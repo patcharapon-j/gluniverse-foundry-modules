@@ -30,14 +30,14 @@ export class AudioManager {
    * Check if audio is enabled in settings
    */
   _isEnabled() {
-    return game.settings.get(MODULE_ID, 'handRaiseAudioEnabled');
+    return game.settings.get(MODULE_ID, 'sp.handRaiseAudioEnabled');
   }
 
   /**
    * Get volume from settings (0-1)
    */
   _getVolume() {
-    return game.settings.get(MODULE_ID, 'handRaiseAudioVolume');
+    return game.settings.get(MODULE_ID, 'sp.handRaiseAudioVolume');
   }
 
   /**

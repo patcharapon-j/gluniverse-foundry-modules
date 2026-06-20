@@ -82,7 +82,7 @@ const FATE_KIND_CHOICES = {
   blank: "GLDDF.Fate.Kind.blank",
 };
 
-const FACE_CONFIG_TEMPLATE = `modules/${MODULE_ID}/templates/${FEATURE_ID}/face-config.hbs`;
+const FACE_CONFIG_TEMPLATE = `modules/${MODULE_ID}/features/${FEATURE_ID}/templates/face-config.hbs`;
 
 export function registerSettings() {
   const reg = (key, opts) => game.settings.register(MODULE_ID, key, {

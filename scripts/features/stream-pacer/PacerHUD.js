@@ -1,5 +1,6 @@
-import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
+import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
 import { PacerManager } from './PacerManager.js';
+import { featurePath } from '../../core/const.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -39,7 +40,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     main: {
-      template: `modules/${MODULE_ID}/templates/pacer-hud.hbs`
+      template: featurePath(FEATURE_ID, 'templates/pacer-hud.hbs')
     }
   };
 
@@ -367,7 +368,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _showCountdownDialog() {
-    const defaultDuration = game.settings.get(MODULE_ID, 'defaultCountdown');
+    const defaultDuration = game.settings.get(MODULE_ID, 'sp.defaultCountdown');
     const defaultMinutes = Math.floor(defaultDuration / 60);
 
     const content = `
@@ -522,7 +523,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   _savePosition() {
     const rect = this.element.getBoundingClientRect();
-    game.settings.set(MODULE_ID, 'hudPosition', {
+    game.settings.set(MODULE_ID, 'sp.hudPosition', {
       left: rect.left,
       top: rect.top
     });
@@ -533,7 +534,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   _restorePosition() {
     try {
-      const pos = game.settings.get(MODULE_ID, 'hudPosition');
+      const pos = game.settings.get(MODULE_ID, 'sp.hudPosition');
       if (pos && pos.left !== null && pos.top !== null) {
         // Validate position is within viewport
         const rect = this.element.getBoundingClientRect();

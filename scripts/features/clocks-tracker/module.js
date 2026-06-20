@@ -231,56 +231,56 @@ function onGetSceneControlButtons(controls) {
 }
 
 function registerKeybindings() {
-  game.keybindings.register(MODULE_ID, "toggleHud", {
+  game.keybindings.register(MODULE_ID, "ct.toggleHud", {
     name: "GLCT.keybindings.toggleHud",
     editable: [{ key: "KeyT", modifiers: ["Alt"] }],
     onDown: () => { if (Features.on("timeHud")) toggleHud(); return true; },
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "advanceStretch", {
+  game.keybindings.register(MODULE_ID, "ct.advanceStretch", {
     name: "GLCT.keybindings.advanceStretch",
     editable: [{ key: "BracketRight", modifiers: ["Alt"] }],
     onDown: () => { if (game.user.isGM && Features.on("timeHud.gmControls")) TimeEngine.advanceStep("stretch"); return true; },
     restricted: true
   });
 
-  game.keybindings.register(MODULE_ID, "openCalendar", {
+  game.keybindings.register(MODULE_ID, "ct.openCalendar", {
     name: "GLCT.keybindings.openCalendar",
     editable: [{ key: "KeyC", modifiers: ["Alt"] }],
     onDown: async () => { if (!Features.on("timeHud.calendar")) return true; const { CalendarView } = await import("./apps/calendar-view.js"); CalendarView.show(); return true; },
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "toggleTracker", {
+  game.keybindings.register(MODULE_ID, "ct.toggleTracker", {
     name: "GLCT.keybindings.toggleTracker",
     editable: [{ key: "KeyR", modifiers: ["Alt"] }],
     onDown: () => { if (Features.on("trackers.dock")) toggleTrackerHud(); return true; },
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "toggleWeather", {
+  game.keybindings.register(MODULE_ID, "ct.toggleWeather", {
     name: "GLCT.keybindings.toggleWeather",
     editable: [{ key: "KeyW", modifiers: ["Alt"] }],
     onDown: () => { if (WeatherStore.enabled) WeatherHud.toggle(); return true; },
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "toggleSupport", {
+  game.keybindings.register(MODULE_ID, "ct.toggleSupport", {
     name: "GLCT.keybindings.toggleSupport",
     editable: [{ key: "KeyM", modifiers: ["Alt"] }],
     onDown: () => { if (SupportStore.enabled) toggleSupportHud(); return true; },
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "toggleDelving", {
+  game.keybindings.register(MODULE_ID, "ct.toggleDelving", {
     name: "GLCT.keybindings.toggleDelving",
     editable: [{ key: "KeyG", modifiers: ["Alt"] }],
     onDown: () => { if (game.user.isGM && DelvingStore.enabled) DelvingStore.setActive(!DelvingStore.active); return true; },
     restricted: true
   });
 
-  game.keybindings.register(MODULE_ID, "passTurn", {
+  game.keybindings.register(MODULE_ID, "ct.passTurn", {
     name: "GLCT.keybindings.passTurn",
     editable: [{ key: "Period", modifiers: ["Alt"] }],
     onDown: () => { if (game.user.isGM && DelvingStore.active) DelvingStore.advanceTurn(); return true; },

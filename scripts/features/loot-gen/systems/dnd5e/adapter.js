@@ -12,7 +12,7 @@
  */
 
 import { registerAdapter } from "../registry.js";
-import { MODULE_ID, SEVERITY } from "../../const.js";
+import { MODULE_ID, FLAG, SEVERITY } from "../../const.js";
 import { worstSeverity } from "../grade.js";
 import {
   budgetForLevel, expectedWealthPerPC, expectedCurrencyForLevel, estimateThreat,
@@ -84,7 +84,7 @@ async function addCoins(actor, gp) {
     await actor.update({ "system.currency.gp": cur + whole });
   } catch (err) {
     console.warn(`${MODULE_ID} | addCoins failed, leaving coins note`, err);
-    try { await actor.setFlag(MODULE_ID, "pendingCoinsGp", whole); } catch { /* ignore */ }
+    try { await actor.setFlag(MODULE_ID, FLAG("pendingCoinsGp"), whole); } catch { /* ignore */ }
   }
 }
 

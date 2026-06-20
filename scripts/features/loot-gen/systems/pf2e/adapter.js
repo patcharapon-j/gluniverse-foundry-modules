@@ -7,7 +7,7 @@
  */
 
 import { registerAdapter } from "../registry.js";
-import { MODULE_ID } from "../../const.js";
+import { MODULE_ID, FLAG } from "../../const.js";
 import { buildReadout, worstSeverity } from "../grade.js";
 import { SEVERITY } from "../../const.js";
 import {
@@ -133,7 +133,7 @@ async function addCoins(actor, gp) {
       return;
     }
   } catch (err) { console.warn(`${MODULE_ID} | addCoins failed, leaving coins note`, err); }
-  try { await actor.setFlag(MODULE_ID, "pendingCoinsGp", whole); } catch { /* ignore */ }
+  try { await actor.setFlag(MODULE_ID, FLAG("pendingCoinsGp"), whole); } catch { /* ignore */ }
 }
 
 /* ------------------------------ the adapter ------------------------------ */

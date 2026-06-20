@@ -10,7 +10,7 @@
  * coins following the recipient. Heirloom awakening is build #5.
  */
 
-import { MODULE_ID, TARGET, PARTY_LEDGER_KEY } from "../const.js";
+import { MODULE_ID, FLAG, TARGET, PARTY_LEDGER_KEY } from "../const.js";
 import { WealthLedger } from "../auditor/ledger.js";
 import { getAdapter } from "../systems/registry.js";
 import { iconNoteHtml } from "./icon-note.js";
@@ -99,7 +99,7 @@ async function makeLootActor(parcel, proposal) {
       type: adapter()?.lootActorType ?? "loot",
       img: adapter()?.lootActorImg ?? "icons/containers/chest/chest-worn-oak-tan.webp",
       folder: folder?.id ?? null,
-      flags: { [MODULE_ID]: { proposalId: proposal.id, context: proposal.context } }
+      flags: { [MODULE_ID]: { lg: { proposalId: proposal.id, context: proposal.context } } }
     });
   } catch (err) {
     console.error(`${MODULE_ID} | failed to create loot actor`, err);
@@ -148,7 +148,7 @@ async function makeMerchantActor(parcel, proposal) {
     actor = await Actor.create(foundry.utils.mergeObject({
       name,
       folder: folder?.id ?? null,
-      flags: { [MODULE_ID]: { proposalId: proposal.id, context: proposal.context, shop: true, keeper } }
+      flags: { [MODULE_ID]: { lg: { proposalId: proposal.id, context: proposal.context, shop: true, keeper } } }
     }, merchantData));
   } catch (err) {
     console.error(`${MODULE_ID} | failed to create merchant actor`, err);
@@ -200,7 +200,7 @@ async function addCoins(actor, gp) {
   const a = adapter();
   if (a?.addCoins) { await a.addCoins(actor, whole); return; }
   // Fallback: stash the intended amount in a flag so the GM can add it manually.
-  try { await actor.setFlag(MODULE_ID, "pendingCoinsGp", whole); } catch { /* ignore */ }
+  try { await actor.setFlag(MODULE_ID, FLAG("pendingCoinsGp"), whole); } catch { /* ignore */ }
 }
 
 /* ------------------------------ direct to sheet ------------------------------ */
