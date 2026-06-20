@@ -2,13 +2,13 @@
 // standalone package id now uses the single suite id, and every settings/flag
 // key is prefixed with the feature prefix ("sbi.") to avoid cross-feature
 // collisions. See docs/FEATURE_CONTRACT.md.
-const MODULE_ID = "gluniverse-suite";
+const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "statsblock-import";
 const PREFIX = "sbi.";
 const SETTING_MOTION_TIER = `${PREFIX}motionTier`;
 const IMPORT_FOLDER = "Imported NPCs";
 // Flag keys are prefixed so they don't collide with other features sharing the
-// `gluniverse-suite` flag scope on the same document.
+// `gluniverse-foundry-modules` flag scope on the same document.
 const FLAG_SOURCE = `${PREFIX}sourceMarkdown`;
 const FLAG_PARSED = `${PREFIX}parsedData`;
 const FLAG_IMPORTED = `${PREFIX}imported`;

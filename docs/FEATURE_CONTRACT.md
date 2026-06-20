@@ -6,10 +6,10 @@ with the suite registry. This document is the binding contract for that port.
 
 ## The single installed package
 
-- Package id: **`gluniverse-suite`** (constant `SUITE_ID`).
+- Package id: **`gluniverse-foundry-modules`** (constant `SUITE_ID`).
 - Only this id may be used as a settings namespace, flag scope, or socket channel.
-- Install path of any bundled asset/template: `modules/gluniverse-suite/...`.
-- A feature's own files live under `modules/gluniverse-suite/features/<featureId>/...`.
+- Install path of any bundled asset/template: `modules/gluniverse-foundry-modules/...`.
+- A feature's own files live under `modules/gluniverse-foundry-modules/features/<featureId>/...`.
 
 ## Namespace rewrite rules (apply inside the ported feature code)
 
@@ -26,7 +26,7 @@ with the suite registry. This document is the binding contract for that port.
    `emitSocket("<featureId>", payload)` / `onSocket("<featureId>", handler)`.
    Register the handler from `onReady`.
 4. **Template & asset paths** — any `modules/<old-id>/...` string becomes
-   `modules/gluniverse-suite/features/<featureId>/...`. Prefer the
+   `modules/gluniverse-foundry-modules/features/<featureId>/...`. Prefer the
    `featurePath(featureId, rel)` helper from `core/const.mjs` for JS-built paths.
 5. **Localization keys** — keep the module's existing i18n key namespace
    (e.g. `GLUNI.*`, `FF.*`). These are merged into one `lang/en.json`; key

@@ -38,7 +38,7 @@ overwrites a value you've already changed in the suite.
 
 ## Architecture
 
-The suite is one package (`gluniverse-suite`); each former module lives under
+The suite is one package (`gluniverse-foundry-modules`); each former module lives under
 `scripts/features/<id>/` and registers itself with a small core framework:
 
 - **`scripts/core/registry.mjs`** — feature definitions, system/dependency
@@ -52,7 +52,7 @@ The suite is one package (`gluniverse-suite`); each former module lives under
   `prefers-reduced-motion`.
 
 Because a Foundry package may only register settings/flags/sockets under its own id,
-each feature's settings and flags are namespaced onto `gluniverse-suite` with a
+each feature's settings and flags are namespaced onto `gluniverse-foundry-modules` with a
 per-feature key prefix (`ct.`, `init.`, `ff.`, …). See
 [`docs/FEATURE_CONTRACT.md`](docs/FEATURE_CONTRACT.md) for the full porting contract.
 

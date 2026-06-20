@@ -747,7 +747,7 @@ export function registerApex() {
 
 /**
  * Public API for macros / other modules. The suite exposes this on
- * `game.modules.get("gluniverse-suite").api.features.flatfinder` via the
+ * `game.modules.get("gluniverse-foundry-modules").api.features.flatfinder` via the
  * adapter's `api` field, so we no longer mutate the module object directly.
  */
 export const apexApi = {

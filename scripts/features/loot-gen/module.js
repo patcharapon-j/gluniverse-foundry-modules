@@ -38,7 +38,7 @@ import { runWorkshop, workshopEnabled } from "./loot/workshop.js";
  * The feature's public API object. Built once at import (pure references, no side
  * effects). Other feature files may import this directly; it is also surfaced via
  * the adapter `api` field (index.mjs) so the suite's
- * `game.modules.get("gluniverse-suite").api.features["loot-gen"]` resolves here —
+ * `game.modules.get("gluniverse-foundry-modules").api.features["loot-gen"]` resolves here —
  * replacing the old `game.modules.get("gluniverse-loot-gen").api`.
  */
 export const LootGenAPI = {

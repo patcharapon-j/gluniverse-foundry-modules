@@ -28,7 +28,7 @@ function setting(key, fallback) {
 /**
  * Guarantee a feature stylesheet is linked. The suite manifest only declares the
  * shared token sheet (`styles/gl-tokens.css`); this feature's own sheets live at
- * `modules/gluniverse-suite/styles/clocks-tracker-*.css` and are injected here so
+ * `modules/gluniverse-foundry-modules/styles/clocks-tracker-*.css` and are injected here so
  * a plain reload is enough. Each is a no-op once its link already exists.
  */
 function ensureFeatureStyle(file) {

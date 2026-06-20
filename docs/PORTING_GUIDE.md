@@ -22,16 +22,16 @@ Work ONLY inside these target locations (do not touch shared/core files,
    source `lang/en.json` (or `lang/*.json`) → `lang/<featureId>.en.json`.
 
 2. **Module id constant** → set the module's `MODULE_ID` (or equivalent) to
-   `"gluniverse-suite"`. Add `const FEATURE_ID = "<featureId>";` if helpful.
+   `"gluniverse-foundry-modules"`. Add `const FEATURE_ID = "<featureId>";` if helpful.
 
 3. **Settings** — every `game.settings.register/get/set/registerMenu` that used
-   the old id now uses `"gluniverse-suite"`, and EVERY setting KEY is prefixed
+   the old id now uses `"gluniverse-foundry-modules"`, and EVERY setting KEY is prefixed
    with `"<prefix>."`. If the module has a central `SETTINGS`/`Settings` key map,
    prefix the values there once; otherwise prefix each inline key string. Keep a
    note of the full old→new key list for your report.
 
 4. **Flags** — `getFlag/setFlag/unsetFlag(<old-id>, key)` → scope
-   `"gluniverse-suite"`, key prefixed with `"<prefix>."`. Same for any
+   `"gluniverse-foundry-modules"`, key prefixed with `"<prefix>."`. Same for any
    `flags["<old-id>"]` / `flags?.[MODULE_ID]` chat-message lookups (prefix the
    sub-keys). Update `module.json`-style hotReload flags are N/A (core owns it).
 
@@ -43,7 +43,7 @@ Work ONLY inside these target locations (do not touch shared/core files,
    feature's own `game.socket.on` wiring.
 
 6. **Paths** — replace every `modules/<old-id>/` string with
-   `modules/gluniverse-suite/features/<featureId>/`. This covers template
+   `modules/gluniverse-foundry-modules/features/<featureId>/`. This covers template
    loaders (`loadTemplates`, `renderTemplate`, `FilePicker`), CSS `url(...)` (use
    relative `../assets/...` or absolute module path consistently), and JS asset
    paths. Verify template/asset paths point at the new copied locations.

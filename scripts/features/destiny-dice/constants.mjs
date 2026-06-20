@@ -1,4 +1,4 @@
-export const MODULE_ID = "gluniverse-suite";
+export const MODULE_ID = "gluniverse-foundry-modules";
 export const FEATURE_ID = "destiny-dice";
 export const MODULE_TITLE = "GLUniverse Destiny Dice";
 

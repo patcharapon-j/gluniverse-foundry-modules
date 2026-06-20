@@ -1,6 +1,6 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 
-const MODULE_ID = "gluniverse-suite";
+const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "critical";
 const FLAG_SCOPE = MODULE_ID;
 const SCHEMA_VERSION = 2;

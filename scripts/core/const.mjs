@@ -2,13 +2,13 @@
  * GLUniverse Suite — core constants.
  *
  * Every feature in the suite ships as a sub-module of a single installed
- * package (`gluniverse-suite`). Because Foundry only lets a package register
+ * package (`gluniverse-foundry-modules`). Because Foundry only lets a package register
  * settings / flags / sockets under *its own* id, all former per-module
  * namespaces collapse onto SUITE_ID here, and per-feature isolation is achieved
  * by key-prefixing (settings + flags) and payload-tagging (sockets).
  */
 
-export const SUITE_ID = "gluniverse-suite";
+export const SUITE_ID = "gluniverse-foundry-modules";
 export const SUITE_TITLE = "GLUniverse Suite";
 
 /** Single shared socket channel. Payloads are tagged with `__feature`. */
@@ -28,13 +28,13 @@ export function suitePath(rel) {
 /**
  * Resolve a bundled feature file to its installed path.
  *
- * Layout convention (the repo root maps to `modules/gluniverse-suite/`):
+ * Layout convention (the repo root maps to `modules/gluniverse-foundry-modules/`):
  *   - templates live at  `templates/<featureId>/...`
  *   - assets    live at  `assets/<featureId>/...`
  *   - any other file is resolved inside the feature's script folder.
  *
  * So `featurePath("insight", "templates/x.hbs")` →
- * `modules/gluniverse-suite/templates/insight/x.hbs`.
+ * `modules/gluniverse-foundry-modules/templates/insight/x.hbs`.
  */
 export function featurePath(featureId, rel) {
   const r = rel.replace(/^\/+/, "");

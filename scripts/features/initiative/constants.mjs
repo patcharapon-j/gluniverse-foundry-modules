@@ -1,8 +1,8 @@
 // Ported into the GLUniverse Suite: the single installed package id is
-// "gluniverse-suite". Settings/flags register under that id; per-feature
+// "gluniverse-foundry-modules". Settings/flags register under that id; per-feature
 // isolation is via the "init." key prefix. The socket no longer uses a per-module
 // channel — emit/on are routed through scripts/core/socket.mjs (feature "initiative").
-export const MODULE_ID = "gluniverse-suite";
+export const MODULE_ID = "gluniverse-foundry-modules";
 export const FEATURE_ID = "initiative";
 // Retained for backwards reference; the live channel is core's shared socket.
 export const SOCKET_NAME = `module.${MODULE_ID}`;
@@ -268,7 +268,7 @@ export const PF2E_GUARD_BREAK_PENALTY = 2;
 export const APEX = Object.freeze({
   // Flatfinder is now the "flatfinder" feature of this same suite, so its apex
   // flags live under the suite scope with the ff.-prefixed keys it writes.
-  MODULE_ID: "gluniverse-suite",
+  MODULE_ID: "gluniverse-foundry-modules",
   FLAG: "ff.apex",            // actor flag: { enabled, turns }
   PRIME_FLAG: "ff.apexPrime", // combatant flag on the boss's primary turn (true)
   EXTRA_FLAG: "ff.apexExtra", // combatant flag on an extra turn: { primeId, index, total }

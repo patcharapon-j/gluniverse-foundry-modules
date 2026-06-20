@@ -41,7 +41,7 @@ Suite.register({
     // Move actor cinematic flags from the old scope to the suite scope.
     migrate: async () => {
       const OLD = "gluniverse-critical";
-      const NEW = "gluniverse-suite";
+      const NEW = "gluniverse-foundry-modules";
       const map = {
         schemaVersion: "crit.schemaVersion",
         enabled: "crit.enabled",
@@ -59,7 +59,7 @@ Suite.register({
               await actor.setFlag(NEW, newKey, v);
             }
           } catch (e) {
-            console.warn(`gluniverse-suite | critical | actor flag migration failed for ${actor.id}:`, e);
+            console.warn(`gluniverse-foundry-modules | critical | actor flag migration failed for ${actor.id}:`, e);
           }
         }
       }

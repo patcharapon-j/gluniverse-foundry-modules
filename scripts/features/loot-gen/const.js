@@ -6,7 +6,7 @@
  * feature isolation is by key-prefixing — see the `lg.` prefix on SETTINGS keys
  * and the FLAG() helper for flags.
  */
-export const MODULE_ID = "gluniverse-suite";
+export const MODULE_ID = "gluniverse-foundry-modules";
 
 /** This feature's id (also its folder name) within the suite. */
 export const FEATURE_ID = "loot-gen";
@@ -18,7 +18,7 @@ export const PREFIX = "GLLG";
  * Flag accessor key. Flags live under the suite scope nested beneath a `lg`
  * object so this feature's flags never collide with another feature's on the
  * same document. Writers store `{ [MODULE_ID]: { lg: { ... } } }`; readers use
- * `doc.getFlag(MODULE_ID, FLAG("..."))` → `flags["gluniverse-suite"].lg.<sub>`.
+ * `doc.getFlag(MODULE_ID, FLAG("..."))` → `flags["gluniverse-foundry-modules"].lg.<sub>`.
  */
 export const FLAG = (sub) => `lg.${sub}`;
 

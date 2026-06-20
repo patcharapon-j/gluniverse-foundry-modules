@@ -38,7 +38,7 @@ Suite.register({
   legacy: {
     id: "gluniverse-initiative",
     // Old standalone setting key → new suite-prefixed key. Registered under the
-    // suite id ("gluniverse-suite") with the "init." prefix.
+    // suite id ("gluniverse-foundry-modules") with the "init." prefix.
     settings: {
       enabled: "init.enabled",
       initiativeMode: "init.initiativeMode",

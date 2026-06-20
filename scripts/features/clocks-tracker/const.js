@@ -2,12 +2,12 @@
 
 /**
  * Ported into the GLUniverse Suite. The Foundry package id is the single suite
- * id (`gluniverse-suite`) used as the settings namespace and flag scope. Per-
+ * id (`gluniverse-foundry-modules`) used as the settings namespace and flag scope. Per-
  * feature isolation is achieved by key-prefixing: every setting key this feature
  * owns is prefixed with `ct.` (already baked into the SETTINGS map below), and
  * every document / chat-message flag sub-key is prefixed with FLAG_NS (`ct`).
  */
-export const MODULE_ID = "gluniverse-suite";
+export const MODULE_ID = "gluniverse-foundry-modules";
 export const FEATURE_ID = "clocks-tracker";
 /** Per-feature flag sub-key prefix (flags live under flags[MODULE_ID].ct.*). */
 export const FLAG_NS = "ct";
@@ -33,7 +33,7 @@ export const HOOKS = {
 /**
  * World/client-setting keys. Every key is prefixed with `ct.` so this feature's
  * settings stay isolated from the rest of the suite under the shared
- * `gluniverse-suite` namespace. NOTE: `ct.moduleConfig` is THIS feature's own
+ * `gluniverse-foundry-modules` namespace. NOTE: `ct.moduleConfig` is THIS feature's own
  * internal feature-tree blob (see features.js) — distinct from the suite core's
  * own `moduleConfig` setting registered under the same package id.
  */

@@ -42,7 +42,7 @@ export class DiceSlot {
     host.dataset.tumbled = "1";
     try { return new DiceSlot(host, { faces, size, discard, tint }, onSettle); }
     catch (err) {
-      console.warn("gluniverse-suite | clocks-tracker | DiceSlot init failed", err);
+      console.warn("gluniverse-foundry-modules | clocks-tracker | DiceSlot init failed", err);
       delete host.dataset.tumbled;
       return null;
     }
@@ -151,6 +151,6 @@ export class DiceSlot {
     this.wrap = null;
     this.host?.classList.remove("dx-tumbling");
     // The animation is finalised — now let the HUD catch up to the new pool state.
-    try { this.onSettle?.(); } catch (err) { console.warn("gluniverse-suite | clocks-tracker | DiceSlot onSettle failed", err); }
+    try { this.onSettle?.(); } catch (err) { console.warn("gluniverse-foundry-modules | clocks-tracker | DiceSlot onSettle failed", err); }
   }
 }

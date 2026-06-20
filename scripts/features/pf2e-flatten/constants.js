@@ -3,7 +3,7 @@
  */
 
 /** Suite package id — the only namespace allowed for settings/flags/sockets. */
-export const SUITE_ID = "gluniverse-suite";
+export const SUITE_ID = "gluniverse-foundry-modules";
 
 /** Short feature prefix for this feature's settings keys. */
 export const FEATURE_PREFIX = "flatten";

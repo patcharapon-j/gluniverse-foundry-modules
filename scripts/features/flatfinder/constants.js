@@ -7,7 +7,7 @@
  * single installed package id; per-feature isolation is achieved by prefixing
  * every settings key and flag key with this feature's short prefix.
  */
-export const MODULE_ID = "gluniverse-suite";
+export const MODULE_ID = "gluniverse-foundry-modules";
 
 /** This feature's id (folder name) and short key prefix. */
 export const FEATURE_ID = "flatfinder";
@@ -87,7 +87,7 @@ export const APEX_INITIATIVE_STEP = 10;
 export const APEX_PHASE_THRESHOLDS = Object.freeze([0.66, 0.33]);
 
 /** The sibling suite feature whose Card initiative mode owns multi-turn bosses. */
-export const GLUNI_MODULE_ID = "gluniverse-suite";
+export const GLUNI_MODULE_ID = "gluniverse-foundry-modules";
 /** Initiative's (prefixed) setting key within the suite namespace. */
 export const GLUNI_INIT_MODE_KEY = "init.initiativeMode";
 

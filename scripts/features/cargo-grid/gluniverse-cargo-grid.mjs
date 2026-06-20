@@ -1,6 +1,6 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 
-const MODULE_ID = "gluniverse-suite";
+const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "cargo-grid";
 const CARGO_MUTATION_QUERY = `${MODULE_ID}.cargoMutation`;
 

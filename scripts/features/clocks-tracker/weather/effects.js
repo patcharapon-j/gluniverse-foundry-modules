@@ -91,7 +91,7 @@ export class WeatherEffect {
     const PIXI = globalThis.PIXI;
     if (!PIXI || !host) return null;
     try { return new WeatherEffect(host, spec); }
-    catch (err) { console.warn("gluniverse-suite | clocks-tracker | Weather effect init failed", err); return null; }
+    catch (err) { console.warn("gluniverse-foundry-modules | clocks-tracker | Weather effect init failed", err); return null; }
   }
 
   constructor(host, spec) {

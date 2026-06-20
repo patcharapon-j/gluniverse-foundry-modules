@@ -1,7 +1,7 @@
 // GLUniverse Suite port: all settings/flags live under the single suite id,
 // isolated from other features by key-prefixing with "tidy.".
-export const MODULE_ID = 'gluniverse-suite';
-export const FLAG_SCOPE = 'gluniverse-suite';
+export const MODULE_ID = 'gluniverse-foundry-modules';
+export const FLAG_SCOPE = 'gluniverse-foundry-modules';
 
 /** Feature key prefix for settings and flags (avoids cross-feature collisions). */
 export const KEY_PREFIX = 'tidy.';

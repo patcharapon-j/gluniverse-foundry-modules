@@ -6,7 +6,7 @@ export const FEATURE_ID = 'stream-pacer';
 // Ported into GLUniverse Suite: the package id is the suite, and every setting
 // key is prefixed with the feature prefix "sp." to avoid cross-feature
 // collisions on the shared namespace.
-export const MODULE_ID = 'gluniverse-suite';
+export const MODULE_ID = 'gluniverse-foundry-modules';
 
 export const PLAYER_STATUS = {
   ENGAGED: 'engaged',

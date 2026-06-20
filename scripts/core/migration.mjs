@@ -4,7 +4,7 @@
  * When a world previously used the separate modules, their settings live in
  * Foundry storage under the *old* package ids (e.g. "pf2e-flatfinder.foo").
  * Those namespaces are no longer registered, so we read them straight from
- * storage and re-register them under `gluniverse-suite` using each feature's
+ * storage and re-register them under `gluniverse-foundry-modules` using each feature's
  * declared key mapping. Document flags (actors / chat messages) are handled by
  * an optional per-feature `legacyMigrate()` hook.
  *

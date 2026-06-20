@@ -64,6 +64,6 @@ Suite.register({
     },
   },
 
-  // Exposed as game.modules.get("gluniverse-suite").api.features["loot-gen"].
+  // Exposed as game.modules.get("gluniverse-foundry-modules").api.features["loot-gen"].
   api: LootGenAPI,
 });

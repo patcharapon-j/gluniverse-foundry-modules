@@ -1,7 +1,7 @@
 // Ported into the GLUniverse Suite: all settings/flags/sockets register under
 // the single installed package id, and every setting key is prefixed with the
 // feature prefix to avoid cross-feature collisions.
-export const MODULE_ID = 'gluniverse-suite';
+export const MODULE_ID = 'gluniverse-foundry-modules';
 export const FEATURE_ID = 'stage';
 const PREFIX = 'stage.';
 

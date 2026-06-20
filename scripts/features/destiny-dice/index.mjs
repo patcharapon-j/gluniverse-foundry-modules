@@ -42,7 +42,7 @@ Suite.register({
     id: OLD_ID,
     settings: LEGACY_SETTINGS,
     // Move the standalone module's fate flag on existing chat messages from
-    // scope "gluniverse-destiny-dice" (key "fate") to scope "gluniverse-suite"
+    // scope "gluniverse-destiny-dice" (key "fate") to scope "gluniverse-foundry-modules"
     // (key "dd.fate"). Best-effort and guarded — never blocks startup.
     migrate: async () => {
       try {

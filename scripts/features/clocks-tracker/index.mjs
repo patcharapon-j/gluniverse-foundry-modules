@@ -22,7 +22,7 @@ const OLD_ID = "gluniverse-clocks-and-tracker";
 /**
  * Old standalone setting key → new suite key (already `ct.`-prefixed). The old
  * module registered every key unprefixed under its own id; the suite registers
- * them prefixed under `gluniverse-suite`. NOTE: the old `moduleConfig` (this
+ * them prefixed under `gluniverse-foundry-modules`. NOTE: the old `moduleConfig` (this
  * feature's internal feature-tree blob) maps to `ct.moduleConfig` — distinct
  * from the suite core's own `moduleConfig`.
  */
@@ -93,7 +93,7 @@ Suite.register({
     /**
      * Move per-PC private trackers off the old flag scope. They lived at
      * `actor.flags[OLD_ID].trackers`; they now live at
-     * `actor.flags[gluniverse-suite].ct.trackers`. Best-effort & idempotent:
+     * `actor.flags[gluniverse-foundry-modules].ct.trackers`. Best-effort & idempotent:
      * only copies when the new location is empty and the old one has data.
      */
     async migrate({ SUITE_ID }) {

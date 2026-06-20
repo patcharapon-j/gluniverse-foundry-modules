@@ -83,7 +83,7 @@ function handleLocalMessage(data) {
 
 function handleSyncRequest(data) {
     if (!game.user.isGM) return;
-    const mod = game.modules.get('gluniverse-suite');
+    const mod = game.modules.get('gluniverse-foundry-modules');
     const stageManager = mod?.stageManager;
     if (!stageManager) return;
 

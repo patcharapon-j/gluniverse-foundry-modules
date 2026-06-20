@@ -22,7 +22,7 @@ export { registerSettings };
 /**
  * Guarantee the feature stylesheet is linked. The suite manifest only declares
  * the shared token sheet (`styles/gl-tokens.css`); this feature's own sheet
- * lives at `modules/gluniverse-suite/styles/stream-pacer.css` and is injected
+ * lives at `modules/gluniverse-foundry-modules/styles/stream-pacer.css` and is injected
  * here so a plain reload is enough. No-op once the link already exists.
  */
 function ensureFeatureStyle() {

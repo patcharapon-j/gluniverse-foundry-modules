@@ -3,7 +3,7 @@
  *
  * Wraps the ported standalone module (`gluniverse-pf2e-statsblock-import`) and
  * registers it with the suite registry. All settings/flags now live under the
- * `gluniverse-suite` id, key-prefixed with "sbi.".
+ * `gluniverse-foundry-modules` id, key-prefixed with "sbi.".
  */
 
 import { Suite } from "../../core/registry.mjs";
@@ -15,7 +15,7 @@ const OLD_ID = "gluniverse-pf2e-statsblock-import";
 /**
  * Best-effort migration of document flags written by the standalone module.
  * The old module stored its flags under its own package id; the suite stores
- * them under `gluniverse-suite` with an "sbi." sub-key prefix. We move any
+ * them under `gluniverse-foundry-modules` with an "sbi." sub-key prefix. We move any
  * surviving old-scope flags on world actors (and their embedded items) across.
  * Guarded so a failure on one document never aborts the whole migration.
  */
