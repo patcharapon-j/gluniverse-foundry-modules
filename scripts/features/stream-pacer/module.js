@@ -1,3 +1,12 @@
+// Stream Pacer — feature entry point (ported into GLUniverse Suite).
+//
+// All former top-level Foundry hook registrations have been removed. The suite
+// registry drives three exported lifecycle functions instead:
+//   - registerSettings()  (re-exported from ./settings.js)
+//   - onInit()            (the old `init` hook body)
+//   - onReady()           (the old `ready` hook body, + socket wiring)
+// Nothing runs at import time except definitions.
+
 import { MODULE_ID, registerSettings } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { SocketHandler } from './socket-handler.js';
@@ -8,6 +17,8 @@ import { HandRaiseSidebar } from './HandRaiseSidebar.js';
 import { PerilOverlay } from './PerilOverlay.js';
 import { ThemeManager } from './ThemeManager.js';
 
+export { registerSettings };
+
 let pacerHUD = null;
 let pacerOverlay = null;
 let audioManager = null;
@@ -16,12 +27,29 @@ let perilOverlay = null;
 let isReady = false;
 let isFirstCanvas = true;
 
-Hooks.once('init', () => {
+/** Everything from the old `init` hook. */
+export function onInit() {
   console.log(`${MODULE_ID} | Initializing Stream Pacer`);
-  registerSettings();
-});
 
-Hooks.once('ready', async () => {
+  // Handle scene changes — reset states if the setting is enabled.
+  Hooks.on('canvasReady', () => {
+    // Skip if game not ready yet or if this is the first canvas load
+    if (!isReady) return;
+    if (isFirstCanvas) {
+      isFirstCanvas = false;
+      return;
+    }
+
+    if (game.settings.get(MODULE_ID, 'sp.resetOnSceneChange')) {
+      if (game.user.isGM) {
+        PacerManager.resetAll();
+      }
+    }
+  });
+}
+
+/** Everything from the old `ready` hook (+ socket wiring). */
+export function onReady() {
   console.log(`${MODULE_ID} | Stream Pacer Ready`);
   isReady = true;
 
@@ -31,9 +59,9 @@ Hooks.once('ready', async () => {
   // Two independent exemptions: the general pacer UI (bars/signals) and the
   // Dire Peril splash. A user can be hidden from one while still seeing the
   // other — e.g. a streaming overlay that shows only the Dire Peril reveal.
-  const exemptUsers = game.settings.get(MODULE_ID, 'exemptUsers');
+  const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
   const isExempt = exemptUsers.includes(game.user.id);
-  const perilExemptUsers = game.settings.get(MODULE_ID, 'perilExemptUsers');
+  const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
   const isPerilExempt = perilExemptUsers.includes(game.user.id);
 
   // Initialize the socket handler (always needed for state sync)
@@ -90,20 +118,4 @@ Hooks.once('ready', async () => {
   if (!isPerilExempt && PacerManager.getState().direPerilActive) {
     perilOverlay.showIndicatorOnly();
   }
-});
-
-// Handle scene changes - reset states if setting enabled
-Hooks.on('canvasReady', () => {
-  // Skip if game not ready yet or if this is the first canvas load
-  if (!isReady) return;
-  if (isFirstCanvas) {
-    isFirstCanvas = false;
-    return;
-  }
-
-  if (game.settings.get(MODULE_ID, 'resetOnSceneChange')) {
-    if (game.user.isGM) {
-      PacerManager.resetAll();
-    }
-  }
-});
+}

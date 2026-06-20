@@ -6,7 +6,6 @@
  * is functionally unchanged; only its call sites now go through the adapter.
  */
 
-import { registerAdapter } from "../registry.js";
 import { MODULE_ID, FLAG } from "../../const.js";
 import { buildReadout, worstSeverity } from "../grade.js";
 import { SEVERITY } from "../../const.js";
@@ -248,4 +247,5 @@ export const pf2eAdapter = {
   }
 };
 
-registerAdapter(pf2eAdapter);
+// NOTE: adapter registration is deferred to the feature's onInit (see module.js)
+// so a disabled feature stays fully inert — nothing runs at import time.

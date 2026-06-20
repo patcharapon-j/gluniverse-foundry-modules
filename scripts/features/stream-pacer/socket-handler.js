@@ -1,7 +1,7 @@
-import { MODULE_ID } from './settings.js';
 import { PacerManager } from './PacerManager.js';
+import { onSocket, emitSocket } from '../../core/socket.mjs';
 
-const SOCKET_NAME = `module.${MODULE_ID}`;
+const FEATURE_ID = 'stream-pacer';
 
 const EVENTS = {
   PLAYER_STATUS_CHANGE: 'playerStatusChange',
@@ -26,7 +26,7 @@ class SocketHandlerClass {
   }
 
   initialize() {
-    game.socket.on(SOCKET_NAME, (data) => this._handleMessage(data));
+    onSocket(FEATURE_ID, (data) => this._handleMessage(data));
 
     // Request current state from GM when joining. Retry a few times in case
     // the GM's socket handler isn't registered yet when we fire the first one.
@@ -133,7 +133,7 @@ class SocketHandlerClass {
   }
 
   _emit(event, payload = {}) {
-    game.socket.emit(SOCKET_NAME, {
+    emitSocket(FEATURE_ID, {
       event,
       payload,
       senderId: game.user.id

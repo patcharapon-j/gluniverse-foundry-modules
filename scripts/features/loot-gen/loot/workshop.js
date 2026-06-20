@@ -259,7 +259,7 @@ function buildCustomItemData(spec, prompt, sources) {
   if (Array.isArray(sources) && sources.length) {
     wf.sources = sources.map(s => String(s?.name ?? "").slice(0, 80)).filter(Boolean).slice(0, 8);
   }
-  const flags = { [MODULE_ID]: wf };
+  const flags = { [MODULE_ID]: { lg: wf } };
 
   // D&D 5e items have an entirely different data model (no runes; rarity +
   // attunement instead) — build them via the 5e path.

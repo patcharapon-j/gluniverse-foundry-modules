@@ -1,9 +1,10 @@
-import { MODULE_ID } from './settings.js';
+import { MODULE_ID, FEATURE_ID } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { PerilWebGL } from './PerilWebGL.js';
+import { featurePath } from '../../core/const.mjs';
 
-const STAGE_TEMPLATE = `modules/${MODULE_ID}/templates/peril-stage.hbs`;
-const INDICATOR_TEMPLATE = `modules/${MODULE_ID}/templates/peril-indicator.hbs`;
+const STAGE_TEMPLATE = featurePath(FEATURE_ID, 'templates/peril-stage.hbs');
+const INDICATOR_TEMPLATE = featurePath(FEATURE_ID, 'templates/peril-indicator.hbs');
 
 /** Full animation duration (ms) from declare to indicator handoff. */
 const STAGE_DURATION_MS = 4200;
@@ -49,7 +50,7 @@ export class PerilOverlay {
   /** WebGL backdrop runs unless disabled in settings or reduced-motion is on. */
   _webglEnabled() {
     try {
-      if (!game.settings.get(MODULE_ID, 'perilWebGLEnabled')) return false;
+      if (!game.settings.get(MODULE_ID, 'sp.perilWebGLEnabled')) return false;
     } catch (e) {
       /* setting not ready — default to on */
     }
@@ -107,14 +108,14 @@ export class PerilOverlay {
   }
 
   _resolveText() {
-    const dire = settingOrLocalized('perilTextDire', 'STREAM_PACER.DirePerilTitleDire');
-    const peril = settingOrLocalized('perilTextPeril', 'STREAM_PACER.DirePerilTitlePeril');
+    const dire = settingOrLocalized('sp.perilTextDire', 'STREAM_PACER.DirePerilTitleDire');
+    const peril = settingOrLocalized('sp.perilTextPeril', 'STREAM_PACER.DirePerilTitlePeril');
     return {
       dire,
       peril,
       title: `${dire} ${peril}`.trim(),
-      tag: settingOrLocalized('perilTextTag', 'STREAM_PACER.DirePerilTag'),
-      subtitle: settingOrLocalized('perilTextSubtitle', 'STREAM_PACER.DirePerilSubtitle')
+      tag: settingOrLocalized('sp.perilTextTag', 'STREAM_PACER.DirePerilTag'),
+      subtitle: settingOrLocalized('sp.perilTextSubtitle', 'STREAM_PACER.DirePerilSubtitle')
     };
   }
 

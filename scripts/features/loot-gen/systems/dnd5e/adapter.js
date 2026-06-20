@@ -11,7 +11,6 @@
  * attunement-aware records, npc-as-loot-chest actors, and 5e currency/coins.
  */
 
-import { registerAdapter } from "../registry.js";
 import { MODULE_ID, FLAG, SEVERITY } from "../../const.js";
 import { worstSeverity } from "../grade.js";
 import {
@@ -192,7 +191,7 @@ export const dnd5eAdapter = {
   lootActorImg: "icons/containers/chest/chest-worn-oak-tan.webp",
   merchantActorData: () => ({
     type: "npc", img: "icons/svg/coins.svg",
-    flags: { [MODULE_ID]: { vendor: true } }             // pair with Item Piles for buy/sell, if installed
+    flags: { [MODULE_ID]: { lg: { vendor: true } } }     // pair with Item Piles for buy/sell, if installed
   }),
   merchantDescPath: () => "system.details.biography.value",
   addCoins,
@@ -212,4 +211,5 @@ export const dnd5eAdapter = {
   }
 };
 
-registerAdapter(dnd5eAdapter);
+// NOTE: adapter registration is deferred to the feature's onInit (see module.js)
+// so a disabled feature stays fully inert — nothing runs at import time.

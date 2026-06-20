@@ -17,17 +17,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=JetBrains+Mono:wght@700;800&display=swap');
 
 /* ---- GL Universe "Etched Glass" shared tokens (docs/design-language.md) ----
-   Family-wide semantic accents + the technical label voice. Declared on :root
-   so every GLct scope (HUD, tracker dock, calendar, weather, delving, support)
-   reads the same values; module-local vars below alias into these. */
-:root{
-  --gl-signal:#ffd24a;        /* signal amber — events, pins, "look here"     */
-  --gl-signal-hot:#ffe070;    /* signal peak — pinned glow, lit digits        */
-  --gl-signal-pale:#ffe9b8;   /* signal text tint on dark glass               */
-  --gl-hazard:#ff4a52;        /* unified danger — doom, hazard, ominous       */
-  --gl-cyan:#5eeaff; --gl-good:#5fdb92; --gl-violet:#b497ff;
-  --gl-tech:"Bahnschrift","JetBrains Mono","Share Tech Mono",Consolas,monospace;
-}
+   The family-wide --gl-* accents + technical label voice that this sheet used to
+   declare on :root now live canonically in styles/gl-tokens.css (loaded suite-
+   wide), so the duplicate :root block was dropped here to avoid redefining them.
+   The #glct-hud scoped vars below still alias into those --gl-* tokens. */
 
 /* ---- frameless ApplicationV2 reset + top-center anchoring ---- */
 #glct-hud{
