@@ -1,0 +1,267 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Etched Glass design system (canonical token set)
+   The single source of truth shared by every feature. Individual features
+   keep their own scoped accent overrides; these tokens never change.
+   ════════════════════════════════════════════════════════════════════════ */
+
+@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&display=swap");
+
+:root {
+  /* ── Ink ramp (surfaces) ── */
+  --gl-ink-0: #02070b;
+  --gl-ink-1: #080b11;
+  --gl-ink-2: #0b0f17;
+  --gl-ink-3: #161d2c;
+
+  /* ── Text ── */
+  --gl-text: #eef1f7;
+  --gl-text-bright: #f3fbff;
+  --gl-text-dim: #98a2b6;
+  --gl-text-faint: rgba(243, 251, 255, 0.38);
+
+  /* ── Lines & rims ── */
+  --gl-hair: rgba(255, 255, 255, 0.08);
+  --gl-edge: rgba(255, 255, 255, 0.13);
+  --gl-line-strong: rgba(244, 252, 255, 0.55);
+
+  /* ── Fixed semantic accents ── */
+  --gl-signal: #ffd24a;
+  --gl-signal-hot: #ffe070;
+  --gl-signal-pale: #ffe9b8;
+  --gl-cyan: #5eeaff;
+  --gl-hazard: #ff4a52;
+  --gl-good: #5fdb92;
+  --gl-violet: #b497ff;
+  --gl-mission: #37d99a;
+
+  /* ── Dynamic accent channel (features override this) ── */
+  --gl-accent: #6b86d6;
+  --gl-glow: color-mix(in srgb, var(--gl-accent) 50%, transparent);
+  --gl-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
+
+  /* ── Typography ── */
+  --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
+  --gl-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* ── Motion ── */
+  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
+  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
+  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
+  --gl-d-quick: 180ms;
+  --gl-d-move: 420ms;
+  --gl-d-reveal: 620ms;
+  --gl-d-splash: 720ms;
+  --gl-breathe: 2.6s;
+  --gl-dread: 3.2s;
+
+  /* ── Silhouette ── */
+  --gl-cut: 12px;
+  --gl-cut-sm: 6px;
+  --gl-radius: 14px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Shared keyframe vocabulary
+   ════════════════════════════════════════════════════════════════════════ */
+@keyframes gl-slot-pop {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes gl-sheen {
+  0% { transform: scaleX(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+@keyframes gl-cascade {
+  0% { opacity: 0; transform: translate(-6px, 4px); }
+  100% { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes gl-stamp {
+  0% { transform: scale(1.6); opacity: 0; filter: blur(2px); }
+  60% { transform: scale(0.94); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); }
+}
+@keyframes gl-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@keyframes gl-dread {
+  0%, 100% { box-shadow: 0 0 10px var(--gl-bloom), inset 0 0 12px var(--gl-bloom); }
+  50% { box-shadow: 0 0 26px var(--gl-glow), inset 0 0 18px var(--gl-bloom); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Reusable etched-glass utilities (opt-in via class)
+   ════════════════════════════════════════════════════════════════════════ */
+.gl-glass {
+  position: relative;
+  border-radius: var(--gl-radius);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
+  border: 1px solid var(--gl-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+.gl-btn {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)), var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0.5em 1em;
+  transition: color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    transform 120ms var(--gl-ease);
+}
+.gl-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--gl-accent) 55%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform var(--gl-d-reveal) var(--gl-ease);
+}
+.gl-btn:hover:not(:disabled) {
+  border-color: var(--gl-accent);
+  box-shadow: 0 0 14px var(--gl-bloom);
+}
+.gl-btn:hover:not(:disabled)::before { transform: translateX(120%); }
+.gl-btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.gl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.gl-btn-accent { border-color: var(--gl-accent); color: var(--gl-text-bright); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-glass, .gl-btn, .gl-btn::before { transition: none !important; }
+  .gl-glass *, .gl-btn { animation: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Feature Manager (suite config app)
+   ════════════════════════════════════════════════════════════════════════ */
+.gls-feature-manager .window-content { padding: 0; background: var(--gl-ink-0); }
+.gls-fm-body {
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  padding: 16px 18px 18px;
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--gl-cyan) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+.gls-fm-intro {
+  margin: 0 0 14px;
+  color: var(--gl-text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.gls-fm-list { display: flex; flex-direction: column; gap: 10px; }
+
+.gls-fm-row {
+  --gl-accent: var(--gl-cyan);
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
+}
+.gls-fm-row.is-on { --gl-accent: var(--gl-good); }
+.gls-fm-row.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
+
+.gls-fm-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-2));
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-accent);
+  font-size: 18px;
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--gl-accent) 20%, transparent);
+}
+.gls-fm-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--gl-text-bright);
+}
+.gls-fm-hint { font-size: 11px; color: var(--gl-text-dim); line-height: 1.4; margin-top: 2px; }
+.gls-fm-lock {
+  margin-top: 4px;
+  font-size: 10px;
+  font-family: var(--gl-tech);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gl-signal);
+}
+.gls-fm-corechip {
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gl-cyan);
+  border: 1px solid color-mix(in srgb, var(--gl-cyan) 50%, transparent);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+/* Toggle switch */
+.gls-switch { background: none; border: none; padding: 4px; cursor: pointer; }
+.gls-switch-track {
+  display: block;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  position: relative;
+  transition: background var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gls-switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff, var(--gl-text-dim));
+  transform: translateY(-50%);
+  transition: left var(--gl-d-quick) var(--gl-snap), background var(--gl-d-quick) var(--gl-ease);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.gls-switch.is-on .gls-switch-track {
+  background: color-mix(in srgb, var(--gl-good) 30%, var(--gl-ink-2));
+  border-color: var(--gl-good);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-good) 45%, transparent);
+}
+.gls-switch.is-on .gls-switch-thumb {
+  left: 25px;
+  background: linear-gradient(180deg, #fff, var(--gl-good));
+}
+.gls-switch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.gls-fm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--gl-hair);
+}
+.gls-fm-note { font-size: 11px; color: var(--gl-text-faint); }
