@@ -118,7 +118,9 @@ export const DEFAULT_HUD_SETTINGS = {
   showResource: true,
   showConditions: true,
   showTempHp: true,
-  showAbilities: false
+  showAbilities: false,
+  showInspiration: true,
+  showSpellSlots: false
 };
 
 export const HUD_ANCHORS = ["top", "bottom", "left", "right"];

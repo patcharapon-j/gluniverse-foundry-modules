@@ -60,19 +60,60 @@ export const dnd5eAdapter = {
   },
 
   /**
-   * The actor's signature class resource: Warlock pact slots first (the
-   * reference card's "Pact"), then a configured primary resource.
+   * The actor's named class resources, in display priority. Warlock pact slots
+   * lead (the reference card's "Pact"), followed by the sheet's configured
+   * resources (ki, rage, sorcery points, bardic inspiration, …). Each entry is
+   * `kind: "pips"` when small enough to draw as dots, else a `"counter"`.
    */
-  getPrimaryResource(actor) {
+  getResources(actor) {
+    const out = [];
     const pact = actor?.system?.spells?.pact;
     if (pact && num(pact.max) > 0) {
-      return { label: game.i18n.localize("GLUNIVERSE_STREAM.hud.resource.pact"), value: num(pact.value), max: num(pact.max), level: num(pact.level) };
+      out.push({
+        key: "pact",
+        label: game.i18n.localize("GLUNIVERSE_STREAM.hud.resource.pact"),
+        value: num(pact.value),
+        max: num(pact.max),
+        kind: "pips"
+      });
     }
-    const primary = actor?.system?.resources?.primary;
-    if (primary && num(primary.max) > 0) {
-      return { label: primary.label || game.i18n.localize("GLUNIVERSE_STREAM.hud.resource.generic"), value: num(primary.value), max: num(primary.max) };
+    const resources = actor?.system?.resources ?? {};
+    for (const slot of ["primary", "secondary", "tertiary"]) {
+      const r = resources[slot];
+      if (!r || num(r.max) <= 0) continue;
+      out.push({
+        key: slot,
+        label: r.label || game.i18n.localize("GLUNIVERSE_STREAM.hud.resource.generic"),
+        value: num(r.value),
+        max: num(r.max),
+        kind: num(r.max) <= 12 ? "pips" : "counter"
+      });
     }
-    return null;
+    return out;
+  },
+
+  /** Leveled spell slots (1–9) the actor actually has, for the slot tracker. */
+  getSpellSlots(actor) {
+    const spells = actor?.system?.spells ?? {};
+    const out = [];
+    for (let level = 1; level <= 9; level += 1) {
+      const slot = spells[`spell${level}`];
+      if (slot && num(slot.max) > 0) out.push({ level, value: num(slot.value), max: num(slot.max) });
+    }
+    return out;
+  },
+
+  /** Whether the character currently holds Heroic Inspiration. */
+  getInspiration(actor) {
+    return Boolean(actor?.system?.attributes?.inspiration);
+  },
+
+  /** Bloodied = at or below half max HP (and still up), per the 2024 rules. */
+  isBloodied(actor) {
+    const hp = actor?.system?.attributes?.hp ?? {};
+    const max = num(hp.max);
+    const value = num(hp.value);
+    return max > 0 && value > 0 && value <= Math.floor(max / 2);
   },
 
   getAbilities(actor) {
@@ -84,7 +125,8 @@ export const dnd5eAdapter = {
         key,
         label: String(label).toUpperCase(),
         value: num(abilities[key]?.value, 10),
-        mod: num(abilities[key]?.mod)
+        mod: num(abilities[key]?.mod),
+        proficient: num(abilities[key]?.proficient) > 0
       };
     });
   },

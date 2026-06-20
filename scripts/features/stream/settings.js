@@ -163,7 +163,7 @@ function sanitizeHudSettings(value) {
   merged.offsetY = numberOrDefault(merged.offsetY, 0);
   merged.scale = Math.min(200, Math.max(50, numberOrDefault(merged.scale, 100)));
   merged.roster = Array.isArray(merged.roster) ? merged.roster.filter(id => typeof id === "string" && id) : [];
-  for (const flag of ["showResource", "showConditions", "showTempHp", "showAbilities"]) merged[flag] = Boolean(merged[flag]);
+  for (const flag of ["showResource", "showConditions", "showTempHp", "showAbilities", "showInspiration", "showSpellSlots"]) merged[flag] = Boolean(merged[flag]);
   return merged;
 }
 

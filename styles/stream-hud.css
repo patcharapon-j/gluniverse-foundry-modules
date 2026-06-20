@@ -41,9 +41,8 @@
   --gls-accent: var(--gl-cyan);
   position: relative;
   display: flex;
-  gap: 12px;
-  width: 290px;
-  padding: 12px 14px 12px 12px;
+  width: 284px;
+  padding: 12px 14px;
   border-radius: var(--gl-radius);
   color: var(--gl-text);
   pointer-events: none;
@@ -74,37 +73,56 @@
   z-index: 3;
 }
 
-/* ── Portrait ────────────────────────────────────────────────────────────── */
-.gls-hud-portrait {
-  position: relative;
-  flex: 0 0 64px;
-  width: 64px;
-  height: 64px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--gl-edge);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
-  align-self: center;
-}
-.gls-hud-portrait img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: filter var(--gl-d-move) var(--gl-ease);
-}
+/* ── Overlays: downed veil + floating-delta FX layer ─────────────────────── */
 .gls-hud-down-veil {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 40%, transparent 30%, rgba(120, 0, 8, 0.45));
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 38%, transparent 28%, rgba(120, 0, 8, 0.42));
   opacity: 0;
+  pointer-events: none;
+  z-index: 4;
   transition: opacity var(--gl-d-move) var(--gl-ease);
 }
+/* Holds the rising "-7"/"+5" chips; overflow visible so they fly off the card. */
+.gls-hud-fx {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 6;
+}
+.gls-hud-delta {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-family: var(--gl-tech);
+  font-weight: 800;
+  font-size: 1.18rem;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  background: rgba(6, 9, 15, 0.78);
+  border: 1px solid var(--gl-edge);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  animation: gls-hud-delta-rise 1150ms var(--gl-ease) forwards;
+}
+.gls-hud-delta.damage { color: #ff7b82; border-color: color-mix(in srgb, var(--gl-hazard) 60%, transparent); box-shadow: 0 0 16px color-mix(in srgb, var(--gl-hazard) 45%, transparent); }
+.gls-hud-delta.heal { color: #8effc0; border-color: color-mix(in srgb, var(--gl-good) 60%, transparent); box-shadow: 0 0 16px color-mix(in srgb, var(--gl-good) 45%, transparent); }
+.gls-hud-delta i { font-size: 0.92em; }
 
 /* ── Body / header ───────────────────────────────────────────────────────── */
 .gls-hud-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .gls-hud-header { display: flex; flex-direction: column; gap: 1px; }
+.gls-hud-titlerow { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .gls-hud-name {
+  flex: 0 1 auto;
   font-weight: 700;
   font-size: 1.04rem;
   letter-spacing: 0.02em;
@@ -114,6 +132,22 @@
   text-overflow: ellipsis;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
+
+/* ── Title badges: bloodied drop + inspiration star ──────────────────────── */
+.gls-hud-badges { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; margin-left: auto; }
+.gls-hud-badges [hidden] { display: none; }
+.gls-hud-bloodied, .gls-hud-insp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+}
+.gls-hud-bloodied { color: var(--gl-hazard); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gl-hazard) 70%, transparent)); }
+.gls-hud-insp { color: var(--gl-signal); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gl-signal) 75%, transparent)); }
+.gls-hud-insp.just-pop, .gls-hud-bloodied.just-pop { animation: gls-hud-badge-pop 560ms var(--gl-pop); }
 .gls-hud-meta { display: flex; gap: 8px; align-items: baseline; font-size: 0.72rem; min-width: 0; }
 .gls-hud-classlevel { color: var(--gls-accent); font-weight: 600; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
 .gls-hud-race { color: var(--gl-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -198,9 +232,10 @@
 }
 .gls-hud-ac.flip .gls-hud-ac-value { animation: gls-hud-flip 540ms var(--gl-pop); }
 
-/* ── Class resource ──────────────────────────────────────────────────────── */
+/* ── Class resources (pact, ki, rage, …) ─────────────────────────────────── */
+.gls-hud-resources { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; }
 .gls-hud-resource { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; }
-.gls-hud-resource-label { text-transform: uppercase; letter-spacing: 0.05em; color: var(--gl-text-dim); }
+.gls-hud-resource-label { text-transform: uppercase; letter-spacing: 0.05em; color: var(--gl-text-dim); white-space: nowrap; }
 .gls-hud-resource-pips { display: inline-flex; gap: 3px; }
 .gls-hud-pip {
   width: 9px;
@@ -219,6 +254,32 @@
 .gls-hud-resource-num { font-family: var(--gl-tech); font-weight: 700; color: var(--gl-text-bright); }
 .gls-hud-resource-max { color: var(--gl-text-dim); font-weight: 400; }
 
+/* ── Spell slots strip ───────────────────────────────────────────────────── */
+.gls-hud-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.gls-hud-slot { display: inline-flex; align-items: center; gap: 4px; }
+.gls-hud-slot-lvl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--gl-cyan);
+  background: color-mix(in srgb, var(--gl-cyan) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gl-cyan) 34%, transparent);
+}
+.gls-hud-slot-pips { display: inline-flex; gap: 3px; }
+.gls-hud-slot .gls-hud-pip.filled {
+  background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--gl-cyan) 80%, #fff), var(--gl-cyan));
+  border-color: var(--gl-cyan);
+  box-shadow: 0 0 7px var(--gl-cyan);
+}
+.gls-hud-slot-num { font-family: var(--gl-tech); font-size: 0.7rem; font-weight: 700; color: var(--gl-text-bright); }
+
 /* ── Conditions ──────────────────────────────────────────────────────────── */
 .gls-hud-conditions { display: flex; flex-wrap: wrap; gap: 4px; }
 .gls-hud-condition {
@@ -235,20 +296,40 @@
 .gls-hud-condition.removing { animation: gls-hud-cond-out 320ms var(--gl-exit) forwards; }
 
 /* ── Ability scores (optional) ───────────────────────────────────────────── */
-.gls-hud-abilities { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Six across, never wrapping — equal flex cells share the card width. */
+.gls-hud-abilities { display: flex; gap: 4px; flex-wrap: nowrap; }
 .gls-hud-ability {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 30px;
-  padding: 2px 4px;
+  padding: 3px 2px 2px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--gl-hair);
 }
-.gls-hud-ability-label { font-size: 0.56rem; letter-spacing: 0.06em; color: var(--gl-text-dim); }
-.gls-hud-ability-score { font-family: var(--gl-tech); font-weight: 700; font-size: 0.86rem; color: var(--gl-text-bright); }
-.gls-hud-ability-mod { font-size: 0.6rem; color: var(--gls-accent); }
+/* Proficient saving throws read with a gold rim + a dot over the label. */
+.gls-hud-ability.is-prof {
+  border-color: color-mix(in srgb, var(--gl-signal) 55%, transparent);
+  box-shadow: inset 0 0 8px color-mix(in srgb, var(--gl-signal) 16%, transparent);
+}
+.gls-hud-ability.is-prof::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--gl-signal);
+  box-shadow: 0 0 5px var(--gl-signal);
+}
+.gls-hud-ability-label { font-size: 0.54rem; letter-spacing: 0.04em; color: var(--gl-text-dim); }
+.gls-hud-ability.is-prof .gls-hud-ability-label { color: var(--gl-signal-pale); }
+.gls-hud-ability-score { font-family: var(--gl-tech); font-weight: 700; font-size: 0.84rem; color: var(--gl-text-bright); }
+.gls-hud-ability-mod { font-size: 0.58rem; color: var(--gls-accent); }
 
 /* ── Active turn emphasis ────────────────────────────────────────────────── */
 .gls-hud-card.is-turn {
@@ -269,15 +350,31 @@
   animation: gls-hud-turn-breathe var(--gl-breathe) ease-in-out infinite;
 }
 
+/* ── Bloodied (≤ half HP) ────────────────────────────────────────────────── */
+/* A dedicated veil child (not ::after) so it can coexist with the turn glow. */
+.gls-hud-bloodied-veil {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  background: radial-gradient(135% 100% at 50% 122%, color-mix(in srgb, var(--gl-hazard) 30%, transparent), transparent 58%);
+  transition: opacity var(--gl-d-move) var(--gl-ease);
+}
+.gls-hud-card.is-bloodied { --gls-accent: var(--gl-hazard); }
+.gls-hud-card.is-bloodied .gls-hud-bloodied-veil { animation: gls-hud-bloodied-breathe var(--gl-breathe) ease-in-out infinite; }
+
 /* ── Downed / 0 HP ───────────────────────────────────────────────────────── */
 .gls-hud-card.is-down { filter: saturate(0.35) brightness(0.82); }
-.gls-hud-card.is-down .gls-hud-portrait img { filter: grayscale(0.85); }
 .gls-hud-card.is-down .gls-hud-down-veil { opacity: 1; }
 .gls-hud-card.is-down .gls-hud-name { color: var(--gl-hazard); }
 
-/* ── Delta flash on the card edge ────────────────────────────────────────── */
+/* ── Whole-card hit/heal reaction (edge bloom + a body shake / pop) ──────── */
 .gls-hud-card.flash-damage { animation: gls-hud-flash-dmg 620ms var(--gl-ease); }
 .gls-hud-card.flash-heal { animation: gls-hud-flash-heal 620ms var(--gl-ease); }
+.gls-hud-card.flash-damage .gls-hud-body { animation: gls-hud-shake 460ms var(--gl-ease); }
+.gls-hud-card.flash-heal .gls-hud-body { animation: gls-hud-heal-pop 520ms var(--gl-pop); }
 
 /* ── Enter / exit ────────────────────────────────────────────────────────── */
 .gls-hud-card.gls-hud-entering { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); }
@@ -321,6 +418,34 @@
   0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
   100% { opacity: 0; transform: translateY(14px) scale(0.9); filter: blur(4px); }
 }
+@keyframes gls-hud-delta-rise {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--gls-delta-x, 0px)), -30%) scale(0.7); }
+  18% { opacity: 1; transform: translate(calc(-50% + var(--gls-delta-x, 0px)), -55%) scale(1.12); }
+  32% { transform: translate(calc(-50% + var(--gls-delta-x, 0px)), -62%) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--gls-delta-x, 0px)), -150%) scale(0.96); }
+}
+@keyframes gls-hud-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  30% { transform: translateX(4px); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(2px); }
+  78% { transform: translateX(-1px); }
+}
+@keyframes gls-hud-heal-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.035); }
+  100% { transform: scale(1); }
+}
+@keyframes gls-hud-badge-pop {
+  0% { transform: scale(0.3) rotate(-25deg); opacity: 0; }
+  55% { transform: scale(1.35) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes gls-hud-bloodied-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    Reduced motion — collapse durations to near-zero (NOT `none`) so width/value
@@ -335,19 +460,24 @@
   .gls-hud-hp-ghost.heal,
   .gls-hud-hp-temp,
   .gls-hud-pip,
-  .gls-hud-portrait img,
   .gls-hud-down-veil {
     transition-duration: 0.001ms !important;
   }
   .gls-hud-card.flash-damage,
   .gls-hud-card.flash-heal,
+  .gls-hud-card.flash-damage .gls-hud-body,
+  .gls-hud-card.flash-heal .gls-hud-body,
   .gls-hud-card.gls-hud-exiting,
   .gls-hud-condition,
   .gls-hud-condition.removing,
   .gls-hud-ac.flip .gls-hud-ac-value,
-  .gls-hud-pip.just-filled {
+  .gls-hud-pip.just-filled,
+  .gls-hud-insp.just-pop,
+  .gls-hud-bloodied.just-pop,
+  .gls-hud-delta {
     animation-duration: 0.001ms !important;
   }
   .gls-hud-card.is-turn::after { animation: none; }
+  .gls-hud-card.is-bloodied .gls-hud-bloodied-veil { animation: none; opacity: 0.7; }
   .gls-hud-card.is-turn { transform: none; }
 }

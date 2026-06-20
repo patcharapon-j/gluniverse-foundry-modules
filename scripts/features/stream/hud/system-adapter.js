@@ -43,15 +43,17 @@ export function buildActorSnapshot(actor, fields = {}) {
   return {
     id: actor.id,
     name: adapter.getName(actor),
-    img: adapter.getPortrait(actor),
     classLevel: adapter.getClassLevel(actor),
     race: adapter.getRace(actor),
     hp,
     ac: adapter.getAC(actor),
-    resource: fields.showResource === false ? null : adapter.getPrimaryResource(actor),
+    resources: fields.showResource === false ? [] : (adapter.getResources?.(actor) ?? []),
+    spellSlots: fields.showSpellSlots ? (adapter.getSpellSlots?.(actor) ?? []) : [],
     abilities: fields.showAbilities ? adapter.getAbilities(actor) : [],
     conditions: fields.showConditions === false ? [] : adapter.getConditions(actor),
     tempHp: fields.showTempHp === false ? 0 : hp.temp,
+    inspiration: fields.showInspiration === false ? false : Boolean(adapter.getInspiration?.(actor)),
+    bloodied: Boolean(adapter.isBloodied?.(actor)),
     defeated: adapter.isDefeated(actor)
   };
 }

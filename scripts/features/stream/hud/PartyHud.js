@@ -16,7 +16,6 @@ import { escapeHTML } from "../../../core/util.mjs";
 import { requestHudState } from "../socket.js";
 
 const ROOT_ID = "gls-hud-root";
-const PORTRAIT_FALLBACK = "icons/svg/mystery-man.svg";
 
 function prefersReducedMotion() {
   return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
@@ -146,10 +145,18 @@ export class PartyHud {
     el.className = "gls-hud-card gl-glass";
     el.dataset.actorId = snap.id;
     el.innerHTML = `
-      <div class="gls-hud-portrait"><img alt="" draggable="false"/><div class="gls-hud-down-veil"></div></div>
+      <div class="gls-hud-fx" aria-hidden="true"></div>
+      <div class="gls-hud-bloodied-veil" aria-hidden="true"></div>
+      <div class="gls-hud-down-veil"></div>
       <div class="gls-hud-body">
         <div class="gls-hud-header">
-          <span class="gls-hud-name"></span>
+          <div class="gls-hud-titlerow">
+            <span class="gls-hud-name"></span>
+            <span class="gls-hud-badges">
+              <span class="gls-hud-bloodied" title="Bloodied" hidden><i class="fa-solid fa-droplet"></i></span>
+              <span class="gls-hud-insp" title="Inspiration" hidden><i class="fa-solid fa-star"></i></span>
+            </span>
+          </div>
           <span class="gls-hud-meta"><span class="gls-hud-classlevel"></span><span class="gls-hud-race"></span></span>
         </div>
         <div class="gls-hud-vitals">
@@ -162,8 +169,9 @@ export class PartyHud {
             <div class="gls-hud-hp-text"><span class="gls-hud-hp-value">0</span><span class="gls-hud-hp-sep">/</span><span class="gls-hud-hp-max">0</span><span class="gls-hud-hp-temp-text"></span></div>
           </div>
           <div class="gls-hud-ac" title="Armor Class"><i class="fa-solid fa-shield-halved"></i><span class="gls-hud-ac-value">—</span></div>
-          <div class="gls-hud-resource"></div>
         </div>
+        <div class="gls-hud-resources"></div>
+        <div class="gls-hud-slots"></div>
         <div class="gls-hud-conditions"></div>
         <div class="gls-hud-abilities"></div>
       </div>`;
@@ -177,21 +185,42 @@ export class PartyHud {
     const prev = rec.snap;
     el.classList.toggle("is-turn", Boolean(snap.turn));
     el.classList.toggle("is-down", Boolean(snap.defeated));
-
-    const img = el.querySelector(".gls-hud-portrait img");
-    if (img.getAttribute("src") !== snap.img) img.src = snap.img || PORTRAIT_FALLBACK;
+    el.classList.toggle("is-bloodied", Boolean(snap.bloodied) && !snap.defeated);
 
     this.#setText(el, ".gls-hud-name", snap.name);
     this.#setText(el, ".gls-hud-classlevel", snap.classLevel);
     this.#setText(el, ".gls-hud-race", snap.race);
     el.querySelector(".gls-hud-race").style.display = snap.race ? "" : "none";
+    this.#updateBadges(el, prev, snap);
 
     this.#updateHP(el, prev?.hp, snap.hp, snap.tempHp);
     this.#updateAC(el, prev?.ac, snap.ac);
-    this.#updateResource(el, prev?.resource, snap.resource);
+    this.#updateResources(el, prev?.resources ?? [], snap.resources ?? []);
+    this.#updateSpellSlots(el, prev?.spellSlots ?? [], snap.spellSlots ?? []);
     this.#updateConditions(el, prev?.conditions ?? [], snap.conditions ?? []);
     this.#updateAbilities(el, snap.abilities ?? []);
     this.#startCount(rec, prev?.hp?.value, snap.hp?.value);
+  }
+
+  /** Inspiration star + bloodied drop, each pulsing when it first appears. */
+  #updateBadges(el, prev, snap) {
+    const insp = el.querySelector(".gls-hud-insp");
+    const gainedInsp = Boolean(snap.inspiration) && !(prev && prev.inspiration);
+    insp.hidden = !snap.inspiration;
+    if (gainedInsp && prev) this.#pulse(insp, "pop");
+
+    const blood = el.querySelector(".gls-hud-bloodied");
+    const becameBloodied = Boolean(snap.bloodied) && !snap.defeated && !(prev && prev.bloodied);
+    blood.hidden = !(snap.bloodied && !snap.defeated);
+    if (becameBloodied && prev) this.#pulse(blood, "pop");
+  }
+
+  #pulse(node, kind) {
+    const cls = `just-${kind}`;
+    node.classList.remove(cls);
+    void node.offsetWidth;
+    node.classList.add(cls);
+    node.addEventListener("animationend", () => node.classList.remove(cls), { once: true });
   }
 
   #updateHP(el, prevHP, hp, tempHp) {
@@ -224,6 +253,7 @@ export class PartyHud {
       ghost.style.transition = "";
       ghost.style.width = `${newPct * 100}%`;
       this.#flash(el, "damage");
+      this.#spawnDelta(el, hp.value - prevHP.value, "damage");
     } else if (prevHP && hp.value > prevHP.value) {
       // Heal: ghost leads to the new (higher) height in green, the solid bar
       // grows up to meet it.
@@ -235,6 +265,7 @@ export class PartyHud {
       ghost.style.transition = "";
       fill.style.width = `${newPct * 100}%`;
       this.#flash(el, "heal");
+      this.#spawnDelta(el, hp.value - prevHP.value, "heal");
     } else {
       // No change (or first paint): settle both bars.
       fill.style.width = `${newPct * 100}%`;
@@ -258,6 +289,27 @@ export class PartyHud {
     window.setTimeout(() => card.classList.remove(cls), 1200);
   }
 
+  /**
+   * A floating "-7" / "+5" with a heart icon that rises off the card and fades.
+   * Lives in the .gls-hud-fx layer so it can overflow the card without clipping.
+   */
+  #spawnDelta(el, amount, kind) {
+    const fx = el.querySelector(".gls-hud-fx");
+    if (!fx) return;
+    const n = Math.abs(Number(amount) || 0);
+    if (!n) return;
+    const chip = document.createElement("span");
+    chip.className = `gls-hud-delta ${kind}`;
+    const icon = kind === "damage" ? "fa-heart-crack" : "fa-heart-circle-plus";
+    const sign = kind === "damage" ? "−" : "+"; // U+2212 minus reads cleaner than hyphen
+    chip.innerHTML = `<i class="fa-solid ${icon}"></i><span>${sign}${n}</span>`;
+    // Slight horizontal jitter so repeated hits don't perfectly overlap.
+    chip.style.setProperty("--gls-delta-x", `${Math.round((Math.random() - 0.5) * 26)}px`);
+    fx.appendChild(chip);
+    chip.addEventListener("animationend", () => chip.remove(), { once: true });
+    window.setTimeout(() => chip.remove(), 1400);
+  }
+
   #updateAC(el, prevAC, ac) {
     const valueEl = el.querySelector(".gls-hud-ac-value");
     const next = ac == null ? "—" : String(ac);
@@ -271,39 +323,90 @@ export class PartyHud {
     }
   }
 
-  #updateResource(el, prevRes, res) {
-    const wrap = el.querySelector(".gls-hud-resource");
-    if (!res) {
+  /** Class resources (pact, ki, rage, …) — pips when small, a counter when large. */
+  #updateResources(el, prevList, list) {
+    const wrap = el.querySelector(".gls-hud-resources");
+    if (!list.length) {
       wrap.innerHTML = "";
       wrap.style.display = "none";
       return;
     }
     wrap.style.display = "";
-    const changed = !prevRes || prevRes.label !== res.label || prevRes.max !== res.max;
-    if (changed) {
-      const pips = Number.isFinite(res.max) && res.max > 0 && res.max <= 12
-        ? Array.from({ length: res.max }, (_, i) => `<span class="gls-hud-pip" data-i="${i}"></span>`).join("")
-        : "";
-      wrap.innerHTML = `
-        <span class="gls-hud-resource-label">${escapeHTML(res.label ?? "")}</span>
-        <span class="gls-hud-resource-pips">${pips}</span>
-        <span class="gls-hud-resource-num">${escapeHTML(String(res.value ?? 0))}${res.max ? `<span class="gls-hud-resource-max">/${escapeHTML(String(res.max))}</span>` : ""}</span>`;
-    } else {
-      this.#setText(el, ".gls-hud-resource-num", `${res.value ?? 0}`);
-      const numEl = wrap.querySelector(".gls-hud-resource-num");
-      if (numEl && res.max) numEl.innerHTML = `${escapeHTML(String(res.value ?? 0))}<span class="gls-hud-resource-max">/${escapeHTML(String(res.max))}</span>`;
+    const sig = list.map(r => `${r.key}:${r.label}:${r.max}:${r.kind}`).join("|");
+    if (wrap.dataset.sig !== sig) {
+      wrap.dataset.sig = sig;
+      wrap.innerHTML = list.map(r => this.#resourceHTML(r)).join("");
     }
-    const pipEls = wrap.querySelectorAll(".gls-hud-pip");
-    pipEls.forEach((pip, i) => {
-      const wasFilled = pip.classList.contains("filled");
-      const filled = i < (res.value ?? 0);
-      pip.classList.toggle("filled", filled);
-      if (filled && !wasFilled && prevRes) {
-        pip.classList.remove("just-filled");
-        void pip.offsetWidth;
-        pip.classList.add("just-filled");
+    const prevByKey = new Map(prevList.map(r => [r.key, r]));
+    for (const res of list) {
+      const group = wrap.querySelector(`[data-res-key="${CSS.escape(res.key)}"]`);
+      if (!group) continue;
+      const prev = prevByKey.get(res.key);
+      const numEl = group.querySelector(".gls-hud-resource-num");
+      if (numEl) {
+        numEl.innerHTML = `${escapeHTML(String(res.value ?? 0))}${res.max ? `<span class="gls-hud-resource-max">/${escapeHTML(String(res.max))}</span>` : ""}`;
       }
-    });
+      group.querySelectorAll(".gls-hud-pip").forEach((pip, i) => {
+        const wasFilled = pip.classList.contains("filled");
+        const filled = i < (res.value ?? 0);
+        pip.classList.toggle("filled", filled);
+        if (filled && !wasFilled && prev) {
+          pip.classList.remove("just-filled");
+          void pip.offsetWidth;
+          pip.classList.add("just-filled");
+        }
+      });
+    }
+  }
+
+  #resourceHTML(res) {
+    const pips = res.kind === "pips" && res.max > 0 && res.max <= 12
+      ? `<span class="gls-hud-resource-pips">${Array.from({ length: res.max }, (_, i) => `<span class="gls-hud-pip" data-i="${i}"></span>`).join("")}</span>`
+      : "";
+    return `<span class="gls-hud-resource" data-res-key="${escapeHTML(res.key)}">
+      <span class="gls-hud-resource-label">${escapeHTML(res.label ?? "")}</span>
+      ${pips}
+      <span class="gls-hud-resource-num">${escapeHTML(String(res.value ?? 0))}${res.max ? `<span class="gls-hud-resource-max">/${escapeHTML(String(res.max))}</span>` : ""}</span>
+    </span>`;
+  }
+
+  /** Leveled spell slots as a compact per-level pip strip (counter if many). */
+  #updateSpellSlots(el, prevList, list) {
+    const wrap = el.querySelector(".gls-hud-slots");
+    if (!list.length) {
+      wrap.innerHTML = "";
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "";
+    const sig = list.map(s => `${s.level}:${s.max}`).join("|");
+    if (wrap.dataset.sig !== sig) {
+      wrap.dataset.sig = sig;
+      wrap.innerHTML = list.map(s => {
+        const pips = s.max <= 6
+          ? `<span class="gls-hud-slot-pips">${Array.from({ length: s.max }, (_, i) => `<span class="gls-hud-pip" data-i="${i}"></span>`).join("")}</span>`
+          : `<span class="gls-hud-slot-num">${escapeHTML(String(s.value))}/${escapeHTML(String(s.max))}</span>`;
+        return `<span class="gls-hud-slot" data-lvl="${s.level}"><span class="gls-hud-slot-lvl">${s.level}</span>${pips}</span>`;
+      }).join("");
+    }
+    const prevByLevel = new Map(prevList.map(s => [s.level, s]));
+    for (const slot of list) {
+      const group = wrap.querySelector(`.gls-hud-slot[data-lvl="${slot.level}"]`);
+      if (!group) continue;
+      const prev = prevByLevel.get(slot.level);
+      const numEl = group.querySelector(".gls-hud-slot-num");
+      if (numEl) numEl.textContent = `${slot.value}/${slot.max}`;
+      group.querySelectorAll(".gls-hud-pip").forEach((pip, i) => {
+        const wasFilled = pip.classList.contains("filled");
+        const filled = i < slot.value;
+        pip.classList.toggle("filled", filled);
+        if (filled && !wasFilled && prev) {
+          pip.classList.remove("just-filled");
+          void pip.offsetWidth;
+          pip.classList.add("just-filled");
+        }
+      });
+    }
   }
 
   #updateConditions(el, prevConds, conds) {
@@ -344,12 +447,14 @@ export class PartyHud {
       return;
     }
     wrap.style.display = "";
-    const want = abilities.map(a => `${a.key}:${a.value}`).join("|");
+    const want = abilities.map(a => `${a.key}:${a.value}:${a.proficient ? 1 : 0}`).join("|");
     if (wrap.dataset.sig === want) return;
     wrap.dataset.sig = want;
     wrap.innerHTML = abilities.map(a => {
       const sign = a.mod >= 0 ? "+" : "";
-      return `<span class="gls-hud-ability"><span class="gls-hud-ability-label">${escapeHTML(a.label)}</span><span class="gls-hud-ability-score">${escapeHTML(String(a.value))}</span><span class="gls-hud-ability-mod">${sign}${escapeHTML(String(a.mod))}</span></span>`;
+      const prof = a.proficient ? " is-prof" : "";
+      const title = a.proficient ? ` title="${escapeHTML(a.label)} — proficient save"` : "";
+      return `<span class="gls-hud-ability${prof}"${title}><span class="gls-hud-ability-label">${escapeHTML(a.label)}</span><span class="gls-hud-ability-score">${escapeHTML(String(a.value))}</span><span class="gls-hud-ability-mod">${sign}${escapeHTML(String(a.mod))}</span></span>`;
     }).join("");
   }
 
