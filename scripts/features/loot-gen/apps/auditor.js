@@ -61,7 +61,7 @@ export class AuditorDashboard extends HandlebarsApplicationMixin(ApplicationV2) 
   };
 
   static PARTS = {
-    body: { template: featurePath(FEATURE_ID, "templates/loot-gen/auditor.hbs") }
+    body: { template: featurePath(FEATURE_ID, "templates/auditor.hbs") }
   };
 
   async _prepareContext(options) {

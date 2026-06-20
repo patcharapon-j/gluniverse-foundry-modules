@@ -33,6 +33,7 @@ import {
   APEX_TURNS_LIMITS,
   DEGREE_LABELS,
   GLUNI_MODULE_ID,
+  GLUNI_INIT_MODE_KEY,
   MODULE_ID,
 } from "./constants.js";
 import { asElement, getSetting } from "./settings.js";
@@ -88,7 +89,7 @@ function gluniCardModeActive() {
   const mod = game.modules?.get(GLUNI_MODULE_ID);
   if (!mod?.active) return false;
   try {
-    return game.settings.get(GLUNI_MODULE_ID, "initiativeMode") === "card";
+    return game.settings.get(GLUNI_MODULE_ID, GLUNI_INIT_MODE_KEY) === "card";
   } catch (err) {
     return false;
   }

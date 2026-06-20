@@ -25,9 +25,22 @@ export function suitePath(rel) {
   return `modules/${SUITE_ID}/${rel.replace(/^\/+/, "")}`;
 }
 
-/** Path to a file inside a feature's own folder. */
+/**
+ * Resolve a bundled feature file to its installed path.
+ *
+ * Layout convention (the repo root maps to `modules/gluniverse-suite/`):
+ *   - templates live at  `templates/<featureId>/...`
+ *   - assets    live at  `assets/<featureId>/...`
+ *   - any other file is resolved inside the feature's script folder.
+ *
+ * So `featurePath("insight", "templates/x.hbs")` →
+ * `modules/gluniverse-suite/templates/insight/x.hbs`.
+ */
 export function featurePath(featureId, rel) {
-  return suitePath(`features/${featureId}/${rel.replace(/^\/+/, "")}`);
+  const r = rel.replace(/^\/+/, "");
+  if (r.startsWith("templates/")) return suitePath(`templates/${featureId}/${r.slice("templates/".length)}`);
+  if (r.startsWith("assets/")) return suitePath(`assets/${featureId}/${r.slice("assets/".length)}`);
+  return suitePath(`scripts/features/${featureId}/${r}`);
 }
 
 export const log = (...a) => console.log(`%c${SUITE_TITLE}`, "color:#5eeaff", "|", ...a);

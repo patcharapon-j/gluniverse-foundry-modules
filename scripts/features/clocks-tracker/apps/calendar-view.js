@@ -42,7 +42,7 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   static PARTS = {
-    main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/calendar-view.hbs` }
+    main: { template: `modules/${MODULE_ID}/templates/clocks-tracker/calendar-view.hbs` }
   };
 
   _viewYear = null;

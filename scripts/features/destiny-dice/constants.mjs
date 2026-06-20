@@ -34,7 +34,7 @@ export const PRESET_DEFAULT = "default";
 export const PRESET_AEGIS_FALLEN = "aegis-fallen";
 export const PRESET_TIDES_OF_DESTINY = "tides-of-destiny";
 
-const ASSET_ROOT = `modules/${MODULE_ID}/features/${FEATURE_ID}/assets/dice`;
+const ASSET_ROOT = `modules/${MODULE_ID}/assets/${FEATURE_ID}/dice`;
 
 function faceAsset(folder, base) {
   if (!base) return { image: "", bump: "", emissive: "" };

@@ -96,7 +96,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   static PARTS = {
-    hud: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/hud.hbs` }
+    hud: { template: `modules/${MODULE_ID}/templates/clocks-tracker/hud.hbs` }
   };
 
   _built = false;

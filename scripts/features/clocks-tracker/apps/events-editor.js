@@ -30,7 +30,7 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/events-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/clocks-tracker/events-editor.hbs` } };
 
   static getEvents() {
     return foundry.utils.deepClone(game.settings.get(MODULE_ID, SETTINGS.events) ?? []);

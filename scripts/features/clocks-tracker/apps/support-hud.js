@@ -60,7 +60,7 @@ export class SupportHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { hud: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/support-hud.hbs` } };
+  static PARTS = { hud: { template: `modules/${MODULE_ID}/templates/clocks-tracker/support-hud.hbs` } };
 
   _gaugeMax = -1;   // segment count currently built (rebuild gauge when poolMax changes)
   _actsSig = null;  // signature of the active support's abilities (rebuild rows on change)

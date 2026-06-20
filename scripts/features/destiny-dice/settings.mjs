@@ -66,7 +66,7 @@ for (const preset of Object.values(PRESET_FATE_FACES)) {
 // install path and the old standalone-module path, since values stored by the
 // previous standalone module still reference `modules/gluniverse-destiny-dice/`.
 for (const legacy of ["defiance.png", "defiance-2.png", "tyranny-2.png", "tyranny-4.png"]) {
-  BUILTIN_IMAGE_PATHS.add(`modules/${MODULE_ID}/features/${FEATURE_ID}/assets/dice/${legacy}`);
+  BUILTIN_IMAGE_PATHS.add(`modules/${MODULE_ID}/assets/${FEATURE_ID}/dice/${legacy}`);
   BUILTIN_IMAGE_PATHS.add(`modules/gluniverse-destiny-dice/assets/dice/${legacy}`);
 }
 
@@ -82,7 +82,7 @@ const FATE_KIND_CHOICES = {
   blank: "GLDDF.Fate.Kind.blank",
 };
 
-const FACE_CONFIG_TEMPLATE = `modules/${MODULE_ID}/features/${FEATURE_ID}/templates/face-config.hbs`;
+const FACE_CONFIG_TEMPLATE = `modules/${MODULE_ID}/templates/${FEATURE_ID}/face-config.hbs`;
 
 export function registerSettings() {
   const reg = (key, opts) => game.settings.register(MODULE_ID, key, {

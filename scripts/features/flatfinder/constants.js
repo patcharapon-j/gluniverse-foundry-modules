@@ -86,8 +86,10 @@ export const APEX_INITIATIVE_STEP = 10;
 /** HP fractions that trigger an Apex phase beat (Flatfinder §8: 66% and 33%). */
 export const APEX_PHASE_THRESHOLDS = Object.freeze([0.66, 0.33]);
 
-/** The sibling module whose Card initiative mode owns multi-turn bosses itself. */
-export const GLUNI_MODULE_ID = "gluniverse-initiative";
+/** The sibling suite feature whose Card initiative mode owns multi-turn bosses. */
+export const GLUNI_MODULE_ID = "gluniverse-suite";
+/** Initiative's (prefixed) setting key within the suite namespace. */
+export const GLUNI_INIT_MODE_KEY = "init.initiativeMode";
 
 export const DEGREE_LABELS = [
   "PF2E-FLATFINDER.Degree.CriticalFailure",

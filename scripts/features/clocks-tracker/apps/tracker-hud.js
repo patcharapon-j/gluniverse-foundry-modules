@@ -48,7 +48,7 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
   };
 
   static PARTS = {
-    hud: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/tracker-hud.hbs` }
+    hud: { template: `modules/${MODULE_ID}/templates/clocks-tracker/tracker-hud.hbs` }
   };
 
   _rows = new Map();   // id -> { el, paint, flash, vsig }

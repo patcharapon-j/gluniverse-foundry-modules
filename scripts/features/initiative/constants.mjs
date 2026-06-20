@@ -202,8 +202,8 @@ export function getDispositionColors(disposition) {
 }
 
 // Flag keys are prefixed with "init." for cross-feature isolation on shared
-// documents (scope is the suite id MODULE_ID). APEX.* flags use their own
-// foreign module namespace ("pf2e-flatfinder") and are intentionally not prefixed.
+// documents (scope is the suite id MODULE_ID). APEX.* flags mirror the
+// flatfinder feature's own ff.-prefixed keys under the same suite scope.
 export const FLAGS = {
   visibility: "init.visibility",
   manualDelayed: "init.manualDelayed",
@@ -266,10 +266,12 @@ export const PF2E_GUARD_BREAK_PENALTY = 2;
 // The PHASE_THRESHOLDS mirror Flatfinder's HP-phase beats so the card's menace
 // escalates in lock-step with the boss's mechanical phases.
 export const APEX = Object.freeze({
-  MODULE_ID: "pf2e-flatfinder",
-  FLAG: "apex",            // actor flag: { enabled, turns }
-  PRIME_FLAG: "apexPrime", // combatant flag on the boss's primary turn (true)
-  EXTRA_FLAG: "apexExtra", // combatant flag on an extra turn: { primeId, index, total }
+  // Flatfinder is now the "flatfinder" feature of this same suite, so its apex
+  // flags live under the suite scope with the ff.-prefixed keys it writes.
+  MODULE_ID: "gluniverse-suite",
+  FLAG: "ff.apex",            // actor flag: { enabled, turns }
+  PRIME_FLAG: "ff.apexPrime", // combatant flag on the boss's primary turn (true)
+  EXTRA_FLAG: "ff.apexExtra", // combatant flag on an extra turn: { primeId, index, total }
   PHASE_THRESHOLDS: Object.freeze([0.66, 0.33]) // HP fraction → Phase II / Phase III
 });
 

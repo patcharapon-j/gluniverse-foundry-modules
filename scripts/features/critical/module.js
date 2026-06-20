@@ -100,7 +100,7 @@ class GMConfigMenu extends Base$1 {
     }
   };
   static PARTS = {
-    form: { template: `modules/${MODULE_ID}/features/${FEATURE_ID}/templates/gm-config.html` }
+    form: { template: `modules/${MODULE_ID}/templates/${FEATURE_ID}/gm-config.html` }
   };
   async _prepareContext() {
     return {
@@ -847,7 +847,7 @@ class ActorConfigModal extends Base {
     }
   };
   static PARTS = {
-    form: { template: `modules/${MODULE_ID}/features/${FEATURE_ID}/templates/actor-config.html` }
+    form: { template: `modules/${MODULE_ID}/templates/${FEATURE_ID}/actor-config.html` }
   };
   constructor(actor, options = {}) {
     super(options);

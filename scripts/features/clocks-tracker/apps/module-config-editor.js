@@ -33,7 +33,7 @@ export class ModuleConfigEditor extends HandlebarsApplicationMixin(ApplicationV2
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/module-config-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/clocks-tracker/module-config-editor.hbs` } };
 
   /** Recursively map a node (by path) and its children into render rows. */
   _row(path, depth, parentOn) {

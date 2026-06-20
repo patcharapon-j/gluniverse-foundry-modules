@@ -47,7 +47,7 @@ export class DelvingEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/delving-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/clocks-tracker/delving-editor.hbs` } };
 
   _working = null;     // working copy of the whole delving config
   _preview = null;     // Pixi preview of the focused stage
