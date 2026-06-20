@@ -19,12 +19,13 @@ import { beginProgress, endProgress } from "./progress.js";
 
 function resolveParty() { return getAdapter()?.resolveParty() ?? { partyActor: null, members: [] }; }
 
-const TARGET_LABELS = {
-  [TARGET.LOOT_ACTOR]: "Loot actor (chest)",
-  [TARGET.CHAT_CARD]: "Chat hand-out",
-  [TARGET.DIRECT]: "Direct to PC sheets",
-  [TARGET.MERCHANT]: "Merchant shop (buyable)"
+const TARGET_LABEL_KEYS = {
+  [TARGET.LOOT_ACTOR]: "GLLG.target.lootActor",
+  [TARGET.CHAT_CARD]: "GLLG.target.chatCard",
+  [TARGET.DIRECT]: "GLLG.target.direct",
+  [TARGET.MERCHANT]: "GLLG.target.merchant"
 };
+function targetLabel(v) { return game.i18n.localize(TARGET_LABEL_KEYS[v] ?? v); }
 
 /** Destinations that make sense for a shop (DESIGN §18) — buyable actor or catalog. */
 const SHOP_TARGETS = [TARGET.MERCHANT, TARGET.CHAT_CARD];
@@ -51,13 +52,13 @@ async function onCardClick(ev) {
   if (!btn) return;
   ev.preventDefault();
   ev.stopPropagation();
-  if (!game.user?.isGM) return ui.notifications?.warn("GLLG: only the GM can act on a loot proposal.");
+  if (!game.user?.isGM) return ui.notifications?.warn(game.i18n.localize("GLLG.card.onlyGm"));
 
   const msgId = btn.closest("[data-message-id]")?.dataset?.messageId;
   const message = msgId ? game.messages.get(msgId) : null;
   if (!message) return;
   const proposal = foundry.utils.duplicate(message.getFlag(MODULE_ID, FLAG("proposal")) ?? null);
-  if (!proposal) return ui.notifications?.warn("GLLG: this proposal has expired.");
+  if (!proposal) return ui.notifications?.warn(game.i18n.localize("GLLG.card.proposalExpired"));
 
   btn.disabled = true;
   try {
@@ -71,7 +72,7 @@ async function onCardClick(ev) {
     }
   } catch (err) {
     console.error(`${MODULE_ID} | review-card action failed`, err);
-    ui.notifications?.error("GLLG: action failed (see console).");
+    ui.notifications?.error(game.i18n.localize("GLLG.card.actionFailed"));
   } finally {
     btn.disabled = false;
   }
@@ -106,8 +107,8 @@ async function doApprove(message, proposal) {
     content: renderDone(proposal, res),
     flags: { [MODULE_ID]: { lg: { proposal, materialized: true } } }
   });
-  if (res.ok) ui.notifications?.info(`GLLG: materialized ${res.created.length} container(s).`);
-  else ui.notifications?.error(`GLLG: ${res.reason}`);
+  if (res.ok) ui.notifications?.info(game.i18n.format("GLLG.card.materialized", { count: res.created.length }));
+  else ui.notifications?.error(game.i18n.format("GLLG.card.materializeError", { reason: res.reason }));
 }
 
 async function doReroll(message, proposal) {
@@ -115,7 +116,7 @@ async function doReroll(message, proposal) {
   // re-runs the cascade against the same request.
   if (proposal.workshop) {
     const { rerunWorkshop } = await import("../loot/workshop.js");
-    const progress = await beginProgress({ title: "Re-forging custom loot…", detail: "Loot Workshop" });
+    const progress = await beginProgress({ title: game.i18n.localize("GLLG.workshop.progressReforge"), detail: game.i18n.localize("GLLG.workshop.progressDetailDefault") });
     let next;
     try { next = await rerunWorkshop(proposal); }
     finally { await endProgress(progress); }
@@ -124,7 +125,7 @@ async function doReroll(message, proposal) {
   }
   const next = await proposeLoot(proposal.request);
   if (flavorEnabled()) {
-    const progress = await beginProgress({ title: "Adding LLM flavor…", detail: next.label || "Loot proposal" });
+    const progress = await beginProgress({ title: game.i18n.localize("GLLG.card.flavorProgress"), detail: next.label || game.i18n.localize("GLLG.card.defaultProposalLabel") });
     try { await decorateProposal(next); }   // re-flavor the fresh picks
     finally { await endProgress(progress); }
   } else {
@@ -135,12 +136,12 @@ async function doReroll(message, proposal) {
 
 /** Re-request LLM flavor for the current picks without changing the loot. */
 async function doReflavor(message, proposal) {
-  if (!flavorEnabled()) return ui.notifications?.warn("GLLG: LLM flavor is disabled (see module settings).");
-  const progress = await beginProgress({ title: "Re-flavoring…", detail: proposal.label || "Loot proposal" });
+  if (!flavorEnabled()) return ui.notifications?.warn(game.i18n.localize("GLLG.card.flavorDisabled"));
+  const progress = await beginProgress({ title: game.i18n.localize("GLLG.card.reflavorProgress"), detail: proposal.label || game.i18n.localize("GLLG.card.defaultProposalLabel") });
   try { await decorateProposal(proposal, { force: true }); }
   finally { await endProgress(progress); }
   await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { lg: { proposal } } } });
-  ui.notifications?.info("GLLG: re-flavored the proposal.");
+  ui.notifications?.info(game.i18n.localize("GLLG.card.reflavored"));
 }
 
 async function doRemove(message, proposal, btn) {
@@ -165,7 +166,7 @@ async function doSwap(message, proposal, btn) {
   // fine and the coins never change. Loot stays within the freed gp + coins.
   const budget = proposal.shop ? Infinity : old.gp + (parcel.currencyGp || 0);
   const repl = await rerollOnePick(proposal, old, budget);
-  if (!repl) return ui.notifications?.warn("GLLG: no affordable replacement found.");
+  if (!repl) return ui.notifications?.warn(game.i18n.localize("GLLG.card.noReplacement"));
   parcel.items[idx] = repl;
   if (!proposal.shop) parcel.currencyGp = round2(budget - repl.gp);
   recompute(parcel, proposal);
@@ -190,7 +191,7 @@ async function rerollOnePick(proposal, old, budget) {
   return {
     uuid: item.uuid, name: item.name, img: item.img, type: item.type,
     level: item.level, gp: round2(item.gp), qty: 1, rarity: item.rarity,
-    tier: old.tier, reason: "Swapped by GM",
+    tier: old.tier, reason: game.i18n.localize("GLLG.card.swappedByGm"),
     forActorId: old.forActorId ?? null, forActorName: old.forActorName ?? null
   };
 }
@@ -214,21 +215,24 @@ function renderCard(p) {
   const multi = p.parcels.length > 1;
   const parcels = p.parcels.map(parcel => renderParcel(parcel, multi)).join("");
   const reasons = (p.reasoning ?? []).map(r => `<li>${esc(r)}</li>`).join("");
+  const sub = game.i18n.format("GLLG.card.subLine", {
+    context: esc(p.context), level: p.level, count: p.itemCount, gp: gp(p.totalGp)
+  });
   return `<div class="gllg-card" data-proposal-id="${esc(p.id)}">
     <header class="gllg-card-head">
-      <div class="gllg-card-title"><i class="fa-solid fa-wand-sparkles"></i> ${esc(p.label || "Loot proposal")}</div>
-      <div class="gllg-card-sub">${esc(p.context)} · Lv ${p.level} · ${p.itemCount} item(s) · ${gp(p.totalGp)} gp</div>
+      <div class="gllg-card-title"><i class="fa-solid fa-wand-sparkles"></i> ${esc(p.label || game.i18n.localize("GLLG.card.defaultProposalLabel"))}</div>
+      <div class="gllg-card-sub">${sub}</div>
       ${headReg(`GLU·LOOT // ${String(p.context || "loot").toUpperCase()}`)}
     </header>
     ${renderKeeper(p)}
-    ${reasons ? `<details class="gllg-why" open><summary>Why these picks</summary><ul>${reasons}</ul></details>` : ""}
+    ${reasons ? `<details class="gllg-why" open><summary>${esc(game.i18n.localize("GLLG.card.whyThesePicks"))}</summary><ul>${reasons}</ul></details>` : ""}
     <div class="gllg-parcels">${parcels}</div>
     ${renderRouting(p)}
     <footer class="gllg-card-actions">
-      <button type="button" data-action="approve" class="gllg-btn gllg-go"><i class="fa-solid fa-check"></i> Approve</button>
-      <button type="button" data-action="reroll" class="gllg-btn"><i class="fa-solid fa-dice"></i> Reroll all</button>
-      ${flavorEnabled() && !p.workshop ? `<button type="button" data-action="reflavor" class="gllg-btn" title="Re-request LLM flavor"><i class="fa-solid fa-feather"></i> Reflavor</button>` : ""}
-      <button type="button" data-action="cancel" class="gllg-btn gllg-ghost"><i class="fa-solid fa-xmark"></i> Cancel</button>
+      <button type="button" data-action="approve" class="gllg-btn gllg-go"><i class="fa-solid fa-check"></i> ${esc(game.i18n.localize("GLLG.card.btnApprove"))}</button>
+      <button type="button" data-action="reroll" class="gllg-btn"><i class="fa-solid fa-dice"></i> ${esc(game.i18n.localize("GLLG.card.btnRerollAll"))}</button>
+      ${flavorEnabled() && !p.workshop ? `<button type="button" data-action="reflavor" class="gllg-btn" title="${attr(game.i18n.localize("GLLG.card.reflavorTitle"))}"><i class="fa-solid fa-feather"></i> ${esc(game.i18n.localize("GLLG.card.btnReflavor"))}</button>` : ""}
+      <button type="button" data-action="cancel" class="gllg-btn gllg-ghost"><i class="fa-solid fa-xmark"></i> ${esc(game.i18n.localize("GLLG.card.btnCancel"))}</button>
     </footer>
   </div>`;
 }
@@ -252,8 +256,8 @@ function renderRouting(p) {
   const target = p.target ?? (p.shop ? TARGET.MERCHANT : TARGET.LOOT_ACTOR);
   // Shops only offer sensible sinks (buyable Merchant or a chat catalog).
   const entries = p.shop
-    ? SHOP_TARGETS.map(v => [v, TARGET_LABELS[v]])
-    : Object.entries(TARGET_LABELS).filter(([v]) => v !== TARGET.MERCHANT);
+    ? SHOP_TARGETS.map(v => [v, targetLabel(v)])
+    : Object.keys(TARGET_LABEL_KEYS).filter(v => v !== TARGET.MERCHANT).map(v => [v, targetLabel(v)]);
   const opts = entries.map(([v, label]) =>
     `<option value="${esc(v)}" ${v === target ? "selected" : ""}>${esc(label)}</option>`).join("");
 
@@ -264,16 +268,16 @@ function renderRouting(p) {
       const chosen = p.directActorId ?? members[0]?.id;
       const mo = members.map(m =>
         `<option value="${esc(m.id)}" ${m.id === chosen ? "selected" : ""}>${esc(m.name)}</option>`).join("");
-      recipient = `<label class="gllg-route-lbl">Unassigned to</label>
+      recipient = `<label class="gllg-route-lbl">${esc(game.i18n.localize("GLLG.card.unassignedTo"))}</label>
         <select data-action="set-recipient" class="gllg-route-sel">${mo}</select>`;
     } else {
-      recipient = `<span class="gllg-route-warn">No party PCs found</span>`;
+      recipient = `<span class="gllg-route-warn">${esc(game.i18n.localize("GLLG.card.noPartyPcs"))}</span>`;
     }
   }
 
   return `<div class="gllg-routing">
     <i class="fa-solid fa-location-arrow"></i>
-    <label class="gllg-route-lbl">Send to</label>
+    <label class="gllg-route-lbl">${esc(game.i18n.localize("GLLG.card.sendTo"))}</label>
     <select data-action="set-target" class="gllg-route-sel">${opts}</select>
     ${recipient}
   </div>`;
@@ -286,12 +290,12 @@ function safeMembers() {
 function renderParcel(parcel, showHead) {
   const rows = (parcel.items ?? []).map(it => renderItem(parcel, it)).join("");
   const coins = parcel.currencyGp > 0
-    ? `<div class="gllg-coins-row"><i class="fa-solid fa-coins"></i> ${gp(parcel.currencyGp)} gp coins</div>` : "";
+    ? `<div class="gllg-coins-row"><i class="fa-solid fa-coins"></i> ${esc(game.i18n.format("GLLG.card.gpCoins", { gp: gp(parcel.currencyGp) }))}</div>` : "";
   const head = showHead
-    ? `<div class="gllg-parcel-head">${esc(parcel.label || "")}<span class="gllg-parcel-tot">${gp(parcel.totalGp)} gp</span></div>` : "";
+    ? `<div class="gllg-parcel-head">${esc(parcel.label || "")}<span class="gllg-parcel-tot">${gp(parcel.totalGp)} ${esc(game.i18n.localize("GLLG.card.gpUnit"))}</span></div>` : "";
   return `<section class="gllg-parcel">
     ${head}
-    <div class="gllg-items">${rows || '<div class="gllg-empty">No items</div>'}</div>
+    <div class="gllg-items">${rows || `<div class="gllg-empty">${esc(game.i18n.localize("GLLG.card.noItems"))}</div>`}</div>
     ${coins}
   </section>`;
 }
@@ -300,7 +304,7 @@ function renderItem(parcel, it) {
   const badge = `<span class="gllg-tier sev-${esc(it.tier)}">${esc(it.tier)}</span>`;
   const who = it.forActorName ? `<span class="gllg-for">→ ${esc(it.forActorName)}</span>` : "";
   const heir = it.heirloom
-    ? `<div class="gllg-item-heir"><i class="fa-solid fa-wand-magic-sparkles"></i> awakens in ${esc(it.forItemName || "signature item")}</div>`
+    ? `<div class="gllg-item-heir"><i class="fa-solid fa-wand-magic-sparkles"></i> ${esc(game.i18n.format("GLLG.card.awakensIn", { item: it.forItemName || game.i18n.localize("GLLG.card.signatureItem") }))}</div>`
     : "";
   const runes = Array.isArray(it.runeNames) && it.runeNames.length
     ? `<div class="gllg-item-runes"><i class="fa-solid fa-gem"></i> ${esc(it.runeNames.join(" · "))}</div>`
@@ -308,12 +312,12 @@ function renderItem(parcel, it) {
   // Swapping a heirloom would replace it with an ordinary drop, and a custom
   // workshop item has no compendium equivalent to swap to — disallow both.
   const swap = (it.heirloom || it.custom) ? ""
-    : `<button type="button" class="gllg-mini" data-action="swap" data-parcel-id="${esc(parcel.id)}" data-uuid="${esc(it.uuid)}" title="Swap for another"><i class="fa-solid fa-rotate"></i></button>`;
+    : `<button type="button" class="gllg-mini" data-action="swap" data-parcel-id="${esc(parcel.id)}" data-uuid="${esc(it.uuid)}" title="${attr(game.i18n.localize("GLLG.card.swapTitle"))}"><i class="fa-solid fa-rotate"></i></button>`;
   return `<div class="gllg-item${it.heirloom ? " gllg-is-heir" : ""}">
     <img class="gllg-item-img" src="${esc(it.img || "icons/svg/item-bag.svg")}" alt="">
     <div class="gllg-item-main">
       <div class="gllg-item-name">${esc(it.name)} ${badge}${it.flavorName ? `<div class="gllg-flavorname">“${esc(it.flavorName)}”</div>` : ""}</div>
-      <div class="gllg-item-meta">Lv ${it.level} · ${gp(it.gp)} gp ${who}</div>
+      <div class="gllg-item-meta">${esc(game.i18n.format("GLLG.card.itemMeta", { level: it.level, gp: gp(it.gp) }))} ${who}</div>
       ${runes}
       ${heir}
       ${it.reason ? `<div class="gllg-item-reason">${esc(it.reason)}</div>` : ""}
@@ -322,7 +326,7 @@ function renderItem(parcel, it) {
     </div>
     <div class="gllg-item-ctl">
       ${swap}
-      <button type="button" class="gllg-mini" data-action="remove" data-parcel-id="${esc(parcel.id)}" data-uuid="${esc(it.uuid)}" title="Remove (gp → coins)"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" class="gllg-mini" data-action="remove" data-parcel-id="${esc(parcel.id)}" data-uuid="${esc(it.uuid)}" title="${attr(game.i18n.localize("GLLG.card.removeTitle"))}"><i class="fa-solid fa-trash"></i></button>
     </div>
   </div>`;
 }
@@ -336,11 +340,11 @@ function renderDone(p, res) {
   }).join("");
   return `<div class="gllg-card gllg-done" data-proposal-id="${esc(p.id)}">
     <header class="gllg-card-head">
-      <div class="gllg-card-title"><i class="fa-solid fa-circle-check"></i> Loot materialized</div>
-      <div class="gllg-card-sub">${esc(p.label || "")} · ${gp(p.totalGp)} gp recorded</div>
+      <div class="gllg-card-title"><i class="fa-solid fa-circle-check"></i> ${esc(game.i18n.localize("GLLG.card.lootMaterialized"))}</div>
+      <div class="gllg-card-sub">${esc(p.label || "")} · ${esc(game.i18n.format("GLLG.card.gpRecorded", { gp: gp(p.totalGp) }))}</div>
       ${headReg(res.ok ? "GLU·LOOT // COMMITTED" : "GLU·LOOT // ABORTED")}
     </header>
-    ${res.ok ? `<ul class="gllg-created">${list}</ul>` : `<p class="gllg-err">${esc(res.reason || "Failed")}</p>`}
+    ${res.ok ? `<ul class="gllg-created">${list}</ul>` : `<p class="gllg-err">${esc(res.reason || game.i18n.localize("GLLG.card.failed"))}</p>`}
   </div>`;
 }
 
@@ -358,3 +362,4 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function attr(s) { return esc(s).replace(/`/g, "&#96;").replace(/\n/g, "&#10;"); }

@@ -21,7 +21,7 @@ import { beginProgress, endProgress } from "./progress.js";
 export async function openGenerateDialog(presetContext) {
   const DialogV2 = foundry.applications?.api?.DialogV2;
   if (!DialogV2) {
-    ui.notifications?.error("GLLG: DialogV2 unavailable — use the console API instead.");
+    ui.notifications?.error(game.i18n.localize("GLLG.gen.dialogV2Unavailable"));
     return;
   }
 
@@ -35,17 +35,17 @@ export async function openGenerateDialog(presetContext) {
   Hooks.on("renderDialogV2", onRender);
 
   const result = await DialogV2.wait({
-    window: { title: "Generate Loot", icon: "fa-solid fa-wand-sparkles", resizable: true },
+    window: { title: game.i18n.localize("GLLG.gen.title"), icon: "fa-solid fa-wand-sparkles", resizable: true },
     position: { width: 460 },
     classes: ["gllg", "gllg-generate"],
     content: buildForm(presetContext),
     rejectClose: false,
     buttons: [
       {
-        action: "go", label: "Generate", icon: "fa-solid fa-dice", default: true,
+        action: "go", label: game.i18n.localize("GLLG.gen.btnGenerate"), icon: "fa-solid fa-dice", default: true,
         callback: (_ev, btn) => readForm(btn.form)
       },
-      { action: "cancel", label: "Cancel", icon: "fa-solid fa-xmark" }
+      { action: "cancel", label: game.i18n.localize("GLLG.common.cancel"), icon: "fa-solid fa-xmark" }
     ]
   }).catch(() => null);
 
@@ -57,36 +57,37 @@ export async function openGenerateDialog(presetContext) {
 /* -------------------------------- form -------------------------------- */
 
 function buildForm(presetContext) {
-  const ctx = sel("context", Object.values(CONTEXT), presetContext ?? CONTEXT.COMBAT, capitalize);
-  const threat = sel("threat", ["auto", ...Object.values(THREAT)], "auto", capitalize);
-  const cacheTier = sel("cacheTier", Object.values(CACHE_TIER), "standard", capitalize);
-  const questTier = sel("questTier", Object.values(QUEST_TIER), "standard", capitalize);
-  const shopTier = sel("shopTier", Object.values(SHOP_TIER), SHOP_TIER.SHOP, capitalize);
-  const kind = sel("kind", ["any", "permanent", "consumable"], "any", capitalize);
-  const biome = sel("biome", ["", ...Object.keys(BIOMES)], "", k => k ? localize(BIOMES[k]) : "— none —");
-  const faction = sel("faction", ["", ...Object.keys(FACTIONS)], "", k => k ? localize(FACTIONS[k]) : "— none —");
+  const noneLabel = localize("GLLG.common.noneOption");
+  const ctx = sel("context", Object.values(CONTEXT), presetContext ?? CONTEXT.COMBAT, v => localize(`GLLG.enum.context.${v}`));
+  const threat = sel("threat", ["auto", ...Object.values(THREAT)], "auto", v => localize(`GLLG.enum.threat.${v}`));
+  const cacheTier = sel("cacheTier", Object.values(CACHE_TIER), "standard", v => localize(`GLLG.enum.tier.${v}`));
+  const questTier = sel("questTier", Object.values(QUEST_TIER), "standard", v => localize(`GLLG.enum.tier.${v}`));
+  const shopTier = sel("shopTier", Object.values(SHOP_TIER), SHOP_TIER.SHOP, v => localize(`GLLG.enum.shopTier.${v}`));
+  const kind = sel("kind", ["any", "permanent", "consumable"], "any", v => localize(`GLLG.enum.kind.${v}`));
+  const biome = sel("biome", ["", ...Object.keys(BIOMES)], "", k => k ? localize(BIOMES[k]) : noneLabel);
+  const faction = sel("faction", ["", ...Object.keys(FACTIONS)], "", k => k ? localize(FACTIONS[k]) : noneLabel);
 
   // data-for lists the contexts each field applies to ("all" = every context).
   const BUDGET = "combat exploration dungeon quest"; // every budget-driven context (not single)
   return `<div class="gllg-genform">
-    <div class="gllg-field" data-for="all"><label>Context</label>${ctx}</div>
-    <div class="gllg-field" data-for="combat"><label>Threat <span class="gllg-dim">(auto reads selected tokens)</span></label>${threat}</div>
-    <div class="gllg-field" data-for="exploration dungeon"><label>Cache tier</label>${cacheTier}</div>
-    <div class="gllg-field" data-for="quest"><label>Reward tier</label>${questTier}</div>
-    <div class="gllg-field" data-for="shop"><label>Shop tier <span class="gllg-dim">(peddler → emporium = size &amp; reach)</span></label>${shopTier}</div>
-    <div class="gllg-field" data-for="dungeon"><label>Rooms</label><input type="number" name="rooms" value="5" min="1" max="20"></div>
-    <div class="gllg-field" data-for="${BUDGET} shop"><label>Number of items <span class="gllg-dim">(blank = auto by ${"tier/budget"})</span></label><input type="number" name="items" min="1" max="40" placeholder="auto"></div>
-    <div class="gllg-field" data-for="single"><label>Item kind</label>${kind}</div>
-    <div class="gllg-field" data-for="single"><label>Item level <span class="gllg-dim">(blank = party level)</span></label><input type="number" name="itemLevel" min="0" max="25" placeholder="party level"></div>
-    <div class="gllg-field" data-for="all"><label>Biome</label>${biome}</div>
-    <div class="gllg-field" data-for="all"><label>Faction</label>${faction}</div>
-    <div class="gllg-field" data-for="all"><label>Additional context / shop concept <span class="gllg-dim">(optional — fed to the LLM; for shops it stocks to match)</span></label><textarea name="extraContext" rows="2" placeholder="loot: 'recovered from the drowned shrine of Gozreh' · shop: 'black-market potion dealer in the sewers — poisons & illicit elixirs'"></textarea></div>
+    <div class="gllg-field" data-for="all"><label>${esc(localize("GLLG.gen.labelContext"))}</label>${ctx}</div>
+    <div class="gllg-field" data-for="combat"><label>${esc(localize("GLLG.gen.labelThreat"))} <span class="gllg-dim">${esc(localize("GLLG.gen.threatHint"))}</span></label>${threat}</div>
+    <div class="gllg-field" data-for="exploration dungeon"><label>${esc(localize("GLLG.gen.labelCacheTier"))}</label>${cacheTier}</div>
+    <div class="gllg-field" data-for="quest"><label>${esc(localize("GLLG.gen.labelRewardTier"))}</label>${questTier}</div>
+    <div class="gllg-field" data-for="shop"><label>${esc(localize("GLLG.gen.labelShopTier"))} <span class="gllg-dim">${esc(localize("GLLG.gen.shopTierHint"))}</span></label>${shopTier}</div>
+    <div class="gllg-field" data-for="dungeon"><label>${esc(localize("GLLG.gen.labelRooms"))}</label><input type="number" name="rooms" value="5" min="1" max="20"></div>
+    <div class="gllg-field" data-for="${BUDGET} shop"><label>${esc(localize("GLLG.gen.labelNumItems"))} <span class="gllg-dim">${esc(localize("GLLG.gen.numItemsHint"))}</span></label><input type="number" name="items" min="1" max="40" placeholder="${attr(localize("GLLG.gen.placeholderAuto"))}"></div>
+    <div class="gllg-field" data-for="single"><label>${esc(localize("GLLG.gen.labelItemKind"))}</label>${kind}</div>
+    <div class="gllg-field" data-for="single"><label>${esc(localize("GLLG.gen.labelItemLevel"))} <span class="gllg-dim">${esc(localize("GLLG.gen.itemLevelHint"))}</span></label><input type="number" name="itemLevel" min="0" max="25" placeholder="${attr(localize("GLLG.gen.placeholderPartyLevel"))}"></div>
+    <div class="gllg-field" data-for="all"><label>${esc(localize("GLLG.gen.labelBiome"))}</label>${biome}</div>
+    <div class="gllg-field" data-for="all"><label>${esc(localize("GLLG.gen.labelFaction"))}</label>${faction}</div>
+    <div class="gllg-field" data-for="all"><label>${esc(localize("GLLG.gen.labelExtraContext"))} <span class="gllg-dim">${esc(localize("GLLG.gen.extraContextHint"))}</span></label><textarea name="extraContext" rows="2" placeholder="${attr(localize("GLLG.gen.extraContextPlaceholder"))}"></textarea></div>
     ${llmToggle()}
     <div class="gllg-row">
-      <div class="gllg-field" data-for="all"><label>Party level <span class="gllg-dim">(blank = auto)</span></label><input type="number" name="level" min="1" max="20" placeholder="auto"></div>
-      <div class="gllg-field" data-for="${BUDGET}"><label>Party size <span class="gllg-dim">(blank = auto)</span></label><input type="number" name="size" min="1" max="8" placeholder="auto"></div>
+      <div class="gllg-field" data-for="all"><label>${esc(localize("GLLG.gen.labelPartyLevel"))} <span class="gllg-dim">${esc(localize("GLLG.gen.partyLevelHint"))}</span></label><input type="number" name="level" min="1" max="20" placeholder="${attr(localize("GLLG.gen.placeholderAuto"))}"></div>
+      <div class="gllg-field" data-for="${BUDGET}"><label>${esc(localize("GLLG.gen.labelPartySize"))} <span class="gllg-dim">${esc(localize("GLLG.gen.partySizeHint"))}</span></label><input type="number" name="size" min="1" max="8" placeholder="${attr(localize("GLLG.gen.placeholderAuto"))}"></div>
     </div>
-    <p class="gllg-dim">Leave level/size blank to read them from the resolved party. Combat reads traits from your selected (defeated) tokens.</p>
+    <p class="gllg-dim">${esc(localize("GLLG.gen.footer"))}</p>
   </div>`;
 }
 
@@ -99,11 +100,11 @@ function buildForm(presetContext) {
 function llmToggle() {
   const on = flavorEnabled();
   const hint = on
-    ? "(uncheck for a quick roll — no LLM call)"
-    : "(enable the LLM sidecar in module settings to use)";
+    ? localize("GLLG.gen.llmToggleHintOn")
+    : localize("GLLG.gen.llmToggleHintOff");
   return `<div class="gllg-field gllg-llm-toggle" data-for="all">
     <label class="gllg-check"><input type="checkbox" name="useLlm" ${on ? "checked" : "disabled"}>
-      <span>Use LLM flavor &amp; provenance <span class="gllg-dim">${hint}</span></span></label>
+      <span>${esc(localize("GLLG.gen.llmToggleLabel"))} <span class="gllg-dim">${esc(hint)}</span></span></label>
   </div>`;
 }
 
@@ -177,7 +178,7 @@ async function runGeneration(r) {
 
   let request;
   try { request = buildRequest(r.context, opts); }
-  catch (e) { return ui.notifications?.error(`GLLG: ${e.message}`); }
+  catch (e) { return ui.notifications?.error(game.i18n.format("GLLG.gen.buildError", { message: e.message })); }
 
   // Per-generation context note rides in meta (plain object → survives the flag)
   // so the decorator can hand it to the LLM alongside the world campaign blurb.
@@ -187,7 +188,7 @@ async function runGeneration(r) {
   // Shops are budget-neutral, so a 0 budget is expected there — only warn for
   // the budget-driven contexts.
   if (!request.budgetGp && r.context !== CONTEXT.SINGLE && r.context !== CONTEXT.SHOP) {
-    ui.notifications?.warn("GLLG: computed budget is 0 — check party level and (for combat) your token selection.");
+    ui.notifications?.warn(game.i18n.localize("GLLG.gen.budgetZero"));
   }
 
   const isShop = r.context === CONTEXT.SHOP;
@@ -206,8 +207,9 @@ async function runGeneration(r) {
   let proposal;
   if (useLlm) {
     const progress = await beginProgress({
-      title: isShop ? "Stocking the shop…" : (hasBrief ? "Curating & flavoring loot…" : "Adding LLM flavor…"),
-      detail: r.context === CONTEXT.SHOP ? "Shop proposal" : "Loot proposal"
+      title: isShop ? game.i18n.localize("GLLG.gen.progressStocking")
+        : (hasBrief ? game.i18n.localize("GLLG.gen.progressCurating") : game.i18n.localize("GLLG.gen.progressFlavoring")),
+      detail: r.context === CONTEXT.SHOP ? game.i18n.localize("GLLG.gen.progressDetailShop") : game.i18n.localize("GLLG.gen.progressDetailLoot")
     });
     try {
       proposal = await proposeLoot(request);
@@ -217,8 +219,10 @@ async function runGeneration(r) {
     proposal = await proposeLoot(request);
   }
   await postReviewCard(proposal);
-  const noun = isShop ? "shop" : "loot";
-  ui.notifications?.info(`GLLG: ${noun} proposal posted to chat (${proposal.itemCount} items, ${Math.round(proposal.totalGp)} gp).`);
+  ui.notifications?.info(game.i18n.format(
+    isShop ? "GLLG.gen.postedShop" : "GLLG.gen.postedLoot",
+    { items: proposal.itemCount, gp: Math.round(proposal.totalGp) }
+  ));
 }
 
 /* -------------------------------- helpers -------------------------------- */

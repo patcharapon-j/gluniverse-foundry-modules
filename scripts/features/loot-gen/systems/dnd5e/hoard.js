@@ -33,7 +33,7 @@ export async function proposeHoard(request) {
   if (!src.ok || !index.length) {
     // A pinned source (Plutonium-only / internal-only) with nothing to draw from:
     // tell the GM rather than silently dropping a coins-only hoard.
-    note("No D&D 5e item content is available for the current source mode — the hoard will contain coin only. Check the “D&D 5e loot source” setting and that the chosen compendium has items.", "warn");
+    note(game.i18n.localize("GLLG.hoard.coinOnly"), "warn");
   }
   const level = request.partyLevel;
   const tags = request.tags;
