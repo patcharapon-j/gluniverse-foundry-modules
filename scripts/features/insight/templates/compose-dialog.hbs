@@ -1,0 +1,24 @@
+<form class="insight-compose-form" autocomplete="off">
+  <div class="insight-compose-kicker">
+    {{localize "INSIGHT.ModuleTitle"}}
+    <span class="insight-compose-serial">SEC&middot;04 / GRID&middot;NW</span>
+  </div>
+  <label>
+    {{localize "INSIGHT.ComposeTarget"}}
+    <select name="target">
+      {{#each players}}
+      <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <label>
+    {{localize "INSIGHT.ComposeMessage"}}
+    <textarea name="message" placeholder="The hairs on your neck rise..." required>{{message}}</textarea>
+    <span class="hint">{{localize "INSIGHT.ComposeMessageHint"}}</span>
+  </label>
+
+  <button type="button" class="insight-send-btn" data-action="send">
+    {{localize "INSIGHT.ComposeSend"}}
+  </button>
+</form>

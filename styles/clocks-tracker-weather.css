@@ -1,0 +1,557 @@
+/* ============================================================
+   GLUniverse — Clocks & Tracker : WEATHER styles
+   The Hex Flower weather system, styled to match the "Arcane Glass"
+   look of the HUD and tracker dock. Weather colour is carried per
+   element by --glct-weather-tint (particles) and --glct-weather-glow
+   (accent/glow), set inline by the apps; the rest of the HUD keeps
+   its shift colour.
+   ============================================================ */
+
+/* shared flat-top hexagon silhouette */
+:root { --wx-hex-clip: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+
+/* ============================================================
+   1) IN-BAR WEATHER — a full-bar diorama layer + a compact readout cell.
+   ============================================================ */
+
+/* Full-bar diorama: a Pixi canvas spanning the whole bar, behind the content
+   (.main is z-index:2). Rendered at full strength with NORMAL blend so the tinted
+   particles read solidly over the dark glass (screen blend only ever *added light*,
+   which is why the effect used to look perpetually faint). The effect washes across
+   the bar's LEFT EDGE and feathers toward the centre, so the active weather tints/
+   reflects down the left side of the card without reaching the clock/meter. */
+/* No global fade: legibility is preserved by the .bar-wx-scrim below, a dark/tinted
+   backdrop that sits between the diorama and the text. z-index:1 keeps it behind
+   .main (z-index:2). */
+#glct-hud .bar-wx{position:absolute;inset:0;z-index:1;pointer-events:none;
+  opacity:1;mix-blend-mode:normal;border-radius:inherit;overflow:hidden;
+  /* A tinted colour wash sits BEHIND the particles so the gaps between them are
+     filled with weather colour — the effect reads as a solid pane rather than a
+     sparse scatter of dots. Confined to the left edge by the mask below. */
+  background:linear-gradient(100deg,
+    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 38%,transparent) 0%,
+    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 18%,transparent) 26%,
+    transparent 52%);
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 18%,transparent 46%,transparent 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 18%,transparent 46%,transparent 100%);
+  transition:opacity .6s ease}
+#glct-hud .bar-wx.off{opacity:0}
+#glct-hud .bar-wx .glct-wx-canvas{position:absolute;inset:0}
+
+/* Legibility scrim: a soft dark wash anchored to the left edge (where the date
+   stack lives) that darkens the bright screen-blended weather just enough for the
+   text above it to stay readable, plus a thin tinted glow hugging the left rim so
+   the weather "reflects" down the edge. Sits above the diorama (later in DOM, same
+   z-index) and below .main (z-index:2). Toggled with the diorama. */
+#glct-hud .bar-wx-scrim{position:absolute;inset:0;z-index:1;pointer-events:none;
+  border-radius:inherit;overflow:hidden;opacity:1;transition:opacity .6s ease;
+  background:
+    linear-gradient(90deg, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 26%,transparent) 0, transparent 4px),
+    linear-gradient(100deg, rgba(8,11,17,.6) 0%, rgba(8,11,17,.36) 17%, rgba(8,11,17,0) 40%)}
+#glct-hud .bar-wx-scrim.off{opacity:0}
+#glct-hud .bar.wx-ominous .bar-wx-scrim{
+  background:
+    linear-gradient(90deg, color-mix(in srgb,var(--gl-hazard) 34%,transparent) 0, transparent 4px),
+    linear-gradient(100deg, rgba(14,8,9,.64) 0%, rgba(14,8,9,.4) 17%, rgba(14,8,9,0) 40%)}
+
+/* Liquid-glass edge refraction — confined to the LEFT ~third of the bar, matching
+   the weather wash (not the whole rim). A thin overlay drawn on top of the content
+   (z-index:3, above .main) bends the colour around the inside of the rim: a tinted
+   inner ring, a brighter tinted top highlight, and a soft bloom feathering in from
+   the left edge. The same left→transparent mask as the diorama clips the inset
+   ring to the left third, so it hugs the left edge and fades out before the clock.
+   pointer-events:none and clipped to the rounded rect by the bar's overflow. */
+#glct-hud .bar.has-wx::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+  border-radius:inherit;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 55%,transparent),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 62%,#fff),
+    inset 0 0 14px -2px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 42%,transparent),
+    inset 14px 0 26px -16px color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 75%,transparent);
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 20%,transparent 38%,transparent 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 20%,transparent 38%,transparent 100%);
+  transition:box-shadow .6s ease}
+
+/* ---- Compact pill weather: the diorama hugs the LEFT HALF of the pill ----
+   When the bar is collapsed the live particle field, tint wash, legibility scrim
+   and liquid-glass rim sit behind the ring on the left half of the pill and feather
+   out before the clock/date on the right — they do NOT span the whole pill. The
+   same left→transparent mask as the full bar clips all three layers; only the stop
+   positions widen to ~half (vs. the full bar's left third). Styling follows the
+   collapsed class so a value-flash peek (which un-collapses) returns to full-bar. */
+#glct-hud .bar.collapsed.has-wx .bar-wx{
+  background:linear-gradient(100deg,
+    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 30%,transparent) 0%,
+    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 13%,transparent) 30%,
+    transparent 58%);
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 36%,transparent 58%,transparent 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 36%,transparent 58%,transparent 100%)}
+#glct-hud .bar.collapsed.has-wx .bar-wx-scrim{
+  background:linear-gradient(100deg, rgba(8,11,17,.5) 0%, rgba(8,11,17,.3) 30%, rgba(8,11,17,0) 56%);
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%)}
+#glct-hud .bar.collapsed.wx-ominous .bar-wx-scrim{
+  background:linear-gradient(100deg, rgba(14,8,9,.56) 0%, rgba(14,8,9,.34) 30%, rgba(14,8,9,0) 56%)}
+#glct-hud .bar.collapsed.has-wx::after{
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 55%,transparent),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 60%,#fff),
+    inset 0 0 16px -3px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 50%,transparent),
+    inset 14px 0 26px -16px color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 70%,transparent)}
+
+/* Under an active effect the date stack gets a deeper shadow so it reads cleanly
+   against the brighter, tinted left edge. The day/month line is gradient-clipped
+   (background-clip:text), so a text-shadow would bleed through the transparent
+   glyphs and muddy the white — use filter:drop-shadow, which shadows the rendered
+   shape instead. Plain-coloured lines (.wd/.mo) can take a normal text-shadow. */
+#glct-hud .bar.has-wx .date .m{filter:drop-shadow(0 1px 2px rgba(0,0,0,.72))}
+#glct-hud .bar.has-wx .date .wd,
+#glct-hud .bar.has-wx .date .mo{text-shadow:0 1px 2px rgba(0,0,0,.7)}
+
+/* All left-section date text goes pure white under an active effect, so the
+   weekday / day / month / year / season read cleanly over a bright, colourful
+   weather wash (their normal muted/gradient colours wash out against it). */
+#glct-hud .bar.has-wx .date .wd,
+#glct-hud .bar.has-wx .date .mo,
+#glct-hud .bar.has-wx .date .season{color:#fff}
+#glct-hud .bar.has-wx .date .m,
+#glct-hud .bar.has-wx .date .m sup{background:none;-webkit-text-fill-color:#fff;color:#fff}
+
+/* Weather readout — compact, nested inside the date cluster (left section) so it
+   reads as part of that group rather than a separate box on the right. A hairline
+   on the left separates it from the date stack. icon · condition · intensity; the
+   click target that opens the Hex Flower window. Tint is scoped here
+   (--glct-weather-*) so it never bleeds onto the shift-coloured HUD. */
+#glct-hud .date .wxmini{--glct-weather-tint:#cfe8ff;--glct-weather-glow:#7fb4e6;
+  appearance:none;border:none;background:none;color:inherit;font:inherit;text-align:left;
+  position:relative;display:flex;align-items:center;gap:7px;cursor:pointer;
+  align-self:stretch;margin:7px 0;padding:0 0 0 11px}
+#glct-hud .date .wxmini.hidden{display:none}
+#glct-hud .date .wxmini::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:1px;
+  background:linear-gradient(180deg,transparent,var(--hair) 22%,var(--hair) 78%,transparent)}
+#glct-hud .date .wxmini:hover .wxmini-label{background:none;-webkit-text-fill-color:#fff;color:#fff}
+#glct-hud .date .wxmini-ico{display:grid;place-items:center;width:23px;height:23px;flex:none;border-radius:7px;
+  color:color-mix(in srgb,var(--glct-weather-tint) 72%,#fff);font-size:13px;
+  background:radial-gradient(120% 120% at 50% 0%,color-mix(in srgb,var(--glct-weather-tint) 26%,#0a0e15),transparent 76%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);
+  filter:drop-shadow(0 0 6px color-mix(in srgb,var(--glct-weather-glow) 55%,transparent))}
+#glct-hud .date .wxmini-text{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+/* A long condition name wraps to (at most) two lines instead of being cut off with
+   an ellipsis; the readout stays narrow so it never widens the date cluster. */
+#glct-hud .date .wxmini-label{font-family:"Oxanium","Segoe UI",system-ui,sans-serif;font-size:11px;font-weight:740;
+  letter-spacing:.02em;max-width:92px;line-height:1.12;overflow-wrap:break-word;word-break:break-word;hyphens:auto;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  background:linear-gradient(180deg,#fff,#d6deec);-webkit-background-clip:text;background-clip:text;color:transparent}
+#glct-hud .date .wxmini-temp{font-size:7px;letter-spacing:.13em;text-transform:uppercase;color:#9aa3b6;font-weight:700;white-space:nowrap}
+#glct-hud .date .wxmini-temp:empty{display:none}
+#glct-hud .date .wxmini-haz{display:none;color:#ff7a6f;font-size:10px;
+  filter:drop-shadow(0 0 6px color-mix(in srgb,var(--gl-hazard) 80%,transparent))}
+
+/* hazard / ominous weather: red dread accent on the readout */
+#glct-hud .date .wxmini.ominous .wxmini-ico{color:#ffb4ad;filter:drop-shadow(0 0 8px color-mix(in srgb,var(--gl-hazard) 70%,transparent))}
+#glct-hud .date .wxmini.ominous .wxmini-label{background:none;-webkit-text-fill-color:#ffd9d4;color:#ffd9d4}
+#glct-hud .date .wxmini.ominous .wxmini-haz{display:inline-block}
+
+/* ============================================================
+   2) HEX FLOWER WINDOW — frameless glass dock.
+   ============================================================ */
+#glct-weather-hud{
+  --ink:#eef1f7; --muted:#98a2b6; --hair:rgba(255,255,255,.08); --edge:rgba(255,255,255,.13);
+  --glct-weather-tint:#cfe8ff; --glct-weather-glow:#7fb4e6;
+  --clock-font:"Oxanium","Segoe UI",system-ui,sans-serif;
+  background:none;border:none;box-shadow:none;padding:0;margin:0;width:auto;height:auto;min-width:0;min-height:0;
+  pointer-events:none;font:14px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#glct-weather-hud .window-content{background:none;padding:0;color:var(--ink);overflow:visible}
+#glct-weather-hud *{box-sizing:border-box}
+#glct-weather-hud .glct-wx-root{pointer-events:none}
+#glct-weather-hud .glct-wx-root > *{pointer-events:auto}
+
+#glct-weather-hud .wx-dock{width:268px;border-radius:14px;overflow:hidden;isolation:isolate;position:relative;
+  background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 26%),
+    linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.22)),linear-gradient(160deg,#161d2c,#080b11 74%);
+  border:1px solid var(--edge);
+  box-shadow:0 26px 64px rgba(0,0,0,.6),0 2px 0 rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.15),
+    inset 0 -14px 30px rgba(0,0,0,.36),0 0 40px color-mix(in srgb,var(--glct-weather-glow) 18%,transparent);
+  backdrop-filter:blur(16px) saturate(1.15)}
+
+#glct-weather-hud .wx-head{display:flex;align-items:center;gap:7px;height:24px;padding:0 6px 0 9px;position:relative;z-index:5;
+  border-bottom:1px solid var(--hair);cursor:grab;user-select:none}
+#glct-weather-hud .dh-grip{display:flex;gap:3px}
+#glct-weather-hud .dh-grip i{width:3px;height:3px;border-radius:99px;background:rgba(255,255,255,.32)}
+#glct-weather-hud .dh-title{flex:1;font:700 8.5px/1.45 var(--gl-tech);letter-spacing:.22em;text-transform:uppercase;color:#8b95a8}
+#glct-weather-hud .wx-hbtn{width:18px;height:18px;border:none;border-radius:5px;cursor:pointer;display:grid;place-items:center;
+  background:rgba(255,255,255,.06);color:#aab4c8;font-size:10px;line-height:1;transition:.15s}
+#glct-weather-hud .wx-hbtn:hover{background:rgba(255,255,255,.16);color:#fff}
+#glct-weather-hud .wx-hbtn.on{color:#9be15d;background:rgba(155,225,93,.14)}
+#glct-weather-hud .wx-hbtn.close:hover{background:color-mix(in srgb,var(--gl-hazard) 20%,transparent);color:#ffd9d4}
+
+/* current-condition hero */
+#glct-weather-hud .wx-current{--glct-weather-tint:#cfe8ff;--glct-weather-glow:#7fb4e6;
+  display:flex;gap:11px;padding:11px 12px;position:relative;align-items:flex-start;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--glct-weather-glow) 12%,transparent),transparent 72%)}
+#glct-weather-hud .wx-current.hidden{display:none}
+#glct-weather-hud .wx-cur-ico{position:relative;flex:none;width:62px;height:50px;border-radius:11px;overflow:hidden;
+  display:grid;place-items:center;
+  background:radial-gradient(130% 130% at 50% 0%,color-mix(in srgb,var(--glct-weather-tint) 26%,#0a0e15),#080b11 82%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),inset 0 -10px 18px rgba(0,0,0,.5),
+    0 0 18px color-mix(in srgb,var(--glct-weather-glow) 30%,transparent)}
+#glct-weather-hud .wx-cur-ico .wx-stage{position:absolute;inset:0}
+#glct-weather-hud .wx-cur-ico .wx-stage .glct-wx-canvas{position:absolute;inset:0}
+#glct-weather-hud .wx-cur-ico > i{position:relative;z-index:2;font-size:22px;color:#fff;
+  filter:drop-shadow(0 0 10px color-mix(in srgb,var(--glct-weather-glow) 75%,transparent))}
+#glct-weather-hud .wx-cur-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#glct-weather-hud .wx-cur-label{font-size:16px;font-weight:780;letter-spacing:.01em;line-height:1.1;
+  background:linear-gradient(180deg,#fff,#cdd6e8);-webkit-background-clip:text;background-clip:text;color:transparent}
+#glct-weather-hud .wx-cur-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#glct-weather-hud .wx-cur-season{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+#glct-weather-hud .wx-cur-temp{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  color:color-mix(in srgb,var(--glct-weather-tint) 60%,#fff);
+  padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--glct-weather-glow) 16%,transparent);
+  border:1px solid color-mix(in srgb,var(--glct-weather-glow) 30%,transparent)}
+/* Description can run long — cap it to a few lines then let it scroll in place
+   instead of stretching the hero card. Thin gutter so text clears the scrollbar. */
+#glct-weather-hud .wx-cur-desc{font-size:10.5px;line-height:1.4;color:#c2cbdb;margin-top:2px;
+  max-height:5.6em;overflow-y:auto;overflow-x:hidden;padding-right:4px;
+  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 45%,transparent) transparent}
+#glct-weather-hud .wx-cur-desc::-webkit-scrollbar{width:6px}
+#glct-weather-hud .wx-cur-desc::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 45%,transparent);border-radius:99px}
+#glct-weather-hud .wx-cur-note{font-size:10px;line-height:1.4;color:#e7c98a;margin-top:3px;
+  padding:5px 8px;border-radius:7px;background:rgba(217,176,102,.1);border-left:2px solid rgba(217,176,102,.5)}
+#glct-weather-hud .wx-current.ominous .wx-cur-label{background:none;-webkit-text-fill-color:#ffd9d4;color:#ffd9d4}
+#glct-weather-hud .wx-current.ominous .wx-cur-ico{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-hazard) 35%,transparent),inset 0 -10px 18px rgba(0,0,0,.5),0 0 22px color-mix(in srgb,var(--gl-hazard) 45%,transparent);
+  animation:wx-chip-dread 3.2s ease-in-out infinite}
+@keyframes wx-chip-dread{0%,100%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-hazard) 35%,transparent),inset 0 -10px 18px rgba(0,0,0,.5),0 0 22px color-mix(in srgb,var(--gl-hazard) 28%,transparent)}
+  50%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-hazard) 45%,transparent),inset 0 -10px 18px rgba(0,0,0,.5),0 0 34px color-mix(in srgb,var(--gl-hazard) 55%,transparent)}}
+
+/* the flower */
+#glct-weather-hud .wx-flower-wrap{display:grid;place-items:center;padding:6px 8px 10px}
+#glct-weather-hud .wx-flower-wrap.hidden,
+#glct-weather-hud .wx-dock.no-flower .wx-flower-wrap{display:none}
+#glct-weather-hud .wx-flower{position:relative}
+
+/* Premium glass hex: a beveled rim (::before) under an inset glass fill (::after),
+   with a drop-shadow that traces the hexagon silhouette. The parent stays
+   unclipped so the rim isn't swallowed by the fill's own clip-path. */
+.wx-hex{position:absolute;transform:translate(-50%,-50%);
+  --glct-weather-tint:#3a4250;--glct-weather-glow:#7fb4e6;display:grid;place-items:center;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));
+  transition:filter .35s ease,transform .3s cubic-bezier(.34,1.4,.5,1);will-change:transform,filter}
+.wx-hex::before{content:"";position:absolute;inset:0;clip-path:var(--wx-hex-clip);
+  background:linear-gradient(155deg,rgba(255,255,255,.42),rgba(255,255,255,.06) 38%,rgba(0,0,0,.46))}
+.wx-hex::after{content:"";position:absolute;inset:1.7px;clip-path:var(--wx-hex-clip);
+  background:
+    radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.22),transparent 60%),
+    linear-gradient(180deg,color-mix(in srgb,var(--glct-weather-tint) 52%,#10141d),color-mix(in srgb,var(--glct-weather-tint) 16%,#080b11))}
+.wx-hex > i{position:relative;z-index:2;font-size:13px;color:color-mix(in srgb,var(--glct-weather-tint) 50%,#eaf1ff);
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.55));transition:color .3s ease}
+.wx-hex.clickable{cursor:pointer}
+.wx-hex.clickable:hover{transform:translate(-50%,-50%) translateY(-1px) scale(1.05);
+  filter:drop-shadow(0 3px 5px rgba(0,0,0,.5)) drop-shadow(0 0 7px color-mix(in srgb,var(--glct-weather-glow) 65%,transparent));z-index:3}
+.wx-hex.clickable:hover > i{color:#fff}
+/* home / start hex: a crisp GREEN hexagonal rim — the coloured ::before shows
+   through a slightly-more-inset ::after, so the border follows the hex shape
+   (a box-shadow ring would be rectangular). Plus a green glow tracing the
+   silhouette via drop-shadow. The flag tag makes it unmistakable. */
+.wx-hex.start{filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)) drop-shadow(0 0 7px rgba(155,225,93,.8))}
+.wx-hex.start::before{background:linear-gradient(155deg,#c6f29a,#74c43f 58%,#4f9c28)}
+.wx-hex.start::after{inset:2.6px}
+/* current cell: a crisp WHITE hexagonal rim (same rim trick) + glow-washed fill
+   + white icon. The animated marker rides over; the rim reads on its own too. */
+.wx-hex.current::before{background:linear-gradient(155deg,#ffffff,#e6edfb 55%,#aeb9d0)}
+.wx-hex.current::after{inset:2.6px;background:
+  radial-gradient(120% 90% at 50% 0%,color-mix(in srgb,var(--glct-weather-glow) 48%,transparent),transparent 64%),
+  linear-gradient(180deg,color-mix(in srgb,var(--glct-weather-tint) 66%,#10141d),color-mix(in srgb,var(--glct-weather-tint) 22%,#080b11))}
+.wx-hex.current > i{color:#fff;filter:drop-shadow(0 0 8px var(--glct-weather-glow))}
+
+/* ----- on-hex tags & blocked-face marks (shared by HUD flower + editor) ----- */
+/* All marks sit INSIDE the hexagon silhouette (not in the bounding-box corners)
+   so they never spill over neighbouring hexes. Green flag = start, dot = now;
+   both ride in the upper interior, above the centre icon. */
+.wx-hex .wx-tag{position:absolute;z-index:7;transform:translate(-50%,-50%);
+  width:13px;height:13px;display:grid;place-items:center;border-radius:50%;
+  font-size:7px;line-height:1;pointer-events:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.7),0 0 0 1.3px rgba(0,0,0,.5)}
+.wx-tag-start{left:31%;top:22%;color:#08230b;
+  background:radial-gradient(closest-side,#cdf59c,#6bbf3a);
+  filter:drop-shadow(0 0 4px rgba(155,225,93,.85))}
+.wx-tag-now{left:69%;top:22%;color:#06223a;
+  background:radial-gradient(closest-side,#eaf4ff,color-mix(in srgb,var(--glct-weather-glow) 75%,#fff));
+  filter:drop-shadow(0 0 5px var(--glct-weather-glow))}
+
+/* a red ✕ for each blocked face, pulled just inside the hexagon toward that
+   face so it clearly reads as "this direction is blocked" without overhanging
+   onto the adjacent hex. Offsets are ~0.72 of the way from centre to each edge. */
+.wx-hex .wx-dir-x{position:absolute;z-index:6;transform:translate(-50%,-50%);
+  width:12px;height:12px;display:grid;place-items:center;border-radius:50%;
+  font-size:8px;font-weight:900;line-height:1;color:#fff;pointer-events:none;
+  background:radial-gradient(closest-side,#ec6258,#a8332c);
+  box-shadow:0 0 0 1.4px rgba(0,0,0,.55),0 1px 2px rgba(0,0,0,.6)}
+.wx-dir-x-up{left:50%;top:14%}
+.wx-dir-x-down{left:50%;top:86%}
+.wx-dir-x-upperRight{left:77%;top:32%}
+.wx-dir-x-lowerRight{left:77%;top:68%}
+.wx-dir-x-upperLeft{left:23%;top:32%}
+.wx-dir-x-lowerLeft{left:23%;top:68%}
+/* ominous: red dread fill + rim */
+.wx-hex.ominous::before{background:linear-gradient(155deg,rgba(255,150,140,.5),rgba(255,255,255,.05) 40%,rgba(0,0,0,.46))}
+.wx-hex.ominous::after{background:
+  radial-gradient(120% 80% at 50% 0%,rgba(255,160,150,.25),transparent 60%),
+  linear-gradient(180deg,color-mix(in srgb,var(--gl-hazard) 46%,transparent),color-mix(in srgb,var(--gl-hazard) 12%,transparent))}
+.wx-hex.ominous > i{color:#ffb4ad}
+
+/* the marker — a glowing hex that rides over the current cell and walks on a step */
+.wx-marker{position:absolute;transform:translate(-50%,-50%);clip-path:var(--wx-hex-clip);
+  --glct-weather-glow:#7fb4e6;pointer-events:none;z-index:4;
+  background:radial-gradient(closest-side,transparent 50%,
+    color-mix(in srgb,var(--glct-weather-glow) 60%,transparent) 76%,
+    color-mix(in srgb,var(--glct-weather-glow) 24%,transparent) 100%);
+  filter:drop-shadow(0 0 5px var(--glct-weather-glow)) drop-shadow(0 0 12px var(--glct-weather-glow));
+  transition:left .55s cubic-bezier(.34,1.3,.4,1),top .55s cubic-bezier(.34,1.3,.4,1);
+  animation:wx-pulse 2.6s ease-in-out infinite}
+@keyframes wx-pulse{0%,100%{opacity:.78}50%{opacity:1}}
+.wx-marker.arrive{animation:wx-arrive .6s cubic-bezier(.34,1.7,.5,1),wx-pulse 2.6s ease-in-out infinite}
+@keyframes wx-arrive{0%{transform:translate(-50%,-50%) scale(1.45)}60%{transform:translate(-50%,-50%) scale(.94)}100%{transform:translate(-50%,-50%) scale(1)}}
+.wx-marker.ominous{--glct-weather-glow:#ff6a60}
+
+/* history strip */
+#glct-weather-hud .wx-strip-wrap{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--hair)}
+#glct-weather-hud .wx-strip-lbl{font-size:7.5px;letter-spacing:.2em;text-transform:uppercase;color:#69748c;font-weight:700;flex:none}
+#glct-weather-hud .wx-strip{display:flex;gap:5px;align-items:center;overflow-x:auto;scrollbar-width:none}
+#glct-weather-hud .wx-strip::-webkit-scrollbar{display:none}
+#glct-weather-hud .wx-strip-empty{font-size:9px;color:#5b6478}
+#glct-weather-hud .wx-shist{--glct-weather-glow:#7fb4e6;flex:none;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+  background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0));border:1px solid var(--hair);
+  color:#cdd6e6;font-size:9.5px;transition:.2s}
+#glct-weather-hud .wx-shist:last-child{border-color:color-mix(in srgb,var(--glct-weather-glow) 50%,transparent);color:#fff;
+  box-shadow:0 0 10px color-mix(in srgb,var(--glct-weather-glow) 40%,transparent)}
+#glct-weather-hud .wx-shist.ominous{color:#ffb4ad}
+
+/* Next-step odds row */
+#glct-weather-hud .wx-forecast-wrap{display:flex;align-items:center;gap:8px;padding:8px 12px 2px}
+#glct-weather-hud .wx-forecast{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#glct-weather-hud .wx-fc{--glct-weather-glow:#7fb4e6;flex:none;display:inline-flex;align-items:center;gap:4px;
+  height:19px;padding:0 6px 0 5px;border-radius:9px;cursor:default;
+  background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.01));
+  border:1px solid color-mix(in srgb,var(--glct-weather-glow) 32%,var(--hair));
+  color:#cdd6e6;transition:.18s}
+#glct-weather-hud .wx-fc i{font-size:9px;color:color-mix(in srgb,var(--glct-weather-glow) 70%,#cdd6e6)}
+#glct-weather-hud .wx-fc b{font:800 9.5px/1 "Oxanium","Segoe UI",system-ui,sans-serif;letter-spacing:.02em;color:#e7eefb}
+#glct-weather-hud .wx-fc.stay{border-style:dashed;opacity:.92}
+#glct-weather-hud .wx-fc.stay i{color:#8b97ad}
+#glct-weather-hud .wx-fc.ominous{border-color:color-mix(in srgb,#ff6a5e 45%,var(--hair))}
+#glct-weather-hud .wx-fc.ominous i{color:#ffb4ad}
+
+/* GM controls */
+#glct-weather-hud .wx-controls{display:flex;gap:6px;padding:0 12px 12px}
+#glct-weather-hud .wx-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1;
+  padding:7px 10px;border-radius:9px;cursor:pointer;font:700 11px/1 "Oxanium","Segoe UI",system-ui,sans-serif;
+  letter-spacing:.04em;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--edge);
+  transition:background .14s,box-shadow .14s,transform .1s}
+#glct-weather-hud .wx-btn:hover{background:rgba(255,255,255,.12)}
+#glct-weather-hud .wx-btn:active{transform:translateY(1px)}
+#glct-weather-hud .wx-btn.primary{flex:3;background:linear-gradient(180deg,rgba(120,150,225,.28),rgba(120,150,225,.12));
+  border-color:rgba(120,150,225,.5);box-shadow:0 0 14px rgba(120,150,225,.22)}
+#glct-weather-hud .wx-btn.primary:hover{background:linear-gradient(180deg,rgba(120,150,225,.4),rgba(120,150,225,.18))}
+
+#glct-weather-hud .wx-empty{padding:14px 14px 16px;text-align:center;color:#8b95a8;font-size:11px;display:flex;flex-direction:column;gap:10px;align-items:center}
+#glct-weather-hud .wx-empty[hidden]{display:none}
+
+/* ============================================================
+   3) WEATHER EDITOR
+   ============================================================ */
+/* the editor has a lot of content — keep the window on-screen and let the body
+   scroll internally instead of growing past the viewport (height:auto window). */
+#glct-weather-editor .window-content{max-height:86vh;overflow-y:auto;overflow-x:hidden}
+.glct-wxeditor{font-family:"Oxanium","Segoe UI",system-ui,sans-serif}
+.glct-wxeditor :is(input,select,button,textarea):not(.header-control){font-family:inherit}
+.glct-wxeditor .glct-wxedit{padding:6px 8px 10px;color:#eef1f7;display:flex;flex-direction:column;gap:10px}
+.glct-wxeditor .wxe-top,.glct-wxeditor .wxe-clim{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.glct-wxeditor .wxe-spacer{flex:1}
+.glct-wxeditor label{font-weight:650;font-size:12px}
+.glct-wxeditor input[type=text],.glct-wxeditor input[type=number],.glct-wxeditor select,.glct-wxeditor textarea{
+  background:#0b0f17;color:#eef1f7;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 9px;font-size:12px}
+.glct-wxeditor input[name=climateName]{flex:1;min-width:120px}
+.glct-wxeditor input[name=startHex]{width:64px}
+.glct-wxeditor button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#eef1f7;
+  border-radius:8px;cursor:pointer;font-weight:600;padding:6px 11px;display:inline-flex;align-items:center;gap:6px}
+.glct-wxeditor button:hover{background:rgba(255,255,255,.13)}
+.glct-wxeditor .wxe-save{background:rgba(120,150,225,.25)!important;border-color:rgba(120,150,225,.5)!important}
+
+/* season tabs */
+.glct-wxeditor .wxe-tabs{display:flex;gap:5px;flex-wrap:wrap}
+.glct-wxeditor .wxe-tab{padding:5px 13px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:.03em;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#aab4c8}
+.glct-wxeditor .wxe-tab.on{background:linear-gradient(180deg,rgba(120,150,225,.3),rgba(120,150,225,.12));
+  border-color:rgba(120,150,225,.5);color:#fff;box-shadow:0 0 12px rgba(120,150,225,.25)}
+
+.glct-wxeditor .wxe-main{display:flex;gap:14px;align-items:flex-start}
+.glct-wxeditor .wxe-flower-col{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px}
+.glct-wxeditor .wxe-flower{position:relative}
+.glct-wxeditor .wxe-hint{font-size:9.5px;color:#69748c;margin:0;text-align:center}
+.glct-wxeditor .wx-hex.sel{z-index:3;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)) drop-shadow(0 0 8px color-mix(in srgb,var(--glct-weather-glow) 80%,transparent))}
+.glct-wxeditor .wx-hex.sel::before{background:linear-gradient(155deg,#fff,rgba(255,255,255,.28) 44%,rgba(0,0,0,.36))}
+.glct-wxeditor .wx-hex.sel > i{color:#fff}
+
+/* hex form */
+.glct-wxeditor .wxe-hexform{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;padding:10px}
+.glct-wxeditor .wxe-fhead{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.glct-wxeditor .wxe-preview{position:relative;width:74px;height:46px;border-radius:9px;overflow:hidden;flex:none;
+  --glct-weather-glow:#7fb4e6;display:grid;place-items:center;
+  background:radial-gradient(130% 130% at 50% 0%,#10151f,#080b11 82%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 0 16px color-mix(in srgb,var(--glct-weather-glow) 26%,transparent)}
+.glct-wxeditor .wxe-preview .glct-wx-canvas{position:absolute;inset:0}
+.glct-wxeditor .wxe-preview > i{position:relative;z-index:2;font-size:18px;color:#fff;filter:drop-shadow(0 0 7px var(--glct-weather-glow))}
+.glct-wxeditor .wxe-fidx{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8b95a8}
+.glct-wxeditor .wxe-frow{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.glct-wxeditor .wxe-frow.checkbox{grid-template-columns:auto 1fr;gap:8px}
+.glct-wxeditor .wxe-flabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#98a2b6;font-weight:700}
+.glct-wxeditor .wxe-frow textarea{width:100%;resize:vertical}
+.glct-wxeditor .wxe-frow input[type=color]{width:100%;height:26px;padding:2px;background:#0b0f17;cursor:pointer}
+.glct-wxeditor .wxe-frow input[type=range]{width:100%}
+.glct-wxeditor .wxe-fsubtitle{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:#69748c;font-weight:700;
+  margin-top:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.07)}
+
+/* navigation hex editor */
+.glct-wxeditor .wxe-navsection{display:flex;flex-direction:column;gap:8px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;padding:10px}
+.glct-wxeditor .wxe-sec-title{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#aab4c8;font-weight:700;display:flex;align-items:center;gap:7px}
+.glct-wxeditor .wxe-navtop{display:flex;align-items:center;gap:8px}
+.glct-wxeditor .wxe-navgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.glct-wxeditor .wxe-navcol-h{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#69748c;font-weight:700;margin-bottom:6px}
+.glct-wxeditor .wxe-maprow{display:grid;grid-template-columns:24px 40px 1fr;gap:6px;align-items:center;margin-bottom:4px}
+.glct-wxeditor .wxe-mtotal{font-variant-numeric:tabular-nums;font-weight:800;font-size:12px;color:#fff;text-align:center}
+.glct-wxeditor .wxe-mpct{font-size:9px;color:#7c869c;text-align:right}
+.glct-wxeditor .wxe-maprow select,.glct-wxeditor .wxe-edgerow select{padding:3px 6px;font-size:11px}
+.glct-wxeditor .wxe-edgerow{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-bottom:4px}
+.glct-wxeditor .wxe-edgelbl{font-size:10px;color:#aab4c8;font-weight:600}
+.glct-wxeditor .wxe-divert{width:48px;padding:3px 6px!important}
+.glct-wxeditor .wxe-trendrow{display:grid;grid-template-columns:58px 1fr 30px;gap:6px;align-items:center;margin-bottom:5px}
+.glct-wxeditor .wxe-tdir{font-size:9px;color:#aab4c8;text-transform:capitalize}
+.glct-wxeditor .wxe-tbar{height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.glct-wxeditor .wxe-tbar i{display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,rgba(120,150,225,.7),#8fb4ff);box-shadow:0 0 8px rgba(120,150,225,.4);transition:width .35s ease}
+.glct-wxeditor .wxe-tpct{font-size:9px;color:#7c869c;text-align:right;font-variant-numeric:tabular-nums}
+.glct-wxeditor .wxe-actions{display:flex;align-items:center;gap:8px}
+
+/* ============================================================
+   4) WEATHER CHAT CARD (global, like the pool card)
+   ============================================================ */
+.glct-weathercard{--wtint:#cfe8ff;--wglow:#7fb4e6;
+  margin:0 -8px -8px;border:none;border-top:1px solid rgba(255,255,255,.1);border-radius:0 0 6px 6px;overflow:hidden;
+  font:13px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif;color:#eef1f7;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--wglow) 14%,transparent),transparent 60%),
+    linear-gradient(160deg,#161d2c,#0a0e15)}
+.glct-weathercard .glct-cc-head{display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid rgba(255,255,255,.08)}
+.glct-weathercard .glct-cc-ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:15px;color:#fff;
+  background:radial-gradient(120% 120% at 50% 0%,color-mix(in srgb,var(--wtint) 40%,#0a0e15),#0a0e15);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 0 14px color-mix(in srgb,var(--wglow) 55%,transparent)}
+.glct-weathercard .glct-cc-title{display:flex;flex-direction:column;line-height:1.2;flex:1;min-width:0}
+.glct-weathercard .glct-cc-title .n{font-size:13px;font-weight:780;
+  background:linear-gradient(180deg,#fff,#cdd6e8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.glct-weathercard .glct-cc-title .s{font-size:8.5px;color:#98a2b6;letter-spacing:.1em;text-transform:uppercase}
+.glct-weathercard .wc-haz{color:#ff7a6f;font-size:13px;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--gl-hazard) 80%,transparent))}
+.glct-weathercard .glct-cc-body{padding:9px 11px;display:flex;flex-direction:column;gap:6px}
+.glct-weathercard .wc-desc{font-size:11.5px;color:#c5cedd;line-height:1.45}
+.glct-weathercard .wc-note{font-size:10.5px;color:#e7c98a;padding:5px 8px;border-radius:6px;
+  background:rgba(217,176,102,.1);border-left:2px solid rgba(217,176,102,.5)}
+.glct-weathercard .wc-note i,.glct-weathercard .wc-temp i{margin-right:5px;opacity:.85}
+.glct-weathercard .wc-from{font-size:10px;letter-spacing:.04em;color:#98a2b6}
+.glct-weathercard .wc-trail{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.glct-weathercard .wc-step{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:10px;color:#cdd6e6;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.glct-weathercard .wc-step:last-child{color:#fff;border-color:color-mix(in srgb,var(--wglow) 50%,transparent);
+  box-shadow:0 0 8px color-mix(in srgb,var(--wglow) 40%,transparent)}
+.glct-weathercard .wc-arrow{color:#5b6478;font-size:10px}
+.glct-weathercard .wc-temp{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--wtint) 55%,#fff);font-weight:700}
+
+/* "how the weather moved this turn": a mini hex flower + an arrow from the previous
+   cell to the new one, with a compass caption. The condition card lays it out as a
+   row (flower left, caption right); the digest reuses .wc-body-move for the same. */
+.glct-weathercard .wc-move{display:flex;align-items:center;gap:11px}
+.glct-weathercard.digest .glct-cc-body.wc-body-move{flex-direction:row;align-items:center;gap:11px}
+.glct-weathercard .wc-move-info{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.glct-weathercard .wc-flower{flex:none;width:62px;height:auto;overflow:visible;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.glct-weathercard .wc-flower .hx{fill:rgba(255,255,255,.045);stroke:rgba(255,255,255,.13);stroke-width:.55}
+.glct-weathercard .wc-flower .hx.from{fill:rgba(255,255,255,.11);
+  stroke:color-mix(in srgb,var(--wglow) 45%,rgba(255,255,255,.22));stroke-width:.8}
+.glct-weathercard .wc-flower .hx.to{fill:color-mix(in srgb,var(--wglow) 42%,transparent);
+  stroke:color-mix(in srgb,var(--wglow) 88%,#fff);stroke-width:1;
+  filter:drop-shadow(0 0 3px color-mix(in srgb,var(--wglow) 75%,transparent))}
+.glct-weathercard .wc-flower .arr-line{stroke:#fff;stroke-width:1.5;stroke-linecap:round;opacity:.95;
+  filter:drop-shadow(0 0 2px color-mix(in srgb,var(--wglow) 85%,transparent))}
+.glct-weathercard .wc-flower .arr-head{fill:#fff;
+  filter:drop-shadow(0 0 2px color-mix(in srgb,var(--wglow) 85%,transparent))}
+.glct-weathercard .wc-move-cap{display:flex;flex-direction:column;gap:3px}
+.glct-weathercard .wc-move-dir{display:inline-flex;align-items:center;font-size:11.5px;font-weight:750;
+  color:#dbe3f0;letter-spacing:.03em}
+.glct-weathercard .wc-move-dir i{margin-right:6px;font-size:10px;
+  color:color-mix(in srgb,var(--wglow) 72%,#cdd6e6);transition:none}
+.glct-weathercard .wc-move-roll{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8b95a8}
+/* ominous move: red destination + arrow glow */
+.glct-weathercard.ominous .wc-flower .hx.to{fill:color-mix(in srgb,var(--gl-hazard) 42%,transparent);stroke:#ff9a90;
+  filter:drop-shadow(0 0 3px color-mix(in srgb,var(--gl-hazard) 70%,transparent))}
+.glct-weathercard.ominous .wc-flower .arr-line,
+.glct-weathercard.ominous .wc-flower .arr-head{filter:drop-shadow(0 0 2px color-mix(in srgb,var(--gl-hazard) 85%,transparent))}
+.glct-weathercard.ominous .wc-move-dir i{color:#ff9a90}
+/* ominous announcement: red dread accents */
+.glct-weathercard.ominous{background:linear-gradient(180deg,color-mix(in srgb,var(--gl-hazard) 16%,transparent),transparent 60%),linear-gradient(160deg,#1c1014,#0a0e15)}
+.glct-weathercard.ominous .glct-cc-ico{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-hazard) 30%,transparent),0 0 14px color-mix(in srgb,var(--gl-hazard) 55%,transparent)}
+.glct-weathercard.ominous .glct-cc-title .n{background:none;-webkit-text-fill-color:#ffd9d4;color:#ffd9d4}
+
+/* let the weather card own the whole chat entry (mirror the pool-card treatment) */
+#chat-log .chat-message.glct-weather-msg,
+.chat-message.glct-weather-msg{padding:0;overflow:hidden;position:relative}
+.chat-message.glct-weather-msg .message-header{position:absolute;top:0;right:0;left:auto;width:auto;margin:0;padding:7px 9px;border:none;z-index:3;flex:none}
+.chat-message.glct-weather-msg .message-sender,
+.chat-message.glct-weather-msg .message-header .flavor-text{display:none}
+.chat-message.glct-weather-msg .message-metadata{margin:0;gap:7px;color:#aab4c8;font-size:10px;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.chat-message.glct-weather-msg .message-content{margin:0;padding:0}
+.chat-message.glct-weather-msg .glct-weathercard{margin:0;border:none;border-radius:6px}
+.chat-message.glct-weather-msg .glct-cc-head{padding-right:60px}
+
+/* respect reduced motion: drop the looping flourishes (Pixi already renders static) */
+@media (prefers-reduced-motion: reduce){
+  #glct-weather-hud .wx-current.ominous .wx-cur-ico,
+  .wx-marker,.wx-marker.arrive{animation:none!important}
+}
+
+/* ============================================================
+   5) REGION SWITCHER (window) + DISALLOWED-FACE MARKS
+   ============================================================ */
+#glct-weather-hud .wx-regionbar{display:flex;align-items:center;gap:6px;padding:5px 9px;position:relative;z-index:5;
+  border-bottom:1px solid var(--hair);background:rgba(255,255,255,.025)}
+#glct-weather-hud .wx-rb-lbl{font-size:10px;color:#8b95a8;display:grid;place-items:center;width:16px}
+#glct-weather-hud .wx-rb-select{flex:1;min-width:0;background:#0b0f17;color:#eef1f7;border:1px solid rgba(255,255,255,.12);
+  border-radius:7px;padding:4px 7px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
+#glct-weather-hud .wx-rb-add{width:22px;height:22px;flex:none;border:1px solid rgba(255,255,255,.12);border-radius:7px;cursor:pointer;
+  display:grid;place-items:center;background:rgba(255,255,255,.06);color:#aab4c8;font-size:10px;transition:.15s}
+#glct-weather-hud .wx-rb-add:hover{background:rgba(155,225,93,.16);color:#bdf08a;border-color:rgba(155,225,93,.4)}
+
+/* the editor's smaller (R=17) tiles get smaller face marks + tags so they stay
+   inside the hexagon and don't crowd the centre icon */
+.glct-wxeditor .wx-hex .wx-dir-x{width:9px;height:9px;font-size:6px;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 1px 2px rgba(0,0,0,.6)}
+.glct-wxeditor .wx-hex .wx-tag{width:10px;height:10px;font-size:5.5px;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+
+/* editor: region management bar */
+.glct-wxeditor .wxe-regionbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  background:linear-gradient(180deg,rgba(120,150,225,.12),rgba(120,150,225,.03));border:1px solid rgba(120,150,225,.28);
+  border-radius:10px;padding:7px 9px}
+.glct-wxeditor .wxe-regionbar select{flex:1;min-width:140px}
+.glct-wxeditor .wxe-regionbar button{padding:6px 9px}
+.glct-wxeditor .wxe-regionbar button:disabled{opacity:.4;cursor:not-allowed}
+.glct-wxeditor .wxe-seasonal{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.glct-wxeditor .wxe-seasonal input{cursor:pointer}
+
+/* editor: per-hex disallowed-face chips */
+.glct-wxeditor .wxe-disallow{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.glct-wxeditor .wxe-dchip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:#c5cedd;cursor:pointer}
+.glct-wxeditor .wxe-dchip input{cursor:pointer}
+.glct-wxeditor .wxe-dchip:has(input:checked){color:#ff9b8f;font-weight:700}

@@ -1,0 +1,31 @@
+<div class="glct-evlist">
+  <header class="ev-head">
+    <span class="ev-count">{{events.length}} event(s)</span>
+    <button type="button" class="ev-add" data-action="addEvent">
+      <i class="fa-solid fa-plus"></i> {{localize "GLCT.events.add"}}
+    </button>
+  </header>
+
+  {{#if events.length}}
+  <ul class="ev-rows">
+    {{#each events}}
+    <li class="ev-row" data-event-id="{{this.id}}">
+      <span class="ev-name">{{this.name}}</span>
+      <span class="ev-when">{{this.when}}</span>
+      <button type="button" class="ev-pin {{#if this.pinned}}on{{/if}}" data-action="togglePin"
+              title="{{localize 'GLCT.events.pinned'}}">
+        <i class="fa-solid fa-thumbtack"></i>
+      </button>
+      <button type="button" class="ev-vis {{#if this.visibleToPlayers}}on{{/if}}" data-action="toggleVis"
+              title="{{localize 'GLCT.events.visibleToPlayers'}}">
+        <i class="fa-solid {{#if this.visibleToPlayers}}fa-eye{{else}}fa-eye-slash{{/if}}"></i>
+      </button>
+      <button type="button" class="ev-edit" data-action="editEvent" title="Edit"><i class="fa-solid fa-pen"></i></button>
+      <button type="button" class="ev-del" data-action="deleteEvent" title="Delete"><i class="fa-solid fa-trash"></i></button>
+    </li>
+    {{/each}}
+  </ul>
+  {{else}}
+  <p class="ev-empty">No events yet. Add holidays, festivals, or one-off events.</p>
+  {{/if}}
+</div>

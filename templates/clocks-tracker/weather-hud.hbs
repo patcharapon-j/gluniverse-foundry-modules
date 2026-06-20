@@ -1,0 +1,69 @@
+{{!-- Hex Flower window: a frameless glass panel modeled on the tracker dock.
+      The flower tiles + history strip are built imperatively in WeatherHud so a
+      step can animate the marker hex-to-hex without a full re-render. --}}
+<div class="glct-wx-root">
+  <div class="wx-dock {{#unless seesFlower}}no-flower{{/unless}}" data-dock>
+
+    <div class="wx-head" data-drag>
+      <span class="dh-grip"><i></i><i></i><i></i></span>
+      <span class="dh-title">{{localize 'GLCT.weather.windowTitle'}}</span>
+      {{#if isGM}}
+      <button type="button" class="wx-hbtn" data-action="openEditor" title="{{localize 'GLCT.weather.editor.title'}}"><i class="fa-solid fa-pen-ruler"></i></button>
+      <button type="button" class="wx-hbtn" data-action="toggleReveal" data-reveal title="{{localize 'GLCT.weather.revealFlower'}}"><i class="fa-solid fa-eye"></i></button>
+      {{/if}}
+      <button type="button" class="wx-hbtn close" data-action="closeWindow" title="{{localize 'GLCT.calendarView.close'}}"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    {{!-- GM region switcher: every region keeps its own living weather; pick which
+          one drives the HUD + chat. Built imperatively (the list is dynamic). --}}
+    {{#if isGM}}
+    <div class="wx-regionbar" data-regionbar></div>
+    {{/if}}
+
+    {{!-- Current-condition hero --}}
+    <div class="wx-current" data-current>
+      <div class="wx-cur-ico"><span class="wx-stage" data-wxstage></span><i data-curicon class="fa-solid fa-cloud"></i></div>
+      <div class="wx-cur-text">
+        <div class="wx-cur-label" data-curlabel></div>
+        <div class="wx-cur-meta"><span class="wx-cur-season" data-curseason></span><span class="wx-cur-temp" data-curtemp></span></div>
+        <div class="wx-cur-desc" data-curdesc></div>
+        <div class="wx-cur-note" data-curnote></div>
+      </div>
+    </div>
+
+    {{!-- The 19-hex flower (tiles built imperatively) --}}
+    <div class="wx-flower-wrap" data-flowerwrap>
+      <div class="wx-flower" data-flower></div>
+    </div>
+
+    {{!-- Next-step odds: P(next condition) from the current hex under the NH --}}
+    <div class="wx-forecast-wrap" data-forecastwrap hidden>
+      <span class="wx-strip-lbl">{{localize 'GLCT.weather.forecast'}}</span>
+      <div class="wx-forecast" data-forecast title="{{localize 'GLCT.weather.forecastHint'}}"></div>
+    </div>
+
+    {{!-- Recent history strip (visible to players) --}}
+    <div class="wx-strip-wrap">
+      <span class="wx-strip-lbl">{{localize 'GLCT.weather.recent'}}</span>
+      <div class="wx-strip" data-strip></div>
+    </div>
+
+    {{#if isGM}}
+    <div class="wx-controls">
+      <button type="button" class="wx-btn primary" data-action="rollNow" data-rollnow title="{{localize 'GLCT.weather.rollHint'}}">
+        <i class="fa-solid fa-dice"></i> <span>{{localize 'GLCT.weather.rollNow'}}</span>
+      </button>
+      <button type="button" class="wx-btn" data-action="reset" title="{{localize 'GLCT.weather.resetHint'}}">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+    </div>
+    {{/if}}
+
+    {{!-- Shown when no flower is configured yet --}}
+    <div class="wx-empty" data-empty hidden>
+      <p>{{localize 'GLCT.weather.notConfigured'}}</p>
+      {{#if isGM}}<button type="button" class="wx-btn primary" data-action="openEditor"><i class="fa-solid fa-pen-ruler"></i> {{localize 'GLCT.weather.openEditor'}}</button>{{/if}}
+    </div>
+
+  </div>
+</div>

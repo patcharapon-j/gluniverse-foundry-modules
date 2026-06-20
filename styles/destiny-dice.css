@@ -1,0 +1,854 @@
+/* ===========================================================================
+   GLUniverse Destiny Dice — "Etched Glass" design language
+   ---------------------------------------------------------------------------
+   Liquid glass as the material, Endfield precision as the drafting layer.
+   Every surface is a slab of dark frosted glass that a laser has etched:
+   a chamfered corner, a hairline registration bracket, a micro-type data
+   label, a rule of light that sweeps across when state changes.
+
+   See: GL Universe — Design Language Reference ("Etched Glass") v1.0
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. Shared GL tokens (§2, §6.1)
+   --------------------------------------------------------------------------- */
+:root {
+  /* Ink ramp (surfaces) */
+  --gl-ink-0: #02070b;
+  --gl-ink-1: #080b11;
+  --gl-ink-2: #0b0f17;
+  --gl-ink-3: #161d2c;
+
+  /* Text */
+  --gl-text: #eef1f7;
+  --gl-text-bright: #f3fbff;
+  --gl-text-dim: #98a2b6;
+  --gl-text-faint: rgba(243, 251, 255, 0.38);
+
+  /* Lines & rims */
+  --gl-hair: rgba(255, 255, 255, 0.08);
+  --gl-edge: rgba(255, 255, 255, 0.13);
+  --gl-line-strong: rgba(244, 252, 255, 0.55);
+
+  /* Fixed semantic accents */
+  --gl-signal: #ffd24a;
+  --gl-signal-hot: #ffe070;
+  --gl-cyan: #5eeaff;
+  --gl-hazard: #ff4a52;
+  --gl-good: #5fdb92;
+  --gl-violet: #b497ff;
+  --gl-mission: #37d99a;
+
+  /* Dynamic accent channel — context sets this per component */
+  --gl-accent: var(--gl-signal);
+
+  /* Type voices */
+  --gl-font-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
+  --gl-font-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* Motion tokens (§6.1) */
+  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
+  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
+  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
+
+  --gl-d-quick: 180ms;
+  --gl-d-move: 420ms;
+  --gl-d-reveal: 620ms;
+  --gl-d-splash: 720ms;
+  --gl-breathe: 2.6s;
+  --gl-dread: 3.2s;
+
+  /* Cinematic-tier multipliers (overridden by body.glddf-motion-* below) */
+  --glddf-motion-scale: 1;
+  --glddf-flare: 0px;
+}
+
+/* ===========================================================================
+   2. The Fated Roll toggle — glass-chip, signal-amber commit accent (§3.2)
+   =========================================================================== */
+.glddf-fated-roll-row {
+  display: flex;
+  width: 100%;
+}
+
+.glddf-fated-roll-toggle {
+  /* The toggle is a commit/confirm control → signal amber (§2.4). */
+  --gl-accent: var(--gl-signal);
+
+  align-items: center;
+  color: color-mix(in oklab, var(--gl-accent) 30%, var(--gl-text-bright));
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  font-family: var(--gl-font-tech);
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 0.6rem;
+  isolation: isolate;
+  justify-content: space-between;
+  letter-spacing: 0.16em;
+  margin: 0;
+  overflow: hidden;
+  padding: 0.46rem 0.9rem 0.46rem 1rem;
+  position: relative;
+  text-transform: uppercase;
+  white-space: nowrap;
+  width: 100%;
+
+  /* Chip notch — top-left (§4.1) */
+  border: 1px solid color-mix(in oklab, var(--gl-accent) 30%, var(--gl-edge));
+  border-radius: 8px;
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -10px 22px rgba(0, 0, 0, 0.34),
+    0 2px 0 rgba(0, 0, 0, 0.4);
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    transform 120ms var(--gl-ease);
+}
+
+/* Edge bar — the accent rail (§7.1) */
+.glddf-fated-roll-toggle::before {
+  background: var(--gl-accent);
+  border-radius: 2px;
+  bottom: 0.34rem;
+  box-shadow:
+    0 0 6px var(--gl-accent),
+    0 0 14px color-mix(in oklab, var(--gl-accent) 45%, transparent);
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 0.34rem;
+  width: 3px;
+  z-index: 1;
+}
+
+/* Top precision rule — draws on hover (§4.3, §7.2) */
+.glddf-fated-roll-toggle::after {
+  background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
+  box-shadow: 0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent);
+  content: "";
+  height: 1px;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition:
+    transform var(--gl-d-quick) var(--gl-ease),
+    opacity var(--gl-d-quick) var(--gl-ease);
+  z-index: 3;
+}
+
+.glddf-fated-roll-toggle > span {
+  position: relative;
+  z-index: 2;
+  text-shadow:
+    0 0 6px color-mix(in oklab, var(--gl-accent) 26%, transparent),
+    0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Triangle bullet — the etched indicator (§4.2) */
+.glddf-fated-roll-toggle > span::before {
+  color: color-mix(in oklab, var(--gl-accent) 80%, var(--gl-text-dim));
+  content: "\25B8";
+  font-size: 0.7em;
+  margin-right: 0.5em;
+}
+
+.glddf-fated-roll-toggle:hover {
+  border-color: color-mix(in oklab, var(--gl-accent) 50%, var(--gl-edge));
+  filter: brightness(1.06);
+}
+
+.glddf-fated-roll-toggle:hover::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* Press (§6.2) */
+.glddf-fated-roll-toggle:active {
+  transform: translateY(1px);
+}
+
+.glddf-fated-roll-toggle:has(input:checked) {
+  border-color: color-mix(in oklab, var(--gl-accent) 70%, var(--gl-edge));
+  color: var(--gl-signal-hot);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -10px 22px rgba(0, 0, 0, 0.34),
+    0 0 22px color-mix(in oklab, var(--gl-accent) 34%, transparent),
+    0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.glddf-fated-roll-toggle:has(input:checked) > span {
+  text-shadow:
+    0 0 10px color-mix(in oklab, var(--gl-accent) 50%, transparent),
+    0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.glddf-fated-roll-toggle:has(input:checked) > span::before {
+  color: var(--gl-accent);
+}
+
+/* Native checkbox → etched signal pip (notched square that fills on commit) */
+.glddf-fated-roll-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.3)),
+    var(--gl-ink-2);
+  border: 1px solid color-mix(in oklab, var(--gl-accent) 40%, var(--gl-edge));
+  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  cursor: pointer;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0;
+  position: relative;
+  width: 1rem;
+  z-index: 2;
+  transition:
+    background var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease);
+}
+
+.glddf-fated-roll-toggle input:checked {
+  background: var(--gl-accent);
+  border-color: var(--gl-signal-hot);
+  box-shadow:
+    0 0 8px color-mix(in oklab, var(--gl-accent) 60%, transparent),
+    0 0 16px color-mix(in oklab, var(--gl-accent) 35%, transparent);
+}
+
+.glddf-fated-roll-toggle input:checked::after {
+  border: solid var(--gl-ink-0);
+  border-width: 0 2px 2px 0;
+  content: "";
+  height: 0.5rem;
+  left: 50%;
+  position: absolute;
+  top: 44%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 0.28rem;
+}
+
+/* ===========================================================================
+   3. The chat-card fate strip — glass-panel material + chamfer (§3.1, §4.1)
+   =========================================================================== */
+.glddf-fate-strip {
+  /* Accent fallbacks; the active preset overrides --gl-accent at runtime. */
+  --gl-accent: var(--gl-text-dim);
+  --glddf-leading-size: 3.1rem;
+
+  align-items: stretch;
+  color: var(--gl-text);
+  display: flex;
+  font-family: var(--gl-font-tech);
+  font-size: 0.82rem;
+  gap: 0;
+  isolation: isolate;
+  letter-spacing: 0.05em;
+  margin: 9px 0 5px;
+  min-height: var(--glddf-leading-size);
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  text-transform: uppercase;
+
+  /* Chamfer — three soft corners, one diagonal cut top-right (§4.1) */
+  border: 1px solid var(--gl-edge);
+  border-radius: 13px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+
+  /* Glass-panel fill (§3.1) */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+
+  /* clip-path clips outer shadows → drop + bloom ride on filter (§9.1 note) */
+  filter:
+    drop-shadow(0 18px 42px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4))
+    drop-shadow(0 0 26px color-mix(in oklab, var(--gl-accent) 18%, transparent));
+
+  backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* Inner radial light catch (§3.1 ::before) */
+.glddf-fate-strip::before {
+  background: radial-gradient(
+    70% 150% at 50% -50%,
+    color-mix(in oklab, var(--gl-accent) 50%, transparent),
+    transparent 66%
+  );
+  content: "";
+  inset: 0;
+  opacity: 0.22;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+/* Top precision rule — the sheen sweep lives here (§4.3, §6.2) */
+.glddf-fate-strip::after {
+  background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
+  box-shadow: 0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent);
+  content: "";
+  height: 1px;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  z-index: 4;
+}
+
+.glddf-fate-strip > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* --- Etched annotations -------------------------------------------------- */
+
+/* Chamfer hairline — a 1px accent line tracing the cut edge (§4.1) */
+.glddf-fate-strip .glddf-cut {
+  background: color-mix(in oklab, var(--gl-accent) 75%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--gl-accent) 60%, transparent);
+  height: 1px;
+  pointer-events: none;
+  position: absolute;
+  right: -3px;
+  top: 8px;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  width: 22px;
+  z-index: 5;
+}
+
+/* L-bracket registration mark — bottom-left (§4.2) */
+.glddf-fate-strip .glddf-bracket {
+  border: 1px solid var(--gl-line-strong);
+  border-right: 0;
+  border-top: 0;
+  bottom: 6px;
+  height: 8px;
+  left: 6px;
+  opacity: 0.5;
+  pointer-events: none;
+  position: absolute;
+  width: 8px;
+  z-index: 5;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
+}
+
+/* Leading face well — frosted inset, flush to left/top/bottom */
+.glddf-fate-face,
+.glddf-fate-glyph {
+  align-self: stretch;
+  background:
+    radial-gradient(ellipse at 50% 32%, rgba(255, 255, 255, 0.07), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.36));
+  border: none;
+  border-right: 1px solid color-mix(in oklab, var(--gl-accent) 32%, var(--gl-hair));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset -1px 0 0 rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex: 0 0 var(--glddf-leading-size);
+  height: auto;
+  margin: 0;
+  position: relative;
+  width: var(--glddf-leading-size);
+}
+
+.glddf-fate-face {
+  object-fit: cover;
+  padding: 0.28rem;
+  filter:
+    drop-shadow(0 0 6px color-mix(in oklab, var(--gl-accent) 55%, transparent))
+    drop-shadow(0 0 13px color-mix(in oklab, var(--gl-accent) 35%, transparent))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+}
+
+.glddf-fate-glyph {
+  align-items: center;
+  color: color-mix(in oklab, var(--gl-accent) 70%, var(--gl-text));
+  justify-content: center;
+  text-shadow:
+    0 0 8px color-mix(in oklab, var(--gl-accent) 55%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.glddf-fate-glyph i {
+  font-size: 1.2rem;
+  line-height: 1;
+  opacity: 0.95;
+}
+
+/* --- Body ---------------------------------------------------------------- */
+.glddf-fate-body {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.5rem 1.05rem 0.5rem 0.95rem;
+  position: relative;
+}
+
+/* Colored rail accent between the leading well and the text body (§7.1) */
+.glddf-fate-body::before {
+  background: var(--gl-accent);
+  border-radius: 2px;
+  bottom: 0.34rem;
+  box-shadow:
+    0 0 6px var(--gl-accent),
+    0 0 14px color-mix(in oklab, var(--gl-accent) 45%, transparent);
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 0.34rem;
+  width: 2px;
+  z-index: 1;
+}
+
+.glddf-fate-body > * {
+  position: relative;
+  z-index: 2;
+}
+
+.glddf-fate-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+/* Technical kicker — micro serial / data label (§4.2, §5) */
+.glddf-fate-kicker {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-font-tech);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Result name — Oxanium display voice (§5) */
+.glddf-fate-name {
+  color: var(--gl-text-bright);
+  font-family: var(--gl-font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.05;
+  text-shadow:
+    0 0 10px color-mix(in oklab, var(--gl-accent) 30%, transparent),
+    0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* --- Hero bonus numeral lockup (§5 "numbers are heroes") ----------------- */
+.glddf-fate-bonus {
+  align-items: center;
+  background:
+    radial-gradient(ellipse at 50% 28%, rgba(255, 255, 255, 0.14), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.42));
+  border: 1px solid color-mix(in oklab, var(--gl-accent) 60%, var(--gl-edge));
+  border-radius: 11px;
+  /* Small notch top-left (§4.1) */
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    0 0 10px color-mix(in oklab, var(--gl-accent) 40%, transparent),
+    0 0 20px color-mix(in oklab, var(--gl-accent) 22%, transparent);
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  min-width: 2.7rem;
+  padding: 0.2rem 0.7rem 0.26rem;
+  text-align: center;
+  text-transform: none;
+}
+
+.glddf-fate-bonus-num {
+  color: var(--gl-text-bright);
+  font-family: var(--gl-font-display);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-shadow:
+    0 0 8px color-mix(in oklab, var(--gl-accent) 70%, transparent),
+    0 0 16px color-mix(in oklab, var(--gl-accent) 40%, transparent),
+    0 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.glddf-fate-bonus-unit {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-font-tech);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  margin-top: 0.05rem;
+  padding-left: 0.32em;
+}
+
+/* ---------------------------------------------------------------------------
+   3.1 Strip states — the dynamic accent channel (§2.5, §7)
+   --------------------------------------------------------------------------- */
+
+/* Static fallbacks; preset overrides (settings.mjs) supersede these. */
+.glddf-fate-strip.glddf-opportunity {
+  --gl-accent: var(--gl-cyan);
+}
+
+.glddf-fate-strip.glddf-complication {
+  --gl-accent: var(--gl-signal);
+}
+
+.glddf-fate-strip.glddf-blank {
+  --gl-accent: #aeb6c6;
+}
+
+/* Active / featured emphasis — every freshly-rolled strip reads as "live" */
+.glddf-fate-strip:not(.glddf-blank):not(.glddf-refused) .glddf-bracket {
+  border-color: var(--gl-accent);
+  opacity: 1;
+}
+
+/* Defeated / spent — the refused (un-accepted) result (§7.6) */
+.glddf-fate-strip.glddf-refused {
+  filter:
+    saturate(0.18) brightness(0.62)
+    drop-shadow(0 14px 30px rgba(0, 0, 0, 0.5));
+  opacity: 0.65;
+}
+
+.glddf-fate-strip.glddf-refused .glddf-bracket {
+  /* The drafting layer never disappears (§7.6) */
+  border-color: var(--gl-line-strong);
+  opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------------------
+   3.2 The reveal contract — sheen sweep + etched ghost (§6.3)
+   anticipation → rule/light moves → content lights → settle
+   --------------------------------------------------------------------------- */
+.glddf-fate-strip.glddf-reveal {
+  animation: glddf-strip-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) both;
+}
+
+.glddf-fate-strip.glddf-reveal::after {
+  animation: glddf-sweep calc(var(--gl-d-splash) * var(--glddf-motion-scale)) var(--gl-ease) 80ms both;
+}
+
+.glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
+.glddf-fate-strip.glddf-reveal .glddf-fate-name {
+  animation: glddf-ghost-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) 200ms both;
+}
+
+.glddf-fate-strip.glddf-reveal .glddf-fate-name {
+  animation-delay: 280ms;
+}
+
+.glddf-fate-strip.glddf-reveal .glddf-fate-bonus {
+  animation: glddf-pop calc(var(--gl-d-move) * var(--glddf-motion-scale)) var(--gl-pop) 360ms both;
+}
+
+.glddf-fate-strip.glddf-reveal .glddf-fate-face,
+.glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
+  animation: glddf-well-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) both;
+}
+
+@keyframes glddf-strip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glddf-sweep {
+  0% {
+    opacity: 0;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  18% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+    transform-origin: right center;
+  }
+}
+
+@keyframes glddf-ghost-in {
+  from {
+    opacity: 0.18;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes glddf-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes glddf-well-in {
+  from {
+    opacity: 0;
+    filter: brightness(2.4);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ===========================================================================
+   4. The Dice Faces config dialog — glass surface + etched rows
+   =========================================================================== */
+.glddf-face-config-form {
+  display: grid;
+  font-family: var(--gl-font-display);
+  gap: 0.85rem;
+}
+
+.glddf-face-config-form .notes {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-font-tech);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.glddf-face-config-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.glddf-face-config-row {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 8rem minmax(8rem, 1fr) 5.5rem minmax(14rem, 2fr);
+  isolation: isolate;
+  padding: 0.7rem 0.75rem;
+  position: relative;
+
+  /* Row chip — soft three-corner radius, notch top-right */
+  border: 1px solid var(--gl-edge);
+  border-radius: 11px;
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 6%, var(--gl-ink-2)), var(--gl-ink-1) 70%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -8px 18px rgba(0, 0, 0, 0.3);
+}
+
+/* L-bracket registration on each face row */
+.glddf-face-config-row::before {
+  border: 1px solid var(--gl-line-strong);
+  border-bottom: 0;
+  border-right: 0;
+  content: "";
+  height: 8px;
+  left: 6px;
+  opacity: 0.45;
+  position: absolute;
+  top: 6px;
+  width: 8px;
+}
+
+.glddf-face-config-label {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.glddf-face-config-id {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.glddf-face-config-kicker {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-font-tech);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1;
+}
+
+.glddf-face-config-label strong {
+  font-family: var(--gl-font-tech);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.glddf-face-config-preview {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 255, 255, 0.06), transparent 60%),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 7px;
+  height: 2.4rem;
+  object-fit: contain;
+  padding: 0.15rem;
+  width: 2.4rem;
+}
+
+.glddf-face-config-row label {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.glddf-face-config-row label > span {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-font-tech);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.glddf-face-config-file {
+  display: flex;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.glddf-face-config-file input {
+  min-width: 0;
+}
+
+.glddf-face-config-file button {
+  flex: 0 0 2rem;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .glddf-face-config-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .glddf-face-config-label,
+  .glddf-face-config-image {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ===========================================================================
+   5. Motion tiers (§6.4) + reduced-motion clamp (§8)
+   =========================================================================== */
+
+/* Cinematic — durations ×1.4, sheens gain a trailing flare */
+body.glddf-motion-cinematic {
+  --glddf-motion-scale: 1.4;
+  --glddf-flare: 28px;
+}
+
+body.glddf-motion-cinematic .glddf-fate-strip.glddf-reveal::after {
+  box-shadow:
+    0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent),
+    var(--glddf-flare) 0 36px color-mix(in oklab, var(--gl-accent) 30%, transparent);
+}
+
+/* Reduced — ceremonies become straight fades, no sheens */
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal {
+  animation: glddf-fade-in 240ms ease both;
+}
+
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal::after,
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-name,
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-bonus,
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-face,
+body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
+  animation: none;
+}
+
+@keyframes glddf-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* prefers-reduced-motion force-clamps to the reduced tier and kills loops (§8) */
+@media (prefers-reduced-motion: reduce) {
+  .glddf-fated-roll-toggle,
+  .glddf-fated-roll-toggle::after,
+  .glddf-fated-roll-toggle input {
+    transition-duration: 120ms;
+  }
+
+  .glddf-fate-strip.glddf-reveal {
+    animation: glddf-fade-in 200ms ease both;
+  }
+
+  .glddf-fate-strip.glddf-reveal::after,
+  .glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
+  .glddf-fate-strip.glddf-reveal .glddf-fate-name,
+  .glddf-fate-strip.glddf-reveal .glddf-fate-bonus,
+  .glddf-fate-strip.glddf-reveal .glddf-fate-face,
+  .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
+    animation: none;
+  }
+}

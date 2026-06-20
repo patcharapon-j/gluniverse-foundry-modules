@@ -1,0 +1,69 @@
+{{!-- Mission Support — the Comms-Coin. A frameless glass widget that rests as a
+      compact coin (the support's portrait filling the whole disc, ringed by a
+      segmented availability gauge) and, on CLICK, expands into a tight dossier
+      sheet. Firing an action posts the support card to chat (rolling the pool
+      when needed). The ring, action rows, portrait framing and pool dice are
+      painted imperatively by SupportHud so state changes animate without a
+      re-render. --}}
+<div class="glct-sup-root" data-root>
+
+  {{!-- GM, no active support: a faint coin that opens the Muster picker --}}
+  <div class="sup-muster" data-muster hidden>
+    <button type="button" class="sup-muster-coin" data-action="muster" title="{{localize 'GLCT.support.musterHint'}}">
+      <i class="fa-solid fa-user-plus"></i>
+      <span>{{localize 'GLCT.support.muster'}}</span>
+    </button>
+  </div>
+
+  {{!-- Active support: the resting coin + the expandable sheet --}}
+  <div class="coin-wrap" data-coinwrap hidden>
+
+    {{!-- resting coin (click to expand, drag to move) --}}
+    <div class="coin" data-coin data-drag title="{{localize 'GLCT.support.expandHint'}}">
+      <div class="disc"><img class="art" data-art="coin" alt=""><i class="ph fa-solid fa-user-shield"></i></div>
+      <div class="dband">{{localize 'GLCT.support.downedShort'}}</div>
+      <svg class="ring" data-gauge viewBox="0 0 96 96"></svg>
+      <span class="cname" data-name></span>
+    </div>
+
+    {{!-- expanded sheet --}}
+    <div class="sheet glass" data-sheet>
+      <div class="hero" data-drag>
+        <img class="art" data-art="exp" alt=""><i class="ph fa-solid fa-user-shield"></i>
+        <div class="dband-wide">{{localize 'GLCT.support.downedShort'}}</div>
+        <span class="state ok"><i class="fa-solid fa-tower-broadcast"></i>{{localize 'GLCT.support.onComms'}}</span>
+        <span class="state down"><i class="fa-solid fa-heart-crack"></i>{{localize 'GLCT.support.downed'}}</span>
+        <div class="htext"><div class="nm" data-name></div><div class="rl" data-role></div></div>
+        <button type="button" class="sheet-close" data-action="collapse" title="{{localize 'GLCT.calendarView.close'}}"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="body">
+        <div class="pstrip">
+          <div class="pstrip-meta"><div class="lbl">{{localize 'GLCT.support.pool'}}</div><div class="fac" data-fac></div></div>
+          {{#if isGM}}
+          <div class="pool-edit" data-pooledit>
+            <button type="button" class="pstep" data-pool="-1" title="−1">−</button>
+            <div class="pcur"><b data-count></b><span class="sep">/</span><span data-max></span></div>
+            <button type="button" class="pstep" data-pool="1" title="+1">+</button>
+          </div>
+          {{/if}}
+        </div>
+
+        <div class="dice" data-dice></div>
+        <div class="acts" data-acts></div>
+
+        {{#if isGM}}
+        <div class="sup-gm">
+          <button type="button" class="sup-gb sup-gb-clear" data-action="clearRound" title="{{localize 'GLCT.support.clearRoundHint'}}" hidden><i class="fa-solid fa-arrow-rotate-left"></i></button>
+          <button type="button" class="sup-gb primary" data-action="startMission" title="{{localize 'GLCT.support.startMissionHint'}}"><i class="fa-solid fa-flag-checkered"></i><span>{{localize 'GLCT.support.startMission'}}</span></button>
+          <button type="button" class="sup-gb" data-action="recover" title="{{localize 'GLCT.support.recoverHint'}}"><i class="fa-solid fa-kit-medical"></i></button>
+          <button type="button" class="sup-gb" data-action="muster" title="{{localize 'GLCT.support.swapHint'}}"><i class="fa-solid fa-right-left"></i></button>
+          <button type="button" class="sup-gb" data-action="togglePlayers" data-players title="{{localize 'GLCT.support.togglePlayersHint'}}"><i class="fa-solid fa-eye"></i></button>
+          <button type="button" class="sup-gb" data-action="openEditor" title="{{localize 'GLCT.support.editorHint'}}"><i class="fa-solid fa-pen-ruler"></i></button>
+          <button type="button" class="sup-gb" data-action="clearActive" title="{{localize 'GLCT.support.clearHint'}}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</div>

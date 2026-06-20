@@ -1,0 +1,50 @@
+<div class="pk-vignette" aria-hidden="true"></div>
+
+<div class="pk-marquee" aria-hidden="true">
+  <div class="pk-marquee-row"><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span></div>
+  <div class="pk-marquee-row"><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span></div>
+  <div class="pk-marquee-row"><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span><span>{{marquee}}</span></div>
+</div>
+
+<div class="pk-sweep" aria-hidden="true"></div>
+<div class="pk-shock" aria-hidden="true"></div>
+
+<div class="pk-preflash" aria-hidden="true">
+  {{#each flashLetters}}<span class="pk-pf" style="--i:{{this.i}}">{{this.ch}}</span>{{/each}}
+</div>
+
+<div class="pk-frame" aria-hidden="true">
+  <span class="pk-corner pk-tl"></span>
+  <span class="pk-corner pk-tr"></span>
+  <span class="pk-corner pk-bl"></span>
+  <span class="pk-corner pk-br"></span>
+  <span class="pk-edge pk-edge-t"></span>
+  <span class="pk-edge pk-edge-b"></span>
+</div>
+
+<div class="pk-stream pk-stream-t" aria-hidden="true">
+  <div class="pk-stream-track"><span>{{runTop}}</span><span>{{runTop}}</span></div>
+</div>
+<div class="pk-stream pk-stream-b" aria-hidden="true">
+  <div class="pk-stream-track pk-stream-rev"><span>{{runBottom}}</span><span>{{runBottom}}</span></div>
+</div>
+
+<div class="pk-reticle" aria-hidden="true">
+  <span class="pk-rh"></span>
+  <span class="pk-rv"></span>
+  <span class="pk-rd"></span>
+</div>
+
+<div class="pk-stack">
+  <div class="pk-tag">{{tag}}</div>
+  <div class="pk-line pk-line-1" style="--n:{{direCount}}">
+    {{#each direLetters}}<span class="pk-l" style="--i:{{this.i}}">{{this.ch}}</span>{{/each}}
+  </div>
+  <div class="pk-rule"></div>
+  <div class="pk-line pk-line-2" style="--n:{{perilCount}}">
+    {{#each perilLetters}}<span class="pk-l" style="--i:{{this.i}}">{{this.ch}}</span>{{/each}}
+  </div>
+  <div class="pk-sub">{{subtitle}}</div>
+</div>
+
+<div class="pk-flash" aria-hidden="true"></div>

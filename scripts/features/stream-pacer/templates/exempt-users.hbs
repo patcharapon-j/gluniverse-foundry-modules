@@ -1,0 +1,28 @@
+<div class="stream-pacer-exempt-users-content">
+  <p class="notes">{{localize "STREAM_PACER.Settings.ExemptUsersHint"}}</p>
+  <table class="stream-pacer-exempt-table">
+    <thead>
+      <tr>
+        <th class="user-col">{{localize "STREAM_PACER.Settings.ExemptUserColumn"}}</th>
+        <th class="exempt-col">{{localize "STREAM_PACER.Settings.ExemptBarsColumn"}}</th>
+        <th class="exempt-col">{{localize "STREAM_PACER.Settings.ExemptPerilColumn"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each users}}
+      <tr>
+        <td class="user-name">{{name}}</td>
+        <td class="exempt-cell">
+          <input type="checkbox" name="bars-{{id}}" {{#if isExempt}}checked{{/if}}>
+        </td>
+        <td class="exempt-cell">
+          <input type="checkbox" name="peril-{{id}}" {{#if isPerilExempt}}checked{{/if}}>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <footer class="form-footer">
+    <button type="submit"><i class="fas fa-save"></i> {{localize "STREAM_PACER.Save"}}</button>
+  </footer>
+</div>

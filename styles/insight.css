@@ -1,0 +1,669 @@
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
+
+/* ============================================================
+   GLUNIVERSE INSIGHT — "Etched Glass" design language
+   ------------------------------------------------------------
+   Liquid glass as the material, Endfield as the drafting layer.
+   Every surface is a slab of dark frosted glass that a precision
+   laser has etched: a chamfered corner, a hairline registration
+   bracket, a data label in micro-type, a rule of light that
+   sweeps across when state changes.
+
+   Canonical reference: GL Universe Design Language v1.0
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   1. TOKENS  (§2 color · §6.1 motion · §5 typography)
+   The shared --gl-* system. Module-local --insight-* tokens
+   alias to these. Themes only swap --gl-accent.
+   ---------------------------------------------------------- */
+
+.insight-notification,
+.insight-compose {
+  /* §2.1 Ink ramp (surfaces) */
+  --gl-ink-0: #02070b;
+  --gl-ink-1: #080b11;
+  --gl-ink-2: #0b0f17;
+  --gl-ink-3: #161d2c;
+
+  /* §2.2 Text */
+  --gl-text:        #eef1f7;
+  --gl-text-bright: #f3fbff;
+  --gl-text-dim:    #98a2b6;
+  --gl-text-faint:  rgba(243, 251, 255, .38);
+
+  /* §2.3 Lines & rims */
+  --gl-hair:        rgba(255, 255, 255, .08);
+  --gl-edge:        rgba(255, 255, 255, .13);
+  --gl-line-strong: rgba(244, 252, 255, .55);
+
+  /* §2.4 Fixed semantic accents */
+  --gl-signal:     #ffd24a;
+  --gl-signal-hot: #ffe070;
+  --gl-cyan:       #5eeaff;
+  --gl-hazard:     #ff4a52;
+  --gl-good:       #5fdb92;
+  --gl-violet:     #b497ff;
+  --gl-mission:    #37d99a;
+
+  /* §2.5 The dynamic accent channel — themes set this. */
+  --gl-accent: var(--gl-violet);
+
+  /* §6.1 Motion tokens */
+  --gl-ease:  cubic-bezier(0.16, 1, 0.3, 1);
+  --gl-snap:  cubic-bezier(0.2, 1.35, 0.22, 1);
+  --gl-pop:   cubic-bezier(0.34, 1.56, 0.5, 1);
+  --gl-exit:  cubic-bezier(0.55, 0, 0.84, 0);
+
+  --gl-d-quick:  180ms;
+  --gl-d-move:   420ms;
+  --gl-d-reveal: 620ms;
+  --gl-d-splash: 720ms;
+  --gl-breathe:  2.6s;
+  --gl-dread:    3.2s;
+
+  /* §5 Typography voices */
+  --gl-font-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
+  --gl-font-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+}
+
+/* ----------------------------------------------------------
+   2. NOTIFICATION CONTAINER
+   ---------------------------------------------------------- */
+
+.insight-notification {
+  position: fixed;
+  right: 40px;
+  top: 50%;
+  width: 348px;
+  z-index: 100;
+  pointer-events: auto;
+  opacity: 0;
+  /* enter along the diagonal axis (§6.2 cascade direction) */
+  transform: translateY(-50%) translate3d(46px, 8px, 0);
+  color: var(--gl-text);
+  font-family: var(--gl-font-display);
+}
+
+.insight-notification.insight-visible {
+  opacity: 1;
+  transform: translateY(-50%) translate3d(0, 0, 0);
+  transition:
+    opacity   var(--gl-d-reveal) var(--gl-ease),
+    transform var(--gl-d-reveal) var(--gl-ease);
+}
+
+/* §4.2 Crop marks — the surface pretends to be a sheet on a press */
+.insight-notification .gl-crop {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--gl-hair);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--gl-d-move) var(--gl-ease);
+}
+.insight-notification.insight-visible .gl-crop { opacity: 1; }
+.insight-notification .gl-crop-tl { top: -5px;    left: -5px;  border-right: 0; border-bottom: 0; }
+.insight-notification .gl-crop-tr { top: -5px;    right: -5px; border-left: 0;  border-bottom: 0; }
+.insight-notification .gl-crop-bl { bottom: -5px; left: -5px;  border-right: 0; border-top: 0; }
+.insight-notification .gl-crop-br { bottom: -5px; right: -5px; border-left: 0;  border-top: 0; }
+
+/* ----------------------------------------------------------
+   3. PRECISION RULE  (§4.3) — formerly the "fracture line"
+   The 1px line of light. Draws scaleX 0→1 from the leading edge
+   as the anticipation beat of the reveal contract (§6.3).
+   ---------------------------------------------------------- */
+
+.insight-fracture-line {
+  height: 1px;
+  margin: 0 2px 9px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--gl-accent) 24%,
+    var(--gl-accent) 76%,
+    transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 70%, transparent);
+  transform: scaleX(0);
+  transform-origin: right center;
+}
+
+.insight-fracture-line.insight-visible {
+  transform: scaleX(1);
+  transition: transform var(--gl-d-move) var(--gl-ease);
+}
+
+/* ----------------------------------------------------------
+   4. GLASS PANEL  (§3.1)  — the card body
+   ---------------------------------------------------------- */
+
+.insight-fracture-card {
+  position: relative;
+  max-height: 0;
+  opacity: 0;
+  /* §4.1 drop + bloom move to filter so they follow the chamfer
+     silhouette (clip-path clips box-shadows). */
+  filter:
+    drop-shadow(0 26px 46px rgba(0, 0, 0, .6))
+    drop-shadow(0 0 30px color-mix(in srgb, var(--gl-accent) 18%, transparent));
+}
+
+.insight-fracture-card.insight-visible {
+  max-height: 620px;
+  opacity: 1;
+  transition:
+    max-height var(--gl-d-reveal) var(--gl-ease),
+    opacity    var(--gl-d-move)   var(--gl-ease);
+}
+
+/* Back panel — offset depth slab, faintly accent-rimmed */
+.insight-fracture-bg-back {
+  position: absolute;
+  inset: 0;
+  background: var(--gl-ink-0);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 22%, var(--gl-hair));
+  border-radius: 12px;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+  translate: 4px 3px;
+}
+
+/* §6.2 breathe — light drifts, glass never "glitches" */
+.insight-fracture-bg-back.insight-glitch {
+  animation: insight-breathe var(--gl-breathe) ease-in-out infinite;
+}
+
+@keyframes insight-breathe {
+  0%, 100% { translate: 4px 3px; opacity: .85; }
+  50%      { translate: 5px 2px; opacity: 1; }
+}
+
+/* Front panel — primary glass surface (§3.1) with the chamfer (§4.1) */
+.insight-fracture-bg-front {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid var(--gl-edge);
+  border-radius: 12px;
+  /* one cut corner — the family signature */
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(0, 0, 0, .20)),
+    linear-gradient(98deg,
+      color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)),
+      var(--gl-ink-1) 64%);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, .4),
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    inset 0 -12px 28px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* §3.1 inner radial light catch */
+.insight-fracture-bg-front::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 150% at 50% -50%,
+    color-mix(in srgb, var(--gl-accent) 50%, transparent), transparent 66%);
+  opacity: .22;
+  pointer-events: none;
+}
+
+/* §4.1 1px accent hairline tracing the cut edge */
+.insight-fracture-bg-front::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 23px;
+  height: 1px;
+  background: color-mix(in srgb, var(--gl-accent) 80%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+  transform-origin: top right;
+  transform: rotate(-45deg) translateX(0);
+  pointer-events: none;
+}
+
+/* §4.2 L-bracket — registration mark, top-left of the panel */
+.insight-bracket {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--gl-line-strong);
+  border-left: 1px solid var(--gl-line-strong);
+  z-index: 3;
+  opacity: 0;
+  transition: opacity var(--gl-d-move) var(--gl-ease),
+              border-color var(--gl-d-quick) var(--gl-ease);
+}
+.insight-fracture-card.insight-visible .insight-bracket { opacity: 1; }
+
+/* §6.2 sheen sweep — precision rule scans the panel as it opens;
+   things it crosses light up (§6.3 reveal contract). */
+.insight-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg,
+    transparent 0%,
+    color-mix(in srgb, var(--gl-accent) 32%, transparent) 46%,
+    color-mix(in srgb, #fff 55%, transparent) 50%,
+    color-mix(in srgb, var(--gl-accent) 32%, transparent) 54%,
+    transparent 100%);
+  mix-blend-mode: screen;
+}
+.insight-fracture-card.insight-visible .insight-sheen {
+  animation: insight-sheen-sweep var(--gl-d-reveal) var(--gl-ease) 120ms 1;
+}
+
+@keyframes insight-sheen-sweep {
+  0%   { opacity: 0; transform: translateX(-72%); }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(72%); }
+}
+
+/* ----------------------------------------------------------
+   5. CONTENT  (§5 typography · §4.2 etched annotations)
+   ---------------------------------------------------------- */
+
+.insight-fracture-inner {
+  padding: 16px 18px 4px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Sense label row — technical voice kicker + serial */
+.insight-label-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+/* §4.2 triangle bullet, accent-lit */
+.insight-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--gl-accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+  opacity: 0;
+}
+
+.insight-sense {
+  font-family: var(--gl-font-tech);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--gl-text-dim);
+  opacity: 0;
+}
+
+/* §4.2 serial / metadata — fake technical designator, far right */
+.insight-serial {
+  margin-left: auto;
+  font-family: var(--gl-font-tech);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--gl-text-faint);
+  text-transform: uppercase;
+  opacity: 0;
+}
+
+/* Hero title — display voice, gradient text */
+.insight-title {
+  font-family: var(--gl-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin-bottom: 9px;
+  background: linear-gradient(180deg, #fff, #cdd6e8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--gl-accent) 38%, transparent))
+          drop-shadow(0 1px 0 rgba(0, 0, 0, .35));
+  opacity: 0;
+  translate: 5px 3px;
+}
+
+/* §4.3 static section divider — precision rule at rest */
+.insight-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--gl-accent) 55%, transparent),
+    color-mix(in srgb, var(--gl-accent) 22%, transparent) 55%,
+    transparent);
+  margin-bottom: 11px;
+  opacity: 0;
+}
+
+.insight-image {
+  width: 100%;
+  max-height: 150px;
+  object-fit: cover;
+  border-radius: 7px;
+  margin-bottom: 11px;
+  opacity: 0;
+  border: 1px solid var(--gl-edge);
+  /* §3.5 legibility — keep the diorama behind a faint scrim */
+  box-shadow: inset 0 0 40px rgba(2, 5, 8, .55);
+}
+
+.insight-body {
+  font-family: var(--gl-font-display);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.72;
+  color: var(--gl-text);
+  font-style: var(--insight-body-style, normal);
+  border-left: 2px solid color-mix(in srgb, var(--gl-accent) 30%, transparent);
+  padding-left: 12px;
+  opacity: 0;
+  translate: 5px 3px;
+}
+
+.insight-body b, .insight-body strong {
+  color: var(--gl-text-bright);
+  font-weight: 700;
+}
+.insight-body i, .insight-body em { font-style: italic; }
+
+/* §4.5 data strip — barcode-like garnish near the footer */
+.insight-datastrip {
+  height: 8px;
+  margin: 12px 0 2px;
+  opacity: 0;
+  background-image: repeating-linear-gradient(90deg,
+    var(--gl-hair) 0 1px, transparent 1px 3px,
+    var(--gl-hair) 3px 4px, transparent 4px 9px,
+    var(--gl-hair) 9px 10px, transparent 10px 14px);
+  -webkit-mask-image: linear-gradient(90deg, #000 0, #000 60%, transparent);
+  mask-image: linear-gradient(90deg, #000 0, #000 60%, transparent);
+}
+
+/* Dismiss button — technical voice, hairline-separated, signal on press */
+.insight-dismiss {
+  display: block;
+  width: 100%;
+  font-family: var(--gl-font-tech);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--gl-text-dim);
+  padding: 11px 18px 13px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  text-align: right;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--gl-hair);
+  opacity: 0;
+  transition: color var(--gl-d-quick) var(--gl-ease),
+              background var(--gl-d-quick) var(--gl-ease);
+}
+
+.insight-dismiss:hover {
+  color: var(--gl-text-bright);
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--gl-accent) 10%, transparent));
+}
+
+/* §6.2 press */
+.insight-dismiss:active { transform: translateY(1px); }
+
+/* ----------------------------------------------------------
+   6. CONTENT REVEAL  (§6.3) — cascade stagger along diagonal,
+   applied per-element by JS as the sheen crosses.
+   ---------------------------------------------------------- */
+
+.insight-fade-in {
+  opacity: 1 !important;
+  translate: 0 0 !important;
+  transition: opacity var(--gl-d-move) var(--gl-ease),
+              translate var(--gl-d-move) var(--gl-ease);
+}
+
+/* ----------------------------------------------------------
+   7. DISMISS — ghost exit (§6.2)
+   ---------------------------------------------------------- */
+
+.insight-notification.insight-dismissing {
+  opacity: 0;
+  transform: translateY(-50%) translate3d(64px, 0, 0) scale(.94);
+  filter: blur(6px);
+  transition:
+    opacity   var(--gl-d-move) var(--gl-exit),
+    transform var(--gl-d-move) var(--gl-exit),
+    filter    var(--gl-d-move) var(--gl-exit);
+}
+
+/* ----------------------------------------------------------
+   8. MOTION TIERS  (§6.4) — animation-speed setting maps to tiers
+   ---------------------------------------------------------- */
+
+/* fast — tighter durations, sheen kept */
+.insight-speed-fast { --gl-d-reveal: 360ms; --gl-d-move: 240ms; --gl-d-quick: 120ms; }
+
+/* instant — straight cut, no decorative motion */
+.insight-speed-instant,
+.insight-speed-instant * {
+  --gl-d-reveal: 0ms;
+  --gl-d-move: 0ms;
+  --gl-d-quick: 0ms;
+  transition-duration: 0s !important;
+  animation: none !important;
+}
+
+/* §8 reduced motion — clamp to reduced tier, kill loops */
+@media (prefers-reduced-motion: reduce) {
+  .insight-notification,
+  .insight-notification * {
+    --gl-d-reveal: 200ms;
+    --gl-d-move: 200ms;
+  }
+  .insight-sheen,
+  .insight-fracture-bg-back.insight-glitch { animation: none !important; }
+  .insight-fracture-bg-front::after { box-shadow: none; }
+}
+
+/* ============================================================
+   9. COMPOSE DIALOG — glass-panel window (§3.1 · §4)
+   ============================================================ */
+
+.insight-compose .window-content {
+  padding: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(98deg,
+      color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-1)),
+      var(--gl-ink-1) 70%);
+  color: var(--gl-text);
+  font-family: var(--gl-font-display);
+  border: 1px solid var(--gl-edge);
+}
+
+.insight-compose .window-header {
+  background: var(--gl-ink-0);
+  border-bottom: 1px solid var(--gl-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.insight-compose .window-header .window-title {
+  font-family: var(--gl-font-tech);
+  color: var(--gl-text);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+/* §4.2 kicker header inside the form */
+.insight-compose-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  font-family: var(--gl-font-tech);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+/* §4.2 tick mark preceding the kicker label */
+.insight-compose-kicker::before {
+  content: '';
+  width: 14px;
+  height: 1px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 70%, transparent);
+}
+
+.insight-compose-kicker .insight-compose-serial {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  letter-spacing: 0.12em;
+}
+
+.insight-compose-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 12px 16px 16px;
+}
+
+.insight-compose-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--gl-font-tech);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--gl-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+/* §3.2 inset glass wells, notched chips (§4.1) */
+.insight-compose-form input,
+.insight-compose-form select,
+.insight-compose-form textarea {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .25), rgba(0, 0, 0, .1)),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 0;
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+  color: var(--gl-text);
+  font-family: var(--gl-font-display);
+  font-size: 13px;
+  padding: 8px 11px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .4);
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+              box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.insight-compose-form input::placeholder,
+.insight-compose-form textarea::placeholder {
+  color: var(--gl-text-faint);
+}
+
+.insight-compose-form input:focus,
+.insight-compose-form select:focus,
+.insight-compose-form textarea:focus {
+  border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  outline: none;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, .4),
+    0 0 0 1px color-mix(in srgb, var(--gl-accent) 35%, transparent),
+    0 0 16px color-mix(in srgb, var(--gl-accent) 22%, transparent);
+}
+
+.insight-compose-form textarea {
+  min-height: 84px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.insight-compose-form .hint {
+  font-family: var(--gl-font-tech);
+  font-size: 8px;
+  color: var(--gl-text-faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+/* Send button — signal-styled commit (§4.4 signal · §6.2 signal flash) */
+.insight-send-btn {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 50%),
+    color-mix(in srgb, var(--gl-signal) 16%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-signal) 45%, transparent);
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+  color: var(--gl-signal);
+  font-family: var(--gl-font-tech);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  padding: 11px;
+  cursor: pointer;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--gl-signal) 45%, transparent);
+  transition: background var(--gl-d-quick) var(--gl-ease),
+              border-color var(--gl-d-quick) var(--gl-ease),
+              transform var(--gl-d-quick) var(--gl-ease);
+}
+
+.insight-send-btn:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 50%),
+    color-mix(in srgb, var(--gl-signal) 24%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
+}
+
+.insight-send-btn:active { transform: translateY(1px) scale(.99); }
+
+/* §6.2 signal flash sweep on commit */
+.insight-send-btn.insight-sent {
+  background: color-mix(in srgb, var(--gl-good) 18%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-good) 55%, transparent);
+  color: var(--gl-good);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--gl-good) 45%, transparent);
+}
+.insight-send-btn.insight-sent::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--gl-signal-hot) 60%, transparent), transparent);
+  animation: insight-signal-flash var(--gl-d-reveal) var(--gl-ease) 1;
+}
+
+@keyframes insight-signal-flash {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  40%  { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-send-btn.insight-sent::after { animation: none; }
+}

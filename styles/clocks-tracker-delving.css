@@ -1,0 +1,347 @@
+/* ============================================================
+   GLUniverse — Clocks & Tracker : DELVING styles
+   Delving Mode swaps the HUD's clock/meter view for a turn counter + the
+   featured delving-resource's degrading atmosphere. Resource colour is carried
+   per element by --dxtint (particles) and --dxglow (accent); --dxstage (0..1)
+   scales the dread as the resource worsens. Matches the "Arcane Glass" look.
+   ============================================================ */
+
+/* ---- delving diorama: washes the bar's RIGHT edge (behind the turn/resource
+   cell), coexisting with the weather wash on the LEFT. Mirrors the weather
+   diorama exactly, just anchored to the opposite rim via delve-scoped vars so the
+   two never fight over a shared colour. A tint wash sits behind the particles so
+   the gaps read as a solid pane; the right→transparent mask confines it. ---- */
+#glct-hud .bar-dx{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  border-radius:inherit; overflow:hidden; opacity:1; mix-blend-mode:normal;
+  background:linear-gradient(260deg,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 30%,transparent) 0%,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 18%,transparent) 12%,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 7%,transparent) 24%,
+    transparent 40%);
+  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
+  mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
+  transition:opacity .6s ease;
+}
+#glct-hud .bar-dx.off{ opacity:0; }
+#glct-hud .bar-dx .glct-wx-canvas{ position:absolute; inset:0; }
+
+/* Legibility scrim anchored to the RIGHT edge — a soft dark wash that darkens the
+   bright effect so the turn counter / resource text stays readable, plus a thin
+   tinted rim. Sits above the diorama, below .main. Toggled with the diorama. */
+#glct-hud .bar-dx-scrim{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  border-radius:inherit; overflow:hidden; opacity:1; transition:opacity .6s ease;
+  background:
+    linear-gradient(270deg, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 22%,transparent) 0, transparent 7px),
+    linear-gradient(260deg, rgba(8,11,17,.5) 0%, rgba(8,11,17,.26) 12%, rgba(8,11,17,0) 30%);
+}
+#glct-hud .bar-dx-scrim.off{ opacity:0; }
+#glct-hud .bar.dx-ominous .bar-dx-scrim{
+  background:
+    linear-gradient(270deg, color-mix(in srgb,var(--gl-hazard) 30%,transparent) 0, transparent 7px),
+    linear-gradient(260deg, rgba(14,8,9,.54) 0%, rgba(14,8,9,.3) 12%, rgba(14,8,9,0) 30%);
+}
+
+/* Liquid-glass edge refraction on the RIGHT rim, mirroring the weather edge. The
+   bar's ::after is already claimed by weather (left), so the delving rim rides on
+   the scrim element instead: an inset ring + top highlight + a bloom feathering in
+   from the right, masked to the right third. */
+#glct-hud .bar.has-dx .bar-dx-scrim{
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 55%,transparent),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 62%,#fff),
+    inset 0 0 14px -2px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 42%,transparent),
+    inset -7px 0 16px -10px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 75%,transparent);
+  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 26%,transparent 100%);
+  mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 26%,transparent 100%);
+}
+
+/* ---- the depleted END: the worst it gets. The liquid-glass edge refraction on
+   the right rim is pushed much harder — a brighter inset ring, a thicker bloom
+   feathering further in, and a slow pulse — so a finished pool reads as a serious,
+   glowing terminal state. Applies on top of .has-dx (defined later, so it wins). */
+#glct-hud .bar.dx-terminal .bar-dx{
+  background:linear-gradient(260deg,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 46%,transparent) 0%,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 26%,transparent) 14%,
+    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 10%,transparent) 28%,
+    transparent 46%);
+}
+#glct-hud .bar.dx-terminal .bar-dx-scrim{
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,#fff),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 80%,#fff),
+    inset 0 0 22px -1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 62%,transparent),
+    inset -22px 0 40px -16px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,transparent),
+    inset -12px 0 26px -12px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 95%,transparent);
+  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
+  mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
+  animation:glctDxTerminalPulse 2.4s ease-in-out infinite;
+}
+@keyframes glctDxTerminalPulse{ 0%,100%{ filter:brightness(1) saturate(1); } 50%{ filter:brightness(1.4) saturate(1.25); } }
+
+/* ---- mode swap: hide the clock/meter/shift cells, reveal the delving cell. The
+   date cell (with the weather chip + left-edge weather wash) stays put, so weather
+   and delving show side by side. ---- */
+#glct-hud .delving-cell{ display:none; }
+#glct-hud .hud-root.delving .clock-cell,
+#glct-hud .hud-root.delving .meter,
+#glct-hud .hud-root.delving .shift-hero{ display:none !important; }
+#glct-hud .hud-root.delving:not(.is-collapsed) .delving-cell{ display:flex; }
+
+/* ---- the delving cell ----
+   NOTE: the base .cell rule is flex-direction:column; we MUST switch to a row here
+   or the turn / featured / chips blocks stack and blow past the fixed 54px bar
+   height. Everything inside is sized to sit comfortably within that height. */
+#glct-hud .delving-cell{
+  position:relative; flex-direction:row; align-items:center; gap:12px;
+  padding:0 10px; max-height:54px; overflow:hidden;
+  --dxtint:#ff9a3c; --dxglow:#ffd27a; --dxstage:0;
+}
+/* a dread wash that strengthens as the resource degrades (ominous stages only) */
+#glct-hud .delving-cell.ominous::after{
+  content:""; position:absolute; inset:-2px; border-radius:10px; pointer-events:none;
+  background:radial-gradient(120% 140% at 12% 50%, color-mix(in srgb, var(--dxglow) 70%, transparent), transparent 70%);
+  opacity:calc(.18 + .42 * var(--dxstage));
+  animation:dx-dread 2.6s ease-in-out infinite;
+}
+@keyframes dx-dread{ 0%,100%{ filter:brightness(.85);} 50%{ filter:brightness(1.25);} }
+
+/* turn counter */
+#glct-hud .dx-turn{ display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; min-width:40px; }
+#glct-hud .dx-turn-num{
+  font-size:23px; font-weight:800; color:#fff; letter-spacing:.5px; line-height:1;
+  text-shadow:0 0 10px color-mix(in srgb, var(--dxglow) 60%, transparent), 0 1px 2px rgba(0,0,0,.7);
+}
+#glct-hud .dx-turn-num.tick{ animation:dx-tick .42s cubic-bezier(.34,1.56,.64,1); }
+@keyframes dx-tick{ 0%{ transform:translateY(.32em) scale(.7); opacity:.2; } 100%{ transform:none; opacity:1; } }
+#glct-hud .dx-turn-lbl{ font-size:8.5px; text-transform:uppercase; letter-spacing:.12em; opacity:.8; margin-top:2px; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+
+/* featured resource block */
+#glct-hud .dx-featured{ display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:120px; }
+#glct-hud .dx-stagebadge{ display:flex; align-items:center; gap:6px; font-weight:700; color:#fff; line-height:1.1; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+#glct-hud .dx-stagebadge i{ color:var(--dxglow); filter:drop-shadow(0 0 5px color-mix(in srgb,var(--dxglow) 70%,transparent)); }
+#glct-hud .dx-stagename{ font-size:12.5px; letter-spacing:.02em; white-space:nowrap; }
+
+#glct-hud .dx-poolval{ display:flex; align-items:center; gap:4px; }
+#glct-hud .dx-stagestep{
+  appearance:none; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06);
+  color:#cfd6e0; width:18px; height:18px; border-radius:5px; cursor:pointer; padding:0;
+  display:inline-flex; align-items:center; justify-content:center; font-size:10px; transition:.15s;
+}
+#glct-hud .dx-stagestep:hover:not(:disabled){ background:var(--dxglow); color:#13131a; border-color:transparent; }
+#glct-hud .dx-stagestep:disabled{ opacity:.25; cursor:default; }
+#glct-hud .dx-dice{ display:inline-flex; align-items:baseline; gap:2px; cursor:pointer; padding:0 4px; border-radius:6px; transition:background .15s; }
+#glct-hud .dx-dice:hover{ background:rgba(255,255,255,.08); }
+#glct-hud .dx-dice b{ font-size:19px; font-weight:800; color:#fff; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+#glct-hud .dx-dice i{ font-style:normal; font-size:10.5px; opacity:.65; }
+#glct-hud .dx-dice.empty b{ color:#ff6b6b; text-shadow:0 0 8px rgba(255,80,80,.5); }
+/* depleted at the worst stage — the delve pool has ENDED (no more dice). Its own
+   terminal presentation: a skull, a crossed-out marker, and a red, glowing name. */
+#glct-hud .dx-dice.ended{ cursor:default; }
+#glct-hud .dx-dice.ended b{ font-size:16px; color:#ff5a5a; text-shadow:0 0 9px rgba(255,70,70,.65); }
+#glct-hud .dx-stagebadge.ended i{ color:#ff5a5a; filter:drop-shadow(0 0 5px rgba(255,70,70,.7)); }
+#glct-hud .dx-stagebadge.ended .dx-stagename{
+  color:#ff8a8a; font-weight:800; letter-spacing:.02em; text-shadow:0 0 9px rgba(255,70,70,.55);
+  animation:glctDxEndedName 2.4s ease-in-out infinite;
+}
+@keyframes glctDxEndedName{ 0%,100%{ opacity:.82; } 50%{ opacity:1; } }
+
+/* players don't get the GM steppers / dice editing */
+#glct-hud .hud-root:not(.is-gm) .dx-stagestep{ display:none; }
+#glct-hud .hud-root:not(.is-gm) .dx-dice{ cursor:default; }
+#glct-hud .hud-root:not(.is-gm) .dx-dice:hover{ background:none; }
+
+/* secondary resource chips — single row (the cell clips overflow); they must never
+   wrap, or the extra rows would push past the fixed bar height. */
+#glct-hud .dx-chips{ display:flex; align-items:center; gap:5px; flex-wrap:nowrap; max-width:180px; overflow:hidden; }
+#glct-hud .dx-chip{
+  --dxtint:#9aa3b0; --dxglow:#9aa3b0;
+  display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px; cursor:pointer;
+  background:color-mix(in srgb, var(--dxtint) 22%, rgba(20,22,30,.6));
+  border:1px solid color-mix(in srgb, var(--dxglow) 45%, transparent); color:#e7ecf3; transition:.15s;
+}
+#glct-hud .dx-chip:hover{ background:color-mix(in srgb, var(--dxtint) 40%, rgba(20,22,30,.6)); transform:translateY(-1px); }
+#glct-hud .dx-chip i{ color:var(--dxglow); font-size:11px; }
+#glct-hud .dx-chip b{ font-size:12px; font-weight:700; }
+#glct-hud .dx-chip.ominous{ animation:dx-dread 2.6s ease-in-out infinite; }
+
+/* ---- dock controls: hidden until the feature / mode is on ---- */
+#glct-hud .delving-toggle, #glct-hud .delving-ctl{ display:none !important; }
+#glct-hud .hud-root.delve-enabled .delving-toggle{ display:inline-flex !important; }
+#glct-hud .hud-root.delving .delving-ctl{ display:inline-flex !important; }
+#glct-hud .gmdock .c.delving.on,
+#glct-hud .gmdock .c[data-delvebtn].on{ background:var(--dxglow,#ffd27a); color:#13131a; }
+#glct-hud .gmdock .c.pass{ font-weight:700; }
+#glct-hud .gmdock .c.roll i{ color:var(--dxglow,#ffd27a); }
+
+/* While delving is LIVE the clock/meter/shifts are hidden, so the time-advance and
+   shift-mode dock buttons don't apply — collapse them so the dock stays short and
+   focused on the delving turn controls (this is the "dock too long" fix). The
+   mission tracker stays (objectives still matter underground). */
+#glct-hud .hud-root.delving .gmdock .c[data-step],
+#glct-hud .hud-root.delving .gmdock .c[data-action="nextShift"],
+#glct-hud .hud-root.delving .gmdock .c[data-action="setTime"],
+#glct-hud .hud-root.delving .gmdock .c.mode{ display:none !important; }
+/* the first delving button no longer needs its divider once it leads the dock */
+#glct-hud .hud-root.delving .gmdock .c.pass.sep{ border-left:0; }
+
+/* ---- delving context menu (mounted on <body>; mirrors the tracker menu) ---- */
+.glct-delve-ctx{
+  position:fixed; min-width:180px; padding:5px; border-radius:10px; opacity:0; transform:scale(.96);
+  background:linear-gradient(180deg, rgba(28,30,40,.98), rgba(18,20,28,.98));
+  border:1px solid rgba(255,255,255,.12); box-shadow:0 12px 36px rgba(0,0,0,.55);
+  transition:opacity .12s ease, transform .12s ease; backdrop-filter:blur(6px);
+}
+.glct-delve-ctx.show{ opacity:1; transform:none; }
+.glct-delve-ctx .ctx-item{
+  display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:0; border-radius:7px;
+  background:none; color:#e7ecf3; font-size:13px; cursor:pointer; text-align:left;
+}
+.glct-delve-ctx .ctx-item:hover{ background:rgba(255,255,255,.1); }
+.glct-delve-ctx .ctx-item i{ width:15px; text-align:center; opacity:.85; }
+.glct-delve-ctx .ctx-item.danger:hover{ background:color-mix(in srgb,var(--gl-hazard) 28%,transparent); }
+.glct-delve-ctx .ctx-sep{ height:1px; margin:4px 6px; background:rgba(255,255,255,.1); }
+
+/* ============================================================
+   In-card slot-machine roll + the Turn chat card
+   ============================================================ */
+/* Let the custom card own the whole chat entry (mirrors the pool / weather /
+   support cards): Foundry's default header collapses to just the timestamp +
+   delete control, floated over the card's top-right, and the duplicate sender /
+   flavor + the nested message chrome are removed so the card isn't a card-in-a-card. */
+#chat-log .chat-message.glct-delve-msg,
+.chat-message.glct-delve-msg{ padding:0; overflow:hidden; position:relative; }
+.chat-message.glct-delve-msg .message-header{ position:absolute; top:0; right:0; left:auto; width:auto; margin:0; padding:7px 9px; border:none; z-index:4; flex:none; }
+.chat-message.glct-delve-msg .message-sender,
+.chat-message.glct-delve-msg .message-header .flavor-text{ display:none; }
+.chat-message.glct-delve-msg .message-metadata{ margin:0; gap:7px; color:#cbd3e2; font-size:10px; text-shadow:0 1px 3px rgba(0,0,0,.9); }
+.chat-message.glct-delve-msg .message-metadata .message-delete{ color:#cbd3e2; }
+.chat-message.glct-delve-msg .message-content{ margin:0; padding:0; }
+.chat-message.glct-delve-msg .glct-delvecard{ margin:0; border:none; border-radius:6px; }
+/* keep the floated timestamp clear of the card's own title block */
+.chat-message.glct-delve-msg .glct-cc-head{ padding-right:64px; }
+
+.glct-delvecard .glct-cc-dice{ position:relative; min-height:26px; display:flex; flex-wrap:wrap; gap:3px; align-items:center; transition:min-height .25s ease; }
+/* While the slot machine spins, give the reels room (the row grows, then settles
+   back to the static-result height as the overlay fades) and hide the baked static
+   spans beneath the reels. */
+.glct-delvecard .glct-cc-dice.dx-tumbling{ min-height:56px; }
+.glct-delvecard .glct-cc-dice.dx-tumbling > .glct-cc-d{ opacity:0; }
+
+/* ---- slot-machine reveal -------------------------------------------------
+   Each die is a reel (a fixed window onto a vertical strip of numbers) that
+   spins up and decelerates onto its rolled value. Discards are NOT shown until
+   every reel has landed — only then do the dropped reels dim + strike. */
+.glct-slot{ position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; opacity:1; transition:opacity .36s ease; }
+.glct-slot.fade{ opacity:0; }
+.glct-slot .reel{
+  position:relative; overflow:hidden; border-radius:8px; flex:none;
+  background:linear-gradient(180deg, rgba(22,22,30,.97), rgba(11,11,17,.97));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--slot-tint,#ff9a3c) 42%,transparent),
+    inset 0 0 10px -3px color-mix(in srgb,var(--slot-tint,#ff9a3c) 60%,transparent),
+    0 2px 8px rgba(0,0,0,.5);
+  transition:opacity .32s ease, filter .32s ease, transform .32s ease;
+}
+/* the slot "window": soft top/bottom shade so the spin reads as a machine reel */
+.glct-slot .reel::before{
+  content:""; position:absolute; inset:0; z-index:2; pointer-events:none; border-radius:inherit;
+  background:linear-gradient(180deg, rgba(0,0,0,.55) 0%, transparent 32%, transparent 68%, rgba(0,0,0,.55) 100%);
+}
+.glct-slot .reel.spinning .strip{ filter:blur(.5px); }
+.glct-slot .strip{ display:flex; flex-direction:column; will-change:transform; }
+.glct-slot .cell{
+  display:flex; align-items:center; justify-content:center; flex:none;
+  font-weight:800; color:#fff; line-height:1; font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 2px rgba(0,0,0,.6);
+}
+/* discard reveal — applied only once all reels have settled */
+.glct-slot .reel.drop{ opacity:.5; filter:grayscale(.65) brightness(.72); transform:translateY(2px) scale(.9); }
+.glct-slot .reel::after{
+  content:""; position:absolute; left:14%; right:14%; top:50%; height:2px; z-index:3;
+  background:var(--gl-hazard); box-shadow:0 0 6px var(--gl-hazard); border-radius:2px;
+  transform:translateY(-1px) scaleX(0); transform-origin:left center;
+  transition:transform .3s ease .04s;
+}
+.glct-slot .reel.drop::after{ transform:translateY(-1px) scaleX(1); }
+
+.glct-delvecard .dx-row{ --dxtint:#ff9a3c; padding:6px 4px; border-top:1px solid rgba(255,255,255,.07); }
+.glct-delvecard .dx-row:first-child{ border-top:0; }
+.glct-delvecard .dx-row.ominous{ box-shadow:inset 3px 0 0 color-mix(in srgb,var(--dxtint) 80%, transparent); }
+.glct-delvecard .dx-row-head{ display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+.glct-delvecard .dx-row-head i{ color:var(--dxtint); }
+.glct-delvecard .dx-name{ font-weight:700; }
+.glct-delvecard .dx-stage{ margin-left:auto; font-size:11px; opacity:.7; }
+.glct-delvecard .dx-shift{ margin-left:auto; font-size:11px; font-weight:700; color:var(--dxtint); }
+/* terminal (ended) badge — the resource's own end name, in alarm red */
+.glct-delvecard .dx-shift.dx-term{ color:#ff6b6b; text-transform:uppercase; letter-spacing:.04em; }
+.glct-delvecard .dx-shift.dx-term i{ filter:drop-shadow(0 0 4px rgba(255,80,80,.6)); }
+.glct-delvecard .dx-row-foot{ margin-top:3px; font-size:12px; }
+/* Don't spoil the outcome before the reels land: the "N left" / stage-shift badge
+   stays invisible while the row's slot machine is spinning, then fades in once the
+   dice resolve (DiceSlot removes .dx-rolling at the discard reveal). Visibility is
+   kept (opacity, not display) so the card never reflows. */
+.glct-delvecard .dx-row .dx-sum,
+.glct-delvecard .dx-row .dx-shift{ transition:opacity .3s ease; }
+.glct-delvecard .dx-row.dx-rolling .dx-sum,
+.glct-delvecard .dx-row.dx-rolling .dx-shift{ opacity:0; }
+.glct-delvecard .dx-sum b{ font-weight:800; }
+.glct-delvecard .dx-sum.wipe{ color:var(--dxtint); font-weight:700; }
+.glct-delvecard .dx-sum.terminal{ color:#ff6b6b; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.glct-delvecard .dx-empty{ opacity:.6; font-style:italic; padding:6px 4px; }
+
+/* ============================================================
+   Delving editor
+   ============================================================ */
+.glct-delveditor{ display:flex; flex-direction:column; gap:12px; padding:6px 4px; }
+.glct-delveditor .dx-ed-grid{ display:grid; grid-template-columns:auto 1fr auto auto; gap:8px 12px; align-items:end; }
+.glct-delveditor .dx-ed-grid label{ display:flex; flex-direction:column; gap:3px; font-size:12px; }
+.glct-delveditor .dx-ed-grid input[type=number]{ width:70px; }
+.glct-delveditor .dx-ed-hint{ margin:4px 0 0; opacity:.7; font-size:12px; font-style:italic; }
+.glct-delveditor .dx-ed-presets{ display:flex; align-items:center; gap:8px; }
+.glct-delveditor .dx-ed-presets .spacer, .glct-delveditor .dx-ed-foot .spacer{ flex:1; }
+
+.glct-delveditor .dx-ed-main{ display:grid; grid-template-columns:1fr 180px; gap:12px; }
+.glct-delveditor .dx-ed-resources{ display:flex; flex-direction:column; gap:10px; max-height:440px; overflow:auto; padding-right:4px; }
+.glct-delveditor .dx-ed-empty{ opacity:.6; font-style:italic; }
+.glct-delveditor .dx-ed-side{ position:sticky; top:0; }
+.glct-delveditor .dx-ed-pvhost{ position:relative; width:100%; height:120px; border-radius:10px; overflow:hidden; background:#0c0d12; border:1px solid rgba(255,255,255,.12); }
+.glct-delveditor .dx-ed-pvlabel{ text-align:center; font-size:12px; opacity:.8; margin-top:5px; }
+
+.glct-delveditor .dx-ed-res{ border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:8px; background:rgba(255,255,255,.03); }
+.glct-delveditor .dx-ed-reshead{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+/* the "End name" row beneath the resource header */
+.glct-delveditor .dx-ed-endrow{ display:flex; align-items:center; gap:6px; margin:-2px 0 8px; padding-left:2px; }
+.glct-delveditor .dx-ed-endrow i{ color:#ff6b6b; font-size:11px; }
+.glct-delveditor .dx-ed-endlbl{ font-size:11px; opacity:.75; white-space:nowrap; }
+.glct-delveditor .dx-ed-endname{ flex:1; min-width:90px; }
+.glct-delveditor .dx-ed-featured{ display:flex; align-items:center; gap:4px; font-size:11px; white-space:nowrap; }
+.glct-delveditor .dx-ed-icon{ width:120px; }
+.glct-delveditor .dx-ed-name{ flex:1; min-width:90px; font-weight:700; }
+.glct-delveditor .dx-ed-vis{ display:flex; align-items:center; gap:4px; font-size:11px; white-space:nowrap; }
+.glct-delveditor .dx-ed-del{ appearance:none; border:0; background:color-mix(in srgb,var(--gl-hazard) 15%,transparent); color:#ff9a9a; width:26px; height:26px; border-radius:6px; cursor:pointer; }
+.glct-delveditor .dx-ed-del:hover:not(:disabled){ background:color-mix(in srgb,var(--gl-hazard) 40%,transparent); }
+.glct-delveditor .dx-ed-del:disabled{ opacity:.3; cursor:default; }
+
+.glct-delveditor .dx-ed-stages{ display:flex; flex-direction:column; gap:5px; }
+.glct-delveditor .dx-ed-stage{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:3px; border-radius:7px; }
+.glct-delveditor .dx-ed-stage:hover{ background:rgba(255,255,255,.04); }
+.glct-delveditor .dx-ed-stageidx{ width:18px; text-align:center; opacity:.6; font-size:11px; }
+.glct-delveditor .dx-ed-sname{ width:104px; }
+.glct-delveditor .dx-ed-num{ width:46px; }
+.glct-delveditor .dx-ed-dlabel{ opacity:.6; font-size:11px; }
+.glct-delveditor .dx-ed-look{ width:96px; }
+.glct-delveditor .dx-ed-arch{ width:84px; }
+.glct-delveditor .dx-ed-drift{ width:90px; }
+.glct-delveditor .dx-ed-stage input[type=color]{ width:26px; height:24px; padding:0; border:none; background:none; cursor:pointer; }
+.glct-delveditor .dx-ed-omin{ display:inline-flex; align-items:center; gap:3px; }
+.glct-delveditor .dx-ed-addstage{ margin-top:6px; font-size:12px; }
+.glct-delveditor .dx-ed-foot{ display:flex; align-items:center; gap:8px; }
+
+/* Honour reduced-motion: drop the terminal/ended pulses (keep the static glow). */
+@media (prefers-reduced-motion: reduce){
+  #glct-hud .bar.dx-terminal .bar-dx-scrim{ animation:none; }
+  #glct-hud .dx-stagebadge.ended .dx-stagename{ animation:none; opacity:1; }
+}

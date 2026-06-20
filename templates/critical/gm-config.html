@@ -1,0 +1,49 @@
+<div class="gluc-gm-config" autocomplete="off">
+  <header>
+    <h2>{{localize "GLUC.Settings.MenuName"}}</h2>
+    <p class="notes">{{localize "GLUC.Settings.MenuHint"}}</p>
+  </header>
+
+  <section>
+    <h3>{{localize "GLUC.Settings.SectionImages"}}</h3>
+    <div class="form-group">
+      <label>{{localize "GLUC.Settings.GMAvatar"}}</label>
+      <div class="form-fields">
+        <file-picker type="imagevideo" name="gmAvatar" value="{{data.gmAvatar}}" placeholder="path/to/image.webp"></file-picker>
+      </div>
+      <p class="notes">{{localize "GLUC.Settings.GMAvatarHint"}}</p>
+    </div>
+  </section>
+
+  <section>
+    <h3>{{localize "GLUC.Settings.SectionAudio"}}</h3>
+    <div class="form-group">
+      <label>{{localize "GLUC.Settings.PCCriticalSFX"}}</label>
+      <div class="form-fields">
+        <file-picker type="audio" name="pcCriticalSfx" value="{{data.pcCriticalSfx}}" placeholder="path/to/sound.ogg"></file-picker>
+      </div>
+      <p class="notes">{{localize "GLUC.Settings.PCCriticalSFXHint"}}</p>
+    </div>
+    <div class="form-group">
+      <label>{{localize "GLUC.Settings.GMCriticalSFX"}}</label>
+      <div class="form-fields">
+        <file-picker type="audio" name="gmCriticalSfx" value="{{data.gmCriticalSfx}}" placeholder="path/to/sound.ogg"></file-picker>
+      </div>
+      <p class="notes">{{localize "GLUC.Settings.GMCriticalSFXHint"}}</p>
+    </div>
+  </section>
+
+  <section>
+    <h3>{{localize "GLUC.Settings.SectionTiming"}}</h3>
+    <div class="form-group">
+      <label>{{localize "GLUC.Settings.CinematicDuration"}}</label>
+      <input type="range" name="cinematicDuration" min="{{durationMin}}" max="{{durationMax}}" step="50" value="{{data.cinematicDuration}}" />
+      <span class="range-value">{{data.cinematicDuration}} ms</span>
+      <p class="notes">{{localize "GLUC.Settings.CinematicDurationHint"}}</p>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="far fa-save"></i> {{localize "GLUC.Actor.Save"}}</button>
+  </footer>
+</div>

@@ -1,0 +1,863 @@
+/* ═══════════════════════════════════════════
+   GLUniverse Stage - Visual Novel Overlay
+   ═══════════════════════════════════════════ */
+
+:root {
+    --glstage-bg: linear-gradient(0deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 60%, transparent 100%);
+    --glstage-name-bg: rgba(0, 0, 0, 0.7);
+    --glstage-name-color: #f0e6d2;
+    --glstage-highlight-glow: rgba(255, 255, 255, 0.6);
+    --glstage-dim-opacity: 0.8;
+    --glstage-transition: 0.35s ease;
+    --stage-height: 40vh;
+    --stage-width: 100%;
+}
+
+/* ── Stage Overlay ── */
+
+.gluniverse-stage-overlay {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: var(--stage-width);
+    height: var(--stage-height);
+    margin: 0 auto;
+    background: var(--glstage-bg);
+    /* z-index 1: just above the canvas (#board is 0) but below all Foundry and
+       system UI (scene controls, hotbar, players, token HUD, PF2e HUD, etc.),
+       which sit at much higher z-indexes. Combined with pointer-events: none,
+       the stage never covers or blocks any UI element. */
+    z-index: 1;
+    pointer-events: none;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: hidden; /* Clip characters shifted by stage Y offset */
+    /* Independent translate property — won't conflict with transform used by show/hide animations */
+    translate: var(--stage-x-offset, 0) 0;
+    /* Only transition width/height/translate for slider changes — show/hide uses JS animation */
+    transition: width var(--glstage-transition), height var(--glstage-transition), translate var(--glstage-transition);
+}
+
+.gluniverse-stage-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.stage-characters {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    gap: 0;
+    padding: 0 2vw;
+    /* No overflow here — the overlay handles clipping so taller images
+       (from crop scaling) can extend above the container properly. */
+    transform: translateY(var(--stage-y-offset, 0px));
+}
+
+/* ── Slot ── */
+
+.stage-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    overflow: visible; /* Let actor art overlap into adjacent slots */
+    transition: filter var(--glstage-transition), opacity var(--glstage-transition);
+}
+
+.stage-slot-empty {
+    /* Takes equal space alongside character slots — no extra rules needed */
+}
+
+.stage-slot.dimmed {
+    opacity: var(--glstage-dim-opacity);
+}
+
+.stage-slot.highlighted {
+    filter: drop-shadow(0 0 18px var(--glstage-highlight-glow)) drop-shadow(0 0 6px var(--glstage-highlight-glow));
+}
+
+/* ── Actor Image ── */
+
+.stage-actor-img-wrap {
+    transform-origin: bottom center;
+    transition: transform var(--glstage-transition);
+    will-change: transform;
+    display: flex;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.stage-actor-img {
+    height: var(--stage-img-height, var(--stage-height));
+    width: auto;
+    max-width: none; /* Never shrink horizontally — overflow the slot instead */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ── Actor Name ── */
+
+.stage-actor-name {
+    position: absolute;
+    bottom: 8px;
+    background: var(--glstage-name-bg);
+    color: var(--glstage-name-color);
+    padding: 4px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    opacity: 0.85;
+    transition: opacity var(--glstage-transition), transform var(--glstage-transition);
+}
+
+.stage-actor-name.highlighted {
+    opacity: 1;
+    background: rgba(255, 215, 100, 0.25);
+    border: 1px solid rgba(255, 215, 100, 0.4);
+    transform: scale(1.08);
+}
+
+
+/* ═══════════════════════════════════════════
+   GM Panel
+   ═══════════════════════════════════════════ */
+
+.gluniverse-stage-panel {
+    font-family: var(--font-primary, 'Signika', sans-serif);
+}
+
+.glstage-panel-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Tabs ── */
+
+.glstage-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.15);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+
+.glstage-tab-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px 6px 0 0;
+    background: rgba(255,255,255,0.04);
+    color: #bbb;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.glstage-tab-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: #eee;
+}
+
+.glstage-tab-btn.active {
+    background: rgba(255,255,255,0.1);
+    color: #f0e6d2;
+    border-color: rgba(255,215,100,0.3);
+    border-bottom-color: transparent;
+}
+
+.glstage-tab-btn i {
+    margin-right: 4px;
+}
+
+/* ── Tab Content ── */
+
+.glstage-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* ── Toolbar ── */
+
+.glstage-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+/* ── Buttons ── */
+
+.glstage-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    background: rgba(255,255,255,0.06);
+    color: #ddd;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.glstage-btn:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.2);
+    color: #fff;
+}
+
+.glstage-btn-active {
+    background: rgba(255, 215, 100, 0.15);
+    border-color: rgba(255, 215, 100, 0.35);
+    color: #ffd764;
+}
+
+.glstage-btn-danger {
+    color: #e55;
+}
+.glstage-btn-danger:hover {
+    background: rgba(238, 85, 85, 0.15);
+    border-color: rgba(238, 85, 85, 0.3);
+}
+
+.glstage-btn-icon {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+.glstage-btn-icon:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+}
+.glstage-btn-icon.glstage-btn-danger:hover {
+    color: #e55;
+    background: rgba(238,85,85,0.12);
+}
+
+.glstage-btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: #bbb;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s ease;
+}
+.glstage-btn-sm:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+}
+.glstage-btn-sm.glstage-btn-active {
+    background: rgba(255, 215, 100, 0.2);
+    border-color: rgba(255, 215, 100, 0.4);
+    color: #ffd764;
+}
+.glstage-btn-sm.glstage-btn-danger:hover {
+    background: rgba(238,85,85,0.12);
+    color: #e55;
+}
+
+/* ── Empty State ── */
+
+.glstage-empty {
+    text-align: center;
+    color: #888;
+    padding: 30px 20px;
+    font-size: 13px;
+    font-style: italic;
+}
+
+/* ── Actor Cards ── */
+
+.glstage-actor-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.glstage-actor-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+}
+.glstage-actor-card:hover {
+    border-color: rgba(255,255,255,0.15);
+}
+
+.glstage-actor-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.3);
+}
+.glstage-actor-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+}
+
+.glstage-actor-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 1;
+    background: rgba(0,0,0,0.5) !important;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.glstage-actor-card:hover .glstage-actor-remove {
+    opacity: 1;
+}
+
+.glstage-actor-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* ── Fields ── */
+
+.glstage-field {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.glstage-field label {
+    font-size: 10px;
+    color: #999;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.glstage-field input,
+.glstage-field select {
+    padding: 4px 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.25);
+    color: #ddd;
+    font-size: 12px;
+}
+.glstage-field input:focus,
+.glstage-field select:focus {
+    border-color: rgba(255,215,100,0.4);
+    outline: none;
+}
+
+.glstage-field select option,
+.glstage-import-actor-select option,
+.glstage-slot-actor-select option,
+.glstage-anim-select option {
+    background: #1f1f1f;
+    color: #ddd;
+}
+
+.glstage-import-actor-select {
+    min-width: 160px;
+    max-width: 220px;
+    padding: 5px 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    background: rgba(0,0,0,0.25);
+    color: #ddd;
+    font-size: 12px;
+}
+
+.glstage-field-row {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 4px;
+}
+.glstage-field-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.glstage-field-group {
+    display: flex;
+    gap: 6px;
+}
+.glstage-field-group .glstage-field {
+    flex: 1;
+}
+
+/* ── Slot Cards (horizontal flow to mirror stage) ── */
+
+.glstage-slot-list {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+}
+
+.glstage-slot-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 90px;
+    padding: 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+    cursor: grab;
+}
+.glstage-slot-card.highlighted {
+    border-color: rgba(255, 215, 100, 0.4);
+    background: rgba(255, 215, 100, 0.06);
+}
+
+/* ── Slot Preview (prominent character image) ── */
+
+.glstage-slot-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.25);
+    margin-bottom: 4px;
+}
+
+.glstage-slot-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+}
+
+.glstage-slot-empty-preview {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    font-size: 20px;
+}
+
+.glstage-slot-number {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    font-size: 10px;
+    color: #ccc;
+    font-weight: 700;
+    background: rgba(0,0,0,0.55);
+    padding: 1px 5px;
+    border-radius: 3px;
+    line-height: 1.4;
+}
+
+/* ── Slot Actor Select ── */
+
+.glstage-slot-actor-select {
+    width: 100%;
+    padding: 3px 4px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.25);
+    color: #ddd;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+/* ── Slot Actions Row ── */
+
+.glstage-slot-actions {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+}
+
+.glstage-slot-zindex {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    color: #888;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+.glstage-slot-zindex i {
+    font-size: 9px;
+}
+.glstage-slot-zindex input {
+    width: 32px;
+    padding: 2px 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px;
+    background: rgba(0,0,0,0.25);
+    color: #ddd;
+    font-size: 10px;
+    text-align: center;
+}
+
+.glstage-anim-select {
+    width: 58px;
+    padding: 3px 2px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.25);
+    color: #ddd;
+    font-size: 10px;
+}
+
+/* ── Guide Tab ── */
+
+.glstage-guide-tab {
+    line-height: 1.6;
+    color: #ccc;
+}
+.glstage-guide-tab h2 {
+    color: #f0e6d2;
+    font-size: 16px;
+    margin: 0 0 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 6px;
+}
+.glstage-guide-tab h3 {
+    color: #ffd764;
+    font-size: 13px;
+    margin: 12px 0 4px;
+}
+.glstage-guide-tab p {
+    font-size: 12px;
+    margin: 0 0 6px;
+}
+.glstage-guide-tip {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(255, 215, 100, 0.08);
+    border: 1px solid rgba(255, 215, 100, 0.2);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #e8d49a;
+}
+
+/* ── Drag-and-Drop Reordering ── */
+
+.glstage-slot-card.dragging {
+    opacity: 0.4;
+}
+.glstage-slot-card.drag-over {
+    border-color: rgba(255, 215, 100, 0.6);
+    background: rgba(255, 215, 100, 0.08);
+}
+
+/* ── Measure Tab ── */
+
+.glstage-measure-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+.glstage-measure-info {
+    font-size: 12px;
+    color: #999;
+    padding: 8px 10px;
+    background: rgba(255, 215, 100, 0.06);
+    border: 1px solid rgba(255, 215, 100, 0.15);
+    border-radius: 6px;
+    line-height: 1.5;
+    flex-shrink: 0;
+}
+
+.glstage-measure-preview {
+    position: relative;
+    width: 100%;
+    flex: 1 1 50%;
+    min-height: 120px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+/* ── Floor Line (where feet align) ── */
+
+.glstage-measure-floor-line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-top: 2px dashed rgba(255, 215, 100, 0.5);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.glstage-measure-floor-label {
+    position: absolute;
+    top: -18px;
+    right: 6px;
+    font-size: 9px;
+    color: rgba(255, 215, 100, 0.7);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Screen Line (stage viewport cutoff) ── */
+
+.glstage-measure-screen-line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-top: 2px solid rgba(100, 180, 255, 0.7);
+    z-index: 11;
+    pointer-events: none;
+    transition: bottom 0.1s ease;
+}
+
+.glstage-measure-screen-label {
+    position: absolute;
+    top: -18px;
+    left: 6px;
+    font-size: 9px;
+    color: rgba(100, 180, 255, 0.8);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Crop Zone (shaded area below screen line) ── */
+
+.glstage-measure-crop-zone {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 60, 60, 0.08),
+        rgba(255, 60, 60, 0.08) 4px,
+        rgba(255, 60, 60, 0.16) 4px,
+        rgba(255, 60, 60, 0.16) 8px
+    );
+    z-index: 9;
+    pointer-events: none;
+    transition: height 0.1s ease;
+}
+
+/* ── Characters in Preview ── */
+
+.glstage-measure-characters {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    gap: 0;
+    padding: 0 8px;
+    transform-origin: bottom center;
+}
+
+.glstage-measure-actor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+}
+
+.glstage-measure-img-wrap {
+    transform-origin: bottom center;
+    display: flex;
+    align-items: flex-end;
+    flex-shrink: 0;
+    height: 100%;
+}
+
+.glstage-measure-img-wrap img {
+    height: 100%;
+    width: auto;
+    max-width: none;
+    user-select: none;
+    -webkit-user-select: none;
+    object-fit: contain;
+    object-position: bottom center;
+}
+
+.glstage-measure-name {
+    position: absolute;
+    bottom: 4px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #f0e6d2;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 12;
+}
+
+/* ── Measure Settings (bottom half, scrollable) ── */
+
+.glstage-measure-settings {
+    flex: 1 1 50%;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ── Measure Slider Row ── */
+
+.glstage-measure-slider-row {
+    flex-shrink: 0;
+}
+
+.glstage-measure-slider-row .glstage-height-control {
+    margin-left: 0;
+}
+
+/* ── Measure Controls ── */
+
+.glstage-measure-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.glstage-measure-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+}
+.glstage-measure-control-row.is-hidden {
+    opacity: 0.6;
+}
+
+.glstage-measure-control-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    object-fit: cover;
+    object-position: top center;
+    flex-shrink: 0;
+}
+
+.glstage-measure-control-name {
+    font-size: 12px;
+    color: #ddd;
+    font-weight: 600;
+    min-width: 60px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.glstage-measure-control-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.glstage-measure-control-field label {
+    font-size: 9px;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.glstage-measure-control-field input {
+    width: 52px;
+    padding: 3px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.25);
+    color: #ddd;
+    font-size: 11px;
+    text-align: center;
+}
+.glstage-measure-control-field input:focus {
+    border-color: rgba(255, 215, 100, 0.4);
+    outline: none;
+}
+
+/* ── Stage Height Slider (inline toolbar) ── */
+
+.glstage-height-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+.glstage-height-control label {
+    font-size: 11px;
+    color: #999;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.glstage-height-control input[type="range"] {
+    width: 80px;
+    accent-color: #ffd764;
+}
+.glstage-height-control .glstage-height-value,
+.glstage-height-control .glstage-width-value,
+.glstage-height-control .glstage-xoffset-value,
+.glstage-height-control .glstage-yoffset-value,
+.glstage-height-control .glstage-measure-screenline-value {
+    font-size: 11px;
+    color: #bbb;
+    min-width: 28px;
+    text-align: center;
+}

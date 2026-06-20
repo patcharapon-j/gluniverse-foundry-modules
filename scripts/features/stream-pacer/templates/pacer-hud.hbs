@@ -1,0 +1,155 @@
+<div id="stream-pacer-container" class="{{#unless isGM}}is-player{{/unless}} {{#if hasActiveSignal}}signal-active{{/if}} {{#if isCountdown}}countdown-active urgency-{{countdownUrgency}}{{/if}}">
+  <div class="sp-accent"></div>
+  {{!-- Header --}}
+  <div class="pacer-header">
+    <div class="drag-handle" title="{{localize 'STREAM_PACER.DragToMove'}}">
+      <i></i><i></i><i></i>
+    </div>
+    <span class="sp-pulse"></span>
+    <span class="pacer-title">{{localize "STREAM_PACER.Title"}}</span>
+    {{#if isGM}}
+    <div class="gm-badge">GM</div>
+    {{/if}}
+  </div>
+
+  {{!-- Operators Section --}}
+  <div class="p-sec">
+    <div class="pacer-players">
+      {{#each players}}
+      <div class="player-status {{statusClass}}" title="{{name}}: {{statusTitle}}">
+        <i class="fa-solid {{statusIcon}}"></i>
+        <span class="p-name">{{name}}</span>
+      </div>
+      {{else}}
+      <div class="no-players">{{localize "STREAM_PACER.NoPlayers"}}</div>
+      {{/each}}
+    </div>
+  </div>
+
+  {{!-- Player Status Buttons (non-GM only) --}}
+  {{#unless isGM}}
+  <div class="p-sec pacer-my-status">
+    <div class="status-buttons">
+      <button type="button" class="status-btn status-engaged {{#if myStatusEngaged}}active{{/if}}"
+              data-action="set-status" data-status="engaged"
+              title="{{localize 'STREAM_PACER.Status.engaged'}}">
+        <i class="fa-solid fa-hourglass-half"></i>
+      </button>
+      <button type="button" class="status-btn status-hand-raised {{#if myStatusHandRaised}}active{{/if}}"
+              data-action="set-status" data-status="hand_raised"
+              title="{{localize 'STREAM_PACER.Status.hand_raised'}}">
+        <i class="fa-solid fa-hand"></i>
+      </button>
+      <button type="button" class="status-btn status-need-time {{#if myStatusNeedTime}}active{{/if}}"
+              data-action="set-status" data-status="need_time"
+              title="{{localize 'STREAM_PACER.Status.need_time'}}">
+        <i class="fa-solid fa-brain"></i>
+      </button>
+      <button type="button" class="status-btn status-ready {{#if myStatusReady}}active{{/if}}"
+              data-action="set-status" data-status="ready"
+              title="{{localize 'STREAM_PACER.Status.ready'}}">
+        <i class="fa-solid fa-circle-check"></i>
+      </button>
+    </div>
+  </div>
+  {{/unless}}
+
+  {{!-- GM Signal Display --}}
+  {{#if hasActiveSignal}}
+  <div class="pacer-signal {{#if isSoftSignal}}soft-signal{{else if isFloorOpen}}floor-open-signal{{else}}hard-signal{{/if}}">
+    {{#if isSoftSignal}}
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>{{localize "STREAM_PACER.SoftSignalMessage"}}</span>
+    {{else if isFloorOpen}}
+    <i class="fa-solid fa-microphone"></i>
+    <span>{{localize "STREAM_PACER.FloorOpenMessage"}}</span>
+    {{else}}
+    <i class="fa-solid fa-clock"></i>
+    <span>{{localize "STREAM_PACER.CountdownMessage"}}</span>
+    <span class="countdown-timer">{{formattedCountdown}}</span>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  {{!-- GM Controls --}}
+  {{#if isGM}}
+  <div class="p-sec pacer-gm-controls-wrap">
+    <div class="pacer-gm-controls">
+      <button type="button" class="gm-btn soft-signal-btn {{#if isSoftSignal}}active{{/if}}"
+              data-action="soft-signal"
+              title="{{localize 'STREAM_PACER.SoftSignalTooltip'}}">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </button>
+      <button type="button" class="gm-btn countdown-btn {{#if isCountdown}}active{{/if}}"
+              data-action="start-countdown"
+              title="{{localize 'STREAM_PACER.CountdownTooltip'}}">
+        <i class="fa-solid fa-clock"></i>
+      </button>
+      <button type="button" class="gm-btn floor-open-btn {{#if isFloorOpen}}active{{/if}}"
+              data-action="open-floor"
+              title="{{localize 'STREAM_PACER.FloorOpenTooltip'}}">
+        <i class="fa-solid fa-microphone"></i>
+      </button>
+      <button type="button" class="gm-btn dire-peril-btn {{#if direPerilActive}}disabled{{/if}}"
+              data-action="declare-peril"
+              {{#if direPerilActive}}disabled{{/if}}
+              title="{{localize 'STREAM_PACER.DirePerilTooltip'}}">
+        <i class="fa-solid fa-skull"></i>
+      </button>
+      {{#if hasActiveSignal}}
+      <button type="button" class="gm-btn cancel-btn"
+              data-action="cancel-signal"
+              title="{{localize 'STREAM_PACER.CancelTooltip'}}">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      {{/if}}
+      <button type="button" class="gm-btn reset-btn"
+              data-action="reset-all"
+              title="{{localize 'STREAM_PACER.ResetTooltip'}}">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+    </div>
+  </div>
+  {{/if}}
+
+  {{!-- Spotlight Tracker (GM only) --}}
+  {{#if isGM}}{{#if spotlight.show}}
+  <div class="p-sec spotlight-sec">
+    <div class="spotlight-head">
+      <span class="sl-title">
+        <i class="fa-solid fa-bullseye"></i>
+        {{localize "STREAM_PACER.Spotlight.Title"}}
+      </span>
+      <button type="button" class="sl-reset" data-action="spotlight-reset"
+              title="{{localize 'STREAM_PACER.Spotlight.ResetTooltip'}}">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+    </div>
+
+    <div class="spotlight-list">
+      {{#each spotlight.players}}
+      <div class="sl-row {{#if active}}is-active{{/if}} {{#if underserved}}is-underserved{{/if}}"
+           data-user-id="{{userId}}">
+        <button type="button" class="sl-toggle" data-action="spotlight-toggle" data-user-id="{{userId}}"
+                title="{{localize 'STREAM_PACER.Spotlight.ToggleTooltip'}}"
+                aria-pressed="{{#if active}}true{{else}}false{{/if}}">
+          <i class="fa-solid {{#if active}}fa-circle-dot{{else}}fa-circle{{/if}}"></i>
+        </button>
+        <span class="sl-name">{{name}}</span>
+        <span class="sl-bar"><span class="sl-bar-fill" style="width:{{pct}}%"></span></span>
+        <span class="sl-time">{{formatted}}</span>
+        <i class="sl-warn fa-solid fa-triangle-exclamation"
+           title="{{localize 'STREAM_PACER.Spotlight.UnderservedTooltip'}}"></i>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="spotlight-next {{#unless spotlight.nextUp}}is-hidden{{/unless}}">
+      <i class="fa-solid fa-arrow-right-long"></i>
+      <span class="sl-next-label">{{localize "STREAM_PACER.Spotlight.NextUp"}}:</span>
+      <strong class="sl-next-name">{{#if spotlight.nextUp}}{{spotlight.nextUp.name}}{{/if}}</strong>
+      <span class="sl-next-deficit">{{#if spotlight.nextUp}}{{spotlight.nextUp.deficitLabel}}{{/if}}</span>
+    </div>
+  </div>
+  {{/if}}{{/if}}
+</div>

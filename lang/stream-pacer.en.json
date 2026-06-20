@@ -1,0 +1,111 @@
+{
+  "STREAM_PACER": {
+    "Title": "Scene Pacing",
+    "SceneControl": "Stream Pacer",
+    "NoPlayers": "No active players",
+    "YourStatus": "Your Status",
+    "HandsRaised": "Hands Raised",
+    "HasHandRaised": "has their hand raised!",
+    "DragToMove": "Drag to move",
+
+    "SectionOperators": "Operators",
+    "SectionStatus": "Status",
+    "SectionCommand": "Command",
+
+    "Status": {
+      "engaged": "Engaged - actively participating",
+      "hand_raised": "Hand Raised - I want to do/say something",
+      "need_time": "Need Time - I'm still thinking/processing",
+      "ready": "Ready - done with scene"
+    },
+
+    "StatusShort": {
+      "engaged": "Engaged",
+      "hand_raised": "Hand Up",
+      "need_time": "Thinking",
+      "ready": "Ready"
+    },
+
+    "SoftSignal": "Soft Signal",
+    "SoftSignalTooltip": "Send a gentle nudge that you'd like to wrap up",
+    "SoftSignalMessage": "GM would like to wrap up",
+
+    "Countdown": "Countdown",
+    "CountdownTooltip": "Start a countdown timer for scene ending",
+    "CountdownMessage": "Scene ending in:",
+    "CountdownDuration": "Countdown Duration",
+    "StartCountdown": "Start Countdown",
+    "Start": "Start",
+    "Minutes": "minutes",
+
+    "FloorOpen": "Open Floor",
+    "FloorOpenTooltip": "Open the floor for player actions - raise your hand",
+    "FloorOpenMessage": "Floor is open - raise your hand",
+
+    "Cancel": "Cancel",
+    "CancelTooltip": "Cancel the current signal",
+    "Save": "Save",
+
+    "Reset": "Reset",
+    "ResetTooltip": "Reset all player statuses",
+
+    "TickerIndex": "NOTICE / {n}",
+    "PriorityIndex": "PRIORITY / {n}",
+    "HandRaisedTag": "// HAND RAISED",
+
+    "DirePerilTitle": "Dire Peril",
+    "DirePerilTooltip": "Declare Dire Peril — death is on the table",
+    "DirePerilTag": "// OPERATIONAL HAZARD //",
+    "DirePerilTitleDire": "Dire",
+    "DirePerilTitlePeril": "Peril",
+    "DirePerilSubtitle": "// DEATH IS ON THE TABLE //",
+    "DirePerilHazardActive": "// HAZARD ACTIVE",
+    "DirePerilDismiss": "Dismiss Dire Peril",
+    "DirePerilRunTop": "HAZARD CLASS [LETHAL] // PROTOCOL ENGAGED // ENCOUNTER [CRITICAL] // DEATH IS ON THE TABLE //",
+    "DirePerilRunBottom": "T-0 // THREAT.LEVEL [MAX] // CASUALTY.RISK [CERTAIN] // COMMAND [ENGAGE] //",
+    "DirePerilColumnLeft": "HAZARD / LETHAL / ENGAGED",
+    "DirePerilColumnRight": "THREAT / RISK / ALERT",
+
+    "Spotlight": {
+      "Title": "Spotlight",
+      "ToggleTooltip": "Toggle this player in or out of the spotlight",
+      "UnderservedTooltip": "Underserved — well below the table's average spotlight time",
+      "NextUp": "Spotlight next",
+      "Deficit": "(−{pct}% vs avg)",
+      "ResetTooltip": "Reset all spotlight times",
+      "ResetTitle": "Reset Spotlight",
+      "ResetConfirm": "Clear every player's tracked spotlight time? This cannot be undone."
+    },
+
+    "Settings": {
+      "DefaultCountdown": "Default Countdown Duration",
+      "DefaultCountdownHint": "Default duration in seconds for the countdown timer (1-10 minutes)",
+      "ResetOnSceneChange": "Reset on Scene Change",
+      "ResetOnSceneChangeHint": "Automatically reset all player statuses when the scene changes",
+      "ExemptUsers": "Exempt Users",
+      "ExemptUsersLabel": "Configure Exempt Users",
+      "ExemptUsersHint": "Choose what each user is hidden from. \"General Bars\" hides the Stream Pacer UI; \"Dire Peril\" hides the Dire Peril splash. These are independent — e.g. hide a streaming overlay from the bars but still let it show Dire Peril.",
+      "ExemptUserColumn": "User",
+      "ExemptBarsColumn": "Hide General Bars",
+      "ExemptPerilColumn": "Hide Dire Peril",
+      "PerilExemptUsers": "Dire Peril Exempt Users",
+      "PerilExemptUsersHint": "Select users who will not see the Dire Peril splash animation or indicator",
+      "HandRaiseAudioEnabled": "Hand Raise Audio Notification",
+      "HandRaiseAudioEnabledHint": "Play a chime sound when a player raises their hand (GM only)",
+      "HandRaiseAudioVolume": "Hand Raise Audio Volume",
+      "HandRaiseAudioVolumeHint": "Volume level for the hand raise notification chime (0 = mute, 1 = full volume)",
+
+      "Appearance": "Appearance",
+      "AppearanceLabel": "Customize Appearance",
+      "AppearanceHint": "Customize the Dire Peril reveal text and effect settings for Stream Pacer",
+      "AppearanceIntro": "Stream Pacer uses a single refined \"Arcane Glass\" look. Use the options below to customize the Dire Peril reveal and effects.",
+      "PerilWebGL": "Dire Peril WebGL Effect",
+      "PerilWebGLHint": "Render the cinematic WebGL danger field during the Dire Peril reveal. Disable on low-end machines.",
+      "PerilTextHint": "Customize the Dire Peril reveal text (GM only — shared with all players). Leave a field blank to use the default.",
+      "PerilTextDire": "Title — Line 1",
+      "PerilTextPeril": "Title — Line 2",
+      "PerilTextTag": "Hazard Tag",
+      "PerilTextSubtitle": "Subtitle"
+    }
+  }
+}

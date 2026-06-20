@@ -1,0 +1,15 @@
+<div class="glct-ced">
+  <p class="ced-hint">{{localize "GLCT.shiftNames.hint"}}</p>
+
+  {{#each rows}}
+  <div class="ced-row sne-row">
+    <span class="sne-swatch" style="--sne-tint: {{this.tint}}"></span>
+    <input type="text" name="shift-{{this.index}}" value="{{this.value}}" placeholder="{{this.placeholder}}" autocomplete="off" />
+  </div>
+  {{/each}}
+
+  <div class="ced-actions">
+    <button type="button" data-action="resetNames"><i class="fa-solid fa-rotate-left"></i> {{localize "GLCT.shiftNames.resetBtn"}}</button>
+    <button type="button" class="ced-save" data-action="saveNames"><i class="fa-solid fa-floppy-disk"></i> {{localize "GLCT.shiftNames.saveBtn"}}</button>
+  </div>
+</div>

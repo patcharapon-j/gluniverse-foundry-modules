@@ -1,0 +1,40 @@
+<div class="glct-ced glct-modcfg-body">
+  <p class="ced-hint">{{localize "GLCT.moduleConfig.hint"}}</p>
+
+  {{#each rows}}
+  <section class="mc-group">
+    <div class="mc-row mc-grouprow" data-depth="0">
+      <label class="mc-toggle">
+        <input type="checkbox" data-path="{{this.path}}" {{#if this.checked}}checked{{/if}} />
+        <span class="mc-label">{{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}</span>
+      </label>
+      {{#if this.hint}}<p class="mc-desc">{{this.hint}}</p>{{/if}}
+    </div>
+
+    {{#each this.children}}
+    <div class="mc-row mc-childrow {{#if this.disabled}}mc-disabled{{/if}}" data-depth="1">
+      <label class="mc-toggle">
+        <input type="checkbox" data-path="{{this.path}}" {{#if this.checked}}checked{{/if}} {{#if this.disabled}}disabled{{/if}} />
+        <span class="mc-label">{{this.label}}</span>
+      </label>
+      {{#if this.hint}}<p class="mc-desc">{{this.hint}}</p>{{/if}}
+
+      {{#each this.children}}
+      <div class="mc-row mc-childrow mc-subrow {{#if this.disabled}}mc-disabled{{/if}}" data-depth="2">
+        <label class="mc-toggle">
+          <input type="checkbox" data-path="{{this.path}}" {{#if this.checked}}checked{{/if}} {{#if this.disabled}}disabled{{/if}} />
+          <span class="mc-label">{{this.label}}</span>
+        </label>
+        {{#if this.hint}}<p class="mc-desc">{{this.hint}}</p>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+    {{/each}}
+  </section>
+  {{/each}}
+
+  <div class="ced-actions">
+    <button type="button" data-action="resetConfig"><i class="fa-solid fa-rotate-left"></i> {{localize "GLCT.moduleConfig.resetBtn"}}</button>
+    <button type="button" class="ced-save" data-action="saveConfig"><i class="fa-solid fa-floppy-disk"></i> {{localize "GLCT.moduleConfig.saveBtn"}}</button>
+  </div>
+</div>

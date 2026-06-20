@@ -1,0 +1,97 @@
+{
+  "PF2E-FLATFINDER.Settings.CompetenceBadge.Name": "Competence-check badges",
+  "PF2E-FLATFINDER.Settings.CompetenceBadge.Hint": "Show a Flatfinder competence band on roll cards. Lore skills gain one band; a natural 20/1 shifts the band up/down by one.",
+  "PF2E-FLATFINDER.Settings.CompetenceBadge.Off": "Off",
+  "PF2E-FLATFINDER.Settings.CompetenceBadge.Skills": "Skill checks only",
+  "PF2E-FLATFINDER.Settings.CompetenceBadge.All": "Skill & perception checks",
+
+  "PF2E-FLATFINDER.Settings.Incapacitation.Name": "Incapacitation adjustment",
+  "PF2E-FLATFINDER.Settings.Incapacitation.Hint": "Replace PF2e's native incapacitation degree-of-success change with the Flatfinder rule: an untyped bonus to the save equal to twice the level difference (max +10) when the target outlevels the source (spells count as twice their rank).",
+
+  "PF2E-FLATFINDER.Settings.FlattenDc.Name": "Flatten item & inline DCs",
+  "PF2E-FLATFINDER.Settings.FlattenDc.Hint": "Subtract the source item's level from static DCs that the system doesn't flatten automatically: inline @Check[...|dc:N] DCs written into descriptions and fixed save DCs carried by items/spells. DCs derived from a creature's statistics are left to pf2e-flatten, so the two never stack.",
+
+  "PF2E-FLATFINDER.Settings.EncounterBudget.Name": "Encounter XP budget badge",
+  "PF2E-FLATFINDER.Settings.EncounterBudget.Hint": "Show the Flatfinder (Proficiency-without-Level) encounter XP total and difficulty band at the top of the combat tracker.",
+
+  "PF2E-FLATFINDER.Settings.ApexTurns.Name": "Apex solo-boss extra turns",
+  "PF2E-FLATFINDER.Settings.ApexTurns.Hint": "Automatically insert the extra turns of an NPC flagged as Apex (via the crown button on its sheet) into standard initiative, at (rolled initiative − 10), (− 20), and so on. The Prime turn is badged in the tracker. Stands down automatically while gluniverse-initiative's Card mode is active, since that mode handles multi-turn bosses itself.",
+
+  "PF2E-FLATFINDER.Settings.ApexPerTurnGuard.Name": "Apex: Prime-turn-only effects",
+  "PF2E-FLATFINDER.Settings.ApexPerTurnGuard.Hint": "Resolve per-turn effects (persistent damage, frightened and other start/end-of-turn ticks, turn-based effect expiry) only on an Apex boss's Prime turn, never on its extra turns — as Flatfinder §8 requires. Disable if it conflicts with another module that drives turn processing.",
+
+  "PF2E-FLATFINDER.Settings.ApexPhases.Name": "Apex: HP-phase beats",
+  "PF2E-FLATFINDER.Settings.ApexPhases.Hint": "Whisper a reminder to the GM when an Apex boss crosses 66% and 33% of its HP: take a free turn, shed one condition, and shift tactics (Flatfinder §8, Component 4).",
+
+  "PF2E-FLATFINDER.Apex.Button": "Apex",
+  "PF2E-FLATFINDER.Apex.Dialog.Title": "Apex Template — {name}",
+  "PF2E-FLATFINDER.Apex.Dialog.Hint": "Flatfinder's Apex (solo boss) template gives a lone boss extra full turns instead of bigger numbers. The boss takes its Prime turn, then an additional turn at (rolled initiative − 10) per extra turn. Each extra turn resets its Multiple Attack Penalty; per-turn effects only resolve on the Prime turn.",
+  "PF2E-FLATFINDER.Apex.Dialog.Enabled": "Treat this NPC as an Apex solo boss",
+  "PF2E-FLATFINDER.Apex.Dialog.Turns": "Turns per round",
+  "PF2E-FLATFINDER.Apex.Dialog.TurnsHint": "Total turns the boss takes each round (2 by default; 3 is suggested against a 5–6 PC party).",
+  "PF2E-FLATFINDER.Apex.Dialog.Save": "Save",
+  "PF2E-FLATFINDER.Apex.Tag.Prime": "Prime · 1/{total}",
+  "PF2E-FLATFINDER.Apex.Tag.Extra": "Apex · {n}/{total}",
+  "PF2E-FLATFINDER.Apex.Tag.PrimeTooltip": "Prime turn: per-turn effects (persistent damage, frightened, start/end-of-turn triggers) resolve only here.",
+  "PF2E-FLATFINDER.Apex.Tag.ExtraTooltip": "Extra Apex turn: a fresh turn with a reset Multiple Attack Penalty. Per-turn effects do NOT resolve on this turn.",
+
+  "PF2E-FLATFINDER.Apex.Phase.Kicker": "APEX PHASE BREAK",
+  "PF2E-FLATFINDER.Apex.Phase.At": "{pct}% threshold — now at {hp}% HP",
+  "PF2E-FLATFINDER.Apex.Phase.FreeTurn": "Take an immediate turn out of initiative.",
+  "PF2E-FLATFINDER.Apex.Phase.ShedCondition": "End one condition affecting the boss.",
+  "PF2E-FLATFINDER.Apex.Phase.Tactics": "Shift tactics — fire the per-phase ability.",
+
+  "PF2E-FLATFINDER.Apex.Counteract.Button": "Apex counteract (highest save, full level)",
+  "PF2E-FLATFINDER.Apex.Counteract.SheetButton": "Counteract",
+  "PF2E-FLATFINDER.Apex.Counteract.Kicker": "APEX COUNTERACT",
+  "PF2E-FLATFINDER.Apex.Counteract.Note": "Counteract rank {rank} (creature level {level}, used in full). Compare this check to the effect's DC for the degree of success, then counteract up to:",
+  "PF2E-FLATFINDER.Apex.Counteract.ColResult": "Result vs DC",
+  "PF2E-FLATFINDER.Apex.Counteract.ColCounteracts": "Counteracts up to",
+  "PF2E-FLATFINDER.Apex.Counteract.Rank": "rank {rank}",
+  "PF2E-FLATFINDER.Apex.Counteract.Levels": "lvl {low}–{high}",
+  "PF2E-FLATFINDER.Apex.Counteract.None": "—",
+  "PF2E-FLATFINDER.Apex.Counteract.Foot": "An effect's counteract rank is its spell rank, or half its level rounded up. The boss must have suffered the condition for a full turn; once per turn, as an action.",
+  "PF2E-FLATFINDER.Apex.Counteract.NoSave": "Flatfinder: could not read this creature's saving-throw modifiers for an Apex counteract.",
+
+  "PF2E-FLATFINDER.Apex.Sheet.Emblem": "APEX",
+  "PF2E-FLATFINDER.Apex.Sheet.Turns": "{turns} turns/round",
+  "PF2E-FLATFINDER.Apex.Sheet.Tooltip": "This NPC is a Flatfinder Apex solo boss. It takes extra full turns each round; configure it with the crown button in the sheet's titlebar.",
+
+  "PF2E-FLATFINDER.Settings.EliteWeakLevel.Name": "Count Elite/Weak as +/-2 levels",
+  "PF2E-FLATFINDER.Settings.EliteWeakLevel.Hint": "Treat an Elite or Weak creature (native button or the bundled FF effects) as +/-2 levels in the encounter-XP and incapacitation math, as Flatfinder requires. This does not change the creature's sheet, so it stays compatible with pf2e-flatten.",
+
+  "PF2E-FLATFINDER.Competence.Caption": "Competence",
+  "PF2E-FLATFINDER.Competence.Band.Disastrous": "Disastrous",
+  "PF2E-FLATFINDER.Competence.Band.Inept": "Inept",
+  "PF2E-FLATFINDER.Competence.Band.Poor": "Poor",
+  "PF2E-FLATFINDER.Competence.Band.Passable": "Passable",
+  "PF2E-FLATFINDER.Competence.Band.Solid": "Solid",
+  "PF2E-FLATFINDER.Competence.Band.Impressive": "Impressive",
+  "PF2E-FLATFINDER.Competence.Band.Remarkable": "Remarkable",
+  "PF2E-FLATFINDER.Competence.Band.Phenomenal": "Phenomenal",
+  "PF2E-FLATFINDER.Competence.Adjust.Lore": "Lore skill: +1 band (+5)",
+  "PF2E-FLATFINDER.Competence.Adjust.Nat20": "Natural 20: +1 band",
+  "PF2E-FLATFINDER.Competence.Adjust.Nat1": "Natural 1: -1 band",
+  "PF2E-FLATFINDER.Competence.Tooltip.Total": "Check total: {total}",
+
+  "PF2E-FLATFINDER.Incapacitation.Caption": "Incapacitation",
+  "PF2E-FLATFINDER.Incapacitation.Bonus": "Flatfinder bonus +{bonus} to the save",
+  "PF2E-FLATFINDER.Incapacitation.Result": "+{bonus}: {degree}",
+  "PF2E-FLATFINDER.Incapacitation.Tooltip": "Target is {diff} level(s) above the source (target {target} vs source {source}); Flatfinder grants an untyped +{bonus} to the save (twice the level difference, max +10).",
+
+  "PF2E-FLATFINDER.Degree.CriticalFailure": "Critical Failure",
+  "PF2E-FLATFINDER.Degree.Failure": "Failure",
+  "PF2E-FLATFINDER.Degree.Success": "Success",
+  "PF2E-FLATFINDER.Degree.CriticalSuccess": "Critical Success",
+
+  "PF2E-FLATFINDER.Encounter.Title": "Flatfinder XP",
+  "PF2E-FLATFINDER.Encounter.Xp": "{xp} XP",
+  "PF2E-FLATFINDER.Encounter.BudgetShort": "Budget: {budget}",
+  "PF2E-FLATFINDER.Encounter.Severity.Trivial": "Trivial",
+  "PF2E-FLATFINDER.Encounter.Severity.Low": "Low",
+  "PF2E-FLATFINDER.Encounter.Severity.Moderate": "Moderate",
+  "PF2E-FLATFINDER.Encounter.Severity.Severe": "Severe",
+  "PF2E-FLATFINDER.Encounter.Severity.Extreme": "Extreme",
+  "PF2E-FLATFINDER.Encounter.Tooltip.Party": "Party level {level}, {size} PC(s)",
+  "PF2E-FLATFINDER.Encounter.Tooltip.Budget": "Budgets — Trivial {trivial} / Low {low} / Moderate {moderate} / Severe {severe} / Extreme {extreme}"
+}

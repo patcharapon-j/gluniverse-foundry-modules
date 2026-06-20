@@ -1,0 +1,147 @@
+{
+    "GLSTAGE": {
+        "title": "GLUniverse Stage",
+        "settings": {
+            "stageHeight": {
+                "name": "Stage Height (%)",
+                "hint": "Height of the visual novel stage area as a percentage of the viewport height."
+            },
+            "stageWidth": {
+                "name": "Stage Width (%)",
+                "hint": "Width of the visual novel stage area as a percentage of the viewport width."
+            },
+            "commsTheme": {
+                "name": "Comms Theme",
+                "hint": "Visual style for the call-in overlay.",
+                "scifi": "Sci-fi Radio",
+                "ethereal": "Fantasy Ethereal",
+                "minimal": "Minimal"
+            },
+            "commsEdge": {
+                "name": "Comms Edge",
+                "hint": "Which screen edge the call-in cards stack against.",
+                "right": "Right",
+                "left": "Left"
+            },
+            "commsVAlign": {
+                "name": "Comms Vertical Anchor",
+                "hint": "Where the call-in stack anchors vertically. The vertical offset below is measured relative to this anchor.",
+                "centered": "Centered",
+                "top": "From Top",
+                "bottom": "From Bottom"
+            },
+            "commsFrameWidth": {
+                "name": "Comms Card Width (px)",
+                "hint": "Width of each call-in portrait card in pixels."
+            },
+            "commsEdgeOffset": {
+                "name": "Comms Edge Spacing (px)",
+                "hint": "Gap between the call-in stack and its screen edge, in pixels."
+            },
+            "commsTopOffset": {
+                "name": "Comms Vertical Offset (%)",
+                "hint": "Vertical offset relative to the anchor, as a percentage of viewport height. When centered it nudges up (negative) or down (positive); when anchored from the top or bottom it sets the gap from that edge."
+            }
+        },
+        "panel": {
+            "title": "Stage Director",
+            "actors": "Actors",
+            "stage": "Stage",
+            "addActor": "Add Actor",
+            "newActor": "New Actor",
+            "importSelectedToken": "Import Selected Token",
+            "importFoundryActor": "Import Actor",
+            "selectFoundryActor": "Select Foundry Actor...",
+            "noSelectedToken": "Select one or more tokens on the canvas first.",
+            "noFoundryActorSelected": "Select a Foundry Actor to import first.",
+            "actorImported": "Actor imported into GLUniverse Stage.",
+            "actorsImported": "{count} actors imported into GLUniverse Stage.",
+            "editActor": "Edit Actor",
+            "removeActor": "Remove Actor",
+            "name": "Name",
+            "image": "Image",
+            "scale": "Scale",
+            "offsetX": "Offset X",
+            "offsetY": "Offset Y",
+            "present": "Show on Stage",
+            "hide": "Hide from Stage",
+            "highlight": "Highlight (Speaking)",
+            "unhighlight": "Unhighlight",
+            "clearStage": "Clear Stage",
+            "showStage": "Show Stage",
+            "hideStage": "Hide Stage",
+            "addSlot": "Add Slot",
+            "removeSlot": "Remove Slot",
+            "emptySlot": "Empty",
+            "animation": "Animation",
+            "triggerAnimation": "Play",
+            "slotPosition": "Position",
+            "guide": "Guide",
+            "browse": "Browse",
+            "stageHeight": "Height",
+            "stageWidth": "Width",
+            "zIndex": "Layer",
+            "measure": "Measure",
+            "measureInfo": "Preview all actors side by side to calibrate scale and positioning. Adjust each actor so feet are level on the floor line.",
+            "floorLine": "Floor Line",
+            "screenLine": "Screen Line",
+            "stageXOffset": "Stage X Offset",
+            "stageYOffset": "Stage Y Offset",
+            "stageYOffsetHint": "Percentage of character to crop from the bottom. The visible portion scales up to fill the stage.",
+            "noActorsConfigured": "No actors configured. Click Add Actor or import one to get started.",
+            "noSlotsConfigured": "No slots on stage. Click Add Slot to create character positions.",
+            "noActorsToMeasure": "No actors configured. Add actors in the Actors tab first.",
+            "hideInMeasure": "Hide in Measure",
+            "showInMeasure": "Show in Measure",
+            "resetScale": "Reset",
+            "comms": "Comms",
+            "callIn": "Call In",
+            "showComms": "Show Comms",
+            "hideComms": "Hide Comms",
+            "clearComms": "Hang Up All",
+            "clearCommsConfirm": "End all active calls and hide the comms overlay?",
+            "selectActorToCall": "Select actor to call...",
+            "noCalls": "No active calls. Ring an actor in from the Actors tab or the dropdown above.",
+            "setSpeaker": "Set as Speaker",
+            "hangUp": "Hang Up",
+            "moveUp": "Move Up",
+            "moveDown": "Move Down",
+            "unknownActor": "Unknown",
+            "commsFraming": "Position the portrait inside the call card (scale / X / Y)",
+            "resetFraming": "Reset framing",
+            "presentation": "Presentation (theme & tint)",
+            "themeDefault": "Default Theme",
+            "commsThemeOverride": "Override the comms theme for this actor",
+            "commsTintOverride": "Enable a custom tint colour for this actor"
+        },
+        "comms": {
+            "connecting": "Connecting",
+            "live": "Live",
+            "sending": "Sending",
+            "attuned": "Attuned"
+        },
+        "animations": {
+            "none": "None",
+            "bounce": "Bounce",
+            "shake": "Shake",
+            "flip": "Flip",
+            "nod": "Nod",
+            "jiggle": "Jiggle",
+            "fadeIn": "Fade In",
+            "slideIn": "Slide In"
+        },
+        "guide": {
+            "title": "Stage Setup Guide",
+            "intro": "Configure your actors to display consistently across all player screens.",
+            "step1title": "1. Add Actors",
+            "step1": "Click 'Add Actor' to create characters. Give them a name and select their image. Use character art with transparent backgrounds for best results.",
+            "step2title": "2. Configure Scale & Offset",
+            "step2": "Adjust Scale to resize the actor (1.0 = 100%). Use Offset X/Y to fine-tune positioning within the stage. These values sync to all players.",
+            "step3title": "3. Manage the Stage",
+            "step3": "Switch to the Stage tab to control what players see. Add slots (positions) for characters. Assign actors to slots or leave them empty for spacing.",
+            "step4title": "4. Highlight & Animate",
+            "step4": "Click Highlight on a character to dim others and indicate the speaker. Use animations for expressive moments — bounce for excitement, shake for anger, nod for agreement.",
+            "tip": "Tip: Use 'Show Stage' to make the stage visible to all players. 'Clear Stage' removes all characters but keeps actors configured."
+        }
+    }
+}
