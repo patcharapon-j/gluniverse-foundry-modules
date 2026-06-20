@@ -22,6 +22,7 @@
 import { MODULE_ID, FLAG_NS, SUPPORT_ROUND_LIMITED_KINDS } from "../const.js";
 import { SupportStore } from "./support-store.js";
 import { Benchmarks } from "./benchmarks.js";
+import { clamp, toInt as int } from "../../../core/util.mjs";
 
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const SAVES = ["fortitude", "reflex", "will"];
@@ -145,7 +146,12 @@ export class SupportCard {
     if (burn) {
       const n = Math.max(0, Number(support.current) || 0);
       if (n <= 0) { ui.notifications?.warn(game.i18n.localize("GLCT.support.poolEmpty")); return null; }
-      const discard = Math.max(0, Number(support.discard) || 0);
+      // Match the canonical default (SupportStore._sanitizeSupport): a roster
+      // entry that predates the discard field — or any unsaved/imported support
+      // the read-side never sanitized — must fall back to 2, NOT 0. With a 0
+      // threshold every d6 face survives, so the pool never drops and no die
+      // renders as discarded.
+      const discard = clamp(int(support.discard, 2), 0, 5);
       const roll = await new Roll(`${n}d6`).evaluate();
       // Mark dice rolling at/under the threshold as discarded on the term itself so
       // the roll renders them dropped (Dice So Nice fades active:false / discarded
