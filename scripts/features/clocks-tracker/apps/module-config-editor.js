@@ -139,7 +139,7 @@ export class ModuleConfigEditor extends HandlebarsApplicationMixin(ApplicationV2
 
 /** Register the settings menu that opens this editor. */
 export function registerModuleConfigMenu() {
-  game.settings.registerMenu(MODULE_ID, "moduleConfigEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.moduleConfigEditor", {
     name: "GLCT.moduleConfig.title",
     label: "GLCT.moduleConfig.label",
     hint: "GLCT.moduleConfig.hint",

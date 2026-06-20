@@ -76,7 +76,7 @@ export class ShiftNamesEditor extends HandlebarsApplicationMixin(ApplicationV2) 
 
 /** Register the settings menu that opens this editor. */
 export function registerShiftNamesMenu() {
-  game.settings.registerMenu(MODULE_ID, "shiftNamesEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.shiftNamesEditor", {
     name: "GLCT.shiftNames.title",
     label: "GLCT.shiftNames.label",
     hint: "GLCT.shiftNames.hint",

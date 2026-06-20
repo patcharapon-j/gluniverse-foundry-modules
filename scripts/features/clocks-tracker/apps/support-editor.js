@@ -614,7 +614,7 @@ export class SupportEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
 /** Register the Support roster editor as a settings menu (GM only). */
 export function registerSupportMenu() {
-  game.settings.registerMenu(MODULE_ID, "supportEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.supportEditor", {
     name: "GLCT.support.editor.title",
     label: "GLCT.support.editor.menuLabel",
     hint: "GLCT.support.editor.menuHint",

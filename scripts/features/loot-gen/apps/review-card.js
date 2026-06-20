@@ -7,7 +7,7 @@
  * updating the message content + flag. GM-only.
  */
 
-import { MODULE_ID, TARGET } from "../const.js";
+import { MODULE_ID, FLAG, TARGET } from "../const.js";
 import { proposeLoot } from "../loot/cascade.js";
 import { materialize } from "../loot/materializer.js";
 import {
@@ -36,7 +36,7 @@ export async function postReviewCard(proposal) {
   return ChatMessage.create({
     content: renderCard(proposal),
     whisper: ChatMessage.getWhisperRecipients?.("GM") ?? [],
-    flags: { [MODULE_ID]: { proposal } }
+    flags: { [MODULE_ID]: { lg: { proposal } } }
   });
 }
 
@@ -56,7 +56,7 @@ async function onCardClick(ev) {
   const msgId = btn.closest("[data-message-id]")?.dataset?.messageId;
   const message = msgId ? game.messages.get(msgId) : null;
   if (!message) return;
-  const proposal = foundry.utils.duplicate(message.getFlag(MODULE_ID, "proposal") ?? null);
+  const proposal = foundry.utils.duplicate(message.getFlag(MODULE_ID, FLAG("proposal")) ?? null);
   if (!proposal) return ui.notifications?.warn("GLLG: this proposal has expired.");
 
   btn.disabled = true;
@@ -86,7 +86,7 @@ async function onCardChange(ev) {
   const msgId = sel.closest("[data-message-id]")?.dataset?.messageId;
   const message = msgId ? game.messages.get(msgId) : null;
   if (!message) return;
-  const proposal = foundry.utils.duplicate(message.getFlag(MODULE_ID, "proposal") ?? null);
+  const proposal = foundry.utils.duplicate(message.getFlag(MODULE_ID, FLAG("proposal")) ?? null);
   if (!proposal) return;
 
   if (sel.dataset.action === "set-target") {
@@ -97,14 +97,14 @@ async function onCardChange(ev) {
   } else {
     return;
   }
-  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { proposal } } });
+  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { lg: { proposal } } } });
 }
 
 async function doApprove(message, proposal) {
   const res = await materialize(proposal);
   await message.update({
     content: renderDone(proposal, res),
-    flags: { [MODULE_ID]: { proposal, materialized: true } }
+    flags: { [MODULE_ID]: { lg: { proposal, materialized: true } } }
   });
   if (res.ok) ui.notifications?.info(`GLLG: materialized ${res.created.length} container(s).`);
   else ui.notifications?.error(`GLLG: ${res.reason}`);
@@ -120,7 +120,7 @@ async function doReroll(message, proposal) {
     try { next = await rerunWorkshop(proposal); }
     finally { await endProgress(progress); }
     if (!next) return; // notified inside
-    return message.update({ content: renderCard(next), flags: { [MODULE_ID]: { proposal: next } } });
+    return message.update({ content: renderCard(next), flags: { [MODULE_ID]: { lg: { proposal: next } } } });
   }
   const next = await proposeLoot(proposal.request);
   if (flavorEnabled()) {
@@ -130,7 +130,7 @@ async function doReroll(message, proposal) {
   } else {
     await decorateProposal(next); // no-op if disabled
   }
-  await message.update({ content: renderCard(next), flags: { [MODULE_ID]: { proposal: next } } });
+  await message.update({ content: renderCard(next), flags: { [MODULE_ID]: { lg: { proposal: next } } } });
 }
 
 /** Re-request LLM flavor for the current picks without changing the loot. */
@@ -139,7 +139,7 @@ async function doReflavor(message, proposal) {
   const progress = await beginProgress({ title: "Re-flavoring…", detail: proposal.label || "Loot proposal" });
   try { await decorateProposal(proposal, { force: true }); }
   finally { await endProgress(progress); }
-  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { proposal } } });
+  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { lg: { proposal } } } });
   ui.notifications?.info("GLLG: re-flavored the proposal.");
 }
 
@@ -153,7 +153,7 @@ async function doRemove(message, proposal, btn) {
     if (!proposal.shop) parcel.currencyGp = round2((parcel.currencyGp || 0) + removed.gp);
     recompute(parcel, proposal);
   }
-  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { proposal } } });
+  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { lg: { proposal } } } });
 }
 
 async function doSwap(message, proposal, btn) {
@@ -169,7 +169,7 @@ async function doSwap(message, proposal, btn) {
   parcel.items[idx] = repl;
   if (!proposal.shop) parcel.currencyGp = round2(budget - repl.gp);
   recompute(parcel, proposal);
-  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { proposal } } });
+  await message.update({ content: renderCard(proposal), flags: { [MODULE_ID]: { lg: { proposal } } } });
 }
 
 /** Pick a fresh item of the same kind/level band within budget, avoiding dupes. */

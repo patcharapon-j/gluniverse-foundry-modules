@@ -180,7 +180,7 @@ class PacerManagerClass {
   startCountdown(duration = null, broadcast = true) {
     if (!game.user.isGM && broadcast) return;
 
-    const countdownDuration = duration || game.settings.get(MODULE_ID, 'defaultCountdown');
+    const countdownDuration = duration || game.settings.get(MODULE_ID, 'sp.defaultCountdown');
     this._gmSignal = GM_SIGNAL.COUNTDOWN;
     this._countdownEnd = Date.now() + (countdownDuration * 1000);
 
@@ -397,7 +397,7 @@ class PacerManagerClass {
 
   loadSpotlight() {
     try {
-      const saved = game.settings.get(MODULE_ID, 'spotlightState');
+      const saved = game.settings.get(MODULE_ID, 'sp.spotlightState');
       if (saved && saved.players) {
         this._spotlight = saved.players;
         this._updateSpotlightInterval();
@@ -414,7 +414,7 @@ class PacerManagerClass {
     clearTimeout(this._spotlightSaveTimeout);
     this._spotlightSaveTimeout = setTimeout(() => {
       this._spotlightSaveTimeout = null;
-      game.settings.set(MODULE_ID, 'spotlightState', { players: this._spotlight });
+      game.settings.set(MODULE_ID, 'sp.spotlightState', { players: this._spotlight });
     }, 300);
   }
 
@@ -550,7 +550,7 @@ class PacerManagerClass {
 
   loadFromSettings() {
     try {
-      const saved = game.settings.get(MODULE_ID, 'pacerState');
+      const saved = game.settings.get(MODULE_ID, 'sp.pacerState');
       if (saved) {
         this._playerStates = saved.playerStates || {};
         this._gmSignal = saved.gmSignal || GM_SIGNAL.NONE;
@@ -581,7 +581,7 @@ class PacerManagerClass {
     clearTimeout(this._saveTimeout);
     this._saveTimeout = setTimeout(() => {
       this._saveTimeout = null;
-      game.settings.set(MODULE_ID, 'pacerState', {
+      game.settings.set(MODULE_ID, 'sp.pacerState', {
         playerStates: this._playerStates,
         gmSignal: this._gmSignal,
         countdownEnd: this._countdownEnd,

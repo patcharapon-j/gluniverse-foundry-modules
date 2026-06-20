@@ -51,7 +51,7 @@ export function levelsFromTokens(tokens) {
  * `extra`. Scene flags let a GM theme a whole map once and reuse it.
  */
 export function tagsFromScene(scene, extra = {}) {
-  const flags = scene?.flags?.[MODULE_ID] ?? {};
+  const flags = scene?.flags?.[MODULE_ID]?.lg ?? {};
   return makeTags({
     traits:   extra.traits,
     biomes:   flags.biomes   ?? extra.biomes,

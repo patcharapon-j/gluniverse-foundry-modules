@@ -170,7 +170,7 @@ export function registerSettings() {
 
 
   // Hidden state storage for persistence
-  game.settings.register(MODULE_ID, 'pacerState', {
+  game.settings.register(MODULE_ID, 'sp.pacerState', {
     name: 'Pacer State',
     scope: 'world',
     config: false,
@@ -186,7 +186,7 @@ export function registerSettings() {
   // Spotlight tracker state — world-scoped so totals survive a reload and are
   // shared between co-GMs. Kept separate from pacerState so the pacer's
   // "Reset all" and scene changes never wipe a session's spotlight tracking.
-  game.settings.register(MODULE_ID, 'spotlightState', {
+  game.settings.register(MODULE_ID, 'sp.spotlightState', {
     name: 'Spotlight State',
     scope: 'world',
     config: false,
@@ -198,7 +198,7 @@ export function registerSettings() {
   // Pass raw i18n keys — Foundry localizes them lazily when the settings
   // sheet is rendered. Calling game.i18n.localize() here (during 'init')
   // runs before language files are fully loaded and returns the raw key.
-  game.settings.register(MODULE_ID, 'defaultCountdown', {
+  game.settings.register(MODULE_ID, 'sp.defaultCountdown', {
     name: 'STREAM_PACER.Settings.DefaultCountdown',
     hint: 'STREAM_PACER.Settings.DefaultCountdownHint',
     scope: 'world',
@@ -213,7 +213,7 @@ export function registerSettings() {
   });
 
   // Auto-reset on scene change
-  game.settings.register(MODULE_ID, 'resetOnSceneChange', {
+  game.settings.register(MODULE_ID, 'sp.resetOnSceneChange', {
     name: 'STREAM_PACER.Settings.ResetOnSceneChange',
     hint: 'STREAM_PACER.Settings.ResetOnSceneChangeHint',
     scope: 'world',
@@ -223,7 +223,7 @@ export function registerSettings() {
   });
 
   // Exempt users (won't see the general pacer UI / bars - useful for streaming)
-  game.settings.register(MODULE_ID, 'exemptUsers', {
+  game.settings.register(MODULE_ID, 'sp.exemptUsers', {
     name: 'STREAM_PACER.Settings.ExemptUsers',
     hint: 'STREAM_PACER.Settings.ExemptUsersHint',
     scope: 'world',
@@ -235,7 +235,7 @@ export function registerSettings() {
   // Dire Peril exempt users (won't see the Dire Peril splash / indicator).
   // Tracked separately from exemptUsers so a user can be hidden from the
   // general bars while still seeing the Dire Peril reveal (or vice versa).
-  game.settings.register(MODULE_ID, 'perilExemptUsers', {
+  game.settings.register(MODULE_ID, 'sp.perilExemptUsers', {
     name: 'STREAM_PACER.Settings.PerilExemptUsers',
     hint: 'STREAM_PACER.Settings.PerilExemptUsersHint',
     scope: 'world',
@@ -245,7 +245,7 @@ export function registerSettings() {
   });
 
   // Register menu for exempt users
-  game.settings.registerMenu(MODULE_ID, 'exemptUsersMenu', {
+  game.settings.registerMenu(MODULE_ID, 'sp.exemptUsersMenu', {
     name: 'STREAM_PACER.Settings.ExemptUsers',
     label: 'STREAM_PACER.Settings.ExemptUsersLabel',
     hint: 'STREAM_PACER.Settings.ExemptUsersHint',
@@ -255,7 +255,7 @@ export function registerSettings() {
   });
 
   // Client-side HUD position memory
-  game.settings.register(MODULE_ID, 'hudPosition', {
+  game.settings.register(MODULE_ID, 'sp.hudPosition', {
     name: 'HUD Position',
     scope: 'client',
     config: false,
@@ -264,7 +264,7 @@ export function registerSettings() {
   });
 
   // Hand raise audio notification enabled (GM only setting)
-  game.settings.register(MODULE_ID, 'handRaiseAudioEnabled', {
+  game.settings.register(MODULE_ID, 'sp.handRaiseAudioEnabled', {
     name: 'STREAM_PACER.Settings.HandRaiseAudioEnabled',
     hint: 'STREAM_PACER.Settings.HandRaiseAudioEnabledHint',
     scope: 'client',
@@ -274,7 +274,7 @@ export function registerSettings() {
   });
 
   // Hand raise audio volume (0-1)
-  game.settings.register(MODULE_ID, 'handRaiseAudioVolume', {
+  game.settings.register(MODULE_ID, 'sp.handRaiseAudioVolume', {
     name: 'STREAM_PACER.Settings.HandRaiseAudioVolume',
     hint: 'STREAM_PACER.Settings.HandRaiseAudioVolumeHint',
     scope: 'client',

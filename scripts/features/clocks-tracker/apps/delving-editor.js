@@ -359,7 +359,7 @@ export class DelvingEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
 /** Register the Delving settings menu (alongside Calendar / Weather / Support). */
 export function registerDelvingMenu() {
-  game.settings.registerMenu(MODULE_ID, "delvingEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.delvingEditor", {
     name: "GLCT.delving.editor.title",
     label: "GLCT.delving.editor.menuLabel",
     hint: "GLCT.delving.editor.menuHint",

@@ -170,7 +170,7 @@ export class AuditorDashboard extends HandlebarsApplicationMixin(ApplicationV2) 
   _onOpenSettings() {
     game.settings.sheet.render(true);
     // Jump to this module's section if the API supports it.
-    try { game.settings.sheet.activateTab?.("gluniverse-loot-gen"); } catch { /* ignore */ }
+    try { game.settings.sheet.activateTab?.(MODULE_ID); } catch { /* ignore */ }
   }
 
   _onFocusActor(event, target) {

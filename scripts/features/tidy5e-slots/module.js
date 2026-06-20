@@ -1,19 +1,48 @@
-import { MODULE_ID, FLAG_SCOPE, FK, registerSettings, unwrapElement } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, SK, registerSettings, unwrapElement } from './settings.js';
 import { SlotCalculator } from './SlotCalculator.js';
 import { TidyIntegration } from './TidyIntegration.js';
 import { NotchCalculator } from './NotchCalculator.js';
 import { AmmoDiceCalculator } from './AmmoDiceCalculator.js';
 import { DicePoolCalculator } from './DicePoolCalculator.js';
 
-Hooks.once('init', () => {
-    console.log(`${MODULE_ID} | Initializing GLUniverse Inventory Slots`);
-    registerSettings();
-});
+export { registerSettings };
 
-Hooks.on('ready', () => {
-    console.log(`${MODULE_ID} | Ready`);
+/** Public API object, exposed via the suite feature registry (see index.mjs). */
+export const api = {
+    SlotCalculator,
+    NotchCalculator,
+    AmmoDiceCalculator,
+    DicePoolCalculator,
+    calculateInventory: (actor) => SlotCalculator.calculateInventory(actor),
+    getItemBulk: (item, actor) => SlotCalculator.getItemBulk(item, actor),
+    getMaxSlots: (actor) => SlotCalculator.getMaxSlots(actor),
+    getNotches: (item) => NotchCalculator.getNotches(item),
+    addNotch: (item) => NotchCalculator.addNotch(item),
+    removeNotch: (item, count) => NotchCalculator.removeNotch(item, count),
+    getNotchSummary: (item) => NotchCalculator.getNotchSummary(item),
+    rollAmmoDie: (item) => AmmoDiceCalculator.rollAmmoDie(item),
+    getAmmoSummary: (item) => AmmoDiceCalculator.getAmmoSummary(item),
+    rollDicePool: (item) => DicePoolCalculator.rollPool(item),
+    getPoolSummary: (item) => DicePoolCalculator.getPoolSummary(item),
+};
 
-    // Verify dependencies
+/**
+ * Init phase (run only when the feature is enabled & available).
+ * Wires the dnd5e.* combat/usage hooks. Settings are registered separately and
+ * unconditionally by the adapter's registerSettings().
+ */
+export function onInit() {
+    wireMechanicalHooks();
+}
+
+/**
+ * Ready phase (run only when the feature is enabled & available).
+ * Wraps document prepareDerivedData, exposes the global API mirror, and hooks
+ * the Tidy 5e Sheet integration.
+ */
+export function onReady() {
+    // Dependency is also enforced by the registry's `requires: ["tidy5e-sheet"]`,
+    // but keep the guard for a clear notification when somehow run without it.
     if (!game.modules.get('tidy5e-sheet')?.active) {
         ui.notifications.error(
             game.i18n.localize('GLINVSLOTS.errors.tidyRequired')
@@ -21,35 +50,24 @@ Hooks.on('ready', () => {
         return;
     }
 
-    // Expose API
-    const mod = game.modules.get(MODULE_ID);
-    mod.api = {
-        SlotCalculator,
-        NotchCalculator,
-        AmmoDiceCalculator,
-        DicePoolCalculator,
-        calculateInventory: (actor) => SlotCalculator.calculateInventory(actor),
-        getItemBulk: (item, actor) => SlotCalculator.getItemBulk(item, actor),
-        getMaxSlots: (actor) => SlotCalculator.getMaxSlots(actor),
-        getNotches: (item) => NotchCalculator.getNotches(item),
-        addNotch: (item) => NotchCalculator.addNotch(item),
-        removeNotch: (item, count) => NotchCalculator.removeNotch(item, count),
-        getNotchSummary: (item) => NotchCalculator.getNotchSummary(item),
-        rollAmmoDie: (item) => AmmoDiceCalculator.rollAmmoDie(item),
-        getAmmoSummary: (item) => AmmoDiceCalculator.getAmmoSummary(item),
-        rollDicePool: (item) => DicePoolCalculator.rollPool(item),
-        getPoolSummary: (item) => DicePoolCalculator.getPoolSummary(item),
-    };
+    // Back-compat global mirror for macros that referenced the standalone module.
+    globalThis.GLUniverseInventorySlots = api;
 
-    globalThis.GLUniverseInventorySlots = mod.api;
-});
+    wrapPrepareDerivedData();
 
-// Hook into Tidy 5e Sheet API when it's ready
-Hooks.once('tidy5e-sheet.ready', (api) => {
-    console.log(`${MODULE_ID} | Tidy 5e Sheet API ready`);
-    TidyIntegration.init(api);
-    TidyIntegration.registerContextMenus();
-});
+    // Hook into Tidy 5e Sheet API when it's ready. If Tidy already fired its
+    // ready hook before us, initialise immediately via its exposed API.
+    const tidyApi = game.modules.get('tidy5e-sheet')?.api;
+    if (tidyApi) {
+        TidyIntegration.init(tidyApi);
+        TidyIntegration.registerContextMenus();
+    } else {
+        Hooks.once('tidy5e-sheet.ready', (apiArg) => {
+            TidyIntegration.init(apiArg);
+            TidyIntegration.registerContextMenus();
+        });
+    }
+}
 
 // ─── Mechanical Effects — Wrap prepareDerivedData ───────────────────
 
@@ -58,7 +76,7 @@ Hooks.once('tidy5e-sheet.ready', (api) => {
  * Wrap Item.prepareDerivedData for weapon damage degradation from notches.
  * These run during data preparation, so rolls and displays use degraded values.
  */
-Hooks.once('ready', () => {
+function wrapPrepareDerivedData() {
     // --- Actor: AC penalty from notched armor ---
     const ActorClass = CONFIG.Actor?.documentClass;
     if (ActorClass) {
@@ -126,8 +144,15 @@ Hooks.once('ready', () => {
             } catch { /* fail silently */ }
         };
     }
-});
+}
 
+// ─── Mechanical Effects — dnd5e combat / usage hooks ────────────────
+
+/**
+ * Register all dnd5e.* gameplay hooks. Called from onInit so they only wire up
+ * when the feature is enabled & available.
+ */
+function wireMechanicalHooks() {
 // ─── Mechanical Effects — Spell Attack / Save DC from Notched Focus ─
 
 /**
@@ -343,10 +368,11 @@ Hooks.on('dnd5e.rollAttack', async (rolls, data) => {
 // (see TidyIntegration), so Tidy re-runs our render callbacks automatically on
 // any actor data / embedded-item change. The old setInterval-based re-injection
 // polling has been removed.
+}
 
 function getSetting(key) {
     try {
-        return game.settings.get(MODULE_ID, key);
+        return game.settings.get(MODULE_ID, SK(key));
     } catch {
         return false;
     }

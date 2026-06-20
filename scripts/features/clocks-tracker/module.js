@@ -46,8 +46,15 @@ function ensureSupportStyles() { ensureFeatureStyle("support"); }
 function ensureDelvingStyles() { ensureFeatureStyle("delving"); }
 function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
 
-Hooks.once("init", () => {
-  registerSettings();
+/**
+ * Init lifecycle (called by the suite adapter only when the feature is enabled).
+ * Settings registration is NOT done here — the adapter wires `registerSettings`
+ * separately so toggles/menus exist even when the feature is off. This wires the
+ * stylesheets, the PF2e sheet tab, the calendar, keybindings, the runtime Foundry
+ * hooks, and publishes the public API. Nothing runs at import time.
+ */
+export function onInit() {
+  ensureHudStyles();
   ensureWeatherStyles();
   ensureSupportStyles();
   ensureDelvingStyles();
@@ -57,13 +64,13 @@ Hooks.once("init", () => {
   // Install the active calendar before GameTime is constructed.
   applyCalendar();
   registerKeybindings();
+  registerRuntimeHooks();
 
-  // Public API for macros / other modules.
-  const mod = game.modules.get(MODULE_ID);
-  if (mod) mod.api = { TimeEngine, GlctHud, TrackerHud, TrackerStore, TrackerSheet, WeatherEngine, WeatherStore, WeatherHud, SupportHud, SupportStore, DelvingStore, HOOKS };
-});
+  return getApi();
+}
 
-Hooks.once("ready", async () => {
+/** Ready lifecycle (called by the suite adapter only when the feature is enabled). */
+export async function onReady() {
   // Wire GM-side pool-roll persistence *first*, before anything that awaits or
   // can throw (opening a HUD, the weather walk). Otherwise a hiccup earlier in
   // this hook could leave a GM without the handler while their own HUD still
@@ -83,21 +90,55 @@ Hooks.once("ready", async () => {
   // players who shouldn't see it / when no support is active).
   SupportStore.registerHandlers();
   if (SupportStore.enabled && !setting(SETTINGS.supportHudHidden, false)) await SupportHud.open();
-});
+}
 
-Hooks.on("updateWorldTime", () => {
-  GlctHud.refreshState();
-  applySceneTint(TimeEngine.getState());
-  // Walk the weather flower as in-game time passes (primary GM only, guarded inside).
-  WeatherEngine.evaluate();
-});
+/** The public API object exposed via the suite (game.modules…api.features[id]). */
+export function getApi() {
+  return { TimeEngine, GlctHud, TrackerHud, TrackerStore, TrackerSheet, WeatherEngine, WeatherStore, WeatherHud, SupportHud, SupportStore, DelvingStore, HOOKS };
+}
+
+/**
+ * Register the feature's runtime Foundry hooks. Called from onInit so they only
+ * attach when the feature is enabled — nothing is registered at import time.
+ */
+function registerRuntimeHooks() {
+  Hooks.on("updateWorldTime", () => {
+    GlctHud.refreshState();
+    applySceneTint(TimeEngine.getState());
+    // Walk the weather flower as in-game time passes (primary GM only, guarded inside).
+    WeatherEngine.evaluate();
+  });
+
+  Hooks.on("renderChatMessageHTML", tagPoolMessage);   // Foundry v13+
+  Hooks.on("renderChatMessage", tagPoolMessage);       // legacy fallback
+
+  // Combat awareness: reflect combat state on the HUD (no auto-advance — a combat
+  // round is far shorter than a stretch, so time only moves when the GM advances).
+  for (const hook of ["combatStart", "deleteCombat", "combatTurn", "combatRound"]) {
+    Hooks.on(hook, () => GlctHud.refreshState());
+  }
+
+  // Support actions share a 1/round lock that only applies IN combat. Clear the
+  // "used" flag when the round advances or combat starts/ends — NOT on every turn,
+  // or it would degrade to 1/turn (GM-authoritative; no-op otherwise).
+  for (const hook of ["combatRound", "combatStart", "deleteCombat"]) {
+    Hooks.on(hook, () => { if (game.user.isGM && SupportStore.enabled) SupportStore.resetRadio(); });
+  }
+  // Repaint the HUD on every client for any combat state change so the used badges
+  // and the GM clear button appear/disappear exactly as combat begins/ends.
+  for (const hook of ["combatStart", "deleteCombat", "combatRound", "combatTurn"]) {
+    Hooks.on(hook, () => { if (SupportStore.enabled) SupportHud.refresh(); });
+  }
+
+  Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
+}
 
 // Tag our resource-pool roll messages so the chat card can take over the whole
 // entry (the duplicate header is hidden; timestamp + delete control remain).
 function tagPoolMessage(message, html) {
   const el = html instanceof HTMLElement ? html : html?.[0];
   if (!el) return;
-  const flags = message?.flags?.[MODULE_ID];
+  const flags = message?.flags?.[MODULE_ID]?.ct;
   if (flags?.poolRoll) el.classList.add("glct-pool-msg");
   if (flags?.weatherCard) el.classList.add("glct-weather-msg");
   if (flags?.supportCard) el.classList.add("glct-support-msg");
@@ -138,29 +179,8 @@ function mountDelveTumble(message, el) {
   // featured card but nothing to animate (e.g. the pool was empty) — sync now
   settle();
 }
-Hooks.on("renderChatMessageHTML", tagPoolMessage);   // Foundry v13+
-Hooks.on("renderChatMessage", tagPoolMessage);       // legacy fallback
-
-// Combat awareness: reflect combat state on the HUD (no auto-advance — a combat
-// round is far shorter than a stretch, so time only moves when the GM advances).
-for (const hook of ["combatStart", "deleteCombat", "combatTurn", "combatRound"]) {
-  Hooks.on(hook, () => GlctHud.refreshState());
-}
-
-// Support actions share a 1/round lock that only applies IN combat. Clear the
-// "used" flag when the round advances or combat starts/ends — NOT on every turn,
-// or it would degrade to 1/turn (GM-authoritative; no-op otherwise).
-for (const hook of ["combatRound", "combatStart", "deleteCombat"]) {
-  Hooks.on(hook, () => { if (game.user.isGM && SupportStore.enabled) SupportStore.resetRadio(); });
-}
-// Repaint the HUD on every client for any combat state change so the used badges
-// and the GM clear button appear/disappear exactly as combat begins/ends.
-for (const hook of ["combatStart", "deleteCombat", "combatRound", "combatTurn"]) {
-  Hooks.on(hook, () => { if (SupportStore.enabled) SupportHud.refresh(); });
-}
-
 // v13+ scene controls: controls/tools are keyed objects; handlers use onChange.
-Hooks.on("getSceneControlButtons", controls => {
+function onGetSceneControlButtons(controls) {
   const group = controls.tokens ?? controls.notes ?? Object.values(controls)[0];
   if (!group?.tools) return;
   if (Features.on("timeHud")) {
@@ -208,7 +228,7 @@ Hooks.on("getSceneControlButtons", controls => {
       onChange: () => DelvingStore.setActive(!DelvingStore.active)
     };
   }
-});
+}
 
 function registerKeybindings() {
   game.keybindings.register(MODULE_ID, "toggleHud", {

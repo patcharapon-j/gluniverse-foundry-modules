@@ -629,7 +629,7 @@ export class WeatherEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
 /** Register the Weather settings menu (alongside Calendar / Events / Shift Names). */
 export function registerWeatherMenu() {
-  game.settings.registerMenu(MODULE_ID, "weatherEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.weatherEditor", {
     name: "GLCT.weather.editor.title",
     label: "GLCT.weather.editor.menuLabel",
     hint: "GLCT.weather.editor.menuHint",

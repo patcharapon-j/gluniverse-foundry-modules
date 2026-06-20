@@ -14,7 +14,7 @@ export async function beginProgress({ title = "Working…", detail = "" } = {}) 
     return await ChatMessage.create({
       content: renderProgress(title, detail),
       whisper: ChatMessage.getWhisperRecipients?.("GM") ?? [],
-      flags: { [MODULE_ID]: { progress: true } }
+      flags: { [MODULE_ID]: { lg: { progress: true } } }
     });
   } catch (err) {
     console.warn(`${MODULE_ID} | progress card failed to post`, err);

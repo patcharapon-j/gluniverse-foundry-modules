@@ -117,7 +117,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
 /** Register the settings menu that opens this editor. */
 export function registerCalendarMenu() {
-  game.settings.registerMenu(MODULE_ID, "calendarEditor", {
+  game.settings.registerMenu(MODULE_ID, "ct.calendarEditor", {
     name: "GLCT.editor.title",
     label: "GLCT.editor.title",
     icon: "fa-solid fa-pen-ruler",
