@@ -147,7 +147,14 @@ export class SupportCard {
       if (n <= 0) { ui.notifications?.warn(game.i18n.localize("GLCT.support.poolEmpty")); return null; }
       const discard = Math.max(0, Number(support.discard) || 0);
       const roll = await new Roll(`${n}d6`).evaluate();
-      const faces = roll.dice[0]?.results?.map(r => r.result) ?? [];
+      // Mark dice rolling at/under the threshold as discarded on the term itself so
+      // the roll renders them dropped (Dice So Nice fades active:false / discarded
+      // dice). A plain Nd6 has no keep/drop modifier, so we set the flags by hand.
+      const results = roll.dice[0]?.results ?? [];
+      for (const r of results) {
+        if (r.result <= discard) { r.discarded = true; r.active = false; }
+      }
+      const faces = results.map(r => r.result);
       const remaining = faces.filter(v => v > discard).length;
       if (game.dice3d) {
         try { await game.dice3d.showForRoll(roll, game.user, true); }
