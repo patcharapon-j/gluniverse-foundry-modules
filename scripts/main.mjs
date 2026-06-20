@@ -13,6 +13,7 @@
 import { SUITE_ID, SUITE_TITLE, log } from "./core/const.mjs";
 import { Suite, Features } from "./core/registry.mjs";
 import { registerCoreSettings } from "./core/settings.mjs";
+import { buildCatalog } from "./core/catalog.mjs";
 import { initSocketDispatcher } from "./core/socket.mjs";
 import { runMigrations } from "./core/migration.mjs";
 
@@ -22,6 +23,9 @@ import "./features/index.mjs";
 Hooks.once("init", async () => {
   registerCoreSettings();
   Suite.registerAllSettings();
+  // Catalog every registered suite setting/menu and hide them from Foundry's
+  // native Settings sheet — the Control Center is the single grouped surface.
+  buildCatalog();
   await Suite.runPhase("onInit");
   log(`Initialised — ${Suite.all().filter((f) => Suite.enabled(f.id)).length}/${Suite.all().length} features active.`);
 });

@@ -22,6 +22,19 @@
  */
 
 import { MODULE_ID, SETTINGS } from "./const.js";
+import { Suite } from "../../core/registry.mjs";
+
+/**
+ * Top-level tree nodes that were promoted to first-class suite features. Their
+ * enable state now lives in the suite registry (Control Center); this map lets
+ * the engine's internal resolver delegate to it so there is one source of truth.
+ */
+const PROMOTED = {
+  trackers: "clocks-trackers",
+  weather: "clocks-weather",
+  support: "clocks-support",
+  delving: "clocks-delving",
+};
 
 /**
  * The enable/disable tree. Node shape:
@@ -142,6 +155,11 @@ export const Features = {
   self(path) {
     const node = NODE_INDEX.get(path);
     if (!node) return true;                         // unknown paths fail open
+    // Promoted top-level nodes resolve through the suite registry.
+    if (path in PROMOTED) {
+      try { return Suite.enabled(PROMOTED[path]); }
+      catch { /* registry not ready — fall through to local read */ }
+    }
     if (node.setting) {
       try { return !!game.settings.get(MODULE_ID, node.setting); }
       catch { return !!node.default; }

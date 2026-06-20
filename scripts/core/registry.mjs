@@ -38,16 +38,26 @@ export const Suite = {
     return _features.find((f) => f.id === id) ?? null;
   },
 
-  /** A feature is *available* when its required system + modules are present. */
+  /** Normalize a field that may be a string or string[] into an array. */
+  _list(v) {
+    return v == null ? [] : Array.isArray(v) ? v : [v];
+  },
+
+  /** A feature is *available* when its required system + modules + sibling
+   *  features are present. `requiresFeature` lets a promoted sub-feature gate on
+   *  its parent (e.g. weather requires the clocks-tracker engine). */
   available(def) {
     if (typeof def === "string") def = this.get(def);
     if (!def) return false;
     if (def.system) {
-      const need = Array.isArray(def.system) ? def.system : [def.system];
+      const need = this._list(def.system);
       if (!need.includes(game.system?.id)) return false;
     }
     for (const modId of def.requires ?? []) {
       if (!game.modules.get(modId)?.active) return false;
+    }
+    for (const featId of this._list(def.requiresFeature)) {
+      if (!this.enabled(featId)) return false;
     }
     return true;
   },
@@ -57,20 +67,37 @@ export const Suite = {
     if (typeof def === "string") def = this.get(def);
     if (!def) return "Unknown feature";
     if (def.system) {
-      const need = Array.isArray(def.system) ? def.system : [def.system];
+      const need = this._list(def.system);
       if (!need.includes(game.system?.id)) return `Requires system: ${need.join(" / ")}`;
     }
     for (const modId of def.requires ?? []) {
       if (!game.modules.get(modId)?.active) return `Requires module: ${modId}`;
     }
+    for (const featId of this._list(def.requiresFeature)) {
+      if (!this.enabled(featId)) {
+        const parent = this.get(featId);
+        const label = parent ? game.i18n.localize(parent.title) : featId;
+        return `Requires feature: ${label}`;
+      }
+    }
     return null;
   },
 
-  /** Raw stored toggle (ignores availability), falling back to default. */
+  /** Raw stored toggle (ignores availability), falling back to default.
+   *  A feature may supply `enableGet()` to back its toggle on an existing world
+   *  setting (used by the promoted clocks-tracker sub-features) instead of the
+   *  shared moduleConfig blob. */
   _stored(id) {
     const def = this.get(id);
     if (!def) return false;
     if (def.core) return true;
+    if (typeof def.enableGet === "function") {
+      try {
+        return !!def.enableGet();
+      } catch {
+        return !!def.defaultEnabled;
+      }
+    }
     let blob = {};
     try {
       blob = game.settings.get(SUITE_ID, SETTING_MODULE_CONFIG) ?? {};
@@ -88,13 +115,27 @@ export const Suite = {
     return def.core || this._stored(id);
   },
 
-  /** Persist a toggle into the master blob. */
+  /** Persist a toggle. Setting-backed features (enableSet) write through to
+   *  their world setting so its onChange side-effects still fire; the rest write
+   *  the shared moduleConfig blob. */
   async setEnabled(id, on) {
     const def = this.get(id);
     if (!def || def.core) return;
+    if (typeof def.enableSet === "function") {
+      await def.enableSet(!!on);
+      return;
+    }
     const blob = { ...(game.settings.get(SUITE_ID, SETTING_MODULE_CONFIG) ?? {}) };
     blob[id] = !!on;
     await game.settings.set(SUITE_ID, SETTING_MODULE_CONFIG, blob);
+  },
+
+  /** True when a feature's enable toggle applies live (no reload needed). The
+   *  promoted clocks-tracker sub-features run their own onChange side-effects, so
+   *  flipping them takes effect immediately. */
+  appliesLive(id) {
+    const def = this.get(id);
+    return !!def && typeof def.enableSet === "function";
   },
 
   /** Run a lifecycle phase ("onInit" | "onReady") for every enabled feature. */

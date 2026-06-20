@@ -2,20 +2,27 @@
 
 A single Foundry VTT module that bundles the entire GLUniverse module family behind
 one installed package and one shared **Etched Glass** interface. Every module is a
-**feature** you can enable or disable individually from a unified **Feature Manager** —
-so you maintain one package, and the features integrate cleanly with each other.
+**feature** you enable, disable and configure from one unified **Control Center** —
+so you maintain one package, every setting is grouped by module in one place, and the
+features integrate cleanly with each other.
 
 > Compatibility: Foundry VTT **v13+** (verified v14).
 
 ## Features
 
-Open **Game Settings → Configure Settings → GLUniverse Suite → Manage Features** to
-toggle any of these. Features that need a specific game system or companion module
-stay locked until that system/module is active.
+Open **Game Settings → Configure Settings → GLUniverse Suite → Open Control Center**.
+Each feature is a section with its enable toggle, its own settings, and buttons to its
+specialized editors. Features that need a specific game system or companion feature
+stay locked until that requirement is met. (The suite hides its settings from Foundry's
+flat native list — the Control Center is the single place to configure everything.)
 
 | Feature | System | Notes |
 |---|---|---|
-| **Clocks & Tracker** *(core, always on)* | any | Calendar & time HUD, trackers, weather (Hex Flower), mission support, delving mode. Has its own internal sub-feature toggles. |
+| **Clocks & Tracker** *(core, always on)* | any | Core engine: in-game calendar & time HUD. |
+| **Resource Trackers** | any (needs Clocks & Tracker) | GM-managed clocks, points, pools and hazard trackers in a dockable HUD. |
+| **Weather** | any (needs Clocks & Tracker) | Hex Flower weather engine with a calendar-driven forecast. |
+| **Mission Support** | any (needs Clocks & Tracker) | Support-NPC roster and the Comms-Coin HUD. |
+| **Delving Mode** | any (needs Clocks & Tracker) | Turn-driven dungeon delve with a degrading resource HUD. |
 | **Initiative** | any | Cinematic initiative overlay with condition badges, turn/start markers, guard-break gauges. |
 | **Flatfinder** | PF2e | Off-guard / competence surfacing, incapacitation, Apex boss support. Ships a Flatfinder compendium. |
 | **Destiny Dice** | PF2e | Cinematic Destiny/Fate die for checks & rerolls (Dice So Nice optional). |

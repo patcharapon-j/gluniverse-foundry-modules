@@ -16,6 +16,7 @@
 
 import { Suite } from "../../core/registry.mjs";
 import { registerSettings, onInit, onReady, getApi } from "./module.js";
+import { registerSubFeatures } from "./sub-features.mjs";
 
 const OLD_ID = "gluniverse-clocks-and-tracker";
 
@@ -115,3 +116,7 @@ Suite.register({
   // Set during onInit (see above). Declared here for documentation.
   api: null,
 });
+
+// Promote the engine's sub-features to first-class suite features, registered
+// *after* the core above so they group beneath it in the Control Center.
+registerSubFeatures();
