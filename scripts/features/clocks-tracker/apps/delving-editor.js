@@ -219,7 +219,7 @@ export class DelvingEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const arch = document.createElement("select");
     arch.className = "dx-ed-arch";
-    arch.append(...WEATHER_ARCHETYPES.map(a => { const o = document.createElement("option"); o.value = a; o.textContent = a; if (a === e.archetype) o.selected = true; return o; }));
+    arch.append(...WEATHER_ARCHETYPES.map(a => { const o = document.createElement("option"); o.value = a; o.textContent = game.i18n.localize(`GLCT.weather.arch.${a}`); if (a === e.archetype) o.selected = true; return o; }));
     arch.addEventListener("change", () => { e.archetype = arch.value; this._focusPreview(s); });
 
     const tintP = document.createElement("input");
