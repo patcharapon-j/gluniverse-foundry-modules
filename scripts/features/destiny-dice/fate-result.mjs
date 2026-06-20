@@ -30,7 +30,7 @@ export async function applyFateToMessage(message, { source = "manual" } = {}) {
     const face = getFaceResult(roll);
     if (!face) {
       console.error(`GLUniverse Destiny Dice | ${FATE_DIE_NOTATION} produced no readable face`, roll);
-      ui.notifications?.error(`GLUniverse Destiny Dice | ${FATE_DIE_NOTATION} produced no readable face. See console for details.`);
+      ui.notifications?.error(game.i18n.format("GLDDF.Notify.NoFace", { notation: FATE_DIE_NOTATION }));
       return null;
     }
 

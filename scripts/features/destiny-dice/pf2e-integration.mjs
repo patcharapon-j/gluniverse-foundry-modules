@@ -190,7 +190,7 @@ async function safeApplyFateToMessage(message, options) {
     return await applyFateToMessage(message, options);
   } catch (error) {
     console.error("GLUniverse Destiny Dice | Failed to apply Fate Die", error);
-    ui.notifications.error("GLUniverse Destiny Dice | Failed to roll Fate Die. See console for details.");
+    ui.notifications.error(game.i18n.localize("GLDDF.Notify.RollFailed"));
     return null;
   }
 }

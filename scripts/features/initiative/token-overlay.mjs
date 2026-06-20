@@ -1206,12 +1206,12 @@ export class TokenOverlayManager {
     label.style.fontWeight = "bold";
     label.style.letterSpacing = fontSize > 10 ? 1.5 : 1;
     label.text = isBreak
-      ? "BREAK"
+      ? localize("GLUNI.GuardBreak").toUpperCase()
       : isDying
         ? (entry.dying.kind === "deathsaves"
             ? (stableSave ? localize("GLUNI.DeathSaves.Stable").toUpperCase() : `${localize("GLUNI.DeathSaves").toUpperCase()} ${entry.dying.failures}/3`)
             : `${localize("GLUNI.Dying").toUpperCase()} ${entry.dying.value}/${entry.dying.max}`)
-        : "DELAYED";
+        : localize("GLUNI.Delayed").toUpperCase();
     label.style.fill = isBreak ? "#02070b" : isDying ? (stableSave ? "#04201c" : "#1a0033") : "#4aa3ff";
 
     const padX = fontSize * 0.6;

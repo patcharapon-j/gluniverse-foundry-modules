@@ -22,6 +22,8 @@
   "INSIGHT.ComposeTargetGMSuffix": "(GM)",
   "INSIGHT.ComposeMessage": "Message",
   "INSIGHT.ComposeMessageHint": "Sent privately to the chosen player. Supports <b>bold</b> and <i>italic</i>. Ctrl+Enter to send.",
+  "INSIGHT.ComposeMessagePlaceholder": "The hairs on your neck rise...",
+  "INSIGHT.ComposeValidation": "Please choose a recipient and type a message.",
   "INSIGHT.SettingSoundFile": "Custom Sound Effect",
   "INSIGHT.SettingSoundFileHint": "Optional audio file to play instead of the default procedural sound. Leave blank to use the built-in sound.",
   "INSIGHT.ComposeSend": "Send",

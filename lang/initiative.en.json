@@ -75,6 +75,8 @@
   "GLUNI.Controls.Mystery": "Mystery",
   "GLUNI.Controls.Delay": "Delay",
   "GLUNI.Controls.Return": "Return",
+  "GLUNI.Controls.Turn": "Turn",
+  "GLUNI.Controls.MoveTracker": "Move tracker",
   "GLUNI.Controls.TurnControls": "Turn controls",
   "GLUNI.Controls.PreviousTurn": "Previous turn",
   "GLUNI.Controls.NextTurn": "Next turn",
