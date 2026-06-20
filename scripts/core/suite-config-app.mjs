@@ -122,9 +122,15 @@ export class SuiteConfigApp extends ApplicationV2 {
     const def = Suite.get(id);
     if (!def || def.core || !Suite.available(def)) return;
     const current = id in this.#pending ? this.#pending[id] : Suite._stored(id);
-    this.#pending[id] = !current;
-    await Suite.setEnabled(id, !current);
-    this.render();
+    const next = !current;
+    this.#pending[id] = next;
+    await Suite.setEnabled(id, next);
+    // Update the switch + row in place. Re-rendering the whole app would replay
+    // every row's entrance animation on each flip, so we mutate the DOM directly
+    // and let the switch's own CSS transition animate the thumb.
+    target.classList.toggle("is-on", next);
+    target.setAttribute("aria-pressed", String(next));
+    target.closest(".gls-fm-row")?.classList.toggle("is-on", next);
   }
 
   static async _onReload() {
