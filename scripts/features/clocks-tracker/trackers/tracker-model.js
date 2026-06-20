@@ -8,7 +8,7 @@
  * — a tracker created on a sheet is byte-for-byte one created on the dock.
  */
 
-import { MODULE_ID, TRACKER_TYPES } from "../const.js";
+import { TRACKER_TYPES } from "../const.js";
 
 /** Per-type factory defaults for newly created trackers. */
 export const TRACKER_DEFAULTS = {

@@ -48,7 +48,6 @@ export class TrackerSheet {
       }
     } catch (err) { console.warn(`${MODULE_ID} | could not read character sheet classes`, err); }
     for (const n of names) Hooks.on(`render${n}`, (app, html) => this._onRender(app, html));
-    console.debug(`${MODULE_ID} | sheet-tracker render hooks:`, [...names]);
 
     // Tracker writes go in with {render:false} (no full sheet redraw); this
     // repaints the open tab in place instead, so value changes animate. Fires on
