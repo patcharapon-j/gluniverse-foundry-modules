@@ -159,6 +159,10 @@
 .gls-control-center .window-content {
   padding: 0;
   background: var(--gl-ink-0);
+  /* Fill the (possibly user-resized) window frame so the inner list scrolls
+     instead of overflowing and getting cropped when the window is made short. */
+  height: 100%;
+  min-height: 0;
   max-height: calc(100vh - 120px);
   overflow: hidden;
   display: flex;
@@ -212,6 +216,9 @@
   --gl-accent: var(--gl-cyan);
   animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
   overflow: hidden;
+  /* Keep each card at its natural height; the list scrolls instead of
+     squashing the cards (which would clip their settings) when space is tight. */
+  flex: 0 0 auto;
 }
 .gls-fm-section.is-on { --gl-accent: var(--gl-good); }
 .gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
