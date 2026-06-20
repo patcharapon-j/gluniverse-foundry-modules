@@ -1,0 +1,22 @@
+<div class="glct-ced">
+  <div class="ced-row">
+    <label>{{localize "GLCT.editor.preset"}}</label>
+    <select name="presetSelect">
+      {{#each presets}}
+      <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>
+      {{/each}}
+    </select>
+    <button type="button" data-action="loadPreset">{{localize "GLCT.editor.preset"}}</button>
+  </div>
+
+  <p class="ced-hint">Edit the calendar definition below (Foundry native CalendarConfig). Use Load to start from a preset, or Import a JSON file. Save applies it to this world.</p>
+
+  <textarea name="calendarJson" spellcheck="false" rows="20">{{json}}</textarea>
+
+  <div class="ced-actions">
+    <button type="button" data-action="importJson"><i class="fa-solid fa-file-import"></i> {{localize "GLCT.editor.import"}}</button>
+    <button type="button" data-action="exportJson"><i class="fa-solid fa-file-export"></i> {{localize "GLCT.editor.export"}}</button>
+    <button type="button" data-action="resetCustom"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+    <button type="button" class="ced-save" data-action="saveCalendar"><i class="fa-solid fa-floppy-disk"></i> {{localize "GLCT.editor.save"}}</button>
+  </div>
+</div>

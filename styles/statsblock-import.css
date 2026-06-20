@@ -1,0 +1,953 @@
+/* ===========================================================================
+   GL Universe — PF2e Stat Block Importer
+   "Etched Glass" design language (canonical v1.0)
+   Liquid glass material + Endfield drafting layer.
+   ========================================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap");
+
+/* ---------------------------------------------------------------------------
+   1. Tokens (§2, §6.1) — scoped to the application root
+   ------------------------------------------------------------------------- */
+.gluniverse-pf2e-importer {
+  /* Ink ramp (surfaces) */
+  --gl-ink-0: #02070b;
+  --gl-ink-1: #080b11;
+  --gl-ink-2: #0b0f17;
+  --gl-ink-3: #161d2c;
+
+  /* Text */
+  --gl-text: #eef1f7;
+  --gl-text-bright: #f3fbff;
+  --gl-text-dim: #98a2b6;
+  --gl-text-faint: rgba(243, 251, 255, 0.38);
+
+  /* Lines & rims */
+  --gl-hair: rgba(255, 255, 255, 0.08);
+  --gl-edge: rgba(255, 255, 255, 0.13);
+  --gl-line-strong: rgba(244, 252, 255, 0.55);
+
+  /* Fixed semantic accents */
+  --gl-signal: #ffd24a;
+  --gl-signal-hot: #ffe070;
+  --gl-cyan: #5eeaff;
+  --gl-hazard: #ff4a52;
+  --gl-good: #5fdb92;
+  --gl-violet: #b497ff;
+  --gl-mission: #37d99a;
+
+  /* Dynamic accent channel (set per context) */
+  --gl-accent: var(--gl-cyan);
+
+  /* Typography voices */
+  --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
+  --gl-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* Motion tokens */
+  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
+  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
+  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
+  --gl-d-quick: 180ms;
+  --gl-d-move: 420ms;
+  --gl-d-reveal: 620ms;
+  --gl-d-splash: 720ms;
+  --gl-breathe: 2.6s;
+  --gl-dread: 3.2s;
+
+  /* Motion multiplier (overridden by tier classes) */
+  --gl-mx: 1;
+
+  min-width: 660px;
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+}
+
+/* Hazard preview re-points the accent to signal amber; errors → hazard red */
+.gluniverse-pf2e-importer [data-kind="hazard"] { --gl-accent: var(--gl-signal); }
+
+/* ---------------------------------------------------------------------------
+   2. Window frame — glass-panel material (§3.1)
+   ------------------------------------------------------------------------- */
+.application.gluniverse-pf2e-importer {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.20)),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
+  border: 1px solid var(--gl-edge);
+  border-radius: 14px;
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.38),
+    0 0 46px color-mix(in srgb, var(--gl-accent) 18%, transparent);
+  backdrop-filter: blur(16px) saturate(1.15);
+}
+
+.gluniverse-pf2e-importer .window-header {
+  background: transparent;
+  border-bottom: 1px solid var(--gl-hair);
+  font-family: var(--gl-tech);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.gluniverse-pf2e-importer .window-header .window-title {
+  font-family: var(--gl-tech);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  color: var(--gl-text-dim);
+}
+
+.gluniverse-pf2e-importer .window-content {
+  padding: 0;
+  background: transparent;
+  color: var(--gl-text);
+}
+
+/* ---------------------------------------------------------------------------
+   3. Layout
+   ------------------------------------------------------------------------- */
+.gluni-importer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  padding: 0.85rem 0.9rem 0.9rem;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.gluni-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, 5fr) minmax(330px, 6fr);
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+.gluni-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.3rem;
+}
+
+/* ---------------------------------------------------------------------------
+   4. Header — etched annotations (§4.2)
+   ------------------------------------------------------------------------- */
+.gluni-header {
+  flex: 0 0 auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.65rem;
+}
+
+/* Precision rule under the header (§4.3) */
+.gluni-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 70%, transparent);
+  opacity: 0.7;
+}
+
+.gluni-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.2rem;
+  font-family: var(--gl-tech);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+/* Tick mark preceding the kicker (§4.2) */
+.gluni-kicker::before {
+  content: "";
+  width: 14px;
+  height: 2px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 8px var(--gl-accent);
+}
+
+.gluni-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  border: none;
+  font-family: var(--gl-display);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--gl-accent) 30%, transparent);
+}
+
+.gluni-header h1 i {
+  font-size: 1.05rem;
+  color: var(--gl-accent);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--gl-accent) 60%, transparent));
+}
+
+.gluni-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gl-text-dim);
+}
+
+/* Header metadata block (serial + CMYK registration + data strip) */
+.gluni-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  text-align: right;
+}
+
+.gluni-serial {
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: var(--gl-text-faint);
+}
+
+.gluni-cmyk {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.gluni-cmyk span {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+.gluni-cmyk span:nth-child(1) { background: var(--gl-ink-0); border: 1px solid var(--gl-hair); }
+.gluni-cmyk span:nth-child(2) { background: var(--gl-cyan); }
+.gluni-cmyk span:nth-child(3) { background: #ff66b3; }
+.gluni-cmyk span:nth-child(4) { background: var(--gl-signal); }
+
+/* Barcode-like data strip (§4.5) */
+.gluni-data-strip {
+  width: 96px;
+  height: 8px;
+  background-image: repeating-linear-gradient(90deg,
+    var(--gl-hair) 0 1px, transparent 1px 3px,
+    var(--gl-hair) 3px 4px, transparent 4px 8px,
+    var(--gl-hair) 8px 9px, transparent 9px 11px);
+  opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------------------
+   5. Form fields
+   ------------------------------------------------------------------------- */
+.gluni-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.gluni-field-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.gluni-label,
+.gluni-rule-helper legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--gl-tech);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+/* Triangle bullet preceding labels (§4.2) */
+.gluni-label::before,
+.gluni-rule-helper legend::before {
+  content: "▶";
+  font-size: 0.5rem;
+  color: var(--gl-accent);
+}
+
+.gluni-importer textarea[name="source"] {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 0.6rem 0.7rem;
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.25)),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 8px 22px rgba(0, 0, 0, 0.45);
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.gluni-importer textarea[name="source"]:focus,
+.gluni-importer input:focus,
+.gluni-importer select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--gl-accent) 55%, var(--gl-edge));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 8px 22px rgba(0, 0, 0, 0.45),
+    0 0 0 1px color-mix(in srgb, var(--gl-accent) 45%, transparent),
+    0 0 18px color-mix(in srgb, var(--gl-accent) 28%, transparent);
+}
+
+.gluni-importer select,
+.gluni-importer input[type="text"] {
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: 0.84rem;
+  padding: 0.4rem 0.55rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.18)),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.gluni-importer select option {
+  background: var(--gl-ink-1);
+  color: var(--gl-text);
+}
+
+.gluni-importer input::placeholder,
+.gluni-importer textarea::placeholder {
+  color: var(--gl-text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   6. Buttons — notch geometry + press + sheen (§4.1, §6.2)
+   ------------------------------------------------------------------------- */
+.gluni-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.gluni-importer button {
+  position: relative;
+  flex: 0 0 auto;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-2)), var(--gl-ink-2));
+  border: 1px solid var(--gl-edge);
+  border-radius: 0;
+  /* small notch at top-left (§4.1) */
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+  /* clip-path clips outer box-shadows, so depth rides filter: drop-shadow (§9.1) */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.4));
+  transition: transform 120ms var(--gl-ease),
+    filter var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease);
+}
+
+/* Hover sheen — precision rule sweeps across (§6.2) */
+.gluni-importer button::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 55%, #fff) 50%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gluni-importer button:hover {
+  border-color: color-mix(in srgb, var(--gl-accent) 40%, var(--gl-edge));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 18%, var(--gl-ink-2)), var(--gl-ink-2));
+  filter:
+    drop-shadow(0 5px 12px rgba(0, 0, 0, 0.4))
+    drop-shadow(0 0 12px color-mix(in srgb, var(--gl-accent) 40%, transparent));
+}
+
+.gluni-importer button:hover::after {
+  animation: gl-sheen calc(520ms * var(--gl-mx)) var(--gl-ease);
+}
+
+/* Press (§6.2) */
+.gluni-importer button:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.gluni-importer button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.18) brightness(0.62);
+  opacity: 0.55;
+}
+
+.gluni-importer button:disabled::after { display: none; }
+
+/* Primary buttons — opaque signal decal (§2.4 signal rule) */
+.gluni-primary {
+  color: var(--gl-ink-0) !important;
+  background:
+    linear-gradient(180deg, var(--gl-signal-hot), var(--gl-signal)) !important;
+  border-color: color-mix(in srgb, var(--gl-signal) 60%, #000) !important;
+  text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  filter:
+    drop-shadow(0 5px 12px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 14px color-mix(in srgb, var(--gl-signal) 38%, transparent));
+}
+
+.gluni-primary:hover {
+  filter:
+    brightness(1.06)
+    drop-shadow(0 5px 12px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 18px color-mix(in srgb, var(--gl-signal) 50%, transparent));
+}
+
+.gluni-primary i { color: var(--gl-ink-0); }
+
+.gluni-target {
+  margin-top: 0.1rem;
+}
+
+.gluni-target select[name="targetActor"] {
+  flex: 1 1 160px;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Rule element helper — glass-chip well (§3.2)
+   ------------------------------------------------------------------------- */
+.gluni-rule-helper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.6rem 0.7rem 0.7rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.16)),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.gluni-rule-helper legend {
+  padding: 0 0.35rem;
+}
+
+.gluni-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.gluni-rule-grid select,
+.gluni-rule-grid input {
+  min-width: 0;
+}
+
+.gluni-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------------------------
+   8. Preview panel — glass-panel + chamfer (§3.1, §4.1)
+   ------------------------------------------------------------------------- */
+.gluni-preview {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.9rem 1rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 8%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
+  border: 1px solid var(--gl-edge);
+  border-radius: 14px;
+  /* chamfer top-right (§4.1) */
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.gluni-preview-inner {
+  position: relative;
+}
+
+.gluni-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.gluni-eyebrow::before {
+  content: "";
+  width: 12px;
+  height: 2px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 8px var(--gl-accent);
+}
+
+.gluni-preview-title {
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.gluni-preview-title h2 {
+  margin: 0.2rem 0 0;
+  border: none;
+  font-family: var(--gl-display);
+  font-weight: 800;
+  font-size: 1.45rem;
+  letter-spacing: 0.01em;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--gl-accent) 28%, transparent);
+}
+
+.gluni-preview h3 {
+  margin: 0 0 0.45rem;
+  border: none;
+  font-family: var(--gl-tech);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.gluni-preview h4 {
+  margin: 0.55rem 0 0.25rem;
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+}
+
+/* ---------------------------------------------------------------------------
+   9. Cards — glass with one cut corner + L-bracket (§4.1, §4.2)
+   ------------------------------------------------------------------------- */
+.gluni-preview-card {
+  position: relative;
+  margin: 0.65rem 0;
+  padding: 0.7rem 0.8rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 36%),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 7%, var(--gl-ink-2)), var(--gl-ink-2) 70%);
+  border: 1px solid var(--gl-edge);
+  /* full notch, no radius (§4.1 cards) */
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--gl-accent) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -10px 22px rgba(0, 0, 0, 0.28);
+  animation: gl-card-enter calc(var(--gl-d-move) * var(--gl-mx)) var(--gl-ease) both;
+}
+
+/* L-bracket registration mark, top-left (§4.2) */
+.gluni-preview-card::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--gl-line-strong);
+  border-left: 1px solid var(--gl-line-strong);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.gluni-preview-card h3 { margin-top: 0; }
+
+.gluni-preview-card p:last-child,
+.gluni-preview-card ul:last-child {
+  margin-bottom: 0;
+}
+
+/* Cascade stagger for the parsed cards (§6.2) */
+.gluni-preview-card:nth-of-type(1) { animation-delay: 30ms; }
+.gluni-preview-card:nth-of-type(2) { animation-delay: 70ms; }
+.gluni-preview-card:nth-of-type(3) { animation-delay: 110ms; }
+.gluni-preview-card:nth-of-type(4) { animation-delay: 150ms; }
+.gluni-preview-card:nth-of-type(5) { animation-delay: 190ms; }
+.gluni-preview-card:nth-of-type(6) { animation-delay: 230ms; }
+
+.gluni-ability-row {
+  font-family: var(--gl-tech);
+}
+
+.gluni-ability-row span strong {
+  color: var(--gl-accent);
+}
+
+/* ---------------------------------------------------------------------------
+   10. Stat tables
+   ------------------------------------------------------------------------- */
+.gluni-stat-table {
+  width: 100%;
+  margin: 0 0 0.6rem;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gluni-stat-table th,
+.gluni-stat-table td {
+  padding: 0.32rem 0.55rem;
+  border: 1px solid var(--gl-hair);
+  text-align: left;
+  vertical-align: top;
+}
+
+.gluni-stat-table td {
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+}
+
+.gluni-stat-table th {
+  width: 6.5rem;
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.gluni-automation-table td {
+  font-family: var(--gl-tech);
+  font-size: 0.95rem;
+  color: var(--gl-text-bright);
+}
+
+/* ---------------------------------------------------------------------------
+   11. Chips — glass-chip, top-left notch (§3.2, §4.1)
+   ------------------------------------------------------------------------- */
+.gluni-chip-list,
+.gluni-ability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.gluni-chip,
+.gluni-ability-row span {
+  padding: 0.12rem 0.55rem;
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--gl-text);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 16%, transparent), color-mix(in srgb, var(--gl-accent) 5%, transparent)),
+    var(--gl-ink-2);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 30%, var(--gl-edge));
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* ---------------------------------------------------------------------------
+   12. Notices — signal / hazard ceremony (§4.4)
+   ------------------------------------------------------------------------- */
+.gluni-notice {
+  position: relative;
+  margin: 0.45rem 0;
+  padding: 0.45rem 0.65rem 0.45rem 0.8rem;
+  font-size: 0.82rem;
+  color: var(--gl-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.12)),
+    var(--gl-ink-2);
+  border: 1px solid var(--gl-hair);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+/* edge ribbon */
+.gluni-notice::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+}
+
+.gluni-warning::before {
+  background: repeating-linear-gradient(45deg,
+    var(--gl-ink-0) 0 6px, var(--gl-signal) 6px 12px);
+}
+
+.gluni-error {
+  font-weight: 600;
+  color: var(--gl-text-bright);
+}
+
+.gluni-error::before {
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--gl-hazard) 65%, transparent) 0 6px,
+    transparent 6px 12px);
+}
+
+.gluni-error::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--gl-hazard) 8%, transparent) 0 8px,
+    transparent 8px 16px);
+  pointer-events: none;
+  animation: gl-dread var(--gl-dread) ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   13. Lists
+   ------------------------------------------------------------------------- */
+.gluni-validation-list,
+.gluni-named-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gluni-validation-list li,
+.gluni-named-list li {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--gl-hair);
+  border-radius: 5px;
+}
+
+/* Triangle bullet for named items (§4.2) */
+.gluni-named-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.gluni-named-list li strong::before {
+  content: "▲ ";
+  font-size: 0.55rem;
+  color: var(--gl-accent);
+  vertical-align: middle;
+}
+
+.gluni-named-list span {
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--gl-text-faint);
+}
+
+.gluni-validation-list.gluni-error li {
+  border-color: color-mix(in srgb, var(--gl-hazard) 40%, var(--gl-hair));
+}
+
+.gluni-validation-list.gluni-warning li {
+  border-color: color-mix(in srgb, var(--gl-signal) 35%, var(--gl-hair));
+}
+
+.gluni-muted {
+  color: var(--gl-text-faint);
+}
+
+.gluni-validation-card {
+  --gl-accent: var(--gl-good);
+}
+
+.gluni-validation-card:has(.gluni-error) {
+  --gl-accent: var(--gl-hazard);
+}
+
+/* ---------------------------------------------------------------------------
+   14. Empty preview — blueprint grid + stamp (§4.6, §6.2)
+   ------------------------------------------------------------------------- */
+.gluni-empty-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  height: 100%;
+  text-align: center;
+  color: var(--gl-text-dim);
+}
+
+/* blueprint drafting grid behind the empty hero (§4.6) */
+.gluni-empty-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(80% 80% at 50% 45%, #000, transparent 75%);
+  mask-image: radial-gradient(80% 80% at 50% 45%, #000, transparent 75%);
+  pointer-events: none;
+}
+
+.gluni-empty-preview > * { position: relative; }
+
+.gluni-empty-preview i {
+  font-size: 2.1rem;
+  color: var(--gl-accent);
+  opacity: 0.7;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--gl-accent) 50%, transparent));
+  animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
+}
+
+.gluni-empty-preview h2 {
+  margin: 0;
+  border: none;
+  font-family: var(--gl-tech);
+  font-size: 0.95rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  animation: gl-stamp calc(550ms * var(--gl-mx)) var(--gl-snap) both;
+}
+
+.gluni-empty-preview p {
+  max-width: 24rem;
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+/* ---------------------------------------------------------------------------
+   15. Keyframes (§6.2)
+   ------------------------------------------------------------------------- */
+@keyframes gl-sheen {
+  from { left: -40%; opacity: 0; }
+  20% { opacity: 1; }
+  to { left: 110%; opacity: 0; }
+}
+
+@keyframes gl-card-enter {
+  from { opacity: 0; transform: translate(6px, 8px); }
+  to { opacity: 1; transform: translate(0, 0); }
+}
+
+@keyframes gl-stamp {
+  0% { opacity: 0; transform: scale(1.35); letter-spacing: 0.9em; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); letter-spacing: 0.4em; }
+}
+
+@keyframes gl-breathe {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 1; }
+}
+
+@keyframes gl-dread {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+
+/* ---------------------------------------------------------------------------
+   16. Motion tiers (§6.4)
+   ------------------------------------------------------------------------- */
+.gluniverse-pf2e-importer.gl-motion-cinematic { --gl-mx: 1.4; }
+
+.gluniverse-pf2e-importer.gl-motion-cinematic .gluni-importer button:hover::after {
+  box-shadow: 0 0 28px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+}
+
+/* Reduced tier — kill decorative loops, keep functional transitions short */
+.gluniverse-pf2e-importer.gl-motion-reduced .gluni-preview-card,
+.gluniverse-pf2e-importer.gl-motion-reduced .gluni-empty-preview h2 {
+  animation: none;
+}
+
+.gluniverse-pf2e-importer.gl-motion-reduced .gluni-empty-preview i,
+.gluniverse-pf2e-importer.gl-motion-reduced .gluni-error::after {
+  animation: none;
+}
+
+.gluniverse-pf2e-importer.gl-motion-reduced .gluni-importer button:hover::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gluniverse-pf2e-importer *,
+  .gluniverse-pf2e-importer *::before,
+  .gluniverse-pf2e-importer *::after {
+    animation: none !important;
+    transition-duration: 120ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   17. Responsive
+   ------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .gluni-body {
+    grid-template-columns: 1fr;
+  }
+}

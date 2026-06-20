@@ -1,0 +1,349 @@
+/* =====================================================================
+ * GLUniverse — Active Inventory  ·  Design System Foundation
+ * ---------------------------------------------------------------------
+ * Shared visual language inherited from gluniverse-clocks-and-tracker:
+ *   · Oxanium variable display font (bundled locally, offline-safe)
+ *   · Dark frosted-glass HUD surfaces with layered depth + glow
+ *   · Tactile, springy motion (cubic-bezier overshoot)
+ *
+ * Tokens are namespaced under `.glinv-scope`. Every piece of UI this
+ * module injects into a Tidy 5e sheet is wrapped in `.glinv-scope` so
+ * the dark HUD aesthetic applies regardless of the host sheet's theme.
+ * ===================================================================== */
+
+/* ─── Bundled Font (variable, 200–800) ──────────────────────────────── */
+@font-face {
+    font-family: 'Oxanium';
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+    src: url('../assets/tidy5e-slots/fonts/oxanium/Oxanium-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+        U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Oxanium';
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+    src: url('../assets/tidy5e-slots/fonts/oxanium/Oxanium-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+ * ETCHED GLASS — canonical GL Universe design language (--gl-* tokens)
+ * ---------------------------------------------------------------------
+ * "Liquid glass as the material, Endfield as the drafting layer on top."
+ * These shared tokens are the source of truth; the module-local --glinv-*
+ * tokens below alias onto them so the whole module shifts as one palette.
+ * Ref: GL Universe Design Language Reference ("Etched Glass") v1.0.
+ * ═════════════════════════════════════════════════════════════════════ */
+.glinv-scope {
+    /* ── Ink ramp (surfaces) ── */
+    --gl-ink-0: #02070b;   /* deepest void — scrims, ceremony decks   */
+    --gl-ink-1: #080b11;   /* glass body base — panel terminus        */
+    --gl-ink-2: #0b0f17;   /* inputs, inset wells                     */
+    --gl-ink-3: #161d2c;   /* raised rows                             */
+
+    /* ── Text ── */
+    --gl-text:        #eef1f7;
+    --gl-text-bright: #f3fbff;
+    --gl-text-dim:    #98a2b6;
+    --gl-text-faint:  rgba(243, 251, 255, 0.38);
+
+    /* ── Lines & rims ── */
+    --gl-hair:        rgba(255, 255, 255, 0.08);
+    --gl-edge:        rgba(255, 255, 255, 0.13);
+    --gl-line-strong: rgba(244, 252, 255, 0.55);
+
+    /* ── Fixed semantic accents ── */
+    --gl-signal:     #ffd24a;   /* SIGNAL AMBER — system ceremony, "look here" */
+    --gl-signal-hot: #ffe070;   /* signal peak — flash sweeps, lit digits      */
+    --gl-cyan:       #5eeaff;
+    --gl-hazard:     #ff4a52;   /* unified danger                              */
+    --gl-good:       #5fdb92;
+    --gl-violet:     #b497ff;   /* mystery / hidden                            */
+    --gl-mission:    #37d99a;
+
+    /* ── Dynamic accent channel ──
+     * One variable carries the contextual color. This module's domain accent
+     * is the periwinkle brand tint; ceremony elements use --gl-signal. */
+    --gl-accent: #6b86d6;
+
+    /* ── Holographic ramp (single hero element only) ── */
+    --gl-holo-a: var(--gl-accent);
+    --gl-holo-b: var(--gl-violet);
+    --gl-holo-c: #ff66b3;
+
+    /* ── Typography voices ── */
+    --gl-display: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
+    --gl-tech: 'Bahnschrift', 'Share Tech Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace;
+
+    /* ── Motion ── */
+    --gl-ease:  cubic-bezier(0.16, 1, 0.3, 1);     /* default premium decel   */
+    --gl-snap:  cubic-bezier(0.2, 1.35, 0.22, 1);  /* slight overshoot        */
+    --gl-pop:   cubic-bezier(0.34, 1.56, 0.5, 1);  /* tactile pop             */
+    --gl-exit:  cubic-bezier(0.55, 0, 0.84, 0);    /* sharp accelerated exit  */
+    --gl-d-quick:  180ms;
+    --gl-d-move:   420ms;
+    --gl-d-reveal: 620ms;
+    --gl-d-splash: 720ms;
+    --gl-breathe:  2.6s;
+    --gl-dread:    3.2s;
+
+    /* ── Derived glows (always color-mix, never hand-picked) ── */
+    --gl-accent-glow:  color-mix(in srgb, var(--gl-accent) 45%, transparent);
+    --gl-accent-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
+    --gl-signal-glow:  color-mix(in srgb, var(--gl-signal) 45%, transparent);
+    --gl-signal-bloom: color-mix(in srgb, var(--gl-signal) 18%, transparent);
+}
+
+/* ─── Design Tokens (module-local, aliased onto --gl-*) ─────────────── */
+.glinv-scope {
+    /* Typography */
+    --glinv-font: var(--gl-display);
+
+    /* Ink & surface */
+    --glinv-ink: var(--gl-text);
+    --glinv-muted: var(--gl-text-dim);
+    --glinv-hair: var(--gl-hair);
+    --glinv-edge: var(--gl-edge);
+    --glinv-surface: rgba(18, 22, 33, 0.72);
+    --glinv-surface-2: rgba(26, 34, 51, 0.85);
+    --glinv-well: rgba(0, 0, 0, 0.28);
+
+    /* Accent (periwinkle — primary brand tint = --gl-accent) */
+    --glinv-tint: var(--gl-accent);
+    --glinv-tint-2: #1a2233;
+    --glinv-glow: color-mix(in srgb, var(--gl-accent) 50%, transparent);
+    --glinv-glow-soft: var(--gl-accent-bloom);
+
+    /* Semantic states (unified onto the --gl-* semantic set) */
+    --glinv-good: var(--gl-good);
+    --glinv-good-glow: color-mix(in srgb, var(--gl-good) 45%, transparent);
+    --glinv-warn: var(--gl-signal);
+    --glinv-warn-glow: var(--gl-signal-glow);
+    --glinv-danger: var(--gl-hazard);
+    --glinv-danger-glow: color-mix(in srgb, var(--gl-hazard) 55%, transparent);
+    --glinv-danger-soft: color-mix(in srgb, var(--gl-hazard) 22%, transparent);
+
+    /* Quickdraw / gold highlight (kept warm; harmonized toward signal) */
+    --glinv-gold: #f0c75e;
+    --glinv-gold-glow: rgba(240, 199, 94, 0.5);
+
+    /* Geometry — tuned to sit tight against Tidy's own corner radii */
+    --glinv-radius: 8px;
+    --glinv-radius-sm: 5px;
+    --glinv-radius-pill: 99px;
+
+    /* Chamfer cut size (Etched Glass signature silhouette) */
+    --gl-cut: 12px;
+    --gl-cut-sm: 6px;
+
+    /* Depth */
+    --glinv-shadow-raised:
+        0 18px 48px rgba(0, 0, 0, 0.55),
+        0 2px 0 rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 -10px 24px rgba(0, 0, 0, 0.34),
+        0 0 40px var(--glinv-glow-soft);
+    --glinv-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    --glinv-shadow-chip:
+        0 4px 12px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+    /* Motion */
+    --glinv-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --glinv-ease-spring: cubic-bezier(0.34, 1.56, 0.5, 1);
+    --glinv-ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --glinv-dur: 0.3s;
+    --glinv-dur-pop: 0.5s;
+
+    font-family: var(--glinv-font);
+    color: var(--glinv-ink);
+}
+
+/* ─── Glass Surface Utility ─────────────────────────────────────────── */
+.glinv-glass {
+    position: relative;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 38%),
+        var(--glinv-surface);
+    border: 1px solid var(--glinv-edge);
+    border-radius: var(--glinv-radius);
+    box-shadow: var(--glinv-shadow-raised);
+    backdrop-filter: blur(16px) saturate(1.15);
+    -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* Top sheen + ambient halo, applied to glass containers that opt in. */
+.glinv-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(70% 150% at 50% -50%, var(--glinv-glow-soft), transparent 66%);
+    opacity: 0.9;
+}
+
+/* Gradient text for headline numerals. */
+.glinv-text-gradient {
+    background: linear-gradient(180deg, #fff, #ccd5e8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* ─── Keyframe Library ──────────────────────────────────────────────── */
+
+/* Slot box filling in — springy scale pop. */
+@keyframes glinv-slot-pop {
+    0% { transform: scale(0.2); opacity: 0; }
+    60% { transform: scale(1.18); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+/* Encumbrance / pool bar fill — smooth width grow with a glow flash. */
+@keyframes glinv-bar-flash {
+    0% { box-shadow: 0 0 0 var(--glinv-glow); }
+    50% { box-shadow: 0 0 18px var(--glinv-glow); }
+    100% { box-shadow: 0 0 6px var(--glinv-glow-soft); }
+}
+
+/* Value change indicator rising/falling. */
+@keyframes glinv-float-up {
+    0% { transform: translateY(6px); opacity: 0; }
+    25% { opacity: 1; }
+    100% { transform: translateY(-14px); opacity: 0; }
+}
+@keyframes glinv-float-down {
+    0% { transform: translateY(-6px); opacity: 0; }
+    25% { opacity: 1; }
+    100% { transform: translateY(14px); opacity: 0; }
+}
+
+/* Notch struck into an item — a quick recoil + red flare. */
+@keyframes glinv-notch-strike {
+    0% { transform: scale(1); }
+    20% { transform: scale(1.4) rotate(-8deg); filter: drop-shadow(0 0 6px var(--glinv-danger-glow)); }
+    100% { transform: scale(1) rotate(0); }
+}
+
+/* Item shatter — violent shake then settle. */
+@keyframes glinv-shatter {
+    0% { transform: translate(0, 0) rotate(0); }
+    15% { transform: translate(-2px, 1px) rotate(-3deg); }
+    30% { transform: translate(2px, -1px) rotate(3deg); }
+    45% { transform: translate(-2px, 2px) rotate(-2deg); }
+    60% { transform: translate(2px, -1px) rotate(2deg); }
+    100% { transform: translate(0, 0) rotate(0); }
+}
+
+/* Ammo die stepping down — tumble + shrink to the smaller face. */
+@keyframes glinv-die-step {
+    0% { transform: rotate(0) scale(1); }
+    50% { transform: rotate(180deg) scale(0.78); filter: brightness(1.4); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Dice pool die entering. */
+@keyframes glinv-die-roll {
+    0% { transform: scale(0) rotate(-90deg); opacity: 0; }
+    70% { transform: scale(1.15) rotate(8deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); }
+}
+
+/* Dice pool die discarded — red flare and tumble out. */
+@keyframes glinv-die-discard {
+    0% { transform: scale(1) rotate(0); opacity: 1; }
+    40% { transform: scale(1.2); filter: brightness(1.6) drop-shadow(0 0 8px var(--glinv-danger-glow)); }
+    100% { transform: scale(0.2) rotate(120deg); opacity: 0; }
+}
+
+/* Breathing dread glow for shattered / overburdened states. */
+@keyframes glinv-dread {
+    0%, 100% { box-shadow: 0 0 10px var(--glinv-danger-soft), inset 0 0 12px var(--glinv-danger-soft); }
+    50% { box-shadow: 0 0 26px var(--glinv-danger-glow), inset 0 0 18px var(--glinv-danger-soft); }
+}
+
+/* Quickdraw shimmer sweep. */
+@keyframes glinv-sweep {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(120%); }
+}
+
+/* Soft attention pulse for newly-injected panels. */
+@keyframes glinv-fade-in {
+    0% { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Etched Glass motion vocabulary ────────────────────────────────── */
+
+/* Sheen sweep — the precision rule of light draws across from the leading
+ * edge. Things it crosses light up. Used for active-enter / splash reveal. */
+@keyframes gl-sheen {
+    0% { transform: scaleX(0); opacity: 0; transform-origin: left center; }
+    20% { opacity: 1; }
+    100% { transform: scaleX(1); opacity: 0; transform-origin: left center; }
+}
+
+/* Diagonal wipe — panel reveals via a 45°-edged clip mask sliding in. */
+@keyframes gl-wipe {
+    0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); opacity: 0; }
+    100% { clip-path: polygon(0 0, 140% 0, 100% 100%, 0 100%); opacity: 1; }
+}
+
+/* Cascade stagger — list item enters sliding a few px along the diagonal. */
+@keyframes gl-cascade {
+    0% { opacity: 0; transform: translate(-6px, 4px); }
+    100% { opacity: 1; transform: translate(0, 0); }
+}
+
+/* Stamp — scale-in overshoot for ceremony verdicts (EMPTY / SHATTERED). */
+@keyframes gl-stamp {
+    0% { transform: scale(1.6); opacity: 0; filter: blur(2px); }
+    60% { transform: scale(0.94); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1); }
+}
+
+/* Breathe — idle accent pulse (decorative loop; killed under reduced motion). */
+@keyframes gl-breathe {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+/* Signal flash — a quick signal-amber fill sweep that recedes to outline. */
+@keyframes gl-signal-flash {
+    0% { background-position: -140% 0; }
+    100% { background-position: 140% 0; }
+}
+
+/* Bracket light-up — registration L-bracket brightening to accent. */
+@keyframes gl-bracket-lit {
+    0% { border-color: var(--gl-line-strong); box-shadow: none; }
+    100% { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-accent-glow); }
+}
+
+/* Hero numeral reveal — etched ghost lit by a passing rule (decode). */
+@keyframes gl-numeral-pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    65% { transform: scale(1.14); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+/* ─── Reduced Motion ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .glinv-scope *,
+    .glinv-scope *::before,
+    .glinv-scope *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}

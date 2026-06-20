@@ -1,0 +1,48 @@
+/* ============================================================
+   TRACKER SHEET TAB — the per-PC private trackers tab injected into
+   the PF2e character sheet. Reuses the shared .glct-trk-skin row
+   visuals (defined in hud.css); this only styles the tab's own
+   chrome: the dark backing panel, header, rows host and per-row
+   tools. Scoped to .glct-trk-skin so it never leaks into the sheet.
+   ============================================================ */
+
+/* The tab body itself: let the inner panel own the look; the skin base rule
+   already neutralises padding/background on the section. */
+.glct-trk-skin.glct-trk-tab{padding:0;height:100%;overflow:auto}
+.glct-trk-skin.glct-trk-tab .glct-trk-root{pointer-events:none;height:100%}
+.glct-trk-skin.glct-trk-tab .glct-trk-root > *{pointer-events:auto}
+
+/* Dark glass panel so the white-accent rows read regardless of the PF2e
+   sheet's light/dark theme — mirrors the floating dock's backing. */
+.glct-trk-skin .glct-trk-sheet{
+  margin:8px;border-radius:11px;overflow:hidden;isolation:isolate;position:relative;
+  background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 30%),
+    linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.22)),linear-gradient(160deg,#161d2c,#080b11 72%);
+  border:1px solid var(--edge);
+  box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);
+  color:var(--ink);font:14px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif}
+
+.glct-trk-skin .ts-head{display:flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 10px;
+  border-bottom:1px solid var(--hair);position:relative;z-index:5}
+.glct-trk-skin .ts-title{flex:1;font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#7c869c;font-weight:700}
+.glct-trk-skin .ts-count{font-size:9.5px;color:#5b6478;font-variant-numeric:tabular-nums}
+.glct-trk-skin .ts-add{width:17px;height:17px;border:none;border-radius:4px;cursor:pointer;display:grid;place-items:center;
+  background:rgba(255,255,255,.07);color:#aab4c8;font-size:12px;line-height:1;transition:.15s}
+.glct-trk-skin .ts-add:hover{background:rgba(255,255,255,.16);color:#fff}
+
+.glct-trk-skin .ts-rows{display:flex;flex-direction:column}
+.glct-trk-skin .ts-empty{padding:14px 12px;text-align:center;color:#5b6478;font-size:10px;line-height:1.5}
+
+/* Per-row edit/delete tools — quiet until the row is hovered. */
+.glct-trk-skin .ts-rows .trow .trk-tools{margin-left:auto;display:flex;gap:3px;align-items:center;
+  opacity:0;transition:opacity .15s;flex:none}
+.glct-trk-skin .ts-rows .trow:hover .trk-tools{opacity:1}
+.glct-trk-skin .trk-tools .tk-btn{width:18px;height:18px;border:none;border-radius:4px;cursor:pointer;
+  display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9aa4b8;font-size:9px;line-height:1;transition:.12s;padding:0}
+.glct-trk-skin .trk-tools .tk-btn:hover{background:rgba(255,255,255,.14);color:var(--gl-signal)}
+.glct-trk-skin .trk-tools .tk-btn.danger:hover{background:color-mix(in srgb,var(--gl-hazard) 18%,transparent);color:#ffd9d4}
+
+/* Injected nav button — inherit the sheet's nav sizing; just tint our glyph so
+   it sits comfortably among PF2e's own tab icons. */
+.glct-trk-tab-btn{cursor:pointer}
+.glct-trk-tab-btn > i{pointer-events:none}

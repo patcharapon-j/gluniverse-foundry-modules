@@ -1,0 +1,58 @@
+#gls-critical-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99999;
+}
+
+#gls-critical-overlay canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.gluc-gm-config section {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gluc-gm-config section:last-of-type {
+  border-bottom: none;
+}
+
+.gluc-gm-config h3 {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gluc-gm-config .range-value {
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gluc-actor-config .form-fields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.gluc-actor-config input[type='color'] {
+  width: 3rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.gluc-clear-color {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+.gluc-test-button {
+  margin-right: auto;
+}

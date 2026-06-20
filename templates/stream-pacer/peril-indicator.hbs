@@ -1,0 +1,15 @@
+<div class="stream-pacer-peril-indicator">
+  <div class="peril-ind-icon">
+    <i class="fa-solid fa-skull"></i>
+  </div>
+  <div class="peril-ind-stack">
+    <div class="peril-ind-header">{{header}}</div>
+    <div class="peril-ind-main">{{label}}</div>
+  </div>
+  {{#if isGM}}
+  <button type="button" class="peril-ind-dismiss" data-action="dismiss-peril"
+          title="{{dismissTooltip}}">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
+  {{/if}}
+</div>

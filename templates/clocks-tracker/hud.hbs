@@ -1,0 +1,141 @@
+<div class="hud-root {{#if collapsed}}is-collapsed{{/if}} {{#if shiftMode}}shift-mode{{/if}}">
+
+  {{!-- Upcoming-event badge: tucked above the bar's left edge (by the date),
+        so it never widens the main row. --}}
+  <div class="event-badge" data-action="openCalendar" role="button" tabindex="0"
+       aria-label="{{localize 'GLCT.calendarView.title'}}" title="{{localize 'GLCT.calendarView.title'}}">
+    <span class="events" data-events></span>
+  </div>
+
+  <div class="bar {{#if collapsed}}collapsed{{/if}}" data-bar>
+    <div class="sweep"></div>
+    {{!-- Full-bar weather diorama: a PixiJS layer that washes the active weather
+          across the bar's left edge (screen blend, full strength). The scrim below
+          sits between the diorama and the text — a soft dark/tinted backdrop that
+          keeps the date stack legible under a bright effect. --}}
+    <div class="bar-wx off" data-wxbar></div>
+    <div class="bar-wx-scrim off" data-wxscrim></div>
+    {{!-- Delving diorama: the featured delving-resource's current stage washes the
+          bar's RIGHT edge (behind the turn/resource cell), coexisting with the
+          weather wash on the left. Same Pixi tech; the scrim keeps the text legible. --}}
+    <div class="bar-dx off" data-dxbar></div>
+    <div class="bar-dx-scrim off" data-dxscrim></div>
+    <div class="main">
+
+      <div class="cell grip" title="{{localize 'GLCT.hud.dragHint'}}">
+        <i></i><i></i><i></i>
+      </div>
+
+      <div class="cell pill" title="{{localize 'GLCT.hud.toggleHint'}}">
+        <span class="pring" data-ring></span>
+        <span class="ptxt">
+          <span class="pw" data-watch></span>
+          <span class="pc reelclock" data-reelclock></span>
+          <span class="pd" data-pilldate></span>
+        </span>
+      </div>
+
+      <div class="cell date" data-action="openCalendar" role="button" tabindex="0"
+           title="{{localize 'GLCT.calendarView.title'}}" aria-label="{{localize 'GLCT.calendarView.title'}}">
+        <span class="datestack">
+          <span class="wd" data-wd></span>
+          <span class="dline">
+            <span class="m"><span data-dy></span><sup data-ord></sup> <span data-moshort></span></span>
+            <span class="moon"><span class="shadow" data-moon></span></span>
+            <span class="season" data-season></span>
+          </span>
+          <span class="mo" data-mo></span>
+        </span>
+        {{!-- Weather readout: compact icon · condition · intensity, nested in the
+              date cluster so it reads as part of the left section. The animated
+              diorama is the full-bar layer behind everything; this is just the
+              label + click target. Hidden until weather is enabled + configured. --}}
+        <button type="button" class="wxmini hidden" data-weather data-action="openWeather"
+                aria-label="{{localize 'GLCT.weather.chipHint'}}" title="{{localize 'GLCT.weather.chipHint'}}">
+          <span class="wxmini-ico"><i data-wxicon class="fa-solid fa-cloud"></i></span>
+          <span class="wxmini-text">
+            <span class="wxmini-label" data-wxlabel></span>
+            <span class="wxmini-temp" data-wxtemp></span>
+          </span>
+          <span class="wxmini-haz" data-wxhaz title="{{localize 'GLCT.weather.hazard'}}"><i class="fa-solid fa-skull"></i></span>
+        </button>
+      </div>
+
+      <div class="cell shift-hero" data-shifthero>
+        <span class="sdial" data-dial></span>
+        <span class="sinfo">
+          <span class="name" data-watch></span>
+          <span class="row">
+            <span class="of" data-shiftof></span>
+            <span class="moon"><span class="shadow" data-moon></span></span>
+          </span>
+          {{#if isGM}}
+          <span class="minitime" title="{{localize 'GLCT.hud.gmTimeHint'}}">
+            <span class="mt-clock" data-mtclock></span>
+            <span class="mt-bar"><i data-mtfill></i></span>
+            <span class="mt-rem" data-mtrem></span>
+          </span>
+          {{/if}}
+        </span>
+      </div>
+
+      <div class="cell clock-cell">
+        <span class="clock"><span class="pulse"></span><span class="reelclock" data-reelclock></span></span>
+        <span class="shifts" data-shifts></span>
+      </div>
+
+      <div class="cell meter">
+        <div class="track" data-track></div>
+        <span class="rem"><span data-rem></span></span>
+        <span class="missline" data-missline>
+          <span class="mc-ico"><i class="fa-solid fa-bullseye goal-ic"></i><i class="fa-solid fa-hourglass-half dl-ic"></i></span>
+          <span class="mc-reelwrap"><span class="mc-reel" data-missreel></span><span class="mc-unit" data-missunit></span></span>
+          <span class="mc-chip" data-misschip><i class="fa-solid fa-flag-checkered goal-ic"></i><i class="fa-solid fa-hourglass-end dl-ic"></i> <span data-misslabel></span></span>
+        </span>
+      </div>
+
+      {{!-- Delving cell: shown only while delving is live (CSS hides the clock /
+            meter / shift hero then). Turn counter + the featured resource's stage,
+            with inline GM controls; secondary resources show as compact chips. --}}
+      <div class="cell delving-cell" data-delvingcell>
+        <div class="dx-turn">
+          <span class="dx-turn-num" data-dxturn>0</span>
+          <span class="dx-turn-lbl" data-dxturnlbl></span>
+        </div>
+        <div class="dx-featured" data-dxfeatured title="{{localize 'GLCT.delving.featuredHint'}}">
+          <div class="dx-stagebadge"><i data-dxicon class="fa-solid fa-fire"></i><span class="dx-stagename" data-dxstage></span></div>
+          <div class="dx-poolval">
+            <button type="button" class="dx-stagestep" data-dxstageless aria-label="{{localize 'GLCT.delving.stageDown'}}" title="{{localize 'GLCT.delving.stageDown'}}"><i class="fa-solid fa-angle-left"></i></button>
+            <span class="dx-dice" data-dxdice title="{{localize 'GLCT.delving.diceHint'}}"><b data-dxcur>0</b><i data-dxsize>d6</i></span>
+            <button type="button" class="dx-stagestep" data-dxstagemore aria-label="{{localize 'GLCT.delving.stageUp'}}" title="{{localize 'GLCT.delving.stageUp'}}"><i class="fa-solid fa-angle-right"></i></button>
+          </div>
+        </div>
+        <div class="dx-chips" data-dxchips></div>
+      </div>
+
+    </div>
+  </div>
+
+  {{#if isGM}}
+  <div class="gmwrap" data-gmwrap>
+    <div class="gmdock">
+      <button type="button" class="c" data-step="stretch" data-action="advance">{{localize 'GLCT.controls.advanceStretch'}}</button>
+      <button type="button" class="c" data-step="hour"    data-action="advance">{{localize 'GLCT.controls.advanceHour'}}</button>
+      <button type="button" class="c" data-step="shift"   data-action="advance">{{localize 'GLCT.controls.advanceShift'}}</button>
+      <button type="button" class="c" data-step="day"     data-action="advance">{{localize 'GLCT.controls.advanceDay'}}</button>
+      <button type="button" class="c sep" data-action="nextShift"><i class="fa-solid fa-forward-step"></i> {{localize 'GLCT.shifts.0'}}</button>
+      <button type="button" class="c sep ico" data-action="setTime" aria-label="{{localize 'GLCT.controls.setTime'}}" title="{{localize 'GLCT.controls.setTime'}}"><i class="fa-solid fa-stopwatch"></i></button>
+      <button type="button" class="c sep mission" data-action="openMission" data-missionbtn title="{{localize 'GLCT.controls.missionToggle'}}"><i class="fa-solid fa-bullseye goal-ic"></i><i class="fa-solid fa-hourglass-half dl-ic"></i> {{localize 'GLCT.controls.mission'}}<b class="cnt" data-missioncount></b></button>
+      <button type="button" class="c sep mode" data-action="toggleShiftMode" data-modebtn title="{{localize 'GLCT.controls.shiftModeToggle'}}"><i class="fa-solid fa-circle-half-stroke"></i> <span data-modetext></span></button>
+      <button type="button" class="c sep glitch" data-action="toggleGlitch" data-glitchbtn title="{{localize 'GLCT.controls.glitchToggle'}}"><i class="fa-solid fa-wave-square"></i> {{localize 'GLCT.controls.glitch'}}</button>
+      {{!-- Delving controls — hidden unless the delving feature is enabled. The
+            Pass-Turn / New-Delve buttons only appear once delving is switched on. --}}
+      <button type="button" class="c sep delving-ctl pass" data-action="passTurn" data-passbtn title="{{localize 'GLCT.delving.controls.passHint'}}"><i class="fa-solid fa-forward"></i> <span data-passlbl></span></button>
+      <button type="button" class="c delving-ctl roll" data-action="rollPool" title="{{localize 'GLCT.delving.controls.rollHint'}}"><i class="fa-solid fa-dice"></i> {{localize 'GLCT.delving.controls.roll'}}</button>
+      <button type="button" class="c delving-ctl ico" data-action="resetDelve" title="{{localize 'GLCT.delving.controls.reset'}}"><i class="fa-solid fa-rotate-left"></i></button>
+      <button type="button" class="c sep delving-toggle" data-action="toggleDelving" data-delvebtn title="{{localize 'GLCT.delving.controls.toggleHint'}}"><i class="fa-solid fa-dungeon"></i> <span data-delvetext></span></button>
+      <button type="button" class="c delving-toggle ico" data-action="openDelving" title="{{localize 'GLCT.delving.controls.edit'}}"><i class="fa-solid fa-sliders"></i></button>
+    </div>
+  </div>
+  {{/if}}
+</div>

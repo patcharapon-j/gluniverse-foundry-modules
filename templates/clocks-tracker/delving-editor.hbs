@@ -1,0 +1,43 @@
+<div class="glct-delveditor">
+
+  <section class="dx-ed-top">
+    <div class="dx-ed-grid">
+      <label>{{localize 'GLCT.delving.editor.turnCount'}}
+        <input type="number" min="1" max="99" data-turncount>
+      </label>
+      <label>{{localize 'GLCT.delving.editor.turnUnit'}}
+        <select data-turnunit></select>
+      </label>
+      <label>{{localize 'GLCT.delving.editor.turnLabel'}}
+        <input type="text" maxlength="24" data-turnlabel>
+      </label>
+      <label title="{{localize 'GLCT.delving.editor.weatherEveryHint'}}">{{localize 'GLCT.delving.editor.weatherEvery'}}
+        <input type="number" min="0" max="99" data-weatherevery>
+      </label>
+    </div>
+    <p class="dx-ed-hint" data-turnhint></p>
+  </section>
+
+  <section class="dx-ed-presets">
+    <select data-presetsel></select>
+    <button type="button" data-action="loadPreset"><i class="fa-solid fa-wand-magic-sparkles"></i> {{localize 'GLCT.delving.editor.loadPreset'}}</button>
+    <span class="spacer"></span>
+    <button type="button" data-action="importJson"><i class="fa-solid fa-file-import"></i> {{localize 'GLCT.editor.import'}}</button>
+    <button type="button" data-action="exportJson"><i class="fa-solid fa-file-export"></i> {{localize 'GLCT.editor.export'}}</button>
+  </section>
+
+  <div class="dx-ed-main">
+    <div class="dx-ed-resources" data-resources></div>
+    <aside class="dx-ed-side">
+      <div class="dx-ed-pvhost" data-preview></div>
+      <div class="dx-ed-pvlabel" data-previewlabel></div>
+    </aside>
+  </div>
+
+  <footer class="dx-ed-foot">
+    <button type="button" data-action="addResource"><i class="fa-solid fa-plus"></i> {{localize 'GLCT.delving.editor.addResource'}}</button>
+    <span class="spacer"></span>
+    <button type="button" class="primary" data-action="saveDelving"><i class="fa-solid fa-floppy-disk"></i> {{localize 'GLCT.delving.editor.save'}}</button>
+  </footer>
+
+</div>

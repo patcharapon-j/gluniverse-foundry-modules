@@ -170,17 +170,30 @@
 }
 .gls-fm-list { display: flex; flex-direction: column; gap: 10px; }
 
-.gls-fm-row {
+.gls-fm-section {
   --gl-accent: var(--gl-cyan);
+  animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
+  overflow: hidden;
+}
+.gls-fm-section.is-on { --gl-accent: var(--gl-good); }
+.gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
+
+.gls-fm-row {
   display: grid;
   grid-template-columns: 42px 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
 }
-.gls-fm-row.is-on { --gl-accent: var(--gl-good); }
-.gls-fm-row.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
+
+/* Feature body (settings + editors) — revealed when the feature is enabled. */
+.gls-sec-body {
+  display: none;
+  padding: 4px 14px 14px 14px;
+  margin: 2px 14px 0 14px;
+  border-top: 1px solid var(--gl-hair);
+}
+.gls-fm-section.is-on .gls-sec-body { display: block; }
 
 .gls-fm-icon {
   display: grid;
@@ -265,3 +278,68 @@
   border-top: 1px solid var(--gl-hair);
 }
 .gls-fm-note { font-size: 11px; color: var(--gl-text-faint); }
+
+/* ---- Control Center: settings controls inside a feature section ---- */
+
+/* Compact switch variant for boolean settings */
+.gls-switch-sm { padding: 2px; }
+.gls-switch-sm .gls-switch-track { width: 40px; height: 21px; }
+.gls-switch-sm .gls-switch-thumb { width: 15px; height: 15px; }
+.gls-switch-sm.is-on .gls-switch-thumb { left: 22px; }
+
+.gls-set-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--gl-hair);
+}
+.gls-set-row:last-of-type { border-bottom: none; }
+.gls-set-name { font-weight: 600; font-size: 12.5px; color: var(--gl-text-bright); }
+.gls-set-hint {
+  font-size: 10.5px;
+  color: var(--gl-text-dim);
+  line-height: 1.4;
+  margin-top: 2px;
+  max-width: 52ch;
+}
+.gls-set-ctl { display: flex; align-items: center; justify-content: flex-end; }
+
+.gls-input {
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: 8px;
+  color: var(--gl-text-bright);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  min-width: 120px;
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gls-input:focus {
+  outline: none;
+  border-color: var(--gl-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gl-accent) 22%, transparent);
+}
+.gls-input:disabled { opacity: 0.45; cursor: not-allowed; }
+.gls-select { cursor: pointer; }
+.gls-range { display: flex; align-items: center; gap: 10px; }
+.gls-range input[type="range"] { min-width: 140px; padding: 0; accent-color: var(--gl-accent); }
+.gls-range-val {
+  font-family: var(--gl-tech);
+  font-size: 11px;
+  color: var(--gl-accent);
+  min-width: 2.5ch;
+  text-align: right;
+}
+
+.gls-editor-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gls-editor-btn { font-size: 11.5px; padding: 6px 12px; }
+
+/* Reload affordance highlight after an enable toggle that needs a reload. */
+.gls-needs-reload .gls-fm-note { color: var(--gl-signal); }
+.gls-needs-reload .gls-btn-accent {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--gl-accent) 50%, transparent);
+}

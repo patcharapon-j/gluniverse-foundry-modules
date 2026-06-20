@@ -1,0 +1,82 @@
+name: Release
+
+# Manually-triggered release, mirroring the standard Foundry VTT module flow.
+# Run it from the Actions tab → "Release" → "Run workflow", entering the version
+# (e.g. 1.1.0). It stamps module.json, builds module.zip, and publishes a GitHub
+# release whose assets Foundry can install/update from.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.1.0 — no leading 'v')"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as a pre-release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve identifiers
+        id: vars
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "manifest=${REPO_URL}/releases/latest/download/module.json" >> "$GITHUB_OUTPUT"
+          echo "download=${REPO_URL}/releases/download/v${VERSION}/module.zip" >> "$GITHUB_OUTPUT"
+          echo "url=${REPO_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp module.json
+        run: |
+          node - <<'EOF'
+          const fs = require("fs");
+          const m = JSON.parse(fs.readFileSync("module.json", "utf8"));
+          m.version = "${{ steps.vars.outputs.version }}";
+          m.url = "${{ steps.vars.outputs.url }}";
+          m.manifest = "${{ steps.vars.outputs.manifest }}";
+          m.download = "${{ steps.vars.outputs.download }}";
+          fs.writeFileSync("module.json", JSON.stringify(m, null, 2) + "\n");
+          console.log(`Stamped module.json → v${m.version}`);
+          EOF
+
+      - name: Build module.zip
+        run: |
+          # Foundry expects module.json at the zip root. Bundle only the files the
+          # module needs at runtime; omit repo/dev tooling.
+          zip -r module.zip \
+            module.json \
+            scripts \
+            styles \
+            lang \
+            templates \
+            assets \
+            packs \
+            README.md \
+            -x '*/.DS_Store' \
+            -x '.git/*'
+          echo "--- module.zip contents (top level) ---"
+          unzip -l module.zip | head -n 40
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: GLUniverse Suite ${{ steps.vars.outputs.version }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            module.json
+            module.zip

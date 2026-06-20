@@ -1,0 +1,19 @@
+{{!-- Tracker dock: a frameless glass panel. The header + an empty rows host;
+      the per-tracker rows are built imperatively in TrackerHud._buildRows so
+      value/roll animations can mutate the DOM without a full re-render. --}}
+<div class="glct-trk-root">
+  <div class="trk-dock {{#if compact}}compact{{/if}}" data-dock>
+    <div class="trk-head" data-drag>
+      <span class="dh-grip"><i></i><i></i><i></i></span>
+      <span class="dh-title">{{localize 'GLCT.tracker.title'}}</span>
+      <span class="dh-count" data-count></span>
+      {{#if isGM}}
+      <button type="button" class="dh-add" data-action="addTracker" title="{{localize 'GLCT.tracker.add'}}">+</button>
+      {{/if}}
+    </div>
+    <div class="trk-rows" data-rows></div>
+    {{#if isGM}}
+    <div class="trk-empty" data-empty>{{localize 'GLCT.tracker.emptyHint'}}</div>
+    {{/if}}
+  </div>
+</div>

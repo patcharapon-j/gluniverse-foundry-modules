@@ -1,0 +1,702 @@
+/* ═══════════════════════════════════════════
+   GLUniverse Stage - Comms / Call-In Overlay
+   Themed portrait cards stacked on a screen edge.
+   ═══════════════════════════════════════════ */
+
+/* Match the gluniverse-clocks-and-tracker module's typeface (Oxanium). Imported
+   here so the comms overlay looks right even without that module installed; when
+   it IS installed we additionally inherit its exact --clock-font value below. */
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&display=swap');
+
+/* Shared comms font: use the clock module's variable when present, else our
+   own Oxanium stack. */
+.gluniverse-comms-overlay,
+.glstage-comms-tab {
+    --comms-font: var(--clock-font, "Oxanium", "Segoe UI", system-ui, sans-serif);
+}
+
+/* ── Overlay container (mounted in #interface, below all UI) ── */
+
+.gluniverse-comms-overlay {
+    position: fixed;
+    /* Full viewport height so the stack can be vertically centred. */
+    top: 0;
+    bottom: 0;
+    width: var(--comms-width, 170px);
+    /* z-index 1: above the canvas, below all Foundry UI/HUD — same layer as
+       the stage. pointer-events: none keeps the UI underneath clickable. */
+    z-index: 1;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+/* edge-right clears Foundry's right sidebar so cards stay visible on the canvas
+   (the overlay sits below the sidebar in z-order). --sidebar-width is provided
+   by Foundry v13+; the 0px fallback keeps the original behaviour everywhere it
+   isn't defined, so this can never regress. The edge offset is configurable. */
+.gluniverse-comms-overlay.edge-right {
+    right: calc(var(--sidebar-width, 0px) + var(--comms-edge-offset, 18px));
+}
+.gluniverse-comms-overlay.edge-left  {
+    left: var(--comms-edge-offset, 14px);
+}
+
+.gluniverse-comms-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* The stack is absolutely positioned within the full-height overlay. How it
+   anchors vertically is set by the valign-* class on the overlay; --comms-voffset
+   is the offset relative to that anchor (px/vh fed in by updateLayout). */
+.glcomms-cards {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: flex-end;
+}
+.gluniverse-comms-overlay.edge-left .glcomms-cards { align-items: flex-start; }
+
+/* Centred (default): the stack's own centre sits at 50% (translateY(-50%)), so a
+   single card is dead-centre and the group grows symmetrically; the offset
+   nudges it up (negative) or down (positive). */
+.gluniverse-comms-overlay.valign-centered .glcomms-cards {
+    top: 50%;
+    transform: translateY(calc(-50% + var(--comms-voffset, 0px)));
+}
+/* From the top: the offset is the gap below the top edge. */
+.gluniverse-comms-overlay.valign-top .glcomms-cards {
+    top: var(--comms-voffset, 0px);
+}
+/* From the bottom: the offset is the gap above the bottom edge; the stack grows
+   upward from there. */
+.gluniverse-comms-overlay.valign-bottom .glcomms-cards {
+    bottom: var(--comms-voffset, 0px);
+}
+
+/* ── Card ── */
+
+.glcomms-card {
+    position: relative;
+    width: var(--comms-width, 170px);
+    transform-origin: center center;
+    transition: filter 0.35s ease, opacity 0.35s ease;
+    /* Accent colour driven by the active theme, overridden per-actor by tint. */
+    --comms-glow: rgba(120, 220, 255, 0.55);
+    /* Rim-light colour follows the actor tint, falling back to cool cyan. */
+    --comms-rim-color: var(--comms-tint, rgba(150, 226, 255, 0.95));
+}
+
+.glcomms-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #05080c;
+}
+
+.glcomms-portrait-wrap {
+    position: absolute;
+    inset: 0;
+    /* Subtle outer edge in the rim colour for separation against the frame.
+       drop-shadow respects the artwork's alpha (no-ops on opaque images). */
+    filter:
+        drop-shadow(0 0 3px color-mix(in srgb, var(--comms-rim-color) 45%, transparent))
+        drop-shadow(0 -1px 1px color-mix(in srgb, var(--comms-rim-color) 70%, transparent));
+}
+
+.glcomms-portrait {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    transform: var(--gp-transform, none);
+    transform-origin: center center;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Inner rim light: a colour fill masked by the actor's own silhouette so the
+   glow lands ON the art (not an outline), brightest along the top edge and
+   fading inward — reads as backlight wrapping onto the figure. The mask and
+   transform match the portrait exactly so they stay aligned through framing. */
+.glcomms-rim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transform: var(--gp-transform, none);
+    transform-origin: center center;
+    -webkit-mask: var(--portrait-src) top center / cover no-repeat;
+    mask: var(--portrait-src) top center / cover no-repeat;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--comms-rim-color) 92%, white) 0%,
+        color-mix(in srgb, var(--comms-rim-color) 55%, transparent) 14%,
+        transparent 36%
+    );
+    mix-blend-mode: screen;
+    opacity: 0.9;
+    filter: blur(1.5px);
+}
+
+.glcomms-fx {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* ── Name plate ── */
+
+.glcomms-name {
+    margin-top: 5px;
+    align-self: center;
+    max-width: 100%;
+    padding: 3px 10px;
+    font-family: var(--comms-font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 4px;
+}
+
+/* ── Status badge ── */
+
+.glcomms-status {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    z-index: 8; /* stay above CRT beam/vignette */
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    font-family: var(--comms-font);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 3px;
+}
+
+.glcomms-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.glcomms-status-text::after { content: attr(data-live); }
+.glcomms-connecting .glcomms-status-text::after { content: attr(data-connecting); }
+
+.glcomms-card:not(.glcomms-connecting) .glcomms-status-dot {
+    animation: glcomms-pulse 2s ease-in-out infinite;
+}
+.glcomms-connecting .glcomms-status-dot {
+    animation: glcomms-blink 0.5s steps(1) infinite;
+}
+@keyframes glcomms-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes glcomms-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+/* ── Speaking / dimmed ── */
+
+.glcomms-card.dimmed { opacity: 0.55; filter: saturate(0.55) brightness(0.82); }
+
+/* ── Active caller: light up the card + a glowing halo behind it ── */
+.glcomms-card.speaking { z-index: 2; }
+.glcomms-card.speaking .glcomms-frame { filter: brightness(1.14) saturate(1.1); }
+.glcomms-card.speaking::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+    z-index: -1;
+    border-radius: 18px;
+    background: radial-gradient(closest-side, var(--comms-glow), transparent 78%);
+    filter: blur(6px);
+    pointer-events: none;
+    animation: glcomms-halo 2s ease-in-out infinite;
+}
+@keyframes glcomms-halo {
+    0%, 100% { opacity: 0.6; transform: scale(0.98); }
+    50%      { opacity: 1;   transform: scale(1.02); }
+}
+
+/* ── Shared FX primitives (shown/hidden per theme) ── */
+
+/* Dark CRT scanlines that read clearly over any image (multiply darkens the
+   gaps between scan rows). Tighter, denser lines than a subtle overlay. */
+.glcomms-fx-scanlines {
+    opacity: 0;
+    z-index: 3;
+    mix-blend-mode: multiply;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.0) 0px,
+        rgba(0, 0, 0, 0.0) 1px,
+        rgba(0, 0, 0, 0.45) 2px,
+        rgba(0, 0, 0, 0.45) 3px
+    );
+    background-size: 100% 3px;
+    animation: glcomms-scan 8s linear infinite;
+}
+@keyframes glcomms-scan { from { background-position: 0 0; } to { background-position: 0 120px; } }
+
+.glcomms-fx-grain {
+    opacity: 0;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+    animation: glcomms-grain 0.55s steps(3) infinite;
+}
+@keyframes glcomms-grain {
+    0%   { transform: translate(0, 0); }
+    33%  { transform: translate(-3%, 2%); }
+    66%  { transform: translate(2%, -2%); }
+    100% { transform: translate(0, 0); }
+}
+
+.glcomms-fx-tint { opacity: 0; }
+.glcomms-fx-glow { opacity: 0; }
+
+/* ═══════════════════════════════════════════
+   Theme: Sci-fi Radio  (cyan/amber hologram)
+   ═══════════════════════════════════════════ */
+
+.theme-scifi { --comms-glow: rgba(90, 220, 255, 0.6); }
+.theme-scifi .glcomms-frame {
+    border: 1px solid rgba(80, 220, 255, 0.55);
+    box-shadow: 0 0 12px rgba(40, 180, 230, 0.35), inset 0 0 24px rgba(0, 40, 60, 0.6);
+    background: #02080c;
+    animation: glcomms-scifi-idle 6s ease-in-out infinite;
+}
+.theme-scifi .glcomms-portrait { filter: contrast(1.05) brightness(1.02) saturate(0.92) hue-rotate(-6deg); }
+.theme-scifi .glcomms-fx-tint {
+    opacity: 1;
+    mix-blend-mode: screen;
+    background: linear-gradient(180deg, rgba(40, 200, 255, 0.18), rgba(0, 80, 120, 0.10) 60%, rgba(255, 170, 60, 0.10));
+}
+.theme-scifi .glcomms-fx-scanlines { opacity: 0.85; }
+.theme-scifi .glcomms-fx-grain { opacity: 0.16; }
+
+/* CRT screen: curved-glass vignette + a bright scan beam sweeping down the
+   portrait, so it clearly reads as a live transmission feed. */
+.theme-scifi .glcomms-frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    background:
+        radial-gradient(125% 125% at 50% 50%, transparent 58%, rgba(0, 8, 14, 0.65) 100%),
+        linear-gradient(rgba(90, 220, 255, 0.05), rgba(90, 220, 255, 0.05));
+}
+.theme-scifi .glcomms-frame::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -25%;
+    height: 22%;
+    z-index: 5;
+    pointer-events: none;
+    background: linear-gradient(
+        rgba(170, 245, 255, 0) 0%,
+        rgba(170, 245, 255, 0.18) 45%,
+        rgba(170, 245, 255, 0.28) 50%,
+        rgba(170, 245, 255, 0.18) 55%,
+        rgba(170, 245, 255, 0) 100%
+    );
+    mix-blend-mode: screen;
+    animation: glcomms-crt-beam 3.4s linear infinite;
+}
+@keyframes glcomms-crt-beam {
+    0%   { top: -25%; opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 120%; opacity: 0; }
+}
+.theme-scifi .glcomms-fx-glow {
+    opacity: 1;
+    background:
+        radial-gradient(120% 60% at 50% 0%, rgba(80, 220, 255, 0.14), transparent 70%),
+        radial-gradient(100% 50% at 50% 100%, rgba(0, 0, 0, 0.45), transparent 60%);
+}
+.theme-scifi .glcomms-name {
+    color: #bfefff;
+    background: rgba(4, 24, 34, 0.85);
+    border: 1px solid rgba(80, 220, 255, 0.35);
+    text-shadow: 0 0 6px rgba(80, 220, 255, 0.5);
+    font-family: var(--comms-font);
+}
+.theme-scifi .glcomms-status {
+    color: #061a22;
+    background: rgba(80, 220, 255, 0.88);
+    box-shadow: 0 0 8px rgba(80, 220, 255, 0.5);
+}
+.theme-scifi .glcomms-status-dot { background: #06303c; }
+
+@keyframes glcomms-scifi-idle {
+    0%, 47%, 53%, 100% { opacity: 1; }
+    49% { opacity: 0.86; }
+    51% { opacity: 0.93; }
+}
+
+/* Speaking */
+.glcomms-card.theme-scifi.speaking .glcomms-frame {
+    border-color: rgba(140, 240, 255, 0.95);
+    animation: glcomms-scifi-speak 1.4s ease-in-out infinite;
+}
+@keyframes glcomms-scifi-speak {
+    0%, 100% { box-shadow: 0 0 14px rgba(80, 220, 255, 0.5), inset 0 0 24px rgba(0, 60, 90, 0.6); }
+    50% { box-shadow: 0 0 26px rgba(120, 240, 255, 0.8), inset 0 0 24px rgba(0, 80, 120, 0.6); }
+}
+
+/* Connect — signal acquire flicker */
+.glcomms-card.theme-scifi.glcomms-connecting .glcomms-frame { animation: glcomms-scifi-connect 1.1s steps(1) 1; }
+.glcomms-card.theme-scifi.glcomms-connecting .glcomms-status {
+    color: #2a1500;
+    background: rgba(255, 170, 60, 0.9);
+    box-shadow: 0 0 8px rgba(255, 170, 60, 0.6);
+}
+@keyframes glcomms-scifi-connect {
+    0%  { opacity: 0; }
+    10% { opacity: 0.6; }
+    15% { opacity: 0.1; }
+    25% { opacity: 0.9; }
+    30% { opacity: 0.2; }
+    45% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+/* Hangup — static burst + CRT collapse */
+.glcomms-card.theme-scifi.glcomms-leaving { animation: glcomms-scifi-hangup 0.5s ease-in forwards; }
+@keyframes glcomms-scifi-hangup {
+    0%   { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+    30%  { opacity: 1; transform: scaleY(1.02); filter: brightness(2) contrast(2); }
+    65%  { opacity: 0.9; transform: scaleY(0.04); filter: brightness(3); }
+    100% { opacity: 0; transform: scaleY(0.01); filter: brightness(0); }
+}
+
+/* ═══════════════════════════════════════════
+   Theme: Fantasy Ethereal  (arcane sending)
+   ═══════════════════════════════════════════ */
+
+.theme-ethereal { --comms-glow: rgba(190, 150, 255, 0.62); }
+.theme-ethereal .glcomms-frame {
+    border: 1px solid rgba(200, 170, 255, 0.5);
+    border-radius: 14px;
+    box-shadow: 0 0 18px rgba(160, 120, 255, 0.4), inset 0 0 30px rgba(60, 30, 110, 0.4);
+    background: #0a0716;
+    animation: glcomms-ethereal-float 7s ease-in-out infinite;
+}
+.theme-ethereal .glcomms-portrait { filter: saturate(1.05) brightness(1.05) contrast(0.98); }
+.theme-ethereal .glcomms-fx-tint {
+    opacity: 1;
+    mix-blend-mode: screen;
+    background: linear-gradient(180deg, rgba(180, 140, 255, 0.20), rgba(120, 200, 255, 0.10) 55%, rgba(255, 200, 240, 0.12));
+}
+.theme-ethereal .glcomms-fx-glow {
+    opacity: 1;
+    background:
+        radial-gradient(120% 80% at 50% 0%, rgba(190, 150, 255, 0.22), transparent 70%),
+        radial-gradient(80% 60% at 50% 110%, rgba(120, 200, 255, 0.18), transparent 60%);
+    animation: glcomms-ethereal-shimmer 6s ease-in-out infinite;
+}
+.theme-ethereal .glcomms-name {
+    color: #ecdcff;
+    background: rgba(28, 16, 48, 0.82);
+    border: 1px solid rgba(200, 170, 255, 0.4);
+    border-radius: 10px;
+    text-shadow: 0 0 8px rgba(190, 150, 255, 0.6);
+}
+.theme-ethereal .glcomms-status {
+    color: #1a0f2e;
+    background: rgba(200, 170, 255, 0.85);
+    box-shadow: 0 0 10px rgba(190, 150, 255, 0.6);
+    border-radius: 8px;
+}
+.theme-ethereal .glcomms-status-dot { background: #3a1f5e; }
+
+@keyframes glcomms-ethereal-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+}
+@keyframes glcomms-ethereal-shimmer {
+    0%, 100% { opacity: 0.8; filter: hue-rotate(0deg); }
+    50% { opacity: 1; filter: hue-rotate(22deg); }
+}
+
+/* Speaking */
+.glcomms-card.theme-ethereal.speaking .glcomms-frame {
+    border-color: rgba(225, 200, 255, 0.95);
+    box-shadow: 0 0 30px rgba(190, 150, 255, 0.7), inset 0 0 30px rgba(80, 40, 140, 0.5);
+}
+
+/* Connect — coalescing shimmer */
+.glcomms-card.theme-ethereal.glcomms-connecting .glcomms-frame { animation: glcomms-ethereal-connect 1.1s ease-out 1; }
+@keyframes glcomms-ethereal-connect {
+    0%   { opacity: 0; filter: blur(14px) brightness(1.8); transform: scale(1.08); }
+    60%  { opacity: 1; filter: blur(3px) brightness(1.2); transform: scale(1.0); }
+    100% { opacity: 1; filter: blur(0) brightness(1); transform: scale(1); }
+}
+
+/* Hangup — dissolve into motes */
+.glcomms-card.theme-ethereal.glcomms-leaving { animation: glcomms-ethereal-hangup 0.6s ease-in forwards; }
+@keyframes glcomms-ethereal-hangup {
+    0%   { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+    100% { opacity: 0; filter: blur(10px) brightness(1.5); transform: translateY(-12px) scale(0.96); }
+}
+
+/* ═══════════════════════════════════════════
+   Theme: Minimal
+   ═══════════════════════════════════════════ */
+
+.theme-minimal { --comms-glow: rgba(255, 215, 100, 0.5); }
+.theme-minimal .glcomms-frame {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    background: #111;
+}
+.theme-minimal .glcomms-fx-glow {
+    opacity: 1;
+    background: radial-gradient(100% 60% at 50% 100%, rgba(0, 0, 0, 0.4), transparent 60%);
+}
+.theme-minimal .glcomms-name {
+    color: #eee;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.theme-minimal .glcomms-status { color: #06210f; background: rgba(120, 220, 140, 0.9); }
+.theme-minimal .glcomms-status-dot { background: #0a3; }
+
+.glcomms-card.theme-minimal.speaking .glcomms-frame {
+    border-color: rgba(255, 215, 100, 0.7);
+    box-shadow: 0 0 16px rgba(255, 215, 100, 0.5);
+}
+.glcomms-card.theme-minimal.glcomms-connecting .glcomms-frame { animation: glcomms-fade-in 0.4s ease; }
+.glcomms-card.theme-minimal.glcomms-leaving { animation: glcomms-fade-out 0.3s ease forwards; }
+@keyframes glcomms-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes glcomms-fade-out { from { opacity: 1; } to { opacity: 0; transform: scale(0.97); } }
+
+/* ═══════════════════════════════════════════
+   Per-actor / per-campaign TINT
+   Drives the whole card like a primary theme colour — border, glow, name
+   badge, status, scan beam — and grades the portrait into a rich, cinematic
+   duotone (not a flat wash). Placed last so it overrides theme rules.
+   ═══════════════════════════════════════════ */
+
+.glcomms-card.has-tint { --comms-glow: var(--comms-tint); }
+
+/* Portrait: lift contrast/saturation so the graded tint reads deep and rich. */
+.glcomms-card.has-tint .glcomms-portrait {
+    filter: contrast(1.12) brightness(1.05) saturate(1.14);
+}
+
+/* Graded tint kept light (~25%) so the portrait's own colours read through —
+   it's a colour cast, not a wash. The badges/border/glow stay fully tinted. */
+.glcomms-card.has-tint .glcomms-fx-tint {
+    opacity: 0.25;
+    mix-blend-mode: color;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--comms-tint) 72%, white) 0%,
+        var(--comms-tint) 42%,
+        color-mix(in srgb, var(--comms-tint) 72%, black) 100%
+    );
+}
+/* A gentle soft-light pass adds filmic depth/sheen on top of the colour grade. */
+.glcomms-card.has-tint .glcomms-fx-glow {
+    opacity: 0.7;
+    mix-blend-mode: soft-light;
+    background:
+        radial-gradient(115% 70% at 50% 8%, color-mix(in srgb, var(--comms-tint) 60%, white), transparent 72%),
+        radial-gradient(120% 80% at 50% 104%, color-mix(in srgb, var(--comms-tint) 75%, black), transparent 64%);
+}
+
+/* Frame: border + glow in the tint */
+.glcomms-card.has-tint .glcomms-frame {
+    border-color: color-mix(in srgb, var(--comms-tint) 85%, white);
+    box-shadow:
+        0 0 14px color-mix(in srgb, var(--comms-tint) 55%, transparent),
+        inset 0 0 26px color-mix(in srgb, var(--comms-tint) 32%, #000);
+}
+
+/* Name badge */
+.glcomms-card.has-tint .glcomms-name {
+    color: #fff;
+    background: color-mix(in srgb, var(--comms-tint) 34%, rgba(0, 0, 0, 0.82));
+    border: 1px solid color-mix(in srgb, var(--comms-tint) 65%, transparent);
+    text-shadow: 0 0 7px color-mix(in srgb, var(--comms-tint) 75%, transparent);
+}
+
+/* Live status badge */
+.glcomms-card.has-tint .glcomms-status {
+    color: #fff;
+    background: var(--comms-tint);
+    box-shadow: 0 0 9px color-mix(in srgb, var(--comms-tint) 65%, transparent);
+}
+.glcomms-card.has-tint .glcomms-status-dot {
+    background: color-mix(in srgb, #fff 72%, var(--comms-tint));
+}
+
+/* Sci-fi CRT scan beam follows the tint */
+.glcomms-card.has-tint.theme-scifi .glcomms-frame::before {
+    background: linear-gradient(
+        transparent 0%,
+        color-mix(in srgb, var(--comms-tint) 55%, white) 50%,
+        transparent 100%
+    );
+}
+
+/* Active caller: strong static tint glow (the halo behind it carries the pulse) */
+.glcomms-card.has-tint.speaking .glcomms-frame {
+    animation: none;
+    border-color: color-mix(in srgb, #fff 28%, var(--comms-tint));
+    box-shadow:
+        0 0 26px color-mix(in srgb, var(--comms-tint) 78%, transparent),
+        inset 0 0 28px color-mix(in srgb, var(--comms-tint) 36%, #000);
+}
+
+/* ═══════════════════════════════════════════
+   GM Panel — Comms tab
+   ═══════════════════════════════════════════ */
+
+.glcomms-call-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.glcomms-call-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+}
+.glcomms-call-card.speaking {
+    border-color: rgba(255, 215, 100, 0.4);
+    background: rgba(255, 215, 100, 0.06);
+}
+
+.glcomms-call-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Framing row: scale / x / y placement of the portrait inside the call card */
+.glcomms-call-framing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.glcomms-call-framing-icon {
+    opacity: 0.5;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.glcomms-call-framing .glstage-field {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+.glcomms-call-framing .glstage-field label {
+    font-size: 10px;
+    color: #9aa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.glcomms-call-framing .glstage-field input {
+    width: 100%;
+    min-width: 0;
+}
+
+/* Presentation row: per-actor theme override + tint */
+.glcomms-call-presentation {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 4px;
+}
+.glcomms-call-theme {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+}
+.glcomms-tint-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    opacity: 0.8;
+}
+.glcomms-tint-toggle input { cursor: pointer; }
+.glcomms-tint-color {
+    width: 34px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+.glcomms-tint-color:disabled { opacity: 0.35; cursor: default; }
+
+.glcomms-call-thumb {
+    width: 36px;
+    height: 48px;
+    object-fit: cover;
+    object-position: top center;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.glcomms-call-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: #ddd;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.glcomms-call-actions {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    flex-shrink: 0;
+}
+.glcomms-call-actions .glstage-btn-sm[disabled] {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* Quick "Call in" button on actor cards (Actors tab) */
+.glstage-actor-callin {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.5) !important;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.glstage-actor-card:hover .glstage-actor-callin { opacity: 1; }

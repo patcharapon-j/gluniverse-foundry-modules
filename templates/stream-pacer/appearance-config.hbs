@@ -1,0 +1,41 @@
+<div class="sp-appearance">
+  <p class="sp-appearance-note">{{localize "STREAM_PACER.Settings.AppearanceIntro"}}</p>
+
+  {{#if isGM}}
+  <p class="sp-appearance-note">{{localize "STREAM_PACER.Settings.PerilTextHint"}}</p>
+
+  <div class="form-group sp-text-group">
+    <label>{{localize "STREAM_PACER.Settings.PerilTextDire"}}</label>
+    <input type="text" name="perilTextDire" value="{{perilTextDire}}" placeholder="{{perilTextDirePlaceholder}}" maxlength="24">
+  </div>
+
+  <div class="form-group sp-text-group">
+    <label>{{localize "STREAM_PACER.Settings.PerilTextPeril"}}</label>
+    <input type="text" name="perilTextPeril" value="{{perilTextPeril}}" placeholder="{{perilTextPerilPlaceholder}}" maxlength="24">
+  </div>
+
+  <div class="form-group sp-text-group">
+    <label>{{localize "STREAM_PACER.Settings.PerilTextTag"}}</label>
+    <input type="text" name="perilTextTag" value="{{perilTextTag}}" placeholder="{{perilTextTagPlaceholder}}" maxlength="48">
+  </div>
+
+  <div class="form-group sp-text-group">
+    <label>{{localize "STREAM_PACER.Settings.PerilTextSubtitle"}}</label>
+    <input type="text" name="perilTextSubtitle" value="{{perilTextSubtitle}}" placeholder="{{perilTextSubtitlePlaceholder}}" maxlength="48">
+  </div>
+
+  <hr>
+  {{/if}}
+
+  <div class="form-group sp-toggle-group">
+    <label>{{localize "STREAM_PACER.Settings.PerilWebGL"}}</label>
+    <input type="checkbox" name="perilWebGLEnabled" {{#if perilWebGLEnabled}}checked{{/if}}>
+    <p class="notes">{{localize "STREAM_PACER.Settings.PerilWebGLHint"}}</p>
+  </div>
+
+  <footer class="sp-appearance-footer">
+    <button type="submit">
+      <i class="fas fa-check"></i> {{localize "STREAM_PACER.Save"}}
+    </button>
+  </footer>
+</div>

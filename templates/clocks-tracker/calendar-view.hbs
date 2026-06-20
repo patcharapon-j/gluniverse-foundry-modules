@@ -1,0 +1,80 @@
+<div class="glct-cal">
+  <header class="cal-head">
+    <button type="button" class="cal-nav" data-action="prevMonth" title="Previous"><i class="fa-solid fa-chevron-left"></i></button>
+    <div class="cal-title">{{monthName}} &middot; {{year}}{{#if yearLabel}} {{yearLabel}}{{/if}}</div>
+    <button type="button" class="cal-nav" data-action="nextMonth" title="Next"><i class="fa-solid fa-chevron-right"></i></button>
+    <button type="button" class="cal-today" data-action="today">{{localize "GLCT.controls.toolTitle"}}</button>
+    {{#if isGM}}<button type="button" class="cal-today" data-action="manageEvents" title="{{localize 'GLCT.events.title'}}"><i class="fa-solid fa-star"></i></button>{{/if}}
+  </header>
+
+  {{#if monthBadges.length}}
+  <div class="cal-badges">
+    {{#each monthBadges}}
+    <button type="button" class="cal-badge{{#if this.gmOnly}} gm-only{{/if}}" data-action="selectMonthEvent" data-event-id="{{this.id}}" title="{{this.name}}">
+      <i class="fa-solid fa-calendar-day"></i><span>{{this.name}}</span>{{#if this.hasNote}}<i class="cal-badge-note fa-solid fa-note-sticky"></i>{{/if}}
+    </button>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <div class="cal-grid">
+    {{#each weekdayNames}}<div class="cal-wd{{#if this.rest}} weekend{{/if}}">{{this.label}}</div>{{/each}}
+    {{#each cells}}
+      <div class="cal-cell{{#unless this.inMonth}} blank{{/unless}}{{#if this.isToday}} today{{/if}}{{#if this.isWeekend}} weekend{{/if}}{{#if this.isSelected}} selected{{/if}}"
+           {{#if this.inMonth}}data-action="selectDay" data-day="{{this.day}}"{{/if}}>
+        {{#if this.inMonth}}
+          <span class="cal-day">{{this.day}}</span>
+          {{#if this.events.length}}
+          <span class="cal-evs">
+            {{#each this.events}}
+              {{#if this.empty}}
+                <span class="cal-ev empty"></span>
+              {{else}}
+                <span class="cal-ev{{#if this.continuesLeft}} cont-l{{/if}}{{#if this.continuesRight}} cont-r{{/if}}{{#if this.hasNote}} has-note{{/if}}" title="{{this.name}}">
+                  {{#if this.showLabel}}<span class="cal-ev-name">{{this.name}}</span>{{/if}}
+                </span>
+              {{/if}}
+            {{/each}}
+          </span>
+          {{/if}}
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+
+  {{#if detail}}
+  <div class="cal-detail">
+    <header class="cd-head">
+      <span class="cd-date">{{detail.heading}}</span>
+      <span class="cd-wd{{#if detail.isWeekend}} weekend{{/if}}">{{detail.sub}}{{#if detail.isWeekend}} &middot; {{localize 'GLCT.calendarView.weekend'}}{{/if}}</span>
+      <button type="button" class="cd-close" data-action="closeDetail" title="{{localize 'GLCT.calendarView.close'}}"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+
+    {{#if detail.events.length}}
+    <ul class="cd-events">
+      {{#each detail.events}}
+      <li class="cd-ev" data-event-id="{{this.id}}">
+        <div class="cd-ev-top">
+          <span class="cd-ev-name">{{this.name}}</span>
+          <span class="cd-ev-when">{{this.when}}</span>
+          {{#if @root.isGM}}
+          {{#unless this.visibleToPlayers}}<i class="cd-ev-hidden fa-solid fa-eye-slash" title="{{localize 'GLCT.calendarView.gmOnly'}}"></i>{{/unless}}
+          <button type="button" class="cd-ev-btn" data-action="editEvent" data-event-id="{{this.id}}" title="{{localize 'GLCT.calendarView.edit'}}"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" class="cd-ev-btn" data-action="deleteEvent" data-event-id="{{this.id}}" title="{{localize 'GLCT.calendarView.delete'}}"><i class="fa-solid fa-trash"></i></button>
+          {{/if}}
+        </div>
+        {{#if this.notePublic}}<p class="cd-note public">{{this.notePublic}}</p>{{/if}}
+        {{#if this.notePrivate}}<p class="cd-note private"><i class="fa-solid fa-lock"></i> {{this.notePrivate}}</p>{{/if}}
+      </li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <p class="cd-empty">{{localize 'GLCT.calendarView.noEvents'}}</p>
+    {{/if}}
+
+    {{#if detail.canAdd}}
+    <button type="button" class="cd-add" data-action="addEventForDay"><i class="fa-solid fa-plus"></i> {{localize 'GLCT.calendarView.addForDay'}}</button>
+    {{/if}}
+  </div>
+  {{/if}}
+</div>

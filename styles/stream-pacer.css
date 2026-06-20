@@ -1,0 +1,2115 @@
+/* Stream Pacer — UI Redesign v2 "Arcane Glass"
+   Floating HUD: frosted-glass panel, soft ambient glow, kinetic light sweep —
+   aesthetics & motion ported from the GLUniverse Clocks & Tracker module.
+   Dire Peril: royal purple + red touch, kinetic-typography full-screen reveal.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap');
+
+:root {
+  /* ── Palette migration to the suite's canonical Etched Glass tokens ──
+     The legacy "Arcane Glass" palette has been repointed onto the global
+     --gl-* tokens (defined in gl-tokens.css) where there is a clear analogue,
+     so Stream Pacer matches the rest of the suite. The --sp-* names are kept
+     as aliases so the remainder of this stylesheet keeps working unchanged.
+     The global --gl-* tokens are NOT redefined here. */
+
+  /* Ink — panel background tones → canonical ink ramp */
+  --sp-ink-0: var(--gl-ink-0);
+  --sp-ink-1: var(--gl-ink-1);
+  --sp-ink-2: var(--gl-ink-2);
+  --sp-ink-3: var(--gl-ink-3);
+
+  /* Text → canonical text tokens */
+  --sp-text: var(--gl-text);
+  --sp-muted: var(--gl-text-dim);
+  --sp-muted-2: var(--gl-text-dim);
+
+  /* Lines → canonical hair/edge tokens */
+  --sp-line: var(--gl-hair);
+  --sp-line-strong: var(--gl-edge);
+
+  /* Arcane Glass chrome — frosted panel surfaces, edges & ambient glow */
+  --sp-glass-tint: var(--gl-ink-3);   /* cool slate base for the panel gradient */
+  --sp-edge: var(--gl-edge);
+  --sp-hair: var(--gl-hair);
+  --sp-glow: var(--gl-glow);
+  --sp-glow-soft: var(--gl-bloom);
+  --sp-clock-font: var(--gl-display);
+  /* Glass & spring easings → reuse the canonical motion curves */
+  --sp-ease-glass: var(--gl-ease);
+  --sp-ease-spring: var(--gl-snap);
+
+  /* Primary accent — amber → canonical signal token */
+  --sp-amber: var(--gl-signal);
+  --sp-amber-soft: var(--gl-signal-hot);
+  --sp-amber-dim: color-mix(in srgb, var(--gl-signal) 22%, transparent);
+  --sp-amber-glow: color-mix(in srgb, var(--gl-signal) 40%, transparent);
+
+  /* Status colors */
+  --sp-cyan: #47c8ff;      /* GM badge, floor open */
+  --sp-blue: #5aa3f0;      /* hand raised */
+  --sp-purple: #a684ff;    /* need time */
+  --sp-green: #64c08f;     /* ready */
+  --sp-red: #ef6464;       /* countdown critical */
+  --sp-warn: #f0a850;      /* countdown warning */
+
+  /* Dire Peril — red-dominant with magenta undertone */
+  --sp-peril: #d6184a;
+  --sp-peril-deep: #2a0510;
+  --sp-peril-bright: #ffc2cf;
+  --sp-peril-glow: rgba(255, 40, 80, 0.6);
+  --sp-peril-red: #ff1030;
+  --sp-peril-red-glow: rgba(255, 20, 50, 0.6);
+  --sp-peril-ghost: rgba(120, 220, 255, 0.35);
+}
+
+/* ========================================
+   HUD Container - Floating & Draggable
+   ======================================== */
+
+#stream-pacer-hud {
+  position: fixed !important;
+  /* Default position - bottom right, left of chat */
+  bottom: 10px;
+  right: 310px;
+  top: auto;
+  left: auto;
+  transform: none !important;
+  z-index: 100;
+  pointer-events: auto;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* When positioned via JS, use these styles */
+#stream-pacer-hud.positioned {
+  bottom: auto;
+  right: auto;
+}
+
+#stream-pacer-hud.dragging {
+  cursor: grabbing !important;
+  user-select: none;
+  transition: none !important;
+}
+
+#stream-pacer-hud.dragging * {
+  cursor: grabbing !important;
+}
+
+#stream-pacer-hud > header,
+#stream-pacer-hud > .window-header,
+#stream-pacer-hud > .window-resize-handle {
+  display: none !important;
+}
+
+/* ---- Arcane Glass panel ---- */
+#stream-pacer-container {
+  position: relative;
+  width: 188px;
+  color: var(--sp-text);
+  font-family: var(--sp-clock-font);
+  font-size: 11px;
+  border-radius: 12px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.20)),
+    linear-gradient(160deg, var(--sp-glass-tint), #080b11 64%);
+  border: 1px solid var(--sp-edge);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.38),
+    0 0 40px var(--sp-glow-soft);
+  backdrop-filter: blur(16px) saturate(1.15);
+  transition: box-shadow 0.6s ease, border-color 0.6s ease;
+}
+
+/* Ambient top glow */
+#stream-pacer-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 150% at 50% -50%, var(--sp-glow), transparent 66%);
+  opacity: 0.22;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 1s ease, background 1s ease;
+}
+
+/* Static accent element — kept for markup compatibility, no moving shimmer */
+#stream-pacer-container .sp-accent {
+  display: none;
+}
+
+/* Signal state recolors the ambient glow + edge; the band carries the detail */
+#stream-pacer-container.signal-active {
+  --sp-glow: var(--sp-amber-glow);
+  --sp-glow-soft: var(--sp-amber-dim);
+  border-color: rgba(228, 176, 85, 0.4);
+}
+
+#stream-pacer-container.countdown-active {
+  --sp-glow: rgba(239, 100, 100, 0.5);
+  --sp-glow-soft: rgba(239, 100, 100, 0.2);
+  border-color: rgba(239, 100, 100, 0.45);
+}
+
+/* ========================================
+   HUD Header
+   ======================================== */
+
+#stream-pacer-container .pacer-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--sp-hair);
+  position: relative;
+  z-index: 2;
+}
+
+#stream-pacer-container .drag-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: grab;
+  padding: 2px 1px;
+  flex-shrink: 0;
+}
+
+#stream-pacer-container .drag-handle i {
+  width: 3px;
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.22);
+  transition: background 0.3s ease;
+}
+
+#stream-pacer-container .pacer-header:hover .drag-handle i {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+#stream-pacer-container .drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Live pulse dot */
+#stream-pacer-container .sp-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--sp-amber);
+  box-shadow: 0 0 9px var(--sp-amber-glow);
+  flex-shrink: 0;
+  animation: sp-pulse-dot 2.6s ease-in-out infinite;
+}
+
+#stream-pacer-container.countdown-active .sp-pulse {
+  background: var(--sp-red);
+  box-shadow: 0 0 9px rgba(239, 100, 100, 0.6);
+}
+
+@keyframes sp-pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+#stream-pacer-container .pacer-title {
+  flex: 1;
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sp-text);
+  text-shadow: 0 0 14px var(--sp-glow-soft);
+  white-space: nowrap;
+}
+
+#stream-pacer-container .gm-badge {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--sp-amber-soft, #ecc173), var(--sp-amber) 100%);
+  color: #1a1205;
+  box-shadow: 0 0 10px var(--sp-amber-glow), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* ========================================
+   Section wrapper
+   ======================================== */
+
+#stream-pacer-container .p-sec {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--sp-hair);
+  position: relative;
+  z-index: 2;
+}
+
+#stream-pacer-container .p-sec:last-child {
+  border-bottom: none;
+}
+
+/* ========================================
+   Player chips
+   ======================================== */
+
+#stream-pacer-container .pacer-players {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+#stream-pacer-container .player-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--sp-hair);
+  color: var(--sp-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.25s var(--sp-ease-spring);
+  position: relative;
+  overflow: hidden;
+}
+
+#stream-pacer-container .player-status i {
+  width: 12px;
+  font-size: 8px;
+  line-height: 1;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+#stream-pacer-container .player-status .p-name {
+  min-width: 0;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+}
+
+/* Engaged — amber */
+#stream-pacer-container .player-status.status-engaged {
+  border-color: var(--sp-amber);
+  background: linear-gradient(180deg, rgba(228, 176, 85, 0.12), rgba(228, 176, 85, 0.02));
+}
+#stream-pacer-container .player-status.status-engaged i {
+  color: var(--sp-amber);
+}
+
+/* Ready — green */
+#stream-pacer-container .player-status.status-ready {
+  border-color: var(--sp-green);
+  background: linear-gradient(180deg, rgba(100, 192, 143, 0.14), rgba(100, 192, 143, 0.03));
+}
+#stream-pacer-container .player-status.status-ready i {
+  color: var(--sp-green);
+}
+
+/* Need Time — purple (soft lavender) */
+#stream-pacer-container .player-status.status-need-time {
+  border-color: var(--sp-purple);
+  background: linear-gradient(180deg, rgba(166, 132, 255, 0.14), rgba(166, 132, 255, 0.03));
+}
+#stream-pacer-container .player-status.status-need-time i {
+  color: var(--sp-purple);
+}
+
+/* Hand Raised — blue with glow + shimmer sweep */
+#stream-pacer-container .player-status.status-hand-raised {
+  border-color: var(--sp-blue);
+  background: linear-gradient(135deg, rgba(90, 163, 240, 0.28) 0%, rgba(90, 163, 240, 0.08) 100%);
+  box-shadow:
+    0 0 14px rgba(90, 163, 240, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  animation: sp-hand-pulse 1.6s ease-in-out infinite;
+}
+
+#stream-pacer-container .player-status.status-hand-raised i {
+  color: var(--sp-blue);
+  filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.9));
+  animation: sp-hand-icon-pulse 1.6s ease-in-out infinite;
+}
+
+#stream-pacer-container .no-players {
+  color: var(--sp-muted-2);
+  font-style: italic;
+  font-size: 8.5px;
+}
+
+@keyframes sp-hand-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 14px rgba(90, 163, 240, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 22px rgba(90, 163, 240, 0.65),
+      0 0 40px rgba(90, 163, 240, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+}
+
+@keyframes sp-hand-icon-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.9)); }
+  50% { filter: drop-shadow(0 0 8px rgba(90, 163, 240, 1)); }
+}
+
+/* ========================================
+   Status buttons (player) + GM buttons
+   Shared glass styling — only active-state colors differ.
+   ======================================== */
+
+#stream-pacer-container .status-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+#stream-pacer-container .pacer-gm-controls {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+#stream-pacer-container .status-btn,
+#stream-pacer-container .gm-btn {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+  border: 1px solid var(--sp-hair);
+  border-radius: 8px;
+  color: var(--sp-muted-2);
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s var(--sp-ease-spring);
+  position: relative;
+}
+
+#stream-pacer-container .status-btn span,
+#stream-pacer-container .gm-btn span {
+  display: none;
+}
+
+#stream-pacer-container .status-btn:hover,
+#stream-pacer-container .gm-btn:hover {
+  color: var(--sp-text);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 0 12px var(--sp-glow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+#stream-pacer-container .status-btn:active,
+#stream-pacer-container .gm-btn:active {
+  transform: translateY(0);
+  filter: brightness(0.92);
+}
+
+/* Hand-raised button — color-specific hover */
+#stream-pacer-container .status-btn.status-hand-raised:hover:not(.active) {
+  color: var(--sp-blue);
+  border-color: rgba(90, 163, 240, 0.5);
+  background: rgba(90, 163, 240, 0.1);
+  box-shadow: 0 0 10px rgba(90, 163, 240, 0.3);
+}
+
+/* Active states — status buttons */
+#stream-pacer-container .status-btn.status-engaged.active {
+  color: var(--sp-amber);
+  border-color: var(--sp-amber);
+  background: linear-gradient(180deg, rgba(228, 176, 85, 0.2), rgba(228, 176, 85, 0.06));
+  box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+#stream-pacer-container .status-btn.status-hand-raised.active {
+  color: var(--sp-blue);
+  border-color: var(--sp-blue);
+  background: linear-gradient(135deg, rgba(90, 163, 240, 0.22), rgba(90, 163, 240, 0.08));
+  box-shadow:
+    0 0 15px rgba(90, 163, 240, 0.5),
+    0 0 30px rgba(90, 163, 240, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: sp-hand-btn-pulse 1.6s ease-in-out infinite;
+  overflow: hidden;
+}
+
+#stream-pacer-container .status-btn.status-hand-raised.active i {
+  filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.8));
+}
+
+#stream-pacer-container .status-btn.status-ready.active {
+  color: var(--sp-green);
+  border-color: var(--sp-green);
+  background: linear-gradient(180deg, rgba(100, 192, 143, 0.2), rgba(100, 192, 143, 0.06));
+  box-shadow: 0 0 12px rgba(100, 192, 143, 0.35);
+}
+
+#stream-pacer-container .status-btn.status-need-time.active {
+  color: var(--sp-purple);
+  border-color: var(--sp-purple);
+  background: linear-gradient(180deg, rgba(166, 132, 255, 0.2), rgba(166, 132, 255, 0.06));
+  box-shadow: 0 0 12px rgba(166, 132, 255, 0.35);
+}
+
+/* Active states — GM buttons */
+#stream-pacer-container .gm-btn.soft-signal-btn:hover,
+#stream-pacer-container .gm-btn.soft-signal-btn.active {
+  color: var(--sp-amber);
+  border-color: var(--sp-amber);
+  background: linear-gradient(180deg, rgba(228, 176, 85, 0.2), rgba(228, 176, 85, 0.06));
+  box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+#stream-pacer-container .gm-btn.soft-signal-btn.active {
+  animation: sp-btn-pulse-amber 2.4s ease-in-out infinite;
+}
+
+#stream-pacer-container .gm-btn.countdown-btn:hover,
+#stream-pacer-container .gm-btn.countdown-btn.active {
+  color: var(--sp-red);
+  border-color: var(--sp-red);
+  background: linear-gradient(180deg, rgba(239, 100, 100, 0.2), rgba(239, 100, 100, 0.06));
+  box-shadow: 0 0 12px rgba(239, 100, 100, 0.35);
+}
+
+#stream-pacer-container .gm-btn.floor-open-btn:hover,
+#stream-pacer-container .gm-btn.floor-open-btn.active {
+  color: var(--sp-cyan);
+  border-color: var(--sp-cyan);
+  background: linear-gradient(180deg, rgba(71, 200, 255, 0.2), rgba(71, 200, 255, 0.06));
+  box-shadow: 0 0 12px rgba(71, 200, 255, 0.35);
+}
+
+#stream-pacer-container .gm-btn.cancel-btn:hover {
+  color: var(--sp-red);
+  border-color: var(--sp-red);
+}
+
+@keyframes sp-hand-btn-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 15px rgba(90, 163, 240, 0.5),
+      0 0 30px rgba(90, 163, 240, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 20px rgba(90, 163, 240, 0.7),
+      0 0 40px rgba(90, 163, 240, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes sp-btn-pulse-amber {
+  0%, 100% { box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+  50% { box-shadow: 0 0 18px rgba(228, 176, 85, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+}
+
+/* ========================================
+   Active signal band
+   Appears when a signal is active; sits between operators and command.
+   ======================================== */
+
+#stream-pacer-container .pacer-signal {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-top: 1px solid var(--sp-amber-dim);
+  border-bottom: 1px solid var(--sp-amber-dim);
+  background: linear-gradient(90deg, rgba(228, 176, 85, 0.18), rgba(228, 176, 85, 0.04));
+  color: var(--sp-amber);
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  animation: sp-signal-glow 3s ease-in-out infinite;
+}
+
+#stream-pacer-container .pacer-signal i {
+  filter: drop-shadow(0 0 6px var(--sp-amber-glow));
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+#stream-pacer-container .pacer-signal.floor-open-signal {
+  border-top-color: rgba(71, 200, 255, 0.28);
+  border-bottom-color: rgba(71, 200, 255, 0.28);
+  background: linear-gradient(90deg, rgba(71, 200, 255, 0.18), rgba(71, 200, 255, 0.04));
+  color: var(--sp-cyan);
+}
+
+#stream-pacer-container .pacer-signal.floor-open-signal i {
+  filter: drop-shadow(0 0 6px rgba(71, 200, 255, 0.6));
+}
+
+#stream-pacer-container .pacer-signal.hard-signal {
+  border-top-color: rgba(239, 100, 100, 0.3);
+  border-bottom-color: rgba(239, 100, 100, 0.3);
+  background: linear-gradient(90deg, rgba(239, 100, 100, 0.2), rgba(239, 100, 100, 0.05));
+  color: var(--sp-red);
+}
+
+#stream-pacer-container .pacer-signal.hard-signal i {
+  filter: drop-shadow(0 0 6px rgba(239, 100, 100, 0.6));
+}
+
+#stream-pacer-container .countdown-timer {
+  margin-left: auto;
+  font-family: var(--sp-clock-font);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--sp-text);
+  text-shadow: 0 0 8px var(--sp-amber-glow);
+}
+
+/* Urgency escalation */
+#stream-pacer-container.countdown-active.urgency-warning {
+  animation: sp-pulse-warning 2s ease-in-out infinite;
+}
+#stream-pacer-container.countdown-active.urgency-warning .pacer-signal {
+  color: var(--sp-warn);
+}
+#stream-pacer-container.countdown-active.urgency-warning .countdown-timer {
+  color: var(--sp-warn);
+  text-shadow: 0 0 8px rgba(240, 168, 80, 0.5);
+}
+
+#stream-pacer-container.countdown-active.urgency-critical {
+  animation: sp-pulse-critical 1s ease-in-out infinite;
+}
+#stream-pacer-container.countdown-active.urgency-critical .pacer-signal {
+  color: var(--sp-red);
+}
+#stream-pacer-container.countdown-active.urgency-critical .countdown-timer {
+  color: var(--sp-red);
+  text-shadow: 0 0 8px rgba(239, 100, 100, 0.6);
+  animation: sp-flash-critical 0.5s ease-in-out infinite;
+}
+
+@keyframes sp-signal-glow {
+  0%, 100% { box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.04); }
+  50% { box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.08); }
+}
+
+@keyframes sp-pulse-warning {
+  0%, 100% {
+    box-shadow:
+      0 22px 60px rgba(0, 0, 0, 0.6),
+      0 0 20px rgba(240, 168, 80, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  50% {
+    box-shadow:
+      0 22px 60px rgba(0, 0, 0, 0.6),
+      0 0 32px rgba(240, 168, 80, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+}
+
+@keyframes sp-pulse-critical {
+  0%, 100% {
+    box-shadow:
+      0 22px 60px rgba(0, 0, 0, 0.6),
+      0 0 22px rgba(239, 100, 100, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  50% {
+    box-shadow:
+      0 22px 60px rgba(0, 0, 0, 0.6),
+      0 0 36px rgba(239, 100, 100, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+}
+
+@keyframes sp-flash-critical {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ========================================
+   Player-only compact overrides
+   Applied when container has is-player class (non-GM view).
+   ======================================== */
+
+#stream-pacer-container.is-player {
+  width: 164px;
+  font-size: 10px;
+  border-radius: 11px;
+}
+
+#stream-pacer-container.is-player .pacer-header {
+  gap: 5px;
+  padding: 4px 7px;
+}
+
+#stream-pacer-container.is-player .pacer-title {
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+}
+
+#stream-pacer-container.is-player .p-sec {
+  padding: 4px 7px;
+}
+
+#stream-pacer-container.is-player .player-status {
+  gap: 5px;
+  padding: 2px 5px;
+}
+
+#stream-pacer-container.is-player .player-status i {
+  width: 11px;
+  font-size: 7px;
+}
+
+#stream-pacer-container.is-player .player-status .p-name {
+  font-size: 8px;
+}
+
+#stream-pacer-container.is-player .no-players {
+  font-size: 7.5px;
+}
+
+#stream-pacer-container.is-player .status-btn {
+  height: 20px;
+  font-size: 10px;
+  border-radius: 7px;
+}
+
+#stream-pacer-container.is-player .pacer-signal {
+  gap: 6px;
+  padding: 4px 7px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+#stream-pacer-container.is-player .pacer-signal i {
+  font-size: 9px;
+}
+
+#stream-pacer-container.is-player .countdown-timer {
+  font-size: 11px;
+}
+
+/* Respect reduced-motion for the floating HUD */
+@media (prefers-reduced-motion: reduce) {
+  #stream-pacer-container .sp-pulse,
+  #stream-pacer-container .pacer-signal,
+  #stream-pacer-container .player-status.status-hand-raised,
+  #stream-pacer-container .player-status.status-hand-raised i,
+  #stream-pacer-container .status-btn.status-hand-raised.active,
+  #stream-pacer-container .gm-btn.soft-signal-btn.active,
+  #stream-pacer-container.countdown-active.urgency-warning,
+  #stream-pacer-container.countdown-active.urgency-critical,
+  #stream-pacer-container.countdown-active.urgency-critical .countdown-timer {
+    animation: none !important;
+  }
+}
+
+/* ========================================
+   Bottom Ticker — Arcane Glass
+   ======================================== */
+
+.stream-pacer-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden;
+  transform: translateY(100%);
+  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-glass);
+  color: var(--sp-text);
+  font-family: var(--sp-clock-font);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(90deg, transparent 0%, rgba(10, 13, 18, 0.5) 2%, rgba(22, 28, 40, 0.92) 8%, rgba(10, 13, 19, 0.94) 50%, rgba(22, 28, 40, 0.92) 92%, rgba(10, 13, 18, 0.5) 98%, transparent 100%);
+  border-top: 1px solid var(--sp-edge);
+  box-shadow:
+    0 -8px 30px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 0 30px var(--sp-glow-soft);
+  backdrop-filter: blur(12px) saturate(1.1);
+}
+
+.stream-pacer-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Tint overlay — signal-colored band */
+.stream-pacer-overlay .sp-tint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(228, 176, 85, 0.14) 10%, rgba(228, 176, 85, 0.06) 50%, rgba(228, 176, 85, 0.14) 90%, transparent 97%, transparent 100%);
+  z-index: 1;
+  transition: background 0.4s ease;
+}
+
+/* Top rail — signal-colored glowing hairline */
+.stream-pacer-overlay .sp-rail {
+  position: absolute;
+  top: 0;
+  left: 3%;
+  right: 3%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sp-amber), transparent);
+  box-shadow: 0 0 10px var(--sp-amber-glow);
+  z-index: 4;
+}
+
+.stream-pacer-overlay.countdown-signal .sp-tint {
+  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(239, 100, 100, 0.16) 10%, rgba(239, 100, 100, 0.07) 50%, rgba(239, 100, 100, 0.16) 90%, transparent 97%, transparent 100%);
+}
+.stream-pacer-overlay.countdown-signal .sp-rail {
+  background: linear-gradient(90deg, transparent, var(--sp-red), transparent);
+  box-shadow: 0 0 10px rgba(239, 100, 100, 0.6);
+}
+
+.stream-pacer-overlay.floor-open-signal .sp-tint {
+  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(71, 200, 255, 0.16) 10%, rgba(71, 200, 255, 0.07) 50%, rgba(71, 200, 255, 0.16) 90%, transparent 97%, transparent 100%);
+}
+.stream-pacer-overlay.floor-open-signal .sp-rail {
+  background: linear-gradient(90deg, transparent, var(--sp-cyan), transparent);
+  box-shadow: 0 0 10px rgba(71, 200, 255, 0.6);
+}
+
+.stream-pacer-overlay.urgency-warning .sp-tint {
+  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(240, 168, 80, 0.2) 10%, rgba(240, 168, 80, 0.1) 50%, rgba(240, 168, 80, 0.2) 90%, transparent 97%, transparent 100%);
+}
+
+.stream-pacer-overlay.urgency-critical .sp-tint {
+  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(245, 60, 60, 0.24) 10%, rgba(245, 60, 60, 0.12) 50%, rgba(245, 60, 60, 0.24) 90%, transparent 97%, transparent 100%);
+  animation: sp-ticker-glow 1s ease-in-out infinite;
+}
+
+/* Scrolling body with edge-fade mask */
+.stream-pacer-overlay .overlay-content {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: sp-ticker-scroll 30s linear infinite;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+}
+
+@keyframes sp-ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes sp-ticker-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+
+.stream-pacer-overlay .ticker-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+}
+
+.stream-pacer-overlay .overlay-ix {
+  font-family: var(--sp-clock-font);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--sp-amber);
+  opacity: 0.9;
+  text-transform: uppercase;
+}
+
+.stream-pacer-overlay.countdown-signal .overlay-ix { color: var(--sp-red); }
+.stream-pacer-overlay.floor-open-signal .overlay-ix { color: var(--sp-cyan); }
+
+.stream-pacer-overlay .overlay-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--sp-amber);
+  filter: drop-shadow(0 0 6px var(--sp-amber-glow));
+}
+
+.stream-pacer-overlay.countdown-signal .overlay-icon {
+  color: var(--sp-red);
+  filter: drop-shadow(0 0 6px rgba(239, 100, 100, 0.7));
+}
+
+.stream-pacer-overlay.floor-open-signal .overlay-icon {
+  color: var(--sp-cyan);
+  filter: drop-shadow(0 0 6px rgba(71, 200, 255, 0.7));
+}
+
+.stream-pacer-overlay .overlay-message {
+  font-family: var(--sp-clock-font);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sp-text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.stream-pacer-overlay .overlay-countdown {
+  font-family: var(--sp-clock-font);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--sp-red);
+  text-shadow: 0 0 8px rgba(239, 100, 100, 0.5);
+}
+
+.stream-pacer-overlay.urgency-critical .overlay-countdown {
+  animation: sp-flash-critical 0.5s ease-in-out infinite;
+}
+
+/* Diamond separator */
+.stream-pacer-overlay .ticker-separator {
+  width: 6px;
+  height: 6px;
+  background: var(--sp-amber);
+  transform: rotate(45deg);
+  display: inline-block;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px var(--sp-amber-glow);
+}
+
+.stream-pacer-overlay.countdown-signal .ticker-separator {
+  background: var(--sp-red);
+  box-shadow: 0 0 8px rgba(239, 100, 100, 0.6);
+}
+
+.stream-pacer-overlay.floor-open-signal .ticker-separator {
+  background: var(--sp-cyan);
+  box-shadow: 0 0 8px rgba(71, 200, 255, 0.6);
+}
+
+/* ========================================
+   Hand-Raise Bar (GM only, top of screen) — Arcane Glass
+   ======================================== */
+
+.stream-pacer-hand-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  z-index: 100;
+  color: #fff;
+  font-family: var(--sp-clock-font);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(90deg, transparent 0%, rgba(10, 13, 18, 0.45) 3%, rgba(28, 56, 104, 0.85) 8%, rgba(42, 92, 168, 0.9) 50%, rgba(28, 56, 104, 0.85) 92%, rgba(10, 13, 18, 0.45) 97%, transparent 100%);
+  border-bottom: 1px solid rgba(120, 165, 240, 0.45);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 36px rgba(90, 163, 240, 0.3);
+  backdrop-filter: blur(14px) saturate(1.15);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-100%);
+  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-spring);
+  overflow: hidden;
+}
+
+.stream-pacer-hand-bar.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.stream-pacer-hand-bar .hand-bar-content {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0 24px;
+}
+
+.stream-pacer-hand-bar .hb-edge {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  height: 1px;
+  z-index: 2;
+}
+.stream-pacer-hand-bar .hb-edge-t {
+  top: 6px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+}
+.stream-pacer-hand-bar .hb-edge-b {
+  bottom: 6px;
+  background: linear-gradient(90deg, transparent, rgba(90, 163, 240, 0.5), transparent);
+  box-shadow: 0 0 8px rgba(90, 163, 240, 0.4);
+}
+
+.stream-pacer-hand-bar .hb-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 3;
+}
+
+.stream-pacer-hand-bar .hb-ix {
+  font-family: var(--sp-clock-font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  padding: 3px 9px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  text-transform: uppercase;
+}
+
+.stream-pacer-hand-bar .hb-icon {
+  font-size: 22px;
+  color: #fff;
+  flex-shrink: 0;
+  animation: sp-hb-icon 1.8s ease-in-out infinite;
+}
+
+.stream-pacer-hand-bar .hb-icon i {
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.9));
+}
+
+@keyframes sp-hb-icon {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-2px) rotate(-6deg); }
+  60% { transform: translateY(-2px) rotate(6deg); }
+}
+
+.stream-pacer-hand-bar .hb-names {
+  font-family: var(--sp-clock-font);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.55),
+    0 0 26px rgba(90, 163, 240, 0.55),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.stream-pacer-hand-bar .hb-tag {
+  font-family: var(--sp-clock-font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-pacer-overlay .overlay-content,
+  .stream-pacer-overlay.urgency-critical .sp-tint,
+  .stream-pacer-overlay.urgency-critical .overlay-countdown,
+  .stream-pacer-hand-bar .hb-icon {
+    animation: none !important;
+  }
+}
+
+/* Dire Peril button */
+#stream-pacer-container .gm-btn.dire-peril-btn {
+  border-color: rgba(175, 45, 185, 0.55);
+  color: var(--sp-peril-bright);
+}
+
+#stream-pacer-container .gm-btn.dire-peril-btn:hover:not(.disabled):not([disabled]) {
+  color: #fff;
+  border-color: var(--sp-peril);
+  background: linear-gradient(180deg, rgba(175, 45, 185, 0.22), rgba(175, 45, 185, 0.08));
+  box-shadow:
+    0 0 12px var(--sp-peril-glow),
+    inset 0 0 8px var(--sp-peril-red-glow);
+}
+
+#stream-pacer-container .gm-btn.dire-peril-btn.disabled,
+#stream-pacer-container .gm-btn.dire-peril-btn[disabled] {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* ========================================
+   Dire Peril — Full-Screen Stage
+   Plays once (4200ms) then hands off to the corner indicator.
+   ======================================== */
+
+/* WebGL danger field — sits just below the kinetic-typography stage so the
+   translucent wash and lettering composite on top of it. */
+.stream-pacer-peril-webgl {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease-in;
+  will-change: opacity;
+}
+
+.stream-pacer-peril-webgl.visible {
+  opacity: 1;
+  transition: opacity 0.65s ease-out;
+}
+
+.stream-pacer-peril-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background: transparent;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  transition: opacity 0.35s ease-out, visibility 0s linear 0.35s;
+}
+
+.stream-pacer-peril-stage.playing {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.12s ease-in, visibility 0s linear;
+}
+
+/* Fine scanlines across the whole stage. */
+.stream-pacer-peril-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(255, 255, 255, 0.018) 2px 3px);
+}
+
+/* Shared envelope: snap on, hold, fade with the stage handoff. */
+@keyframes pk-fade-hold {
+  0% { opacity: 0; }
+  4% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Radial darkening + themed wash so the WebGL field reads as danger. */
+.stream-pacer-peril-stage .pk-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 28%, rgba(0, 0, 0, 0.55) 100%),
+    radial-gradient(ellipse at 50% 50%, var(--sp-peril-glow), transparent 60%);
+  opacity: 0;
+  animation: pk-fade-hold 4200ms ease-in-out forwards;
+}
+
+/* Drifting outline marquee of the title behind everything. */
+.stream-pacer-peril-stage .pk-marquee {
+  position: absolute;
+  inset: -6% 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  overflow: hidden;
+  opacity: 0;
+  animation: pk-fade-hold 4200ms ease-out forwards;
+}
+
+.stream-pacer-peril-stage .pk-marquee-row {
+  display: flex;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 12vh;
+  line-height: 1.05;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--sp-peril-ghost);
+  will-change: transform;
+}
+
+.stream-pacer-peril-stage .pk-marquee-row span { padding: 0 0.4em; }
+.stream-pacer-peril-stage .pk-marquee-row:nth-child(1) { animation: pk-drift-l 28s linear infinite; }
+.stream-pacer-peril-stage .pk-marquee-row:nth-child(2) {
+  -webkit-text-stroke-color: var(--sp-peril-red-glow);
+  animation: pk-drift-r 36s linear infinite;
+}
+.stream-pacer-peril-stage .pk-marquee-row:nth-child(3) { animation: pk-drift-l 32s linear infinite; }
+
+@keyframes pk-drift-l { 0% { transform: translateX(0); } 100% { transform: translateX(-25%); } }
+@keyframes pk-drift-r { 0% { transform: translateX(-25%); } 100% { transform: translateX(0); } }
+
+/* Alert sweep — a bright bar scanning top to bottom on entry. */
+.stream-pacer-peril-stage .pk-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30vh;
+  z-index: 30;
+  background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 50%, transparent);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: pk-sweep 4200ms ease-out forwards;
+}
+
+@keyframes pk-sweep {
+  0% { transform: translateY(-40vh); opacity: 0; }
+  3% { opacity: 0.9; }
+  20%, 100% { transform: translateY(110vh); opacity: 0; }
+}
+
+/* Expanding impact shockwave ring (also a fallback when WebGL is off). */
+.stream-pacer-peril-stage .pk-shock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  z-index: 20;
+  border: 3px solid var(--sp-peril-red);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  box-shadow: 0 0 40px var(--sp-peril-red-glow), inset 0 0 40px var(--sp-peril-glow);
+  animation: pk-shock 4200ms cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+
+@keyframes pk-shock {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  1% { opacity: 1; }
+  22% { transform: translate(-50%, -50%) scale(36); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Tactical corner brackets + center edge ticks. */
+.stream-pacer-peril-stage .pk-frame { position: absolute; inset: 0; z-index: 26; }
+
+.stream-pacer-peril-stage .pk-corner {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  border: 0 solid var(--sp-peril-red);
+  opacity: 0;
+  filter: drop-shadow(0 0 6px var(--sp-peril-red-glow));
+  animation: pk-corner 4200ms cubic-bezier(0.2, 1, 0.3, 1) forwards;
+}
+.stream-pacer-peril-stage .pk-tl { top: 30px; left: 30px; border-width: 2px 0 0 2px; }
+.stream-pacer-peril-stage .pk-tr { top: 30px; right: 30px; border-width: 2px 2px 0 0; }
+.stream-pacer-peril-stage .pk-bl { bottom: 30px; left: 30px; border-width: 0 0 2px 2px; }
+.stream-pacer-peril-stage .pk-br { bottom: 30px; right: 30px; border-width: 0 2px 2px 0; }
+
+@keyframes pk-corner {
+  0%, 6% { opacity: 0; transform: scale(1.18); }
+  12% { opacity: 1; transform: scale(1); }
+  82% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; }
+}
+
+.stream-pacer-peril-stage .pk-edge {
+  position: absolute;
+  left: 50%;
+  width: 200px;
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red) 50%, transparent);
+  box-shadow: 0 0 6px var(--sp-peril-red-glow);
+  opacity: 0;
+  animation: pk-fade-hold 4200ms ease-out forwards;
+}
+.stream-pacer-peril-stage .pk-edge-t { top: 34px; }
+.stream-pacer-peril-stage .pk-edge-b { bottom: 34px; }
+
+/* Side data streams. */
+.stream-pacer-peril-stage .pk-stream {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: 25;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--sp-peril-bright);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+  opacity: 0;
+  animation: pk-fade-hold 4200ms ease-out forwards;
+}
+.stream-pacer-peril-stage .pk-stream-t { top: 54px; }
+.stream-pacer-peril-stage .pk-stream-b { bottom: 54px; }
+.stream-pacer-peril-stage .pk-stream-track { display: inline-flex; animation: pk-stream-l 20s linear infinite; }
+.stream-pacer-peril-stage .pk-stream-rev { animation: pk-stream-r 24s linear infinite; }
+.stream-pacer-peril-stage .pk-stream-track > span { padding: 0 1.4em; }
+
+@keyframes pk-stream-l { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes pk-stream-r { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+
+/* Reticle behind the title. */
+.stream-pacer-peril-stage .pk-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 660px;
+  height: 660px;
+  transform: translate(-50%, -50%);
+  z-index: 21;
+  opacity: 0;
+  animation: pk-fade-hold 4200ms ease-out forwards;
+}
+.stream-pacer-peril-stage .pk-rh,
+.stream-pacer-peril-stage .pk-rv {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red-glow) 40%, var(--sp-peril-red-glow) 60%, transparent);
+}
+.stream-pacer-peril-stage .pk-rh { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+.stream-pacer-peril-stage .pk-rv {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 40%, var(--sp-peril-red-glow) 60%, transparent);
+}
+.stream-pacer-peril-stage .pk-rd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120px;
+  height: 120px;
+  border: 1px solid var(--sp-peril-red-glow);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: pk-spin 4200ms linear forwards;
+}
+@keyframes pk-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(160deg); }
+}
+
+/* Pre-flash montage — each character stamps huge at center in rapid
+   sequence before the full title assembles. */
+.stream-pacer-peril-stage .pk-preflash {
+  position: absolute;
+  inset: 0;
+  z-index: 36;
+  pointer-events: none;
+}
+.stream-pacer-peril-stage .pk-pf {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1;
+  font-size: clamp(180px, 32vw, 460px);
+  color: #fff;
+  text-shadow: 0 0 40px var(--sp-peril-glow), 0 0 90px var(--sp-peril-red-glow), 0 6px 16px #000;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.22);
+  animation: pk-pf 92ms cubic-bezier(0.6, 0, 0.1, 1) both;
+  animation-delay: calc(160ms + var(--i) * 78ms);
+}
+@keyframes pk-pf {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.22); filter: blur(3px); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.97); filter: blur(0); }
+}
+
+/* Title composition. Motion is sharp and snappy — no bounce: tight-eased
+   micro-slides, rapid per-character opacity flashing, and letter-spacing
+   tracking that collapses each line into place, then a frozen pose hold.
+   The two lines assemble only after the pre-flash montage completes. */
+.stream-pacer-peril-stage .pk-stack {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: pk-fade-hold 4200ms ease-out forwards, pk-jolt 4200ms linear forwards;
+}
+
+/* Single sharp positional jolt as the second line lands — no scale bounce. */
+@keyframes pk-jolt {
+  0%, 38% { transform: translate(-50%, -50%); }
+  39% { transform: translate(calc(-50% - 6px), -50%); }
+  40% { transform: translate(calc(-50% + 7px), calc(-50% - 2px)); }
+  41% { transform: translate(calc(-50% - 4px), calc(-50% + 2px)); }
+  42% { transform: translate(calc(-50% + 2px), -50%); }
+  43%, 100% { transform: translate(-50%, -50%); }
+}
+
+.stream-pacer-peril-stage .pk-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 7px;
+  color: var(--sp-peril-red);
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-bottom: 14px;
+  padding: 4px 14px;
+  border: 1px solid var(--sp-peril-red-glow);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  transform-origin: center;
+  opacity: 0;
+  animation: pk-tag 4200ms cubic-bezier(0.7, 0, 0.1, 1) forwards;
+}
+@keyframes pk-tag {
+  0%, 17% { opacity: 0; transform: scaleX(0.1); }
+  22% { opacity: 1; transform: scaleX(1); }
+  23.5% { opacity: 0.35; }
+  25% { opacity: 1; }
+  82% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; }
+}
+
+.stream-pacer-peril-stage .pk-line {
+  display: flex;
+  justify-content: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 0.92;
+  font-size: clamp(64px, 15vw, 168px);
+  letter-spacing: 0.04em;
+  will-change: filter, letter-spacing;
+}
+
+/* Tracking collapse + a quick brightness strobe as each line lands. */
+.stream-pacer-peril-stage .pk-line-1 {
+  animation: pk-track-1 4200ms cubic-bezier(0.7, 0, 0.1, 1) both, pk-strobe-1 4200ms steps(1) both;
+}
+.stream-pacer-peril-stage .pk-line-2 {
+  animation: pk-track-2 4200ms cubic-bezier(0.7, 0, 0.1, 1) both, pk-strobe-2 4200ms steps(1) both;
+}
+@keyframes pk-track-1 {
+  0%, 20% { letter-spacing: 0.55em; }
+  30% { letter-spacing: 0.04em; }
+  100% { letter-spacing: 0.04em; }
+}
+@keyframes pk-track-2 {
+  0%, 30% { letter-spacing: 0.55em; }
+  41% { letter-spacing: 0.04em; }
+  100% { letter-spacing: 0.04em; }
+}
+@keyframes pk-strobe-1 {
+  0%, 28% { filter: none; }
+  29% { filter: brightness(2.4); }
+  30% { filter: none; }
+  31% { filter: brightness(1.7); }
+  32%, 100% { filter: none; }
+}
+@keyframes pk-strobe-2 {
+  0%, 38% { filter: none; }
+  39% { filter: brightness(2.6); }
+  40% { filter: none; }
+  41% { filter: brightness(1.8); }
+  42%, 100% { filter: none; }
+}
+
+.stream-pacer-peril-stage .pk-l {
+  display: inline-block;
+  white-space: pre;
+  opacity: 0;
+  color: #fff;
+  text-shadow: 0 0 30px var(--sp-peril-glow), 0 0 70px var(--sp-peril-red-glow), 0 4px 10px #000;
+}
+
+/* Line 1 — sharp downward micro-slide + rapid opacity flash. */
+.stream-pacer-peril-stage .pk-line-1 .pk-l {
+  animation: pk-char-y 240ms cubic-bezier(0.7, 0, 0.1, 1) both;
+  animation-delay: calc(900ms + var(--i) * 30ms);
+}
+@keyframes pk-char-y {
+  0% { opacity: 0; transform: translateY(-0.16em); filter: blur(5px); }
+  35% { opacity: 1; transform: translateY(0); filter: blur(0); }
+  48% { opacity: 0.2; }
+  60% { opacity: 1; }
+  78% { opacity: 0.55; }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* Line 2 — sharp sideways micro-slide + flash, heavier RGB-split shadow. */
+.stream-pacer-peril-stage .pk-line-2 .pk-l {
+  animation: pk-char-x 250ms cubic-bezier(0.7, 0, 0.1, 1) both;
+  animation-delay: calc(1280ms + var(--i) * 30ms);
+  text-shadow:
+    -3px 0 var(--sp-peril-red),
+    2px 0 var(--sp-peril-ghost),
+    0 0 30px var(--sp-peril-glow),
+    0 0 70px var(--sp-peril-red-glow),
+    0 4px 10px #000;
+}
+@keyframes pk-char-x {
+  0% { opacity: 0; transform: translateX(0.18em); filter: blur(6px); }
+  35% { opacity: 1; transform: translateX(0); filter: blur(0); }
+  48% { opacity: 0.18; }
+  60% { opacity: 1; }
+  78% { opacity: 0.5; }
+  100% { opacity: 1; transform: translateX(0); filter: blur(0); }
+}
+
+.stream-pacer-peril-stage .pk-rule {
+  height: 2px;
+  width: 0;
+  margin: 10px 0;
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red) 30%, var(--sp-peril) 50%, var(--sp-peril-red) 70%, transparent);
+  box-shadow: 0 0 12px var(--sp-peril-red-glow);
+  animation: pk-rule 4200ms cubic-bezier(0.7, 0, 0.15, 1) forwards;
+}
+@keyframes pk-rule {
+  0%, 39% { width: 0; opacity: 0; }
+  43% { width: min(440px, 60vw); opacity: 1; }
+  82% { width: min(440px, 60vw); opacity: 1; }
+  100% { width: min(440px, 60vw); opacity: 0; }
+}
+
+.stream-pacer-peril-stage .pk-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 6px;
+  color: var(--sp-peril-bright);
+  text-transform: uppercase;
+  margin-top: 14px;
+  max-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  animation: pk-sub 4200ms steps(24) forwards;
+}
+@keyframes pk-sub {
+  0%, 46% { max-width: 0; }
+  56% { max-width: 620px; }
+  82% { max-width: 620px; }
+  100% { max-width: 0; }
+}
+
+/* Impact flash — declare hit, then the second-line slam. */
+.stream-pacer-peril-stage .pk-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 38;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.95), var(--sp-peril-red-glow) 55%, transparent 75%);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: pk-flash 4200ms steps(1) forwards;
+}
+@keyframes pk-flash {
+  0%, 3% { opacity: 0; }
+  3.5% { opacity: 0.85; }
+  6% { opacity: 0; }
+  38% { opacity: 0; }
+  39% { opacity: 0.95; }
+  41% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* ========================================
+   Dire Peril — Persistent Corner Indicator
+   ======================================== */
+
+.stream-pacer-peril-indicator-wrap {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.stream-pacer-peril-indicator-wrap.visible .stream-pacer-peril-indicator {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stream-pacer-peril-indicator {
+  position: relative;
+  min-width: 210px;
+  padding: 9px 14px 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+
+  background: linear-gradient(180deg, rgba(45, 10, 90, 0.96), rgba(20, 4, 42, 0.98));
+  border: 1px solid rgba(175, 45, 185, 0.5);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.55),
+    0 0 24px var(--sp-peril-glow);
+
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  animation: sp-peril-ind-pulse 2.4s ease-in-out infinite;
+}
+
+.stream-pacer-peril-indicator::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(255, 255, 255, 0.02) 2px 3px);
+  pointer-events: none;
+}
+
+/* Left edge gradient bar */
+.stream-pacer-peril-indicator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--sp-peril), var(--sp-peril-red));
+  box-shadow: 0 0 8px var(--sp-peril);
+  animation: sp-peril-ind-bar 1.8s ease-in-out infinite;
+}
+
+.stream-pacer-peril-indicator .peril-ind-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--sp-peril-red);
+  color: var(--sp-peril-red);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px var(--sp-peril-red-glow));
+}
+
+.stream-pacer-peril-indicator .peril-ind-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stream-pacer-peril-indicator .peril-ind-header {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 2.5px;
+  color: var(--sp-peril-red);
+  text-transform: uppercase;
+}
+
+.stream-pacer-peril-indicator .peril-ind-main {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.stream-pacer-peril-indicator .peril-ind-dismiss {
+  margin-left: auto;
+  padding: 2px 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+  background: transparent;
+  border: 1px solid rgba(175, 45, 185, 0.3);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.stream-pacer-peril-indicator .peril-ind-dismiss:hover {
+  color: #fff;
+  border-color: var(--sp-peril);
+}
+
+@keyframes sp-peril-ind-pulse {
+  0%, 100% {
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55), 0 0 24px var(--sp-peril-glow);
+  }
+  50% {
+    box-shadow:
+      0 8px 22px rgba(0, 0, 0, 0.55),
+      0 0 34px rgba(175, 45, 185, 0.7),
+      0 0 48px var(--sp-peril-red-glow);
+  }
+}
+
+@keyframes sp-peril-ind-bar {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+/* ========================================
+   Reduced motion — disable animations for users who prefer it
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  #stream-pacer-container,
+  #stream-pacer-container *,
+  .stream-pacer-overlay,
+  .stream-pacer-overlay *,
+  .stream-pacer-hand-bar,
+  .stream-pacer-hand-bar *,
+  .stream-pacer-peril-stage,
+  .stream-pacer-peril-stage *,
+  .stream-pacer-peril-indicator,
+  .stream-pacer-peril-indicator * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* WebGL field never renders under reduced motion. */
+  .stream-pacer-peril-webgl {
+    display: none !important;
+  }
+}
+
+/* ========================================
+   Appearance / Tech Display config
+   ======================================== */
+
+.stream-pacer-appearance .sp-appearance {
+  padding: 4px 2px;
+}
+
+.stream-pacer-appearance .sp-appearance-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--sp-muted-2, #8a96a4);
+}
+
+.stream-pacer-appearance .form-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stream-pacer-appearance .form-group > label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.stream-pacer-appearance .sp-text-group input[type="text"] {
+  flex: 1.2;
+}
+
+.stream-pacer-appearance .sp-toggle-group {
+  flex-wrap: wrap;
+}
+
+.stream-pacer-appearance .sp-toggle-group .notes {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--sp-muted, #6a7684);
+}
+
+.stream-pacer-appearance .sp-appearance-footer {
+  margin-top: 14px;
+  text-align: right;
+}
+
+/* ========================================
+   Exempt Users config — two-column table
+   (General Bars vs. Dire Peril exemptions)
+   ======================================== */
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 4px;
+}
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table th,
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--sp-hairline, rgba(255, 255, 255, 0.08));
+}
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table th {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table th.exempt-col,
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table td.exempt-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table td.user-name {
+  font-weight: 600;
+}
+
+.stream-pacer-exempt-users-content .stream-pacer-exempt-table input[type="checkbox"] {
+  margin: 0;
+}
+
+/* ========================================
+   Aura halo behind edge-to-edge bars
+   Lives as a sibling of the bar (created in JS) so it can extend ~3x the
+   bar height past the screen edge without the bar's overflow clipping it.
+   Signal-coloured via class mirroring; static when reduced-motion is on.
+   ======================================== */
+
+.stream-pacer-bar-aura {
+  position: fixed;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-glass);
+  --sp-aura-color: var(--sp-amber-glow);
+  --sp-aura-mid:   var(--sp-amber-dim);
+  will-change: opacity, transform;
+}
+
+/* Aura sits one layer below its bar so the bar always reads in front, but
+   above the scene canvas so it isn't washed out by terrain. */
+/* Hidden state: parked just off-screen past the bar's edge, so the aura
+   slides into place together with its bar instead of merely cross-fading. */
+.stream-pacer-bar-aura.aura-bottom { z-index: 9; transform: translateY(100%); }
+.stream-pacer-bar-aura.aura-top {
+  z-index: 99;
+  transform: translateY(-100%);
+  /* match the hand-bar's spring entrance */
+  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-spring);
+}
+
+.stream-pacer-bar-aura.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Bottom-anchored aura — sits directly above the bottom ticker, slides up. */
+.stream-pacer-bar-aura.aura-bottom {
+  bottom: 36px; /* equals overlay height */
+  height: 114px; /* ~3x */
+  background:
+    linear-gradient(to top,
+      var(--sp-aura-color) 0%,
+      var(--sp-aura-mid) 32%,
+      transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+  animation: sp-aura-breath 3.4s ease-in-out infinite;
+}
+
+/* Top-anchored aura — sits directly below the hand-raise bar, slides down. */
+.stream-pacer-bar-aura.aura-top {
+  top: 44px; /* equals hand-bar height */
+  height: 138px; /* ~3x */
+  background:
+    linear-gradient(to bottom,
+      var(--sp-aura-color) 0%,
+      var(--sp-aura-mid) 32%,
+      transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+  animation: sp-aura-breath 3.4s ease-in-out infinite;
+}
+
+/* Breath pulses brightness only — never opacity. Animating opacity here would
+   override the .active fade transition and desync the aura from the bar on
+   show/dismiss. The dim rest frame fakes a subtle opacity dip. */
+@keyframes sp-aura-breath {
+  0%, 100% { filter: brightness(0.92); }
+  50%      { filter: brightness(1.12); }
+}
+
+/* Signal-colour mapping for the aura — mirrors the bar's signal classes. */
+.stream-pacer-bar-aura.soft-signal {
+  --sp-aura-color: rgba(228, 176, 85, 0.42);
+  --sp-aura-mid:   rgba(228, 176, 85, 0.16);
+}
+
+.stream-pacer-bar-aura.countdown-signal {
+  --sp-aura-color: rgba(239, 100, 100, 0.42);
+  --sp-aura-mid:   rgba(239, 100, 100, 0.16);
+}
+
+.stream-pacer-bar-aura.floor-open-signal {
+  --sp-aura-color: rgba(71, 200, 255, 0.42);
+  --sp-aura-mid:   rgba(71, 200, 255, 0.16);
+}
+
+.stream-pacer-bar-aura.hand-raise {
+  --sp-aura-color: rgba(90, 163, 240, 0.48);
+  --sp-aura-mid:   rgba(90, 163, 240, 0.18);
+}
+
+.stream-pacer-bar-aura.urgency-warning {
+  --sp-aura-color: rgba(240, 168, 80, 0.5);
+  --sp-aura-mid:   rgba(240, 168, 80, 0.2);
+  animation-duration: 1.6s;
+}
+
+.stream-pacer-bar-aura.urgency-critical {
+  --sp-aura-color: rgba(245, 60, 60, 0.58);
+  --sp-aura-mid:   rgba(245, 60, 60, 0.24);
+  animation-duration: 0.9s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-pacer-bar-aura {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ========================================
+   Spotlight Tracker (GM only)
+   A fairness instrument: live per-player spotlight time, deficit bars, and a
+   "spotlight next" nudge. Tuned to the Arcane Glass palette.
+   ======================================== */
+
+#stream-pacer-container .spotlight-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#stream-pacer-container .spotlight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#stream-pacer-container .sl-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sp-muted-2);
+}
+
+#stream-pacer-container .sl-title i {
+  font-size: 8px;
+  color: var(--sp-amber);
+}
+
+#stream-pacer-container .sl-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--sp-hair);
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+  color: var(--sp-muted-2);
+  font-size: 7.5px;
+  cursor: pointer;
+  transition: all 0.2s var(--sp-ease-glass);
+}
+
+#stream-pacer-container .sl-reset:hover {
+  color: var(--sp-text);
+  border-color: var(--sp-line-strong);
+}
+
+#stream-pacer-container .spotlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#stream-pacer-container .sl-row {
+  display: grid;
+  grid-template-columns: 16px minmax(46px, 1fr) 2.2fr auto 10px;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background 0.25s var(--sp-ease-glass), border-color 0.25s var(--sp-ease-glass);
+}
+
+#stream-pacer-container .sl-row.is-active {
+  background: linear-gradient(180deg, rgba(228, 176, 85, 0.12), rgba(228, 176, 85, 0.02));
+  border-color: var(--sp-amber-dim);
+}
+
+#stream-pacer-container .sl-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--sp-muted);
+  font-size: 9px;
+  cursor: pointer;
+  transition: color 0.2s var(--sp-ease-glass), filter 0.2s var(--sp-ease-glass);
+}
+
+#stream-pacer-container .sl-toggle:hover {
+  color: var(--sp-muted-2);
+}
+
+#stream-pacer-container .sl-row.is-active .sl-toggle {
+  color: var(--sp-amber);
+  filter: drop-shadow(0 0 4px var(--sp-amber-glow));
+}
+
+#stream-pacer-container .sl-name {
+  min-width: 0;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--sp-text);
+}
+
+#stream-pacer-container .sl-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--sp-hair);
+  overflow: hidden;
+}
+
+#stream-pacer-container .sl-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(90deg, rgba(120, 150, 225, 0.5), var(--sp-blue));
+  transition: width 0.6s var(--sp-ease-glass);
+}
+
+#stream-pacer-container .sl-row.is-active .sl-bar-fill {
+  background: linear-gradient(90deg, var(--sp-amber-dim), var(--sp-amber));
+}
+
+#stream-pacer-container .sl-time {
+  font-family: var(--sp-clock-font);
+  font-size: 8.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--sp-muted-2);
+  text-align: right;
+}
+
+/* Underserved — warm flag on the row, bar, and the warning glyph */
+#stream-pacer-container .sl-warn {
+  font-size: 8px;
+  color: var(--sp-warn);
+  opacity: 0;
+  transition: opacity 0.25s var(--sp-ease-glass);
+}
+
+#stream-pacer-container .sl-row.is-underserved .sl-warn {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px rgba(240, 168, 80, 0.6));
+}
+
+#stream-pacer-container .sl-row.is-underserved .sl-name {
+  color: var(--sp-warn);
+}
+
+#stream-pacer-container .sl-row.is-underserved:not(.is-active) .sl-bar-fill {
+  background: linear-gradient(90deg, rgba(240, 168, 80, 0.35), var(--sp-warn));
+}
+
+/* "Spotlight next" nudge */
+#stream-pacer-container .spotlight-next {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 1px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--sp-muted-2);
+  border-top: 1px solid var(--sp-hair);
+}
+
+#stream-pacer-container .spotlight-next.is-hidden {
+  display: none;
+}
+
+#stream-pacer-container .spotlight-next i {
+  font-size: 7.5px;
+  color: var(--sp-warn);
+}
+
+#stream-pacer-container .spotlight-next .sl-next-name {
+  color: var(--sp-text);
+  font-weight: 700;
+}
+
+#stream-pacer-container .spotlight-next .sl-next-deficit {
+  color: var(--sp-warn);
+  font-variant-numeric: tabular-nums;
+}

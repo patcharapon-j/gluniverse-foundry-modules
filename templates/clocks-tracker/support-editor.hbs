@@ -1,0 +1,95 @@
+{{!-- Mission Support editor: a roster list (left) + the selected support's fields
+      and four ability slots (right). Inputs bind live to the working copy via
+      data-field/data-ability; Save writes it back through SupportStore. --}}
+<div class="sup-ed">
+  <div class="sup-ed-top">
+    <button type="button" class="sup-eb" data-action="addSupport"><i class="fa-solid fa-plus"></i> {{localize 'GLCT.support.editor.add'}}</button>
+    <button type="button" class="sup-eb" data-action="importPreset"><i class="fa-solid fa-download"></i> {{localize 'GLCT.support.editor.importPreset'}}</button>
+    <button type="button" class="sup-eb" data-action="importJson"><i class="fa-solid fa-file-import"></i> {{localize 'GLCT.support.editor.importJson'}}</button>
+    <button type="button" class="sup-eb" data-action="exportJson"><i class="fa-solid fa-file-export"></i> {{localize 'GLCT.support.editor.export'}}</button>
+    <span class="sup-ed-spacer"></span>
+    {{#if sel}}<button type="button" class="sup-eb" data-action="setActive"><i class="fa-solid fa-star"></i> {{localize 'GLCT.support.editor.setActive'}}</button>{{/if}}
+    <button type="button" class="sup-eb primary" data-action="saveRoster"><i class="fa-solid fa-floppy-disk"></i> {{localize 'GLCT.support.editor.save'}}</button>
+  </div>
+
+  <div class="sup-ed-body">
+    <div class="sup-ed-list" data-list>
+      {{#each roster}}
+      <div class="sup-ed-row {{#if this.selected}}sel{{/if}}" data-id="{{this.id}}" draggable="true">
+        <span class="dot" style="background:{{this.accent}}"></span>
+        <span class="nm">{{this.name}}</span>
+        {{#if this.active}}<i class="fa-solid fa-star" title="{{localize 'GLCT.support.editor.activeTag'}}"></i>{{/if}}
+      </div>
+      {{/each}}
+      {{#unless roster.length}}<p class="sup-ed-empty">{{localize 'GLCT.support.editor.empty'}}</p>{{/unless}}
+    </div>
+
+    <div class="sup-ed-form" data-form>
+      {{#if sel}}
+      <div class="sup-ed-grid">
+        <label>{{localize 'GLCT.support.editor.name'}}<input type="text" data-field="name" value="{{sel.name}}"></label>
+        <label>{{localize 'GLCT.support.editor.role'}}<input type="text" data-field="role" value="{{sel.role}}"></label>
+        <label>{{localize 'GLCT.support.editor.level'}}<input type="number" data-field="level" value="{{sel.level}}" min="-1" max="25" step="1"></label>
+        <label>{{localize 'GLCT.support.editor.accent'}}<input type="color" data-field="accent" value="{{sel.accent}}"></label>
+        <label>{{localize 'GLCT.support.editor.basePool'}}<input type="number" data-field="basePool" value="{{sel.basePool}}" min="1" max="20" step="1"></label>
+        <label>{{localize 'GLCT.support.editor.faction'}}
+          <select data-field="faction">
+            {{#each factionOptions}}<option value="{{this.v}}" {{#if this.sel}}selected{{/if}}>{{this.label}}</option>{{/each}}
+          </select>
+        </label>
+        <label>{{localize 'GLCT.support.editor.discard'}}<input type="number" data-field="discard" value="{{sel.discard}}" min="0" max="5" step="1"></label>
+        <label class="chk"><input type="checkbox" data-field="downFloor" {{#if sel.downFloor}}checked{{/if}}> {{localize 'GLCT.support.editor.downFloor'}}</label>
+        <label class="chk"><input type="checkbox" data-field="playerInvoke" {{#if sel.playerInvoke}}checked{{/if}}> {{localize 'GLCT.support.editor.playerInvoke'}}</label>
+      </div>
+
+      <div class="sup-ed-imgs">
+        <label class="img">{{localize 'GLCT.support.editor.portrait'}}
+          <span class="fp"><input type="text" data-field="img" value="{{sel.img}}" placeholder="path/to/portrait.webp">
+          <button type="button" class="sup-eb mini" data-action="pickImg" data-target="img"><i class="fa-solid fa-folder-open"></i></button></span>
+        </label>
+        <label class="img">{{localize 'GLCT.support.editor.tokenImg'}}
+          <span class="fp"><input type="text" data-field="tokenImg" value="{{sel.tokenImg}}" placeholder="{{localize 'GLCT.support.editor.tokenImgHint'}}">
+          <button type="button" class="sup-eb mini" data-action="pickImg" data-target="tokenImg"><i class="fa-solid fa-folder-open"></i></button></span>
+        </label>
+      </div>
+
+      <div class="sup-ed-framerow">
+        <button type="button" class="sup-eb" data-action="framePortrait"><i class="fa-solid fa-crop-simple"></i> {{localize 'GLCT.support.editor.framePortrait'}}</button>
+        <span class="sup-ed-help">{{localize 'GLCT.support.editor.framePortraitHint'}}</span>
+      </div>
+
+      <label class="img full" data-drop="passive">{{localize 'GLCT.support.editor.passiveEffect'}}
+        <span class="fp"><input type="text" data-field="passiveEffectUuid" value="{{sel.passiveEffectUuid}}" placeholder="{{localize 'GLCT.support.editor.dropEffect'}}">
+        <button type="button" class="sup-eb mini" data-action="clearField" data-target="passiveEffectUuid"><i class="fa-solid fa-xmark"></i></button></span>
+      </label>
+
+      <details class="sup-ed-help">
+        <summary>{{localize 'GLCT.support.editor.tokenHelp'}}</summary>
+        <div class="sup-ed-tokens">{{{tokenHelp}}}</div>
+      </details>
+
+      <div class="sup-ed-abils">
+        {{#each abilities}}
+        <fieldset class="sup-ed-abil {{this.cls}}" data-drop="ability" data-ability="{{this.key}}">
+          <legend><i class="{{this.icon}}"></i> {{this.label}}{{#if this.burn}} <span class="burn">{{localize 'GLCT.support.editor.burns'}}</span>{{/if}}</legend>
+          <div class="sup-ed-abrow">
+            <label>{{localize 'GLCT.support.editor.abName'}}<input type="text" data-ability="{{this.key}}" data-field="name" value="{{this.a.name}}"></label>
+            <label>{{localize 'GLCT.support.editor.cost'}}<input type="text" data-ability="{{this.key}}" data-field="costLabel" value="{{this.a.costLabel}}"></label>
+          </div>
+          <label>{{localize 'GLCT.support.editor.traits'}}<input type="text" data-ability="{{this.key}}" data-field="traits" value="{{this.traitsStr}}" placeholder="auditory, concentrate"></label>
+          <label>{{localize 'GLCT.support.editor.cardText'}}<textarea data-ability="{{this.key}}" data-field="cardText" rows="3" placeholder="{{localize 'GLCT.support.editor.cardTextHint'}}">{{this.a.cardText}}</textarea></label>
+          <label data-drop="ability" data-ability="{{this.key}}">{{localize 'GLCT.support.editor.effectUuids'}}<textarea data-ability="{{this.key}}" data-field="effectUuids" rows="2" placeholder="{{localize 'GLCT.support.editor.dropEffects'}}">{{this.effectsStr}}</textarea></label>
+        </fieldset>
+        {{/each}}
+      </div>
+
+      <div class="sup-ed-foot">
+        <button type="button" class="sup-eb" data-action="dupSupport"><i class="fa-solid fa-copy"></i> {{localize 'GLCT.support.editor.duplicate'}}</button>
+        <button type="button" class="sup-eb danger" data-action="delSupport"><i class="fa-solid fa-trash"></i> {{localize 'GLCT.support.editor.delete'}}</button>
+      </div>
+      {{else}}
+      <p class="sup-ed-hint">{{localize 'GLCT.support.editor.selectHint'}}</p>
+      {{/if}}
+    </div>
+  </div>
+</div>

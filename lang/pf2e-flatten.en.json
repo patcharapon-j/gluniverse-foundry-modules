@@ -1,0 +1,41 @@
+{
+	"pf2e-flatten": {
+		"settings": {
+			"autoflatten": {
+				"name": "Automatically flatten new actors",
+				"hint": "When enabled, any eligible actor created in the world (for example, dragged in from a compendium) is flattened automatically."
+			},
+			"flattenPcs": {
+				"name": "Enable flattening for PCs",
+				"hint": "Allow the flatten/unflatten actions to apply to player characters in addition to NPCs."
+			},
+			"multiplier": {
+				"name": "Reduced proficiency mode",
+				"hint": "How much of an actor's level is removed from proficiency. Unflatten and reflatten existing actors to apply a change.",
+				"half": "Half level proficiency",
+				"none": "No level proficiency"
+			},
+			"roundingMode": {
+				"name": "Rounding mode",
+				"hint": "Rounding applied when calculating the half-level value. Unflatten and reflatten existing actors to apply a change.",
+				"ceil": "Round up (ceil)",
+				"floor": "Round down (floor)"
+			}
+		},
+		"context": {
+			"flatten": "PF2e Flatten",
+			"unflatten": "PF2e Unflatten"
+		},
+		"buttons": {
+			"flattenAll": "Flatten All",
+			"unflattenAll": "Unflatten All"
+		},
+		"notifications": {
+			"flattening": "Flattening {count} actor(s)…",
+			"flattened": "Finished flattening {count} actor(s).",
+			"unflattening": "Unflattening {count} actor(s)…",
+			"unflattened": "Finished unflattening {count} actor(s).",
+			"reapplied": "Re-applied flattening for {name}."
+		}
+	}
+}

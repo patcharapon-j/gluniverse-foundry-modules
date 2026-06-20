@@ -1,0 +1,10 @@
+{
+  "GLUCARGO.Settings.PlayerVisible.Name": "Show Cargo Grid to players",
+  "GLUCARGO.Settings.PlayerVisible.Hint": "When disabled, players do not see the Cargo Grid button and any open player board closes.",
+  "GLUCARGO.Settings.MaxShapeSize.Name": "Maximum cargo shape editor size",
+  "GLUCARGO.Settings.MaxShapeSize.Hint": "Maximum width and height for custom cargo masks.",
+  "GLUCARGO.Settings.CellSize.Name": "Cargo grid cell size",
+  "GLUCARGO.Settings.CellSize.Hint": "Default grid cell size in pixels before the board scales down to fit.",
+  "GLUCARGO.Title": "Cargo Grid",
+  "GLUCARGO.Open": "Open Cargo Grid"
+}

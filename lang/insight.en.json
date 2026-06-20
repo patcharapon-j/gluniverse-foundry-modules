@@ -1,0 +1,32 @@
+{
+  "INSIGHT.ModuleTitle": "Gluniverse Insight",
+
+  "INSIGHT.SettingTheme": "Notification Theme",
+  "INSIGHT.SettingThemeHint": "Visual theme for Insight notifications.",
+  "INSIGHT.ThemeDreadlight": "Dreadlight",
+  "INSIGHT.ThemeFantasy": "Fantasy",
+
+  "INSIGHT.SettingSoundEnabled": "Enable Sounds",
+  "INSIGHT.SettingSoundEnabledHint": "Play sounds when notifications appear.",
+  "INSIGHT.SettingSoundVolume": "Sound Volume",
+  "INSIGHT.SettingSoundVolumeHint": "Volume level for notification sounds.",
+  "INSIGHT.SettingAnimationSpeed": "Animation Speed",
+  "INSIGHT.SettingAnimationSpeedHint": "Speed of notification animations.",
+  "INSIGHT.AnimationNormal": "Normal",
+  "INSIGHT.AnimationFast": "Fast",
+  "INSIGHT.AnimationInstant": "Instant",
+
+  "INSIGHT.ComposeTitle": "Send Insight",
+  "INSIGHT.ComposeTarget": "Target Recipient",
+  "INSIGHT.ComposeTargetHint": "Select which user receives this notification. Other GMs are included so you can whisper to a co-GM or GM assistant.",
+  "INSIGHT.ComposeTargetGMSuffix": "(GM)",
+  "INSIGHT.ComposeMessage": "Message",
+  "INSIGHT.ComposeMessageHint": "Sent privately to the chosen player. Supports <b>bold</b> and <i>italic</i>. Ctrl+Enter to send.",
+  "INSIGHT.SettingSoundFile": "Custom Sound Effect",
+  "INSIGHT.SettingSoundFileHint": "Optional audio file to play instead of the default procedural sound. Leave blank to use the built-in sound.",
+  "INSIGHT.ComposeSend": "Send",
+  "INSIGHT.ComposeSent": "Sent!",
+
+  "INSIGHT.Dismiss": "Dismiss",
+  "INSIGHT.SceneControl": "Send Insight"
+}

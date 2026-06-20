@@ -1,0 +1,60 @@
+{{!-- Weather visual editor. The flower, per-hex form, and Navigation-Hex editor
+      (with live trend preview) are built imperatively in WeatherEditor for full
+      control over selection + live Pixi preview; this is the static shell. --}}
+<div class="glct-wxedit">
+
+  {{!-- Region management: each region keeps its own climate + living walk. The
+        editor edits one region at a time (independent of which is "active"). --}}
+  <div class="wxe-regionbar">
+    <label>{{localize 'GLCT.weather.region.editing'}}</label>
+    <select name="regionSel" data-regionsel></select>
+    <button type="button" data-action="regionNew" title="{{localize 'GLCT.weather.region.add'}}"><i class="fa-solid fa-plus"></i></button>
+    <button type="button" data-action="regionDup" title="{{localize 'GLCT.weather.region.duplicate'}}"><i class="fa-solid fa-clone"></i></button>
+    <button type="button" data-action="regionRename" title="{{localize 'GLCT.weather.region.rename'}}"><i class="fa-solid fa-i-cursor"></i></button>
+    <button type="button" data-action="regionDelete" title="{{localize 'GLCT.weather.region.delete'}}"><i class="fa-solid fa-trash"></i></button>
+  </div>
+
+  <div class="wxe-top">
+    <label>{{localize 'GLCT.weather.editor.preset'}}</label>
+    <select name="presetSelect">
+      {{#each presets}}<option value="{{this.id}}">{{this.name}}</option>{{/each}}
+    </select>
+    <button type="button" data-action="loadPreset"><i class="fa-solid fa-wand-magic-sparkles"></i> {{localize 'GLCT.weather.editor.load'}}</button>
+    <span class="wxe-spacer"></span>
+    <button type="button" data-action="importJson" title="{{localize 'GLCT.editor.import'}}"><i class="fa-solid fa-file-import"></i></button>
+    <button type="button" data-action="exportJson" title="{{localize 'GLCT.editor.export'}}"><i class="fa-solid fa-file-export"></i></button>
+  </div>
+
+  <div class="wxe-clim">
+    <label>{{localize 'GLCT.weather.editor.climateName'}}</label>
+    <input type="text" name="climateName" />
+    <label>{{localize 'GLCT.weather.editor.startHex'}}</label>
+    <input type="number" name="startHex" min="0" max="18" step="1" />
+    <label class="wxe-seasonal" title="{{localize 'GLCT.weather.editor.seasonalHint'}}">
+      <input type="checkbox" name="seasonal" /> {{localize 'GLCT.weather.editor.seasonal'}}
+    </label>
+  </div>
+  <p class="wxe-hint" data-seasonalhint></p>
+
+  <div class="wxe-tabs" data-tabs></div>
+
+  <div class="wxe-main">
+    <div class="wxe-flower-col">
+      <div class="wxe-flower" data-flower></div>
+      <p class="wxe-hint">{{localize 'GLCT.weather.editor.clickHex'}}</p>
+    </div>
+    <div class="wxe-hexform" data-hexform></div>
+  </div>
+
+  <div class="wxe-navsection">
+    <div class="wxe-sec-title"><i class="fa-solid fa-compass"></i> {{localize 'GLCT.weather.editor.navTitle'}}</div>
+    <div class="wxe-nav" data-nav></div>
+  </div>
+
+  <div class="wxe-actions">
+    <button type="button" data-action="resetWalk"><i class="fa-solid fa-rotate-left"></i> {{localize 'GLCT.weather.editor.resetWalk'}}</button>
+    <span class="wxe-spacer"></span>
+    <button type="button" class="wxe-save" data-action="saveWeather"><i class="fa-solid fa-floppy-disk"></i> {{localize 'GLCT.weather.editor.save'}}</button>
+  </div>
+
+</div>

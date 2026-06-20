@@ -1,0 +1,33 @@
+<div class="insight-notification" data-id="{{id}}">
+  <span class="gl-crop gl-crop-tl"></span>
+  <span class="gl-crop gl-crop-tr"></span>
+  <span class="gl-crop gl-crop-bl"></span>
+  <span class="gl-crop gl-crop-br"></span>
+  <div class="insight-fracture-line"></div>
+  <div class="insight-fracture-card">
+    <div class="insight-fracture-bg-back"></div>
+    <div class="insight-fracture-bg-front">
+      <span class="insight-bracket"></span>
+      <div class="insight-sheen"></div>
+      <div class="insight-fracture-inner">
+        <div class="insight-label-row">
+          <div class="insight-icon">&#x25B2;</div>
+          {{#if sense}}<div class="insight-sense">{{sense}}</div>{{/if}}
+          <div class="insight-serial">GLU&middot;INSIGHT // {{serial}}</div>
+        </div>
+        {{#if title}}
+        <div class="insight-title">{{title}}</div>
+        <div class="insight-divider"></div>
+        {{/if}}
+        {{#if image}}
+        <img class="insight-image" src="{{image}}" alt="">
+        {{/if}}
+        <div class="insight-body">{{{body}}}</div>
+        <div class="insight-datastrip"></div>
+      </div>
+      <button class="insight-dismiss" data-action="dismiss">
+        &#x2715; {{localize "INSIGHT.Dismiss"}}
+      </button>
+    </div>
+  </div>
+</div>

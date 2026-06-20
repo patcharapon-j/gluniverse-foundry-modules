@@ -1,0 +1,356 @@
+/* ============================================================
+   GLUniverse — Clocks & Tracker : MISSION SUPPORT styles
+   The Comms-Coin HUD (compact coin → hover dossier) + the support
+   action chat card, styled to match the "Arcane Glass" HUD. Each
+   support carries its accent via --glct-sup-accent (set inline);
+   glow/soft are derived from it with color-mix.
+   ============================================================ */
+
+#glct-support-hud{
+  --ink:#eef1f7; --muted:#98a2b6; --hair:rgba(255,255,255,.08); --edge:rgba(255,255,255,.13);
+  --glct-sup-accent:#e0a368;
+  --acc:var(--glct-sup-accent);
+  --glow:color-mix(in srgb, var(--acc) 55%, transparent);
+  --soft:color-mix(in srgb, var(--acc) 18%, transparent);
+  --tint2:color-mix(in srgb, var(--acc) 16%, #0b0e14);
+  width:max-content;height:max-content;background:none;border:none;box-shadow:none;
+  font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--ink);pointer-events:none;
+}
+#glct-support-hud .glct-sup-root{position:relative;pointer-events:none}
+#glct-support-hud .glct-sup-root *{pointer-events:auto;box-sizing:border-box}
+
+#glct-support-hud .glass{
+  background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 32%),
+    linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.22)),
+    linear-gradient(120deg, var(--tint2), #080b11 72%);
+  border:1px solid var(--edge);
+  box-shadow:0 24px 64px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -12px 26px rgba(0,0,0,.36), 0 0 38px var(--soft);
+  backdrop-filter:blur(15px) saturate(1.15);
+}
+
+/* ---------------- Muster (GM, no active support) ---------------- */
+#glct-support-hud .sup-muster[hidden]{display:none}
+#glct-support-hud .sup-muster-coin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  width:60px;height:60px;border-radius:50%;cursor:pointer;color:var(--muted);
+  border:1px dashed rgba(255,255,255,.22);background:rgba(14,18,26,.7);backdrop-filter:blur(8px);
+  font:700 7px/1.1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.1em;text-transform:uppercase;transition:.18s}
+#glct-support-hud .sup-muster-coin i{font-size:16px}
+#glct-support-hud .sup-muster-coin:hover{color:var(--ink);border-color:var(--acc);box-shadow:0 0 18px var(--soft)}
+/* while dragging the whole widget */
+#glct-support-hud.is-dragging,#glct-support-hud.is-dragging .coin,#glct-support-hud.is-dragging .sup-muster-coin{cursor:grabbing}
+#glct-support-hud.is-dragging .coin{transform:none}
+
+/* ---------------- Coin (resting) — portrait fills the whole disc ---------------- */
+/* The coin geometry is authored at 96px but rendered 25% smaller (→72px) via a
+   top-left scale, so the disc / ring / name / DOWNED all shrink together crisply. */
+#glct-support-hud .coin-wrap{position:relative;width:72px;height:72px}
+#glct-support-hud .coin-wrap[hidden]{display:none}
+#glct-support-hud .coin{position:absolute;left:0;top:0;width:96px;height:96px;cursor:grab;overflow:visible;
+  transform:scale(.75);transform-origin:top left;
+  filter:drop-shadow(0 11px 20px rgba(0,0,0,.6));transition:transform .26s cubic-bezier(.34,1.4,.5,1),opacity .22s}
+#glct-support-hud .coin:hover{transform:scale(.75) translateY(-3px)}
+#glct-support-hud .coin-wrap.is-open .coin{opacity:0;pointer-events:none;transform:scale(.675)}
+/* the disc: a clean circle the portrait fills (bleeds past the top, soft rim) */
+#glct-support-hud .disc{position:absolute;left:11px;top:11px;width:74px;height:74px;border-radius:50%;overflow:hidden;
+  background:#06080c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),inset 0 -8px 18px rgba(0,0,0,.6)}
+#glct-support-hud .disc.has-img{background:#06080c}
+#glct-support-hud .disc:not(.has-img){background:radial-gradient(115% 90% at 50% 22%,color-mix(in srgb,var(--acc) 50%,#1a1410),#0b0907 80%)}
+#glct-support-hud .disc .art{position:absolute;left:50%;top:0;width:170%;transform-origin:top center;display:none;
+  transform:translate(calc(-50% + var(--ix,0px)),var(--iy,-10px)) scale(var(--is,1));
+  -webkit-mask-image:radial-gradient(125% 95% at 50% 32%,#000 62%,transparent 94%);
+          mask-image:radial-gradient(125% 95% at 50% 32%,#000 62%,transparent 94%)}
+#glct-support-hud .disc.has-img .art{display:block}
+#glct-support-hud .disc.has-img .ph{display:none}
+#glct-support-hud .disc .ph{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:26px;
+  color:color-mix(in srgb,var(--acc) 80%,#fff);filter:drop-shadow(0 0 8px var(--glow))}
+
+#glct-support-hud .ring{position:absolute;inset:0;width:96px;height:96px;overflow:visible}
+#glct-support-hud .ring .track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:7}
+#glct-support-hud .ring .seg{fill:none;stroke-width:7;stroke-linecap:butt;stroke:rgba(255,255,255,.14);transition:stroke .45s,filter .45s}
+#glct-support-hud .ring .seg.on{stroke:var(--acc);filter:drop-shadow(0 0 5px var(--glow))}
+
+#glct-support-hud .coin .cname{position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);white-space:nowrap;z-index:6;
+  font:800 9.5px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.05em;color:#fff;text-shadow:0 1px 5px #000;
+  padding:2px 8px;border-radius:99px;background:rgba(8,11,17,.72);border:1px solid var(--hair)}
+
+/* DOWNED — red banner across the disc centre, above the art */
+#glct-support-hud .coin .dband{display:none}
+#glct-support-hud .is-downed .disc .art{filter:grayscale(.85) brightness(.58)}
+#glct-support-hud .is-downed .ring .seg.on{stroke:var(--gl-hazard);filter:drop-shadow(0 0 5px color-mix(in srgb,var(--gl-hazard) 60%,transparent))}
+#glct-support-hud .is-downed .coin .dband{display:block;position:absolute;left:0;right:0;top:50%;z-index:7;
+  transform:translateY(-50%);text-align:center;font:800 10.5px/1 "Oxanium","Segoe UI",sans-serif;
+  letter-spacing:.3em;text-indent:.3em;text-transform:uppercase;color:#ff5a4d;
+  text-shadow:0 0 8px rgba(255,72,60,.55),0 1px 3px rgba(0,0,0,.85);animation:glct-dthrob 2.4s ease-in-out infinite}
+@keyframes glct-dthrob{0%,100%{opacity:.82;text-shadow:0 0 6px rgba(255,72,60,.38),0 1px 3px rgba(0,0,0,.85)}
+  50%{opacity:1;text-shadow:0 0 13px rgba(255,72,60,.75),0 1px 3px rgba(0,0,0,.85)}}
+
+/* ---------------- Expanded sheet (click) ---------------- */
+#glct-support-hud .sheet{position:absolute;right:0;bottom:0;width:300px;border-radius:15px;overflow:hidden;
+  display:none;transform-origin:bottom right;z-index:20}
+#glct-support-hud .coin-wrap.is-open .sheet{display:block;animation:glct-sup-pop .26s cubic-bezier(.34,1.3,.5,1)}
+@keyframes glct-sup-pop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+
+/* diorama hero — portrait art bleeds top-left and fades out to the right/bottom */
+#glct-support-hud .hero{position:relative;height:104px;overflow:hidden;border-bottom:1px solid var(--hair);cursor:grab}
+#glct-support-hud .hero .art{position:absolute;left:0;top:0;height:200%;transform-origin:top left;display:none;
+  transform:translate(var(--ix,0px),var(--iy,-22px)) scale(var(--is,1));
+  -webkit-mask-image:linear-gradient(100deg,#000 34%,transparent 76%),linear-gradient(#000,#000 66%,transparent);
+          mask-image:linear-gradient(100deg,#000 34%,transparent 76%),linear-gradient(#000,#000 66%,transparent);
+  -webkit-mask-composite:source-in;mask-composite:intersect}
+#glct-support-hud .hero.has-img .art{display:block}
+#glct-support-hud .hero.has-img .ph{display:none}
+#glct-support-hud .hero .ph{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:34px;
+  color:color-mix(in srgb,var(--acc) 78%,#fff);filter:drop-shadow(0 0 9px var(--glow))}
+#glct-support-hud .hero .htext{position:absolute;right:13px;bottom:11px;left:128px;text-align:right;z-index:2}
+#glct-support-hud .hero .nm{font:800 18px/1.05 "Oxanium","Segoe UI",sans-serif;
+  background:linear-gradient(180deg,#fff,#cdd6e6);-webkit-background-clip:text;background-clip:text;color:transparent}
+#glct-support-hud .hero .rl{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.25}
+#glct-support-hud .hero .state{position:absolute;left:13px;top:11px;z-index:2;display:inline-flex;align-items:center;gap:5px;
+  font:800 8px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.14em;text-transform:uppercase;padding:4px 8px;border-radius:99px;border:1px solid;white-space:nowrap}
+#glct-support-hud .hero .state.ok{color:#9ff0c4;border-color:rgba(111,224,160,.4);background:rgba(111,224,160,.14)}
+#glct-support-hud .hero .state.down{display:none;color:#ffd0cb;border-color:color-mix(in srgb,var(--gl-hazard) 50%,transparent);background:color-mix(in srgb,var(--gl-hazard) 20%,transparent)}
+#glct-support-hud .is-downed .state.ok{display:none}
+#glct-support-hud .is-downed .state.down{display:inline-flex}
+#glct-support-hud .is-downed .hero .art{filter:grayscale(.85) brightness(.58)}
+#glct-support-hud .sheet-close{position:absolute;right:9px;top:8px;z-index:3;width:22px;height:22px;border-radius:7px;
+  border:1px solid var(--hair);background:rgba(8,11,17,.55);color:#cdd6e6;cursor:pointer;display:grid;place-items:center;font-size:11px;transition:.14s}
+#glct-support-hud .sheet-close:hover{background:color-mix(in srgb,var(--gl-hazard) 25%,transparent);color:#fff}
+
+/* DOWNED band across the hero (and reused by the card takeover header) */
+#glct-support-hud .dband-wide{display:none}
+#glct-support-hud .is-downed .dband-wide{display:block;position:absolute;left:0;right:0;top:50%;z-index:3;
+  transform:translateY(-50%);text-align:center;font:800 17px/1 "Oxanium","Segoe UI",sans-serif;
+  letter-spacing:.44em;text-indent:.44em;text-transform:uppercase;color:#ff5a4d;
+  text-shadow:0 0 13px rgba(255,72,60,.5),0 2px 5px rgba(0,0,0,.85);animation:glct-dthrob 2.4s ease-in-out infinite}
+
+#glct-support-hud .body{padding:11px}
+
+#glct-support-hud .pstrip{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;margin-bottom:9px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border:1px solid var(--hair)}
+#glct-support-hud .pstrip-meta{min-width:0}
+#glct-support-hud .pstrip .lbl{font:800 7.5px/1.3 "Oxanium","Segoe UI",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#69748c}
+#glct-support-hud .pstrip .fac{font:700 10px/1.3 "Oxanium","Segoe UI",sans-serif;color:#cdd6e6;margin-top:2px}
+#glct-support-hud .pstrip .fac b{color:var(--acc)}
+#glct-support-hud .pool-edit{margin-left:auto;display:flex;align-items:center;gap:7px;flex:none}
+#glct-support-hud .pstep{width:22px;height:22px;border-radius:6px;border:1px solid var(--hair);background:rgba(255,255,255,.06);color:var(--ink);
+  cursor:pointer;font:800 14px/1 "Oxanium","Segoe UI",sans-serif;display:grid;place-items:center;transition:.14s}
+#glct-support-hud .pstep:hover{background:rgba(255,255,255,.14)}
+#glct-support-hud .pcur{min-width:46px;text-align:center;font:800 12px/1 "Oxanium","Segoe UI",sans-serif;color:#cdd6e6;display:flex;align-items:baseline;justify-content:center;gap:3px}
+#glct-support-hud .pcur b{color:var(--acc);font-size:17px}
+#glct-support-hud .pcur .sep{color:#69748c}
+
+#glct-support-hud .dice{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px}
+#glct-support-hud .die{width:19px;height:19px;border-radius:5px;display:grid;place-items:center;flex:none;font:800 8px/1 "Oxanium","Segoe UI",sans-serif;color:#0c0a08;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 92%,#fff),var(--acc));
+  box-shadow:0 2px 5px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.45);transition:transform .4s cubic-bezier(.34,1.5,.5,1),opacity .4s,filter .4s,background .4s}
+#glct-support-hud .is-gm .die{cursor:pointer}
+#glct-support-hud .die.spent{background:rgba(255,255,255,.06);color:#566;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);opacity:.5;transform:scale(.82) rotate(-8deg);filter:grayscale(1)}
+
+#glct-support-hud .acts{display:flex;flex-direction:column;gap:5px}
+#glct-support-hud .act{position:relative;display:flex;align-items:center;gap:9px;padding:8px 9px 8px 11px;border-radius:9px;text-align:left;width:100%;
+  background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01));border:1px solid var(--hair);color:var(--ink);
+  cursor:pointer;transition:.14s;overflow:hidden}
+#glct-support-hud .act::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2.5px;background:var(--ac,var(--acc))}
+#glct-support-hud .act:hover{background:rgba(255,255,255,.07);box-shadow:0 0 0 1px color-mix(in srgb,var(--ac) 30%,transparent),0 0 14px -4px var(--ac)}
+#glct-support-hud .act:active{transform:translateY(1px)}
+#glct-support-hud .act .ai{width:18px;text-align:center;font-size:13px;color:var(--ac,var(--acc));flex:none}
+#glct-support-hud .act .am{flex:1;min-width:0}
+/* only the ability name shows; it wraps to a second line instead of clipping */
+#glct-support-hud .act .an{font:800 10.5px/1.25 "Oxanium","Segoe UI",sans-serif;letter-spacing:.01em;white-space:normal;overflow-wrap:anywhere}
+#glct-support-hud .act .cost{flex:none;display:inline-flex;align-items:center;gap:4px;font:800 7px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.08em;
+  text-transform:uppercase;color:#aeb8cc;border:1px solid var(--hair);border-radius:6px;padding:3px 5px;white-space:nowrap;margin-top:1px}
+#glct-support-hud .act .burn{color:#ff9a6f}
+#glct-support-hud .act.passive{--ac:#9fb0ff;cursor:pointer}
+#glct-support-hud .act.radio{--ac:#7fb4ff}
+#glct-support-hud .act.fc{--ac:#ff8a5f}
+#glct-support-hud .act.fx{--ac:#7fd6a0}
+#glct-support-hud .act.disabled{opacity:.38;pointer-events:none;filter:grayscale(.6)}
+#glct-support-hud .act.used{opacity:.6}
+#glct-support-hud .act.used .cost::after{content:"· used";color:#ff9a6f;margin-left:3px}
+
+#glct-support-hud .sup-gm{display:flex;gap:5px;margin-top:9px}
+#glct-support-hud .sup-gb{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:28px;padding:0 8px;border-radius:8px;
+  border:1px solid var(--hair);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));color:var(--ink);cursor:pointer;
+  font:800 9px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.06em;text-transform:uppercase;transition:.14s}
+#glct-support-hud .sup-gb i{font-size:11px}
+#glct-support-hud .sup-gb.primary{flex:1;color:#fff;border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 70%,#000),color-mix(in srgb,var(--acc) 45%,#000))}
+#glct-support-hud .sup-gb:hover{background:rgba(255,255,255,.12);box-shadow:0 0 12px var(--soft)}
+#glct-support-hud .sup-gb.on{color:#9ff0c4}
+/* GM "clear this round's action" — only shown (JS) in combat once the lock is set */
+#glct-support-hud .sup-gb-clear{color:#ff9a6f;border-color:rgba(255,154,111,.34);background:linear-gradient(180deg,rgba(255,154,111,.14),rgba(255,154,111,.05))}
+#glct-support-hud .sup-gb-clear:hover{background:rgba(255,154,111,.22);box-shadow:0 0 12px rgba(255,154,111,.4)}
+#glct-support-hud .sup-gb-clear[hidden]{display:none}
+
+/* ---------------- Muster picker dialog ---------------- */
+.glct-sup-picker .sup-pick-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;margin-bottom:8px}
+.glct-sup-picker .sup-pick{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:10px;text-align:left;cursor:pointer;
+  --acc:var(--glct-sup-accent,#e0a368);border:1px solid rgba(255,255,255,.12);background:linear-gradient(120deg,color-mix(in srgb,var(--acc) 14%,#10141c),#10141c 70%);color:#eef1f7;transition:.14s}
+.glct-sup-picker .sup-pick:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 40%,transparent),0 0 16px -4px var(--acc)}
+.glct-sup-picker .sup-pick.active{box-shadow:0 0 0 1px var(--acc)}
+.glct-sup-picker .sup-pick-pic{width:38px;height:38px;border-radius:8px;flex:none;display:grid;place-items:center;overflow:hidden;font-size:18px;
+  background:radial-gradient(120% 120% at 50% 20%,color-mix(in srgb,var(--acc) 50%,#1a1410),#0b0907)}
+.glct-sup-picker .sup-pick-pic img{width:100%;height:100%;object-fit:cover}
+.glct-sup-picker .sup-pick-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.glct-sup-picker .sup-pick-txt .n{font:800 13px/1 "Oxanium","Segoe UI",sans-serif}
+.glct-sup-picker .sup-pick-txt .r{font-size:10px;color:#98a2b6}
+.glct-sup-picker .sup-pick-pool{font:800 11px/1 "Oxanium","Segoe UI",sans-serif;color:var(--acc);white-space:nowrap}
+.glct-sup-picker .sup-pick-down{color:#ffb0a8;font-size:9px;display:block;margin-top:2px}
+.glct-sup-picker .sup-pick-start{display:flex;align-items:center;gap:6px;font-size:12px;color:#cdd6e6}
+
+/* ---------------- Action hover tooltip (renders in Foundry's #tooltip) ---------------- */
+#tooltip.glct-sup-tip-wrap,aside.glct-sup-tip-wrap{white-space:normal;text-align:left;max-width:288px}
+.glct-sup-tip{--glct-sup-accent:#e0a368;max-width:262px;text-align:left;padding:2px 1px}
+.glct-sup-tip .tip-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.glct-sup-tip .tip-head b{font:800 12.5px/1.15 "Oxanium","Segoe UI",sans-serif;color:#fff}
+.glct-sup-tip .tip-cost{flex:none;font:800 7px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;
+  color:#e9eefb;border:1px solid rgba(255,255,255,.22);border-radius:5px;padding:3px 5px;white-space:nowrap}
+.glct-sup-tip .tip-kind{font:800 7.5px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--glct-sup-accent) 80%,#fff);margin-top:4px}
+.glct-sup-tip .tip-traits{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.glct-sup-tip .tip-traits span{font:700 8px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.05em;text-transform:uppercase;
+  color:#d8b48a;background:#3a2a18;border:1px solid #5a4326;border-radius:3px;padding:3px 5px}
+.glct-sup-tip .tip-limit{display:inline-flex;align-items:center;gap:5px;margin-top:6px;
+  font:800 7.5px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#ff9a6f;
+  border:1px solid rgba(255,154,111,.32);border-radius:5px;padding:3px 6px;background:rgba(255,154,111,.08)}
+.glct-sup-tip .tip-body{margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.12);
+  font:12px/1.5 "Segoe UI",system-ui,sans-serif;color:#dfe5f0}
+
+/* ============================================================
+   Support action CHAT CARD (global — rendered in the chat log)
+   ============================================================ */
+.glct-support-card{--glct-sup-accent:#e0a368;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.13);
+  background:linear-gradient(180deg,#1c2230,#141923);box-shadow:0 8px 20px rgba(0,0,0,.4)}
+/* diorama header — the portrait art bleeds in from the left and fades out */
+.glct-support-card .glct-sc-head{position:relative;min-height:104px;overflow:hidden;display:flex;align-items:stretch;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(120deg,color-mix(in srgb,var(--glct-sup-accent) 26%,#10141c),#10141c 70%)}
+.glct-support-card .glct-sc-art{position:absolute;left:0;top:0;height:210%;transform-origin:top left;
+  transform:translate(var(--cx,0px),var(--cy,-18px)) scale(var(--cs,1));
+  -webkit-mask-image:linear-gradient(100deg,#000 28%,transparent 72%),linear-gradient(#000,#000 72%,transparent);
+          mask-image:linear-gradient(100deg,#000 28%,transparent 72%),linear-gradient(#000,#000 72%,transparent);
+  -webkit-mask-composite:source-in;mask-composite:intersect}
+.glct-support-card .glct-sc-ph{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:30px;color:color-mix(in srgb,var(--glct-sup-accent) 78%,#fff)}
+.glct-support-card .glct-sc-who{position:relative;z-index:2;margin-left:auto;display:flex;flex-direction:column;
+  align-items:flex-end;justify-content:center;gap:5px;text-align:right;padding:26px 13px 13px;min-width:0;max-width:62%}
+.glct-support-card .glct-sc-who .glct-sc-a{font:800 8px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#cbb38c}
+.glct-support-card .glct-sc-who .glct-sc-b{font:800 15px/1.18 "Oxanium","Segoe UI",sans-serif;color:#fff;white-space:normal;overflow-wrap:anywhere}
+.glct-support-card .glct-sc-cost{align-self:flex-end;font:800 7px/1.3 "Oxanium","Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#e9eefb;
+  border:1px solid rgba(255,255,255,.22);border-radius:6px;padding:4px 7px;text-align:center;max-width:100%;white-space:nowrap;background:rgba(8,11,17,.4)}
+.glct-support-card .glct-sc-traits{display:flex;gap:4px;flex-wrap:wrap;padding:8px 10px 0}
+.glct-support-card .glct-sc-trait{font:700 8px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#d8b48a;
+  background:#3a2a18;border:1px solid #5a4326;border-radius:3px;padding:3px 6px}
+.glct-support-card .glct-sc-body{padding:9px 10px 11px;font-size:13px;line-height:1.5;color:#cdd6e6}
+.glct-support-card .glct-sc-body b,.glct-support-card .glct-sc-body strong{color:#fff}
+.glct-support-card .glct-sc-pool{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.08);
+  background:rgba(0,0,0,.22);font:700 11px/1 "Oxanium","Segoe UI",sans-serif;color:#9aa3b6;flex-wrap:wrap}
+.glct-support-card .glct-sc-pool.empty{color:#ffb0a8}
+.glct-support-card .glct-sc-pool-lbl{display:inline-flex;align-items:center;gap:6px}
+.glct-support-card .glct-sc-pool-dice{display:flex;gap:3px;margin-left:auto;flex-wrap:wrap}
+.glct-support-card .glct-sc-die{width:17px;height:17px;border-radius:4px;display:grid;place-items:center;font:800 9px/1 "Oxanium","Segoe UI",sans-serif;
+  color:#0c0a08;background:linear-gradient(180deg,#f0d9b8,var(--glct-sup-accent))}
+.glct-support-card .glct-sc-die.drop{background:rgba(255,255,255,.08);color:#667;text-decoration:line-through}
+/* Full-bleed: the card carries its own header, so strip the chat-message chrome
+   and float the metadata (timestamp + delete control) over the top-right corner —
+   the delete control stays intact, just relocated. */
+#chat-log .chat-message.glct-support-msg,
+.chat-message.glct-support-msg{padding:0;overflow:hidden;position:relative}
+.chat-message.glct-support-msg .message-header{position:absolute;top:0;right:0;left:auto;width:auto;margin:0;padding:6px 9px;border:none;z-index:4;flex:none}
+.chat-message.glct-support-msg .message-sender,
+.chat-message.glct-support-msg .message-header .flavor-text{display:none}
+.chat-message.glct-support-msg .message-metadata{margin:0;gap:8px;color:#e3e9f4;font-size:10px;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.chat-message.glct-support-msg .message-metadata .message-delete{color:#e3e9f4}
+.chat-message.glct-support-msg .message-content{margin:0;padding:0}
+/* the card fills the message corner-to-corner; the li's overflow:hidden rounds it */
+.chat-message.glct-support-msg .glct-support-card{margin:0;border:none;border-radius:0;box-shadow:none}
+
+/* ============================================================
+   Support EDITOR (settings-menu app)
+   ============================================================ */
+.glct-supeditor .sup-ed{display:flex;flex-direction:column;gap:10px}
+.glct-supeditor .sup-ed-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.glct-supeditor .sup-ed-spacer{flex:1}
+.glct-supeditor .sup-eb{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--color-border-light-tertiary,rgba(0,0,0,.2));background:rgba(255,255,255,.04);color:inherit;
+  font:600 12px/1 "Oxanium","Segoe UI",sans-serif;transition:.14s}
+.glct-supeditor .sup-eb:hover{background:rgba(127,160,231,.16)}
+.glct-supeditor .sup-eb.primary{background:#5a7fd6;color:#fff;border-color:transparent}
+.glct-supeditor .sup-eb.danger:hover{background:color-mix(in srgb,var(--gl-hazard) 20%,transparent)}
+.glct-supeditor .sup-eb.mini{padding:6px 8px}
+.glct-supeditor .sup-ed-body{display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start}
+.glct-supeditor .sup-ed-list{display:flex;flex-direction:column;gap:4px;max-height:62vh;overflow-y:auto;
+  border:1px solid var(--color-border-light-tertiary,rgba(0,0,0,.15));border-radius:8px;padding:6px}
+.glct-supeditor .sup-ed-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:.12s}
+.glct-supeditor .sup-ed-row:hover{background:rgba(127,160,231,.14)}
+.glct-supeditor .sup-ed-row.sel{background:rgba(127,160,231,.24);box-shadow:inset 0 0 0 1px rgba(127,160,231,.5)}
+.glct-supeditor .sup-ed-row .dot{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 6px rgba(0,0,0,.3)}
+.glct-supeditor .sup-ed-row .nm{flex:1;min-width:0;font:700 13px/1.2 "Oxanium","Segoe UI",sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glct-supeditor .sup-ed-row i{color:#e0b15a}
+.glct-supeditor .sup-ed-empty,.glct-supeditor .sup-ed-hint{color:var(--color-text-dark-secondary,#777);font-size:12px;text-align:center;padding:18px 8px}
+.glct-supeditor .sup-ed-form{display:flex;flex-direction:column;gap:10px;min-width:0;max-height:62vh;overflow-y:auto;padding-right:4px}
+.glct-supeditor .sup-ed-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.glct-supeditor .sup-ed-grid label,.glct-supeditor .sup-ed-imgs label,.glct-supeditor .sup-ed-abil label{display:flex;flex-direction:column;gap:3px;font:600 10px/1.2 "Oxanium","Segoe UI",sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-dark-secondary,#888)}
+.glct-supeditor .sup-ed-grid label.chk{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;align-self:end}
+.glct-supeditor input,.glct-supeditor textarea,.glct-supeditor select{font:inherit}
+.glct-supeditor textarea{resize:vertical;font-size:12px}
+.glct-supeditor .sup-ed-imgs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.glct-supeditor .fp{display:flex;gap:4px}
+.glct-supeditor .fp input{flex:1;min-width:0}
+.glct-supeditor label.full{display:flex;flex-direction:column;gap:3px}
+.glct-supeditor [data-drop].drop-hot{outline:2px dashed #7fb4ff;outline-offset:2px;border-radius:6px}
+.glct-supeditor .sup-ed-help{font-size:11px;color:var(--color-text-dark-secondary,#888)}
+.glct-supeditor .sup-ed-help summary{cursor:pointer;font-weight:600}
+.glct-supeditor .sup-ed-tokens{margin-top:6px;line-height:1.7}
+.glct-supeditor .sup-ed-tokens code{background:rgba(127,160,231,.16);border-radius:4px;padding:1px 5px;font-size:11px}
+.glct-supeditor .sup-ed-abils{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.glct-supeditor .sup-ed-abil{border:1px solid var(--color-border-light-tertiary,rgba(0,0,0,.15));border-radius:9px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;margin:0;border-left-width:3px}
+.glct-supeditor .sup-ed-abil.passive{border-left-color:#9fb0ff}
+.glct-supeditor .sup-ed-abil.radio{border-left-color:#7fb4ff}
+.glct-supeditor .sup-ed-abil.fc{border-left-color:#ff8a5f}
+.glct-supeditor .sup-ed-abil.fx{border-left-color:#7fd6a0}
+.glct-supeditor .sup-ed-abil legend{font:800 11px/1 "Oxanium","Segoe UI",sans-serif;padding:0 5px;display:flex;align-items:center;gap:6px}
+.glct-supeditor .sup-ed-abil legend .burn{font-size:8px;color:#ff9a6f;text-transform:uppercase;letter-spacing:.08em}
+.glct-supeditor .sup-ed-abrow{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.glct-supeditor .sup-ed-foot{display:flex;gap:6px;justify-content:flex-end}
+.glct-supeditor .sup-ed-framerow{display:flex;align-items:center;gap:10px}
+.glct-supeditor .sup-ed-framerow .sup-ed-help{margin:0}
+
+/* ---------------- Portrait framing dialog ---------------- */
+.glct-frame-dlg .frm{--glct-sup-accent:#e0a368;display:flex;flex-direction:column;gap:12px;min-width:430px}
+.glct-frame-dlg .frm-tabs{display:flex;gap:6px}
+.glct-frame-dlg .frm-tab{flex:1;font:800 10px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.05em;text-transform:uppercase;
+  padding:9px 4px;border-radius:8px;cursor:pointer;border:1px solid var(--color-border-light-tertiary,rgba(0,0,0,.2));
+  background:rgba(127,127,127,.08);color:inherit;transition:.14s}
+.glct-frame-dlg .frm-tab.on{color:#fff;border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--glct-sup-accent) 70%,#000),color-mix(in srgb,var(--glct-sup-accent) 45%,#000))}
+.glct-frame-dlg .frm-previews{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:14px;border-radius:12px;
+  background:#0c0f15;border:1px solid rgba(255,255,255,.08)}
+.glct-frame-dlg .frm-pv{display:flex;flex-direction:column;align-items:center;gap:6px}
+.glct-frame-dlg .frm-pv .cap{font:800 7px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#69748c}
+.glct-frame-dlg .frm-pv .frame{position:relative;overflow:hidden;background:#06080c;border:1px solid rgba(255,255,255,.1)}
+.glct-frame-dlg .frm-pv.active .frame{outline:2px solid var(--glct-sup-accent);outline-offset:2px}
+.glct-frame-dlg .frm-pv .frame img{position:absolute;user-select:none;-webkit-user-drag:none}
+.glct-frame-dlg .frm-ctrl{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.glct-frame-dlg .frm-ctrl label{width:54px;font:800 8px/1 "Oxanium","Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#888}
+.glct-frame-dlg .frm-ctrl input[type=range]{flex:1;accent-color:var(--glct-sup-accent)}
+.glct-frame-dlg .frm-ctrl .val{width:50px;text-align:right;font:700 11px/1 "Oxanium","Segoe UI",sans-serif}
+.glct-frame-dlg .frm-foot{display:flex;align-items:center;gap:12px}
+.glct-frame-dlg .frm-reset{font:700 11px/1 "Oxanium","Segoe UI",sans-serif;padding:6px 10px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--color-border-light-tertiary,rgba(0,0,0,.2));background:rgba(127,127,127,.08);color:inherit}
+.glct-frame-dlg .frm-hint{font-size:11px;color:#888}
+
+/* ---------------- Import Support dialog ---------------- */
+.glct-sup-import-dlg .glct-sup-import,
+.glct-sup-import{display:flex;flex-direction:column;gap:10px;min-width:440px}
+.glct-sup-import .imp-intro{margin:0;font-size:12.5px;line-height:1.5;color:var(--color-text-dark-secondary,#888)}
+.glct-sup-import .imp-ta{width:100%;min-height:200px;resize:vertical;border-radius:9px;padding:10px 11px;
+  font:12px/1.55 ui-monospace,"JetBrains Mono",Consolas,monospace}
+.glct-sup-import .imp-ta:focus{outline:none;border-color:#7fb4ff;box-shadow:0 0 0 3px rgba(127,180,255,.18)}
+.glct-sup-import .imp-row{display:flex;align-items:center;gap:8px}
+.glct-sup-import .imp-spacer{flex:1}
+.glct-sup-import .imp-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
+  font:600 11.5px/1.3 "Oxanium","Segoe UI",sans-serif;transition:.16s}
+.glct-sup-import .imp-chip.idle{background:rgba(127,160,231,.12);color:var(--color-text-dark-secondary,#888);border:1px solid rgba(127,160,231,.22)}
+.glct-sup-import .imp-chip.ok{background:rgba(127,214,160,.16);color:#2f8f5c;border:1px solid rgba(127,214,160,.45)}
+.glct-sup-import .imp-chip.err{background:color-mix(in srgb,var(--gl-hazard) 14%,transparent);color:#c0473e;border:1px solid color-mix(in srgb,var(--gl-hazard) 40%,transparent)}
+.glct-sup-import .imp-hint{margin:0;font-size:11.5px;color:var(--color-text-dark-secondary,#888)}
+.glct-sup-import .imp-hint i{color:#e0b15a}

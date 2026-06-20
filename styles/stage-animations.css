@@ -1,0 +1,119 @@
+/* ═══════════════════════════════════════════
+   GLUniverse Stage - Character Animations
+   ═══════════════════════════════════════════ */
+
+/* ── Bounce ── */
+.anim-bounce {
+    animation: glstage-bounce 0.6s cubic-bezier(0.28, 0.84, 0.42, 1);
+}
+@keyframes glstage-bounce {
+    0%   { transform: translateY(0) scale(var(--_sx, 1)); }
+    30%  { transform: translateY(-40px) scale(var(--_sx, 1)); }
+    50%  { transform: translateY(0) scale(var(--_sx, 1)); }
+    70%  { transform: translateY(-15px) scale(var(--_sx, 1)); }
+    100% { transform: translateY(0) scale(var(--_sx, 1)); }
+}
+
+/* ── Shake ── */
+.anim-shake {
+    animation: glstage-shake 0.5s ease;
+}
+@keyframes glstage-shake {
+    0%   { transform: translateX(0); }
+    15%  { transform: translateX(-12px); }
+    30%  { transform: translateX(10px); }
+    45%  { transform: translateX(-8px); }
+    60%  { transform: translateX(6px); }
+    75%  { transform: translateX(-3px); }
+    100% { transform: translateX(0); }
+}
+
+/* ── Flip (3D Y-axis) ── */
+.anim-flip {
+    animation: glstage-flip 0.8s ease;
+    transform-style: preserve-3d;
+}
+@keyframes glstage-flip {
+    0%   { transform: perspective(800px) rotateY(0deg); }
+    50%  { transform: perspective(800px) rotateY(180deg); }
+    100% { transform: perspective(800px) rotateY(360deg); }
+}
+
+/* ── Nod ── */
+.anim-nod {
+    animation: glstage-nod 0.5s ease;
+    transform-origin: bottom center;
+}
+@keyframes glstage-nod {
+    0%   { transform: rotate(0deg); }
+    25%  { transform: rotate(5deg); }
+    50%  { transform: rotate(-3deg); }
+    75%  { transform: rotate(2deg); }
+    100% { transform: rotate(0deg); }
+}
+
+/* ── Jiggle ── */
+.anim-jiggle {
+    animation: glstage-jiggle 0.5s ease;
+    transform-origin: bottom center;
+}
+@keyframes glstage-jiggle {
+    0%   { transform: scale(1, 1); }
+    15%  { transform: scale(1.1, 0.9); }
+    30%  { transform: scale(0.9, 1.1); }
+    45%  { transform: scale(1.06, 0.94); }
+    60%  { transform: scale(0.97, 1.03); }
+    75%  { transform: scale(1.02, 0.98); }
+    100% { transform: scale(1, 1); }
+}
+
+/* ── Fade In ── */
+.anim-fadeIn {
+    animation: glstage-fadeIn 0.6s ease;
+}
+@keyframes glstage-fadeIn {
+    0%   { opacity: 0; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Slide In (from bottom) ── */
+.anim-slideIn {
+    animation: glstage-slideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes glstage-slideIn {
+    0%   { transform: translateY(80px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════
+   Slot Enter / Exit / Content-Exit
+   ═══════════════════════════════════════════ */
+
+/* ── Slot Enter (new actor appears — fade in + subtle rise) ── */
+.glstage-slot-entering {
+    animation: glstage-slot-enter 0.4s ease-out both;
+}
+@keyframes glstage-slot-enter {
+    0%   { opacity: 0; translate: 0 -10px; }
+    100% { opacity: 1; translate: 0 0; }
+}
+
+/* ── Slot Exit (slot removed — fade out + subtle sink) ── */
+.glstage-slot-exiting {
+    animation: glstage-slot-exit 0.3s ease-in both;
+    pointer-events: none;
+}
+@keyframes glstage-slot-exit {
+    0%   { opacity: 1; translate: 0 0; }
+    100% { opacity: 0; translate: 0 10px; }
+}
+
+/* ── Content Exit (actor unassigned — fade out + subtle sink) ── */
+.glstage-content-exiting > .stage-actor-img-wrap,
+.glstage-content-exiting > .stage-actor-name {
+    animation: glstage-content-exit 0.3s ease-in both;
+}
+@keyframes glstage-content-exit {
+    0%   { opacity: 1; translate: 0 0; }
+    100% { opacity: 0; translate: 0 8px; }
+}
