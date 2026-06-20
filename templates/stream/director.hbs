@@ -1,0 +1,137 @@
+<div class="gluniverse-stream-director-body">
+<section class="gluniverse-stream-panel">
+  <h2>Status</h2>
+  <div class="form-group">
+    <label>Stream user</label>
+    <select name="streamUserId">
+      <option value="">None configured</option>
+      {{#each users}}
+      <option value="{{id}}" {{selected}}>{{name}}{{#if active}} (connected){{/if}}</option>
+      {{/each}}
+    </select>
+  </div>
+  <div class="gluniverse-stream-status-grid">
+    <span>Connected: {{status.connected}}</span>
+    <span>Stream client: {{status.stream}}</span>
+    <span>Stream UI: {{status.restore}}</span>
+    <span>Auto-start: {{status.autoStart}}</span>
+    <span>Scene: {{status.scene}}</span>
+    <span>Combat active: {{status.combat}}</span>
+    <span>Active camera mode: {{status.mode}}</span>
+  </div>
+  <div class="gluniverse-stream-actions">
+    <button type="button" data-action="start"><i class="fas fa-play"></i> Request Start</button>
+    <button type="button" data-action="stop" {{status.stopDisabled}} title="Exit stream mode on the stream client"><i class="fas fa-stop"></i> Stop Stream Mode</button>
+    <button type="button" data-action="toggle-restore" {{status.restoreDisabled}} title="Temporarily show or hide normal Foundry UI on the stream client"><i class="fas fa-eye"></i> Toggle Stream UI</button>
+    {{#if status.autoStartCanEnable}}<button type="button" data-action="enable-auto-start"><i class="fas fa-bolt"></i> Always Enter Stream Mode</button>{{/if}}
+    {{#if status.autoStartEnabled}}<button type="button" data-action="revoke-auto-start"><i class="fas fa-ban"></i> Revoke Auto-start</button>{{/if}}
+  </div>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Trusted Directors</h2>
+  <div class="gluniverse-stream-user-list">
+    {{#each users}}
+    <label><input type="checkbox" name="trustedDirectorUserIds" value="{{id}}" {{checked}} {{#if isGM}}disabled{{/if}}> {{name}}{{#if isGM}} (GM){{/if}}</label>
+    {{/each}}
+  </div>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Camera</h2>
+  <div class="form-group"><label>Out-of-combat mode</label><select name="camera.outOfCombatMode">{{#each outOfCombatModeOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></div>
+  <div class="form-group"><label>In-combat mode</label><select name="camera.combatMode">{{#each combatModeOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></div>
+  <div class="form-group"><label>Scene view</label><select name="camera.sceneViewMode">{{#each sceneViewOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></div>
+  <h3>Percent Padding</h3>
+  <div class="gluniverse-stream-number-grid">
+    <label>Top % <input type="number" name="camera.paddingPercentTop" value="{{camera.paddingPercentTop}}" step="1"></label>
+    <label>Right % <input type="number" name="camera.paddingPercentRight" value="{{camera.paddingPercentRight}}" step="1"></label>
+    <label>Bottom % <input type="number" name="camera.paddingPercentBottom" value="{{camera.paddingPercentBottom}}" step="1"></label>
+    <label>Left % <input type="number" name="camera.paddingPercentLeft" value="{{camera.paddingPercentLeft}}" step="1"></label>
+  </div>
+  <h3>Grid Padding</h3>
+  <div class="gluniverse-stream-number-grid">
+    <label>Top spaces <input type="number" name="camera.paddingGridSpacesTop" value="{{camera.paddingGridSpacesTop}}" step="1"></label>
+    <label>Right spaces <input type="number" name="camera.paddingGridSpacesRight" value="{{camera.paddingGridSpacesRight}}" step="1"></label>
+    <label>Bottom spaces <input type="number" name="camera.paddingGridSpacesBottom" value="{{camera.paddingGridSpacesBottom}}" step="1"></label>
+    <label>Left spaces <input type="number" name="camera.paddingGridSpacesLeft" value="{{camera.paddingGridSpacesLeft}}" step="1"></label>
+  </div>
+  <div class="gluniverse-stream-number-grid">
+    <label>Min zoom <input type="number" name="camera.minZoom" value="{{camera.minZoom}}" step="0.05"></label>
+    <label>Max zoom <input type="number" name="camera.maxZoom" value="{{camera.maxZoom}}" step="0.05"></label>
+    <label>Animation ms <input type="number" name="camera.animationDurationMs" value="{{camera.animationDurationMs}}" step="50"></label>
+    <label><input type="checkbox" name="camera.excludeDefeated" {{#if camera.excludeDefeated}}checked{{/if}}> Exclude defeated</label>
+  </div>
+  <button type="button" data-action="reframe" {{status.reframeDisabled}} title="Ask the active stream client to frame the current camera target; falls back to the scene if the active mode has no target"><i class="fas fa-crosshairs"></i> Reframe Now</button>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Tracking</h2>
+  <table>
+    <thead><tr><th>Token</th><th>Actor</th><th>State</th><th></th></tr></thead>
+    <tbody>
+      {{#each tokenRows}}
+      <tr>
+        <td>{{name}}</td>
+        <td>{{actor}}</td>
+        <td>{{#if hidden}}hidden {{/if}}{{#if defeated}}defeated {{/if}}{{#if inCombat}}combat {{/if}}{{#unless visibleHere}}not visible here{{/unless}}</td>
+        <td><button type="button" data-action="toggle-token" data-token-id="{{id}}">{{#if tracked}}Untrack{{else}}Track{{/if}}</button></td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Chat Overlay</h2>
+  <div class="form-group"><label>Position</label><select name="chat.position">{{#each chatPositionOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></div>
+  <div class="gluniverse-stream-number-grid">
+    <label>X offset px <input type="number" name="chat.offsetX" value="{{chat.offsetX}}" step="1"></label>
+    <label>Y offset px <input type="number" name="chat.offsetY" value="{{chat.offsetY}}" step="1"></label>
+    <label>Lifetime ms <input type="number" name="chat.lifetimeMs" value="{{chat.lifetimeMs}}" step="500"></label>
+    <label>Max visible <input type="number" name="chat.maxVisible" value="{{chat.maxVisible}}" step="1"></label>
+  </div>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Dialog Overlay</h2>
+  <label>Lifetime ms <input type="number" name="dialog.lifetimeMs" value="{{dialog.lifetimeMs}}" step="500" min="0"></label>
+  <p class="gluniverse-stream-form-hint"><small>Set to 0 to keep dialogs, images, and journals open until the stream user taps outside the dialog to dismiss them.</small></p>
+</section>
+
+<section class="gluniverse-stream-panel">
+  <h2>Stream UI Visibility</h2>
+  <table>
+    <thead><tr><th>Title</th><th>Selector</th><th>Source</th><th>State</th><th>Layer</th><th></th></tr></thead>
+    <tbody>
+      {{#each detectedUi}}
+      <tr>
+        <td>{{title}}<br><small>{{appClass}}</small></td>
+        <td><code>{{selector}}</code></td>
+        <td>{{source}}</td>
+        <td>{{state}}</td>
+        <td><input type="number" name="uiZIndex" data-rule-id="{{ruleId}}" value="{{zIndex}}" step="1" placeholder="auto" title="z-index applied while allowed in stream mode"></td>
+        <td>
+          <button type="button" data-action="ui-allow" data-rule-id="{{ruleId}}">Allow</button>
+          <button type="button" data-action="ui-block" data-rule-id="{{ruleId}}">Block</button>
+          <button type="button" data-action="ui-default" data-rule-id="{{ruleId}}">Default</button>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <p class="gluniverse-stream-form-hint"><small>Layer sets the z-index applied to an allowed element while in stream mode. Leave blank to keep its natural stacking. The stream overlay (chat, dialogs) sits at 100000.</small></p>
+  <div class="gluniverse-stream-selector-rule">
+    <input type="text" name="selectorRule.selector" placeholder="Expert CSS selector">
+    <select name="selectorRule.action"><option value="block">Block</option><option value="allow">Allow</option></select>
+    <input type="number" name="selectorRule.zIndex" step="1" placeholder="Layer (z-index)" title="z-index applied to allowed matches">
+    <button type="button" data-action="selector-add">Add Rule</button>
+  </div>
+  <ul class="gluniverse-stream-selector-rules">
+    {{#each selectorRules}}
+    <li><code>{{selector}}</code> {{action}}{{#if zIndex}} (z-index {{zIndex}}){{/if}} <button type="button" data-action="selector-remove" data-rule-id="{{id}}">Remove</button></li>
+    {{/each}}
+  </ul>
+</section>
+
+</div>

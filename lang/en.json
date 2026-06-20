@@ -37,6 +37,8 @@
   "GLS.feature.stage.hint": "Visual-novel presenter: actor portraits, dialogue and comms overlays.",
   "GLS.feature.stream-pacer.title": "Stream Pacer",
   "GLS.feature.stream-pacer.hint": "GM/player pacing HUD: countdowns, spotlight, hand-raise and peril cues.",
+  "GLS.feature.stream.title": "Stream",
+  "GLS.feature.stream.hint": "OBS-friendly stream client mode: clean capture view, director controls, camera framing, and chat/dialog overlays.",
   "GLS.feature.statsblock-import.title": "PF2e Stat Block Importer",
   "GLS.feature.statsblock-import.hint": "Import PF2e NPCs and hazards from pasted stat-block text.",
   "GLS.feature.loot-gen.title": "Loot Generator",

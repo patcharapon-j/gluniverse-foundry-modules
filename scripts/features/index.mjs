@@ -13,6 +13,7 @@ import "./destiny-dice/index.mjs";
 import "./insight/index.mjs";
 import "./stage/index.mjs";
 import "./stream-pacer/index.mjs";
+import "./stream/index.mjs";
 import "./statsblock-import/index.mjs";
 import "./loot-gen/index.mjs";
 import "./cargo-grid/index.mjs";
