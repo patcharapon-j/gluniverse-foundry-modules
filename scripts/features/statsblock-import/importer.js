@@ -19,12 +19,14 @@ const FLAG_IMPORTED = `${PREFIX}imported`;
 function suiteFlags(entries) {
   return { [MODULE_ID]: foundry.utils.expandObject(entries) };
 }
+// Update-mode keys. Display labels are localized at render time (the lang layer
+// is not ready at module-evaluation time).
 const IMPORT_MODES = {
-  replaceMatching: "Replace matching imported items",
-  replaceAll: "Replace all imported items",
-  appendOnly: "Append only new items",
-  coreOnly: "Update core stats only",
-  itemsOnly: "Update items only"
+  replaceMatching: "GLSBI.modes.replaceMatching",
+  replaceAll: "GLSBI.modes.replaceAll",
+  appendOnly: "GLSBI.modes.appendOnly",
+  coreOnly: "GLSBI.modes.coreOnly",
+  itemsOnly: "GLSBI.modes.itemsOnly"
 };
 
 const SIZE_MAP = {
@@ -92,9 +94,9 @@ function getRuleElementKeys() {
 /** Always run at init so the menu/setting exist even when the feature is off. */
 export function registerSettings() {
   game.settings.registerMenu(MODULE_ID, `${PREFIX}openImporter`, {
-    name: "PF2e Stat Block Importer",
-    label: "Open Importer",
-    hint: "Paste strict Markdown PF2e NPC stat blocks, preview parsed data, then create or update NPC actors.",
+    name: "GLSBI.settings.menu.name",
+    label: "GLSBI.settings.menu.label",
+    hint: "GLSBI.settings.menu.hint",
     icon: "fa-solid fa-file-import",
     type: PF2EStatBlockImporter,
     restricted: true
@@ -102,12 +104,12 @@ export function registerSettings() {
 
   // Etched Glass motion tiers (§6.4 of the GL Universe design language).
   game.settings.register(MODULE_ID, SETTING_MOTION_TIER, {
-    name: "Animation Level",
-    hint: "Etched Glass motion intensity. Cinematic adds flourish; Reduced keeps only essential transitions. Forced to Reduced when the OS requests reduced motion.",
+    name: "GLSBI.settings.motionTier.name",
+    hint: "GLSBI.settings.motionTier.hint",
     scope: "client",
     config: true,
     type: String,
-    choices: { reduced: "Reduced", default: "Default", cinematic: "Cinematic" },
+    choices: { reduced: "GLSBI.settings.motionTier.reduced", default: "GLSBI.settings.motionTier.default", cinematic: "GLSBI.settings.motionTier.cinematic" },
     default: "default",
     onChange: () => Object.values(ui.windows ?? {}).forEach((app) => app instanceof PF2EStatBlockImporter && app.render({ force: false }))
   });
@@ -117,7 +119,7 @@ export function registerSettings() {
 export function onInit() {
   Hooks.on("getActorContextOptions", (_app, options) => {
     options.push({
-      name: "Import PF2e Stat Block",
+      name: "GLSBI.contextMenu.import",
       icon: '<i class="fa-solid fa-file-import"></i>',
       condition: () => game.user?.isGM && game.system.id === "pf2e",
       callback: (target) => {
@@ -125,7 +127,7 @@ export function onInit() {
         const actorId = li?.dataset.entryId ?? li?.dataset.documentId;
         const actor = game.actors.get(actorId);
         if (!actor || !["npc", "hazard"].includes(actor.type)) {
-          ui.notifications.warn("Stat block import targets NPC or hazard actors only.");
+          ui.notifications.warn(game.i18n.localize("GLSBI.notify.targetTypeOnly"));
           return;
         }
         const importer = new PF2EStatBlockImporter();
@@ -139,7 +141,7 @@ export function onInit() {
 /** Run at ready only when enabled & available. */
 export function onReady() {
   if (game.system.id !== "pf2e") {
-    ui.notifications?.warn("GLUniverse PF2e Stat Block Importer requires the PF2e system.");
+    ui.notifications?.warn(game.i18n.localize("GLSBI.notify.requiresPf2e"));
   }
 }
 
@@ -156,7 +158,7 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     classes: ["gluniverse-pf2e-importer"],
     tag: "section",
     window: {
-      title: "PF2e Stat Block Importer",
+      title: "GLSBI.window.title",
       icon: "fa-solid fa-file-import",
       resizable: true
     },
@@ -219,13 +221,14 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
   #renderAppHtml() {
     const actors = game.actors.filter((actor) => ["npc", "hazard"].includes(actor.type)).sort((a, b) => a.name.localeCompare(b.name));
     const actorOptions = actors.map((actor) => `<option value="${escapeHtml(actor.id)}" ${this.#targetActorId === actor.id ? "selected" : ""}>${escapeHtml(actor.name)}</option>`).join("");
-    const modeOptions = Object.entries(IMPORT_MODES).map(([value, label]) => `<option value="${value}" ${this.#updateMode === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+    const modeOptions = Object.entries(IMPORT_MODES).map(([value, labelKey]) => `<option value="${value}" ${this.#updateMode === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(labelKey))}</option>`).join("");
+    const t = (key) => escapeHtml(game.i18n.localize(key));
     return `
       <header class="gluni-header">
         <div class="gluni-header-main">
-          <p class="gluni-kicker">GL UNIVERSE // STAT BLOCK INTAKE</p>
-          <h1><i class="fa-solid fa-file-import"></i> PF2e NPC Stat Block Importer</h1>
-          <p class="gluni-subtitle">Paste strict Markdown, validate PF2e data, then create, update, or export NPC actors.</p>
+          <p class="gluni-kicker">${t("GLSBI.dialog.kicker")}</p>
+          <h1><i class="fa-solid fa-file-import"></i> ${t("GLSBI.dialog.heading")}</h1>
+          <p class="gluni-subtitle">${t("GLSBI.dialog.subtitle")}</p>
         </div>
         <div class="gluni-meta">
           <span class="gluni-serial">GLU·SB // INTAKE·0001</span>
@@ -236,21 +239,21 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
       <div class="gluni-body">
         <section class="gluni-input">
           <label class="gluni-field gluni-field-grow">
-            <span class="gluni-label">Source Markdown</span>
-            <textarea name="source" spellcheck="false" placeholder="Paste strict Markdown stat block here">${escapeHtml(this.#source)}</textarea>
+            <span class="gluni-label">${t("GLSBI.dialog.sourceLabel")}</span>
+            <textarea name="source" spellcheck="false" placeholder="${t("GLSBI.dialog.sourcePlaceholder")}">${escapeHtml(this.#source)}</textarea>
           </label>
           <div class="gluni-actions">
-            <button class="gluni-primary" type="button" data-action="parse"><i class="fa-solid fa-magnifying-glass-chart"></i> Parse Preview</button>
-            <button type="button" data-action="sample"><i class="fa-solid fa-wand-magic-sparkles"></i> Load Sample</button>
+            <button class="gluni-primary" type="button" data-action="parse"><i class="fa-solid fa-magnifying-glass-chart"></i> ${t("GLSBI.dialog.parsePreview")}</button>
+            <button type="button" data-action="sample"><i class="fa-solid fa-wand-magic-sparkles"></i> ${t("GLSBI.dialog.loadSample")}</button>
           </div>
 
           <label class="gluni-field">
-            <span class="gluni-label">Update mode</span>
+            <span class="gluni-label">${t("GLSBI.dialog.updateModeLabel")}</span>
             <select name="updateMode">${modeOptions}</select>
           </label>
 
           <fieldset class="gluni-rule-helper">
-            <legend>Rule Element Helper</legend>
+            <legend>${t("GLSBI.dialog.ruleHelperLegend")}</legend>
             <div class="gluni-rule-grid">
               <select name="ruleHelperType">
                 <option value="FlatModifier">FlatModifier</option>
@@ -259,20 +262,20 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
                 <option value="Note">Note</option>
                 <option value="GrantItem">GrantItem</option>
               </select>
-              <input type="text" name="ruleHelperSelector" placeholder="selector/domain/radius">
-              <input type="text" name="ruleHelperValue" placeholder="value/option/uuid/text">
+              <input type="text" name="ruleHelperSelector" placeholder="${t("GLSBI.dialog.ruleHelperSelectorPlaceholder")}">
+              <input type="text" name="ruleHelperValue" placeholder="${t("GLSBI.dialog.ruleHelperValuePlaceholder")}">
             </div>
-            <button type="button" data-action="insertRuleHelper"><i class="fa-solid fa-plus"></i> Insert Rule Element</button>
+            <button type="button" data-action="insertRuleHelper"><i class="fa-solid fa-plus"></i> ${t("GLSBI.dialog.insertRuleElement")}</button>
           </fieldset>
 
           <div class="gluni-actions gluni-target">
-            <button class="gluni-primary" type="button" data-action="create" ${this.#parsed?.valid ? "" : "disabled"}><i class="fa-solid fa-plus"></i> Create NPC</button>
+            <button class="gluni-primary" type="button" data-action="create" ${this.#parsed?.valid ? "" : "disabled"}><i class="fa-solid fa-plus"></i> ${t("GLSBI.dialog.createNpc")}</button>
             <select name="targetActor">${actorOptions}</select>
-            <button type="button" data-action="update" ${this.#parsed?.valid ? "" : "disabled"}><i class="fa-solid fa-pen-to-square"></i> Update</button>
-            <button type="button" data-action="export"><i class="fa-solid fa-file-export"></i> Export</button>
+            <button type="button" data-action="update" ${this.#parsed?.valid ? "" : "disabled"}><i class="fa-solid fa-pen-to-square"></i> ${t("GLSBI.dialog.update")}</button>
+            <button type="button" data-action="export"><i class="fa-solid fa-file-export"></i> ${t("GLSBI.dialog.export")}</button>
           </div>
 
-          <p class="gluni-hint">Strict Markdown lets the importer build PF2e NPC fields, strikes, actions, spellcasting entries, items, effects, auras, inline checks and damage, condition links, and explicit rule elements.</p>
+          <p class="gluni-hint">${t("GLSBI.dialog.hint")}</p>
         </section>
         <section class="gluni-preview">${renderPreview(this.#parsed, this.#validation)}</section>
       </div>
@@ -293,7 +296,7 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     const actor = await Actor.create(actorData, { renderSheet: false });
     await importItems(actor, this.#parsed.npc, { mode: "appendOnly" });
     await actor.sheet.render(true);
-    ui.notifications.info(`Created ${actor.type === "hazard" ? "hazard" : "NPC"}: ${actor.name}`);
+    ui.notifications.info(game.i18n.format(actor.type === "hazard" ? "GLSBI.notify.createdHazard" : "GLSBI.notify.createdNpc", { name: actor.name }));
   }
 
   async #updateActor() {
@@ -301,11 +304,11 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     const actorId = this.element.querySelector("select[name='targetActor']")?.value;
     const actor = game.actors.get(actorId);
     if (!actor || !["npc", "hazard"].includes(actor.type)) {
-      ui.notifications.warn("Select an existing NPC or hazard actor to update.");
+      ui.notifications.warn(game.i18n.localize("GLSBI.notify.selectActorUpdate"));
       return;
     }
     if (actor.type !== resolveActorType(this.#parsed.npc)) {
-      ui.notifications.warn(`Parsed stat block is a ${resolveActorType(this.#parsed.npc)}; cannot update a ${actor.type} actor.`);
+      ui.notifications.warn(game.i18n.format("GLSBI.notify.typeMismatch", { parsedType: resolveActorType(this.#parsed.npc), actorType: actor.type }));
       return;
     }
     if (this.#updateMode !== "itemsOnly") {
@@ -317,19 +320,19 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     }
     if (this.#updateMode !== "coreOnly") await importItems(actor, this.#parsed.npc, { mode: this.#updateMode });
     await actor.sheet.render(true);
-    ui.notifications.info(`Updated ${actor.type}: ${actor.name}`);
+    ui.notifications.info(game.i18n.format("GLSBI.notify.updated", { actorType: actor.type, name: actor.name }));
   }
 
   async #exportSelectedActor() {
     const actorId = this.element.querySelector("select[name='targetActor']")?.value;
     const actor = game.actors.get(actorId);
     if (!actor || !["npc", "hazard"].includes(actor.type)) {
-      ui.notifications.warn("Select an existing NPC or hazard actor to export.");
+      ui.notifications.warn(game.i18n.localize("GLSBI.notify.selectActorExport"));
       return;
     }
     this.#source = exportActorToMarkdown(actor);
     await this.#parseAndRender();
-    ui.notifications.info(`Exported ${actor.type}: ${actor.name}`);
+    ui.notifications.info(game.i18n.format("GLSBI.notify.exported", { actorType: actor.type, name: actor.name }));
   }
 
   #insertRuleHelper() {
@@ -350,11 +353,11 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
 
   #requireParsed() {
     if (!this.#parsed) {
-      ui.notifications.warn("Parse the stat block first.");
+      ui.notifications.warn(game.i18n.localize("GLSBI.notify.parseFirst"));
       return false;
     }
     if (!this.#parsed.valid) {
-      ui.notifications.error("Fix parser errors before importing.");
+      ui.notifications.error(game.i18n.localize("GLSBI.notify.fixErrors"));
       return false;
     }
     return true;
@@ -540,7 +543,7 @@ function parseTopLevelField(section, key, value, npc, warnings) {
     case "note": case "notes": npc.notes.push(value.trim()); break;
     default:
       if (value.match(/\bAC\b|\bFort\b|\bHP\b/i)) parseCompoundStats(`${key}: ${value}`, npc);
-      else warnings.push(`Ignored field "${key}" in section "${section}".`);
+      else warnings.push(game.i18n.format("GLSBI.parse.ignoredField", { field: key, section }));
   }
 }
 
@@ -630,7 +633,7 @@ function normalizeBlock(block, npc, warnings) {
     });
     return;
   }
-  warnings.push(`Ignored block "${block.name}" in section "${section}".`);
+  warnings.push(game.i18n.format("GLSBI.parse.ignoredBlock", { name: block.name, section }));
 }
 
 function resolveActorType(npc) {
@@ -643,15 +646,15 @@ function resolveActorType(npc) {
 
 function validateNpc(npc, errors, warnings) {
   npc.kind = resolveActorType(npc);
-  const label = npc.kind === "hazard" ? "hazard" : "NPC";
-  if (!npc.name) errors.push(`Missing ${label} name. Use '# Name' or 'Name: ...'.`);
-  if (!Number.isInteger(npc.level)) errors.push("Missing or invalid Level.");
-  if (!npc.ac.value) warnings.push("AC was not detected; defaulting to 10.");
-  if (!npc.hp.value) warnings.push("HP was not detected; defaulting to 10.");
+  const label = game.i18n.localize(npc.kind === "hazard" ? "GLSBI.label.hazard" : "GLSBI.label.npc");
+  if (!npc.name) errors.push(game.i18n.format("GLSBI.parse.missingName", { label }));
+  if (!Number.isInteger(npc.level)) errors.push(game.i18n.localize("GLSBI.parse.missingLevel"));
+  if (!npc.ac.value) warnings.push(game.i18n.localize("GLSBI.parse.acDefault"));
+  if (!npc.hp.value) warnings.push(game.i18n.localize("GLSBI.parse.hpDefault"));
   if (npc.kind === "hazard") {
-    if (!npc.hazard.disable) warnings.push("No Disable entry detected for this hazard.");
+    if (!npc.hazard.disable) warnings.push(game.i18n.localize("GLSBI.parse.noDisable"));
   } else if (!npc.attacks.length && !npc.actions.length && !npc.spellcasting.length) {
-    warnings.push("No attacks, actions, or spells detected.");
+    warnings.push(game.i18n.localize("GLSBI.parse.noAutomation"));
   }
 }
 
@@ -702,7 +705,7 @@ function buildNpcActorSource(npc, source) {
         level: { value: npc.level },
         languages: npc.languages,
         publicNotes,
-        privateNotes: `<section><h3>Imported Source</h3><pre>${escapeHtml(source)}</pre></section>`
+        privateNotes: `<section><h3>${escapeHtml(game.i18n.localize("GLSBI.notes.importedSource"))}</h3><pre>${escapeHtml(source)}</pre></section>`
       }
     }
   };
@@ -920,7 +923,7 @@ async function importSpellcasting(actor, entries, { mode = "replaceMatching" } =
 async function spellSourceFromCompendium(name) {
   const match = await findCompendiumItem(name, { type: "spell", packHint: "pf2e.spells-srd" });
   if (!match) {
-    ui.notifications.warn(`Spell not found in PF2e compendium: ${name}`);
+    ui.notifications.warn(game.i18n.format("GLSBI.notify.spellNotFound", { name }));
     return null;
   }
   const document = await match.pack.getDocument(match.entry._id);
@@ -1046,67 +1049,69 @@ function buildSpellLocation(spell, entryId) {
 }
 
 function renderPreview(parsed, validation = null) {
-  if (!parsed) return `<div class="gluni-empty-preview" data-kind="standby"><i class="fa-solid fa-scroll"></i><h2>STANDBY</h2><p>Paste a strict Markdown stat block and click <strong>Parse Preview</strong>.</p></div>`;
+  const t = (key) => escapeHtml(game.i18n.localize(key));
+  if (!parsed) return `<div class="gluni-empty-preview" data-kind="standby"><i class="fa-solid fa-scroll"></i><h2>${t("GLSBI.preview.standbyTitle")}</h2><p>${game.i18n.localize("GLSBI.preview.standbyHint")}</p></div>`;
   const { npc, warnings, errors } = parsed;
   const actorType = resolveActorType(npc);
-  const serial = `${actorType === "hazard" ? "HZD" : "NPC"}·LV / ${String(npc.level ?? 0).padStart(2, "0")}`;
+  const serial = `${t(actorType === "hazard" ? "GLSBI.preview.serialHazard" : "GLSBI.preview.serialNpc")}·LV / ${String(npc.level ?? 0).padStart(2, "0")}`;
   const chips = (values) => `<span class="gluni-chip-list">${values.map((v) => `<span class="gluni-chip">${escapeHtml(v)}</span>`).join("")}</span>`;
   const hazardCard = actorType === "hazard" ? `
     <div class="gluni-preview-card">
-      <h3>Hazard</h3>
-      <p><strong>Stealth</strong> ${signed(npc.hazard.stealth.value)} &nbsp; <strong>Hardness</strong> ${npc.hazard.hardness} &nbsp; <strong>Complexity</strong> ${npc.hazard.complex ? "complex" : "simple"}</p>
-      ${npc.hazard.disable ? `<p><strong>Disable:</strong> ${escapeHtml(npc.hazard.disable)}</p>` : ""}
+      <h3>${t("GLSBI.preview.hazardHeading")}</h3>
+      <p><strong>${t("GLSBI.preview.stealth")}</strong> ${signed(npc.hazard.stealth.value)} &nbsp; <strong>${t("GLSBI.preview.hardness")}</strong> ${npc.hazard.hardness} &nbsp; <strong>${t("GLSBI.preview.complexity")}</strong> ${t(npc.hazard.complex ? "GLSBI.preview.complex" : "GLSBI.preview.simple")}</p>
+      ${npc.hazard.disable ? `<p><strong>${t("GLSBI.preview.disable")}</strong> ${escapeHtml(npc.hazard.disable)}</p>` : ""}
     </div>` : "";
   return `
     <div class="gluni-preview-inner" data-kind="${actorType}">
     <div class="gluni-preview-title">
-      <p class="gluni-eyebrow">Parsed Preview — ${actorType === "hazard" ? "Hazard" : "NPC"} <span class="gluni-serial">${serial}</span></p>
-      <h2>${escapeHtml(npc.name || "Unnamed")}</h2>
+      <p class="gluni-eyebrow">${t(actorType === "hazard" ? "GLSBI.preview.parsedPreviewHazard" : "GLSBI.preview.parsedPreviewNpc")} <span class="gluni-serial">${serial}</span></p>
+      <h2>${escapeHtml(npc.name || game.i18n.localize("GLSBI.preview.unnamed"))}</h2>
     </div>
     ${errors.map((error) => `<p class="gluni-notice gluni-error">${escapeHtml(error)}</p>`).join("")}
     ${warnings.map((warning) => `<p class="gluni-notice gluni-warning">${escapeHtml(warning)}</p>`).join("")}
     <table class="gluni-stat-table">
-      <tr><th>Level</th><td>${npc.level}</td><th>Rarity</th><td>${escapeHtml(npc.rarity)}</td></tr>
-      <tr><th>Size</th><td>${escapeHtml(npc.size)}</td><th>Traits</th><td>${chips(npc.traits)}</td></tr>
-      <tr><th>Perception</th><td>${signed(npc.perception.mod)}</td><th>Languages</th><td>${chips(npc.languages.value)}</td></tr>
-      <tr><th>AC</th><td>${npc.ac.value}</td><th>HP</th><td>${npc.hp.value}</td></tr>
-      <tr><th>Fort</th><td>${signed(npc.saves.fortitude)}</td><th>Ref</th><td>${signed(npc.saves.reflex)}</td></tr>
-      <tr><th>Will</th><td>${signed(npc.saves.will)}</td><th>Speed</th><td>${npc.speed.value} ft.</td></tr>
+      <tr><th>${t("GLSBI.preview.level")}</th><td>${npc.level}</td><th>${t("GLSBI.preview.rarity")}</th><td>${escapeHtml(npc.rarity)}</td></tr>
+      <tr><th>${t("GLSBI.preview.size")}</th><td>${escapeHtml(npc.size)}</td><th>${t("GLSBI.preview.traits")}</th><td>${chips(npc.traits)}</td></tr>
+      <tr><th>${t("GLSBI.preview.perception")}</th><td>${signed(npc.perception.mod)}</td><th>${t("GLSBI.preview.languages")}</th><td>${chips(npc.languages.value)}</td></tr>
+      <tr><th>${t("GLSBI.preview.ac")}</th><td>${npc.ac.value}</td><th>${t("GLSBI.preview.hp")}</th><td>${npc.hp.value}</td></tr>
+      <tr><th>${t("GLSBI.preview.fort")}</th><td>${signed(npc.saves.fortitude)}</td><th>${t("GLSBI.preview.ref")}</th><td>${signed(npc.saves.reflex)}</td></tr>
+      <tr><th>${t("GLSBI.preview.will")}</th><td>${signed(npc.saves.will)}</td><th>${t("GLSBI.preview.speed")}</th><td>${escapeHtml(game.i18n.format("GLSBI.preview.speedValue", { value: npc.speed.value }))}</td></tr>
     </table>
     <div class="gluni-preview-card">
-      <h3>Abilities</h3>
+      <h3>${t("GLSBI.preview.abilities")}</h3>
       <p class="gluni-ability-row">${ABILITY_KEYS.map((key) => `<span><strong>${key.toUpperCase()}</strong> ${signed(npc.abilities[key])}</span>`).join("")}</p>
     </div>
     <div class="gluni-preview-card">
-      <h3>Skills</h3>
-      <p>${Object.entries(npc.skills).map(([key, value]) => `${escapeHtml(key)} ${signed(value)}`).join(", ") || "None"}</p>
+      <h3>${t("GLSBI.preview.skills")}</h3>
+      <p>${Object.entries(npc.skills).map(([key, value]) => `${escapeHtml(key)} ${signed(value)}`).join(", ") || t("GLSBI.preview.none")}</p>
     </div>
-    <h3>Automation Items</h3>
+    <h3>${t("GLSBI.preview.automationItems")}</h3>
     <table class="gluni-stat-table gluni-automation-table">
-      <tr><th>Attacks</th><td>${npc.attacks.length}</td><th>Actions</th><td>${npc.actions.length}</td></tr>
-      <tr><th>Spellcasting</th><td>${npc.spellcasting.length}</td><th>Inventory</th><td>${npc.inventory.length}</td></tr>
-      <tr><th>Effects/Auras</th><td>${npc.effects.length}</td><th>Rule Elements</th><td>${countRules(npc)}</td></tr>
+      <tr><th>${t("GLSBI.preview.attacks")}</th><td>${npc.attacks.length}</td><th>${t("GLSBI.preview.actions")}</th><td>${npc.actions.length}</td></tr>
+      <tr><th>${t("GLSBI.preview.spellcasting")}</th><td>${npc.spellcasting.length}</td><th>${t("GLSBI.preview.inventory")}</th><td>${npc.inventory.length}</td></tr>
+      <tr><th>${t("GLSBI.preview.effectsAuras")}</th><td>${npc.effects.length}</td><th>${t("GLSBI.preview.ruleElements")}</th><td>${countRules(npc)}</td></tr>
     </table>
     ${hazardCard}
     ${renderValidation(validation)}
-    ${renderNamedList("Attacks", npc.attacks)}
-    ${renderNamedList("Actions", npc.actions)}
-    ${renderNamedList("Spellcasting", npc.spellcasting)}
-    ${renderNamedList("Effects", npc.effects)}
+    ${renderNamedList(t("GLSBI.preview.attacks"), npc.attacks)}
+    ${renderNamedList(t("GLSBI.preview.actions"), npc.actions)}
+    ${renderNamedList(t("GLSBI.preview.spellcasting"), npc.spellcasting)}
+    ${renderNamedList(t("GLSBI.preview.effects"), npc.effects)}
     </div>
   `;
 }
 
 function renderValidation(validation) {
-  if (!validation) return `<div class="gluni-preview-card"><h3>Validation</h3><p class="gluni-muted">Validation runs after parsing.</p></div>`;
+  const t = (key) => escapeHtml(game.i18n.localize(key));
+  if (!validation) return `<div class="gluni-preview-card"><h3>${t("GLSBI.validation.heading")}</h3><p class="gluni-muted">${t("GLSBI.validation.runsAfterParsing")}</p></div>`;
   const list = (title, values, className = "") => values.length ? `<h4>${title}</h4><ul class="gluni-validation-list ${className}">${values.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul>` : "";
   return `
     <div class="gluni-preview-card gluni-validation-card">
-    <h3>Validation</h3>
-    ${list("Errors", validation.errors, "gluni-error")}
-    ${list("Warnings", validation.warnings, "gluni-warning")}
-    ${list("Compendium Matches", validation.matches)}
-    ${!validation.errors.length && !validation.warnings.length ? `<p class="gluni-muted">No validation issues detected.</p>` : ""}
+    <h3>${t("GLSBI.validation.heading")}</h3>
+    ${list(t("GLSBI.validation.errors"), validation.errors, "gluni-error")}
+    ${list(t("GLSBI.validation.warnings"), validation.warnings, "gluni-warning")}
+    ${list(t("GLSBI.validation.compendiumMatches"), validation.matches)}
+    ${!validation.errors.length && !validation.warnings.length ? `<p class="gluni-muted">${t("GLSBI.validation.noIssues")}</p>` : ""}
     </div>
   `;
 }
@@ -1129,31 +1134,31 @@ async function validateParsed(parsed) {
   const ruleKeys = getRuleElementKeys();
 
   for (const trait of collectTraits(npc)) {
-    if (traitSet.size && !traitSet.has(trait)) result.warnings.push(`Unknown PF2e trait slug: ${trait}`);
+    if (traitSet.size && !traitSet.has(trait)) result.warnings.push(game.i18n.format("GLSBI.validation.unknownTrait", { trait }));
   }
   for (const attack of npc.attacks) {
     for (const roll of Object.values(attack.damageRolls)) {
-      if (!damageTypes.has(roll.damageType)) result.warnings.push(`Unknown damage type on ${attack.name}: ${roll.damageType}`);
+      if (!damageTypes.has(roll.damageType)) result.warnings.push(game.i18n.format("GLSBI.validation.unknownDamageType", { name: attack.name, damageType: roll.damageType }));
     }
     for (const effect of attack.effects) {
-      if (!isKnownAttackEffect(effect)) result.warnings.push(`Attack effect may not resolve automatically: ${effect}`);
+      if (!isKnownAttackEffect(effect)) result.warnings.push(game.i18n.format("GLSBI.validation.unresolvedAttackEffect", { effect }));
     }
   }
   for (const rule of collectRules(npc)) {
-    if (!rule?.key) result.errors.push("Rule Element is missing a key.");
-    else if (!ruleKeys.has(rule.key)) result.warnings.push(`Unknown Rule Element key for the installed PF2e version: ${rule.key}`);
+    if (!rule?.key) result.errors.push(game.i18n.localize("GLSBI.validation.ruleMissingKey"));
+    else if (!ruleKeys.has(rule.key)) result.warnings.push(game.i18n.format("GLSBI.validation.unknownRuleKey", { key: rule.key }));
   }
   for (const entry of npc.spellcasting) {
     for (const spell of entry.spells) {
       const match = await findCompendiumItem(spell.name, { type: "spell", packHint: "pf2e.spells-srd" });
-      if (match) result.matches.push(`Spell: ${spell.name} -> ${match.pack.collection}`);
-      else result.warnings.push(`Spell not found in PF2e spell compendium: ${spell.name}`);
+      if (match) result.matches.push(game.i18n.format("GLSBI.validation.spellMatch", { name: spell.name, pack: match.pack.collection }));
+      else result.warnings.push(game.i18n.format("GLSBI.validation.spellNotFound", { name: spell.name }));
     }
   }
   for (const item of npc.inventory) {
     const match = await findCompendiumItem(item.name, { type: item.type, packHint: item.source });
-    if (match) result.matches.push(`Item: ${item.name} -> ${match.pack.collection}`);
-    else result.warnings.push(`Inventory item will be created as generic ${item.type}: ${item.name}`);
+    if (match) result.matches.push(game.i18n.format("GLSBI.validation.itemMatch", { name: item.name, pack: match.pack.collection }));
+    else result.warnings.push(game.i18n.format("GLSBI.validation.itemGeneric", { type: item.type, name: item.name }));
   }
   return result;
 }
@@ -1242,7 +1247,7 @@ function parseIWR(value, withValue, warnings) {
     const match = part.match(/^(.+?)\s+(\d+)$/);
     const type = slugify(match ? match[1] : part);
     if (!type) return null;
-    if (withValue && !match) warnings.push(`IWR entry "${part}" has no value.`);
+    if (withValue && !match) warnings.push(game.i18n.format("GLSBI.parse.iwrNoValue", { entry: part }));
     return withValue ? { type, value: Number(match?.[2] ?? 1), exceptions: [] } : { type, exceptions: [] };
   }).filter(Boolean);
 }
@@ -1261,7 +1266,7 @@ function parseRuleElements(lines, warnings) {
       try {
         rules.push(JSON.parse(trimmed));
       } catch (_err) {
-        warnings.push(`RuleElements must be JSON objects or arrays; ignored: ${trimmed}`);
+        warnings.push(game.i18n.format("GLSBI.parse.ruleElementsNotJson", { text: trimmed }));
       }
     }
     return rules;
@@ -1279,7 +1284,7 @@ function parseRuleHelpers(lines, warnings) {
     const value = values.value ?? values.option ?? values.uuid ?? values.text ?? "";
     const rule = buildRuleHelperObject(type, selector, value, values);
     if (rule.key) rules.push(rule);
-    else warnings.push(`Unknown RuleHelper type ignored: ${type}`);
+    else warnings.push(game.i18n.format("GLSBI.parse.unknownRuleHelper", { type }));
   }
   return rules;
 }
@@ -1419,7 +1424,7 @@ function parseDamageRolls(value, warnings = [], attackName = "attack") {
   for (const part of text.split(/,|;/).map((piece) => piece.trim()).filter(Boolean)) {
     const match = part.match(/(\d+d\d+(?:\s*[+\-]\s*\d+)?|\d+)\s+(?:(persistent|precision|splash|critical-only|crit-only)\s+)?([a-z -]+?)(?:\s+damage)?$/i);
     if (!match) {
-      warnings.push(`Could not parse damage part "${part}" on ${attackName}.`);
+      warnings.push(game.i18n.format("GLSBI.parse.damagePart", { part, name: attackName }));
       continue;
     }
     const formula = match[1].replace(/\s+/g, "");
@@ -1427,7 +1432,7 @@ function parseDamageRolls(value, warnings = [], attackName = "attack") {
     const typeSlug = slugify(match[3]);
     const damageType = damageTypes.has(typeSlug) ? typeSlug : "bludgeoning";
     const category = DAMAGE_CATEGORIES.includes(categorySlug) ? categorySlug : null;
-    if (["critical-only", "crit-only"].includes(categorySlug)) warnings.push(`Critical-only damage on ${attackName} is preserved in the text but cannot be represented as an NPC Strike damage category.`);
+    if (["critical-only", "crit-only"].includes(categorySlug)) warnings.push(game.i18n.format("GLSBI.parse.criticalOnly", { name: attackName }));
     rolls[index === 0 ? "main" : `extra${index}`] = { damage: formula, damageType, category };
     index += 1;
   }
@@ -1860,7 +1865,7 @@ function flushLooseAction(action, actionText) {
 }
 
 function convertLooseToStrict(text, warnings = []) {
-  warnings.push("Parsed using the loose stat block reader; review the preview before importing.");
+  warnings.push(game.i18n.localize("GLSBI.parse.looseReader"));
   const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n").map((line) => normalizeActionGlyphs(line).trim());
   const core = { rarity: "common", size: "medium", traits: [] };
   const coreLines = [];
