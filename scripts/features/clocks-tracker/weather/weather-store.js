@@ -11,15 +11,14 @@
 import { MODULE_ID, SETTINGS, HOOKS, WEATHER_HISTORY_CAP, WEATHER_DIRECTIONS, WEATHER_ARCHETYPES, WEATHER_DICE } from "../const.js";
 import { makeDefaultWeather, freshState, makeRegion, buildTemperate, isClimateSeasonal } from "./presets.js";
 import { HEX_COUNT } from "./hex-geometry.js";
+import { clamp01, hex6 } from "../../../core/util.mjs";
 
 const FALLBACK_REGION = "default";   // the always-present seed region
 
-const clamp01 = (n) => Math.max(0, Math.min(1, Number.isFinite(+n) ? +n : 0));
 const idx = (v, fallback = 0) => {
   const n = Math.trunc(Number(v));
   return Number.isInteger(n) && n >= 0 && n < HEX_COUNT ? n : fallback;
 };
-const hex6 = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : fallback);
 
 export class WeatherStore {
   /* ------------------------------- reads ------------------------------- */

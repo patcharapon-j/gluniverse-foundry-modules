@@ -14,6 +14,7 @@ import { MODULE_ID, FLAG, TARGET, PARTY_LEDGER_KEY } from "../const.js";
 import { WealthLedger } from "../auditor/ledger.js";
 import { getAdapter } from "../systems/registry.js";
 import { iconNoteHtml } from "./icon-note.js";
+import { escapeHTML as escapeHtml } from "../../../core/util.mjs";
 
 function adapter() { return getAdapter(); }
 
@@ -435,8 +436,4 @@ async function safeFromUuid(uuid) {
 }
 function fmtGp(n) {
   return Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

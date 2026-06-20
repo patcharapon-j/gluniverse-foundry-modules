@@ -25,6 +25,7 @@ import {
   requestSelectionProfile, applyExclude, profileWeight, rarityLeanBias, resolveWanted
 } from "./selection-profile.js";
 import { getAdapter } from "../systems/registry.js";
+import { clamp } from "../../../core/util.mjs";
 
 const ARMOR_AXES = new Set(["defense", "resilient"]);
 
@@ -546,5 +547,4 @@ function signatureFor(actorId, axis) {
 function safeSetting(key, fallback) {
   try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }
-function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 function round2(n) { return Math.round(n * 100) / 100; }

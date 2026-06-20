@@ -20,6 +20,8 @@
  * CSS-only tinted look.
  */
 
+import { clamp, randRange as rand } from "../../../core/util.mjs";
+
 const ADDITIVE = new Set(["motes", "embers", "spores", "runes", "void"]);
 
 /**
@@ -82,8 +84,6 @@ const hexInt = (s, fallback = 0xffffff) => {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(s ?? ""));
   return m ? parseInt(m[1], 16) : fallback;
 };
-const rand = (a, b) => a + Math.random() * (b - a);
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export class WeatherEffect {
   /** Build an effect for `host`, or null if Pixi/WebGL is unavailable. */

@@ -27,7 +27,9 @@ const REVEAL_DELAY = 300;  // pause after the last reel lands, before discards s
 const DISCARD_HOLD = 640;  // how long the revealed discards are held
 const FADE = 360;          // overlay fade-out (ms), revealing the static spans
 
-const rand = (a, b) => a + Math.random() * (b - a);
+import { randRange as rand } from "../../../core/util.mjs";
+
+// Like hex6 but tolerates a missing leading '#' and supplies a delving-orange default.
 const hexCss = s => (/^#?[0-9a-f]{6}$/i.test(String(s ?? "")) ? (String(s)[0] === "#" ? s : "#" + s) : "#ff9a3c");
 
 export class DiceSlot {
