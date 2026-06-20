@@ -196,7 +196,6 @@ function readForm(form) {
 
 /* -------------------------------- helpers -------------------------------- */
 
-function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 function loc(key, data) {
   return data ? (game.i18n?.format?.(key, data) ?? key) : (game.i18n?.localize?.(key) ?? key);
 }

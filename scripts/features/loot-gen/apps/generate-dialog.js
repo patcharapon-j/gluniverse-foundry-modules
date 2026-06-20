@@ -233,7 +233,6 @@ function sel(name, values, selected, labelFn) {
   return `<select name="${attr(name)}">${opts}</select>`;
 }
 function localize(key) { return game.i18n?.localize?.(key) ?? key; }
-function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

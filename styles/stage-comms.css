@@ -12,7 +12,7 @@
    own Oxanium stack. */
 .gluniverse-comms-overlay,
 .glstage-comms-tab {
-    --comms-font: var(--clock-font, "Oxanium", "Segoe UI", system-ui, sans-serif);
+    --comms-font: var(--gl-display);
 }
 
 /* ── Overlay container (mounted in #interface, below all UI) ── */

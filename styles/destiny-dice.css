@@ -42,9 +42,9 @@
   /* Dynamic accent channel — context sets this per component */
   --gl-accent: var(--gl-signal);
 
-  /* Type voices */
-  --gl-font-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
-  --gl-font-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+  /* Type voices — derive from the canonical Etched Glass tokens. */
+  --gl-font-display: var(--gl-display);
+  --gl-font-tech: var(--gl-tech);
 
   /* Motion tokens (§6.1) */
   --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);

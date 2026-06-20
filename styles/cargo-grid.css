@@ -50,9 +50,10 @@
   --gl-holo-b: var(--gl-violet);
   --gl-holo-c: #ff66b3;
 
-  /* Typography — two voices, strict roles (§5) */
-  --gl-font-display: "Oxanium", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --gl-font-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+  /* Typography — two voices, strict roles (§5). Derive from the canonical
+     Etched Glass tokens (gl-tokens.css) so the suite has one type source. */
+  --gl-font-display: var(--gl-display);
+  --gl-font-tech: var(--gl-tech);
 
   /* Motion (§6.1) */
   --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
