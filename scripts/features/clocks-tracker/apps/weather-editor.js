@@ -52,7 +52,7 @@ export class WeatherEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/weather-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/weather-editor.hbs` } };
 
   _working = null;     // working copy of the EDITED region's climate
   _regionKey = null;   // which region this editor session is editing

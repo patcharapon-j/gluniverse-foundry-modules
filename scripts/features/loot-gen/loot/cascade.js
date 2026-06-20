@@ -544,7 +544,7 @@ function signatureFor(actorId, axis) {
   return item ? { id: item.id, name: item.name } : null;
 }
 function safeSetting(key, fallback) {
-  try { return game.settings.get("gluniverse-loot-gen", key); } catch { return fallback; }
+  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 function round2(n) { return Math.round(n * 100) / 100; }

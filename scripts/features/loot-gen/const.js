@@ -1,51 +1,70 @@
 /** Shared constants for GLUniverse — Loot Generator. */
 
-export const MODULE_ID = "gluniverse-loot-gen";
+/**
+ * Ported into the GLUniverse Suite: the single installed package id is the
+ * settings namespace, flag scope and socket channel for every feature. Per-
+ * feature isolation is by key-prefixing — see the `lg.` prefix on SETTINGS keys
+ * and the FLAG() helper for flags.
+ */
+export const MODULE_ID = "gluniverse-suite";
+
+/** This feature's id (also its folder name) within the suite. */
+export const FEATURE_ID = "loot-gen";
 
 /** Short scope/log prefix. */
 export const PREFIX = "GLLG";
 
-/** Namespaced hooks other modules / macros can listen to. */
+/**
+ * Flag accessor key. Flags live under the suite scope nested beneath a `lg`
+ * object so this feature's flags never collide with another feature's on the
+ * same document. Writers store `{ [MODULE_ID]: { lg: { ... } } }`; readers use
+ * `doc.getFlag(MODULE_ID, FLAG("..."))` → `flags["gluniverse-suite"].lg.<sub>`.
+ */
+export const FLAG = (sub) => `lg.${sub}`;
+
+/** Namespaced hooks other modules / macros can listen to. Kept under the legacy
+ *  id so existing macros/listeners keep working after the suite port. */
 export const HOOKS = {
   /** Fired (callAll) after the ledger records or recomputes an award: (state) => void */
-  ledgerChanged: `${MODULE_ID}.ledgerChanged`,
+  ledgerChanged: `gluniverse-loot-gen.ledgerChanged`,
   /** Fired (callAll) after the auditor recomputes party health: (report) => void */
-  auditChanged: `${MODULE_ID}.auditChanged`
+  auditChanged: `gluniverse-loot-gen.auditChanged`
 };
 
-/** Setting keys. Scope (world/client) is declared in settings.js. */
+/** Setting keys. Scope (world/client) is declared in settings.js. Every key is
+ *  prefixed `lg.` so the feature shares the suite namespace without collisions. */
 export const SETTINGS = {
   // --- Auditor / ledger ---
-  ledger: "ledger",                       // Object (world): persisted award ledger keyed by actor id
-  partyActorId: "partyActorId",           // String (world): explicit party actor override (else auto-detect)
-  shoppingAccess: "shoppingAccess",       // String (world): "free" | "limited" | "none" — core/unusual baseline
-  variantABP: "variantABP",               // Boolean (world): campaign runs Automatic Bonus Progression
-  proficiencyWithoutLevel: "proficiencyWithoutLevel", // Boolean (world): campaign uses the Proficiency Without Level variant (drops level from modifiers/DCs)
-  driftTolerancePct: "driftTolerancePct", // Number (world): +/- % band before wealth-drift flags
-  heirloomMode: "heirloomMode",           // Boolean (world): fundamental runes awaken in-place on signature items
-  heirloomArmor: "heirloomArmor",         // Boolean (world): also awaken armor fundamentals (else weapons only)
-  etchRunes: "etchRunes",                 // Boolean (world): etch appropriate rune sets onto generated weapon/armor loot
+  ledger: "lg.ledger",                       // Object (world): persisted award ledger keyed by actor id
+  partyActorId: "lg.partyActorId",           // String (world): explicit party actor override (else auto-detect)
+  shoppingAccess: "lg.shoppingAccess",       // String (world): "free" | "limited" | "none" — core/unusual baseline
+  variantABP: "lg.variantABP",               // Boolean (world): campaign runs Automatic Bonus Progression
+  proficiencyWithoutLevel: "lg.proficiencyWithoutLevel", // Boolean (world): campaign uses the Proficiency Without Level variant (drops level from modifiers/DCs)
+  driftTolerancePct: "lg.driftTolerancePct", // Number (world): +/- % band before wealth-drift flags
+  heirloomMode: "lg.heirloomMode",           // Boolean (world): fundamental runes awaken in-place on signature items
+  heirloomArmor: "lg.heirloomArmor",         // Boolean (world): also awaken armor fundamentals (else weapons only)
+  etchRunes: "lg.etchRunes",                 // Boolean (world): etch appropriate rune sets onto generated weapon/armor loot
 
   // --- D&D 5e (Plutonium) sourcing ---
-  dnd5eSourceMode: "dnd5eSourceMode",     // String (world): "auto" | "plutonium" | "internal" — where 5e loot is drawn from (see SOURCE_MODE)
-  dnd5eSourcePack: "dnd5eSourcePack",     // String (world): preferred source compendium collection id (blank = auto, Plutonium-first)
-  dnd5eSourceBooks: "dnd5eSourceBooks",   // String (world): comma-separated allow-list of item source codes/homebrew names (blank = all). Filters by each item's source (e.g. "PHB, DMG, My Homebrew").
-  dnd5eAutoImport: "dnd5eAutoImport",     // Boolean (world): let Plutonium auto-import catalogue content on demand when its API is available
+  dnd5eSourceMode: "lg.dnd5eSourceMode",     // String (world): "auto" | "plutonium" | "internal" — where 5e loot is drawn from (see SOURCE_MODE)
+  dnd5eSourcePack: "lg.dnd5eSourcePack",     // String (world): preferred source compendium collection id (blank = auto, Plutonium-first)
+  dnd5eSourceBooks: "lg.dnd5eSourceBooks",   // String (world): comma-separated allow-list of item source codes/homebrew names (blank = all). Filters by each item's source (e.g. "PHB, DMG, My Homebrew").
+  dnd5eAutoImport: "lg.dnd5eAutoImport",     // Boolean (world): let Plutonium auto-import catalogue content on demand when its API is available
 
   // --- LLM flavor sidecar (build #6, DESIGN §14) ---
-  llmFlavor: "llmFlavor",                 // Boolean (world): request LLM provenance/flavor from the sidecar
-  sidecarUrl: "sidecarUrl",               // String (world): base URL of the claude -p sidecar (same-origin path or full URL)
-  sidecarSecret: "sidecarSecret",         // String (world, GM-only): shared secret sent as a header
-  llmModel: "llmModel",                   // String (world): Claude model the sidecar should use (alias or full id; blank = sidecar default)
-  campaignContext: "campaignContext",     // String (world): GM's campaign blurb fed to the LLM as baseline flavor context
-  llmLog: "llmLog",                       // Array (client, hidden): recent LLM sidecar calls for the diagnostics viewer
+  llmFlavor: "lg.llmFlavor",                 // Boolean (world): request LLM provenance/flavor from the sidecar
+  sidecarUrl: "lg.sidecarUrl",               // String (world): base URL of the claude -p sidecar (same-origin path or full URL)
+  sidecarSecret: "lg.sidecarSecret",         // String (world, GM-only): shared secret sent as a header
+  llmModel: "lg.llmModel",                   // String (world): Claude model the sidecar should use (alias or full id; blank = sidecar default)
+  campaignContext: "lg.campaignContext",     // String (world): GM's campaign blurb fed to the LLM as baseline flavor context
+  llmLog: "lg.llmLog",                       // Array (client, hidden): recent LLM sidecar calls for the diagnostics viewer
 
   // --- Auditor window (client) ---
-  auditorPosition: "auditorPosition",     // Object (client): {left,top}
-  auditorHidden: "auditorHidden",         // Boolean (client): window hidden on this screen
+  auditorPosition: "lg.auditorPosition",     // Object (client): {left,top}
+  auditorHidden: "lg.auditorHidden",         // Boolean (client): window hidden on this screen
 
   // --- Presentation (client) ---
-  motionTier: "motionTier"                // String (client): "reduced" | "default" | "cinematic" — animation intensity (see MOTION_TIER)
+  motionTier: "lg.motionTier"                // String (client): "reduced" | "default" | "cinematic" — animation intensity (see MOTION_TIER)
 };
 
 /**

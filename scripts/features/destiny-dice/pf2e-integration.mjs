@@ -9,11 +9,9 @@ export function registerPF2eIntegration() {
   Hooks.on("getChatMessageContextOptions", addChatContextOptions);
   Hooks.on("createChatMessage", onCreateChatMessage);
   Hooks.on("pf2e.reroll", onPF2eReroll);
-
-  Hooks.once("ready", () => {
-    patchPF2eCheckMethods();
-  });
 }
+
+export { patchPF2eCheckMethods };
 
 function patchPF2eCheckMethods() {
   const Check = game.pf2e?.Check;

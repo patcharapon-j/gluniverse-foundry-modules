@@ -1,4 +1,4 @@
-import { MODULE_ID, FLAG_SCOPE, BULK_CATEGORIES, BULK_ORDER, TEMPER_GRADES, FRAGILITY, AMMO_DIE_CHAIN, DICE_POOL_DEFAULTS, DICE_POOL_DIE_TYPES, getSetting, unwrapElement } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, BULK_CATEGORIES, BULK_ORDER, TEMPER_GRADES, FRAGILITY, AMMO_DIE_CHAIN, DICE_POOL_DEFAULTS, DICE_POOL_DIE_TYPES, getSetting, unwrapElement } from './settings.js';
 import { SlotCalculator } from './SlotCalculator.js';
 import { NotchCalculator } from './NotchCalculator.js';
 import { AmmoDiceCalculator } from './AmmoDiceCalculator.js';
@@ -205,13 +205,13 @@ export class TidyIntegration {
                 iconClass: 'fas fa-bolt',
                 enabled: ({ item }) => getSetting('enableSlotSystem') && getSetting('enableQuickdraw') && physical(item),
                 execute: async ({ item }) => {
-                    const isQd = item.getFlag(FLAG_SCOPE, 'quickdraw') || false;
+                    const isQd = item.getFlag(FLAG_SCOPE, FK('quickdraw')) || false;
                     if (!isQd) {
                         const count = SlotCalculator.getQuickdrawCount(item.parent);
                         const max = SlotCalculator.getMaxQuickdrawSlots();
                         if (count >= max) { ui.notifications.warn(game.i18n.format('GLINVSLOTS.quickdrawFull', { max })); return; }
                     }
-                    await item.setFlag(FLAG_SCOPE, 'quickdraw', !isQd);
+                    await item.setFlag(FLAG_SCOPE, FK('quickdraw'), !isQd);
                 },
             },
         ];
@@ -568,8 +568,8 @@ export class TidyIntegration {
     // ─── Settings Dialog (GM Override) ───────────────────────────────
 
     static async _openSettingsDialog(actor) {
-        const currentOverride = actor.getFlag(FLAG_SCOPE, 'maxSlotsOverride') ?? '';
-        const currentSizeOverride = actor.getFlag(FLAG_SCOPE, 'sizeOverride') ?? '';
+        const currentOverride = actor.getFlag(FLAG_SCOPE, FK('maxSlotsOverride')) ?? '';
+        const currentSizeOverride = actor.getFlag(FLAG_SCOPE, FK('sizeOverride')) ?? '';
         const breakdown = SlotCalculator.getSlotBreakdown(actor);
 
         const sizeOptions = [
@@ -627,12 +627,12 @@ export class TidyIntegration {
 
         if (!result) return;
 
-        if (result.sizeOverride) await actor.setFlag(FLAG_SCOPE, 'sizeOverride', result.sizeOverride);
-        else await actor.unsetFlag(FLAG_SCOPE, 'sizeOverride');
+        if (result.sizeOverride) await actor.setFlag(FLAG_SCOPE, FK('sizeOverride'), result.sizeOverride);
+        else await actor.unsetFlag(FLAG_SCOPE, FK('sizeOverride'));
 
         const maxVal = parseInt(result.maxSlotsOverride);
-        if (!isNaN(maxVal) && maxVal > 0) await actor.setFlag(FLAG_SCOPE, 'maxSlotsOverride', maxVal);
-        else await actor.unsetFlag(FLAG_SCOPE, 'maxSlotsOverride');
+        if (!isNaN(maxVal) && maxVal > 0) await actor.setFlag(FLAG_SCOPE, FK('maxSlotsOverride'), maxVal);
+        else await actor.unsetFlag(FLAG_SCOPE, FK('maxSlotsOverride'));
     }
 
     // ─── Inline Slot Squares on Item Rows ────────────────────────────
@@ -804,13 +804,13 @@ export class TidyIntegration {
     // ─── Bulk Config HTML ───────────────────────────────────────────
 
     static _buildBulkConfigHtml(item) {
-        const currentCategory = item.getFlag?.(FLAG_SCOPE, 'bulkCategory') || '';
-        const currentOverride = item.getFlag?.(FLAG_SCOPE, 'bulkOverride');
-        const isQuickdraw = item.getFlag?.(FLAG_SCOPE, 'quickdraw') || false;
-        const isBasicSupply = item.getFlag?.(FLAG_SCOPE, 'isBasicSupply') || false;
-        const objectScale = item.getFlag?.(FLAG_SCOPE, 'objectScale') || 'med';
-        const containerSlots = item.getFlag?.(FLAG_SCOPE, 'containerSlotsOverride');
-        const magicSlots = item.getFlag?.(FLAG_SCOPE, 'magicContainerSlots');
+        const currentCategory = item.getFlag?.(FLAG_SCOPE, FK('bulkCategory')) || '';
+        const currentOverride = item.getFlag?.(FLAG_SCOPE, FK('bulkOverride'));
+        const isQuickdraw = item.getFlag?.(FLAG_SCOPE, FK('quickdraw')) || false;
+        const isBasicSupply = item.getFlag?.(FLAG_SCOPE, FK('isBasicSupply')) || false;
+        const objectScale = item.getFlag?.(FLAG_SCOPE, FK('objectScale')) || 'med';
+        const containerSlots = item.getFlag?.(FLAG_SCOPE, FK('containerSlotsOverride'));
+        const magicSlots = item.getFlag?.(FLAG_SCOPE, FK('magicContainerSlots'));
         const isContainer = item.type === 'container' || item.type === 'backpack';
 
         const categoryOptions = Object.entries(BULK_CATEGORIES).map(([key, cat]) =>
@@ -894,7 +894,7 @@ export class TidyIntegration {
         const quality = NotchCalculator.getQualityGrade(item);
         const shattered = NotchCalculator.isShattered(item);
         const isArcaneFocus = NotchCalculator.isArcaneFocus(item);
-        const peakNotches = item.getFlag?.(FLAG_SCOPE, 'peakNotches') ?? 0;
+        const peakNotches = item.getFlag?.(FLAG_SCOPE, FK('peakNotches')) ?? 0;
 
         const fragilityOptions = Object.entries(FRAGILITY).map(([key, f]) =>
             `<option value="${key}" ${key === fragility ? 'selected' : ''}>${game.i18n.localize(f.label)} (${f.maxNotches})</option>`
@@ -1028,8 +1028,8 @@ export class TidyIntegration {
         // Only show for ammunition items or items manually opted in
         const isAmmo = AmmoDiceCalculator.isAmmunition(item);
         const usesAmmoDice = AmmoDiceCalculator.usesAmmoDice(item);
-        const isManuallyTagged = item.getFlag(FLAG_SCOPE, 'isAmmoDice') === true;
-        const trackIndividual = item.getFlag(FLAG_SCOPE, 'ammoTrackIndividual') === true;
+        const isManuallyTagged = item.getFlag(FLAG_SCOPE, FK('isAmmoDice')) === true;
+        const trackIndividual = item.getFlag(FLAG_SCOPE, FK('ammoTrackIndividual')) === true;
 
         // If it's not ammo at all and not manually tagged, show opt-in only for consumables
         if (!isAmmo && item.type !== 'consumable') return '';
@@ -1126,11 +1126,11 @@ export class TidyIntegration {
         const actor = item.parent;
         if (!actor) return '';
 
-        const pairedAmmoId = item.getFlag(FLAG_SCOPE, 'pairedAmmoId') || '';
+        const pairedAmmoId = item.getFlag(FLAG_SCOPE, FK('pairedAmmoId')) || '';
 
         // Gather all ammo items on this actor that use dice tracking
         const ammoItems = (actor.items?.contents ?? []).filter(i =>
-            AmmoDiceCalculator.isAmmunition(i) || i.getFlag(FLAG_SCOPE, 'isAmmoDice') === true
+            AmmoDiceCalculator.isAmmunition(i) || i.getFlag(FLAG_SCOPE, FK('isAmmoDice')) === true
         );
 
         if (ammoItems.length === 0 && !pairedAmmoId) return '';
@@ -1338,43 +1338,43 @@ export class TidyIntegration {
         // Bulk config events
         container.querySelector('.glinv-bulk-category')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
-            if (val) await item.setFlag(FLAG_SCOPE, 'bulkCategory', val);
-            else await item.unsetFlag(FLAG_SCOPE, 'bulkCategory');
+            if (val) await item.setFlag(FLAG_SCOPE, FK('bulkCategory'), val);
+            else await item.unsetFlag(FLAG_SCOPE, FK('bulkCategory'));
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-bulk-override')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
-            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, 'bulkOverride', parseFloat(val));
-            else await item.unsetFlag(FLAG_SCOPE, 'bulkOverride');
+            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, FK('bulkOverride'), parseFloat(val));
+            else await item.unsetFlag(FLAG_SCOPE, FK('bulkOverride'));
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-object-scale')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'objectScale', ev.target.value);
+            await item.setFlag(FLAG_SCOPE, FK('objectScale'), ev.target.value);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-container-slots')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
-            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, 'containerSlotsOverride', parseInt(val));
-            else await item.unsetFlag(FLAG_SCOPE, 'containerSlotsOverride');
+            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, FK('containerSlotsOverride'), parseInt(val));
+            else await item.unsetFlag(FLAG_SCOPE, FK('containerSlotsOverride'));
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-magic-slots')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
-            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, 'magicContainerSlots', parseInt(val));
-            else await item.unsetFlag(FLAG_SCOPE, 'magicContainerSlots');
+            if (val !== '' && !isNaN(val)) await item.setFlag(FLAG_SCOPE, FK('magicContainerSlots'), parseInt(val));
+            else await item.unsetFlag(FLAG_SCOPE, FK('magicContainerSlots'));
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-quickdraw-toggle')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'quickdraw', ev.target.checked);
+            await item.setFlag(FLAG_SCOPE, FK('quickdraw'), ev.target.checked);
         });
 
         container.querySelector('.glinv-basic-supply-toggle')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'isBasicSupply', ev.target.checked);
+            await item.setFlag(FLAG_SCOPE, FK('isBasicSupply'), ev.target.checked);
         });
 
         // Notch config events
@@ -1394,45 +1394,45 @@ export class TidyIntegration {
         });
 
         container.querySelector('.glinv-fragility-select')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'fragility', ev.target.value);
+            await item.setFlag(FLAG_SCOPE, FK('fragility'), ev.target.value);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-temper-select')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'temper', ev.target.value);
+            await item.setFlag(FLAG_SCOPE, FK('temper'), ev.target.value);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-arcane-focus-toggle')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'isArcaneFocus', ev.target.checked);
+            await item.setFlag(FLAG_SCOPE, FK('isArcaneFocus'), ev.target.checked);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-quality-select')?.addEventListener('change', async (ev) => {
             const qualityMap = { pristine: 0, worn: 1, wellWorn: 2, scarred: 4 };
             const peak = qualityMap[ev.target.value] ?? 0;
-            await item.setFlag(FLAG_SCOPE, 'peakNotches', peak);
+            await item.setFlag(FLAG_SCOPE, FK('peakNotches'), peak);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-notch-override')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
             if (val !== '' && !isNaN(val)) await NotchCalculator.setNotches(item, parseFloat(val));
-            else await item.unsetFlag(FLAG_SCOPE, 'notches');
+            else await item.unsetFlag(FLAG_SCOPE, FK('notches'));
             this._refreshItemTab(sheetElement, item);
         });
 
         // Ammo dice events — weapon pairing
         container.querySelector('.glinv-ammo-pair-select')?.addEventListener('change', async (ev) => {
             const val = ev.target.value;
-            if (val) await item.setFlag(FLAG_SCOPE, 'pairedAmmoId', val);
-            else await item.unsetFlag(FLAG_SCOPE, 'pairedAmmoId');
+            if (val) await item.setFlag(FLAG_SCOPE, FK('pairedAmmoId'), val);
+            else await item.unsetFlag(FLAG_SCOPE, FK('pairedAmmoId'));
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-ammo-roll-paired')?.addEventListener('click', async (ev) => {
             ev.preventDefault();
-            const pairedAmmoId = item.getFlag(FLAG_SCOPE, 'pairedAmmoId');
+            const pairedAmmoId = item.getFlag(FLAG_SCOPE, FK('pairedAmmoId'));
             const actor = item.parent;
             if (pairedAmmoId && actor) {
                 const ammoItem = actor.items.get(pairedAmmoId);
@@ -1445,12 +1445,12 @@ export class TidyIntegration {
 
         // Ammo dice events — ammo items
         container.querySelector('.glinv-ammo-dice-toggle')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'isAmmoDice', ev.target.checked);
+            await item.setFlag(FLAG_SCOPE, FK('isAmmoDice'), ev.target.checked);
             this._refreshItemTab(sheetElement, item);
         });
 
         container.querySelector('.glinv-ammo-individual-toggle')?.addEventListener('change', async (ev) => {
-            await item.setFlag(FLAG_SCOPE, 'ammoTrackIndividual', ev.target.checked);
+            await item.setFlag(FLAG_SCOPE, FK('ammoTrackIndividual'), ev.target.checked);
             this._refreshItemTab(sheetElement, item);
         });
 
@@ -1562,7 +1562,7 @@ export class TidyIntegration {
             if (!SlotCalculator._isPhysicalItem(item)) return;
 
             if (getSetting('enableQuickdraw')) {
-                const isQd = item.getFlag(FLAG_SCOPE, 'quickdraw') || false;
+                const isQd = item.getFlag(FLAG_SCOPE, FK('quickdraw')) || false;
                 options.push({
                     name: isQd ? game.i18n.localize('GLINVSLOTS.removeQuickdraw') : game.i18n.localize('GLINVSLOTS.setQuickdraw'),
                     icon: '<i class="fas fa-bolt"></i>',
@@ -1575,18 +1575,18 @@ export class TidyIntegration {
                                 return;
                             }
                         }
-                        await item.setFlag(FLAG_SCOPE, 'quickdraw', !isQd);
+                        await item.setFlag(FLAG_SCOPE, FK('quickdraw'), !isQd);
                     }
                 });
             }
 
             if (getSetting('enableBasicSupplies')) {
-                const isBasic = item.getFlag(FLAG_SCOPE, 'isBasicSupply') || false;
+                const isBasic = item.getFlag(FLAG_SCOPE, FK('isBasicSupply')) || false;
                 options.push({
                     name: isBasic ? game.i18n.localize('GLINVSLOTS.removeBasicSupply') : game.i18n.localize('GLINVSLOTS.setBasicSupply'),
                     icon: '<i class="fas fa-campground"></i>',
                     callback: async () => {
-                        await item.setFlag(FLAG_SCOPE, 'isBasicSupply', !isBasic);
+                        await item.setFlag(FLAG_SCOPE, FK('isBasicSupply'), !isBasic);
                     }
                 });
             }
@@ -1691,7 +1691,7 @@ export class TidyIntegration {
                             name: `${game.i18n.localize('GLINVSLOTS.notch.setTemper')}: ${game.i18n.localize(`GLINVSLOTS.notch.temper.${grade}`)}`,
                             icon: '<i class="fas fa-fire"></i>',
                             callback: async () => {
-                                await item.setFlag(FLAG_SCOPE, 'temper', grade);
+                                await item.setFlag(FLAG_SCOPE, FK('temper'), grade);
                                 ui.notifications.info(`${item.name}: ${game.i18n.localize(`GLINVSLOTS.notch.temper.${grade}`)}`);
                             }
                         });

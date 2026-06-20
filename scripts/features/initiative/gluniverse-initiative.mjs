@@ -1,4 +1,9 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
+
+// True when Foundry's socket subsystem is live. Emits are routed through the
+// suite's shared dispatcher (emitSocket); this guard only gates the optimistic
+// "broadcast to peers" paths, falling back to local-only behaviour otherwise.
+const socketReady = () => Boolean(game?.socket);
 import {
     MODULE_ID, FEATURE_ID, SOCKET_NAME, SETTINGS, TOKEN_OVERLAY_PALETTE, DISPOSITION_PALETTE,
   ACTIVE_SHADER_PALETTE, getDispositionColors, FLAGS, INITIATIVE_MODE, CARD_CONFIG_DEFAULTS, CARD_CONFIG_LIMITS,
@@ -74,58 +79,62 @@ function applyTheme({ skipRedraw = false } = {}) {
   return resolved;
 }
 
-Hooks.on("createCombat", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
-Hooks.on("preDeleteCombat", combat => overlay?.removeAllPF2eGuardBreakEffects(combat));
-Hooks.on("deleteCombat", () => {
-  overlay?.renderSoon();
-  refreshNativeTurnMarkerSuppression();
-});
-Hooks.on("updateCombat", (combat, changed) => overlay?.onCombatUpdate(combat, changed));
-Hooks.on("createCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
-Hooks.on("preDeleteCombatant", combatant => overlay?.removePF2eGuardBreakEffect(combatant));
-Hooks.on("deleteCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
-Hooks.on("updateCombatant", (_combatant, changed) => {
-  if (isRelevantCombatantUpdate(changed)) overlay?.renderSoon();
-});
-Hooks.on("updateActor", (actor, changed) => {
-  if (isRelevantActorUpdate(changed) && overlay?.hasCombatActor(actor)) {
+// All Foundry hooks are attached here (called at init only when the feature is
+// enabled & available), so a disabled feature stays completely inert.
+export function onInit() {
+  Hooks.on("createCombat", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("preDeleteCombat", combat => overlay?.removeAllPF2eGuardBreakEffects(combat));
+  Hooks.on("deleteCombat", () => {
     overlay?.renderSoon();
-  }
-});
-Hooks.on("createItem", item => overlay?.onActorItemChange(item?.parent));
-Hooks.on("deleteItem", item => overlay?.onActorItemChange(item?.parent));
-Hooks.on("updateItem", item => overlay?.onActorItemChange(item?.parent));
-// D&D 5e (and other systems) model conditions/statuses as ActiveEffects rather
-// than items, so the card's condition badges/background react to effect changes.
-// An effect's parent is an Actor (status applied to the token/actor) or an Item
-// whose own parent is the actor; resolve to the actor before re-rendering.
-Hooks.on("createActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
-Hooks.on("deleteActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
-Hooks.on("updateActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
-Hooks.on("getApplicationHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-Hooks.on("getApplicationV1HeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-Hooks.on("getActorSheetHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-Hooks.on("getHeaderControlsApplicationV2", (app, controls) => { addPortraitHeaderControl(app, controls); addCardConfigHeaderControl(app, controls); });
-Hooks.on("renderApplicationV1", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
-Hooks.on("renderApplicationV2", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
-Hooks.on("renderTokenHUD", (hud, html, data) => {
-  addGuardBreakTokenHudButton(hud, html, data);
-  addBreakGaugeTokenHudButton(hud, html, data);
-});
-Hooks.on("combatRound", (_combat, updateData) => {
-  if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round);
-});
-Hooks.on("canvasReady", () => {
-  tokenOverlays?.refresh();
-  refreshNativeTurnMarkerSuppression();
-  // Pre-bake the turn-marker loop sheets now that the renderer exists, so the
-  // first combat doesn't pay the bake cost mid-encounter.
-  try { getMarkerSheets(); } catch { /* falls back to the live shader on demand */ }
-  // Compile the break/dying/delay status shaders now too, so the first time one of
-  // those states appears on a token it doesn't stall on a synchronous GLSL compile.
-  try { prewarmStatusShaders(); } catch { /* compiles on demand if this fails */ }
-});
-Hooks.on("refreshToken", token => hideNativeTurnMarker(token));
+    refreshNativeTurnMarkerSuppression();
+  });
+  Hooks.on("updateCombat", (combat, changed) => overlay?.onCombatUpdate(combat, changed));
+  Hooks.on("createCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("preDeleteCombatant", combatant => overlay?.removePF2eGuardBreakEffect(combatant));
+  Hooks.on("deleteCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("updateCombatant", (_combatant, changed) => {
+    if (isRelevantCombatantUpdate(changed)) overlay?.renderSoon();
+  });
+  Hooks.on("updateActor", (actor, changed) => {
+    if (isRelevantActorUpdate(changed) && overlay?.hasCombatActor(actor)) {
+      overlay?.renderSoon();
+    }
+  });
+  Hooks.on("createItem", item => overlay?.onActorItemChange(item?.parent));
+  Hooks.on("deleteItem", item => overlay?.onActorItemChange(item?.parent));
+  Hooks.on("updateItem", item => overlay?.onActorItemChange(item?.parent));
+  // D&D 5e (and other systems) model conditions/statuses as ActiveEffects rather
+  // than items, so the card's condition badges/background react to effect changes.
+  // An effect's parent is an Actor (status applied to the token/actor) or an Item
+  // whose own parent is the actor; resolve to the actor before re-rendering.
+  Hooks.on("createActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
+  Hooks.on("deleteActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
+  Hooks.on("updateActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
+  Hooks.on("getApplicationHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
+  Hooks.on("getApplicationV1HeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
+  Hooks.on("getActorSheetHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
+  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => { addPortraitHeaderControl(app, controls); addCardConfigHeaderControl(app, controls); });
+  Hooks.on("renderApplicationV1", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
+  Hooks.on("renderApplicationV2", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
+  Hooks.on("renderTokenHUD", (hud, html, data) => {
+    addGuardBreakTokenHudButton(hud, html, data);
+    addBreakGaugeTokenHudButton(hud, html, data);
+  });
+  Hooks.on("combatRound", (_combat, updateData) => {
+    if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round);
+  });
+  Hooks.on("canvasReady", () => {
+    tokenOverlays?.refresh();
+    refreshNativeTurnMarkerSuppression();
+    // Pre-bake the turn-marker loop sheets now that the renderer exists, so the
+    // first combat doesn't pay the bake cost mid-encounter.
+    try { getMarkerSheets(); } catch { /* falls back to the live shader on demand */ }
+    // Compile the break/dying/delay status shaders now too, so the first time one of
+    // those states appears on a token it doesn't stall on a synchronous GLSL compile.
+    try { prewarmStatusShaders(); } catch { /* compiles on demand if this fails */ }
+  });
+  Hooks.on("refreshToken", token => hideNativeTurnMarker(token));
+}
 
 function registerSettings() {
   const rerender = () => overlay?.renderSoon();
@@ -2844,7 +2853,7 @@ class GLUniverseInitiativeOverlay {
       return;
     }
 
-    if (game.socket) {
+    if (socketReady()) {
       emitSocket(FEATURE_ID, {
         type: "requestEndTurn",
         requestId: `${game.user.id}:${combat.id}:${combatant.id}:${Date.now()}`,
@@ -2902,7 +2911,7 @@ class GLUniverseInitiativeOverlay {
       return;
     }
 
-    if (game.socket) {
+    if (socketReady()) {
       emitSocket(FEATURE_ID, {
         type: "requestCardSwap",
         requestId: `${game.user.id}:${combat.id}:${Date.now()}`,
@@ -3327,7 +3336,7 @@ class GLUniverseInitiativeOverlay {
   }
 
   broadcastGuardBreakImpact(combatantId) {
-    if (!game.socket || !combatantId) return;
+    if (!socketReady() || !combatantId) return;
     emitSocket(FEATURE_ID, {
       type: "guardBreakImpact",
       combatId: this.combat?.id,
@@ -3402,7 +3411,7 @@ class GLUniverseInitiativeOverlay {
   }
 
   broadcastBreakSplash(name) {
-    if (!game.socket || !name) return;
+    if (!socketReady() || !name) return;
     emitSocket(FEATURE_ID, { type: "breakSplash", name });
   }
 
@@ -3425,7 +3434,7 @@ class GLUniverseInitiativeOverlay {
   }
 
   broadcastStatusAnimation(combatantId, kind) {
-    if (!game.socket || !combatantId || !STATUS_ANIMATION[kind]) return;
+    if (!socketReady() || !combatantId || !STATUS_ANIMATION[kind]) return;
     emitSocket(FEATURE_ID, {
       type: "statusAnimation",
       combatId: this.combat?.id,
@@ -4043,7 +4052,7 @@ class GLUniverseInitiativeOverlay {
 
   broadcastRefresh() {
     this.renderSoon();
-    if (game.socket) emitSocket(FEATURE_ID, { type: "refresh" });
+    if (socketReady()) emitSocket(FEATURE_ID, { type: "refresh" });
   }
 
   playStatusFlash(card, text, colorClass) {

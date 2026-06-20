@@ -8,8 +8,8 @@
  * ==========================================================================*/
 @font-face {
   font-family: "JetBrains Mono";
-  src: url("../fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2-variations"),
-       url("../fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
   font-weight: 100 800;
   font-style: normal;
   font-display: swap;
@@ -17,8 +17,8 @@
 }
 @font-face {
   font-family: "JetBrains Mono";
-  src: url("../fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2-variations"),
-       url("../fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2");
   font-weight: 100 800;
   font-style: normal;
   font-display: swap;
@@ -6558,32 +6558,32 @@ html.gluni-theme--core {
  * ==========================================================================*/
 @font-face {
   font-family: "Cormorant Garamond";
-  src: url("../fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2-variations"),
-       url("../fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2");
   font-weight: 300 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Cormorant Garamond";
-  src: url("../fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2-variations"),
-       url("../fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2");
   font-weight: 300 700;
   font-style: italic;
   font-display: swap;
 }
 @font-face {
   font-family: "EB Garamond";
-  src: url("../fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2-variations"),
-       url("../fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2");
   font-weight: 400 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "EB Garamond";
-  src: url("../fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2-variations"),
-       url("../fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2-variations"),
+       url("../assets/initiative/fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2");
   font-weight: 400 800;
   font-style: italic;
   font-display: swap;
@@ -6667,7 +6667,7 @@ html.gluni-theme--fantasy .gluni-card--active .gluni-card-surface {
  * ==========================================================================*/
 @font-face {
   font-family: "Oxanium";
-  src: url("../fonts/oxanium/Oxanium-latin.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/oxanium/Oxanium-latin.woff2") format("woff2");
   font-weight: 400 800;
   font-style: normal;
   font-display: swap;
@@ -6675,7 +6675,7 @@ html.gluni-theme--fantasy .gluni-card--active .gluni-card-surface {
 }
 @font-face {
   font-family: "Oxanium";
-  src: url("../fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2");
+  src: url("../assets/initiative/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2");
   font-weight: 400 800;
   font-style: normal;
   font-display: swap;

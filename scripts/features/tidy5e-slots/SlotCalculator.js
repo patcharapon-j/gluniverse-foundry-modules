@@ -1,5 +1,5 @@
 import {
-    MODULE_ID, FLAG_SCOPE, BULK_CATEGORIES, BULK_ORDER,
+    MODULE_ID, FLAG_SCOPE, FK, BULK_CATEGORIES, BULK_ORDER,
     CREATURE_SLOT_TABLE, OBJECT_SCALE_SHIFTS, ARMOR_BULK_TABLE,
     VEHICLE_SLOTS, getSetting
 } from './settings.js';
@@ -28,7 +28,7 @@ export class SlotCalculator {
      * @returns {Object} Breakdown with all contributing factors
      */
     static getSlotBreakdown(actor) {
-        const override = actor.getFlag(FLAG_SCOPE, 'maxSlotsOverride');
+        const override = actor.getFlag(FLAG_SCOPE, FK('maxSlotsOverride'));
         if (override != null && override > 0) {
             return {
                 total: override,
@@ -38,7 +38,7 @@ export class SlotCalculator {
         }
 
         // Size: check for per-actor override first
-        const sizeOverride = actor.getFlag(FLAG_SCOPE, 'sizeOverride');
+        const sizeOverride = actor.getFlag(FLAG_SCOPE, FK('sizeOverride'));
         const size = sizeOverride || actor.system.traits?.size || 'med';
         const entry = CREATURE_SLOT_TABLE[size] || CREATURE_SLOT_TABLE.med;
 
@@ -101,11 +101,11 @@ export class SlotCalculator {
      */
     static getItemBulk(item, ownerActor = null) {
         // Check for explicit bulk override on the item
-        const bulkOverride = item.getFlag(FLAG_SCOPE, 'bulkOverride');
+        const bulkOverride = item.getFlag(FLAG_SCOPE, FK('bulkOverride'));
         if (bulkOverride != null && bulkOverride >= 0) return bulkOverride;
 
         // Check for explicit bulk category set on the item
-        const bulkCategory = item.getFlag(FLAG_SCOPE, 'bulkCategory');
+        const bulkCategory = item.getFlag(FLAG_SCOPE, FK('bulkCategory'));
         if (bulkCategory && BULK_CATEGORIES[bulkCategory]) {
             let bulk = BULK_CATEGORIES[bulkCategory].value;
 
@@ -165,7 +165,7 @@ export class SlotCalculator {
      * Apply object scaling based on the item's size relative to the creature's size.
      */
     static _applyObjectScaling(bulk, categoryKey, item, ownerActor) {
-        const itemScale = item.getFlag(FLAG_SCOPE, 'objectScale');
+        const itemScale = item.getFlag(FLAG_SCOPE, FK('objectScale'));
         if (!itemScale || itemScale === 'med') return bulk;
 
         const shift = OBJECT_SCALE_SHIFTS[itemScale] || 0;
@@ -224,11 +224,11 @@ export class SlotCalculator {
             return Infinity; // No limit when container rules disabled
         }
 
-        const override = item.getFlag(FLAG_SCOPE, 'containerSlotsOverride');
+        const override = item.getFlag(FLAG_SCOPE, FK('containerSlotsOverride'));
         if (override != null && override >= 0) return override;
 
         // Magical containers have special slot counts
-        const magicSlots = item.getFlag(FLAG_SCOPE, 'magicContainerSlots');
+        const magicSlots = item.getFlag(FLAG_SCOPE, FK('magicContainerSlots'));
         if (magicSlots != null && magicSlots > 0) return magicSlots;
 
         // Normal container: slots = bulk value
@@ -259,7 +259,7 @@ export class SlotCalculator {
      */
     static isBasicSupply(item) {
         if (!getSetting('enableBasicSupplies')) return false;
-        return item.getFlag(FLAG_SCOPE, 'isBasicSupply') === true;
+        return item.getFlag(FLAG_SCOPE, FK('isBasicSupply')) === true;
     }
 
     // ─── Quickdraw ───────────────────────────────────────────────────
@@ -269,7 +269,7 @@ export class SlotCalculator {
      */
     static isQuickdraw(item) {
         if (!getSetting('enableQuickdraw')) return false;
-        return item.getFlag(FLAG_SCOPE, 'quickdraw') === true;
+        return item.getFlag(FLAG_SCOPE, FK('quickdraw')) === true;
     }
 
     /**
@@ -277,7 +277,7 @@ export class SlotCalculator {
      */
     static getQuickdrawCount(actor) {
         const items = actor.items?.contents ?? [];
-        return items.filter(i => i.getFlag(FLAG_SCOPE, 'quickdraw') === true).length;
+        return items.filter(i => i.getFlag(FLAG_SCOPE, FK('quickdraw')) === true).length;
     }
 
     /**

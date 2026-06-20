@@ -35,7 +35,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/calendar-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/calendar-editor.hbs` } };
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);

@@ -146,7 +146,7 @@ export function registerSettings() {
   });
 
   // A button in the module's settings section that opens the LLM call-log viewer.
-  game.settings.registerMenu(MODULE_ID, "llmLogMenu", {
+  game.settings.registerMenu(MODULE_ID, "lg.llmLogMenu", {
     name: "GLLG.llmlog.menuName",
     label: "GLLG.llmlog.menuLabel",
     hint: "GLLG.llmlog.menuHint",

@@ -1,5 +1,20 @@
-export const MODULE_ID = 'gluniverse-tidy-5e-inventory-slots';
-export const FLAG_SCOPE = 'gluniverse-tidy-5e-inventory-slots';
+// GLUniverse Suite port: all settings/flags live under the single suite id,
+// isolated from other features by key-prefixing with "tidy.".
+export const MODULE_ID = 'gluniverse-suite';
+export const FLAG_SCOPE = 'gluniverse-suite';
+
+/** Feature key prefix for settings and flags (avoids cross-feature collisions). */
+export const KEY_PREFIX = 'tidy.';
+
+/** Prefix a setting key with the feature prefix. */
+export function SK(key) {
+    return `${KEY_PREFIX}${key}`;
+}
+
+/** Prefix a flag key with the feature prefix. */
+export function FK(key) {
+    return `${KEY_PREFIX}${key}`;
+}
 
 // Bulk size categories
 export const BULK_CATEGORIES = {
@@ -126,7 +141,7 @@ export const DICE_POOL_DIE_TYPES = [4, 6, 8, 10, 12, 20];
 export function registerSettings() {
     // --- Core Settings (visible in config) ---
 
-    game.settings.register(MODULE_ID, 'enableSlotSystem', {
+    game.settings.register(MODULE_ID, SK('enableSlotSystem'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableSlotSystem.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableSlotSystem.hint'),
         scope: 'world',
@@ -136,7 +151,7 @@ export function registerSettings() {
         requiresReload: true
     });
 
-    game.settings.register(MODULE_ID, 'enableForNPCs', {
+    game.settings.register(MODULE_ID, SK('enableForNPCs'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableForNPCs.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableForNPCs.hint'),
         scope: 'world',
@@ -146,7 +161,7 @@ export function registerSettings() {
         requiresReload: true
     });
 
-    game.settings.register(MODULE_ID, 'enableQuickdraw', {
+    game.settings.register(MODULE_ID, SK('enableQuickdraw'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableQuickdraw.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableQuickdraw.hint'),
         scope: 'world',
@@ -155,7 +170,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'quickdrawSlots', {
+    game.settings.register(MODULE_ID, SK('quickdrawSlots'), {
         name: game.i18n.localize('GLINVSLOTS.settings.quickdrawSlots.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.quickdrawSlots.hint'),
         scope: 'world',
@@ -165,7 +180,7 @@ export function registerSettings() {
         range: { min: 1, max: 10, step: 1 }
     });
 
-    game.settings.register(MODULE_ID, 'enablePackEndurance', {
+    game.settings.register(MODULE_ID, SK('enablePackEndurance'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enablePackEndurance.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enablePackEndurance.hint'),
         scope: 'world',
@@ -174,7 +189,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'enableObjectScaling', {
+    game.settings.register(MODULE_ID, SK('enableObjectScaling'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableObjectScaling.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableObjectScaling.hint'),
         scope: 'world',
@@ -183,7 +198,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'enableEncumbranceEffects', {
+    game.settings.register(MODULE_ID, SK('enableEncumbranceEffects'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableEncumbranceEffects.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableEncumbranceEffects.hint'),
         scope: 'world',
@@ -192,7 +207,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'enableContainerRules', {
+    game.settings.register(MODULE_ID, SK('enableContainerRules'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableContainerRules.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableContainerRules.hint'),
         scope: 'world',
@@ -201,7 +216,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'enableBasicSupplies', {
+    game.settings.register(MODULE_ID, SK('enableBasicSupplies'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableBasicSupplies.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableBasicSupplies.hint'),
         scope: 'world',
@@ -210,7 +225,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'enableArmorSlotCost', {
+    game.settings.register(MODULE_ID, SK('enableArmorSlotCost'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableArmorSlotCost.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableArmorSlotCost.hint'),
         scope: 'world',
@@ -219,7 +234,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'autoBulkFromWeight', {
+    game.settings.register(MODULE_ID, SK('autoBulkFromWeight'), {
         name: game.i18n.localize('GLINVSLOTS.settings.autoBulkFromWeight.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.autoBulkFromWeight.hint'),
         scope: 'world',
@@ -228,7 +243,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'showBulkColumn', {
+    game.settings.register(MODULE_ID, SK('showBulkColumn'), {
         name: game.i18n.localize('GLINVSLOTS.settings.showBulkColumn.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.showBulkColumn.hint'),
         scope: 'world',
@@ -237,7 +252,7 @@ export function registerSettings() {
         default: true
     });
 
-    game.settings.register(MODULE_ID, 'replaceEncumbranceBar', {
+    game.settings.register(MODULE_ID, SK('replaceEncumbranceBar'), {
         name: game.i18n.localize('GLINVSLOTS.settings.replaceEncumbranceBar.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.replaceEncumbranceBar.hint'),
         scope: 'world',
@@ -248,7 +263,7 @@ export function registerSettings() {
 
     // --- Wear & Tear Settings ---
 
-    game.settings.register(MODULE_ID, 'enableWearAndTear', {
+    game.settings.register(MODULE_ID, SK('enableWearAndTear'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableWearAndTear.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableWearAndTear.hint'),
         scope: 'world',
@@ -257,7 +272,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'enableTempering', {
+    game.settings.register(MODULE_ID, SK('enableTempering'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableTempering.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableTempering.hint'),
         scope: 'world',
@@ -266,7 +281,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'autoNotchOnCrit', {
+    game.settings.register(MODULE_ID, SK('autoNotchOnCrit'), {
         name: game.i18n.localize('GLINVSLOTS.settings.autoNotchOnCrit.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.autoNotchOnCrit.hint'),
         scope: 'world',
@@ -277,7 +292,7 @@ export function registerSettings() {
 
     // --- Ammunition Dice Settings ---
 
-    game.settings.register(MODULE_ID, 'enableAmmunitionDice', {
+    game.settings.register(MODULE_ID, SK('enableAmmunitionDice'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableAmmunitionDice.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableAmmunitionDice.hint'),
         scope: 'world',
@@ -286,7 +301,7 @@ export function registerSettings() {
         default: false
     });
 
-    game.settings.register(MODULE_ID, 'autoRollAmmoDice', {
+    game.settings.register(MODULE_ID, SK('autoRollAmmoDice'), {
         name: game.i18n.localize('GLINVSLOTS.settings.autoRollAmmoDice.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.autoRollAmmoDice.hint'),
         scope: 'world',
@@ -297,7 +312,7 @@ export function registerSettings() {
 
     // --- Dice Pool Settings ---
 
-    game.settings.register(MODULE_ID, 'enableDicePool', {
+    game.settings.register(MODULE_ID, SK('enableDicePool'), {
         name: game.i18n.localize('GLINVSLOTS.settings.enableDicePool.name'),
         hint: game.i18n.localize('GLINVSLOTS.settings.enableDicePool.hint'),
         scope: 'world',
@@ -308,7 +323,7 @@ export function registerSettings() {
 }
 
 export function getSetting(key) {
-    return game.settings.get(MODULE_ID, key);
+    return game.settings.get(MODULE_ID, SK(key));
 }
 
 /**
@@ -337,5 +352,5 @@ export function unwrapElement(el) {
 }
 
 export function setSetting(key, value) {
-    return game.settings.set(MODULE_ID, key, value);
+    return game.settings.set(MODULE_ID, SK(key), value);
 }

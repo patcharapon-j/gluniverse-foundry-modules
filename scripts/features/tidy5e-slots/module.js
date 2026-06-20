@@ -1,4 +1,4 @@
-import { MODULE_ID, FLAG_SCOPE, registerSettings, unwrapElement } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, registerSettings, unwrapElement } from './settings.js';
 import { SlotCalculator } from './SlotCalculator.js';
 import { TidyIntegration } from './TidyIntegration.js';
 import { NotchCalculator } from './NotchCalculator.js';
@@ -244,7 +244,7 @@ Hooks.on('dnd5e.preUseItem', (item, config, options) => {
     if (!actor) return;
 
     // Check explicit pairing first
-    const pairedAmmoId = item.getFlag(FLAG_SCOPE, 'pairedAmmoId');
+    const pairedAmmoId = item.getFlag(FLAG_SCOPE, FK('pairedAmmoId'));
     if (pairedAmmoId) {
         const ammoItem = actor.items.get(pairedAmmoId);
         if (ammoItem && AmmoDiceCalculator.usesAmmoDice(ammoItem)) {
@@ -279,7 +279,7 @@ Hooks.on('dnd5e.preUseActivity', (activity, usageConfig, dialogConfig, messageCo
     const actor = item.parent;
     if (!actor) return;
 
-    const pairedAmmoId = item.getFlag(FLAG_SCOPE, 'pairedAmmoId');
+    const pairedAmmoId = item.getFlag(FLAG_SCOPE, FK('pairedAmmoId'));
     const consumeTarget = item.system?.consume?.target;
     const ammoId = pairedAmmoId || consumeTarget;
     if (!ammoId) return;
@@ -312,7 +312,7 @@ Hooks.on('dnd5e.rollAttack', async (rolls, data) => {
     if (!actor) return;
 
     // 1. Check explicit weapon-ammo pairing
-    const pairedAmmoId = item.getFlag?.(FLAG_SCOPE, 'pairedAmmoId');
+    const pairedAmmoId = item.getFlag?.(FLAG_SCOPE, FK('pairedAmmoId'));
     if (pairedAmmoId) {
         const ammoItem = actor.items.get(pairedAmmoId);
         if (ammoItem && AmmoDiceCalculator.usesAmmoDice(ammoItem)) {

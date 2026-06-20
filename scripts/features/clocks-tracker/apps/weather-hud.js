@@ -54,7 +54,7 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { hud: { template: `modules/${MODULE_ID}/templates/weather-hud.hbs` } };
+  static PARTS = { hud: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/weather-hud.hbs` } };
 
   _tiles = new Map();   // index -> tile element
   _marker = null;

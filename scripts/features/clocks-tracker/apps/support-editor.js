@@ -76,7 +76,7 @@ export class SupportEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/support-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/support-editor.hbs` } };
 
   _working = null;   // working copy of the roster array
   _selId = null;

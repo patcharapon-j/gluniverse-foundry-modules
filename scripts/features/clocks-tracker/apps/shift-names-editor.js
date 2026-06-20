@@ -31,7 +31,7 @@ export class ShiftNamesEditor extends HandlebarsApplicationMixin(ApplicationV2) 
     }
   };
 
-  static PARTS = { main: { template: `modules/${MODULE_ID}/templates/shift-names-editor.hbs` } };
+  static PARTS = { main: { template: `modules/${MODULE_ID}/features/clocks-tracker/templates/shift-names-editor.hbs` } };
 
   /** Currently stored names, falling back to defaults when unset/malformed. */
   _currentNames() {

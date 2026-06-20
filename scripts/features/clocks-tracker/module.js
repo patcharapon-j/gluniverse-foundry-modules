@@ -3,6 +3,10 @@
 import { MODULE_ID, SETTINGS, STEPS, HOOKS } from "./const.js";
 import { registerSettings } from "./settings.js";
 import { Features } from "./features.js";
+
+// Re-export the suite-facing settings registration so the adapter can wire it as
+// `registerSettings()` (runs unconditionally at init so toggles/menus exist).
+export { registerSettings };
 import { applyCalendar } from "./calendar/calendar.js";
 import { TimeEngine } from "./engine.js";
 import { GlctHud } from "./apps/hud.js";
@@ -22,46 +26,25 @@ function setting(key, fallback) {
 }
 
 /**
- * Guarantee the weather stylesheet is linked. Foundry only reads `module.json`
- * (and so injects `styles[]` links) at server startup, so a world that booted
- * before weather.css was added to the manifest never links it — leaving the
- * weather editor/HUD completely unstyled until a full restart. Injecting it here
- * makes a plain page reload enough; it's a no-op once the manifest link exists.
+ * Guarantee a feature stylesheet is linked. The suite manifest only declares the
+ * shared token sheet (`styles/gl-tokens.css`); this feature's own sheets live at
+ * `modules/gluniverse-suite/styles/clocks-tracker-*.css` and are injected here so
+ * a plain reload is enough. Each is a no-op once its link already exists.
  */
-function ensureWeatherStyles() {
-  if (document.querySelector('link[href*="styles/weather.css"]')) return;
+function ensureFeatureStyle(file) {
+  const href = `modules/${MODULE_ID}/styles/clocks-tracker-${file}.css`;
+  if (document.querySelector(`link[href*="styles/clocks-tracker-${file}.css"]`)) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = `modules/${MODULE_ID}/styles/weather.css`;
+  link.href = href;
   document.head.appendChild(link);
 }
 
-/** Same guard for the support stylesheet (added to the manifest after weather). */
-function ensureSupportStyles() {
-  if (document.querySelector('link[href*="styles/support.css"]')) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = `modules/${MODULE_ID}/styles/support.css`;
-  document.head.appendChild(link);
-}
-
-/** Same guard for the delving stylesheet (added to the manifest after support). */
-function ensureDelvingStyles() {
-  if (document.querySelector('link[href*="styles/delving.css"]')) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = `modules/${MODULE_ID}/styles/delving.css`;
-  document.head.appendChild(link);
-}
-
-/** Same guard for the PC-sheet trackers stylesheet (latest manifest addition). */
-function ensureSheetTrackerStyles() {
-  if (document.querySelector('link[href*="styles/tracker-sheet.css"]')) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = `modules/${MODULE_ID}/styles/tracker-sheet.css`;
-  document.head.appendChild(link);
-}
+function ensureHudStyles() { ensureFeatureStyle("hud"); }
+function ensureWeatherStyles() { ensureFeatureStyle("weather"); }
+function ensureSupportStyles() { ensureFeatureStyle("support"); }
+function ensureDelvingStyles() { ensureFeatureStyle("delving"); }
+function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
 
 Hooks.once("init", () => {
   registerSettings();

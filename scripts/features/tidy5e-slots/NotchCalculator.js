@@ -1,5 +1,5 @@
 import {
-    MODULE_ID, FLAG_SCOPE, TEMPER_GRADES, FRAGILITY,
+    MODULE_ID, FLAG_SCOPE, FK, TEMPER_GRADES, FRAGILITY,
     DIE_CHAIN, ARMOR_SACRIFICE_DICE, QUALITY_GRADES, getSetting
 } from './settings.js';
 
@@ -15,7 +15,7 @@ export class NotchCalculator {
      * Get current notch count for an item (can be fractional from tempering).
      */
     static getNotches(item) {
-        return item.getFlag(FLAG_SCOPE, 'notches') ?? 0;
+        return item.getFlag(FLAG_SCOPE, FK('notches')) ?? 0;
     }
 
     /**
@@ -30,7 +30,7 @@ export class NotchCalculator {
      * Get max notches before the item shatters.
      */
     static getMaxNotches(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'maxNotchesOverride');
+        const override = item.getFlag(FLAG_SCOPE, FK('maxNotchesOverride'));
         if (override != null && override > 0) return override;
 
         const fragility = this.getFragility(item);
@@ -41,7 +41,7 @@ export class NotchCalculator {
      * Get the fragility category of an item.
      */
     static getFragility(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'fragility');
+        const override = item.getFlag(FLAG_SCOPE, FK('fragility'));
         if (override && FRAGILITY[override]) return override;
         return 'sturdy'; // default
     }
@@ -86,7 +86,7 @@ export class NotchCalculator {
      */
     static getTemper(item) {
         if (!getSetting('enableTempering')) return 'none';
-        const temper = item.getFlag(FLAG_SCOPE, 'temper');
+        const temper = item.getFlag(FLAG_SCOPE, FK('temper'));
         return (temper && TEMPER_GRADES[temper]) ? temper : 'none';
     }
 
@@ -112,13 +112,13 @@ export class NotchCalculator {
         const newNotches = current + increment;
         const maxNotches = this.getMaxNotches(item);
 
-        await item.setFlag(FLAG_SCOPE, 'notches', newNotches);
+        await item.setFlag(FLAG_SCOPE, FK('notches'), newNotches);
 
         // Track peak notch count for quality grade
         const effectiveNew = Math.floor(newNotches);
-        const currentPeak = item.getFlag(FLAG_SCOPE, 'peakNotches') ?? 0;
+        const currentPeak = item.getFlag(FLAG_SCOPE, FK('peakNotches')) ?? 0;
         if (effectiveNew > currentPeak) {
-            await item.setFlag(FLAG_SCOPE, 'peakNotches', effectiveNew);
+            await item.setFlag(FLAG_SCOPE, FK('peakNotches'), effectiveNew);
         }
 
         const shattered = effectiveNew >= maxNotches;
@@ -132,7 +132,7 @@ export class NotchCalculator {
     static async removeNotch(item, count = 1) {
         const current = this.getNotches(item);
         const newNotches = Math.max(0, current - count);
-        await item.setFlag(FLAG_SCOPE, 'notches', newNotches);
+        await item.setFlag(FLAG_SCOPE, FK('notches'), newNotches);
         return newNotches;
     }
 
@@ -140,10 +140,10 @@ export class NotchCalculator {
      * Set notches to a specific value (GM override).
      */
     static async setNotches(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'notches', Math.max(0, value));
-        const peak = item.getFlag(FLAG_SCOPE, 'peakNotches') ?? 0;
+        await item.setFlag(FLAG_SCOPE, FK('notches'), Math.max(0, value));
+        const peak = item.getFlag(FLAG_SCOPE, FK('peakNotches')) ?? 0;
         if (Math.floor(value) > peak) {
-            await item.setFlag(FLAG_SCOPE, 'peakNotches', Math.floor(value));
+            await item.setFlag(FLAG_SCOPE, FK('peakNotches'), Math.floor(value));
         }
     }
 
@@ -154,7 +154,7 @@ export class NotchCalculator {
      * @returns {{ key: string, resalePercent: number }}
      */
     static getQualityGrade(item) {
-        const peak = item.getFlag(FLAG_SCOPE, 'peakNotches') ?? 0;
+        const peak = item.getFlag(FLAG_SCOPE, FK('peakNotches')) ?? 0;
         // Walk backwards through grades (highest threshold first)
         for (let i = QUALITY_GRADES.length - 1; i >= 0; i--) {
             if (peak >= QUALITY_GRADES[i].minPeak) return QUALITY_GRADES[i];
@@ -489,7 +489,7 @@ export class NotchCalculator {
      * Check if an item is marked as an arcane focus for this system.
      */
     static isArcaneFocus(item) {
-        return item.getFlag(FLAG_SCOPE, 'isArcaneFocus') === true;
+        return item.getFlag(FLAG_SCOPE, FK('isArcaneFocus')) === true;
     }
 
     /**

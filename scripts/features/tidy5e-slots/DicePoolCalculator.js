@@ -1,4 +1,4 @@
-import { MODULE_ID, FLAG_SCOPE, DICE_POOL_DEFAULTS, getSetting } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, DICE_POOL_DEFAULTS, getSetting } from './settings.js';
 
 /**
  * Calculation engine for the Dice Pool system.
@@ -18,7 +18,7 @@ export class DicePoolCalculator {
      */
     static usesDicePool(item) {
         if (!item) return false;
-        return item.getFlag(FLAG_SCOPE, 'hasDicePool') === true;
+        return item.getFlag(FLAG_SCOPE, FK('hasDicePool')) === true;
     }
 
     // ─── Pool State ─────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export class DicePoolCalculator {
      * Get the current number of dice in the pool.
      */
     static getPoolSize(item) {
-        const size = item.getFlag(FLAG_SCOPE, 'poolSize');
+        const size = item.getFlag(FLAG_SCOPE, FK('poolSize'));
         if (size != null) return Math.max(0, size);
         return this.getMaxPoolSize(item);
     }
@@ -36,7 +36,7 @@ export class DicePoolCalculator {
      * Get the maximum (full) pool size.
      */
     static getMaxPoolSize(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'poolMaxSize');
+        const override = item.getFlag(FLAG_SCOPE, FK('poolMaxSize'));
         if (override != null && override > 0) return override;
         return DICE_POOL_DEFAULTS.defaultPoolSize;
     }
@@ -45,7 +45,7 @@ export class DicePoolCalculator {
      * Get the die type for this pool (e.g. 6 for d6, 8 for d8).
      */
     static getDieType(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'poolDieType');
+        const override = item.getFlag(FLAG_SCOPE, FK('poolDieType'));
         if (override != null && override > 0) return override;
         return DICE_POOL_DEFAULTS.defaultDieType;
     }
@@ -54,7 +54,7 @@ export class DicePoolCalculator {
      * Get the discard threshold — dice showing this value or below are removed.
      */
     static getDiscardThreshold(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'poolDiscardThreshold');
+        const override = item.getFlag(FLAG_SCOPE, FK('poolDiscardThreshold'));
         if (override != null && override > 0) return override;
         return DICE_POOL_DEFAULTS.defaultDiscardThreshold;
     }
@@ -69,26 +69,26 @@ export class DicePoolCalculator {
     // ─── State Setters ──────────────────────────────────────────────
 
     static async setPoolSize(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'poolSize', Math.max(0, value));
+        await item.setFlag(FLAG_SCOPE, FK('poolSize'), Math.max(0, value));
     }
 
     static async setMaxPoolSize(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'poolMaxSize', Math.max(1, value));
+        await item.setFlag(FLAG_SCOPE, FK('poolMaxSize'), Math.max(1, value));
     }
 
     static async setDieType(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'poolDieType', value);
+        await item.setFlag(FLAG_SCOPE, FK('poolDieType'), value);
     }
 
     static async setDiscardThreshold(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'poolDiscardThreshold', Math.max(1, value));
+        await item.setFlag(FLAG_SCOPE, FK('poolDiscardThreshold'), Math.max(1, value));
     }
 
     static async enableDicePool(item, enabled) {
-        await item.setFlag(FLAG_SCOPE, 'hasDicePool', enabled);
+        await item.setFlag(FLAG_SCOPE, FK('hasDicePool'), enabled);
         // Initialize pool if enabling for the first time
-        if (enabled && item.getFlag(FLAG_SCOPE, 'poolSize') == null) {
-            await item.setFlag(FLAG_SCOPE, 'poolSize', this.getMaxPoolSize(item));
+        if (enabled && item.getFlag(FLAG_SCOPE, FK('poolSize')) == null) {
+            await item.setFlag(FLAG_SCOPE, FK('poolSize'), this.getMaxPoolSize(item));
         }
     }
 

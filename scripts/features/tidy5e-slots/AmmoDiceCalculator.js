@@ -1,4 +1,4 @@
-import { MODULE_ID, FLAG_SCOPE, AMMO_DIE_CHAIN, AMMO_REPLENISH_COST, getSetting } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, AMMO_DIE_CHAIN, AMMO_REPLENISH_COST, getSetting } from './settings.js';
 
 /**
  * Calculation engine for the Ammunition Dice system.
@@ -21,7 +21,7 @@ export class AmmoDiceCalculator {
         // dnd5e: consumable with type 'ammo'
         if (item.type === 'consumable' && item.system.type?.value === 'ammo') return true;
         // Also check the ammunition flag override
-        if (item.getFlag(FLAG_SCOPE, 'isAmmoDice') === true) return true;
+        if (item.getFlag(FLAG_SCOPE, FK('isAmmoDice')) === true) return true;
         return false;
     }
 
@@ -32,10 +32,10 @@ export class AmmoDiceCalculator {
     static usesAmmoDice(item) {
         if (!this.isAmmunition(item)) return false;
         // Explicit opt-out
-        if (item.getFlag(FLAG_SCOPE, 'ammoTrackIndividual') === true) return false;
+        if (item.getFlag(FLAG_SCOPE, FK('ammoTrackIndividual')) === true) return false;
         // Magic items default to individual tracking unless opted in
         if (item.system.rarity && item.system.rarity !== 'common' && item.system.rarity !== '') {
-            return item.getFlag(FLAG_SCOPE, 'isAmmoDice') === true;
+            return item.getFlag(FLAG_SCOPE, FK('isAmmoDice')) === true;
         }
         return true;
     }
@@ -47,7 +47,7 @@ export class AmmoDiceCalculator {
      * Returns the die denomination (e.g., 12 for d12, 4 for d4, 1 for last shot, 0 for empty).
      */
     static getCurrentDie(item) {
-        const die = item.getFlag(FLAG_SCOPE, 'ammoDie');
+        const die = item.getFlag(FLAG_SCOPE, FK('ammoDie'));
         if (die != null) return die;
         // Default: use max die (d12 for standard ammo)
         return this.getMaxDie(item);
@@ -58,7 +58,7 @@ export class AmmoDiceCalculator {
      * Default is d12 for standard ammunition.
      */
     static getMaxDie(item) {
-        const override = item.getFlag(FLAG_SCOPE, 'ammoMaxDie');
+        const override = item.getFlag(FLAG_SCOPE, FK('ammoMaxDie'));
         if (override != null && override > 0) return override;
         return 12; // d12 default
     }
@@ -67,14 +67,14 @@ export class AmmoDiceCalculator {
      * Set the current ammo die.
      */
     static async setCurrentDie(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'ammoDie', Math.max(0, value));
+        await item.setFlag(FLAG_SCOPE, FK('ammoDie'), Math.max(0, value));
     }
 
     /**
      * Set the max die for this ammo type.
      */
     static async setMaxDie(item, value) {
-        await item.setFlag(FLAG_SCOPE, 'ammoMaxDie', value);
+        await item.setFlag(FLAG_SCOPE, FK('ammoMaxDie'), value);
     }
 
     /**

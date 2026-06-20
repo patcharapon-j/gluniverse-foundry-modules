@@ -1,6 +1,12 @@
 import { ThemeManager } from './ThemeManager.js';
+import { featurePath } from '../../core/const.mjs';
 
-export const MODULE_ID = 'stream-pacer';
+export const FEATURE_ID = 'stream-pacer';
+
+// Ported into GLUniverse Suite: the package id is the suite, and every setting
+// key is prefixed with the feature prefix "sp." to avoid cross-feature
+// collisions on the shared namespace.
+export const MODULE_ID = 'gluniverse-suite';
 
 export const PLAYER_STATUS = {
   ENGAGED: 'engaged',
@@ -35,8 +41,8 @@ async function saveExemptUsers(_event, _form, formData) {
       perilExemptUsers.push(key.replace('peril-', ''));
     }
   }
-  await game.settings.set(MODULE_ID, 'exemptUsers', exemptUsers);
-  await game.settings.set(MODULE_ID, 'perilExemptUsers', perilExemptUsers);
+  await game.settings.set(MODULE_ID, 'sp.exemptUsers', exemptUsers);
+  await game.settings.set(MODULE_ID, 'sp.perilExemptUsers', perilExemptUsers);
 }
 
 class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -60,13 +66,13 @@ class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     form: {
-      template: `modules/${MODULE_ID}/templates/exempt-users.hbs`
+      template: featurePath(FEATURE_ID, 'templates/exempt-users.hbs')
     }
   };
 
   async _prepareContext() {
-    const exemptUsers = game.settings.get(MODULE_ID, 'exemptUsers');
-    const perilExemptUsers = game.settings.get(MODULE_ID, 'perilExemptUsers');
+    const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
+    const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
     const users = game.users.map(u => ({
       id: u.id,
       name: u.name,
@@ -79,14 +85,14 @@ class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
 
 async function saveAppearance(_event, _form, formData) {
   const data = formData?.object ?? {};
-  await game.settings.set(MODULE_ID, 'perilWebGLEnabled', data.perilWebGLEnabled === true);
+  await game.settings.set(MODULE_ID, 'sp.perilWebGLEnabled', data.perilWebGLEnabled === true);
 
   // Dire Peril text is world-scoped — only GMs may write it.
   if (game.user.isGM) {
-    await game.settings.set(MODULE_ID, 'perilTextDire', (data.perilTextDire ?? '').trim());
-    await game.settings.set(MODULE_ID, 'perilTextPeril', (data.perilTextPeril ?? '').trim());
-    await game.settings.set(MODULE_ID, 'perilTextTag', (data.perilTextTag ?? '').trim());
-    await game.settings.set(MODULE_ID, 'perilTextSubtitle', (data.perilTextSubtitle ?? '').trim());
+    await game.settings.set(MODULE_ID, 'sp.perilTextDire', (data.perilTextDire ?? '').trim());
+    await game.settings.set(MODULE_ID, 'sp.perilTextPeril', (data.perilTextPeril ?? '').trim());
+    await game.settings.set(MODULE_ID, 'sp.perilTextTag', (data.perilTextTag ?? '').trim());
+    await game.settings.set(MODULE_ID, 'sp.perilTextSubtitle', (data.perilTextSubtitle ?? '').trim());
   }
 
   ThemeManager.apply();
@@ -113,18 +119,18 @@ class AppearanceConfig extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     form: {
-      template: `modules/${MODULE_ID}/templates/appearance-config.hbs`
+      template: featurePath(FEATURE_ID, 'templates/appearance-config.hbs')
     }
   };
 
   async _prepareContext() {
     return {
-      perilWebGLEnabled: game.settings.get(MODULE_ID, 'perilWebGLEnabled'),
+      perilWebGLEnabled: game.settings.get(MODULE_ID, 'sp.perilWebGLEnabled'),
       isGM: game.user.isGM,
-      perilTextDire: game.settings.get(MODULE_ID, 'perilTextDire'),
-      perilTextPeril: game.settings.get(MODULE_ID, 'perilTextPeril'),
-      perilTextTag: game.settings.get(MODULE_ID, 'perilTextTag'),
-      perilTextSubtitle: game.settings.get(MODULE_ID, 'perilTextSubtitle'),
+      perilTextDire: game.settings.get(MODULE_ID, 'sp.perilTextDire'),
+      perilTextPeril: game.settings.get(MODULE_ID, 'sp.perilTextPeril'),
+      perilTextTag: game.settings.get(MODULE_ID, 'sp.perilTextTag'),
+      perilTextSubtitle: game.settings.get(MODULE_ID, 'sp.perilTextSubtitle'),
       perilTextDirePlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTitleDire'),
       perilTextPerilPlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTitlePeril'),
       perilTextTagPlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTag'),
@@ -135,7 +141,7 @@ class AppearanceConfig extends HandlebarsApplicationMixin(ApplicationV2) {
 
 export function registerSettings() {
   // --- Appearance ---
-  game.settings.register(MODULE_ID, 'perilWebGLEnabled', {
+  game.settings.register(MODULE_ID, 'sp.perilWebGLEnabled', {
     scope: 'client',
     config: false,
     type: Boolean,
@@ -144,7 +150,7 @@ export function registerSettings() {
 
   // Dire Peril display text — world-scoped so the whole table sees the same
   // reveal. Empty string falls back to the localized default at render time.
-  for (const key of ['perilTextDire', 'perilTextPeril', 'perilTextTag', 'perilTextSubtitle']) {
+  for (const key of ['sp.perilTextDire', 'sp.perilTextPeril', 'sp.perilTextTag', 'sp.perilTextSubtitle']) {
     game.settings.register(MODULE_ID, key, {
       scope: 'world',
       config: false,
@@ -153,7 +159,7 @@ export function registerSettings() {
     });
   }
 
-  game.settings.registerMenu(MODULE_ID, 'appearanceMenu', {
+  game.settings.registerMenu(MODULE_ID, 'sp.appearanceMenu', {
     name: 'STREAM_PACER.Settings.Appearance',
     label: 'STREAM_PACER.Settings.AppearanceLabel',
     hint: 'STREAM_PACER.Settings.AppearanceHint',
