@@ -51,7 +51,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _parse() {
     try { return { ok: true, value: JSON.parse(this._textarea().value) }; }
-    catch (e) { ui.notifications.error(`Invalid JSON: ${e.message}`); return { ok: false }; }
+    catch (e) { ui.notifications.error(game.i18n.format("GLCT.calendarEditor.invalidJson", { message: e.message })); return { ok: false }; }
   }
 
   _onLoadPreset() {
@@ -69,8 +69,8 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
         const text = await file.text();
         JSON.parse(text); // validate
         this._textarea().value = text;
-        ui.notifications.info("Calendar JSON loaded into the editor. Review, then Save.");
-      } catch (e) { ui.notifications.error(`Invalid calendar file: ${e.message}`); }
+        ui.notifications.info(game.i18n.localize("GLCT.calendarEditor.imported"));
+      } catch (e) { ui.notifications.error(game.i18n.format("GLCT.calendarEditor.invalidFile", { message: e.message })); }
     });
     input.click();
   }
@@ -89,7 +89,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onReset() {
     const ok = await DialogV2.confirm({
       window: { title: game.i18n.localize("GLCT.editor.title") },
-      content: `<p>Discard the custom calendar and revert to the selected preset?</p>`
+      content: game.i18n.localize("GLCT.calendarEditor.resetConfirm")
     });
     if (!ok) return;
     await game.settings.set(MODULE_ID, SETTINGS.calendarConfig, null);
@@ -102,7 +102,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     const parsed = this._parse(); if (!parsed.ok) return;
     const cfg = parsed.value;
     if (!cfg?.days?.values?.length) {
-      ui.notifications.error("Calendar must define days.values (the weekdays).");
+      ui.notifications.error(game.i18n.localize("GLCT.calendarEditor.needDays"));
       return;
     }
     await game.settings.set(MODULE_ID, SETTINGS.calendarConfig, cfg);
@@ -110,7 +110,7 @@ export class CalendarEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     if (id) await game.settings.set(MODULE_ID, SETTINGS.calendarId, id);
     applyCalendar({ reinitialize: true });
     GlctHud.refreshState();
-    ui.notifications.info("Calendar saved.");
+    ui.notifications.info(game.i18n.localize("GLCT.calendarEditor.saved"));
     this.render();
   }
 }

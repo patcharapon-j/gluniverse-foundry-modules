@@ -46,7 +46,7 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     const months = this._months();
     const mn = i => months[i]?.name ?? `M${(i ?? 0) + 1}`;
     switch (e.scope) {
-      case "month": return `All of ${mn(e.month)}`;
+      case "month": return game.i18n.format?.("GLCT.calendarView.allOf", { month: mn(e.month) }) ?? `All of ${mn(e.month)}`;
       case "range": return `${mn(e.month)} ${e.day} – ${mn(e.endMonth)} ${e.endDay}`;
       default: return `${mn(e.month)} ${e.day}`;
     }

@@ -1,6 +1,6 @@
 <div class="glct-evlist">
   <header class="ev-head">
-    <span class="ev-count">{{events.length}} event(s)</span>
+    <span class="ev-count">{{localize "GLCT.events.count" n=events.length}}</span>
     <button type="button" class="ev-add" data-action="addEvent">
       <i class="fa-solid fa-plus"></i> {{localize "GLCT.events.add"}}
     </button>
@@ -20,12 +20,12 @@
               title="{{localize 'GLCT.events.visibleToPlayers'}}">
         <i class="fa-solid {{#if this.visibleToPlayers}}fa-eye{{else}}fa-eye-slash{{/if}}"></i>
       </button>
-      <button type="button" class="ev-edit" data-action="editEvent" title="Edit"><i class="fa-solid fa-pen"></i></button>
-      <button type="button" class="ev-del" data-action="deleteEvent" title="Delete"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" class="ev-edit" data-action="editEvent" title="{{localize 'GLCT.calendarView.edit'}}"><i class="fa-solid fa-pen"></i></button>
+      <button type="button" class="ev-del" data-action="deleteEvent" title="{{localize 'GLCT.calendarView.delete'}}"><i class="fa-solid fa-trash"></i></button>
     </li>
     {{/each}}
   </ul>
   {{else}}
-  <p class="ev-empty">No events yet. Add holidays, festivals, or one-off events.</p>
+  <p class="ev-empty">{{localize "GLCT.events.emptyHint"}}</p>
   {{/if}}
 </div>
