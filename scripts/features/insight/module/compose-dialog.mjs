@@ -77,7 +77,7 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     const targetUser = formData.get("target");
 
     if (!message || !targetUser) {
-      ui.notifications.warn("Please choose a recipient and type a message.");
+      ui.notifications.warn(game.i18n.localize("INSIGHT.ComposeValidation"));
       return;
     }
 

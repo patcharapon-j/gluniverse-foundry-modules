@@ -62,9 +62,9 @@
   --gl-breathe:  2.6s;
   --gl-dread:    3.2s;
 
-  /* §5 Typography voices */
-  --gl-font-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
-  --gl-font-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+  /* §5 Typography voices — derive from the canonical Etched Glass tokens. */
+  --gl-font-display: var(--gl-display);
+  --gl-font-tech: var(--gl-tech);
 }
 
 /* ----------------------------------------------------------

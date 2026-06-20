@@ -15,13 +15,14 @@ export class SetTimeDialog {
       .map((m, i) => `<option value="${i}" ${i === c.month ? "selected" : ""}>${m.name}</option>`)
       .join("");
 
+    const L = k => game.i18n.localize(k);
     const content = `
       <div class="glct-settime" style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;">
-        <label>Year</label>   <input type="number" name="year"  value="${c.year}">
-        <label>Month</label>  <select name="month">${monthOpts}</select>
-        <label>Day</label>    <input type="number" name="day"   value="${(c.dayOfMonth ?? 0) + 1}" min="1">
-        <label>Hour</label>   <input type="number" name="hour"  value="${c.hour ?? 0}" min="0" max="23">
-        <label>Minute</label> <input type="number" name="minute" value="${c.minute ?? 0}" min="0" max="59" step="10">
+        <label>${L("GLCT.setTime.year")}</label>   <input type="number" name="year"  value="${c.year}">
+        <label>${L("GLCT.setTime.month")}</label>  <select name="month">${monthOpts}</select>
+        <label>${L("GLCT.setTime.day")}</label>    <input type="number" name="day"   value="${(c.dayOfMonth ?? 0) + 1}" min="1">
+        <label>${L("GLCT.setTime.hour")}</label>   <input type="number" name="hour"  value="${c.hour ?? 0}" min="0" max="23">
+        <label>${L("GLCT.setTime.minute")}</label> <input type="number" name="minute" value="${c.minute ?? 0}" min="0" max="59" step="10">
       </div>`;
 
     try {

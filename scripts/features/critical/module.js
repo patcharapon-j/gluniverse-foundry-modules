@@ -471,7 +471,7 @@ function resolveCritEvent(input) {
   return {
     messageId: input.messageId,
     actorId: input.actorId,
-    actorName: actor.name ?? "Unknown",
+    actorName: actor.name ?? game.i18n.localize("GLUC.Actor.UnknownName"),
     isPC: input.isPC,
     imagePath: resolveImage(actor, input.isPC),
     durationMs: getSetting(SETTINGS.CINEMATIC_DURATION),
@@ -869,7 +869,7 @@ class ActorConfigModal extends Base {
   get title() {
     const isNPC = !this.#actor.hasPlayerOwner;
     const key = isNPC ? "GLUC.Actor.ModalTitleNPC" : "GLUC.Actor.ModalTitlePC";
-    return game.i18n.format(key, { name: this.#actor.name ?? "Actor" });
+    return game.i18n.format(key, { name: this.#actor.name ?? game.i18n.localize("GLUC.Actor.GenericName") });
   }
   async _prepareContext() {
     const flags = readActorFlags(this.#baseActor);

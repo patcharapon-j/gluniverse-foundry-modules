@@ -24,13 +24,13 @@
 
 /* ---- frameless ApplicationV2 reset + top-center anchoring ---- */
 #glct-hud{
-  --ink:#eef1f7; --muted:#98a2b6; --hair:rgba(255,255,255,.08);
+  --ink:var(--gl-text); --muted:var(--gl-text-dim); --hair:var(--gl-hair);
   --tint:#6b86d6; --tint2:#1a2233; --glow:rgba(120,150,225,.5); --glowsoft:rgba(120,150,225,.18);
-  --edge:rgba(255,255,255,.13);
+  --edge:var(--gl-edge);
   /* Mission accent — emerald, chosen to stay clear of every shift tint
      (blue/amber/cyan/purple), the amber event chip, and the red hazard. */
-  --mission:#37d99a; --missionsoft:rgba(55,217,154,.45);
-  --clock-font:"Oxanium","Segoe UI",system-ui,sans-serif;
+  --mission:var(--gl-mission); --missionsoft:rgba(55,217,154,.45);
+  --clock-font:var(--gl-display);
   background:none;border:none;box-shadow:none;padding:0;margin:0;
   width:auto;height:auto;min-width:0;min-height:0;
   pointer-events:none;                 /* clicks fall through transparent gaps */
@@ -565,7 +565,7 @@
   --ink:#eef1f7; --muted:#98a2b6; --hair:rgba(255,255,255,.08); --edge:rgba(255,255,255,.13);
   --tint:#e9eef7; --glow:rgba(255,255,255,.5); --glowsoft:rgba(255,255,255,.16);
   --danger:var(--gl-hazard); --dangerglow:color-mix(in srgb,var(--gl-hazard) 55%,transparent); --dangersoft:color-mix(in srgb,var(--gl-hazard) 22%,transparent); --good:#67d39b;
-  --clock-font:"Oxanium","Segoe UI",system-ui,sans-serif;
+  --clock-font:var(--gl-display);
   background:none;border:none;box-shadow:none;padding:0;margin:0;width:auto;height:auto;min-width:0;min-height:0;
   pointer-events:none;font:14px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;}
 .glct-trk-skin .window-content{background:none;padding:0;color:var(--ink);overflow:visible}
@@ -839,7 +839,7 @@
 .glct-chatcard{margin:0 -8px -8px;border:none;border-top:1px solid rgba(255,255,255,.10);border-radius:0 0 6px 6px;
   overflow:hidden;box-shadow:none;font:13px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif;
   --tint:#6b86d6;--glow:rgba(120,150,225,.5);--glowsoft:rgba(120,150,225,.18);--good:#67d39b;
-  --clock-font:"Oxanium","Segoe UI",system-ui,sans-serif;
+  --clock-font:var(--gl-display);
   background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.01)),linear-gradient(160deg,#161d2c,#0a0e15);
   color:#eef1f7}
 .glct-chatcard .glct-cc-head{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid rgba(255,255,255,.08)}

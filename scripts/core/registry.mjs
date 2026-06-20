@@ -65,19 +65,19 @@ export const Suite = {
   /** Reason a feature is unavailable (for the config UI), or null. */
   unavailableReason(def) {
     if (typeof def === "string") def = this.get(def);
-    if (!def) return "Unknown feature";
+    if (!def) return game.i18n.localize("GLS.config.lock.unknown");
     if (def.system) {
       const need = this._list(def.system);
-      if (!need.includes(game.system?.id)) return `Requires system: ${need.join(" / ")}`;
+      if (!need.includes(game.system?.id)) return game.i18n.format("GLS.config.lock.system", { systems: need.join(" / ") });
     }
     for (const modId of def.requires ?? []) {
-      if (!game.modules.get(modId)?.active) return `Requires module: ${modId}`;
+      if (!game.modules.get(modId)?.active) return game.i18n.format("GLS.config.lock.module", { module: modId });
     }
     for (const featId of this._list(def.requiresFeature)) {
       if (!this.enabled(featId)) {
         const parent = this.get(featId);
         const label = parent ? game.i18n.localize(parent.title) : featId;
-        return `Requires feature: ${label}`;
+        return game.i18n.format("GLS.config.lock.feature", { feature: label });
       }
     }
     return null;

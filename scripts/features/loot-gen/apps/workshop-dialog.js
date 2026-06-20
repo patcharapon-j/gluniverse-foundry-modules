@@ -21,11 +21,11 @@ import { beginProgress, endProgress } from "./progress.js";
 export async function openWorkshopDialog(presetPrompt = "") {
   const DialogV2 = foundry.applications?.api?.DialogV2;
   if (!DialogV2) {
-    ui.notifications?.error("GLLG: DialogV2 unavailable — use the console API instead.");
+    ui.notifications?.error(game.i18n.localize("GLLG.workshop.dialogV2Unavailable"));
     return;
   }
   if (!workshopEnabled()) {
-    ui.notifications?.warn("GLLG: the Loot Workshop needs the LLM sidecar — set the Flavor Sidecar URL in module settings.");
+    ui.notifications?.warn(game.i18n.localize("GLLG.workshop.needsSidecar"));
     return;
   }
 
@@ -53,17 +53,17 @@ export async function openWorkshopDialog(presetPrompt = "") {
   let result;
   try {
     result = await DialogV2.wait({
-      window: { title: "Loot Workshop", icon: "fa-solid fa-hammer", resizable: true },
+      window: { title: game.i18n.localize("GLLG.workshop.title"), icon: "fa-solid fa-hammer", resizable: true },
       position: { width: 480 },
       classes: ["gllg", "gllg-generate", "gllg-workshop"],
       content: buildForm(presetPrompt, sources),
       rejectClose: false,
       buttons: [
         {
-          action: "go", label: "Forge", icon: "fa-solid fa-wand-sparkles", default: true,
+          action: "go", label: game.i18n.localize("GLLG.workshop.btnForge"), icon: "fa-solid fa-wand-sparkles", default: true,
           callback: (_ev, btn) => readForm(btn.form)
         },
-        { action: "cancel", label: "Cancel", icon: "fa-solid fa-xmark" }
+        { action: "cancel", label: game.i18n.localize("GLLG.common.cancel"), icon: "fa-solid fa-xmark" }
       ]
     }).catch(() => null);
   } finally {
@@ -74,12 +74,13 @@ export async function openWorkshopDialog(presetPrompt = "") {
 
   if (!result || result === "cancel") return;
   if (!result.prompt && !result.useCreatures) {
-    return ui.notifications?.warn("GLLG: describe the loot you want, or select creature tokens to base it on.");
+    return ui.notifications?.warn(game.i18n.localize("GLLG.workshop.describeOrSelect"));
   }
 
   const detail = result.useCreatures && result.sources?.length
-    ? `Loot from ${sourcesLabel(result.sources)}` : "Loot Workshop";
-  const progress = await beginProgress({ title: "Forging custom loot…", detail });
+    ? game.i18n.format("GLLG.workshop.progressDetailFrom", { sources: sourcesLabel(result.sources) })
+    : game.i18n.localize("GLLG.workshop.progressDetailDefault");
+  const progress = await beginProgress({ title: game.i18n.localize("GLLG.workshop.progressTitle"), detail });
   let proposal;
   try {
     proposal = await runWorkshop(result);
@@ -93,12 +94,12 @@ export async function openWorkshopDialog(presetPrompt = "") {
 
 function buildForm(presetPrompt, sources) {
   const rarity = ["any", "common", "uncommon", "rare", "unique"]
-    .map(v => `<option value="${v}">${capitalize(v)}</option>`).join("");
+    .map(v => `<option value="${v}">${esc(loc(`GLLG.enum.rarity.${v}`))}</option>`).join("");
   const lootKind = [
-    ["both", "Both (carried gear + harvested parts)"],
-    ["carried", "Carried gear / keepsakes only"],
-    ["harvested", "Harvested monster parts only"]
-  ].map(([v, lbl]) => `<option value="${v}">${esc(lbl)}</option>`).join("");
+    ["both", "GLLG.workshop.lootKindBoth"],
+    ["carried", "GLLG.workshop.lootKindCarried"],
+    ["harvested", "GLLG.workshop.lootKindHarvested"]
+  ].map(([v, key]) => `<option value="${v}">${esc(loc(key))}</option>`).join("");
 
   // Default count/level from the selection (Q4): count = #creatures (cap 8),
   // level = the toughest creature's level. Both stay GM-overridable.
@@ -108,16 +109,16 @@ function buildForm(presetPrompt, sources) {
   return `<div class="gllg-genform gllg-workshop-form">
     <div class="gllg-creatures">${creatureBlockInner(sources)}</div>
     <div class="gllg-field gllg-lootkind" data-creature-only style="${sources.length ? "" : "display:none"}">
-      <label>Loot kind</label><select name="lootKind">${lootKind}</select>
+      <label>${esc(loc("GLLG.workshop.labelLootKind"))}</label><select name="lootKind">${lootKind}</select>
     </div>
-    <div class="gllg-field"><label>Describe the loot <span class="gllg-dim gllg-prompt-hint">${sources.length ? "(optional — extra steering on top of the creatures)" : ""}</span></label>
-      <textarea name="prompt" rows="3" placeholder="e.g. a sinister relic for the cult's vault — something that whispers to whoever holds it">${esc(presetPrompt)}</textarea></div>
+    <div class="gllg-field"><label>${esc(loc("GLLG.workshop.labelDescribe"))} <span class="gllg-dim gllg-prompt-hint">${sources.length ? esc(loc("GLLG.workshop.describeHintOptional")) : ""}</span></label>
+      <textarea name="prompt" rows="3" placeholder="${attr(loc("GLLG.workshop.describePlaceholder"))}">${esc(presetPrompt)}</textarea></div>
     <div class="gllg-row">
-      <div class="gllg-field"><label>How many</label><input type="number" name="count" value="${count}" min="1" max="8"></div>
-      <div class="gllg-field"><label>Item level <span class="gllg-dim">(blank = AI decides)</span></label><input type="number" name="level" min="0" max="25" value="${lvl ?? ""}" placeholder="AI decides"></div>
-      <div class="gllg-field"><label>Rarity</label><select name="rarity">${rarity}</select></div>
+      <div class="gllg-field"><label>${esc(loc("GLLG.workshop.labelHowMany"))}</label><input type="number" name="count" value="${count}" min="1" max="8"></div>
+      <div class="gllg-field"><label>${esc(loc("GLLG.workshop.labelItemLevel"))} <span class="gllg-dim">${esc(loc("GLLG.workshop.itemLevelHint"))}</span></label><input type="number" name="level" min="0" max="25" value="${lvl ?? ""}" placeholder="${attr(loc("GLLG.workshop.itemLevelPlaceholder"))}"></div>
+      <div class="gllg-field"><label>${esc(loc("GLLG.workshop.labelRarity"))}</label><select name="rarity">${rarity}</select></div>
     </div>
-    <p class="gllg-dim">The LLM authors real PF2e items — correct item type, valid traits, a fair price for their level, and any dice/DCs encoded as clickable Foundry rolls (scaled to your variant rules, e.g. Proficiency Without Level). Each is validated against your PF2e build before it appears, and carries a GM-only icon prompt in its notes for quick art. With creatures selected, items are authored as loot found on or harvested from them — harvested parts include a clickable harvest check. You review, tweak the destination, reroll, or drop them like any other loot; your campaign context (module settings) is fed in automatically.</p>
+    <p class="gllg-dim">${esc(loc("GLLG.workshop.body"))}</p>
   </div>`;
 }
 
@@ -125,25 +126,25 @@ function buildForm(presetPrompt, sources) {
 function creatureBlockInner(sources) {
   if (!sources.length) {
     return `<input type="checkbox" name="useCreatures" hidden>
-      <p class="gllg-dim gllg-creature-empty"><i class="fa-solid fa-paw"></i> Select one or more creature tokens to base loot on them (found on / harvested from). Otherwise this forges loot from your description alone.</p>`;
+      <p class="gllg-dim gllg-creature-empty"><i class="fa-solid fa-paw"></i> ${esc(loc("GLLG.workshop.creatureEmpty"))}</p>`;
   }
   const chips = sources.map(s => {
-    const sub = [s.level >= 0 ? `Lv ${s.level}` : null, s.rarity !== "common" ? s.rarity : null]
+    const sub = [s.level >= 0 ? loc("GLLG.workshop.lvPrefix", { level: s.level }) : null, s.rarity !== "common" ? s.rarity : null]
       .filter(Boolean).join(" · ");
     const n = s.count > 1 ? ` ×${s.count}` : "";
     return `<span class="gllg-creature-chip" title="${attr(chipTitle(s))}">${esc(s.name)}${n}${sub ? ` <span class="gllg-dim">(${esc(sub)})</span>` : ""}</span>`;
   }).join("");
   return `<label class="gllg-check gllg-creature-toggle">
       <input type="checkbox" name="useCreatures" checked>
-      <span>Base loot on selected creatures <span class="gllg-dim">(${totalSourceCount(sources)})</span></span>
+      <span>${esc(loc("GLLG.workshop.baseLootOn"))} <span class="gllg-dim">(${totalSourceCount(sources)})</span></span>
     </label>
     <div class="gllg-creature-chips">${chips}</div>`;
 }
 
 function chipTitle(s) {
   const bits = [];
-  if (s.traits?.length) bits.push(`Traits: ${s.traits.join(", ")}`);
-  if (s.gear?.length) bits.push(`Carries: ${s.gear.join(", ")}`);
+  if (s.traits?.length) bits.push(loc("GLLG.workshop.chipTraits", { traits: s.traits.join(", ") }));
+  if (s.gear?.length) bits.push(loc("GLLG.workshop.chipCarries", { gear: s.gear.join(", ") }));
   if (s.lore) bits.push(s.lore);
   return bits.join("\n");
 }
@@ -173,7 +174,7 @@ function applyCreatureVisibility(root) {
     el.style.display = on ? "" : "none";
   }
   const hint = root.querySelector(".gllg-prompt-hint");
-  if (hint) hint.textContent = on ? "(optional — extra steering on top of the creatures)" : "";
+  if (hint) hint.textContent = on ? loc("GLLG.workshop.describeHintOptional") : "";
 }
 
 function readForm(form) {
@@ -195,7 +196,9 @@ function readForm(form) {
 
 /* -------------------------------- helpers -------------------------------- */
 
-function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function loc(key, data) {
+  return data ? (game.i18n?.format?.(key, data) ?? key) : (game.i18n?.localize?.(key) ?? key);
+}
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

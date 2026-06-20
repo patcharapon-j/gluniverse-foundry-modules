@@ -9,7 +9,7 @@
 import { MODULE_ID } from "../const.js";
 
 /** Post a whispered "working…" card and return the ChatMessage (or null). */
-export async function beginProgress({ title = "Working…", detail = "" } = {}) {
+export async function beginProgress({ title = game.i18n.localize("GLLG.progress.defaultTitle"), detail = "" } = {}) {
   try {
     return await ChatMessage.create({
       content: renderProgress(title, detail),
@@ -40,7 +40,7 @@ function renderProgress(title, detail) {
     </header>
     <div class="gllg-progress-body">
       <span class="gllg-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
-      <span class="gllg-progress-text">Contacting the LLM sidecar — this can take a few seconds…</span>
+      <span class="gllg-progress-text">${esc(game.i18n.localize("GLLG.progress.contacting"))}</span>
     </div>
   </div>`;
 }

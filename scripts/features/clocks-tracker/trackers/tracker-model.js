@@ -8,7 +8,8 @@
  * — a tracker created on a sheet is byte-for-byte one created on the dock.
  */
 
-import { MODULE_ID, TRACKER_TYPES } from "../const.js";
+import { TRACKER_TYPES } from "../const.js";
+import { clamp, toInt } from "../../../core/util.mjs";
 
 /** Per-type factory defaults for newly created trackers. */
 export const TRACKER_DEFAULTS = {
@@ -20,8 +21,10 @@ export const TRACKER_DEFAULTS = {
   separator: { label: "" }
 };
 
-export const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-export const tInt = (v, fallback = 0) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : fallback; };
+// Re-exported from the shared core util so the tracker stores keep importing
+// clamp / tInt from here (their long-standing local API) with no duplicate logic.
+export { clamp };
+export const tInt = toInt;
 /** Optional integer bound: blank/null/undefined stays unset (null); otherwise an int. */
 export const optInt = (v) => {
   if (v === null || v === undefined || String(v).trim() === "") return null;

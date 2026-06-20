@@ -14,61 +14,61 @@ const SETTINGS = Object.freeze({
 
 const CATEGORIES = Object.freeze({
   supplies: {
-    label: "Supplies",
+    labelKey: "GLUCARGO.category.supplies",
     icon: "fa-solid fa-kit-medical",
     color: "#18c7b8",
     pattern: "stripe"
   },
   parts: {
-    label: "Parts",
+    labelKey: "GLUCARGO.category.parts",
     icon: "fa-solid fa-gears",
     color: "#f59e0b",
     pattern: "circuit"
   },
   comforts: {
-    label: "Comforts",
+    labelKey: "GLUCARGO.category.comforts",
     icon: "fa-solid fa-mug-hot",
     color: "#ec4899",
     pattern: "soft"
   },
   objective: {
-    label: "Objective",
+    labelKey: "GLUCARGO.category.objective",
     icon: "fa-solid fa-diamond",
     color: "#e11d48",
     pattern: "warning"
   },
   intel: {
-    label: "Intel",
+    labelKey: "GLUCARGO.category.intel",
     icon: "fa-solid fa-hard-drive",
     color: "#38bdf8",
     pattern: "scan"
   },
   loot: {
-    label: "Loot",
+    labelKey: "GLUCARGO.category.loot",
     icon: "fa-solid fa-shield-halved",
     color: "#8b5cf6",
     pattern: "edge"
   },
   specimens: {
-    label: "Specimens",
+    labelKey: "GLUCARGO.category.specimens",
     icon: "fa-solid fa-flask-vial",
     color: "#22c55e",
     pattern: "bio"
   },
   salvage: {
-    label: "Salvage",
+    labelKey: "GLUCARGO.category.salvage",
     icon: "fa-solid fa-recycle",
     color: "#f97316",
     pattern: "plate"
   },
   hazardous: {
-    label: "Hazardous",
+    labelKey: "GLUCARGO.category.hazardous",
     icon: "fa-solid fa-triangle-exclamation",
     color: "#facc15",
     pattern: "hazard"
   },
   custom: {
-    label: "Custom",
+    labelKey: "GLUCARGO.category.custom",
     icon: "fa-solid fa-cube",
     color: "#94a3b8",
     pattern: "generic"
@@ -200,7 +200,7 @@ function createDefaultWorldData() {
   };
 }
 
-function createMission(name = "New Mission") {
+function createMission(name = game.i18n.localize("GLUCARGO.default.missionName")) {
   const now = Date.now();
   const id = makeId("mission");
   const containerId = makeId("container");
@@ -212,7 +212,7 @@ function createMission(name = "New Mission") {
     containers: {
       [containerId]: {
         id: containerId,
-        name: "Extraction Case",
+        name: game.i18n.localize("GLUCARGO.default.containerName"),
         width: 10,
         height: 6,
         locked: false,
@@ -301,12 +301,12 @@ async function requestCargoMutation(operation, data, { undo = false } = {}) {
       return Boolean(response?.ok ?? response);
     } catch (error) {
       console.warn(`${MODULE_ID} | GM cargo mutation query failed`, error);
-      notifyWarn("The GM client did not confirm the cargo move.");
+      notifyWarn(game.i18n.localize("GLUCARGO.notify.gmDidNotConfirmMove"));
       return false;
     }
   }
 
-  notifyWarn("A connected GM client is required to move cargo.");
+  notifyWarn(game.i18n.localize("GLUCARGO.notify.gmRequired"));
   return false;
 }
 
@@ -395,7 +395,7 @@ function getSocketUserSnapshot(payload) {
   const user = game.users?.get?.(payload?.userId);
   return {
     id: user?.id ?? payload?.userId,
-    name: user?.name ?? payload?.userName ?? "Player",
+    name: user?.name ?? payload?.userName ?? game.i18n.localize("GLUCARGO.default.player"),
     isGM: false
   };
 }
@@ -443,11 +443,6 @@ function resolveUuid(uuid) {
   return typeof fn === "function" ? fn(uuid) : Promise.resolve(null);
 }
 
-function localize(key, fallback) {
-  const text = game.i18n?.localize?.(key);
-  return text && text !== key ? text : fallback;
-}
-
 function getActiveMission(data = getReadData()) {
   const mission = data.activeMissionId ? data.missions?.[data.activeMissionId] : null;
   return mission ? normalizeMission(mission) : null;
@@ -482,8 +477,8 @@ function renderFloatingButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "glucargo-fab";
-  button.title = localize("GLUCARGO.Open", "Open Cargo Grid");
-  button.innerHTML = `<i class="fa-solid fa-boxes-stacked"></i><span>CARGO</span>`;
+  button.title = game.i18n.localize("GLUCARGO.Open");
+  button.innerHTML = `<i class="fa-solid fa-boxes-stacked"></i><span>${escapeHtml(game.i18n.localize("GLUCARGO.brand.fabLabel"))}</span>`;
   button.addEventListener("click", () => openBoard());
   button.addEventListener("contextmenu", event => {
     event.preventDefault();
@@ -562,7 +557,7 @@ class CargoMinimapWindow {
       this.element = document.createElement("section");
       this.element.className = "glucargo-minimap";
       this.element.setAttribute("role", "dialog");
-      this.element.setAttribute("aria-label", "Cargo minimap");
+      this.element.setAttribute("aria-label", game.i18n.localize("GLUCARGO.aria.minimap"));
       document.body.append(this.element);
       this.bindEvents();
     }
@@ -584,7 +579,7 @@ class CargoMinimapWindow {
     return `
       <header class="glucargo-minimap__bar" data-minimap-drag-handle>
         <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
-        <button type="button" data-minimap-action="close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" data-minimap-action="close" aria-label="${escapeHtml(game.i18n.localize("GLUCARGO.aria.close"))}"><i class="fa-solid fa-xmark"></i></button>
       </header>
       <div class="glucargo-minimap__frame">
         ${this.renderGrid(mission, container, cellSize)}
@@ -734,7 +729,7 @@ class CargoBoardWindow {
       this.element = document.createElement("section");
       this.element.className = "glucargo-window";
       this.element.setAttribute("role", "dialog");
-      this.element.setAttribute("aria-label", "GLUniverse Cargo Grid");
+      this.element.setAttribute("aria-label", game.i18n.localize("GLUCARGO.aria.window"));
       document.body.append(this.element);
       this.bindPersistentEvents();
     }
@@ -793,20 +788,20 @@ class CargoBoardWindow {
           <div class="glucargo-brand">
             <i class="fa-solid fa-boxes-stacked"></i>
             <div>
-              <strong>GLUniverse Cargo Grid</strong>
-              <span>Mission cargo logistics</span>
+              <strong>${escapeHtml(game.i18n.localize("GLUCARGO.brand.name"))}</strong>
+              <span>${escapeHtml(game.i18n.localize("GLUCARGO.brand.tagline"))}</span>
             </div>
           </div>
-          <button type="button" class="glucargo-icon-button" data-action="close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" class="glucargo-icon-button" data-action="close" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.close"))}"><i class="fa-solid fa-xmark"></i></button>
         </header>
         <main class="glucargo-empty-state${gmClass}">
           <div class="glucargo-empty-state__panel">
-            <span class="glucargo-kicker">No Active Mission</span>
-            <h2>Create a cargo board to begin staging mission rewards.</h2>
+            <span class="glucargo-kicker">${escapeHtml(game.i18n.localize("GLUCARGO.ui.noActiveMission"))}</span>
+            <h2>${escapeHtml(game.i18n.localize("GLUCARGO.ui.emptyHeadline"))}</h2>
             ${game.user.isGM ? `
               <div class="glucargo-inline-form">
-                <input type="text" data-new-mission-name placeholder="Mission name" value="Field Operation">
-                <button type="button" data-action="create-mission"><i class="fa-solid fa-plus"></i> Create Mission</button>
+                <input type="text" data-new-mission-name placeholder="${escapeAttr(game.i18n.localize("GLUCARGO.ui.missionNamePlaceholder"))}" value="${escapeAttr(game.i18n.localize("GLUCARGO.default.fieldOperation"))}">
+                <button type="button" data-action="create-mission"><i class="fa-solid fa-plus"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.createMission"))}</button>
               </div>
             ` : ""}
           </div>
@@ -832,22 +827,22 @@ class CargoBoardWindow {
           <i class="fa-solid fa-boxes-stacked"></i>
           <div>
             <strong>${escapeHtml(mission.name)}</strong>
-            <span>${mission.status === "extracted" ? "Extracted archive" : "Shared extraction cargo"}</span>
+            <span>${escapeHtml(mission.status === "extracted" ? game.i18n.localize("GLUCARGO.brand.subtitleExtracted") : game.i18n.localize("GLUCARGO.brand.subtitleShared"))}</span>
           </div>
         </div>
         <div class="glucargo-titlebar__actions">
           ${game.user.isGM ? `
-            <button type="button" class="glucargo-chip ${visible ? "is-on" : ""}" data-action="toggle-visibility" title="Toggle player visibility">
+            <button type="button" class="glucargo-chip ${visible ? "is-on" : ""}" data-action="toggle-visibility" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.toggleVisibility"))}">
               <i class="fa-solid ${visible ? "fa-eye" : "fa-eye-slash"}"></i>
-              ${visible ? "Players visible" : "GM only"}
+              ${escapeHtml(visible ? game.i18n.localize("GLUCARGO.ui.playersVisible") : game.i18n.localize("GLUCARGO.ui.gmOnly"))}
             </button>
-            <button type="button" class="glucargo-chip ${mission.locked ? "is-locked" : ""}" data-action="toggle-board-lock" title="Lock player cargo movement">
+            <button type="button" class="glucargo-chip ${mission.locked ? "is-locked" : ""}" data-action="toggle-board-lock" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.toggleBoardLock"))}">
               <i class="fa-solid ${mission.locked ? "fa-lock" : "fa-lock-open"}"></i>
-              ${mission.locked ? "Board locked" : "Board open"}
+              ${escapeHtml(mission.locked ? game.i18n.localize("GLUCARGO.ui.boardLocked") : game.i18n.localize("GLUCARGO.ui.boardOpen"))}
             </button>
-            <button type="button" class="glucargo-icon-button" data-action="undo" title="Undo last GM action" ${data.lastUndo ? "" : "disabled"}><i class="fa-solid fa-rotate-left"></i></button>
+            <button type="button" class="glucargo-icon-button" data-action="undo" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.undo"))}" ${data.lastUndo ? "" : "disabled"}><i class="fa-solid fa-rotate-left"></i></button>
           ` : ""}
-          <button type="button" class="glucargo-icon-button" data-action="close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" class="glucargo-icon-button" data-action="close" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.close"))}"><i class="fa-solid fa-xmark"></i></button>
         </div>
       </header>
       <main class="glucargo-board ${hasCargoTools ? "" : "glucargo-board--no-tools"}">
@@ -866,8 +861,8 @@ class CargoBoardWindow {
       <aside class="glucargo-sidebar">
         <section class="glucargo-panel glucargo-panel--flush">
           <div class="glucargo-panel__head">
-            <span>Containers</span>
-            ${game.user.isGM && mission.status !== "extracted" ? `<button type="button" data-action="add-container" title="Add container"><i class="fa-solid fa-plus"></i></button>` : ""}
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.containers"))}</span>
+            ${game.user.isGM && mission.status !== "extracted" ? `<button type="button" data-action="add-container" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.addContainer"))}"><i class="fa-solid fa-plus"></i></button>` : ""}
           </div>
           <div class="glucargo-container-list">
             ${containers.map(container => this.renderContainerButton(mission, container, activeContainer?.id)).join("")}
@@ -876,8 +871,8 @@ class CargoBoardWindow {
         ${game.user.isGM ? `
           <section class="glucargo-panel glucargo-mission-manager">
             <div class="glucargo-panel__head">
-              <span>Missions</span>
-              <button type="button" data-action="create-mission" title="Create mission"><i class="fa-solid fa-plus"></i></button>
+              <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.missions"))}</span>
+              <button type="button" data-action="create-mission" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.createMissionTitle"))}"><i class="fa-solid fa-plus"></i></button>
             </div>
             <div class="glucargo-mission-list">
               ${missionList.map(item => `
@@ -888,9 +883,9 @@ class CargoBoardWindow {
               `).join("")}
             </div>
             <div class="glucargo-manager-actions">
-              ${mission.status === "extracted" ? `<button type="button" data-action="reopen-mission"><i class="fa-solid fa-lock-open"></i> Reopen</button>` : `<button type="button" data-action="extract-mission"><i class="fa-solid fa-flag-checkered"></i> Extract</button>`}
-              <button type="button" data-action="duplicate-mission"><i class="fa-solid fa-copy"></i> Duplicate</button>
-              <button type="button" class="danger" data-action="delete-mission"><i class="fa-solid fa-trash"></i> Delete</button>
+              ${mission.status === "extracted" ? `<button type="button" data-action="reopen-mission"><i class="fa-solid fa-lock-open"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.reopen"))}</button>` : `<button type="button" data-action="extract-mission"><i class="fa-solid fa-flag-checkered"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.extract"))}</button>`}
+              <button type="button" data-action="duplicate-mission"><i class="fa-solid fa-copy"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.duplicate"))}</button>
+              <button type="button" class="danger" data-action="delete-mission"><i class="fa-solid fa-trash"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.delete"))}</button>
             </div>
           </section>
         ` : ""}
@@ -901,18 +896,18 @@ class CargoBoardWindow {
   renderContainerButton(mission, container, activeId) {
     const stats = getContainerStats(mission, container);
     const pct = stats.total ? Math.min(100, Math.round((stats.used / stats.total) * 100)) : 0;
-    const brokenMeta = stats.broken ? ` / ${stats.broken} broken` : "";
+    const brokenMeta = stats.broken ? game.i18n.format("GLUCARGO.ui.brokenMeta", { broken: stats.broken }) : "";
     return `
       <article class="glucargo-container-card ${container.id === activeId ? "is-active" : ""}">
         <button type="button" class="glucargo-container-card__main" data-action="select-container" data-container-id="${escapeAttr(container.id)}">
           <span class="glucargo-container-card__name">${escapeHtml(container.name)}</span>
-          <span class="glucargo-container-card__meta">${container.width}x${container.height} / ${stats.used}/${stats.total} cells / ${stats.pieces} cargo${brokenMeta}</span>
+          <span class="glucargo-container-card__meta">${container.width}x${container.height} / ${game.i18n.format("GLUCARGO.ui.cellsUsage", { used: stats.used, total: stats.total })} / ${game.i18n.format("GLUCARGO.ui.cargoCount", { pieces: stats.pieces })}${brokenMeta}</span>
           <span class="glucargo-meter"><span style="width:${pct}%"></span></span>
         </button>
         ${game.user.isGM && mission.status !== "extracted" ? `
           <div class="glucargo-container-card__actions">
-            <button type="button" data-action="edit-container" data-container-id="${escapeAttr(container.id)}" title="Edit container"><i class="fa-solid fa-pen"></i></button>
-            <button type="button" class="danger" data-action="delete-container" data-container-id="${escapeAttr(container.id)}" title="Remove container"><i class="fa-solid fa-trash"></i></button>
+            <button type="button" data-action="edit-container" data-container-id="${escapeAttr(container.id)}" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.editContainer"))}"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" class="danger" data-action="delete-container" data-container-id="${escapeAttr(container.id)}" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.removeContainer"))}"><i class="fa-solid fa-trash"></i></button>
           </div>
         ` : ""}
       </article>
@@ -921,7 +916,7 @@ class CargoBoardWindow {
 
   renderGridPanel(mission, container) {
     if (!container) {
-      return `<section class="glucargo-grid-panel"><div class="glucargo-empty-grid">No container selected.</div></section>`;
+      return `<section class="glucargo-grid-panel"><div class="glucargo-empty-grid">${escapeHtml(game.i18n.localize("GLUCARGO.ui.noContainerSelected"))}</div></section>`;
     }
 
     const readonly = mission.status === "extracted" || container.locked || (mission.locked && !game.user.isGM);
@@ -937,7 +932,9 @@ class CargoBoardWindow {
       for (let x = 0; x < container.width; x += 1) {
         const broken = brokenSet.has(cellKey(x, y));
         const action = brokenEditMode ? "toggle-broken-cell" : "place-selected";
-        const label = broken ? `Broken cell ${x + 1}, ${y + 1}` : `Cell ${x + 1}, ${y + 1}`;
+        const label = broken
+          ? game.i18n.format("GLUCARGO.aria.brokenCell", { x: x + 1, y: y + 1 })
+          : game.i18n.format("GLUCARGO.aria.cell", { x: x + 1, y: y + 1 });
         cells.push(`<button type="button" class="glucargo-cell ${broken ? "is-broken" : ""} ${brokenEditMode ? "is-broken-edit" : ""}" data-action="${action}" data-x="${x}" data-y="${y}" data-coord="${x + 1},${y + 1}" ${readonly ? "disabled" : ""} aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}"></button>`);
       }
     }
@@ -958,13 +955,13 @@ class CargoBoardWindow {
       <section class="glucargo-grid-panel">
         <div class="glucargo-grid-panel__head">
           <div>
-            <span class="glucargo-kicker">Active Container</span>
+            <span class="glucargo-kicker">${escapeHtml(game.i18n.localize("GLUCARGO.ui.activeContainer"))}</span>
             <h2>${escapeHtml(container.name)}</h2>
           </div>
           <div class="glucargo-grid-panel__tools">
-            ${game.user.isGM ? `<button type="button" class="${showCoordinates ? "is-on" : ""}" data-action="toggle-coordinates"><i class="fa-solid fa-table-cells"></i> Coords</button>` : ""}
-            ${canEditBrokenCells ? `<button type="button" class="${brokenEditMode ? "is-on" : ""}" data-action="toggle-broken-cells" data-container-id="${escapeAttr(container.id)}" title="Mark broken cells"><i class="fa-solid fa-hammer"></i> Broken</button>` : ""}
-            ${selected && !readonly ? `<button type="button" data-action="move-selected"><i class="fa-solid fa-up-down-left-right"></i> Move</button><button type="button" data-action="rotate-selected"><i class="fa-solid fa-rotate-right"></i> Rotate</button><button type="button" data-action="cancel-selection"><i class="fa-solid fa-ban"></i> Cancel</button>` : ""}
+            ${game.user.isGM ? `<button type="button" class="${showCoordinates ? "is-on" : ""}" data-action="toggle-coordinates"><i class="fa-solid fa-table-cells"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.coords"))}</button>` : ""}
+            ${canEditBrokenCells ? `<button type="button" class="${brokenEditMode ? "is-on" : ""}" data-action="toggle-broken-cells" data-container-id="${escapeAttr(container.id)}" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.markBrokenCells"))}"><i class="fa-solid fa-hammer"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.broken"))}</button>` : ""}
+            ${selected && !readonly ? `<button type="button" data-action="move-selected"><i class="fa-solid fa-up-down-left-right"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.move"))}</button><button type="button" data-action="rotate-selected"><i class="fa-solid fa-rotate-right"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.rotate"))}</button><button type="button" data-action="cancel-selection"><i class="fa-solid fa-ban"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.cancel"))}</button>` : ""}
           </div>
         </div>
         <div class="glucargo-grid-wrap ${readonly ? "is-readonly" : ""} ${showCoordinates ? "show-coords" : ""} ${brokenEditMode ? "is-broken-edit" : ""}" style="--glucargo-cell:${cellSize}px; --glucargo-cols:${container.width}; --glucargo-rows:${container.height};">
@@ -993,37 +990,37 @@ class CargoBoardWindow {
       <section class="glucargo-panel glucargo-floor-dock">
         <div class="glucargo-floor-dock__sidebar">
           <div class="glucargo-panel__head">
-            <span>Floor Manifest</span>
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.floorManifest"))}</span>
             <small>${floorCargo.length}</small>
           </div>
           <label>
-            <span>Search</span>
-            <input type="search" data-filter="search" placeholder="Search" value="${escapeAttr(this.search)}">
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.search"))}</span>
+            <input type="search" data-filter="search" placeholder="${escapeAttr(game.i18n.localize("GLUCARGO.ui.search"))}" value="${escapeAttr(this.search)}">
           </label>
           <label>
-            <span>Category</span>
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.category"))}</span>
             <select data-filter="category">${this.renderCategoryOptions(this.filters.category, true)}</select>
           </label>
           <label>
-            <span>Visibility</span>
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.visibility"))}</span>
             <select data-filter="visibility">
-              ${["all", "revealed", "scanned", "unknown"].map(value => `<option value="${value}" ${this.filters.visibility === value ? "selected" : ""}>${capitalize(value)}</option>`).join("")}
+              ${["all", "revealed", "scanned", "unknown"].map(value => `<option value="${value}" ${this.filters.visibility === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(`GLUCARGO.visibility.${value}`))}</option>`).join("")}
             </select>
           </label>
           <label>
-            <span>Sort</span>
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.sort"))}</span>
             <select data-filter="sort">
               ${[
-                ["newest", "Newest"],
-                ["priority", "Priority"],
-                ["name", "Name"],
-                ["size", "Size"]
-              ].map(([value, label]) => `<option value="${value}" ${this.filters.sort === value ? "selected" : ""}>${label}</option>`).join("")}
+                ["newest", "GLUCARGO.sort.newest"],
+                ["priority", "GLUCARGO.sort.priority"],
+                ["name", "GLUCARGO.sort.name"],
+                ["size", "GLUCARGO.sort.size"]
+              ].map(([value, labelKey]) => `<option value="${value}" ${this.filters.sort === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(labelKey))}</option>`).join("")}
             </select>
           </label>
         </div>
         <div class="glucargo-floor-list">
-          ${floorCargo.length ? floorCargo.map(cargo => this.renderFloorCargo(cargo)).join("") : `<div class="glucargo-empty-list">No cargo on the floor.</div>`}
+          ${floorCargo.length ? floorCargo.map(cargo => this.renderFloorCargo(cargo)).join("") : `<div class="glucargo-empty-list">${escapeHtml(game.i18n.localize("GLUCARGO.ui.noFloorCargo"))}</div>`}
         </div>
       </section>
     `;
@@ -1036,35 +1033,35 @@ class CargoBoardWindow {
     return `
       <section class="glucargo-panel glucargo-quick">
         <div class="glucargo-panel__head">
-          <span>Quick Cargo</span>
-          <small>${this.droppedItem ? "Item linked" : "Drop PF2e item"}</small>
+          <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.quickCargo"))}</span>
+          <small>${escapeHtml(this.droppedItem ? game.i18n.localize("GLUCARGO.ui.itemLinked") : game.i18n.localize("GLUCARGO.ui.dropItem"))}</small>
         </div>
         <form data-form="quick-cargo">
           <div class="glucargo-field-grid">
-            <label>Name<input name="name" type="text" value="${escapeAttr(draft.name)}" placeholder="Cargo name" required></label>
-            <label>Subtitle<input name="subtitle" type="text" value="${escapeAttr(draft.subtitle)}" placeholder="Benefit or contents"></label>
-            <label>Category<select name="category">${this.renderCategoryOptions(draft.category)}</select></label>
-            <label>Priority<select name="priority">
-              ${["normal", "high", "critical"].map(value => `<option value="${value}" ${draft.priority === value ? "selected" : ""}>${capitalize(value)}</option>`).join("")}
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.name"))}<input name="name" type="text" value="${escapeAttr(draft.name)}" placeholder="${escapeAttr(game.i18n.localize("GLUCARGO.ui.cargoNamePlaceholder"))}" required></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.subtitle"))}<input name="subtitle" type="text" value="${escapeAttr(draft.subtitle)}" placeholder="${escapeAttr(game.i18n.localize("GLUCARGO.ui.subtitlePlaceholder"))}"></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.category"))}<select name="category">${this.renderCategoryOptions(draft.category)}</select></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.priority"))}<select name="priority">
+              ${["normal", "high", "critical"].map(value => `<option value="${value}" ${draft.priority === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(`GLUCARGO.priority.${value}`))}</option>`).join("")}
             </select></label>
-            <label>Qty<input name="quantity" type="number" value="${escapeAttr(draft.quantity)}" min="1" max="20"></label>
-            <label>Color<input name="color" type="color" value="${escapeAttr(draft.color)}"></label>
-            <label class="glucargo-hidden-toggle" title="Hide from players until revealed"><input name="hidden" type="checkbox" ${draft.hidden ? "checked" : ""}> Hidden from players</label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.qty"))}<input name="quantity" type="number" value="${escapeAttr(draft.quantity)}" min="1" max="20"></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.color"))}<input name="color" type="color" value="${escapeAttr(draft.color)}"></label>
+            <label class="glucargo-hidden-toggle" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.hiddenToggleTitle"))}"><input name="hidden" type="checkbox" ${draft.hidden ? "checked" : ""}> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.hiddenFromPlayers"))}</label>
           </div>
           <div class="glucargo-shape-tools">
-            <span>Shape</span>
+            <span>${escapeHtml(game.i18n.localize("GLUCARGO.ui.shape"))}</span>
             <button type="button" data-action="shape-preset" data-preset="one">1</button>
             <button type="button" data-action="shape-preset" data-preset="two">2</button>
-            <button type="button" data-action="shape-preset" data-preset="box">Box</button>
+            <button type="button" data-action="shape-preset" data-preset="box">${escapeHtml(game.i18n.localize("GLUCARGO.ui.shapePresetBox"))}</button>
             <button type="button" data-action="shape-preset" data-preset="l">L</button>
             <button type="button" data-action="shape-preset" data-preset="t">T</button>
-            <label class="glucargo-shape-size">Cells<input name="randomShapeSize" type="number" min="1" max="${maxRandomShapeCells}" value="${escapeAttr(draft.randomShapeSize)}"></label>
-            <button type="button" data-action="random-quick-shape" title="Generate random valid shape"><i class="fa-solid fa-shuffle"></i></button>
+            <label class="glucargo-shape-size">${escapeHtml(game.i18n.localize("GLUCARGO.ui.cells"))}<input name="randomShapeSize" type="number" min="1" max="${maxRandomShapeCells}" value="${escapeAttr(draft.randomShapeSize)}"></label>
+            <button type="button" data-action="random-quick-shape" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.randomShape"))}"><i class="fa-solid fa-shuffle"></i></button>
             <button type="button" data-action="rotate-quick-shape"><i class="fa-solid fa-rotate-right"></i></button>
             <button type="button" data-action="clear-quick-shape"><i class="fa-solid fa-eraser"></i></button>
           </div>
           ${this.renderShapeEditor()}
-          <button type="submit" class="glucargo-primary"><i class="fa-solid fa-plus"></i> Award Cargo</button>
+          <button type="submit" class="glucargo-primary"><i class="fa-solid fa-plus"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.awardCargo"))}</button>
         </form>
       </section>
     `;
@@ -1077,7 +1074,7 @@ class CargoBoardWindow {
     for (let y = 0; y < size; y += 1) {
       for (let x = 0; x < size; x += 1) {
         const active = shapeSet.has(`${x},${y}`);
-        cells.push(`<button type="button" class="glucargo-shape-cell ${active ? "is-on" : ""}" data-action="toggle-shape-cell" data-x="${x}" data-y="${y}" aria-label="Shape cell ${x + 1}, ${y + 1}"></button>`);
+        cells.push(`<button type="button" class="glucargo-shape-cell ${active ? "is-on" : ""}" data-action="toggle-shape-cell" data-x="${x}" data-y="${y}" aria-label="${escapeAttr(game.i18n.format("GLUCARGO.aria.shapeCell", { x: x + 1, y: y + 1 }))}"></button>`);
       }
     }
     return `<div class="glucargo-shape-editor" style="--shape-size:${size};">${cells.join("")}</div>`;
@@ -1088,12 +1085,12 @@ class CargoBoardWindow {
     const cat = getCategory(cargo);
     const locked = lockOwner(cargo);
     const preview = this.renderCargoShapePreview(cargo);
-    const lockMessage = locked ? `Picked up by ${locked}` : "";
+    const lockMessage = locked ? game.i18n.format("GLUCARGO.ui.pickedUpBy", { name: locked }) : "";
     const newClass = this.renderedFloorCargoIds.has(cargo.id) ? "" : " is-new";
     const isHidden = Boolean(cargo.hidden);
     const hiddenClass = game.user.isGM && isHidden ? " is-hidden" : "";
     const visibilityToggle = game.user.isGM
-      ? `<button type="button" class="glucargo-visibility-toggle ${isHidden ? "is-hidden" : ""}" data-action="toggle-cargo-hidden" data-cargo-id="${escapeAttr(cargo.id)}" title="${isHidden ? "Hidden from players — click to reveal" : "Visible to players — click to hide"}" aria-label="${isHidden ? "Reveal cargo to players" : "Hide cargo from players"}"><i class="fa-solid ${isHidden ? "fa-eye-slash" : "fa-eye"}"></i></button>`
+      ? `<button type="button" class="glucargo-visibility-toggle ${isHidden ? "is-hidden" : ""}" data-action="toggle-cargo-hidden" data-cargo-id="${escapeAttr(cargo.id)}" title="${escapeAttr(isHidden ? game.i18n.localize("GLUCARGO.ui.hiddenTooltip") : game.i18n.localize("GLUCARGO.ui.visibleTooltip"))}" aria-label="${escapeAttr(isHidden ? game.i18n.localize("GLUCARGO.aria.cargoReveal") : game.i18n.localize("GLUCARGO.aria.cargoHide"))}"><i class="fa-solid ${isHidden ? "fa-eye-slash" : "fa-eye"}"></i></button>`
       : "";
     return `
       <article class="glucargo-floor-item${newClass}${hiddenClass} ${this.selectedCargoId === cargo.id ? "is-selected" : ""} ${locked ? "is-locked" : ""} priority-${escapeAttr(cargo.priority ?? "normal")}" data-cargo-id="${escapeAttr(cargo.id)}" draggable="false" style="--cargo-accent:${escapeAttr(cat.color)};">
@@ -1104,11 +1101,11 @@ class CargoBoardWindow {
             <small>${escapeHtml(visible.subtitle || cat.label)}</small>
             <span class="glucargo-floor-item__meta">
               <span>${escapeHtml(cat.label)}</span>
-              <span>${getShapeMetrics(visible.shape).cells.length} cells</span>
+              <span>${escapeHtml(game.i18n.format("GLUCARGO.ui.cellsCount", { count: getShapeMetrics(visible.shape).cells.length }))}</span>
               <span>${escapeHtml(cargo.priority ?? "normal")}</span>
             </span>
           </span>
-          ${locked ? `<span class="glucargo-lock glucargo-floor-lock" title="Locked by ${escapeAttr(locked)}"><i class="fa-solid fa-lock"></i></span>` : ""}
+          ${locked ? `<span class="glucargo-lock glucargo-floor-lock" title="${escapeAttr(game.i18n.format("GLUCARGO.ui.lockedBy", { name: locked }))}"><i class="fa-solid fa-lock"></i></span>` : ""}
           ${lockMessage ? `<span class="glucargo-lock-banner"><strong>${escapeHtml(lockMessage)}</strong></span>` : ""}
         </button>
         ${visibilityToggle}
@@ -1146,7 +1143,7 @@ class CargoBoardWindow {
     const lockedBy = lockOwner(cargo);
     const locked = Boolean(lockedBy);
     const lockedByOther = isLockedByOther(cargo);
-    const lockLabel = lockedBy ? `Picked up by ${lockedBy}` : "";
+    const lockLabel = lockedBy ? game.i18n.format("GLUCARGO.ui.pickedUpBy", { name: lockedBy }) : "";
     const image = cargoImage(cargo);
     const imageStyle = image ? ` --cargo-image:${cssUrl(image)};` : "";
     const tileVars = `--tile-x:${pos.x}; --tile-y:${pos.y}; --tile-w:${width}; --tile-h:${height}; --cargo-accent:${escapeAttr(cat.color)}; --tile-mask:${maskUrl}; --emblem-x:${iconCell.x}; --emblem-y:${iconCell.y};${imageStyle}`;
@@ -1169,7 +1166,7 @@ class CargoBoardWindow {
     const narrow = labelSegment.height === 1;
     const overlayIcon = `<div class="glucargo-tile-emblem ${image ? "has-image" : ""}" data-cargo-id="${escapeAttr(cargo.id)}" style="${tileVars}"><span>${renderCargoIcon(cat, image)}</span></div>`;
     const label = `<div class="glucargo-tile-label ${selected ? "is-selected" : ""} ${compact ? "is-compact" : ""} ${narrow ? "is-narrow" : ""}" data-cargo-id="${escapeAttr(cargo.id)}" style="${labelVars}"><strong>${escapeHtml(visible.name)}</strong><small>${escapeHtml(visible.subtitle || cat.label)}</small></div>`;
-    const lockOverlay = locked ? `<div class="glucargo-lock-overlay" data-cargo-id="${escapeAttr(cargo.id)}" style="${tileVars}"><strong>Picked up by ${escapeHtml(lockedBy)}</strong></div>` : "";
+    const lockOverlay = locked ? `<div class="glucargo-lock-overlay" data-cargo-id="${escapeAttr(cargo.id)}" style="${tileVars}"><strong>${escapeHtml(game.i18n.format("GLUCARGO.ui.pickedUpBy", { name: lockedBy }))}</strong></div>` : "";
 
     return cellHtml + overlayIcon + label + lockOverlay;
   }
@@ -1210,7 +1207,7 @@ class CargoBoardWindow {
     const { cells, width, height } = getShapeMetrics(cargo.shape, cargo.rotation ?? 0);
     const footprint = `${width}x${height}`;
     const linked = cargo.linkedItem;
-    const location = cargo.location?.type === "container" ? "Container" : "Floor manifest";
+    const location = cargo.location?.type === "container" ? game.i18n.localize("GLUCARGO.ui.locationContainer") : game.i18n.localize("GLUCARGO.ui.locationFloor");
     return `
       <aside class="glucargo-detail ${image ? "has-image" : ""}" style="--cargo-accent:${escapeAttr(cat.color)};">
         <div class="glucargo-detail__head">
@@ -1219,39 +1216,39 @@ class CargoBoardWindow {
             <strong>${escapeHtml(visible.name)}</strong>
             <small>${escapeHtml(visible.subtitle || cat.label)}</small>
           </div>
-          <button type="button" data-action="cancel-selection" title="Close details"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" data-action="cancel-selection" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.closeDetails"))}"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <dl>
-          <dt>Subtitle</dt><dd>${escapeHtml(visible.subtitle || cat.label)}</dd>
-          <dt>Category</dt><dd>${escapeHtml(cat.label)}</dd>
-          <dt>Visibility</dt><dd>${escapeHtml(cargo.visibility ?? VISIBILITY.revealed)}</dd>
-          ${canEdit ? `<dt>Players</dt><dd>${cargo.hidden ? "Hidden" : "Shown"}</dd>` : ""}
-          <dt>Priority</dt><dd>${escapeHtml(cargo.priority ?? "normal")}</dd>
-          <dt>Location</dt><dd>${escapeHtml(location)}</dd>
-          <dt>Footprint</dt><dd>${footprint} / ${cells.length} cells</dd>
-          ${linked?.type ? `<dt>Item Type</dt><dd>${escapeHtml(capitalize(linked.type))}</dd>` : ""}
-          ${linked?.level !== null && linked?.level !== undefined && linked?.level !== "" ? `<dt>Level</dt><dd>${escapeHtml(linked.level)}</dd>` : ""}
-          ${linked?.rarity ? `<dt>Rarity</dt><dd>${escapeHtml(capitalize(linked.rarity))}</dd>` : ""}
-          ${linked?.traits?.length ? `<dt>Traits</dt><dd>${linked.traits.map(trait => escapeHtml(trait)).join(", ")}</dd>` : ""}
-          ${linked?.description ? `<dt>Description</dt><dd>${escapeHtml(linked.description)}</dd>` : ""}
-          ${lock ? `<dt>Lock</dt><dd>${escapeHtml(lock)}</dd>` : ""}
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailSubtitle"))}</dt><dd>${escapeHtml(visible.subtitle || cat.label)}</dd>
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailCategory"))}</dt><dd>${escapeHtml(cat.label)}</dd>
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailVisibility"))}</dt><dd>${escapeHtml(cargo.visibility ?? VISIBILITY.revealed)}</dd>
+          ${canEdit ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailPlayers"))}</dt><dd>${escapeHtml(cargo.hidden ? game.i18n.localize("GLUCARGO.ui.playersHidden") : game.i18n.localize("GLUCARGO.ui.playersShown"))}</dd>` : ""}
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailPriority"))}</dt><dd>${escapeHtml(cargo.priority ?? "normal")}</dd>
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.detailLocation"))}</dt><dd>${escapeHtml(location)}</dd>
+          <dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.footprint"))}</dt><dd>${escapeHtml(game.i18n.format("GLUCARGO.ui.footprintValue", { footprint, cells: cells.length }))}</dd>
+          ${linked?.type ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.itemType"))}</dt><dd>${escapeHtml(capitalize(linked.type))}</dd>` : ""}
+          ${linked?.level !== null && linked?.level !== undefined && linked?.level !== "" ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.level"))}</dt><dd>${escapeHtml(linked.level)}</dd>` : ""}
+          ${linked?.rarity ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.rarity"))}</dt><dd>${escapeHtml(capitalize(linked.rarity))}</dd>` : ""}
+          ${linked?.traits?.length ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.traits"))}</dt><dd>${linked.traits.map(trait => escapeHtml(trait)).join(", ")}</dd>` : ""}
+          ${linked?.description ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.description"))}</dt><dd>${escapeHtml(linked.description)}</dd>` : ""}
+          ${lock ? `<dt>${escapeHtml(game.i18n.localize("GLUCARGO.ui.lock"))}</dt><dd>${escapeHtml(lock)}</dd>` : ""}
         </dl>
         ${cargo.linkedItem?.uuid && cargo.visibility !== VISIBILITY.unknown ? `
-          <button type="button" data-action="open-linked-item" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-up-right-from-square"></i> Open linked item</button>
+          <button type="button" data-action="open-linked-item" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.openLinkedItem"))}</button>
         ` : ""}
         ${cargo.location?.type === "container" && _mission.status !== "extracted" ? `
-          <button type="button" data-action="move-selected" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-up-down-left-right"></i> Move</button>
-          <button type="button" data-action="return-to-floor" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-arrow-up-from-bracket"></i> Return to floor</button>
+          <button type="button" data-action="move-selected" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-up-down-left-right"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.move"))}</button>
+          <button type="button" data-action="return-to-floor" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.returnToFloor"))}</button>
         ` : ""}
         ${canEdit ? `
           <form data-form="edit-cargo" data-cargo-id="${escapeAttr(cargo.id)}">
-            <label>Name<input name="name" value="${escapeAttr(cargo.name)}"></label>
-            <label>Subtitle<input name="subtitle" value="${escapeAttr(cargo.subtitle ?? "")}"></label>
-            <label>Visibility<select name="visibility">${Object.values(VISIBILITY).map(value => `<option value="${value}" ${cargo.visibility === value ? "selected" : ""}>${capitalize(value)}</option>`).join("")}</select></label>
-            <label>Priority<select name="priority">${["normal", "high", "critical"].map(value => `<option value="${value}" ${cargo.priority === value ? "selected" : ""}>${capitalize(value)}</option>`).join("")}</select></label>
-            <label class="glucargo-hidden-toggle" title="Hide from players until revealed"><input name="hidden" type="checkbox" ${cargo.hidden ? "checked" : ""}> Hidden from players</label>
-            <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-            <button type="button" class="danger" data-action="delete-cargo" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-trash"></i> Delete</button>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.name"))}<input name="name" value="${escapeAttr(cargo.name)}"></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.subtitle"))}<input name="subtitle" value="${escapeAttr(cargo.subtitle ?? "")}"></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.visibility"))}<select name="visibility">${Object.values(VISIBILITY).map(value => `<option value="${value}" ${cargo.visibility === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(`GLUCARGO.visibility.${value}`))}</option>`).join("")}</select></label>
+            <label>${escapeHtml(game.i18n.localize("GLUCARGO.ui.priority"))}<select name="priority">${["normal", "high", "critical"].map(value => `<option value="${value}" ${cargo.priority === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(`GLUCARGO.priority.${value}`))}</option>`).join("")}</select></label>
+            <label class="glucargo-hidden-toggle" title="${escapeAttr(game.i18n.localize("GLUCARGO.ui.hiddenToggleTitle"))}"><input name="hidden" type="checkbox" ${cargo.hidden ? "checked" : ""}> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.hiddenFromPlayers"))}</label>
+            <button type="submit"><i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.save"))}</button>
+            <button type="button" class="danger" data-action="delete-cargo" data-cargo-id="${escapeAttr(cargo.id)}"><i class="fa-solid fa-trash"></i> ${escapeHtml(game.i18n.localize("GLUCARGO.ui.delete"))}</button>
           </form>
         ` : ""}
       </aside>
@@ -1259,9 +1256,9 @@ class CargoBoardWindow {
   }
 
   renderCategoryOptions(selected = "supplies", includeAll = false) {
-    const options = includeAll ? [`<option value="all" ${selected === "all" ? "selected" : ""}>All categories</option>`] : [];
+    const options = includeAll ? [`<option value="all" ${selected === "all" ? "selected" : ""}>${escapeHtml(game.i18n.localize("GLUCARGO.category.all"))}</option>`] : [];
     for (const [value, cat] of Object.entries(CATEGORIES)) {
-      options.push(`<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(cat.label)}</option>`);
+      options.push(`<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(game.i18n.localize(cat.labelKey))}</option>`);
     }
     return options.join("");
   }
@@ -1663,7 +1660,7 @@ class CargoBoardWindow {
       category: "loot",
       color: CATEGORIES.loot.color
     });
-    notifyInfo(`Linked ${item.name} for the next cargo.`);
+    notifyInfo(game.i18n.format("GLUCARGO.notify.linkedItem", { name: item.name }));
     this.render();
   }
 
@@ -1671,10 +1668,10 @@ class CargoBoardWindow {
     if (!game.user.isGM) return;
     const input = this.element.querySelector("[data-new-mission-name]");
     const name = input?.value?.trim() || await promptTextDialog({
-      title: "Create Mission",
-      label: "Mission name",
-      value: "Field Operation"
-    }) || "Field Operation";
+      title: game.i18n.localize("GLUCARGO.dialog.createMission"),
+      label: game.i18n.localize("GLUCARGO.dialog.missionNameLabel"),
+      value: game.i18n.localize("GLUCARGO.default.fieldOperation")
+    }) || game.i18n.localize("GLUCARGO.default.fieldOperation");
     await mutateData(data => {
       const mission = createMission(name);
       data.missions[mission.id] = mission;
@@ -1718,7 +1715,7 @@ class CargoBoardWindow {
 
   async addContainer() {
     if (!game.user.isGM) return;
-    const values = await containerDialog({ title: "Add Container" });
+    const values = await containerDialog({ title: game.i18n.localize("GLUCARGO.dialog.addContainer") });
     if (!values) return;
     await mutateData(data => {
       const mission = getActiveMission(data);
@@ -1742,7 +1739,7 @@ class CargoBoardWindow {
     if (!game.user.isGM) return;
     const container = getActiveMission()?.containers?.[containerId];
     if (!container) return;
-    const values = await containerDialog({ title: "Edit Container", container });
+    const values = await containerDialog({ title: game.i18n.localize("GLUCARGO.dialog.editContainer"), container });
     if (!values) return;
     await mutateData(data => {
       const mission = getActiveMission(data);
@@ -1796,12 +1793,12 @@ class CargoBoardWindow {
     const container = mission?.containers?.[containerId];
     if (!mission || !container) return;
     if (Object.keys(mission.containers ?? {}).length <= 1) {
-      notifyWarn("A mission needs at least one container.");
+      notifyWarn(game.i18n.localize("GLUCARGO.notify.needsContainer"));
       return;
     }
     const ok = await confirmDialog({
-      title: "Remove Container",
-      content: `<p>Remove <strong>${escapeHtml(container.name)}</strong>? Cargo inside it will return to the floor.</p>`
+      title: game.i18n.localize("GLUCARGO.dialog.removeContainer"),
+      content: game.i18n.format("GLUCARGO.dialog.removeContainerContent", { name: escapeHtml(container.name) })
     });
     if (!ok) return;
     await mutateData(data => {
@@ -1835,7 +1832,7 @@ class CargoBoardWindow {
       if (!mission) return;
       const copy = duplicate(mission);
       copy.id = makeId("mission");
-      copy.name = `${mission.name} Copy`;
+      copy.name = game.i18n.format("GLUCARGO.ui.copySuffix", { name: mission.name });
       copy.status = "draft";
       copy.createdAt = Date.now();
       copy.updatedAt = Date.now();
@@ -1849,8 +1846,8 @@ class CargoBoardWindow {
     const mission = getActiveMission();
     if (!mission) return;
     const ok = await confirmDialog({
-      title: "Delete Mission",
-      content: `<p>Delete <strong>${escapeHtml(mission.name)}</strong>? This cannot be undone after the next GM action.</p>`
+      title: game.i18n.localize("GLUCARGO.dialog.deleteMission"),
+      content: game.i18n.format("GLUCARGO.dialog.deleteMissionContent", { name: escapeHtml(mission.name) })
     });
     if (!ok) return;
     await mutateData(data => {
@@ -1875,8 +1872,8 @@ class CargoBoardWindow {
     const mission = getActiveMission();
     if (!mission) return;
     const ok = await confirmDialog({
-      title: "Extract Mission",
-      content: `<p>Extract <strong>${escapeHtml(mission.name)}</strong> and post a cargo report?</p>`
+      title: game.i18n.localize("GLUCARGO.dialog.extractMission"),
+      content: game.i18n.format("GLUCARGO.dialog.extractMissionContent", { name: escapeHtml(mission.name) })
     });
     if (!ok) return;
     const report = buildExtractionReport(mission);
@@ -1893,7 +1890,7 @@ class CargoBoardWindow {
       }
     });
     ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ alias: "Cargo Grid" }),
+      speaker: ChatMessage.getSpeaker({ alias: game.i18n.localize("GLUCARGO.Title") }),
       content: report
     });
   }
@@ -1936,13 +1933,13 @@ class CargoBoardWindow {
     const formData = new FormData(form);
     const shape = trimShape(this.quickShape);
     if (!isContiguous(shape)) {
-      notifyWarn("Cargo shape must be orthogonally contiguous.");
+      notifyWarn(game.i18n.localize("GLUCARGO.notify.shapeNotContiguous"));
       return;
     }
     const quantity = Math.max(1, Math.min(20, Number(formData.get("quantity") || 1)));
     const category = String(formData.get("category") || "supplies");
     const color = String(formData.get("color") || CATEGORIES[category]?.color || CATEGORIES.custom.color);
-    const name = String(formData.get("name") || this.droppedItem?.name || "Cargo").trim();
+    const name = String(formData.get("name") || this.droppedItem?.name || game.i18n.localize("GLUCARGO.default.cargoName")).trim();
     const subtitle = String(formData.get("subtitle") || "").trim();
     const linkedItem = this.droppedItem ? duplicate(this.droppedItem) : null;
     const hidden = formData.get("hidden") === "on";
@@ -1954,7 +1951,7 @@ class CargoBoardWindow {
         mission.cargo[id] = {
           id,
           templateId: null,
-          name: quantity > 1 ? `${name} ${i + 1}` : name,
+          name: quantity > 1 ? game.i18n.format("GLUCARGO.ui.quantityName", { name, index: i + 1 }) : name,
           subtitle,
           category,
           customCategory: null,
@@ -2012,8 +2009,8 @@ class CargoBoardWindow {
     const cargo = getActiveMission()?.cargo?.[cargoId];
     if (!cargo) return;
     const ok = await confirmDialog({
-      title: "Delete Cargo",
-      content: `<p>Delete <strong>${escapeHtml(cargo.name)}</strong>?</p>`
+      title: game.i18n.localize("GLUCARGO.dialog.deleteCargo"),
+      content: game.i18n.format("GLUCARGO.dialog.deleteCargoContent", { name: escapeHtml(cargo.name) })
     });
     if (!ok) return;
     await mutateData(data => {
@@ -2046,13 +2043,13 @@ class CargoBoardWindow {
     const cargo = mission?.cargo?.[cargoId];
     if (!cargo || mission.status === "extracted" || (mission.locked && !game.user.isGM)) return;
     if (isLockedByOther(cargo)) {
-      notifyWarn(`${cargo.name} is being moved by ${cargo.lock.userName}.`);
+      notifyWarn(game.i18n.format("GLUCARGO.notify.cargoBeingMoved", { name: cargo.name, user: cargo.lock.userName }));
       return;
     }
     if (this.lockedCargoId !== cargoId) {
       const locked = await this.acquireLock(cargoId);
       if (!locked) {
-        notifyWarn("The GM client did not confirm the cargo lock.");
+        notifyWarn(game.i18n.localize("GLUCARGO.notify.gmDidNotConfirmLock"));
         return;
       }
       this.lockedCargoId = cargoId;
@@ -2086,13 +2083,13 @@ class CargoBoardWindow {
     if (!cargo) return;
     if (mission.locked && !game.user.isGM) return;
     if (isLockedByOther(cargo)) {
-      notifyWarn(`${cargo.name} is being moved by ${cargo.lock.userName}.`);
+      notifyWarn(game.i18n.format("GLUCARGO.notify.cargoBeingMoved", { name: cargo.name, user: cargo.lock.userName }));
       return;
     }
     if (this.lockedCargoId !== cargo.id) {
       const locked = await this.acquireLock(cargo.id);
       if (!locked) {
-        notifyWarn("The GM client did not confirm the cargo lock.");
+        notifyWarn(game.i18n.localize("GLUCARGO.notify.gmDidNotConfirmLock"));
         return;
       }
       this.lockedCargoId = cargo.id;
@@ -2111,7 +2108,7 @@ class CargoBoardWindow {
     if (this.lockedCargoId !== cargo.id) {
       const locked = await this.acquireLock(cargo.id);
       if (!locked) {
-        notifyWarn("The GM client did not confirm the cargo lock.");
+        notifyWarn(game.i18n.localize("GLUCARGO.notify.gmDidNotConfirmLock"));
         return;
       }
       this.lockedCargoId = cargo.id;
@@ -2120,7 +2117,7 @@ class CargoBoardWindow {
     const shape = rotateShape(cargo.shape, rotation);
     if (!canPlaceCargo(mission, container, cargo.id, shape, { x, y })) {
       this.flashInvalidPlacement(x, y);
-      notifyWarn("Cargo does not fit there.");
+      notifyWarn(game.i18n.localize("GLUCARGO.notify.cargoDoesNotFit"));
       return;
     }
     const placed = await requestCargoMutation("placeCargo", {
@@ -2131,7 +2128,7 @@ class CargoBoardWindow {
       rotation
     }, { undo: game.user.isGM });
     if (!placed) {
-      notifyWarn("The GM client did not accept the cargo placement.");
+      notifyWarn(game.i18n.localize("GLUCARGO.notify.gmDidNotAcceptPlacement"));
       return;
     }
     this.selectedCargoId = null;
@@ -2288,7 +2285,7 @@ function getDialogV2() {
 async function confirmDialog({ title, content }) {
   const DialogV2 = getDialogV2();
   if (!DialogV2) {
-    notifyWarn("Foundry Dialog is not available.");
+    notifyWarn(game.i18n.localize("GLUCARGO.notify.dialogUnavailable"));
     return false;
   }
   const result = await DialogV2.confirm({
@@ -2303,7 +2300,7 @@ async function confirmDialog({ title, content }) {
 async function promptTextDialog({ title, label, value = "" }) {
   const DialogV2 = getDialogV2();
   if (!DialogV2) {
-    notifyWarn("Foundry Dialog is not available.");
+    notifyWarn(game.i18n.localize("GLUCARGO.notify.dialogUnavailable"));
     return null;
   }
   const result = await DialogV2.wait({
@@ -2318,14 +2315,14 @@ async function promptTextDialog({ title, label, value = "" }) {
     buttons: [
       {
         action: "ok",
-        label: "Save",
+        label: game.i18n.localize("GLUCARGO.dialog.save"),
         icon: "fa-solid fa-check",
         default: true,
         callback: (_event, button) => String(button.form?.elements?.value?.value ?? "").trim()
       },
       {
         action: "cancel",
-        label: "Cancel",
+        label: game.i18n.localize("GLUCARGO.dialog.cancel"),
         icon: "fa-solid fa-xmark",
         callback: () => null
       }
@@ -2337,7 +2334,7 @@ async function promptTextDialog({ title, label, value = "" }) {
 async function containerDialog({ title, container = null }) {
   const DialogV2 = getDialogV2();
   if (!DialogV2) {
-    notifyWarn("Foundry Dialog is not available.");
+    notifyWarn(game.i18n.localize("GLUCARGO.notify.dialogUnavailable"));
     return null;
   }
   const width = Number(container?.width ?? 10);
@@ -2348,24 +2345,24 @@ async function containerDialog({ title, container = null }) {
     rejectClose: false,
     content: `
       <div class="glucargo-dialog-form">
-        <label>Name<input name="name" type="text" value="${escapeAttr(container?.name ?? "Extraction Case")}" required></label>
+        <label>${escapeHtml(game.i18n.localize("GLUCARGO.dialog.containerName"))}<input name="name" type="text" value="${escapeAttr(container?.name ?? game.i18n.localize("GLUCARGO.default.containerName"))}" required></label>
         <div class="glucargo-dialog-grid">
-          <label>Width<input name="width" type="number" min="1" max="30" value="${width}"></label>
-          <label>Height<input name="height" type="number" min="1" max="20" value="${height}"></label>
+          <label>${escapeHtml(game.i18n.localize("GLUCARGO.dialog.containerWidth"))}<input name="width" type="number" min="1" max="30" value="${width}"></label>
+          <label>${escapeHtml(game.i18n.localize("GLUCARGO.dialog.containerHeight"))}<input name="height" type="number" min="1" max="20" value="${height}"></label>
         </div>
-        <label class="glucargo-dialog-check"><input name="locked" type="checkbox" ${container?.locked ? "checked" : ""}> Locked</label>
+        <label class="glucargo-dialog-check"><input name="locked" type="checkbox" ${container?.locked ? "checked" : ""}> ${escapeHtml(game.i18n.localize("GLUCARGO.dialog.containerLocked"))}</label>
       </div>
     `,
     buttons: [
       {
         action: "ok",
-        label: "Save",
+        label: game.i18n.localize("GLUCARGO.dialog.save"),
         icon: "fa-solid fa-floppy-disk",
         default: true,
         callback: (_event, button) => {
           const elements = button.form?.elements ?? {};
           return {
-            name: String(elements.name?.value || "Extraction Case").trim(),
+            name: String(elements.name?.value || game.i18n.localize("GLUCARGO.default.containerName")).trim(),
             width: Math.max(1, Math.min(30, Number(elements.width?.value || 10))),
             height: Math.max(1, Math.min(20, Number(elements.height?.value || 6))),
             locked: elements.locked?.checked === true
@@ -2374,7 +2371,7 @@ async function containerDialog({ title, container = null }) {
       },
       {
         action: "cancel",
-        label: "Cancel",
+        label: game.i18n.localize("GLUCARGO.dialog.cancel"),
         icon: "fa-solid fa-xmark",
         callback: () => null
       }
@@ -2467,7 +2464,7 @@ function getLabelSegment(cells, width, height) {
 function summarizeItem(item) {
   const pieces = [];
   if (item.type) pieces.push(capitalize(item.type));
-  if (item.level !== null && item.level !== undefined && item.level !== "") pieces.push(`Level ${item.level}`);
+  if (item.level !== null && item.level !== undefined && item.level !== "") pieces.push(game.i18n.format("GLUCARGO.item.levelLabel", { level: item.level }));
   if (item.rarity) pieces.push(capitalize(String(item.rarity)));
   return pieces.join(" / ");
 }
@@ -2480,8 +2477,8 @@ function getPlayerFacingCargo(cargo) {
   if (game.user.isGM || cargo.visibility !== VISIBILITY.unknown) return cargo;
   return {
     ...cargo,
-    name: "Unknown Cargo",
-    subtitle: "Unidentified mission cargo",
+    name: game.i18n.localize("GLUCARGO.default.unknownCargoName"),
+    subtitle: game.i18n.localize("GLUCARGO.default.unknownCargoSubtitle"),
     shape: cargo.shape
   };
 }
@@ -2491,7 +2488,7 @@ function getCategory(cargo) {
   return {
     ...base,
     color: resolveCargoColor(cargo.styleOverride?.color, base.color),
-    label: cargo.customCategory?.label || base.label,
+    label: cargo.customCategory?.label || game.i18n.localize(base.labelKey),
     icon: cargo.customCategory?.icon || base.icon,
     pattern: cargo.customCategory?.pattern || base.pattern
   };
@@ -2740,7 +2737,7 @@ function isLockedByOtherForUser(cargo, userId) {
 
 function lockOwner(cargo) {
   if (!cargo.lock?.userId || cargo.lock.expiresAt <= Date.now()) return "";
-  return cargo.lock.userId === game.user.id ? "You" : cargo.lock.userName;
+  return cargo.lock.userId === game.user.id ? game.i18n.localize("GLUCARGO.ui.you") : cargo.lock.userName;
 }
 
 function priorityRank(priority) {
@@ -2769,7 +2766,7 @@ function buildExtractionReport(mission) {
           <strong>${escapeHtml(visible.name)}</strong>
           <small>${escapeHtml(visible.subtitle || cat.label)}</small>
         </span>
-        <span class="glucargo-chat-report__cargo-meta">${getShapeMetrics(item.shape).cells.length}c</span>
+        <span class="glucargo-chat-report__cargo-meta">${escapeHtml(game.i18n.format("GLUCARGO.chat.cellsShort", { count: getShapeMetrics(item.shape).cells.length }))}</span>
       </li>
     `;
   }).join("");
@@ -2782,7 +2779,7 @@ function buildExtractionReport(mission) {
       <header class="glucargo-chat-report__head">
         <span><i class="fa-solid fa-flag-checkered"></i></span>
         <div>
-          <span class="glucargo-kicker">Extraction Manifest</span>
+          <span class="glucargo-kicker">${escapeHtml(game.i18n.localize("GLUCARGO.chat.extractionManifest"))}</span>
           <h2>${escapeHtml(mission.name)}</h2>
         </div>
         <span class="glucargo-regmark" aria-hidden="true">
@@ -2791,13 +2788,13 @@ function buildExtractionReport(mission) {
         </span>
       </header>
       <section class="glucargo-chat-report__stats">
-        <span><strong>${extracted.length}</strong><small>Secured</small></span>
-        <span><strong>${totalCells}</strong><small>Cells</small></span>
-        <span><strong>${abandoned.length}</strong><small>Left Site</small></span>
+        <span><strong>${extracted.length}</strong><small>${escapeHtml(game.i18n.localize("GLUCARGO.chat.secured"))}</small></span>
+        <span><strong>${totalCells}</strong><small>${escapeHtml(game.i18n.localize("GLUCARGO.chat.cells"))}</small></span>
+        <span><strong>${abandoned.length}</strong><small>${escapeHtml(game.i18n.localize("GLUCARGO.chat.leftSite"))}</small></span>
       </section>
-      <section class="glucargo-chat-report__chips">${summary || "<span>No secured cargo <strong>0</strong></span>"}</section>
-      <ol class="glucargo-chat-report__list">${rows || `<li class="glucargo-chat-report__empty">No cargo extracted.</li>`}</ol>
-      ${abandoned.length ? `<footer class="glucargo-chat-report__lost"><strong>Unsecured</strong>${abandonedRows}${abandoned.length > 6 ? `<span>+${abandoned.length - 6} more</span>` : ""}</footer>` : ""}
+      <section class="glucargo-chat-report__chips">${summary || `<span>${game.i18n.localize("GLUCARGO.chat.noSecuredCargo")}</span>`}</section>
+      <ol class="glucargo-chat-report__list">${rows || `<li class="glucargo-chat-report__empty">${escapeHtml(game.i18n.localize("GLUCARGO.chat.noCargoExtracted"))}</li>`}</ol>
+      ${abandoned.length ? `<footer class="glucargo-chat-report__lost"><strong>${escapeHtml(game.i18n.localize("GLUCARGO.chat.unsecured"))}</strong>${abandonedRows}${abandoned.length > 6 ? `<span>${escapeHtml(game.i18n.format("GLUCARGO.chat.moreCount", { count: abandoned.length - 6 }))}</span>` : ""}</footer>` : ""}
     </div>
   `;
 }

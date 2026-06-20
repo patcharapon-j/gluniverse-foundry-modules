@@ -1,6 +1,6 @@
 /** GLUniverse — Clocks & Tracker : module entry point. */
 
-import { MODULE_ID, SETTINGS, STEPS, HOOKS } from "./const.js";
+import { MODULE_ID, SETTINGS, HOOKS } from "./const.js";
 import { registerSettings } from "./settings.js";
 import { Features } from "./features.js";
 

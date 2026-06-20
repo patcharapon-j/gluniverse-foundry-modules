@@ -14,6 +14,7 @@ import { MODULE_ID, FLAG, TARGET, PARTY_LEDGER_KEY } from "../const.js";
 import { WealthLedger } from "../auditor/ledger.js";
 import { getAdapter } from "../systems/registry.js";
 import { iconNoteHtml } from "./icon-note.js";
+import { escapeHTML as escapeHtml } from "../../../core/util.mjs";
 
 function adapter() { return getAdapter(); }
 
@@ -103,7 +104,7 @@ async function makeLootActor(parcel, proposal) {
     });
   } catch (err) {
     console.error(`${MODULE_ID} | failed to create loot actor`, err);
-    ui.notifications?.error("GLLG: could not create the loot actor (see console).");
+    ui.notifications?.error(game.i18n.localize("GLLG.materialize.lootActorError"));
     return null;
   }
 
@@ -136,7 +137,7 @@ async function makeLootActor(parcel, proposal) {
  */
 async function makeMerchantActor(parcel, proposal) {
   const keeper = proposal.shop?.keeper ?? null;
-  const name = keeper?.shop || parcel.label || proposal.label || "Shop";
+  const name = keeper?.shop || parcel.label || proposal.label || game.i18n.localize("GLLG.materialize.shopFallbackName");
 
   // Created GM-only by default (Foundry's default ownership) so an upcoming shop
   // isn't spoiled the instant it's stocked. The GM grants players access — or
@@ -152,7 +153,7 @@ async function makeMerchantActor(parcel, proposal) {
     }, merchantData));
   } catch (err) {
     console.error(`${MODULE_ID} | failed to create merchant actor`, err);
-    ui.notifications?.error("GLLG: could not create the shop actor (see console).");
+    ui.notifications?.error(game.i18n.localize("GLLG.materialize.shopActorError"));
     return null;
   }
 
@@ -435,8 +436,4 @@ async function safeFromUuid(uuid) {
 }
 function fmtGp(n) {
   return Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

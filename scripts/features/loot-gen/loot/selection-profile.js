@@ -20,6 +20,7 @@ import { MODULE_ID, SETTINGS } from "../const.js";
 import { filterCandidates, weightFor, weightedPick, mundaneBases } from "./item-selector.js";
 import { buildRuneSet } from "../pf2e/runes.js";
 import { logLlmCall } from "./llm-log.js";
+import { clamp } from "../../../core/util.mjs";
 
 export const PROFILE_TYPES = ["weapon", "armor", "equipment", "consumable", "treasure"];
 const PERMANENT_TYPES = new Set(["weapon", "armor", "shield", "equipment"]);
@@ -251,7 +252,6 @@ export function toPick(item, reason) {
 
 /* ------------------------------ helpers ------------------------------ */
 
-function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 function clampInt(v, lo, hi) { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; }
 function round2(n) { return Math.round(n * 100) / 100; }
 function clip(s, max) { return String(s ?? "").slice(0, max); }

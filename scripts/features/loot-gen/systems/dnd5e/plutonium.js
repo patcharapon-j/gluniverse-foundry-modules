@@ -211,27 +211,25 @@ export async function ensureContent({ notify = true } = {}) {
   if (mode === SOURCE_MODE.INTERNAL) {
     const ok = hasAnySource();
     if (notify) {
-      note(ok
-        ? "Internal-compendium mode — sourcing loot only from the dnd5e system's bundled (SRD) packs."
-        : "Internal-compendium mode is on, but no dnd5e system Item packs were found.", ok ? "info" : "warn");
+      note(game.i18n.localize(ok ? "GLLG.plutonium.internalOk" : "GLLG.plutonium.internalNone"), ok ? "info" : "warn");
     }
     return { ok, mode: ok ? "internal" : "none" };
   }
 
   // PLUTONIUM: require Plutonium; do not silently fall back to SRD.
   if (mode === SOURCE_MODE.PLUTONIUM && !plutoniumActive()) {
-    if (notify) note("Source mode is set to Plutonium-only, but Plutonium is not active — install & enable it (or switch the source mode). No loot can be drawn.", "warn");
+    if (notify) note(game.i18n.localize("GLLG.plutonium.pluginOnlyInactive"), "warn");
     return { ok: false, mode: "none" };
   }
 
   if (!plutoniumActive()) {
-    if (notify) note("Plutonium is not active — sourcing loot from the available dnd5e compendiums (SRD).", "info");
+    if (notify) note(game.i18n.localize("GLLG.plutonium.inactiveSrd"), "info");
     return { ok: hasAnySource(), mode: hasAnySource() ? "srd" : "none" };
   }
 
   const apis = importApi();
   if (!apis) {
-    if (notify) note("Plutonium is active but exposes no import API in this build — indexing already-imported Plutonium packs. Use Plutonium's importer to add more content.", "info");
+    if (notify) note(game.i18n.localize("GLLG.plutonium.activeNoApi"), "info");
     return { ok: true, mode: "indexed" };
   }
 

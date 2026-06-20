@@ -24,10 +24,9 @@ import {
   SUPPORT_FACTION_MOD, SUPPORT_TIERS, SUPPORT_LEVEL_RANGE, SUPPORT_POOL_RANGE
 } from "../const.js";
 
-const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-const int = (v, fallback = 0) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : fallback; };
+import { clamp, toInt as int, hex6 } from "../../../core/util.mjs";
+
 const str = (v, max = 200) => String(v ?? "").slice(0, max);
-const hex6 = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : fallback);
 
 /** A blank ability of a given kind, with a sensible default label. */
 function makeAbility(kind) {

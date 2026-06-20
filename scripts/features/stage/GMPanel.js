@@ -1,20 +1,9 @@
 import { MODULE_ID, getSetting, setSetting } from './settings.js';
 import { StageManager } from './StageManager.js';
+import { escapeHTML } from '../../core/util.mjs';
 
 const i18n = (key) => game.i18n.localize(`GLSTAGE.${key}`);
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
-
-const HTML_ESCAPE = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-};
-
-function escapeHTML(value) {
-    return String(value ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPE[ch]);
-}
 
 function escapeAttr(value) {
     return escapeHTML(value);

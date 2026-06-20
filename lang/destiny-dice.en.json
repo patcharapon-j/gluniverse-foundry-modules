@@ -23,5 +23,13 @@
   "GLDDF.Settings.FaceConfig.Hint": "Configure each physical die face: result kind, numeric value, and PNG texture.",
   "GLDDF.Settings.FaceConfig.Title": "Destiny Dice Faces",
   "GLDDF.Settings.FaceConfig.ReloadHint": "Dice So Nice texture changes require a Foundry reload. Result and value changes apply to future fate rolls.",
-  "GLDDF.Settings.FaceConfig.Saved": "Destiny Dice face configuration saved."
+  "GLDDF.Settings.FaceConfig.Saved": "Destiny Dice face configuration saved.",
+  "GLDDF.Settings.FaceConfig.Face": "Face",
+  "GLDDF.Settings.FaceConfig.Result": "Result",
+  "GLDDF.Settings.FaceConfig.Value": "Value",
+  "GLDDF.Settings.FaceConfig.Image": "PNG",
+  "GLDDF.Settings.FaceConfig.Browse": "Browse",
+  "GLDDF.Settings.FaceConfig.Save": "Save",
+  "GLDDF.Notify.NoFace": "GLUniverse Destiny Dice | {notation} produced no readable face. See console for details.",
+  "GLDDF.Notify.RollFailed": "GLUniverse Destiny Dice | Failed to roll Fate Die. See console for details."
 }

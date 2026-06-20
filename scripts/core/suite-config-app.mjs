@@ -289,7 +289,7 @@ export class SuiteConfigApp extends ApplicationV2 {
     try {
       await game.settings.set(SUITE_ID, key, next);
     } catch (e) {
-      return ui.notifications?.error(`Could not update setting: ${e.message}`);
+      return ui.notifications?.error(game.i18n.format("GLS.config.err.setSetting", { message: e.message }));
     }
     target.classList.toggle("is-on", next);
     target.setAttribute("aria-pressed", String(next));
@@ -304,7 +304,7 @@ export class SuiteConfigApp extends ApplicationV2 {
     try {
       await game.settings.set(SUITE_ID, key, value);
     } catch (e) {
-      ui.notifications?.error(`Could not update setting: ${e.message}`);
+      ui.notifications?.error(game.i18n.format("GLS.config.err.setSetting", { message: e.message }));
     }
   }
 
@@ -315,7 +315,7 @@ export class SuiteConfigApp extends ApplicationV2 {
     try {
       new Type().render(true);
     } catch (e) {
-      ui.notifications?.error(`Could not open editor: ${e.message}`);
+      ui.notifications?.error(game.i18n.format("GLS.config.err.openEditor", { message: e.message }));
     }
   }
 

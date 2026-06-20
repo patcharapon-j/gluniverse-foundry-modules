@@ -1515,7 +1515,7 @@ class GLUniverseInitiativeOverlay {
     return `
       <div class="gluni-shell">
         <header class="gluni-header">
-          <button class="gluni-drag-handle" type="button" title="Move tracker" aria-label="Move tracker">
+          <button class="gluni-drag-handle" type="button" title="${escapeAttr(localize("GLUNI.Controls.MoveTracker"))}" aria-label="${escapeAttr(localize("GLUNI.Controls.MoveTracker"))}">
             <span class="gluni-drag-handle-grip" aria-hidden="true"></span>
           </button>
           <div class="gluni-round-chip">
@@ -2002,7 +2002,7 @@ class GLUniverseInitiativeOverlay {
           : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
-            ${card.active ? `<span class="gluni-active-tag">TURN</span>` : ""}
+            ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
             ${card.apex ? this.renderApexKicker(card.apex) : ""}
             ${card.guardBroken ? `<span class="gluni-guard-break-tag">${localize("GLUNI.GuardBreak").toUpperCase()}</span>` : ""}
             ${card.dying ? (card.dying.kind === "deathsaves"
@@ -4971,7 +4971,7 @@ function renderPortraitConfigPanel(mode, label, values, portrait, actorName) {
           <img class="gluni-card-portrait" src="${escapeAttr(portrait)}" alt="${escapeAttr(actorName)}" draggable="false">
         </div>
         <div class="gluni-card-content">
-          <div class="gluni-card-kicker">${mode === "expanded" ? `<span class="gluni-active-tag">TURN</span>` : ""}</div>
+          <div class="gluni-card-kicker">${mode === "expanded" ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}</div>
           <h3>${escapeHTML(actorName)}</h3>
         </div>
         <span class="gluni-initiative-badge">18</span>

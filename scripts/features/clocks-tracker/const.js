@@ -112,16 +112,6 @@ export const STEPS = ["stretch", "hour", "shift", "day"];
 /** The 6 hex-face directions, clockwise from the top (matches HEX_LAYOUT). */
 export const WEATHER_DIRECTIONS = ["up", "upperRight", "lowerRight", "down", "lowerLeft", "upperLeft"];
 
-/** Human display order for the Navigation-Hex editor (clock-face). */
-export const WEATHER_DIRECTION_LABELS = {
-  up: "GLCT.weather.dir.up",
-  upperRight: "GLCT.weather.dir.upperRight",
-  lowerRight: "GLCT.weather.dir.lowerRight",
-  down: "GLCT.weather.dir.down",
-  lowerLeft: "GLCT.weather.dir.lowerLeft",
-  upperLeft: "GLCT.weather.dir.upperLeft"
-};
-
 /**
  * Pixi motion archetypes the effects engine implements. Originally weather-only
  * (decision #8, §4.6); now a SHARED effect registry consumed by weather AND the
@@ -140,9 +130,6 @@ export const WEATHER_ARCHETYPES = [
 
 /** Alias: the archetype list is no longer weather-specific. Prefer this name in new code. */
 export const EFFECT_ARCHETYPES = WEATHER_ARCHETYPES;
-
-/** Archetypes that read better with additive blending (glowing particles). */
-export const WEATHER_ADDITIVE_ARCHETYPES = ["flashes", "motes", "embers", "spores", "runes", "void"];
 
 /** Drift directions an archetype may honour. */
 export const WEATHER_DRIFTS = ["fall", "rise", "left", "right", "still"];

@@ -30,10 +30,7 @@ import { TimeEngine } from "../engine.js";
 import { WeatherStore } from "../weather/weather-store.js";
 import { WeatherEngine } from "../weather/engine.js";
 import { makeDefaultDelving, makeResource, makeStage } from "./presets.js";
-
-const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-const int = (v, fallback = 0) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : fallback; };
-const hex6 = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v) : fallback);
+import { clamp, toInt as int, hex6 } from "../../../core/util.mjs";
 
 export class DelvingStore {
   /* ------------------------------- reads ------------------------------- */

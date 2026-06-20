@@ -28,6 +28,7 @@ import { themeRuneSlugs } from "../pf2e/runes.js";
 import { runWorkshop } from "./workshop.js";
 import { logLlmCall } from "./llm-log.js";
 import { getAdapter } from "../systems/registry.js";
+import { clamp } from "../../../core/util.mjs";
 import {
   requestSelectionProfile, resolveWanted, pickByProfile, makeRuned, toPick, rarityLeanBias
 } from "./selection-profile.js";
@@ -407,7 +408,6 @@ function sidecarConfigured() {
 }
 
 function randInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
-function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 function clampInt(v, lo, hi) { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; }
 function round2(n) { return Math.round(n * 100) / 100; }
 function clean(s, max = 400) { return String(s ?? "").replace(/\s+/g, " ").trim().slice(0, max); }

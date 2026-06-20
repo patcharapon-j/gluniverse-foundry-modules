@@ -48,6 +48,8 @@
       "HeaderButton": "Critical Cinematic",
       "ModalTitlePC": "Critical Cinematic — {name}",
       "ModalTitleNPC": "Critical Cinematic — {name} (NPC)",
+      "UnknownName": "Unknown",
+      "GenericName": "Actor",
 
       "EnableForNPC": "Enable cinematic for this NPC",
       "EnableForNPCHint": "GM-only. When OFF, this NPC never triggers a cinematic.",

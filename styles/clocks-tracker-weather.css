@@ -158,9 +158,9 @@
    2) HEX FLOWER WINDOW — frameless glass dock.
    ============================================================ */
 #glct-weather-hud{
-  --ink:#eef1f7; --muted:#98a2b6; --hair:rgba(255,255,255,.08); --edge:rgba(255,255,255,.13);
+  --ink:var(--gl-text); --muted:var(--gl-text-dim); --hair:var(--gl-hair); --edge:var(--gl-edge);
   --glct-weather-tint:#cfe8ff; --glct-weather-glow:#7fb4e6;
-  --clock-font:"Oxanium","Segoe UI",system-ui,sans-serif;
+  --clock-font:var(--gl-display);
   background:none;border:none;box-shadow:none;padding:0;margin:0;width:auto;height:auto;min-width:0;min-height:0;
   pointer-events:none;font:14px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
 #glct-weather-hud .window-content{background:none;padding:0;color:var(--ink);overflow:visible}

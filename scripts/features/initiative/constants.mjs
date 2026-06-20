@@ -353,6 +353,8 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.Controls.NextTurn": "Next turn",
   "GLUNI.Controls.PreviousTurn": "Previous turn",
   "GLUNI.Controls.Return": "Return",
+  "GLUNI.Controls.Turn": "Turn",
+  "GLUNI.Controls.MoveTracker": "Move tracker",
   "GLUNI.Controls.TurnControls": "Turn controls",
   "GLUNI.Controls.Visible": "Show",
   "GLUNI.AdHoc.Add": "Add ad hoc initiative",

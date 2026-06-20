@@ -47,7 +47,7 @@ export function workshopEnabled() {
  */
 export async function runWorkshop(params) {
   if (!workshopEnabled()) {
-    ui.notifications?.warn("GLLG: the LLM sidecar isn't configured — set the Flavor Sidecar URL in module settings.");
+    ui.notifications?.warn(game.i18n.localize("GLLG.workshop.sidecarNotConfigured"));
     return null;
   }
   return requestAndBuild(normalizeParams(params));
@@ -66,11 +66,11 @@ async function requestAndBuild(params) {
     specs = await callWorkshop(params);
   } catch (err) {
     console.error(`${MODULE_ID} | workshop request failed`, err);
-    ui.notifications?.error("GLLG: the loot workshop request failed (see console).");
+    ui.notifications?.error(game.i18n.localize("GLLG.workshop.requestFailed"));
     return null;
   }
   if (!specs?.length) {
-    ui.notifications?.warn("GLLG: the workshop returned no items — try a more specific request.");
+    ui.notifications?.warn(game.i18n.localize("GLLG.workshop.noItems"));
     return null;
   }
   return buildWorkshopProposal(params, specs);

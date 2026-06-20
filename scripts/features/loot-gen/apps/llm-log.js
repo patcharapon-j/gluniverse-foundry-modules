@@ -31,13 +31,17 @@ export class LlmLogViewer extends ApplicationV2 {
 function renderLog(entries) {
   const rows = entries.length
     ? entries.map(rowHtml).join("")
-    : `<div class="gllg-empty">No LLM calls recorded yet. Generate loot with flavor on, or use the Loot Workshop.</div>`;
+    : `<div class="gllg-empty">${esc(game.i18n.localize("GLLG.llmlog.empty"))}</div>`;
+  const countLine = game.i18n.format(
+    entries.length === 1 ? "GLLG.llmlog.countOne" : "GLLG.llmlog.countMany",
+    { count: entries.length }
+  );
   return `<div class="gllg-llmlog-wrap">
     <div class="gllg-llmlog-bar">
-      <span class="gllg-llmlog-count">${entries.length} call${entries.length === 1 ? "" : "s"} logged</span>
+      <span class="gllg-llmlog-count">${esc(countLine)}</span>
       <span class="gllg-llmlog-actions">
-        <button type="button" data-action="refresh" class="gllg-llmlog-btn"><i class="fa-solid fa-rotate"></i> Refresh</button>
-        <button type="button" data-action="clear" class="gllg-llmlog-btn"><i class="fa-solid fa-trash"></i> Clear</button>
+        <button type="button" data-action="refresh" class="gllg-llmlog-btn"><i class="fa-solid fa-rotate"></i> ${esc(game.i18n.localize("GLLG.llmlog.refresh"))}</button>
+        <button type="button" data-action="clear" class="gllg-llmlog-btn"><i class="fa-solid fa-trash"></i> ${esc(game.i18n.localize("GLLG.llmlog.clear"))}</button>
       </span>
     </div>
     <div class="gllg-llmlog-list">${rows}</div>
@@ -47,8 +51,8 @@ function renderLog(entries) {
 function rowHtml(e) {
   const ok = e.ok;
   const badge = ok
-    ? `<span class="gllg-llmlog-ok"><i class="fa-solid fa-circle-check"></i> ok</span>`
-    : `<span class="gllg-llmlog-fail"><i class="fa-solid fa-circle-exclamation"></i> fail</span>`;
+    ? `<span class="gllg-llmlog-ok"><i class="fa-solid fa-circle-check"></i> ${esc(game.i18n.localize("GLLG.llmlog.ok"))}</span>`
+    : `<span class="gllg-llmlog-fail"><i class="fa-solid fa-circle-exclamation"></i> ${esc(game.i18n.localize("GLLG.llmlog.fail"))}</span>`;
   const status = e.status != null ? ` · HTTP ${esc(e.status)}` : "";
   const secs = (e.ms / 1000).toFixed(1);
   const line2 = e.error

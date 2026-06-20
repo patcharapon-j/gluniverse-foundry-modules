@@ -74,7 +74,7 @@ export function onInit() {
     const m = /^\/grill-?me\b\s*([\s\S]*)$/i.exec(String(message ?? "").trim());
     if (!m) return true;
     if (!game.user?.isGM) {
-      ui.notifications?.warn("GLLG: only the GM can open the Loot Workshop.");
+      ui.notifications?.warn(game.i18n.localize("GLLG.module.onlyGmWorkshop"));
       return false;
     }
     openWorkshopDialog(m[1]?.trim() || "");

@@ -1,21 +1,10 @@
 import { getSetting } from './settings.js';
+import { escapeHTML } from '../../core/util.mjs';
 
 const SHOW_DURATION = 350;
 const HIDE_DURATION = 300;
 const CONNECT_DURATION = 1100; // connecting → live handoff (matches CSS connect keyframes)
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
-
-const HTML_ESCAPE = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-};
-
-function escapeHTML(value) {
-    return String(value ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPE[ch]);
-}
 
 function actorImage(actor) {
     return actor?.image || DEFAULT_ACTOR_IMAGE;
