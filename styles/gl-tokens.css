@@ -151,10 +151,24 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Feature Manager (suite config app)
+   Control Center (suite config app)
    ════════════════════════════════════════════════════════════════════════ */
-.gls-feature-manager .window-content { padding: 0; background: var(--gl-ink-0); }
+/* The window-content is a flex column capped to the viewport, so the feature
+   list scrolls between a pinned intro and footer instead of letting the whole
+   window grow taller than the screen. */
+.gls-control-center .window-content {
+  padding: 0;
+  background: var(--gl-ink-0);
+  max-height: calc(100vh - 120px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .gls-fm-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   font-family: var(--gl-display);
   color: var(--gl-text);
   padding: 16px 18px 18px;
@@ -163,12 +177,36 @@
     linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
 }
 .gls-fm-intro {
+  flex: 0 0 auto;
   margin: 0 0 14px;
   color: var(--gl-text-dim);
   font-size: 12px;
   line-height: 1.5;
 }
-.gls-fm-list { display: flex; flex-direction: column; gap: 10px; }
+.gls-fm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* room so the scrollbar doesn't clip the sections' glass edges/glow */
+  padding: 2px 8px 2px 2px;
+  margin: -2px -8px -2px -2px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gl-cyan) 40%, transparent) transparent;
+}
+.gls-fm-list::-webkit-scrollbar { width: 10px; }
+.gls-fm-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--gl-cyan) 35%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.gls-fm-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--gl-cyan) 55%, transparent);
+  background-clip: content-box;
+}
 
 .gls-fm-section {
   --gl-accent: var(--gl-cyan);
@@ -269,11 +307,12 @@
 .gls-switch:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .gls-fm-foot {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-top: 16px;
+  margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--gl-hair);
 }
