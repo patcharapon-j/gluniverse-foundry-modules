@@ -19,6 +19,21 @@ import { ThemeManager } from './ThemeManager.js';
 
 export { registerSettings };
 
+/**
+ * Guarantee the feature stylesheet is linked. The suite manifest only declares
+ * the shared token sheet (`styles/gl-tokens.css`); this feature's own sheet
+ * lives at `modules/gluniverse-suite/styles/stream-pacer.css` and is injected
+ * here so a plain reload is enough. No-op once the link already exists.
+ */
+function ensureFeatureStyle() {
+  const href = `modules/${MODULE_ID}/styles/stream-pacer.css`;
+  if (document.querySelector('link[href*="styles/stream-pacer.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  document.head.appendChild(link);
+}
+
 let pacerHUD = null;
 let pacerOverlay = null;
 let audioManager = null;
@@ -52,6 +67,9 @@ export function onInit() {
 export function onReady() {
   console.log(`${MODULE_ID} | Stream Pacer Ready`);
   isReady = true;
+
+  // Ensure the feature stylesheet is linked (manifest only ships gl-tokens.css).
+  ensureFeatureStyle();
 
   // Apply the fixed Arcane Glass palette before any UI renders.
   ThemeManager.initialize();
