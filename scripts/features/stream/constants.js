@@ -106,13 +106,33 @@ export const DEFAULT_UI_RULES = {
   selectorRules: []
 };
 
+/** Party HUD config. Director-owned, world-scoped, broadcast to the stream client. */
+export const DEFAULT_HUD_SETTINGS = {
+  enabled: false,
+  anchor: "bottom",       // top | bottom | left | right
+  align: "center",        // start | center | end
+  offsetX: 0,
+  offsetY: 0,
+  scale: 100,             // percent
+  roster: [],             // ordered actor ids
+  showResource: true,
+  showConditions: true,
+  showTempHp: true,
+  showAbilities: false
+};
+
+export const HUD_ANCHORS = ["top", "bottom", "left", "right"];
+export const HUD_ALIGNS = ["start", "center", "end"];
+
 export const SOCKET_TYPES = {
   clientStatus: "clientStatus",
   requestClientStatus: "requestClientStatus",
   command: "command",
   requestSettingSet: "requestSettingSet",
   requestSceneFlagSet: "requestSceneFlagSet",
-  requestAutoStartSet: "requestAutoStartSet"
+  requestAutoStartSet: "requestAutoStartSet",
+  hudState: "hudState",
+  requestHudState: "requestHudState"
 };
 
 export const STREAM_COMMANDS = {

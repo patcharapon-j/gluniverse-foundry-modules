@@ -2,13 +2,16 @@ import {
   CAMERA_MODES,
   CHAT_POSITIONS,
   FEATURE_ID,
+  HUD_ALIGNS,
+  HUD_ANCHORS,
   MODULE_ID,
   SCENE_VIEW_MODES,
   STREAM_COMMANDS
 } from "./constants.js";
 import { featurePath } from "../../core/const.mjs";
-import { getCameraSettings, getChatSettings, getDialogSettings, getSetting, getUiRules, isDirectorUser, setSetting } from "./settings.js";
+import { getCameraSettings, getChatSettings, getDialogSettings, getHudSettings, getSetting, getUiRules, isDirectorUser, setSetting } from "./settings.js";
 import { getStreamClientStatus, requestStreamClientStatus, sendStreamCommand } from "./socket.js";
+import { hasAdapter } from "./hud/system-adapter.js";
 
 let services = {};
 let instance = null;
@@ -143,7 +146,36 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
         [SCENE_VIEW_MODES.fitBackground]: "Fit background",
         [SCENE_VIEW_MODES.fillBackground]: "Fill background"
       }, camera.sceneViewMode),
-      chatPositionOptions: optionsFor(Object.fromEntries(CHAT_POSITIONS.map(position => [position, labelize(position)])), chat.position)
+      chatPositionOptions: optionsFor(Object.fromEntries(CHAT_POSITIONS.map(position => [position, labelize(position)])), chat.position),
+      ...this.#hudContext()
+    };
+  }
+
+  #hudContext() {
+    const hud = getHudSettings();
+    const roster = hud.roster ?? [];
+    const rosterRows = roster.map((id, index) => {
+      const actor = game.actors?.get(id);
+      return {
+        id,
+        name: actor?.name ?? id,
+        img: actor?.img ?? "icons/svg/mystery-man.svg",
+        missing: !actor,
+        first: index === 0,
+        last: index === roster.length - 1
+      };
+    });
+    const addable = (game.actors?.filter(actor => actor.type === "character" && !roster.includes(actor.id)) ?? [])
+      .map(actor => ({ id: actor.id, name: actor.name, img: actor.img }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      hud,
+      hudAdapterReady: hasAdapter(),
+      hudSystem: game.system?.id ?? "",
+      hudRoster: rosterRows,
+      hudAddable: addable,
+      hudAnchorOptions: optionsFor(Object.fromEntries(HUD_ANCHORS.map(a => [a, labelize(a)])), hud.anchor),
+      hudAlignOptions: optionsFor(Object.fromEntries(HUD_ALIGNS.map(a => [a, labelize(a)])), hud.align)
     };
   }
 
@@ -210,6 +242,7 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (name.startsWith("camera.")) return this.#updateObject("cameraSettings", name.slice(7), fieldValue(target));
     if (name.startsWith("chat.")) return this.#updateObject("chatSettings", name.slice(5), fieldValue(target));
     if (name.startsWith("dialog.")) return this.#updateObject("dialogSettings", name.slice(7), fieldValue(target));
+    if (name.startsWith("hud.")) return this.#updateObject("hudSettings", name.slice(4), fieldValue(target));
   }
 
   async #onClick(event) {
@@ -244,7 +277,51 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       case "selector-remove":
         this.#captureScroll();
         return services.uiDetector?.removeSelectorRule(button.dataset.ruleId);
+      case "hud-roster-add":
+        this.#captureScroll();
+        return this.#hudRosterAdd(button.dataset.actorId);
+      case "hud-roster-remove":
+        this.#captureScroll();
+        return this.#hudRosterRemove(button.dataset.actorId);
+      case "hud-roster-move":
+        this.#captureScroll();
+        return this.#hudRosterMove(button.dataset.actorId, button.dataset.dir);
+      case "hud-roster-fill":
+        this.#captureScroll();
+        return this.#hudRosterFillFromPlayers();
     }
+  }
+
+  async #hudRosterAdd(id) {
+    if (!id) return;
+    const hud = getHudSettings();
+    if (hud.roster.includes(id)) return;
+    await setSetting("hudSettings", { ...hud, roster: [...hud.roster, id] });
+  }
+
+  async #hudRosterRemove(id) {
+    const hud = getHudSettings();
+    await setSetting("hudSettings", { ...hud, roster: hud.roster.filter(x => x !== id) });
+  }
+
+  async #hudRosterMove(id, dir) {
+    const hud = getHudSettings();
+    const roster = [...hud.roster];
+    const i = roster.indexOf(id);
+    if (i < 0) return;
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= roster.length) return;
+    [roster[i], roster[j]] = [roster[j], roster[i]];
+    await setSetting("hudSettings", { ...hud, roster });
+  }
+
+  /** Convenience: seed the roster from players' currently assigned characters. */
+  async #hudRosterFillFromPlayers() {
+    const hud = getHudSettings();
+    const assigned = (game.users?.filter(u => !u.isGM && u.character) ?? []).map(u => u.character.id);
+    const roster = [...hud.roster];
+    for (const id of assigned) if (!roster.includes(id)) roster.push(id);
+    await setSetting("hudSettings", { ...hud, roster });
   }
 
   async #setAndRender(key, value) {
@@ -254,7 +331,10 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #updateObject(key, field, value) {
     this.#captureScroll();
-    const current = key === "cameraSettings" ? getCameraSettings() : key === "chatSettings" ? getChatSettings() : getDialogSettings();
+    const current = key === "cameraSettings" ? getCameraSettings()
+      : key === "chatSettings" ? getChatSettings()
+      : key === "hudSettings" ? getHudSettings()
+      : getDialogSettings();
     await setSetting(key, { ...current, [field]: value });
   }
 

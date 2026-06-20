@@ -9,6 +9,8 @@ import { registerSocket } from "./socket.js";
 import { StreamMode } from "./stream-mode.js";
 import { TokenTracking } from "./token-tracking.js";
 import { UiDetector } from "./ui-detector.js";
+import { PartyHud } from "./hud/PartyHud.js";
+import { HudController } from "./hud/hud-controller.js";
 
 export { registerSettings };
 
@@ -50,6 +52,8 @@ export async function onReady() {
   state.chatOverlay = new ChatOverlay(state.streamMode);
   state.dialogOverlay = new DialogOverlay(state.streamMode);
   state.uiDetector = new UiDetector(state.streamMode);
+  state.partyHud = new PartyHud(state.streamMode);
+  state.hudController = new HudController();
 
   configureDirectorApp(state);
   registerSocket(state);
@@ -58,6 +62,8 @@ export async function onReady() {
   state.chatOverlay.registerHooks();
   state.dialogOverlay.registerHooks();
   state.uiDetector.registerHooks();
+  state.partyHud.registerHooks();
+  state.hudController.registerHooks();
 
   Hooks.on(`${HOOK_NS}.settingsChanged`, key => {
     renderDirectorApp();

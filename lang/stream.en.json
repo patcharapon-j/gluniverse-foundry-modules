@@ -13,6 +13,8 @@
   "GLUNIVERSE_STREAM.settings.dialogSettings.hint": "World-level stream dialog overlay settings.",
   "GLUNIVERSE_STREAM.settings.uiRules.name": "Stream UI Rules",
   "GLUNIVERSE_STREAM.settings.uiRules.hint": "Allow/block rules for detected floating UI and expert CSS selectors.",
+  "GLUNIVERSE_STREAM.settings.hudSettings.name": "Party HUD Settings",
+  "GLUNIVERSE_STREAM.settings.hudSettings.hint": "World-level live PC information HUD settings (roster, layout, fields).",
   "GLUNIVERSE_STREAM.keybindings.emergencyRestore.name": "Toggle Stream UI Restore",
   "GLUNIVERSE_STREAM.keybindings.emergencyRestore.hint": "Temporarily restore or hide Foundry UI while stream mode remains active.",
   "GLUNIVERSE_STREAM.startPrompt.title": "Start Stream Mode?",
@@ -28,5 +30,7 @@
   "GLUNIVERSE_STREAM.notifications.notDirector": "You are not allowed to operate stream controls.",
   "GLUNIVERSE_STREAM.notifications.invalidSelector": "That CSS selector is invalid.",
   "GLUNIVERSE_STREAM.tokenHud.track": "Toggle stream tracking",
-  "GLUNIVERSE_STREAM.common.none": "None"
+  "GLUNIVERSE_STREAM.common.none": "None",
+  "GLUNIVERSE_STREAM.hud.resource.pact": "Pact",
+  "GLUNIVERSE_STREAM.hud.resource.generic": "Resource"
 }

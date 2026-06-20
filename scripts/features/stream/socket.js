@@ -4,7 +4,7 @@ import { emitSocket, onSocket } from "../../core/socket.mjs";
 
 let services = {};
 const clientStatusByUser = new Map();
-const DIRECTOR_SETTING_KEYS = new Set(["streamUserId", "autoStartStreamUserIds", "trustedDirectorUserIds", "cameraSettings", "chatSettings", "dialogSettings", "uiRules"]);
+const DIRECTOR_SETTING_KEYS = new Set(["streamUserId", "autoStartStreamUserIds", "trustedDirectorUserIds", "cameraSettings", "chatSettings", "dialogSettings", "uiRules", "hudSettings"]);
 
 export function registerSocket(nextServices) {
   services = nextServices;
@@ -46,6 +46,23 @@ export async function requestAutoStartSet(enabled) {
   emitSocket(FEATURE_ID, { type: SOCKET_TYPES.requestAutoStartSet, userId: game.user.id, enabled: Boolean(enabled) });
 }
 
+/**
+ * Broadcast the GM-computed Party HUD state to the stream client. Only the
+ * responsible GM emits (avoids multi-GM double-emit); if this client is itself
+ * the stream user (solo GM streamer) the state is applied locally too, since
+ * Foundry's socket never echoes to the sender.
+ */
+export function emitHudState(state) {
+  if (!isResponsibleGM()) return;
+  emitSocket(FEATURE_ID, { type: SOCKET_TYPES.hudState, userId: game.user.id, state });
+  if (isConfiguredStreamUser()) services.partyHud?.applyState(state);
+}
+
+/** Stream client asks the GM for the current Party HUD state (e.g. on load). */
+export function requestHudState() {
+  emitSocket(FEATURE_ID, { type: SOCKET_TYPES.requestHudState, userId: game.user.id });
+}
+
 export async function setSceneFlag(scene, flagKey, value) {
   if (!scene || ![FLAGS.trackedTokenIds, FLAGS.sceneCameraOverride].includes(flagKey)) return;
   if (game.user?.isGM) return scene.setFlag(MODULE_ID, flagKey, value);
@@ -84,6 +101,18 @@ async function handleSocketMessage(message) {
     if (!isResponsibleGM() || !isDirectorUser(game.users?.get(message.userId))) return;
     const scene = game.scenes?.get(message.sceneId);
     if (scene && [FLAGS.trackedTokenIds, FLAGS.sceneCameraOverride].includes(message.flagKey)) await scene.setFlag(MODULE_ID, message.flagKey, message.value);
+    return;
+  }
+
+  if (message.type === SOCKET_TYPES.hudState) {
+    if (!isConfiguredStreamUser()) return;
+    if (!game.users?.get(message.userId)?.isGM) return;
+    services.partyHud?.applyState(message.state);
+    return;
+  }
+
+  if (message.type === SOCKET_TYPES.requestHudState) {
+    if (isResponsibleGM()) services.hudController?.broadcast();
     return;
   }
 

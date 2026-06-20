@@ -26,6 +26,7 @@
     "styles/stage-comms.css",
     "styles/stream-pacer.css",
     "styles/stream.css",
+    "styles/stream-hud.css",
     "styles/statsblock-import.css",
     "styles/loot-gen.css",
     "styles/cargo-grid.css",

@@ -1,0 +1,353 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Stream — Party HUD (Etched Glass)
+   Live PC information cards for the stream client. Built on the canonical
+   design tokens in gl-tokens.css. Motion here is value-driven: every animation
+   is triggered by a real state change (HP delta, AC change, turn change,
+   roster reorder), never idle. Class prefix: gls-hud-.
+   ════════════════════════════════════════════════════════════════════════ */
+
+#gls-hud-root {
+  position: fixed;
+  inset: 0;
+  z-index: 99990; /* above the canvas, below the chat/dialog overlay (100000) */
+  pointer-events: none;
+  display: flex;
+  gap: 14px;
+  padding: 2.2vmin;
+  font-family: var(--gl-display);
+  transform: translate3d(var(--gls-hud-offset-x, 0px), var(--gls-hud-offset-y, 0px), 0) scale(var(--gls-hud-scale, 1));
+  transform-origin: center;
+}
+
+#gls-hud-root.gls-hud-hidden { display: none; }
+
+/* ── Anchoring ───────────────────────────────────────────────────────────── */
+#gls-hud-root[data-anchor="bottom"] { flex-direction: row; align-items: flex-end; justify-content: center; }
+#gls-hud-root[data-anchor="top"]    { flex-direction: row; align-items: flex-start; justify-content: center; }
+#gls-hud-root[data-anchor="left"]   { flex-direction: column; align-items: flex-start; justify-content: center; transform-origin: left center; }
+#gls-hud-root[data-anchor="right"]  { flex-direction: column; align-items: flex-end; justify-content: center; transform-origin: right center; }
+
+#gls-hud-root[data-anchor="bottom"][data-align="start"],
+#gls-hud-root[data-anchor="top"][data-align="start"] { justify-content: flex-start; }
+#gls-hud-root[data-anchor="bottom"][data-align="end"],
+#gls-hud-root[data-anchor="top"][data-align="end"] { justify-content: flex-end; }
+#gls-hud-root[data-anchor="left"][data-align="start"],
+#gls-hud-root[data-anchor="right"][data-align="start"] { justify-content: flex-start; }
+#gls-hud-root[data-anchor="left"][data-align="end"],
+#gls-hud-root[data-anchor="right"][data-align="end"] { justify-content: flex-end; }
+
+/* ── Card shell ──────────────────────────────────────────────────────────── */
+.gls-hud-card {
+  --gls-accent: var(--gl-cyan);
+  position: relative;
+  display: flex;
+  gap: 12px;
+  width: 290px;
+  padding: 12px 14px 12px 12px;
+  border-radius: var(--gl-radius);
+  color: var(--gl-text);
+  pointer-events: none;
+  isolation: isolate;
+  background:
+    linear-gradient(155deg, rgba(13, 19, 30, 0.92), rgba(6, 9, 15, 0.86));
+  border: 1px solid var(--gl-edge);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px) saturate(1.1);
+  transition: transform var(--gl-d-move) var(--gl-ease), filter var(--gl-d-move) var(--gl-ease), box-shadow var(--gl-d-move) var(--gl-ease);
+}
+
+/* Etched top hairline + faint accent rim. */
+.gls-hud-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gls-accent) 36%, transparent), transparent 42%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+  z-index: 3;
+}
+
+/* ── Portrait ────────────────────────────────────────────────────────────── */
+.gls-hud-portrait {
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--gl-edge);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+  align-self: center;
+}
+.gls-hud-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: filter var(--gl-d-move) var(--gl-ease);
+}
+.gls-hud-down-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, transparent 30%, rgba(120, 0, 8, 0.45));
+  opacity: 0;
+  transition: opacity var(--gl-d-move) var(--gl-ease);
+}
+
+/* ── Body / header ───────────────────────────────────────────────────────── */
+.gls-hud-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.gls-hud-header { display: flex; flex-direction: column; gap: 1px; }
+.gls-hud-name {
+  font-weight: 700;
+  font-size: 1.04rem;
+  letter-spacing: 0.02em;
+  color: var(--gl-text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.gls-hud-meta { display: flex; gap: 8px; align-items: baseline; font-size: 0.72rem; min-width: 0; }
+.gls-hud-classlevel { color: var(--gls-accent); font-weight: 600; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+.gls-hud-race { color: var(--gl-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Vitals row ──────────────────────────────────────────────────────────── */
+.gls-hud-vitals { display: flex; align-items: center; gap: 10px; }
+.gls-hud-hp { flex: 1 1 auto; min-width: 0; }
+
+.gls-hud-hp-bar {
+  position: relative;
+  height: 14px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.gls-hud-hp-bar > div { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: inherit; }
+
+/* The ghost/lag bar sits behind the solid fill and reveals the delta. */
+.gls-hud-hp-ghost { z-index: 1; width: 0; }
+.gls-hud-hp-ghost.damage {
+  background: linear-gradient(180deg, #ff6b72, #c8121c);
+  box-shadow: 0 0 10px rgba(255, 74, 82, 0.6);
+  transition: width 720ms cubic-bezier(0.5, 0, 0.75, 0);
+}
+.gls-hud-hp-ghost.heal {
+  background: linear-gradient(180deg, #8effc0, #2bd47b);
+  box-shadow: 0 0 12px rgba(95, 219, 146, 0.7);
+  transition: width 120ms linear;
+}
+.gls-hud-hp-fill {
+  z-index: 2;
+  width: 0;
+  background: linear-gradient(180deg, #6fe6a0, #36b56e);
+  transition: width 560ms var(--gl-ease), background 420ms var(--gl-ease);
+}
+.gls-hud-hp-bar[data-band="mid"] .gls-hud-hp-fill { background: linear-gradient(180deg, #ffd76b, #e0a020); }
+.gls-hud-hp-bar[data-band="low"] .gls-hud-hp-fill { background: linear-gradient(180deg, #ff8f6b, #d8401f); }
+
+/* Temp HP overlays as a translucent cyan slab on the leading edge. */
+.gls-hud-hp-temp {
+  z-index: 3;
+  width: 0;
+  background: repeating-linear-gradient(135deg, rgba(94, 234, 255, 0.55) 0 5px, rgba(94, 234, 255, 0.28) 5px 10px);
+  transition: width 420ms var(--gl-ease);
+}
+
+.gls-hud-hp-text {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 3px;
+  font-family: var(--gl-tech);
+  font-size: 0.82rem;
+  line-height: 1;
+}
+.gls-hud-hp-value { font-weight: 700; color: var(--gl-text-bright); font-size: 1.12rem; font-variant-numeric: tabular-nums; }
+.gls-hud-hp-sep, .gls-hud-hp-max { color: var(--gl-text-dim); }
+.gls-hud-hp-temp-text { margin-left: 5px; color: var(--gl-cyan); font-weight: 700; }
+
+/* ── AC badge ────────────────────────────────────────────────────────────── */
+.gls-hud-ac {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--gl-edge);
+  perspective: 240px;
+}
+.gls-hud-ac i { color: var(--gl-text-dim); font-size: 0.8rem; }
+.gls-hud-ac-value {
+  font-family: var(--gl-tech);
+  font-weight: 700;
+  font-size: 1.06rem;
+  color: var(--gl-text-bright);
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+}
+.gls-hud-ac.flip .gls-hud-ac-value { animation: gls-hud-flip 540ms var(--gl-pop); }
+
+/* ── Class resource ──────────────────────────────────────────────────────── */
+.gls-hud-resource { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; }
+.gls-hud-resource-label { text-transform: uppercase; letter-spacing: 0.05em; color: var(--gl-text-dim); }
+.gls-hud-resource-pips { display: inline-flex; gap: 3px; }
+.gls-hud-pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--gl-edge);
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gls-hud-pip.filled {
+  background: radial-gradient(circle at 40% 35%, var(--gl-signal-hot), var(--gl-signal));
+  border-color: var(--gl-signal);
+  box-shadow: 0 0 7px var(--gl-signal);
+}
+.gls-hud-pip.just-filled { animation: gls-hud-pip-pop 480ms var(--gl-pop); }
+.gls-hud-resource-num { font-family: var(--gl-tech); font-weight: 700; color: var(--gl-text-bright); }
+.gls-hud-resource-max { color: var(--gl-text-dim); font-weight: 400; }
+
+/* ── Conditions ──────────────────────────────────────────────────────────── */
+.gls-hud-conditions { display: flex; flex-wrap: wrap; gap: 4px; }
+.gls-hud-condition {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--gl-edge);
+  background: rgba(0, 0, 0, 0.45);
+  animation: gls-hud-cond-in 360ms var(--gl-snap) backwards;
+  animation-delay: var(--stagger, 0ms);
+}
+.gls-hud-condition img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gls-hud-condition.removing { animation: gls-hud-cond-out 320ms var(--gl-exit) forwards; }
+
+/* ── Ability scores (optional) ───────────────────────────────────────────── */
+.gls-hud-abilities { display: flex; gap: 6px; flex-wrap: wrap; }
+.gls-hud-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 30px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--gl-hair);
+}
+.gls-hud-ability-label { font-size: 0.56rem; letter-spacing: 0.06em; color: var(--gl-text-dim); }
+.gls-hud-ability-score { font-family: var(--gl-tech); font-weight: 700; font-size: 0.86rem; color: var(--gl-text-bright); }
+.gls-hud-ability-mod { font-size: 0.6rem; color: var(--gls-accent); }
+
+/* ── Active turn emphasis ────────────────────────────────────────────────── */
+.gls-hud-card.is-turn {
+  --gls-accent: var(--gl-signal);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px var(--gl-signal),
+    0 0 22px color-mix(in srgb, var(--gl-signal) 55%, transparent);
+  transform: translateY(-4px) scale(1.03);
+}
+.gls-hud-card.is-turn::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  animation: gls-hud-turn-breathe var(--gl-breathe) ease-in-out infinite;
+}
+
+/* ── Downed / 0 HP ───────────────────────────────────────────────────────── */
+.gls-hud-card.is-down { filter: saturate(0.35) brightness(0.82); }
+.gls-hud-card.is-down .gls-hud-portrait img { filter: grayscale(0.85); }
+.gls-hud-card.is-down .gls-hud-down-veil { opacity: 1; }
+.gls-hud-card.is-down .gls-hud-name { color: var(--gl-hazard); }
+
+/* ── Delta flash on the card edge ────────────────────────────────────────── */
+.gls-hud-card.flash-damage { animation: gls-hud-flash-dmg 620ms var(--gl-ease); }
+.gls-hud-card.flash-heal { animation: gls-hud-flash-heal 620ms var(--gl-ease); }
+
+/* ── Enter / exit ────────────────────────────────────────────────────────── */
+.gls-hud-card.gls-hud-entering { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); }
+.gls-hud-card.gls-hud-exiting { animation: gls-hud-card-out 460ms var(--gl-exit) forwards; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Keyframes
+   ════════════════════════════════════════════════════════════════════════ */
+@keyframes gls-hud-flip {
+  0% { transform: rotateX(0); }
+  45% { transform: rotateX(90deg); color: var(--gls-accent); }
+  55% { transform: rotateX(-90deg); }
+  100% { transform: rotateX(0); }
+}
+@keyframes gls-hud-pip-pop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+@keyframes gls-hud-cond-in {
+  0% { opacity: 0; transform: translateY(-6px) scale(0.6); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes gls-hud-cond-out {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.5); }
+}
+@keyframes gls-hud-turn-breathe {
+  0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--gl-signal) 30%, transparent); }
+  50% { box-shadow: 0 0 30px color-mix(in srgb, var(--gl-signal) 65%, transparent); }
+}
+@keyframes gls-hud-flash-dmg {
+  0% { box-shadow: 0 14px 34px rgba(0,0,0,0.5), 0 0 0 2px var(--gl-hazard), 0 0 26px var(--gl-hazard); }
+  100% { box-shadow: 0 14px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06); }
+}
+@keyframes gls-hud-flash-heal {
+  0% { box-shadow: 0 14px 34px rgba(0,0,0,0.5), 0 0 0 2px var(--gl-good), 0 0 26px var(--gl-good); }
+  100% { box-shadow: 0 14px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06); }
+}
+@keyframes gls-hud-card-out {
+  0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(14px) scale(0.9); filter: blur(4px); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Reduced motion — collapse durations to near-zero (NOT `none`) so width/value
+   settles instantly while transitionend/animationend cleanup still fires.
+   ════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  #gls-hud-root,
+  .gls-hud-card,
+  .gls-hud-card.is-turn,
+  .gls-hud-hp-fill,
+  .gls-hud-hp-ghost.damage,
+  .gls-hud-hp-ghost.heal,
+  .gls-hud-hp-temp,
+  .gls-hud-pip,
+  .gls-hud-portrait img,
+  .gls-hud-down-veil {
+    transition-duration: 0.001ms !important;
+  }
+  .gls-hud-card.flash-damage,
+  .gls-hud-card.flash-heal,
+  .gls-hud-card.gls-hud-exiting,
+  .gls-hud-condition,
+  .gls-hud-condition.removing,
+  .gls-hud-ac.flip .gls-hud-ac-value,
+  .gls-hud-pip.just-filled {
+    animation-duration: 0.001ms !important;
+  }
+  .gls-hud-card.is-turn::after { animation: none; }
+  .gls-hud-card.is-turn { transform: none; }
+}

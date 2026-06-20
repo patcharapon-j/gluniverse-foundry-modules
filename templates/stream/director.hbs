@@ -29,6 +29,58 @@
 </section>
 
 <section class="gluniverse-stream-panel">
+  <h2>Party HUD</h2>
+  {{#unless hudAdapterReady}}
+  <p class="gluniverse-stream-form-hint"><small>The Party HUD has no data adapter for this system (<code>{{hudSystem}}</code>) yet, so it stays hidden. Supported now: D&amp;D 5e. PF2e is planned.</small></p>
+  {{/unless}}
+  <div class="form-group">
+    <label><input type="checkbox" name="hud.enabled" {{#if hud.enabled}}checked{{/if}}> Show Party HUD on the stream client</label>
+  </div>
+  <div class="gluniverse-stream-number-grid">
+    <label>Anchor <select name="hud.anchor">{{#each hudAnchorOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></label>
+    <label>Align <select name="hud.align">{{#each hudAlignOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></label>
+    <label>X offset px <input type="number" name="hud.offsetX" value="{{hud.offsetX}}" step="1"></label>
+    <label>Y offset px <input type="number" name="hud.offsetY" value="{{hud.offsetY}}" step="1"></label>
+    <label>Scale % <input type="number" name="hud.scale" value="{{hud.scale}}" step="5" min="50" max="200"></label>
+  </div>
+  <h3>Card Fields</h3>
+  <div class="gluniverse-stream-user-list">
+    <label><input type="checkbox" name="hud.showResource" {{#if hud.showResource}}checked{{/if}}> Class resource</label>
+    <label><input type="checkbox" name="hud.showConditions" {{#if hud.showConditions}}checked{{/if}}> Conditions</label>
+    <label><input type="checkbox" name="hud.showTempHp" {{#if hud.showTempHp}}checked{{/if}}> Temp HP</label>
+    <label><input type="checkbox" name="hud.showAbilities" {{#if hud.showAbilities}}checked{{/if}}> Ability scores</label>
+  </div>
+  <h3>Roster</h3>
+  <div class="gluniverse-stream-actions">
+    <button type="button" data-action="hud-roster-fill" title="Add every player's assigned character to the roster"><i class="fas fa-users"></i> Fill from players</button>
+  </div>
+  <table>
+    <tbody>
+      {{#each hudRoster}}
+      <tr>
+        <td style="width:2.2rem;"><img src="{{img}}" alt="" width="28" height="28" style="border-radius:4px;object-fit:cover;"></td>
+        <td>{{name}}{{#if missing}} <small>(missing)</small>{{/if}}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button type="button" data-action="hud-roster-move" data-actor-id="{{id}}" data-dir="up" {{#if first}}disabled{{/if}} title="Move up"><i class="fas fa-arrow-up"></i></button>
+          <button type="button" data-action="hud-roster-move" data-actor-id="{{id}}" data-dir="down" {{#if last}}disabled{{/if}} title="Move down"><i class="fas fa-arrow-down"></i></button>
+          <button type="button" data-action="hud-roster-remove" data-actor-id="{{id}}" title="Remove"><i class="fas fa-xmark"></i></button>
+        </td>
+      </tr>
+      {{/each}}
+      {{#unless hudRoster.length}}<tr><td colspan="3"><small>No characters in the roster yet — add some below.</small></td></tr>{{/unless}}
+    </tbody>
+  </table>
+  {{#if hudAddable.length}}
+  <h3>Add Character</h3>
+  <div class="gluniverse-stream-user-list">
+    {{#each hudAddable}}
+    <button type="button" data-action="hud-roster-add" data-actor-id="{{id}}" title="Add to Party HUD"><i class="fas fa-plus"></i> {{name}}</button>
+    {{/each}}
+  </div>
+  {{/if}}
+</section>
+
+<section class="gluniverse-stream-panel">
   <h2>Trusted Directors</h2>
   <div class="gluniverse-stream-user-list">
     {{#each users}}

@@ -3,8 +3,11 @@ import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_DIALOG_SETTINGS,
+  DEFAULT_HUD_SETTINGS,
   DEFAULT_UI_RULES,
   HOOK_NS,
+  HUD_ALIGNS,
+  HUD_ANCHORS,
   KEY,
   MODULE_ID
 } from "./constants.js";
@@ -17,7 +20,8 @@ const SETTINGS = {
   cameraSettings: { type: Object, default: DEFAULT_CAMERA_SETTINGS, config: false },
   chatSettings: { type: Object, default: DEFAULT_CHAT_SETTINGS, config: false },
   dialogSettings: { type: Object, default: DEFAULT_DIALOG_SETTINGS, config: false },
-  uiRules: { type: Object, default: DEFAULT_UI_RULES, config: false }
+  uiRules: { type: Object, default: DEFAULT_UI_RULES, config: false },
+  hudSettings: { type: Object, default: DEFAULT_HUD_SETTINGS, config: false }
 };
 
 export function registerSettings() {
@@ -71,6 +75,10 @@ export function getUiRules() {
   };
 }
 
+export function getHudSettings() {
+  return sanitizeHudSettings(getSetting("hudSettings"));
+}
+
 export function isConfiguredStreamUser(user = game.user) {
   return Boolean(user?.id && getSetting("streamUserId") === user.id);
 }
@@ -98,6 +106,8 @@ export function sanitizeSetting(key, value) {
       return sanitizeObject(value, DEFAULT_DIALOG_SETTINGS);
     case "uiRules":
       return sanitizeUiRules(value);
+    case "hudSettings":
+      return sanitizeHudSettings(value);
     case "streamUserId":
       return typeof value === "string" ? value : "";
     default:
@@ -141,6 +151,20 @@ function migrateCameraMode(mode) {
 
 function sanitizeObject(value, defaults) {
   return { ...defaults, ...((value && typeof value === "object") ? value : {}) };
+}
+
+function sanitizeHudSettings(value) {
+  const source = (value && typeof value === "object") ? value : {};
+  const merged = { ...DEFAULT_HUD_SETTINGS, ...source };
+  merged.enabled = Boolean(merged.enabled);
+  merged.anchor = HUD_ANCHORS.includes(merged.anchor) ? merged.anchor : DEFAULT_HUD_SETTINGS.anchor;
+  merged.align = HUD_ALIGNS.includes(merged.align) ? merged.align : DEFAULT_HUD_SETTINGS.align;
+  merged.offsetX = numberOrDefault(merged.offsetX, 0);
+  merged.offsetY = numberOrDefault(merged.offsetY, 0);
+  merged.scale = Math.min(200, Math.max(50, numberOrDefault(merged.scale, 100)));
+  merged.roster = Array.isArray(merged.roster) ? merged.roster.filter(id => typeof id === "string" && id) : [];
+  for (const flag of ["showResource", "showConditions", "showTempHp", "showAbilities"]) merged[flag] = Boolean(merged[flag]);
+  return merged;
 }
 
 function sanitizeUiRules(value) {
