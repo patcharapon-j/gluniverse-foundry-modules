@@ -216,6 +216,9 @@
   --gl-accent: var(--gl-cyan);
   animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
   overflow: hidden;
+  /* Keep each card at its natural height; the list scrolls instead of
+     squashing the cards (which would clip their settings) when space is tight. */
+  flex: 0 0 auto;
 }
 .gls-fm-section.is-on { --gl-accent: var(--gl-good); }
 .gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
