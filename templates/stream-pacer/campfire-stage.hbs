@@ -1,0 +1,17 @@
+<div class="cf-vignette" aria-hidden="true"></div>
+<div class="cf-glow" aria-hidden="true"></div>
+
+<div class="cf-embers" aria-hidden="true">
+  {{#each embers}}
+  <span class="cf-ember"
+        style="left:{{this.left}}%; --delay:{{this.delay}}s; --dur:{{this.dur}}s; --drift:{{this.drift}}px; --scale:{{this.scale}}"></span>
+  {{/each}}
+</div>
+
+<div class="cf-stack">
+  <div class="cf-tag">{{tag}}</div>
+  <div class="cf-icon" aria-hidden="true"><i class="fa-solid fa-fire"></i></div>
+  <div class="cf-title">{{title}}</div>
+  <div class="cf-rule" aria-hidden="true"></div>
+  <div class="cf-sub">{{subtitle}}</div>
+</div>

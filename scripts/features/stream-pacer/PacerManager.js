@@ -8,9 +8,16 @@ class PacerManagerClass {
     this._countdownEnd = null;
     this._countdownInterval = null;
     this._direPerilActive = false;
+    // Campfire Scene: a calm, GM-declared "relax and roleplay" interlude. Like
+    // Dire Peril it's a sticky boolean reveal, but it also carries an optional
+    // soft countdown (_campfireEnd = ms timestamp, or null for an open scene).
+    this._campfireActive = false;
+    this._campfireEnd = null;
+    this._campfireInterval = null;
     this._subscribers = new Set();
     this._handRaiseCallbacks = new Set();
     this._direPerilCallbacks = new Set();
+    this._campfireCallbacks = new Set();
     this._notifyPending = false;
 
     // Spotlight tracker: per-user { accrued: seconds, activeSince: ms|null }.
@@ -81,6 +88,27 @@ class PacerManagerClass {
     }
   }
 
+  /**
+   * Register a callback for Campfire Scene declare/dismiss events.
+   * @param {Function} callback - Called with ({ active, animate, end }) on change
+   * @returns {Function} Unsubscribe function
+   */
+  onCampfire(callback) {
+    this._campfireCallbacks.add(callback);
+    return () => this._campfireCallbacks.delete(callback);
+  }
+
+  _notifyCampfire(active, { animate = true } = {}) {
+    const end = this._campfireEnd;
+    for (const callback of this._campfireCallbacks) {
+      try {
+        callback({ active, animate, end });
+      } catch (e) {
+        console.error(`${MODULE_ID} | Campfire callback error:`, e);
+      }
+    }
+  }
+
   _notifySubscribers() {
     // Use requestAnimationFrame to batch updates and prevent UI freezing
     if (this._notifyPending) return;
@@ -112,7 +140,10 @@ class PacerManagerClass {
       countdownEnd: this._countdownEnd,
       countdownRemaining: this.getCountdownRemaining(),
       handRaisedCount,
-      direPerilActive: this._direPerilActive
+      direPerilActive: this._direPerilActive,
+      campfireActive: this._campfireActive,
+      campfireEnd: this._campfireEnd,
+      campfireRemaining: this.getCampfireRemaining()
     };
   }
 
@@ -139,6 +170,12 @@ class PacerManagerClass {
     if (!this._countdownEnd) return null;
     const remaining = Math.max(0, Math.ceil((this._countdownEnd - Date.now()) / 1000));
     return remaining;
+  }
+
+  /** Seconds left on the campfire timer, or null when the scene has no timer. */
+  getCampfireRemaining() {
+    if (!this._campfireEnd) return null;
+    return Math.max(0, Math.ceil((this._campfireEnd - Date.now()) / 1000));
   }
 
   // --- Player Actions ---
@@ -232,13 +269,17 @@ class PacerManagerClass {
     this._gmSignal = GM_SIGNAL.NONE;
     this._countdownEnd = null;
     this._direPerilActive = false;
+    this._campfireActive = false;
+    this._campfireEnd = null;
     this._clearCountdownInterval();
+    this._clearCampfireInterval();
 
     if (broadcast) {
       SocketHandler.emitResetAll();
     }
 
     this._notifyDirePeril(false);
+    this._notifyCampfire(false);
     this._notifySubscribers();
     this._saveToSettings();
   }
@@ -271,6 +312,70 @@ class PacerManagerClass {
     this._notifyDirePeril(false);
     this._notifySubscribers();
     this._saveToSettings();
+  }
+
+  // --- Campfire Scene ---
+
+  /**
+   * Declare a Campfire Scene. Optionally pass a duration in seconds to run a
+   * soft countdown; omit (or pass null/0) for an open-ended scene.
+   */
+  declareCampfire(durationSec = null, broadcast = true) {
+    if (!game.user.isGM && broadcast) return;
+    if (this._campfireActive) return; // already lit — ignore re-triggers
+
+    this._campfireActive = true;
+    this._campfireEnd = durationSec ? Date.now() + durationSec * 1000 : null;
+
+    this._clearCampfireInterval();
+    if (this._campfireEnd) {
+      this._campfireInterval = setInterval(() => this._tickCampfire(), 1000);
+    }
+
+    if (broadcast) {
+      SocketHandler.emitCampfireDeclare(this._campfireEnd);
+    }
+
+    this._notifyCampfire(true);
+    this._notifySubscribers();
+    this._saveToSettings();
+  }
+
+  dismissCampfire(broadcast = true) {
+    if (!game.user.isGM && broadcast) return;
+    if (!this._campfireActive) return;
+
+    this._campfireActive = false;
+    this._campfireEnd = null;
+    this._clearCampfireInterval();
+
+    if (broadcast) {
+      SocketHandler.emitCampfireDismiss();
+    }
+
+    this._notifyCampfire(false);
+    this._notifySubscribers();
+    this._saveToSettings();
+  }
+
+  // The campfire timer only needs to fire once, at expiry. Display ticking is
+  // owned by the overlay, so we deliberately avoid _notifySubscribers here to
+  // keep the GM HUD from re-rendering (and restarting its animations) each second.
+  _tickCampfire() {
+    const remaining = this.getCampfireRemaining();
+    if (remaining !== null && remaining <= 0) {
+      // GM owns the authoritative dismiss + broadcast; other clients clear their
+      // own interval and wait for the GM's socket message.
+      this._clearCampfireInterval();
+      if (game.user.isGM) this.dismissCampfire();
+    }
+  }
+
+  _clearCampfireInterval() {
+    if (this._campfireInterval) {
+      clearInterval(this._campfireInterval);
+      this._campfireInterval = null;
+    }
   }
 
   // --- Spotlight Tracker (GM-facing) ---
@@ -484,8 +589,12 @@ class PacerManagerClass {
     this._gmSignal = GM_SIGNAL.NONE;
     this._countdownEnd = null;
     this._direPerilActive = false;
+    this._campfireActive = false;
+    this._campfireEnd = null;
     this._clearCountdownInterval();
+    this._clearCampfireInterval();
     this._notifyDirePeril(false);
+    this._notifyCampfire(false);
     this._notifySubscribers();
   }
 
@@ -509,19 +618,57 @@ class PacerManagerClass {
     }
   }
 
+  receiveCampfireDeclare(campfireEnd) {
+    if (this._campfireActive) return;
+    this._campfireActive = true;
+    this._campfireEnd = campfireEnd || null;
+
+    this._clearCampfireInterval();
+    if (this._campfireEnd) {
+      this._campfireInterval = setInterval(() => this._tickCampfire(), 1000);
+    }
+
+    this._notifyCampfire(true);
+    this._notifySubscribers();
+    if (game.user.isGM) {
+      this._saveToSettings();
+    }
+  }
+
+  receiveCampfireDismiss() {
+    if (!this._campfireActive) return;
+    this._campfireActive = false;
+    this._campfireEnd = null;
+    this._clearCampfireInterval();
+    this._notifyCampfire(false);
+    this._notifySubscribers();
+    if (game.user.isGM) {
+      this._saveToSettings();
+    }
+  }
+
   receiveSyncState(state) {
     this._playerStates = state.playerStates || {};
     this._gmSignal = state.gmSignal || GM_SIGNAL.NONE;
     this._countdownEnd = state.countdownEnd || null;
     this._direPerilActive = state.direPerilActive === true;
+    this._campfireActive = state.campfireActive === true;
+    this._campfireEnd = state.campfireEnd || null;
 
     this._clearCountdownInterval();
     if (this._gmSignal === GM_SIGNAL.COUNTDOWN && this._countdownEnd) {
       this._countdownInterval = setInterval(() => this._tickCountdown(), 1000);
     }
 
-    // Late-join: surface peril state to the overlay without replaying the animation.
+    this._clearCampfireInterval();
+    if (this._campfireActive && this._campfireEnd) {
+      this._campfireInterval = setInterval(() => this._tickCampfire(), 1000);
+    }
+
+    // Late-join: surface peril + campfire state to the overlays without replaying
+    // the reveal animation.
     this._notifyDirePeril(this._direPerilActive, { animate: false });
+    this._notifyCampfire(this._campfireActive, { animate: false });
     this._notifySubscribers();
   }
 
@@ -556,6 +703,8 @@ class PacerManagerClass {
         this._gmSignal = saved.gmSignal || GM_SIGNAL.NONE;
         this._countdownEnd = saved.countdownEnd || null;
         this._direPerilActive = saved.direPerilActive === true;
+        this._campfireActive = saved.campfireActive === true;
+        this._campfireEnd = saved.campfireEnd || null;
 
         // Restart countdown interval if needed
         if (this._gmSignal === GM_SIGNAL.COUNTDOWN && this._countdownEnd) {
@@ -565,6 +714,16 @@ class PacerManagerClass {
             // Countdown expired while offline
             this._gmSignal = GM_SIGNAL.NONE;
             this._countdownEnd = null;
+          }
+        }
+
+        // Restart the campfire timer, or close a scene whose timer lapsed offline.
+        if (this._campfireActive && this._campfireEnd) {
+          if (this._campfireEnd > Date.now()) {
+            this._campfireInterval = setInterval(() => this._tickCampfire(), 1000);
+          } else {
+            this._campfireActive = false;
+            this._campfireEnd = null;
           }
         }
       }
@@ -585,7 +744,9 @@ class PacerManagerClass {
         playerStates: this._playerStates,
         gmSignal: this._gmSignal,
         countdownEnd: this._countdownEnd,
-        direPerilActive: this._direPerilActive
+        direPerilActive: this._direPerilActive,
+        campfireActive: this._campfireActive,
+        campfireEnd: this._campfireEnd
       });
     }, 300);
   }

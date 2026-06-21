@@ -1,0 +1,21 @@
+<div class="stream-pacer-campfire-indicator">
+  <div class="campfire-ind-icon">
+    <i class="fa-solid fa-fire"></i>
+  </div>
+  <div class="campfire-ind-stack">
+    <div class="campfire-ind-header">{{header}}</div>
+    <div class="campfire-ind-main">{{label}}</div>
+  </div>
+  {{#if hasTimer}}
+  <div class="campfire-ind-timer-wrap">
+    <i class="fa-solid fa-hourglass-half"></i>
+    <span class="campfire-ind-timer">{{timer}}</span>
+  </div>
+  {{/if}}
+  {{#if isGM}}
+  <button type="button" class="campfire-ind-dismiss" data-action="dismiss-campfire"
+          title="{{dismissTooltip}}">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
+  {{/if}}
+</div>
