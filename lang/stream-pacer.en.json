@@ -68,10 +68,8 @@
 
     "Campfire": {
       "Tooltip": "Light a Campfire Scene — invite the table to relax and roleplay",
-      "Tag": "// GATHER ROUND //",
       "Title": "Campfire Scene",
       "Subtitle": "Relax, roleplay, and explore your characters",
-      "IndicatorHeader": "// SCENE ACTIVE",
       "Dismiss": "End Campfire Scene",
       "DialogTitle": "Light a Campfire Scene",
       "DialogHint": "Signal the table to slow down and roleplay. Leave the timer at 0 for an open-ended scene.",
