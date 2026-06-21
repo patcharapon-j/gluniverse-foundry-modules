@@ -15,6 +15,7 @@ import { PacerOverlay } from './PacerOverlay.js';
 import { AudioManager } from './AudioManager.js';
 import { HandRaiseSidebar } from './HandRaiseSidebar.js';
 import { PerilOverlay } from './PerilOverlay.js';
+import { CampfireOverlay } from './CampfireOverlay.js';
 import { ThemeManager } from './ThemeManager.js';
 
 export { registerSettings };
@@ -39,6 +40,7 @@ let pacerOverlay = null;
 let audioManager = null;
 let handRaiseSidebar = null;
 let perilOverlay = null;
+let campfireOverlay = null;
 let isReady = false;
 let isFirstCanvas = true;
 
@@ -97,6 +99,11 @@ export function onReady() {
     // Initialize overlay for signals
     pacerOverlay = new PacerOverlay();
     pacerOverlay.initialize();
+
+    // Campfire Scene reveal + indicator. Shares the general-bars exemption: a
+    // streaming overlay hidden from the pacer UI also stays clear of this splash.
+    campfireOverlay = new CampfireOverlay();
+    campfireOverlay.initialize();
   }
 
   // The Dire Peril splash is gated by its own exemption list
@@ -129,11 +136,17 @@ export function onReady() {
     audio: audioManager,
     handSidebar: handRaiseSidebar,
     peril: perilOverlay,
+    campfire: campfireOverlay,
     theme: ThemeManager
   };
 
   // Late-join: if peril is already active, show the indicator only (no replay).
   if (!isPerilExempt && PacerManager.getState().direPerilActive) {
     perilOverlay.showIndicatorOnly();
+  }
+
+  // Late-join: same for an in-progress Campfire Scene.
+  if (!isExempt && PacerManager.getState().campfireActive) {
+    campfireOverlay.showIndicatorOnly();
   }
 }

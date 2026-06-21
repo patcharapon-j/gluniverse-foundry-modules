@@ -96,6 +96,12 @@
               title="{{localize 'STREAM_PACER.DirePerilTooltip'}}">
         <i class="fa-solid fa-skull"></i>
       </button>
+      <button type="button" class="gm-btn campfire-btn {{#if campfireActive}}active{{/if}}"
+              data-action="declare-campfire"
+              {{#if campfireActive}}disabled{{/if}}
+              title="{{localize 'STREAM_PACER.Campfire.Tooltip'}}">
+        <i class="fa-solid fa-fire"></i>
+      </button>
       {{#if hasActiveSignal}}
       <button type="button" class="gm-btn cancel-btn"
               data-action="cancel-signal"

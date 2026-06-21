@@ -121,6 +121,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       countdownUrgency,
       handRaisedCount: state.handRaisedCount,
       direPerilActive: state.direPerilActive,
+      campfireActive: state.campfireActive,
       PLAYER_STATUS,
       GM_SIGNAL
     };
@@ -230,6 +231,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     return [
       state.gmSignal,
       state.direPerilActive,
+      state.campfireActive,
       state.handRaisedCount,
       PacerManager.getPlayerStatus(game.user.id),
       playerSig,
@@ -353,6 +355,9 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         case 'declare-peril':
           if (game.user.isGM) PacerManager.declareDirePeril();
           break;
+        case 'declare-campfire':
+          if (game.user.isGM) this._showCampfireDialog();
+          break;
         case 'spotlight-toggle': {
           if (!game.user.isGM) break;
           const userId = target.dataset.userId;
@@ -403,6 +408,54 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
           icon: 'fas fa-play',
           default: true,
           callback: (_event, _button, dialog) => start(readMinutes(dialog.element))
+        },
+        {
+          action: 'cancel',
+          label: game.i18n.localize('STREAM_PACER.Cancel'),
+          icon: 'fas fa-times'
+        }
+      ],
+      rejectClose: false
+    });
+  }
+
+  // Light a Campfire Scene, optionally with a soft timer. A blank/zero duration
+  // declares an open-ended scene the GM closes by hand.
+  async _showCampfireDialog() {
+    const content = `
+      <form>
+        <p class="notes">${game.i18n.localize('STREAM_PACER.Campfire.DialogHint')}</p>
+        <div class="form-group">
+          <label>${game.i18n.localize('STREAM_PACER.Campfire.TimerLabel')}</label>
+          <div class="form-fields">
+            <input type="number" name="minutes" value="0" min="0" style="width: 60px">
+            <span>${game.i18n.localize('STREAM_PACER.Minutes')}</span>
+          </div>
+        </div>
+      </form>
+    `;
+
+    const readMinutes = (root) => {
+      const input = root?.querySelector?.('[name="minutes"]');
+      const n = parseInt(input?.value);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    };
+
+    const light = (minutes) => {
+      const seconds = minutes > 0 ? minutes * 60 : null;
+      PacerManager.declareCampfire(seconds);
+    };
+
+    await foundry.applications.api.DialogV2.wait({
+      window: { title: game.i18n.localize('STREAM_PACER.Campfire.DialogTitle') },
+      content,
+      buttons: [
+        {
+          action: 'light',
+          label: game.i18n.localize('STREAM_PACER.Campfire.LightButton'),
+          icon: 'fas fa-fire',
+          default: true,
+          callback: (_event, _button, dialog) => light(readMinutes(dialog.element))
         },
         {
           action: 'cancel',

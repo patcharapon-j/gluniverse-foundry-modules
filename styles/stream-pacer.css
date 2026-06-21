@@ -62,6 +62,14 @@
   --sp-peril-red: #ff1030;
   --sp-peril-red-glow: rgba(255, 20, 50, 0.6);
   --sp-peril-ghost: rgba(120, 220, 255, 0.35);
+
+  /* Campfire Scene — warm hearth amber/ember, the calm foil to Dire Peril */
+  --sp-campfire: #ff9a3c;
+  --sp-campfire-deep: #2a1405;
+  --sp-campfire-bright: #ffd9a0;
+  --sp-campfire-ember: #ff6a2c;
+  --sp-campfire-glow: rgba(255, 140, 50, 0.55);
+  --sp-campfire-ember-glow: rgba(255, 90, 30, 0.6);
 }
 
 /* ========================================
@@ -1085,6 +1093,26 @@
   cursor: default;
 }
 
+/* Campfire button — warm hearth foil to the Dire Peril button */
+#stream-pacer-container .gm-btn.campfire-btn {
+  border-color: color-mix(in srgb, var(--sp-campfire) 50%, transparent);
+  color: var(--sp-campfire-bright);
+}
+
+#stream-pacer-container .gm-btn.campfire-btn:hover:not(.disabled):not([disabled]),
+#stream-pacer-container .gm-btn.campfire-btn.active {
+  color: #fff;
+  border-color: var(--sp-campfire);
+  background: linear-gradient(180deg, rgba(255, 140, 50, 0.22), rgba(255, 140, 50, 0.06));
+  box-shadow:
+    0 0 12px var(--sp-campfire-glow),
+    inset 0 0 8px var(--sp-campfire-ember-glow);
+}
+
+#stream-pacer-container .gm-btn.campfire-btn[disabled] {
+  cursor: default;
+}
+
 /* ========================================
    Dire Peril — Full-Screen Stage
    Plays once (4200ms) then hands off to the corner indicator.
@@ -1697,6 +1725,199 @@
 }
 
 /* ========================================
+   Campfire Scene — Prominent Bottom Bar
+   A warm, flame-pulsing banner pinned to the bottom edge. Replaces the calmer
+   full-screen reveal: it stays put for the whole scene and carries the optional
+   countdown. Show/hide is class + timer driven (not animationend), so
+   reduced-motion can safely kill the animations outright.
+   ======================================== */
+
+.stream-pacer-campfire-bar-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 96;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+
+.stream-pacer-campfire-bar-wrap .stream-pacer-campfire-bar {
+  transform: translateY(112%);
+  opacity: 0;
+  transition: transform 0.5s var(--gl-snap, cubic-bezier(0.2, 1.35, 0.22, 1)), opacity 0.4s ease-out;
+}
+
+.stream-pacer-campfire-bar-wrap.visible .stream-pacer-campfire-bar {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.stream-pacer-campfire-bar {
+  position: relative;
+  width: 100%;
+  min-height: 58px;
+  padding: 11px 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  overflow: visible;
+
+  background:
+    radial-gradient(120% 180% at 50% 130%, rgba(255, 140, 50, 0.22), transparent 60%),
+    linear-gradient(180deg, rgba(62, 30, 9, 0.93), rgba(26, 12, 4, 0.98));
+  border-top: 2px solid var(--sp-campfire-ember);
+  box-shadow:
+    0 -6px 26px var(--sp-campfire-glow),
+    inset 0 1px 0 rgba(255, 205, 150, 0.25);
+  animation: sp-campfire-bar-pulse 2.6s ease-in-out infinite;
+}
+
+/* Faint scanlines, matching the module's tech-glass texture. */
+.stream-pacer-campfire-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(255, 255, 255, 0.02) 2px 3px);
+}
+
+/* Flame tongues licking up off the top edge. A warm gradient masked into
+   vertical tongues, flickering in brightness + height to read as fire. */
+.stream-pacer-campfire-bar .cf-bar-flames {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -14px;
+  height: 18px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--sp-campfire) 55%, var(--sp-campfire-ember));
+  -webkit-mask-image: repeating-linear-gradient(90deg, transparent 0 5px, #000 9px, transparent 13px 19px);
+          mask-image: repeating-linear-gradient(90deg, transparent 0 5px, #000 9px, transparent 13px 19px);
+  filter: blur(2px);
+  transform-origin: bottom;
+  opacity: 0.9;
+  animation: sp-campfire-flames 0.85s ease-in-out infinite alternate;
+}
+
+@keyframes sp-campfire-flames {
+  0% { opacity: 0.55; transform: scaleY(0.78) translateX(0); }
+  50% { opacity: 0.95; transform: scaleY(1.18) translateX(3px); }
+  100% { opacity: 0.7; transform: scaleY(0.95) translateX(-3px); }
+}
+
+.stream-pacer-campfire-bar .cf-bar-icon {
+  font-size: 22px;
+  color: var(--sp-campfire-bright);
+  text-shadow: 0 0 12px var(--sp-campfire-glow), 0 0 26px var(--sp-campfire-ember-glow);
+  animation: cf-flicker 1.6s ease-in-out infinite;
+}
+
+.stream-pacer-campfire-bar .cf-bar-title {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 14px var(--sp-campfire-glow), 0 2px 6px #000;
+}
+
+.stream-pacer-campfire-bar .cf-bar-sep {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  transform: rotate(45deg);
+  background: var(--sp-campfire-ember);
+  box-shadow: 0 0 8px var(--sp-campfire-ember-glow);
+}
+
+.stream-pacer-campfire-bar .cf-bar-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--sp-campfire-bright);
+  opacity: 0.92;
+}
+
+.stream-pacer-campfire-bar .cf-bar-timer-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 6px;
+  padding: 4px 12px;
+  color: var(--sp-campfire-bright);
+  border: 1px solid color-mix(in srgb, var(--sp-campfire) 45%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  background: rgba(255, 140, 50, 0.08);
+}
+
+.stream-pacer-campfire-bar .cf-bar-timer-wrap i {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.stream-pacer-campfire-bar .cf-bar-timer {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1.5px;
+}
+
+/* Final stretch — push the timer chip toward the hot ember tone. */
+.stream-pacer-campfire-bar.is-ending .cf-bar-timer-wrap {
+  border-color: var(--sp-campfire-ember);
+  color: #fff;
+  background: rgba(255, 90, 30, 0.2);
+  animation: sp-campfire-timer-warn 1s ease-in-out infinite;
+}
+
+@keyframes sp-campfire-timer-warn {
+  0%, 100% { box-shadow: 0 0 0 transparent; }
+  50% { box-shadow: 0 0 14px var(--sp-campfire-ember-glow); }
+}
+
+.stream-pacer-campfire-bar .cf-bar-dismiss {
+  margin-left: 8px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--sp-campfire) 32%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.stream-pacer-campfire-bar .cf-bar-dismiss:hover {
+  color: #fff;
+  border-color: var(--sp-campfire);
+  background: rgba(255, 140, 50, 0.14);
+}
+
+@keyframes sp-campfire-bar-pulse {
+  0%, 100% {
+    box-shadow: 0 -6px 22px var(--sp-campfire-glow), inset 0 1px 0 rgba(255, 205, 150, 0.22);
+    border-top-color: var(--sp-campfire);
+  }
+  50% {
+    box-shadow: 0 -9px 40px var(--sp-campfire-ember-glow), inset 0 1px 0 rgba(255, 220, 170, 0.36);
+    border-top-color: var(--sp-campfire-ember);
+  }
+}
+
+
+/* ========================================
    Reduced motion — disable animations for users who prefer it
    ======================================== */
 
@@ -1710,7 +1931,9 @@
   .stream-pacer-peril-stage,
   .stream-pacer-peril-stage *,
   .stream-pacer-peril-indicator,
-  .stream-pacer-peril-indicator * {
+  .stream-pacer-peril-indicator *,
+  .stream-pacer-campfire-bar,
+  .stream-pacer-campfire-bar * {
     animation: none !important;
     transition: none !important;
   }

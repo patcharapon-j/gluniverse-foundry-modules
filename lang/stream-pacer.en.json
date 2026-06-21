@@ -66,6 +66,17 @@
     "DirePerilColumnLeft": "HAZARD / LETHAL / ENGAGED",
     "DirePerilColumnRight": "THREAT / RISK / ALERT",
 
+    "Campfire": {
+      "Tooltip": "Light a Campfire Scene — invite the table to relax and roleplay",
+      "Title": "Campfire Scene",
+      "Subtitle": "Relax, roleplay, and explore your characters",
+      "Dismiss": "End Campfire Scene",
+      "DialogTitle": "Light a Campfire Scene",
+      "DialogHint": "Signal the table to slow down and roleplay. Leave the timer at 0 for an open-ended scene.",
+      "TimerLabel": "Optional Timer",
+      "LightButton": "Light Campfire"
+    },
+
     "Spotlight": {
       "Title": "Spotlight",
       "ToggleTooltip": "Toggle this player in or out of the spotlight",

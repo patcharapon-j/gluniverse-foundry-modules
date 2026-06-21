@@ -14,6 +14,8 @@ const EVENTS = {
   RESET_ALL: 'resetAll',
   DIRE_PERIL_DECLARE: 'direPerilDeclare',
   DIRE_PERIL_DISMISS: 'direPerilDismiss',
+  CAMPFIRE_DECLARE: 'campfireDeclare',
+  CAMPFIRE_DISMISS: 'campfireDismiss',
   SPOTLIGHT_UPDATE: 'spotlightUpdate',
   SPOTLIGHT_RESET: 'spotlightReset'
 };
@@ -120,6 +122,16 @@ class SocketHandlerClass {
         PacerManager.receiveDirePerilDismiss();
         break;
 
+      case EVENTS.CAMPFIRE_DECLARE:
+        if (!senderIsGM) break;
+        PacerManager.receiveCampfireDeclare(payload.campfireEnd);
+        break;
+
+      case EVENTS.CAMPFIRE_DISMISS:
+        if (!senderIsGM) break;
+        PacerManager.receiveCampfireDismiss();
+        break;
+
       case EVENTS.SPOTLIGHT_UPDATE:
         if (!senderIsGM) break;
         PacerManager.receiveSpotlightUpdate(payload.userId, payload.accrued, payload.activeSince);
@@ -174,7 +186,9 @@ class SocketHandlerClass {
         playerStates: state.playerStates,
         gmSignal: state.gmSignal,
         countdownEnd: state.countdownEnd,
-        direPerilActive: state.direPerilActive
+        direPerilActive: state.direPerilActive,
+        campfireActive: state.campfireActive,
+        campfireEnd: state.campfireEnd
       }
     });
   }
@@ -189,6 +203,14 @@ class SocketHandlerClass {
 
   emitDirePerilDismiss() {
     this._emit(EVENTS.DIRE_PERIL_DISMISS);
+  }
+
+  emitCampfireDeclare(campfireEnd) {
+    this._emit(EVENTS.CAMPFIRE_DECLARE, { campfireEnd });
+  }
+
+  emitCampfireDismiss() {
+    this._emit(EVENTS.CAMPFIRE_DISMISS);
   }
 
   emitSpotlightUpdate(userId, accrued, activeSince) {

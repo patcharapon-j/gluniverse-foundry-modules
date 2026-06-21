@@ -1,0 +1,19 @@
+<div class="stream-pacer-campfire-bar{{#if hasTimer}} has-timer{{/if}}">
+  <div class="cf-bar-flames" aria-hidden="true"></div>
+  <span class="cf-bar-icon" aria-hidden="true"><i class="fa-solid fa-fire"></i></span>
+  <span class="cf-bar-title">{{title}}</span>
+  <span class="cf-bar-sep" aria-hidden="true"></span>
+  <span class="cf-bar-sub">{{subtitle}}</span>
+  {{#if hasTimer}}
+  <span class="cf-bar-timer-wrap">
+    <i class="fa-solid fa-hourglass-half"></i>
+    <span class="cf-bar-timer">{{timer}}</span>
+  </span>
+  {{/if}}
+  {{#if isGM}}
+  <button type="button" class="cf-bar-dismiss" data-action="dismiss-campfire"
+          title="{{dismissTooltip}}">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
+  {{/if}}
+</div>
