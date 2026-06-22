@@ -1769,13 +1769,47 @@
   overflow: visible;
 
   background:
-    radial-gradient(120% 180% at 50% 130%, rgba(255, 140, 50, 0.22), transparent 60%),
-    linear-gradient(180deg, rgba(62, 30, 9, 0.93), rgba(26, 12, 4, 0.98));
+    radial-gradient(140% 200% at 50% 142%, rgba(255, 150, 60, 0.28), transparent 62%),
+    linear-gradient(180deg, rgba(46, 22, 7, 0.9) 0%, rgba(20, 9, 3, 0.985) 100%);
+  -webkit-backdrop-filter: blur(3px) saturate(1.12);
+          backdrop-filter: blur(3px) saturate(1.12);
   border-top: 2px solid var(--sp-campfire-ember);
   box-shadow:
     0 -6px 26px var(--sp-campfire-glow),
-    inset 0 1px 0 rgba(255, 205, 150, 0.25);
+    inset 0 1px 0 rgba(255, 205, 150, 0.25),
+    inset 0 -24px 40px -24px rgba(255, 120, 40, 0.4);
   animation: sp-campfire-bar-pulse 2.6s ease-in-out infinite;
+}
+
+/* Keep the bar's text + controls above the WebGL fire canvas. */
+.stream-pacer-campfire-bar > span,
+.stream-pacer-campfire-bar > button {
+  position: relative;
+  z-index: 1;
+}
+
+/* Premium WebGL fire — sits behind the text, overhanging above the top edge so
+   flames lick up off the bar. Rides the bar's slide-in via the parent. */
+.stream-pacer-campfire-bar .stream-pacer-campfire-webgl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -150px;
+  bottom: 0;
+  width: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+}
+
+.stream-pacer-campfire-bar .stream-pacer-campfire-webgl.visible {
+  opacity: 1;
+}
+
+/* When the WebGL fire is live, retire the cheap CSS fallback flames. */
+.stream-pacer-campfire-bar.webgl-active .cf-bar-flames {
+  display: none;
 }
 
 /* Faint scanlines, matching the module's tech-glass texture. */
@@ -1938,8 +1972,9 @@
     transition: none !important;
   }
 
-  /* WebGL field never renders under reduced motion. */
-  .stream-pacer-peril-webgl {
+  /* WebGL fields never render under reduced motion. */
+  .stream-pacer-peril-webgl,
+  .stream-pacer-campfire-webgl {
     display: none !important;
   }
 }
