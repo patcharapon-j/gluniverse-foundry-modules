@@ -51,16 +51,6 @@
   box-shadow:0 0 0 4px var(--glowsoft)}
 #glct-hud :is(button,[role="button"]):focus:not(:focus-visible){outline:none}
 
-/* ---- reduced motion: drop the decorative/looping animation and snap the
-   tactile transitions. Functional state still updates (the clock/pips/dial
-   reach their target value), just without the travel. Mirrors how the weather
-   diorama already renders a single static frame under this preference. */
-@media (prefers-reduced-motion: reduce){
-  #glct-hud *,#glct-hud *::before,#glct-hud *::after{
-    animation-duration:.001ms!important;animation-iteration-count:1!important;
-    transition-duration:.001ms!important}
-}
-
 /* ========== BAR: stacked rows for player/GM consistency ========== */
 /* Etched Glass chamfer: three soft corners + one 14px diagonal cut top-right
    (the family signature, docs/design-language.md §4.1). clip-path would clip
@@ -895,8 +885,7 @@
      3. graphic indicators (meter / rings / dial / moon) blurred into static.
    JS pins the cold "lost-signal" palette and parks the weather/delving
    dioramas. On-brand "Decode text" gesture (design-language §6.2), turned
-   hostile. Survives prefers-reduced-motion: the scramble freezes (still
-   illegible — real text is transparent) and the CSS animations clamp. */
+   hostile. */
 
 /* the glass turns cold: a colder cast, no warm shift bloom */
 #glct-hud .hud-root.glitched .bar{

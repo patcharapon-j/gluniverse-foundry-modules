@@ -1341,11 +1341,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       // delving dioramas (CSS hides them too) so only the distortion shows.
       this._wx?.pause(); this._dx?.pause();
       this._corrupt();   // scramble once immediately
-      // Re-scramble at 1 Hz — a slow, deliberate churn, not a strobe. Under
-      // reduced-motion we set it once and leave it static (the readout is still
-      // illegible — the real text is transparent and the scramble is frozen).
-      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-      if (!reduce) this._glitchT = setInterval(() => { if (this.rendered) this._corrupt(); }, 1000);
+      // Re-scramble at 1 Hz — a slow, deliberate churn, not a strobe.
+      this._glitchT = setInterval(() => { if (this.rendered) this._corrupt(); }, 1000);
     } else if (was) {
       // lifting the distortion — drop the scramble attrs, repaint the truth, wake dioramas.
       this.element.querySelectorAll("[data-glitch]").forEach(el => { delete el.dataset.glitch; });

@@ -3267,58 +3267,6 @@
   }
 }
 
-/* ─── Reduced Motion ────────────────────────────────────────────────── */
-/* Decorative loops are disabled (not slowed); ceremonies collapse to
-   straight fades; functional transitions stay ≤120ms (§6.4, §8). */
-@media (prefers-reduced-motion: reduce) {
-  .glucargo-fab,
-  .glucargo-fab::before,
-  .glucargo-window,
-  .glucargo-minimap,
-  .glucargo-brand > i,
-  .glucargo-window button,
-  .glucargo-grid,
-  .glucargo-preview-cell,
-  .glucargo-manifest-card > button,
-  .glucargo-floor-item > button,
-  .glucargo-tile-cell,
-  .glucargo-tile-cell.is-selected,
-  .glucargo-tile-cell.priority-critical,
-  .glucargo-tile-emblem.is-hold-arming::after,
-  .glucargo-container-card,
-  .glucargo-container-card::before,
-  .glucargo-meter span,
-  .glucargo-chat-report,
-  .glucargo-chat-report__head > span,
-  .glucargo-chat-report__cargo,
-  .glucargo-detail,
-  .glucargo-preview-cell.is-valid::before,
-  .glucargo-preview-cell.is-invalid {
-    animation: none !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  /* Keep entrances visible (a 1-step fade) rather than re-triggering motion. */
-  .glucargo-chat-report,
-  .glucargo-detail {
-    opacity: 1 !important;
-    transform: none !important;
-  }
-
-  .glucargo-titlebar::after,
-  .glucargo-titlebar::before {
-    animation: none;
-  }
-
-  .glucargo-titlebar::after {
-    display: none;
-  }
-
-  .glucargo-tile-emblem.is-hold-arming::after {
-    transform: scaleY(1);
-  }
-}
-
 /* ─── Responsive ────────────────────────────────────────────────────── */
 @media (max-width: 1080px) {
   .glucargo-titlebar__actions {

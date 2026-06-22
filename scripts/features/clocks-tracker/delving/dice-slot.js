@@ -15,8 +15,8 @@
  * The card already contains the baked static result spans (with the discarded
  * dice pre-marked); they're hidden under `.dx-tumbling` while the reels play and
  * revealed as the overlay fades, so scrollback / re-renders just show the result.
- * Reduced-motion / a build failure makes `mount` return null and the caller both
- * skips the animation and settles the HUD immediately.
+ * A build failure makes `mount` return null and the caller both skips the
+ * animation and settles the HUD immediately.
  */
 
 const CAP = 24;            // max reels spun; any extras live in the static spans
@@ -35,12 +35,11 @@ const hexCss = s => (/^#?[0-9a-f]{6}$/i.test(String(s ?? "")) ? (String(s)[0] ==
 export class DiceSlot {
   /**
    * Spin a slot-machine roll over a `.glct-cc-dice` host. Returns the instance,
-   * or null when it can't run (reduced motion / no faces / failure) — the caller
-   * then settles the HUD itself. `onSettle` fires once the whole sequence ends.
+   * or null when it can't run (no faces / failure) — the caller then settles the
+   * HUD itself. `onSettle` fires once the whole sequence ends.
    */
   static mount(host, { faces = [], size = 6, discard = 0, tint = "#ff9a3c" } = {}, onSettle = null) {
     if (!host || host.dataset.tumbled || !faces.length) return null;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return null;
     host.dataset.tumbled = "1";
     try { return new DiceSlot(host, { faces, size, discard, tint }, onSettle); }
     catch (err) {

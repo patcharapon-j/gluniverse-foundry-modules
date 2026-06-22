@@ -373,14 +373,6 @@ function getConditionBadgeLayout() {
   }
 }
 
-export function prefersReducedMotion() {
-  try {
-    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  } catch {
-    return false;
-  }
-}
-
 // WebGL renderer for the guard-break splash: a procedural glass-crack + shatter
 // shockwave drawn additively over the existing CSS deck. It is purely
 // decorative and self-contained — if a GL context can't be created the splash
@@ -1380,7 +1372,7 @@ class GLUniverseInitiativeOverlay {
     ].filter(Boolean).join(" ");
     const markup = this.renderMarkup(combat, view, settings);
     const markupChanged = markup !== this.lastMarkup;
-    const shouldAnimateTurnChange = isTurnChange && markupChanged && !prefersReducedMotion();
+    const shouldAnimateTurnChange = isTurnChange && markupChanged;
     const oldRects = shouldAnimateTurnChange ? this.captureItemRects() : new Map();
     // Card mode collect/deal beats fly clones of the outgoing cards into (and new
     // cards out of) the deck stub, so snapshot the rail's current look + geometry
@@ -2233,8 +2225,7 @@ class GLUniverseInitiativeOverlay {
   // fly into the deck stub (collect), while the freshly-dealt cards play their
   // CSS deal-in keyframe. Because the ghosts are throwaway clones and the deal-in
   // rides the existing enter animation, none of this fights the FLIP reflow that
-  // moves the cards that simply shifted position. All of it is gated behind
-  // !prefersReducedMotion() by the caller (the snapshot is only taken then).
+  // moves the cards that simply shifted position.
 
   snapshotRailCards() {
     if (!this.root) return null;
@@ -3370,24 +3361,19 @@ class GLUniverseInitiativeOverlay {
     document.body.appendChild(splash);
 
     // WebGL glass-crack + shockwave layer. Decorative and additive over the CSS
-    // deck — skipped only when the user's OS prefers reduced motion. Uses the
-    // shared pre-compiled renderer, so no per-break shader compilation.
+    // deck. Uses the shared pre-compiled renderer, so no per-break shader compilation.
     let breakGL = null;
-    if (!prefersReducedMotion()) {
-      const renderer = getBreakSplashRenderer();
-      if (renderer?.play(splash, { lifeMs: this.getBreakGLLife() })) {
-        breakGL = renderer;
-      }
+    const renderer = getBreakSplashRenderer();
+    if (renderer?.play(splash, { lifeMs: this.getBreakGLLife() })) {
+      breakGL = renderer;
     }
 
     window.requestAnimationFrame(() => splash.classList.add("gluni-break-splash--show"));
     // Short screen-shake on impact.
-    if (!prefersReducedMotion()) {
-      window.requestAnimationFrame(() => {
-        splash.classList.add("gluni-break-splash--shake");
-        window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), 520);
-      });
-    }
+    window.requestAnimationFrame(() => {
+      splash.classList.add("gluni-break-splash--shake");
+      window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), 520);
+    });
     window.setTimeout(() => splash.classList.add("gluni-break-splash--leave"), this.getBreakSplashHold());
     window.setTimeout(() => {
       breakGL?.stop(splash);

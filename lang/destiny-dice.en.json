@@ -14,7 +14,7 @@
   "GLDDF.Settings.EmissiveIntensity.Name": "Dice Emission Intensity",
   "GLDDF.Settings.EmissiveIntensity.Hint": "Controls the glow strength of the Destiny Dice emission maps in Dice So Nice. 0 disables the glow; 1.0 uses the map's baked-in color as-is; higher values brighten the glow further. Requires a reload.",
   "GLDDF.Settings.MotionTier.Name": "Animation Style",
-  "GLDDF.Settings.MotionTier.Hint": "Controls the Etched Glass result-card animations. Reduced uses simple fades; Default plays the full reveal sweep; Cinematic lengthens the ceremony with a trailing flare. Forced to Reduced when your system requests reduced motion.",
+  "GLDDF.Settings.MotionTier.Hint": "Controls the Etched Glass result-card animations. Reduced uses simple fades; Default plays the full reveal sweep; Cinematic lengthens the ceremony with a trailing flare.",
   "GLDDF.Settings.MotionTier.Reduced": "Reduced (simple fades)",
   "GLDDF.Settings.MotionTier.Default": "Default (full reveal)",
   "GLDDF.Settings.MotionTier.Cinematic": "Cinematic (extended)",

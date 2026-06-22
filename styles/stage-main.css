@@ -861,24 +861,3 @@
     min-width: 28px;
     text-align: center;
 }
-
-/* Honour reduced-motion across the whole Stage feature — the portrait overlay,
-   the comms overlay and the GM panel. Uses near-zero durations rather than
-   `animation: none` so the JS lifecycle still fires (StageOverlay/CommsOverlay
-   remove elements on animationend / transitionend). Matches the suite-wide
-   reduced-motion pattern used by the design system and the other features. */
-@media (prefers-reduced-motion: reduce) {
-    #gluniverse-stage-overlay *,
-    #gluniverse-stage-overlay *::before,
-    #gluniverse-stage-overlay *::after,
-    #gluniverse-comms-overlay *,
-    #gluniverse-comms-overlay *::before,
-    #gluniverse-comms-overlay *::after,
-    .gluniverse-stage-panel *,
-    .gluniverse-stage-panel *::before,
-    .gluniverse-stage-panel *::after {
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-    }
-}

@@ -75,10 +75,12 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
   system. Use the `--gl-*` tokens, `.gl-glass`/`.gl-btn` utilities, and `gl-*`
   keyframes. Don't redefine tokens locally; derive from them if you need an
   alias. Keep each feature's existing unique class prefix.
-- **Reduced motion** — the suite honors `prefers-reduced-motion`. Some features
-  (Stage, Mission Support) rely on `animationend`/`transitionend` for element
-  cleanup, so reduced-motion blocks use **near-zero durations (0.001ms)**, NOT
-  `animation: none` — otherwise the cleanup events never fire.
+- **Motion** — the suite does NOT honor the OS `prefers-reduced-motion`
+  preference; animations always play so visuals are consistent for every user
+  regardless of their PC settings. Do not add `@media (prefers-reduced-motion)`
+  blocks or `matchMedia("(prefers-reduced-motion: reduce)")` checks. (Loot Gen,
+  Destiny Dice and Statsblock Import keep their in-app "motion tier" setting,
+  which is an explicit user choice, not an OS preference.)
 - **Shared helpers** — reach for `scripts/core/util.mjs` before re-declaring
   clamp/integer-coercion/hex-validation/HTML-escape. Keep that module
   dependency-free and side-effect-free.

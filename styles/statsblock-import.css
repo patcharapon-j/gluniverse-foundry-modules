@@ -934,15 +934,6 @@
   animation: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gluniverse-pf2e-importer *,
-  .gluniverse-pf2e-importer *::before,
-  .gluniverse-pf2e-importer *::after {
-    animation: none !important;
-    transition-duration: 120ms !important;
-  }
-}
-
 /* ---------------------------------------------------------------------------
    17. Responsive
    ------------------------------------------------------------------------- */

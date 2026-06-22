@@ -339,9 +339,3 @@
 .glct-delveditor .dx-ed-omin{ display:inline-flex; align-items:center; gap:3px; }
 .glct-delveditor .dx-ed-addstage{ margin-top:6px; font-size:12px; }
 .glct-delveditor .dx-ed-foot{ display:flex; align-items:center; gap:8px; }
-
-/* Honour reduced-motion: drop the terminal/ended pulses (keep the static glow). */
-@media (prefers-reduced-motion: reduce){
-  #glct-hud .bar.dx-terminal .bar-dx-scrim{ animation:none; }
-  #glct-hud .dx-stagebadge.ended .dx-stagename{ animation:none; opacity:1; }
-}
