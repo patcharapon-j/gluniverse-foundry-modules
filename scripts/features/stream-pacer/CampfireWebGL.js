@@ -66,6 +66,29 @@ float fbm(vec2 p){
   return v;
 }
 
+// Ridged turbulence — stacked abs(noise) gives the sharp, wispy filaments that
+// read as licking flame tongues rather than soft blobs.
+float turb(vec2 p){
+  float v = 0.0;
+  float a = 0.55;
+  for (int i = 0; i < 6; i++) {
+    v += a * abs(noise(p) * 2.0 - 1.0);
+    p = p * 2.0 + vec2(3.1, 1.7);
+    a *= 0.5;
+  }
+  return v;
+}
+
+// Blackbody-style ramp through the themed palette: dim ember -> deep -> mid ->
+// hot -> a white-hot core at the densest, hottest part of the flame.
+vec3 fireColor(float h, vec3 deep, vec3 mid, vec3 hot){
+  vec3 c = mix(deep * 0.22, deep, smoothstep(0.0, 0.2, h));
+  c = mix(c, mid, smoothstep(0.18, 0.5, h));
+  c = mix(c, hot, smoothstep(0.48, 0.82, h));
+  c = mix(c, vec3(1.0, 0.96, 0.86), smoothstep(0.85, 1.0, h));
+  return c;
+}
+
 void main(){
   vec2 uv = v_uv;
   float t = u_time;
@@ -77,31 +100,32 @@ void main(){
   float fx = uv.x;
 
   float boost = 0.65 + 0.45 * u_intensity;
+  float h = clamp(fy, 0.0, 1.0);
 
   // --- Rising flame field ---
-  // Scroll the noise downward so the pattern climbs; warp it horizontally so the
-  // tongues flicker and lean instead of marching straight up.
-  float scroll = t * (0.85 + 0.55 * boost);
-  vec2 wp = vec2(fx * aspect * 2.0, fy * 2.4 - scroll);
-  float warp = fbm(wp * 1.3 - vec2(0.0, scroll * 0.5));
-  vec2 sp = vec2(fx * aspect * 3.0 + (warp - 0.5) * 1.2, fy * 3.0 - scroll * 1.6);
-  float n = fbm(sp);
+  // Tall, advected turbulence builds vertical tongues across the whole bar; a
+  // height-scaled sway makes them lick and lean instead of marching straight up.
+  float rise = t * (1.05 + 0.5 * boost);
+  float sway = (fbm(vec2(uv.x * aspect * 1.8, fy * 2.0 - rise * 0.7)) - 0.5) * (0.14 + 0.4 * h);
+  vec2 fp = vec2((uv.x * aspect + sway) * 2.7, fy * 1.55 - rise);
+  float detail = turb(fp);
 
-  // Flame body: noise minus a height falloff, fuller and wider at the base.
-  float h = clamp(fy, 0.0, 1.0);
-  float body = n * 1.75 - h * 1.25 + (1.0 - h) * 0.18;
-  float flame = smoothstep(0.0, 0.55, body) * step(0.0, fy) * boost;
+  // Flame body: turbulent detail eaten away with height, fuller at the base.
+  float body = detail * (0.92 + 0.5 * boost) - fy * 1.18 + 0.22;
+  float flame = smoothstep(0.0, 0.5, body) * step(0.0, fy);
 
-  // Color ramp: cool ember bed -> orange -> bright hearth as the flame heats up.
-  vec3 col = u_deep * smoothstep(0.0, 0.28, flame);
-  col = mix(col, u_mid, smoothstep(0.16, 0.58, flame));
-  col = mix(col, u_hot, smoothstep(0.55, 0.98, flame));
-  float alpha = smoothstep(0.04, 0.24, flame);
+  // Blackbody ramp: cooler toward the tips, white-hot at the dense base.
+  float heat = clamp(flame * (0.7 + 0.5 * boost) * (1.0 - 0.32 * h), 0.0, 1.0);
+  vec3 col = fireColor(heat, u_deep, u_mid, u_hot) * smoothstep(0.0, 0.05, flame);
+  float alpha = smoothstep(0.02, 0.2, flame);
 
-  // Hot rim hugging the baseline edge — the glowing seam of coals.
+  // Hot rim hugging the baseline edge — the glowing seam of coals. A broad warm
+  // halo plus a thin white-hot line right on the edge.
   float edge = exp(-abs(fy) * 8.5) * step(-0.08, fy);
+  float seam = exp(-abs(fy) * 26.0) * step(-0.04, fy);
   col += mix(u_mid, u_hot, 0.6) * edge * (0.9 + 0.6 * boost);
-  alpha += edge * 0.7;
+  col += mix(u_hot, vec3(1.0, 0.97, 0.88), 0.5) * seam * (0.7 + 0.5 * boost);
+  alpha += edge * 0.7 + seam * 0.5;
 
   // Warm under-glow inside the bar (fy < 0): low, fading downward so the
   // text stays readable while the bar feels lit from its own fire.
@@ -125,10 +149,12 @@ void main(){
     float br = smoothstep(2.4, 0.0, r) + smoothstep(7.0, 0.0, r) * 0.35;
     br *= (1.0 - life);                  // burn out as it climbs
     br *= smoothstep(0.0, 0.12, life);   // fade in at birth
+    br *= 0.7 + 0.3 * sin(t * 18.0 + seed * 50.0); // twinkle
     sparks += br;
   }
   sparks = clamp(sparks, 0.0, 1.0);
-  col += mix(u_mid, u_hot, 0.7) * sparks * (0.95 + 0.5 * boost);
+  // Sparks cool from white-hot to ember as they drift up.
+  col += mix(vec3(1.0, 0.95, 0.82), u_hot, 0.4) * sparks * (0.95 + 0.5 * boost);
   alpha += sparks * 0.9;
 
   // Subtle whole-field flicker.
