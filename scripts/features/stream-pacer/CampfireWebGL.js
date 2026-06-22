@@ -99,66 +99,64 @@ void main(){
   float fy = (uv.y - u_base) / span;   // negative inside the bar
   float fx = uv.x;
 
-  float boost = 0.65 + 0.45 * u_intensity;
+  float boost = 0.4 + 0.35 * u_intensity;
   float h = clamp(fy, 0.0, 1.0);
 
   // --- Rising flame field ---
-  // Tall, advected turbulence builds vertical tongues across the whole bar; a
-  // height-scaled sway makes them lick and lean instead of marching straight up.
-  float rise = t * (1.05 + 0.5 * boost);
-  float sway = (fbm(vec2(uv.x * aspect * 1.8, fy * 2.0 - rise * 0.7)) - 0.5) * (0.14 + 0.4 * h);
-  vec2 fp = vec2((uv.x * aspect + sway) * 2.7, fy * 1.55 - rise);
+  // Slow, gently advected turbulence with balanced vertical detail so the
+  // tongues read as flame rather than smearing into tall vertical streaks.
+  // A soft, height-scaled sway lets them lean a touch without sliding sideways.
+  float rise = t * (0.26 + 0.1 * boost);
+  float sway = (fbm(vec2(uv.x * aspect * 1.6, fy * 2.0 - rise * 0.7)) - 0.5) * (0.05 + 0.16 * h);
+  vec2 fp = vec2((uv.x * aspect + sway) * 3.2, fy * 3.0 - rise);
   float detail = turb(fp);
 
-  // Flame body: turbulent detail eaten away with height, fuller at the base.
-  float body = detail * (0.92 + 0.5 * boost) - fy * 1.18 + 0.22;
+  // Flame body: turbulent detail eaten away with height; kept short and sparse
+  // so the effect stays a calm hearth glow rather than a bonfire.
+  float body = detail * (0.85 + 0.35 * boost) - fy * 1.5 + 0.04;
   float flame = smoothstep(0.0, 0.5, body) * step(0.0, fy);
 
-  // Blackbody ramp: cooler toward the tips, white-hot at the dense base.
-  float heat = clamp(flame * (0.7 + 0.5 * boost) * (1.0 - 0.32 * h), 0.0, 1.0);
+  // Mostly warm amber, with only a soft highlight at the hottest base.
+  float heat = clamp(flame * (0.55 + 0.4 * boost) * (1.0 - 0.4 * h), 0.0, 1.0);
   vec3 col = fireColor(heat, u_deep, u_mid, u_hot) * smoothstep(0.0, 0.05, flame);
-  float alpha = smoothstep(0.02, 0.2, flame);
+  float alpha = smoothstep(0.02, 0.22, flame) * 0.7;
 
-  // Hot rim hugging the baseline edge — the glowing seam of coals. A broad warm
-  // halo plus a thin white-hot line right on the edge.
-  float edge = exp(-abs(fy) * 8.5) * step(-0.08, fy);
-  float seam = exp(-abs(fy) * 26.0) * step(-0.04, fy);
-  col += mix(u_mid, u_hot, 0.6) * edge * (0.9 + 0.6 * boost);
-  col += mix(u_hot, vec3(1.0, 0.97, 0.88), 0.5) * seam * (0.7 + 0.5 * boost);
-  alpha += edge * 0.7 + seam * 0.5;
+  // Soft warm rim hugging the baseline edge — the gentle glow of the coals.
+  float edge = exp(-abs(fy) * 9.0) * step(-0.08, fy);
+  col += mix(u_mid, u_hot, 0.5) * edge * (0.45 + 0.3 * boost);
+  alpha += edge * 0.4;
 
   // Warm under-glow inside the bar (fy < 0): low, fading downward so the
   // text stays readable while the bar feels lit from its own fire.
   float belowT = clamp(-fy / 0.85, 0.0, 1.0);
   float glow = (1.0 - belowT) * step(fy, 0.0);
-  col += u_deep * glow * 0.30 * boost;
-  alpha += glow * 0.14 * boost;
+  col += u_deep * glow * 0.2 * boost;
+  alpha += glow * 0.1 * boost;
 
-  // --- Drifting embers / sparks ---
+  // --- Drifting embers / sparks (few, slow, dim) ---
   float sparks = 0.0;
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 9; i++) {
     float fi = float(i);
     float seed = hash(vec2(fi, 7.0));
-    float speed = 0.16 + seed * 0.42;
+    float speed = 0.04 + seed * 0.07;             // very slow drift
     float life = fract(t * speed + seed);
     float baseX = hash(vec2(fi, 3.0));
-    float sx = baseX + sin(life * 7.0 + seed * 30.0) * 0.045;
-    float sy = u_base + life * (1.0 - u_base) * 1.08;
+    float sx = baseX + sin(life * 5.0 + seed * 30.0) * 0.03;
+    float sy = u_base + life * (1.0 - u_base) * 1.05;
     vec2 dpx = (uv - vec2(sx, sy)) * u_res;
     float r = length(dpx);
-    float br = smoothstep(2.4, 0.0, r) + smoothstep(7.0, 0.0, r) * 0.35;
-    br *= (1.0 - life);                  // burn out as it climbs
-    br *= smoothstep(0.0, 0.12, life);   // fade in at birth
-    br *= 0.7 + 0.3 * sin(t * 18.0 + seed * 50.0); // twinkle
+    float br = smoothstep(2.0, 0.0, r) + smoothstep(5.5, 0.0, r) * 0.25;
+    br *= (1.0 - life);                   // burn out as it climbs
+    br *= smoothstep(0.0, 0.12, life);    // fade in at birth
+    br *= 0.65 + 0.35 * sin(t * 3.5 + seed * 50.0); // slow twinkle
     sparks += br;
   }
   sparks = clamp(sparks, 0.0, 1.0);
-  // Sparks cool from white-hot to ember as they drift up.
-  col += mix(vec3(1.0, 0.95, 0.82), u_hot, 0.4) * sparks * (0.95 + 0.5 * boost);
-  alpha += sparks * 0.9;
+  col += mix(vec3(1.0, 0.93, 0.78), u_hot, 0.5) * sparks * 0.6;
+  alpha += sparks * 0.6;
 
-  // Subtle whole-field flicker.
-  col *= 0.93 + 0.07 * sin(t * 11.0 + uv.x * 6.0);
+  // Subtle, slow whole-field flicker.
+  col *= 0.96 + 0.04 * sin(t * 2.2 + uv.x * 5.0);
 
   alpha = clamp(alpha, 0.0, 1.0);
   // Premultiplied-alpha output for clean glow compositing.
@@ -166,8 +164,10 @@ void main(){
 }
 `;
 
-// Pixels of flame allowed to rise above the bar's top edge (CSS px).
-const OVERHANG_PX = 150;
+// Pixels of flame allowed to rise above the bar's top edge (CSS px). Kept low
+// so the fire stays a calm strip rather than towering over the bar. Must match
+// the canvas `top` offset in stream-pacer.css.
+const OVERHANG_PX = 85;
 
 export class CampfireWebGL {
   constructor() {
