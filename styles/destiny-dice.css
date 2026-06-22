@@ -793,7 +793,7 @@
 }
 
 /* ===========================================================================
-   5. Motion tiers (§6.4) + reduced-motion clamp (§8)
+   5. Motion tiers (§6.4)
    =========================================================================== */
 
 /* Cinematic — durations ×1.4, sheens gain a trailing flare */
@@ -828,27 +828,5 @@ body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
   }
   to {
     opacity: 1;
-  }
-}
-
-/* prefers-reduced-motion force-clamps to the reduced tier and kills loops (§8) */
-@media (prefers-reduced-motion: reduce) {
-  .glddf-fated-roll-toggle,
-  .glddf-fated-roll-toggle::after,
-  .glddf-fated-roll-toggle input {
-    transition-duration: 120ms;
-  }
-
-  .glddf-fate-strip.glddf-reveal {
-    animation: glddf-fade-in 200ms ease both;
-  }
-
-  .glddf-fate-strip.glddf-reveal::after,
-  .glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
-  .glddf-fate-strip.glddf-reveal .glddf-fate-name,
-  .glddf-fate-strip.glddf-reveal .glddf-fate-bonus,
-  .glddf-fate-strip.glddf-reveal .glddf-fate-face,
-  .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
-    animation: none;
   }
 }

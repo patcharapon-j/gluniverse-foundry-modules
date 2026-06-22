@@ -1505,13 +1505,6 @@
   100% { filter: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gluni-break-gauge-sheen { animation: none; }
-  .gluni-break-gauge-fill { transition: none; }
-  .gluni-break-gauge-track--down,
-  .gluni-break-gauge-track--up { animation: none; }
-}
-
 .gluni-initiative--left .gluni-initiative-badge {
   right: auto;
   left: 8px;
@@ -5474,155 +5467,6 @@
   100% { translate: 0 0; scale: 1; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gluni-card,
-  .gluni-round-separator,
-  .gluni-card-portrait,
-  .gluni-card-mystery-mark,
-  .gluni-card-controls,
-  .gluni-end-turn,
-  .gluni-turn-controls button {
-    transition-duration: 120ms !important;
-  }
-
-  .gluni-card-sheen,
-  .gluni-card-sheen::after,
-  .gluni-card-adhoc-repeat,
-  .gluni-card-delayed-bg,
-  .gluni-card-delayed-repeat,
-  .gluni-card-dying-bg,
-  .gluni-card-dying-repeat,
-  .gluni-card-guard-break-bg,
-  .gluni-card-guard-break-bg::before,
-  .gluni-card-guard-break-bg::after,
-  .gluni-card-guard-break-repeat,
-  .gluni-card--guard-broken,
-  .gluni-card--guard-broken:not(.gluni-card--active) .gluni-card-surface::after,
-  .gluni-card--guard-break-impact,
-  .gluni-card--dying-high,
-  .gluni-card--dying-critical,
-  .gluni-dying-pip--filled,
-  .gluni-card-dying-bg::before,
-  .gluni-card-dying-bg::after,
-  .gluni-card--dying .gluni-card-accent,
-  .gluni-status-flash,
-  .gluni-status-flash span,
-  .gluni-status-flash::before,
-  .gluni-card--dying-entering .gluni-card-dying-bg,
-  .gluni-card--dying-entering .gluni-card-dying-repeat,
-  .gluni-card--dying-entering .gluni-dying-pips,
-  .gluni-card--delay-entering,
-  .gluni-card--delay-entering .gluni-card-delayed-bg,
-  .gluni-card--delay-entering .gluni-card-delayed-repeat,
-  .gluni-card-condition-repeat,
-  .gluni-card--condition-entering .gluni-card-condition-bg,
-  .gluni-card--condition-entering .gluni-card-condition-repeat,
-  .gluni-card--slide-in,
-  .gluni-active-tag,
-  .gluni-guard-break-tag,
-  .gluni-dying-tag,
-  .gluni-card--active .gluni-card-surface::after,
-  .gluni-card-holo,
-  .gluni-card-holo::before,
-  .gluni-card-shockwave,
-  .gluni-card--impact,
-  .gluni-card--impact-settle .gluni-card-content,
-  .gluni-card--impact-settle .gluni-initiative-badge,
-  .gluni-card--impact-settle .gluni-card-portrait-wrap,
-  .gluni-card--impact-settle .gluni-card-accent,
-  .gluni-card:not(.gluni-card--active) .gluni-card-surface::after {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .gluni-card-sheen,
-  .gluni-card-sheen::after,
-  .gluni-card:not(.gluni-card--active) .gluni-card-surface::after {
-    opacity: 0 !important;
-  }
-
-  .gluni-card--active .gluni-card-surface::after {
-    opacity: 0.18 !important;
-    transform: none !important;
-  }
-
-  .gluni-card-ghost--leave.gluni-card-ghost--left,
-  .gluni-card-ghost--leave.gluni-card-ghost--right {
-    animation-duration: 220ms !important;
-  }
-
-  .gluni-item--entering,
-  .gluni-item--entering-bottom,
-  .gluni-card--outgoing-active {
-    animation-duration: 180ms !important;
-  }
-
-  .gluni-round-rule,
-  .gluni-round-rule::after {
-    animation: none !important;
-    transform: translate(-50%, -50%) scaleX(0) !important;
-    opacity: 0 !important;
-  }
-
-  .gluni-round-splash--show .gluni-round-num .d {
-    animation: none !important;
-    opacity: 1 !important;
-    filter: none !important;
-  }
-
-  .gluni-round-splash--show .gluni-round-splash-inner,
-  .gluni-round-splash--show .gluni-round-label .tick,
-  .gluni-round-splash--show .gluni-round-label span:last-child,
-  .gluni-round-splash--show .gluni-round-sub span {
-    animation-duration: 160ms !important;
-    transform: none !important;
-    filter: none !important;
-  }
-
-  .gluni-round-splash--leave * {
-    animation-duration: 160ms !important;
-  }
-
-  .gluni-break-splash-burst,
-  .gluni-break-splash-rule,
-  .gluni-break-splash-rule::before,
-  .gluni-break-splash-rule::after {
-    animation: none !important;
-    opacity: 0 !important;
-  }
-
-  .gluni-break-splash--show .gluni-break-splash-text .d {
-    animation: none !important;
-    opacity: 1 !important;
-    filter: none !important;
-    transform: none !important;
-  }
-
-  .gluni-break-splash--show .gluni-break-splash-inner,
-  .gluni-break-splash--show .gluni-break-splash-label .tick,
-  .gluni-break-splash--show .gluni-break-splash-label span:last-child,
-  .gluni-break-splash--show .gluni-break-splash-name span {
-    animation-duration: 160ms !important;
-    transform: none !important;
-    filter: none !important;
-  }
-
-  .gluni-break-splash--leave * {
-    animation-duration: 160ms !important;
-  }
-
-  .gluni-round-deck::after,
-  .gluni-break-deck::after,
-  .gluni-round-rule::before {
-    animation: none !important;
-    opacity: 0 !important;
-  }
-
-  .gluni-break-splash--shake .gluni-break-splash-inner,
-  .gluni-break-splash--cinematic.gluni-break-splash--shake .gluni-break-splash-inner {
-    animation-name: gluni-break-deck-in !important;
-  }
-}
 
 /* =====================================================================
    D&D 5e DEATH SAVES
@@ -5860,14 +5704,6 @@
   animation: none;
 }
 
-/* ---- reduced motion: mirror the dying convention -------------------- */
-@media (prefers-reduced-motion: reduce) {
-  .gluni-deathsave-pip--failure.gluni-deathsave-pip--filled,
-  .gluni-card--stable .gluni-card-accent,
-  .gluni-card--stable .gluni-card-dying-bg::after {
-    animation: none !important;
-  }
-}
 
 /* ===================================================================== */
 /* CARD INITIATIVE MODE                                                   */
@@ -6394,19 +6230,6 @@
   z-index: 60;
 }
 
-/* --- Accessibility: drop the heavy beats under reduced motion ----------- */
-@media (prefers-reduced-motion: reduce) {
-  .gluni-initiative--reshuffling .gluni-rail,
-  .gluni-initiative--reshuffling .gluni-card-deck-stub-pile,
-  .gluni-initiative--reshuffling .gluni-rail .gluni-card .gluni-card-back,
-  .gluni-initiative--card-mode .gluni-item--entering,
-  .gluni-initiative--card-mode .gluni-item--entering-bottom {
-    animation: none;
-  }
-  .gluni-card-back-sheen {
-    display: none;
-  }
-}
 
 /* ---- Card deck config dialog --------------------------------------- */
 .gluni-card-config-form {
@@ -6475,10 +6298,6 @@
   font-family: var(--gluni-font-family);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gluni-card--swap-source { animation: none !important; }
-  .gluni-card-swap-pick { animation: none !important; opacity: 1; }
-}
 
 /* ============================================================================
  * THEME: CORE — Clean modern Foundry-panel feel.
@@ -6969,12 +6788,6 @@ html.gluni-theme--chronicle .gluni-break-deck {
     0 0 50px color-mix(in srgb, var(--gluni-break) 26%, transparent);
 }
 
-/* Honour the OS reduced-motion preference for the looping active-card breath. */
-@media (prefers-reduced-motion: reduce) {
-  html.gluni-theme--chronicle .gluni-card--active .gluni-card-surface {
-    animation: none !important;
-  }
-}
 
 /* ============================================================================
  * Accessibility: high-contrast / reduced-transparency accommodation.
@@ -7014,7 +6827,7 @@ html.gluni-theme--chronicle .gluni-break-deck {
  * lighting back up while active. Footprint stays uniform (no rail-geometry
  * change) per the design decision; menace comes from ornament + motion.
  * The WebGL ember/corona is the live portrait layer; this CSS is the structure
- * (and the full fallback when WebGL is unavailable / reduced-motion is set).
+ * (and the full fallback when WebGL is unavailable).
  * ==========================================================================*/
 .gluni-card--apex {
   --gluni-accent: var(--gluni-apex);
@@ -7204,17 +7017,3 @@ html.gluni-theme--chronicle .gluni-break-deck {
 .gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(1),
 .gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(2) { display: none; }
 
-/* accessibility / GPU accommodation: drop the heavy per-card loops, keep the
-   static menace (frame, accent, corona, crowned kicker, phase meter) */
-@media (prefers-reduced-motion: reduce) {
-  .gluni-card--apex .gluni-card-surface,
-  .gluni-card--apex-phase-3 .gluni-card-surface,
-  .gluni-card--apex-reprise.gluni-card--active .gluni-card-surface {
-    animation: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 56%, var(--gluni-line)),
-      inset 0 0 30px rgba(0, 0, 0, 0.45),
-      0 0 26px color-mix(in srgb, var(--gluni-apex) 30%, transparent);
-  }
-}

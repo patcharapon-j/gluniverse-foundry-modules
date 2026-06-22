@@ -93,8 +93,7 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     });
 
     // Signal flash on commit (§6.2), then close once the sweep has read.
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (target && !reduced) {
+    if (target) {
       target.classList.add("insight-sent");
       target.textContent = game.i18n.localize("INSIGHT.ComposeSent");
       setTimeout(() => this.close(), 420);

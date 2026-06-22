@@ -354,16 +354,3 @@
 .glct-sup-import .imp-chip.err{background:color-mix(in srgb,var(--gl-hazard) 14%,transparent);color:#c0473e;border:1px solid color-mix(in srgb,var(--gl-hazard) 40%,transparent)}
 .glct-sup-import .imp-hint{margin:0;font-size:11.5px;color:var(--color-text-dark-secondary,#888)}
 .glct-sup-import .imp-hint i{color:#e0b15a}
-
-/* Honour reduced-motion (matches the suite design-system pattern used by the
-   other features): collapse motion to near-zero while still firing any
-   animation/transition end events the code may listen for. */
-@media (prefers-reduced-motion: reduce) {
-  #glct-support-hud *,
-  #glct-support-hud *::before,
-  #glct-support-hud *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
-}

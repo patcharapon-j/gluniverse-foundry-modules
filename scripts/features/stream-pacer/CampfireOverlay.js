@@ -29,10 +29,9 @@ export class CampfireOverlay {
     this._barEl = null;
     this._tickInterval = null;
     this._unsubscribe = null;
-    // Premium WebGL fire; a no-op when WebGL is unavailable or motion is reduced,
-    // in which case the CSS fallback flames remain.
+    // Premium WebGL fire; a no-op when WebGL is unavailable, in which case the
+    // CSS fallback flames remain.
     this._webgl = new CampfireWebGL();
-    this._reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     // Bumped whenever the scene ends; in-flight async renders check this token
     // before writing DOM so a dismiss can cancel a pending show.
     this._token = 0;
@@ -92,7 +91,7 @@ export class CampfireOverlay {
     // Light the premium WebGL fire inside the freshly rendered bar. When it
     // mounts, flag the bar so the CSS fallback flames step aside.
     const barEl = this._barEl.querySelector('.stream-pacer-campfire-bar');
-    if (barEl && !this._reduceMotion && this._webgl.mount(barEl)) {
+    if (barEl && this._webgl.mount(barEl)) {
       barEl.classList.add('webgl-active');
     }
 

@@ -55,8 +55,7 @@ The suite is one package (`gluniverse-foundry-modules`); each former module live
 - **`scripts/core/settings.mjs` + `suite-config-app.mjs`** — the Feature Manager UI.
 - **`scripts/core/migration.mjs`** — one-time import from the standalone modules.
 - **`styles/gl-tokens.css`** — the canonical Etched Glass design system (tokens,
-  keyframes, glass/button utilities) shared by every feature. Respects
-  `prefers-reduced-motion`.
+  keyframes, glass/button utilities) shared by every feature.
 
 Because a Foundry package may only register settings/flags/sockets under its own id,
 each feature's settings and flags are namespaced onto `gluniverse-foundry-modules` with a

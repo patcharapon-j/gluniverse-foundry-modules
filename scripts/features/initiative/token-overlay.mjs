@@ -12,7 +12,7 @@ localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCS
 import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, 
 FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, 
 FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
-import { overlay, prefersReducedMotion, getCombatantTokenObject } from "./gluniverse-initiative.mjs";
+import { overlay, getCombatantTokenObject } from "./gluniverse-initiative.mjs";
 import { getGuardBreakState, getDyingState, getBreakGaugeState } from "./conditions.mjs";
 
 // Ground turn-markers + above-token status overlays drawn with PIXI/WebGL.
@@ -244,14 +244,6 @@ export class TokenOverlayManager {
 
   // ---- ground turn-markers ----------------------------------------------
 
-  // Whether ground markers should animate. When false the marker is fully static
-  // (OS reduced-motion), so we skip the per-frame WebGL plasma shader entirely and
-  // draw the cheap hand-drawn rings instead — the shader output would be frozen
-  // anyway, so running it every frame is wasted GPU.
-  _markerMotion() {
-    return !prefersReducedMotion();
-  }
-
   _markerSettings() {
     const get = key => { try { return Boolean(game.settings.get(MODULE_ID, key)); } catch { return false; } };
     return {
@@ -374,7 +366,7 @@ export class TokenOverlayManager {
     const fidelity = this._getFidelity();
     // `hasOrigin` is in the key so the echo geometry rebuilds when an origin first
     // becomes available (or clears) for an otherwise-unchanged active marker.
-    const key = `${role}/${disposition}/${shape}/${fidelity}/${Math.round(token.w)}x${Math.round(token.h)}/r${showRing ? 1 : 0}/s${showStart ? 1 : 0}/o${origin ? 1 : 0}/m${this._markerMotion() ? 1 : 0}`;
+    const key = `${role}/${disposition}/${shape}/${fidelity}/${Math.round(token.w)}x${Math.round(token.h)}/r${showRing ? 1 : 0}/s${showStart ? 1 : 0}/o${origin ? 1 : 0}/m1`;
     if (marker.key !== key) {
       marker.key = key;
       marker.role = role;
@@ -550,9 +542,6 @@ export class TokenOverlayManager {
   // back to running the live FX_FRAG_TURN plasma shader every frame. Returns false
   // (hiding the mesh) when even that is unavailable, so the hand-drawn ring shows.
   _setupMarkerFx(marker, size, colors, isActive, high) {
-    // Static marker (reduced motion): the frozen shader is indistinguishable from
-    // a still image, so fall back to the hand-drawn rings and run no shader at all.
-    if (!this._markerMotion()) { if (marker.fxMesh) marker.fxMesh.visible = false; return false; }
     if (!globalThis.PIXI?.Mesh || !globalThis.PIXI?.Geometry || !globalThis.PIXI?.Shader) return false;
     try {
       const sheets = getMarkerSheets();
@@ -629,7 +618,7 @@ export class TokenOverlayManager {
     const cx = token.center.x, cy = token.center.y;
     marker.ringWrap.position.set(cx, cy);
 
-    const motion = this._markerMotion();
+    const motion = true;   // markers always animate (no reduced-motion gating)
     const t = this._time;
     const isActive = marker.role === "active";
 

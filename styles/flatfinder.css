@@ -592,12 +592,3 @@
   line-height: 1.3;
   opacity: 0.7;
 }
-
-/* Honour the reduced-motion contract: no decorative motion is used here, but
-   keep glows from animating if future states add loops. */
-@media (prefers-reduced-motion: reduce) {
-  .flatfinder-competence,
-  .flatfinder-incapacitation,
-  .flatfinder-encounter-budget,
-  .flatfinder-apex-badge { transition: none !important; }
-}

@@ -522,20 +522,3 @@
     filter: drop-shadow(0 0 8px var(--gl-accent-glow));
 }
 
-/* ─────────────────────────────────────────────────────────────────────
- * 14 · MOTION TIERS — cinematic embellishment + reduced-motion clamp
- * Decorative infinite loops are DISABLED (not slowed) under reduced motion;
- * functional transitions clamp to ≤120ms; ceremonies become straight fades.
- * ───────────────────────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-    .glinv-scope .glinv-slot-panel.glinv-overburdened,
-    .glinv-scope .glinv-header-chip.glinv-overburdened,
-    .glinv-scope.glinv-chat-card.glinv-cc-danger {
-        animation: none !important;
-    }
-    .glinv-scope button::before,
-    .glinv-scope.glinv-chat-card::after { display: none !important; }
-    .glinv-scope.glinv-chat-card {
-        animation: glinv-fade-in 120ms linear both !important;
-    }
-}
