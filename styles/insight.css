@@ -468,18 +468,6 @@
   animation: none !important;
 }
 
-/* §8 reduced motion — clamp to reduced tier, kill loops */
-@media (prefers-reduced-motion: reduce) {
-  .insight-notification,
-  .insight-notification * {
-    --gl-d-reveal: 200ms;
-    --gl-d-move: 200ms;
-  }
-  .insight-sheen,
-  .insight-fracture-bg-back.insight-glitch { animation: none !important; }
-  .insight-fracture-bg-front::after { box-shadow: none; }
-}
-
 /* ============================================================
    9. COMPOSE DIALOG — glass-panel window (§3.1 · §4)
    ============================================================ */
@@ -662,8 +650,4 @@
   0%   { transform: translateX(-100%); opacity: 0; }
   40%  { opacity: 1; }
   100% { transform: translateX(100%); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .insight-send-btn.insight-sent::after { animation: none; }
 }

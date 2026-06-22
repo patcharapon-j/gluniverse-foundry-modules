@@ -47,14 +47,14 @@ export class PerilOverlay {
     this._activationToken = 0;
   }
 
-  /** WebGL backdrop runs unless disabled in settings or reduced-motion is on. */
+  /** WebGL backdrop runs unless disabled in settings. */
   _webglEnabled() {
     try {
       if (!game.settings.get(MODULE_ID, 'sp.perilWebGLEnabled')) return false;
     } catch (e) {
       /* setting not ready — default to on */
     }
-    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return true;
   }
 
   initialize() {

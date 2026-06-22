@@ -12,8 +12,7 @@
  * well in a tiny chip OR across the full HUD bar.
  *
  * Lifecycle (decision D4): the ticker stops when the host is hidden/collapsed or
- * the tab is backgrounded, and on destroy. `prefers-reduced-motion` renders a
- * single static frame.
+ * the tab is backgrounded, and on destroy.
  *
  * Uses Foundry's bundled Pixi (PIXI global) — no new dependency. If Pixi or
  * WebGL is unavailable, create() returns null and the host falls back to its
@@ -102,7 +101,6 @@ export class WeatherEffect {
     this._paused = true;
     this._flashT = 0;
     this._strike = 0;
-    this._reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
 
     const w = Math.max(8, host.clientWidth || 54);
     const h = Math.max(8, host.clientHeight || 30);
@@ -272,7 +270,6 @@ export class WeatherEffect {
     this.gColor = hexInt(s.tintGlow, 0xffffff);
     if (archChanged) this._rebuild();
     else this._retint();
-    if (this._reduced) this._renderStatic();
   }
 
   _rebuild() {
@@ -539,11 +536,6 @@ export class WeatherEffect {
     for (const p of paths) trace(p, 0.9, 0xffffff, 1);
   }
 
-  _renderStatic() {
-    for (let i = 0; i < 30; i++) this._advance(0.05);
-    try { this.app?.renderer?.render(this.app.stage); } catch { /* ignore */ }
-  }
-
   /* ------------------------------ lifecycle ------------------------------ */
 
   pause() {
@@ -553,7 +545,6 @@ export class WeatherEffect {
   }
 
   resume() {
-    if (this._reduced) { this._renderStatic(); return; }
     if (!this._paused) return;
     this._paused = false;
     this.app?.ticker?.start();

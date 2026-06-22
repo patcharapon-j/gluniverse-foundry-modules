@@ -9,7 +9,7 @@
   "GLSBI.settings.menu.label": "Open Importer",
   "GLSBI.settings.menu.hint": "Paste strict Markdown PF2e NPC stat blocks, preview parsed data, then create or update NPC actors.",
   "GLSBI.settings.motionTier.name": "Animation Level",
-  "GLSBI.settings.motionTier.hint": "Etched Glass motion intensity. Cinematic adds flourish; Reduced keeps only essential transitions. Forced to Reduced when the OS requests reduced motion.",
+  "GLSBI.settings.motionTier.hint": "Etched Glass motion intensity. Cinematic adds flourish; Reduced keeps only essential transitions.",
   "GLSBI.settings.motionTier.reduced": "Reduced",
   "GLSBI.settings.motionTier.default": "Default",
   "GLSBI.settings.motionTier.cinematic": "Cinematic",

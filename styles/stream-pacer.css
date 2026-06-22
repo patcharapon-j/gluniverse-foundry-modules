@@ -734,21 +734,6 @@
   font-size: 11px;
 }
 
-/* Respect reduced-motion for the floating HUD */
-@media (prefers-reduced-motion: reduce) {
-  #stream-pacer-container .sp-pulse,
-  #stream-pacer-container .pacer-signal,
-  #stream-pacer-container .player-status.status-hand-raised,
-  #stream-pacer-container .player-status.status-hand-raised i,
-  #stream-pacer-container .status-btn.status-hand-raised.active,
-  #stream-pacer-container .gm-btn.soft-signal-btn.active,
-  #stream-pacer-container.countdown-active.urgency-warning,
-  #stream-pacer-container.countdown-active.urgency-critical,
-  #stream-pacer-container.countdown-active.urgency-critical .countdown-timer {
-    animation: none !important;
-  }
-}
-
 /* ========================================
    Bottom Ticker — Arcane Glass
    ======================================== */
@@ -1060,15 +1045,6 @@
   letter-spacing: 0.2em;
   color: rgba(255, 255, 255, 0.75);
   text-transform: uppercase;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stream-pacer-overlay .overlay-content,
-  .stream-pacer-overlay.urgency-critical .sp-tint,
-  .stream-pacer-overlay.urgency-critical .overlay-countdown,
-  .stream-pacer-hand-bar .hb-icon {
-    animation: none !important;
-  }
 }
 
 /* Dire Peril button */
@@ -1728,8 +1704,7 @@
    Campfire Scene — Prominent Bottom Bar
    A warm, flame-pulsing banner pinned to the bottom edge. Replaces the calmer
    full-screen reveal: it stays put for the whole scene and carries the optional
-   countdown. Show/hide is class + timer driven (not animationend), so
-   reduced-motion can safely kill the animations outright.
+   countdown. Show/hide is class + timer driven (not animationend).
    ======================================== */
 
 .stream-pacer-campfire-bar-wrap {
@@ -1918,33 +1893,6 @@
 
 
 /* ========================================
-   Reduced motion — disable animations for users who prefer it
-   ======================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  #stream-pacer-container,
-  #stream-pacer-container *,
-  .stream-pacer-overlay,
-  .stream-pacer-overlay *,
-  .stream-pacer-hand-bar,
-  .stream-pacer-hand-bar *,
-  .stream-pacer-peril-stage,
-  .stream-pacer-peril-stage *,
-  .stream-pacer-peril-indicator,
-  .stream-pacer-peril-indicator *,
-  .stream-pacer-campfire-bar,
-  .stream-pacer-campfire-bar * {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  /* WebGL field never renders under reduced motion. */
-  .stream-pacer-peril-webgl {
-    display: none !important;
-  }
-}
-
-/* ========================================
    Appearance / Tech Display config
    ======================================== */
 
@@ -2031,7 +1979,7 @@
    Aura halo behind edge-to-edge bars
    Lives as a sibling of the bar (created in JS) so it can extend ~3x the
    bar height past the screen edge without the bar's overflow clipping it.
-   Signal-coloured via class mirroring; static when reduced-motion is on.
+   Signal-coloured via class mirroring.
    ======================================== */
 
 .stream-pacer-bar-aura {
@@ -2132,13 +2080,6 @@
   --sp-aura-color: rgba(245, 60, 60, 0.58);
   --sp-aura-mid:   rgba(245, 60, 60, 0.24);
   animation-duration: 0.9s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stream-pacer-bar-aura {
-    animation: none !important;
-    transition: none !important;
-  }
 }
 
 /* ========================================

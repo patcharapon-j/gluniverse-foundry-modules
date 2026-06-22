@@ -517,12 +517,6 @@
 .chat-message.glct-weather-msg .glct-weathercard{margin:0;border:none;border-radius:6px}
 .chat-message.glct-weather-msg .glct-cc-head{padding-right:60px}
 
-/* respect reduced motion: drop the looping flourishes (Pixi already renders static) */
-@media (prefers-reduced-motion: reduce){
-  #glct-weather-hud .wx-current.ominous .wx-cur-ico,
-  .wx-marker,.wx-marker.arrive{animation:none!important}
-}
-
 /* ============================================================
    5) REGION SWITCHER (window) + DISALLOWED-FACE MARKS
    ============================================================ */

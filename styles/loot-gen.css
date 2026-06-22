@@ -696,8 +696,7 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
 /* ============================================================
    9 · Motion tiers  (design-language §6.4)
    Driven by the module's "Animation" preference, applied as a
-   `gllg-motion-<tier>` class on <body>. `prefers-reduced-motion`
-   (§10) is an additional HARD floor on top of any chosen tier.
+   `gllg-motion-<tier>` class on <body>.
    ============================================================ */
 /* REDUCED — collapse durations, kill sheens + decorative loops, ceremonies
    become straight fades. */
@@ -722,23 +721,3 @@ body.gllg-motion-cinematic .gllg-mini::before,
 body.gllg-motion-cinematic .gllg-card .gllg-btn::before{box-shadow:0 0 28px var(--gl-glow),0 0 8px var(--gl-glow)}
 body.gllg-motion-cinematic .gllg-card-head::after{box-shadow:0 0 24px var(--gl-glow);opacity:.7}
 body.gllg-motion-cinematic .gllg-card.gllg-done .gllg-card-title i{animation-duration:var(--gl-d-splash)}
-
-/* ============================================================
-   10 · Accessibility & motion discipline  (§6.4 · §8)
-   prefers-reduced-motion → kill decorative loops entirely and
-   collapse ceremonies to plain fades; keep functional transitions
-   tight (≤120ms). Static chamfers / glass remain.
-   ============================================================ */
-@media (prefers-reduced-motion: reduce){
-  #gllg-auditor *,
-  .gllg-card,.gllg-card *,
-  .application.gllg-generate *,
-  .application.gllg-llm-log *{
-    animation:none !important;
-    transition-duration:120ms !important;
-  }
-  #gllg-auditor .gllg-member::before,
-  #gllg-auditor .chip.sev-critical,
-  .gllg-card .gllg-spinner i,
-  .gllg-card .fa-beat-fade{animation:none !important}
-}

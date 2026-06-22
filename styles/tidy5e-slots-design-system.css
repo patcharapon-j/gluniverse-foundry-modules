@@ -312,7 +312,7 @@
     100% { transform: scale(1); }
 }
 
-/* Breathe — idle accent pulse (decorative loop; killed under reduced motion). */
+/* Breathe — idle accent pulse (decorative loop). */
 @keyframes gl-breathe {
     0%, 100% { opacity: 0.4; }
     50% { opacity: 1; }
@@ -337,13 +337,3 @@
     100% { transform: scale(1); }
 }
 
-/* ─── Reduced Motion ────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-    .glinv-scope *,
-    .glinv-scope *::before,
-    .glinv-scope *::after {
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-    }
-}

@@ -145,11 +145,6 @@
 .gl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .gl-btn-accent { border-color: var(--gl-accent); color: var(--gl-text-bright); }
 
-@media (prefers-reduced-motion: reduce) {
-  .gl-glass, .gl-btn, .gl-btn::before { transition: none !important; }
-  .gl-glass *, .gl-btn { animation: none !important; }
-}
-
 /* ════════════════════════════════════════════════════════════════════════
    Control Center (suite config app)
    ════════════════════════════════════════════════════════════════════════ */

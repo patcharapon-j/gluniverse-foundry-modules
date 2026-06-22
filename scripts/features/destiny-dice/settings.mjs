@@ -23,7 +23,7 @@ export const SETTINGS = {
   motionTier: `${DD_PREFIX}motionTier`,
 };
 
-// Motion tiers (§6.4). `prefers-reduced-motion` force-clamps to "reduced".
+// Motion tiers (§6.4).
 export const MOTION_TIERS = ["reduced", "default", "cinematic"];
 export const MOTION_TIER_DEFAULT = "default";
 
@@ -412,8 +412,7 @@ function accentRule(selector, color) {
   return `${selector} { --gl-accent: ${color}; }`;
 }
 
-// Applies the motion-tier setting as a body class (§6.4). The CSS clamps to
-// the reduced tier under `prefers-reduced-motion` regardless of this value.
+// Applies the motion-tier setting as a body class (§6.4).
 export function applyMotionTier() {
   if (typeof document === "undefined" || !document.body) return;
   const tier = MOTION_TIERS.includes(getSetting(SETTINGS.motionTier))
