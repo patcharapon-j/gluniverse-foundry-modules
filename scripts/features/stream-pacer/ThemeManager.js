@@ -116,6 +116,22 @@ class ThemeManagerClass {
     return this._peril;
   }
 
+  /**
+   * Normalized color bed for the Campfire WebGL fire (deep → mid → hot), kept in
+   * sync with the static `--sp-campfire*` CSS palette. Returned as 0..1 rgb
+   * arrays so the fragment shader can ramp cool embers up to a bright hearth.
+   */
+  getCampfireWebGLColors() {
+    const norm = ({ r, g, b }) => [r / 255, g / 255, b / 255];
+    return {
+      // A warm ember-brown bed rather than the near-black CSS deep, so the base
+      // of the flame reads as glowing coals instead of mud.
+      deep: norm(hexToRgb('#6e2a08')),
+      mid: norm(hexToRgb('#ff7a26')),
+      hot: norm(hexToRgb('#ffe6ad'))
+    };
+  }
+
   initialize() {
     this.apply();
   }

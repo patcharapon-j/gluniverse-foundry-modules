@@ -1,5 +1,6 @@
 import { FEATURE_ID } from './settings.js';
 import { PacerManager } from './PacerManager.js';
+import { CampfireWebGL } from './CampfireWebGL.js';
 import { featurePath } from '../../core/const.mjs';
 
 const BAR_TEMPLATE = featurePath(FEATURE_ID, 'templates/campfire-bar.hbs');
@@ -28,6 +29,9 @@ export class CampfireOverlay {
     this._barEl = null;
     this._tickInterval = null;
     this._unsubscribe = null;
+    // Premium WebGL fire; a no-op when WebGL is unavailable, in which case the
+    // CSS fallback flames remain.
+    this._webgl = new CampfireWebGL();
     // Bumped whenever the scene ends; in-flight async renders check this token
     // before writing DOM so a dismiss can cancel a pending show.
     this._token = 0;
@@ -84,6 +88,13 @@ export class CampfireOverlay {
       dismissBtn.addEventListener('click', () => PacerManager.dismissCampfire());
     }
 
+    // Light the premium WebGL fire inside the freshly rendered bar. When it
+    // mounts, flag the bar so the CSS fallback flames step aside.
+    const barEl = this._barEl.querySelector('.stream-pacer-campfire-bar');
+    if (barEl && this._webgl.mount(barEl)) {
+      barEl.classList.add('webgl-active');
+    }
+
     void this._barEl.offsetWidth;
     this._barEl.classList.add('visible');
 
@@ -105,9 +116,11 @@ export class CampfireOverlay {
       }
       const timerEl = this._barEl?.querySelector('.cf-bar-timer');
       if (timerEl) timerEl.textContent = formatRemaining(remaining);
-      // Soft warning tint in the final stretch.
+      // Soft warning tint + hotter, taller fire in the final stretch.
       const bar = this._barEl?.querySelector('.stream-pacer-campfire-bar');
-      if (bar) bar.classList.toggle('is-ending', remaining <= 30);
+      const ending = remaining <= 30;
+      if (bar) bar.classList.toggle('is-ending', ending);
+      this._webgl.setEnding(ending);
     }, 1000);
   }
 
@@ -121,6 +134,7 @@ export class CampfireOverlay {
   _hide() {
     this._token++;
     this._stopTicking();
+    this._webgl.stop();
     if (!this._barEl) return;
     this._barEl.classList.remove('visible');
     // Clear after the slide-out transition so a re-light starts clean.
@@ -133,6 +147,7 @@ export class CampfireOverlay {
 
   destroy() {
     this._stopTicking();
+    this._webgl.destroy();
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = null;
