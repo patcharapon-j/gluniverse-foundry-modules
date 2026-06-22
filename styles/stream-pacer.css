@@ -1744,16 +1744,16 @@
   overflow: visible;
 
   background:
-    radial-gradient(140% 200% at 50% 142%, rgba(255, 150, 60, 0.28), transparent 62%),
+    radial-gradient(140% 200% at 50% 142%, rgba(255, 150, 60, 0.14), transparent 62%),
     linear-gradient(180deg, rgba(46, 22, 7, 0.9) 0%, rgba(20, 9, 3, 0.985) 100%);
-  -webkit-backdrop-filter: blur(3px) saturate(1.12);
-          backdrop-filter: blur(3px) saturate(1.12);
+  -webkit-backdrop-filter: blur(3px) saturate(1.08);
+          backdrop-filter: blur(3px) saturate(1.08);
   border-top: 2px solid var(--sp-campfire-ember);
   box-shadow:
-    0 -6px 26px var(--sp-campfire-glow),
-    inset 0 1px 0 rgba(255, 205, 150, 0.25),
-    inset 0 -24px 40px -24px rgba(255, 120, 40, 0.4);
-  animation: sp-campfire-bar-pulse 2.6s ease-in-out infinite;
+    0 -5px 20px var(--sp-campfire-glow),
+    inset 0 1px 0 rgba(255, 205, 150, 0.2),
+    inset 0 -16px 30px -24px rgba(255, 120, 40, 0.22);
+  animation: sp-campfire-bar-pulse 6s ease-in-out infinite;
 }
 
 /* Keep the bar's text + controls above the WebGL fire canvas. */
@@ -1769,13 +1769,13 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: -150px;
+  top: -85px;
   bottom: 0;
   width: 100%;
   z-index: 0;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.5s ease-out;
+  transition: opacity 0.6s ease-out;
 }
 
 .stream-pacer-campfire-bar .stream-pacer-campfire-webgl.visible {
@@ -1916,11 +1916,11 @@
 
 @keyframes sp-campfire-bar-pulse {
   0%, 100% {
-    box-shadow: 0 -6px 22px var(--sp-campfire-glow), inset 0 1px 0 rgba(255, 205, 150, 0.22);
+    box-shadow: 0 -5px 18px var(--sp-campfire-glow), inset 0 1px 0 rgba(255, 205, 150, 0.18);
     border-top-color: var(--sp-campfire);
   }
   50% {
-    box-shadow: 0 -9px 40px var(--sp-campfire-ember-glow), inset 0 1px 0 rgba(255, 220, 170, 0.36);
+    box-shadow: 0 -6px 26px var(--sp-campfire-ember-glow), inset 0 1px 0 rgba(255, 220, 170, 0.26);
     border-top-color: var(--sp-campfire-ember);
   }
 }
