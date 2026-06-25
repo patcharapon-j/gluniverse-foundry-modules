@@ -36,6 +36,9 @@
       "AllowPlayerOptOut": "Allow players to disable cinematics",
       "AllowPlayerOptOutHint": "When ON, each player can disable cinematics in their client settings.",
 
+      "NpcDefault": "Show cinematics for all NPCs",
+      "NpcDefaultHint": "When ON, NPC critical rolls always trigger a cinematic — the GM no longer has to enable cinematics on each NPC actor individually. When OFF, only NPCs explicitly enabled in their actor sheet fire cinematics.",
+
       "ShowCinematics": "Show critical cinematics",
       "ShowCinematicsHint": "Display cinematic critical animations on this client.",
       "AudioEnabled": "Cinematic audio",

@@ -120,7 +120,7 @@
 
   {{!-- Spotlight Tracker (GM only) --}}
   {{#if isGM}}{{#if spotlight.show}}
-  <div class="p-sec spotlight-sec">
+  <div class="p-sec spotlight-sec {{#if spotlight.isCount}}is-count-mode{{/if}}">
     <div class="spotlight-head">
       <span class="sl-title">
         <i class="fa-solid fa-bullseye"></i>
@@ -137,7 +137,7 @@
       <div class="sl-row {{#if active}}is-active{{/if}} {{#if underserved}}is-underserved{{/if}}"
            data-user-id="{{userId}}">
         <button type="button" class="sl-toggle" data-action="spotlight-toggle" data-user-id="{{userId}}"
-                title="{{localize 'STREAM_PACER.Spotlight.ToggleTooltip'}}"
+                title="{{#if ../spotlight.isCount}}{{localize 'STREAM_PACER.Spotlight.CountTooltip'}}{{else}}{{localize 'STREAM_PACER.Spotlight.ToggleTooltip'}}{{/if}}"
                 aria-pressed="{{#if active}}true{{else}}false{{/if}}">
           <i class="fa-solid {{#if active}}fa-circle-dot{{else}}fa-circle{{/if}}"></i>
         </button>
