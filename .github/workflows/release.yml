@@ -1,15 +1,34 @@
 name: Release
 
 # Manually-triggered release, mirroring the standard Foundry VTT module flow.
-# Run it from the Actions tab → "Release" → "Run workflow", entering the version
-# (e.g. 1.1.0). It stamps module.json, builds module.zip, and publishes a GitHub
-# release whose assets Foundry can install/update from.
+# Run it from the Actions tab → "Release" → "Run workflow".
+#
+# Versioning — two ways, pick one:
+#   • Auto-increment (default): leave "version" blank and choose a "bump" level
+#     (patch / minor / major). The next version is computed from the latest
+#     released git tag (falling back to module.json if there are no tags yet).
+#   • Explicit: type a full version into "version" (e.g. 1.4.0). It wins over
+#     "bump".
+#
+# It stamps module.json, builds module.zip, publishes a GitHub release whose
+# assets Foundry can install/update from, and commits the bumped module.json
+# back so the repo's version stays in sync with what was released.
 on:
   workflow_dispatch:
     inputs:
+      bump:
+        description: "Auto-increment level (used when 'version' is blank)"
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       version:
-        description: "Release version (e.g. 1.1.0 — no leading 'v')"
-        required: true
+        description: "Explicit version (e.g. 1.4.0 — overrides 'bump'; leave blank to auto-increment)"
+        required: false
+        default: ""
         type: string
       prerelease:
         description: "Mark as a pre-release"
@@ -26,12 +45,60 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so the auto-increment can find the latest release
+          # tag, and so the version-bump commit can be pushed back.
+          fetch-depth: 0
 
       - name: Resolve identifiers
         id: vars
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION="${VERSION#v}"
+          set -euo pipefail
+
+          bump_version() {
+            local v="$1" part="$2" major minor patch
+            IFS='.' read -r major minor patch <<< "$v"
+            : "${major:=0}" "${minor:=0}" "${patch:=0}"
+            case "$part" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+              *) echo "Unknown bump level: $part" >&2; exit 1 ;;
+            esac
+            echo "${major}.${minor}.${patch}"
+          }
+
+          EXPLICIT="${{ inputs.version }}"
+          EXPLICIT="${EXPLICIT#v}"
+
+          if [ -n "$EXPLICIT" ]; then
+            VERSION="$EXPLICIT"
+            echo "Using explicit version: ${VERSION}"
+          else
+            # Latest released version from tags (vX.Y.Z), highest semver wins.
+            LATEST="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | sort -V | tail -n 1)"
+            if [ -z "$LATEST" ]; then
+              LATEST="$(node -p "require('./module.json').version")"
+              echo "No release tags found; basing bump on module.json (${LATEST})."
+            else
+              echo "Latest release tag: v${LATEST}"
+            fi
+            VERSION="$(bump_version "$LATEST" "${{ inputs.bump }}")"
+            echo "Auto-incremented (${{ inputs.bump }}): ${LATEST} → ${VERSION}"
+          fi
+
+          # Sanity-check the resulting version is plain semver.
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Resolved version '${VERSION}' is not a valid X.Y.Z semver." >&2
+            exit 1
+          fi
+
+          # Refuse to clobber an existing release tag.
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "Tag v${VERSION} already exists — choose a different bump/version." >&2
+            exit 1
+          fi
+
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
@@ -80,3 +147,16 @@ jobs:
           files: |
             module.json
             module.zip
+
+      - name: Commit version bump
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add module.json
+          if git diff --cached --quiet; then
+            echo "module.json already at v${{ steps.vars.outputs.version }} — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(release): v${{ steps.vars.outputs.version }}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

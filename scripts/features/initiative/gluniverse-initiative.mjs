@@ -910,8 +910,8 @@ function addGuardBreakTokenHudButton(hud, html, data) {
   button.type = "button";
   button.className = `control-icon gluni-token-guard-break${isBroken ? " active" : ""}`;
   button.title = localize(isBroken ? "GLUNI.Controls.ClearGuardBreak" : "GLUNI.Controls.GuardBreak");
-  button.ariaLabel = localize("GLUNI.Controls.TokenGuardBreak");
-  button.dataset.tooltip = localize("GLUNI.Controls.TokenGuardBreak");
+  button.ariaLabel = localize("GLUNI.Controls.TokenGuardBreak.Tooltip");
+  button.dataset.tooltip = localize("GLUNI.Controls.TokenGuardBreak.Tooltip");
   button.innerHTML = '<i class="fa-solid fa-shield-halved" aria-hidden="true"></i>';
   button.addEventListener("click", async event => {
     event.preventDefault();
@@ -1865,7 +1865,7 @@ class GLUniverseInitiativeOverlay {
   // reprise ordinal (k/N — "the boss acts again") or, on the prime, the current
   // HP phase. The crown lives here over the dark scrim, never on the portrait.
   renderApexKicker(apex) {
-    const crown = `<span class="gluni-apex-tag"><i class="fa-solid fa-crown" aria-hidden="true"></i>${escapeHTML(localize("GLUNI.Apex").toUpperCase())}</span>`;
+    const crown = `<span class="gluni-apex-tag"><i class="fa-solid fa-crown" aria-hidden="true"></i>${escapeHTML(localize("GLUNI.Apex.Tag").toUpperCase())}</span>`;
     if (apex.role === "reprise") {
       const aria = formatLocalized("GLUNI.Apex.Ordinal.Aria", { index: apex.index, total: apex.total });
       return `${crown}<span class="gluni-apex-tag gluni-apex-tag--ordinal" role="img" aria-label="${escapeAttr(aria)}">${apex.index}/${apex.total}</span>`;
@@ -1998,8 +1998,8 @@ class GLUniverseInitiativeOverlay {
             ${card.apex ? this.renderApexKicker(card.apex) : ""}
             ${card.guardBroken ? `<span class="gluni-guard-break-tag">${localize("GLUNI.GuardBreak").toUpperCase()}</span>` : ""}
             ${card.dying ? (card.dying.kind === "deathsaves"
-              ? `<span class="gluni-dying-tag${card.dying.stable ? " gluni-dying-tag--stable" : ""}">${(card.dying.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves")).toUpperCase()}</span>`
-              : `<span class="gluni-dying-tag">${localize("GLUNI.Dying").toUpperCase()} ${card.dying.value}</span>`) : ""}
+              ? `<span class="gluni-dying-tag${card.dying.stable ? " gluni-dying-tag--stable" : ""}">${(card.dying.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase()}</span>`
+              : `<span class="gluni-dying-tag">${localize("GLUNI.Dying.Label").toUpperCase()} ${card.dying.value}</span>`) : ""}
             ${card.adhoc ? `<span class="gluni-adhoc-tag">${escapeHTML(card.adhoc.label).toUpperCase()}</span>` : ""}
             ${card.adhoc?.oneShot ? `<span class="gluni-adhoc-tag gluni-adhoc-tag--oneshot">${localize("GLUNI.AdHoc.OneShot").toUpperCase()} ${formatRound(card.adhoc.round)}</span>` : ""}
             ${card.delayed ? `<span class="gluni-delayed-tag">${localize("GLUNI.Delayed").toUpperCase()}</span>` : ""}
@@ -4175,8 +4175,8 @@ class GLUniverseInitiativeOverlay {
       if (!card || !card.classList.contains("gluni-card--dying")) continue;
       card.classList.add("gluni-card--dying-entering");
       const flashLabel = card.classList.contains("gluni-card--deathsaves")
-        ? localize("GLUNI.DeathSaves")
-        : localize("GLUNI.Dying");
+        ? localize("GLUNI.DeathSaves.Label")
+        : localize("GLUNI.Dying.Label");
       this.playInlineStatusFlash(card, flashLabel.toUpperCase(), "dying");
       this.pulseTagEnter(card, ".gluni-dying-tag");
       window.setTimeout(() => card.classList.remove("gluni-card--dying-entering"), 640);
@@ -5129,7 +5129,7 @@ function renderAdhocInitiativeDialog(defaults) {
           </select>
         </label>
         <label class="gluni-adhoc-field">
-          <span>${localize("GLUNI.AdHoc.Type")}</span>
+          <span>${localize("GLUNI.AdHoc.TypeLabel")}</span>
           <select name="type">
             ${Object.entries(ADHOC_TYPES).map(([type, config]) => `
               <option value="${escapeAttr(type)}" data-icon="${escapeAttr(config.icon)}" ${type === defaults.type ? "selected" : ""}>${localize(config.label)}</option>

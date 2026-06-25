@@ -331,7 +331,7 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.Controls.Apply": "Apply",
   "GLUNI.Controls.GuardBreak": "Guard break",
   "GLUNI.Controls.ClearGuardBreak": "Clear guard break",
-  "GLUNI.Controls.TokenGuardBreak": "Toggle break on token",
+  "GLUNI.Controls.TokenGuardBreak.Tooltip": "Toggle break on token",
   "GLUNI.Controls.TokenGuardBreak.NoCombat": "Start combat before marking break.",
   "GLUNI.Controls.TokenGuardBreak.NoCombatant": "This token is not in the active combat.",
   "GLUNI.Controls.TokenBreakGauge": "Break gauge",
@@ -339,7 +339,7 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.BreakGauge.Title": "Break gauge",
   "GLUNI.BreakGauge.Max": "Max",
   "GLUNI.BreakGauge.Current": "Current",
-  "GLUNI.BreakGauge.Mode": "Mode",
+  "GLUNI.BreakGauge.ModeLabel": "Mode",
   "GLUNI.BreakGauge.Mode.Smooth": "Smooth",
   "GLUNI.BreakGauge.Mode.Segmented": "Segmented",
   "GLUNI.BreakGauge.Enable": "Show break gauge",
@@ -371,7 +371,7 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.AdHoc.OneShot": "One shot",
   "GLUNI.AdHoc.Persistent": "Persistent",
   "GLUNI.AdHoc.Round": "Round",
-  "GLUNI.AdHoc.Type": "Type",
+  "GLUNI.AdHoc.TypeLabel": "Type",
   "GLUNI.AdHoc.Type.Effect": "Effect",
   "GLUNI.AdHoc.Type.Environment": "Environment",
   "GLUNI.AdHoc.Type.Hazard": "Hazard",
@@ -379,7 +379,7 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.AdHoc.Visibility": "Visibility",
   "GLUNI.Delayed": "Delayed",
   "GLUNI.GuardBreak": "Break",
-  "GLUNI.Apex": "Apex",
+  "GLUNI.Apex.Tag": "Apex",
   "GLUNI.Apex.PhaseLabel": "Phase",
   "GLUNI.Apex.Aria": "Apex solo creature, phase {phase} of 3",
   "GLUNI.Apex.Ordinal.Aria": "Apex extra turn {index} of {total}",
@@ -389,9 +389,9 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.Conditions.None": "No temporary conditions",
   "GLUNI.PF2e.BreakEffect.Name": "Break",
   "GLUNI.PF2e.BreakEffect.Description": "<p>Your guard has been broken. You take a -2 status penalty to AC and all saving throws, and you lose all resistances.</p>",
-  "GLUNI.Dying": "Dying",
+  "GLUNI.Dying.Label": "Dying",
   "GLUNI.Dying.Aria": "Dying {value} of {max}",
-  "GLUNI.DeathSaves": "Death Saves",
+  "GLUNI.DeathSaves.Label": "Death Saves",
   "GLUNI.DeathSaves.Stable": "Stable",
   "GLUNI.DeathSaves.Success.Aria": "Death save successes {value} of {max}",
   "GLUNI.DeathSaves.Failure.Aria": "Death save failures {value} of {max}",
@@ -470,7 +470,7 @@ export const ADHOC_LIFECYCLE_MODES = new Set(Object.values(ADHOC_LIFECYCLE));
 export const STATUS_ANIMATION = Object.freeze({
   delay: Object.freeze({ label: "GLUNI.Delayed", colorClass: "delay", motion: "slide" }),
   guardBreak: Object.freeze({ label: "GLUNI.GuardBreak", colorClass: "break", motion: "slide" }),
-  dying: Object.freeze({ label: "GLUNI.Dying", colorClass: "dying", motion: "dying" })
+  dying: Object.freeze({ label: "GLUNI.Dying.Label", colorClass: "dying", motion: "dying" })
 });
 export const ADHOC_ICON_CHOICES = Object.freeze([
   "fa-solid fa-bolt",
