@@ -80,6 +80,7 @@
     "Spotlight": {
       "Title": "Spotlight",
       "ToggleTooltip": "Toggle this player in or out of the spotlight",
+      "CountTooltip": "Left-click to add a spotlight, right-click to remove one",
       "UnderservedTooltip": "Underserved — well below the table's average spotlight time",
       "NextUp": "Spotlight next",
       "Deficit": "(−{pct}% vs avg)",
@@ -89,6 +90,12 @@
     },
 
     "Settings": {
+      "SpotlightEnabled": "Spotlight Tracker",
+      "SpotlightEnabledHint": "Show the GM-only spotlight fairness panel in the Stream Pacer HUD.",
+      "SpotlightMode": "Spotlight Tracking Mode",
+      "SpotlightModeHint": "How spotlight time is tracked. \"Time\" accrues seconds while a player is in the light. \"Count\" is a more abstract tally — left-click a player to add a spotlight moment, right-click to remove one.",
+      "SpotlightModeTime": "Time (accrued seconds)",
+      "SpotlightModeCount": "Count (click to tally)",
       "DefaultCountdown": "Default Countdown Duration",
       "DefaultCountdownHint": "Default duration in seconds for the countdown timer (1-10 minutes)",
       "ResetOnSceneChange": "Reset on Scene Change",

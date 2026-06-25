@@ -194,6 +194,42 @@ export function registerSettings() {
     default: { players: {} }
   });
 
+  // Spotlight tracker on/off. World-scoped so the GM team shares one decision.
+  // When OFF the fairness panel is hidden entirely from the HUD.
+  game.settings.register(MODULE_ID, 'sp.spotlightEnabled', {
+    name: 'STREAM_PACER.Settings.SpotlightEnabled',
+    hint: 'STREAM_PACER.Settings.SpotlightEnabledHint',
+    scope: 'world',
+    config: true,
+    type: Boolean,
+    default: true,
+    onChange: () => {
+      // Re-render the HUD and start/stop the live timer for the new state.
+      game.streamPacer?.manager?._updateSpotlightInterval();
+      game.streamPacer?.hud?.render(false);
+    }
+  });
+
+  // Spotlight tracking mode. "time" accrues seconds in the light; "count" is a
+  // more abstract tally the GM clicks up/down (left-click add, right-click
+  // reduce) when a PC takes a spotlight moment.
+  game.settings.register(MODULE_ID, 'sp.spotlightMode', {
+    name: 'STREAM_PACER.Settings.SpotlightMode',
+    hint: 'STREAM_PACER.Settings.SpotlightModeHint',
+    scope: 'world',
+    config: true,
+    type: String,
+    choices: {
+      time: 'STREAM_PACER.Settings.SpotlightModeTime',
+      count: 'STREAM_PACER.Settings.SpotlightModeCount'
+    },
+    default: 'time',
+    onChange: () => {
+      game.streamPacer?.manager?._updateSpotlightInterval();
+      game.streamPacer?.hud?.render(false);
+    }
+  });
+
   // Default countdown duration (1-10 minutes)
   // Pass raw i18n keys — Foundry localizes them lazily when the settings
   // sheet is rendered. Calling game.i18n.localize() here (during 'init')

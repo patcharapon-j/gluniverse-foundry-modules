@@ -80,19 +80,21 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    // Spotlight tracker — GM-only fairness view.
+    // Spotlight tracker — GM-only fairness view, hideable via setting.
     let spotlight = null;
-    if (game.user.isGM) {
+    if (game.user.isGM && game.settings.get(MODULE_ID, 'sp.spotlightEnabled')) {
       const summary = PacerManager.getSpotlightSummary();
+      const isCount = summary.mode === 'count';
       spotlight = {
         show: summary.hasPlayers,
+        isCount,
         players: summary.players.map(p => ({
           userId: p.userId,
           name: p.name,
           active: p.active,
           underserved: p.underserved,
           pct: p.pct,
-          formatted: PacerHUD._formatDuration(p.seconds)
+          formatted: PacerHUD._formatSpotlightValue(p.value, summary.mode)
         })),
         nextUp: summary.nextUp
           ? {
@@ -133,6 +135,13 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     const minutes = Math.floor(s / 60);
     const seconds = s % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  // Format a spotlight metric for display: m:ss in time mode, a bare tally in
+  // the more abstract count mode.
+  static _formatSpotlightValue(value, mode) {
+    if (mode === 'count') return String(Math.max(0, Math.round(value)));
+    return PacerHUD._formatDuration(value);
   }
 
   _getStatusIcon(status) {
@@ -294,7 +303,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       const p = byId.get(row.dataset.userId);
       if (!p) return;
       const timeEl = row.querySelector('.sl-time');
-      if (timeEl) timeEl.textContent = PacerHUD._formatDuration(p.seconds);
+      if (timeEl) timeEl.textContent = PacerHUD._formatSpotlightValue(p.value, summary.mode);
       const fill = row.querySelector('.sl-bar-fill');
       if (fill) fill.style.width = `${p.pct}%`;
       row.classList.toggle('is-underserved', !!p.underserved);
@@ -361,7 +370,13 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         case 'spotlight-toggle': {
           if (!game.user.isGM) break;
           const userId = target.dataset.userId;
-          PacerManager.setSpotlight(userId, !PacerManager.isSpotlightActive(userId));
+          // Count mode: left-click adds a tally (right-click reduces, handled
+          // by the contextmenu listener). Time mode: toggle in/out of the light.
+          if (game.settings.get(MODULE_ID, 'sp.spotlightMode') === 'count') {
+            PacerManager.adjustSpotlightCount(userId, 1);
+          } else {
+            PacerManager.setSpotlight(userId, !PacerManager.isSpotlightActive(userId));
+          }
           break;
         }
         case 'spotlight-reset':
@@ -370,6 +385,19 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     };
     html.addEventListener('click', html._pacerClickHandler);
+
+    // Right-click on a spotlight row reduces that player's tally in count mode.
+    if (html._pacerContextHandler) {
+      html.removeEventListener('contextmenu', html._pacerContextHandler);
+    }
+    html._pacerContextHandler = (event) => {
+      const target = event.target.closest('[data-action="spotlight-toggle"]');
+      if (!target || !game.user.isGM) return;
+      if (game.settings.get(MODULE_ID, 'sp.spotlightMode') !== 'count') return;
+      event.preventDefault();
+      PacerManager.adjustSpotlightCount(target.dataset.userId, -1);
+    };
+    html.addEventListener('contextmenu', html._pacerContextHandler);
   }
 
   async _showCountdownDialog() {

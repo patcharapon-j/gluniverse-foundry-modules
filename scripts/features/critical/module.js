@@ -23,6 +23,7 @@ const SETTINGS = {
   ENABLE_PERCEPTION_CRITS: "crit.enablePerceptionCrits",
   ALLOW_PLAYER_OPT_OUT: "crit.allowPlayerOptOut",
   SHOW_CINEMATICS: "crit.showCinematics",
+  NPC_DEFAULT: "crit.npcDefault",
   AUDIO_ENABLED: "crit.audioEnabled",
   VOLUME: "crit.volume"
 };
@@ -217,6 +218,14 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: true
+  });
+  game.settings.register(MODULE_ID, SETTINGS.NPC_DEFAULT, {
+    name: "GLUC.Settings.NpcDefault",
+    hint: "GLUC.Settings.NpcDefaultHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
   });
   game.settings.register(MODULE_ID, SETTINGS.SHOW_CINEMATICS, {
     name: "GLUC.Settings.ShowCinematics",
@@ -602,7 +611,7 @@ function buildInputFromMessage$1(message) {
     blind: message.blind ?? false,
     hasActor: !!actor,
     actorHasPlayerOwner: actor?.hasPlayerOwner ?? false,
-    npcEnabled: actor ? actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.ENABLED) ?? false : false,
+    npcEnabled: (actor ? actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.ENABLED) ?? false : false) || getSetting(SETTINGS.NPC_DEFAULT),
     triggerMode: getSetting(SETTINGS.TRIGGER_MODE),
     nat20Detected: hasNat20Result(message),
     skillCritsEnabled: getSetting(SETTINGS.ENABLE_SKILL_CRITS),
@@ -676,7 +685,7 @@ function buildInputFromMessage(message) {
     blind: message.blind ?? false,
     hasActor: !!actor,
     actorHasPlayerOwner: actor?.hasPlayerOwner ?? false,
-    npcEnabled: actor ? actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.ENABLED) ?? false : false,
+    npcEnabled: (actor ? actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.ENABLED) ?? false : false) || getSetting(SETTINGS.NPC_DEFAULT),
     triggerMode: getSetting(SETTINGS.TRIGGER_MODE),
     nat20Detected: hasNat20Result(message),
     skillCritsEnabled: getSetting(SETTINGS.ENABLE_SKILL_CRITS),

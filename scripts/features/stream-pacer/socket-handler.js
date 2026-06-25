@@ -134,7 +134,7 @@ class SocketHandlerClass {
 
       case EVENTS.SPOTLIGHT_UPDATE:
         if (!senderIsGM) break;
-        PacerManager.receiveSpotlightUpdate(payload.userId, payload.accrued, payload.activeSince);
+        PacerManager.receiveSpotlightUpdate(payload.userId, payload.accrued, payload.activeSince, payload.count);
         break;
 
       case EVENTS.SPOTLIGHT_RESET:
@@ -213,8 +213,8 @@ class SocketHandlerClass {
     this._emit(EVENTS.CAMPFIRE_DISMISS);
   }
 
-  emitSpotlightUpdate(userId, accrued, activeSince) {
-    this._emit(EVENTS.SPOTLIGHT_UPDATE, { userId, accrued, activeSince });
+  emitSpotlightUpdate(userId, accrued, activeSince, count) {
+    this._emit(EVENTS.SPOTLIGHT_UPDATE, { userId, accrued, activeSince, count });
   }
 
   emitSpotlightReset() {
