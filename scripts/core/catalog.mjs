@@ -63,6 +63,20 @@ export function featureForKey(key) {
   return null;
 }
 
+/**
+ * The bare setting/menu key (e.g. "ct.weatherEditor") from its fully-qualified
+ * map key (e.g. "gluniverse-foundry-modules.ct.weatherEditor"). The map key is
+ * always `${namespace}.${key}`; we derive from it rather than trusting the
+ * config's own `.key` field, which is the *namespaced* key in some Foundry
+ * builds — matching prefixes (or "featureManager") against that would fail and
+ * silently delete every menu, including the Control Center's own entry.
+ */
+function bareKey(fqKey, fallback) {
+  const prefix = `${SUITE_ID}.`;
+  if (typeof fqKey === "string" && fqKey.startsWith(prefix)) return fqKey.slice(prefix.length);
+  return fallback ?? fqKey;
+}
+
 /** featureId → { settings: [...], menus: [...] } */
 const _catalog = new Map();
 
@@ -89,17 +103,20 @@ export function buildCatalog() {
   if (buildCatalog._done) return _catalog;
   buildCatalog._done = true;
 
-  for (const [, cfg] of game.settings.settings) {
+  for (const [fqKey, cfg] of game.settings.settings) {
     try {
       if (cfg.namespace !== SUITE_ID) continue;
       if (cfg.config !== true) continue;
-      const fid = featureForKey(cfg.key);
+      const key = bareKey(fqKey, cfg.key);
+      const fid = featureForKey(key);
       if (fid) {
         const control = controlOf(cfg);
         if (control) {
           bucket(fid).settings.push({
-            key: cfg.key,
-            name: cfg.name ?? cfg.key,
+            // Store the BARE key: the Control Center reads/writes via
+            // game.settings.get/set(SUITE_ID, key), which expects it.
+            key,
+            name: cfg.name ?? key,
             hint: cfg.hint ?? "",
             scope: cfg.scope ?? "world",
             control,
@@ -110,7 +127,7 @@ export function buildCatalog() {
         // (no-control settings have their own specialized editor menu)
       } else {
         warn(
-          `Setting "${cfg.key}" has no owning feature — hidden from the native ` +
+          `Setting "${key}" has no owning feature — hidden from the native ` +
             `sheet but not shown in the Control Center. Add its prefix to the ` +
             `owning feature's settingPrefix.`
         );
@@ -126,25 +143,27 @@ export function buildCatalog() {
   const menus = game.settings.menus;
   for (const [fqKey, menu] of [...menus]) {
     if (menu.namespace !== SUITE_ID) continue;
-    if (menu.key === "featureManager") continue; // the suite's single native entry
-    const fid = featureForKey(menu.key);
+    const key = bareKey(fqKey, menu.key);
+    // Keep the suite's own Control Center menu as the single native entry point.
+    if (key === "featureManager") continue;
+    const fid = featureForKey(key);
     if (fid) {
       bucket(fid).menus.push({
-        key: menu.key,
-        name: menu.name ?? menu.label ?? menu.key,
-        label: menu.label ?? menu.name ?? menu.key,
+        key,
+        name: menu.name ?? menu.label ?? key,
+        label: menu.label ?? menu.name ?? key,
         hint: menu.hint ?? "",
         icon: menu.icon ?? "fa-solid fa-sliders",
         type: menu.type,
       });
     } else {
       warn(
-        `Menu "${menu.key}" has no owning feature — removed from the native ` +
+        `Menu "${key}" has no owning feature — removed from the native ` +
           `sheet but not shown in the Control Center. Add its prefix to the ` +
           `owning feature's settingPrefix.`
       );
     }
-    // Always remove suite menus from the native list (the Control Center
+    // Remove every other suite menu from the native list (the Control Center
     // surfaces them as "Open editor" buttons).
     menus.delete(fqKey);
   }
