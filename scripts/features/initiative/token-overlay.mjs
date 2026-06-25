@@ -1198,8 +1198,8 @@ export class TokenOverlayManager {
       ? localize("GLUNI.GuardBreak").toUpperCase()
       : isDying
         ? (entry.dying.kind === "deathsaves"
-            ? (stableSave ? localize("GLUNI.DeathSaves.Stable").toUpperCase() : `${localize("GLUNI.DeathSaves").toUpperCase()} ${entry.dying.failures}/3`)
-            : `${localize("GLUNI.Dying").toUpperCase()} ${entry.dying.value}/${entry.dying.max}`)
+            ? (stableSave ? localize("GLUNI.DeathSaves.Stable").toUpperCase() : `${localize("GLUNI.DeathSaves.Label").toUpperCase()} ${entry.dying.failures}/3`)
+            : `${localize("GLUNI.Dying.Label").toUpperCase()} ${entry.dying.value}/${entry.dying.max}`)
         : localize("GLUNI.Delayed").toUpperCase();
     label.style.fill = isBreak ? "#02070b" : isDying ? (stableSave ? "#04201c" : "#1a0033") : "#4aa3ff";
 

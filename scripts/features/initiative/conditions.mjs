@@ -347,7 +347,7 @@ export function getItemSlug(item) {
 }
 
 export function renderDyingRepeatText(dying) {
-  const text = `${localize("GLUNI.Dying").toUpperCase()} ${dying.value}`;
+  const text = `${localize("GLUNI.Dying.Label").toUpperCase()} ${dying.value}`;
   const line = Array.from({ length: 5 }, () => `<span>${escapeHTML(text)}</span>`).join("");
   return Array.from({ length: 6 }, (_, index) => `
     <div class="gluni-card-dying-repeat-line${index % 2 ? " gluni-card-dying-repeat-line--alt" : ""}">
@@ -549,7 +549,7 @@ export function renderDeathSavePips(state) {
 }
 
 export function renderDeathSaveRepeatText(state) {
-  const text = (state.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves")).toUpperCase();
+  const text = (state.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase();
   const line = Array.from({ length: 5 }, () => `<span>${escapeHTML(text)}</span>`).join("");
   return Array.from({ length: 6 }, (_, index) => `
     <div class="gluni-card-dying-repeat-line${index % 2 ? " gluni-card-dying-repeat-line--alt" : ""}">
