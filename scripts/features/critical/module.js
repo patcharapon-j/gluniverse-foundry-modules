@@ -701,34 +701,34 @@ const ADAPTERS = [pf2eAdapter, dnd5eAdapter];
 function getAdapter(systemId) {
   return ADAPTERS.find((a) => a.systemId === systemId);
 }
-let lastDiceSoNiceMessageId = null;
-let lastDiceSoNiceTimestamp = 0;
 function registerDetector() {
   const adapter = getAdapter(game.system.id);
   if (!adapter) return;
-  const dsnActive = !!game.dice3d;
-  if (dsnActive) {
-    Hooks.on("diceSoNiceRollComplete", (messageId) => {
-      const id = messageId;
-      lastDiceSoNiceMessageId = id;
-      lastDiceSoNiceTimestamp = performance.now();
-      const message = getChatMessageById(id);
-      if (message) processMessage(adapter, message);
-    });
-  }
   Hooks.on("createChatMessage", (raw) => {
     const message = raw;
-    if (dsnActive && message.id && lastDiceSoNiceMessageId === message.id && performance.now() - lastDiceSoNiceTimestamp < 5e3) {
-      return;
-    }
-    if (!dsnActive) processMessage(adapter, message);
+    if (messageAuthorId(message) !== game.user.id) return;
+    void waitForDiceThenProcess(adapter, message);
   });
 }
-function getChatMessageById(messageId) {
-  const fromCollection = game.messages?.get(messageId);
-  if (fromCollection) return fromCollection;
-  const ChatMessage = globalThis.ChatMessage;
-  return ChatMessage?.get(messageId);
+/**
+ * Hold the cinematic until Dice So Nice has finished animating this message's
+ * dice, then run detection. `game.dice3d` must be read here (not snapshotted at
+ * init) because Dice So Nice assigns it after the suite's init phase, so an
+ * early snapshot is always falsy and the cut-in would fire the instant the
+ * message is created — before the 3D dice land. `waitFor3DAnimationByMessageID`
+ * resolves immediately when no animation is queued for the message, so the
+ * non-DSN path is unaffected.
+ */
+async function waitForDiceThenProcess(adapter, message) {
+  const dsn = game.dice3d;
+  if (dsn && typeof dsn.waitFor3DAnimationByMessageID === "function" && message.id) {
+    try {
+      await dsn.waitFor3DAnimationByMessageID(message.id);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | ${FEATURE_ID} | failed waiting for Dice So Nice animation:`, err);
+    }
+  }
+  processMessage(adapter, message);
 }
 function messageAuthorId(message) {
   return message.author?.id ?? (typeof message.user === "string" ? message.user : message.user?.id);
