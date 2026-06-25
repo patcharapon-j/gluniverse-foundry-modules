@@ -13,6 +13,7 @@ Suite.register({
   title: "GLS.feature.pf2e-flatten.title",
   hint: "GLS.feature.pf2e-flatten.hint",
   icon: "fa-solid fa-level-down-alt",
+  settingPrefix: "flatten.",
   system: "pf2e",
   requires: [],
   core: false,

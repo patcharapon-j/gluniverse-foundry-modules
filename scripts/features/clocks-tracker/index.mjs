@@ -69,6 +69,10 @@ Suite.register({
   title: "GLS.feature.clocks-tracker.title",
   hint: "GLS.feature.clocks-tracker.hint",
   icon: "fa-solid fa-hourglass-half",
+  // Engine catch-all prefix; the promoted sub-features below declare the more
+  // specific ct.weather/ct.support/ct.delving/ct.tracker prefixes and claim
+  // those keys first (catalog routing resolves longest prefix first).
+  settingPrefix: "ct.",
   system: null,
   requires: [],
   core: true,

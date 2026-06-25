@@ -6,6 +6,7 @@ Suite.register({
   title: "GLS.feature.cargo-grid.title",
   hint: "GLS.feature.cargo-grid.hint",
   icon: "fa-solid fa-boxes-stacked",
+  settingPrefix: "cargo.",
   system: null,
   requires: [],
   core: false,

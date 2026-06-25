@@ -6,6 +6,7 @@ Suite.register({
   title: "GLS.feature.stage.title",
   hint: "GLS.feature.stage.hint",
   icon: "fa-solid fa-theater-masks",
+  settingPrefix: "stage.",
   system: null,
   requires: [],
   core: false,

@@ -21,6 +21,7 @@ Suite.register({
   title: "GLS.feature.destiny-dice.title",
   hint: "GLS.feature.destiny-dice.hint",
   icon: "fa-solid fa-dice-d6",
+  settingPrefix: "dd.",
   system: "pf2e",
   requires: [],
   core: false,

@@ -6,6 +6,7 @@ Suite.register({
   title: "GLS.feature.critical.title",
   hint: "GLS.feature.critical.hint",
   icon: "fa-solid fa-bolt",
+  settingPrefix: "crit.",
   system: ["pf2e", "dnd5e"],
   requires: [],
   core: false,

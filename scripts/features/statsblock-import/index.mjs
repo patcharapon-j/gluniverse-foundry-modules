@@ -63,6 +63,7 @@ Suite.register({
   title: "GLS.feature.statsblock-import.title",
   hint: "GLS.feature.statsblock-import.hint",
   icon: "fa-solid fa-file-import",
+  settingPrefix: "sbi.",
   system: "pf2e",
   requires: [],
   core: false,

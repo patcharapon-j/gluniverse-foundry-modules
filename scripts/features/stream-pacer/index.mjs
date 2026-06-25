@@ -6,6 +6,7 @@ Suite.register({
   title: "GLS.feature.stream-pacer.title",
   hint: "GLS.feature.stream-pacer.hint",
   icon: "fa-solid fa-gauge-high",
+  settingPrefix: "sp.",
   system: null,
   requires: [],
   core: false,

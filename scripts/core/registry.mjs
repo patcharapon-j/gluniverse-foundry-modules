@@ -7,6 +7,12 @@
  *     title:     string            i18n key or literal for the config UI
  *     hint:      string            i18n key or literal
  *     icon:      string            Font Awesome class
+ *     settingPrefix: string|string[]   the setting/menu key prefix(es) this
+ *                                  feature owns (e.g. "init." or "ct.weather").
+ *                                  The catalog uses these to route every setting
+ *                                  into this feature's Control Center section and
+ *                                  hide it from Foundry's native sheet, so a
+ *                                  feature's config is always attributed to it.
  *     system:    null | string | string[]   required game system id(s)
  *     requires:  string[]          required *other* active module ids
  *     core:      boolean           true → cannot be disabled (base experience)
