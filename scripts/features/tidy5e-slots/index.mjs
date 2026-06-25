@@ -49,6 +49,7 @@ Suite.register({
   title: "GLS.feature.tidy5e-slots.title",
   hint: "GLS.feature.tidy5e-slots.hint",
   icon: "fa-solid fa-box-archive",
+  settingPrefix: "tidy.",
   system: "dnd5e",
   requires: ["tidy5e-sheet"],
   core: false,

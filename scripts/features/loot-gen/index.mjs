@@ -15,6 +15,7 @@ Suite.register({
   title: "GLS.feature.loot-gen.title",
   hint: "GLS.feature.loot-gen.hint",
   icon: "fa-solid fa-gem",
+  settingPrefix: "lg.",
   system: ["pf2e", "dnd5e"],
   requires: [],
   core: false,

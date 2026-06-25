@@ -6,45 +6,60 @@
  * features have registered their settings + menus, `buildCatalog()`:
  *
  *   1. Walks `game.settings.settings` for our package, records each *visible*
- *      (config:true) setting's metadata under its owning feature, then flips it
- *      to config:false so it no longer shows in Foundry's native Settings sheet.
+ *      (config:true) setting's metadata under its owning feature, then flips
+ *      *every* suite setting to config:false so none ever show in Foundry's
+ *      native Settings sheet. A setting whose key matches no feature's
+ *      `settingPrefix` is still hidden, but logs a warning (it would otherwise
+ *      be unreachable) — keep prefixes and `settingPrefix` in sync.
  *   2. Walks `game.settings.menus`, records each feature's specialized editor
- *      menus, then removes them from the native menu list (the Control Center
- *      surfaces them as "Open editor" buttons). The suite's own Feature Manager
- *      menu is left in place as the single native entry point.
+ *      menus, then removes *every* suite menu from the native list (the Control
+ *      Center surfaces them as "Open editor" buttons). The suite's own Feature
+ *      Manager menu is left in place as the single native entry point.
  *
  * Nothing about the settings' behaviour changes — they remain registered and
  * fully readable/writable via `game.settings.get/set`; only their *presentation*
  * moves into the suite UI.
  */
 
-import { SUITE_ID } from "./const.mjs";
+import { SUITE_ID, warn } from "./const.mjs";
+import { Suite } from "./registry.mjs";
 
-/** Ordered prefix → feature-id rules. Longest / most specific first so the
- *  promoted clocks-tracker sub-features claim their keys before the core. */
-const KEY_RULES = [
-  [/^ct\.weather/i, "clocks-weather"],
-  [/^ct\.support/i, "clocks-support"],
-  [/^ct\.delving/i, "clocks-delving"],
-  [/^ct\.(tracker|sheetTrackers)/i, "clocks-trackers"],
-  [/^ct\./i, "clocks-tracker"],
-  [/^init\./i, "initiative"],
-  [/^ff\./i, "flatfinder"],
-  [/^dd\./i, "destiny-dice"],
-  [/^insight\./i, "insight"],
-  [/^stage\./i, "stage"],
-  [/^sp\./i, "stream-pacer"],
-  [/^sbi\./i, "statsblock-import"],
-  [/^lg\./i, "loot-gen"],
-  [/^cargo\./i, "cargo-grid"],
-  [/^tidy\./i, "tidy5e-slots"],
-  [/^flatten\./i, "pf2e-flatten"],
-  [/^crit\./i, "critical"],
-];
+/**
+ * Routing is derived from the features themselves: every feature declares the
+ * setting-key prefix(es) it owns via `settingPrefix` in its `Suite.register(...)`
+ * definition (string or string[]). This keeps each module's configuration
+ * *attributed to that module* — there is no second, hand-maintained list to keep
+ * in sync, so a new feature can never silently leak its settings into Foundry's
+ * native sheet.
+ *
+ * Rules are sorted longest-prefix-first so a promoted sub-feature (e.g. the
+ * `ct.weather…` keys → `clocks-weather`) claims its keys before the parent
+ * engine's catch-all prefix (`ct.` → `clocks-tracker`).
+ */
+function prefixesOf(def) {
+  const v = def.settingPrefix;
+  const list = v == null ? [] : Array.isArray(v) ? v : [v];
+  return list.map((p) => String(p).toLowerCase()).filter(Boolean);
+}
+
+/** Built once, lazily, after every feature has registered. */
+let _rules = null;
+
+function buildRules() {
+  const rules = [];
+  for (const def of Suite.all()) {
+    for (const prefix of prefixesOf(def)) rules.push([prefix, def.id]);
+  }
+  // Longest prefix wins so sub-feature prefixes resolve before the parent's.
+  rules.sort((a, b) => b[0].length - a[0].length);
+  return rules;
+}
 
 /** Map a raw setting/menu key to its owning feature id, or null (suite core). */
 export function featureForKey(key) {
-  for (const [re, fid] of KEY_RULES) if (re.test(key)) return fid;
+  if (!_rules) _rules = buildRules();
+  const k = String(key).toLowerCase();
+  for (const [prefix, fid] of _rules) if (k.startsWith(prefix)) return fid;
   return null;
 }
 
@@ -79,21 +94,29 @@ export function buildCatalog() {
       if (cfg.namespace !== SUITE_ID) continue;
       if (cfg.config !== true) continue;
       const fid = featureForKey(cfg.key);
-      if (!fid) continue;
-      const control = controlOf(cfg);
-      if (control) {
-        bucket(fid).settings.push({
-          key: cfg.key,
-          name: cfg.name ?? cfg.key,
-          hint: cfg.hint ?? "",
-          scope: cfg.scope ?? "world",
-          control,
-          choices: cfg.choices ?? null,
-          range: cfg.range ?? null,
-        });
+      if (fid) {
+        const control = controlOf(cfg);
+        if (control) {
+          bucket(fid).settings.push({
+            key: cfg.key,
+            name: cfg.name ?? cfg.key,
+            hint: cfg.hint ?? "",
+            scope: cfg.scope ?? "world",
+            control,
+            choices: cfg.choices ?? null,
+            range: cfg.range ?? null,
+          });
+        }
+        // (no-control settings have their own specialized editor menu)
+      } else {
+        warn(
+          `Setting "${cfg.key}" has no owning feature — hidden from the native ` +
+            `sheet but not shown in the Control Center. Add its prefix to the ` +
+            `owning feature's settingPrefix.`
+        );
       }
-      // Hide from Foundry's native Settings sheet either way (no-control
-      // settings have their own specialized editor).
+      // Always hide every suite setting from Foundry's native Settings sheet so
+      // the Control Center is the single configuration surface — nothing leaks.
       cfg.config = false;
     } catch {
       /* be resilient to any one setting's odd registration shape */
@@ -105,16 +128,25 @@ export function buildCatalog() {
     if (menu.namespace !== SUITE_ID) continue;
     if (menu.key === "featureManager") continue; // the suite's single native entry
     const fid = featureForKey(menu.key);
-    if (!fid) continue;
-    bucket(fid).menus.push({
-      key: menu.key,
-      name: menu.name ?? menu.label ?? menu.key,
-      label: menu.label ?? menu.name ?? menu.key,
-      hint: menu.hint ?? "",
-      icon: menu.icon ?? "fa-solid fa-sliders",
-      type: menu.type,
-    });
-    menus.delete(fqKey); // hide from the native menu list
+    if (fid) {
+      bucket(fid).menus.push({
+        key: menu.key,
+        name: menu.name ?? menu.label ?? menu.key,
+        label: menu.label ?? menu.name ?? menu.key,
+        hint: menu.hint ?? "",
+        icon: menu.icon ?? "fa-solid fa-sliders",
+        type: menu.type,
+      });
+    } else {
+      warn(
+        `Menu "${menu.key}" has no owning feature — removed from the native ` +
+          `sheet but not shown in the Control Center. Add its prefix to the ` +
+          `owning feature's settingPrefix.`
+      );
+    }
+    // Always remove suite menus from the native list (the Control Center
+    // surfaces them as "Open editor" buttons).
+    menus.delete(fqKey);
   }
 
   return _catalog;

@@ -17,7 +17,12 @@ with the suite registry. This document is the binding contract for that port.
    collisions between features, **prefix every setting key** with the feature's
    short prefix, e.g. `pf2e-flatfinder`'s `competenceBadge` → key
    `ff.competenceBadge`. Update every `game.settings.get/set/register/registerMenu`
-   call accordingly.
+   call accordingly. **Declare that same prefix as `settingPrefix` in the
+   adapter** (below) so the Control Center routes every one of the feature's
+   settings/menus into its section and hides them from Foundry's native sheet.
+   Every suite setting is hidden from the native sheet regardless; one without a
+   matching `settingPrefix` is hidden but *unreachable* (it logs a warning), so
+   the prefix and `settingPrefix` must always agree.
 2. **Flags** — use scope `SUITE_ID`. Prefix flag keys with the feature prefix to
    avoid cross-feature flag collisions on the same document, e.g.
    `actor.getFlag(SUITE_ID, "init.portraitFrame")`.
@@ -45,6 +50,9 @@ Suite.register({
   title: "<i18n key or literal>",
   hint: "<i18n key or literal>",
   icon: "fa-solid fa-...",
+  settingPrefix: "<ff.>",  // string | string[]: the setting/menu key prefix(es)
+                           //   this feature owns. Routes its config into the
+                           //   Control Center and hides it from the native sheet.
   system: null,            // null | "pf2e" | "dnd5e" | ["pf2e","dnd5e"]
   requires: [],            // other active module ids required, e.g. ["tidy5e-sheet"]
   core: false,             // true only for clocks-tracker

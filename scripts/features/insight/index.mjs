@@ -6,6 +6,7 @@ Suite.register({
   title: "GLS.feature.insight.title",
   hint: "GLS.feature.insight.hint",
   icon: "fa-solid fa-eye",
+  settingPrefix: "insight.",
   system: null,
   requires: [],
   core: false,

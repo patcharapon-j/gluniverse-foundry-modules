@@ -18,6 +18,7 @@ Suite.register({
   title: "GLS.feature.initiative.title",
   hint: "GLS.feature.initiative.hint",
   icon: "fa-solid fa-bolt",
+  settingPrefix: "init.",
   system: null,
   requires: [],
   core: false,

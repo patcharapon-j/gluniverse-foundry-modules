@@ -15,6 +15,7 @@ Suite.register({
   title: "GLS.feature.flatfinder.title",
   hint: "GLS.feature.flatfinder.hint",
   icon: "fa-solid fa-dice-d20",
+  settingPrefix: "ff.",
   system: "pf2e",
   requires: [],
   core: false,
