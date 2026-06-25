@@ -65,17 +65,55 @@ function fallbackRegister(target, fn, type) {
 }
 
 /**
- * Register a wrapper around `target`.
+ * Per-target handler registry. libWrapper (and our fallback) only allow ONE
+ * registration per (package, target); flatfinder wraps `game.pf2e.Check.roll`
+ * from both the Incapacitation and DC-flattening features, so we register a
+ * single dispatcher per target and chain any additional handlers onto it.
+ * target → { handlers: Function[], backend: "libwrapper"|"fallback" }
+ */
+const _wrapped = new Map();
+
+/**
+ * Register a wrapper around `target`. Multiple handlers may be registered for
+ * the same target (from this one package); they run in registration order, each
+ * receiving the next handler as its `wrapped` argument, ending in the genuine
+ * original function — the same chaining libWrapper provides across packages.
+ * Only WRAPPER/MIXED handlers (which receive `wrapped`) may share a target.
  * @param {string} target  Dotted path, e.g. "game.pf2e.Check.roll".
  * @param {Function} fn     Wrapper `(wrapped, ...args) => {}` (or `(...args)` for OVERRIDE).
  * @param {string} [type]   WRAPPER | MIXED | OVERRIDE.
  * @returns {"libwrapper"|"fallback"} which backend was used.
  */
 export function registerWrapper(target, fn, type = MIXED) {
-  if (hasLibWrapper()) {
-    libWrapper.register(MODULE_ID, target, fn, type);
-    return "libwrapper";
+  const existing = _wrapped.get(target);
+  if (existing) {
+    // A dispatcher is already installed for this target — just add the handler.
+    existing.handlers.push(fn);
+    return existing.backend;
   }
-  fallbackRegister(target, fn, type);
-  return "fallback";
+
+  const handlers = [fn];
+  // One dispatcher composes every handler registered for this target, in
+  // registration order, ending in the genuine wrapped function.
+  const dispatcher = function (wrapped, ...args) {
+    const self = this;
+    let next = wrapped;
+    for (let i = handlers.length - 1; i >= 0; i--) {
+      const handler = handlers[i];
+      const inner = next;
+      next = (...a) => handler.call(self, inner, ...a);
+    }
+    return next.call(self, ...args);
+  };
+
+  let backend;
+  if (hasLibWrapper()) {
+    libWrapper.register(MODULE_ID, target, dispatcher, type);
+    backend = "libwrapper";
+  } else {
+    fallbackRegister(target, dispatcher, type);
+    backend = "fallback";
+  }
+  _wrapped.set(target, { handlers, backend });
+  return backend;
 }
