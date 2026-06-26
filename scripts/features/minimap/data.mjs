@@ -304,7 +304,8 @@ export const MapStore = {
   _visualSig(el) {
     return JSON.stringify({
       t: el.type, c: el.color, l: el.label, ic: el.icon, tx: el.text,
-      w: el.w, h: el.h, r: el.r, sh: el.shape, p: el.points, u: el.userId, sz: el.size
+      w: el.w, h: el.h, r: el.r, sh: el.shape, p: el.points, u: el.userId, sz: el.size,
+      cw: el.width, pat: el.pattern, k: el.kind, wr: el.wrap
     });
   },
 

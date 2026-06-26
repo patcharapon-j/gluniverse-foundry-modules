@@ -460,7 +460,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this._tool === "polygon" && pts.length >= 3) {
       await this._createAndSelect({ type: "room", shape: "polygon", points: pts, label: "", color: DEFAULT_ROOM_COLOR });
     } else if (this._tool === "connector" && pts.length >= 2) {
-      await this._createAndSelect({ type: "connector", points: pts, dashed: false, color: DEFAULT_ELEMENT_COLOR });
+      await this._createAndSelect({ type: "connector", points: pts, pattern: "solid", width: 5, color: DEFAULT_ELEMENT_COLOR });
     }
   }
 
@@ -687,7 +687,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     el.appendChild(this._swatchRow(sel.color, (c) => this._patch({ color: c })));
 
     if (sel.type === "label") {
-      el.appendChild(this._textRow("GLMM.props.text", sel.text ?? "", (v) => this._patch({ text: v })));
+      el.appendChild(this._textareaRow("GLMM.props.text", sel.text ?? "", (v) => this._patch({ text: v })));
       el.appendChild(this._rangeRow("GLMM.props.size", sel.size ?? 28, 12, 90, (v) => this._patch({ size: v })));
     }
     if (sel.type === "room") {
@@ -713,7 +713,8 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
       el.appendChild(this._rangeRow("GLMM.props.size", sel.r ?? 16, 8, 48, (v) => this._patch({ r: v })));
     }
     if (sel.type === "connector") {
-      el.appendChild(this._toggleRow("GLMM.props.dashed", !!sel.dashed, (v) => this._patch({ dashed: v })));
+      el.appendChild(this._rangeRow("GLMM.props.thickness", sel.width ?? 5, 2, 18, (v) => this._patch({ width: v })));
+      el.appendChild(this._patternRow(sel.pattern ?? (sel.dashed ? "dashed" : "solid"), (v) => this._patch({ pattern: v })));
     }
 
     // notes (player-visible + GM-only)
@@ -882,6 +883,21 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     b.setAttribute("aria-pressed", String(on));
     b.addEventListener("click", () => { const next = b.getAttribute("aria-pressed") !== "true"; b.classList.toggle("is-on", next); b.setAttribute("aria-pressed", String(next)); onChange(next); });
     row.appendChild(b);
+    return row;
+  }
+
+  _patternRow(current, onChange) {
+    const row = mkRow("GLMM.props.pattern");
+    const sel = document.createElement("select");
+    sel.className = "gls-input gls-select";
+    for (const p of ["solid", "dashed", "dotted"]) {
+      const o = document.createElement("option");
+      o.value = p; o.textContent = game.i18n.localize(`GLMM.pattern.${p}`);
+      if (current === p) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.addEventListener("change", () => onChange(sel.value));
+    row.appendChild(sel);
     return row;
   }
 

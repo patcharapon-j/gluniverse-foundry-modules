@@ -84,6 +84,28 @@ const clampScale = (z) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, z || 1));
 /** Monotonic id so concurrent renderers (viewer + studio) get unique <defs>. */
 let RID = 0;
 
+/**
+ * Build an easing function for a CSS cubic-bezier(x1,y1,x2,y2) so a JS camera
+ * glide can share the exact curve of a simultaneous CSS transition.
+ */
+export function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sampleX = (t) => ((ax * t + bx) * t + cx) * t;
+  const sampleY = (t) => ((ay * t + by) * t + cy) * t;
+  const dX = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    let t = x;
+    for (let i = 0; i < 6; i++) {
+      const xs = sampleX(t) - x;
+      const d = dX(t);
+      if (Math.abs(xs) < 1e-4 || d === 0) break;
+      t -= xs / d;
+    }
+    return sampleY(Math.max(0, Math.min(1, t)));
+  };
+}
+
 export class MapRenderer {
   /**
    * @param {HTMLElement} host         container (must allow position:relative)
@@ -251,19 +273,35 @@ export class MapRenderer {
   }
 
   /** Frame all content (or the nominal frame) with breathing room. A minimum
-   *  framed span keeps a sparse map (a lone marker) from filling the screen. */
-  fit(pad = 1.16) {
+   *  framed span keeps a sparse map (a lone marker) from filling the screen.
+   *  When `dur` is given the move is animated (so it can be coordinated with a
+   *  simultaneous window morph using the same easing). */
+  fit(pad = 1.16, dur = 0, ease) {
     const b = this.contentBounds();
     const MIN = 480;
     let { x, y, w, h } = b;
     if (w < MIN) { x -= (MIN - w) / 2; w = MIN; }
     if (h < MIN) { y -= (MIN - h) / 2; h = MIN; }
-    this.view.pan = { x: x + w / 2, y: y + h / 2 };
+    const pan = { x: x + w / 2, y: y + h / 2 };
     const { w: pw, h: ph } = this._hostSize();
-    if (!pw || !ph) { this._refitPending = true; return; }
+    if (!pw || !ph) { this.view.pan = pan; this._refitPending = true; return; }
     this._refitPending = false;
-    this.view.zoom = clampScale(Math.min(pw / (w * pad), ph / (h * pad)));
-    this.applyView();
+    const zoom = clampScale(Math.min(pw / (w * pad), ph / (h * pad)));
+    if (dur) this.animateView(pan, zoom, dur, ease);
+    else { this.view.pan = pan; this.view.zoom = zoom; this.applyView(); }
+  }
+
+  /** Union logical bounding box of a list of elements (full extents), or null. */
+  boundsOfElements(els) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of els ?? []) {
+      const b = this._elBounds(el);
+      if (!b) continue;
+      minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+    }
+    if (!isFinite(minX)) return null;
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
   }
 
   /** Scale (px/unit) at which a logical span fills the corresponding viewport
@@ -274,17 +312,17 @@ export class MapRenderer {
     return clampScale(Math.min(w / spanX, h / spanY));
   }
 
-  /** Smoothly glide the camera to a target pan/zoom (ease-in-out for a calm,
-   *  un-snappy feel even on long glides). */
-  animateView(pan, zoom, dur = 760) {
+  /** Smoothly glide the camera to a target pan/zoom. Defaults to a calm
+   *  ease-in-out; pass `ease` (e.g. the gl-ease bezier) to match a CSS morph. */
+  animateView(pan, zoom, dur = 760, ease) {
     if (this._viewAnim) cancelAnimationFrame(this._viewAnim);
     const from = { x: this.view.pan.x, y: this.view.pan.y, z: this.view.zoom };
     const to = { x: pan?.x ?? from.x, y: pan?.y ?? from.y, z: clampScale(zoom ?? from.z) };
     const t0 = performance.now();
-    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const easeFn = ease ?? ((t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2));
     const step = (now) => {
       const t = Math.min(1, (now - t0) / dur);
-      const k = ease(t);
+      const k = easeFn(t);
       this.view.pan = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
       this.view.zoom = from.z + (to.z - from.z) * k;
       this.applyView();
@@ -403,10 +441,10 @@ export class MapRenderer {
     const color = el.color || DEFAULT_ROOM_COLOR;
     const g = S("g", { class: "glmm-room", style: `--c:${color}` });
     g.dataset.layer = "rooms";
-    let shapeEl, cx, cy;
+    let shapeEl, cx, cy, w;
     if (el.shape === "ellipse") {
       const rx = (el.w ?? 100) / 2, ry = (el.h ?? 100) / 2;
-      cx = (el.x ?? 0) + rx; cy = (el.y ?? 0) + ry;
+      cx = (el.x ?? 0) + rx; cy = (el.y ?? 0) + ry; w = el.w ?? 100;
       shapeEl = S("ellipse", { class: "glmm-room-shape", cx, cy, rx, ry });
     } else if (el.shape === "polygon" && Array.isArray(el.points) && el.points.length > 2) {
       const pts = el.points.map((p) => `${p.x},${p.y}`).join(" ");
@@ -414,23 +452,58 @@ export class MapRenderer {
       const n = el.points.length;
       const c = el.points.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
       cx = c.x / n; cy = c.y / n;
+      const xs = el.points.map((p) => p.x); w = Math.max(...xs) - Math.min(...xs);
     } else {
-      cx = (el.x ?? 0) + (el.w ?? 100) / 2; cy = (el.y ?? 0) + (el.h ?? 100) / 2;
+      cx = (el.x ?? 0) + (el.w ?? 100) / 2; cy = (el.y ?? 0) + (el.h ?? 100) / 2; w = el.w ?? 100;
       shapeEl = S("rect", { class: "glmm-room-shape", x: el.x ?? 0, y: el.y ?? 0, width: el.w ?? 100, height: el.h ?? 100, rx: 10 });
     }
     g.appendChild(shapeEl);
     if (el.label) {
-      g.appendChild(S("text", { class: "glmm-room-label", x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central", text: el.label }));
+      // wrap the label to the room's width so long names stack tidily, centred
+      const maxChars = Math.max(6, Math.min(34, Math.floor((w || 160) / (24 * 0.58))));
+      g.appendChild(this._centeredText(el.label, cx, cy, { size: 24, className: "glmm-room-label", maxChars }));
     }
     return g;
   }
 
+  /** Word-wrap into lines, honouring explicit newlines, capped at `maxChars`. */
+  _wrapLines(text, maxChars) {
+    const out = [];
+    for (const raw of String(text ?? "").split("\n")) {
+      const words = raw.split(/\s+/).filter(Boolean);
+      if (!words.length) { out.push(""); continue; }
+      let line = "";
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && next.length > maxChars) { out.push(line); line = word; }
+        else line = next;
+      }
+      if (line) out.push(line);
+    }
+    return out.length ? out : [""];
+  }
+
+  /** A multi-line <text>, horizontally centred and vertically centred on (x,y). */
+  _centeredText(text, x, y, { size, className, maxChars = 18 }) {
+    const lines = this._wrapLines(text, maxChars);
+    const lh = size * 1.18;
+    const t = S("text", { class: className, x, y, "text-anchor": "middle", "dominant-baseline": "central", "font-size": size });
+    const top = -((lines.length - 1) / 2) * lh;
+    lines.forEach((ln, i) => t.appendChild(S("tspan", { x, dy: i === 0 ? top : lh, text: ln })));
+    return t;
+  }
+
   _connector(el) {
     const color = el.color || DEFAULT_ELEMENT_COLOR;
+    const width = el.width ?? 5;
+    const pattern = el.pattern ?? (el.dashed ? "dashed" : "solid"); // migrate old dashed flag
     const pts = (el.points ?? []).map((p) => `${p.x},${p.y}`).join(" ");
-    const g = S("g", { class: "glmm-connector" + (el.dashed ? " is-dashed" : ""), style: `--c:${color}` });
+    const g = S("g", { class: `glmm-connector is-${pattern}`, style: `--c:${color}` });
     g.dataset.layer = "connectors";
-    g.appendChild(S("polyline", { class: "glmm-conn-line", points: pts, fill: "none" }));
+    const line = S("polyline", { class: "glmm-conn-line", points: pts, fill: "none", "stroke-width": width });
+    if (pattern === "dashed") line.setAttribute("stroke-dasharray", `${(width * 2.6).toFixed(1)} ${(width * 2.1).toFixed(1)}`);
+    else if (pattern === "dotted") line.setAttribute("stroke-dasharray", `0 ${(width * 2).toFixed(1)}`);
+    g.appendChild(line);
     return g;
   }
 
@@ -438,10 +511,9 @@ export class MapRenderer {
     const color = el.color || "#f3fbff";
     const g = S("g", { class: "glmm-label", style: `--c:${color}` });
     g.dataset.layer = "annot";
-    g.appendChild(S("text", {
-      class: "glmm-label-text", x: el.x ?? 0, y: el.y ?? 0,
-      "text-anchor": "middle", "dominant-baseline": "central",
-      "font-size": el.size ?? 26, text: el.text ?? el.label ?? ""
+    const size = el.size ?? 26;
+    g.appendChild(this._centeredText(el.text ?? el.label ?? "", el.x ?? 0, el.y ?? 0, {
+      size, className: "glmm-label-text", maxChars: el.wrap ?? 18
     }));
     return g;
   }
@@ -511,12 +583,17 @@ export class MapRenderer {
     return node?.querySelector?.(".glmm-marker-name, .glmm-room-label, .glmm-icon-label, .glmm-label-text") ?? null;
   }
 
+  /** Decoder-scramble a text node, line by line when it is wrapped into tspans. */
+  _scrambleNode(node, dur = 760) {
+    if (!node) return;
+    const tspans = node.tagName === "text" ? node.querySelectorAll("tspan") : null;
+    if (tspans && tspans.length) tspans.forEach((ts, i) => scrambleText(ts, ts.textContent, { dur: dur + i * 70 }));
+    else if (node.textContent) scrambleText(node, node.textContent, { dur });
+  }
+
   /** Scramble-in every visible text node — used when a map first appears. */
   revealText() {
-    for (const node of this._nodes.values()) {
-      const t = this._textNodeOf(node);
-      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 760 });
-    }
+    for (const node of this._nodes.values()) this._scrambleNode(this._textNodeOf(node), 760);
   }
 
   /** Stagger an enter animation across all elements (a calm cascade on load). */
@@ -527,8 +604,7 @@ export class MapRenderer {
       void node.getBoundingClientRect();
       node.style.setProperty("--gl-delay", `${Math.min(i * 45, 520)}ms`);
       node.classList.add("glmm-enter");
-      const t = this._textNodeOf(node);
-      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 720 });
+      this._scrambleNode(this._textNodeOf(node), 720);
       i++;
     }
     setTimeout(() => {
@@ -655,8 +731,7 @@ export class MapRenderer {
       if (!node) return;
       node.style.setProperty("--gl-delay", `${Math.min(i * 60, 360)}ms`);
       node.classList.add("glmm-enter");
-      const t = this._textNodeOf(node);
-      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 860 });
+      this._scrambleNode(this._textNodeOf(node), 860);
     });
 
     // Changed: highlight pulse + re-scramble text if it changed.
@@ -664,8 +739,7 @@ export class MapRenderer {
       const node = this.nodeFor(el.id);
       if (!node) continue;
       node.classList.add("glmm-changed");
-      const t = this._textNodeOf(node);
-      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 760 });
+      this._scrambleNode(this._textNodeOf(node), 760);
     }
 
     // Moved: tween from old anchor to new, leaving a trail.

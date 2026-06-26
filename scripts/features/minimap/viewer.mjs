@@ -16,12 +16,19 @@ import {
   MODULE_ID, SETTINGS, VIEWER_COMPACT, VIEWER_EXPANDED, BROADCAST, ATTENTION_TTL_MS
 } from "./const.mjs";
 import { MapStore } from "./data.mjs";
-import { MapRenderer, scrambleText } from "./render.mjs";
+import { MapRenderer, scrambleText, cubicBezier } from "./render.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const PRESS_PING_MS = 430;
 const MOVE_CANCEL_PX = 6;
+/** Must match --glmm-morph in styles/minimap.css so the window resize and the
+ *  camera glide that run together on a broadcast collapse share one timing. */
+const MORPH_MS = 640;
+/** The shared gl-ease curve (cubic-bezier 0.16,1,0.3,1) as a JS easing fn. */
+const GL_EASE = cubicBezier(0.16, 1, 0.3, 1);
+/** Logical units framed in follow mode — tight enough to stay on the marker. */
+const FOLLOW_SPAN = 460;
 
 export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(actions = {}) {
@@ -420,11 +427,17 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
     this._updatePanel();
 
     await this._wait(BROADCAST.hold);
-    if (prominent) this._restoreInPlace();
-    if (restoreMin) this.setMinimized(true, { persist: false });
-    this.element.classList.remove("is-broadcasting");
     this._free = false; this._updateFreeChip();
-    this._frameForView();
+    this.element.classList.remove("is-broadcasting");
+    if (prominent) {
+      // Collapse: the window resize (CSS morph) and the camera settle run at the
+      // same time, so glide the camera on the identical gl-ease curve + duration.
+      this._restoreInPlace();
+      this._frameForView(MORPH_MS, GL_EASE);
+    } else {
+      this._frameForView();
+    }
+    if (restoreMin) this.setMinimized(true, { persist: false });
   }
 
   /** Restart the diagonal light sweep across the glass (broadcast flourish). */
@@ -448,29 +461,36 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
     return el ? { x: el.x ?? 0, y: el.y ?? 0 } : null;
   }
 
-  /** Apply the view-mode default framing (unless the user is free-looking). */
-  _frameForView() {
+  /** Apply the view-mode default framing (unless the user is free-looking).
+   *  Pass dur+ease to animate the settle (e.g. coordinated with a window morph). */
+  _frameForView(dur = 0, ease) {
     if (!this.renderer || this._free) return;
     const mode = this._viewMode ?? "shared";
     if (mode === "follow") {
       const a = this._selfAnchor();
-      if (a) { this.renderer.animateView({ x: a.x, y: a.y }, this.renderer.scaleForSpan(720), 760); return; }
+      if (a) { this.renderer.animateView({ x: a.x, y: a.y }, this.renderer.scaleForSpan(FOLLOW_SPAN), dur || 760, ease); return; }
     }
     // shared (initial) and freeform both default to fit-all
-    this.renderer.fit();
+    this.renderer.fit(1.16, dur, ease);
   }
 
   _frameForChange(snap, diff, newMap) {
-    if (newMap || !diff) { this.renderer.fit(); return; }
-    const pts = [];
-    for (const m of diff.moved ?? []) { pts.push(m.from, m.to); }
-    for (const el of [...(diff.added ?? []), ...(diff.changed ?? [])]) pts.push(MapStore.anchorOf(el));
-    if (!pts.length) { this.renderer.fit(); return; }
-    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const spanX = Math.max(240, (Math.max(...xs) - Math.min(...xs)) * 1.8);
-    const spanY = Math.max(200, (Math.max(...ys) - Math.min(...ys)) * 1.8);
+    if (newMap || !diff) { this.renderer.fit(1.16, 720); return; }
+    // Frame the *full extent* of every changed element (not just its centre) so
+    // rooms aren't cropped, plus the journey origins of moved markers.
+    const els = [...(diff.added ?? []), ...(diff.changed ?? [])];
+    for (const m of diff.moved ?? []) if (m.el) els.push(m.el);
+    let box = this.renderer.boundsOfElements(els);
+    const fromPts = (diff.moved ?? []).map((m) => m.from);
+    if (box && fromPts.length) {
+      let { x, y } = box; let r = x + box.w, b = y + box.h;
+      for (const p of fromPts) { x = Math.min(x, p.x); y = Math.min(y, p.y); r = Math.max(r, p.x); b = Math.max(b, p.y); }
+      box = { x, y, w: r - x, h: b - y };
+    }
+    if (!box) { this.renderer.fit(1.16, 720); return; }
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    const spanX = Math.max(220, box.w * 1.35); // 1.35 → a little padding around it
+    const spanY = Math.max(180, box.h * 1.35);
     this.renderer.animateView({ x: cx, y: cy }, this.renderer.scaleForSpan(spanX, spanY), 720);
   }
 
@@ -570,6 +590,11 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
     this._free = true;
     this._updateFreeChip();
     this.renderer.animateView({ x, y }, this.renderer.scaleForSpan(760), 820);
+    // Glow the glass *edge* (rim) in the attention colour rather than a diffuse halo.
+    this.element.style.setProperty("--glmm-attn-c", color || "#ffd24a");
+    this.element.classList.add("is-attn");
+    clearTimeout(this._attnGlowT);
+    this._attnGlowT = setTimeout(() => this.element?.classList.remove("is-attn"), ATTENTION_TTL_MS);
     if (expand) {
       const wasMin = this._minimized;
       const grew = !this._expanded && !this._override;
