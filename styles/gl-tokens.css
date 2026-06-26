@@ -59,6 +59,60 @@
   --gl-cut: 12px;
   --gl-cut-sm: 6px;
   --gl-radius: 14px;
+
+  /* ── Interface scale (per-client, suite-wide) ──
+     Set live on <html> from the core.uiScale setting; consumed by the global
+     scaling rule below and by the Initiative overlay's own transform. */
+  --gl-ui-scale: 1;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Suite-wide interface scale
+   Every UI this suite injects is zoomed by `--gl-ui-scale` so a single slider
+   (Control Center → GLUniverse Suite → Interface Scale) sizes them together.
+
+   This is the ONE place that enumerates the suite's top-level UI roots — when a
+   feature adds a new floating window / HUD / overlay, add its outermost root
+   selector here. Two roots are intentionally excluded:
+     • #gluni-initiative  — scales itself via `transform: scale(var(--gl-ui-scale))`
+       (its fixed edge-anchoring needs transform, not zoom).
+     • #gls-control-center — the panel that hosts the slider; zooming it would
+       make it resize under the cursor while dragging.
+   ════════════════════════════════════════════════════════════════════════ */
+#glmm-studio,
+#glmm-viewer,
+#glct-hud,
+#glct-tracker-hud,
+#glct-weather-hud,
+#glct-support-hud,
+#glct-calendar,
+#glct-calendar-editor,
+#glct-weather-editor,
+#glct-delving-editor,
+#glct-events,
+#glct-support-editor,
+#glct-module-config,
+#glct-shift-names-editor,
+#gluniverse-foundry-modules-critical-gm-config,
+#stream-pacer-hud,
+#stream-pacer-exempt-users,
+#stream-pacer-appearance,
+#stream-pacer-overlay,
+#stream-pacer-hand-bar,
+#gluniverse-pf2e-statblock-importer,
+#gluniverse-stage-panel,
+#gluniverse-stage-overlay,
+#gluniverse-comms-overlay,
+#gllg-llm-log,
+#gllg-auditor,
+#insight-compose-dialog,
+#glddf-face-config,
+.stream-pacer-peril-stage,
+.stream-pacer-peril-indicator-wrap,
+.stream-pacer-campfire-bar-wrap,
+.insight-notification,
+.glucargo-minimap {
+  zoom: var(--gl-ui-scale, 1);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -217,6 +271,9 @@
 }
 .gls-fm-section.is-on { --gl-accent: var(--gl-good); }
 .gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
+/* The pinned suite-wide card is always "open" but is not a feature toggle, so
+   keep it on the neutral cyan accent rather than the enabled-green. */
+.gls-fm-suite.is-on { --gl-accent: var(--gl-cyan); }
 
 .gls-fm-row {
   display: grid;

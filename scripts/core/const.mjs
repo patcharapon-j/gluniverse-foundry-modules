@@ -20,6 +20,10 @@ export const SETTING_MODULE_CONFIG = "moduleConfig";
 /** True once the suite has finished `ready`. */
 export const SETTING_MIGRATION = "migrationVersion";
 
+/** Suite-wide per-client interface scale. Drives the `--gl-ui-scale` custom
+ *  property that styles/gl-tokens.css uses to size every UI the suite injects. */
+export const SETTING_UI_SCALE = "core.uiScale";
+
 /** Path to a file inside the installed suite package. */
 export function suitePath(rel) {
   return `modules/${SUITE_ID}/${rel.replace(/^\/+/, "")}`;

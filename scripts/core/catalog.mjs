@@ -25,6 +25,14 @@ import { SUITE_ID, warn } from "./const.mjs";
 import { Suite } from "./registry.mjs";
 
 /**
+ * Synthetic owner id for suite-level (`core.*`) settings — things that belong to
+ * the whole suite rather than any one feature (e.g. the interface scale). They
+ * are collected into their own bucket so the Control Center can render them in a
+ * pinned section above the per-feature list.
+ */
+export const SUITE_SECTION = "__suite";
+
+/**
  * Routing is derived from the features themselves: every feature declares the
  * setting-key prefix(es) it owns via `settingPrefix` in its `Suite.register(...)`
  * definition (string or string[]). This keeps each module's configuration
@@ -60,6 +68,8 @@ export function featureForKey(key) {
   if (!_rules) _rules = buildRules();
   const k = String(key).toLowerCase();
   for (const [prefix, fid] of _rules) if (k.startsWith(prefix)) return fid;
+  // Suite-level settings (no owning feature) get their own pinned section.
+  if (k.startsWith("core.")) return SUITE_SECTION;
   return null;
 }
 
