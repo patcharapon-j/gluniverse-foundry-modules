@@ -38,7 +38,8 @@
     "styles/tidy5e-slots-inventory-slots.css",
     "styles/tidy5e-slots-components.css",
     "styles/tidy5e-slots-etched-glass.css",
-    "styles/critical.css"
+    "styles/critical.css",
+    "styles/minimap.css"
   ],
   "languages": [
     {
@@ -110,6 +111,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/critical.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/minimap.en.json"
     }
   ],
   "packs": [
