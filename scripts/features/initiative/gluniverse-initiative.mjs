@@ -226,11 +226,14 @@ function registerSettings() {
     onChange: rerender
   });
 
+  // Superseded by the suite-wide interface scale (core.uiScale), which scales
+  // every GLUniverse UI at once — see styles/initiative.css + core/settings.mjs.
+  // Kept registered (hidden) so existing worlds don't lose the stored value.
   game.settings.register(MODULE_ID, SETTINGS.uiScale, {
     name: localize("GLUNI.Settings.UIScale.Name"),
     hint: localize("GLUNI.Settings.UIScale.Hint"),
     scope: "client",
-    config: true,
+    config: false,
     type: Number,
     range: {
       min: 0.5,
@@ -3994,8 +3997,10 @@ class GLUniverseInitiativeOverlay {
     this.lastPositionStyle = next;
   }
 
-  applyUIScale(scale) {
-    this.root?.style.setProperty("--gluni-ui-scale", String(scale || 1));
+  applyUIScale() {
+    // Interface scale is now a suite-wide per-client preference (core.uiScale →
+    // `--gl-ui-scale`). The overlay reads that global var directly in its CSS
+    // transform, so there is nothing to push per-render here.
   }
 
   showRoundSplash(round) {

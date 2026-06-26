@@ -1,0 +1,23 @@
+{{!-- GLUniverse Suite — Minimap floating viewer shell. Dynamic content
+      (tools, SVG stage, legend/roster, chips) is built imperatively. --}}
+<div class="glmm-viewer gl-glass">
+  <span class="glmm-sweep" data-sweep aria-hidden="true"></span>
+  <span class="glmm-rim" aria-hidden="true"></span>
+  <header class="glmm-vchrome" data-drag>
+    <div class="glmm-vtitle">
+      <i class="fa-solid fa-map-location-dot"></i>
+      <span data-title></span>
+    </div>
+    <div class="glmm-vmode" data-mode></div>
+    <div class="glmm-vtools" data-tools></div>
+  </header>
+  <div class="glmm-vbody">
+    <div class="glmm-vstage" data-stage></div>
+    <aside class="glmm-vpanel" data-panel hidden></aside>
+    <button type="button" class="glmm-chip glmm-freelook" data-freelook hidden></button>
+    <div class="glmm-pending" data-pending hidden></div>
+  </div>
+  <div class="glmm-vresize" data-resize title="">
+    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M11 4 L4 11 M11 8 L8 11" /></svg>
+  </div>
+</div>

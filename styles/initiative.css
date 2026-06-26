@@ -202,7 +202,9 @@
   border: 0;
   contain: layout style;
   box-shadow: none;
-  transform: scale(var(--gluni-ui-scale, 1));
+  /* Scale follows the suite-wide interface scale (core.uiScale → --gl-ui-scale),
+     applied here via transform so the overlay's fixed edge-anchoring is kept. */
+  transform: scale(var(--gl-ui-scale, 1));
   transform-origin: top right;
 }
 

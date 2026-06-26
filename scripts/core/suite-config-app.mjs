@@ -14,7 +14,7 @@
 
 import { SUITE_ID } from "./const.mjs";
 import { Suite } from "./registry.mjs";
-import { catalogFor } from "./catalog.mjs";
+import { catalogFor, SUITE_SECTION } from "./catalog.mjs";
 
 const { ApplicationV2 } = foundry.applications.api;
 
@@ -153,50 +153,52 @@ export class SuiteConfigApp extends ApplicationV2 {
     return btn;
   }
 
-  /* --------------------------------- render --------------------------------- */
+  /** The pinned suite-wide section (interface scale, etc.) — shown to everyone,
+   *  always expanded. Its settings are per-client, so every user can edit them. */
+  #suiteSection(cat) {
+    const section = document.createElement("div");
+    section.className = "gls-fm-section gls-fm-suite gl-glass is-on";
+    const header = document.createElement("div");
+    header.className = "gls-fm-row";
+    header.innerHTML = `
+      <div class="gls-fm-icon"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></div>
+      <div class="gls-fm-meta">
+        <div class="gls-fm-name">${T("GLS.config.suite.title", "GLUniverse Suite")}</div>
+        <div class="gls-fm-hint">${T("GLS.config.suite.hint", "Suite-wide preferences that apply to your screen only.")}</div>
+      </div>
+      <div class="gls-fm-ctl"></div>`;
+    section.appendChild(header);
+    const body = document.createElement("div");
+    body.className = "gls-sec-body";
+    for (const s of cat.settings) body.appendChild(this.#settingRow(s));
+    section.appendChild(body);
+    return section;
+  }
 
-  async _renderHTML() {
-    this.#editors.clear();
-    const wrap = document.createElement("div");
-    wrap.className = "gls-fm-body";
+  /** One feature card. `isGM` gates the enable toggle + editor buttons; the
+   *  caller decides which settings/menus to pass (players get only their own
+   *  per-client settings, no GM editors). */
+  #featureSection(def, { isGM, on, available, reason, settings, menus }) {
+    const section = document.createElement("div");
+    section.className = "gls-fm-section gl-glass";
+    section.dataset.feature = def.id;
+    if (!available) section.classList.add("is-locked");
+    if (on) section.classList.add("is-on");
 
-    const intro = document.createElement("p");
-    intro.className = "gls-fm-intro";
-    intro.textContent = T(
-      "GLS.config.intro",
-      "Enable or disable each module and tune its settings here. Features that need a specific game system or companion feature unlock automatically when present."
-    );
-    wrap.appendChild(intro);
+    const header = document.createElement("div");
+    header.className = "gls-fm-row";
+    header.innerHTML = `
+      <div class="gls-fm-icon"><i class="${def.icon ?? "fa-solid fa-cube"}"></i></div>
+      <div class="gls-fm-meta">
+        <div class="gls-fm-name">${T(def.title, def.id)}</div>
+        <div class="gls-fm-hint">${T(def.hint, "")}</div>
+        ${reason ? `<div class="gls-fm-lock"><i class="fa-solid fa-lock"></i> ${reason}</div>` : ""}
+      </div>
+      <div class="gls-fm-ctl"></div>`;
 
-    const list = document.createElement("div");
-    list.className = "gls-fm-list";
-
-    for (const def of Suite.all()) {
-      const available = Suite.available(def);
-      const reason = Suite.unavailableReason(def);
-      const on = def.core || (available && Suite._stored(def.id));
-      const cat = catalogFor(def.id);
-      const hasBody = available && (cat.settings.length || cat.menus.length);
-
-      const section = document.createElement("div");
-      section.className = "gls-fm-section gl-glass";
-      section.dataset.feature = def.id;
-      if (!available) section.classList.add("is-locked");
-      if (on) section.classList.add("is-on");
-
-      // -- header --
-      const header = document.createElement("div");
-      header.className = "gls-fm-row";
-      header.innerHTML = `
-        <div class="gls-fm-icon"><i class="${def.icon ?? "fa-solid fa-cube"}"></i></div>
-        <div class="gls-fm-meta">
-          <div class="gls-fm-name">${T(def.title, def.id)}</div>
-          <div class="gls-fm-hint">${T(def.hint, "")}</div>
-          ${reason ? `<div class="gls-fm-lock"><i class="fa-solid fa-lock"></i> ${reason}</div>` : ""}
-        </div>
-        <div class="gls-fm-ctl"></div>`;
-
-      const ctl = header.querySelector(".gls-fm-ctl");
+    // Feature enablement is a world setting → only the GM gets the toggle/chip.
+    const ctl = header.querySelector(".gls-fm-ctl");
+    if (isGM) {
       if (def.core) {
         const chip = document.createElement("span");
         chip.className = "gls-fm-corechip";
@@ -213,37 +215,93 @@ export class SuiteConfigApp extends ApplicationV2 {
         sw.innerHTML = `<span class="gls-switch-track"><span class="gls-switch-thumb"></span></span>`;
         ctl.appendChild(sw);
       }
-      section.appendChild(header);
+    }
+    section.appendChild(header);
 
-      // -- body (settings + editors) --
-      if (hasBody) {
-        const body = document.createElement("div");
-        body.className = "gls-sec-body";
-        for (const s of cat.settings) body.appendChild(this.#settingRow(s));
-        if (cat.menus.length) {
-          const eds = document.createElement("div");
-          eds.className = "gls-editor-row";
-          for (const m of cat.menus) eds.appendChild(this.#editorButton(m));
-          body.appendChild(eds);
-        }
-        section.appendChild(body);
+    if (available && (settings.length || menus.length)) {
+      const body = document.createElement("div");
+      body.className = "gls-sec-body";
+      for (const s of settings) body.appendChild(this.#settingRow(s));
+      if (menus.length) {
+        const eds = document.createElement("div");
+        eds.className = "gls-editor-row";
+        for (const m of menus) eds.appendChild(this.#editorButton(m));
+        body.appendChild(eds);
+      }
+      section.appendChild(body);
+    }
+    return section;
+  }
+
+  /* --------------------------------- render --------------------------------- */
+
+  async _renderHTML() {
+    this.#editors.clear();
+    const isGM = !!game.user?.isGM;
+    const wrap = document.createElement("div");
+    wrap.className = "gls-fm-body";
+
+    const intro = document.createElement("p");
+    intro.className = "gls-fm-intro";
+    intro.textContent = isGM
+      ? T(
+          "GLS.config.intro",
+          "Enable or disable each module and tune its settings here. Features that need a specific game system or companion feature unlock automatically when present."
+        )
+      : T(
+          "GLS.config.introPlayer",
+          "Personalize the GLUniverse Suite for your screen. These preferences affect only you — your GM controls which features are enabled."
+        );
+    wrap.appendChild(intro);
+
+    const list = document.createElement("div");
+    list.className = "gls-fm-list";
+
+    // Pinned suite-wide section (e.g. interface scale) above the feature list.
+    const suite = catalogFor(SUITE_SECTION);
+    if (suite.settings.length) list.appendChild(this.#suiteSection(suite));
+
+    for (const def of Suite.all()) {
+      const available = Suite.available(def);
+      const reason = Suite.unavailableReason(def);
+      const on = def.core || (available && Suite._stored(def.id));
+      const cat = catalogFor(def.id);
+
+      if (!isGM) {
+        // Players only see live features that expose a per-client setting they
+        // can actually change — world settings and GM editors are omitted.
+        if (!available || !on) continue;
+        const mine = cat.settings.filter((s) => s.scope !== "world");
+        if (!mine.length) continue;
+        list.appendChild(this.#featureSection(def, { isGM, on, available, reason, settings: mine, menus: [] }));
+        continue;
       }
 
-      list.appendChild(section);
+      list.appendChild(
+        this.#featureSection(def, { isGM, on, available, reason, settings: cat.settings, menus: cat.menus })
+      );
     }
 
     wrap.appendChild(list);
 
     const foot = document.createElement("div");
     foot.className = "gls-fm-foot";
-    foot.innerHTML = `
-      <span class="gls-fm-note">${T(
-        "GLS.config.reloadNote",
-        "Settings apply instantly. Enabling or disabling a feature applies after a reload."
-      )}</span>
-      <button type="button" class="gls-btn gls-btn-accent" data-action="reload">
-        <i class="fa-solid fa-rotate"></i> ${T("GLS.config.saveReload", "Save & Reload")}
-      </button>`;
+    if (isGM) {
+      foot.innerHTML = `
+        <span class="gls-fm-note">${T(
+          "GLS.config.reloadNote",
+          "Settings apply instantly. Enabling or disabling a feature applies after a reload."
+        )}</span>
+        <button type="button" class="gls-btn gls-btn-accent" data-action="reload">
+          <i class="fa-solid fa-rotate"></i> ${T("GLS.config.saveReload", "Save & Reload")}
+        </button>`;
+    } else {
+      foot.classList.add("gls-fm-foot-player");
+      foot.innerHTML = `<span class="gls-fm-note">${T(
+        "GLS.config.playerNote",
+        "Your preferences save instantly and apply to your screen only."
+      )}</span>`;
+    }
     wrap.appendChild(foot);
 
     return wrap;

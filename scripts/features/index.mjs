@@ -19,3 +19,4 @@ import "./cargo-grid/index.mjs";
 import "./tidy5e-slots/index.mjs";
 import "./pf2e-flatten/index.mjs";
 import "./critical/index.mjs";
+import "./minimap/index.mjs";
