@@ -2,7 +2,7 @@
   "id": "gluniverse-foundry-modules",
   "title": "GLUniverse Suite",
   "description": "A unified suite of GLUniverse modules for Foundry VTT — clocks & trackers, initiative, weather, mission support, loot, cargo, critical animations, and more — all sharing one premium Etched Glass interface. Every module can be enabled or disabled individually from a single Feature Manager.",
-  "version": "1.3.5",
+  "version": "1.4.0",
   "compatibility": {
     "minimum": "13",
     "verified": "14",
@@ -164,5 +164,5 @@
   "socket": true,
   "url": "https://github.com/patcharapon-j/gluniverse-foundry-modules",
   "manifest": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/latest/download/module.json",
-  "download": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/download/v1.3.5/module.zip"
+  "download": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/download/v1.4.0/module.zip"
 }
