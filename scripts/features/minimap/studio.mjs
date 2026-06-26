@@ -8,8 +8,8 @@
  */
 
 import {
-  MODULE_ID, MAP_W, MAP_H, PALETTE, ICON_CATALOG, VIEW_MODES, makeId,
-  DEFAULT_ROOM_COLOR, DEFAULT_MARKER_COLOR, DEFAULT_ELEMENT_COLOR, safeIconClass
+  MODULE_ID, MAP_W, MAP_H, PALETTE, ICON_CATALOG, VIEW_MODES, MARKER_KINDS, makeId,
+  DEFAULT_ROOM_COLOR, DEFAULT_MARKER_COLOR, DEFAULT_ELEMENT_COLOR, DEFAULT_PARTY_COLOR, safeIconClass
 } from "./const.mjs";
 import { MapStore } from "./data.mjs";
 import { MapRenderer } from "./render.mjs";
@@ -46,8 +46,11 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     this.renderer = null;
     this._editId = null;
     this._tool = "select";
-    this._selId = null;
-    this._poly = null; // in-progress polygon/connector points
+    this._selId = null;          // primary selection (for single-element props)
+    this._selIds = new Set();    // full selection set (marquee / shift-click)
+    this._poly = null;           // in-progress polygon/connector points
+    this._fitMapId = null;       // map whose first fit has run
+    this._space = false;         // space held → pan gesture
   }
 
   static DEFAULT_OPTIONS = {
@@ -83,7 +86,9 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     this._buildToolbar();
     this._wireCanvas();
     this._key = (ev) => this._onKey(ev);
+    this._keyUp = (ev) => this._onKeyUp(ev);
     window.addEventListener("keydown", this._key);
+    window.addEventListener("keyup", this._keyUp);
 
     this.refresh();
   }
@@ -91,6 +96,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onClose(options) {
     this.renderer?.destroy();
     if (this._key) window.removeEventListener("keydown", this._key);
+    if (this._keyUp) window.removeEventListener("keyup", this._keyUp);
     await super._onClose(options);
   }
 
@@ -224,6 +230,9 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
   _buildToolbar() {
     const el = this._toolbarEl;
     el.replaceChildren();
+    const left = document.createElement("div");
+    left.className = "glmm-st-tb-left";
+
     const group = document.createElement("div");
     group.className = "glmm-st-tools";
     for (const t of TOOLS) {
@@ -235,7 +244,26 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
       b.addEventListener("click", () => this._setTool(t.id));
       group.appendChild(b);
     }
-    el.appendChild(group);
+    left.appendChild(group);
+
+    // undo / redo
+    const hist = document.createElement("div");
+    hist.className = "glmm-st-tools glmm-st-hist";
+    const undo = document.createElement("button");
+    undo.className = "glmm-st-tool";
+    undo.title = game.i18n.localize("GLMM.studio.undo");
+    undo.disabled = !MapStore.canUndo();
+    undo.innerHTML = `<i class="fa-solid fa-rotate-left"></i>`;
+    undo.addEventListener("click", () => this._undo());
+    const redo = document.createElement("button");
+    redo.className = "glmm-st-tool";
+    redo.title = game.i18n.localize("GLMM.studio.redo");
+    redo.disabled = !MapStore.canRedo();
+    redo.innerHTML = `<i class="fa-solid fa-rotate-right"></i>`;
+    redo.addEventListener("click", () => this._redo());
+    hist.append(undo, redo);
+    left.appendChild(hist);
+    el.appendChild(left);
 
     const right = document.createElement("div");
     right.className = "glmm-st-tb-right";
@@ -243,6 +271,13 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     fit.className = "gls-btn glmm-st-fit";
     fit.innerHTML = `<i class="fa-solid fa-expand"></i> ${game.i18n.localize("GLMM.studio.fit")}`;
     fit.addEventListener("click", () => this.renderer?.fit());
+    // broadcast presentation style toggle (prominent | normal)
+    const style = Ctl.getBroadcastStyle?.() ?? "prominent";
+    const styleBtn = document.createElement("button");
+    styleBtn.className = "gls-btn glmm-st-style is-" + style;
+    styleBtn.title = game.i18n.localize("GLMM.studio.broadcastStyleHint");
+    styleBtn.innerHTML = `<i class="fa-solid ${style === "normal" ? "fa-arrows-to-dot" : "fa-arrows-to-circle"}"></i> ${game.i18n.localize(`GLMM.broadcastStyle.${style}`)}`;
+    styleBtn.addEventListener("click", () => { Ctl.cycleBroadcastStyle?.(); this._buildToolbar(); });
     const silent = document.createElement("button");
     silent.className = "gls-btn glmm-st-push";
     silent.innerHTML = `<i class="fa-solid fa-eye-low-vision"></i> ${game.i18n.localize("GLMM.viewer.tool.silent")}`;
@@ -251,7 +286,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     bc.className = "gls-btn gls-btn-accent glmm-st-push";
     bc.innerHTML = `<i class="fa-solid fa-tower-broadcast"></i> ${game.i18n.localize("GLMM.viewer.tool.broadcast")}`;
     bc.addEventListener("click", () => this.cb.push?.("broadcast"));
-    right.append(fit, silent, bc);
+    right.append(fit, styleBtn, silent, bc);
     el.appendChild(right);
   }
 
@@ -259,9 +294,14 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     this._tool = id;
     this._poly = null;
     this.renderer?.clearFx();
-    this._toolbarEl.querySelectorAll(".glmm-st-tool").forEach((b) => b.classList.toggle("is-on", b.dataset.tool === id));
+    this._toolbarEl.querySelectorAll(".glmm-st-tool[data-tool]").forEach((b) => b.classList.toggle("is-on", b.dataset.tool === id));
     this._canvasEl.dataset.tool = id;
   }
+
+  /* ------------------------------ undo / redo ---------------------------- */
+
+  async _undo() { if (await MapStore.undo()) { this._selId = null; this._selIds.clear(); this.refresh(); } }
+  async _redo() { if (await MapStore.redo()) { this._selId = null; this._selIds.clear(); this.refresh(); } }
 
   _buildStatus() {
     if (!this._statusEl) return;
@@ -272,17 +312,33 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     if (pending > 0) parts.push(game.i18n.format("GLMM.viewer.pending", { n: pending }));
     this._statusEl.textContent = parts.join("  ·  ");
     this._statusEl.classList.toggle("has-pending", pending > 0);
+    this._syncHistButtons();
+  }
+
+  /** Keep the undo/redo buttons' enabled state current without rebuilding the bar. */
+  _syncHistButtons() {
+    const tb = this._toolbarEl;
+    if (!tb) return;
+    const [u, r] = tb.querySelectorAll(".glmm-st-hist .glmm-st-tool");
+    if (u) u.disabled = !MapStore.canUndo();
+    if (r) r.disabled = !MapStore.canRedo();
   }
 
   /* -------------------------------- canvas ------------------------------- */
 
   _renderCanvas() {
     const m = this.editMap();
-    if (!m) { this.renderer.setSnapshot(null); this._clearSelection(); return; }
+    if (!m) { this.renderer.setSnapshot(null); this._clearSelection(); this._fitMapId = null; return; }
     const snap = { mapId: m.id, name: m.name, w: m.w ?? MAP_W, h: m.h ?? MAP_H, viewMode: m.viewMode, elements: m.elements ?? [], rev: -1 };
     this.renderer.setSnapshot(snap);
-    // mark hidden elements (they remain editable in the studio)
+    // prune any stale selection ids that no longer exist
+    const live = new Set((m.elements ?? []).map((e) => e.id));
+    for (const id of [...this._selIds]) if (!live.has(id)) this._selIds.delete(id);
+    // mark hidden elements (they remain editable in the studio) + multi-selection
     for (const e of m.elements ?? []) if (e.hidden) this.renderer.nodeFor(e.id)?.classList.add("is-hidden-el");
+    for (const id of this._selIds) this.renderer.nodeFor(id)?.classList.add("is-multi-sel");
+    // First time we show this map, frame it (endless canvas → fit to content).
+    if (m.id !== this._fitMapId) { this._fitMapId = m.id; this.renderer.fit(); }
     this._drawSelection();
   }
 
@@ -290,19 +346,21 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     const c = this._canvasEl;
     c.addEventListener("wheel", (ev) => {
       ev.preventDefault();
-      this.renderer.zoomAt(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX, ev.clientY);
+      this.renderer.zoomAt(ev.deltaY < 0 ? 1.12 : 1 / 1.12, ev.clientX, ev.clientY);
       this._drawSelection();
     }, { passive: false });
     c.addEventListener("pointerdown", (ev) => this._onCanvasDown(ev));
     c.addEventListener("dblclick", () => this._finishPoly());
+    c.addEventListener("contextmenu", (ev) => ev.preventDefault()); // right-drag pans
   }
 
   _onCanvasDown(ev) {
-    if (ev.button === 1 || ev.button === 2) return; // middle/right reserved
+    if (ev.button === 2) return; // right reserved
+    // Endless-canvas panning: middle-button, right-button, or space + left-drag.
+    if (ev.button === 1 || (ev.button === 0 && this._space)) { ev.preventDefault(); return this._startPan(ev); }
     if (ev.button !== 0) return;
     const pt = this.renderer.toLogical(ev.clientX, ev.clientY);
-    const x = clamp(pt.x, 0, this.editMap()?.w ?? MAP_W);
-    const y = clamp(pt.y, 0, this.editMap()?.h ?? MAP_H);
+    const x = Math.round(pt.x), y = Math.round(pt.y); // endless canvas: no clamping
 
     switch (this._tool) {
       case "select": return this._selectAt(ev);
@@ -310,8 +368,25 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
       case "polygon": case "connector": return this._addPolyPoint(x, y);
       case "label": return this._createAndSelect({ type: "label", x, y, text: game.i18n.localize("GLMM.default.label"), size: 28, color: "#f3fbff" });
       case "icon": return this._createAndSelect({ type: "icon", x, y, icon: ICON_CATALOG[0].cls, label: "", size: 42, color: DEFAULT_ELEMENT_COLOR });
-      case "marker": return this._createAndSelect({ type: "marker", x, y, r: 16, label: "", color: DEFAULT_MARKER_COLOR });
+      case "marker": return this._createAndSelect({ type: "marker", kind: "member", x, y, r: 16, label: "", color: DEFAULT_MARKER_COLOR });
     }
+  }
+
+  /** Drag the endless canvas (keeps the grabbed logical point under the cursor). */
+  _startPan(ev) {
+    const c = this._canvasEl;
+    const grab = this.renderer.toLogical(ev.clientX, ev.clientY);
+    c.setPointerCapture(ev.pointerId);
+    c.classList.add("is-panning");
+    const move = (e) => this.renderer.panGrab(grab, e.clientX, e.clientY);
+    const up = () => {
+      c.releasePointerCapture?.(ev.pointerId);
+      c.removeEventListener("pointermove", move);
+      c.removeEventListener("pointerup", up);
+      c.classList.remove("is-panning");
+    };
+    c.addEventListener("pointermove", move);
+    c.addEventListener("pointerup", up);
   }
 
   async _createAndSelect(el) {
@@ -320,6 +395,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     el.id = makeId(el.type);
     await MapStore.addElement(m.id, el);
     this._selId = el.id;
+    this._selIds = new Set([el.id]);
     this._setTool("select");
     this.refresh();
   }
@@ -337,7 +413,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
       else { preview.setAttribute("x", x); preview.setAttribute("y", y); preview.setAttribute("width", w); preview.setAttribute("height", h); preview.setAttribute("rx", 8); }
     };
     draw();
-    const move = (e) => { const p = this.renderer.toLogical(e.clientX, e.clientY); x1 = clamp(p.x, 0, this.editMap()?.w ?? MAP_W); y1 = clamp(p.y, 0, this.editMap()?.h ?? MAP_H); draw(); };
+    const move = (e) => { const p = this.renderer.toLogical(e.clientX, e.clientY); x1 = p.x; y1 = p.y; draw(); };
     const up = async () => {
       c.releasePointerCapture?.(ev.pointerId);
       c.removeEventListener("pointermove", move);
@@ -390,51 +466,126 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /* ----------------------------- select / move --------------------------- */
 
+  selEls() {
+    const m = this.editMap();
+    if (!m) return [];
+    const byId = new Map((m.elements ?? []).map((e) => [e.id, e]));
+    return [...this._selIds].map((id) => byId.get(id)).filter(Boolean);
+  }
+
   _selectAt(ev) {
     // handle drag-resize first
     if (ev.target.dataset?.handle) return this._startResize(ev);
     const node = ev.target.closest?.(".glmm-el");
     const id = node?.dataset.id ?? null;
+
+    if (!id) {
+      // empty space → rubber-band marquee (shift keeps the current selection)
+      if (!ev.shiftKey) { this._selId = null; this._selIds.clear(); this._buildProps(); this._drawSelection(); }
+      return this._startMarquee(ev);
+    }
+
+    if (ev.shiftKey) {
+      if (this._selIds.has(id)) { this._selIds.delete(id); if (this._selId === id) this._selId = [...this._selIds].at(-1) ?? null; }
+      else { this._selIds.add(id); this._selId = id; }
+      this._buildProps();
+      this._refreshSelectionVisn();
+      return;
+    }
+
+    if (!this._selIds.has(id)) this._selIds = new Set([id]);
     this._selId = id;
     this._buildProps();
-    this._drawSelection();
-    if (id) this._startMove(ev, id);
+    this._refreshSelectionVisn();
+    this._startMove(ev, id);
   }
 
+  /** Drag-move every selected element together. */
   _startMove(ev, id) {
     const c = this._canvasEl;
-    const el = this.selEl();
-    if (!el) return;
+    const els = this.selEls();
+    if (!els.length) return;
     const start = this.renderer.toLogical(ev.clientX, ev.clientY);
-    const node = this.renderer.nodeFor(id);
     c.setPointerCapture(ev.pointerId);
     let moved = false, delta = { x: 0, y: 0 };
+    const nodes = els.map((el) => this.renderer.nodeFor(el.id)).filter(Boolean);
     const move = (e) => {
       const cur = this.renderer.toLogical(e.clientX, e.clientY);
       delta = { x: cur.x - start.x, y: cur.y - start.y };
       if (Math.hypot(delta.x, delta.y) > 2) moved = true;
-      if (node) node.style.transform = `translate(${delta.x}px, ${delta.y}px)`;
+      for (const node of nodes) node.style.transform = `translate(${delta.x}px, ${delta.y}px)`;
       this._moveSelGroup(delta);
     };
     const up = async () => {
       c.releasePointerCapture?.(ev.pointerId);
       c.removeEventListener("pointermove", move);
       c.removeEventListener("pointerup", up);
-      if (node) node.style.transform = "";
-      if (moved) await this._commitMove(el, delta);
+      for (const node of nodes) node.style.transform = "";
+      if (moved) await this._commitMove(els, delta);
     };
     c.addEventListener("pointermove", move);
     c.addEventListener("pointerup", up);
   }
 
-  async _commitMove(el, delta) {
+  async _commitMove(els, delta) {
     const dx = Math.round(delta.x), dy = Math.round(delta.y);
-    const patch = {};
-    if (el.type === "room" && el.shape === "polygon") patch.points = el.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-    else if (el.type === "connector") patch.points = el.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-    else { patch.x = (el.x ?? 0) + dx; patch.y = (el.y ?? 0) + dy; }
-    await MapStore.updateElement(this._editId, el.id, patch);
+    if (!dx && !dy) return;
+    const patches = {};
+    for (const el of els) {
+      if ((el.type === "room" && el.shape === "polygon") || el.type === "connector") {
+        patches[el.id] = { points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+      } else {
+        patches[el.id] = { x: (el.x ?? 0) + dx, y: (el.y ?? 0) + dy };
+      }
+    }
+    await MapStore.updateElements(this._editId, patches);
     this.refresh();
+  }
+
+  /** Rubber-band selection over empty canvas. */
+  _startMarquee(ev) {
+    const c = this._canvasEl;
+    const start = this.renderer.toLogical(ev.clientX, ev.clientY);
+    c.setPointerCapture(ev.pointerId);
+    const rect = document.createElementNS(SVGNS, "rect");
+    rect.setAttribute("class", "glmm-st-marquee");
+    this.renderer.layers.fx.appendChild(rect);
+    let cur = start, moved = false;
+    const draw = () => {
+      const x = Math.min(start.x, cur.x), y = Math.min(start.y, cur.y);
+      rect.setAttribute("x", x); rect.setAttribute("y", y);
+      rect.setAttribute("width", Math.abs(cur.x - start.x)); rect.setAttribute("height", Math.abs(cur.y - start.y));
+    };
+    draw();
+    const move = (e) => { cur = this.renderer.toLogical(e.clientX, e.clientY); if (Math.hypot(cur.x - start.x, cur.y - start.y) > 3) moved = true; draw(); };
+    const up = () => {
+      c.releasePointerCapture?.(ev.pointerId);
+      c.removeEventListener("pointermove", move);
+      c.removeEventListener("pointerup", up);
+      rect.remove();
+      if (!moved) return;
+      const box = { x: Math.min(start.x, cur.x), y: Math.min(start.y, cur.y), w: Math.abs(cur.x - start.x), h: Math.abs(cur.y - start.y) };
+      const hits = this._elementsInBox(box);
+      if (ev.shiftKey) for (const id of hits) this._selIds.add(id);
+      else this._selIds = new Set(hits);
+      this._selId = [...this._selIds].at(-1) ?? null;
+      this._buildProps();
+      this._refreshSelectionVisn();
+    };
+    c.addEventListener("pointermove", move);
+    c.addEventListener("pointerup", up);
+  }
+
+  _elementsInBox(box) {
+    const m = this.editMap();
+    if (!m) return [];
+    const hit = [];
+    for (const el of m.elements ?? []) {
+      const b = this.bboxOf(el);
+      if (!b) continue;
+      if (b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y) hit.push(el.id);
+    }
+    return hit;
   }
 
   _startResize(ev) {
@@ -481,27 +632,37 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _clearSelection() { this._selGroup?.remove(); this._selGroup = null; }
 
+  /** Update selection highlighting + overlay without rebuilding the canvas. */
+  _refreshSelectionVisn() {
+    this.renderer.svg.querySelectorAll(".glmm-el.is-multi-sel").forEach((n) => n.classList.remove("is-multi-sel"));
+    for (const id of this._selIds) this.renderer.nodeFor(id)?.classList.add("is-multi-sel");
+    this._drawSelection();
+  }
+
   _drawSelection(override = {}) {
     this._clearSelection();
-    const el = this.selEl();
-    if (!el) return;
-    const b = this.bboxOf(el, override);
-    if (!b) return;
+    const els = this.selEls();
+    if (!els.length) return;
+    const single = els.length === 1;
     const g = document.createElementNS(SVGNS, "g");
     g.setAttribute("class", "glmm-st-sel");
     const pad = 8;
-    const rect = document.createElementNS(SVGNS, "rect");
-    rect.setAttribute("class", "glmm-st-selbox");
-    rect.setAttribute("x", b.x - pad); rect.setAttribute("y", b.y - pad);
-    rect.setAttribute("width", b.w + pad * 2); rect.setAttribute("height", b.h + pad * 2);
-    g.appendChild(rect);
-    if (el.type === "room" && el.shape !== "polygon") {
-      const handle = document.createElementNS(SVGNS, "rect");
-      handle.setAttribute("class", "glmm-st-handle");
-      handle.dataset.handle = "se";
-      handle.setAttribute("x", b.x + b.w - 7); handle.setAttribute("y", b.y + b.h - 7);
-      handle.setAttribute("width", 14); handle.setAttribute("height", 14);
-      g.appendChild(handle);
+    for (const el of els) {
+      const b = this.bboxOf(el, single ? override : {});
+      if (!b) continue;
+      const rect = document.createElementNS(SVGNS, "rect");
+      rect.setAttribute("class", "glmm-st-selbox");
+      rect.setAttribute("x", b.x - pad); rect.setAttribute("y", b.y - pad);
+      rect.setAttribute("width", b.w + pad * 2); rect.setAttribute("height", b.h + pad * 2);
+      g.appendChild(rect);
+      if (single && el.type === "room" && el.shape !== "polygon") {
+        const handle = document.createElementNS(SVGNS, "rect");
+        handle.setAttribute("class", "glmm-st-handle");
+        handle.dataset.handle = "se";
+        handle.setAttribute("x", b.x + b.w - 7); handle.setAttribute("y", b.y + b.h - 7);
+        handle.setAttribute("width", 14); handle.setAttribute("height", 14);
+        g.appendChild(handle);
+      }
     }
     this.renderer.svg.appendChild(g);
     this._selGroup = g;
@@ -516,6 +677,7 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
   _buildProps() {
     const el = this._propsEl;
     el.replaceChildren();
+    if (this._selIds.size > 1) return this._buildGroupProps();
     const sel = this.selEl();
     if (!sel) { this._buildMapProps(); return; }
 
@@ -537,9 +699,18 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
       el.appendChild(this._iconPicker(sel.icon, (c) => this._patch({ icon: c })));
     }
     if (sel.type === "marker") {
-      el.appendChild(this._userRow(sel.userId ?? "", (v) => this._patch({ userId: v || null })));
+      const kind = sel.kind ?? "member";
+      el.appendChild(this._kindRow(kind, (v) => {
+        const patch = { kind: v };
+        if (v === "party" && (!sel.color || sameColor(sel.color, DEFAULT_MARKER_COLOR))) patch.color = DEFAULT_PARTY_COLOR;
+        this._patch(patch);
+        this._buildProps();
+      }));
+      if (kind !== "party") {
+        el.appendChild(this._userRow(sel.userId ?? "", (v) => this._patch({ userId: v || null })));
+      }
       el.appendChild(this._textRow("GLMM.props.nameOverride", sel.label ?? "", (v) => this._patch({ label: v })));
-      el.appendChild(this._rangeRow("GLMM.props.size", sel.r ?? 16, 8, 40, (v) => this._patch({ r: v })));
+      el.appendChild(this._rangeRow("GLMM.props.size", sel.r ?? 16, 8, 48, (v) => this._patch({ r: v })));
     }
     if (sel.type === "connector") {
       el.appendChild(this._toggleRow("GLMM.props.dashed", !!sel.dashed, (v) => this._patch({ dashed: v })));
@@ -580,6 +751,17 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     el.appendChild(hint);
   }
 
+  /** Properties for a multi-element selection (group recolour + delete). */
+  _buildGroupProps() {
+    const el = this._propsEl;
+    el.appendChild(mkPropHead(game.i18n.format("GLMM.props.multi", { n: this._selIds.size }), () => this._deleteSel()));
+    const hint = document.createElement("div");
+    hint.className = "glmm-prop-hint";
+    hint.textContent = game.i18n.localize("GLMM.props.multiHint");
+    el.appendChild(hint);
+    el.appendChild(this._swatchRow(null, (c) => this._patchGroup({ color: c })));
+  }
+
   async _patch(patch) {
     const sel = this.selEl();
     if (!sel) return;
@@ -590,18 +772,50 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _deleteSel() {
-    const sel = this.selEl();
-    if (!sel) return;
-    await MapStore.removeElement(this._editId, sel.id);
+    if (this._selIds.size > 1) {
+      await MapStore.removeElements(this._editId, [...this._selIds]);
+    } else {
+      const sel = this.selEl();
+      if (!sel) return;
+      await MapStore.removeElement(this._editId, sel.id);
+    }
     this._selId = null;
+    this._selIds.clear();
     this.refresh();
+  }
+
+  /** Apply one patch to every selected element (single undo step). */
+  async _patchGroup(patch) {
+    if (!this._selIds.size) return;
+    const patches = {};
+    for (const id of this._selIds) patches[id] = { ...patch };
+    await MapStore.updateElements(this._editId, patches);
+    this._renderCanvas();
+    this._buildStatus();
+    this.cb.refreshViewer?.();
   }
 
   _onKey(ev) {
     if (!this.rendered) return;
-    if ((ev.key === "Delete" || ev.key === "Backspace") && this._selId && !isTyping(ev)) { ev.preventDefault(); this._deleteSel(); }
-    if (ev.key === "Escape" && this._poly) { this._poly = null; this.renderer.clearFx(); }
+    const mod = ev.ctrlKey || ev.metaKey;
+    if (mod && (ev.key === "z" || ev.key === "Z")) {
+      if (isTyping(ev)) return;
+      ev.preventDefault();
+      if (ev.shiftKey) this._redo(); else this._undo();
+      return;
+    }
+    if (mod && (ev.key === "y" || ev.key === "Y")) { if (isTyping(ev)) return; ev.preventDefault(); this._redo(); return; }
+    if (ev.code === "Space" && !isTyping(ev)) { this._space = true; this._canvasEl?.classList.add("can-pan"); }
+    if ((ev.key === "Delete" || ev.key === "Backspace") && (this._selId || this._selIds.size) && !isTyping(ev)) { ev.preventDefault(); this._deleteSel(); }
+    if (ev.key === "Escape") {
+      if (this._poly) { this._poly = null; this.renderer.clearFx(); }
+      else if (this._selIds.size) { this._selId = null; this._selIds.clear(); this._buildProps(); this._refreshSelectionVisn(); }
+    }
     if (ev.key === "Enter" && this._poly) { ev.preventDefault(); this._finishPoly(); }
+  }
+
+  _onKeyUp(ev) {
+    if (ev.code === "Space") { this._space = false; this._canvasEl?.classList.remove("can-pan"); }
   }
 
   /* --------------------------- prop control builders --------------------- */
@@ -668,6 +882,21 @@ export class MapStudio extends HandlebarsApplicationMixin(ApplicationV2) {
     b.setAttribute("aria-pressed", String(on));
     b.addEventListener("click", () => { const next = b.getAttribute("aria-pressed") !== "true"; b.classList.toggle("is-on", next); b.setAttribute("aria-pressed", String(next)); onChange(next); });
     row.appendChild(b);
+    return row;
+  }
+
+  _kindRow(current, onChange) {
+    const row = mkRow("GLMM.props.markerKind");
+    const sel = document.createElement("select");
+    sel.className = "gls-input gls-select";
+    for (const k of MARKER_KINDS) {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = game.i18n.localize(`GLMM.markerKind.${k}`);
+      if (current === k) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.addEventListener("change", () => onChange(sel.value));
+    row.appendChild(sel);
     return row;
   }
 
@@ -753,7 +982,6 @@ async function promptText(title, initial) {
   }
 }
 
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const toHex6 = (c) => { const s = String(c ?? "#6b86d6"); return /^#[0-9a-f]{6}$/i.test(s) ? s : "#6b86d6"; };
 const sameColor = (a, b) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 function isTyping(ev) { const t = ev.target; return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable); }

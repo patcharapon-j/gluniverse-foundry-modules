@@ -8,7 +8,8 @@
   "GLMM.control.viewer": "Toggle Minimap",
   "GLMM.keybind.toggleViewer": "Minimap: Toggle Viewer",
 
-  "GLMM.notify.broadcast": "Broadcast to players — changes are animating on their maps.",
+  "GLMM.notify.broadcast": "Broadcast to players — their maps expand and the changes animate.",
+  "GLMM.notify.broadcastNormal": "Broadcast to players — changes animate in place, windows stay put.",
   "GLMM.notify.silent": "Applied silently — players' maps updated quietly.",
 
   "GLMM.viewer.empty": "No active map",
@@ -20,7 +21,11 @@
   "GLMM.viewer.tool.broadcast": "Broadcast changes",
   "GLMM.viewer.tool.recenter": "Recenter",
   "GLMM.viewer.tool.expand": "Expand / collapse",
+  "GLMM.viewer.tool.minimize": "Minimize / restore",
   "GLMM.viewer.tool.close": "Close",
+
+  "GLMM.broadcastStyle.prominent": "Prominent",
+  "GLMM.broadcastStyle.normal": "In place",
 
   "GLMM.viewMode.shared": "Shared view",
   "GLMM.viewMode.freeform": "Free view",
@@ -33,6 +38,7 @@
   "GLMM.legend.key": "Legend",
   "GLMM.legend.empty": "Nothing on this map yet.",
   "GLMM.legend.unnamed": "Marker",
+  "GLMM.legend.party": "Party",
 
   "GLMM.tip.hidden": "Hidden from players",
 
@@ -54,10 +60,13 @@
   "GLMM.studio.deleteConfirm": "Delete the map \"{name}\"? This cannot be undone.",
   "GLMM.studio.viewMode": "Player view mode",
   "GLMM.studio.fit": "Fit",
+  "GLMM.studio.undo": "Undo (Ctrl+Z)",
+  "GLMM.studio.redo": "Redo (Ctrl+Shift+Z)",
+  "GLMM.studio.broadcastStyleHint": "Broadcast style — Prominent grows players' windows; In place animates without moving them.",
   "GLMM.studio.status": "{n} elements",
   "GLMM.studio.needMap": "Create or select a map first.",
   "GLMM.studio.pickOrCreate": "Pick a map from the left, or create a new one.",
-  "GLMM.studio.selectHint": "Use a tool to draw, or click an element to edit it. Drag to move; Delete removes the selection.",
+  "GLMM.studio.selectHint": "Draw with a tool, or click an element to edit. Drag to move. Drag empty space to marquee-select, Shift-click to add. Middle-drag or hold Space to pan the endless canvas. Ctrl+Z undoes.",
 
   "GLMM.tool.select": "Select / move",
   "GLMM.tool.rect": "Room (rectangle)",
@@ -66,7 +75,7 @@
   "GLMM.tool.connector": "Connector (click points, double-click to finish)",
   "GLMM.tool.label": "Text label",
   "GLMM.tool.icon": "Icon point-of-interest",
-  "GLMM.tool.marker": "Entity marker (player dot)",
+  "GLMM.tool.marker": "Entity marker (player dot / party)",
 
   "GLMM.element.room": "Room",
   "GLMM.element.connector": "Connector",
@@ -79,7 +88,12 @@
   "GLMM.props.size": "Size",
   "GLMM.props.label": "Label",
   "GLMM.props.nameOverride": "Name override",
+  "GLMM.props.markerKind": "Marker type",
   "GLMM.props.bindUser": "Bound player",
+  "GLMM.props.multi": "{n} selected",
+  "GLMM.props.multiHint": "Recolor or delete the whole selection. Drag any one to move them together.",
+  "GLMM.markerKind.member": "Member (player dot)",
+  "GLMM.markerKind.party": "Party (whole group)",
   "GLMM.props.noUser": "— none —",
   "GLMM.props.icon": "Icon",
   "GLMM.props.dashed": "Dashed line",

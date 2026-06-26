@@ -8,7 +8,7 @@
  * (activate / push / draw-attention / stage a quick marker move).
  */
 
-import { MODULE_ID, FEATURE_ID, MSG, PING_COOLDOWN_MS, MAP_W, MAP_H } from "./const.mjs";
+import { MODULE_ID, FEATURE_ID, MSG, PING_COOLDOWN_MS, MAP_W, MAP_H, BROADCAST_STYLES, DEFAULT_BROADCAST_STYLE } from "./const.mjs";
 import { MapStore } from "./data.mjs";
 import { MinimapViewer } from "./viewer.mjs";
 import * as Net from "./socket.mjs";
@@ -19,8 +19,21 @@ const state = {
   viewer: null,
   lastRev: 0,
   lastPingAt: 0,
-  vpThrottle: 0
+  vpThrottle: 0,
+  broadcastStyle: DEFAULT_BROADCAST_STYLE // GM's chosen broadcast presentation
 };
+
+/** GM's broadcast presentation choice (prominent | normal). */
+export function getBroadcastStyle() { return state.broadcastStyle; }
+export function setBroadcastStyle(style) {
+  state.broadcastStyle = BROADCAST_STYLES.includes(style) ? style : DEFAULT_BROADCAST_STYLE;
+  getStudio()?.refresh?.();
+  return state.broadcastStyle;
+}
+export function cycleBroadcastStyle() {
+  const i = BROADCAST_STYLES.indexOf(state.broadcastStyle);
+  return setBroadcastStyle(BROADCAST_STYLES[(i + 1) % BROADCAST_STYLES.length]);
+}
 
 /** The single live Map Studio instance, whichever entry point opened it. */
 function getStudio() {
@@ -145,15 +158,20 @@ export async function deactivate() {
   getStudio()?.refresh?.();
 }
 
-/** Publish the active map's draft to players — silently or as a broadcast. */
+/** Publish the active map's draft to players — silently or as a broadcast. The
+ *  broadcast `style` (prominent | normal) decides whether players' windows
+ *  expand to centre-screen or just animate the diff in place. */
 export async function push(mode = "silent") {
   if (!game.user?.isGM) return;
   const snap = await MapStore.publishActive();
   if (!snap) return;
   state.lastRev = snap.rev;
-  Net.emitPublished(mode, snap.rev);
+  const style = mode === "broadcast" ? state.broadcastStyle : undefined;
+  Net.emitPublished(mode, snap.rev, style);
   refreshGM(); // clears the pending pill; GM keeps editing the draft
-  const key = mode === "broadcast" ? "GLMM.notify.broadcast" : "GLMM.notify.silent";
+  const key = mode === "broadcast"
+    ? (style === "normal" ? "GLMM.notify.broadcastNormal" : "GLMM.notify.broadcast")
+    : "GLMM.notify.silent";
   ui.notifications?.info(game.i18n.localize(key));
 }
 
@@ -249,7 +267,7 @@ async function onPublishedMsg(msg) {
   if (msg.mode === "broadcast") {
     const v = ensureViewer();
     await v.ensureRendered();
-    v.applyPublished(snap, "broadcast");
+    v.applyPublished(snap, "broadcast", msg.style ?? DEFAULT_BROADCAST_STYLE);
   } else if (state.viewer?.rendered) {
     state.viewer.applyPublished(snap, "silent");
   }

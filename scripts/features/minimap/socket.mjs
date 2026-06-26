@@ -19,8 +19,8 @@ export function emitAttention(x, y, color) {
   emitSocket(FEATURE_ID, { type: MSG.attention, x, y, color, userId: me() });
 }
 
-export function emitPublished(mode, rev) {
-  emitSocket(FEATURE_ID, { type: MSG.published, mode, rev, userId: me() });
+export function emitPublished(mode, rev, style) {
+  emitSocket(FEATURE_ID, { type: MSG.published, mode, rev, style, userId: me() });
 }
 
 export function emitViewport(pan, zoom, rev) {

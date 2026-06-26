@@ -14,11 +14,49 @@
  */
 
 import {
-  MAP_W, MAP_H, PING_TTL_MS, ATTENTION_TTL_MS,
-  DEFAULT_MARKER_COLOR, DEFAULT_ROOM_COLOR, DEFAULT_ELEMENT_COLOR, safeIconClass
+  MAP_W, MAP_H, PING_TTL_MS, ATTENTION_TTL_MS, SCALE_MIN, SCALE_MAX,
+  DEFAULT_MARKER_COLOR, DEFAULT_ROOM_COLOR, DEFAULT_ELEMENT_COLOR, DEFAULT_PARTY_COLOR,
+  PARTY_GLYPH, SCRAMBLE_GLYPHS, safeIconClass
 } from "./const.mjs";
 
 const SVGNS = "http://www.w3.org/2000/svg";
+
+/**
+ * Per-character "decoder" reveal: each glyph cycles through random characters
+ * then locks in, staggered left→right, so text scrambles into place. Works on
+ * any node with textContent (HTML or SVG <text>). Returns a cancel fn.
+ */
+export function scrambleText(node, finalText, { dur = 820, settle = 0.55 } = {}) {
+  if (!node) return () => {};
+  const text = String(finalText ?? "");
+  const n = text.length;
+  if (!n) { node.textContent = ""; return () => {}; }
+  // Each char reveals across [start, end] of normalised progress.
+  const spans = [];
+  for (let i = 0; i < n; i++) {
+    const start = (i / n) * (1 - settle);
+    spans.push([start, start + settle]);
+  }
+  let raf = 0;
+  let t0 = 0;
+  const pick = () => SCRAMBLE_GLYPHS[(Math.random() * SCRAMBLE_GLYPHS.length) | 0];
+  const step = (now) => {
+    if (!t0) t0 = now;
+    const p = Math.min(1, (now - t0) / dur);
+    let out = "";
+    for (let i = 0; i < n; i++) {
+      const ch = text[i];
+      if (ch === " " || ch === "\n") { out += ch; continue; }
+      const [s, e] = spans[i];
+      out += p >= e ? ch : pick();
+    }
+    node.textContent = out;
+    if (p < 1) raf = requestAnimationFrame(step);
+    else node.textContent = text;
+  };
+  raf = requestAnimationFrame(step);
+  return () => { cancelAnimationFrame(raf); node.textContent = text; };
+}
 
 /** Tiny SVG element builder. `text` sets textContent; everything else is an attr. */
 function S(tag, attrs = {}, ...kids) {
@@ -40,7 +78,11 @@ function H(tag, cls, text) {
   return n;
 }
 
-const clampz = (z) => Math.max(0.55, Math.min(6, z || 1));
+/** Clamp the camera scale (pixels per logical unit). */
+const clampScale = (z) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, z || 1));
+
+/** Monotonic id so concurrent renderers (viewer + studio) get unique <defs>. */
+let RID = 0;
 
 export class MapRenderer {
   /**
@@ -54,8 +96,11 @@ export class MapRenderer {
     this.opts = opts;
     this.snapshot = null;
     this.ghosts = [];
-    this.view = { pan: { x: MAP_W / 2, y: MAP_H / 2 }, zoom: 1 };
+    // zoom is a true scale: pixels per logical unit (set properly by fit()).
+    this.view = { pan: { x: MAP_W / 2, y: MAP_H / 2 }, zoom: 0.5 };
     this._viewAnim = null;
+    this._refitPending = false;
+    this._rid = ++RID; // unique suffix for in-document <defs> ids
     this._nodes = new Map(); // element id -> rendered group node
     this._build();
   }
@@ -65,16 +110,30 @@ export class MapRenderer {
   _build() {
     this.host.classList.add("glmm-stage");
     const svg = S("svg", { class: "glmm-svg", viewBox: `0 0 ${MAP_W} ${MAP_H}`, preserveAspectRatio: "xMidYMid meet" });
+    const uid = this._rid;
 
-    // A faint vignette + grid live in defs so they scale with the map.
+    // A centred vignette + a two-level blueprint grid live in <defs>. The cover
+    // rects below are re-sized to the live viewBox each frame so the backdrop is
+    // seamless no matter where the endless canvas is panned.
     const defs = S("defs");
-    const grid = S("pattern", { id: "glmm-grid", width: 50, height: 50, patternUnits: "userSpaceOnUse" });
-    grid.appendChild(S("path", { d: "M 50 0 L 0 0 0 50", fill: "none", stroke: "rgba(255,255,255,0.05)", "stroke-width": 1 }));
-    defs.appendChild(grid);
+    const vign = S("radialGradient", { id: `glmm-vign-${uid}`, cx: "50%", cy: "42%", r: "75%" });
+    vign.appendChild(S("stop", { offset: "0%", "stop-color": "#0c1422" }));
+    vign.appendChild(S("stop", { offset: "58%", "stop-color": "#080d16" }));
+    vign.appendChild(S("stop", { offset: "100%", "stop-color": "#04070d" }));
+    defs.appendChild(vign);
+    const minor = S("pattern", { id: `glmm-grid-${uid}`, width: 50, height: 50, patternUnits: "userSpaceOnUse" });
+    minor.appendChild(S("path", { d: "M 50 0 L 0 0 0 50", fill: "none", stroke: "rgba(120,180,255,0.055)", "stroke-width": 1 }));
+    defs.appendChild(minor);
+    const major = S("pattern", { id: `glmm-grid-maj-${uid}`, width: 250, height: 250, patternUnits: "userSpaceOnUse" });
+    major.appendChild(S("path", { d: "M 250 0 L 0 0 0 250", fill: "none", stroke: "rgba(120,180,255,0.10)", "stroke-width": 1.5 }));
+    defs.appendChild(major);
     svg.appendChild(defs);
 
-    svg.appendChild(S("rect", { class: "glmm-bg", x: 0, y: 0, width: MAP_W, height: MAP_H }));
-    svg.appendChild(S("rect", { class: "glmm-gridfill", x: 0, y: 0, width: MAP_W, height: MAP_H, fill: "url(#glmm-grid)" }));
+    const bg = S("rect", { class: "glmm-bg", fill: `url(#glmm-vign-${uid})` });
+    const gMinor = S("rect", { class: "glmm-gridfill", fill: `url(#glmm-grid-${uid})` });
+    const gMajor = S("rect", { class: "glmm-gridfill glmm-gridfill-maj", fill: `url(#glmm-grid-maj-${uid})` });
+    svg.append(bg, gMinor, gMajor);
+    this._coverRects = [bg, gMinor, gMajor];
 
     // Paint order: rooms < connectors < icons/labels < markers < fx
     this.layers = {
@@ -95,11 +154,20 @@ export class MapRenderer {
     this.svg = svg;
     this.overlay = overlay;
     this.tip = tip;
+
+    // The viewBox is derived from the host's pixel size, so re-derive it whenever
+    // the host resizes (window morph, drag-resize, studio window resize).
+    try {
+      this._ro = new ResizeObserver(() => { if (this._refitPending) this.fit(); else this.applyView(); });
+      this._ro.observe(this.host);
+    } catch { /* ResizeObserver unavailable — applyView still runs on demand */ }
   }
 
   destroy() {
     if (this._viewAnim) cancelAnimationFrame(this._viewAnim);
     this._viewAnim = null;
+    this._ro?.disconnect();
+    this._ro = null;
   }
 
   /* ----------------------------- view / camera --------------------------- */
@@ -107,37 +175,113 @@ export class MapRenderer {
   mapW() { return this.snapshot?.w ?? MAP_W; }
   mapH() { return this.snapshot?.h ?? MAP_H; }
 
+  /** Host pixel size; (0,0) until the element has been laid out. */
+  _hostSize() { return { w: this.host.clientWidth || 0, h: this.host.clientHeight || 0 }; }
+
+  /**
+   * Derive the viewBox from the host's pixel size, the camera centre (pan) and
+   * the scale (pixels per logical unit). Because the viewBox aspect ratio always
+   * matches the container, nothing is letterboxed and the canvas is effectively
+   * endless — square, wide and tall maps all behave identically. Pan is *not*
+   * clamped: the camera can roam anywhere.
+   */
   applyView() {
-    const W = this.mapW(), H_ = this.mapH();
-    const zoom = clampz(this.view.zoom);
-    const vw = W / zoom, vh = H_ / zoom;
-    let cx = this.view.pan?.x ?? W / 2;
-    let cy = this.view.pan?.y ?? H_ / 2;
-    cx = vw >= W ? W / 2 : Math.min(W - vw / 2, Math.max(vw / 2, cx));
-    cy = vh >= H_ ? H_ / 2 : Math.min(H_ - vh / 2, Math.max(vh / 2, cy));
-    this.view = { pan: { x: cx, y: cy }, zoom };
-    this.svg.setAttribute("viewBox", `${cx - vw / 2} ${cy - vh / 2} ${vw} ${vh}`);
+    const { w: pw, h: ph } = this._hostSize();
+    if (!pw || !ph) return; // not laid out yet — the ResizeObserver re-runs us
+    const scale = clampScale(this.view.zoom);
+    this.view.zoom = scale;
+    const vw = pw / scale, vh = ph / scale;
+    const cx = this.view.pan?.x ?? 0, cy = this.view.pan?.y ?? 0;
+    const vx = cx - vw / 2, vy = cy - vh / 2;
+    this.svg.setAttribute("viewBox", `${vx} ${vy} ${vw} ${vh}`);
+    for (const r of this._coverRects ?? []) {
+      r.setAttribute("x", vx); r.setAttribute("y", vy);
+      r.setAttribute("width", vw); r.setAttribute("height", vh);
+    }
     this._syncTip();
   }
 
   setView(pan, zoom) {
     if (pan) this.view.pan = { ...pan };
-    if (zoom != null) this.view.zoom = clampz(zoom);
+    if (zoom != null) this.view.zoom = clampScale(zoom);
     this.applyView();
   }
 
-  fit() {
-    this.view = { pan: { x: this.mapW() / 2, y: this.mapH() / 2 }, zoom: 1 };
+  /** The logical bounding box of everything drawn (or the nominal frame when the
+   *  map is empty). This is what "fit" frames, so the map's apparent shape simply
+   *  follows its content. */
+  contentBounds() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const consider = (b) => {
+      if (!b) return;
+      minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+    };
+    for (const el of this.snapshot?.elements ?? []) consider(this._elBounds(el));
+    for (const el of this.ghosts ?? []) consider(this._elBounds(el));
+    if (!isFinite(minX)) return { x: 0, y: 0, w: this.mapW(), h: this.mapH() };
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+  }
+
+  /** Approximate logical bounding box of a single element (label/glyph extents
+   *  are estimated; fit padding absorbs the slack). */
+  _elBounds(el) {
+    if (!el || !el.type) return null;
+    if (el.type === "room" && el.shape !== "polygon") {
+      return { x: el.x ?? 0, y: el.y ?? 0, w: el.w ?? 100, h: el.h ?? 100 };
+    }
+    if ((el.type === "room" && el.shape === "polygon") || el.type === "connector") {
+      const pts = el.points ?? [];
+      if (!pts.length) return null;
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+      return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    }
+    if (el.type === "label") {
+      const sz = el.size ?? 26, len = String(el.text ?? el.label ?? "").length || 1;
+      const w = len * sz * 0.6, h = sz * 1.3;
+      return { x: (el.x ?? 0) - w / 2, y: (el.y ?? 0) - h / 2, w, h };
+    }
+    if (el.type === "icon") {
+      const sz = (el.size ?? 40) * 1.1;
+      return { x: (el.x ?? 0) - sz, y: (el.y ?? 0) - sz, w: sz * 2, h: sz * 2.2 };
+    }
+    // marker
+    const r = (el.r ?? 16) * 2.2;
+    return { x: (el.x ?? 0) - r, y: (el.y ?? 0) - r, w: r * 2, h: r * 2.4 };
+  }
+
+  /** Frame all content (or the nominal frame) with breathing room. A minimum
+   *  framed span keeps a sparse map (a lone marker) from filling the screen. */
+  fit(pad = 1.16) {
+    const b = this.contentBounds();
+    const MIN = 480;
+    let { x, y, w, h } = b;
+    if (w < MIN) { x -= (MIN - w) / 2; w = MIN; }
+    if (h < MIN) { y -= (MIN - h) / 2; h = MIN; }
+    this.view.pan = { x: x + w / 2, y: y + h / 2 };
+    const { w: pw, h: ph } = this._hostSize();
+    if (!pw || !ph) { this._refitPending = true; return; }
+    this._refitPending = false;
+    this.view.zoom = clampScale(Math.min(pw / (w * pad), ph / (h * pad)));
     this.applyView();
   }
 
-  /** Smoothly glide the camera to a target pan/zoom. */
-  animateView(pan, zoom, dur = 620) {
+  /** Scale (px/unit) at which a logical span fills the corresponding viewport
+   *  dimension — used to focus on a marker / a change region. */
+  scaleForSpan(spanX, spanY = spanX) {
+    const { w, h } = this._hostSize();
+    if (!w || !h || !spanX || !spanY) return this.view.zoom;
+    return clampScale(Math.min(w / spanX, h / spanY));
+  }
+
+  /** Smoothly glide the camera to a target pan/zoom (ease-in-out for a calm,
+   *  un-snappy feel even on long glides). */
+  animateView(pan, zoom, dur = 760) {
     if (this._viewAnim) cancelAnimationFrame(this._viewAnim);
     const from = { x: this.view.pan.x, y: this.view.pan.y, z: this.view.zoom };
-    const to = { x: pan?.x ?? from.x, y: pan?.y ?? from.y, z: clampz(zoom ?? from.z) };
+    const to = { x: pan?.x ?? from.x, y: pan?.y ?? from.y, z: clampScale(zoom ?? from.z) };
     const t0 = performance.now();
-    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
     const step = (now) => {
       const t = Math.min(1, (now - t0) / dur);
       const k = ease(t);
@@ -151,7 +295,7 @@ export class MapRenderer {
   }
 
   zoomBy(factor, centerLogical) {
-    const z = clampz(this.view.zoom * factor);
+    const z = clampScale(this.view.zoom * factor);
     if (centerLogical) this.view.pan = { ...centerLogical };
     this.view.zoom = z;
     this.applyView();
@@ -160,7 +304,7 @@ export class MapRenderer {
   /** Zoom while keeping the logical point under (clientX, clientY) stationary. */
   zoomAt(factor, clientX, clientY) {
     const before = this.toLogical(clientX, clientY);
-    this.view.zoom = clampz(this.view.zoom * factor);
+    this.view.zoom = clampScale(this.view.zoom * factor);
     this.applyView();
     const after = this.toLogical(clientX, clientY);
     this.view.pan = { x: this.view.pan.x + (before.x - after.x), y: this.view.pan.y + (before.y - after.y) };
@@ -193,21 +337,25 @@ export class MapRenderer {
   /* ------------------------------ rendering ------------------------------ */
 
   resolveMarker(el) {
+    if (el.kind === "party") {
+      const color = el.color || DEFAULT_PARTY_COLOR;
+      const name = (el.label && el.label.trim()) || game.i18n?.localize?.("GLMM.legend.party") || "Party";
+      return { color, name, isSelf: false, isParty: true, user: null };
+    }
     const user = el.userId ? game.users?.get(el.userId) : null;
     let color = el.color;
     if (user?.color) color = user.color.css ?? (typeof user.color === "string" ? user.color : color);
     color ||= DEFAULT_MARKER_COLOR;
     const name = (el.label && el.label.trim()) || user?.name || "";
     const isSelf = !!user && user.id === game.user?.id;
-    return { color, name, isSelf, user };
+    return { color, name, isSelf, isParty: false, user };
   }
 
   setSnapshot(snapshot, { ghosts = [] } = {}) {
     this.snapshot = snapshot ? foundry.utils.deepClone(snapshot) : null;
     this.ghosts = ghosts ?? [];
-    this.svg.setAttribute("viewBox", `0 0 ${this.mapW()} ${this.mapH()}`);
     this._renderAll();
-    this.applyView();
+    this.applyView(); // keeps the current camera; the viewer/studio call fit() on first show
   }
 
   _renderAll() {
@@ -320,6 +468,7 @@ export class MapRenderer {
   }
 
   _marker(el) {
+    if (el.kind === "party") return this._partyMarker(el);
     const { color, name, isSelf } = this.resolveMarker(el);
     const x = el.x ?? 0, y = el.y ?? 0, r = el.r ?? 16;
     const g = S("g", { class: "glmm-marker" + (isSelf ? " is-self" : ""), style: `--c:${color}` });
@@ -331,6 +480,60 @@ export class MapRenderer {
       g.appendChild(S("text", { class: "glmm-marker-name", x, y: y - r * 1.9, "text-anchor": "middle", text: name }));
     }
     return g;
+  }
+
+  /** A single badge standing in for the whole party — a glyph disc, not a dot. */
+  _partyMarker(el) {
+    const { color, name } = this.resolveMarker(el);
+    const x = el.x ?? 0, y = el.y ?? 0, r = el.r ?? 20;
+    const g = S("g", { class: "glmm-marker glmm-party", style: `--c:${color}` });
+    g.dataset.layer = "markers";
+    g.appendChild(S("circle", { class: "glmm-marker-halo", cx: x, cy: y, r: r * 2.3 }));
+    g.appendChild(S("circle", { class: "glmm-party-ring", cx: x, cy: y, r: r * 1.5 }));
+    g.appendChild(S("circle", { class: "glmm-party-disc", cx: x, cy: y, r: r * 1.05 }));
+    const sz = r * 1.35;
+    const fo = S("foreignObject", { x: x - sz / 2, y: y - sz / 2, width: sz, height: sz });
+    const wrap = H("div", "glmm-icon-glyph glmm-party-glyph");
+    const i = H("i");
+    i.className = safeIconClass(PARTY_GLYPH);
+    i.style.fontSize = `${sz * 0.6}px`;
+    wrap.appendChild(i);
+    fo.appendChild(wrap);
+    g.appendChild(fo);
+    if (name) {
+      g.appendChild(S("text", { class: "glmm-marker-name", x, y: y - r * 2.05, "text-anchor": "middle", text: name }));
+    }
+    return g;
+  }
+
+  /** The primary text node of a rendered element (for the decoder reveal). */
+  _textNodeOf(node) {
+    return node?.querySelector?.(".glmm-marker-name, .glmm-room-label, .glmm-icon-label, .glmm-label-text") ?? null;
+  }
+
+  /** Scramble-in every visible text node — used when a map first appears. */
+  revealText() {
+    for (const node of this._nodes.values()) {
+      const t = this._textNodeOf(node);
+      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 760 });
+    }
+  }
+
+  /** Stagger an enter animation across all elements (a calm cascade on load). */
+  revealAll() {
+    let i = 0;
+    for (const node of this._nodes.values()) {
+      node.classList.remove("glmm-enter");
+      void node.getBoundingClientRect();
+      node.style.setProperty("--gl-delay", `${Math.min(i * 45, 520)}ms`);
+      node.classList.add("glmm-enter");
+      const t = this._textNodeOf(node);
+      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 720 });
+      i++;
+    }
+    setTimeout(() => {
+      for (const node of this._nodes.values()) { node.classList.remove("glmm-enter"); node.style.removeProperty("--gl-delay"); }
+    }, 1100);
   }
 
   /* ------------------------------- tooltips ------------------------------ */
@@ -382,7 +585,7 @@ export class MapRenderer {
     const g = S("g", { class: "glmm-ping", style: `--c:${color}` });
     for (let i = 0; i < 3; i++) {
       const ring = S("circle", { class: "glmm-ping-ring", cx: x, cy: y, r: 8 });
-      ring.style.animationDelay = `${i * 160}ms`;
+      ring.style.animationDelay = `${i * 230}ms`;
       g.appendChild(ring);
     }
     g.appendChild(S("circle", { class: "glmm-ping-core", cx: x, cy: y, r: 7 }));
@@ -444,13 +647,26 @@ export class MapRenderer {
 
     // Re-mount removal ghosts on top of the freshly rendered snapshot.
     for (const node of removalGhosts) (this.layers[node.dataset.layer] ?? this.layers.annot).appendChild(node);
-    setTimeout(() => removalGhosts.forEach((n) => n.remove()), 720);
+    setTimeout(() => removalGhosts.forEach((n) => n.remove()), 780);
 
-    // Additions: draw in.
-    for (const el of diff.added ?? []) this.nodeFor(el.id)?.classList.add("glmm-enter");
+    // Additions: draw in + scramble any text into place.
+    diff.added?.forEach((el, i) => {
+      const node = this.nodeFor(el.id);
+      if (!node) return;
+      node.style.setProperty("--gl-delay", `${Math.min(i * 60, 360)}ms`);
+      node.classList.add("glmm-enter");
+      const t = this._textNodeOf(node);
+      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 860 });
+    });
 
-    // Changed: highlight pulse.
-    for (const el of diff.changed ?? []) this.nodeFor(el.id)?.classList.add("glmm-changed");
+    // Changed: highlight pulse + re-scramble text if it changed.
+    for (const el of diff.changed ?? []) {
+      const node = this.nodeFor(el.id);
+      if (!node) continue;
+      node.classList.add("glmm-changed");
+      const t = this._textNodeOf(node);
+      if (t && t.textContent) scrambleText(t, t.textContent, { dur: 760 });
+    }
 
     // Moved: tween from old anchor to new, leaving a trail.
     for (const m of diff.moved ?? []) {
@@ -465,7 +681,7 @@ export class MapRenderer {
       });
       this.layers.fx.appendChild(trail);
       requestAnimationFrame(() => trail.classList.add("is-in"));
-      setTimeout(() => trail.remove(), 1700);
+      setTimeout(() => trail.remove(), 2100);
 
       node.style.transition = "none";
       node.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -473,19 +689,19 @@ export class MapRenderer {
       // force reflow, then release to the final (untranslated) position
       void node.getBoundingClientRect();
       requestAnimationFrame(() => {
-        node.style.transition = "transform 1.05s var(--gl-ease, cubic-bezier(0.16,1,0.3,1))";
+        node.style.transition = "transform 1.25s var(--gl-ease, cubic-bezier(0.16,1,0.3,1))";
         node.style.transform = "translate(0px, 0px)";
       });
       setTimeout(() => {
         node.style.transition = "";
         node.style.transform = "";
         node.classList.remove("glmm-moving");
-      }, 1200);
+      }, 1500);
     }
 
     // settle: drop the one-shot highlight classes
-    await new Promise((res) => setTimeout(res, 1300));
-    for (const el of diff.added ?? []) this.nodeFor(el.id)?.classList.remove("glmm-enter");
+    await new Promise((res) => setTimeout(res, 1600));
+    for (const el of diff.added ?? []) { const n = this.nodeFor(el.id); n?.classList.remove("glmm-enter"); n?.style.removeProperty("--gl-delay"); }
     for (const el of diff.changed ?? []) this.nodeFor(el.id)?.classList.remove("glmm-changed");
   }
 
@@ -497,7 +713,7 @@ export class MapRenderer {
     for (const el of this.snapshot?.elements ?? []) {
       if (el.type === "marker") {
         const m = this.resolveMarker(el);
-        markers.push({ id: el.id, name: m.name || game.i18n.localize("GLMM.legend.unnamed"), color: m.color, isSelf: m.isSelf });
+        markers.push({ id: el.id, name: m.name || game.i18n.localize("GLMM.legend.unnamed"), color: m.color, isSelf: m.isSelf, isParty: m.isParty });
       } else if (el.type === "icon" && el.label) {
         const key = el.label;
         if (!iconMap.has(key)) iconMap.set(key, { label: el.label, cls: safeIconClass(el.icon), color: el.color || DEFAULT_ELEMENT_COLOR });

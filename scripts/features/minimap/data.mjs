@@ -20,6 +20,9 @@ function defaultLibrary() {
   return { schemaVersion: 1, maps: {}, activeMapId: null, rev: 0 };
 }
 
+/** Session-scoped undo/redo of full library snapshots (GM authoring only). */
+const HIST = { undo: [], redo: [], max: 60 };
+
 export const MapStore = {
   /* ----------------------------- library I/O ----------------------------- */
 
@@ -35,10 +38,38 @@ export const MapStore = {
     return clone(blob);
   },
 
-  async write(blob) {
+  async write(blob, { history = true } = {}) {
+    if (history) {
+      HIST.undo.push(this.read()); // the state *before* this change
+      if (HIST.undo.length > HIST.max) HIST.undo.shift();
+      HIST.redo.length = 0;
+    }
     blob.rev = (Number(blob.rev) || 0) + 1;
     await game.settings.set(MODULE_ID, SETTINGS.maps, blob);
     return blob;
+  },
+
+  /* ------------------------------ undo / redo ---------------------------- */
+
+  canUndo() { return HIST.undo.length > 0; },
+  canRedo() { return HIST.redo.length > 0; },
+  async undo() {
+    if (!HIST.undo.length) return false;
+    const cur = this.read();
+    const prev = HIST.undo.pop();
+    HIST.redo.push(cur);
+    prev.rev = (Number(cur.rev) || 0) + 1; // keep the setting rev monotonic
+    await game.settings.set(MODULE_ID, SETTINGS.maps, prev);
+    return true;
+  },
+  async redo() {
+    if (!HIST.redo.length) return false;
+    const cur = this.read();
+    const next = HIST.redo.pop();
+    HIST.undo.push(cur);
+    next.rev = (Number(cur.rev) || 0) + 1;
+    await game.settings.set(MODULE_ID, SETTINGS.maps, next);
+    return true;
   },
 
   list() {
@@ -143,6 +174,30 @@ export const MapStore = {
     const m = blob.maps[mapId];
     if (!m) return;
     m.elements = m.elements.filter((e) => e.id !== elId);
+    m.updatedAt = Date.now();
+    await this.write(blob);
+  },
+
+  /** Apply many element patches in one write (one undo step) — group edits. */
+  async updateElements(mapId, patchesById) {
+    const blob = this.read();
+    const m = blob.maps[mapId];
+    if (!m) return;
+    for (const el of m.elements) {
+      const patch = patchesById[el.id];
+      if (patch) Object.assign(el, patch);
+    }
+    m.updatedAt = Date.now();
+    await this.write(blob);
+  },
+
+  /** Delete many elements in one write (one undo step). */
+  async removeElements(mapId, ids) {
+    const blob = this.read();
+    const m = blob.maps[mapId];
+    if (!m) return;
+    const set = new Set(ids);
+    m.elements = m.elements.filter((e) => !set.has(e.id));
     m.updatedAt = Date.now();
     await this.write(blob);
   },

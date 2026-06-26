@@ -2,12 +2,16 @@
    GLUniverse Suite — Minimap
    Etched-glass schematic maps: a floating viewer + the Map Studio editor.
    Built on the shared design tokens in gl-tokens.css. Scoped accent = cyan.
+   The "liquid glass" recipe (layered gradients, chamfer glint, drop-shadow
+   bloom, light sweep) is modelled on the Clocks & Tracker HUD.
    ════════════════════════════════════════════════════════════════════════ */
 
 .glmm {
   --gl-accent: #5eeaff;
-  --glmm-room: color-mix(in srgb, var(--c, var(--gl-accent)) 22%, transparent);
-  --glmm-room-edge: color-mix(in srgb, var(--c, var(--gl-accent)) 75%, transparent);
+  --glmm-party: #ffd24a;
+  /* Calmer motion aliases — everything eases, nothing snaps. */
+  --glmm-morph: 640ms;
+  --glmm-soft: var(--gl-ease);
 }
 
 /* ─────────────────────────── Floating viewer ─────────────────────────── */
@@ -15,7 +19,9 @@
 .glmm-viewer-app {
   z-index: 70;
   pointer-events: auto;
-  /* frameless ApplicationV2 reset — the .glmm-viewer glass child is the frame */
+  /* frameless ApplicationV2 reset — the .glmm-viewer glass child is the frame.
+     The floating bloom + drop shadow ride here (filter, not box-shadow) so they
+     follow the chamfered silhouette and are never clipped by the glass child. */
   background: none;
   border: none;
   box-shadow: none;
@@ -23,14 +29,29 @@
   margin: 0;
   min-width: 0;
   min-height: 0;
+  filter:
+    drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4))
+    drop-shadow(0 0 26px var(--gl-bloom));
+  transition: filter 600ms var(--gl-ease);
 }
 .glmm-viewer-app .window-content { background: none; padding: 0; overflow: visible; height: 100%; }
 .glmm-viewer-app.is-animating {
-  transition: left var(--gl-d-move) var(--gl-ease), top var(--gl-d-move) var(--gl-ease),
-    width var(--gl-d-move) var(--gl-snap), height var(--gl-d-move) var(--gl-snap);
+  transition:
+    left var(--glmm-morph) var(--gl-ease),
+    top var(--glmm-morph) var(--gl-ease),
+    width var(--glmm-morph) var(--gl-ease),
+    height var(--glmm-morph) var(--gl-ease);
+}
+.glmm-viewer-app.is-broadcasting {
+  filter:
+    drop-shadow(0 22px 46px rgba(0, 0, 0, 0.62))
+    drop-shadow(0 0 44px var(--gl-glow));
 }
 
 .glmm-viewer {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -40,65 +61,111 @@
   color: var(--gl-text);
   animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
 }
+/* soft top bloom catching the light */
+.glmm-viewer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(78% 130% at 50% -28%, var(--gl-glow), transparent 64%);
+  opacity: 0.2;
+  transition: opacity 600ms var(--gl-ease);
+}
+.glmm-viewer-app.is-broadcasting .glmm-viewer::before,
+.glmm-viewer-app.glmm-attn .glmm-viewer::before { opacity: 0.42; }
+/* accent hairline tracing the top-right chamfer cut — the "edge refraction" */
+.glmm-viewer::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 18px;
+  height: 1px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 88%, #fff));
+  transform-origin: 100% 0;
+  transform: rotate(45deg) translateX(1px);
+  box-shadow: 0 0 8px var(--gl-glow);
+  opacity: 0.85;
+}
+/* diagonal light sweep across the glass on broadcast */
+.glmm-sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  transform: translateX(-180%) skewX(-12deg);
+  opacity: 0;
+}
+.glmm-sweep.is-run { animation: glmm-sweep 1.15s var(--gl-ease); }
+
+/* keep the interactive chrome above the bloom layer */
+.glmm-vchrome, .glmm-vbody { position: relative; z-index: 2; }
 
 .glmm-vchrome {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 9px 7px 11px;
+  gap: 7px;
+  padding: 4px 5px 4px 9px;
   cursor: grab;
   border-bottom: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent);
   user-select: none;
 }
 .glmm-vchrome:active { cursor: grabbing; }
 .glmm-vtitle {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--gl-text-bright);
 }
-.glmm-vtitle i { color: var(--gl-accent); filter: drop-shadow(0 0 6px var(--gl-bloom)); }
+.glmm-vtitle i { color: var(--gl-accent); font-size: 12px; filter: drop-shadow(0 0 6px var(--gl-bloom)); }
 .glmm-vtitle span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
 }
 .glmm-vmode {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-left: auto;
-  padding: 2px 8px;
+  padding: 2px 7px;
   font-family: var(--gl-tech);
-  font-size: 9.5px;
+  font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gl-cyan);
-  border: 1px solid color-mix(in srgb, var(--gl-cyan) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gl-cyan) 38%, transparent);
   border-radius: 999px;
   white-space: nowrap;
 }
-.glmm-viewer-app[data-state="compact"] .glmm-vmode span { display: none; }
+.glmm-viewer-app[data-state="compact"] .glmm-vmode span,
+.glmm-viewer-app.is-min .glmm-vmode { display: none; }
 
-.glmm-vtools { display: flex; align-items: center; gap: 3px; }
+.glmm-vtools { display: flex; align-items: center; gap: 2px; }
 .glmm-vtool {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--gl-text-dim);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
@@ -114,6 +181,13 @@
 
 .glmm-vbody { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 
+/* ───────────────────────────── minimized pill ────────────────────────── */
+.glmm-viewer-app.is-min .glmm-vbody,
+.glmm-viewer-app.is-min .glmm-vresize { display: none; }
+.glmm-viewer-app.is-min .glmm-viewer { height: auto; }
+.glmm-viewer-app.is-min .glmm-vchrome { border-bottom: none; cursor: pointer; padding: 4px 5px 4px 10px; }
+.glmm-viewer-app.is-min .glmm-vtitle { cursor: pointer; }
+
 .glmm-vstage {
   position: relative;
   flex: 1 1 auto;
@@ -124,37 +198,37 @@
 .glmm-viewer-app.is-arming .glmm-vstage { cursor: crosshair; }
 
 .glmm-vpanel {
-  flex: 0 0 168px;
+  flex: 0 0 150px;
   overflow-y: auto;
-  padding: 10px 10px 14px;
+  padding: 8px 8px 10px;
   border-left: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.24), transparent);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--gl-cyan) 40%, transparent) transparent;
   animation: gl-cascade var(--gl-d-move) var(--gl-ease) both;
 }
 .glmm-panel-head {
   font-family: var(--gl-tech);
-  font-size: 9.5px;
+  font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
-  margin: 10px 0 5px;
+  margin: 9px 0 4px;
 }
 .glmm-panel-head:first-child { margin-top: 0; }
-.glmm-panel-empty { color: var(--gl-text-faint); font-size: 11px; font-style: italic; }
+.glmm-panel-empty { color: var(--gl-text-faint); font-size: 10.5px; font-style: italic; }
 
 .glmm-roster-row, .glmm-legend-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 4px 5px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--gl-text);
-  font-size: 11.5px;
+  font-size: 11px;
   text-align: left;
   cursor: default;
 }
@@ -162,9 +236,18 @@
 .glmm-roster-row:hover { background: color-mix(in srgb, var(--c) 16%, transparent); border-color: color-mix(in srgb, var(--c) 50%, transparent); }
 .glmm-roster-row.is-self { border-color: color-mix(in srgb, var(--c) 55%, transparent); }
 .glmm-roster-dot {
+  display: grid;
+  place-items: center;
   width: 11px; height: 11px; border-radius: 50%;
   background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent);
   flex: 0 0 auto;
+}
+.glmm-roster-row.is-party .glmm-roster-dot {
+  width: 16px; height: 16px; border-radius: 5px;
+  background: color-mix(in srgb, var(--c) 26%, var(--gl-ink-2));
+  border: 1px solid var(--c);
+  color: var(--c);
+  font-size: 8px;
 }
 .glmm-roster-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .glmm-legend-row i { color: var(--c); width: 16px; text-align: center; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--c) 60%, transparent)); }
@@ -174,10 +257,10 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 10px;
-  padding: 4px 12px;
+  bottom: 9px;
+  padding: 4px 11px;
   font-family: var(--gl-tech);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--gl-text-bright);
@@ -187,23 +270,23 @@
   cursor: pointer;
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  animation: gl-slot-pop var(--gl-d-quick) var(--gl-pop) both;
+  animation: gl-slot-pop var(--gl-d-move) var(--gl-pop) both;
 }
 .glmm-freelook:hover { border-color: var(--gl-cyan); box-shadow: 0 0 14px var(--gl-bloom); }
 .glmm-pending {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 3px 9px;
+  top: 7px;
+  left: 7px;
+  padding: 3px 8px;
   font-family: var(--gl-tech);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.04em;
   color: var(--gl-signal);
   background: color-mix(in srgb, var(--gl-signal) 14%, var(--gl-ink-1));
   border: 1px solid color-mix(in srgb, var(--gl-signal) 50%, transparent);
-  border-radius: 7px;
+  border-radius: 6px;
   box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 30%, transparent);
-  animation: gl-stamp var(--gl-d-quick) var(--gl-pop) both;
+  animation: gl-stamp var(--gl-d-move) var(--gl-pop) both;
   pointer-events: none;
 }
 
@@ -211,8 +294,8 @@
   position: absolute;
   right: 2px;
   bottom: 2px;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   cursor: nwse-resize;
   color: var(--gl-text-faint);
   z-index: 3;
@@ -220,8 +303,7 @@
 .glmm-vresize svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.4; }
 .glmm-vresize:hover { color: var(--gl-cyan); }
 
-.glmm-viewer-app.is-broadcasting .glmm-viewer { box-shadow: 0 0 0 1px var(--gl-cyan), 0 0 30px var(--gl-glow); }
-.glmm-viewer-app.glmm-attn .glmm-viewer { animation: glmm-attn 700ms var(--gl-ease); }
+.glmm-viewer-app.glmm-attn { animation: glmm-attn 1000ms var(--gl-ease); }
 .glmm-viewer-app.is-empty .glmm-vstage::after {
   content: attr(data-empty);
   position: absolute;
@@ -236,22 +318,26 @@
 
 .glmm-stage { position: relative; width: 100%; height: 100%; }
 .glmm-svg { display: block; width: 100%; height: 100%; touch-action: none; }
-.glmm-bg { fill: #060a12; }
-.glmm-gridfill { opacity: 0.9; pointer-events: none; }
+.glmm-bg { /* filled with the centred vignette gradient in render.mjs */ }
+.glmm-gridfill { pointer-events: none; opacity: 0.9; }
+.glmm-gridfill-maj { opacity: 1; }
 
-.glmm-el { transition: opacity var(--gl-d-quick) var(--gl-ease); }
+.glmm-el { transition: opacity var(--gl-d-move) var(--gl-ease); }
 .glmm-el.is-ghost { opacity: 0.28; }
 .glmm-el.is-hidden-el .glmm-room-shape,
 .glmm-el.is-hidden-el .glmm-conn-line { stroke-dasharray: 10 8; opacity: 0.6; }
 .glmm-el.is-hidden-el { opacity: 0.55; }
+/* multi-selection lift in the studio */
+.glmm-el.is-multi-sel { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--gl-signal) 70%, transparent)) brightness(1.08); }
 
-/* rooms */
+/* rooms — colour-mix is computed directly against the element's own --c so the
+   colour picker reaches every room (no inherited intermediate variable). */
 .glmm-room-shape {
-  fill: var(--glmm-room);
-  stroke: var(--glmm-room-edge);
+  fill: color-mix(in srgb, var(--c, var(--gl-accent)) 22%, transparent);
+  stroke: color-mix(in srgb, var(--c, var(--gl-accent)) 80%, transparent);
   stroke-width: 3;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--c, var(--gl-accent)) 26%, transparent));
-  transition: fill var(--gl-d-quick) var(--gl-ease), stroke var(--gl-d-quick) var(--gl-ease);
+  transition: fill var(--gl-d-move) var(--gl-ease), stroke var(--gl-d-move) var(--gl-ease);
 }
 .glmm-room-label {
   fill: var(--gl-text-bright);
@@ -272,6 +358,7 @@
   stroke-linejoin: round;
   opacity: 0.85;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c, var(--gl-accent)) 50%, transparent));
+  transition: stroke var(--gl-d-move) var(--gl-ease);
 }
 .glmm-connector.is-dashed .glmm-conn-line { stroke-dasharray: 14 12; }
 
@@ -284,6 +371,7 @@
   paint-order: stroke;
   stroke: rgba(0, 0, 0, 0.6);
   stroke-width: 5px;
+  transition: fill var(--gl-d-move) var(--gl-ease);
 }
 
 /* icon POIs */
@@ -292,6 +380,7 @@
   stroke: var(--c, var(--gl-accent));
   stroke-width: 2.5;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--c, var(--gl-accent)) 45%, transparent));
+  transition: fill var(--gl-d-move) var(--gl-ease), stroke var(--gl-d-move) var(--gl-ease);
 }
 .glmm-icon-glyph {
   width: 100%;
@@ -315,6 +404,7 @@
   stroke: #fff;
   stroke-width: 2.5;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  transition: fill var(--gl-d-move) var(--gl-ease);
 }
 .glmm-marker-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.5; }
 .glmm-marker-halo { fill: var(--c); opacity: 0; }
@@ -328,19 +418,32 @@
   stroke-width: 4.5px;
   pointer-events: none;
 }
-.glmm-marker.is-self .glmm-marker-ring { opacity: 0.9; animation: glmm-self 2.6s var(--gl-ease) infinite; }
+.glmm-marker.is-self .glmm-marker-ring { opacity: 0.9; animation: glmm-self 2.8s var(--gl-ease) infinite; }
 .glmm-marker.is-self .glmm-marker-halo { opacity: 0.18; }
 .glmm-marker.is-dragging { cursor: grabbing; }
 .glmm-marker.is-dragging .glmm-marker-dot { stroke: var(--gl-signal); }
 .glmm-el.is-flash .glmm-marker-dot,
-.glmm-el.is-flash .glmm-room-shape { animation: glmm-flash 1.1s var(--gl-ease); }
+.glmm-el.is-flash .glmm-room-shape,
+.glmm-el.is-flash .glmm-party-disc { animation: glmm-flash 1.3s var(--gl-ease); }
+
+/* party marker — a glyph badge standing in for the whole group */
+.glmm-party-disc {
+  fill: color-mix(in srgb, var(--c) 30%, var(--gl-ink-1));
+  stroke: var(--c);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 11px color-mix(in srgb, var(--c) 55%, transparent));
+  transition: fill var(--gl-d-move) var(--gl-ease), stroke var(--gl-d-move) var(--gl-ease);
+}
+.glmm-party-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.55; animation: glmm-self 3.1s var(--gl-ease) infinite; }
+.glmm-party .glmm-marker-halo { fill: var(--c); opacity: 0.14; }
+.glmm-party-glyph { color: var(--c); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
 
 /* ───────────────────────────────── FX ────────────────────────────────── */
 
 .glmm-l-fx { pointer-events: none; }
 
-.glmm-ping-ring { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-ping 1.5s var(--gl-ease) forwards; }
-.glmm-ping-core { fill: var(--c); animation: glmm-ping-core 1.5s var(--gl-ease) forwards; }
+.glmm-ping-ring { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-ping 1.8s var(--gl-ease) forwards; }
+.glmm-ping-core { fill: var(--c); animation: glmm-ping-core 1.8s var(--gl-ease) forwards; }
 .glmm-ping-name {
   fill: var(--gl-text-bright);
   font-family: var(--gl-tech);
@@ -349,15 +452,15 @@
   stroke: rgba(0, 0, 0, 0.7);
   stroke-width: 5px;
   opacity: 0;
-  animation: glmm-pingname 2.4s var(--gl-ease) forwards;
+  animation: glmm-pingname 2.6s var(--gl-ease) forwards;
 }
 
 .glmm-beacon { transition: opacity 600ms var(--gl-ease); }
 .glmm-beacon.is-out { opacity: 0; }
-.glmm-beacon-pulse { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-beacon 2.2s var(--gl-ease) infinite; }
-.glmm-beacon-pulse.d2 { animation-delay: 1.1s; }
-.glmm-beacon-dot { fill: var(--c); filter: drop-shadow(0 0 10px var(--c)); animation: glmm-beacondot 1.4s var(--gl-ease) infinite; }
-.glmm-beacon-arrow { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: glmm-arrow 1.4s var(--gl-ease) infinite; }
+.glmm-beacon-pulse { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-beacon 2.6s var(--gl-ease) infinite; }
+.glmm-beacon-pulse.d2 { animation-delay: 1.3s; }
+.glmm-beacon-dot { fill: var(--c); filter: drop-shadow(0 0 10px var(--c)); animation: glmm-beacondot 1.6s var(--gl-ease) infinite; }
+.glmm-beacon-arrow { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: glmm-arrow 1.6s var(--gl-ease) infinite; }
 
 .glmm-trail {
   stroke: var(--c, var(--gl-cyan));
@@ -365,17 +468,18 @@
   stroke-linecap: round;
   stroke-dasharray: 4 10;
   opacity: 0;
-  transition: opacity 300ms var(--gl-ease);
+  transition: opacity 360ms var(--gl-ease);
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c, var(--gl-cyan)) 60%, transparent));
 }
-.glmm-trail.is-in { opacity: 0.85; animation: glmm-trail 1.6s linear forwards; }
+.glmm-trail.is-in { opacity: 0.85; animation: glmm-trail 2s linear forwards; }
 
-.glmm-enter { animation: glmm-enter 620ms var(--gl-pop) both; transform-box: fill-box; transform-origin: center; }
-.glmm-leave { animation: glmm-leave 680ms var(--gl-exit) both; transform-box: fill-box; transform-origin: center; }
+.glmm-enter { animation: glmm-enter 760ms var(--gl-pop) both; animation-delay: var(--gl-delay, 0ms); transform-box: fill-box; transform-origin: center; }
+.glmm-leave { animation: glmm-leave 760ms var(--gl-exit) both; transform-box: fill-box; transform-origin: center; }
 .glmm-changed .glmm-room-shape,
 .glmm-changed .glmm-marker-dot,
 .glmm-changed .glmm-icon-disc,
-.glmm-changed .glmm-label-text { animation: glmm-changed 1.1s var(--gl-ease); }
+.glmm-changed .glmm-party-disc,
+.glmm-changed .glmm-label-text { animation: glmm-changed 1.3s var(--gl-ease); }
 
 /* tooltip */
 .glmm-html-fx { position: absolute; inset: 0; pointer-events: none; }
@@ -406,7 +510,7 @@
 .glmm-studio-app .window-content { padding: 0; background: var(--gl-ink-0); overflow: hidden; height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .glmm-studio {
   display: grid;
-  grid-template-columns: 220px 1fr 268px;
+  grid-template-columns: 198px 1fr 244px;
   flex: 1 1 auto;
   height: 100%;
   min-height: 0;
@@ -423,22 +527,24 @@
   flex-direction: column;
   border-right: 1px solid var(--gl-hair);
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px;
   gap: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 22%), linear-gradient(160deg, rgba(94, 234, 255, 0.04), transparent 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .glmm-st-libhead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-family: var(--gl-tech);
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
 }
 .glmm-st-newmap {
   display: grid; place-items: center;
-  width: 24px; height: 24px;
+  width: 23px; height: 23px;
   border: 1px solid var(--gl-edge); border-radius: 7px;
   background: color-mix(in srgb, var(--gl-cyan) 14%, var(--gl-ink-2));
   color: var(--gl-cyan); cursor: pointer;
@@ -446,12 +552,12 @@
 }
 .glmm-st-newmap:hover { border-color: var(--gl-cyan); box-shadow: 0 0 12px var(--gl-bloom); }
 .glmm-st-maplist { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.glmm-st-empty { color: var(--gl-text-faint); font-size: 11.5px; font-style: italic; padding: 8px 4px; }
+.glmm-st-empty { color: var(--gl-text-faint); font-size: 11px; font-style: italic; padding: 8px 4px; }
 .glmm-st-maprow {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 5px 7px;
   border: 1px solid transparent;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.02);
@@ -467,7 +573,7 @@
   border: none;
   color: var(--gl-text-bright);
   text-align: left;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   overflow: hidden;
@@ -476,7 +582,7 @@
 }
 .glmm-st-livebadge {
   font-family: var(--gl-tech);
-  font-size: 8.5px;
+  font-size: 8px;
   letter-spacing: 0.1em;
   color: var(--gl-good);
   border: 1px solid color-mix(in srgb, var(--gl-good) 55%, transparent);
@@ -487,17 +593,17 @@
 .glmm-st-maptools { display: flex; gap: 2px; }
 .glmm-icobtn {
   display: grid; place-items: center;
-  width: 22px; height: 22px;
+  width: 21px; height: 21px;
   border: 1px solid transparent; border-radius: 6px;
   background: transparent; color: var(--gl-text-dim); cursor: pointer;
-  font-size: 11px;
+  font-size: 10.5px;
   transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
 .glmm-icobtn:hover { color: var(--gl-text-bright); background: rgba(255, 255, 255, 0.08); }
 .glmm-icobtn.is-danger:hover { color: var(--gl-hazard); background: color-mix(in srgb, var(--gl-hazard) 16%, transparent); }
 
-.glmm-st-viewmode { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--gl-hair); display: flex; flex-direction: column; gap: 6px; }
-.glmm-st-vmhint { font-size: 10.5px; color: var(--gl-text-dim); line-height: 1.4; }
+.glmm-st-viewmode { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--gl-hair); display: flex; flex-direction: column; gap: 5px; }
+.glmm-st-vmhint { font-size: 10px; color: var(--gl-text-dim); line-height: 1.4; }
 
 /* main column */
 .glmm-st-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -506,22 +612,27 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 6px 9px;
   border-bottom: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.glmm-st-tools { display: flex; gap: 4px; }
+.glmm-st-tb-left { display: flex; align-items: center; gap: 8px; }
+.glmm-st-tools { display: flex; gap: 3px; }
+.glmm-st-hist { padding-left: 8px; border-left: 1px solid var(--gl-hair); }
 .glmm-st-tool {
   display: grid; place-items: center;
-  width: 32px; height: 32px;
-  border: 1px solid var(--gl-edge); border-radius: 8px;
-  background: var(--gl-ink-2); color: var(--gl-text-dim); cursor: pointer;
-  font-size: 13px;
+  width: 28px; height: 28px;
+  border: 1px solid var(--gl-edge); border-radius: 7px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.16)), var(--gl-ink-2);
+  color: var(--gl-text-dim); cursor: pointer;
+  font-size: 12px;
   transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-.glmm-st-tool:hover { color: var(--gl-text-bright); border-color: var(--gl-accent); }
+.glmm-st-tool:hover:not(:disabled) { color: var(--gl-text-bright); border-color: var(--gl-accent); }
+.glmm-st-tool:disabled { opacity: 0.34; cursor: not-allowed; }
 .glmm-st-tool.is-on {
   color: var(--gl-ink-0);
   background: var(--gl-cyan);
@@ -529,7 +640,9 @@
   box-shadow: 0 0 14px var(--gl-bloom);
 }
 .glmm-st-tb-right { display: flex; gap: 6px; align-items: center; }
-.glmm-st-fit, .glmm-st-push { font-size: 11px; padding: 7px 11px; display: inline-flex; align-items: center; gap: 6px; }
+.glmm-st-fit, .glmm-st-push, .glmm-st-style { font-size: 10.5px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px; }
+.glmm-st-style.is-normal { border-color: color-mix(in srgb, var(--gl-text-dim) 60%, transparent); color: var(--gl-text-dim); }
+.glmm-st-style.is-prominent { border-color: color-mix(in srgb, var(--gl-cyan) 55%, transparent); color: var(--gl-cyan); }
 
 .glmm-st-canvas {
   position: relative;
@@ -549,13 +662,15 @@
 .glmm-st-canvas[data-tool="label"],
 .glmm-st-canvas[data-tool="icon"],
 .glmm-st-canvas[data-tool="marker"] { cursor: crosshair; }
+.glmm-st-canvas.can-pan { cursor: grab; }
+.glmm-st-canvas.is-panning { cursor: grabbing; }
 .glmm-st-canvas .glmm-el { cursor: pointer; }
 
 .glmm-st-statusbar {
   flex: 0 0 auto;
-  padding: 5px 12px;
+  padding: 5px 11px;
   font-family: var(--gl-tech);
-  font-size: 10.5px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   color: var(--gl-text-dim);
   border-top: 1px solid var(--gl-hair);
@@ -571,6 +686,13 @@
 }
 .glmm-st-preview.is-line { fill: none; }
 .glmm-st-prevdot { fill: var(--gl-cyan); stroke: #fff; stroke-width: 1.5; }
+.glmm-st-marquee {
+  fill: color-mix(in srgb, var(--gl-cyan) 12%, transparent);
+  stroke: var(--gl-cyan);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  animation: glmm-march 0.8s linear infinite;
+}
 .glmm-st-sel { pointer-events: none; }
 .glmm-st-selbox {
   fill: none;
@@ -591,23 +713,24 @@
 .glmm-st-props {
   border-left: 1px solid var(--gl-hair);
   overflow-y: auto;
-  padding: 12px 14px 18px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent);
+  padding: 10px 11px 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 26%), linear-gradient(200deg, rgba(94, 234, 255, 0.03), transparent 55%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.glmm-prop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.glmm-prop-title { font-weight: 700; font-size: 14px; color: var(--gl-text-bright); letter-spacing: 0.02em; }
-.glmm-prop-hint { font-size: 11.5px; color: var(--gl-text-dim); line-height: 1.5; }
-.glmm-prop-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 11px; }
-.glmm-prop-row.is-stacked { gap: 7px; }
-.glmm-prop-label { font-size: 11px; color: var(--gl-text-dim); font-weight: 600; letter-spacing: 0.02em; }
+.glmm-prop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.glmm-prop-title { font-weight: 700; font-size: 13.5px; color: var(--gl-text-bright); letter-spacing: 0.02em; }
+.glmm-prop-hint { font-size: 11px; color: var(--gl-text-dim); line-height: 1.5; }
+.glmm-prop-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.glmm-prop-row.is-stacked { gap: 6px; }
+.glmm-prop-label { font-size: 10.5px; color: var(--gl-text-dim); font-weight: 600; letter-spacing: 0.02em; }
 .glmm-prop-row .gls-input { width: 100%; }
-.glmm-textarea { resize: vertical; min-height: 44px; font-family: inherit; }
+.glmm-textarea { resize: vertical; min-height: 42px; font-family: inherit; }
 .glmm-prop-z { flex-direction: row; align-items: center; gap: 8px; }
 .glmm-prop-z .glmm-prop-label { flex: 1 1 auto; }
 
 .glmm-swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .glmm-swatch {
-  width: 22px; height: 22px;
+  width: 21px; height: 21px;
   border: 2px solid transparent; border-radius: 6px;
   cursor: pointer; padding: 0;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
@@ -615,13 +738,13 @@
 }
 .glmm-swatch:hover { transform: scale(1.12); }
 .glmm-swatch.is-on { border-color: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
-.glmm-swatch-custom { width: 26px; height: 24px; padding: 0; border: 1px solid var(--gl-edge); border-radius: 6px; background: var(--gl-ink-2); cursor: pointer; }
+.glmm-swatch-custom { width: 25px; height: 23px; padding: 0; border: 1px solid var(--gl-edge); border-radius: 6px; background: var(--gl-ink-2); cursor: pointer; }
 
 .glmm-iconpick {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 4px;
-  max-height: 150px;
+  max-height: 148px;
   overflow-y: auto;
   padding: 4px;
   border: 1px solid var(--gl-hair);
@@ -643,8 +766,13 @@
 /* ──────────────────────────────── keyframes ──────────────────────────── */
 
 @keyframes glmm-attn {
-  0%, 100% { box-shadow: 0 0 0 1px var(--gl-edge); }
-  35% { box-shadow: 0 0 0 2px var(--gl-cyan), 0 0 26px var(--gl-glow); }
+  0%, 100% { filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 26px var(--gl-bloom)); }
+  40% { filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px var(--gl-glow)); }
+}
+@keyframes glmm-sweep {
+  0% { transform: translateX(-180%) skewX(-12deg); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translateX(320%) skewX(-12deg); opacity: 0; }
 }
 @keyframes glmm-self {
   0%, 100% { opacity: 0.4; r: 1.35; }
@@ -656,7 +784,7 @@
 }
 @keyframes glmm-ping {
   0% { r: 8; opacity: 0.9; stroke-width: 4; }
-  100% { r: 70; opacity: 0; stroke-width: 1; }
+  100% { r: 78; opacity: 0; stroke-width: 1; }
 }
 @keyframes glmm-ping-core {
   0% { opacity: 1; r: 9; }
@@ -665,13 +793,13 @@
 }
 @keyframes glmm-pingname {
   0% { opacity: 0; }
-  18% { opacity: 1; }
-  78% { opacity: 1; }
+  16% { opacity: 1; }
+  80% { opacity: 1; }
   100% { opacity: 0; }
 }
 @keyframes glmm-beacon {
   0% { r: 14; opacity: 0.9; stroke-width: 5; }
-  100% { r: 90; opacity: 0; stroke-width: 1; }
+  100% { r: 96; opacity: 0; stroke-width: 1; }
 }
 @keyframes glmm-beacondot {
   0%, 100% { opacity: 0.7; }
@@ -683,21 +811,21 @@
 }
 @keyframes glmm-trail {
   0% { opacity: 0.85; }
-  70% { opacity: 0.55; }
+  70% { opacity: 0.5; }
   100% { opacity: 0; }
 }
 @keyframes glmm-enter {
-  0% { opacity: 0; transform: scale(0.55); }
-  60% { opacity: 1; transform: scale(1.12); }
+  0% { opacity: 0; transform: scale(0.6); }
+  62% { opacity: 1; transform: scale(1.06); }
   100% { opacity: 1; transform: scale(1); }
 }
 @keyframes glmm-leave {
   0% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(0.55); }
 }
 @keyframes glmm-changed {
   0%, 100% { filter: none; }
-  35% { filter: drop-shadow(0 0 14px var(--gl-cyan)) brightness(1.35); }
+  38% { filter: drop-shadow(0 0 14px var(--gl-cyan)) brightness(1.32); }
 }
 @keyframes glmm-march {
   to { stroke-dashoffset: -24; }

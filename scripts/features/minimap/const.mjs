@@ -24,23 +24,39 @@ export const SETTINGS = Object.freeze({
   viewer: "mm.viewerState"
 });
 
-/** Logical canvas size (abstract units). Element coordinates live in 0..MAP_W /
- *  0..MAP_H; the SVG viewBox maps this onto whatever pixel size the window is. */
+/** Nominal canvas size (abstract units). The canvas is *endless*: element
+ *  coordinates are unbounded (a map can be square, wide or tall, growing to fit
+ *  whatever the GM draws). MAP_W/MAP_H are only the starting frame for an empty
+ *  map and the fallback extent when nothing has been placed yet. */
 export const MAP_W = 1000;
 export const MAP_H = 1000;
 
-/** Default compact / expanded window geometry (per-client, overridable). */
-export const VIEWER_COMPACT = Object.freeze({ width: 280, height: 230 });
-export const VIEWER_EXPANDED = Object.freeze({ width: 720, height: 600 });
+/** Camera scale (pixels per logical unit) clamp. zoom is now a true scale, not a
+ *  fit-multiplier, so the same model serves square / long / tall maps. */
+export const SCALE_MIN = 0.02;
+export const SCALE_MAX = 7;
+
+/** Default compact / expanded window geometry (per-client, overridable). Tuned
+ *  tight so the player dock keeps a small, unobtrusive footprint. */
+export const VIEWER_COMPACT = Object.freeze({ width: 248, height: 206 });
+export const VIEWER_EXPANDED = Object.freeze({ width: 680, height: 560 });
 
 /** Ping anti-spam window, per user. */
 export const PING_COOLDOWN_MS = 1200;
 /** How long a ping ripple / who-pinged label lives. */
-export const PING_TTL_MS = 2600;
+export const PING_TTL_MS = 2800;
 /** How long the GM "draw attention" beacon holds before fading. */
-export const ATTENTION_TTL_MS = 4200;
-/** Broadcast sequence timings (ms). */
-export const BROADCAST = Object.freeze({ expand: 460, settle: 240, play: 1500, hold: 900, collapse: 520 });
+export const ATTENTION_TTL_MS = 4600;
+/** Broadcast sequence timings (ms). Lengthened + eased for a smoother, less
+ *  snappy reveal (see styles/minimap.css for the matching CSS durations). */
+export const BROADCAST = Object.freeze({ expand: 640, settle: 460, play: 1600, hold: 1200, collapse: 720 });
+
+/** Broadcast presentation styles. `prominent` expands the player window to the
+ *  centre of the screen, frames the change, holds, then collapses. `normal`
+ *  plays the same diff tweening *in place* without moving or expanding the
+ *  window — a quieter nudge. */
+export const BROADCAST_STYLES = Object.freeze(["prominent", "normal"]);
+export const DEFAULT_BROADCAST_STYLE = "prominent";
 
 export const VIEW_MODES = Object.freeze(["shared", "freeform", "follow"]);
 export const DEFAULT_VIEW_MODE = "shared";
@@ -81,6 +97,18 @@ export const PALETTE = Object.freeze([
 export const DEFAULT_ELEMENT_COLOR = PALETTE[0];
 export const DEFAULT_MARKER_COLOR = "#5eeaff";
 export const DEFAULT_ROOM_COLOR = "#6b86d6";
+/** A party marker (the whole group) reads in the warm signal hue so it stands
+ *  apart from the cool, per-user member dots. */
+export const DEFAULT_PARTY_COLOR = "#ffd24a";
+
+/** Marker kinds. `member` is the per-user/PC dot (optionally user-bound);
+ *  `party` is a single badge standing in for the entire party. */
+export const MARKER_KINDS = Object.freeze(["member", "party"]);
+/** Glyph used for the party badge. */
+export const PARTY_GLYPH = "fa-solid fa-people-group";
+
+/** Glyph alphabet for the per-character "decoder" text reveal. */
+export const SCRAMBLE_GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789#%&/\\<>*+=≡∴⟡◊";
 
 /**
  * Curated, map-relevant Font Awesome glyphs for the icon picker. Power users
