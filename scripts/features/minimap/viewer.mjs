@@ -175,6 +175,9 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
     this.renderer?.destroy();
     if (this._onWinResize) window.removeEventListener("resize", this._onWinResize);
     clearTimeout(this._animT);
+    clearTimeout(this._pingGlowT);
+    clearTimeout(this._attnGlowT);
+    clearTimeout(this._attnT);
     await super._onClose(options);
   }
 
@@ -586,11 +589,15 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
 
   ping(x, y, opts) {
     this.renderer?.ping(x, y, opts);
-    if (!this._expanded) {
-      this.element.classList.remove("glmm-attn");
-      void this.element.offsetWidth;
-      this.element.classList.add("glmm-attn");
-    }
+    // Pulse the liquid-glass rim (edge glow) in the pinger's colour — the same
+    // edge-refraction vocabulary as broadcast and draw-attention, not a diffuse
+    // halo. Re-trigger by removing/forcing reflow/re-adding the one-shot class.
+    if (opts?.color) this.element.style.setProperty("--glmm-ping-c", opts.color);
+    this.element.classList.remove("glmm-attn");
+    void this.element.offsetWidth;
+    this.element.classList.add("glmm-attn");
+    clearTimeout(this._pingGlowT);
+    this._pingGlowT = setTimeout(() => this.element?.classList.remove("glmm-attn"), 1040);
   }
 
   attention(x, y, { color, expand } = {}) {
