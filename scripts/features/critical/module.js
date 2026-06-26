@@ -11,6 +11,10 @@ const EASE_IN_FRACTION = 0.15;
 const EASE_OUT_FRACTION = 0.2;
 const QUEUE_MAX = 3;
 const DEDUPE_WINDOW_MS = 500;
+// Upper bound for how long we hold the cut-in waiting on Dice So Nice. The real
+// `diceSoNiceRollComplete` signal wins the race in the normal case; this is only
+// the safety net for when that signal never arrives (see waitForDiceThenProcess).
+const DSN_ANIMATION_WAIT_TIMEOUT_MS = 5e3;
 const OVERLAY_Z_INDEX = 99999;
 const OVERLAY_CONTAINER_ID = "gls-critical-overlay";
 const SETTINGS = {
@@ -718,17 +722,32 @@ function registerDetector() {
  * message is created — before the 3D dice land. `waitFor3DAnimationByMessageID`
  * resolves immediately when no animation is queued for the message, so the
  * non-DSN path is unaffected.
+ *
+ * The DSN wait is raced against a timeout. `waitFor3DAnimationByMessageID`
+ * resolves only when DSN fires `diceSoNiceRollComplete` for this exact message
+ * id; in combat, rapid back-to-back rolls let DSN coalesce/queue animations and
+ * that per-message signal can be missed (a DSN reliability bug fixed only in
+ * v6), so the promise can never settle. Without the timeout that silently
+ * suppressed every crit cut-in during combat while leaving isolated
+ * out-of-combat rolls working. The race keeps the normal case snappy (the real
+ * completion wins) and guarantees detection still runs when the signal is lost.
  */
 async function waitForDiceThenProcess(adapter, message) {
   const dsn = game.dice3d;
   if (dsn && typeof dsn.waitFor3DAnimationByMessageID === "function" && message.id) {
     try {
-      await dsn.waitFor3DAnimationByMessageID(message.id);
+      await Promise.race([
+        Promise.resolve(dsn.waitFor3DAnimationByMessageID(message.id)),
+        sleep(DSN_ANIMATION_WAIT_TIMEOUT_MS)
+      ]);
     } catch (err) {
       console.warn(`${MODULE_ID} | ${FEATURE_ID} | failed waiting for Dice So Nice animation:`, err);
     }
   }
   processMessage(adapter, message);
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 function messageAuthorId(message) {
   return message.author?.id ?? (typeof message.user === "string" ? message.user : message.user?.id);
