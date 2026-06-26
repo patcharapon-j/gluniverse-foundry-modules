@@ -276,17 +276,23 @@ export class MapRenderer {
    *  framed span keeps a sparse map (a lone marker) from filling the screen.
    *  When `dur` is given the move is animated (so it can be coordinated with a
    *  simultaneous window morph using the same easing). */
-  fit(pad = 1.16, dur = 0, ease) {
-    const b = this.contentBounds();
+  /** Target pan/zoom that frames all content (with min-span padding) for the
+   *  CURRENT host size, without applying it. `zoom` is null until laid out. */
+  fitTarget(pad = 1.16) {
+    let { x, y, w, h } = this.contentBounds();
     const MIN = 480;
-    let { x, y, w, h } = b;
     if (w < MIN) { x -= (MIN - w) / 2; w = MIN; }
     if (h < MIN) { y -= (MIN - h) / 2; h = MIN; }
     const pan = { x: x + w / 2, y: y + h / 2 };
     const { w: pw, h: ph } = this._hostSize();
-    if (!pw || !ph) { this.view.pan = pan; this._refitPending = true; return; }
+    if (!pw || !ph) return { pan, zoom: null };
+    return { pan, zoom: clampScale(Math.min(pw / (w * pad), ph / (h * pad))) };
+  }
+
+  fit(pad = 1.16, dur = 0, ease) {
+    const { pan, zoom } = this.fitTarget(pad);
+    if (zoom == null) { this.view.pan = pan; this._refitPending = true; return; }
     this._refitPending = false;
-    const zoom = clampScale(Math.min(pw / (w * pad), ph / (h * pad)));
     if (dur) this.animateView(pan, zoom, dur, ease);
     else { this.view.pan = pan; this.view.zoom = zoom; this.applyView(); }
   }
@@ -325,6 +331,32 @@ export class MapRenderer {
       const k = easeFn(t);
       this.view.pan = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
       this.view.zoom = from.z + (to.z - from.z) * k;
+      this.applyView();
+      if (t < 1) this._viewAnim = requestAnimationFrame(step);
+      else this._viewAnim = null;
+    };
+    this._viewAnim = requestAnimationFrame(step);
+  }
+
+  /** Glide to a target that is recomputed from the LIVE host each frame, so the
+   *  framing stays correct even while the host is simultaneously resizing (e.g. a
+   *  broadcast collapse). `target()` returns {pan, zoom} for the current host
+   *  size; both ease from the current view on the given curve, so the camera
+   *  shares the window morph's timing AND lands on the correct fit for the final
+   *  (post-resize) size rather than a zoom precomputed for the grown window. */
+  animateLiveView(target, dur = 760, ease) {
+    if (this._viewAnim) cancelAnimationFrame(this._viewAnim);
+    const from = { x: this.view.pan.x, y: this.view.pan.y, z: this.view.zoom };
+    const t0 = performance.now();
+    const easeFn = ease ?? ((t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2));
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / dur);
+      const k = easeFn(t);
+      const tg = target() || {};
+      const tx = tg.pan?.x ?? from.x, ty = tg.pan?.y ?? from.y;
+      const tz = clampScale(tg.zoom ?? from.z);
+      this.view.pan = { x: from.x + (tx - from.x) * k, y: from.y + (ty - from.y) * k };
+      this.view.zoom = from.z + (tz - from.z) * k;
       this.applyView();
       if (t < 1) this._viewAnim = requestAnimationFrame(step);
       else this._viewAnim = null;

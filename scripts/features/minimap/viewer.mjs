@@ -466,12 +466,21 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
   _frameForView(dur = 0, ease) {
     if (!this.renderer || this._free) return;
     const mode = this._viewMode ?? "shared";
+    // When the framing runs alongside a window morph (dur + ease given), drive it
+    // off the LIVE host each frame so it lands on the right zoom for the *final*
+    // size — otherwise a collapse settles at the zoom computed for the big window.
+    const live = !!(dur && ease);
     if (mode === "follow") {
       const a = this._selfAnchor();
-      if (a) { this.renderer.animateView({ x: a.x, y: a.y }, this.renderer.scaleForSpan(FOLLOW_SPAN), dur || 760, ease); return; }
+      if (a) {
+        if (live) this.renderer.animateLiveView(() => ({ pan: a, zoom: this.renderer.scaleForSpan(FOLLOW_SPAN) }), dur, ease);
+        else this.renderer.animateView({ x: a.x, y: a.y }, this.renderer.scaleForSpan(FOLLOW_SPAN), dur || 760, ease);
+        return;
+      }
     }
     // shared (initial) and freeform both default to fit-all
-    this.renderer.fit(1.16, dur, ease);
+    if (live) this.renderer.animateLiveView(() => this.renderer.fitTarget(1.16), dur, ease);
+    else this.renderer.fit(1.16, dur, ease);
   }
 
   _frameForChange(snap, diff, newMap) {
@@ -604,7 +613,11 @@ export class MinimapViewer extends HandlebarsApplicationMixin(ApplicationV2) {
       this._attnT = setTimeout(() => {
         if (grew) this._restoreInPlace();
         if (wasMin) this.setMinimized(true, { persist: false });
-        this._free = false; this._updateFreeChip(); this._frameForView();
+        this._free = false; this._updateFreeChip();
+        // If we grew in place, the window is shrinking back now — reframe on the
+        // shared morph curve so the camera tracks the resize to the correct fit.
+        if (grew) this._frameForView(MORPH_MS, GL_EASE);
+        else this._frameForView();
       }, ATTENTION_TTL_MS);
     }
   }
