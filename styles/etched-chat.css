@@ -1,0 +1,588 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Etched-Glass Chat Theme (PF2e)   [feature: etched-chat]
+
+   Restyles PF2e chat cards in the suite's Etched Glass aesthetic. All styling
+   keys off the `.glec-card` marker (added only by the enabled feature's hook),
+   so a disabled feature is fully inert. Built entirely from the canonical
+   `--gl-*` tokens / `gl-*` keyframes in gl-tokens.css — no token is redefined
+   here. Unique class prefix: `glec-`.
+
+   Override strategy (research.md §E): out-specify Dorako UI's `[data-theme]`
+   chat rules by SPECIFICITY, never load order. `!important` only as a scoped
+   last resort on the few hard-pinned background/border properties.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Local keyframes ─────────────────────────────────────────────────────── */
+@keyframes glec-card-in {
+  0% { opacity: 0; transform: translateY(6px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes glec-crack-burst {
+  0% { opacity: 0; transform: scale(0.2); filter: brightness(3.4) blur(1.4px); }
+  16% { opacity: 1; transform: scale(1.04); filter: brightness(2.2) blur(0); }
+  100% { opacity: 0.88; transform: scale(1); filter: brightness(1); }
+}
+@keyframes glec-frac-halo {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Baseline glass surface + edge-reflection light (US1 / T010)
+   Scope under `.chat-message.glec-card` so we out-rank Dorako's chat rules.
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--gl-radius);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  /* liquid-glass body */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%) !important;
+  border: 1px solid var(--gl-edge) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  color: var(--gl-text);
+  animation: glec-card-in var(--gl-d-move) var(--gl-ease) both; /* entrance (T012) */
+}
+
+/* Edge-reflection light: a thin bright rake along the top + leading edge. */
+.chat-message.glec-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 18%),
+    linear-gradient(100deg, color-mix(in srgb, var(--gl-accent) 22%, transparent), transparent 30%);
+  mix-blend-mode: screen;
+  opacity: 0.7;
+}
+
+/* Keep the real card content above the portrait + FX + edge layers. */
+.chat-message.glec-card > *:not(.glec-portrait):not(.glec-fx) {
+  position: relative;
+  z-index: 2;
+}
+
+/* Header / sender / content read on glass (Dorako override — T011). */
+.chat-message.glec-card .message-header,
+.chat-message.glec-card .message-sender,
+.chat-message.glec-card .message-content,
+.chat-message.glec-card .message-metadata {
+  background: transparent !important;
+  color: var(--gl-text);
+  border-color: var(--gl-hair);
+}
+.chat-message.glec-card .message-sender,
+.chat-message.glec-card h3,
+.chat-message.glec-card h4 {
+  font-family: var(--gl-display);
+  color: var(--gl-text-bright);
+  letter-spacing: 0.01em;
+}
+.chat-message.glec-card .whisper-to,
+.chat-message.glec-card .message-timestamp,
+.chat-message.glec-card .flavor-text {
+  color: var(--gl-text-dim);
+}
+/* Doubled-class lift for backgrounds Dorako pins one level deeper. */
+.chat-message.glec-card.glec-card .dice-roll .dice-total,
+.chat-message.glec-card.glec-card .dice-result {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)) !important;
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text-bright);
+}
+
+/* ── Interactive buttons + hover light-sweep sheen (US1 / T013) ──────────────
+   ONLY the card-action button strips get the glass + sheen. Inline buttons that
+   PF2e injects *inside* the dice-total <h4> (e.g. `.set-as-initiative`) must NOT
+   be reboxed — a border/padding there inflates the result row's height. They are
+   explicitly reset to small transparent icons below. */
+.chat-message.glec-card .card-buttons button,
+.chat-message.glec-card .message-buttons button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)), var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text-bright);
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.chat-message.glec-card .card-buttons button::before,
+.chat-message.glec-card .message-buttons button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--gl-accent) 55%, transparent) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform var(--gl-d-reveal) var(--gl-ease);
+}
+.chat-message.glec-card .card-buttons button:hover:not(:disabled),
+.chat-message.glec-card .message-buttons button:hover:not(:disabled) {
+  border-color: var(--gl-accent);
+  box-shadow: 0 0 14px var(--gl-bloom);
+}
+.chat-message.glec-card .card-buttons button:hover:not(:disabled)::before,
+.chat-message.glec-card .message-buttons button:hover:not(:disabled)::before {
+  transform: translateX(120%);
+}
+
+/* ── Readability floor on dark glass (preserve PF2e hues) ────────────────────
+   The dark card pushes PF2e's default-grey button labels, icons and untyped
+   damage numbers below legible contrast. Floor them to the bright ink. Typed
+   damage spans carry their OWN color (e.g. via inline style / damage-type
+   classes), which out-specifies the inherited `currentColor` here, so their
+   hue survives — they only gain a shadow for pop. */
+.chat-message.glec-card .card-buttons button i,
+.chat-message.glec-card .message-buttons button i,
+.chat-message.glec-card .card-buttons button .fa,
+.chat-message.glec-card .message-buttons button .fa,
+.chat-message.glec-card .damage-application,
+.chat-message.glec-card .damage-application button,
+.chat-message.glec-card .damage-application button i {
+  color: var(--gl-text-bright);
+}
+/* Result/damage totals + any damage-roll text: brighten the base ink while
+   leaving colored child spans to keep their hue. */
+.chat-message.glec-card .dice-roll .dice-total,
+.chat-message.glec-card .damage-roll .dice-total,
+.chat-message.glec-card .message-content .damage {
+  color: var(--gl-text-bright);
+}
+/* Colored damage values get a subtle dark halo so even mid-tone hues read on
+   glass without recoloring them (hue preserved). */
+.chat-message.glec-card .dice-result [style*="color"],
+.chat-message.glec-card .dice-result .damage-type,
+.chat-message.glec-card .damage-roll [style*="color"] {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+/* Physical/untyped damage renders near-grey and stays hard to read. On damage
+   cards there is no d20 chip, so a brightness+saturate filter over the result
+   subtree is safe: it LIFTS grey numbers toward legible while vivid damage-type
+   hues only get punchier (hue preserved — we never recolor). */
+.chat-message.glec-card[data-glec-category="damage"] .dice-formula,
+.chat-message.glec-card[data-glec-category="damage"] .dice-total,
+.chat-message.glec-card[data-glec-category="damage"] .dice-result .damage,
+.chat-message.glec-card[data-glec-category="damage"] .damage-roll .damage {
+  color: var(--gl-text-bright);
+}
+.chat-message.glec-card[data-glec-category="damage"] .dice-result {
+  filter: brightness(1.5) saturate(1.15);
+}
+/* PF2e/Dorako color each damage instance span by type via `--damage-color` plus a
+   pale pill `background-color: var(--color-bg-physical)`. For PHYSICAL types that
+   pill + text read as a washed grey on dark glass (and physical has no meaningful
+   hue), so we override the variable, force bright text, and strip the grey pill.
+   We out-specify Dorako's `:root .damage.color.slashing` (0,4,0) and PF2e's
+   `body .damage.color.slashing` (0,3,1) with (0,5,0) + !important. Elemental types
+   are untouched and keep their hue. */
+.chat-message.glec-card .damage.color.bludgeoning,
+.chat-message.glec-card .damage.color.piercing,
+.chat-message.glec-card .damage.color.slashing,
+.chat-message.glec-card .damage.color.untyped {
+  --damage-color: var(--gl-text-bright);
+  color: var(--gl-text-bright) !important;
+  background-color: transparent !important;
+  border-color: color-mix(in srgb, var(--gl-text-bright) 30%, transparent) !important;
+}
+.chat-message.glec-card .damage.color.bludgeoning i[class^="fa-"],
+.chat-message.glec-card .damage.color.piercing i[class^="fa-"],
+.chat-message.glec-card .damage.color.slashing i[class^="fa-"],
+.chat-message.glec-card .damage.color.untyped i[class^="fa-"] {
+  color: var(--gl-text-bright) !important;
+}
+/* The result total ("4") + formula container read bright regardless of theme. */
+.chat-message.glec-card .dice-roll .dice-total,
+.chat-message.glec-card .dice-roll .dice-total .total,
+.chat-message.glec-card .dice-roll .dice-formula {
+  color: var(--gl-text-bright) !important;
+}
+
+/* GM/owner-only content (PF2e/Foundry mark hidden values with a pale highlight
+   box) renders white-on-white on the dark theme. Re-skin those visibility boxes
+   to dark glass with bright ink so the hidden number is readable to its owner. */
+.chat-message.glec-card [data-visibility="gm"],
+.chat-message.glec-card [data-visibility="owner"],
+.chat-message.glec-card [data-visibility="none"],
+.chat-message.glec-card .gm-only,
+.chat-message.glec-card .owner-only {
+  background: rgba(8, 12, 20, 0.55) !important;
+  color: var(--gl-text-bright) !important;
+  border: 1px solid var(--gl-edge);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Visibility badge — at-a-glance roll audience (public / GM / blind GM / self)
+   Injected by style.mjs into the header metadata; colored by data-glec-vis.
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card .glec-vis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--glec-vc, var(--gl-edge)) 60%, var(--gl-edge));
+  background: color-mix(in srgb, var(--glec-vc, #000) 14%, rgba(0, 0, 0, 0.42));
+  color: color-mix(in srgb, var(--glec-vc, var(--gl-text-bright)) 78%, var(--gl-text-bright));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glec-vc, transparent) 28%, transparent);
+  font-family: var(--gl-tech);
+  font-size: 0.66em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.chat-message.glec-card .glec-vis i { font-size: 0.92em; }
+/* Per-visibility hue. Public is intentionally muted (the common case); the others
+   carry a clear signal color. */
+.chat-message.glec-card[data-glec-vis="public"] .glec-vis {
+  --glec-vc: var(--gl-text-dim);
+  opacity: 0.72;
+}
+.chat-message.glec-card[data-glec-vis="gm"] .glec-vis { --glec-vc: var(--gl-violet); }
+.chat-message.glec-card[data-glec-vis="blind"] .glec-vis { --glec-vc: var(--gl-hazard); }
+.chat-message.glec-card[data-glec-vis="self"] .glec-vis { --glec-vc: var(--gl-cyan); }
+.chat-message.glec-card[data-glec-vis="private"] .glec-vis { --glec-vc: var(--gl-signal); }
+
+/* Inline dice-total buttons (PF2e's set-as-initiative) stay tiny + transparent
+   so they ride the result baseline instead of growing the row (#2 fix). */
+.chat-message.glec-card .dice-total button {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible;
+  margin: 0;
+  padding: 0 0 0 0.35em;
+  line-height: 1;
+  vertical-align: baseline;
+  color: var(--gl-text-dim);
+}
+.chat-message.glec-card .dice-total button:hover {
+  color: var(--gl-signal);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Diorama portrait bleed (US1 / T014)
+   Layer injected by style.mjs as `.glec-portrait`. Art bleeds in from the
+   left and fades out to the right/bottom (clocks-tracker diorama pattern).
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card .glec-portrait {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.42;
+  -webkit-mask-image: linear-gradient(100deg, #000 30%, transparent 78%), linear-gradient(#000, #000 72%, transparent);
+          mask-image: linear-gradient(100deg, #000 30%, transparent 78%), linear-gradient(#000, #000 72%, transparent);
+  -webkit-mask-composite: source-in;
+          mask-composite: intersect;
+}
+/* The art is a real <img> so per-actor framing is precise: object-position sets
+   the focus point (default face-focused 50% 18%) and transform:scale is the zoom.
+   This replaces the old background-cover-at-200%-height that cropped to the
+   upper-left and read as "cut off at half". */
+.chat-message.glec-card .glec-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--glec-frame-x, 50%) var(--glec-frame-y, 18%);
+  transform: scale(var(--glec-frame-zoom, 1));
+  transform-origin: var(--glec-frame-x, 50%) var(--glec-frame-y, 18%);
+}
+/* No portrait resolved (or disabled per-actor) → layer absent, no broken region. */
+
+/* The diorama already shows the actor art at full bleed, so the small header
+   avatar is redundant — hide it ONLY when the diorama actually mounted
+   (`.glec-has-art`). Art-less cards keep their thumbnail as the sole image. */
+.chat-message.glec-card.glec-has-art .message-header .portrait,
+.chat-message.glec-card.glec-has-art .message-header .portrait.token,
+.chat-message.glec-card.glec-has-art .message-header > img,
+.chat-message.glec-card.glec-has-art header > img {
+  display: none !important;
+}
+/* PF2e's `.message-header.with-image` is a CSS grid whose first column is a fixed
+   2.75rem reserved for the portrait (grid-area: img). Hiding the portrait leaves
+   that column empty — a gap at the top-left. Collapse the img column to 0 so the
+   `name`/`user` column slides into the corner. (0,5,0) out-specifies PF2e's
+   `.chat-message .message-header.with-image` (0,3,0). */
+.chat-message.glec-card.glec-has-art .message-header.with-image {
+  grid-template-columns: 0 1fr min-content;
+  column-gap: 0;
+}
+.chat-message.glec-card.glec-has-art .message-sender {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+/* Text rides over the portrait bleed — give content a soft shadow so it stays
+   legible against bright/busy art (only when art is present). */
+.chat-message.glec-card.glec-has-art > *:not(.glec-portrait):not(.glec-fx),
+.chat-message.glec-card.glec-has-art .message-header,
+.chat-message.glec-card.glec-has-art .message-content {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.78), 0 0 2px rgba(0, 0, 0, 0.55);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Category-aware baseline tweaks (US1 / T015) keyed off data-glec-category
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card[data-glec-category="damage"] { --gl-accent: var(--gl-hazard); }
+.chat-message.glec-card[data-glec-category="save"] { --gl-accent: var(--gl-good); }
+.chat-message.glec-card[data-glec-category="check"] { --gl-accent: var(--gl-cyan); }
+.chat-message.glec-card[data-glec-category="action"] { --gl-accent: var(--gl-signal); }
+.chat-message.glec-card[data-glec-category="item-spell"] { --gl-accent: var(--gl-violet); }
+.chat-message.glec-card[data-glec-category="whisper"] {
+  --gl-accent: var(--gl-violet);
+  border-style: dashed !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Fracture FX canvas + valence glass accents (US2 / T020, T021)
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card canvas.glec-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5; /* ABOVE the card content — the shatter is a full-card overlay, not a
+                 backdrop. pointer-events:none keeps the card interactive. */
+  pointer-events: none;
+  mix-blend-mode: screen;
+  /* Concentrate the fracture in the upper-right corner and fade it out across the
+     card toward the lower-left, so the shatter never blankets the readable
+     content. The GLSL origin (impact) is nucleated top-right to match. */
+  -webkit-mask-image: radial-gradient(92% 92% at 100% 0%,
+      #000 0%, #000 13%, rgba(0, 0, 0, 0.4) 37%, transparent 56%);
+          mask-image: radial-gradient(92% 92% at 100% 0%,
+      #000 0%, #000 13%, rgba(0, 0, 0, 0.4) 37%, transparent 56%);
+}
+
+/* Gold = positive valence: warm signal halo + border. */
+.chat-message.glec-card[data-glec-frac="gold"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.38),
+    0 0 22px color-mix(in srgb, var(--gl-signal) 45%, transparent);
+  border-color: color-mix(in srgb, var(--gl-signal) 60%, var(--gl-edge)) !important;
+}
+.chat-message.glec-card[data-glec-frac="gold"]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--gl-signal-hot) 70%, transparent);
+  border-radius: inherit;
+  animation: glec-frac-halo var(--gl-breathe) var(--gl-ease) infinite;
+}
+
+/* Red/purple = negative valence: hazard + violet halo. */
+.chat-message.glec-card[data-glec-frac="red"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.42),
+    0 0 24px color-mix(in srgb, var(--gl-hazard) 42%, transparent);
+  border-color: color-mix(in srgb, var(--gl-hazard) 55%, var(--gl-edge)) !important;
+}
+.chat-message.glec-card[data-glec-frac="red"]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--gl-violet) 72%, transparent);
+  border-radius: inherit;
+  animation: glec-frac-halo var(--gl-breathe) var(--gl-ease) infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Dying sheen (US3 / T022) — resting treatment for dying/wounded cards
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card[data-glec-tier="dying"] {
+  border-color: color-mix(in srgb, var(--gl-violet) 45%, var(--gl-edge)) !important;
+}
+.chat-message.glec-card[data-glec-tier="dying"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  z-index: 1;
+  pointer-events: none;
+  transform-origin: left center;
+  background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--gl-violet) 38%, transparent) 50%, transparent);
+  mix-blend-mode: screen;
+  animation: gluni-dying-sheen 1600ms var(--gl-ease) infinite;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   WebGL-off fallback — pure-CSS crack floor (US3 / T023)
+   Applied by style.mjs as `.glec-crack-css` when fxRenderer is unsupported.
+   Valence-colored via data-glec-frac. Guarantees no fractured card is broken.
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card.glec-crack-css::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  transform-origin: 60% 34%;
+  background:
+    repeating-conic-gradient(from 0deg at 62% 36%,
+      transparent 0deg 14deg,
+      color-mix(in srgb, var(--glec-crack, var(--gl-signal)) 80%, transparent) 14deg 15deg,
+      transparent 15deg 27deg),
+    radial-gradient(40% 40% at 62% 36%,
+      color-mix(in srgb, var(--glec-crack, var(--gl-signal)) 50%, transparent), transparent 70%);
+  animation: glec-crack-burst 900ms var(--gl-ease) both;
+}
+.chat-message.glec-card.glec-crack-css[data-glec-frac="gold"] { --glec-crack: var(--gl-signal-hot); }
+.chat-message.glec-card.glec-crack-css[data-glec-frac="red"] { --glec-crack: var(--gl-hazard); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Natural-d20 chip on the result row (checks only)
+   A d20-silhouette glass token pinned to the LEFT edge of the dice-total,
+   showing the raw die face. nat-20 gold / nat-1 red. Injected by style.mjs
+   only for d20 check categories (check / save / action) — never damage.
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card .dice-total {
+  position: relative;
+}
+.chat-message.glec-card .glec-d20 {
+  position: absolute;
+  left: 0.4em;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-grid;
+  place-items: center;
+  width: 1.7em;
+  height: 1.7em;
+  font-family: var(--gl-tech);
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gl-text-bright);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.28)), var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  /* d20 / hex silhouette */
+  clip-path: polygon(50% 0, 100% 27%, 100% 73%, 50% 100%, 0 73%, 0 27%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.chat-message.glec-card .glec-d20.glec-nat-max {
+  color: var(--gl-ink-0);
+  background: linear-gradient(180deg, var(--gl-signal-hot), var(--gl-signal));
+  border-color: var(--gl-signal-hot);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.chat-message.glec-card .glec-d20.glec-nat-min {
+  color: var(--gl-text-bright);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 78%, #000), color-mix(in srgb, var(--gl-hazard) 42%, #000));
+  border-color: var(--gl-hazard);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-hazard) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   "Chat Frame" actor-sheet header button + framing dialog
+   The crop button lives in the actor sheet's window header (.glec-frame-portrait,
+   styled by core's .header-button); the dialog previews a REAL chat card so the
+   framing is shown exactly as it renders in chat.
+   ════════════════════════════════════════════════════════════════════════ */
+/* The dialog renders in its own window (outside #chat); --gl-* tokens are global
+   so the mock card + controls still read as suite UI. */
+.glec-frame-dialog { display: grid; gap: 12px; padding: 4px 2px; }
+
+/* The preview is an actual .glec-card mock (same anatomy the styler stamps), so
+   it inherits every chat-card rule above. Here we only neutralise the live-card
+   context it normally relies on: give it a stable height for the portrait bleed,
+   strip Foundry's .chat-message list margins, and make it non-interactive. */
+.glec-frame-dialog .glec-frame-preview-card {
+  margin: 0;
+  min-height: 104px;
+  padding: 8px 10px;
+  pointer-events: none;
+  list-style: none;
+}
+.glec-frame-dialog .glec-frame-preview-card .message-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+.glec-frame-dialog .glec-frame-preview-card .message-sender { margin: 0; font-size: 1.05em; }
+.glec-frame-dialog .glec-frame-preview-card .dice-result {
+  display: grid;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.glec-frame-dialog .glec-frame-preview-card .dice-formula { font-family: var(--gl-tech); color: var(--gl-text-dim); font-size: 0.85em; }
+.glec-frame-dialog .glec-frame-preview-card .dice-total { margin: 0; text-align: center; font-size: 1.3em; }
+
+.glec-frame-toggle { display: flex; align-items: center; gap: 8px; font-family: var(--gl-tech); }
+.glec-frame-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+}
+.glec-frame-row label { font-family: var(--gl-tech); letter-spacing: 0.04em; }
+.glec-frame-row output { text-align: right; font-family: var(--gl-tech); color: var(--gl-text-dim); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   pf2e-modifiers-matter compatibility
+   Give its highlighted modifier tags the etched-glass / refracted-edge look,
+   driven by the module's own --pf2emm-color-* vars (significance class maps to a
+   local --glec-mm hue). No coupling: rules are inert if the module is absent.
+   ════════════════════════════════════════════════════════════════════════ */
+.chat-message.glec-card .pf2emm-is-ESSENTIAL { --glec-mm: var(--pf2emm-color-essential, #2fa84f); }
+.chat-message.glec-card .pf2emm-is-HELPFUL { --glec-mm: var(--pf2emm-color-helpful, #acc24a); }
+.chat-message.glec-card .pf2emm-is-HARMFUL { --glec-mm: var(--pf2emm-color-harmful, #ff4a52); }
+.chat-message.glec-card .pf2emm-is-DETRIMENTAL { --glec-mm: var(--pf2emm-color-detrimental, #ff852f); }
+
+.chat-message.glec-card .tag_alt[class*="pf2emm-is-"],
+.chat-message.glec-card .tag_transparent[class*="pf2emm-is-"] {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--glec-mm) 32%, transparent),
+      color-mix(in srgb, var(--glec-mm) 10%, transparent)) !important;
+  color: color-mix(in srgb, var(--glec-mm) 78%, var(--gl-text-bright)) !important;
+  border: 1px solid color-mix(in srgb, var(--glec-mm) 58%, transparent) !important;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 0 10px color-mix(in srgb, var(--glec-mm) 34%, transparent) !important;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--glec-mm) 42%, transparent);
+  backdrop-filter: blur(3px) saturate(1.2);
+  -webkit-backdrop-filter: blur(3px) saturate(1.2);
+}
+.chat-message.glec-card .pf2emm-suffix[class*="pf2emm-is-"] {
+  color: color-mix(in srgb, var(--glec-mm) 85%, var(--gl-text-bright)) !important;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--glec-mm) 40%, transparent);
+  font-weight: 700;
+}
+.chat-message.glec-card .pf2emm-potential {
+  color: var(--gl-signal-hot);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gl-signal) 55%, transparent);
+}

@@ -1,0 +1,22 @@
+{
+  "GLEC.aria.card": "Etched-glass chat card",
+  "GLEC.aria.fracture": "Critical glass fracture",
+  "GLEC.aria.fractureGold": "Critical success — glass fracture",
+  "GLEC.aria.fractureRed": "Critical failure — glass fracture",
+  "GLEC.aria.dying": "Dying creature card",
+  "GLEC.frame.title": "Frame Chat-Card Portrait",
+  "GLEC.frame.button": "Chat Frame",
+  "GLEC.frame.previewFlavor": "Perception check",
+  "GLEC.frame.previewNow": "now",
+  "GLEC.frame.enabled": "Show portrait",
+  "GLEC.frame.x": "Horizontal",
+  "GLEC.frame.y": "Vertical",
+  "GLEC.frame.zoom": "Zoom",
+  "GLEC.frame.save": "Save",
+  "GLEC.frame.cancel": "Cancel",
+  "GLEC.vis.public": "Public",
+  "GLEC.vis.gm": "GM",
+  "GLEC.vis.blind": "Blind GM",
+  "GLEC.vis.self": "Self",
+  "GLEC.vis.private": "Private"
+}

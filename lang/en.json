@@ -55,5 +55,7 @@
   "GLS.feature.pf2e-flatten.title": "Flatten Proficiency (PF2e)",
   "GLS.feature.pf2e-flatten.hint": "Proficiency Without Level variant rule automation for PF2e.",
   "GLS.feature.critical.title": "Critical",
-  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations."
+  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations.",
+  "GLS.feature.etched-chat.title": "Etched-Glass Chat Theme (PF2e)",
+  "GLS.feature.etched-chat.hint": "Restyle PF2e chat cards in the suite's Etched Glass aesthetic, with a disposition-colored glass fracture on critical rolls. Overrides Dorako UI's chat theme."
 }

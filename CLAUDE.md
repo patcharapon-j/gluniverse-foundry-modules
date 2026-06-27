@@ -129,10 +129,13 @@ the shape, the speckit commands to capture it.
 - Don't move side effects to import time in feature adapters.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/001-suite-scene-control-group/plan.md`
-(Suite Scene Control Group — relocate all suite scene-control tools out of
-Foundry's Token Controls into one top-level GLUniverse group via the shared
-`scripts/core/scene-controls.mjs` helper). See that plan and its
-`research.md` / `data-model.md` / `contracts/` for technologies, structure, and
-validation steps.
+Active feature plan: `specs/002-etched-chat-theme/plan.md`
+(Etched-Glass Chat Theme (PF2e) — a self-contained toggleable feature `etched-chat`
+that restyles PF2e chat cards in the suite's Etched Glass aesthetic, overriding
+Dorako UI's chat themes without coupling to them. Baseline glass/diorama styling via
+a `renderChatMessageHTML` marker (`.glec-card`/`data-glec-tier`); valence-colored
+glass-fracture on crit-success/kill (gold) and crit-failure (red/purple) reusing the
+initiative tracker's single-shared-renderer FX pipeline, with a CSS-crack fallback).
+See that plan and its `research.md` / `data-model.md` / `contracts/` for the tier-
+resolution + FX-surface contracts, structure, and validation steps.
 <!-- SPECKIT END -->

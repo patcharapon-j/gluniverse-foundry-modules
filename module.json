@@ -39,7 +39,8 @@
     "styles/tidy5e-slots-components.css",
     "styles/tidy5e-slots-etched-glass.css",
     "styles/critical.css",
-    "styles/minimap.css"
+    "styles/minimap.css",
+    "styles/etched-chat.css"
   ],
   "languages": [
     {
@@ -116,6 +117,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/minimap.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/etched-chat.en.json"
     }
   ],
   "packs": [
