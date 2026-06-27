@@ -3,6 +3,7 @@
 import { MODULE_ID, SETTINGS, HOOKS } from "./const.js";
 import { registerSettings } from "./settings.js";
 import { Features } from "./features.js";
+import { ensureSuiteGroup } from "../../core/scene-controls.mjs";
 
 // Re-export the suite-facing settings registration so the adapter can wire it as
 // `registerSettings()` (runs unconditionally at init so toggles/menus exist).
@@ -181,10 +182,10 @@ function mountDelveTumble(message, el) {
 }
 // v13+ scene controls: controls/tools are keyed objects; handlers use onChange.
 function onGetSceneControlButtons(controls) {
-  const group = controls.tokens ?? controls.notes ?? Object.values(controls)[0];
-  if (!group?.tools) return;
+  // Suite tools live under the suite's own top-level group; `ensureSuiteGroup` is
+  // called inside each enabled-branch so the group only appears when a tool does.
   if (Features.on("timeHud")) {
-    group.tools["glct-toggle"] = {
+    ensureSuiteGroup(controls).tools["glct-toggle"] = {
       name: "glct-toggle",
       title: "GLCT.keybindings.toggleHud",
       icon: "fa-solid fa-hourglass-half",
@@ -193,7 +194,7 @@ function onGetSceneControlButtons(controls) {
     };
   }
   if (Features.on("trackers.dock")) {
-    group.tools["glct-tracker-toggle"] = {
+    ensureSuiteGroup(controls).tools["glct-tracker-toggle"] = {
       name: "glct-tracker-toggle",
       title: "GLCT.keybindings.toggleTracker",
       icon: "fa-solid fa-list-check",
@@ -202,7 +203,7 @@ function onGetSceneControlButtons(controls) {
     };
   }
   if (WeatherStore.enabled) {
-    group.tools["glct-weather-toggle"] = {
+    ensureSuiteGroup(controls).tools["glct-weather-toggle"] = {
       name: "glct-weather-toggle",
       title: "GLCT.keybindings.toggleWeather",
       icon: "fa-solid fa-cloud-bolt",
@@ -211,7 +212,7 @@ function onGetSceneControlButtons(controls) {
     };
   }
   if (SupportStore.enabled) {
-    group.tools["glct-support-toggle"] = {
+    ensureSuiteGroup(controls).tools["glct-support-toggle"] = {
       name: "glct-support-toggle",
       title: "GLCT.keybindings.toggleSupport",
       icon: "fa-solid fa-user-shield",
@@ -220,7 +221,7 @@ function onGetSceneControlButtons(controls) {
     };
   }
   if (DelvingStore.enabled && game.user.isGM) {
-    group.tools["glct-delving-toggle"] = {
+    ensureSuiteGroup(controls).tools["glct-delving-toggle"] = {
       name: "glct-delving-toggle",
       title: "GLCT.keybindings.toggleDelving",
       icon: "fa-solid fa-dungeon",

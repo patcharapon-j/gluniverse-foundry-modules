@@ -91,6 +91,27 @@ Suite.register({
   already prevents the feature from running on the wrong system when `system` is
   set, but keep internal guards for safety.
 
+### Left-bar scene controls
+
+- A feature that adds tools to Foundry's left scene-control bar MUST place them in
+  the suite's own top-level group, NOT in Token Controls. From the feature's
+  `getSceneControlButtons` handler, gate first (role / enabled sub-feature), then
+  call `ensureSuiteGroup(controls)` from `scripts/core/scene-controls.mjs` and add
+  tools to the returned `group.tools`:
+
+  ```js
+  import { ensureSuiteGroup } from "../../core/scene-controls.mjs";
+  Hooks.on("getSceneControlButtons", (controls) => {
+    if (!game.user.isGM) return;            // gate first
+    const group = ensureSuiteGroup(controls);
+    group.tools["myFeature-open"] = { name: "myFeature-open", title: "…", icon: "…", button: true, onChange };
+  });
+  ```
+
+  Gate-then-ensure keeps an empty group from ever rendering. For `button` tools
+  whose `onChange` is unreliable across v13/v14, use `bindSuiteToolClicks(html, { toolName: handler })`
+  from the same module inside a `renderSceneControls` hook.
+
 ## Per-feature system/dependency matrix
 
 | featureId          | prefix     | system            | requires        | default |

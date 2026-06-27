@@ -1,5 +1,6 @@
 {
   "GLS.module.title": "GLUniverse Suite",
+  "GLS.controls.suiteGroup": "GLUniverse",
   "GLS.config.menu.name": "Control Center",
   "GLS.config.menu.label": "Open Control Center",
   "GLS.config.menu.hint": "Enable, disable and configure every module in the GLUniverse Suite from one place.",

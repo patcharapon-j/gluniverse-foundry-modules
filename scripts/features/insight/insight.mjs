@@ -2,6 +2,7 @@
 import { registerSettings } from "./module/settings.mjs";
 import { registerSocket } from "./module/socket.mjs";
 import { InsightComposeDialog } from "./module/compose-dialog.mjs";
+import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 
 const COMPOSE_DIALOG_ID = "insight-compose-dialog";
 
@@ -11,18 +12,18 @@ export { registerSettings };
 export function onInit() {
   console.log("Insight | Initializing module");
 
-  // Add scene control button (GM only)
+  // Add scene control button (GM only) under the suite's own top-level group.
   Hooks.on("getSceneControlButtons", (controls) => {
     if (!game.user.isGM) return;
 
-    const tokenControls = controls.tokens;
-    if (!tokenControls) return;
+    const group = ensureSuiteGroup(controls);
+    if (!group) return;
 
-    tokenControls.tools.insight = {
+    group.tools.insight = {
       name: "insight",
       title: "INSIGHT.SceneControl",
       icon: "fas fa-eye",
-      order: Object.keys(tokenControls.tools).length,
+      order: Object.keys(group.tools).length,
       button: true,
       visible: true,
       onChange: () => openComposeDialog(),
@@ -32,17 +33,13 @@ export function onInit() {
   // A `button` scene-control tool is meant to resolve on click via `onChange`, but
   // that dispatch is unreliable across v13/v14 builds: `onChange` only fires when the
   // active tool *changes*, so the button can stick as the active tool and then repeat
-  // clicks fire no change event — the GM clicks Insight and nothing happens. Bind the
-  // click on the rendered button directly so the dialog opens on every click.
+  // clicks fire no change event — the GM clicks Insight and nothing happens. The shared
+  // helper binds the rendered button directly so the dialog opens on every click.
   // openComposeDialog() reuses the open instance, so this never stacks duplicate
   // windows even if the native onChange also fires.
   Hooks.on("renderSceneControls", (_app, html) => {
     if (!game.user.isGM) return;
-    const root = html instanceof HTMLElement ? html : html?.[0];
-    const button = root?.querySelector('[data-tool="insight"]');
-    if (!button || button.dataset.insightBound) return;
-    button.dataset.insightBound = "true";
-    button.addEventListener("click", () => openComposeDialog());
+    bindSuiteToolClicks(html, { insight: () => openComposeDialog() });
   });
 }
 

@@ -12,6 +12,7 @@
  */
 
 import { MODULE_ID, HOOKS, CONTEXT } from "./const.js";
+import { ensureSuiteGroup } from "../../core/scene-controls.mjs";
 import { registerSettings, applyMotionTier } from "./settings.js";
 // System adapters: imported for their factory objects only. They no longer
 // self-register on import — onInit() registers them so a disabled feature is inert.
@@ -93,9 +94,10 @@ export function onInit() {
   }
 
   // v13+ scene controls (keyed objects; handlers use onChange).
+  // Suite tools live under the suite's own top-level group, not Token Controls.
   Hooks.on("getSceneControlButtons", controls => {
     if (!game.user?.isGM) return;
-    const group = controls.tokens ?? controls.notes ?? Object.values(controls)[0];
+    const group = ensureSuiteGroup(controls);
     if (!group?.tools) return;
     group.tools["gllg-auditor"] = {
       name: "gllg-auditor",

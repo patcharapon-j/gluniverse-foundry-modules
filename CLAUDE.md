@@ -109,3 +109,12 @@ that exist.
 - Don't register anything under an id other than `gluniverse-foundry-modules`.
 - Don't rename existing i18n keys or CSS class prefixes (breaks migration/world data).
 - Don't move side effects to import time in feature adapters.
+
+<!-- SPECKIT START -->
+Active feature plan: `specs/001-suite-scene-control-group/plan.md`
+(Suite Scene Control Group — relocate all suite scene-control tools out of
+Foundry's Token Controls into one top-level GLUniverse group via the shared
+`scripts/core/scene-controls.mjs` helper). See that plan and its
+`research.md` / `data-model.md` / `contracts/` for technologies, structure, and
+validation steps.
+<!-- SPECKIT END -->

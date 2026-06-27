@@ -7,6 +7,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
+import { ensureSuiteGroup } from "../../core/scene-controls.mjs";
 import { MODULE_ID, FEATURE_ID, SETTINGS } from "./const.mjs";
 import { MapStore } from "./data.mjs";
 import { MapStudio } from "./studio.mjs";
@@ -73,11 +74,15 @@ function onReady() {
 /** v13+ scene controls: add Minimap tools to the token group (the suite's
  *  established home for cross-feature toggles). */
 function onGetSceneControlButtons(controls) {
-  const group = controls.tokens ?? controls.notes ?? Object.values(controls)[0];
+  // Only touch the suite group when this user actually gets a tool, so an empty
+  // group never appears.
+  const isGM = game.user?.isGM;
+  if (!isGM && !MapStore.activeMapId()) return;
+  const group = ensureSuiteGroup(controls);
   if (!group?.tools) return;
   const order = Object.keys(group.tools).length;
 
-  if (game.user?.isGM) {
+  if (isGM) {
     group.tools["glmm-studio"] = {
       name: "glmm-studio",
       title: "GLMM.control.studio",

@@ -1,4 +1,5 @@
 import { MODULE_ID, registerSettings } from './settings.js';
+import { ensureSuiteGroup } from '../../core/scene-controls.mjs';
 import { initializeSocket, requestStateSync } from './socket-handler.js';
 import { StageManager } from './StageManager.js';
 import { StageOverlay } from './StageOverlay.js';
@@ -27,17 +28,17 @@ export const api = {
 export function onInit() {
     console.log(`${MODULE_ID} | Initializing GLUniverse Stage`);
 
-    // Add scene control button for GM (was a top-level getSceneControlButtons hook).
+    // Add scene control button for GM under the suite's own top-level group.
     Hooks.on('getSceneControlButtons', (controls) => {
         if (!game.user.isGM) return;
 
-        const tokenControls = controls.tokens;
-        if (tokenControls) {
-            tokenControls.tools.gluniverseStage = {
+        const group = ensureSuiteGroup(controls);
+        if (group) {
+            group.tools.gluniverseStage = {
                 name: 'gluniverseStage',
                 title: 'GLUniverse Stage Director',
                 icon: 'fa-solid fa-theater-masks',
-                order: Object.keys(tokenControls.tools).length,
+                order: Object.keys(group.tools).length,
                 button: true,
                 visible: true,
                 onChange: () => {
