@@ -103,6 +103,24 @@ When touching localization, also sanity-check that referenced keys resolve and
 that `module.json`'s `styles`/`languages`/`esmodules` lists still point at files
 that exist.
 
+## Spec Kit workflow
+
+Features are developed through Spec Kit: `/speckit-specify` → `/speckit-clarify`
+(optional) → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`. Spec Kit is
+the **artifact layer** (it writes spec/plan/tasks). Two grilling skills add the
+**thinking layer** at the seams where decisions are made — suggest them proactively:
+
+- **`/brainstorm`** before `/speckit-specify`, for any idea fuzzier than a clear
+  one-liner. A relentless one-question-at-a-time interview that discovers scope and
+  hidden decisions, then hands a sharp feature description to specify.
+- **`/grill-plan`** between `/speckit-plan` and `/speckit-tasks`. Stress-tests the
+  design in `plan.md`/`research.md` (and against this file + the constitution) before
+  it fans out into tasks, updating those artifacts in place.
+
+`/grill-plan` is divergent and writes nothing to the spec; `/speckit-clarify` is the
+convergent, capped pass that encodes answers back into `spec.md`. Use grilling to find
+the shape, the speckit commands to capture it.
+
 ## Don't
 
 - Don't add a build step, bundler, or transpile — Foundry consumes the source.
