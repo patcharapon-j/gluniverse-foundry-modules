@@ -40,7 +40,8 @@
     "styles/tidy5e-slots-etched-glass.css",
     "styles/critical.css",
     "styles/minimap.css",
-    "styles/etched-chat.css"
+    "styles/etched-chat.css",
+    "styles/timer.css"
   ],
   "languages": [
     {
@@ -122,6 +123,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/etched-chat.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/timer.en.json"
     }
   ],
   "packs": [

@@ -1,0 +1,30 @@
+<div class="gltimer-panel-body gl-glass">
+  <div class="gltimer-panel-grid">
+    <label class="gltimer-field">
+      <span>{{localize "GLTIMER.panel.minutes"}}</span>
+      <input class="gls-input" type="number" name="min" min="0" max="99" step="1" value="{{curM}}" />
+    </label>
+    <label class="gltimer-field">
+      <span>{{localize "GLTIMER.panel.seconds"}}</span>
+      <input class="gls-input" type="number" name="sec" min="0" max="59" step="1" value="{{curS}}" />
+    </label>
+  </div>
+
+  <div class="gltimer-presets">
+    {{#each presets}}
+      <button type="button" class="gl-btn gltimer-preset" data-action="preset" data-m="{{this.m}}" data-s="{{this.s}}">{{this.label}}</button>
+    {{/each}}
+  </div>
+
+  <div class="gltimer-panel-actions">
+    <button type="button" class="gl-btn gl-btn-accent" data-action="start">
+      <i class="fa-solid fa-play"></i>
+      {{#if active}}{{localize "GLTIMER.panel.set"}}{{else}}{{localize "GLTIMER.panel.start"}}{{/if}}
+    </button>
+    {{#if active}}
+      <button type="button" class="gl-btn" data-action="clear">
+        <i class="fa-solid fa-xmark"></i> {{localize "GLTIMER.panel.clear"}}
+      </button>
+    {{/if}}
+  </div>
+</div>

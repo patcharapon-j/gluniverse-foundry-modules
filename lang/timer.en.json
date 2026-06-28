@@ -1,0 +1,20 @@
+{
+  "GLTIMER.title": "Timer",
+  "GLTIMER.hint": "A shared GM countdown shown to everyone — escalating urgency as it nears zero, frantic decimals in the final minute, with a synthesized tick and alarm. Respects world pause; the GM can add or remove time live.",
+  "GLTIMER.control": "Timer",
+  "GLTIMER.sound.name": "Timer sounds",
+  "GLTIMER.sound.hint": "Play the final-10-seconds tick and the alarm at zero on your client. Affects only your screen.",
+  "GLTIMER.panel.title": "Timer",
+  "GLTIMER.panel.minutes": "Minutes",
+  "GLTIMER.panel.seconds": "Seconds",
+  "GLTIMER.panel.start": "Start",
+  "GLTIMER.panel.set": "Set",
+  "GLTIMER.panel.clear": "Clear",
+  "GLTIMER.warn.zero": "Set a duration greater than zero.",
+  "GLTIMER.strip.pause": "Pause timer",
+  "GLTIMER.strip.resume": "Resume timer",
+  "GLTIMER.strip.add": "Add time",
+  "GLTIMER.strip.sub": "Remove time",
+  "GLTIMER.strip.edit": "Edit duration",
+  "GLTIMER.strip.stop": "Stop & dismiss"
+}
