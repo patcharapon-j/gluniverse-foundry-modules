@@ -1,0 +1,217 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Timer feature
+   A fixed top-center liquid-glass, edge-lit countdown plaque (everyone) with an
+   inline GM control strip, plus the GM create/exact-set panel. Built entirely on
+   the canonical --gl-* tokens / .gl-glass utility; the accent channel carries the
+   urgency ramp (calm cyan → urgent amber → critical red).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── The shared HUD overlay ──────────────────────────────────────────────── */
+#gltimer-hud {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 30px 14px;
+  min-width: 200px;
+  --gl-accent: var(--gl-cyan);
+  /* The plaque is presentational; only the GM strip captures pointer events. */
+  pointer-events: none;
+  user-select: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.42),
+    0 8px 34px rgba(0, 0, 0, 0.5);
+}
+
+#gltimer-hud[data-tier="calm"] { --gl-accent: var(--gl-cyan); }
+#gltimer-hud[data-tier="urgent"] { --gl-accent: var(--gl-signal); }
+#gltimer-hud[data-tier="critical"],
+#gltimer-hud[data-tier="expired"] { --gl-accent: var(--gl-hazard); }
+
+/* Edge-lit rim — a bright inner hairline + accent bloom that lives on the edges
+   and intensifies with the urgency tier. */
+.gltimer-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px var(--gl-line-strong),
+    inset 0 0 18px color-mix(in srgb, var(--gl-accent) 32%, transparent),
+    0 0 22px var(--gl-glow);
+}
+
+#gltimer-hud[data-tier="calm"] .gltimer-rim {
+  animation: gltimer-edge var(--gl-breathe) ease-in-out infinite;
+}
+#gltimer-hud[data-tier="urgent"] .gltimer-rim {
+  animation: gltimer-edge 1.05s var(--gl-ease) infinite;
+}
+#gltimer-hud[data-tier="critical"] .gltimer-rim {
+  animation: gltimer-edge 0.5s var(--gl-ease) infinite;
+}
+
+/* Critical jitter — keeps the centering translate so the plaque shakes in place. */
+#gltimer-hud[data-tier="critical"] {
+  animation: gltimer-shake 0.5s steps(2, jump-none) infinite;
+}
+
+#gltimer-hud.is-paused .gltimer-rim { animation: gl-breathe var(--gl-dread) ease-in-out infinite; }
+#gltimer-hud.is-paused { animation: none; }
+#gltimer-hud.is-paused .gltimer-face { opacity: 0.55; }
+
+/* Entrance sheen sweep on (re)start. */
+.gltimer-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.gltimer-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-130%);
+  opacity: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    color-mix(in srgb, var(--gl-accent) 55%, transparent) 50%,
+    transparent 62%
+  );
+}
+#gltimer-hud.is-sheen .gltimer-sheen::before {
+  animation: gltimer-sweep var(--gl-d-reveal) var(--gl-ease);
+}
+
+/* Expire fracture flash (gold → red). */
+#gltimer-hud.is-burst { animation: gltimer-burst 720ms var(--gl-exit); }
+
+/* ── Digits ──────────────────────────────────────────────────────────────── */
+.gltimer-face {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  font-family: var(--gl-tech);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  line-height: 1;
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
+}
+.gltimer-main {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 16px var(--gl-glow);
+}
+.gltimer-frac {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--gl-accent);
+  margin-left: 1px;
+  text-shadow: 0 0 12px var(--gl-glow);
+}
+#gltimer-hud[data-tier="critical"] .gltimer-main,
+#gltimer-hud[data-tier="expired"] .gltimer-main {
+  color: var(--gl-signal-pale);
+}
+
+/* ── GM control strip ────────────────────────────────────────────────────── */
+.gltimer-strip {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.gltimer-ctl {
+  font-size: 11px;
+  padding: 4px 9px;
+  min-width: 0;
+}
+.gltimer-stop { color: var(--gl-hazard); border-color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-edge)); }
+.gltimer-stop:hover:not(:disabled) { border-color: var(--gl-hazard); box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 40%, transparent); }
+
+/* ── GM create / exact-set panel ─────────────────────────────────────────── */
+#gltimer-panel .window-content { padding: 0; background: var(--gl-ink-0); }
+.gltimer-panel-body {
+  --gl-accent: var(--gl-cyan);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+}
+.gltimer-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gltimer-field { display: flex; flex-direction: column; gap: 5px; }
+.gltimer-field > span {
+  font-size: 10.5px;
+  font-family: var(--gl-tech);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gl-text-dim);
+}
+.gltimer-field .gls-input { min-width: 0; width: 100%; font-size: 18px; text-align: center; }
+.gltimer-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.gltimer-preset { font-size: 11.5px; padding: 6px 12px; flex: 1 1 auto; }
+.gltimer-panel-actions { display: flex; gap: 8px; margin-top: 2px; }
+.gltimer-panel-actions .gl-btn { flex: 1 1 auto; }
+
+/* ── Keyframes (feature-scoped; shared vocab lives in gl-tokens.css) ──────── */
+@keyframes gltimer-edge {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 1px var(--gl-line-strong),
+      inset 0 0 14px color-mix(in srgb, var(--gl-accent) 28%, transparent),
+      0 0 16px var(--gl-bloom);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px var(--gl-text-bright),
+      inset 0 0 24px color-mix(in srgb, var(--gl-accent) 55%, transparent),
+      0 0 36px var(--gl-glow);
+  }
+}
+@keyframes gltimer-shake {
+  0%, 100% { transform: translateX(-50%); }
+  25% { transform: translateX(-50%) translate(1.5px, -1px); }
+  50% { transform: translateX(-50%) translate(-1.5px, 1px); }
+  75% { transform: translateX(-50%) translate(1px, 1.5px); }
+}
+@keyframes gltimer-sweep {
+  0% { transform: translateX(-130%); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translateX(130%); opacity: 0; }
+}
+@keyframes gltimer-burst {
+  0% {
+    filter: brightness(2);
+    box-shadow:
+      inset 0 0 0 2px var(--gl-signal-hot),
+      inset 0 0 30px var(--gl-signal),
+      0 0 60px 12px color-mix(in srgb, var(--gl-signal-hot) 70%, transparent);
+  }
+  45% {
+    filter: brightness(1.25);
+    box-shadow:
+      inset 0 0 0 1px var(--gl-hazard),
+      inset 0 0 24px var(--gl-hazard),
+      0 0 44px 6px color-mix(in srgb, var(--gl-hazard) 60%, transparent);
+  }
+  100% {
+    filter: brightness(1);
+    box-shadow:
+      inset 0 0 0 1px var(--gl-line-strong),
+      inset 0 0 18px color-mix(in srgb, var(--gl-hazard) 30%, transparent),
+      0 0 22px var(--gl-glow);
+  }
+}

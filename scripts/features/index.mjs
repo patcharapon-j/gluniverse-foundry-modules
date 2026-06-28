@@ -21,3 +21,4 @@ import "./pf2e-flatten/index.mjs";
 import "./critical/index.mjs";
 import "./minimap/index.mjs";
 import "./etched-chat/index.mjs";
+import "./timer/index.mjs";
