@@ -19,12 +19,10 @@ import { TimerPanel } from "./panel.mjs";
 
 const TOOL = "timer-open";
 
-/** Toggle the GM control panel. */
-function togglePanel() {
+/** Open the GM control panel (idempotent — reuses the open instance). */
+function openPanel() {
   if (!game.user.isGM) return;
-  const existing = foundry.applications.instances.get("gltimer-panel");
-  if (existing) existing.close();
-  else new TimerPanel().render({ force: true });
+  TimerPanel.open();
 }
 
 Suite.register({
@@ -74,13 +72,13 @@ Suite.register({
         order: Object.keys(group.tools).length,
         button: true,
         visible: true,
-        onChange: () => togglePanel(),
+        onChange: () => openPanel(),
       };
     });
     // Reliable click delivery for the button tool across v13/v14.
     Hooks.on("renderSceneControls", (_app, html) => {
       if (!game.user.isGM) return;
-      bindSuiteToolClicks(html, { [TOOL]: togglePanel });
+      bindSuiteToolClicks(html, { [TOOL]: openPanel });
     });
 
     // World pause freezes the timer for everyone; the GM persists the freeze so
