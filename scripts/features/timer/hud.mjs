@@ -110,7 +110,7 @@ class TimerHUDClass {
         case "sub10": TimerCtrl.adjust(-10_000); break;
         case "add10": TimerCtrl.adjust(10_000); break;
         case "add60": TimerCtrl.adjust(60_000); break;
-        case "edit": new TimerPanel().render({ force: true }); break;
+        case "edit": TimerPanel.open(); break;
         case "stop": TimerCtrl.clear(); break;
       }
     });

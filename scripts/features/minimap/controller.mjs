@@ -20,7 +20,8 @@ const state = {
   lastRev: 0,
   lastPingAt: 0,
   vpThrottle: 0,
-  broadcastStyle: DEFAULT_BROADCAST_STYLE // GM's chosen broadcast presentation
+  broadcastStyle: DEFAULT_BROADCAST_STYLE, // GM's chosen broadcast presentation
+  hadActive: false // last-seen active-map presence (gates the player viewer tool)
 };
 
 /** GM's broadcast presentation choice (prominent | normal). */
@@ -44,11 +45,18 @@ function getStudio() {
 
 export function wire() {
   Net.installDispatcher(dispatch);
+  state.hadActive = !!MapStore.activeMapId();
 
-  // A second GM editing the library should see it; players don't watch `maps`.
   Hooks.on("updateSetting", (setting) => {
-    if (!game.user?.isGM) return;
-    if (setting?.key === `${MODULE_ID}.mm.maps`) refreshGM();
+    if (setting?.key !== `${MODULE_ID}.mm.maps`) return;
+    // A second GM editing the library should see it; players don't watch `maps`.
+    if (game.user?.isGM) refreshGM();
+    // The active-map presence gates the player's viewer tool in the scene
+    // controls, and Foundry doesn't re-render the control bar on a setting
+    // change — so do it here whenever that presence flips. Without this a player
+    // who closes their viewer has no button to reopen it, and a stale button
+    // lingers after the GM deactivates.
+    refreshViewerControl();
   });
 
   // Late-join / reload: if a map is active and published, open the viewer.
@@ -57,6 +65,17 @@ export function wire() {
     state.lastRev = pub.rev ?? 0;
     openViewer();
   }
+}
+
+/** Re-render the scene-control bar when the active-map presence changes, so the
+ *  player viewer tool appears (and disappears) in step with it. No-op while
+ *  unchanged: map edits bump `mm.maps` constantly, but only activate/deactivate
+ *  flips this. */
+function refreshViewerControl() {
+  const hasActive = !!MapStore.activeMapId();
+  if (hasActive === state.hadActive) return;
+  state.hadActive = hasActive;
+  try { ui.controls?.render?.(); } catch { /* ignore */ }
 }
 
 /* ------------------------------- the viewer ------------------------------ */

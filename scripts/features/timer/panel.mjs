@@ -35,6 +35,22 @@ export class TimerPanel extends HandlebarsApplicationMixin(ApplicationV2) {
     { m: 10, s: 0, label: "10:00" },
   ];
 
+  /**
+   * Open the panel, reusing the already-open instance instead of toggling or
+   * stacking a second one. A single scene-control click can reach the opener
+   * through BOTH the tool's `onChange` and the bound DOM click listener; keeping
+   * this idempotent (open / bring-to-front, never close) is what stops the window
+   * from flashing open then instantly shutting again. Mirrors the suite's
+   * `insight` compose-dialog convention.
+   */
+  static open() {
+    const existing = foundry.applications.instances.get("gltimer-panel");
+    if (existing) { existing.render({ force: true }); return existing; }
+    const panel = new TimerPanel();
+    panel.render({ force: true });
+    return panel;
+  }
+
   async _prepareContext() {
     const s = getState();
     const totalSec = Math.round(remainingOf(s) / 1000);
