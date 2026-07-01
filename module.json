@@ -41,7 +41,8 @@
     "styles/critical.css",
     "styles/minimap.css",
     "styles/etched-chat.css",
-    "styles/timer.css"
+    "styles/timer.css",
+    "styles/mythic-gme.css"
   ],
   "languages": [
     {
@@ -128,6 +129,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/timer.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/mythic-gme.en.json"
     }
   ],
   "packs": [

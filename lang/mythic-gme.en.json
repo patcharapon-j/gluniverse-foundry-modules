@@ -1,0 +1,68 @@
+{
+  "GLMYTHIC": {
+    "title": "Mythic GME Oracle",
+    "hint": "GM-facing quick-roll oracle for the Mythic Game Master Emulator 2nd Edition: Fate Chart, Random Events, and every Meaning & Elements table, with a persisted Chaos Factor.",
+    "control": "Mythic GME Oracle",
+    "cf": {
+      "title": "Chaos Factor",
+      "up": "Raise Chaos Factor",
+      "down": "Lower Chaos Factor",
+      "abbr": "CF"
+    },
+    "fate": {
+      "label": "Fate",
+      "odds": "Odds",
+      "ask": "Ask Fate"
+    },
+    "odds": {
+      "impossible": "Impossible",
+      "nearly-impossible": "Nearly Impossible",
+      "very-unlikely": "Very Unlikely",
+      "unlikely": "Unlikely",
+      "fifty-fifty": "50 / 50",
+      "likely": "Likely",
+      "very-likely": "Very Likely",
+      "nearly-certain": "Nearly Certain",
+      "certain": "Certain"
+    },
+    "verdict": {
+      "exceptional-yes": "Exceptional Yes",
+      "yes": "Yes",
+      "no": "No",
+      "exceptional-no": "Exceptional No"
+    },
+    "event": {
+      "button": "Random Event",
+      "label": "Random Event",
+      "focus": "Focus",
+      "triggered": "Random Event",
+      "flagged": "triggered — roll it",
+      "meaning": "Meaning"
+    },
+    "meaning": {
+      "action": "Meaning · Action",
+      "description": "Meaning · Description",
+      "actionBtn": "Action",
+      "descBtn": "Description"
+    },
+    "elements": {
+      "search": "Search tables…"
+    },
+    "log": {
+      "title": "Oracle Log",
+      "clear": "Clear log",
+      "empty": "Rolls appear here. Nothing yet.",
+      "toChat": "Send to GM chat",
+      "sent": "Sent to GM chat."
+    },
+    "chat": {
+      "alias": "Mythic Oracle"
+    },
+    "settings": {
+      "autoEvent": {
+        "name": "Auto-roll triggered Random Events",
+        "hint": "When a Fate Chart roll triggers a Random Event (doubles with the tens digit ≤ Chaos Factor), roll and show it inline under the Yes/No result."
+      }
+    }
+  }
+}

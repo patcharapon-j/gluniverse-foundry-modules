@@ -1,0 +1,328 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Mythic GME oracle panel
+   Self-contained styling built on the suite's canonical --gl-* tokens and the
+   .gl-glass / .gl-btn utilities. GM-facing floating panel: Chaos Factor meter,
+   Fate Chart, quick meaning rolls, a searchable Elements picker, and a live
+   result log with per-roll "send to chat". Tuned compact (~half footprint).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── local motion (self-contained; mirrors the suite easing) ── */
+@keyframes gmyth-in {
+  0% { opacity: 0; transform: translateX(-10px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes gmyth-bump {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.4); color: var(--gl-accent); }
+  100% { transform: scale(1); }
+}
+@keyframes gmyth-fade {
+  0% { opacity: 0; transform: translateY(5px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── window frame ── */
+#gmyth-panel .window-content { padding: 0; background: var(--gl-ink-0); }
+.gmyth-panel .window-header {
+  font-family: var(--gl-display);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.gmyth-root {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  background:
+    radial-gradient(130% 60% at 100% 0%, color-mix(in srgb, var(--gl-accent) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+
+/* ── shared motifs (local // slash) ── */
+.gmyth-slash::before {
+  content: "// ";
+  color: var(--gl-accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Top zone — Chaos Factor / Fate / quick rolls
+   ════════════════════════════════════════════════════════════════════════ */
+.gmyth-top { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+
+/* Chaos Factor — single compact row: label · bar · steppers */
+.gmyth-cf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  border-left: 2px solid var(--gl-accent);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
+}
+.gmyth-cf-title {
+  flex: 0 0 auto;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--gl-text-dim);
+}
+.gmyth-cf-track {
+  flex: 1 1 auto;
+  height: 4px;
+  background: var(--gl-ink-1);
+  border: 1px solid var(--gl-hair);
+  overflow: hidden;
+}
+.gmyth-cf-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 35%, transparent), var(--gl-accent));
+  box-shadow: 0 0 8px var(--gl-glow);
+  transition: width var(--gl-d-move) var(--gl-ease);
+}
+.gmyth-cf-steppers { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.gmyth-cf-val {
+  display: inline-block;
+  min-width: 1.2ch;
+  text-align: center;
+  font-family: var(--gl-tech);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gl-text-bright);
+}
+.gmyth-cf-val.gmyth-bump { animation: gmyth-bump 340ms var(--gl-snap); }
+.gmyth-step {
+  display: grid;
+  place-items: center;
+  width: 20px; height: 20px;
+  background: var(--gl-ink-1);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text);
+  font-size: 9px;
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gmyth-step:hover { border-color: var(--gl-accent); color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-bloom); }
+.gmyth-step:active { transform: translateY(1px); }
+
+/* Fate row */
+.gmyth-fate { display: flex; align-items: stretch; gap: 6px; }
+.gmyth-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text-bright);
+  font-family: var(--gl-display);
+  font-size: 12px;
+  padding: 5px 7px;
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gmyth-select:focus { outline: none; border-color: var(--gl-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gl-accent) 22%, transparent); }
+.gmyth-ask { flex: 0 0 auto; white-space: nowrap; font-size: 10.5px; padding: 5px 10px; }
+.gmyth-ask i { margin-right: 3px; }
+
+/* Quick meaning rolls */
+.gmyth-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gmyth-quick-btn { font-size: 10px; padding: 6px 4px; justify-content: center; letter-spacing: 0.04em; }
+.gmyth-quick-btn i { margin-right: 3px; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Elements — searchable, categorized (2 dense columns)
+   ════════════════════════════════════════════════════════════════════════ */
+.gmyth-elements { flex: 1 1 42%; display: flex; flex-direction: column; min-height: 0; gap: 6px; }
+.gmyth-search {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text-dim);
+  font-size: 11px;
+}
+.gmyth-search:focus-within { border-color: var(--gl-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gl-accent) 18%, transparent); }
+.gmyth-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none; border: none; outline: none;
+  color: var(--gl-text-bright);
+  font-family: var(--gl-display);
+  font-size: 12px;
+}
+.gmyth-el-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gl-accent) 40%, transparent) transparent;
+}
+.gmyth-el-scroll::-webkit-scrollbar { width: 7px; }
+.gmyth-el-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--gl-accent) 35%, transparent); border-radius: 999px; }
+
+.gmyth-group { margin-bottom: 7px; }
+.gmyth-group-title {
+  margin: 0 0 4px;
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gl-text-dim);
+  border: none;
+}
+.gmyth-group-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.gmyth-el {
+  text-align: left;
+  line-height: 1.15;
+  padding: 5px 7px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-hair);
+  border-left: 2px solid color-mix(in srgb, var(--gl-accent) 40%, transparent);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease), transform 90ms var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gmyth-el:hover {
+  border-color: var(--gl-accent);
+  border-left-color: var(--gl-accent);
+  background: color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-2));
+  box-shadow: 0 0 10px var(--gl-bloom);
+}
+.gmyth-el:active { transform: translateY(1px) scale(0.99); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Result log
+   ════════════════════════════════════════════════════════════════════════ */
+.gmyth-logwrap { flex: 1 1 58%; display: flex; flex-direction: column; min-height: 0; gap: 5px; }
+.gmyth-log-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gl-text-dim);
+  border-top: 1px solid var(--gl-hair);
+  padding-top: 6px;
+}
+.gmyth-icon-btn {
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease);
+}
+.gmyth-icon-btn:hover { color: var(--gl-accent); border-color: var(--gl-edge); }
+
+.gmyth-empty {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 6px;
+  text-align: center;
+  color: var(--gl-text-faint);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.gmyth-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0; padding: 0 3px 0 0;
+  display: flex; flex-direction: column; gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gl-accent) 40%, transparent) transparent;
+}
+.gmyth-log::-webkit-scrollbar { width: 7px; }
+.gmyth-log::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--gl-accent) 35%, transparent); border-radius: 999px; }
+
+.gmyth-entry {
+  --tone: var(--gl-text);
+  padding: 6px 8px;
+  background: var(--gl-ink-1);
+  border: 1px solid var(--gl-hair);
+  border-left: 3px solid var(--tone);
+  animation: gmyth-in var(--gl-d-move) var(--gl-ease) both;
+}
+.gmyth-entry[data-tone="yes"] { --tone: var(--gl-good); }
+.gmyth-entry[data-tone="exceptional-yes"] { --tone: var(--gl-signal); }
+.gmyth-entry[data-tone="no"] { --tone: var(--gl-text-dim); }
+.gmyth-entry[data-tone="exceptional-no"] { --tone: var(--gl-hazard); }
+.gmyth-entry[data-tone="event"] { --tone: var(--gl-accent); }
+.gmyth-entry[data-tone="neutral"] { --tone: color-mix(in srgb, var(--gl-accent) 55%, var(--gl-text-dim)); }
+
+.gmyth-entry-head { display: flex; align-items: center; gap: 6px; }
+.gmyth-entry-head > i { color: var(--tone); font-size: 11px; }
+.gmyth-entry-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--gl-tech);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gmyth-entry-head .gmyth-icon-btn { width: 18px; height: 18px; font-size: 10px; flex: 0 0 auto; }
+
+.gmyth-entry-result {
+  margin-top: 2px;
+  font-family: var(--gl-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tone);
+  line-height: 1.15;
+}
+.gmyth-entry[data-tone="neutral"] .gmyth-entry-result { color: var(--gl-text-bright); }
+.gmyth-entry-meta {
+  margin-top: 1px;
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  color: var(--gl-text-faint);
+  letter-spacing: 0.03em;
+}
+
+/* nested sub-lines (triggered event / meaning under a fate roll) */
+.gmyth-sub {
+  --tone: var(--gl-accent);
+  margin-top: 5px;
+  padding: 4px 7px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px;
+  background: color-mix(in srgb, var(--tone) 9%, var(--gl-ink-2));
+  border-left: 2px solid var(--tone);
+  animation: gmyth-fade var(--gl-d-move) var(--gl-ease) both;
+}
+.gmyth-sub[data-tone="event"] { --tone: var(--gl-accent); }
+.gmyth-sub[data-tone="neutral"] { --tone: var(--gl-text-dim); }
+.gmyth-sub-label {
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gl-text-dim);
+}
+.gmyth-sub-result { font-family: var(--gl-display); font-size: 12px; font-weight: 600; color: var(--gl-text-bright); }
+.gmyth-sub-meta { font-family: var(--gl-tech); font-size: 9px; color: var(--gl-text-faint); margin-left: auto; }
+
+/* GM whisper card */
+.gmyth-chat { font-family: var(--gl-display); }
+.gmyth-chat strong { color: var(--gl-accent); }
