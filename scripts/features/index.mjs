@@ -22,3 +22,4 @@ import "./critical/index.mjs";
 import "./minimap/index.mjs";
 import "./etched-chat/index.mjs";
 import "./timer/index.mjs";
+import "./mythic-gme/index.mjs";

@@ -1,0 +1,66 @@
+{{!-- GLUniverse Suite — Mythic GME oracle panel --}}
+<div class="gmyth-root gl-glass">
+
+  {{!-- ── Fixed top zone ─────────────────────────────────────────────── --}}
+  <section class="gmyth-top">
+
+    {{!-- Chaos Factor meter (single compact row) --}}
+    <div class="gmyth-cf">
+      <span class="gmyth-cf-title">{{localize "GLMYTHIC.cf.abbr"}}</span>
+      <div class="gmyth-cf-track"><span class="gmyth-cf-fill" data-cf-fill></span></div>
+      <div class="gmyth-cf-steppers">
+        <button type="button" class="gmyth-step" data-action="cfDown" title="{{localize "GLMYTHIC.cf.down"}}"><i class="fa-solid fa-minus"></i></button>
+        <span class="gmyth-cf-val" data-cf>{{chaos}}</span>
+        <button type="button" class="gmyth-step" data-action="cfUp" title="{{localize "GLMYTHIC.cf.up"}}"><i class="fa-solid fa-plus"></i></button>
+      </div>
+    </div>
+
+    {{!-- Fate Chart --}}
+    <div class="gmyth-fate">
+      <select class="gmyth-select" data-odds title="{{localize "GLMYTHIC.fate.odds"}}">
+        {{#each odds}}<option value="{{this.id}}"{{#if this.selected}} selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      <button type="button" class="gl-btn gl-btn-accent gmyth-ask" data-action="askFate">
+        <i class="fa-solid fa-scale-balanced"></i> {{localize "GLMYTHIC.fate.ask"}}
+      </button>
+    </div>
+
+    {{!-- Quick meaning rolls --}}
+    <div class="gmyth-quick">
+      <button type="button" class="gl-btn gmyth-quick-btn" data-action="rollEvent"><i class="fa-solid fa-bolt"></i> {{localize "GLMYTHIC.event.button"}}</button>
+      <button type="button" class="gl-btn gmyth-quick-btn" data-action="rollAction"><i class="fa-solid fa-bolt-lightning"></i> {{localize "GLMYTHIC.meaning.actionBtn"}}</button>
+      <button type="button" class="gl-btn gmyth-quick-btn" data-action="rollDesc"><i class="fa-solid fa-feather"></i> {{localize "GLMYTHIC.meaning.descBtn"}}</button>
+    </div>
+  </section>
+
+  {{!-- ── Elements (searchable) ──────────────────────────────────────── --}}
+  <section class="gmyth-elements">
+    <div class="gmyth-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" class="gmyth-search-input" data-search placeholder="{{localize "GLMYTHIC.elements.search"}}" autocomplete="off">
+    </div>
+    <div class="gmyth-el-scroll">
+      {{#each groups}}
+      <div class="gmyth-group" data-group>
+        <h4 class="gmyth-group-title gmyth-slash">{{this.category}}</h4>
+        <div class="gmyth-group-grid">
+          {{#each this.tables}}
+          <button type="button" class="gmyth-el" data-action="rollElement" data-el="{{this.id}}">{{this.name}}</button>
+          {{/each}}
+        </div>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  {{!-- ── Result log ─────────────────────────────────────────────────── --}}
+  <section class="gmyth-logwrap">
+    <div class="gmyth-log-head">
+      <span class="gmyth-slash">{{localize "GLMYTHIC.log.title"}}</span>
+      <button type="button" class="gmyth-icon-btn" data-action="clearLog" title="{{localize "GLMYTHIC.log.clear"}}"><i class="fa-solid fa-trash-can"></i></button>
+    </div>
+    <p class="gmyth-empty" data-empty>{{localize "GLMYTHIC.log.empty"}}</p>
+    <ul class="gmyth-log" data-log></ul>
+  </section>
+
+</div>
