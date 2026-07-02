@@ -85,14 +85,17 @@
 .glo-slots {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 1fr;
   gap: 4px;
 }
 .glo-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 5px 2px 4px;
+  justify-content: center;
+  gap: 3px;
+  min-height: 42px;
+  padding: 5px 3px;
   background: var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   color: var(--gl-text);
@@ -105,12 +108,12 @@
   font-family: var(--gl-tech);
   font-size: 8px;
   font-weight: 700;
+  line-height: 1.15;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-align: center;
+  letter-spacing: 0.04em;
   color: var(--gl-text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   max-width: 100%;
 }
 .glo-slot:hover { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-bloom); }
