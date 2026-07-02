@@ -1,0 +1,74 @@
+{{!-- GLUniverse Suite — Oracles panel --}}
+<div class="glo-root gl-glass">
+
+  {{!-- ── Fixed top zone ─────────────────────────────────────────────── --}}
+  <section class="glo-top">
+
+    {{!-- Ask the Oracle (yes/no) --}}
+    <div class="glo-ask">
+      <select class="glo-select" data-odds title="{{localize "GLORACLE.ask.odds"}}">
+        {{#each odds}}<option value="{{this.id}}"{{#if this.selected}} selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      <button type="button" class="gl-btn gl-btn-accent glo-ask-btn" data-action="ask" title="{{localize "GLORACLE.ask.hint"}}">
+        <i class="fa-solid fa-circle-question"></i> {{localize "GLORACLE.ask.button"}}
+      </button>
+    </div>
+
+    {{!-- Tier-1 slot shortcuts (primary pack) --}}
+    <div class="glo-slots">
+      {{#each slots}}
+      <button type="button" class="glo-slot" data-action="rollTable" data-table="{{this.tableId}}"
+        title="{{this.label}}{{#if ../primaryLabel}} · {{../primaryLabel}}{{/if}}">
+        <i class="{{this.icon}}"></i><span class="glo-slot-label">{{this.label}}</span>
+      </button>
+      {{/each}}
+    </div>
+  </section>
+
+  {{!-- ── Pack browser (searchable) ──────────────────────────────────── --}}
+  <section class="glo-browser">
+    <div class="glo-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" class="glo-search-input" data-search placeholder="{{localize "GLORACLE.browser.search"}}" autocomplete="off">
+    </div>
+    <div class="glo-scroll">
+      {{#each packs}}
+      <div class="glo-pack" data-pack="{{this.id}}">
+        <div class="glo-pack-head">
+          <h3 class="glo-pack-title glo-slash{{#if this.isPrimary}} glo-primary{{/if}}">{{this.label}}</h3>
+          {{#if this.context}}
+          <select class="glo-select glo-ctx" data-ctx-pack="{{this.id}}" title="{{this.context.label}}">
+            {{#each this.context.values}}
+            <option value="{{this.id}}"{{#if this.selected}} selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+          </select>
+          {{/if}}
+        </div>
+        {{#each this.categories}}
+        <div class="glo-group" data-group>
+          <h4 class="glo-group-title">{{this.name}}</h4>
+          <div class="glo-group-grid">
+            {{#each this.tables}}
+            <button type="button" class="glo-el" data-action="rollTable" data-table="{{this.id}}">{{this.name}}</button>
+            {{/each}}
+          </div>
+        </div>
+        {{/each}}
+        {{#if this.attribution}}<p class="glo-attribution">{{this.attribution}}</p>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  {{!-- ── Result log ─────────────────────────────────────────────────── --}}
+  <section class="glo-logwrap">
+    <div class="glo-log-head">
+      <span class="glo-slash">{{localize "GLORACLE.log.title"}}</span>
+      <span class="glo-log-tip" title="{{localize "GLORACLE.log.shiftTip"}}"><i class="fa-solid fa-circle-info"></i></span>
+      <button type="button" class="glo-icon-btn" data-action="clearLog" title="{{localize "GLORACLE.log.clear"}}"><i class="fa-solid fa-trash-can"></i></button>
+    </div>
+    <p class="glo-empty" data-empty>{{localize "GLORACLE.log.empty"}}</p>
+    <ul class="glo-log" data-log></ul>
+  </section>
+
+</div>
