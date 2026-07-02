@@ -1,0 +1,77 @@
+{
+  "GLORACLE": {
+    "title": "Oracles",
+    "hint": "A multi-genre oracle library for solo and GM-lite play: an Ironsworn-style yes/no oracle, universal Action/Theme and Descriptor/Focus prompts, and swappable genre packs (sci-fi, fantasy, dark fantasy, modern occult, urban gothic, dieselpunk, arcanepunk) with full generators for characters, places, factions and more. GM-only.",
+    "control": "Open Oracles",
+
+    "settings": {
+      "primaryPack": {
+        "name": "Primary genre pack",
+        "hint": "The pack whose Character / Place / Settlement / Faction / Creature / Encounter / Theme / Complication shortcuts fill the panel's quick-roll row."
+      },
+      "pack": {
+        "hint": "Enabled packs appear in the oracle browser and are loaded on demand. Disabled packs are never loaded.",
+        "starforged": { "name": "Pack: Starforged (Sci-Fi)" },
+        "fantasy": { "name": "Pack: Fantasy (Ironsworn)" },
+        "dark-fantasy": { "name": "Pack: Dark Fantasy" },
+        "modern-occult": { "name": "Pack: Modern Occult" },
+        "vampire-modern": { "name": "Pack: Urban Gothic (Vampires)" },
+        "dieselpunk": { "name": "Pack: Dieselpunk" },
+        "arcanepunk": { "name": "Pack: Arcanepunk" }
+      }
+    },
+
+    "ask": {
+      "label": "Ask the Oracle",
+      "button": "Ask",
+      "hint": "Decide the odds of a yes, then roll. On a match, envision an extreme result or twist.",
+      "odds": "Odds of a yes",
+      "yes": "Yes",
+      "no": "No",
+      "yesIf": "yes ≤"
+    },
+
+    "odds": {
+      "small-chance": "Small Chance",
+      "unlikely": "Unlikely",
+      "fifty-fifty": "50 / 50",
+      "likely": "Likely",
+      "almost-certain": "Almost Certain"
+    },
+
+    "slot": {
+      "character": "Character",
+      "place": "Place",
+      "settlement": "Settlement",
+      "faction": "Faction",
+      "creature": "Creature",
+      "encounter": "Encounter",
+      "location-theme": "Theme",
+      "complication": "Twist"
+    },
+
+    "browser": {
+      "search": "Search oracle tables…"
+    },
+
+    "match": {
+      "label": "MATCH",
+      "hint": "Match — envision an extreme result, interesting twist, or dramatic complication."
+    },
+
+    "rollTimes": "Roll again",
+
+    "log": {
+      "title": "Results",
+      "empty": "No rolls yet. Ask a question or pick a table.",
+      "clear": "Clear log",
+      "toChat": "Send to chat",
+      "sent": "Sent to GM chat.",
+      "shiftTip": "Shift-click any roll to expand every linked table in one go."
+    },
+
+    "chat": {
+      "alias": "Oracle"
+    }
+  }
+}

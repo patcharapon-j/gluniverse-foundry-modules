@@ -42,7 +42,8 @@
     "styles/minimap.css",
     "styles/etched-chat.css",
     "styles/timer.css",
-    "styles/mythic-gme.css"
+    "styles/mythic-gme.css",
+    "styles/oracles.css"
   ],
   "languages": [
     {
@@ -134,6 +135,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/mythic-gme.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/oracles.en.json"
     }
   ],
   "packs": [

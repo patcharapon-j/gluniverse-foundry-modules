@@ -1,0 +1,357 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Oracles panel
+   Self-contained styling built on the suite's canonical --gl-* tokens and the
+   .gl-glass / .gl-btn utilities. GM-facing floating panel: Ask-the-Oracle
+   yes/no row, Tier-1 slot shortcuts, a searchable multi-pack table browser
+   (with per-pack context selectors), and a live nested result log with
+   per-roll "send to chat" and manual-ref drill buttons.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── local motion (self-contained; mirrors the suite easing) ── */
+@keyframes glo-in {
+  0% { opacity: 0; transform: translateX(-10px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes glo-match-pulse {
+  0% { box-shadow: 0 0 0 color-mix(in srgb, var(--gl-accent) 60%, transparent); }
+  60% { box-shadow: 0 0 10px var(--gl-bloom); }
+  100% { box-shadow: 0 0 4px color-mix(in srgb, var(--gl-accent) 30%, transparent); }
+}
+
+/* ── window frame ── */
+#glo-panel .window-content { padding: 0; background: var(--gl-ink-0); }
+.glo-panel .window-header {
+  font-family: var(--gl-display);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.glo-root {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  background:
+    radial-gradient(130% 60% at 100% 0%, color-mix(in srgb, var(--gl-accent) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+
+/* ── shared motifs ── */
+.glo-slash::before {
+  content: "// ";
+  color: var(--gl-accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.glo-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: 11px;
+}
+.glo-select:focus { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-bloom); outline: none; }
+
+.glo-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 20px; height: 20px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--gl-text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease);
+}
+.glo-icon-btn:hover { color: var(--gl-accent); border-color: var(--gl-edge); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Top zone — Ask the Oracle + slot shortcuts
+   ════════════════════════════════════════════════════════════════════════ */
+.glo-top { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+
+.glo-ask { display: flex; align-items: stretch; gap: 6px; }
+.glo-ask-btn { flex: 0 0 auto; white-space: nowrap; }
+
+.glo-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.glo-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 2px 4px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+  color: var(--gl-text);
+  cursor: pointer;
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
+  transition: border-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glo-slot i { font-size: 12px; color: var(--gl-accent); }
+.glo-slot-label {
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.glo-slot:hover { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-bloom); }
+.glo-slot:hover .glo-slot-label { color: var(--gl-text); }
+.glo-slot:active { transform: translateY(1px); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Pack browser
+   ════════════════════════════════════════════════════════════════════════ */
+.glo-browser {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+}
+
+.glo-search {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-edge);
+}
+.glo-search i { font-size: 10px; color: var(--gl-text-dim); }
+.glo-search-input {
+  flex: 1 1 auto;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: 11px;
+}
+.glo-search-input:focus { outline: none; box-shadow: none; }
+
+.glo-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.glo-pack-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.glo-pack-title {
+  flex: 1 1 auto;
+  margin: 0;
+  border: none;
+  font-family: var(--gl-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--gl-text-bright);
+}
+.glo-pack-title.glo-primary { color: var(--gl-accent); }
+.glo-ctx { flex: 0 1 auto; max-width: 45%; height: 22px; font-size: 10px; }
+
+.glo-group { margin-bottom: 4px; }
+.glo-group-title {
+  margin: 0 0 3px;
+  border: none;
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gl-text-dim);
+}
+.glo-group-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.glo-el {
+  padding: 2px 7px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glo-el:hover { border-color: var(--gl-accent); color: var(--gl-accent); box-shadow: 0 0 6px var(--gl-bloom); }
+.glo-el:active { transform: translateY(1px); }
+
+.glo-attribution {
+  margin: 2px 0 0;
+  font-size: 8px;
+  line-height: 1.35;
+  color: var(--gl-text-faint);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Result log
+   ════════════════════════════════════════════════════════════════════════ */
+.glo-logwrap {
+  flex: 0 0 34%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--gl-edge);
+  padding-top: 5px;
+}
+.glo-log-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gl-text-dim);
+}
+.glo-log-head .glo-slash { flex: 1 1 auto; }
+.glo-log-tip { color: var(--gl-text-faint); cursor: help; }
+
+.glo-empty {
+  margin: 6px 0 0;
+  font-size: 10px;
+  color: var(--gl-text-faint);
+  text-align: center;
+}
+
+.glo-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.glo-entry {
+  padding: 5px 7px;
+  background: var(--gl-ink-2);
+  border: 1px solid var(--gl-hair);
+  border-left: 2px solid var(--gl-text-dim);
+}
+.glo-entry.glo-in { animation: glo-in var(--gl-d-move) var(--gl-ease); }
+.glo-entry[data-tone="yes"] { border-left-color: var(--gl-good); }
+.glo-entry[data-tone="no"] { border-left-color: var(--gl-hazard); }
+.glo-entry[data-tone="match"] { border-left-color: var(--gl-accent); }
+
+.glo-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.glo-entry-head > i { font-size: 10px; color: var(--gl-accent); }
+.glo-entry-label {
+  flex: 1 1 auto;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glo-entry-result {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gl-text-bright);
+}
+.glo-entry-meta {
+  margin-top: 1px;
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  color: var(--gl-text-faint);
+}
+
+.glo-match {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  background: color-mix(in srgb, var(--gl-accent) 18%, transparent);
+  border: 1px solid var(--gl-accent);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  animation: glo-match-pulse 900ms var(--gl-ease) both;
+}
+
+/* nested result nodes */
+.glo-node {
+  margin: 3px 0 0 10px;
+  padding-left: 7px;
+  border-left: 1px solid var(--gl-hair);
+  font-size: 11px;
+}
+.glo-node-label {
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gl-text-dim);
+  margin-right: 5px;
+}
+.glo-node-result { color: var(--gl-text); font-weight: 600; }
+.glo-node-meta {
+  margin-left: 5px;
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  color: var(--gl-text-faint);
+}
+
+/* manual-ref drill buttons */
+.glo-pend { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0 0 10px; }
+.glo-drill {
+  padding: 1px 7px;
+  background: color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-2));
+  border: 1px dashed var(--gl-accent);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  cursor: pointer;
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glo-drill i { font-size: 8px; margin-right: 3px; }
+.glo-drill:hover { box-shadow: 0 0 8px var(--gl-bloom); }
+.glo-drill.glo-drilled { border-style: solid; opacity: 0.65; }
+
+/* chat card */
+.glo-chat { font-size: 12px; line-height: 1.45; }
