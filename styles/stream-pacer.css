@@ -676,7 +676,7 @@
    ======================================== */
 
 #stream-pacer-container.is-player {
-  width: 164px;
+  width: 196px;
   font-size: 10px;
   border-radius: 11px;
 }
@@ -713,10 +713,50 @@
   font-size: 7.5px;
 }
 
+/* Player status buttons — the primary interactive surface on the player HUD.
+   Taller, larger icons, and each carries its status color at rest so it reads
+   as a clear, prominent choice instead of a muted icon that only lights up on
+   hover/active. */
+#stream-pacer-container.is-player .status-buttons {
+  gap: 6px;
+}
+
 #stream-pacer-container.is-player .status-btn {
-  height: 20px;
-  font-size: 10px;
-  border-radius: 7px;
+  height: 36px;
+  font-size: 15px;
+  border-radius: 9px;
+  border-width: 1.5px;
+}
+
+#stream-pacer-container.is-player .status-btn i {
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* Resting colors — instantly identifiable per status even before selection.
+   Scoped to :not(.active) so the stronger selected state (defined earlier)
+   keeps its full-strength fill + glow. */
+#stream-pacer-container.is-player .status-btn.status-engaged:not(.active) {
+  color: var(--sp-amber);
+  border-color: color-mix(in srgb, var(--sp-amber) 55%, transparent);
+  background: linear-gradient(180deg, rgba(228, 176, 85, 0.14), rgba(228, 176, 85, 0.03));
+}
+
+#stream-pacer-container.is-player .status-btn.status-hand-raised:not(.active) {
+  color: var(--sp-blue);
+  border-color: color-mix(in srgb, var(--sp-blue) 55%, transparent);
+  background: linear-gradient(180deg, rgba(90, 163, 240, 0.14), rgba(90, 163, 240, 0.03));
+}
+
+#stream-pacer-container.is-player .status-btn.status-need-time:not(.active) {
+  color: var(--sp-purple);
+  border-color: color-mix(in srgb, var(--sp-purple) 55%, transparent);
+  background: linear-gradient(180deg, rgba(166, 132, 255, 0.14), rgba(166, 132, 255, 0.03));
+}
+
+#stream-pacer-container.is-player .status-btn.status-ready:not(.active) {
+  color: var(--sp-green);
+  border-color: color-mix(in srgb, var(--sp-green) 55%, transparent);
+  background: linear-gradient(180deg, rgba(100, 192, 143, 0.14), rgba(100, 192, 143, 0.03));
 }
 
 #stream-pacer-container.is-player .pacer-signal {
