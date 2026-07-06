@@ -9,6 +9,7 @@
 
 import * as M from "./time-math.js";
 import { WATCHES, DEFAULT_SHIFT_NAMES, SETTINGS, MODULE_ID } from "./const.js";
+import { getEraLabel } from "./calendar/calendar.js";
 
 function getSetting(key, fallback) {
   try { return game.settings.get(MODULE_ID, key); }
@@ -103,15 +104,27 @@ export class TimeEngine {
       } catch { /* fall through to arithmetic */ }
     }
 
+    // Arithmetic fallback (native path unavailable). Count in-cycle days from
+    // yearZero to the target date. Leap days are honoured per-year so weekdays
+    // don't drift on real-world calendars — but intercalary/out-of-cycle days
+    // stay excluded so intercalary calendars keep starting every year on the
+    // same weekday (see the doc comment above).
     const firstWeekday = cal?.years?.firstWeekday ?? 0;
     const yearZero = cal?.years?.yearZero ?? 0;
-    const perYear = months.reduce((a, m) => a + (outOfCycle(m) ? 0 : (m.days ?? 0)), 0) || wdCount;
-    let before = 0;
-    for (let i = 0; i < monthIndex && i < months.length; i++) {
-      if (!outOfCycle(months[i])) before += months[i].days ?? 0;
-    }
-    const inMonth = outOfCycle(months[monthIndex] ?? {}) ? 0 : dayOfMonth0;
-    const total = (year - yearZero) * perYear + before + inMonth;
+    const leap = cal?.years?.leapYear ?? {};
+    const leapInterval = Number(leap.leapInterval) || 0;
+    const leapStart = Number(leap.leapStart) || 0;
+    const isLeap = y => leapInterval > 0 && y >= leapStart && ((y - leapStart) % leapInterval === 0);
+    const cycleDays = (m, y) => outOfCycle(m)
+      ? 0
+      : ((isLeap(y) && Number.isInteger(m.leapDays)) ? m.leapDays : (m.days ?? 0));
+    const yearCycleLen = y => months.reduce((a, m) => a + cycleDays(m, y), 0) || wdCount;
+
+    let total = 0;
+    for (let y = yearZero; y < year; y++) total += yearCycleLen(y);
+    for (let y = year; y < yearZero; y++) total -= yearCycleLen(y);
+    for (let i = 0; i < monthIndex && i < months.length; i++) total += cycleDays(months[i], year);
+    total += outOfCycle(months[monthIndex] ?? {}) ? 0 : dayOfMonth0;
     return ((firstWeekday + total) % wdCount + wdCount) % wdCount;
   }
 
@@ -194,7 +207,7 @@ export class TimeEngine {
         monthName: month?.name ?? "",
         monthAbbr: month?.abbreviation ?? month?.name ?? "",
         year: c.year,
-        yearLabel: getSetting(SETTINGS.yearLabel, ""),
+        yearLabel: getEraLabel(),
         dayOfYear: c.day
       },
       seasonName: season?.name ?? "",
