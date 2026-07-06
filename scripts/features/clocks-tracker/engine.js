@@ -9,6 +9,7 @@
 
 import * as M from "./time-math.js";
 import { WATCHES, DEFAULT_SHIFT_NAMES, SETTINGS, MODULE_ID } from "./const.js";
+import { getEraLabel } from "./calendar/calendar.js";
 
 function getSetting(key, fallback) {
   try { return game.settings.get(MODULE_ID, key); }
@@ -194,7 +195,7 @@ export class TimeEngine {
         monthName: month?.name ?? "",
         monthAbbr: month?.abbreviation ?? month?.name ?? "",
         year: c.year,
-        yearLabel: getSetting(SETTINGS.yearLabel, ""),
+        yearLabel: getEraLabel(),
         dayOfYear: c.day
       },
       seasonName: season?.name ?? "",

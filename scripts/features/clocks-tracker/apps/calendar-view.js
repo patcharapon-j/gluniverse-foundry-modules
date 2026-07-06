@@ -5,7 +5,7 @@
 
 import { MODULE_ID, SETTINGS } from "../const.js";
 import { TimeEngine } from "../engine.js";
-import { getActiveCalendarConfig } from "../calendar/calendar.js";
+import { getActiveCalendarConfig, getEraLabel } from "../calendar/calendar.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -173,7 +173,7 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
       isGM,
       monthName: month?.name ?? "",
       year,
-      yearLabel: game.settings.get(MODULE_ID, SETTINGS.yearLabel) || "",
+      yearLabel: getEraLabel(),
       weekdayNames: weekdays.map((w, i) => ({ label: w.abbreviation ?? w.name, rest: restDays[i] })),
       wdCount,
       monthBadges,

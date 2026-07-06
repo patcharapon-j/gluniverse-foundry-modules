@@ -20,6 +20,18 @@ export function getActiveCalendarConfig() {
 }
 
 /**
+ * Era suffix shown after the year (e.g. "A.S.", "CE", "AR"). Sourced from the
+ * active calendar definition so it follows the calendar when the GM switches
+ * systems — the standalone `yearLabel` setting is only used as a fallback for
+ * custom calendars that don't carry an `era` field.
+ */
+export function getEraLabel() {
+  const cfg = getActiveCalendarConfig();
+  if (cfg && typeof cfg.era === "string" && cfg.era.trim()) return cfg.era.trim();
+  return safeGet(SETTINGS.yearLabel, "") || "";
+}
+
+/**
  * Install the active calendar. Call in `init` (before GameTime is built) and
  * again after the GM changes the definition (with reinitialize:true).
  */

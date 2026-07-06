@@ -14,11 +14,19 @@ const mo = (rows) => rows.map(([name, days, abbreviation], i) => ({
   name, ordinal: i + 1, days, abbreviation: abbreviation ?? name.slice(0, 3)
 }));
 
-/** Simplified Gregorian (real-world). */
+/**
+ * Simplified Gregorian (real-world). Anchored to the Unix epoch so world time
+ * lines up with reality: worldTime 0 = 1970-01-01, which was a Thursday
+ * (weekday index 4 in the Sunday-first list below). Leap years follow the
+ * every-4th rule from 1972 (the century exception is ignored, matching
+ * Foundry's own SIMPLIFIED_GREGORIAN). This mirrors how Foundry interprets
+ * `game.time.worldTime` as seconds since the epoch.
+ */
 export const GREGORIAN = {
   name: "Gregorian",
   description: "The standard real-world calendar.",
-  years: { yearZero: 0, firstWeekday: 0, leapYear: { leapStart: 0, leapInterval: 4 } },
+  era: "CE",
+  years: { yearZero: 1970, firstWeekday: 4, leapYear: { leapStart: 1972, leapInterval: 4 } },
   days: {
     values: wk(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]),
     daysPerYear: 365, ...STD_DAY
@@ -44,6 +52,7 @@ export const GREGORIAN = {
 export const GOLARION = {
   name: "Golarion (Absalom Reckoning)",
   description: "The calendar of Golarion, used in Pathfinder.",
+  era: "AR",
   years: { yearZero: 0, firstWeekday: 0, leapYear: { leapStart: 0, leapInterval: 8 } },
   days: {
     values: wk(["Moonday", "Toilday", "Wealday", "Oathday", "Fireday", "Starday", "Sunday"]),
@@ -74,6 +83,7 @@ export const GOLARION = {
 export const HARPTOS = {
   name: "Harptos (Calendar of Harptos)",
   description: "The calendar of Faerûn used in the Forgotten Realms.",
+  era: "DR",
   years: { yearZero: 0, firstWeekday: 0, leapYear: { leapStart: 0, leapInterval: 4 } },
   days: {
     values: wk(["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"]),
@@ -127,6 +137,7 @@ const OUROLYN_MONTH_WORDS = [
 export const OUROLYN = {
   name: "Ourolyn (After Sundering)",
   description: "The calendar of the world of Ourolyn, reckoned in years After Sundering (A.S.).",
+  era: "A.S.",
   years: { yearZero: 0, firstWeekday: 0, leapYear: { leapStart: 0, leapInterval: 0 } },
   days: {
     values: [
