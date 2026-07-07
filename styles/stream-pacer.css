@@ -451,42 +451,45 @@
   box-shadow: 0 0 10px rgba(90, 163, 240, 0.3);
 }
 
-/* Active states — status buttons */
+/* Active states — status buttons.
+   The selected mode is filled solid with its status color so it's obvious at a
+   glance which mode is active; the icon flips to a contrasting tone (dark on the
+   light amber/green fills, white on the deeper blue/purple ones). */
 #stream-pacer-container .status-btn.status-engaged.active {
-  color: var(--sp-amber);
+  color: #1a1205;
   border-color: var(--sp-amber);
-  background: linear-gradient(180deg, rgba(228, 176, 85, 0.2), rgba(228, 176, 85, 0.06));
-  box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, var(--sp-amber-soft, #ecc173), var(--sp-amber));
+  box-shadow: 0 0 14px rgba(228, 176, 85, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 #stream-pacer-container .status-btn.status-hand-raised.active {
-  color: var(--sp-blue);
+  color: #fff;
   border-color: var(--sp-blue);
-  background: linear-gradient(135deg, rgba(90, 163, 240, 0.22), rgba(90, 163, 240, 0.08));
+  background: linear-gradient(180deg, #6fb0f5, var(--sp-blue));
   box-shadow:
-    0 0 15px rgba(90, 163, 240, 0.5),
-    0 0 30px rgba(90, 163, 240, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    0 0 16px rgba(90, 163, 240, 0.6),
+    0 0 32px rgba(90, 163, 240, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   animation: sp-hand-btn-pulse 1.6s ease-in-out infinite;
   overflow: hidden;
 }
 
 #stream-pacer-container .status-btn.status-hand-raised.active i {
-  filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.8));
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.35));
 }
 
 #stream-pacer-container .status-btn.status-ready.active {
-  color: var(--sp-green);
+  color: #08150e;
   border-color: var(--sp-green);
-  background: linear-gradient(180deg, rgba(100, 192, 143, 0.2), rgba(100, 192, 143, 0.06));
-  box-shadow: 0 0 12px rgba(100, 192, 143, 0.35);
+  background: linear-gradient(180deg, #7bcfa0, var(--sp-green));
+  box-shadow: 0 0 14px rgba(100, 192, 143, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 #stream-pacer-container .status-btn.status-need-time.active {
-  color: var(--sp-purple);
+  color: #fff;
   border-color: var(--sp-purple);
-  background: linear-gradient(180deg, rgba(166, 132, 255, 0.2), rgba(166, 132, 255, 0.06));
-  box-shadow: 0 0 12px rgba(166, 132, 255, 0.35);
+  background: linear-gradient(180deg, #b79bff, var(--sp-purple));
+  box-shadow: 0 0 14px rgba(166, 132, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Active states — GM buttons */
