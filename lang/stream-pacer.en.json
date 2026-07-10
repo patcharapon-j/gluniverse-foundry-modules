@@ -77,6 +77,30 @@
       "LightButton": "Light Campfire"
     },
 
+    "SafetyCheck": {
+      "TriggerTooltip": "Start a private table safety check",
+      "StartTitle": "Start Safety Check",
+      "StartConfirm": "Send a private traffic-light check-in to all active players ({count})?",
+      "NoPlayers": "No active players are available for a safety check.",
+      "ResultsTitle": "Safety Check",
+      "ResponseCountTooltip": "Responses received",
+      "Waiting": "Waiting for responses",
+      "Pending": "pending",
+      "AllResponded": "All responded",
+      "ClearTitle": "Run Check Again",
+      "ClearConfirm": "Clear the current answers and prompt the same players again?",
+      "ClearTooltip": "Clear answers and prompt these players again",
+      "DismissTooltip": "Close this safety check",
+      "DialogLabel": "Table safety check",
+      "GreenLabel": "Green — continue",
+      "YellowLabel": "Yellow — slow down and check in",
+      "RedLabel": "Red — stop",
+      "green": "Green — continue",
+      "yellow": "Yellow — slow down and check in",
+      "red": "Red — stop",
+      "UnknownPlayer": "Unknown player"
+    },
+
     "Spotlight": {
       "Title": "Spotlight",
       "ToggleTooltip": "Toggle this player in or out of the spotlight",

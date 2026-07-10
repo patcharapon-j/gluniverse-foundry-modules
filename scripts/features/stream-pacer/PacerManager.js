@@ -1,4 +1,4 @@
-import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
+import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS } from './settings.js';
 import { SocketHandler } from './socket-handler.js';
 
 class PacerManagerClass {
@@ -19,6 +19,12 @@ class PacerManagerClass {
     this._direPerilCallbacks = new Set();
     this._campfireCallbacks = new Set();
     this._notifyPending = false;
+
+    // Safety check-ins intentionally never enter Foundry settings. The GM's
+    // currently-running client owns this live state and shares it over the
+    // socket so reconnecting players can be prompted again without retaining
+    // sensitive responses after a reload.
+    this._safetyCheck = this._emptySafetyCheck();
 
     // Spotlight tracker: per-user { accrued: seconds, activeSince: ms|null }.
     // A user "in the light" carries an activeSince timestamp; their live total
@@ -143,8 +149,28 @@ class PacerManagerClass {
       direPerilActive: this._direPerilActive,
       campfireActive: this._campfireActive,
       campfireEnd: this._campfireEnd,
-      campfireRemaining: this.getCampfireRemaining()
+      campfireRemaining: this.getCampfireRemaining(),
+      safetyCheck: this.getSafetyCheck()
     };
+  }
+
+  _emptySafetyCheck() {
+    return { id: null, active: false, targetUserIds: [], responses: {} };
+  }
+
+  getSafetyCheck() {
+    return {
+      id: this._safetyCheck.id,
+      active: this._safetyCheck.active === true,
+      targetUserIds: [...this._safetyCheck.targetUserIds],
+      responses: { ...this._safetyCheck.responses }
+    };
+  }
+
+  getActivePlayerIds() {
+    return game.users
+      .filter(user => !user.isGM && user.active)
+      .map(user => user.id);
   }
 
   getPlayerStatus(userId) {
@@ -195,6 +221,66 @@ class PacerManagerClass {
 
     this._notifySubscribers();
     this._saveToSettings();
+  }
+
+  // --- Safety Check-in (session-only, GM-facing) ---
+
+  startSafetyCheck(targetUserIds = this.getActivePlayerIds(), broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+    if (this._safetyCheck.active) return false;
+
+    const targets = [...new Set(targetUserIds)].filter(userId => {
+      const user = game.users.get(userId);
+      return user && !user.isGM && user.active;
+    });
+    if (!targets.length) return false;
+
+    const id = foundry.utils.randomID();
+    this._safetyCheck = { id, active: true, targetUserIds: targets, responses: {} };
+    if (broadcast) SocketHandler.emitSafetyCheckStart(id, targets);
+    this._notifySubscribers();
+    return true;
+  }
+
+  clearSafetyCheck(broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+    if (!this._safetyCheck.active) return false;
+
+    const id = foundry.utils.randomID();
+    this._safetyCheck = { ...this._safetyCheck, id, responses: {} };
+    if (broadcast) SocketHandler.emitSafetyCheckClear(id);
+    this._notifySubscribers();
+    return true;
+  }
+
+  dismissSafetyCheck(broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+    if (!this._safetyCheck.active) return false;
+
+    const id = this._safetyCheck.id;
+    this._safetyCheck = this._emptySafetyCheck();
+    if (broadcast) SocketHandler.emitSafetyCheckDismiss(id);
+    this._notifySubscribers();
+    return true;
+  }
+
+  submitSafetyResponse(userId, status, broadcast = true) {
+    if (broadcast && userId !== game.user.id) return false;
+    const checkId = this._safetyCheck.id;
+    if (!this._canAcceptSafetyResponse(checkId, userId, status)) return false;
+
+    this._safetyCheck.responses[userId] = status;
+    if (broadcast) SocketHandler.emitSafetyCheckResponse(checkId, userId, status);
+    this._notifySubscribers();
+    return true;
+  }
+
+  _canAcceptSafetyResponse(checkId, userId, status) {
+    return this._safetyCheck.active
+      && this._safetyCheck.id === checkId
+      && this._safetyCheck.targetUserIds.includes(userId)
+      && !this._safetyCheck.responses[userId]
+      && Object.values(SAFETY_STATUS).includes(status);
   }
 
   // --- GM Actions ---
@@ -579,6 +665,41 @@ class PacerManagerClass {
     if (game.user.isGM) this._saveSpotlight();
   }
 
+  receiveSafetyCheckStart(id, targetUserIds) {
+    if (typeof id !== 'string' || !id || this._safetyCheck.active) return;
+    const targets = Array.isArray(targetUserIds) ? targetUserIds.filter(userId => {
+      const user = game.users.get(userId);
+      return user && !user.isGM;
+    }) : [];
+    if (!targets.length) return;
+    this._safetyCheck = { id, active: true, targetUserIds: [...new Set(targets)], responses: {} };
+    this._notifySubscribers();
+  }
+
+  receiveSafetyCheckClear(id) {
+    if (typeof id !== 'string' || !id || !this._safetyCheck.active) return;
+    this._safetyCheck = { ...this._safetyCheck, id, responses: {} };
+    this._notifySubscribers();
+  }
+
+  receiveSafetyCheckDismiss(id) {
+    if (!this._safetyCheck.active || this._safetyCheck.id !== id) return;
+    this._safetyCheck = this._emptySafetyCheck();
+    this._notifySubscribers();
+  }
+
+  receiveSafetyCheckReset() {
+    if (!this._safetyCheck.active) return;
+    this._safetyCheck = this._emptySafetyCheck();
+    this._notifySubscribers();
+  }
+
+  receiveSafetyCheckResponse(checkId, userId, status) {
+    if (!this._canAcceptSafetyResponse(checkId, userId, status)) return;
+    this._safetyCheck.responses[userId] = status;
+    this._notifySubscribers();
+  }
+
   // --- State Sync (for socket updates) ---
 
   receivePlayerStatusChange(userId, status) {
@@ -696,6 +817,14 @@ class PacerManagerClass {
     this._direPerilActive = state.direPerilActive === true;
     this._campfireActive = state.campfireActive === true;
     this._campfireEnd = state.campfireEnd || null;
+    this._safetyCheck = state.safetyCheck?.active === true
+      ? {
+          id: typeof state.safetyCheck.id === 'string' ? state.safetyCheck.id : null,
+          active: true,
+          targetUserIds: Array.isArray(state.safetyCheck.targetUserIds) ? [...state.safetyCheck.targetUserIds] : [],
+          responses: { ...(state.safetyCheck.responses || {}) }
+        }
+      : this._emptySafetyCheck();
 
     this._clearCountdownInterval();
     if (this._gmSignal === GM_SIGNAL.COUNTDOWN && this._countdownEnd) {

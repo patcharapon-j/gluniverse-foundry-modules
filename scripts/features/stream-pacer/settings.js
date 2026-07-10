@@ -22,6 +22,15 @@ export const GM_SIGNAL = {
   FLOOR_OPEN: 'floor_open'
 };
 
+// A short-lived, GM-initiated table check-in. These values deliberately live
+// outside the normal pacing statuses: they are private, session-only safety
+// responses and must never be persisted with the player's public HUD status.
+export const SAFETY_STATUS = {
+  GREEN: 'green',
+  YELLOW: 'yellow',
+  RED: 'red'
+};
+
 // Configuration app for selecting exempt users.
 // Defined before registerSettings() so registerMenu can reference it without
 // hitting the class-declaration temporal dead zone.

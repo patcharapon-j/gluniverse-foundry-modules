@@ -1,4 +1,4 @@
-import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
+import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { featurePath } from '../../core/const.mjs';
 
@@ -105,6 +105,37 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       };
     }
 
+    // Safety results are prepared only for GM clients. Unanswered players are
+    // represented by the aggregate pending count, never by a guessed status.
+    let safetyCheck = null;
+    if (game.user.isGM) {
+      const check = state.safetyCheck;
+      const responses = check.targetUserIds.flatMap(userId => {
+        const status = check.responses[userId];
+        if (!status) return [];
+        return [{
+          userId,
+          name: game.users.get(userId)?.name || game.i18n.localize('STREAM_PACER.SafetyCheck.UnknownPlayer'),
+          status,
+          isGreen: status === SAFETY_STATUS.GREEN,
+          isYellow: status === SAFETY_STATUS.YELLOW,
+          isRed: status === SAFETY_STATUS.RED,
+          icon: status === SAFETY_STATUS.GREEN ? 'fa-check' : status === SAFETY_STATUS.YELLOW ? 'fa-triangle-exclamation' : 'fa-hand',
+          title: game.i18n.localize(`STREAM_PACER.SafetyCheck.${status}`)
+        }];
+      });
+      const targetCount = check.targetUserIds.length;
+      safetyCheck = {
+        active: check.active,
+        responses,
+        responseCount: responses.length,
+        targetCount,
+        pendingCount: Math.max(0, targetCount - responses.length),
+        hasResponses: responses.length > 0,
+        allResponded: targetCount > 0 && responses.length === targetCount
+      };
+    }
+
     return {
       isGM: game.user.isGM,
       players,
@@ -124,6 +155,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       handRaisedCount: state.handRaisedCount,
       direPerilActive: state.direPerilActive,
       campfireActive: state.campfireActive,
+      safetyCheck,
       PLAYER_STATUS,
       GM_SIGNAL
     };
@@ -244,7 +276,10 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       state.handRaisedCount,
       PacerManager.getPlayerStatus(game.user.id),
       playerSig,
-      spotlightSig
+      spotlightSig,
+      state.safetyCheck.active,
+      state.safetyCheck.id,
+      Object.entries(state.safetyCheck.responses).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|')
     ].join('#');
   }
 
@@ -366,6 +401,15 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
           break;
         case 'declare-campfire':
           if (game.user.isGM) this._showCampfireDialog();
+          break;
+        case 'start-safety-check':
+          if (game.user.isGM) this._confirmSafetyCheckStart();
+          break;
+        case 'clear-safety-check':
+          if (game.user.isGM) this._confirmSafetyCheckClear();
+          break;
+        case 'dismiss-safety-check':
+          if (game.user.isGM) PacerManager.dismissSafetyCheck();
           break;
         case 'spotlight-toggle': {
           if (!game.user.isGM) break;
@@ -504,6 +548,32 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       modal: true
     });
     if (confirmed) PacerManager.resetSpotlight();
+  }
+
+  async _confirmSafetyCheckStart() {
+    const targets = PacerManager.getActivePlayerIds();
+    if (!targets.length) {
+      ui.notifications?.warn(game.i18n.localize('STREAM_PACER.SafetyCheck.NoPlayers'));
+      return;
+    }
+
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('STREAM_PACER.SafetyCheck.StartTitle') },
+      content: `<p>${game.i18n.format('STREAM_PACER.SafetyCheck.StartConfirm', { count: targets.length })}</p>`,
+      rejectClose: false,
+      modal: true
+    });
+    if (confirmed) PacerManager.startSafetyCheck(targets);
+  }
+
+  async _confirmSafetyCheckClear() {
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('STREAM_PACER.SafetyCheck.ClearTitle') },
+      content: `<p>${game.i18n.localize('STREAM_PACER.SafetyCheck.ClearConfirm')}</p>`,
+      rejectClose: false,
+      modal: true
+    });
+    if (confirmed) PacerManager.clearSafetyCheck();
   }
 
   _onClose(options) {

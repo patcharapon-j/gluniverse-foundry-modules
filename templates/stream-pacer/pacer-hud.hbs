@@ -102,6 +102,12 @@
               title="{{localize 'STREAM_PACER.Campfire.Tooltip'}}">
         <i class="fa-solid fa-fire"></i>
       </button>
+      <button type="button" class="gm-btn safety-check-btn {{#if safetyCheck.active}}active{{/if}}"
+              data-action="start-safety-check"
+              {{#if safetyCheck.active}}disabled{{/if}}
+              title="{{localize 'STREAM_PACER.SafetyCheck.TriggerTooltip'}}">
+        <i class="fa-solid fa-traffic-light"></i>
+      </button>
       {{#if hasActiveSignal}}
       <button type="button" class="gm-btn cancel-btn"
               data-action="cancel-signal"
@@ -117,6 +123,56 @@
     </div>
   </div>
   {{/if}}
+
+  {{!-- Safety Check Results (GM only) --}}
+  {{#if isGM}}{{#if safetyCheck.active}}
+  <div class="p-sec safety-results-sec {{#if safetyCheck.allResponded}}is-complete{{/if}}">
+    <div class="safety-results-head">
+      <span class="safety-results-title">
+        <span class="safety-mini-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+        {{localize "STREAM_PACER.SafetyCheck.ResultsTitle"}}
+      </span>
+      <span class="safety-results-count" title="{{localize 'STREAM_PACER.SafetyCheck.ResponseCountTooltip'}}">
+        {{safetyCheck.responseCount}} / {{safetyCheck.targetCount}}
+      </span>
+    </div>
+
+    <div class="safety-response-list">
+      {{#each safetyCheck.responses}}
+      <div class="safety-response {{#if isGreen}}is-green{{else if isYellow}}is-yellow{{else}}is-red{{/if}}"
+           data-user-id="{{userId}}" title="{{name}}: {{title}}">
+        <span class="safety-response-icon"><i class="fa-solid {{icon}}"></i></span>
+        <span class="safety-response-name">{{name}}</span>
+      </div>
+      {{else}}
+      <div class="safety-waiting">
+        <span class="safety-waiting-pulse"></span>
+        {{localize "STREAM_PACER.SafetyCheck.Waiting"}}
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="safety-results-foot">
+      <span class="safety-pending {{#if safetyCheck.allResponded}}is-complete{{/if}}">
+        {{#if safetyCheck.allResponded}}
+          <i class="fa-solid fa-circle-check"></i> {{localize "STREAM_PACER.SafetyCheck.AllResponded"}}
+        {{else}}
+          <i class="fa-solid fa-hourglass-half"></i> {{safetyCheck.pendingCount}} {{localize "STREAM_PACER.SafetyCheck.Pending"}}
+        {{/if}}
+      </span>
+      <span class="safety-result-actions">
+        <button type="button" data-action="clear-safety-check"
+                title="{{localize 'STREAM_PACER.SafetyCheck.ClearTooltip'}}">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
+        <button type="button" data-action="dismiss-safety-check"
+                title="{{localize 'STREAM_PACER.SafetyCheck.DismissTooltip'}}">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </span>
+    </div>
+  </div>
+  {{/if}}{{/if}}
 
   {{!-- Spotlight Tracker (GM only) --}}
   {{#if isGM}}{{#if spotlight.show}}

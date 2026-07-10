@@ -17,7 +17,12 @@ const EVENTS = {
   CAMPFIRE_DECLARE: 'campfireDeclare',
   CAMPFIRE_DISMISS: 'campfireDismiss',
   SPOTLIGHT_UPDATE: 'spotlightUpdate',
-  SPOTLIGHT_RESET: 'spotlightReset'
+  SPOTLIGHT_RESET: 'spotlightReset',
+  SAFETY_CHECK_START: 'safetyCheckStart',
+  SAFETY_CHECK_CLEAR: 'safetyCheckClear',
+  SAFETY_CHECK_DISMISS: 'safetyCheckDismiss',
+  SAFETY_CHECK_RESET: 'safetyCheckReset',
+  SAFETY_CHECK_RESPONSE: 'safetyCheckResponse'
 };
 
 class SocketHandlerClass {
@@ -32,11 +37,11 @@ class SocketHandlerClass {
 
     // Request current state from GM when joining. Retry a few times in case
     // the GM's socket handler isn't registered yet when we fire the first one.
-    if (!game.user.isGM) {
-      this._syncReceived = false;
-      this._syncRetriesLeft = 4;
-      this._scheduleSyncRequest(500);
-    }
+    // Co-GMs also need a live-state sync: safety check-ins intentionally are
+    // not persisted, but every active GM may view and manage one.
+    this._syncReceived = false;
+    this._syncRetriesLeft = 4;
+    this._scheduleSyncRequest(500);
   }
 
   _scheduleSyncRequest(delay) {
@@ -141,6 +146,37 @@ class SocketHandlerClass {
         if (!senderIsGM) break;
         PacerManager.receiveSpotlightReset();
         break;
+
+      case EVENTS.SAFETY_CHECK_START:
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyCheckStart(payload.checkId, payload.targetUserIds);
+        break;
+
+      case EVENTS.SAFETY_CHECK_CLEAR:
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyCheckClear(payload.checkId);
+        break;
+
+      case EVENTS.SAFETY_CHECK_DISMISS:
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyCheckDismiss(payload.checkId);
+        break;
+
+      case EVENTS.SAFETY_CHECK_RESET:
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyCheckReset();
+        break;
+
+      case EVENTS.SAFETY_CHECK_RESPONSE:
+        // A player may only submit a response for themselves. The manager
+        // additionally verifies that they belong to this check-in's snapshot.
+        // The transport is broadcast by Foundry, but only GM clients retain
+        // other users' results; player clients keep only their local answer.
+        if (senderIsGM || payload.userId !== senderId) break;
+        if (game.user.isGM) {
+          PacerManager.receiveSafetyCheckResponse(payload.checkId, payload.userId, payload.status);
+        }
+        break;
     }
   }
 
@@ -180,6 +216,15 @@ class SocketHandlerClass {
 
   _sendSyncState(targetUserId) {
     const state = PacerManager.getState();
+    const targetIsGM = game.users.get(targetUserId)?.isGM === true;
+    const safetyCheck = targetIsGM
+      ? state.safetyCheck
+      : {
+          ...state.safetyCheck,
+          responses: state.safetyCheck.responses[targetUserId]
+            ? { [targetUserId]: state.safetyCheck.responses[targetUserId] }
+            : {}
+        };
     this._emit(EVENTS.SYNC_STATE, {
       targetUserId,
       state: {
@@ -188,7 +233,8 @@ class SocketHandlerClass {
         countdownEnd: state.countdownEnd,
         direPerilActive: state.direPerilActive,
         campfireActive: state.campfireActive,
-        campfireEnd: state.campfireEnd
+        campfireEnd: state.campfireEnd,
+        safetyCheck
       }
     });
   }
@@ -219,6 +265,26 @@ class SocketHandlerClass {
 
   emitSpotlightReset() {
     this._emit(EVENTS.SPOTLIGHT_RESET);
+  }
+
+  emitSafetyCheckStart(checkId, targetUserIds) {
+    this._emit(EVENTS.SAFETY_CHECK_START, { checkId, targetUserIds });
+  }
+
+  emitSafetyCheckClear(checkId) {
+    this._emit(EVENTS.SAFETY_CHECK_CLEAR, { checkId });
+  }
+
+  emitSafetyCheckDismiss(checkId) {
+    this._emit(EVENTS.SAFETY_CHECK_DISMISS, { checkId });
+  }
+
+  emitSafetyCheckReset() {
+    this._emit(EVENTS.SAFETY_CHECK_RESET);
+  }
+
+  emitSafetyCheckResponse(checkId, userId, status) {
+    this._emit(EVENTS.SAFETY_CHECK_RESPONSE, { checkId, userId, status });
   }
 }
 
