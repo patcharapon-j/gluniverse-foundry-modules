@@ -85,6 +85,11 @@ export class TrackerStore {
     return this.update(id, { visibleToPlayers: !!visible });
   }
 
+  /** Make one shared-HUD tracker visually dominant for every connected user. */
+  static async setProminent(id, prominent) {
+    return this.update(id, { prominent: !!prominent });
+  }
+
   /** Persist a new display order from an array of ids (drag-reorder result). */
   static async reorder(idsInOrder) {
     if (!game.user.isGM) return;

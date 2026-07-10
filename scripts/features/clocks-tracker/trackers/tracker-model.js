@@ -42,6 +42,7 @@ export function makeNewTracker(type, overrides = {}, list = []) {
     type,
     order,
     visibleToPlayers: true,
+    prominent: false,
     ...base,
     ...overrides
   };
@@ -49,6 +50,9 @@ export function makeNewTracker(type, overrides = {}, list = []) {
 
 /** Coerce a tracker's numeric fields into their valid ranges (mutates in place). */
 export function sanitizeTracker(t) {
+  // Prominence is a shared-dock presentation flag. Separators remain neutral
+  // dividers even if stale/imported data happens to carry the property.
+  t.prominent = t.type === "separator" ? false : !!t.prominent;
   switch (t.type) {
     case "point": {
       let lo = optInt(t.min), hi = optInt(t.max);
