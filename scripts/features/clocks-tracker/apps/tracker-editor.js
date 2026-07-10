@@ -102,9 +102,11 @@ export class TrackerEditor {
         parts.push(row(L("GLCT.tracker.field.label"), text("label", t.label)));
         break;
     }
-    // Per-tracker player visibility only applies to the shared world dock; a
-    // sheet tracker is private to the PC by definition.
-    if (!isActor) parts.push(row(L("GLCT.tracker.field.visible"), check("visibleToPlayers", t.visibleToPlayers ?? true)));
+    // Shared-HUD presentation controls do not apply to private PC-sheet trackers.
+    if (!isActor) {
+      if (type !== "separator") parts.push(row(L("GLCT.tracker.field.prominent"), check("prominent", t.prominent ?? false)));
+      parts.push(row(L("GLCT.tracker.field.visible"), check("visibleToPlayers", t.visibleToPlayers ?? true)));
+    }
     return parts.join("");
   }
 
@@ -116,7 +118,10 @@ export class TrackerEditor {
     const ck = (n) => !!form.elements[n]?.checked;
     // Sheet trackers carry no player-visibility flag; keep them flagged visible
     // so they sort/behave consistently if ever surfaced elsewhere.
-    const base = { visibleToPlayers: isActor ? true : ck("visibleToPlayers") };
+    const base = {
+      visibleToPlayers: isActor ? true : ck("visibleToPlayers"),
+      prominent: !isActor && type !== "separator" ? ck("prominent") : false
+    };
     switch (type) {
       case "point": return { ...base, name: (v("name") || "").trim() || L("GLCT.tracker.types.point"), value: nn("value"), min: opt("min"), max: opt("max") };
       case "clock": return { ...base, name: (v("name") || "").trim() || L("GLCT.tracker.types.clock"), slices: nn("slices", 6), value: nn("value"), bad: ck("bad") };

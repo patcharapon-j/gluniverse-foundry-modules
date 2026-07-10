@@ -182,6 +182,8 @@
   "GLCT.tracker.toggleVis": "Toggle player visibility",
   "GLCT.tracker.ctx.show": "Show to players",
   "GLCT.tracker.ctx.hide": "Hide from players",
+  "GLCT.tracker.ctx.promote": "Mark as Prominent",
+  "GLCT.tracker.ctx.unpromote": "Remove Prominent status",
   "GLCT.tracker.pickType": "What kind of tracker would you like to add?",
   "GLCT.tracker.emptyHint": "No trackers yet — press + to add one.",
   "GLCT.tracker.playersMayRoll": "Players may roll this pool",
@@ -218,6 +220,7 @@
   "GLCT.tracker.field.playerRoll": "Players may roll",
   "GLCT.tracker.field.label": "Label (optional)",
   "GLCT.tracker.field.visible": "Visible to players",
+  "GLCT.tracker.field.prominent": "Prominent in HUD",
 
   "GLCT.tracker.settings.sheetTab.name": "Private trackers on PC sheets (PF2e)",
   "GLCT.tracker.settings.sheetTab.hint": "Adds a “Trackers” tab to each PF2e character sheet for trackers private to that PC — visible and editable only by the actor's owner(s) and the GM, separate from the shared tracker dock.",

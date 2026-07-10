@@ -128,8 +128,7 @@ export const TrackerRender = {
     const { svg: s, segs } = this.makePie(slices, 26);
     const pie = this.el("div", "piewrap"); pie.appendChild(s);
     const nm = this.el("div", "nm", t.name ?? "");
-    const frac = this.el("div", "frac");
-    c.append(pie, nm, frac);
+    c.append(pie, nm);
     let last = -1;
     const paint = (tr) => {
       nm.textContent = tr.name ?? "";
@@ -139,7 +138,6 @@ export const TrackerRender = {
         sg.classList.toggle("fill", fill);
         if (fill && i >= last && last >= 0) { sg.classList.remove("justfilled"); void sg.getBoundingClientRect().width; sg.classList.add("justfilled"); }
       });
-      frac.innerHTML = `<b>${v}</b>/${slices}`;
       const done = v >= slices;
       c.classList.toggle("complete", done);
       // A bad clock filling up is an ominous event — a red "doom" stamp rather
@@ -149,7 +147,7 @@ export const TrackerRender = {
         game.i18n.localize(bad ? "GLCT.tracker.doom" : "GLCT.tracker.filled"));
       last = v;
     };
-    return { content: c, paint, stepEls: [pie, frac] };
+    return { content: c, paint, stepEls: [pie] };
   },
 
   /* ---- POOL (point-style remaining count; 3D roll handled by Dice So Nice in chat) ---- */

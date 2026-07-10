@@ -124,7 +124,7 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _structuralSig(t) {
     return [t.id, t.order, t.type, t.name, t.title, t.subtitle, t.label, t.slices, t.boxes,
-      t.size, t.count, t.discard, t.playerRoll, t.bad, t.visibleToPlayers].join("|");
+      t.size, t.count, t.discard, t.playerRoll, t.bad, t.visibleToPlayers, t.prominent].join("|");
   }
 
   /** The live value that, when it changes, should pop a compact card open. */
@@ -164,6 +164,7 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const badClock = t.type === "clock" && t.bad;
     const row = this._el("div", "trow type-" + t.type + (t.type === "hazard" ? " hazard" : "") + (badClock ? " badclock" : "") + (t.type === "separator" ? " sep" : ""));
     row.dataset.id = t.id;
+    if (t.prominent && t.type !== "separator") row.classList.add("prominent");
     if (isGM && !t.visibleToPlayers) row.classList.add("hiddenfromplayers");
     if (t.type === "hazard" || badClock) row.appendChild(this._el("div", "haz-scan"));
 
@@ -259,7 +260,7 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
       row.style.left = "5px";                                // match the compact .trk-rows padding
       row.style.top = `${cy}px`;                             // stay on its own band, just stretch wide
       row.style.width = `${host.clientWidth - 10}px`;
-      row.style.height = "28px";
+      row.style.height = t.prominent ? "56px" : "28px";
 
       popTimer = setTimeout(settle, DWELL);
     };
@@ -293,12 +294,10 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
         const slices = Math.max(1, Math.trunc(Number(t.slices) || 6));
         const { svg, segs } = this._makePie(slices, 24);
         core.appendChild(svg);
-        const sub = this._el("div", "tm-sub"); el.appendChild(sub);
         paint = (tr) => {
           name.textContent = tr.name ?? "";
           const v = Math.max(0, Math.min(slices, Math.trunc(Number(tr.value) || 0)));
           segs.forEach((sg, i) => sg.classList.toggle("fill", i < v));
-          sub.textContent = `${v}/${slices}`;
           el.classList.toggle("complete", v >= slices);
         };
         break;
@@ -432,6 +431,13 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const L = k => game.i18n.localize(k);
     const items = [];
     items.push({ icon: "fa-gear", label: L("GLCT.tracker.edit"), run: () => this._editTracker(t.id) });
+    if (t.type !== "separator") {
+      items.push({
+        icon: "fa-up-right-and-down-left-from-center",
+        label: L(t.prominent ? "GLCT.tracker.ctx.unpromote" : "GLCT.tracker.ctx.promote"),
+        run: () => TrackerStore.setProminent(t.id, !t.prominent)
+      });
+    }
     items.push({
       icon: t.visibleToPlayers ? "fa-eye-slash" : "fa-eye",
       label: L(t.visibleToPlayers ? "GLCT.tracker.ctx.hide" : "GLCT.tracker.ctx.show"),

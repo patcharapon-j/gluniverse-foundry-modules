@@ -597,6 +597,25 @@
 .glct-trk-skin .trow .nm{font-size:11px;letter-spacing:.03em;text-transform:uppercase;font-weight:700;
   color:#eaeffa;text-shadow:0 0 10px var(--glowsoft);min-width:0;max-width:200px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A GM-marked Prominent tracker becomes the dock's visual hero on every client.
+   Its larger geometry is intrinsic (not transformed), so hit targets, drag order,
+   viewport clamping and the rows below it all continue to use honest dimensions. */
+.glct-trk-skin .trow.prominent{height:56px;gap:9px;padding:0 11px 0 8px;
+  background:linear-gradient(90deg,rgba(255,255,255,.09),rgba(255,255,255,.035) 62%,transparent);
+  box-shadow:inset 4px 0 0 rgba(255,255,255,.72),inset 0 0 30px rgba(255,255,255,.07),0 0 16px rgba(255,255,255,.10)}
+.glct-trk-skin .trow.prominent::before{opacity:.9}
+.glct-trk-skin .trow.prominent .nm{font-size:15px;max-width:280px;letter-spacing:.065em}
+.glct-trk-skin .trow.prominent .reeldig{font-size:30px}
+.glct-trk-skin .trow.prominent .t-point .reelmax,
+.glct-trk-skin .trow.prominent .t-pool .reelmax{font-size:13px}
+.glct-trk-skin .trow.prominent .t-clock{gap:10px}
+.glct-trk-skin .trow.prominent .t-clock .piewrap{width:46px;height:46px}
+.glct-trk-skin .trow.prominent .t-clock svg.pie{width:46px;height:46px}
+.glct-trk-skin .trow.prominent .t-task .titles .tt{font-size:15px}
+.glct-trk-skin .trow.prominent .t-task .titles .st{font-size:10px}
+.glct-trk-skin .trow.prominent .boxrow{gap:3px}
+.glct-trk-skin .trow.prominent .box{width:19px;height:19px}
+.glct-trk-skin .trow.prominent .rovl .ot{font-size:18px}
 .glct-trk-skin .trow.hiddenfromplayers::after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;
   background:repeating-linear-gradient(180deg,var(--gl-signal) 0 4px,transparent 4px 8px);opacity:.7}
 .glct-trk-skin .trow.dragging{background:rgba(255,255,255,.06);box-shadow:0 14px 30px rgba(0,0,0,.6),0 0 26px var(--glow);z-index:30}
@@ -688,8 +707,6 @@
 @keyframes glct-segpop{0%{fill:#fff;filter:drop-shadow(0 0 9px #fff)}100%{}}
 .glct-trk-skin .t-clock .pie .ring{fill:none;stroke:rgba(255,255,255,.18);stroke-width:1.6}
 .glct-trk-skin .t-clock .nm{flex:1}
-.glct-trk-skin .t-clock .frac{font-family:var(--clock-font);font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;color:#dfe6f3;flex:none}
-.glct-trk-skin .t-clock .frac b{color:#fff}
 
 /* POOL — layout/number styling shared with POINT above; only the "players may
    roll" tag is pool-specific. */
@@ -739,11 +756,8 @@
 .glct-trk-skin .trow.badclock::before{background:linear-gradient(90deg,color-mix(in srgb,var(--gl-hazard) 22%,transparent),transparent 62%);opacity:.7}
 .glct-trk-skin .trow.badclock .nm{color:#e8a39d}
 .glct-trk-skin .trow.badclock .t-clock .pie .ring{stroke:color-mix(in srgb,var(--gl-hazard) 40%,transparent)}
-.glct-trk-skin .trow.badclock .t-clock .frac{color:#e8a39d}
-.glct-trk-skin .trow.badclock .t-clock .frac b{color:#ffd9d4}
 /* Compact card keeps the red identity. */
 .glct-trk-skin .trow.badclock .tmini .tm-name{color:#e8a39d}
-.glct-trk-skin .trow.badclock .tmini.complete .tm-sub{color:#ff9a8f}
 
 /* SEPARATOR — a purely visual divider, ~1/3 the height of a normal row */
 .glct-trk-skin .trow.sep{min-height:0;height:11px;gap:6px}
@@ -775,6 +789,9 @@
   box-shadow:0 4px 10px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12)}
 .glct-trk-skin .trk-dock.compact .trow + .trow{border-top:1px solid var(--edge)}
 .glct-trk-skin .trk-dock.compact .trow:hover{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 42%),linear-gradient(160deg,#1f283a,#0b0f17)}
+.glct-trk-skin .trk-dock.compact .trow.prominent{width:68px;height:88px;
+  background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,0) 46%),linear-gradient(160deg,#202938,#0b0f17);
+  box-shadow:inset 4px 0 0 rgba(255,255,255,.72),0 9px 22px rgba(0,0,0,.64),0 0 18px rgba(255,255,255,.12)}
 .glct-trk-skin .trk-dock.compact .trow::before{opacity:.32}
 .glct-trk-skin .trk-dock.compact .trow > *:not(.tmini){opacity:0;pointer-events:none;transition:opacity .25s ease}
 .glct-trk-skin .trk-dock.compact .trow .tmini{display:flex}
@@ -802,6 +819,10 @@
   line-height:1.1;max-width:100%;white-space:normal;overflow:hidden;word-break:break-word;hyphens:auto;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .glct-trk-skin .tmini .tm-core{display:grid;place-items:center;flex:0 1 auto;min-height:0}
+.glct-trk-skin .trow.prominent .tmini{padding:8px 6px 6px}
+.glct-trk-skin .trow.prominent .tmini .tm-name{font-size:9px;line-height:1.18}
+.glct-trk-skin .trow.prominent .tmini .tm-val{font-size:19px}
+.glct-trk-skin .trow.prominent .tmini .tm-val.big{font-size:25px}
 .glct-trk-skin .tmini .tm-val{font-family:var(--clock-font);font-weight:800;font-size:12px;line-height:1;color:#fff;text-shadow:0 0 12px var(--glowsoft)}
 .glct-trk-skin .tmini .tm-val.big{font-size:15px;transition:color .3s ease}
 .glct-trk-skin .tmini .tm-val i{font-style:normal;color:#8b94a8;font-size:.62em}
@@ -809,10 +830,8 @@
 .glct-trk-skin .tmini .tm-max{font-family:var(--clock-font);font-weight:700;font-size:7px;line-height:1;color:#fff;opacity:.3;margin-top:1px}
 .glct-trk-skin .tmini.at-max .tm-val{color:var(--good)}
 .glct-trk-skin .tmini.at-min .tm-val{color:#ff8a7e}
-.glct-trk-skin .tmini .tm-sub{flex:none;font-family:var(--clock-font);font-variant-numeric:tabular-nums;font-size:7px;font-weight:700;color:#cfd7e6;line-height:1}
-.glct-trk-skin .tmini .tm-sub b{color:#fff}
 .glct-trk-skin .tmini svg.pie{display:block}
-.glct-trk-skin .tmini.complete .tm-sub,.glct-trk-skin .tmini.full .tm-val b{color:var(--good)}
+.glct-trk-skin .tmini.full .tm-val b{color:var(--good)}
 /* Separator card: a slim vertical hairline. */
 .glct-trk-skin .tmini.sep{justify-content:center}
 .glct-trk-skin .tmini.sep .tm-name,.glct-trk-skin .tmini.sep .tm-core{display:none}
