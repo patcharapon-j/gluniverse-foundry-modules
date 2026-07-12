@@ -1,19 +1,9 @@
 import { MODULE_ID, getSetting } from './settings.js';
-import { escapeHTML } from '../../core/util.mjs';
+import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
 
 const SHOW_DURATION = 400;
 const HIDE_DURATION = 350;
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
-
-function escapeAttr(value) {
-    return escapeHTML(value);
-}
-
-function clampNumber(value, min, max, fallback) {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return fallback;
-    return Math.min(Math.max(number, min), max);
-}
 
 function actorImage(actor) {
     return actor?.image || DEFAULT_ACTOR_IMAGE;

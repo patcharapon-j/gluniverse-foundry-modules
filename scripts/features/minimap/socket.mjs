@@ -3,7 +3,7 @@
  *
  * Thin wrappers over the suite's shared dispatcher. Every payload is already
  * tagged with `__feature: "minimap"` by `emitSocket`; we add a `type` (see MSG)
- * and the originating user id.
+ * and the dispatcher supplies the originating user id separately.
  */
 
 import { onSocket, emitSocket } from "../../core/socket.mjs";

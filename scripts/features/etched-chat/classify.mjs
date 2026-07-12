@@ -2,8 +2,7 @@
  * GLUniverse Suite — Etched-Glass Chat Theme: tier resolution.
  *
  * The single deterministic function that maps one PF2e chat message to exactly
- * one Treatment Tier (and, when fractured, exactly one fracture color). See
- * specs/002-etched-chat-theme/contracts/tier-resolution.md.
+ * one Treatment Tier (and, when fractured, exactly one fracture color).
  *
  * Pure with respect to the message + live actor/token state: no DOM, no side
  * effects, no persistence. Total — always returns a valid tier; never throws.

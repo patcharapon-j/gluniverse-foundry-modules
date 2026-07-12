@@ -8,64 +8,12 @@
    Shared tokens use the --gl-* namespace; module-local --glucargo-* aliases
    point at them so the existing markup keeps working.
    ═══════════════════════════════════════════════════════════════════════ */
-@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=Share+Tech+Mono&display=swap');
-
 /* ─── Canonical GL tokens (§2, §6.1) ────────────────────────────────── */
 :root {
-  /* Ink ramp — surfaces */
-  --gl-ink-0: #02070b;
-  --gl-ink-1: #080b11;
-  --gl-ink-2: #0b0f17;
-  --gl-ink-3: #161d2c;
-
-  /* Text */
-  --gl-text: #eef1f7;
-  --gl-text-bright: #f3fbff;
-  --gl-text-dim: #98a2b6;
-  --gl-text-faint: rgba(243, 251, 255, 0.38);
-
-  /* Lines & rims */
-  --gl-hair: rgba(255, 255, 255, 0.08);
-  --gl-edge: rgba(255, 255, 255, 0.13);
-  --gl-line-strong: rgba(244, 252, 255, 0.55);
-
-  /* Fixed semantic accents */
-  --gl-signal: #ffd24a;
-  --gl-signal-hot: #ffe070;
-  --gl-cyan: #5eeaff;
-  --gl-hazard: #ff4a52;
-  --gl-good: #5fdb92;
-  --gl-violet: #b497ff;
-  --gl-mission: #37d99a;
-
-  /* Dynamic accent channel — cargo grid reads cyan as its system identity */
-  --gl-accent: var(--gl-cyan);
-
-  /* Derived glows (always color-mix, never hand-picked) */
-  --gl-glow: color-mix(in srgb, var(--gl-accent) 45%, transparent);
-  --gl-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
-
-  /* Holographic ramp (premium single-element highlight) */
-  --gl-holo-a: var(--gl-accent);
-  --gl-holo-b: var(--gl-violet);
-  --gl-holo-c: #ff66b3;
-
   /* Typography — two voices, strict roles (§5). Derive from the canonical
      Etched Glass tokens (gl-tokens.css) so the suite has one type source. */
   --gl-font-display: var(--gl-display);
   --gl-font-tech: var(--gl-tech);
-
-  /* Motion (§6.1) */
-  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
-  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
-  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
-  --gl-d-quick: 180ms;
-  --gl-d-move: 420ms;
-  --gl-d-reveal: 620ms;
-  --gl-d-splash: 720ms;
-  --gl-breathe: 2.6s;
-  --gl-dread: 3.2s;
 
   /* ── Module-local aliases (keep --glucargo-* markup working) ─────── */
   --glucargo-ink: var(--gl-ink-1);
@@ -78,7 +26,7 @@
   --glucargo-text: var(--gl-text);
   --glucargo-muted: var(--gl-text-dim);
   --glucargo-dim: var(--gl-text-faint);
-  --glucargo-cyan: var(--gl-accent);
+  --glucargo-cyan: var(--gl-cyan);
   --glucargo-green: var(--gl-good);
   --glucargo-red: var(--gl-hazard);
   --glucargo-amber: var(--gl-signal);
@@ -87,8 +35,8 @@
   --glucargo-glow: var(--gl-glow);
   --glucargo-glow-soft: var(--gl-bloom);
 
-  --glucargo-holo-a: var(--gl-holo-a);
-  --glucargo-holo-b: var(--gl-holo-b);
+  --glucargo-holo-a: var(--gl-cyan);
+  --glucargo-holo-b: var(--gl-violet);
   --glucargo-holo-c: var(--gl-holo-c);
 
   --glucargo-font-ui: var(--gl-font-display);

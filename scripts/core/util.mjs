@@ -10,6 +10,12 @@
 /** Clamp `n` into the inclusive range [lo, hi]. */
 export const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
+/** Finite numeric coercion followed by clamp; fallback when coercion fails. */
+export const clampNumber = (value, lo, hi, fallback = lo) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? clamp(number, lo, hi) : fallback;
+};
+
 /** Clamp to [0, 1], coercing non-finite input to 0. */
 export const clamp01 = (n) => Math.max(0, Math.min(1, Number.isFinite(+n) ? +n : 0));
 
@@ -29,3 +35,6 @@ const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'
 
 /** Escape the five HTML-significant characters for safe interpolation into markup. */
 export const escapeHTML = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+
+/** HTML escaping is sufficient for values interpolated inside quoted attributes. */
+export const escapeAttr = escapeHTML;

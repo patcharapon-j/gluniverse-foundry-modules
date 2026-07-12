@@ -43,32 +43,6 @@
 .flatfinder-incapacitation,
 .flatfinder-encounter-budget,
 .flatfinder-apex-badge {
-  --gl-ink-0: #02070b;
-  --gl-ink-1: #080b11;
-  --gl-ink-2: #0b0f17;
-
-  --gl-text: #eef1f7;
-  --gl-text-bright: #f3fbff;
-  --gl-text-dim: #98a2b6;
-  --gl-text-faint: rgba(243, 251, 255, 0.38);
-
-  --gl-hair: rgba(255, 255, 255, 0.08);
-  --gl-edge: rgba(255, 255, 255, 0.13);
-  --gl-line-strong: rgba(244, 252, 255, 0.55);
-
-  --gl-signal: #ffd24a;
-  --gl-signal-hot: #ffe070;
-  --gl-cyan: #5eeaff;
-  --gl-hazard: #ff4a52;
-  --gl-good: #5fdb92;
-  --gl-violet: #b497ff;
-  --gl-holo-c: #ff66b3;
-
-  --gl-display: "Oxanium", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --gl-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
-
-  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
 }
 
 /* ===========================================================================
@@ -327,7 +301,7 @@
    prepends one banner and tints one control, never touching the system layout.
    =========================================================================== */
 .flatfinder-apex-sheet {
-  --ff-apex: #ffd24a;
+  --ff-apex: var(--gl-signal);
 }
 
 /* The crown control in the titlebar tints amber so the Apex state is obvious.
@@ -338,13 +312,7 @@
 
 /* Etched "APEX" emblem banner — GL Universe glass slab, signal-amber accent. */
 .flatfinder-apex-emblem {
-  --gl-ink-1: #080b11;
-  --gl-text-bright: #f3fbff;
-  --gl-text-dim: #98a2b6;
-  --gl-edge: rgba(255, 255, 255, 0.13);
-  --gl-display: "Oxanium", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --gl-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
-  --ff-apex: #ffd24a;
+  --ff-apex: var(--gl-signal);
 
   position: relative;
   z-index: 1;

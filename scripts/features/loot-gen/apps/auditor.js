@@ -10,6 +10,7 @@
 
 import { MODULE_ID, FEATURE_ID, SETTINGS, HOOKS, SEVERITY } from "../const.js";
 import { featurePath } from "../../../core/const.mjs";
+import { safeSetting } from "../settings-util.js";
 import { buildReport } from "../auditor/health-check.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -197,10 +198,6 @@ export class AuditorDashboard extends HandlebarsApplicationMixin(ApplicationV2) 
     }, 400);
     this._savePos(position);
   }
-}
-
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }
 
 /** Format a gp amount with thin thousands separators. */

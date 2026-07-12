@@ -10,6 +10,7 @@
  */
 
 import { MODULE_ID, SETTINGS } from "../const.js";
+import { safeSetting } from "../settings-util.js";
 import { logLlmCall } from "./llm-log.js";
 import { getAdapter } from "../systems/registry.js";
 
@@ -146,10 +147,6 @@ function pickTags(tags) {
 /** Trim and hard-cap flavor length so a runaway model can't bloat a chat card. */
 function clean(s) {
   return String(s ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
-}
-
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }
 
 /** Human-friendly one-liner for the call log (distinguishes a client-side abort). */

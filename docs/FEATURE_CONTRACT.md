@@ -40,6 +40,19 @@ with the suite registry. This document is the binding contract for that port.
    `glucargo-`, `insight-`, etc.). They do not collide. CSS files move to
    `styles/<featureId>.css` (may be multiple).
 
+### Theme interface
+
+- `styles/gl-tokens.css` owns every canonical `--gl-*` value. Feature CSS must
+  consume those tokens and must not redeclare the ink, text, line, semantic
+  accent, typography, motion, radius, or material tokens.
+- Set only `--gl-accent` on a feature root or state selector. Derived surfaces,
+  glow, and bloom come from `--gl-surface*`, `--gl-glow`, and `--gl-bloom`.
+- Reuse `.gl-glass`, `.gl-btn`, `.gl-field`, `.gl-well`, `.gl-tech-label`, and
+  `.gl-divider` where markup permits. Feature-local aliases must point to the
+  canonical semantic tokens.
+- Retheming must be possible by changing canonical values in `gl-tokens.css`;
+  feature styles may keep domain colors only when they carry distinct meaning.
+
 ## The adapter (`index.mjs`)
 
 ```js

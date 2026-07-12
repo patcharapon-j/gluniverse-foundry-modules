@@ -13,51 +13,9 @@
    1. Shared GL tokens (§2, §6.1)
    --------------------------------------------------------------------------- */
 :root {
-  /* Ink ramp (surfaces) */
-  --gl-ink-0: #02070b;
-  --gl-ink-1: #080b11;
-  --gl-ink-2: #0b0f17;
-  --gl-ink-3: #161d2c;
-
-  /* Text */
-  --gl-text: #eef1f7;
-  --gl-text-bright: #f3fbff;
-  --gl-text-dim: #98a2b6;
-  --gl-text-faint: rgba(243, 251, 255, 0.38);
-
-  /* Lines & rims */
-  --gl-hair: rgba(255, 255, 255, 0.08);
-  --gl-edge: rgba(255, 255, 255, 0.13);
-  --gl-line-strong: rgba(244, 252, 255, 0.55);
-
-  /* Fixed semantic accents */
-  --gl-signal: #ffd24a;
-  --gl-signal-hot: #ffe070;
-  --gl-cyan: #5eeaff;
-  --gl-hazard: #ff4a52;
-  --gl-good: #5fdb92;
-  --gl-violet: #b497ff;
-  --gl-mission: #37d99a;
-
-  /* Dynamic accent channel — context sets this per component */
-  --gl-accent: var(--gl-signal);
-
   /* Type voices — derive from the canonical Etched Glass tokens. */
   --gl-font-display: var(--gl-display);
   --gl-font-tech: var(--gl-tech);
-
-  /* Motion tokens (§6.1) */
-  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
-  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
-  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
-
-  --gl-d-quick: 180ms;
-  --gl-d-move: 420ms;
-  --gl-d-reveal: 620ms;
-  --gl-d-splash: 720ms;
-  --gl-breathe: 2.6s;
-  --gl-dread: 3.2s;
 
   /* Cinematic-tier multipliers (overridden by body.glddf-motion-* below) */
   --glddf-motion-scale: 1;

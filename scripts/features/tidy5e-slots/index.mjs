@@ -9,7 +9,10 @@
 
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
-import { registerSettings, onInit, onReady, api } from "./module.js";
+import { registerSettings } from "./settings.js";
+
+let runtimePromise = null;
+const loadRuntime = () => runtimePromise ??= import("./module.js");
 
 const OLD_ID = "gluniverse-tidy-5e-inventory-slots";
 const KEY_PREFIX = "tidy.";
@@ -59,12 +62,15 @@ Suite.register({
     registerSettings();
   },
 
-  onInit() {
-    onInit();
+  async onInit() {
+    const runtime = await loadRuntime();
+    this.api = runtime.api;
+    runtime.onInit();
   },
 
-  onReady() {
-    onReady();
+  async onReady() {
+    const runtime = await loadRuntime();
+    runtime.onReady();
   },
 
   legacy: {
@@ -106,5 +112,5 @@ Suite.register({
     },
   },
 
-  api,
+  api: null,
 });

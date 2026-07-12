@@ -1,4 +1,7 @@
 import { LOCALIZATION_FALLBACKS } from "./constants.mjs";
+import { clamp, escapeHTML } from "../../core/util.mjs";
+
+export { clamp, escapeHTML };
 
 // Pure, framework-light helpers: localization, formatting, escaping, math.
 
@@ -50,21 +53,8 @@ export function modulo(value, divisor) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-export function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
 export function wait(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
-}
-
-export function escapeHTML(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 export function escapeAttr(value) {

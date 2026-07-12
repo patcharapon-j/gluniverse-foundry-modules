@@ -26,6 +26,7 @@
 import { SUITE_ID, SETTING_MODULE_CONFIG, warn, err } from "./const.mjs";
 
 const _features = [];
+const _availabilityStack = new Set();
 
 export const Suite = {
   /** Register a feature definition. Order here drives UI order. */
@@ -38,6 +39,26 @@ export const Suite = {
 
   all() {
     return _features.slice();
+  },
+
+  /** Validate the completed roster once before lifecycle execution. */
+  validate() {
+    const known = new Set(_features.map((feature) => feature.id));
+    const visiting = new Set();
+    const visited = new Set();
+    const visit = (feature) => {
+      if (visited.has(feature.id)) return;
+      if (visiting.has(feature.id)) throw new Error(`Cyclic feature dependency at "${feature.id}".`);
+      visiting.add(feature.id);
+      for (const id of this._list(feature.requiresFeature)) {
+        if (!known.has(id)) throw new Error(`Feature "${feature.id}" requires unknown feature "${id}".`);
+        visit(this.get(id));
+      }
+      visiting.delete(feature.id);
+      visited.add(feature.id);
+    };
+    for (const feature of _features) visit(feature);
+    return true;
   },
 
   get(id) {
@@ -55,17 +76,26 @@ export const Suite = {
   available(def) {
     if (typeof def === "string") def = this.get(def);
     if (!def) return false;
-    if (def.system) {
-      const need = this._list(def.system);
-      if (!need.includes(game.system?.id)) return false;
+    if (_availabilityStack.has(def.id)) {
+      warn(`Cyclic feature dependency detected at "${def.id}".`);
+      return false;
     }
-    for (const modId of def.requires ?? []) {
-      if (!game.modules.get(modId)?.active) return false;
+    _availabilityStack.add(def.id);
+    try {
+      if (def.system) {
+        const need = this._list(def.system);
+        if (!need.includes(game.system?.id)) return false;
+      }
+      for (const modId of def.requires ?? []) {
+        if (!game.modules.get(modId)?.active) return false;
+      }
+      for (const featId of this._list(def.requiresFeature)) {
+        if (!this.enabled(featId)) return false;
+      }
+      return true;
+    } finally {
+      _availabilityStack.delete(def.id);
     }
-    for (const featId of this._list(def.requiresFeature)) {
-      if (!this.enabled(featId)) return false;
-    }
-    return true;
   },
 
   /** Reason a feature is unavailable (for the config UI), or null. */
@@ -151,7 +181,10 @@ export const Suite = {
       const fn = def[phase];
       if (typeof fn !== "function") continue;
       try {
+        const started = performance.now();
         await fn.call(def);
+        const elapsed = performance.now() - started;
+        if (elapsed > 500) warn(`${phase} for "${def.id}" took ${Math.round(elapsed)}ms.`);
       } catch (e) {
         err(`Feature "${def.id}" failed during ${phase}:`, e);
       }

@@ -13,6 +13,7 @@
 import { MODULE_ID, SETTINGS, SEVERITY } from "../../const.js";
 import { buildReadout, worstSeverity } from "../grade.js";
 import { expectedMagic, RARITY_ORDER, DND5E_MAX_LEVEL } from "./tables.js";
+import { safeSetting } from "../../settings-util.js";
 
 /** dnd5e physical (ownable, priceable) item types. */
 const PHYSICAL_TYPES = new Set([
@@ -212,9 +213,6 @@ export function progressionAudit(actor, level) {
 
 export { PHYSICAL_TYPES };
 
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
-}
 function fromUuidSync(uuid) {
   try { return globalThis.fromUuidSync?.(uuid) ?? null; } catch { return null; }
 }
