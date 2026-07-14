@@ -45,9 +45,6 @@ export function injectItemUltimateToggle(app, html) {
   if (!root || !game.user?.isGM || !isEligibleItem(item)) return;
   if (root.querySelector(".glult-item-toggle")) return;
 
-  const navigation = root.querySelector("nav.sheet-navigation, .sheet-navigation");
-  const host = navigation?.parentElement ?? root.querySelector(".window-content, form") ?? root;
-
   const selected = isUltimateItem(item);
   const group = document.createElement("div");
   group.className = "glult-item-toggle";
@@ -75,8 +72,13 @@ export function injectItemUltimateToggle(app, html) {
       input.disabled = false;
     }
   });
-  if (navigation) host.insertBefore(group, navigation);
-  else host.prepend(group);
+  // Anchor the toggle at the top of the tabbed sheet body. Older PF2e item
+  // sheets keep the tab navigation as a full-width block, but the redesigned
+  // ability sheet nests it inside the header's flex row — inserting there
+  // stretched the toggle into a giant vertical pill floating over the banner.
+  const body = root.querySelector("section.sheet-body, .sheet-body");
+  const host = body ?? root.querySelector(".window-content, form") ?? root;
+  host.prepend(group);
 }
 
 export function decorateNpcSheet(app, html) {

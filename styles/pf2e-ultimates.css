@@ -3,8 +3,13 @@
 .pf2e.item.sheet .glult-item-toggle,
 .application.pf2e.item .glult-item-toggle {
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: flex-start;
   justify-content: flex-end;
   box-sizing: border-box;
+  width: 100%;
+  grid-column: 1 / -1;
   margin: 2px 0 4px;
   padding: 0 4px;
   color: var(--gl-text-dim);
@@ -16,7 +21,9 @@
 
 .glult-item-toggle label {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
+  align-self: center;
   gap: 4px;
   padding: 2px 7px 2px 3px;
   border: 1px solid var(--gl-edge);
