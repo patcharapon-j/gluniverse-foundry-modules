@@ -24,3 +24,4 @@ import "./etched-chat/index.mjs";
 import "./timer/index.mjs";
 import "./mythic-gme/index.mjs";
 import "./oracles/index.mjs";
+import "./pf2e-ultimates/index.mjs";

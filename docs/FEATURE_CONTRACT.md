@@ -143,3 +143,4 @@ Suite.register({
 | pf2e-flatten       | flatten    | pf2e              | —               | off     |
 | critical           | crit       | ["pf2e","dnd5e"]  | —               | off     |
 | timer              | timer      | null              | —               | off     |
+| pf2e-ultimates     | ult        | pf2e              | —               | off     |
