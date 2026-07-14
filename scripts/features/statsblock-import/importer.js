@@ -1,4 +1,5 @@
 import { escapeHTML as escapeHtml } from "../../core/util.mjs";
+import { warn } from "../../core/const.mjs";
 
 // Ported into the GLUniverse Suite. Everything that used to live under the
 // standalone package id now uses the single suite id, and every settings/flag
@@ -296,9 +297,10 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     const actorData = await buildActorSource(this.#parsed.npc, this.#source);
     actorData.folder = folder?.id ?? null;
     const actor = await Actor.create(actorData, { renderSheet: false });
-    await importItems(actor, this.#parsed.npc, { mode: "appendOnly" });
+    const failures = await importItems(actor, this.#parsed.npc, { mode: "appendOnly" });
     await actor.sheet.render(true);
     ui.notifications.info(game.i18n.format(actor.type === "hazard" ? "GLSBI.notify.createdHazard" : "GLSBI.notify.createdNpc", { name: actor.name }));
+    notifyImportFailures(failures);
   }
 
   async #updateActor() {
@@ -317,12 +319,17 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
       const actorData = await buildActorSource(this.#parsed.npc, this.#source);
       delete actorData.name;
       delete actorData.type;
+      // Updating an existing actor must not disturb art the GM has already set:
+      // leave the actor image and prototype token (portrait/token) untouched.
+      delete actorData.img;
       delete actorData.prototypeToken;
       await actor.update(actorData);
     }
-    if (this.#updateMode !== "coreOnly") await importItems(actor, this.#parsed.npc, { mode: this.#updateMode });
+    let failures = [];
+    if (this.#updateMode !== "coreOnly") failures = await importItems(actor, this.#parsed.npc, { mode: this.#updateMode });
     await actor.sheet.render(true);
     ui.notifications.info(game.i18n.format("GLSBI.notify.updated", { actorType: actor.type, name: actor.name }));
+    notifyImportFailures(failures);
   }
 
   async #exportSelectedActor() {
@@ -769,14 +776,14 @@ function buildPrototypeToken(npc, actorType, art) {
   return token;
 }
 
+// Import all embedded items for an NPC. Building or creating any single item is
+// isolated so one malformed entry can't abort the whole import — failures are
+// collected and returned as a list of labels for the caller to surface.
 async function importItems(actor, npc, { mode = "replaceMatching" } = {}) {
-  const sources = [];
-  sources.push(...npc.attacks.map(buildMeleeItem));
-  sources.push(...npc.actions.map(buildActionItem));
-  sources.push(...(await Promise.all(npc.inventory.map(buildInventoryItem))));
-  sources.push(...npc.effects.map(buildEffectItem));
+  const failures = [];
+  const sources = await buildItemSources(npc, failures);
 
-  const spellEntrySources = npc.spellcasting.map(buildSpellcastingEntryItem);
+  const spellEntrySources = safeMap(npc.spellcasting, buildSpellcastingEntryItem);
   const sourceKeys = new Set([...sources, ...spellEntrySources].map(itemKey));
   const imported = actor.items.filter((item) => item.getFlag(MODULE_ID, FLAG_IMPORTED));
 
@@ -793,8 +800,81 @@ async function importItems(actor, npc, { mode = "replaceMatching" } = {}) {
 
   const existingKeys = new Set(actor.items.filter((item) => item.getFlag(MODULE_ID, FLAG_IMPORTED)).map(itemKey));
   const filteredSources = mode === "appendOnly" ? sources.filter((source) => !existingKeys.has(itemKey(source))) : sources;
-  if (filteredSources.length) await actor.createEmbeddedDocuments("Item", filteredSources);
-  await importSpellcasting(actor, npc.spellcasting, { mode });
+  await createItemsResilient(actor, filteredSources, failures);
+  await importSpellcasting(actor, npc.spellcasting, { mode, failures });
+  return failures;
+}
+
+// Build every non-spell item source for an NPC, isolating each builder so a
+// single bad entry doesn't reject the whole batch (unlike a bare Promise.all).
+async function buildItemSources(npc, failures) {
+  const sources = [];
+  const buildEach = (list, builder, kind) => {
+    for (const entry of list) {
+      try {
+        sources.push(builder(entry));
+      } catch (error) {
+        recordItemFailure(failures, entry?.name, kind, error);
+      }
+    }
+  };
+  buildEach(npc.attacks, buildMeleeItem, "attack");
+  buildEach(npc.actions, buildActionItem, "action");
+  for (const item of npc.inventory) {
+    try {
+      sources.push(await buildInventoryItem(item));
+    } catch (error) {
+      recordItemFailure(failures, item?.name, "inventory", error);
+    }
+  }
+  buildEach(npc.effects, buildEffectItem, "effect");
+  return sources;
+}
+
+// Create embedded items, falling back to one-at-a-time creation when a bulk
+// create is rejected so a single invalid document can't discard the whole batch.
+async function createItemsResilient(actor, sources, failures) {
+  if (!sources.length) return [];
+  try {
+    return await actor.createEmbeddedDocuments("Item", sources);
+  } catch (_bulkError) {
+    const created = [];
+    for (const source of sources) {
+      try {
+        const [doc] = await actor.createEmbeddedDocuments("Item", [source]);
+        if (doc) created.push(doc);
+      } catch (error) {
+        recordItemFailure(failures, source?.name, source?.type, error);
+      }
+    }
+    return created;
+  }
+}
+
+// Map a list through a builder, dropping (not throwing on) any entry that fails.
+// Used where the result only feeds key computation; real failures are recorded
+// on the import path itself.
+function safeMap(list, builder) {
+  const out = [];
+  for (const entry of list) {
+    try {
+      out.push(builder(entry));
+    } catch (_error) {
+      // Intentionally ignored here.
+    }
+  }
+  return out;
+}
+
+function recordItemFailure(failures, name, kind, error) {
+  const label = name || game.i18n.localize("GLSBI.notify.unnamedItem");
+  failures.push(label);
+  warn(`statsblock-import: skipped ${kind || "item"} "${label}" during import`, error);
+}
+
+function notifyImportFailures(failures) {
+  if (!failures?.length) return;
+  ui.notifications?.warn(game.i18n.format("GLSBI.notify.itemsFailed", { count: failures.length, names: failures.join(", ") }));
 }
 
 function buildMeleeItem(attack) {
@@ -898,27 +978,38 @@ function buildSpellcastingEntryItem(entry) {
   });
 }
 
-async function importSpellcasting(actor, entries, { mode = "replaceMatching" } = {}) {
+async function importSpellcasting(actor, entries, { mode = "replaceMatching", failures = [] } = {}) {
   const existingKeys = new Set(actor.items.filter((item) => item.getFlag(MODULE_ID, FLAG_IMPORTED)).map(itemKey));
   for (const entry of entries) {
-    const entrySource = buildSpellcastingEntryItem(entry);
-    if (mode === "appendOnly" && existingKeys.has(itemKey(entrySource))) continue;
-    const [createdEntry] = await actor.createEmbeddedDocuments("Item", [entrySource]);
+    let createdEntry;
+    try {
+      const entrySource = buildSpellcastingEntryItem(entry);
+      if (mode === "appendOnly" && existingKeys.has(itemKey(entrySource))) continue;
+      [createdEntry] = await actor.createEmbeddedDocuments("Item", [entrySource]);
+    } catch (error) {
+      recordItemFailure(failures, entry?.name, "spellcasting", error);
+      continue;
+    }
+    if (!createdEntry) continue;
     const spellSources = [];
     for (const spell of entry.spells) {
-      const source = await spellSourceFromCompendium(spell.name);
-      if (!source) continue;
-      delete source._id;
-      source.system.location = buildSpellLocation(spell, createdEntry.id);
-      if (Number.isInteger(spell.level)) source.system.level = { value: spell.level };
-      source.flags ??= {};
-      source.flags[MODULE_ID] = foundry.utils.mergeObject(
-        source.flags[MODULE_ID] ?? {},
-        suiteFlags({ [FLAG_IMPORTED]: true, [`${PREFIX}originalName`]: spell.name, [`${PREFIX}frequency`]: spell.frequency })[MODULE_ID]
-      );
-      spellSources.push(source);
+      try {
+        const source = await spellSourceFromCompendium(spell.name);
+        if (!source) continue;
+        delete source._id;
+        source.system.location = buildSpellLocation(spell, createdEntry.id);
+        if (Number.isInteger(spell.level)) source.system.level = { value: spell.level };
+        source.flags ??= {};
+        source.flags[MODULE_ID] = foundry.utils.mergeObject(
+          source.flags[MODULE_ID] ?? {},
+          suiteFlags({ [FLAG_IMPORTED]: true, [`${PREFIX}originalName`]: spell.name, [`${PREFIX}frequency`]: spell.frequency })[MODULE_ID]
+        );
+        spellSources.push(source);
+      } catch (error) {
+        recordItemFailure(failures, spell?.name, "spell", error);
+      }
     }
-    if (spellSources.length) await actor.createEmbeddedDocuments("Item", spellSources);
+    await createItemsResilient(actor, spellSources, failures);
   }
 }
 

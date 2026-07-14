@@ -29,6 +29,8 @@
   "GLSBI.notify.parseFirst": "Parse the stat block first.",
   "GLSBI.notify.fixErrors": "Fix parser errors before importing.",
   "GLSBI.notify.spellNotFound": "Spell not found in PF2e compendium: {name}",
+  "GLSBI.notify.unnamedItem": "unnamed item",
+  "GLSBI.notify.itemsFailed": "{count} item(s) could not be imported and were skipped: {names}",
 
   "GLSBI.dialog.kicker": "GL UNIVERSE // STAT BLOCK INTAKE",
   "GLSBI.dialog.heading": "PF2e NPC Stat Block Importer",
