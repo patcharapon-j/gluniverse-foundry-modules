@@ -117,23 +117,42 @@ mat2 glultRotate(float angle) {
   return mat2(c, -s, s, c);
 }
 
+/* Piecewise-LINEAR value noise: hard kinks at integer stations, so bolts
+   read as angular zigzags instead of smooth wobbles. */
+float glultZig(float x, float t) {
+  float i = floor(x);
+  float f = fract(x);
+  float a = glultHash(vec2(i, t)) - 0.5;
+  float b = glultHash(vec2(i + 1.0, t)) - 0.5;
+  return mix(a, b, f);
+}
+
 float glultBolt(vec2 p, float angle, float seed) {
   p = glultRotate(angle) * p;
   float cycle = uTime * 1.35 + seed * 17.0 + uSeed;
   float tick = floor(cycle);
   float age = fract(cycle);
-  float jag = (glultNoise(vec2(p.x * 15.0 + seed, tick)) - 0.5) * 0.075;
-  jag += sin(p.x * 49.0 + tick * 1.3) * 0.012;
-  float trunk = exp(-abs(p.y - jag) * 155.0);
-  float reach = smoothstep(0.16, 0.21, p.x) * (1.0 - smoothstep(0.38, 0.49, p.x));
-  float event = step(0.76, glultHash(vec2(tick, seed * 31.7)));
-  float strike = (1.0 - smoothstep(0.0, 0.18, age));
-  float aftershock = exp(-pow((age - 0.34) * 30.0, 2.0)) * 0.48;
-  float flash = event * (strike + aftershock);
-  float branchY = jag + (p.x - 0.24) * (0.33 + seed * 0.12);
-  float branch = exp(-abs(p.y - branchY) * 205.0);
-  branch *= smoothstep(0.22, 0.27, p.x) * (1.0 - smoothstep(0.34, 0.44, p.x));
-  return (trunk * reach + branch * 0.7) * flash;
+
+  float jag = glultZig(p.x * 13.0 + seed * 7.0, tick) * 0.115 * smoothstep(0.1, 0.3, p.x);
+  jag += glultZig(p.x * 31.0 + seed * 3.0, tick + 7.0) * 0.042;
+
+  float core = exp(-abs(p.y - jag) * 250.0);
+  float halo = exp(-abs(p.y - jag) * 58.0) * 0.32;
+  float reach = smoothstep(0.15, 0.20, p.x) * (1.0 - smoothstep(0.40, 0.50, p.x));
+
+  float event = step(0.72, glultHash(vec2(tick, seed * 31.7)));
+  float strike = 1.0 - smoothstep(0.0, 0.14, age);
+  float strobe = mix(0.55, 1.0, step(0.4, glultHash(vec2(tick + floor(age * 26.0), seed * 5.1))));
+  float aftershock = exp(-pow((age - 0.30) * 26.0, 2.0)) * 0.5;
+  float flash = event * (strike * strobe + aftershock);
+
+  float forkBase = 0.21 + glultHash(vec2(tick, seed + 2.0)) * 0.09;
+  float forkY = jag + (p.x - forkBase) * (0.55 + seed * 0.35)
+    + glultZig(p.x * 27.0 + seed, tick + 3.0) * 0.03;
+  float fork = exp(-abs(p.y - forkY) * 270.0);
+  fork *= smoothstep(forkBase, forkBase + 0.035, p.x) * (1.0 - smoothstep(0.35, 0.45, p.x));
+
+  return ((core + halo) * reach + fork * 0.85) * flash;
 }
 
 float glultArc(float r, float a, float radius, float phase, float frequency) {
@@ -148,13 +167,23 @@ void main(void) {
   float a = atan(uv.y, uv.x);
 
   float breathe = 0.92 + 0.08 * sin(uTime * 2.25 + uSeed);
-  float flameNoise = glultFbm(vec2(a * 2.15 - uTime * 0.17 + r * 4.0, r * 16.0 - uTime * 0.72));
-  float curl = sin(a * 6.0 - uTime * 0.52 + r * 22.0);
-  float flameEdge = 0.305 + flameNoise * 0.09 + curl * 0.018;
-  float flame = smoothstep(0.185, 0.235, r) * (1.0 - smoothstep(flameEdge - 0.045, flameEdge, r));
-  flame *= (0.22 + flameNoise * 1.05) * breathe;
 
-  float wisps = pow(glultFbm(vec2(a * 4.0 + uTime * 0.12, r * 22.0 - uTime * 0.84)), 3.2);
+  /* On-fire style flame: ridged noise advected outward + upward forms
+     distinct licking tongues; taller above the sphere, tapered at the tips,
+     with a continuous hot band hugging the rim. */
+  float up = -uv.y;
+  float tongueNoise = glultFbm(vec2(a * 3.1 + uSeed, r * 9.0 - uTime * 1.55 + up * 2.3));
+  float ridged = 1.0 - abs(2.0 * tongueNoise - 1.0);
+  float licks = pow(ridged, 2.4);
+  float flicker = 0.85 + 0.15 * sin(uTime * 7.0 + a * 4.0 + uSeed);
+  float tongueLen = 0.285 + licks * 0.135 * flicker + up * 0.05;
+  float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
+  float flame = smoothstep(0.188, 0.222, r) * taper;
+  flame *= (0.30 + licks * 1.25) * breathe;
+  float flameCore = smoothstep(0.188, 0.215, r) * (1.0 - smoothstep(0.235, 0.275, r))
+    * (0.5 + licks * 0.8) * breathe;
+
+  float wisps = pow(glultFbm(vec2(a * 4.0 + uTime * 0.12, r * 22.0 - uTime * 1.1 + up * 1.6)), 3.2);
   wisps *= smoothstep(0.255, 0.31, r) * (1.0 - smoothstep(0.34, 0.47, r));
 
   float arcs = glultArc(r, a, 0.245, uTime * 0.72 + uSeed, 5.0);
@@ -180,15 +209,15 @@ void main(void) {
   float icon = smoothstep(0.10, 0.62, texture2D(uIcon, vTextureCoord).a) * (1.0 - smoothstep(0.17, 0.198, r));
   float iconAura = smoothstep(0.18, 0.0, r) * 0.24 * breathe;
   float energy = sphereShade + sphereRim + sphereHighlight + iconAura;
-  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + wisps * 1.15;
-  energy += sparks * 1.7 + chargeWave + bolts * 2.15;
+  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9 + wisps * 1.15;
+  energy += sparks * 1.7 + chargeWave + bolts * 2.3;
   float alpha = clamp(energy, 0.0, 0.98) * (1.0 - smoothstep(0.47, 0.5, r));
 
   vec3 deep = uColor * 0.42;
   vec3 bright = min(vec3(1.0), uColor * 1.32 + vec3(0.28));
   vec3 whiteHot = min(vec3(1.0), bright + vec3(0.38));
-  float heat = clamp(sphereHighlight + arcs * 0.45 + flame * 0.32 + sparks + bolts * 1.25, 0.0, 1.0);
-  vec3 color = mix(deep, bright, clamp(sphereDepth + flame * 0.55 + chargeWave, 0.0, 1.0));
+  float heat = clamp(sphereHighlight + arcs * 0.45 + flameCore * 0.9 + flame * 0.18 + sparks + bolts * 1.4, 0.0, 1.0);
+  vec3 color = mix(deep, bright, clamp(sphereDepth + flame * 0.6 + flameCore + chargeWave, 0.0, 1.0));
   color = mix(color, whiteHot, clamp(icon * 0.72 + heat * 0.78, 0.0, 1.0));
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
