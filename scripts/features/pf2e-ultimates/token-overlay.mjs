@@ -157,11 +157,14 @@ void main(void) {
 
   float breathe = 0.92 + 0.08 * sin(uTime * 2.25 + uSeed);
 
-  /* Spiraling on-fire flame: one ridged noise layer sampled along a
-     spiral coordinate, so the tongues wind around the sphere as they
-     rise, over a continuous hot band hugging the rim. */
-  float spiralA = a + r * 11.0 - uTime * 0.9;
-  float tongueNoise = glultNoise(vec2(spiralA * 3.0 + uSeed, r * 7.0 - uTime * 1.3));
+  /* Spiraling on-fire flame. The noise is sampled in a rotated Cartesian
+     frame (rotation grows with radius → spiral) instead of on the atan
+     angle, so there is no wrap seam at the ±PI boundary on the left.
+     Two octaves shape the tongues; slow outward drift keeps it calm. */
+  vec2 sp = glultRotate(r * 9.0 - uTime * 0.3) * uv;
+  vec2 outward = (sp / max(r, 0.05)) * uTime * 0.22;
+  float tongueNoise = glultNoise(sp * 16.0 - outward + vec2(uSeed, 0.0)) * 0.7
+    + glultNoise(sp * 33.0 - outward * 1.6 + vec2(0.0, uSeed)) * 0.3;
   float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
   float tongueLen = 0.29 + licks * 0.125;
   float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
@@ -237,11 +240,15 @@ void main(void) {
 
   float base = exp(-pow((r - 0.335) * 34.0, 2.0)) * 0.5 * breathe;
 
-  /* Same spiraling flame pattern as the gel icon, wound around the ring:
-     ridged noise on a spiral coordinate makes tongues that circle the
-     token as they lick outward. */
-  float spiralA = a + r * 9.0 - uTime * 0.9;
-  float tongueNoise = ringNoise(vec2(spiralA * 3.0 + uSeed, r * 6.0 - uTime * 1.3));
+  /* Same spiraling flame pattern as the gel icon: noise sampled in a
+     rotated Cartesian frame (rotation grows with radius → spiral), which
+     is seamless across the ±PI angle boundary. Two octaves, slow drift. */
+  float rc = cos(r * 7.0 - uTime * 0.25);
+  float rs = sin(r * 7.0 - uTime * 0.25);
+  vec2 sp = mat2(rc, -rs, rs, rc) * uv;
+  vec2 outward = (sp / max(r, 0.05)) * uTime * 0.2;
+  float tongueNoise = ringNoise(sp * 13.0 - outward + vec2(uSeed, 0.0)) * 0.7
+    + ringNoise(sp * 27.0 - outward * 1.6 + vec2(0.0, uSeed)) * 0.3;
   float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
   float tongueLen = 0.355 + licks * 0.075;
   float flame = smoothstep(0.30, 0.335, r) * (1.0 - smoothstep(tongueLen - 0.04, tongueLen, r));
@@ -249,9 +256,9 @@ void main(void) {
   float flameCore = smoothstep(0.30, 0.328, r) * (1.0 - smoothstep(0.345, 0.365, r))
     * (0.5 + licks * 0.8) * breathe;
 
-  float comet = pow(0.5 + 0.5 * sin(a - uTime * 1.7 + uSeed), 18.0) * exp(-abs(r - 0.335) * 70.0) * 1.4;
+  float comet = pow(0.5 + 0.5 * sin(a - uTime * 0.9 + uSeed), 18.0) * exp(-abs(r - 0.335) * 70.0) * 1.4;
 
-  float wavePhase = fract(uTime * 0.3 + fract(uSeed * 0.13));
+  float wavePhase = fract(uTime * 0.2 + fract(uSeed * 0.13));
   float wave = exp(-abs(r - (0.30 + wavePhase * 0.16)) * 90.0) * (1.0 - wavePhase) * 0.5;
 
   float energy = base + flame * 1.1 + flameCore * 0.9 + comet + wave;
