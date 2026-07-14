@@ -100,17 +100,6 @@ float glultNoise(vec2 p) {
   );
 }
 
-float glultFbm(vec2 p) {
-  float value = 0.0;
-  float amplitude = 0.5;
-  for (int i = 0; i < 4; i++) {
-    value += glultNoise(p) * amplitude;
-    p = p * 2.03 + vec2(17.1, 9.2);
-    amplitude *= 0.5;
-  }
-  return value;
-}
-
 mat2 glultRotate(float angle) {
   float c = cos(angle);
   float s = sin(angle);
@@ -168,23 +157,18 @@ void main(void) {
 
   float breathe = 0.92 + 0.08 * sin(uTime * 2.25 + uSeed);
 
-  /* On-fire style flame: ridged noise advected outward + upward forms
-     distinct licking tongues; taller above the sphere, tapered at the tips,
-     with a continuous hot band hugging the rim. */
-  float up = -uv.y;
-  float tongueNoise = glultFbm(vec2(a * 3.1 + uSeed, r * 9.0 - uTime * 1.55 + up * 2.3));
-  float ridged = 1.0 - abs(2.0 * tongueNoise - 1.0);
-  float licks = pow(ridged, 2.4);
-  float flicker = 0.85 + 0.15 * sin(uTime * 7.0 + a * 4.0 + uSeed);
-  float tongueLen = 0.285 + licks * 0.135 * flicker + up * 0.05;
+  /* Spiraling on-fire flame: one ridged noise layer sampled along a
+     spiral coordinate, so the tongues wind around the sphere as they
+     rise, over a continuous hot band hugging the rim. */
+  float spiralA = a + r * 11.0 - uTime * 0.9;
+  float tongueNoise = glultNoise(vec2(spiralA * 3.0 + uSeed, r * 7.0 - uTime * 1.3));
+  float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
+  float tongueLen = 0.29 + licks * 0.125;
   float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
   float flame = smoothstep(0.188, 0.222, r) * taper;
-  flame *= (0.30 + licks * 1.25) * breathe;
+  flame *= (0.30 + licks * 1.2) * breathe;
   float flameCore = smoothstep(0.188, 0.215, r) * (1.0 - smoothstep(0.235, 0.275, r))
     * (0.5 + licks * 0.8) * breathe;
-
-  float wisps = pow(glultFbm(vec2(a * 4.0 + uTime * 0.12, r * 22.0 - uTime * 1.1 + up * 1.6)), 3.2);
-  wisps *= smoothstep(0.255, 0.31, r) * (1.0 - smoothstep(0.34, 0.47, r));
 
   float arcs = glultArc(r, a, 0.245, uTime * 0.72 + uSeed, 5.0);
   arcs += glultArc(r, a, 0.292, -uTime * 0.47 + uSeed * 0.4, 7.0) * 0.72;
@@ -209,7 +193,7 @@ void main(void) {
   float icon = smoothstep(0.10, 0.62, texture2D(uIcon, vTextureCoord).a) * (1.0 - smoothstep(0.17, 0.198, r));
   float iconAura = smoothstep(0.18, 0.0, r) * 0.24 * breathe;
   float energy = sphereShade + sphereRim + sphereHighlight + iconAura;
-  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9 + wisps * 1.15;
+  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9;
   energy += sparks * 1.7 + chargeWave + bolts * 2.3;
   float alpha = clamp(energy, 0.0, 0.98) * (1.0 - smoothstep(0.47, 0.5, r));
 
@@ -228,32 +212,55 @@ uniform float uTime;
 uniform float uSeed;
 uniform vec3 uColor;
 
+float ringHash(vec2 p) {
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + vec2(34.345 + uSeed));
+  return fract(p.x * p.y);
+}
+
+float ringNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(ringHash(i), ringHash(i + vec2(1.0, 0.0)), f.x),
+    mix(ringHash(i + vec2(0.0, 1.0)), ringHash(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+
 void main(void) {
   vec2 uv = vTextureCoord - vec2(0.5);
   float r = length(uv);
   float a = atan(uv.y, uv.x);
   float breathe = 0.9 + 0.1 * sin(uTime * 2.1 + uSeed);
 
-  float base = exp(-pow((r - 0.345) * 34.0, 2.0)) * 0.5 * breathe;
+  float base = exp(-pow((r - 0.335) * 34.0, 2.0)) * 0.5 * breathe;
 
-  float arc1 = exp(-abs(r - 0.345) * 90.0) * smoothstep(-0.2, 0.55, sin(a * 3.0 + uTime * 0.9 + uSeed));
-  float arc2 = exp(-abs(r - 0.375) * 110.0) * smoothstep(-0.1, 0.6, sin(a * 5.0 - uTime * 1.25 + uSeed * 0.7)) * 0.7;
+  /* Same spiraling flame pattern as the gel icon, wound around the ring:
+     ridged noise on a spiral coordinate makes tongues that circle the
+     token as they lick outward. */
+  float spiralA = a + r * 9.0 - uTime * 0.9;
+  float tongueNoise = ringNoise(vec2(spiralA * 3.0 + uSeed, r * 6.0 - uTime * 1.3));
+  float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
+  float tongueLen = 0.355 + licks * 0.075;
+  float flame = smoothstep(0.30, 0.335, r) * (1.0 - smoothstep(tongueLen - 0.04, tongueLen, r));
+  flame *= (0.30 + licks * 1.2) * breathe;
+  float flameCore = smoothstep(0.30, 0.328, r) * (1.0 - smoothstep(0.345, 0.365, r))
+    * (0.5 + licks * 0.8) * breathe;
 
-  float comet = pow(0.5 + 0.5 * sin(a - uTime * 1.7 + uSeed), 18.0) * exp(-abs(r - 0.345) * 70.0) * 1.4;
-  float comet2 = pow(0.5 + 0.5 * sin(a + uTime * 1.1 + 2.4), 24.0) * exp(-abs(r - 0.375) * 90.0) * 0.8;
+  float comet = pow(0.5 + 0.5 * sin(a - uTime * 1.7 + uSeed), 18.0) * exp(-abs(r - 0.335) * 70.0) * 1.4;
 
   float wavePhase = fract(uTime * 0.3 + fract(uSeed * 0.13));
   float wave = exp(-abs(r - (0.30 + wavePhase * 0.16)) * 90.0) * (1.0 - wavePhase) * 0.5;
 
-  float ticks = pow(abs(sin(a * 12.0 + uTime * 0.22 + uSeed)), 60.0) * exp(-abs(r - 0.322) * 130.0) * 0.7;
-
-  float energy = base + arc1 * 0.8 + arc2 + comet + comet2 + wave + ticks;
-  energy *= smoothstep(0.265, 0.30, r) * (1.0 - smoothstep(0.42, 0.5, r));
+  float energy = base + flame * 1.1 + flameCore * 0.9 + comet + wave;
+  energy *= smoothstep(0.265, 0.30, r) * (1.0 - smoothstep(0.44, 0.5, r));
 
   vec3 bright = min(vec3(1.0), uColor * 1.25 + vec3(0.22));
   vec3 whiteHot = min(vec3(1.0), bright + vec3(0.35));
   vec3 color = mix(uColor * 0.6, bright, clamp(energy, 0.0, 1.0));
-  color = mix(color, whiteHot, clamp(comet + comet2 * 0.7, 0.0, 1.0));
+  color = mix(color, whiteHot, clamp(comet + flameCore * 0.8, 0.0, 1.0));
   float alpha = clamp(energy, 0.0, 0.9);
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
