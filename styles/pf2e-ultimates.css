@@ -155,8 +155,11 @@
 .glult-charge-copy .gl-tech-label {
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--gl-accent);
-  font-size: 9px;
+  color: color-mix(in srgb, var(--gl-accent) 38%, var(--gl-text-bright));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 7px var(--gl-bloom);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -176,9 +179,10 @@
 .glult-charge-copy small {
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--gl-text-dim);
+  color: color-mix(in srgb, var(--gl-text-dim) 58%, var(--gl-text-bright));
   font-family: var(--gl-tech);
   font-size: 9px;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   text-overflow: ellipsis;
@@ -204,6 +208,8 @@
 .pf2e.actor.npc .glult-ultimate-item {
   position: relative;
   margin-block: 3px;
+  padding-inline: 7px 5px;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--gl-accent) 50%, var(--gl-edge));
   border-radius: var(--gl-cut-sm);
   background: linear-gradient(105deg, color-mix(in srgb, var(--gl-accent) 11%, transparent), transparent 62%);
