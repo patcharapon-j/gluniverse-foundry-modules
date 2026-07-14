@@ -202,6 +202,7 @@
 }
 
 .glult-item-badge {
+  position: relative;
   display: inline-grid;
   flex: 0 0 16px;
   place-items: center;
@@ -213,13 +214,19 @@
   margin-right: 4px;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--gl-accent);
+  background:
+    radial-gradient(120% 90% at 32% 22%, rgb(255 255 255 / 0.42), transparent 52%),
+    radial-gradient(115% 115% at 50% 118%, color-mix(in srgb, var(--gl-ink-1) 55%, transparent), transparent 60%),
+    var(--gl-accent);
   color: var(--gl-text-bright);
   font-family: var(--gl-tech);
   font-size: 10px;
-  box-shadow: 0 0 5px var(--gl-glow);
+  box-shadow:
+    0 0 6px var(--gl-glow),
+    inset 0 1px 1px rgb(255 255 255 / 0.5),
+    inset 0 -1px 2px color-mix(in srgb, var(--gl-ink-1) 45%, transparent);
   pointer-events: none;
-  text-shadow: none;
+  text-shadow: 0 1px 1px color-mix(in srgb, var(--gl-ink-1) 55%, transparent);
 }
 
 .glult-item-badges {
@@ -245,6 +252,22 @@
   max-width: 11px;
   overflow: hidden;
   text-align: center;
+}
+
+/* Fallback rendering for FA icons not bundled with Foundry: the CDN SVG is
+   applied as a currentColor mask so it tints like a font glyph. */
+.glult-icon-mask {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: var(--glult-icon) no-repeat center / contain;
+  mask: var(--glult-icon) no-repeat center / contain;
+}
+
+.glult-item-badge .glult-icon-mask {
+  width: 10px;
+  height: 10px;
 }
 
 .glult-config-dialog .window-content {
@@ -289,16 +312,39 @@
 }
 
 .glult-config-icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 46px;
   height: 46px;
+  overflow: hidden;
   border: 1px solid var(--gl-accent);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-2));
+  background:
+    radial-gradient(110% 85% at 32% 20%, rgb(255 255 255 / 0.24), transparent 48%),
+    radial-gradient(130% 130% at 50% 125%, color-mix(in srgb, var(--gl-accent) 34%, transparent), transparent 62%),
+    color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-2));
   color: var(--gl-accent);
   font-size: 21px;
-  box-shadow: 0 0 17px var(--gl-bloom), inset 0 0 13px var(--gl-bloom);
+  text-shadow: 0 0 8px var(--gl-glow);
+  box-shadow:
+    0 0 17px var(--gl-bloom),
+    inset 0 0 13px var(--gl-bloom),
+    inset 0 1px 1px rgb(255 255 255 / 0.35),
+    inset 0 -2px 4px color-mix(in srgb, var(--gl-ink-1) 55%, transparent);
+}
+
+.glult-config-icon::after {
+  content: "";
+  position: absolute;
+  top: 7%;
+  left: 16%;
+  width: 52%;
+  height: 34%;
+  border-radius: 50%;
+  background: linear-gradient(rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.02));
+  filter: blur(0.5px);
+  pointer-events: none;
 }
 
 .glult-config-field {
