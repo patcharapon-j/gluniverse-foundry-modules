@@ -5,9 +5,11 @@ import {
   MAX_CHARGES,
   MIN_CHARGES,
 } from "./constants.mjs";
+import { decodeCssContent } from "./token-overlay.mjs";
 import {
   getUltimateState,
   hasUltimateItems,
+  iconCdnUrl,
   isEligibleItem,
   isNpcActor,
   isReadyState,
@@ -21,6 +23,36 @@ import {
 } from "./state.mjs";
 
 const t = (key) => game.i18n.localize(key);
+
+const glyphAvailability = new Map();
+
+/** Whether the FA class resolves to a glyph in the fonts Foundry loaded. */
+function glyphAvailable(iconClass) {
+  const cached = glyphAvailability.get(iconClass);
+  if (cached !== undefined) return cached;
+  let available = false;
+  if (document?.body) {
+    const probe = document.createElement("i");
+    probe.className = iconClass;
+    probe.setAttribute("aria-hidden", "true");
+    Object.assign(probe.style, { position: "fixed", left: "-9999px", top: "-9999px", visibility: "hidden" });
+    document.body.appendChild(probe);
+    available = Boolean(decodeCssContent(getComputedStyle(probe, "::before").content));
+    probe.remove();
+  }
+  glyphAvailability.set(iconClass, available);
+  return available;
+}
+
+/** Icon markup that works for ANY FA icon: the bundled font when available,
+ *  otherwise a currentColor CSS mask over the FA free CDN SVG. */
+function iconMarkup(iconClass) {
+  const icon = sanitizeIcon(iconClass);
+  if (glyphAvailable(icon)) return `<i class="${escapeAttr(icon)}" aria-hidden="true"></i>`;
+  const url = iconCdnUrl(icon);
+  if (url) return `<span class="glult-icon-mask" style="--glult-icon:url('${escapeAttr(url)}')" aria-hidden="true"></span>`;
+  return `<i class="${escapeAttr(DEFAULT_ICON)}" aria-hidden="true"></i>`;
+}
 
 export function normalizeHtml(value) {
   if (value instanceof HTMLElement) return value;
@@ -109,7 +141,7 @@ function decorateAbilityRows(actor, root, state) {
     badge.className = "glult-item-badge glult-function-ultimate";
     badge.dataset.tooltip = label;
     badge.setAttribute("aria-label", label);
-    badge.innerHTML = `<i class="${escapeAttr(state.icon)}" aria-hidden="true"></i>`;
+    badge.innerHTML = iconMarkup(state.icon);
     badges.appendChild(badge);
     name.prepend(badges);
   }
@@ -276,7 +308,7 @@ function renderConfig(actor, state) {
   return `
     <form class="glult-config-form" style="--gl-accent:${escapeAttr(state.color)}">
       <div class="glult-config-preview gl-glass">
-        <span class="glult-config-icon"><i class="${escapeAttr(state.icon)}" aria-hidden="true"></i></span>
+        <span class="glult-config-icon">${iconMarkup(state.icon)}</span>
         <span><small>${escapeHTML(state.resourceName || t("GLULT.Charge.Label"))}</small><strong>${escapeHTML(actor.name)}</strong></span>
       </div>
       <div class="glult-config-grid">
@@ -378,12 +410,12 @@ function activateConfigPreview(root) {
   if (!form) return;
   const color = form.querySelector('[name="color"]');
   const icon = form.querySelector('[name="icon"]');
-  const previewIcon = form.querySelector(".glult-config-icon i");
+  const previewIcon = form.querySelector(".glult-config-icon");
   const resourceName = form.querySelector('[name="resourceName"]');
   const previewLabel = form.querySelector(".glult-config-preview small");
   const update = () => {
     form.style.setProperty("--gl-accent", color.value);
-    previewIcon.className = sanitizeIcon(icon.value || DEFAULT_ICON);
+    previewIcon.innerHTML = iconMarkup(icon.value || DEFAULT_ICON);
     previewLabel.textContent = resourceName.value.trim() || t("GLULT.Charge.Label");
   };
   color.addEventListener("input", update);

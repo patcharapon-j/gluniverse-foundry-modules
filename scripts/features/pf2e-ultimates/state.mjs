@@ -70,7 +70,24 @@ export function sanitizeIcon(value) {
     .slice(0, 5);
   const hasStyle = tokens.some((token) => /^fa-(solid|regular|brands|duotone|light|thin|sharp(?:-[a-z]+)?)$/i.test(token));
   const hasGlyph = tokens.some((token) => token.startsWith("fa-") && !/^fa-(solid|regular|brands|duotone|light|thin|sharp(?:-[a-z]+)?|fw|spin|pulse)$/i.test(token));
+  if (hasGlyph && !hasStyle) return ["fa-solid", ...tokens].join(" ");
   return hasStyle && hasGlyph ? tokens.join(" ") : DEFAULT_ICON;
+}
+
+const FA_STYLE_DIRS = Object.freeze({ "fa-solid": "solid", "fa-regular": "regular", "fa-brands": "brands" });
+
+/**
+ * CDN URL for the icon's SVG in the Font Awesome free set. Lets users pick
+ * any FA icon, including ones missing from the Foundry-bundled FA build.
+ * Returns null for icons with no free-set equivalent (e.g. pro-only styles).
+ */
+export function iconCdnUrl(value) {
+  const tokens = sanitizeIcon(value).split(" ");
+  const styleDir = FA_STYLE_DIRS[tokens.find((token) => FA_STYLE_DIRS[token])] ?? "solid";
+  const glyph = tokens.find((token) => token.startsWith("fa-")
+    && !/^fa-(solid|regular|brands|duotone|light|thin|sharp(?:-[a-z]+)?|fw|spin|pulse)$/i.test(token));
+  if (!glyph) return null;
+  return `https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6/svgs/${styleDir}/${glyph.slice(3).toLowerCase()}.svg`;
 }
 
 export function normalizeUltimateState(raw = {}) {

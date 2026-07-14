@@ -254,6 +254,22 @@
   text-align: center;
 }
 
+/* Fallback rendering for FA icons not bundled with Foundry: the CDN SVG is
+   applied as a currentColor mask so it tints like a font glyph. */
+.glult-icon-mask {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: var(--glult-icon) no-repeat center / contain;
+  mask: var(--glult-icon) no-repeat center / contain;
+}
+
+.glult-item-badge .glult-icon-mask {
+  width: 10px;
+  height: 10px;
+}
+
 .glult-config-dialog .window-content {
   background: var(--gl-ink-1);
 }

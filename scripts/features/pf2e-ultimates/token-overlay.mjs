@@ -3,6 +3,7 @@ import {
   getDisplayMode,
   getUltimateState,
   hasUltimateItems,
+  iconCdnUrl,
   isCharged,
   isNpcActor,
   sanitizeIcon,
@@ -126,11 +127,11 @@ float glultBolt(vec2 p, float angle, float seed) {
   jag += glultZig(p.x * 31.0 + seed * 3.0, tick + 7.0) * 0.042;
 
   float core = exp(-abs(p.y - jag) * 250.0);
-  float halo = exp(-abs(p.y - jag) * 58.0) * 0.32;
+  float halo = exp(-abs(p.y - jag) * 46.0) * 0.45;
   float reach = smoothstep(0.15, 0.20, p.x) * (1.0 - smoothstep(0.40, 0.50, p.x));
 
-  float event = step(0.72, glultHash(vec2(tick, seed * 31.7)));
-  float strike = 1.0 - smoothstep(0.0, 0.14, age);
+  float event = step(0.6, glultHash(vec2(tick, seed * 31.7)));
+  float strike = 1.0 - smoothstep(0.0, 0.19, age);
   float strobe = mix(0.55, 1.0, step(0.4, glultHash(vec2(tick + floor(age * 26.0), seed * 5.1))));
   float aftershock = exp(-pow((age - 0.30) * 26.0, 2.0)) * 0.5;
   float flash = event * (strike * strobe + aftershock);
@@ -141,7 +142,7 @@ float glultBolt(vec2 p, float angle, float seed) {
   float fork = exp(-abs(p.y - forkY) * 270.0);
   fork *= smoothstep(forkBase, forkBase + 0.035, p.x) * (1.0 - smoothstep(0.35, 0.45, p.x));
 
-  return ((core + halo) * reach + fork * 0.85) * flash;
+  return ((core + halo) * reach + fork * 1.0) * flash;
 }
 
 float glultArc(float r, float a, float radius, float phase, float frequency) {
@@ -168,10 +169,12 @@ void main(void) {
   float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
   float tongueLen = 0.29 + licks * 0.125;
   float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
+  float flicker = 0.82 + 0.18 * (0.6 * sin(uTime * 5.3 + uSeed) + 0.4 * sin(uTime * 8.7 + uSeed * 2.0));
   float flame = smoothstep(0.188, 0.222, r) * taper;
-  flame *= (0.30 + licks * 1.2) * breathe;
+  flame *= (0.30 + licks * 1.25) * breathe * flicker;
   float flameCore = smoothstep(0.188, 0.215, r) * (1.0 - smoothstep(0.235, 0.275, r))
-    * (0.5 + licks * 0.8) * breathe;
+    * (0.5 + licks * 0.8) * breathe * flicker;
+  float glow = exp(-abs(r - 0.21) * 16.0) * 0.34 * breathe * flicker;
 
   float arcs = glultArc(r, a, 0.245, uTime * 0.72 + uSeed, 5.0);
   arcs += glultArc(r, a, 0.292, -uTime * 0.47 + uSeed * 0.4, 7.0) * 0.72;
@@ -196,14 +199,14 @@ void main(void) {
   float icon = smoothstep(0.10, 0.62, texture2D(uIcon, vTextureCoord).a) * (1.0 - smoothstep(0.17, 0.198, r));
   float iconAura = smoothstep(0.18, 0.0, r) * 0.24 * breathe;
   float energy = sphereShade + sphereRim + sphereHighlight + iconAura;
-  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9;
-  energy += sparks * 1.7 + chargeWave + bolts * 2.3;
+  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9 + glow;
+  energy += sparks * 1.7 + chargeWave + bolts * 3.0;
   float alpha = clamp(energy, 0.0, 0.98) * (1.0 - smoothstep(0.47, 0.5, r));
 
   vec3 deep = uColor * 0.42;
   vec3 bright = min(vec3(1.0), uColor * 1.32 + vec3(0.28));
   vec3 whiteHot = min(vec3(1.0), bright + vec3(0.38));
-  float heat = clamp(sphereHighlight + arcs * 0.45 + flameCore * 0.9 + flame * 0.18 + sparks + bolts * 1.4, 0.0, 1.0);
+  float heat = clamp(sphereHighlight + arcs * 0.45 + flameCore * 0.9 + flame * 0.18 + sparks + bolts * 1.8, 0.0, 1.0);
   vec3 color = mix(deep, bright, clamp(sphereDepth + flame * 0.6 + flameCore + chargeWave, 0.0, 1.0));
   color = mix(color, whiteHot, clamp(icon * 0.72 + heat * 0.78, 0.0, 1.0));
   gl_FragColor = vec4(color * alpha, alpha);
@@ -251,17 +254,19 @@ void main(void) {
     + ringNoise(sp * 27.0 - outward * 1.6 + vec2(0.0, uSeed)) * 0.3;
   float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
   float tongueLen = 0.355 + licks * 0.075;
+  float flicker = 0.82 + 0.18 * (0.6 * sin(uTime * 5.3 + uSeed) + 0.4 * sin(uTime * 8.7 + uSeed * 2.0));
   float flame = smoothstep(0.30, 0.335, r) * (1.0 - smoothstep(tongueLen - 0.04, tongueLen, r));
-  flame *= (0.30 + licks * 1.2) * breathe;
+  flame *= (0.30 + licks * 1.25) * breathe * flicker;
   float flameCore = smoothstep(0.30, 0.328, r) * (1.0 - smoothstep(0.345, 0.365, r))
-    * (0.5 + licks * 0.8) * breathe;
+    * (0.5 + licks * 0.8) * breathe * flicker;
+  float glow = exp(-abs(r - 0.335) * 14.0) * 0.3 * breathe * flicker;
 
   float comet = pow(0.5 + 0.5 * sin(a - uTime * 0.9 + uSeed), 18.0) * exp(-abs(r - 0.335) * 70.0) * 1.4;
 
   float wavePhase = fract(uTime * 0.2 + fract(uSeed * 0.13));
   float wave = exp(-abs(r - (0.30 + wavePhase * 0.16)) * 90.0) * (1.0 - wavePhase) * 0.5;
 
-  float energy = base + flame * 1.1 + flameCore * 0.9 + comet + wave;
+  float energy = base + flame * 1.1 + flameCore * 0.9 + glow + comet + wave;
   energy *= smoothstep(0.265, 0.30, r) * (1.0 - smoothstep(0.44, 0.5, r));
 
   vec3 bright = min(vec3(1.0), uColor * 1.25 + vec3(0.22));
@@ -457,13 +462,18 @@ export class UltimateTokenOverlay {
     const key = sanitizeIcon(icon);
     const cached = this.iconTextures.get(key);
     if (cached && !cached.destroyed) return cached;
-    const mask = rasterizeFontAwesome(key) ?? rasterizeFontAwesome(DEFAULT_ICON);
+    const mask = document.createElement("canvas");
+    mask.width = 256;
+    mask.height = 256;
     const texture = PIXI.Texture.from(mask);
     if (texture.baseTexture) {
       texture.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? texture.baseTexture.scaleMode;
       if (PIXI.MIPMAP_MODES?.ON !== undefined) texture.baseTexture.mipmap = PIXI.MIPMAP_MODES.ON;
     }
     this.iconTextures.set(key, texture);
+    void paintIconMask(mask, key).then(() => {
+      if (!texture.destroyed) texture.baseTexture?.update?.();
+    });
     return texture;
   }
 
@@ -613,8 +623,16 @@ function makeCounter(state, size) {
   return container;
 }
 
-function rasterizeFontAwesome(iconClass) {
-  if (!document?.body) return null;
+/** Paint the icon into the mask canvas: bundled FA font first, then the FA
+ *  free CDN for icons Foundry doesn't ship, then the default glyph. */
+async function paintIconMask(canvas, iconClass) {
+  if (drawFontAwesomeGlyph(canvas, iconClass)) return;
+  if (await drawCdnIcon(canvas, iconClass)) return;
+  drawFontAwesomeGlyph(canvas, DEFAULT_ICON);
+}
+
+function drawFontAwesomeGlyph(canvas, iconClass) {
+  if (!document?.body) return false;
   const probe = document.createElement("i");
   probe.className = iconClass;
   probe.setAttribute("aria-hidden", "true");
@@ -625,20 +643,59 @@ function rasterizeFontAwesome(iconClass) {
   const family = style.fontFamily;
   const weight = style.fontWeight || "900";
   probe.remove();
-  if (!glyph || !family) return null;
+  if (!glyph || !family) return false;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
   const context = canvas.getContext("2d");
-  if (!context) return null;
-  context.clearRect(0, 0, 256, 256);
+  if (!context) return false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#ffffff";
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.font = `${weight} 80px ${family}`;
-  context.fillText(glyph, 128, 128);
-  return canvas;
+  context.fillText(glyph, canvas.width / 2, canvas.height / 2);
+  return true;
+}
+
+async function drawCdnIcon(canvas, iconClass) {
+  const url = iconCdnUrl(iconClass);
+  if (!url || !globalThis.fetch) return false;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return false;
+    let svg = await response.text();
+    // FA SVGs carry only a viewBox; give them explicit dimensions so the
+    // decoded image has an intrinsic size in every browser.
+    const viewBox = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/);
+    if (viewBox && !/<svg[^>]*\swidth=/.test(svg)) {
+      svg = svg.replace(/<svg /, `<svg width="${viewBox[1]}" height="${viewBox[2]}" `);
+    }
+    const blobUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    try {
+      const image = new Image();
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error(`Could not decode icon SVG: ${url}`));
+        image.src = blobUrl;
+      });
+      const context = canvas.getContext("2d");
+      if (!context) return false;
+      const scale = 104 / Math.max(image.width || 1, image.height || 1);
+      const width = (image.width || 1) * scale;
+      const height = (image.height || 1) * scale;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+      context.globalCompositeOperation = "source-in";
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.globalCompositeOperation = "source-over";
+      return true;
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  } catch (error) {
+    console.warn("GLUniverse Suite | PF2e Ultimates | Could not fetch icon from CDN", error);
+    return false;
+  }
 }
 
 export function decodeCssContent(raw) {

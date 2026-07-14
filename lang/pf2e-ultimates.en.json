@@ -48,7 +48,7 @@
   "GLULT.Config.Allegiance": "NPC Use",
   "GLULT.Config.Color": "Effect Color",
   "GLULT.Config.Icon": "Font Awesome Icon",
-  "GLULT.Config.IconHint": "Enter any Font Awesome class available in Foundry, such as fa-solid fa-bolt.",
+  "GLULT.Config.IconHint": "Enter any Font Awesome 6 icon class, such as fa-solid fa-bolt. Icons not bundled with Foundry are fetched from the Font Awesome CDN.",
   "GLULT.Config.EngineDesign": "Personal Engine",
   "GLULT.Config.CombatPromise": "Combat Promise",
   "GLULT.Config.CombatPromiseHint": "One sentence: what this NPC does, the battlefield result, and how it reaches its climax.",
