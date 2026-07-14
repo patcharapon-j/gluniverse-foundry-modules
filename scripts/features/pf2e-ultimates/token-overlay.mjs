@@ -161,11 +161,11 @@ void main(void) {
   /* Spiraling on-fire flame. The noise is sampled in a rotated Cartesian
      frame (rotation grows with radius → spiral) instead of on the atan
      angle, so there is no wrap seam at the ±PI boundary on the left.
-     Two octaves shape the tongues; slow outward drift keeps it calm. */
+     A single octave shapes the tongues — the gel icon is small on screen,
+     so finer detail just reads as noise; the token ring keeps two. */
   vec2 sp = glultRotate(r * 9.0 - uTime * 0.3) * uv;
   vec2 outward = (sp / max(r, 0.05)) * uTime * 0.22;
-  float tongueNoise = glultNoise(sp * 16.0 - outward + vec2(uSeed, 0.0)) * 0.7
-    + glultNoise(sp * 33.0 - outward * 1.6 + vec2(0.0, uSeed)) * 0.3;
+  float tongueNoise = glultNoise(sp * 14.0 - outward + vec2(uSeed, 0.0));
   float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
   float tongueLen = 0.29 + licks * 0.125;
   float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
@@ -277,10 +277,27 @@ void main(void) {
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
 
+/* Enter/exit animation timing (seconds). */
+const APPEAR_SECONDS = 0.5;
+const VANISH_SECONDS = 0.35;
+
+/* Ease-out-back: overshoots slightly past 1 for a gel-like pop. */
+function easeOutBack(p) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const q = p - 1;
+  return 1 + c3 * q * q * q + c1 * q * q;
+}
+
+function easeOutCubic(p) {
+  return 1 - Math.pow(1 - p, 3);
+}
+
 export class UltimateTokenOverlay {
   constructor() {
     this.entries = new Map();
     this.iconTextures = new Map();
+    this.dying = [];
     this.started = false;
     this.ticking = false;
     this.time = 0;
@@ -294,6 +311,9 @@ export class UltimateTokenOverlay {
     Hooks.on("canvasTearDown", () => this.clearAll({ destroyTextures: true }));
     Hooks.on("drawToken", () => this.refreshAll());
     Hooks.on("refreshToken", (token) => this.refreshToken(token));
+    // The overlay ring lives in canvas.primary rather than under the Token,
+    // so it must be released explicitly when the placeable is destroyed.
+    Hooks.on("destroyToken", (token) => { this.remove(token?.id); this.syncTicker(); });
     Hooks.on("updateActor", () => this.refreshAll());
     Hooks.on("createItem", () => this.refreshAll());
     Hooks.on("updateItem", () => this.refreshAll());
@@ -317,7 +337,7 @@ export class UltimateTokenOverlay {
       this.upsert(token, display);
     }
     for (const id of [...this.entries.keys()]) {
-      if (!wanted.has(id)) this.remove(id);
+      if (!wanted.has(id)) this.remove(id, { animate: true });
     }
     this.syncTicker();
   }
@@ -326,7 +346,7 @@ export class UltimateTokenOverlay {
     if (!token?.id) return;
     const display = this.computeDisplay(token);
     if (display) this.upsert(token, display);
-    else this.remove(token.id);
+    else this.remove(token.id, { animate: true });
     this.syncTicker();
   }
 
@@ -363,15 +383,67 @@ export class UltimateTokenOverlay {
     ].join("|");
     let entry = this.entries.get(token.id);
     if (entry?.signature !== signature || entry?.token !== token || entry.container?.destroyed) {
+      const previous = entry && entry.token === token && !entry.container?.destroyed ? entry : null;
+      const prevDisplay = previous?.display ?? null;
+      if (previous) this.retireRemovedLayers(previous, display);
       this.remove(token.id);
-      entry = this.createEntry(token, state, icon, size, signature, display);
+      // Only layers that were not already showing animate in; a layer that
+      // merely re-rendered (e.g. the counter after a value change) swaps
+      // in place without replaying its entrance.
+      const appear = {
+        icon: display.icon && !prevDisplay?.icon,
+        ring: display.ring && !prevDisplay?.ring,
+        counter: display.counter && !prevDisplay?.counter,
+      };
+      entry = this.createEntry(token, state, icon, size, signature, display, appear);
       if (!entry) return;
       this.entries.set(token.id, entry);
     }
     this.positionEntry(entry, token);
   }
 
-  createEntry(token, state, icon, size, signature, display) {
+  /**
+   * Detach layers that the next display no longer wants and hand them to the
+   * fade-out queue, so a spent Ultimate's icon/ring dissolves instead of
+   * vanishing when the entry is rebuilt (e.g. counter still showing).
+   */
+  retireRemovedLayers(entry, next) {
+    const prev = entry.display ?? {};
+    const hostParent = entry.container?.parent ?? null;
+    if (entry.iconGroup && prev.icon && !next.icon) {
+      const iconMeshes = (entry.meshes ?? []).filter((mesh) => mesh.parent === entry.iconGroup);
+      entry.meshes = (entry.meshes ?? []).filter((mesh) => mesh.parent !== entry.iconGroup);
+      // The entry container sits at the token origin, so reparenting to the
+      // token keeps the group's local coordinates intact.
+      if (hostParent) hostParent.addChild(entry.iconGroup);
+      this.retire(entry.iconGroup, iconMeshes);
+      entry.iconGroup = null;
+    }
+    if (entry.ringContainer && prev.ring && !next.ring) {
+      const ringMeshes = entry.ring ? [entry.ring] : [];
+      entry.meshes = (entry.meshes ?? []).filter((mesh) => mesh !== entry.ring);
+      if (entry.ringContainer.parent === entry.container && hostParent) hostParent.addChild(entry.ringContainer);
+      this.retire(entry.ringContainer, ringMeshes);
+      entry.ring = null;
+      entry.ringContainer = null;
+    }
+    if (entry.fallback && !next.icon && !next.ring) {
+      if (hostParent) hostParent.addChild(entry.fallback);
+      this.retire(entry.fallback, []);
+      entry.fallback = null;
+    }
+  }
+
+  /** Queue a display object for the fade-out animation, then destruction. */
+  retire(node, meshes = []) {
+    if (!node || node.destroyed) {
+      for (const mesh of meshes) destroyMesh(mesh);
+      return;
+    }
+    this.dying.push({ node, meshes, t: 0, alpha: node.alpha ?? 1, scale: node.scale?.x ?? 1 });
+  }
+
+  createEntry(token, state, icon, size, signature, display, appear = { icon: true, ring: true, counter: true }) {
     try {
       const container = new PIXI.Container();
       container.eventMode = "none";
@@ -380,10 +452,19 @@ export class UltimateTokenOverlay {
       const texture = this.iconTexture(icon);
       const rgb = hexRgb(state.color);
       const meshes = [];
+      const intro = [];
       let iconGroup = null;
       let ring = null;
+      let ringContainer = null;
       let counter = null;
       let fallback = null;
+      // Prime a layer for its entrance animation: invisible and shrunken on
+      // the first frame, animated up to full size/alpha by tick().
+      const introduce = (node, kind) => {
+        node.alpha = 0;
+        node.scale.set(kind === "ring" ? 0.65 : 0.4);
+        intro.push({ node, kind, t: 0 });
+      };
 
       try {
         if (display.icon) {
@@ -409,6 +490,7 @@ export class UltimateTokenOverlay {
           iconGroup.addChild(material, energy);
           meshes.push(material, energy);
           container.addChild(iconGroup);
+          if (appear.icon) introduce(iconGroup, "icon");
         }
 
         if (display.ring) {
@@ -421,27 +503,46 @@ export class UltimateTokenOverlay {
           setMeshQuad(ring, ringSize, ringSize, true);
           ring.blendMode = PIXI.BLEND_MODES?.ADD ?? "add";
           meshes.push(ring);
-          container.addChild(ring);
+          ringContainer = new PIXI.Container();
+          ringContainer.eventMode = "none";
+          ringContainer.addChild(ring);
+          // Render the ring in the primary group just below the token's art
+          // mesh, so the token portrait sits on top of the energy ring.
+          const primary = canvas?.primary;
+          if (primary?.addChild) {
+            ringContainer.sortLayer = token.mesh?.sortLayer ?? 700;
+            primary.addChild(ringContainer);
+          } else {
+            container.addChildAt(ringContainer, 0);
+          }
+          if (appear.ring) introduce(ringContainer, "ring");
         }
       } catch (error) {
         for (const mesh of meshes) destroyMesh(mesh);
         meshes.length = 0;
+        intro.length = 0;
         iconGroup = null;
         ring = null;
+        if (ringContainer && !ringContainer.destroyed) {
+          try { ringContainer.destroy({ children: true }); } catch { /* noop */ }
+        }
+        ringContainer = null;
         console.warn("GLUniverse Suite | PF2e Ultimates | WebGL effect unavailable; using static icon", error);
         if (display.icon || display.ring) {
           fallback = makeFallback(texture, size, state.color);
           container.addChild(fallback);
+          if (appear.icon || appear.ring) introduce(fallback, "icon");
         }
       }
 
       if (display.counter) {
         counter = makeCounter(state, size);
         container.addChild(counter);
+        if (appear.counter) introduce(counter, "counter");
       }
 
       token.addChild(container);
-      return { token, container, meshes, iconGroup, ring, counter, fallback, signature, size };
+      return { token, container, meshes, intro, iconGroup, ring, ringContainer, counter, fallback, display, signature, size };
     } catch (error) {
       console.warn("GLUniverse Suite | PF2e Ultimates | Could not attach token indicator", error);
       return null;
@@ -454,8 +555,21 @@ export class UltimateTokenOverlay {
     const size = entry.size;
     entry.iconGroup?.position.set(width - size * 0.9, size * 0.9);
     entry.fallback?.position.set(width - size * 0.9, size * 0.9);
-    entry.ring?.position.set(width / 2, height / 2);
     entry.counter?.position.set(width - size * 0.9, height - size * 0.9);
+    const ringContainer = entry.ringContainer;
+    if (!ringContainer) return;
+    if (ringContainer.parent && ringContainer.parent !== entry.container) {
+      // Ring lives in canvas.primary: track the token in world coordinates
+      // and keep its depth sort just below the token's art mesh.
+      const cx = (token.x ?? 0) + width / 2;
+      const cy = (token.y ?? 0) + height / 2;
+      ringContainer.position.set(cx, cy);
+      ringContainer.elevation = token.document?.elevation ?? 0;
+      ringContainer.sort = (token.mesh?.sort ?? 0) - 1;
+      ringContainer.zIndex = token.mesh?.zIndex ?? 0;
+    } else {
+      ringContainer.position.set(width / 2, height / 2);
+    }
   }
 
   iconTexture(icon) {
@@ -479,10 +593,63 @@ export class UltimateTokenOverlay {
 
   tick() {
     const deltaMs = canvas?.app?.ticker?.deltaMS ?? 16.667;
-    this.time += Math.min(deltaMs, 100) / 1000;
+    const dt = Math.min(deltaMs, 100) / 1000;
+    this.time += dt;
     for (const entry of this.entries.values()) {
       for (const mesh of entry.meshes ?? []) {
         if (mesh?.shader?.uniforms) mesh.shader.uniforms.uTime = this.time;
+      }
+      this.animateIntro(entry, dt);
+    }
+    this.animateDying(dt);
+    if (!this.entries.size && !this.dying.length) this.syncTicker();
+  }
+
+  /** Advance a new layer's entrance: fade in with a gel pop / ring bloom. */
+  animateIntro(entry, dt) {
+    if (!entry.intro?.length) return;
+    for (let i = entry.intro.length - 1; i >= 0; i--) {
+      const anim = entry.intro[i];
+      const node = anim.node;
+      if (!node || node.destroyed) {
+        entry.intro.splice(i, 1);
+        continue;
+      }
+      anim.t += dt;
+      const p = Math.min(1, anim.t / APPEAR_SECONDS);
+      node.alpha = Math.min(1, p * 1.8);
+      if (anim.kind === "ring") node.scale.set(0.65 + 0.35 * easeOutCubic(p));
+      else node.scale.set(0.4 + 0.6 * easeOutBack(p));
+      if (p >= 1) {
+        node.alpha = 1;
+        node.scale.set(1);
+        entry.intro.splice(i, 1);
+      }
+    }
+  }
+
+  /** Advance retired layers' exit fade, destroying them when finished. */
+  animateDying(dt) {
+    for (let i = this.dying.length - 1; i >= 0; i--) {
+      const record = this.dying[i];
+      record.t += dt;
+      const p = Math.min(1, record.t / VANISH_SECONDS);
+      const alive = record.node && !record.node.destroyed;
+      if (alive) {
+        for (const mesh of record.meshes) {
+          if (mesh?.shader?.uniforms) mesh.shader.uniforms.uTime = this.time;
+        }
+        const fade = 1 - p;
+        record.node.alpha = record.alpha * fade * fade;
+        record.node.scale?.set(record.scale * (1 - 0.2 * easeOutCubic(p)));
+      }
+      if (p >= 1 || !alive) {
+        this.dying.splice(i, 1);
+        for (const mesh of record.meshes) destroyMesh(mesh);
+        if (alive) {
+          if (record.node.parent) record.node.parent.removeChild(record.node);
+          try { record.node.destroy({ children: true }); } catch { /* noop */ }
+        }
       }
     }
   }
@@ -490,21 +657,34 @@ export class UltimateTokenOverlay {
   syncTicker() {
     const ticker = canvas?.app?.ticker;
     if (!ticker) return;
-    if (this.entries.size && !this.ticking) {
+    const active = this.entries.size > 0 || this.dying.length > 0;
+    if (active && !this.ticking) {
       ticker.add(this.tick);
       this.ticking = true;
-    } else if (!this.entries.size && this.ticking) {
+    } else if (!active && this.ticking) {
       ticker.remove(this.tick);
       this.ticking = false;
     }
   }
 
-  remove(id) {
+  remove(id, { animate = false } = {}) {
     const entry = this.entries.get(id);
     if (!entry) return;
     this.entries.delete(id);
+    if (animate && entry.container && !entry.container.destroyed) {
+      const ringMeshes = entry.ring ? [entry.ring] : [];
+      const bodyMeshes = (entry.meshes ?? []).filter((mesh) => mesh !== entry.ring);
+      if (entry.ringContainer && entry.ringContainer.parent !== entry.container) {
+        this.retire(entry.ringContainer, ringMeshes);
+      } else {
+        bodyMeshes.push(...ringMeshes);
+      }
+      this.retire(entry.container, bodyMeshes);
+      this.syncTicker();
+      return;
+    }
     for (const mesh of entry.meshes ?? []) destroyMesh(mesh);
-    for (const child of [entry.fallback, entry.counter, entry.iconGroup]) {
+    for (const child of [entry.fallback, entry.counter, entry.iconGroup, entry.ringContainer]) {
       if (child && !child.destroyed) {
         try { child.destroy({ children: true }); } catch { /* noop */ }
       }
@@ -517,6 +697,12 @@ export class UltimateTokenOverlay {
 
   clearAll({ destroyTextures = false } = {}) {
     for (const id of [...this.entries.keys()]) this.remove(id);
+    for (const record of this.dying.splice(0)) {
+      for (const mesh of record.meshes) destroyMesh(mesh);
+      if (record.node && !record.node.destroyed) {
+        try { record.node.destroy({ children: true }); } catch { /* noop */ }
+      }
+    }
     this.syncTicker();
     if (destroyTextures) {
       for (const texture of this.iconTextures.values()) {
