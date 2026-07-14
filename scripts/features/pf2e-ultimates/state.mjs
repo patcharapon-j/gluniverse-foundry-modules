@@ -19,6 +19,7 @@ import {
   READY_MODES,
   SETTINGS,
 } from "./constants.mjs";
+import { sanitizeEffect } from "./effects.mjs";
 
 export function isNpcActor(actor) {
   return actor?.documentName === "Actor" && actor.type === "npc" && game.system?.id === "pf2e";
@@ -101,6 +102,7 @@ export function normalizeUltimateState(raw = {}) {
     counterMode: COUNTER_MODES.has(raw?.counterMode) ? raw.counterMode : "default",
     color: hex6(raw?.color, DEFAULT_COLOR).toLowerCase(),
     icon: sanitizeIcon(raw?.icon),
+    effect: sanitizeEffect(raw?.effect),
     resourceName: cleanText(raw?.resourceName, 48),
     tier: COMPLEXITY_TIERS.has(raw?.tier) ? raw.tier : "elite",
     allegiance: ALLEGIANCES.has(raw?.allegiance) ? raw.allegiance : "enemy",

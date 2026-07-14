@@ -5,6 +5,7 @@ import {
   MAX_CHARGES,
   MIN_CHARGES,
 } from "./constants.mjs";
+import { EFFECTS, EFFECT_GROUPS } from "./effects.mjs";
 import { decodeCssContent } from "./token-overlay.mjs";
 import {
   getUltimateState,
@@ -264,6 +265,7 @@ export async function openUltimateConfig(actor) {
       counterMode: form?.querySelector?.('[name="counterMode"]')?.value,
       color: form?.querySelector?.('[name="color"]')?.value,
       icon: form?.querySelector?.('[name="icon"]')?.value,
+      effect: form?.querySelector?.('[name="effect"]')?.value,
       resourceName: form?.querySelector?.('[name="resourceName"]')?.value,
       tier: form?.querySelector?.('[name="tier"]')?.value,
       allegiance: form?.querySelector?.('[name="allegiance"]')?.value,
@@ -372,6 +374,11 @@ function renderConfig(actor, state) {
         </label>
       </div>
       <label class="glult-config-field">
+        <span>${escapeHTML(t("GLULT.Config.Effect"))}</span>
+        <select class="gl-field" name="effect">${effectOptions(state.effect)}</select>
+        <small>${escapeHTML(t("GLULT.Config.EffectHint"))}</small>
+      </label>
+      <label class="glult-config-field">
         <span>${escapeHTML(t("GLULT.Config.Icon"))}</span>
         <input class="gl-field" type="search" name="icon" list="glult-icon-suggestions" value="${escapeAttr(state.icon)}" autocomplete="off">
         <datalist id="glult-icon-suggestions">${options}</datalist>
@@ -391,6 +398,16 @@ function renderConfig(actor, state) {
       </details>
     </form>
   `;
+}
+
+function effectOptions(selected) {
+  return EFFECT_GROUPS.map((group) => {
+    const options = Object.entries(EFFECTS)
+      .filter(([, effect]) => effect.group === group)
+      .map(([id]) => option(id, t(`GLULT.Effect.${id}`), selected))
+      .join("");
+    return `<optgroup label="${escapeAttr(t(`GLULT.EffectGroup.${group}`))}">${options}</optgroup>`;
+  }).join("");
 }
 
 function option(value, label, selected) {
@@ -422,6 +439,18 @@ function activateConfigPreview(root) {
   icon.addEventListener("input", update);
   resourceName.addEventListener("input", update);
   update();
+
+  // Picking an effect suggests its matching color and icon; both stay
+  // editable afterwards, so the suggestion never locks anything in.
+  const effect = form.querySelector('[name="effect"]');
+  effect?.addEventListener("change", () => {
+    const preset = EFFECTS[effect.value];
+    if (preset) {
+      color.value = preset.color;
+      icon.value = preset.icon;
+    }
+    update();
+  });
 
   const readyMode = form.querySelector('[name="readyMode"]');
   const readyThreshold = form.querySelector('[name="readyThreshold"]');

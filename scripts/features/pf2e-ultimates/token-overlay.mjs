@@ -1,4 +1,5 @@
 import { DEFAULT_ICON } from "./constants.mjs";
+import { effectChunk, sanitizeEffect } from "./effects.mjs";
 import {
   getDisplayMode,
   getUltimateState,
@@ -77,118 +78,38 @@ void main(void) {
   gl_FragColor = vec4(body * alpha, alpha);
 }`;
 
-const FRAGMENT_SHADER = `
+/* Per-effect fragment shaders. Each effect (effects.mjs) supplies a
+   `glultEffect(uv, r, a) -> (energy, heat, fill)` body; the templates below
+   wrap it with the gel-sphere/icon rendering (icon) or the base ring, comet,
+   and token masking (ring). The gel icon compiles the simplified variant
+   (GLULT_SIMPLE), the token overlay ring the full-complexity one. */
+
+const iconFragmentCache = new Map();
+const ringFragmentCache = new Map();
+
+function iconFragmentShader(effectId) {
+  const key = sanitizeEffect(effectId);
+  let source = iconFragmentCache.get(key);
+  if (source) return source;
+  source = `
 varying vec2 vTextureCoord;
 uniform sampler2D uIcon;
 uniform float uTime;
 uniform float uSeed;
 uniform vec3 uColor;
-
-float glultHash(vec2 p) {
-  p = fract(p * vec2(123.34, 345.45));
-  p += dot(p, p + vec2(34.345 + uSeed));
-  return fract(p.x * p.y);
-}
-
-float glultNoise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(glultHash(i), glultHash(i + vec2(1.0, 0.0)), f.x),
-    mix(glultHash(i + vec2(0.0, 1.0)), glultHash(i + vec2(1.0, 1.0)), f.x),
-    f.y
-  );
-}
-
-mat2 glultRotate(float angle) {
-  float c = cos(angle);
-  float s = sin(angle);
-  return mat2(c, -s, s, c);
-}
-
-/* Piecewise-LINEAR value noise: hard kinks at integer stations, so bolts
-   read as angular zigzags instead of smooth wobbles. */
-float glultZig(float x, float t) {
-  float i = floor(x);
-  float f = fract(x);
-  float a = glultHash(vec2(i, t)) - 0.5;
-  float b = glultHash(vec2(i + 1.0, t)) - 0.5;
-  return mix(a, b, f);
-}
-
-float glultBolt(vec2 p, float angle, float seed) {
-  p = glultRotate(angle) * p;
-  float cycle = uTime * 1.35 + seed * 17.0 + uSeed;
-  float tick = floor(cycle);
-  float age = fract(cycle);
-
-  float jag = glultZig(p.x * 13.0 + seed * 7.0, tick) * 0.115 * smoothstep(0.1, 0.3, p.x);
-  jag += glultZig(p.x * 31.0 + seed * 3.0, tick + 7.0) * 0.042;
-
-  float core = exp(-abs(p.y - jag) * 250.0);
-  float halo = exp(-abs(p.y - jag) * 46.0) * 0.45;
-  float reach = smoothstep(0.15, 0.20, p.x) * (1.0 - smoothstep(0.40, 0.50, p.x));
-
-  float event = step(0.6, glultHash(vec2(tick, seed * 31.7)));
-  float strike = 1.0 - smoothstep(0.0, 0.19, age);
-  float strobe = mix(0.55, 1.0, step(0.4, glultHash(vec2(tick + floor(age * 26.0), seed * 5.1))));
-  float aftershock = exp(-pow((age - 0.30) * 26.0, 2.0)) * 0.5;
-  float flash = event * (strike * strobe + aftershock);
-
-  float forkBase = 0.21 + glultHash(vec2(tick, seed + 2.0)) * 0.09;
-  float forkY = jag + (p.x - forkBase) * (0.55 + seed * 0.35)
-    + glultZig(p.x * 27.0 + seed, tick + 3.0) * 0.03;
-  float fork = exp(-abs(p.y - forkY) * 270.0);
-  fork *= smoothstep(forkBase, forkBase + 0.035, p.x) * (1.0 - smoothstep(0.35, 0.45, p.x));
-
-  return ((core + halo) * reach + fork * 1.0) * flash;
-}
-
-float glultArc(float r, float a, float radius, float phase, float frequency) {
-  float ring = exp(-abs(r - radius) * 145.0);
-  float broken = smoothstep(-0.35, 0.42, sin(a * frequency + phase));
-  return ring * broken;
-}
+#define GLULT_SIMPLE 1
+#define GLULT_EDGE 0.188
+#define GLULT_BASE 0.21
+#define GLULT_OUT 0.44
+${effectChunk(key)}
 
 void main(void) {
   vec2 uv = vTextureCoord - vec2(0.5);
   float r = length(uv);
   float a = atan(uv.y, uv.x);
-
   float breathe = 0.92 + 0.08 * sin(uTime * 2.25 + uSeed);
 
-  /* Spiraling on-fire flame. The noise is sampled in a rotated Cartesian
-     frame (rotation grows with radius → spiral) instead of on the atan
-     angle, so there is no wrap seam at the ±PI boundary on the left.
-     A single octave shapes the tongues — the gel icon is small on screen,
-     so finer detail just reads as noise; the token ring keeps two. */
-  vec2 sp = glultRotate(r * 9.0 - uTime * 0.3) * uv;
-  vec2 outward = (sp / max(r, 0.05)) * uTime * 0.22;
-  float tongueNoise = glultNoise(sp * 14.0 - outward + vec2(uSeed, 0.0));
-  float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
-  float tongueLen = 0.29 + licks * 0.125;
-  float taper = 1.0 - smoothstep(tongueLen - 0.06, tongueLen, r);
-  float flicker = 0.82 + 0.18 * (0.6 * sin(uTime * 5.3 + uSeed) + 0.4 * sin(uTime * 8.7 + uSeed * 2.0));
-  float flame = smoothstep(0.188, 0.222, r) * taper;
-  flame *= (0.30 + licks * 1.25) * breathe * flicker;
-  float flameCore = smoothstep(0.188, 0.215, r) * (1.0 - smoothstep(0.235, 0.275, r))
-    * (0.5 + licks * 0.8) * breathe * flicker;
-  float glow = exp(-abs(r - 0.21) * 16.0) * 0.34 * breathe * flicker;
-
-  float arcs = glultArc(r, a, 0.245, uTime * 0.72 + uSeed, 5.0);
-  arcs += glultArc(r, a, 0.292, -uTime * 0.47 + uSeed * 0.4, 7.0) * 0.72;
-
-  float sparks = exp(-abs(r - 0.325) * 180.0) * pow(max(0.0, sin(a * 3.0 - uTime * 1.15)), 30.0);
-  sparks += exp(-abs(r - 0.276) * 190.0) * pow(max(0.0, sin(a * 2.0 + uTime * 0.83 + 1.7)), 34.0) * 0.75;
-
-  float wavePhase = fract(uTime * 0.34 + fract(uSeed * 0.17));
-  float waveRadius = 0.215 + wavePhase * 0.22;
-  float chargeWave = exp(-abs(r - waveRadius) * 125.0) * (1.0 - wavePhase) * 0.42;
-
-  float bolts = glultBolt(uv, 0.12, 0.17);
-  bolts += glultBolt(uv, 2.24, 0.53);
-  bolts += glultBolt(uv, 4.37, 0.89);
+  vec3 fx = glultEffect(uv, r, a);
 
   float sphereMask = 1.0 - smoothstep(0.178, 0.205, r);
   float sphereDepth = sqrt(max(0.0, 1.0 - pow(r / 0.205, 2.0)));
@@ -197,43 +118,35 @@ void main(void) {
   float sphereHighlight = exp(-length(uv - vec2(-0.065, -0.075)) * 22.0) * sphereMask * 0.58;
 
   float icon = smoothstep(0.10, 0.62, texture2D(uIcon, vTextureCoord).a) * (1.0 - smoothstep(0.17, 0.198, r));
-  float iconAura = smoothstep(0.18, 0.0, r) * 0.24 * breathe;
-  float energy = sphereShade + sphereRim + sphereHighlight + iconAura;
-  energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + flameCore * 0.9 + glow;
-  energy += sparks * 1.7 + chargeWave + bolts * 3.0;
+  float iconAura = (1.0 - smoothstep(0.0, 0.18, r)) * 0.24 * breathe;
+  float energy = sphereShade + sphereRim + sphereHighlight + iconAura + icon * 1.85 + fx.x;
   float alpha = clamp(energy, 0.0, 0.98) * (1.0 - smoothstep(0.47, 0.5, r));
 
   vec3 deep = uColor * 0.42;
   vec3 bright = min(vec3(1.0), uColor * 1.32 + vec3(0.28));
   vec3 whiteHot = min(vec3(1.0), bright + vec3(0.38));
-  float heat = clamp(sphereHighlight + arcs * 0.45 + flameCore * 0.9 + flame * 0.18 + sparks + bolts * 1.8, 0.0, 1.0);
-  vec3 color = mix(deep, bright, clamp(sphereDepth + flame * 0.6 + flameCore + chargeWave, 0.0, 1.0));
+  float heat = clamp(sphereHighlight + fx.y, 0.0, 1.0);
+  vec3 color = mix(deep, bright, clamp(sphereDepth + fx.z, 0.0, 1.0));
   color = mix(color, whiteHot, clamp(icon * 0.72 + heat * 0.78, 0.0, 1.0));
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
+  iconFragmentCache.set(key, source);
+  return source;
+}
 
-const RING_FRAGMENT_SHADER = `
+function ringFragmentShader(effectId) {
+  const key = sanitizeEffect(effectId);
+  let source = ringFragmentCache.get(key);
+  if (source) return source;
+  source = `
 varying vec2 vTextureCoord;
 uniform float uTime;
 uniform float uSeed;
 uniform vec3 uColor;
-
-float ringHash(vec2 p) {
-  p = fract(p * vec2(123.34, 345.45));
-  p += dot(p, p + vec2(34.345 + uSeed));
-  return fract(p.x * p.y);
-}
-
-float ringNoise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(ringHash(i), ringHash(i + vec2(1.0, 0.0)), f.x),
-    mix(ringHash(i + vec2(0.0, 1.0)), ringHash(i + vec2(1.0, 1.0)), f.x),
-    f.y
-  );
-}
+#define GLULT_EDGE 0.30
+#define GLULT_BASE 0.335
+#define GLULT_OUT 0.46
+${effectChunk(key)}
 
 void main(void) {
   vec2 uv = vTextureCoord - vec2(0.5);
@@ -241,41 +154,24 @@ void main(void) {
   float a = atan(uv.y, uv.x);
   float breathe = 0.9 + 0.1 * sin(uTime * 2.1 + uSeed);
 
-  float base = exp(-pow((r - 0.335) * 34.0, 2.0)) * 0.5 * breathe;
+  vec3 fx = glultEffect(uv, r, a);
 
-  /* Same spiraling flame pattern as the gel icon: noise sampled in a
-     rotated Cartesian frame (rotation grows with radius → spiral), which
-     is seamless across the ±PI angle boundary. Two octaves, slow drift. */
-  float rc = cos(r * 7.0 - uTime * 0.25);
-  float rs = sin(r * 7.0 - uTime * 0.25);
-  vec2 sp = mat2(rc, -rs, rs, rc) * uv;
-  vec2 outward = (sp / max(r, 0.05)) * uTime * 0.2;
-  float tongueNoise = ringNoise(sp * 13.0 - outward + vec2(uSeed, 0.0)) * 0.7
-    + ringNoise(sp * 27.0 - outward * 1.6 + vec2(0.0, uSeed)) * 0.3;
-  float licks = pow(1.0 - abs(2.0 * tongueNoise - 1.0), 2.4);
-  float tongueLen = 0.355 + licks * 0.075;
-  float flicker = 0.82 + 0.18 * (0.6 * sin(uTime * 5.3 + uSeed) + 0.4 * sin(uTime * 8.7 + uSeed * 2.0));
-  float flame = smoothstep(0.30, 0.335, r) * (1.0 - smoothstep(tongueLen - 0.04, tongueLen, r));
-  flame *= (0.30 + licks * 1.25) * breathe * flicker;
-  float flameCore = smoothstep(0.30, 0.328, r) * (1.0 - smoothstep(0.345, 0.365, r))
-    * (0.5 + licks * 0.8) * breathe * flicker;
-  float glow = exp(-abs(r - 0.335) * 14.0) * 0.3 * breathe * flicker;
+  float base = exp(-pow((r - GLULT_BASE) * 34.0, 2.0)) * 0.5 * breathe;
+  float comet = pow(0.5 + 0.5 * sin(a - uTime * 0.9 + uSeed), 18.0) * exp(-abs(r - GLULT_BASE) * 70.0) * 1.4;
 
-  float comet = pow(0.5 + 0.5 * sin(a - uTime * 0.9 + uSeed), 18.0) * exp(-abs(r - 0.335) * 70.0) * 1.4;
-
-  float wavePhase = fract(uTime * 0.2 + fract(uSeed * 0.13));
-  float wave = exp(-abs(r - (0.30 + wavePhase * 0.16)) * 90.0) * (1.0 - wavePhase) * 0.5;
-
-  float energy = base + flame * 1.1 + flameCore * 0.9 + glow + comet + wave;
+  float energy = base + comet + fx.x;
   energy *= smoothstep(0.265, 0.30, r) * (1.0 - smoothstep(0.44, 0.5, r));
 
   vec3 bright = min(vec3(1.0), uColor * 1.25 + vec3(0.22));
   vec3 whiteHot = min(vec3(1.0), bright + vec3(0.35));
-  vec3 color = mix(uColor * 0.6, bright, clamp(energy, 0.0, 1.0));
-  color = mix(color, whiteHot, clamp(comet + flameCore * 0.8, 0.0, 1.0));
+  vec3 color = mix(uColor * 0.6, bright, clamp(energy * 0.6 + fx.z, 0.0, 1.0));
+  color = mix(color, whiteHot, clamp(comet + fx.y, 0.0, 1.0));
   float alpha = clamp(energy, 0.0, 0.9);
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
+  ringFragmentCache.set(key, source);
+  return source;
+}
 
 /* Enter/exit animation timing (seconds). */
 const APPEAR_SECONDS = 0.5;
@@ -376,7 +272,7 @@ export class UltimateTokenOverlay {
     const height = token.h || 0;
     const size = Math.max(16, Math.min(36, Math.min(width, height) * 0.2));
     const signature = [
-      token.actor.uuid, state.color, icon, size,
+      token.actor.uuid, state.color, state.effect, icon, size,
       display.icon ? 1 : 0, display.ring ? 1 : 0,
       display.counter ? state.value : "-",
       width, height,
@@ -479,7 +375,7 @@ export class UltimateTokenOverlay {
           setMeshQuad(material, size * 1.75, size * 1.75, true);
           material.blendMode = PIXI.BLEND_MODES?.NORMAL ?? "normal";
 
-          const energy = makeMesh(FRAGMENT_SHADER, {
+          const energy = makeMesh(iconFragmentShader(state.effect), {
             uIcon: texture,
             uTime: this.time,
             uSeed: Math.random() * 100,
@@ -494,7 +390,7 @@ export class UltimateTokenOverlay {
         }
 
         if (display.ring) {
-          ring = makeMesh(RING_FRAGMENT_SHADER, {
+          ring = makeMesh(ringFragmentShader(state.effect), {
             uTime: this.time,
             uSeed: Math.random() * 100,
             uColor: rgb,
