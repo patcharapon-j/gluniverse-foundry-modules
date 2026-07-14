@@ -271,6 +271,9 @@
 }
 
 .glult-config-dialog .window-content {
+  max-height: min(80vh, 760px);
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
   background: var(--gl-ink-1);
 }
 
