@@ -1,5 +1,13 @@
 import { DEFAULT_ICON } from "./constants.mjs";
-import { getUltimateState, hasUltimateItems, isCharged, isNpcActor, sanitizeIcon } from "./state.mjs";
+import {
+  getDisplayMode,
+  getUltimateState,
+  hasUltimateItems,
+  isCharged,
+  isNpcActor,
+  sanitizeIcon,
+  shouldShowCounter,
+} from "./state.mjs";
 
 const VERTEX_SHADER = `
 attribute vec2 aVertexPosition;
@@ -185,6 +193,42 @@ void main(void) {
   gl_FragColor = vec4(color * alpha, alpha);
 }`;
 
+const RING_FRAGMENT_SHADER = `
+varying vec2 vTextureCoord;
+uniform float uTime;
+uniform float uSeed;
+uniform vec3 uColor;
+
+void main(void) {
+  vec2 uv = vTextureCoord - vec2(0.5);
+  float r = length(uv);
+  float a = atan(uv.y, uv.x);
+  float breathe = 0.9 + 0.1 * sin(uTime * 2.1 + uSeed);
+
+  float base = exp(-pow((r - 0.345) * 34.0, 2.0)) * 0.5 * breathe;
+
+  float arc1 = exp(-abs(r - 0.345) * 90.0) * smoothstep(-0.2, 0.55, sin(a * 3.0 + uTime * 0.9 + uSeed));
+  float arc2 = exp(-abs(r - 0.375) * 110.0) * smoothstep(-0.1, 0.6, sin(a * 5.0 - uTime * 1.25 + uSeed * 0.7)) * 0.7;
+
+  float comet = pow(0.5 + 0.5 * sin(a - uTime * 1.7 + uSeed), 18.0) * exp(-abs(r - 0.345) * 70.0) * 1.4;
+  float comet2 = pow(0.5 + 0.5 * sin(a + uTime * 1.1 + 2.4), 24.0) * exp(-abs(r - 0.375) * 90.0) * 0.8;
+
+  float wavePhase = fract(uTime * 0.3 + fract(uSeed * 0.13));
+  float wave = exp(-abs(r - (0.30 + wavePhase * 0.16)) * 90.0) * (1.0 - wavePhase) * 0.5;
+
+  float ticks = pow(abs(sin(a * 12.0 + uTime * 0.22 + uSeed)), 60.0) * exp(-abs(r - 0.322) * 130.0) * 0.7;
+
+  float energy = base + arc1 * 0.8 + arc2 + comet + comet2 + wave + ticks;
+  energy *= smoothstep(0.265, 0.30, r) * (1.0 - smoothstep(0.42, 0.5, r));
+
+  vec3 bright = min(vec3(1.0), uColor * 1.25 + vec3(0.22));
+  vec3 whiteHot = min(vec3(1.0), bright + vec3(0.35));
+  vec3 color = mix(uColor * 0.6, bright, clamp(energy, 0.0, 1.0));
+  color = mix(color, whiteHot, clamp(comet + comet2 * 0.7, 0.0, 1.0));
+  float alpha = clamp(energy, 0.0, 0.9);
+  gl_FragColor = vec4(color * alpha, alpha);
+}`;
+
 export class UltimateTokenOverlay {
   constructor() {
     this.entries = new Map();
@@ -219,9 +263,10 @@ export class UltimateTokenOverlay {
     }
     const wanted = new Set();
     for (const token of canvas.tokens.placeables ?? []) {
-      if (!this.shouldDisplay(token)) continue;
+      const display = this.computeDisplay(token);
+      if (!display) continue;
       wanted.add(token.id);
-      this.upsert(token);
+      this.upsert(token, display);
     }
     for (const id of [...this.entries.keys()]) {
       if (!wanted.has(id)) this.remove(id);
@@ -231,37 +276,54 @@ export class UltimateTokenOverlay {
 
   refreshToken(token) {
     if (!token?.id) return;
-    if (this.shouldDisplay(token)) this.upsert(token);
+    const display = this.computeDisplay(token);
+    if (display) this.upsert(token, display);
     else this.remove(token.id);
     this.syncTicker();
   }
 
-  shouldDisplay(token) {
+  /** Resolve which layers this token needs: gel icon, overlay ring, counter. */
+  computeDisplay(token) {
     const actor = token?.actor;
-    if (!isNpcActor(actor) || !hasUltimateItems(actor) || !isCharged(actor)) return false;
-    if (token.document?.hidden && !game.user?.isGM) return false;
-    if (actor.isDead) return false;
+    if (!isNpcActor(actor) || !hasUltimateItems(actor)) return null;
+    if (token.document?.hidden && !game.user?.isGM) return null;
+    if (actor.isDead) return null;
     const combatant = token.document?.combatant
       ?? game.combat?.combatants?.find?.((entry) => entry.tokenId === token.id && entry.sceneId === token.document?.parent?.id);
-    return !combatant?.defeated;
+    if (combatant?.defeated) return null;
+
+    const charged = isCharged(actor);
+    const mode = getDisplayMode(actor);
+    const icon = charged && (mode === "icon" || mode === "both");
+    const ring = charged && (mode === "overlay" || mode === "both");
+    const counter = shouldShowCounter(actor);
+    if (!icon && !ring && !counter) return null;
+    return { icon, ring, counter };
   }
 
-  upsert(token) {
+  upsert(token, display) {
     const state = getUltimateState(token.actor);
     const icon = sanitizeIcon(state.icon);
-    const size = Math.max(16, Math.min(36, Math.min(token.w || 0, token.h || 0) * 0.2));
-    const signature = `${token.actor.uuid}|${state.color}|${icon}|${size}`;
+    const width = token.w || 0;
+    const height = token.h || 0;
+    const size = Math.max(16, Math.min(36, Math.min(width, height) * 0.2));
+    const signature = [
+      token.actor.uuid, state.color, icon, size,
+      display.icon ? 1 : 0, display.ring ? 1 : 0,
+      display.counter ? state.value : "-",
+      width, height,
+    ].join("|");
     let entry = this.entries.get(token.id);
     if (entry?.signature !== signature || entry?.token !== token || entry.container?.destroyed) {
       this.remove(token.id);
-      entry = this.createEntry(token, state, icon, size, signature);
+      entry = this.createEntry(token, state, icon, size, signature, display);
       if (!entry) return;
       this.entries.set(token.id, entry);
     }
-    this.positionEntry(entry, token, size);
+    this.positionEntry(entry, token);
   }
 
-  createEntry(token, state, icon, size, signature) {
+  createEntry(token, state, icon, size, signature, display) {
     try {
       const container = new PIXI.Container();
       container.eventMode = "none";
@@ -269,49 +331,83 @@ export class UltimateTokenOverlay {
       container.zIndex = 1000;
       const texture = this.iconTexture(icon);
       const rgb = hexRgb(state.color);
-      let material = null;
-      let mesh = null;
+      const meshes = [];
+      let iconGroup = null;
+      let ring = null;
+      let counter = null;
       let fallback = null;
 
       try {
-        material = makeMesh(MATERIAL_FRAGMENT_SHADER, {
-          uIcon: texture,
-          uTime: this.time,
-          uSeed: Math.random() * 100,
-          uColor: rgb,
-        });
-        setMeshQuad(material, size * 1.75, size * 1.75, true);
-        material.blendMode = PIXI.BLEND_MODES?.NORMAL ?? "normal";
+        if (display.icon) {
+          iconGroup = new PIXI.Container();
+          iconGroup.eventMode = "none";
+          const material = makeMesh(MATERIAL_FRAGMENT_SHADER, {
+            uIcon: texture,
+            uTime: this.time,
+            uSeed: Math.random() * 100,
+            uColor: rgb,
+          });
+          setMeshQuad(material, size * 1.75, size * 1.75, true);
+          material.blendMode = PIXI.BLEND_MODES?.NORMAL ?? "normal";
 
-        mesh = makeMesh(FRAGMENT_SHADER, {
-          uIcon: texture,
-          uTime: this.time,
-          uSeed: Math.random() * 100,
-          uColor: rgb,
-        });
-        setMeshQuad(mesh, size * 1.75, size * 1.75, true);
-        mesh.blendMode = PIXI.BLEND_MODES?.ADD ?? "add";
-        container.addChild(material, mesh);
+          const energy = makeMesh(FRAGMENT_SHADER, {
+            uIcon: texture,
+            uTime: this.time,
+            uSeed: Math.random() * 100,
+            uColor: rgb,
+          });
+          setMeshQuad(energy, size * 1.75, size * 1.75, true);
+          energy.blendMode = PIXI.BLEND_MODES?.ADD ?? "add";
+          iconGroup.addChild(material, energy);
+          meshes.push(material, energy);
+          container.addChild(iconGroup);
+        }
+
+        if (display.ring) {
+          ring = makeMesh(RING_FRAGMENT_SHADER, {
+            uTime: this.time,
+            uSeed: Math.random() * 100,
+            uColor: rgb,
+          });
+          const ringSize = Math.max(32, Math.min(token.w || 0, token.h || 0) * 1.5);
+          setMeshQuad(ring, ringSize, ringSize, true);
+          ring.blendMode = PIXI.BLEND_MODES?.ADD ?? "add";
+          meshes.push(ring);
+          container.addChild(ring);
+        }
       } catch (error) {
-        destroyMesh(material);
-        destroyMesh(mesh);
-        material = null;
-        mesh = null;
+        for (const mesh of meshes) destroyMesh(mesh);
+        meshes.length = 0;
+        iconGroup = null;
+        ring = null;
         console.warn("GLUniverse Suite | PF2e Ultimates | WebGL effect unavailable; using static icon", error);
-        fallback = makeFallback(texture, size, state.color);
-        container.addChild(fallback);
+        if (display.icon || display.ring) {
+          fallback = makeFallback(texture, size, state.color);
+          container.addChild(fallback);
+        }
+      }
+
+      if (display.counter) {
+        counter = makeCounter(state, size);
+        container.addChild(counter);
       }
 
       token.addChild(container);
-      return { token, container, material, mesh, fallback, signature, size };
+      return { token, container, meshes, iconGroup, ring, counter, fallback, signature, size };
     } catch (error) {
       console.warn("GLUniverse Suite | PF2e Ultimates | Could not attach token indicator", error);
       return null;
     }
   }
 
-  positionEntry(entry, token, size) {
-    entry.container.position.set((token.w || 0) - size * 0.9, size * 0.9);
+  positionEntry(entry, token) {
+    const width = token.w || 0;
+    const height = token.h || 0;
+    const size = entry.size;
+    entry.iconGroup?.position.set(width - size * 0.9, size * 0.9);
+    entry.fallback?.position.set(width - size * 0.9, size * 0.9);
+    entry.ring?.position.set(width / 2, height / 2);
+    entry.counter?.position.set(width - size * 0.9, height - size * 0.9);
   }
 
   iconTexture(icon) {
@@ -332,8 +428,9 @@ export class UltimateTokenOverlay {
     const deltaMs = canvas?.app?.ticker?.deltaMS ?? 16.667;
     this.time += Math.min(deltaMs, 100) / 1000;
     for (const entry of this.entries.values()) {
-      if (entry.material?.shader?.uniforms) entry.material.shader.uniforms.uTime = this.time;
-      if (entry.mesh?.shader?.uniforms) entry.mesh.shader.uniforms.uTime = this.time;
+      for (const mesh of entry.meshes ?? []) {
+        if (mesh?.shader?.uniforms) mesh.shader.uniforms.uTime = this.time;
+      }
     }
   }
 
@@ -353,10 +450,11 @@ export class UltimateTokenOverlay {
     const entry = this.entries.get(id);
     if (!entry) return;
     this.entries.delete(id);
-    destroyMesh(entry.material);
-    destroyMesh(entry.mesh);
-    if (entry.fallback && !entry.fallback.destroyed) {
-      try { entry.fallback.destroy({ children: true }); } catch { /* noop */ }
+    for (const mesh of entry.meshes ?? []) destroyMesh(mesh);
+    for (const child of [entry.fallback, entry.counter, entry.iconGroup]) {
+      if (child && !child.destroyed) {
+        try { child.destroy({ children: true }); } catch { /* noop */ }
+      }
     }
     if (entry.container && !entry.container.destroyed) {
       if (entry.container.parent) entry.container.parent.removeChild(entry.container);
@@ -425,6 +523,50 @@ function makeFallback(texture, size, color) {
   sprite.height = size * 0.72;
   sprite.tint = tint;
   container.addChild(glow, sprite);
+  return container;
+}
+
+/** Small gel-styled numeric badge showing the current resource count. */
+function makeCounter(state, size) {
+  const container = new PIXI.Container();
+  container.eventMode = "none";
+  const tint = Number.parseInt(state.color.slice(1), 16);
+  const radius = size * 0.46;
+
+  const disc = new PIXI.Graphics();
+  disc.beginFill(tint, 0.16);
+  disc.drawCircle(0, 0, radius * 1.28);
+  disc.endFill();
+  disc.beginFill(0x0c1017, 0.88);
+  disc.drawCircle(0, 0, radius);
+  disc.endFill();
+  disc.beginFill(tint, 0.26);
+  disc.drawCircle(0, 0, radius * 0.9);
+  disc.endFill();
+  disc.lineStyle({ width: Math.max(1, size * 0.06), color: tint, alpha: 0.95 });
+  disc.drawCircle(0, 0, radius);
+  disc.lineStyle(0);
+  disc.beginFill(0xffffff, 0.2);
+  disc.drawEllipse(-radius * 0.16, -radius * 0.42, radius * 0.62, radius * 0.34);
+  disc.endFill();
+  container.addChild(disc);
+
+  try {
+    const text = new PIXI.Text(String(state.value), {
+      fontFamily: "Signika, 'Signika Negative', Arial, sans-serif",
+      fontSize: Math.max(10, Math.round(size * 0.58)),
+      fontWeight: "700",
+      fill: 0xffffff,
+      stroke: 0x0a0d12,
+      strokeThickness: Math.max(2, Math.round(size * 0.1)),
+      align: "center",
+    });
+    text.anchor.set(0.5);
+    text.resolution = Math.max(2, globalThis.devicePixelRatio || 2);
+    container.addChild(text);
+  } catch (error) {
+    console.warn("GLUniverse Suite | PF2e Ultimates | Could not render counter text", error);
+  }
   return container;
 }
 

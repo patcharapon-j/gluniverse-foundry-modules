@@ -9,6 +9,16 @@ export const DEFAULT_CHARGES = 3;
 export const MIN_CHARGES = 1;
 export const MAX_CHARGES = 12;
 
+export const SETTINGS = Object.freeze({
+  displayMode: "ult.displayMode",
+  counterDefault: "ult.counterDefault",
+});
+
+export const DISPLAY_MODES = new Set(["icon", "overlay", "both"]);
+export const ACTOR_DISPLAY_MODES = new Set(["default", "icon", "overlay", "both"]);
+export const COUNTER_MODES = new Set(["default", "show", "hide"]);
+export const READY_MODES = new Set(["full", "atLeast", "exactly"]);
+
 export const ELIGIBLE_ITEM_TYPES = new Set(["action", "melee", "spell"]);
 
 export const FUNCTION_ORDER = ["signature", "trigger", "engine", "ultimate"];

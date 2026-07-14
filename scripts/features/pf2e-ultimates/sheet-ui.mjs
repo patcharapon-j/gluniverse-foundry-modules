@@ -10,6 +10,7 @@ import {
   hasUltimateItems,
   isEligibleItem,
   isNpcActor,
+  isReadyState,
   isUltimateItem,
   normalizeUltimateState,
   reconcileActorUltimateState,
@@ -129,7 +130,7 @@ function injectChargeControl(app, actor, root, state) {
     return;
   }
 
-  const charged = state.value >= state.max;
+  const charged = isReadyState(state);
   const control = document.createElement("section");
   control.className = `glult-charge-control gl-glass${charged ? " is-charged" : ""}`;
   control.style.setProperty("--gl-accent", state.color);
@@ -140,7 +141,7 @@ function injectChargeControl(app, actor, root, state) {
     <div class="glult-charge-copy">
       <span class="gl-tech-label">${escapeHTML(state.resourceName || t("GLULT.Charge.Label"))}</span>
       <strong>${state.value} / ${state.max}</strong>
-      <small>${escapeHTML(t(charged ? "GLULT.Charge.Charged" : "GLULT.Charge.Charging"))}</small>
+      <small>${escapeHTML(chargeStatus(state))}</small>
     </div>
     <div class="glult-charge-actions">
       <button type="button" class="gl-btn" data-glult-action="step-down" aria-label="${escapeAttr(t("GLULT.Charge.Remove"))}" data-tooltip="${escapeAttr(t("GLULT.Charge.Remove"))}"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
@@ -172,14 +173,20 @@ function injectChargeControl(app, actor, root, state) {
 }
 
 function updateChargeControl(control, state) {
-  const charged = state.value >= state.max;
-  control.classList.toggle("is-charged", charged);
+  control.classList.toggle("is-charged", isReadyState(state));
   const clock = control.querySelector(".glult-clock-button");
   if (clock) clock.innerHTML = clockSvg(state.value, state.max);
   const value = control.querySelector(".glult-charge-copy strong");
   if (value) value.textContent = `${state.value} / ${state.max}`;
   const status = control.querySelector(".glult-charge-copy small");
-  if (status) status.textContent = t(charged ? "GLULT.Charge.Charged" : "GLULT.Charge.Charging");
+  if (status) status.textContent = chargeStatus(state);
+}
+
+function chargeStatus(state) {
+  if (isReadyState(state)) return t("GLULT.Charge.Charged");
+  if (state.readyMode === "atLeast") return game.i18n.format("GLULT.Charge.ReadyAtLeast", { threshold: state.readyThreshold });
+  if (state.readyMode === "exactly") return game.i18n.format("GLULT.Charge.ReadyExactly", { threshold: state.readyThreshold });
+  return t("GLULT.Charge.Charging");
 }
 
 export function clockSvg(value, max) {
@@ -219,6 +226,10 @@ export async function openUltimateConfig(actor) {
     const next = normalizeUltimateState({
       ...state,
       max: form?.querySelector?.('[name="max"]')?.value,
+      readyMode: form?.querySelector?.('[name="readyMode"]')?.value,
+      readyThreshold: form?.querySelector?.('[name="readyThreshold"]')?.value,
+      displayMode: form?.querySelector?.('[name="displayMode"]')?.value,
+      counterMode: form?.querySelector?.('[name="counterMode"]')?.value,
       color: form?.querySelector?.('[name="color"]')?.value,
       icon: form?.querySelector?.('[name="icon"]')?.value,
       resourceName: form?.querySelector?.('[name="resourceName"]')?.value,
@@ -282,15 +293,52 @@ function renderConfig(actor, state) {
           <select class="gl-field" name="allegiance">${allegianceOptions}</select>
         </label>
       </div>
-      <label class="glult-config-field">
-        <span>${escapeHTML(t("GLULT.Config.Required"))}</span>
-        <input class="gl-field" type="number" name="max" min="${MIN_CHARGES}" max="${MAX_CHARGES}" step="1" value="${state.max}">
-        <small>${escapeHTML(t("GLULT.Config.RequiredHint"))}</small>
-      </label>
-      <label class="glult-config-field">
-        <span>${escapeHTML(t("GLULT.Config.Color"))}</span>
-        <input class="gl-field glult-color" type="color" name="color" value="${escapeAttr(state.color)}">
-      </label>
+      <div class="glult-config-grid">
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.Required"))}</span>
+          <input class="gl-field" type="number" name="max" min="${MIN_CHARGES}" max="${MAX_CHARGES}" step="1" value="${state.max}">
+          <small>${escapeHTML(t("GLULT.Config.RequiredHint"))}</small>
+        </label>
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.ReadyMode"))}</span>
+          <select class="gl-field" name="readyMode">
+            ${option("full", t("GLULT.Config.ReadyFull"), state.readyMode)}
+            ${option("atLeast", t("GLULT.Config.ReadyAtLeast"), state.readyMode)}
+            ${option("exactly", t("GLULT.Config.ReadyExactly"), state.readyMode)}
+          </select>
+          <small>${escapeHTML(t("GLULT.Config.ReadyModeHint"))}</small>
+        </label>
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.ReadyThreshold"))}</span>
+          <input class="gl-field" type="number" name="readyThreshold" min="1" max="${MAX_CHARGES}" step="1" value="${state.readyThreshold}" ${state.readyMode === "full" ? "disabled" : ""}>
+          <small>${escapeHTML(t("GLULT.Config.ReadyThresholdHint"))}</small>
+        </label>
+      </div>
+      <div class="glult-config-grid">
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.Display"))}</span>
+          <select class="gl-field" name="displayMode">
+            ${option("default", t("GLULT.Config.OptionDefault"), state.displayMode)}
+            ${option("icon", t("GLULT.Settings.DisplayMode.Icon"), state.displayMode)}
+            ${option("overlay", t("GLULT.Settings.DisplayMode.Overlay"), state.displayMode)}
+            ${option("both", t("GLULT.Settings.DisplayMode.Both"), state.displayMode)}
+          </select>
+          <small>${escapeHTML(t("GLULT.Config.DisplayHint"))}</small>
+        </label>
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.Counter"))}</span>
+          <select class="gl-field" name="counterMode">
+            ${option("default", t("GLULT.Config.OptionDefault"), state.counterMode)}
+            ${option("show", t("GLULT.Config.CounterShow"), state.counterMode)}
+            ${option("hide", t("GLULT.Config.CounterHide"), state.counterMode)}
+          </select>
+          <small>${escapeHTML(t("GLULT.Config.CounterHint"))}</small>
+        </label>
+        <label class="glult-config-field">
+          <span>${escapeHTML(t("GLULT.Config.Color"))}</span>
+          <input class="gl-field glult-color" type="color" name="color" value="${escapeAttr(state.color)}">
+        </label>
+      </div>
       <label class="glult-config-field">
         <span>${escapeHTML(t("GLULT.Config.Icon"))}</span>
         <input class="gl-field" type="search" name="icon" list="glult-icon-suggestions" value="${escapeAttr(state.icon)}" autocomplete="off">
@@ -342,4 +390,17 @@ function activateConfigPreview(root) {
   icon.addEventListener("input", update);
   resourceName.addEventListener("input", update);
   update();
+
+  const readyMode = form.querySelector('[name="readyMode"]');
+  const readyThreshold = form.querySelector('[name="readyThreshold"]');
+  const maxInput = form.querySelector('[name="max"]');
+  const syncReady = () => {
+    if (!readyMode || !readyThreshold) return;
+    readyThreshold.disabled = readyMode.value === "full";
+    const cap = Number.parseInt(maxInput?.value, 10);
+    if (Number.isFinite(cap)) readyThreshold.max = String(cap);
+  };
+  readyMode?.addEventListener("change", syncReady);
+  maxInput?.addEventListener("input", syncReady);
+  syncReady();
 }

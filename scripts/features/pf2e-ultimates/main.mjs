@@ -6,6 +6,7 @@ import {
   hasUltimateItems,
   isCharged,
   isNpcActor,
+  isReadyState,
   isUltimateItem,
   reconcileActorUltimateState,
   setCharge,
@@ -40,6 +41,10 @@ export function onReady() {
   overlay.start();
 }
 
+export function refreshOverlay() {
+  overlay?.refreshAll();
+}
+
 function rememberDeletingParent(item) {
   if (item?.uuid && isNpcActor(item.parent)) deletingParents.set(item.uuid, item.parent);
 }
@@ -68,13 +73,13 @@ function onCreateChatMessage(message, _options, userId) {
   const contextType = message.flags?.pf2e?.context?.type ?? null;
   const isDamageFollowup = contextType === "damage-roll";
 
-  if (userId === game.user?.id && state.value < state.max && !isDamageFollowup) {
+  if (userId === game.user?.id && !isReadyState(state) && !isDamageFollowup) {
     ui.notifications?.warn(game.i18n.format("GLULT.Notify.UsedEarly", {
       item: item.name,
       value: state.value,
       max: state.max,
     }));
-  } else if (userId === game.user?.id && state.value >= state.max) {
+  } else if (userId === game.user?.id && isReadyState(state)) {
     ui.notifications?.info(game.i18n.format("GLULT.Notify.Spent", { item: item.name }));
   }
 
