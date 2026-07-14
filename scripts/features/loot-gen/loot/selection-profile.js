@@ -21,6 +21,7 @@ import { filterCandidates, weightFor, weightedPick, mundaneBases } from "./item-
 import { buildRuneSet } from "../pf2e/runes.js";
 import { logLlmCall } from "./llm-log.js";
 import { clamp } from "../../../core/util.mjs";
+import { safeSetting } from "../settings-util.js";
 
 export const PROFILE_TYPES = ["weapon", "armor", "equipment", "consumable", "treasure"];
 const PERMANENT_TYPES = new Set(["weapon", "armor", "shield", "equipment"]);
@@ -255,7 +256,6 @@ export function toPick(item, reason) {
 function clampInt(v, lo, hi) { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; }
 function round2(n) { return Math.round(n * 100) / 100; }
 function clip(s, max) { return String(s ?? "").slice(0, max); }
-function safeSetting(key, fallback) { try { return game.settings.get(MODULE_ID, key); } catch { return fallback; } }
 function errText(err) {
   if (err?.name === "AbortError") return "timed out (client)";
   return err?.message || String(err ?? "unknown error");

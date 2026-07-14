@@ -34,58 +34,6 @@
  * so the shared vocabulary stays stable across skins.
  * ==========================================================================*/
 :root {
-  /* Ink ramp — surfaces (§2.1) */
-  --gl-ink-0: #02070b;   /* deepest void — page scrims, splash decks */
-  --gl-ink-1: #080b11;   /* glass body base */
-  --gl-ink-2: #0b0f17;   /* inputs, inset wells */
-  --gl-ink-3: #161d2c;   /* raised rows */
-
-  /* Text (§2.2) */
-  --gl-text:        #eef1f7;
-  --gl-text-bright: #f3fbff;
-  --gl-text-dim:    #98a2b6;
-  --gl-text-faint:  rgba(243, 251, 255, 0.38);
-
-  /* Lines & rims (§2.3) */
-  --gl-hair:        rgba(255, 255, 255, 0.08);
-  --gl-edge:        rgba(255, 255, 255, 0.13);
-  --gl-line-strong: rgba(244, 252, 255, 0.55);
-
-  /* Fixed semantic accents (§2.4) */
-  --gl-signal:     #ffd24a;   /* signal amber — system ceremony / "look here" */
-  --gl-signal-hot: #ffe070;   /* signal peak — flash sweeps, lit digits */
-  --gl-cyan:       #5eeaff;   /* system/friendly accent (Initiative primary) */
-  --gl-hazard:     #ff4a52;   /* unified danger */
-  --gl-good:       #5fdb92;   /* success / completion */
-  --gl-violet:     #b497ff;   /* mystery / hidden */
-  --gl-mission:    #37d99a;   /* mission/goal emerald */
-  --gl-holo-c:     #ff66b3;   /* holo ramp terminus (§2.6) */
-
-  /* Apex — PF2e-Flatfinder solo-boss accent (eclipse-violet: void + venom). A
-     dedicated semantic so a boss never collides with the hazard ad-hoc red. */
-  --gl-apex:       #b14bff;
-  --gl-apex-deep:  #3c0a6b;
-  --gl-apex-hot:   #ff7bd6;
-  --gl-apex-ink:   #140422;
-
-  /* Two typographic voices (§5) */
-  --gl-display: "Oxanium", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --gl-tech:    "Bahnschrift", "Share Tech Mono", "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
-
-  /* Motion tokens (§6.1) */
-  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);     /* premium decel */
-  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);  /* slight overshoot — numerals */
-  --gl-pop:  cubic-bezier(0.34, 1.56, 0.5, 1);  /* tactile pop — pips, fills */
-  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);    /* sharp accelerated exit */
-  --gl-d-quick:  180ms;
-  --gl-d-move:   420ms;
-  --gl-d-reveal: 620ms;
-  --gl-d-splash: 720ms;
-  --gl-breathe:  2.6s;
-  --gl-dread:    3.2s;
-}
-
-:root {
   --gluni-cyan:        var(--gl-cyan);
   --gluni-white:       var(--gl-text-bright);
   --gluni-red:         var(--gl-hazard);   /* §9.2: --gluni-red #ff335f -> --gl-hazard */
@@ -137,7 +85,7 @@
      Status classes remap these so shimmer + edge-spec inherit the accent hue. */
   --gluni-holo-a: var(--gluni-cyan);
   --gluni-holo-b: var(--gluni-violet);
-  --gluni-holo-c: #ff66b3;            /* magenta (matches mockup .v4) */
+  --gluni-holo-c: var(--gl-holo-c);
   --gluni-magenta: #ff66b3;
 
   /* Heavy turn-change beat timings (cinematic baseline; tiers scale via root class). */
@@ -3121,8 +3069,8 @@
     0 26px 70px rgba(0, 0, 0, 0.62);
   /* True frosted-glass deck (design-language.md §3.3): blur the dimmed
      battlefield behind the ceremony type. Panel-level only — never on chips. */
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
 }
@@ -3548,8 +3496,8 @@
     inset 0 0 44px color-mix(in srgb, var(--gluni-break) 15%, transparent),
     0 26px 74px rgba(0, 0, 0, 0.66);
   /* Frosted-glass deck (design-language.md §3.3) — amber sibling of the round deck. */
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }

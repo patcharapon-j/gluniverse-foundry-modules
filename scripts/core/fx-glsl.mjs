@@ -6,7 +6,7 @@
  * without forking the shader. The initiative tracker re-exports these from
  * `features/initiative/gl.mjs`; the etched-chat feature imports them directly for
  * its own offscreen renderer. Two features, one shader source — the crack look is
- * guaranteed identical (see specs/002-etched-chat-theme/research.md §D).
+ * guaranteed identical.
  *
  * No PIXI, no DOM, no imports. Just data.
  */

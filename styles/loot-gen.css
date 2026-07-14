@@ -17,8 +17,6 @@
      · .gllg-llm-log          LLM call-log window
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=Share+Tech+Mono&display=swap');
-
 /* ============================================================
    1 · Shared tokens  (design-language §2 · §6.1)
    Declared on every root we paint — chat cards live outside the
@@ -30,31 +28,8 @@
 .application.gllg-generate,
 .application.gllg-llm-log,
 .chat-message:has(.gllg-card){
-  /* — ink ramp (surfaces) — */
-  --gl-ink-0:#02070b; --gl-ink-1:#080b11; --gl-ink-2:#0b0f17; --gl-ink-3:#161d2c;
-  /* — text — */
-  --gl-text:#eef1f7; --gl-text-bright:#f3fbff; --gl-text-dim:#98a2b6;
-  --gl-text-faint:rgba(243,251,255,.38);
-  /* — lines & rims — */
-  --gl-hair:rgba(255,255,255,.08); --gl-edge:rgba(255,255,255,.13);
-  --gl-line-strong:rgba(244,252,255,.55);
-  /* — fixed semantic accents — */
-  --gl-signal:#ffd24a; --gl-signal-hot:#ffe070; --gl-cyan:#5eeaff;
-  --gl-hazard:#ff4a52; --gl-good:#5fdb92; --gl-violet:#b497ff; --gl-mission:#37d99a;
   /* — dynamic accent channel (set per-context below) — */
-  --gl-accent:#6b86d6;                                   /* default: night shift tint */
-  --gl-glow:color-mix(in srgb, var(--gl-accent) 50%, transparent);
-  --gl-bloom:color-mix(in srgb, var(--gl-accent) 18%, transparent);
-  /* — motion — */
-  --gl-ease:cubic-bezier(.16,1,.3,1);
-  --gl-snap:cubic-bezier(.2,1.35,.22,1);
-  --gl-pop:cubic-bezier(.34,1.56,.5,1);
-  --gl-exit:cubic-bezier(.55,0,.84,0);
-  --gl-d-quick:180ms; --gl-d-move:420ms; --gl-d-reveal:620ms; --gl-d-splash:720ms;
-  --gl-breathe:2.6s; --gl-dread:3.2s;
-  /* — type voices — */
-  --gl-display:"Oxanium","Segoe UI",system-ui,sans-serif;
-  --gl-tech:"Share Tech Mono","Bahnschrift","JetBrains Mono",Consolas,monospace;
+  --gl-accent:#6b86d6;
 
   /* — legacy module-local aliases (keep old rules working) — */
   --ink:var(--gl-text); --muted:var(--gl-text-dim); --faint:#69748c;

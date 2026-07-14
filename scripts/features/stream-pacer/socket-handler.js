@@ -33,7 +33,7 @@ class SocketHandlerClass {
   }
 
   initialize() {
-    onSocket(FEATURE_ID, (data) => this._handleMessage(data));
+    onSocket(FEATURE_ID, (data, senderId) => this._handleMessage(data, senderId));
 
     // Request current state from GM when joining. Retry a few times in case
     // the GM's socket handler isn't registered yet when we fire the first one.
@@ -60,8 +60,8 @@ class SocketHandlerClass {
     }, delay);
   }
 
-  _handleMessage(data) {
-    const { event, payload, senderId } = data;
+  _handleMessage(data, senderId) {
+    const { event, payload = {} } = data;
 
     // Foundry's socket emit is a broadcast — ignore our own messages so we
     // don't double-apply state we already set locally.
@@ -183,8 +183,7 @@ class SocketHandlerClass {
   _emit(event, payload = {}) {
     emitSocket(FEATURE_ID, {
       event,
-      payload,
-      senderId: game.user.id
+      payload
     });
   }
 

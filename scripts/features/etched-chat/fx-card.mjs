@@ -6,8 +6,7 @@
  * context. Mirrors the initiative CardFXManager mechanism (one shared renderer,
  * N cheap 2D canvases) but with a one-shot "animate then settle to a static
  * cracked still" lifecycle instead of an indefinite loop. Two WebGL contexts
- * total across the suite (initiative + etched-chat); see
- * specs/002-etched-chat-theme/contracts/fx-surface.md.
+ * total across the suite (initiative + etched-chat).
  *
  * When WebGL/PIXI is unavailable, `supported` is false and callers fall back to
  * the pure-CSS crack (style.mjs / .glec-crack-css).

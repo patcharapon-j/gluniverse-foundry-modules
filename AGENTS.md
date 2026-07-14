@@ -72,8 +72,8 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
   add the matching lang keys. Do NOT localize stored data values or
   parse/format vocabulary (e.g. statsblock parsing tokens).
 - **CSS** — `styles/gl-tokens.css` is the single source of truth for the design
-  system. Use the `--gl-*` tokens, `.gl-glass`/`.gl-btn` utilities, and `gl-*`
-  keyframes. Don't redefine tokens locally; derive from them if you need an
+  system. Use the `--gl-*` tokens, `.gl-glass`/`.gl-btn`/`.gl-field`/`.gl-well`
+  utilities, semantic `--gl-surface*` tokens, and `gl-*` keyframes. Don't redefine tokens locally; derive from them if you need an
   alias. Keep each feature's existing unique class prefix.
 - **Motion** — the suite does NOT honor the OS `prefers-reduced-motion`
   preference; animations always play so visuals are consistent for every user
@@ -103,39 +103,9 @@ When touching localization, also sanity-check that referenced keys resolve and
 that `module.json`'s `styles`/`languages`/`esmodules` lists still point at files
 that exist.
 
-## Spec Kit workflow
-
-Features are developed through Spec Kit: `/speckit-specify` → `/speckit-clarify`
-(optional) → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`. Spec Kit is
-the **artifact layer** (it writes spec/plan/tasks). Two grilling skills add the
-**thinking layer** at the seams where decisions are made — suggest them proactively:
-
-- **`/brainstorm`** before `/speckit-specify`, for any idea fuzzier than a clear
-  one-liner. A relentless one-question-at-a-time interview that discovers scope and
-  hidden decisions, then hands a sharp feature description to specify.
-- **`/grill-plan`** between `/speckit-plan` and `/speckit-tasks`. Stress-tests the
-  design in `plan.md`/`research.md` (and against this file + the constitution) before
-  it fans out into tasks, updating those artifacts in place.
-
-`/grill-plan` is divergent and writes nothing to the spec; `/speckit-clarify` is the
-convergent, capped pass that encodes answers back into `spec.md`. Use grilling to find
-the shape, the speckit commands to capture it.
-
 ## Don't
 
 - Don't add a build step, bundler, or transpile — Foundry consumes the source.
 - Don't register anything under an id other than `gluniverse-foundry-modules`.
 - Don't rename existing i18n keys or CSS class prefixes (breaks migration/world data).
 - Don't move side effects to import time in feature adapters.
-
-<!-- SPECKIT START -->
-Active feature plan: `specs/002-etched-chat-theme/plan.md`
-(Etched-Glass Chat Theme (PF2e) — a self-contained toggleable feature `etched-chat`
-that restyles PF2e chat cards in the suite's Etched Glass aesthetic, overriding
-Dorako UI's chat themes without coupling to them. Baseline glass/diorama styling via
-a `renderChatMessageHTML` marker (`.glec-card`/`data-glec-tier`); valence-colored
-glass-fracture on crit-success/kill (gold) and crit-failure (red/purple) reusing the
-initiative tracker's single-shared-renderer FX pipeline, with a CSS-crack fallback).
-See that plan and its `research.md` / `data-model.md` / `contracts/` for the tier-
-resolution + FX-surface contracts, structure, and validation steps.
-<!-- SPECKIT END -->

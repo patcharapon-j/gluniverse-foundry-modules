@@ -1,4 +1,4 @@
-import { MODULE_ID, FLAG_SCOPE, FK, SK, registerSettings, unwrapElement } from './settings.js';
+import { MODULE_ID, FLAG_SCOPE, FK, SK, registerSettings } from './settings.js';
 import { SlotCalculator } from './SlotCalculator.js';
 import { TidyIntegration } from './TidyIntegration.js';
 import { NotchCalculator } from './NotchCalculator.js';
@@ -25,6 +25,9 @@ export const api = {
     rollDicePool: (item) => DicePoolCalculator.rollPool(item),
     getPoolSummary: (item) => DicePoolCalculator.getPoolSummary(item),
 };
+
+const WRAPPED = Symbol.for(`${MODULE_ID}.tidy.prepareDerivedData.wrapped`);
+const ORIGINAL = Symbol.for(`${MODULE_ID}.tidy.prepareDerivedData.original`);
 
 /**
  * Init phase (run only when the feature is enabled & available).
@@ -79,34 +82,38 @@ export function onReady() {
 function wrapPrepareDerivedData() {
     // --- Actor: AC penalty from notched armor ---
     const ActorClass = CONFIG.Actor?.documentClass;
-    if (ActorClass) {
+    if (ActorClass && !ActorClass.prototype[WRAPPED]) {
         const origActorPrep = ActorClass.prototype.prepareDerivedData;
+        Object.defineProperty(ActorClass.prototype, ORIGINAL, { value: origActorPrep, configurable: true });
         ActorClass.prototype.prepareDerivedData = function (...args) {
-            origActorPrep.call(this, ...args);
+            const result = origActorPrep.call(this, ...args);
             try {
-                if (!getSetting('enableWearAndTear')) return;
-                if (this.type !== 'character' && this.type !== 'npc') return;
+                if (!getSetting('enableWearAndTear')) return result;
+                if (this.type !== 'character' && this.type !== 'npc') return result;
 
                 const acPenalty = NotchCalculator.getActorArmorNotchPenalty(this);
                 if (acPenalty > 0 && this.system?.attributes?.ac) {
                     this.system.attributes.ac.value = Math.max(0, this.system.attributes.ac.value - acPenalty);
                 }
             } catch { /* fail silently if data not yet available */ }
+            return result;
         };
+        Object.defineProperty(ActorClass.prototype, WRAPPED, { value: true, configurable: true });
     }
 
     // --- Item: weapon damage degradation from notches ---
     const ItemClass = CONFIG.Item?.documentClass;
-    if (ItemClass) {
+    if (ItemClass && !ItemClass.prototype[WRAPPED]) {
         const origItemPrep = ItemClass.prototype.prepareDerivedData;
+        Object.defineProperty(ItemClass.prototype, ORIGINAL, { value: origItemPrep, configurable: true });
         ItemClass.prototype.prepareDerivedData = function (...args) {
-            origItemPrep.call(this, ...args);
+            const result = origItemPrep.call(this, ...args);
             try {
-                if (!getSetting('enableWearAndTear')) return;
-                if (this.type !== 'weapon') return;
+                if (!getSetting('enableWearAndTear')) return result;
+                if (this.type !== 'weapon') return result;
 
                 const notches = NotchCalculator.getEffectiveNotches(this);
-                if (notches <= 0) return;
+                if (notches <= 0) return result;
 
                 // dnd5e 5.2+: structured DamageData with number/denomination
                 if (this.system.damage?.base?.denomination) {
@@ -142,7 +149,20 @@ function wrapPrepareDerivedData() {
                     }
                 }
             } catch { /* fail silently */ }
+            return result;
         };
+        Object.defineProperty(ItemClass.prototype, WRAPPED, { value: true, configurable: true });
+    }
+}
+
+/** Restore Foundry document methods for hot-reload/diagnostic teardown. */
+export function teardownPrepareDerivedData() {
+    for (const DocClass of [CONFIG.Actor?.documentClass, CONFIG.Item?.documentClass]) {
+        const proto = DocClass?.prototype;
+        if (!proto?.[WRAPPED] || typeof proto[ORIGINAL] !== 'function') continue;
+        proto.prepareDerivedData = proto[ORIGINAL];
+        delete proto[WRAPPED];
+        delete proto[ORIGINAL];
     }
 }
 
@@ -229,7 +249,7 @@ Hooks.on('dnd5e.rollAttack', async (rolls, data) => {
         // Fumble → notch the weapon or focus used
         const toNotch = NotchCalculator.getWeaponToNotch(actor, item);
         if (toNotch) {
-            const result = await NotchCalculator.addNotch(toNotch);
+            await NotchCalculator.addNotch(toNotch);
             const reason = toNotch.type === 'weapon'
                 ? game.i18n.localize('GLINVSLOTS.notch.weaponNotched')
                 : game.i18n.localize('GLINVSLOTS.notch.focusNotched');
@@ -245,7 +265,7 @@ Hooks.on('dnd5e.rollAttack', async (rolls, data) => {
             if (!targetActor) continue;
             const armorItem = NotchCalculator.getArmorToNotch(targetActor);
             if (armorItem) {
-                const result = await NotchCalculator.addNotch(armorItem);
+                await NotchCalculator.addNotch(armorItem);
                 const reason = game.i18n.localize('GLINVSLOTS.notch.armorNotched');
                 await NotchCalculator.announceNotch(armorItem, targetActor, reason);
             }

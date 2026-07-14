@@ -1,13 +1,8 @@
 import { MODULE_ID, getSetting, setSetting } from './settings.js';
 import { emitSocket, SOCKET_EVENTS } from './socket-handler.js';
+import { clampNumber } from '../../core/util.mjs';
 
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
-
-function clampNumber(value, min, max, fallback) {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return fallback;
-    return Math.min(Math.max(number, min), max);
-}
 
 function cleanString(value, fallback, maxLength = 512) {
     const string = String(value ?? fallback ?? '').trim();

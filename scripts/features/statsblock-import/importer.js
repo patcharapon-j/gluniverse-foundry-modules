@@ -1,3 +1,5 @@
+import { escapeHTML as escapeHtml } from "../../core/util.mjs";
+
 // Ported into the GLUniverse Suite. Everything that used to live under the
 // standalone package id now uses the single suite id, and every settings/flag
 // key is prefixed with the feature prefix ("sbi.") to avoid cross-feature
@@ -1537,10 +1539,6 @@ function signed(value) {
 
 function titleCase(value) {
   return String(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
 }
 
 function exportActorToMarkdown(actor) {

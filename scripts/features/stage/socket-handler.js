@@ -27,33 +27,32 @@ export function initializeSocket(onStageUpdate, onAnimation, onCommsUpdate) {
 }
 
 export function emitSocket(data) {
-    const payload = { ...data, senderId: game.user.id };
-    suiteEmit(FEATURE_ID, payload);
+    suiteEmit(FEATURE_ID, data);
     // Foundry does not echo a client's own emit back to it, so handle locally.
     handleLocalMessage(data);
 }
 
-function handleSocketMessage(data) {
-    if (data.senderId === game.user.id) return;
+function handleSocketMessage(data, senderId) {
+    if (senderId === game.user.id) return;
 
     switch (data.type) {
         case SOCKET_EVENTS.UPDATE_STAGE:
-            if (!isSenderGM(data) || !data.state || typeof data.state !== 'object') return;
+            if (!isSenderGM(senderId) || !data.state || typeof data.state !== 'object') return;
             if (_onStageUpdate) _onStageUpdate(data.state);
             break;
         case SOCKET_EVENTS.UPDATE_COMMS:
-            if (!isSenderGM(data) || !data.state || typeof data.state !== 'object') return;
+            if (!isSenderGM(senderId) || !data.state || typeof data.state !== 'object') return;
             if (_onCommsUpdate) _onCommsUpdate(data.state);
             break;
         case SOCKET_EVENTS.TRIGGER_ANIMATION:
-            if (!isSenderGM(data) || !Number.isInteger(data.slotIndex) || !ALLOWED_ANIMATIONS.has(data.animation)) return;
+            if (!isSenderGM(senderId) || !Number.isInteger(data.slotIndex) || !ALLOWED_ANIMATIONS.has(data.animation)) return;
             if (_onAnimation) _onAnimation(data.slotIndex, data.animation);
             break;
         case SOCKET_EVENTS.REQUEST_SYNC:
-            handleSyncRequest(data);
+            handleSyncRequest(data, senderId);
             break;
         case SOCKET_EVENTS.SYNC_STATE:
-            if (!isSenderGM(data) || !data.state || typeof data.state !== 'object') return;
+            if (!isSenderGM(senderId) || !data.state || typeof data.state !== 'object') return;
             if (data.targetId && data.targetId !== game.user.id) return;
             if (_onStageUpdate) _onStageUpdate(data.state);
             if (data.commsState && typeof data.commsState === 'object' && _onCommsUpdate) {
@@ -63,8 +62,8 @@ function handleSocketMessage(data) {
     }
 }
 
-function isSenderGM(data) {
-    return game.users?.get(data.senderId)?.isGM === true;
+function isSenderGM(senderId) {
+    return game.users?.get(senderId)?.isGM === true;
 }
 
 function handleLocalMessage(data) {
@@ -81,7 +80,7 @@ function handleLocalMessage(data) {
     }
 }
 
-function handleSyncRequest(data) {
+function handleSyncRequest(data, senderId) {
     if (!game.user.isGM) return;
     const mod = game.modules.get('gluniverse-foundry-modules');
     const stageManager = mod?.stageManager;
@@ -89,8 +88,7 @@ function handleSyncRequest(data) {
 
     suiteEmit(FEATURE_ID, {
         type: SOCKET_EVENTS.SYNC_STATE,
-        senderId: game.user.id,
-        targetId: data.senderId,
+        targetId: senderId,
         state: stageManager.getFullState(),
         commsState: stageManager.getFullCommsState()
     });

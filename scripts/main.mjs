@@ -21,6 +21,7 @@ import { runMigrations } from "./core/migration.mjs";
 import "./features/index.mjs";
 
 Hooks.once("init", async () => {
+  Suite.validate();
   registerCoreSettings();
   Suite.registerAllSettings();
   // Catalog every registered suite setting/menu and hide them from Foundry's

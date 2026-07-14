@@ -29,6 +29,7 @@ import { runWorkshop } from "./workshop.js";
 import { logLlmCall } from "./llm-log.js";
 import { getAdapter } from "../systems/registry.js";
 import { clamp } from "../../../core/util.mjs";
+import { safeSetting } from "../settings-util.js";
 import {
   requestSelectionProfile, resolveWanted, pickByProfile, makeRuned, toPick, rarityLeanBias
 } from "./selection-profile.js";
@@ -412,7 +413,6 @@ function clampInt(v, lo, hi) { const n = Math.trunc(Number(v)); return Number.is
 function round2(n) { return Math.round(n * 100) / 100; }
 function clean(s, max = 400) { return String(s ?? "").replace(/\s+/g, " ").trim().slice(0, max); }
 function clip(s, max) { return String(s ?? "").slice(0, max); }
-function safeSetting(key, fallback) { try { return game.settings.get(MODULE_ID, key); } catch { return fallback; } }
 function errText(err) {
   if (err?.name === "AbortError") return "timed out (client)";
   return err?.message || String(err ?? "unknown error");

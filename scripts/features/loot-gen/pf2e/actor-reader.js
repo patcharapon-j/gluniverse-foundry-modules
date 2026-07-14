@@ -9,6 +9,7 @@
  */
 
 import { MODULE_ID, SETTINGS } from "../const.js";
+import { safeSetting } from "../settings-util.js";
 
 const STRIKING_TIER = { striking: 1, greaterStriking: 2, majorStriking: 3 };
 const RESILIENT_TIER = { resilient: 1, greaterResilient: 2, majorResilient: 3 };
@@ -205,8 +206,4 @@ export function readFundamentals(actor) {
     hasWeapon: weapons.length > 0,
     hasArmor: armors.length > 0
   };
-}
-
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }

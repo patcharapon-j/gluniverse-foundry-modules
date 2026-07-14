@@ -1,16 +1,11 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
+import { escapeHTML as escapeHtml } from "../../core/util.mjs";
+import { SETTINGS } from "./settings.mjs";
 
 const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "cargo-grid";
 const CARGO_MUTATION_QUERY = `${MODULE_ID}.cargoMutation`;
 
-const SETTINGS = Object.freeze({
-  boardData: "cargo.boardData",
-  playerVisible: "cargo.playerVisible",
-  maxShapeSize: "cargo.maxShapeSize",
-  cellSize: "cargo.cellSize",
-  viewState: "cargo.viewState"
-});
 
 const CATEGORIES = Object.freeze({
   supplies: {
@@ -131,62 +126,13 @@ export function onReady() {
   scheduleRefresh();
 }
 
-export function registerSettings() {
-  game.settings.register(MODULE_ID, SETTINGS.boardData, {
-    scope: "world",
-    config: false,
-    type: Object,
-    default: createDefaultWorldData()
-  });
+export function onPlayerVisibleChanged(visible) {
+  if (!visible) emitSocket(FEATURE_ID, { type: "closePlayers" });
+  scheduleRefresh();
+}
 
-  game.settings.register(MODULE_ID, SETTINGS.playerVisible, {
-    name: "GLUCARGO.Settings.PlayerVisible.Name",
-    hint: "GLUCARGO.Settings.PlayerVisible.Hint",
-    scope: "world",
-    config: true,
-    restricted: true,
-    type: Boolean,
-    default: false,
-    onChange: visible => {
-      if (!visible) emitSocket(FEATURE_ID, { type: "closePlayers" });
-      scheduleRefresh();
-    }
-  });
-
-  game.settings.register(MODULE_ID, SETTINGS.maxShapeSize, {
-    name: "GLUCARGO.Settings.MaxShapeSize.Name",
-    hint: "GLUCARGO.Settings.MaxShapeSize.Hint",
-    scope: "world",
-    config: true,
-    restricted: true,
-    type: Number,
-    default: 8,
-    range: { min: 3, max: 12, step: 1 }
-  });
-
-  game.settings.register(MODULE_ID, SETTINGS.cellSize, {
-    name: "GLUCARGO.Settings.CellSize.Name",
-    hint: "GLUCARGO.Settings.CellSize.Hint",
-    scope: "client",
-    config: true,
-    type: Number,
-    default: 44,
-    range: { min: 28, max: 56, step: 1 },
-    onChange: () => boardWindow?.render()
-  });
-
-  game.settings.register(MODULE_ID, SETTINGS.viewState, {
-    scope: "client",
-    config: false,
-    type: Object,
-    default: {
-      left: 120,
-      top: 90,
-      width: 1180,
-      height: 740,
-      activeContainerId: null
-    }
-  });
+export function refreshBoard() {
+  boardWindow?.render();
 }
 
 function createDefaultWorldData() {
@@ -2817,12 +2763,6 @@ function debounce(fn, delay) {
 
 function capitalize(value) {
   return String(value ?? "").replace(/^\w/, char => char.toUpperCase());
-}
-
-function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = String(value ?? "");
-  return div.innerHTML;
 }
 
 function escapeAttr(value) {

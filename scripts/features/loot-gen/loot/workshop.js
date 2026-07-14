@@ -17,6 +17,7 @@ import { getAdapter } from "../systems/registry.js";
 import { iconNoteHtml } from "./icon-note.js";
 import { logLlmCall } from "./llm-log.js";
 import { sourcesLabel } from "./creature-sources.js";
+import { safeSetting } from "../settings-util.js";
 import { sanitizeRuneSet, buildRuneSet, runePriceOf, runeSetNames, themeRuneSlugs } from "../pf2e/runes.js";
 
 function resolveParty() { return getAdapter()?.resolveParty() ?? { partyActor: null, members: [] }; }
@@ -930,10 +931,6 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
-}
-
 /** Human-friendly one-liner for the call log (distinguishes a client-side abort). */
 function errText(err) {
   if (err?.name === "AbortError") return "timed out (client)";

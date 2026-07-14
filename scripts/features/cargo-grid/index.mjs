@@ -1,5 +1,8 @@
 import { Suite } from "../../core/registry.mjs";
-import { registerSettings, onInit, onReady } from "./gluniverse-cargo-grid.mjs";
+import { registerSettings } from "./settings.mjs";
+
+let runtimePromise = null;
+const loadRuntime = () => runtimePromise ??= import("./gluniverse-cargo-grid.mjs");
 
 Suite.register({
   id: "cargo-grid",
@@ -16,12 +19,12 @@ Suite.register({
     registerSettings();
   },
 
-  onInit() {
-    onInit();
+  async onInit() {
+    (await loadRuntime()).onInit();
   },
 
-  onReady() {
-    onReady();
+  async onReady() {
+    (await loadRuntime()).onReady();
   },
 
   legacy: {

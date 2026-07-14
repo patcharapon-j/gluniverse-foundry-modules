@@ -18,6 +18,7 @@
  */
 
 import { MODULE_ID, SETTINGS, SOURCE_MODE } from "../../const.js";
+import { safeSetting } from "../../settings-util.js";
 
 export const PLUTONIUM_ID = "plutonium";
 
@@ -273,7 +274,4 @@ function hasAnySource() {
 }
 function note(msg, level = "info") {
   try { ui.notifications?.[level]?.(`GLLG: ${msg}`); } catch { /* ignore */ }
-}
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }

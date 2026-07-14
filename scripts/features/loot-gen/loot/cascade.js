@@ -26,6 +26,7 @@ import {
 } from "./selection-profile.js";
 import { getAdapter } from "../systems/registry.js";
 import { clamp } from "../../../core/util.mjs";
+import { safeSetting } from "../settings-util.js";
 
 const ARMOR_AXES = new Set(["defense", "resilient"]);
 
@@ -543,8 +544,5 @@ function signatureFor(actorId, axis) {
   if (ARMOR_AXES.has(axis) && !safeSetting(SETTINGS.heirloomArmor, false)) return null;
   const item = ARMOR_AXES.has(axis) ? signatureArmor(actor) : signatureWeapon(actor);
   return item ? { id: item.id, name: item.name } : null;
-}
-function safeSetting(key, fallback) {
-  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
 }
 function round2(n) { return Math.round(n * 100) / 100; }

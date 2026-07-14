@@ -21,7 +21,9 @@
 import { SUITE_ID, SETTING_MIGRATION, log, warn } from "./const.mjs";
 import { Suite } from "./registry.mjs";
 
-const MIGRATION_VERSION = 1;
+// v2 adds a per-feature completion ledger so one failed adapter is retried
+// instead of being hidden behind a globally completed migration.
+const MIGRATION_VERSION = 2;
 
 /** Read a raw world setting value (parsed) for an arbitrary namespace.key. */
 function readWorldSetting(namespace, key) {
@@ -62,14 +64,19 @@ function isUnset(suiteKey) {
 export async function runMigrations() {
   if (!game.user.isGM) return;
   const done = game.settings.get(SUITE_ID, SETTING_MIGRATION) ?? {};
-  if (done.version >= MIGRATION_VERSION) return;
+  const completed = { ...(done.features ?? {}) };
+  const legacyFeatures = Suite.all().filter((def) => def.legacy?.id);
+  const isComplete = (def) => completed[def.id] >= (def.legacy.version ?? MIGRATION_VERSION);
+  if (legacyFeatures.every(isComplete)) return;
+  let failed = false;
 
   let migratedAny = false;
 
   for (const def of Suite.all()) {
     const legacy = def.legacy;
     if (!legacy?.id) continue;
-    if (done[def.id]) continue;
+    const targetVersion = legacy.version ?? MIGRATION_VERSION;
+    if (completed[def.id] >= targetVersion) continue;
 
     try {
       // 1) Settings remap (world + client).
@@ -92,14 +99,17 @@ export async function runMigrations() {
         await legacy.migrate.call(def, { SUITE_ID, readWorldSetting, readClientSetting });
         migratedAny = true;
       }
+      completed[def.id] = targetVersion;
     } catch (e) {
+      failed = true;
       warn(`Migration for "${def.id}" (from ${legacy.id}) failed:`, e);
     }
   }
 
   await game.settings.set(SUITE_ID, SETTING_MIGRATION, {
     ...done,
-    version: MIGRATION_VERSION,
+    features: completed,
+    version: failed ? (done.version ?? 0) : MIGRATION_VERSION,
   });
   if (migratedAny) {
     log("Imported configuration from previously-installed standalone modules.");

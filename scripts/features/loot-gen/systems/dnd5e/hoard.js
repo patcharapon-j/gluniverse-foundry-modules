@@ -22,6 +22,7 @@ import {
 import { magicPlan, RARITY_LEVEL, RARITY_GP, RARITY_ORDER } from "./tables.js";
 import { normRarity } from "./actor-reader.js";
 import { importItemByName, ensureContent } from "./plutonium.js";
+import { safeSetting } from "../../settings-util.js";
 
 const RARITIES = ["common", "uncommon", "rare", "very rare", "legendary"];
 const MAX_ITEMS = 30;
@@ -293,7 +294,6 @@ function clearIndexFor() { /* placeholder kept for symmetry; reindex handles it 
 
 /* ------------------------------ utils ------------------------------ */
 
-function safeSetting(key, fallback) { try { return game.settings.get(MODULE_ID, key); } catch { return fallback; } }
 function note(msg, level = "info") { try { ui.notifications?.[level]?.(`GLLG: ${msg}`); } catch { /* ignore */ } }
 function round2(n) { return Math.round(n * 100) / 100; }
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }

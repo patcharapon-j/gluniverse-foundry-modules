@@ -1,4 +1,5 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
+import { clamp01 } from "../../core/util.mjs";
 
 const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "critical";
@@ -283,10 +284,6 @@ function playSfx(kind) {
   el.play().catch((err) => {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | sfx play failed:`, err);
   });
-}
-function clamp01(n) {
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(1, n));
 }
 function readGlobalInterfaceVolume() {
   try {

@@ -38,6 +38,8 @@
   "GLS.feature.flatfinder.hint": "Surfaces flat-footed / off-guard conditions and competence in PF2e combat.",
   "GLS.feature.destiny-dice.title": "Destiny Dice (PF2e)",
   "GLS.feature.destiny-dice.hint": "A cinematic Destiny/Fate die for PF2e checks and rerolls.",
+  "GLS.feature.pf2e-ultimates.title": "PF2e Combat Engines & Ultimates",
+  "GLS.feature.pf2e-ultimates.hint": "Build NPC Signature, Trigger, Engine, and charge-powered Ultimate abilities with a cinematic token indicator.",
   "GLS.feature.insight.title": "Insight",
   "GLS.feature.insight.hint": "Passive, broadcastable on-screen notifications and cues.",
   "GLS.feature.stage.title": "Stage",
