@@ -23,27 +23,48 @@ void main(void) {
   vec2 uv = vTextureCoord - vec2(0.5);
   float r = length(uv);
   float sphereRadius = 0.205;
-  float sphereMask = 1.0 - smoothstep(0.184, sphereRadius, r);
+  float sphereMask = 1.0 - smoothstep(sphereRadius - 0.011, sphereRadius, r);
   float z = sqrt(max(0.0, 1.0 - pow(r / sphereRadius, 2.0)));
   vec3 normal = normalize(vec3(uv / sphereRadius, z));
+  vec3 viewDir = vec3(0.0, 0.0, 1.0);
 
-  vec3 lightDirection = normalize(vec3(-0.48, -0.62, 0.95));
-  float diffuse = 0.24 + max(dot(normal, lightDirection), 0.0) * 0.76;
-  float fresnel = pow(1.0 - z, 2.35);
-  float specular = pow(max(dot(normal, lightDirection), 0.0), 24.0);
-  float caustic = 0.5 + 0.5 * sin(uv.x * 44.0 - uv.y * 31.0 + uTime * 0.58 + sin(uv.y * 23.0 + uSeed));
-  caustic = pow(caustic, 5.0) * z * sphereMask;
-  float innerShade = smoothstep(0.19, 0.04, r) * 0.2;
+  vec3 keyLight = normalize(vec3(-0.48, -0.62, 0.95));
+  vec3 fillLight = normalize(vec3(0.58, 0.44, 0.40));
+  float diffuse = 0.20 + max(dot(normal, keyLight), 0.0) * 0.68 + max(dot(normal, fillLight), 0.0) * 0.18;
+  float bottomOcclusion = max(dot(normal, vec3(0.0, 1.0, 0.30)), 0.0) * 0.16;
 
-  vec3 deep = uColor * 0.12;
-  vec3 body = mix(deep, uColor * 0.82, diffuse);
-  body += uColor * (caustic * 0.24 + innerShade);
+  float fresnel = pow(1.0 - z, 2.6);
+  vec3 halfKey = normalize(keyLight + viewDir);
+  float specKey = pow(max(dot(normal, halfKey), 0.0), 120.0) * 1.1;
+  vec3 halfFill = normalize(fillLight + viewDir);
+  float specFill = pow(max(dot(normal, halfFill), 0.0), 40.0) * 0.26;
+  float sheen = pow(max(dot(normal, keyLight), 0.0), 9.0) * 0.26;
+
+  vec2 windowOffset = (uv - vec2(-0.072, -0.084)) * vec2(1.0, 1.5);
+  float window = exp(-dot(windowOffset, windowOffset) * 330.0) * 0.8;
+
+  float c1 = sin(uv.x * 41.0 - uv.y * 29.0 + uTime * 0.58 + sin(uv.y * 21.0 + uSeed));
+  float c2 = sin(uv.x * 24.0 + uv.y * 37.0 - uTime * 0.41 + uSeed * 1.7);
+  float caustic = pow(0.5 + 0.5 * c1, 5.0) * 0.7 + pow(0.5 + 0.5 * c2, 6.0) * 0.5;
+  caustic *= z * sphereMask;
+  float innerShade = smoothstep(0.19, 0.04, r) * 0.16;
+
+  vec2 refractedUv = vTextureCoord - normal.xy * (1.0 - z) * 0.028;
+  float iconEdge = 1.0 - smoothstep(0.17, 0.198, r);
+  float icon = smoothstep(0.10, 0.62, texture2D(uIcon, refractedUv).a) * iconEdge;
+  float iconShadow = smoothstep(0.10, 0.62, texture2D(uIcon, refractedUv - vec2(-0.011, -0.014)).a) * iconEdge * 0.32;
+
+  vec3 deep = uColor * 0.10;
+  vec3 body = mix(deep, uColor * 0.86, clamp(diffuse - bottomOcclusion, 0.0, 1.0));
+  body += uColor * (caustic * 0.22 + innerShade);
   vec3 pearl = min(vec3(1.0), uColor * 0.72 + vec3(0.58));
-  body = mix(body, pearl, clamp(fresnel * 0.68 + specular * 0.72, 0.0, 1.0));
+  vec3 rimDispersion = fresnel * vec3(1.05, 1.0, 0.94);
+  body = mix(body, pearl, clamp(rimDispersion * 0.62 + vec3(specFill + sheen), vec3(0.0), vec3(1.0)));
 
-  float icon = texture2D(uIcon, vTextureCoord).a * (1.0 - smoothstep(0.17, 0.198, r));
-  body = mix(body, vec3(1.0), icon * 0.82);
-  float alpha = clamp(sphereMask * (0.52 + z * 0.24 + fresnel * 0.18) + icon * 0.34, 0.0, 0.94);
+  body = mix(body, deep * 0.5, iconShadow * (1.0 - icon));
+  body = mix(body, vec3(1.0), clamp(icon * 0.88 + specKey + window, 0.0, 1.0));
+  float gloss = (specKey + window) * sphereMask;
+  float alpha = clamp(sphereMask * (0.50 + z * 0.26 + fresnel * 0.20) + icon * 0.36 + gloss * 0.35, 0.0, 0.96);
   gl_FragColor = vec4(body * alpha, alpha);
 }`;
 
@@ -148,7 +169,7 @@ void main(void) {
   float sphereRim = exp(-pow((r - 0.196) * 43.0, 2.0)) * 0.92;
   float sphereHighlight = exp(-length(uv - vec2(-0.065, -0.075)) * 22.0) * sphereMask * 0.58;
 
-  float icon = texture2D(uIcon, vTextureCoord).a * (1.0 - smoothstep(0.17, 0.198, r));
+  float icon = smoothstep(0.10, 0.62, texture2D(uIcon, vTextureCoord).a) * (1.0 - smoothstep(0.17, 0.198, r));
   float iconAura = smoothstep(0.18, 0.0, r) * 0.24 * breathe;
   float energy = sphereShade + sphereRim + sphereHighlight + iconAura;
   energy += icon * 1.85 + arcs * 0.95 + flame * 1.1 + wisps * 1.15;
@@ -299,7 +320,10 @@ export class UltimateTokenOverlay {
     if (cached && !cached.destroyed) return cached;
     const mask = rasterizeFontAwesome(key) ?? rasterizeFontAwesome(DEFAULT_ICON);
     const texture = PIXI.Texture.from(mask);
-    texture.baseTexture && (texture.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? texture.baseTexture.scaleMode);
+    if (texture.baseTexture) {
+      texture.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? texture.baseTexture.scaleMode;
+      if (PIXI.MIPMAP_MODES?.ON !== undefined) texture.baseTexture.mipmap = PIXI.MIPMAP_MODES.ON;
+    }
     this.iconTextures.set(key, texture);
     return texture;
   }
@@ -419,16 +443,16 @@ function rasterizeFontAwesome(iconClass) {
   if (!glyph || !family) return null;
 
   const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
+  canvas.width = 256;
+  canvas.height = 256;
   const context = canvas.getContext("2d");
   if (!context) return null;
-  context.clearRect(0, 0, 128, 128);
+  context.clearRect(0, 0, 256, 256);
   context.fillStyle = "#ffffff";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.font = `${weight} 40px ${family}`;
-  context.fillText(glyph, 64, 64);
+  context.font = `${weight} 80px ${family}`;
+  context.fillText(glyph, 128, 128);
   return canvas;
 }
 
