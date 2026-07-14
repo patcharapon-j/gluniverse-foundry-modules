@@ -2,18 +2,11 @@
 
 .pf2e.item.sheet .glult-item-toggle,
 .application.pf2e.item .glult-item-toggle {
-  align-self: stretch;
-  display: grid;
-  flex: 0 1 auto;
-  gap: 5px;
-  width: 100%;
-  max-width: 100%;
+  display: flex;
+  justify-content: flex-end;
   box-sizing: border-box;
-  margin-top: 5px;
-  padding: 4px 9px;
-  border: 1px solid var(--gl-edge);
-  border-radius: var(--gl-cut-sm);
-  background: var(--gl-surface-inset);
+  margin: 2px 0 4px;
+  padding: 0 4px;
   color: var(--gl-text-dim);
   font-family: var(--gl-tech);
   font-size: 11px;
@@ -21,29 +14,18 @@
   text-transform: uppercase;
 }
 
-.glult-item-toggle-title {
-  color: var(--gl-text-dim);
-  font-size: 9px;
-}
-
-.glult-item-toggle-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.glult-item-toggle-options label {
+.glult-item-toggle label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 6px 2px 3px;
+  gap: 4px;
+  padding: 2px 7px 2px 3px;
   border: 1px solid var(--gl-edge);
   border-radius: 999px;
   color: var(--gl-text-dim);
   cursor: pointer;
 }
 
-.glult-item-toggle-options label:has(input:checked) {
+.glult-item-toggle label:has(input:checked) {
   --gl-accent: var(--gl-cyan);
   border-color: var(--gl-accent);
   color: var(--gl-text-bright);
@@ -60,8 +42,8 @@
 .glult-item-toggle-mark {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 1px solid var(--gl-edge);
   border-radius: 50%;
   background: var(--gl-surface-raised);
@@ -71,10 +53,6 @@
   border-color: var(--gl-accent);
   color: var(--gl-accent);
   box-shadow: 0 0 9px var(--gl-glow);
-}
-
-.pf2e.actor.npc .glult-engine-item:not(.glult-ultimate-item) {
-  background: linear-gradient(105deg, color-mix(in srgb, var(--gl-accent) 5%, transparent), transparent 45%);
 }
 
 .pf2e.actor.npc .glult-charge-control {
@@ -253,17 +231,6 @@
 
 .glult-item-badges .glult-item-badge + .glult-item-badge {
   margin-left: -3px;
-}
-
-.glult-function-signature { --glult-role: var(--gl-cyan); }
-.glult-function-trigger { --glult-role: var(--gl-hazard); }
-.glult-function-engine { --glult-role: var(--gl-violet); }
-
-.glult-item-badge:not(.glult-function-ultimate) {
-  border: 1px solid color-mix(in srgb, var(--glult-role) 65%, var(--gl-edge));
-  background: color-mix(in srgb, var(--glult-role) 18%, var(--gl-surface-raised));
-  color: var(--glult-role);
-  box-shadow: none;
 }
 
 .glult-item-badge i {

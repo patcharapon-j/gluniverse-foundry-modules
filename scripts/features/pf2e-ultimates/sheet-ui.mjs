@@ -1,18 +1,16 @@
 import { escapeAttr, escapeHTML } from "../../core/util.mjs";
 import {
-  ABILITY_FUNCTIONS,
   DEFAULT_ICON,
-  FUNCTION_ORDER,
   ICON_SUGGESTIONS,
   MAX_CHARGES,
   MIN_CHARGES,
 } from "./constants.mjs";
 import {
-  getItemFunctions,
   getUltimateState,
   hasUltimateItems,
   isEligibleItem,
   isNpcActor,
+  isUltimateItem,
   normalizeUltimateState,
   reconcileActorUltimateState,
   sanitizeIcon,
@@ -47,37 +45,26 @@ export function injectItemUltimateToggle(app, html) {
   if (!root || !game.user?.isGM || !isEligibleItem(item)) return;
   if (root.querySelector(".glult-item-toggle")) return;
 
-  const host = root.querySelector("header.sheet-header .details, .sheet-header .details, header.sheet-header");
-  if (!host) return;
+  const navigation = root.querySelector("nav.sheet-navigation, .sheet-navigation");
+  const host = navigation?.parentElement ?? root.querySelector(".window-content, form") ?? root;
 
-  const selected = new Set(getItemFunctions(item));
+  const selected = isUltimateItem(item);
   const group = document.createElement("div");
   group.className = "glult-item-toggle";
-  group.setAttribute("role", "group");
-  group.setAttribute("aria-label", t("GLULT.Item.Functions"));
   group.innerHTML = `
-    <span class="glult-item-toggle-title">${escapeHTML(t("GLULT.Item.Functions"))}</span>
-    <span class="glult-item-toggle-options">
-      ${FUNCTION_ORDER.map((role) => {
-        const definition = ABILITY_FUNCTIONS[role];
-        const label = t(definition.label);
-        return `<label data-tooltip="${escapeAttr(game.i18n.format("GLULT.Item.FunctionHint", { function: label }))}">
-          <input type="checkbox" value="${role}" ${selected.has(role) ? "checked" : ""}>
-          <span class="glult-item-toggle-mark"><i class="${escapeAttr(definition.icon)}" aria-hidden="true"></i></span>
-          <span>${escapeHTML(label)}</span>
-        </label>`;
-      }).join("")}
-    </span>
+    <label data-tooltip="${escapeAttr(game.i18n.format("GLULT.Item.FunctionHint", { function: t("GLULT.Function.Ultimate") }))}">
+      <input type="checkbox" ${selected ? "checked" : ""}>
+      <span class="glult-item-toggle-mark"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+      <span>${escapeHTML(t("GLULT.Function.Ultimate"))}</span>
+    </label>
   `;
   group.addEventListener("change", async (event) => {
     const input = event.target.closest('input[type="checkbox"]');
     if (!input) return;
     event.stopPropagation();
-    const inputs = [...group.querySelectorAll('input[type="checkbox"]')];
-    for (const control of inputs) control.disabled = true;
+    input.disabled = true;
     try {
-      const functions = inputs.filter((control) => control.checked).map((control) => control.value);
-      await setItemFunctions(item, functions, { render: false });
+      await setItemFunctions(item, input.checked ? ["ultimate"] : [], { render: false });
       await reconcileActorUltimateState(item.parent);
       item.parent?.sheet?.render?.(false);
     } catch (error) {
@@ -85,10 +72,11 @@ export function injectItemUltimateToggle(app, html) {
       ui.notifications?.error(t("GLULT.Notify.UpdateFailed"));
       console.error("GLUniverse Suite | PF2e Ultimates | Failed to update item functions", error);
     } finally {
-      for (const control of inputs) control.disabled = false;
+      input.disabled = false;
     }
   });
-  host.appendChild(group);
+  if (navigation) host.insertBefore(group, navigation);
+  else host.prepend(group);
 }
 
 export function decorateNpcSheet(app, html) {
@@ -104,28 +92,22 @@ export function decorateNpcSheet(app, html) {
 function decorateAbilityRows(actor, root, state) {
   for (const row of root.querySelectorAll("[data-item-id]")) {
     const item = actor.items.get(row.dataset.itemId ?? "");
-    const functions = getItemFunctions(item);
-    if (!functions.length) continue;
+    if (!isUltimateItem(item)) continue;
     const itemRow = row.matches(".item") ? row : row.closest(".item") ?? row;
-    itemRow.classList.add("glult-engine-item");
-    itemRow.classList.toggle("glult-ultimate-item", functions.includes("ultimate"));
+    itemRow.classList.add("glult-ultimate-item");
     itemRow.style.setProperty("--gl-accent", state.color);
     if (itemRow.querySelector(".glult-item-badges")) continue;
     const name = itemRow.querySelector("h4 .name, h4.name, .item-name, .name");
     if (!name) continue;
     const badges = document.createElement("span");
     badges.className = "glult-item-badges";
-    for (const role of functions) {
-      const definition = ABILITY_FUNCTIONS[role];
-      const label = t(definition.label);
-      const badge = document.createElement("span");
-      badge.className = `glult-item-badge glult-function-${role}`;
-      badge.dataset.tooltip = label;
-      badge.setAttribute("aria-label", label);
-      const icon = role === "ultimate" ? state.icon : definition.icon;
-      badge.innerHTML = `<i class="${escapeAttr(icon)}" aria-hidden="true"></i>`;
-      badges.appendChild(badge);
-    }
+    const label = t("GLULT.Function.Ultimate");
+    const badge = document.createElement("span");
+    badge.className = "glult-item-badge glult-function-ultimate";
+    badge.dataset.tooltip = label;
+    badge.setAttribute("aria-label", label);
+    badge.innerHTML = `<i class="${escapeAttr(state.icon)}" aria-hidden="true"></i>`;
+    badges.appendChild(badge);
     name.prepend(badges);
   }
 }
