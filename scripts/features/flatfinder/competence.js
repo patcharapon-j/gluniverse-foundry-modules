@@ -84,13 +84,28 @@ export function computeCompetence(message) {
   return { band, total, lore, natural, adjustments };
 }
 
+/**
+ * Whether the current user may see a result derived from this message.
+ *
+ * `visible` controls access to the message itself (for whispers), while
+ * `isContentVisible` controls access to its roll content.  Blind rolls are the
+ * important distinction: Foundry renders a message shell to the rolling player,
+ * but sets `isContentVisible` false so the result remains GM-only.
+ */
+export function isCompetenceResultVisible(message) {
+  return message?.visible !== false && message?.isContentVisible !== false;
+}
+
 /** Render (or refresh) the competence badge on a chat card. */
 export function renderCompetenceBadge(message, html) {
-  const result = computeCompetence(message);
   const root = asElement(html);
   if (!root) return;
 
+  // Remove first so a visibility-changing re-render cannot retain a stale result.
   root.querySelector(".flatfinder-competence")?.remove();
+  if (!isCompetenceResultVisible(message)) return;
+
+  const result = computeCompetence(message);
   if (!result) return;
 
   const { band, total, adjustments } = result;
