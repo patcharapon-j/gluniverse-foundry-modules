@@ -182,7 +182,7 @@ export class LevelZeroSheet {
           ${option("", L("GL0.weapon.choose"), !config.simpleWeapon)}
           ${simpleWeapons.map((weapon) => option(weapon.value, weapon.label, config.simpleWeapon === weapon.value)).join("")}
         </select></div>
-        <div class="gl0-field"><label>${E(game.i18n.format("GL0.skills", { chosen: config.skills.length, required }))}</label><p class="hint">${E(L("GL0.skills.hint"))}</p>
+        <div class="gl0-field"><label>${E(game.i18n.format("GL0.skills.label", { chosen: config.skills.length, required }))}</label><p class="hint">${E(L("GL0.skills.hint"))}</p>
           <div class="gl0-skills">${skillOptions(actor, config)}</div>
         </div>
       </section>
