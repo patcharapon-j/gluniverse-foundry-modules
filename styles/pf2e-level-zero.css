@@ -1,12 +1,21 @@
 /* GLUniverse Suite — PF2e Level 0 character-sheet support */
 
-.gl0-sheet-tab {
+.actor.sheet.character section.window-content .crb-style .sheet-body .sheet-content > .gl0-sheet-tab {
   --gl-accent: var(--gl-good);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 0.75rem;
 }
 
 .gl0-root {
-  min-height: 100%;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 1rem;
   color: var(--gl-text);
   background:
@@ -18,7 +27,7 @@
 
 .gl0-hero {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.9rem;
   align-items: center;
   padding-bottom: 1rem;
@@ -31,6 +40,7 @@
 
 .gl0-emblem {
   display: grid;
+  grid-row: 1 / span 2;
   place-items: center;
   width: 3.4rem;
   height: 3.4rem;
@@ -44,8 +54,11 @@
 
 .gl0-status {
   display: inline-flex;
+  grid-column: 2;
+  justify-self: start;
   gap: 0.4rem;
   align-items: center;
+  max-width: 100%;
   padding: 0.4rem 0.65rem;
   font-size: 0.72rem;
   font-weight: 700;
@@ -207,8 +220,6 @@
 .gl0-save { min-width: 12rem; }
 
 @media (max-width: 740px) {
-  .gl0-hero { grid-template-columns: auto minmax(0, 1fr); }
-  .gl0-status { grid-column: 1 / -1; justify-self: start; }
   .gl0-skills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gl0-grid,
   .gl0-cantrips { grid-template-columns: 1fr; }
