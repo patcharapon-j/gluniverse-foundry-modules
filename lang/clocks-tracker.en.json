@@ -73,6 +73,9 @@
   "GLCT.controls.mission": "Mission",
   "GLCT.controls.missionToggle": "Set a mission — count down the stretches to a target time",
   "GLCT.controls.glitch": "Distort",
+  "GLCT.controls.playersToggle": "Show or hide the time tracker for players",
+  "GLCT.controls.playersOn": "Players: Visible",
+  "GLCT.controls.playersOff": "Players: Hidden",
   "GLCT.controls.glitchToggle": "Temporal distortion — corrupt the date & time into noise for a scene where the when & where is a mystery (affects every player)",
 
   "GLCT.mission.title": "Mission Countdown",

@@ -48,6 +48,7 @@ export const SETTINGS = {
   hudCollapsed: "ct.hudCollapsed",    // Boolean (client)
   hudPosition: "ct.hudPosition",      // Object {top,cx} centre-anchored (client; legacy {top,left} migrated)
   hudGlitch: "ct.hudGlitch",          // Boolean (world): "temporal distortion" — corrupt the HUD readout for an uncertain when/where scene
+  hudVisibleToPlayers: "ct.hudVisibleToPlayers", // Boolean (world): GM show/hide the time HUD for players
   sceneTint: "ct.sceneTint",          // Boolean: tint canvas with the active shift
   yearLabel: "ct.yearLabel",          // String: era suffix shown after the year, e.g. "AR"
   trackers: "ct.trackers",            // Array: GM-managed tracker definitions (world)

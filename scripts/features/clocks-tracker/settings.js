@@ -30,7 +30,10 @@ import { Features } from "./features.js";
  */
 async function applyModuleConfig() {
   if (Features.on("timeHud")) {
-    if (!GlctHud.instance?.rendered) await GlctHud.open();
+    let visible = true;
+    try { visible = !!game.settings.get(MODULE_ID, SETTINGS.hudVisibleToPlayers); } catch { /* use default */ }
+    if (!game.user?.isGM && !visible) await GlctHud.instance?.close?.({ animate: false });
+    else if (!GlctHud.instance?.rendered) await GlctHud.open();
     else await GlctHud.refreshStructure();
   } else {
     await GlctHud.instance?.close?.();
@@ -137,6 +140,13 @@ export function registerSettings() {
   game.settings.register(MODULE_ID, SETTINGS.hudGlitch, {
     scope: "world", config: false, type: Boolean, default: false,
     onChange: () => GlctHud.applyGlitch()
+  });
+
+  // GM-controlled player visibility for the complete time HUD. It defaults on
+  // to preserve the suite's historical behaviour; GMs always retain their HUD.
+  game.settings.register(MODULE_ID, SETTINGS.hudVisibleToPlayers, {
+    scope: "world", config: false, type: Boolean, default: true,
+    onChange: (visible) => GlctHud.applyPlayerVisibility(visible)
   });
 
   // GM-managed trackers (world). Changes broadcast to all clients → repaint the dock.

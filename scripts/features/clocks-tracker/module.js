@@ -77,7 +77,7 @@ export async function onReady() {
   // this hook could leave a GM without the handler while their own HUD still
   // works — which would stop players' pool rolls from updating the shared count.
   TrackerStore.registerHandlers();
-  if (Features.on("timeHud")) await GlctHud.open();
+  if (Features.on("timeHud") && (game.user.isGM || setting(SETTINGS.hudVisibleToPlayers, true))) await GlctHud.open();
   if (Features.on("trackers.dock") && !setting(SETTINGS.trackerHudHidden, false)) await TrackerHud.open();
   applySceneTint(TimeEngine.getState());
 

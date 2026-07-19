@@ -34,6 +34,11 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** Open (or focus) the singleton HUD. */
   static async open() {
+    if (!game.user?.isGM) {
+      let visible = true;
+      try { visible = !!game.settings.get(MODULE_ID, SETTINGS.hudVisibleToPlayers); } catch { /* use default */ }
+      if (!visible) return null;
+    }
     if (!this.instance) this.instance = new this();
     await this.instance.render(true);
     return this.instance;
@@ -52,6 +57,17 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** Engage/lift the "temporal distortion" glitch live (no re-render). */
   static applyGlitch() { this.instance?._applyGlitch(); }
+
+  /** Reconcile the world-wide GM choice that reveals the time HUD to players. */
+  static async applyPlayerVisibility(visible) {
+    if (!Features.on("timeHud")) return;
+    if (game.user?.isGM || visible) {
+      if (!this.instance?.rendered) await this.open();
+      else this.instance._paintPlayersBtn();
+    } else {
+      await this.instance?.close?.({ animate: false });
+    }
+  }
 
   /** Repaint just the weather chip (after a weatherChanged / enable toggle). */
   static refreshWeather() { this.instance?._paintWeather(); }
@@ -84,6 +100,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       setTime: GlctHud.prototype._onSetTime,
       toggleShiftMode: GlctHud.prototype._onToggleShiftMode,
       toggleGlitch: GlctHud.prototype._onToggleGlitch,
+      togglePlayers: GlctHud.prototype._onTogglePlayers,
       openMission: GlctHud.prototype._onOpenMission,
       openCalendar: GlctHud.prototype._onOpenCalendar,
       openWeather: GlctHud.prototype._onOpenWeather,
@@ -143,6 +160,11 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     try { return !!game.settings.get(MODULE_ID, SETTINGS.hudGlitch); } catch { return false; }
   }
 
+  /** Whether non-GM clients should display the complete time HUD. */
+  get visibleToPlayers() {
+    try { return !!game.settings.get(MODULE_ID, SETTINGS.hudVisibleToPlayers); } catch { return true; }
+  }
+
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     return Object.assign(context, {
@@ -200,7 +222,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     // GM time controls: the advance / next-shift / set-time / distort buttons.
     gate(Features.on("timeHud.gmControls"),
-      '.c[data-action="advance"]', '[data-action="nextShift"]', '[data-action="setTime"]', '[data-action="toggleGlitch"]');
+      '.c[data-action="advance"]', '[data-action="nextShift"]', '[data-action="setTime"]',
+      '[data-action="toggleGlitch"]', '[data-action="togglePlayers"]');
   }
 
   async _onClose(options) {
@@ -978,6 +1001,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       modeBtn.classList.toggle("on", sm);
       this._setText("[data-modetext]", game.i18n.localize(sm ? "GLCT.controls.shiftModeOn" : "GLCT.controls.shiftModeOff"));
     }
+    this._paintPlayersBtn();
 
     // slot-reel clocks — held at scrambled faces while glitched (see _glitchReels)
     if (!this.glitched) this._reels.forEach(c => this._setClock(c, st.clock));
@@ -997,8 +1021,12 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       d.classList.toggle("done", i < st.shiftIndex);
       if (active) {
         d.style.setProperty("--fill", `${st.shiftProgress * 100}%`);
-        d.style.width = "auto";            // read the natural width...
-        const w = d.scrollWidth;
+        // The `.on` class animates padding from 0 to 9px. Measuring the parent
+        // immediately after a watch change therefore sees the transition's
+        // zero-padding frame and pins a badge that is too tight until the next
+        // repaint. Measure the label and add the final CSS padding explicitly.
+        const pad = Number.parseFloat(getComputedStyle(d).getPropertyValue("--shift-pad-x")) || 9;
+        const w = Math.ceil(nm?.scrollWidth ?? 0) + (pad * 2);
         d.style.width = `${w}px`;          // ...then pin it so the transition animates
       } else {
         d.style.width = "";                // back to the CSS 9px square (transitions too)
@@ -1126,6 +1154,16 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _setText(sel, txt) {
     this.element.querySelectorAll(sel).forEach(e => { e.textContent = txt; });
+  }
+
+  _paintPlayersBtn() {
+    const btn = this.element.querySelector("[data-playersbtn]");
+    if (!btn) return;
+    const on = this.visibleToPlayers;
+    btn.classList.toggle("on", on);
+    btn.querySelector("i")?.classList.toggle("fa-eye", on);
+    btn.querySelector("i")?.classList.toggle("fa-eye-slash", !on);
+    this._setText("[data-playerstext]", game.i18n.localize(on ? "GLCT.controls.playersOn" : "GLCT.controls.playersOff"));
   }
 
   /**
@@ -1315,6 +1353,11 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onToggleGlitch() {
     if (!game.user.isGM) return;
     try { await game.settings.set(MODULE_ID, SETTINGS.hudGlitch, !this.glitched); } catch { /* ignore */ }
+  }
+
+  async _onTogglePlayers() {
+    if (!game.user.isGM) return;
+    try { await game.settings.set(MODULE_ID, SETTINGS.hudVisibleToPlayers, !this.visibleToPlayers); } catch { /* ignore */ }
   }
 
   /**
