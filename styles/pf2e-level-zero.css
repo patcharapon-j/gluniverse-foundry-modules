@@ -3,7 +3,6 @@
 .gl0-sheet-tab {
   --gl-accent: var(--gl-good);
   padding: 0.75rem;
-  overflow-y: auto;
 }
 
 .gl0-root {

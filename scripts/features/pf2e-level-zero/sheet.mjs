@@ -33,7 +33,7 @@ function skillOptions(actor, config) {
       const checked = config.skills.includes(slug);
       const mod = Number(actor.system?.abilities?.[attribute]?.mod ?? 0);
       return `<label class="gl0-skill${checked ? " selected" : ""}">
-        <input type="checkbox" name="skills" value="${E(slug)}"${checked ? " checked" : ""}>
+        <input type="checkbox" data-gl0-skill value="${E(slug)}"${checked ? " checked" : ""}>
         <span>${E(label)}</span><small>${attribute.toUpperCase()} ${mod >= 0 ? "+" : ""}${mod}</small>
       </label>`;
     }).join("");
@@ -82,6 +82,9 @@ function moneyText(actor) {
 }
 
 export class LevelZeroSheet {
+  static inFlightRoots = new WeakSet();
+  static navHandlers = new WeakMap();
+
   static register() {
     const names = new Set(["CharacterSheetPF2e", "ActorSheetPF2e", "ApplicationV2", "ActorSheet", "ActorSheetV2"]);
     try {
@@ -99,19 +102,24 @@ export class LevelZeroSheet {
     if (!isLevelZeroActor(actor)) return;
     const root = html instanceof HTMLElement ? html : html?.[0];
     if (!root || !actor.isOwner) return;
+    if (this.inFlightRoots.has(root)) return;
+    this.inFlightRoots.add(root);
     try { await this.inject(root, actor); }
     catch (error) { console.error("GLUniverse Suite | Level 0 sheet injection failed", error); }
+    finally { this.inFlightRoots.delete(root); }
   }
 
   static async inject(root, actor) {
-    const navLink = root.querySelector("nav a[data-tab], nav [data-tab]");
-    const nav = navLink?.closest("nav") ?? navLink?.parentElement;
-    const contentTab = root.querySelector("section.tab[data-tab], div.tab[data-tab], [data-tab].tab");
+    const mainNav = root.querySelector("nav.sheet-navigation");
+    const navLink = mainNav?.querySelector("[data-tab]") ?? root.querySelector("nav a[data-tab], nav [data-tab]");
+    const nav = mainNav ?? navLink?.closest("nav") ?? navLink?.parentElement;
+    const contentTab = root.querySelector(".sheet-body .sheet-content > .tab[data-tab]")
+      ?? root.querySelector("section.tab[data-tab], div.tab[data-tab], [data-tab].tab");
     const body = contentTab?.parentElement;
     if (!nav || !body || !navLink || !contentTab) return;
 
-    nav.querySelector(`[data-tab="${TAB}"]`)?.remove();
-    body.querySelector(`[data-tab="${TAB}"]`)?.remove();
+    nav.querySelectorAll(`[data-tab="${TAB}"]`).forEach((element) => element.remove());
+    body.querySelectorAll(`:scope > [data-tab="${TAB}"]`).forEach((element) => element.remove());
 
     const config = getConfig(actor);
     const required = requiredSkillCount(actor);
@@ -135,15 +143,19 @@ export class LevelZeroSheet {
     section.dataset.tab = TAB;
     section.innerHTML = this.markup(actor, config, required, simpleWeapons, martialWeapons, cantrips);
     body.appendChild(section);
-    this.activate(section, nav, body, actor, required);
+    this.activate(section, actor, required);
 
-    nav.addEventListener("click", (event) => {
+    const priorHandler = this.navHandlers.get(nav);
+    if (priorHandler) nav.removeEventListener("click", priorHandler, true);
+    const navHandler = (event) => {
       const hit = event.target.closest("[data-tab]");
       if (!hit || !nav.contains(hit)) return;
       this.setActive(nav, body, hit.dataset.tab);
       if (hit.dataset.tab === TAB) activeActors.add(actor.id);
       else activeActors.delete(actor.id);
-    }, true);
+    };
+    this.navHandlers.set(nav, navHandler);
+    nav.addEventListener("click", navHandler, true);
     if (activeActors.has(actor.id)) this.setActive(nav, body, TAB);
   }
 
@@ -155,7 +167,7 @@ export class LevelZeroSheet {
       if (config.cantrips.every(Boolean) && new Set(config.cantrips).size !== 2) missing += 1;
     }
     const fundsAdded = startingMoneyGranted(actor);
-    return `<form class="gl0-root gl-glass">
+    return `<div class="gl0-root gl-glass">
       <header class="gl0-hero">
         <div class="gl0-emblem"><i class="fa-solid fa-seedling"></i></div>
         <div><span class="gl-tech-label">${E(L("GL0.subtitle"))}</span><h2>${E(L("GL0.title"))}</h2><p>${E(L("GL0.summary"))}</p></div>
@@ -166,7 +178,7 @@ export class LevelZeroSheet {
       <section class="gl0-card">
         <div class="gl0-card-title"><i class="fa-solid fa-shield-halved"></i><h3>${E(L("GL0.initial.title"))}</h3></div>
         <p class="gl0-fixed">${E(L("GL0.initial.fixed"))}</p>
-        <div class="gl0-field"><label>${E(L("GL0.weapon.simple"))}</label><select name="simpleWeapon" class="gl-field">
+        <div class="gl0-field"><label>${E(L("GL0.weapon.simple"))}</label><select data-gl0-field="simpleWeapon" class="gl-field">
           ${option("", L("GL0.weapon.choose"), !config.simpleWeapon)}
           ${simpleWeapons.map((weapon) => option(weapon.value, weapon.label, config.simpleWeapon === weapon.value)).join("")}
         </select></div>
@@ -177,7 +189,7 @@ export class LevelZeroSheet {
 
       <section class="gl0-card">
         <div class="gl0-card-title"><i class="fa-solid fa-graduation-cap"></i><h3>${E(L("GL0.apprentice.title"))}</h3></div>
-        <div class="gl0-field"><select name="apprentice" class="gl-field">
+        <div class="gl0-field"><select data-gl0-field="apprentice" class="gl-field">
           ${option("none", L("GL0.apprentice.none"), config.apprentice === "none")}
           ${option("alchemist", L("GL0.apprentice.alchemist"), config.apprentice === "alchemist")}
           ${option("monk", L("GL0.apprentice.monk"), config.apprentice === "monk")}
@@ -188,14 +200,14 @@ export class LevelZeroSheet {
         <div class="gl0-apprentice" data-apprentice-section="monk"><p>${E(L("GL0.apprentice.monkHint"))}</p></div>
         <div class="gl0-apprentice" data-apprentice-section="martial">
           <p>${E(L("GL0.apprentice.martialHint"))}</p>
-          <div class="gl0-grid"><div class="gl0-field"><label>${E(L("GL0.apprentice.class"))}</label><select name="martialClass" class="gl-field">${option("", L("GL0.none"), !APPRENTICE_CLASSES.martial.includes(config.classSlug))}${classOptions("martial", config.classSlug)}</select></div>
-          <div class="gl0-field"><label>${E(L("GL0.weapon.martial"))}</label><select name="martialWeapon" class="gl-field">${option("", L("GL0.weapon.choose"), !config.martialWeapon)}${martialWeapons.map((weapon) => option(weapon.value, weapon.label, config.martialWeapon === weapon.value)).join("")}</select></div></div>
+          <div class="gl0-grid"><div class="gl0-field"><label>${E(L("GL0.apprentice.class"))}</label><select data-gl0-field="martialClass" class="gl-field">${option("", L("GL0.none"), !APPRENTICE_CLASSES.martial.includes(config.classSlug))}${classOptions("martial", config.classSlug)}</select></div>
+          <div class="gl0-field"><label>${E(L("GL0.weapon.martial"))}</label><select data-gl0-field="martialWeapon" class="gl-field">${option("", L("GL0.weapon.choose"), !config.martialWeapon)}${martialWeapons.map((weapon) => option(weapon.value, weapon.label, config.martialWeapon === weapon.value)).join("")}</select></div></div>
         </div>
         <div class="gl0-apprentice" data-apprentice-section="spellcaster">
           <p>${E(L("GL0.apprentice.spellcasterHint"))}</p>
-          <div class="gl0-grid"><div class="gl0-field"><label>${E(L("GL0.apprentice.class"))}</label><select name="spellcasterClass" class="gl-field">${option("", L("GL0.none"), !APPRENTICE_CLASSES.spellcaster.includes(config.classSlug))}${classOptions("spellcaster", config.classSlug)}</select></div>
-          <div class="gl0-field"><label>${E(L("GL0.tradition"))}</label><select name="tradition" class="gl-field">${traditionOptions(config.tradition)}</select></div>
-          <div class="gl0-field"><label>${E(L("GL0.castingStyle"))}</label><select name="castingStyle" class="gl-field">${option("prepared", L("GL0.casting.prepared"), config.castingStyle === "prepared")}${option("spontaneous", L("GL0.casting.spontaneous"), config.castingStyle === "spontaneous")}</select></div></div>
+          <div class="gl0-grid"><div class="gl0-field"><label>${E(L("GL0.apprentice.class"))}</label><select data-gl0-field="spellcasterClass" class="gl-field">${option("", L("GL0.none"), !APPRENTICE_CLASSES.spellcaster.includes(config.classSlug))}${classOptions("spellcaster", config.classSlug)}</select></div>
+          <div class="gl0-field"><label>${E(L("GL0.tradition"))}</label><select data-gl0-field="tradition" class="gl-field">${traditionOptions(config.tradition)}</select></div>
+          <div class="gl0-field"><label>${E(L("GL0.castingStyle"))}</label><select data-gl0-field="castingStyle" class="gl-field">${option("prepared", L("GL0.casting.prepared"), config.castingStyle === "prepared")}${option("spontaneous", L("GL0.casting.spontaneous"), config.castingStyle === "spontaneous")}</select></div></div>
           <label class="gl0-cantrip-label">${E(L("GL0.cantrips"))}</label><div class="gl0-cantrips">${cantripSlot(cantrips[0], 0)}${cantripSlot(cantrips[1], 1)}</div>
         </div>
         ${config.apprentice !== "none" ? `<p class="gl0-class-skills"><i class="fa-solid fa-book-open"></i> ${E(classSkillText(config))}</p>` : ""}
@@ -209,13 +221,14 @@ export class LevelZeroSheet {
         <div class="gl0-card-title"><i class="fa-solid fa-route"></i><h3>${E(L("GL0.gameplay.title"))}</h3></div>
         <p>${E(L("GL0.gameplay.rule"))}</p>
       </section>
-      <footer><button type="submit" class="gl-btn gl0-save"><i class="fa-solid fa-floppy-disk"></i> ${E(L("GL0.save"))}</button></footer>
-    </form>`;
+      <footer><button type="button" class="gl-btn gl0-save" data-gl0-save><i class="fa-solid fa-floppy-disk"></i> ${E(L("GL0.save"))}</button></footer>
+    </div>`;
   }
 
-  static activate(section, nav, body, actor, required) {
-    const form = section.querySelector("form");
-    const apprenticeSelect = form.elements.apprentice;
+  static activate(section, actor, required) {
+    const form = section.querySelector(".gl0-root");
+    const field = (name) => form.querySelector(`[data-gl0-field="${name}"]`);
+    const apprenticeSelect = field("apprentice");
     const showApprentice = () => {
       for (const panel of form.querySelectorAll("[data-apprentice-section]")) panel.hidden = panel.dataset.apprenticeSection !== apprenticeSelect.value;
     };
@@ -226,20 +239,20 @@ export class LevelZeroSheet {
       checkbox.addEventListener("change", () => checkbox.closest(".gl0-skill").classList.toggle("selected", checkbox.checked));
     }
 
-    form.addEventListener("submit", async (event) => {
+    form.querySelector("[data-gl0-save]").addEventListener("click", async (event) => {
       event.preventDefault();
       const apprentice = apprenticeSelect.value;
-      const skills = [...form.querySelectorAll('input[name="skills"]:checked')].map((input) => input.value);
+      const skills = [...form.querySelectorAll("input[data-gl0-skill]:checked")].map((input) => input.value);
       if (skills.length !== required) return ui.notifications.warn(game.i18n.format("GL0.error.skills", { required }));
-      if (!form.elements.simpleWeapon.value) return ui.notifications.warn(L("GL0.error.simpleWeapon"));
+      if (!field("simpleWeapon").value) return ui.notifications.warn(L("GL0.error.simpleWeapon"));
       const config = getConfig(actor);
-      config.simpleWeapon = form.elements.simpleWeapon.value;
+      config.simpleWeapon = field("simpleWeapon").value;
       config.skills = skills;
       config.apprentice = apprentice;
-      config.classSlug = apprentice === "martial" ? form.elements.martialClass.value : apprentice === "spellcaster" ? form.elements.spellcasterClass.value : "";
-      config.martialWeapon = form.elements.martialWeapon.value;
-      config.tradition = form.elements.tradition.value;
-      config.castingStyle = form.elements.castingStyle.value;
+      config.classSlug = apprentice === "martial" ? field("martialClass").value : apprentice === "spellcaster" ? field("spellcasterClass").value : "";
+      config.martialWeapon = field("martialWeapon").value;
+      config.tradition = field("tradition").value;
+      config.castingStyle = field("castingStyle").value;
       if (["martial", "spellcaster"].includes(apprentice) && !config.classSlug) return ui.notifications.warn(L("GL0.error.class"));
       if (apprentice === "martial" && !config.martialWeapon) return ui.notifications.warn(L("GL0.error.martialWeapon"));
       if (apprentice === "spellcaster" && (config.cantrips.some((uuid) => !uuid) || new Set(config.cantrips).size !== 2)) return ui.notifications.warn(L("GL0.error.twoCantrips"));

@@ -116,11 +116,6 @@
     {
       "lang": "en",
       "name": "English",
-      "path": "lang/pf2e-level-zero.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
       "path": "lang/critical.en.json"
     },
     {
