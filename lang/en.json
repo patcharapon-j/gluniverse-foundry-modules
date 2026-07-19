@@ -56,6 +56,8 @@
   "GLS.feature.tidy5e-slots.hint": "Slot-based encumbrance and wear-and-tear for the Tidy 5e sheet.",
   "GLS.feature.pf2e-flatten.title": "Flatten Proficiency (PF2e)",
   "GLS.feature.pf2e-flatten.hint": "Proficiency Without Level variant rule automation for PF2e.",
+  "GLS.feature.pf2e-level-zero.title": "Level 0 Characters (PF2e)",
+  "GLS.feature.pf2e-level-zero.hint": "Adds native-sheet setup and automation for PF2e level-0 PCs and apprentice characters.",
   "GLS.feature.critical.title": "Critical",
   "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations.",
   "GLS.feature.etched-chat.title": "Etched-Glass Chat Theme (PF2e)",

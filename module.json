@@ -38,6 +38,7 @@
     "styles/tidy5e-slots-inventory-slots.css",
     "styles/tidy5e-slots-components.css",
     "styles/tidy5e-slots-etched-glass.css",
+    "styles/pf2e-level-zero.css",
     "styles/critical.css",
     "styles/minimap.css",
     "styles/etched-chat.css",
@@ -111,6 +112,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-flatten.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-level-zero.en.json"
     },
     {
       "lang": "en",
