@@ -12,7 +12,7 @@
 
 import { SUITE_ID, SUITE_TITLE, log } from "./core/const.mjs";
 import { Suite, Features } from "./core/registry.mjs";
-import { registerCoreSettings, applyUiScale } from "./core/settings.mjs";
+import { registerCoreSettings, applyUiScale, applySheetHeaderIconOnly } from "./core/settings.mjs";
 import { buildCatalog } from "./core/catalog.mjs";
 import { initSocketDispatcher } from "./core/socket.mjs";
 import { runMigrations } from "./core/migration.mjs";
@@ -34,6 +34,8 @@ Hooks.once("init", async () => {
 Hooks.once("ready", async () => {
   // Reflect this client's saved interface scale before any feature paints.
   applyUiScale();
+  // Reflect the GM's icon-only sheet-header-button choice on this client.
+  applySheetHeaderIconOnly();
   initSocketDispatcher();
   await runMigrations();
   await Suite.runPhase("onReady");

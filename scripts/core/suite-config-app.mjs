@@ -259,7 +259,10 @@ export class SuiteConfigApp extends ApplicationV2 {
 
     // Pinned suite-wide section (e.g. interface scale) above the feature list.
     const suite = catalogFor(SUITE_SECTION);
-    if (suite.settings.length) list.appendChild(this.#suiteSection(suite));
+    // World-scoped suite settings (GM choices like icon-only header buttons)
+    // are hidden from players — they couldn't save them anyway.
+    const suiteSettings = isGM ? suite.settings : suite.settings.filter((s) => s.scope !== "world");
+    if (suiteSettings.length) list.appendChild(this.#suiteSection({ ...suite, settings: suiteSettings }));
 
     for (const def of Suite.all()) {
       const available = Suite.available(def);

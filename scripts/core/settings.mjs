@@ -2,7 +2,9 @@
  * GLUniverse Suite — core settings + the unified "Feature Manager" menu.
  */
 
-import { SUITE_ID, SETTING_MODULE_CONFIG, SETTING_MIGRATION, SETTING_UI_SCALE } from "./const.mjs";
+import {
+  SUITE_ID, SETTING_MODULE_CONFIG, SETTING_MIGRATION, SETTING_UI_SCALE, SETTING_HEADER_ICON_ONLY
+} from "./const.mjs";
 import { Suite } from "./registry.mjs";
 import { SuiteConfigApp } from "./suite-config-app.mjs";
 import { clamp } from "./util.mjs";
@@ -28,6 +30,19 @@ export function applyUiScale(value) {
   }
   v = clamp(Number.isFinite(v) ? v : 1, UI_SCALE_MIN, UI_SCALE_MAX);
   document.documentElement?.style.setProperty("--gl-ui-scale", String(v));
+}
+
+/**
+ * Reflect the GM's "icon-only sheet header buttons" choice on `<body>`.
+ * styles/gl-tokens.css collapses the label text of header buttons/controls
+ * while the class is present (icons and tooltips stay).
+ */
+export function applySheetHeaderIconOnly(value) {
+  let v = value;
+  if (typeof v !== "boolean") {
+    try { v = !!game.settings.get(SUITE_ID, SETTING_HEADER_ICON_ONLY); } catch { v = false; }
+  }
+  document.body?.classList.toggle("gl-header-icons-only", v);
 }
 
 export function registerCoreSettings() {
@@ -59,6 +74,18 @@ export function registerCoreSettings() {
     range: { min: UI_SCALE_MIN, max: UI_SCALE_MAX, step: 0.05 },
     default: 1,
     onChange: (v) => applyUiScale(v),
+  });
+
+  // GM choice, applied on every client: sheet-header buttons render icon-only
+  // (labels collapse to tooltips) so crowded sheet headers stay compact.
+  game.settings.register(SUITE_ID, SETTING_HEADER_ICON_ONLY, {
+    name: "GLS.config.headerIconOnly.name",
+    hint: "GLS.config.headerIconOnly.hint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: (v) => applySheetHeaderIconOnly(!!v),
   });
 
   // The premium etched-glass Control Center. Unrestricted so players can open it

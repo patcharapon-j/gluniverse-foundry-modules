@@ -502,8 +502,14 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _updateDelveDock() {
     const root = this.element;
     const active = DelvingStore.active;
-    root.querySelector("[data-delvebtn]")?.classList.toggle("on", active);
-    this._setText("[data-delvetext]", game.i18n.localize(active ? "GLCT.delving.controls.exit" : "GLCT.delving.controls.enter"));
+    const delveBtn = root.querySelector("[data-delvebtn]");
+    if (delveBtn) {
+      delveBtn.classList.toggle("on", active);
+      // icon-only button — the enter/exit wording lives in the tooltip
+      const txt = `${game.i18n.localize(active ? "GLCT.delving.controls.exit" : "GLCT.delving.controls.enter")} · ${game.i18n.localize("GLCT.delving.controls.toggleHint")}`;
+      delveBtn.title = txt;
+      delveBtn.setAttribute("aria-label", txt);
+    }
     this._setText("[data-passlbl]", game.i18n.format("GLCT.delving.controls.pass", { label: DelvingStore.turn.label }));
   }
 
@@ -995,11 +1001,14 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     root.querySelector("[data-missionbtn]")?.classList.toggle("on", st.mission.active);
     this._setText("[data-missioncount]", st.mission.active && !st.mission.reached ? String(st.mission.stretchesLeft) : "");
 
-    // shift-mode toggle button reflects the current granularity
+    // shift-mode toggle button reflects the current granularity (icon-only —
+    // the tooltip carries both the action and the current view)
     const modeBtn = root.querySelector("[data-modebtn]");
     if (modeBtn) {
       modeBtn.classList.toggle("on", sm);
-      this._setText("[data-modetext]", game.i18n.localize(sm ? "GLCT.controls.shiftModeOn" : "GLCT.controls.shiftModeOff"));
+      const modeTxt = `${game.i18n.localize("GLCT.controls.shiftModeToggle")} · ${game.i18n.localize(sm ? "GLCT.controls.shiftModeOn" : "GLCT.controls.shiftModeOff")}`;
+      modeBtn.title = modeTxt;
+      modeBtn.setAttribute("aria-label", modeTxt);
     }
     this._paintPlayersBtn();
 
@@ -1163,7 +1172,10 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     btn.classList.toggle("on", on);
     btn.querySelector("i")?.classList.toggle("fa-eye", on);
     btn.querySelector("i")?.classList.toggle("fa-eye-slash", !on);
-    this._setText("[data-playerstext]", game.i18n.localize(on ? "GLCT.controls.playersOn" : "GLCT.controls.playersOff"));
+    // icon-only button — the state text lives in the tooltip
+    const txt = `${game.i18n.localize("GLCT.controls.playersToggle")} · ${game.i18n.localize(on ? "GLCT.controls.playersOn" : "GLCT.controls.playersOff")}`;
+    btn.title = txt;
+    btn.setAttribute("aria-label", txt);
   }
 
   /**
