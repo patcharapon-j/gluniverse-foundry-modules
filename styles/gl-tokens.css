@@ -476,3 +476,18 @@
 .gls-needs-reload .gls-btn-accent {
   box-shadow: 0 0 16px color-mix(in srgb, var(--gl-accent) 50%, transparent);
 }
+
+/* ============================== ICON-ONLY SHEET HEADER BUTTONS ==============================
+   GM choice (core.sheetHeaderIconOnly): collapse the label text of window-header
+   buttons so crowded sheet headers stay compact. The text stays in the DOM
+   (screen readers still announce it) — only its rendered size collapses; the
+   Font Awesome glyph is restored to a legible size. Applies to legacy (V1)
+   header-button anchors; AppV2 header controls are already icon-only. */
+body.gl-header-icons-only .window-app .window-header a.header-button {
+  font-size: 0;
+  column-gap: 0;
+}
+body.gl-header-icons-only .window-app .window-header a.header-button > i {
+  font-size: var(--font-size-14, 14px);
+  margin: 0;
+}

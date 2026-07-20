@@ -123,19 +123,22 @@
       <button type="button" class="c" data-step="hour"    data-action="advance">{{localize 'GLCT.controls.advanceHour'}}</button>
       <button type="button" class="c" data-step="shift"   data-action="advance">{{localize 'GLCT.controls.advanceShift'}}</button>
       <button type="button" class="c" data-step="day"     data-action="advance">{{localize 'GLCT.controls.advanceDay'}}</button>
-      <button type="button" class="c sep" data-action="nextShift"><i class="fa-solid fa-forward-step"></i> {{localize 'GLCT.shifts.0'}}</button>
-      <button type="button" class="c sep ico" data-action="setTime" aria-label="{{localize 'GLCT.controls.setTime'}}" title="{{localize 'GLCT.controls.setTime'}}"><i class="fa-solid fa-stopwatch"></i></button>
-      <button type="button" class="c sep mission" data-action="openMission" data-missionbtn title="{{localize 'GLCT.controls.missionToggle'}}"><i class="fa-solid fa-bullseye goal-ic"></i><i class="fa-solid fa-hourglass-half dl-ic"></i> {{localize 'GLCT.controls.mission'}}<b class="cnt" data-missioncount></b></button>
-      <button type="button" class="c sep mode" data-action="toggleShiftMode" data-modebtn title="{{localize 'GLCT.controls.shiftModeToggle'}}"><i class="fa-solid fa-circle-half-stroke"></i> <span data-modetext></span></button>
-      <button type="button" class="c sep glitch" data-action="toggleGlitch" data-glitchbtn title="{{localize 'GLCT.controls.glitchToggle'}}"><i class="fa-solid fa-wave-square"></i> {{localize 'GLCT.controls.glitch'}}</button>
-      <button type="button" class="c sep players" data-action="togglePlayers" data-playersbtn title="{{localize 'GLCT.controls.playersToggle'}}"><i class="fa-solid fa-eye"></i> <span data-playerstext></span></button>
+      {{!-- Toggles & one-shot actions are icon-only (tooltips carry the wording)
+            so the dock stays a single compact row. --}}
+      <button type="button" class="c sep ico" data-action="nextShift" aria-label="{{localize 'GLCT.controls.nextShift'}}" title="{{localize 'GLCT.controls.nextShift'}}"><i class="fa-solid fa-forward-step"></i></button>
+      <button type="button" class="c ico" data-action="setTime" aria-label="{{localize 'GLCT.controls.setTime'}}" title="{{localize 'GLCT.controls.setTime'}}"><i class="fa-solid fa-stopwatch"></i></button>
+      <button type="button" class="c ico mission" data-action="openMission" data-missionbtn aria-label="{{localize 'GLCT.controls.mission'}}" title="{{localize 'GLCT.controls.missionToggle'}}"><i class="fa-solid fa-bullseye goal-ic"></i><i class="fa-solid fa-hourglass-half dl-ic"></i><b class="cnt" data-missioncount></b></button>
+      <button type="button" class="c ico mode" data-action="toggleShiftMode" data-modebtn title="{{localize 'GLCT.controls.shiftModeToggle'}}"><i class="fa-solid fa-circle-half-stroke"></i></button>
+      <button type="button" class="c ico glitch" data-action="toggleGlitch" data-glitchbtn aria-label="{{localize 'GLCT.controls.glitch'}}" title="{{localize 'GLCT.controls.glitchToggle'}}"><i class="fa-solid fa-wave-square"></i></button>
+      <button type="button" class="c ico players" data-action="togglePlayers" data-playersbtn title="{{localize 'GLCT.controls.playersToggle'}}"><i class="fa-solid fa-eye"></i></button>
       {{!-- Delving controls — hidden unless the delving feature is enabled. The
-            Pass-Turn / New-Delve buttons only appear once delving is switched on. --}}
+            Pass-Turn / New-Delve buttons only appear once delving is switched on.
+            Pass keeps its label (it's the primary delve action); the rest are icons. --}}
       <button type="button" class="c sep delving-ctl pass" data-action="passTurn" data-passbtn title="{{localize 'GLCT.delving.controls.passHint'}}"><i class="fa-solid fa-forward"></i> <span data-passlbl></span></button>
-      <button type="button" class="c delving-ctl roll" data-action="rollPool" title="{{localize 'GLCT.delving.controls.rollHint'}}"><i class="fa-solid fa-dice"></i> {{localize 'GLCT.delving.controls.roll'}}</button>
-      <button type="button" class="c delving-ctl ico" data-action="resetDelve" title="{{localize 'GLCT.delving.controls.reset'}}"><i class="fa-solid fa-rotate-left"></i></button>
-      <button type="button" class="c sep delving-toggle" data-action="toggleDelving" data-delvebtn title="{{localize 'GLCT.delving.controls.toggleHint'}}"><i class="fa-solid fa-dungeon"></i> <span data-delvetext></span></button>
-      <button type="button" class="c delving-toggle ico" data-action="openDelving" title="{{localize 'GLCT.delving.controls.edit'}}"><i class="fa-solid fa-sliders"></i></button>
+      <button type="button" class="c ico delving-ctl roll" data-action="rollPool" aria-label="{{localize 'GLCT.delving.controls.roll'}}" title="{{localize 'GLCT.delving.controls.rollHint'}}"><i class="fa-solid fa-dice"></i></button>
+      <button type="button" class="c ico delving-ctl" data-action="resetDelve" title="{{localize 'GLCT.delving.controls.reset'}}"><i class="fa-solid fa-rotate-left"></i></button>
+      <button type="button" class="c sep ico delving-toggle" data-action="toggleDelving" data-delvebtn title="{{localize 'GLCT.delving.controls.toggleHint'}}"><i class="fa-solid fa-dungeon"></i></button>
+      <button type="button" class="c ico delving-toggle" data-action="openDelving" title="{{localize 'GLCT.delving.controls.edit'}}"><i class="fa-solid fa-sliders"></i></button>
     </div>
   </div>
   {{/if}}

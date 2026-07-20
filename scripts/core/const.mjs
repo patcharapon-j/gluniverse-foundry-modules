@@ -24,6 +24,11 @@ export const SETTING_MIGRATION = "migrationVersion";
  *  property that styles/gl-tokens.css uses to size every UI the suite injects. */
 export const SETTING_UI_SCALE = "core.uiScale";
 
+/** World-wide GM choice: render the suite's sheet-header buttons icon-only
+ *  (label text hidden) to save header space. Drives a `<body>` class that
+ *  styles/gl-tokens.css picks up. */
+export const SETTING_HEADER_ICON_ONLY = "core.sheetHeaderIconOnly";
+
 /** Path to a file inside the installed suite package. */
 export function suitePath(rel) {
   return `modules/${SUITE_ID}/${rel.replace(/^\/+/, "")}`;

@@ -17,6 +17,8 @@
   "GLS.config.err.openEditor": "Could not open editor: {message}",
   "GLS.config.suite.title": "GLUniverse Suite",
   "GLS.config.suite.hint": "Suite-wide preferences that apply to your screen only.",
+  "GLS.config.headerIconOnly.name": "Icon-Only Sheet Header Buttons",
+  "GLS.config.headerIconOnly.hint": "Hide the text labels of the buttons added to sheet window headers, leaving only their icons, to save header space. GM choice — applies to every player.",
   "GLS.config.uiScale.name": "Interface Scale",
   "GLS.config.uiScale.hint": "Resize every GLUniverse Suite window, HUD and overlay together. Affects only your screen.",
   "GLS.config.introPlayer": "Personalize the GLUniverse Suite for your screen. These preferences affect only you — your GM controls which features are enabled.",
