@@ -16,5 +16,6 @@
   "GLMOB.noCharacter": "No character is assigned to you. Ask your GM to assign one.",
   "GLMOB.notMobileReady": "This feature has no mobile view yet.",
   "GLMOB.exitMobile": "Switch to desktop layout",
+  "GLMOB.enterMobile": "Switch to mobile layout",
   "GLMOB.combatTurn": "Turn: {name}"
 }

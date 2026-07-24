@@ -242,6 +242,30 @@ body.gl-mobile .gl-mobile-combat {
   pointer-events: none;
 }
 
+/* ---------- Stream Pacer HUD ---------- */
+
+/* The pacer is a frameless draggable overlay whose saved desktop position is
+   meaningless on a phone (and its drag is mouse-only). Pin it bottom-center
+   just above the tab bar, compacted; !important beats the inline left/top the
+   pacer's own position-restore writes. */
+body.gl-mobile #stream-pacer-hud,
+body.gl-mobile #stream-pacer-hud.positioned {
+  position: fixed !important;
+  top: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: calc(var(--glmob-tabbar-h) + var(--glmob-safe-bottom) + 10px) !important;
+  transform: translateX(-50%) !important;
+  max-width: calc(100vw - 12px);
+  z-index: 115;
+  zoom: 0.85;
+}
+
+/* No dragging on touch — hide the handle instead of teasing it. */
+body.gl-mobile #stream-pacer-container .drag-handle {
+  display: none !important;
+}
+
 body.gl-mobile[data-gl-mobile-view="canvas"] .gl-mobile-combat.show {
   display: block;
 }

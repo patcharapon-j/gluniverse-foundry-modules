@@ -16,7 +16,8 @@
 
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
-import { FEATURE_ID, KEY_MODE, KEY_PERF_BACKUP, mobileActive } from "./detect.mjs";
+import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
+import { FEATURE_ID, KEY_MODE, KEY_PERF_BACKUP, mobileActive, touchCapable } from "./detect.mjs";
 import { Shell } from "./shell.mjs";
 import { initWindowManager } from "./windows.mjs";
 import { restorePerfProfile, setCanvasFrozen } from "./perf.mjs";
@@ -61,6 +62,36 @@ Suite.register({
   onInit() {
     // Undo the legacy performance clamp on any client that still carries it.
     Hooks.once("ready", () => restorePerfProfile());
+
+    // Way back IN: once a player exits to the desktop layout there is no mobile
+    // UI left to re-enter from, so touch-capable desktop-layout players get a
+    // suite scene-control button that flips the mode back on.
+    const TOOL = "mobile-mode";
+    const enterMobile = async () => {
+      await game.settings.set(SUITE_ID, KEY_MODE, "on");
+      foundry.utils.debouncedReload();
+    };
+    const showEntryTool = () => !game.user.isGM && !mobileActive() && touchCapable();
+    Hooks.on("getSceneControlButtons", (controls) => {
+      if (!showEntryTool()) return;
+      const group = ensureSuiteGroup(controls);
+      if (!group) return;
+      group.tools[TOOL] = {
+        name: TOOL,
+        title: "GLMOB.enterMobile",
+        icon: "fa-solid fa-mobile-screen-button",
+        order: Object.keys(group.tools).length,
+        button: true,
+        visible: true,
+        onChange: () => enterMobile(),
+      };
+    });
+    // Reliable click delivery for the button tool across v13/v14.
+    Hooks.on("renderSceneControls", (_app, html) => {
+      if (!showEntryTool()) return;
+      bindSuiteToolClicks(html, { [TOOL]: enterMobile });
+    });
+
     if (!mobileActive()) return;
     // Mark the body as early as possible so first paint is already mobile.
     document.body.classList.add("gl-mobile");

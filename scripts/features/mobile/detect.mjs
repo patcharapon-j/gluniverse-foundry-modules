@@ -16,11 +16,15 @@ export const KEY_PERF_BACKUP = "mob.perfBackup"; // client: legacy clamp stash (
 /** Smaller viewport dimension at or below this reads as a phone. */
 const PHONE_MAX_DIM = 820;
 
+/** Touch-capable client, regardless of viewport size. */
+export function touchCapable() {
+  return (navigator.maxTouchPoints ?? 0) > 0 || matchMedia("(pointer: coarse)").matches;
+}
+
 /** Pure heuristic: touch-capable AND phone-sized viewport. */
 export function detectPhone() {
-  const touch = (navigator.maxTouchPoints ?? 0) > 0 || matchMedia("(pointer: coarse)").matches;
   const dim = Math.min(window.innerWidth, window.innerHeight);
-  return touch && dim <= PHONE_MAX_DIM;
+  return touchCapable() && dim <= PHONE_MAX_DIM;
 }
 
 /** Resolved activation: the client override wins, otherwise the heuristic. */

@@ -23,6 +23,11 @@ function fullscreen(app) {
   // ApplicationV2 too but not positioned windows.
   const positioned = app?.options?.window?.positioned ?? app?.options?.positioned ?? true;
   if (!positioned && !el.classList.contains("window-app")) return;
+  // Frameless ApplicationV2s are HUD overlays (e.g. the Stream Pacer), not
+  // windows; forcing them full-screen strands their content mid-screen. Each
+  // overlay gets its own mobile docking in styles/mobile.css instead.
+  const framed = app?.options?.window?.frame ?? true;
+  if (!framed && !el.classList.contains("window-app")) return;
   el.classList.add(FS_CLASS);
   // Actor sheets belong to the Character tab: they are only visible while
   // that tab is fronted (CSS), so a roll can "collapse" the sheet by simply
