@@ -1,0 +1,20 @@
+{
+  "GLMOB.title": "Mobile Mode",
+  "GLMOB.hint": "Phone-friendly play for players: a tabbed app shell (Canvas / Chat / Character / Suite), full-screen windows, and touch-sized controls. Activates automatically on phones; desktop clients are unaffected.",
+
+  "GLMOB.mode.name": "Mobile Mode (this device)",
+  "GLMOB.mode.hint": "Auto detects a touch device with a phone-sized screen. Force On/Off overrides detection for this device only.",
+  "GLMOB.mode.auto": "Auto-detect",
+  "GLMOB.mode.on": "Force on",
+  "GLMOB.mode.off": "Force off",
+
+  "GLMOB.tab.canvas": "Map",
+  "GLMOB.tab.chat": "Chat",
+  "GLMOB.tab.character": "Sheet",
+  "GLMOB.tab.suite": "Suite",
+
+  "GLMOB.noCharacter": "No character is assigned to you. Ask your GM to assign one.",
+  "GLMOB.notMobileReady": "This feature has no mobile view yet.",
+  "GLMOB.exitMobile": "Switch to desktop layout",
+  "GLMOB.combatTurn": "Turn: {name}"
+}

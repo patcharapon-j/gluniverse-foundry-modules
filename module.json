@@ -45,7 +45,8 @@
     "styles/timer.css",
     "styles/mythic-gme.css",
     "styles/oracles.css",
-    "styles/pf2e-ultimates.css"
+    "styles/pf2e-ultimates.css",
+    "styles/mobile.css"
   ],
   "languages": [
     {
@@ -147,6 +148,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-ultimates.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/mobile.en.json"
     }
   ],
   "packs": [

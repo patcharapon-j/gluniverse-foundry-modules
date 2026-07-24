@@ -26,3 +26,4 @@ import "./timer/index.mjs";
 import "./mythic-gme/index.mjs";
 import "./oracles/index.mjs";
 import "./pf2e-ultimates/index.mjs";
+import "./mobile/index.mjs";

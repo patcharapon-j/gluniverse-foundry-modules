@@ -1,0 +1,514 @@
+/* GLUniverse Suite — Mobile (phone player) mode.
+ *
+ * Every rule is scoped under body.gl-mobile: desktop clients must be 100%
+ * untouched. The shell shows one view at a time via body[data-gl-mobile-view]
+ * and a fixed bottom tab bar. Written outside any CSS @layer so it wins over
+ * Foundry v13+ layered core styles without specificity hacks.
+ */
+
+/* ---------- App shell frame ---------- */
+
+body.gl-mobile {
+  --glmob-tabbar-h: 72px;
+  --glmob-safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Height of the visible viewport (dvh tracks the mobile URL bar) and the
+     space left above the tab bar. Every shell surface derives from these so
+     nothing can hang below the browser chrome. */
+  --glmob-vh: 100dvh;
+  --glmob-view-h: calc(var(--glmob-vh) - var(--glmob-tabbar-h) - var(--glmob-safe-bottom));
+  /* Space reserved at the top for the always-on tracker dock (0 when the
+     Clocks & Tracker HUD isn't rendered). */
+  --glmob-top: 0px;
+  /* Lock the page: no rubber-band scroll, no horizontal overflow. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: var(--glmob-vh);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+@supports not (height: 100dvh) {
+  body.gl-mobile {
+    --glmob-vh: 100vh;
+  }
+}
+
+/* Hide desktop chrome irrelevant to a phone player. */
+body.gl-mobile #scene-controls,
+body.gl-mobile #controls,
+body.gl-mobile #navigation,
+body.gl-mobile #scene-navigation,
+body.gl-mobile #hotbar,
+body.gl-mobile #players,
+body.gl-mobile #pause img {
+  display: none !important;
+}
+
+/* ---------- Bottom tab bar ---------- */
+
+body.gl-mobile .gl-mobile-tabbar {
+  position: fixed;
+  top: var(--glmob-view-h);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  display: flex;
+  height: calc(var(--glmob-tabbar-h) + var(--glmob-safe-bottom));
+  padding-top: 6px;
+  padding-bottom: var(--glmob-safe-bottom);
+  border-top: 1px solid var(--gl-edge);
+}
+
+body.gl-mobile .gl-mobile-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.gl-mobile .gl-mobile-tab i {
+  font-size: 18px;
+  line-height: 1;
+  /* FA line boxes clip glyph tops in tight flex rows; give the icon its own
+   * fixed-height centered box so nothing is shaved off. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+}
+
+body.gl-mobile .gl-mobile-tab.active {
+  color: var(--gl-accent);
+  text-shadow: 0 0 8px var(--gl-glow);
+}
+
+/* ---------- View switching ---------- */
+
+/* Sidebar (chat) becomes a full-screen surface on the chat view… */
+body.gl-mobile[data-gl-mobile-view="chat"] #sidebar {
+  position: fixed !important;
+  inset: var(--glmob-top) 0 auto 0 !important;
+  width: auto !important;
+  height: calc(var(--glmob-view-h) - var(--glmob-top)) !important;
+  max-height: none !important;
+  z-index: 110;
+}
+
+/* …and is fully hidden on every other view. */
+body.gl-mobile:not([data-gl-mobile-view="chat"]) #sidebar {
+  display: none !important;
+}
+
+/* Chat input: room for thumbs + the explicit send button. */
+body.gl-mobile #chat-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+body.gl-mobile #chat-message {
+  min-height: 44px;
+  font-size: 16px; /* ≥16px stops iOS auto-zoom on focus */
+}
+
+body.gl-mobile .gl-mobile-send {
+  min-width: 48px;
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+/* Bigger touch targets on chat cards. */
+body.gl-mobile #chat-log .message button,
+body.gl-mobile #chat-log .message .card-buttons button {
+  min-height: 40px;
+}
+
+/* ---------- Full-screen windows ---------- */
+
+body.gl-mobile .gl-mobile-fs {
+  position: fixed !important;
+  inset: var(--glmob-top) 0 auto 0 !important;
+  width: auto !important;
+  height: calc(var(--glmob-view-h) - var(--glmob-top)) !important;
+  max-width: none !important;
+  max-height: none !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+body.gl-mobile .gl-mobile-fs .window-content {
+  height: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Universal sheet fallback: let dense desktop sheets pan inside the frame. */
+body.gl-mobile .gl-mobile-fs .window-content > form,
+body.gl-mobile .gl-mobile-fs .window-content > .sheet-body {
+  min-width: min-content;
+}
+
+/* Window headers: keep only a big close button usable by thumb. */
+body.gl-mobile .gl-mobile-fs .window-header {
+  touch-action: none;
+}
+
+body.gl-mobile .gl-mobile-fs .window-header .header-button,
+body.gl-mobile .gl-mobile-fs .window-header [data-action="close"] {
+  min-width: 44px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Resize handles are meaningless full-screen. */
+body.gl-mobile .gl-mobile-fs .window-resize-handle,
+body.gl-mobile .gl-mobile-fs .window-resizable-handle {
+  display: none !important;
+}
+
+/* ---------- Suite panel ---------- */
+
+body.gl-mobile .gl-mobile-suite {
+  position: fixed;
+  inset: var(--glmob-top) 0 auto 0;
+  height: calc(var(--glmob-view-h) - var(--glmob-top));
+  z-index: 115;
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+body.gl-mobile .gl-mobile-suite.open {
+  display: flex;
+}
+
+body.gl-mobile .gl-mobile-suite-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.gl-mobile .gl-mobile-suite-item,
+body.gl-mobile .gl-mobile-suite-exit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+body.gl-mobile .gl-mobile-suite-item[disabled] {
+  opacity: 0.4;
+}
+
+body.gl-mobile .gl-mobile-suite-exit {
+  margin-top: 24px;
+  color: var(--gl-text-dim);
+}
+
+/* ---------- Combat banner ---------- */
+
+body.gl-mobile .gl-mobile-combat {
+  position: fixed;
+  top: calc(var(--glmob-top) + 8px);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 105;
+  display: none;
+  padding: 6px 14px;
+  font-family: var(--gl-tech);
+  font-size: 12px;
+  color: var(--gl-text-bright);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-radius);
+  pointer-events: none;
+}
+
+body.gl-mobile[data-gl-mobile-view="canvas"] .gl-mobile-combat.show {
+  display: block;
+}
+
+/* ---------- Tracker dock (Clocks & Tracker HUD) ---------- */
+
+/* The time/tracker HUD becomes a compact strip docked to the top edge and
+ * stays visible on EVERY tab. Desktop-only cells (drag grip, date stack,
+ * stretch meter, event badge, GM dock) are stripped; what remains is the
+ * shift dial/name and the clock + shift boxes. `zoom` shrinks real layout
+ * size while keeping the internal layout intact (Chrome Android is the
+ * supported mobile target). Every shell surface reserves --glmob-top for it. */
+body.gl-mobile {
+  --glmob-hud-zoom: 0.78;
+}
+
+body.gl-mobile:has(#glct-hud) {
+  --glmob-top: 52px;
+}
+
+body.gl-mobile #glct-hud {
+  zoom: var(--glmob-hud-zoom);
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  transform: none !important;
+  z-index: 125;
+}
+
+body.gl-mobile #glct-hud .cell.grip,
+body.gl-mobile #glct-hud .cell.date,
+body.gl-mobile #glct-hud .cell.meter,
+body.gl-mobile #glct-hud .event-badge,
+body.gl-mobile #glct-hud .gmwrap {
+  display: none !important;
+}
+
+/* Dock silhouette: square top corners against the screen edge, and never
+ * wider than the viewport (vw inside a zoomed element is scaled back down,
+ * hence the division). */
+body.gl-mobile #glct-hud .bar {
+  max-width: calc(100vw / var(--glmob-hud-zoom));
+  border-radius: 0 0 14px 14px;
+}
+
+/* ---------- Roll result toasts ---------- */
+
+/* Compact "cinematic" result bar: chat results surface here so the chat tab
+ * never has to be opened mid-scene. Hidden on the chat view itself. */
+body.gl-mobile .gl-mobile-toasts {
+  position: fixed;
+  /* Below the combat banner's slot so the two never overlap. */
+  top: calc(var(--glmob-top) + 42px);
+  left: 10px;
+  right: 10px;
+  z-index: 118;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+body.gl-mobile[data-gl-mobile-view="chat"] .gl-mobile-toasts {
+  display: none;
+}
+
+body.gl-mobile .gl-mobile-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 14px;
+  text-align: left;
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-radius);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: glmob-toast-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+body.gl-mobile .gl-mobile-toast.out {
+  animation: glmob-toast-out 0.35s ease forwards;
+}
+
+body.gl-mobile .gl-mobile-toast .who {
+  flex: 0 0 auto;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gl-text-dim);
+}
+
+body.gl-mobile .gl-mobile-toast .what {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--gl-text);
+}
+
+body.gl-mobile .gl-mobile-toast .num {
+  flex: 0 0 auto;
+  font-family: var(--gl-display, var(--gl-tech));
+  font-size: 21px;
+  color: var(--gl-accent);
+  text-shadow: 0 0 10px var(--gl-glow);
+}
+
+/* System-aware outcome block: successes over the outcome word, tinted by how
+ * the roll landed (win / messy crit / bestial failure / plain failure). */
+body.gl-mobile .gl-mobile-toast .res {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  color: var(--gl-accent);
+}
+
+body.gl-mobile .gl-mobile-toast .res .num {
+  font-size: 19px;
+  line-height: 1;
+  color: inherit;
+  text-shadow: 0 0 10px currentColor;
+}
+
+body.gl-mobile .gl-mobile-toast .res .lbl {
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: inherit;
+  opacity: 0.9;
+}
+
+body.gl-mobile .gl-mobile-toast .res.tone-messy {
+  color: var(--gl-signal-hot);
+}
+
+body.gl-mobile .gl-mobile-toast .res.tone-bestial {
+  color: var(--gl-hazard);
+}
+
+body.gl-mobile .gl-mobile-toast .res.tone-loss,
+body.gl-mobile .gl-mobile-toast .res.tone-loss .num {
+  color: var(--gl-text-dim);
+  text-shadow: none;
+}
+
+/* ---- V5 skin ----
+ * Toasts carrying a gluniverse-wod-v5 result drop the etched glass and render
+ * as a parchment slip with a blood rule — the same visual language as the
+ * system's chat cards. All tokens (--gl-parch/--gl-ink/--gl-blood/--gl-serif/
+ * --gl-cond/…) come from the system's stylesheet on :root and flip with its
+ * dark "midnight" scheme; fallbacks keep the toast legible if it ever renders
+ * without them. */
+body.gl-mobile .gl-mobile-toast.v5 {
+  background: linear-gradient(180deg, var(--gl-parch-raise, #f6f1e6), var(--gl-parch, #efe8da));
+  border: 1px solid var(--gl-line-soft, #cabfa8);
+  border-left: 3px solid var(--gl-blood, #7d1013);
+  border-radius: 3px;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.4);
+}
+
+body.gl-mobile .gl-mobile-toast.v5 .who {
+  font-family: var(--gl-cond, "Arial Narrow", sans-serif);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--gl-muted-2, #5f574a);
+}
+
+/* The pool name reads like a card title: serif, ink. */
+body.gl-mobile .gl-mobile-toast.v5 .what {
+  font-family: var(--gl-serif, Georgia, serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gl-ink, #1b1712);
+}
+
+body.gl-mobile .gl-mobile-toast.v5 .res .num {
+  font-family: var(--gl-serif, Georgia, serif);
+  font-size: 20px;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+/* Outcome word styled like the system's .gl-badge: condensed, tracked caps. */
+body.gl-mobile .gl-mobile-toast.v5 .res .lbl {
+  font-family: var(--gl-cond, "Arial Narrow", sans-serif);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  opacity: 1;
+}
+
+/* Outcome colours mirror the system's own badge palette. */
+body.gl-mobile .gl-mobile-toast.v5 .res {
+  color: var(--gl-good, #3f6b3a);
+}
+
+body.gl-mobile .gl-mobile-toast.v5 .res.tone-crit {
+  color: var(--gl-gold, #b8860b);
+}
+
+body.gl-mobile .gl-mobile-toast.v5 .res.tone-messy,
+body.gl-mobile .gl-mobile-toast.v5 .res.tone-bestial {
+  color: var(--gl-blood-bright, #a8181d);
+}
+
+body.gl-mobile .gl-mobile-toast.v5 .res.tone-loss,
+body.gl-mobile .gl-mobile-toast.v5 .res.tone-loss .num {
+  color: var(--gl-muted-2, #5f574a);
+}
+
+@keyframes glmob-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 -14px;
+    scale: 0.96;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+@keyframes glmob-toast-out {
+  to {
+    opacity: 0;
+    translate: 0 -10px;
+    scale: 0.97;
+  }
+}
+
+/* ---------- Character sheet as a tab ---------- */
+
+/* Actor-sheet windows belong to the Sheet tab: off that view they stay
+ * rendered but hidden, so switching back is instant and a roll can collapse
+ * the sheet just by fronting the canvas. */
+body.gl-mobile:not([data-gl-mobile-view="character"]) .gl-mobile-sheet-win {
+  display: none !important;
+}
+
+/* ---------- Global touch affordances ---------- */
+
+body.gl-mobile button,
+body.gl-mobile .gl-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.gl-mobile ::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}

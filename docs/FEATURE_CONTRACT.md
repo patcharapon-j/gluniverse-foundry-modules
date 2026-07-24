@@ -145,3 +145,4 @@ Suite.register({
 | critical           | crit       | ["pf2e","dnd5e"]  | —               | off     |
 | timer              | timer      | null              | —               | off     |
 | pf2e-ultimates     | ult        | pf2e              | —               | off     |
+| mobile             | mob        | null              | —               | off     |
