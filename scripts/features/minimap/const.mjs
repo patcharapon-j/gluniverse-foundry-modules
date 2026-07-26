@@ -8,6 +8,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
+import { PALETTE as SUITE } from "../../core/theme.mjs";
 
 export const MODULE_ID = SUITE_ID;
 export const FEATURE_ID = "minimap";
@@ -75,31 +76,36 @@ export const MSG = Object.freeze({
 });
 
 /**
- * Curated colour palette for elements. Derived from the Etched Glass semantic
- * accents (see gl-tokens.css) plus a few extra hues for variety. The first
- * entry is the neutral default.
+ * Curated colour palette offered in the element colour picker.
+ *
+ * The chosen value is stored as world data (a GM's map is theirs), so this is a
+ * list of literals rather than live token references — but the suite hues are
+ * sourced from the shared palette so the swatches cannot drift out of step with
+ * gl-tokens.css. The four extra hues fill gaps the semantic set doesn't cover
+ * (a map needs more distinguishable colours than a UI does). The first entry is
+ * the neutral default.
  */
 export const PALETTE = Object.freeze([
-  "#6b86d6", // accent (neutral default)
-  "#5eeaff", // cyan
-  "#5fdb92", // good
-  "#37d99a", // mission
-  "#ffd24a", // signal
-  "#f59e0b", // amber
-  "#ff4a52", // hazard
-  "#ec4899", // pink
-  "#b497ff", // violet
-  "#38bdf8", // sky
-  "#94a3b8", // slate
-  "#f3fbff"  // bright
+  SUITE.accent,   // neutral default
+  SUITE.cyan,
+  SUITE.good,
+  SUITE.mission,
+  SUITE.signal,
+  "#f59e0b",      // amber — warmer than signal, for map variety
+  SUITE.hazard,
+  "#ec4899",       // pink
+  SUITE.violet,
+  "#38bdf8",      // sky
+  "#94a3b8",      // slate
+  SUITE.textBright,
 ]);
 
 export const DEFAULT_ELEMENT_COLOR = PALETTE[0];
-export const DEFAULT_MARKER_COLOR = "#5eeaff";
-export const DEFAULT_ROOM_COLOR = "#6b86d6";
+export const DEFAULT_MARKER_COLOR = SUITE.cyan;
+export const DEFAULT_ROOM_COLOR = SUITE.accent;
 /** A party marker (the whole group) reads in the warm signal hue so it stands
  *  apart from the cool, per-user member dots. */
-export const DEFAULT_PARTY_COLOR = "#ffd24a";
+export const DEFAULT_PARTY_COLOR = SUITE.signal;
 
 /** Marker kinds. `member` is the per-user/PC dot (optionally user-bound);
  *  `party` is a single badge standing in for the entire party. */

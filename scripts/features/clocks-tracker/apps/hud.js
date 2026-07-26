@@ -8,7 +8,7 @@
  * continuous, exactly like the approved mockup.
  */
 
-import { MODULE_ID, SETTINGS } from "../const.js";
+import { MODULE_ID, SETTINGS, FALLBACK_TINTS, GLITCH_PALETTE } from "../const.js";
 import { Features } from "../features.js";
 import { TimeEngine } from "../engine.js";
 import {
@@ -286,16 +286,16 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     // tint scoped to the weather cell only — never the shift-driven HUD vars
     if (cell) {
-      cell.style.setProperty("--glct-weather-tint", e.tintParticle ?? "#cfe8ff");
-      cell.style.setProperty("--glct-weather-glow", e.tintGlow ?? "#7fb4e6");
+      cell.style.setProperty("--glct-weather-tint", e.tintParticle ?? FALLBACK_TINTS.weather.tint);
+      cell.style.setProperty("--glct-weather-glow", e.tintGlow ?? FALLBACK_TINTS.weather.glow);
       cell.classList.toggle("ominous", !!e.ominous);
     }
 
     // Carry the weather tint on the bar so the left-edge scrim/glow can pick it up
     // (scoped var — never the shift-driven HUD colour).
     if (bar) {
-      bar.style.setProperty("--glct-weather-tint", e.tintParticle ?? "#cfe8ff");
-      bar.style.setProperty("--glct-weather-glow", e.tintGlow ?? "#7fb4e6");
+      bar.style.setProperty("--glct-weather-tint", e.tintParticle ?? FALLBACK_TINTS.weather.tint);
+      bar.style.setProperty("--glct-weather-glow", e.tintGlow ?? FALLBACK_TINTS.weather.glow);
       bar.classList.toggle("wx-ominous", !!e.ominous);
     }
 
@@ -442,8 +442,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       const dice = root.querySelector("[data-dxdice]");
       if (dice) { dice.style.display = hideCount ? "none" : ""; dice.classList.toggle("empty", feat.current <= 0 && !ended); dice.classList.toggle("ended", ended); }
       if (cell && efx) {
-        cell.style.setProperty("--dxtint", efx.tintParticle ?? "#ff9a3c");
-        cell.style.setProperty("--dxglow", efx.tintGlow ?? "#ffd27a");
+        cell.style.setProperty("--dxtint", efx.tintParticle ?? FALLBACK_TINTS.delving.tint);
+        cell.style.setProperty("--dxglow", efx.tintGlow ?? FALLBACK_TINTS.delving.glow);
         cell.classList.toggle("ominous", !!efx.ominous);
         cell.classList.toggle("terminal", ended);
         // dread intensifies as the resource degrades toward its worst stage; the
@@ -468,8 +468,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
         if (bar) {
           // delve-scoped vars so the right-edge wash never clobbers weather's
           // left-edge tint (both can be live at once).
-          bar.style.setProperty("--glct-delve-tint", efx.tintParticle ?? "#ff9a3c");
-          bar.style.setProperty("--glct-delve-glow", efx.tintGlow ?? "#ffd27a");
+          bar.style.setProperty("--glct-delve-tint", efx.tintParticle ?? FALLBACK_TINTS.delving.tint);
+          bar.style.setProperty("--glct-delve-glow", efx.tintGlow ?? FALLBACK_TINTS.delving.glow);
           bar.classList.toggle("dx-ominous", !!efx.ominous);
           // the depleted end cranks the liquid-glass edge refraction + glow
           bar.classList.toggle("dx-terminal", ended);
@@ -489,8 +489,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       const chip = this._mk("button", "dx-chip" + (fx.ominous ? " ominous" : ""));
       chip.type = "button";
       chip.dataset.id = r.id;
-      chip.style.setProperty("--dxtint", fx.tintParticle ?? "#9aa3b0");
-      chip.style.setProperty("--dxglow", fx.tintGlow ?? "#9aa3b0");
+      chip.style.setProperty("--dxtint", fx.tintParticle ?? FALLBACK_TINTS.neutral.tint);
+      chip.style.setProperty("--dxglow", fx.tintGlow ?? FALLBACK_TINTS.neutral.glow);
       chip.title = `${r.name ?? ""} · ${stage.name ?? ""}`;
       chip.append(this._mk("i", r.icon || "fa-solid fa-hourglass-half"), this._mk("b", null, String(r.current)));
       chip.addEventListener("click", ev => { ev.stopPropagation(); if (game.user.isGM) DelvingStore.setFeatured(r.id); });
@@ -1411,10 +1411,10 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
    *  theming is suppressed in _paint so this isn't overwritten on the next paint). */
   _setGlitchPalette() {
     const el = this.element;
-    el.style.setProperty("--tint", "#7bf0ff");
-    el.style.setProperty("--tint2", "#0a0d16");
-    el.style.setProperty("--glow", "rgba(123,240,255,.5)");
-    el.style.setProperty("--glowsoft", "rgba(176,128,255,.24)");
+    el.style.setProperty("--tint", GLITCH_PALETTE.tint);
+    el.style.setProperty("--tint2", GLITCH_PALETTE.tint2);
+    el.style.setProperty("--glow", GLITCH_PALETTE.glow);
+    el.style.setProperty("--glowsoft", GLITCH_PALETTE.soft);
   }
 
   /** Glyph pool — letters + digits + technical punctuation, so the readout reads

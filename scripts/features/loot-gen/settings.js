@@ -1,6 +1,7 @@
 /** Setting registration for GLUniverse — Loot Generator. */
 
 import { MODULE_ID, SETTINGS, SOURCE_MODE, MOTION_TIER } from "./const.js";
+import { applyMotionTier as applySuiteMotionTier } from "../../core/theme.mjs";
 import { LlmLogViewer } from "./apps/llm-log.js";
 
 export function registerSettings() {
@@ -181,6 +182,9 @@ export function applyMotionTier() {
   try { tier = game.settings.get(MODULE_ID, SETTINGS.motionTier) || MOTION_TIER.DEFAULT; } catch { /* pre-init */ }
   const body = document.body;
   if (!body) return;
+  // The shared multiplier retimes every --gl-d-* duration token; the body class
+  // stays for the feature-specific, non-duration parts of a tier.
+  applySuiteMotionTier(tier);
   for (const t of Object.values(MOTION_TIER)) body.classList.toggle(`gllg-motion-${t}`, t === tier);
 }
 

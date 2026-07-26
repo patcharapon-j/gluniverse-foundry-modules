@@ -6,44 +6,17 @@
    both light/parchment and dark (Dorako UI) chat backgrounds.
    =========================================================================== */
 
-/* --- Bundled typefaces (OFL; mirrors gluniverse-initiative) ----------------- */
+/* --- Typefaces -------------------------------------------------------------
+   Declared once for the whole suite in styles/gl-fonts.css, which bundles
+   Oxanium and JetBrains Mono from a single `assets/fonts/` location. This file
+   used to ship its own third copy of both @font-face pairs pointing at a
+   per-feature asset folder. Reach the faces through --gl-display / --gl-tech. */
 
-@font-face {
-  font-family: "Oxanium";
-  src: url("../assets/flatfinder/fonts/oxanium/Oxanium-latin.woff2") format("woff2-variations"),
-       url("../assets/flatfinder/fonts/oxanium/Oxanium-latin.woff2") format("woff2");
-  font-weight: 200 800;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
-    U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Oxanium";
-  src: url("../assets/flatfinder/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2-variations"),
-       url("../assets/flatfinder/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2");
-  font-weight: 200 800;
-  font-display: swap;
-  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB,
-    U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../assets/flatfinder/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2-variations"),
-       url("../assets/flatfinder/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
-  font-weight: 100 800;
-  font-display: swap;
-}
-
-/* --- Shared GL Universe tokens (design-language.md §2, §6.1) ----------------
-   Defined defensively so Flatfinder is self-sufficient without the sibling
-   modules; where gluniverse-clocks/initiative are present the values are
-   identical, so co-existence is a no-op.                                       */
-.flatfinder-competence,
-.flatfinder-incapacitation,
-.flatfinder-encounter-budget,
-.flatfinder-apex-badge {
-}
+/* --- Shared GL Universe tokens ---------------------------------------------
+   Flatfinder used to redeclare the --gl-* foundation here "defensively", from
+   when it shipped as a standalone module. Inside the suite that block was dead
+   weight at best and a silent override at worst, so it is gone: the tokens come
+   from styles/gl-tokens.css, which always loads first.                         */
 
 /* ===========================================================================
    Glass slab — shared anatomy for every Flatfinder badge.
@@ -71,15 +44,15 @@
   /* signature chamfer: diagonal cut on the top-right corner */
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.22)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.22)),
     linear-gradient(98deg,
       color-mix(in srgb, var(--ff-accent) 18%, var(--gl-ink-1)),
       var(--gl-ink-1) 66%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -10px 22px rgba(0, 0, 0, 0.34),
-    0 6px 18px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.34),
+    0 6px 18px rgb(var(--gl-tint-dark) / 0.45),
     0 0 26px color-mix(in srgb, var(--ff-accent) 16%, transparent);
 }
 
@@ -135,7 +108,7 @@
   letter-spacing: 0.01em;
   color: var(--gl-text-bright);
   text-shadow: 0 0 12px color-mix(in srgb, var(--ff-accent) 55%, transparent),
-    0 1px 0 rgba(0, 0, 0, 0.4);
+    0 1px 0 rgb(var(--gl-tint-dark) / 0.4);
 }
 .flatfinder-competence .ff-label {
   font-size: 1.05rem;
@@ -179,14 +152,14 @@
   border-radius: 9px;
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.07), rgb(var(--gl-tint-light) / 0) 38%),
     linear-gradient(98deg,
       color-mix(in srgb, var(--ff-accent) 16%, var(--gl-ink-1)),
       var(--gl-ink-1) 70%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -8px 18px rgba(0, 0, 0, 0.32),
-    0 6px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+    inset 0 -8px 18px rgb(var(--gl-tint-dark) / 0.32),
+    0 6px 16px rgb(var(--gl-tint-dark) / 0.45),
     0 0 22px color-mix(in srgb, var(--ff-accent) 14%, transparent);
 }
 .flatfinder-encounter-budget::before {
@@ -266,16 +239,16 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--gl-ink-0, #02070b);
-  background: var(--ff-accent, #ffd24a);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--ff-accent, #ffd24a) 60%, transparent);
+  color: var(--gl-ink-0, var(--gl-ink-0));
+  background: var(--ff-accent, var(--gl-signal));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ff-accent, var(--gl-signal)) 60%, transparent);
 }
-.combatant .flatfinder-apex-tag[data-prime="true"]  { --ff-accent: #ffd24a; }
+.combatant .flatfinder-apex-tag[data-prime="true"]  { --ff-accent: var(--gl-signal); }
 .combatant .flatfinder-apex-tag[data-prime="false"] {
-  --ff-accent: #b497ff;
-  color: var(--gl-text-bright, #f3fbff);
-  background: color-mix(in srgb, #b497ff 22%, transparent);
-  border: 1px solid color-mix(in srgb, #b497ff 55%, transparent);
+  --ff-accent: var(--gl-violet);
+  color: var(--gl-text-bright, var(--gl-text-bright));
+  background: color-mix(in srgb, var(--gl-violet) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gl-violet) 55%, transparent);
 }
 
 /* Counteract action button on the prime row. */
@@ -286,11 +259,11 @@
   margin-left: 0.3em;
   width: 1.5em;
   height: 1.5em;
-  color: var(--gl-signal, #ffd24a);
+  color: var(--gl-signal, var(--gl-signal));
   cursor: pointer;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gl-signal, #ffd24a) 55%, transparent));
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gl-signal, var(--gl-signal)) 55%, transparent));
 }
-.combatant .flatfinder-apex-counteract-btn:hover { color: var(--gl-signal-hot, #ffe070); }
+.combatant .flatfinder-apex-counteract-btn:hover { color: var(--gl-signal-hot, var(--gl-signal-hot)); }
 
 /* ===========================================================================
    Apex (solo boss) — the NPC sheet itself reads as Apex.
@@ -329,13 +302,13 @@
   border-radius: 8px;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 36%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-light) / 0) 36%),
     linear-gradient(98deg,
       color-mix(in srgb, var(--ff-apex) 20%, var(--gl-ink-1)),
       var(--gl-ink-1) 66%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 4px 14px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    0 4px 14px rgb(var(--gl-tint-dark) / 0.4),
     0 0 22px color-mix(in srgb, var(--ff-apex) 18%, transparent);
 }
 /* Accent edge bar (left) — matches the badge family's idle marker. */
@@ -408,22 +381,22 @@
    Apex chat cards (phase break + counteract) — etched glass, on chat.
    =========================================================================== */
 .flatfinder-apex-phase {
-  --ff-accent: #b497ff;
+  --ff-accent: var(--gl-violet);
   position: relative;
   margin: 0.2em 0;
   padding: 0.5em 0.7em 0.5em 0.85em;
-  color: var(--gl-text, #eef1f7);
-  font-family: var(--gl-display, "Oxanium", system-ui, sans-serif);
-  border: 1px solid var(--gl-edge, rgba(255, 255, 255, 0.13));
+  color: var(--gl-text, var(--gl-text));
+  font-family: var(--gl-display);
+  border: 1px solid var(--gl-edge, rgb(var(--gl-tint-light) / 0.13));
   border-radius: 9px;
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 36%),
-    linear-gradient(98deg, color-mix(in srgb, var(--ff-accent) 20%, var(--gl-ink-1, #080b11)),
-      var(--gl-ink-1, #080b11) 68%);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.07), rgb(var(--gl-tint-light) / 0) 36%),
+    linear-gradient(98deg, color-mix(in srgb, var(--ff-accent) 20%, var(--gl-ink-1, var(--gl-ink-1))),
+      var(--gl-ink-1, var(--gl-ink-1)) 68%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    0 6px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.13),
+    0 6px 16px rgb(var(--gl-tint-dark) / 0.45),
     0 0 24px color-mix(in srgb, var(--ff-accent) 16%, transparent);
 }
 .flatfinder-apex-phase::before {
@@ -450,12 +423,12 @@
   font-size: 0.6rem;
   color: var(--ff-accent);
 }
-.flatfinder-apex-phase .ff-ap-name { font-weight: 800; color: var(--gl-text-bright, #f3fbff); }
+.flatfinder-apex-phase .ff-ap-name { font-weight: 800; color: var(--gl-text-bright, var(--gl-text-bright)); }
 .flatfinder-apex-phase .ff-ap-hp {
   margin-left: auto;
   font-family: var(--gl-tech, monospace);
   font-size: 0.66rem;
-  color: var(--gl-text-dim, #98a2b6);
+  color: var(--gl-text-dim, var(--gl-text-dim));
 }
 .flatfinder-apex-phase .ff-ap-beats {
   margin: 0.4em 0 0;
@@ -484,7 +457,7 @@
   letter-spacing: 0.16em;
   font-weight: 700;
   font-size: 0.62rem;
-  color: var(--gl-signal, #ffd24a);
+  color: var(--gl-signal, var(--gl-signal));
 }
 .flatfinder-apex-counteract .ff-ac-note { font-size: 0.78rem; opacity: 0.88; }
 
@@ -503,17 +476,17 @@
   font-size: 0.56rem;
   font-weight: 700;
   text-align: left;
-  color: var(--gl-text-dim, #98a2b6);
+  color: var(--gl-text-dim, var(--gl-text-dim));
   padding: 0 0.5em 0.2em;
-  border-bottom: 1px solid var(--gl-edge, rgba(255, 255, 255, 0.13));
+  border-bottom: 1px solid var(--gl-edge, rgb(var(--gl-tint-light) / 0.13));
 }
 .flatfinder-apex-counteract .ff-ac-table thead th:last-child { text-align: right; }
 .flatfinder-apex-counteract .ff-ac-table tbody th {
-  font-family: var(--gl-display, "Oxanium", system-ui, sans-serif);
+  font-family: var(--gl-display);
   font-weight: 700;
   text-align: left;
   white-space: nowrap;
-  color: var(--gl-text-bright, #f3fbff);
+  color: var(--gl-text-bright, var(--gl-text-bright));
   padding: 0.16em 0.5em;
   background: none;
   border: 0;
@@ -525,33 +498,33 @@
 }
 .flatfinder-apex-counteract .ff-ac-table tbody tr + tr th,
 .flatfinder-apex-counteract .ff-ac-table tbody tr + tr td {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgb(var(--gl-tint-light) / 0.05);
 }
 /* Accent each tier on its left rail to match the badge family's degree colours. */
 .flatfinder-apex-counteract .ff-ac-table tbody th {
-  border-left: 3px solid var(--ff-tier, var(--gl-text-dim, #98a2b6));
+  border-left: 3px solid var(--ff-tier, var(--gl-text-dim, var(--gl-text-dim)));
   padding-left: 0.55em;
 }
-.flatfinder-apex-counteract tr[data-degree="critical-success"] { --ff-tier: #5eeaff; }
-.flatfinder-apex-counteract tr[data-degree="success"]          { --ff-tier: #5fdb92; }
+.flatfinder-apex-counteract tr[data-degree="critical-success"] { --ff-tier: var(--gl-cyan); }
+.flatfinder-apex-counteract tr[data-degree="success"]          { --ff-tier: var(--gl-good); }
 .flatfinder-apex-counteract tr[data-degree="failure"]          { --ff-tier: #ffc24a; }
-.flatfinder-apex-counteract tr[data-degree="critical-failure"] { --ff-tier: #ff4a52; }
-.flatfinder-apex-counteract tr[data-degree] th { color: var(--gl-text-bright, #f3fbff); }
+.flatfinder-apex-counteract tr[data-degree="critical-failure"] { --ff-tier: var(--gl-hazard); }
+.flatfinder-apex-counteract tr[data-degree] th { color: var(--gl-text-bright, var(--gl-text-bright)); }
 
 .flatfinder-apex-counteract .ff-ac-rank {
   font-family: var(--gl-tech, monospace);
   font-weight: 800;
-  color: var(--gl-text-bright, #f3fbff);
+  color: var(--gl-text-bright, var(--gl-text-bright));
 }
 .flatfinder-apex-counteract .ff-ac-band {
   margin-left: 0.45em;
   font-family: var(--gl-tech, monospace);
   font-size: 0.64rem;
-  color: var(--gl-text-dim, #98a2b6);
+  color: var(--gl-text-dim, var(--gl-text-dim));
 }
 .flatfinder-apex-counteract .ff-ac-fail {
   font-weight: 700;
-  color: var(--gl-text-dim, #98a2b6);
+  color: var(--gl-text-dim, var(--gl-text-dim));
 }
 .flatfinder-apex-counteract .ff-ac-foot {
   display: block;

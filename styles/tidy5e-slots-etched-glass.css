@@ -30,19 +30,19 @@
     border-radius: 14px;
     clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.16),
-        inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+        inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38);
     filter:
-        drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55))
-        drop-shadow(0 0 22px var(--gl-accent-bloom));
+        drop-shadow(0 18px 40px rgb(var(--gl-tint-dark) / 0.55))
+        drop-shadow(0 0 22px var(--gl-bloom));
 }
 
 /* Re-lay the v3 glass body so the accent-tinted refraction reads on the cut. */
 .glinv-scope .glinv-slot-panel,
 .glinv-scope .glinv-item-config {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.20)),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.10), rgb(var(--gl-tint-light) / 0) 34%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.20)),
         linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
     border: 1px solid var(--gl-edge);
 }
@@ -67,7 +67,7 @@
 .glinv-scope .glinv-slot-panel:hover::after,
 .glinv-scope .glinv-item-config:hover::after {
     border-color: var(--gl-accent);
-    box-shadow: 0 0 8px var(--gl-accent-glow);
+    box-shadow: 0 0 8px var(--gl-glow);
     opacity: 1;
 }
 
@@ -106,7 +106,7 @@
     height: 2px;
     transform: translateY(-50%);
     background: var(--gl-accent);
-    box-shadow: 0 0 8px var(--gl-accent-glow);
+    box-shadow: 0 0 8px var(--gl-glow);
     border-radius: 1px;
 }
 
@@ -150,14 +150,14 @@
 }
 .glinv-scope .glinv-slot-label i {
     color: var(--gl-accent);
-    filter: drop-shadow(0 0 4px var(--gl-accent-glow));
+    filter: drop-shadow(0 0 4px var(--gl-glow));
 }
 
 /* Hero slot count — Oxanium numerals, tabular, with an etched glow. */
 .glinv-scope .glinv-count-used {
     font-family: var(--gl-display);
     color: var(--gl-text-bright);
-    text-shadow: 0 0 14px var(--gl-accent-glow), 0 1px 0 rgba(0, 0, 0, 0.35);
+    text-shadow: 0 0 14px var(--gl-glow), 0 1px 0 rgb(var(--gl-tint-dark) / 0.35);
 }
 
 /* State badge → opaque signal-amber decal (Endfield "look here"). */
@@ -192,22 +192,22 @@
  * ───────────────────────────────────────────────────────────────────── */
 .glinv-scope .glinv-slot-box.glinv-filled {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.45), rgb(var(--gl-tint-light) / 0) 45%),
         linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 78%, white), var(--gl-accent) 60%, color-mix(in srgb, var(--gl-accent) 70%, black));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.55),
-        inset 0 -2px 3px rgba(0, 0, 0, 0.35),
-        0 1px 2px rgba(0, 0, 0, 0.45),
-        0 0 6px var(--gl-accent-glow);
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.55),
+        inset 0 -2px 3px rgb(var(--gl-tint-dark) / 0.35),
+        0 1px 2px rgb(var(--gl-tint-dark) / 0.45),
+        0 0 6px var(--gl-glow);
     animation: glinv-slot-pop var(--gl-d-quick) var(--gl-pop) both;
 }
 .glinv-scope .glinv-slot-box.glinv-over {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.4), rgb(var(--gl-tint-light) / 0) 45%),
         linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 80%, white), var(--gl-hazard) 60%, color-mix(in srgb, var(--gl-hazard) 70%, black));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.5),
-        inset 0 -2px 3px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5),
+        inset 0 -2px 3px rgb(var(--gl-tint-dark) / 0.4),
         0 0 9px color-mix(in srgb, var(--gl-hazard) 60%, transparent);
 }
 
@@ -220,7 +220,7 @@
     border-radius: 0;
     clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.18)),
         var(--gl-ink-2);
     border: 1px solid var(--gl-edge);
     font-family: var(--gl-tech);
@@ -244,7 +244,7 @@
 }
 .glinv-scope button:hover:not(:disabled) {
     border-color: var(--gl-accent);
-    box-shadow: 0 0 14px var(--gl-accent-bloom);
+    box-shadow: 0 0 14px var(--gl-bloom);
     transform: none;
 }
 .glinv-scope button:hover:not(:disabled)::before { transform: translateX(120%); }
@@ -284,7 +284,7 @@
     overflow: hidden;
     padding-left: 0.62rem;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.2)),
         var(--gl-ink-2);
     border: 1px solid var(--gl-edge);
     font-family: var(--gl-display);
@@ -298,15 +298,15 @@
     bottom: 0;
     width: 3px;
     background: var(--gl-accent);
-    box-shadow: 0 0 8px var(--gl-accent-glow);
+    box-shadow: 0 0 8px var(--gl-glow);
 }
 .glinv-scope .glinv-header-chip i {
     color: var(--gl-accent);
-    filter: drop-shadow(0 0 4px var(--gl-accent-glow));
+    filter: drop-shadow(0 0 4px var(--gl-glow));
 }
 .glinv-scope .glinv-header-chip .glinv-hc-used {
     color: var(--gl-text-bright);
-    text-shadow: 0 0 10px var(--gl-accent-glow);
+    text-shadow: 0 0 10px var(--gl-glow);
 }
 .glinv-scope .glinv-header-chip.glinv-heavy,
 .glinv-scope .glinv-header-chip.glinv-encumbered { --gl-accent: var(--gl-signal); }
@@ -325,13 +325,13 @@
     border-radius: 0;
     clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 32%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.07), rgb(var(--gl-tint-light) / 0) 32%),
         linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 70%);
     border: 1px solid var(--gl-edge);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
         inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 16%, transparent),
-        inset 0 -10px 24px rgba(0, 0, 0, 0.35);
+        inset 0 -10px 24px rgb(var(--gl-tint-dark) / 0.35);
     /* Reveal via a diagonal settle (keeps the static chamfer intact — never
      * animate clip-path here or the cut corner is lost on settle). */
     animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
@@ -346,7 +346,7 @@
     height: 1px;
     transform-origin: left center;
     background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
-    box-shadow: 0 0 14px var(--gl-accent-glow);
+    box-shadow: 0 0 14px var(--gl-glow);
     animation: gl-sheen var(--gl-d-splash) var(--gl-ease) both;
 }
 /* L-bracket registration mark, top-left. */
@@ -365,7 +365,7 @@
 }
 
 .glinv-scope .glinv-cc-head { font-family: var(--gl-tech); letter-spacing: 0.1em; }
-.glinv-scope .glinv-cc-head > i { color: var(--gl-accent); filter: drop-shadow(0 0 4px var(--gl-accent-glow)); }
+.glinv-scope .glinv-cc-head > i { color: var(--gl-accent); filter: drop-shadow(0 0 4px var(--gl-glow)); }
 .glinv-scope .glinv-cc-title { font-family: var(--gl-display); letter-spacing: 0; }
 
 /* Result tag → opaque signal decal. */
@@ -384,14 +384,14 @@
     border-radius: 0;
     clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 48%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.18), rgb(var(--gl-tint-light) / 0) 48%),
         var(--gl-ink-2);
     border: 1px solid var(--gl-edge);
-    animation: gl-numeral-pop var(--gl-d-reveal) var(--gl-snap) both;
+    animation: glinv-numeral-pop var(--gl-d-reveal) var(--gl-snap) both;
 }
 .glinv-scope .glinv-cc-die-val {
     font-family: var(--gl-display);
-    text-shadow: 0 0 14px var(--gl-accent-glow);
+    text-shadow: 0 0 14px var(--gl-glow);
 }
 .glinv-scope .glinv-cc-foot { font-family: var(--gl-tech); letter-spacing: 0.05em; }
 .glinv-scope .glinv-cc-foot,
@@ -428,20 +428,20 @@
     border-radius: 0;
     clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 48%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.16), rgb(var(--gl-tint-light) / 0) 48%),
         var(--gl-ink-2);
 }
 .glinv-scope .glinv-die-face { font-family: var(--gl-display); color: var(--gl-accent); }
 .glinv-scope .glinv-step.on {
     background: linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 82%, white), var(--gl-accent));
-    box-shadow: 0 0 5px var(--gl-accent-bloom);
+    box-shadow: 0 0 5px var(--gl-bloom);
 }
 .glinv-scope .glinv-card-tag {
     border-radius: 0;
     clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
     font-family: var(--gl-display);
 }
-.glinv-scope .glinv-pool-fraction { font-family: var(--gl-display); text-shadow: 0 0 12px var(--gl-accent-glow); }
+.glinv-scope .glinv-pool-fraction { font-family: var(--gl-display); text-shadow: 0 0 12px var(--gl-glow); }
 
 /* Ammo state channels on the card root re-point the accent. */
 .glinv-scope .glinv-ammo-die-low { --gl-accent: var(--gl-signal); }
@@ -500,7 +500,7 @@
  * ───────────────────────────────────────────────────────────────────── */
 .tidy5e-sheet .glinv-sq-normal {
     background: var(--gl-accent);
-    box-shadow: 0 0 4px var(--gl-accent-glow);
+    box-shadow: 0 0 4px var(--gl-glow);
 }
 .tidy5e-sheet .glinv-ammo-indicator i { color: var(--gl-accent); }
 .tidy5e-sheet .glinv-ammo-ind-low { --gl-accent: var(--gl-signal); }
@@ -519,6 +519,6 @@
     background-clip: text;
     color: transparent;
     text-shadow: none;
-    filter: drop-shadow(0 0 8px var(--gl-accent-glow));
+    filter: drop-shadow(0 0 8px var(--gl-glow));
 }
 

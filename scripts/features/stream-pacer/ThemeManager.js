@@ -1,51 +1,36 @@
 /**
- * Central appearance controller — single fixed "Arcane Glass" theme.
+ * Stream Pacer appearance controller.
  *
- * There is no longer a family/preset selector: the look is fixed. The full
- * palette lives in CSS (:root); this class re-stamps the accent and Dire Peril
- * custom properties from one source of truth so the WebGL danger field and the
- * CSS stay in sync, and exposes the derived Dire Peril color bed for the
- * renderer.
+ * The look is fixed — Etched Glass, like the rest of the suite. This class only
+ * exists because the Dire Peril and Campfire effects are WebGL: a fragment
+ * shader cannot read a CSS custom property, so the same colours have to be
+ * derived once and handed to the renderer as 0..1 rgb arrays.
+ *
+ * What changed in the design-system refactor: this used to own two literal
+ * hexes and stamp a dozen `--sp-*` properties onto GLOBAL `:root` through an
+ * injected <style> element, which put a feature's palette in everyone's scope
+ * and bypassed the token layer entirely. Now:
+ *   • the source colours come from the shared palette (scripts/core/theme.mjs),
+ *   • the derived properties are written to the feature's own scope, and
+ *   • the colour maths uses the shared helpers instead of a private copy.
  */
 
-/** The one and only theme — cool "Arcane Glass" chrome with a warm amber accent. */
-export const DEFAULT_THEME = { accent: '#e4b055', peril: '#d6184a' };
+import { PALETTE, lighten, darken, mix, withAlpha, hexToRgbFloat }
+  from "../../core/theme.mjs";
 
-function clamp8(n) {
-  return Math.max(0, Math.min(255, Math.round(n)));
-}
-
-function hexToRgb(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || '').trim());
-  if (!m) return { r: 228, g: 176, b: 85 };
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
-}
-
-function rgbToHex({ r, g, b }) {
-  const h = (v) => clamp8(v).toString(16).padStart(2, '0');
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-
-/** Mix two rgb objects; t=0 → a, t=1 → b. */
-function mix(a, b, t) {
-  return {
-    r: a.r + (b.r - a.r) * t,
-    g: a.g + (b.g - a.g) * t,
-    b: a.b + (b.b - a.b) * t
-  };
-}
-
-function lighten(rgb, t) {
-  return mix(rgb, { r: 255, g: 255, b: 255 }, t);
-}
-
-function darken(rgb, t) {
-  return mix(rgb, { r: 0, g: 0, b: 0 }, t);
-}
-
-function rgba(rgb, a) {
-  return `rgba(${clamp8(rgb.r)}, ${clamp8(rgb.g)}, ${clamp8(rgb.b)}, ${a})`;
-}
+/**
+ * Stream Pacer's source colours, taken from the shared palette.
+ *
+ * `accent` was a bespoke brass amber (#e4b055) sitting a few degrees off the
+ * suite's signal amber for no semantic reason — exactly the drift this refactor
+ * removes, so it now uses the canonical token. `peril` keeps its exact original
+ * crimson, promoted into the palette as `--gl-peril` / `PALETTE.peril` because
+ * "escalation beyond hazard" is a real semantic other features can reuse.
+ */
+export const DEFAULT_THEME = {
+  accent: PALETTE.signal,
+  peril: PALETTE.peril,
+};
 
 class ThemeManagerClass {
   constructor() {
@@ -53,10 +38,10 @@ class ThemeManagerClass {
     this._peril = null; // cached { deep, mid, hot } as 0..1 rgb arrays
   }
 
-  /** Build the accent + Dire Peril custom-property map from the fixed theme. */
+  /** Build the accent + Dire Peril custom-property map. */
   _buildPalette() {
-    const a = hexToRgb(DEFAULT_THEME.accent);
-    const p = hexToRgb(DEFAULT_THEME.peril);
+    const a = DEFAULT_THEME.accent;
+    const p = DEFAULT_THEME.peril;
 
     // Derived accent tone — a softer, brighter sibling for highlights.
     const accentSoft = lighten(a, 0.18);
@@ -65,42 +50,60 @@ class ThemeManagerClass {
     // hot "alert red" pushed toward saturated red-orange for the danger read.
     const perilDeep = darken(p, 0.82);
     const perilBright = lighten(p, 0.62);
-    const perilHot = mix(p, { r: 255, g: 30, b: 48 }, 0.5);
-    const perilGhost = lighten(mix(p, { r: 120, g: 220, b: 255 }, 0.6), 0.1);
+    const perilHot = mix(p, '#ff1e30', 0.5);
+    const perilGhost = lighten(mix(p, '#78dcff', 0.6), 0.1);
 
     const vars = {
-      '--sp-amber': rgbToHex(a),
-      '--sp-amber-soft': rgbToHex(accentSoft),
-      '--sp-amber-dim': rgba(a, 0.22),
-      '--sp-amber-glow': rgba(a, 0.4),
+      '--sp-amber': a,
+      '--sp-amber-soft': accentSoft,
+      '--sp-amber-dim': withAlpha(a, 0.22),
+      '--sp-amber-glow': withAlpha(a, 0.4),
 
-      '--sp-peril': rgbToHex(p),
-      '--sp-peril-deep': rgbToHex(perilDeep),
-      '--sp-peril-bright': rgbToHex(perilBright),
-      '--sp-peril-glow': rgba(lighten(p, 0.15), 0.6),
-      '--sp-peril-red': rgbToHex(perilHot),
-      '--sp-peril-red-glow': rgba(perilHot, 0.6),
-      '--sp-peril-ghost': rgba(perilGhost, 0.35)
+      '--sp-peril': p,
+      '--sp-peril-deep': perilDeep,
+      '--sp-peril-bright': perilBright,
+      '--sp-peril-glow': withAlpha(lighten(p, 0.15), 0.6),
+      '--sp-peril-red': perilHot,
+      '--sp-peril-red-glow': withAlpha(perilHot, 0.6),
+      '--sp-peril-ghost': withAlpha(perilGhost, 0.35),
     };
 
     // WebGL color bed: 0..1 normalized rgb arrays.
-    const norm = ({ r, g, b }) => [r / 255, g / 255, b / 255];
     this._peril = {
-      deep: norm(darken(p, 0.6)),
-      mid: norm(p),
-      hot: norm(lighten(perilHot, 0.25))
+      deep: hexToRgbFloat(darken(p, 0.6)),
+      mid: hexToRgbFloat(p),
+      hot: hexToRgbFloat(lighten(perilHot, 0.25)),
     };
 
     return vars;
   }
 
-  /** Write the fixed palette onto :root via a managed <style> element. */
+  /**
+   * Write the derived palette onto the feature's own roots.
+   *
+   * Scoped deliberately: `:root` is shared with Foundry, the game system and
+   * every other module, so a feature publishing its palette there is a global
+   * side effect. Stream Pacer mounts several detached roots (HUD, overlay,
+   * peril stage, hand bar), hence the selector list rather than one element.
+   */
   apply() {
     const vars = this._buildPalette();
     const body = Object.entries(vars)
       .map(([k, v]) => `  ${k}: ${v};`)
       .join('\n');
-    const css = `:root {\n${body}\n}`;
+
+    const scopes = [
+      '#stream-pacer-hud',
+      '#stream-pacer-overlay',
+      '#stream-pacer-hand-bar',
+      '#stream-pacer-appearance',
+      '#stream-pacer-exempt-users',
+      '.stream-pacer-peril-stage',
+      '.stream-pacer-peril-indicator-wrap',
+      '.stream-pacer-campfire-bar-wrap',
+    ].join(',\n');
+
+    const css = `${scopes} {\n${body}\n}`;
 
     if (!this._styleEl) {
       this._styleEl = document.createElement('style');
@@ -122,13 +125,12 @@ class ThemeManagerClass {
    * arrays so the fragment shader can ramp cool embers up to a bright hearth.
    */
   getCampfireWebGLColors() {
-    const norm = ({ r, g, b }) => [r / 255, g / 255, b / 255];
+    // A warm ember-brown bed rather than the near-black CSS deep, so the base
+    // of the flame reads as glowing coals instead of mud.
     return {
-      // A warm ember-brown bed rather than the near-black CSS deep, so the base
-      // of the flame reads as glowing coals instead of mud.
-      deep: norm(hexToRgb('#6e2a08')),
-      mid: norm(hexToRgb('#ff7a26')),
-      hot: norm(hexToRgb('#ffe6ad'))
+      deep: hexToRgbFloat(darken(PALETTE.warnDeep, 0.62)),
+      mid: hexToRgbFloat(PALETTE.warnDeep),
+      hot: hexToRgbFloat(PALETTE.signalPale),
     };
   }
 

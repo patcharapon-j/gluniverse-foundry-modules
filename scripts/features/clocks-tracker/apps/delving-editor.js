@@ -14,7 +14,7 @@
 
 import {
   MODULE_ID, DELVING_UNITS, WEATHER_ARCHETYPES, WEATHER_DRIFTS,
-  DELVING_TURN_COUNT_RANGE, DELVING_STAGE_RANGE
+  DELVING_TURN_COUNT_RANGE, DELVING_STAGE_RANGE, FALLBACK_TINTS
 } from "../const.js";
 import { DelvingStore } from "../delving/delving-store.js";
 import { DELVING_PRESETS, STAGE_LOOKS, STAGE_LOOK_LIST, makeResource, makeStage } from "../delving/presets.js";
@@ -223,12 +223,12 @@ export class DelvingEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     arch.addEventListener("change", () => { e.archetype = arch.value; this._focusPreview(s); });
 
     const tintP = document.createElement("input");
-    tintP.type = "color"; tintP.value = /^#[0-9a-f]{6}$/i.test(e.tintParticle) ? e.tintParticle : "#ff9a3c";
+    tintP.type = "color"; tintP.value = /^#[0-9a-f]{6}$/i.test(e.tintParticle) ? e.tintParticle : FALLBACK_TINTS.delving.tint;
     tintP.title = game.i18n.localize("GLCT.delving.editor.tintParticle");
     tintP.addEventListener("input", () => { e.tintParticle = tintP.value; this._focusPreview(s); });
 
     const tintG = document.createElement("input");
-    tintG.type = "color"; tintG.value = /^#[0-9a-f]{6}$/i.test(e.tintGlow) ? e.tintGlow : "#ffd27a";
+    tintG.type = "color"; tintG.value = /^#[0-9a-f]{6}$/i.test(e.tintGlow) ? e.tintGlow : FALLBACK_TINTS.delving.glow;
     tintG.title = game.i18n.localize("GLCT.delving.editor.tintGlow");
     tintG.addEventListener("input", () => { e.tintGlow = tintG.value; this._focusPreview(s); });
 

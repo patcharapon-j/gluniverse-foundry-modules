@@ -3,10 +3,10 @@
    ═══════════════════════════════════════════ */
 
 :root {
-    --glstage-bg: linear-gradient(0deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 60%, transparent 100%);
-    --glstage-name-bg: rgba(0, 0, 0, 0.7);
+    --glstage-bg: linear-gradient(0deg, rgb(var(--gl-tint-dark) / 0.5) 0%, rgb(var(--gl-tint-dark) / 0.15) 60%, transparent 100%);
+    --glstage-name-bg: rgb(var(--gl-tint-dark) / 0.7);
     --glstage-name-color: #f0e6d2;
-    --glstage-highlight-glow: rgba(255, 255, 255, 0.6);
+    --glstage-highlight-glow: rgb(var(--gl-tint-light) / 0.6);
     --glstage-dim-opacity: 0.8;
     --glstage-transition: 0.35s ease;
     --stage-height: 40vh;
@@ -150,8 +150,8 @@
     display: flex;
     gap: 2px;
     padding: 6px 8px;
-    background: rgba(0,0,0,0.15);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: rgb(var(--gl-tint-dark) / 0.15);
+    border-bottom: 1px solid rgb(var(--gl-tint-light) / 0.08);
     flex-shrink: 0;
 }
 
@@ -160,7 +160,7 @@
     padding: 6px 10px;
     border: 1px solid transparent;
     border-radius: 6px 6px 0 0;
-    background: rgba(255,255,255,0.04);
+    background: rgb(var(--gl-tint-light) / 0.04);
     color: #bbb;
     cursor: pointer;
     font-size: 12px;
@@ -169,12 +169,12 @@
 }
 
 .glstage-tab-btn:hover {
-    background: rgba(255,255,255,0.08);
+    background: rgb(var(--gl-tint-light) / 0.08);
     color: #eee;
 }
 
 .glstage-tab-btn.active {
-    background: rgba(255,255,255,0.1);
+    background: rgb(var(--gl-tint-light) / 0.1);
     color: #f0e6d2;
     border-color: rgba(255,215,100,0.3);
     border-bottom-color: transparent;
@@ -208,9 +208,9 @@
     align-items: center;
     gap: 5px;
     padding: 5px 12px;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.12);
     border-radius: 5px;
-    background: rgba(255,255,255,0.06);
+    background: rgb(var(--gl-tint-light) / 0.06);
     color: #ddd;
     cursor: pointer;
     font-size: 12px;
@@ -219,8 +219,8 @@
 }
 
 .glstage-btn:hover {
-    background: rgba(255,255,255,0.12);
-    border-color: rgba(255,255,255,0.2);
+    background: rgb(var(--gl-tint-light) / 0.12);
+    border-color: rgb(var(--gl-tint-light) / 0.2);
     color: #fff;
 }
 
@@ -249,7 +249,7 @@
 }
 .glstage-btn-icon:hover {
     color: #fff;
-    background: rgba(255,255,255,0.08);
+    background: rgb(var(--gl-tint-light) / 0.08);
 }
 .glstage-btn-icon.glstage-btn-danger:hover {
     color: #e55;
@@ -262,16 +262,16 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 4px;
-    background: rgba(255,255,255,0.05);
+    background: rgb(var(--gl-tint-light) / 0.05);
     color: #bbb;
     cursor: pointer;
     font-size: 11px;
     transition: all 0.15s ease;
 }
 .glstage-btn-sm:hover {
-    background: rgba(255,255,255,0.1);
+    background: rgb(var(--gl-tint-light) / 0.1);
     color: #fff;
 }
 .glstage-btn-sm.glstage-btn-active {
@@ -307,13 +307,13 @@
     flex-direction: column;
     gap: 6px;
     padding: 6px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgb(var(--gl-tint-light) / 0.04);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.08);
     border-radius: 8px;
     transition: border-color 0.2s ease;
 }
 .glstage-actor-card:hover {
-    border-color: rgba(255,255,255,0.15);
+    border-color: rgb(var(--gl-tint-light) / 0.15);
 }
 
 .glstage-actor-preview {
@@ -323,7 +323,7 @@
     border-radius: 6px;
     overflow: hidden;
     flex-shrink: 0;
-    background: rgba(0,0,0,0.3);
+    background: rgb(var(--gl-tint-dark) / 0.3);
 }
 .glstage-actor-preview img {
     width: 100%;
@@ -337,7 +337,7 @@
     top: 4px;
     right: 4px;
     z-index: 1;
-    background: rgba(0,0,0,0.5) !important;
+    background: rgb(var(--gl-tint-dark) / 0.5) !important;
     border-radius: 4px;
     opacity: 0;
     transition: opacity 0.15s ease;
@@ -370,9 +370,9 @@
 .glstage-field input,
 .glstage-field select {
     padding: 4px 8px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 4px;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 12px;
 }
@@ -394,9 +394,9 @@
     min-width: 160px;
     max-width: 220px;
     padding: 5px 8px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 5px;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 12px;
 }
@@ -437,8 +437,8 @@
     flex: 1 1 0;
     min-width: 90px;
     padding: 6px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgb(var(--gl-tint-light) / 0.04);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.08);
     border-radius: 8px;
     transition: border-color 0.2s ease;
     cursor: grab;
@@ -456,7 +456,7 @@
     aspect-ratio: 3 / 4;
     border-radius: 6px;
     overflow: hidden;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     margin-bottom: 4px;
 }
 
@@ -485,7 +485,7 @@
     font-size: 10px;
     color: #ccc;
     font-weight: 700;
-    background: rgba(0,0,0,0.55);
+    background: rgb(var(--gl-tint-dark) / 0.55);
     padding: 1px 5px;
     border-radius: 3px;
     line-height: 1.4;
@@ -496,9 +496,9 @@
 .glstage-slot-actor-select {
     width: 100%;
     padding: 3px 4px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 4px;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 11px;
     margin-bottom: 4px;
@@ -529,9 +529,9 @@
 .glstage-slot-zindex input {
     width: 32px;
     padding: 2px 3px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 3px;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 10px;
     text-align: center;
@@ -540,9 +540,9 @@
 .glstage-anim-select {
     width: 58px;
     padding: 3px 2px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 4px;
-    background: rgba(0,0,0,0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 10px;
 }
@@ -557,7 +557,7 @@
     color: #f0e6d2;
     font-size: 16px;
     margin: 0 0 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgb(var(--gl-tint-light) / 0.1);
     padding-bottom: 6px;
 }
 .glstage-guide-tab h3 {
@@ -615,8 +615,8 @@
     width: 100%;
     flex: 1 1 50%;
     min-height: 120px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgb(var(--gl-tint-dark) / 0.3);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 8px;
     overflow: hidden;
     display: flex;
@@ -735,7 +735,7 @@
 .glstage-measure-name {
     position: absolute;
     bottom: 4px;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgb(var(--gl-tint-dark) / 0.7);
     color: #f0e6d2;
     padding: 2px 8px;
     border-radius: 3px;
@@ -779,8 +779,8 @@
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgb(var(--gl-tint-light) / 0.04);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.08);
     border-radius: 6px;
 }
 .glstage-measure-control-row.is-hidden {
@@ -821,9 +821,9 @@
 .glstage-measure-control-field input {
     width: 52px;
     padding: 3px 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
     border-radius: 3px;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgb(var(--gl-tint-dark) / 0.25);
     color: #ddd;
     font-size: 11px;
     text-align: center;

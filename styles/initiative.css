@@ -1,61 +1,40 @@
 /* ============================================================================
- * Bundled default-theme typeface. The Sci-Fi and Core themes prefer Bahnschrift
- * (a Windows-only system face); on macOS/Linux the cascade would otherwise fall
- * through to a generic platform monospace, losing the tactical-HUD identity.
- * JetBrains Mono is OFL and already named in --gluni-font-family, so bundling it
- * here gives every player the same designed face (Bahnschrift still wins where
- * installed). Two subsets mirror what Google Fonts serves.
- * ==========================================================================*/
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
-  font-weight: 100 800;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2");
-  font-weight: 100 800;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-/* ============================================================================
- * Etched Glass — shared GL Universe design-language tokens.
- * The canonical --gl-* palette + motion vocabulary that every GL Universe module
- * shares (design-language.md §2, §6.1). The module-local --gluni-* tokens below
- * ALIAS these so the Initiative rail converges on the family look (§9.2). Themed
- * blocks (core/fantasy/chronicle) re-point the --gluni-* aliases, never --gl-*,
- * so the shared vocabulary stays stable across skins.
+ * Etched Glass — module-local aliases onto the shared design system.
+ * The canonical --gl-* palette, motion vocabulary and scales live in
+ * styles/gl-tokens.css + styles/gl-motion.css. The --gluni-* tokens below ALIAS
+ * those so the Initiative rail converges on the family look while keeping its
+ * own readable names at the call sites.
+ *
+ * Rule: a --gluni-* token may alias a --gl-* token or define a genuinely
+ * initiative-specific value. It must NEVER redefine a --gl-* token — that would
+ * leak this feature's paint into every other feature.
+ *
+ * Typefaces are declared once in styles/gl-fonts.css (bundled, offline-safe);
+ * this file used to carry its own JetBrains Mono @font-face pair.
  * ==========================================================================*/
 :root {
   --gluni-cyan:        var(--gl-cyan);
   --gluni-white:       var(--gl-text-bright);
   --gluni-red:         var(--gl-hazard);   /* §9.2: --gluni-red #ff335f -> --gl-hazard */
-  --gluni-delay:       #4aa3ff;
-  --gluni-delay-hot:   #9ad8ff;
-  --gluni-break:       #ffb12d;
-  --gluni-break-hot:   #ffe070;
-  --gluni-break-deep:  #ff6f1a;
-  --gluni-dying:       #cf85e0;          /* orchid — kept distinct from secret violet */
+  --gluni-delay:       var(--gl-info);
+  --gluni-delay-hot:   var(--gl-info-hot);
+  --gluni-break:       var(--gl-warn);
+  --gluni-break-hot:   var(--gl-signal-hot);
+  --gluni-break-deep:  var(--gl-warn-deep);
+  --gluni-dying:       var(--gl-orchid);          /* orchid — kept distinct from secret violet */
   --gluni-dying-hot:   #f6d9fb;
   --gluni-neutral:     #ffce6a;          /* neutral disposition reads amber, not white */
   /* Ceremony amber == signal (§2.4); the neutral disposition amber above stays. */
   --gluni-signal:      var(--gl-signal);
   --gluni-signal-hot:  var(--gl-signal-hot);
-  --gluni-condition:     #54d6a6;
+  --gluni-condition:     var(--gl-jade);
   --gluni-condition-hot: #c2ffe8;
   /* D&D 5e death saves — success green, failure red, calm stable teal. */
   --gluni-save-success:     #57e08b;
   --gluni-save-success-hot: #b6ffd0;
   --gluni-save-failure:     #ff5d6c;
   --gluni-save-failure-hot: #ffc0c6;
-  --gluni-stable:           #4ad9c0;
+  --gluni-stable:           var(--gl-teal);
   --gluni-stable-hot:       #b6fff2;
   --gluni-violet:      var(--gl-violet);
   --gluni-apex:        var(--gl-apex);
@@ -72,7 +51,7 @@
   --gluni-display-font: var(--gl-display);
 
   --gluni-ease:        var(--gl-ease);
-  --gluni-snap:        cubic-bezier(0.22, 1, 0.36, 1);
+  --gluni-snap:        var(--gl-ease);
   --gluni-exit:        var(--gl-exit);
   --gluni-d-quick:     var(--gl-d-quick);
   --gluni-d-card:      420ms;
@@ -86,7 +65,7 @@
   --gluni-holo-a: var(--gluni-cyan);
   --gluni-holo-b: var(--gluni-violet);
   --gluni-holo-c: var(--gl-holo-c);
-  --gluni-magenta: #ff66b3;
+  --gluni-magenta: var(--gl-holo-c);
 
   /* Heavy turn-change beat timings (cinematic baseline; tiers scale via root class). */
   --gluni-beat-anticipation: 80ms;
@@ -299,7 +278,7 @@
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-cyan) 46%, var(--gluni-line) 54%),
     inset 0 0 18px rgba(94, 234, 255, 0.14),
-    0 2px 12px rgba(0, 0, 0, 0.5);
+    0 2px 12px rgb(var(--gl-tint-dark) / 0.5);
   clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
 }
 
@@ -408,11 +387,11 @@
   contain: layout style;
   background: linear-gradient(180deg, #0a1218 0%, #04080c 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-    inset 1px 0 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
+    inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
     inset 0 0 0 1px var(--gluni-line),
-    inset 0 0 28px rgba(0, 0, 0, 0.4);
+    inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4);
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   transition:
     min-height var(--gluni-d-card) var(--gluni-ease),
@@ -538,7 +517,7 @@
   z-index: 1;
   overflow: hidden;
   contain: layout paint style;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.05);
   transition:
     top var(--gluni-d-card) var(--gluni-snap),
     height var(--gluni-d-card) var(--gluni-snap),
@@ -577,7 +556,7 @@
   line-height: 1;
   text-shadow:
     0 0 18px color-mix(in srgb, var(--gluni-violet) 80%, transparent),
-    0 8px 26px rgba(0, 0, 0, 0.9);
+    0 8px 26px rgb(var(--gl-tint-dark) / 0.9);
   transform: scale(1);
   transition:
     transform var(--gluni-d-card) var(--gluni-ease),
@@ -641,7 +620,7 @@
   line-height: 1;
   text-shadow:
     0 0 22px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent),
-    0 10px 28px rgba(0, 0, 0, 0.9);
+    0 10px 28px rgb(var(--gl-tint-dark) / 0.9);
   transform: translateY(-1px);
 }
 
@@ -936,8 +915,8 @@
   inset: 0;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 140' preserveAspectRatio='none'%3E%3Cpath d='M0,28 Q18,32 38,48 Q52,60 58,78 Q62,90 60,108' stroke='%23efd7ff' stroke-width='7' fill='none' stroke-linecap='round' opacity='.18'/%3E%3Cpath d='M0,72 Q22,68 44,74 Q62,80 72,96' stroke='%23b497ff' stroke-width='6' fill='none' stroke-linecap='round' opacity='.14'/%3E%3Cpath d='M200,42 Q178,46 158,58 Q144,68 138,84' stroke='%23efd7ff' stroke-width='6' fill='none' stroke-linecap='round' opacity='.16'/%3E%3Cpath d='M200,98 Q182,92 166,86 Q152,82 142,92' stroke='%23b497ff' stroke-width='5' fill='none' stroke-linecap='round' opacity='.12'/%3E%3Cpath d='M100,0 Q96,18 98,38 Q100,54 108,66' stroke='%23efd7ff' stroke-width='5' fill='none' stroke-linecap='round' opacity='.12'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.88) 20%, rgba(0,0,0,0.66) 40%, transparent 62%);
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.88) 20%, rgba(0,0,0,0.66) 40%, transparent 62%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.88) 20%, rgb(var(--gl-tint-dark) / 0.66) 40%, transparent 62%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.88) 20%, rgb(var(--gl-tint-dark) / 0.66) 40%, transparent 62%);
   -webkit-mask-size: 300% 100%;
   mask-size: 300% 100%;
   opacity: 0.68;
@@ -1021,8 +1000,8 @@
 .gluni-card-guard-break-bg::after {
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 140' preserveAspectRatio='none'%3E%3Cpath d='M136,36 Q118,58 92,82 Q72,100 28,124' stroke='%23ffe070' stroke-width='10' fill='none' stroke-linecap='round' opacity='.34'/%3E%3Cpath d='M136,36 Q152,56 170,82 Q182,100 192,112' stroke='%23ffe070' stroke-width='9' fill='none' stroke-linecap='round' opacity='.28'/%3E%3Cpath d='M136,36 Q110,38 76,46 Q44,52 18,54' stroke='%23fff' stroke-width='8' fill='none' stroke-linecap='round' opacity='.24'/%3E%3Cpath d='M136,36 Q140,62 148,92 Q154,118 158,138' stroke='%23ff6f1a' stroke-width='7' fill='none' stroke-linecap='round' opacity='.22'/%3E%3Cpath d='M136,36 Q122,24 102,14 Q88,8 68,4' stroke='%23ffe070' stroke-width='6' fill='none' stroke-linecap='round' opacity='.18'/%3E%3Cpath d='M136,36 Q158,34 178,40 Q192,46 200,54' stroke='%23fff' stroke-width='5' fill='none' stroke-linecap='round' opacity='.16'/%3E%3Cpath d='M92,82 Q78,72 54,48 Q44,38 36,30' stroke='%23ffe070' stroke-width='6' fill='none' stroke-linecap='round' opacity='.2'/%3E%3Cpath d='M170,82 Q178,72 190,54 Q196,44 200,34' stroke='%23ff6f1a' stroke-width='5' fill='none' stroke-linecap='round' opacity='.18'/%3E%3Ccircle cx='136' cy='36' r='38' fill='%23ffb12d' opacity='.1'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  -webkit-mask-image: linear-gradient(135deg, transparent 0%, rgba(0,0,0,0.94) 22%, rgba(0,0,0,0.72) 38%, transparent 58%);
-  mask-image: linear-gradient(135deg, transparent 0%, rgba(0,0,0,0.94) 22%, rgba(0,0,0,0.72) 38%, transparent 58%);
+  -webkit-mask-image: linear-gradient(135deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.94) 22%, rgb(var(--gl-tint-dark) / 0.72) 38%, transparent 58%);
+  mask-image: linear-gradient(135deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.94) 22%, rgb(var(--gl-tint-dark) / 0.72) 38%, transparent 58%);
   -webkit-mask-size: 300% 300%;
   mask-size: 300% 300%;
   opacity: 0.82;
@@ -1196,7 +1175,7 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 2px 8px rgb(var(--gl-tint-dark) / 0.9);
   transition: font-size var(--gluni-d-quick) var(--gluni-ease),
               color var(--gluni-d-quick) var(--gluni-ease);
 }
@@ -1221,8 +1200,8 @@
   letter-spacing: 0;
   text-shadow:
     0 0 14px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 42%, transparent),
-    0 2px 4px rgba(0, 0, 0, 0.96),
-    0 8px 18px rgba(0, 0, 0, 0.88);
+    0 2px 4px rgb(var(--gl-tint-dark) / 0.96),
+    0 8px 18px rgb(var(--gl-tint-dark) / 0.88);
   transition: color var(--gluni-d-quick) var(--gluni-ease),
               right var(--gluni-d-quick) var(--gluni-ease),
               bottom var(--gluni-d-quick) var(--gluni-ease),
@@ -1254,9 +1233,9 @@
       rgba(9, 7, 16, 0.82) 54% 100%
     );
   box-shadow:
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.34),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.72),
-    0 1px 2px rgba(0, 0, 0, 0.58),
+    inset 0 0.5px 0 rgb(var(--gl-tint-light) / 0.34),
+    inset 0 -1px 1px rgb(var(--gl-tint-dark) / 0.72),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.58),
     0 0 5px color-mix(in srgb, var(--gluni-dying) 18%, transparent);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
@@ -1280,9 +1259,9 @@
       #3a2065 60% 100%
     );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.92),
     inset 0 -1.5px 1px rgba(30, 9, 52, 0.9),
-    0 1px 2px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
     0 0 9px color-mix(in srgb, var(--gluni-dying-hot) 82%, transparent),
     0 0 20px color-mix(in srgb, var(--gluni-dying) 62%, transparent);
   animation: gluni-dying-pip-pulse 1.1s ease-in-out infinite;
@@ -1291,7 +1270,7 @@
 /* bright specular glint pinned to the top facet of a lit gem */
 .gluni-dying-pip--filled::before {
   inset: 16%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), color-mix(in srgb, var(--gluni-dying-hot) 50%, transparent) 50%, transparent 78%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.95), color-mix(in srgb, var(--gluni-dying-hot) 50%, transparent) 50%, transparent 78%);
   opacity: 0.9;
 }
 
@@ -1337,8 +1316,8 @@
   white-space: nowrap;
   pointer-events: none;
   text-shadow:
-    0 0 4px rgba(0, 0, 0, 0.95),
-    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 4px rgb(var(--gl-tint-dark) / 0.95),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.95),
     0 0 9px color-mix(in srgb, var(--gluni-break-hot) 65%, transparent);
 }
 
@@ -1352,7 +1331,7 @@
   background: linear-gradient(180deg, rgba(255, 177, 45, 0.06), rgba(255, 177, 45, 0.14));
   box-shadow:
     inset 0 0 0 1px rgba(255, 177, 45, 0.3),
-    inset 0 1px 2px rgba(0, 0, 0, 0.45);
+    inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.45);
   clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
   overflow: hidden;
 }
@@ -1363,7 +1342,7 @@
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, var(--gluni-break-deep), var(--gluni-break) 58%, var(--gluni-break-hot));
   box-shadow: 0 0 10px color-mix(in srgb, var(--gluni-break) 70%, transparent);
-  transition: width 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: width 0.5s var(--gl-ease);
 }
 
 .gluni-break-gauge-fill::after {
@@ -1386,7 +1365,7 @@
   background: linear-gradient(
     100deg,
     transparent 35%,
-    rgba(255, 255, 255, 0.22) 50%,
+    rgb(var(--gl-tint-light) / 0.22) 50%,
     transparent 65%
   );
   background-size: 220% 100%;
@@ -1484,15 +1463,15 @@
      rim + outer bloom live in the box-shadow below. Cards stay blur-free per
      §9.2 ("keep cards lighter") — only panel-level decks frost the backdrop. */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.20)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.20)),
     linear-gradient(98deg, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 14%, #0d1822), #04080c 64%);
   box-shadow:
     inset 0 1px 0 rgba(94, 234, 255, 0.20),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 70%, var(--gluni-line) 30%),
-    inset 0 0 32px rgba(0, 0, 0, 0.4),
-    0 18px 36px rgba(0, 0, 0, 0.7),
+    inset 0 0 32px rgb(var(--gl-tint-dark) / 0.4),
+    0 18px 36px rgb(var(--gl-tint-dark) / 0.7),
     0 0 32px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 34%, transparent);
   clip-path: polygon(
     0 -42px,
@@ -1570,8 +1549,8 @@
     rgba(2, 5, 8, 0.42) 68%,
     rgba(2, 5, 8, 0)
   );
-  -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.82) 48%, transparent 100%);
-  mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.82) 48%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, rgb(var(--gl-tint-dark) / 0.82) 48%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0%, rgb(var(--gl-tint-dark) / 0.82) 48%, transparent 100%);
 }
 
 .gluni-card--active .gluni-card-surface::after {
@@ -1611,8 +1590,8 @@
   opacity: 0.36;
   transform: translate3d(0, 0, 0);
   animation: gluni-active-triangle-field 8s linear infinite;
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.86), rgba(0, 0, 0, 0.42) 66%, transparent 100%);
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.86), rgba(0, 0, 0, 0.42) 66%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
+  mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
 }
 
 .gluni-initiative--left .gluni-card--active .gluni-card-surface::before {
@@ -1655,7 +1634,7 @@
   text-shadow:
     0 0 32px color-mix(in srgb, var(--gluni-violet) 96%, transparent),
     0 0 64px color-mix(in srgb, var(--gluni-cyan) 24%, transparent),
-    0 14px 36px rgba(0, 0, 0, 0.9);
+    0 14px 36px rgb(var(--gl-tint-dark) / 0.9);
 }
 
 .gluni-card--adhoc .gluni-card-content {
@@ -1699,8 +1678,8 @@
   font-size: 34px;
   text-shadow:
     0 0 18px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent),
-    0 2px 5px rgba(0, 0, 0, 0.98),
-    0 12px 28px rgba(0, 0, 0, 0.9);
+    0 2px 5px rgb(var(--gl-tint-dark) / 0.98),
+    0 12px 28px rgb(var(--gl-tint-dark) / 0.9);
 }
 
 .gluni-initiative--left .gluni-card--active .gluni-initiative-badge {
@@ -1881,8 +1860,8 @@
   color: color-mix(in srgb, var(--gluni-break-hot) 68%, var(--gluni-accent, var(--gluni-cyan)) 32%);
   text-shadow:
     0 0 14px color-mix(in srgb, var(--gluni-break-accent) 56%, transparent),
-    0 2px 4px rgba(0, 0, 0, 0.96),
-    0 8px 18px rgba(0, 0, 0, 0.88);
+    0 2px 4px rgb(var(--gl-tint-dark) / 0.96),
+    0 8px 18px rgb(var(--gl-tint-dark) / 0.88);
 }
 
 .gluni-card--guard-broken .gluni-card-sheen,
@@ -2104,7 +2083,7 @@
     linear-gradient(135deg, rgba(2, 7, 11, 0.96), rgba(10, 18, 24, 0.94));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-cyan) 34%, var(--gluni-line) 66%),
-    0 10px 28px rgba(0, 0, 0, 0.42),
+    0 10px 28px rgb(var(--gl-tint-dark) / 0.42),
     0 0 20px color-mix(in srgb, var(--gluni-cyan) 16%, transparent);
   font-family: var(--gluni-font-family);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
@@ -2132,7 +2111,7 @@
   border: 1px solid rgba(224, 246, 255, 0.22);
   border-radius: 3px;
   color: var(--gluni-white);
-  background: rgba(0, 0, 0, 0.46);
+  background: rgb(var(--gl-tint-dark) / 0.46);
   font: inherit;
   font-size: 13px;
   font-weight: 950;
@@ -2264,7 +2243,7 @@
   background: linear-gradient(135deg, rgba(18, 9, 2, 0.96), rgba(10, 7, 4, 0.94));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-break) 40%, var(--gluni-line) 60%),
-    0 10px 28px rgba(0, 0, 0, 0.42),
+    0 10px 28px rgb(var(--gl-tint-dark) / 0.42),
     0 0 20px color-mix(in srgb, var(--gluni-break) 16%, transparent);
   font-family: var(--gluni-font-family);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
@@ -2292,7 +2271,7 @@
   border: 1px solid rgba(224, 246, 255, 0.22);
   border-radius: 3px;
   color: var(--gluni-white);
-  background: rgba(0, 0, 0, 0.46);
+  background: rgb(var(--gl-tint-dark) / 0.46);
   font: inherit;
   font-size: 14px;
   font-weight: 950;
@@ -2662,13 +2641,13 @@
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: linear-gradient(115deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 30%);
+  background: linear-gradient(115deg, rgb(var(--gl-tint-light) / 0.10) 0%, rgb(var(--gl-tint-light) / 0) 30%);
   mix-blend-mode: screen;
   opacity: 0.9;
 }
 
 .gluni-initiative--left .gluni-card-spec {
-  background: linear-gradient(245deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 30%);
+  background: linear-gradient(245deg, rgb(var(--gl-tint-light) / 0.10) 0%, rgb(var(--gl-tint-light) / 0) 30%);
 }
 
 /* Active: prismatic catch in the spec, derived from holo hue. */
@@ -2693,8 +2672,8 @@
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 36%, rgba(0, 0, 0, 0.18) 100%),
-    radial-gradient(120% 60% at 20% 0%, rgba(255, 255, 255, 0.10), transparent 50%);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06) 0%, rgb(var(--gl-tint-light) / 0) 36%, rgb(var(--gl-tint-dark) / 0.18) 100%),
+    radial-gradient(120% 60% at 20% 0%, rgb(var(--gl-tint-light) / 0.10), transparent 50%);
 }
 
 /* Holographic drift — mockup `.v4 .card.is-active::after`, but as its own element so it
@@ -2711,8 +2690,8 @@
   opacity: 0;
   overflow: hidden;
   mix-blend-mode: screen;
-  -webkit-mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.22) 46%, transparent 72%);
-  mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.22) 46%, transparent 72%);
+  -webkit-mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgb(var(--gl-tint-dark) / 0.22) 46%, transparent 72%);
+  mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgb(var(--gl-tint-dark) / 0.22) 46%, transparent 72%);
 }
 
 /* The drifting gradient lives on an oversized child strip translated on the
@@ -2901,7 +2880,7 @@
   position: relative;
   gap: 4px;
   padding-left: 6px;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 1px rgb(var(--gl-tint-dark) / 0.55);
 }
 
 /* Leading HUD marker so the label reads like a system readout, not just a pill. */
@@ -3062,11 +3041,11 @@
     rgba(2, 6, 10, 0.7)
   );
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--gluni-cyan) 30%, rgba(255, 255, 255, 0.22)),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 color-mix(in srgb, var(--gluni-cyan) 30%, rgb(var(--gl-tint-light) / 0.22)),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.7),
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-cyan) 22%, var(--gluni-line)),
     inset 0 0 38px color-mix(in srgb, var(--gluni-cyan) 12%, transparent),
-    0 26px 70px rgba(0, 0, 0, 0.62);
+    0 26px 70px rgb(var(--gl-tint-dark) / 0.62);
   /* True frosted-glass deck (design-language.md §3.3): blur the dimmed
      battlefield behind the ceremony type. Panel-level only — never on chips. */
   backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
@@ -3120,7 +3099,7 @@
   letter-spacing: 0.01em;
   text-shadow:
     0 0 24px color-mix(in srgb, var(--gluni-cyan) 46%, transparent),
-    0 14px 42px rgba(0, 0, 0, 0.86);
+    0 14px 42px rgb(var(--gl-tint-dark) / 0.86);
 }
 
 .gluni-round-num .d {
@@ -3490,11 +3469,11 @@
     rgba(6, 4, 2, 0.72)
   );
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--gluni-break-hot) 36%, rgba(255, 255, 255, 0.24)),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 color-mix(in srgb, var(--gluni-break-hot) 36%, rgb(var(--gl-tint-light) / 0.24)),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.72),
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-break) 26%, var(--gluni-line)),
     inset 0 0 44px color-mix(in srgb, var(--gluni-break) 15%, transparent),
-    0 26px 74px rgba(0, 0, 0, 0.66);
+    0 26px 74px rgb(var(--gl-tint-dark) / 0.66);
   /* Frosted-glass deck (design-language.md §3.3) — amber sibling of the round deck. */
   backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
@@ -3551,7 +3530,7 @@
   text-shadow:
     0 0 32px color-mix(in srgb, var(--gluni-break) 62%, transparent),
     0 0 64px color-mix(in srgb, var(--gluni-break-deep) 38%, transparent),
-    0 16px 48px rgba(0, 0, 0, 0.88);
+    0 16px 48px rgb(var(--gl-tint-dark) / 0.88);
 }
 
 .gluni-break-splash-text .d {
@@ -3790,7 +3769,7 @@
   border: 1px solid rgba(224, 246, 255, 0.2);
   border-radius: 4px;
   color: var(--gluni-white);
-  background: rgba(0, 0, 0, 0.42);
+  background: rgb(var(--gl-tint-dark) / 0.42);
   font-family: inherit;
   font-size: 12px;
   font-weight: 850;
@@ -3848,7 +3827,7 @@
   border: 1px solid rgba(224, 246, 255, 0.18);
   border-radius: 5px;
   background: rgba(2, 7, 11, 0.62);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.03);
 }
 
 .gluni-portrait-config-panel-head {
@@ -3945,7 +3924,7 @@
   border: 1px solid rgba(224, 246, 255, 0.2);
   border-radius: 4px;
   color: var(--gluni-white);
-  background: rgba(0, 0, 0, 0.42);
+  background: rgb(var(--gl-tint-dark) / 0.42);
   font-family: inherit;
   font-size: 10px;
   font-weight: 900;
@@ -3997,7 +3976,7 @@
   text-shadow:
     0 0 24px var(--gluni-break),
     0 0 52px var(--gluni-break-deep),
-    0 4px 14px rgba(0, 0, 0, 0.92);
+    0 4px 14px rgb(var(--gl-tint-dark) / 0.92);
 }
 
 .gluni-status-flash--delay {
@@ -4028,7 +4007,7 @@
   text-shadow:
     0 0 24px var(--gluni-delay),
     0 0 52px rgba(74, 163, 255, 0.42),
-    0 4px 14px rgba(0, 0, 0, 0.92);
+    0 4px 14px rgb(var(--gl-tint-dark) / 0.92);
 }
 
 .gluni-status-flash--dying {
@@ -4057,7 +4036,7 @@
   text-shadow:
     0 0 24px var(--gluni-dying),
     0 0 52px rgba(239, 215, 255, 0.42),
-    0 4px 14px rgba(0, 0, 0, 0.92);
+    0 4px 14px rgb(var(--gl-tint-dark) / 0.92);
 }
 
 .gluni-status-flash--condition {
@@ -4074,7 +4053,7 @@
   text-shadow:
     0 0 24px var(--gluni-condition),
     0 0 52px color-mix(in srgb, var(--gluni-condition) 42%, transparent),
-    0 4px 14px rgba(0, 0, 0, 0.92);
+    0 4px 14px rgb(var(--gl-tint-dark) / 0.92);
 }
 
 /* Shrink long announce text so it still reads in a single horizontal pass. */
@@ -4156,33 +4135,33 @@
 @keyframes gluni-delay-settle {
   0% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-      inset 1px 0 0 rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+      inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
+      inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
       inset 0 0 0 1px var(--gluni-line),
-      inset 0 0 28px rgba(0, 0, 0, 0.4),
+      inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4),
       0 0 0 1px color-mix(in srgb, var(--gluni-delay-hot) 80%, transparent),
       0 0 22px color-mix(in srgb, var(--gluni-delay) 70%, transparent),
       0 0 46px color-mix(in srgb, var(--gluni-delay) 46%, transparent);
   }
   46% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-      inset 1px 0 0 rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+      inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
+      inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
       inset 0 0 0 1px var(--gluni-line),
-      inset 0 0 28px rgba(0, 0, 0, 0.4),
+      inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4),
       0 0 0 1px color-mix(in srgb, var(--gluni-delay-hot) 44%, transparent),
       0 0 14px color-mix(in srgb, var(--gluni-delay) 38%, transparent),
       0 0 26px color-mix(in srgb, var(--gluni-delay) 22%, transparent);
   }
   100% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-      inset 1px 0 0 rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+      inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
+      inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
       inset 0 0 0 1px var(--gluni-line),
-      inset 0 0 28px rgba(0, 0, 0, 0.4),
+      inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4),
       0 0 0 1px transparent,
       0 0 14px transparent,
       0 0 26px transparent;
@@ -4519,9 +4498,9 @@
 @keyframes gluni-dying-pip-pulse {
   0%, 100% {
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.78),
+      inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.78),
       inset -1px -1px 0 rgba(37, 12, 58, 0.82),
-      0 1px 2px rgba(0, 0, 0, 0.7),
+      0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
       0 0 10px color-mix(in srgb, var(--gluni-dying-hot) 86%, transparent),
       0 0 22px color-mix(in srgb, var(--gluni-dying) 64%, transparent);
     transform: scale(1);
@@ -4529,9 +4508,9 @@
 
   50% {
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.92),
+      inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.92),
       inset -1px -1px 0 rgba(37, 12, 58, 0.82),
-      0 1px 2px rgba(0, 0, 0, 0.7),
+      0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
       0 0 14px color-mix(in srgb, var(--gluni-dying-hot) 96%, transparent),
       0 0 28px color-mix(in srgb, var(--gluni-dying) 78%, transparent);
     transform: scale(1.08);
@@ -5455,9 +5434,9 @@
     radial-gradient(circle at 50% 50%, rgba(243, 251, 255, 0.12), transparent 54%),
     linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.24),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.68),
-    0 1px 2px rgba(0, 0, 0, 0.58);
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.58);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
 
@@ -5476,9 +5455,9 @@
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gluni-save-success) 16%, transparent), transparent 54%),
     linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.24),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.68),
-    0 1px 2px rgba(0, 0, 0, 0.58),
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.58),
     0 0 5px color-mix(in srgb, var(--gluni-save-success) 18%, transparent);
 }
 
@@ -5491,9 +5470,9 @@
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gluni-save-failure) 16%, transparent), transparent 54%),
     linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.24),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.68),
-    0 1px 2px rgba(0, 0, 0, 0.58),
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.58),
     0 0 5px color-mix(in srgb, var(--gluni-save-failure) 18%, transparent);
 }
 
@@ -5506,9 +5485,9 @@
   background:
     linear-gradient(145deg, var(--gluni-save-success-hot), var(--gluni-save-success) 58%, #1c6b41);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.78),
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.78),
     inset -1px -1px 0 rgba(8, 46, 28, 0.82),
-    0 1px 2px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
     0 0 8px color-mix(in srgb, var(--gluni-save-success-hot) 82%, transparent),
     0 0 16px color-mix(in srgb, var(--gluni-save-success) 56%, transparent);
 }
@@ -5523,9 +5502,9 @@
   background:
     linear-gradient(145deg, var(--gluni-save-failure-hot), var(--gluni-save-failure) 58%, #7a1822);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.78),
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.78),
     inset -1px -1px 0 rgba(58, 12, 18, 0.82),
-    0 1px 2px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
     0 0 10px color-mix(in srgb, var(--gluni-save-failure-hot) 86%, transparent),
     0 0 22px color-mix(in srgb, var(--gluni-save-failure) 64%, transparent);
   animation: gluni-deathsave-fail-pulse 1.1s ease-in-out infinite;
@@ -5539,9 +5518,9 @@
 @keyframes gluni-deathsave-fail-pulse {
   0%, 100% {
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.78),
+      inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.78),
       inset -1px -1px 0 rgba(58, 12, 18, 0.82),
-      0 1px 2px rgba(0, 0, 0, 0.7),
+      0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
       0 0 10px color-mix(in srgb, var(--gluni-save-failure-hot) 86%, transparent),
       0 0 22px color-mix(in srgb, var(--gluni-save-failure) 64%, transparent);
     transform: scale(1);
@@ -5549,9 +5528,9 @@
 
   50% {
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.92),
+      inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.92),
       inset -1px -1px 0 rgba(58, 12, 18, 0.82),
-      0 1px 2px rgba(0, 0, 0, 0.7),
+      0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
       0 0 14px color-mix(in srgb, var(--gluni-save-failure-hot) 96%, transparent),
       0 0 28px color-mix(in srgb, var(--gluni-save-failure) 78%, transparent);
     transform: scale(1.08);
@@ -5937,7 +5916,7 @@
   height: 13px;
   font-size: 10px;
   line-height: 1;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+  filter: drop-shadow(0 1px 2px rgb(var(--gl-tint-dark) / 0.7));
 }
 
 .gluni-sliver-icon--break { color: var(--gluni-break-hot); }
@@ -6024,7 +6003,7 @@
   /* The pile's apparent thickness grows with the draws remaining this round. */
   filter:
     drop-shadow(calc(var(--gluni-deck-depth, 0) * 0.7px) calc(var(--gluni-deck-depth, 0) * 0.7px) 0 color-mix(in srgb, var(--gluni-deck-a, var(--gluni-violet)) 22%, transparent))
-    drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6));
+    drop-shadow(0 6px 12px rgb(var(--gl-tint-dark) / 0.6));
 }
 
 .gluni-card-deck-stub-pile .gluni-card-back {
@@ -6250,493 +6229,14 @@
 
 
 /* ============================================================================
- * THEME: CORE — Clean modern Foundry-panel feel.
- * Calm amber accent, charcoal slate panels, no prismatic shimmer or backdrop
- * blur. Same structural skeleton as sci-fi; only the paint differs.
+ * Alternate themes (core / fantasy / chronicle) used to live here — ~490 lines
+ * re-painting every surface, plus their own serif @font-face declarations.
+ * Etched Glass is now the suite's single theme: the look comes from the shared
+ * token layer (styles/gl-tokens.css) and is rethemed by overriding tokens
+ * there, not by shipping parallel skins per feature.
+ * The matching `init.theme` setting and the four-way PALETTES table in
+ * constants.mjs were removed with them.
  * ==========================================================================*/
-html.gluni-theme--core {
-  --gluni-cyan:        #e8a44c;            /* amber accent (sits where cyan does) */
-  --gluni-white:       #ececec;
-  --gluni-red:         #d8484a;
-  --gluni-delay:       #6fa3c8;
-  --gluni-delay-hot:   #a9c8de;
-  --gluni-break:       #e89a3a;
-  --gluni-break-hot:   #ffd29a;
-  --gluni-break-deep:  #b87024;
-  --gluni-dying:       #b074bf;
-  --gluni-dying-hot:   #ecd0f0;
-  --gluni-neutral:     var(--gluni-white);  /* amber slot already taken by accent */
-  --gluni-condition:     #5fb472;
-  --gluni-condition-hot: #b1e0bd;
-  --gluni-save-success:     #5fb472;
-  --gluni-save-success-hot: #b1e0bd;
-  --gluni-save-failure:     #d8484a;
-  --gluni-save-failure-hot: #f2a0a2;
-  --gluni-stable:           #4ad9c0;
-  --gluni-stable-hot:       #b6fff2;
-  --gluni-violet:      #a48cc9;
-  --gluni-magenta:     #c9789f;
-  --gluni-apex:        #9d6bc0;            /* muted eclipse-violet */
-  --gluni-apex-deep:   #3a1a55;
-  --gluni-apex-hot:    #d79ad6;
-  --gluni-apex-ink:    #15091f;
-  --gluni-ink:         #1c1d20;            /* Foundry sheet chrome */
-  --gluni-line:        rgba(255, 255, 255, 0.08);
-  --gluni-line-strong: rgba(255, 255, 255, 0.45);
-  --gluni-text-dim:    rgba(236, 236, 236, 0.62);
-
-  /* Holo triplet collapses to a single quiet amber sheen — no prism. */
-  --gluni-holo-a: #e8a44c;
-  --gluni-holo-b: #e8a44c;
-  --gluni-holo-c: #ffd29a;
-
-  --gluni-font-family: "Signika", "Signika Negative", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-html.gluni-theme--core .gluni-card-surface {
-  background: #1c1d20;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px var(--gluni-line),
-    inset 0 0 16px rgba(0, 0, 0, 0.3);
-}
-
-html.gluni-theme--core .gluni-card--active .gluni-card-surface {
-  background: linear-gradient(180deg, #25272c 0%, #15161a 100%);
-}
-
-/* Drop the backdrop blur — Foundry panels are opaque. */
-html.gluni-theme--core .gluni-shell,
-html.gluni-theme--core .gluni-card-surface,
-html.gluni-theme--core .gluni-round-deck,
-html.gluni-theme--core .gluni-break-deck {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-/* Modern-Foundry numerals keep the Signika display face, not Oxanium. */
-html.gluni-theme--core {
-  --gluni-display-font: var(--gluni-font-family);
-}
-
-/* ============================================================================
- * THEME: FANTASY — Polished tome aesthetic.
- * Midnight cobalt with gold accents, ivory text, serif typography, a subtle
- * candlelight vignette on cards. Same structural skeleton as sci-fi.
- * ==========================================================================*/
-@font-face {
-  font-family: "Cormorant Garamond";
-  src: url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond.woff2") format("woff2");
-  font-weight: 300 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Cormorant Garamond";
-  src: url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/cormorant-garamond/CormorantGaramond-Italic.woff2") format("woff2");
-  font-weight: 300 700;
-  font-style: italic;
-  font-display: swap;
-}
-@font-face {
-  font-family: "EB Garamond";
-  src: url("../assets/initiative/fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/eb-garamond/EBGaramond-Regular.woff2") format("woff2");
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "EB Garamond";
-  src: url("../assets/initiative/fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2-variations"),
-       url("../assets/initiative/fonts/eb-garamond/EBGaramond-Italic.woff2") format("woff2");
-  font-weight: 400 800;
-  font-style: italic;
-  font-display: swap;
-}
-
-html.gluni-theme--fantasy {
-  --gluni-cyan:        #d4a84a;            /* aged gold (active accent slot) */
-  --gluni-white:       #efe6d2;            /* ivory parchment text */
-  --gluni-red:         #b03a3a;
-  --gluni-delay:       #5a7fa3;
-  --gluni-delay-hot:   #9ab0c8;
-  --gluni-break:       #c47438;
-  --gluni-break-hot:   #f4d27a;
-  --gluni-break-deep:  #8a4a1f;
-  --gluni-neutral:     var(--gluni-white);  /* gold accent owns amber; neutral stays ivory */
-  --gluni-dying:       #9a4f96;
-  --gluni-dying-hot:   #d8a8cf;
-  --gluni-condition:     #4f8a55;
-  --gluni-condition-hot: #9fc8a6;
-  --gluni-save-success:     #4f8a55;
-  --gluni-save-success-hot: #9fc8a6;
-  --gluni-save-failure:     #b03a3a;
-  --gluni-save-failure-hot: #e48b8b;
-  --gluni-stable:           #4ad9c0;
-  --gluni-stable-hot:       #b6fff2;
-  --gluni-violet:      #7b5fb0;
-  --gluni-magenta:     #b04a78;
-  --gluni-apex:        #8e4fc4;            /* arcane eclipse-violet */
-  --gluni-apex-deep:   #341a52;
-  --gluni-apex-hot:    #d8a8e8;
-  --gluni-apex-ink:    #160a22;
-  --gluni-ink:         #181428;            /* midnight cobalt with purple undertone */
-  --gluni-line:        rgba(212, 168, 74, 0.18);
-  --gluni-line-strong: rgba(239, 230, 210, 0.55);
-  --gluni-text-dim:    rgba(239, 230, 210, 0.65);
-
-  /* Gold two-stop sweep — no prism. */
-  --gluni-holo-a: #d4a84a;
-  --gluni-holo-b: #f4d27a;
-  --gluni-holo-c: #d4a84a;
-
-  --gluni-font-family: "Cormorant Garamond", "EB Garamond", Georgia, "Times New Roman", serif;
-  /* Tome numerals stay in the serif display face, not Oxanium. */
-  --gluni-display-font: var(--gluni-font-family);
-}
-
-html.gluni-theme--fantasy .gluni-card-surface {
-  /* Tome page at night: deep cobalt with a subtle candlelight catch in the
-     upper-left, no parchment texture — keeps it modern and polished. */
-  background:
-    radial-gradient(ellipse at 28% 18%, rgba(244, 210, 122, 0.05), transparent 60%),
-    linear-gradient(180deg, #1d1730 0%, #100b1c 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(244, 210, 122, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px var(--gluni-line),
-    inset 0 0 32px rgba(0, 0, 0, 0.5);
-}
-
-/* Active card gains a thin gold hairline along the full edge in addition to
-   the inset accent bar — reads as gilded trim. The background gets a slightly
-   warmer cobalt with stronger candlelight catch. */
-html.gluni-theme--fantasy .gluni-card--active .gluni-card-surface {
-  background:
-    radial-gradient(ellipse at 30% 16%, rgba(244, 210, 122, 0.08), transparent 65%),
-    linear-gradient(180deg, #221b38 0%, #120c20 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(212, 168, 74, 0.45),
-    inset 0 1px 0 rgba(244, 210, 122, 0.12),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 36px rgba(0, 0, 0, 0.45);
-}
-
-/* ============================================================================
- * THEME: CHRONICLE — Midnight-HUD aesthetic of the companion "GLUniverse
- * Clocks & Tracker" module. Glassy midnight-navy surfaces, cornflower-blue
- * accents with a soft halo glow, a warm gold highlight (its clock/event fill),
- * coral danger red, and the Oxanium display face. Same structural skeleton and
- * cinematic motion as sci-fi; only paint, glow, and typography shift.
- * Oxanium is bundled (OFL) — the two subsets mirror what Google Fonts serves.
- * ==========================================================================*/
-@font-face {
-  font-family: "Oxanium";
-  src: url("../assets/initiative/fonts/oxanium/Oxanium-latin.woff2") format("woff2");
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Oxanium";
-  src: url("../assets/initiative/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2");
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-html.gluni-theme--chronicle {
-  --gluni-cyan:        #6b86d6;            /* cornflower accent (active slot) */
-  --gluni-white:       #eef1f7;            /* cool ivory HUD text */
-  --gluni-red:         #e0584f;
-  --gluni-delay:       #5a78c8;
-  --gluni-delay-hot:   #9fb2e6;
-  --gluni-break:       #ffc454;            /* companion gold (clock/event fill) */
-  --gluni-break-hot:   #ffe6b5;
-  --gluni-break-deep:  #e0964a;
-  --gluni-dying:       #b57fd6;
-  --gluni-dying-hot:   #e6c8f0;
-  --gluni-neutral:     var(--gluni-white);  /* cool HUD; gold is the highlight, neutral stays ivory */
-  --gluni-condition:     #67d39b;
-  --gluni-condition-hot: #a8ecc8;
-  --gluni-save-success:     #67d39b;
-  --gluni-save-success-hot: #a8ecc8;
-  --gluni-save-failure:     #e0584f;
-  --gluni-save-failure-hot: #ff9a8f;
-  --gluni-stable:           #4ad9c0;
-  --gluni-stable-hot:       #b6fff2;
-  --gluni-violet:      #9a8ce0;
-  --gluni-magenta:     #b07acb;
-  --gluni-apex:        #a25fe0;            /* eclipse-violet on midnight HUD */
-  --gluni-apex-deep:   #341a52;
-  --gluni-apex-hot:    #d79ad6;
-  --gluni-apex-ink:    #120a1f;
-  --gluni-ink:         #0a0e15;            /* midnight navy */
-  --gluni-line:        rgba(255, 255, 255, 0.08);
-  --gluni-line-strong: rgba(255, 255, 255, 0.45);
-  --gluni-text-dim:    rgba(238, 241, 247, 0.62);
-
-  /* Cool cornflower -> ice -> gold sweep echoing the companion's blue+gold duo. */
-  --gluni-holo-a: #6b86d6;
-  --gluni-holo-b: #9fb2e6;
-  --gluni-holo-c: #ffc454;
-
-  /* Companion glow tokens, reused by the badge / splash / active-card polish. */
-  --gluni-glow:     rgba(120, 150, 225, 0.50);
-  --gluni-glowsoft: rgba(120, 150, 225, 0.18);
-
-  --gluni-font-family: "Oxanium", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-}
-
-/* Glassy midnight panel with a faint top sheen and a soft cornflower halo —
-   the companion HUD's signature look. */
-html.gluni-theme--chronicle .gluni-card-surface {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(98deg, #161d2c 0%, #080b11 64%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px var(--gluni-line),
-    inset 0 0 22px rgba(0, 0, 0, 0.34),
-    0 0 30px rgba(120, 150, 225, 0.10);
-}
-
-/* Active card lifts the cornflower halo and brightens the rim, mirroring the
-   companion's glow-on-active treatment. */
-html.gluni-theme--chronicle .gluni-card--active .gluni-card-surface {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 30%),
-    linear-gradient(98deg, #1b2436 0%, #0a0e16 64%);
-  box-shadow:
-    inset 0 0 0 1px rgba(107, 134, 214, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 30px rgba(0, 0, 0, 0.4),
-    0 18px 36px rgba(0, 0, 0, 0.62),
-    0 0 42px rgba(120, 150, 225, 0.28);
-}
-
-/* ----------------------------------------------------------------------------
- * CHRONICLE — premium overhaul.
- * The companion HUD's signature is restrained typography (Oxanium 600–800, not
- * a blanket bold), softly-rounded glass plates, and cool cornflower glow with a
- * warm gold counterpoint. The sections below carry that language into the round
- * badge, the round/break splashes, the dividers, and the active turn card.
- * (The ground turn-markers and token status overlays already retint through the
- *  Chronicle palette in constants.mjs, so they match without extra CSS.)
- * --------------------------------------------------------------------------*/
-
-/* 1) WEIGHT SCALE — the sci-fi field is a blanket font-weight:950, which in
- *    Oxanium clamps to its heaviest 800 and reads blocky. Reset the whole
- *    overlay/splash field to a clean 600, then re-emphasise only names, small
- *    caps labels and hero numerals (the companion's 600 / 700 / 800 ladder). */
-html.gluni-theme--chronicle .gluni-initiative [class*="gluni-"],
-html.gluni-theme--chronicle .gluni-round-splash [class*="gluni-"],
-html.gluni-theme--chronicle .gluni-break-splash [class*="gluni-"] {
-  font-weight: 600;
-}
-html.gluni-theme--chronicle .gluni-card h3,
-html.gluni-theme--chronicle .gluni-initiative .gluni-round-chip-label,
-html.gluni-theme--chronicle .gluni-initiative .gluni-round-chip-num,
-html.gluni-theme--chronicle .gluni-initiative .gluni-round-separator,
-html.gluni-theme--chronicle .gluni-initiative .gluni-round-separator strong,
-html.gluni-theme--chronicle .gluni-initiative .gluni-card-mystery-mark,
-html.gluni-theme--chronicle .gluni-round-splash .gluni-round-label span:last-child,
-html.gluni-theme--chronicle .gluni-round-splash .gluni-round-sub span,
-html.gluni-theme--chronicle .gluni-break-splash .gluni-break-splash-label span:last-child,
-html.gluni-theme--chronicle .gluni-break-splash .gluni-break-splash-name span {
-  font-weight: 700;
-}
-html.gluni-theme--chronicle .gluni-initiative .gluni-initiative-badge,
-html.gluni-theme--chronicle .gluni-round-splash .gluni-round-num,
-html.gluni-theme--chronicle .gluni-round-splash .gluni-round-num .d,
-html.gluni-theme--chronicle .gluni-break-splash .gluni-break-splash-text {
-  font-weight: 800;
-}
-
-/* Combatant name borrows the companion's soft ivory bevel (top-lit gradient). */
-html.gluni-theme--chronicle .gluni-card h3 {
-  letter-spacing: 0.03em;
-  background: linear-gradient(180deg, #ffffff, #c7d2ea);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-html.gluni-theme--chronicle .gluni-card--gm-hidden h3,
-html.gluni-theme--chronicle .gluni-card--gm-mystery h3 {
-  /* keep hidden/mystery names from inheriting the bright bevel */
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: var(--gluni-text-dim);
-}
-
-/* 2) ROUND BADGE — a rounded glass pill instead of the sheared sci-fi tab. */
-html.gluni-theme--chronicle .gluni-round-chip,
-html.gluni-theme--chronicle .gluni-initiative--left .gluni-round-chip {
-  clip-path: none;
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(98deg, #161d2c, #080b11 70%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px var(--gluni-line),
-    0 6px 18px rgba(0, 0, 0, 0.5),
-    0 0 22px var(--gluni-glowsoft);
-}
-html.gluni-theme--chronicle .gluni-round-chip-label {
-  font-size: 8px;
-  letter-spacing: 0.26em;
-  color: var(--gluni-text-dim);
-}
-html.gluni-theme--chronicle .gluni-round-chip-divider {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--gluni-cyan) 48%, transparent) 50%,
-    transparent
-  );
-}
-html.gluni-theme--chronicle .gluni-round-chip-num {
-  color: #ffffff;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  text-shadow:
-    0 0 14px var(--gluni-glow),
-    0 0 30px var(--gluni-glowsoft);
-}
-
-/* 3) ROUND DIVIDERS — the inter-round separator becomes a soft glass capsule. */
-html.gluni-theme--chronicle .gluni-round-separator {
-  border: 1px solid color-mix(in srgb, var(--gluni-cyan) 24%, transparent);
-  border-radius: 99px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--gluni-cyan) 13%, transparent),
-    transparent
-  );
-  color: var(--gluni-text-dim);
-  letter-spacing: 0.12em;
-}
-html.gluni-theme--chronicle .gluni-round-separator strong {
-  color: var(--gluni-cyan);
-  text-shadow: 0 0 10px var(--gluni-glowsoft);
-}
-
-/* 4) ACTIVE TURN CARD — keep the chamfered silhouette but light it like glass:
- *    a brighter cornflower accent edge, a gilded accent bar (holo a->b->c already
- *    sweeps cornflower->ice->gold via the themed vars), and a slow breath glow. */
-html.gluni-theme--chronicle .gluni-card--active .gluni-card-accent {
-  box-shadow:
-    0 0 22px rgba(120, 150, 225, 0.6),
-    0 0 12px rgba(255, 196, 84, 0.4);
-}
-html.gluni-theme--chronicle .gluni-card--active .gluni-card-bracket {
-  border-top-color: var(--gluni-cyan);
-  border-left-color: var(--gluni-cyan);
-  filter: drop-shadow(0 0 6px var(--gluni-glowsoft));
-}
-html.gluni-theme--chronicle .gluni-initiative--left .gluni-card--active .gluni-card-bracket {
-  border-right-color: var(--gluni-cyan);
-}
-@keyframes gluni-chronicle-breathe {
-  0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px rgba(107, 134, 214, 0.40),
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-      inset 0 0 30px rgba(0, 0, 0, 0.4),
-      0 18px 36px rgba(0, 0, 0, 0.62),
-      0 0 34px rgba(120, 150, 225, 0.20);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 1px rgba(107, 134, 214, 0.52),
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-      inset 0 0 30px rgba(0, 0, 0, 0.4),
-      0 18px 36px rgba(0, 0, 0, 0.62),
-      0 0 52px rgba(120, 150, 225, 0.36);
-  }
-}
-/* Only breathe on a "clean" active card — the dying / guard-broken / hidden /
- * mystery states paint their own surface box-shadow, which the animation would
- * otherwise clobber. */
-html.gluni-theme--chronicle .gluni-card--active:not(.gluni-card--dying):not(.gluni-card--guard-broken):not(.gluni-card--gm-hidden):not(.gluni-card--gm-mystery):not(.gluni-card--gm-visible) .gluni-card-surface {
-  animation: gluni-chronicle-breathe 3.6s ease-in-out infinite;
-}
-
-/* 5) ROUND SPLASH (the round-counter reveal) — solid rounded glass plate with a
- *    cornflower horizon rule, a white hero numeral, and a warm gold caption. */
-html.gluni-theme--chronicle .gluni-round-splash--show {
-  background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gluni-cyan) 8%, transparent) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 50%, transparent 24%, rgba(4, 7, 12, 0.22) 58%, rgba(4, 7, 12, 0.5) 100%);
-}
-html.gluni-theme--chronicle .gluni-round-deck {
-  inset: -6px -16px;
-  border-radius: 16px;
-  -webkit-mask-image: none;
-  mask-image: none;
-  background: linear-gradient(
-    180deg,
-    rgba(22, 27, 37, 0.80),
-    rgba(8, 11, 17, 0.88) 54%,
-    rgba(8, 11, 17, 0.82)
-  );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px var(--gluni-line),
-    inset 0 0 44px var(--gluni-glowsoft),
-    0 26px 70px rgba(0, 0, 0, 0.6),
-    0 0 46px var(--gluni-glowsoft);
-}
-html.gluni-theme--chronicle .gluni-round-rule {
-  box-shadow: 0 0 22px var(--gluni-glow);
-}
-html.gluni-theme--chronicle .gluni-round-num {
-  color: #ffffff;
-  letter-spacing: 0.02em;
-  text-shadow:
-    0 0 26px var(--gluni-glow),
-    0 14px 42px rgba(0, 0, 0, 0.86);
-}
-html.gluni-theme--chronicle .gluni-round-sub span {
-  color: color-mix(in srgb, var(--gluni-break) 86%, var(--gluni-white));
-  text-shadow: 0 0 12px color-mix(in srgb, var(--gluni-break) 40%, transparent);
-}
-
-/* 6) BREAK SPLASH — same rounded-glass plate, kept in the gold "break" palette
- *    so it stays consistent with the gold guard-break ring on the token. */
-html.gluni-theme--chronicle .gluni-break-deck {
-  inset: -6px -16px;
-  border-radius: 16px;
-  -webkit-mask-image: none;
-  mask-image: none;
-  background: linear-gradient(
-    180deg,
-    rgba(30, 22, 10, 0.78),
-    rgba(12, 9, 5, 0.88) 54%,
-    rgba(12, 9, 5, 0.82)
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--gluni-break-hot) 30%, rgba(255, 255, 255, 0.22)),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.66),
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-break) 24%, var(--gluni-line)),
-    inset 0 0 48px color-mix(in srgb, var(--gluni-break) 14%, transparent),
-    0 26px 74px rgba(0, 0, 0, 0.64),
-    0 0 50px color-mix(in srgb, var(--gluni-break) 26%, transparent);
-}
 
 
 /* ============================================================================
@@ -6802,17 +6302,17 @@ html.gluni-theme--chronicle .gluni-break-deck {
 @keyframes gluni-apex-breathe {
   0%, 100% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.07),
       inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 42%, var(--gluni-line)),
-      inset 0 0 30px rgba(0, 0, 0, 0.45),
+      inset 0 0 30px rgb(var(--gl-tint-dark) / 0.45),
       0 0 0 1px color-mix(in srgb, var(--gluni-apex-deep) 50%, transparent),
       0 0 22px color-mix(in srgb, var(--gluni-apex) 22%, transparent);
   }
   50% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
       inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 66%, var(--gluni-line)),
-      inset 0 0 30px rgba(0, 0, 0, 0.45),
+      inset 0 0 30px rgb(var(--gl-tint-dark) / 0.45),
       0 0 0 1px color-mix(in srgb, var(--gluni-apex-deep) 72%, transparent),
       0 0 42px color-mix(in srgb, var(--gluni-apex) 44%, transparent);
   }
@@ -6933,9 +6433,9 @@ html.gluni-theme--chronicle .gluni-break-deck {
 }
 .gluni-card--apex-reprise .gluni-card-surface {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05),
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 22%, var(--gluni-line)),
-    inset 0 0 24px rgba(0, 0, 0, 0.5);
+    inset 0 0 24px rgb(var(--gl-tint-dark) / 0.5);
 }
 .gluni-card--apex-reprise .gluni-card-apex-corona { opacity: 0.4; }
 .gluni-card--apex-reprise .gluni-card-apex-corners span { opacity: 0.45; filter: none; }

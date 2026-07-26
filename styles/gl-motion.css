@@ -1,0 +1,256 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — canonical motion pool
+   ════════════════════════════════════════════════════════════════════════
+
+   The shared animation vocabulary. Every keyframe here is `gl-` prefixed and
+   is the ONE definition of that motion in the suite — a feature that wants a
+   pulse, a sheen or an entrance reaches for these instead of authoring its
+   own. Durations/easings come from the motion tokens in gl-tokens.css, so
+   everything below retimes with `--gl-motion-scale`.
+
+   ── Why this file exists ────────────────────────────────────────────────
+   The suite had 293 @keyframes across 30 stylesheets, five of which redefined
+   a `gl-*` name that already existed — last-loaded-wins, so a feature could
+   silently change another feature's animation. Names are global in CSS: there
+   is no scoping. Hence one pool, one prefix, one definition.
+
+   ── Using it ────────────────────────────────────────────────────────────
+     • Prefer a `.gl-anim-*` utility class when the default timing suits.
+     • Otherwise reference the keyframe directly and pick your own timing:
+           animation: gl-pulse var(--gl-breathe) var(--gl-ease) infinite;
+     • Stagger a list with the shared step:
+           .row:nth-child(n) { animation-delay: calc(var(--gl-stagger) * n); }
+     • A feature-specific motion (a bespoke boss corona, a fire sim) still
+       belongs in that feature's stylesheet — this pool is for what RECURS.
+
+   Note: the suite deliberately ignores the OS prefers-reduced-motion setting;
+   motion is an explicit in-app choice via `--gl-motion-scale`. See CLAUDE.md.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════════
+   ENTRANCES — an element arriving
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Fade only. The safe default when layout must not shift. */
+@keyframes gl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Diagonal drift into place — the suite's list/row entrance. */
+@keyframes gl-cascade {
+  0% { opacity: 0; transform: translate(-6px, 4px); }
+  100% { opacity: 1; transform: translate(0, 0); }
+}
+
+/* Rise from below. Panels, cards, toasts. */
+@keyframes gl-rise-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Drop from above — headers, banners, splash chrome. */
+@keyframes gl-drop-in {
+  0% { opacity: 0; transform: translateY(-8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Scale-up with overshoot. Pips, chips, counters incrementing. */
+@keyframes gl-pop-in {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* Heavy arrival — slams in from oversize with a blur clearing. Reserve for
+   ceremony (round splash, crit banner), not routine UI. */
+@keyframes gl-stamp {
+  0% { transform: scale(1.6); opacity: 0; filter: blur(2px); }
+  60% { transform: scale(0.94); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   EXITS — an element leaving
+   ════════════════════════════════════════════════════════════════════════ */
+@keyframes gl-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes gl-sink-out {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(6px); }
+}
+@keyframes gl-pop-out {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.86); opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   AMBIENT LOOPS — continuous, never gated on interaction
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Opacity breathing. The suite's "this is live" idle. */
+@keyframes gl-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Scale + opacity heartbeat. Stronger than breathe; use for alerts. */
+@keyframes gl-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 0.82; }
+}
+
+/* Accent glow swelling in and out of the element's own bloom. */
+@keyframes gl-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px var(--gl-bloom); }
+  50% { box-shadow: 0 0 22px var(--gl-glow); }
+}
+
+/* Mounting dread — inner + outer glow, slower and heavier than glow-pulse. */
+@keyframes gl-dread {
+  0%, 100% { box-shadow: 0 0 10px var(--gl-bloom), inset 0 0 12px var(--gl-bloom); }
+  50% { box-shadow: 0 0 26px var(--gl-glow), inset 0 0 18px var(--gl-bloom); }
+}
+
+/* Slow vertical bob — floating markers, idle tokens. */
+@keyframes gl-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Background-position drift, for textured/gridded beds. */
+@keyframes gl-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+@keyframes gl-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gl-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SURFACE FX — light moving across a surface
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Horizontal scale-out wipe used as a reveal underline / bar fill. */
+@keyframes gl-sheen {
+  0% { transform: scaleX(0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* A specular band travelling left→right across an element. Pair with an
+   ::before at inset:0 carrying an angled gradient. */
+@keyframes gl-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+/* Scanline crossing top→bottom. */
+@keyframes gl-scan {
+  0% { transform: translateY(-100%); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+/* Prismatic hue travel for holographic edges. */
+@keyframes gl-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* Reveal by unclipping left→right. */
+@keyframes gl-wipe-x {
+  0% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+/* Reveal behind a 45°-edged mask — the suite's panel-open wipe. */
+@keyframes gl-wipe-diag {
+  0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); opacity: 0; }
+  100% { clip-path: polygon(0 0, 140% 0, 100% 100%, 0 100%); opacity: 1; }
+}
+
+/* A signal-amber fill sweeping across and receding to outline. Pair with a
+   background-size ~200% gradient. */
+@keyframes gl-signal-flash {
+  0% { background-position: -140% 0; }
+  100% { background-position: 140% 0; }
+}
+
+/* Expanding ring — impact / confirmation. */
+@keyframes gl-burst {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   EMPHASIS — drawing the eye to something that changed
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Lateral shake. Invalid input, rejected action, damage taken. */
+@keyframes gl-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* One-shot brightness flash. */
+@keyframes gl-flash {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.85); }
+}
+
+/* Value changed — a quick lift and settle. */
+@keyframes gl-bump {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.22); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   ANIMATION UTILITIES
+   Opt-in classes for the common cases. Timing comes from the motion tokens,
+   so these follow --gl-motion-scale automatically.
+   ════════════════════════════════════════════════════════════════════════ */
+.gl-anim-fade { animation: gl-fade-in var(--gl-d-quick) var(--gl-ease) both; }
+.gl-anim-cascade { animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both; }
+.gl-anim-rise { animation: gl-rise-in var(--gl-d-move) var(--gl-ease) both; }
+.gl-anim-drop { animation: gl-drop-in var(--gl-d-move) var(--gl-ease) both; }
+.gl-anim-pop { animation: gl-pop-in var(--gl-d-move) var(--gl-pop) both; }
+.gl-anim-stamp { animation: gl-stamp var(--gl-d-splash) var(--gl-snap) both; }
+
+.gl-anim-breathe { animation: gl-breathe var(--gl-breathe) var(--gl-ease) infinite; }
+.gl-anim-pulse { animation: gl-pulse var(--gl-breathe) var(--gl-ease) infinite; }
+.gl-anim-glow { animation: gl-glow-pulse var(--gl-breathe) var(--gl-ease) infinite; }
+.gl-anim-dread { animation: gl-dread var(--gl-dread) var(--gl-ease) infinite; }
+.gl-anim-float { animation: gl-float var(--gl-drift) var(--gl-ease) infinite; }
+.gl-anim-spin { animation: gl-spin var(--gl-d-cinematic) var(--gl-linear) infinite; }
+
+.gl-anim-shake { animation: gl-shake var(--gl-d-move) var(--gl-ease) both; }
+.gl-anim-flash { animation: gl-flash var(--gl-d-quick) var(--gl-ease) both; }
+.gl-anim-bump { animation: gl-bump var(--gl-d-quick) var(--gl-pop) both; }
+
+/* Stagger helper — children enter in sequence off the shared step.
+   Covers the first 12; beyond that set --gl-i inline from JS. */
+.gl-stagger > * { animation-delay: calc(var(--gl-stagger) * var(--gl-i, 0)); }
+.gl-stagger > *:nth-child(1) { --gl-i: 0; }
+.gl-stagger > *:nth-child(2) { --gl-i: 1; }
+.gl-stagger > *:nth-child(3) { --gl-i: 2; }
+.gl-stagger > *:nth-child(4) { --gl-i: 3; }
+.gl-stagger > *:nth-child(5) { --gl-i: 4; }
+.gl-stagger > *:nth-child(6) { --gl-i: 5; }
+.gl-stagger > *:nth-child(7) { --gl-i: 6; }
+.gl-stagger > *:nth-child(8) { --gl-i: 7; }
+.gl-stagger > *:nth-child(9) { --gl-i: 8; }
+.gl-stagger > *:nth-child(10) { --gl-i: 9; }
+.gl-stagger > *:nth-child(11) { --gl-i: 10; }
+.gl-stagger > *:nth-child(12) { --gl-i: 11; }

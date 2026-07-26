@@ -24,178 +24,58 @@ export const SETTINGS = {
   conditionBadges: "init.conditionBadges",
   conditionBadgeLayout: "init.conditionBadgeLayout",
   guardBreakSound: "init.guardBreakSound",
-  guardBreakSoundVolume: "init.guardBreakSoundVolume",
-  theme: "init.theme"
+  guardBreakSoundVolume: "init.guardBreakSoundVolume"
 };
 
-export const THEMES = Object.freeze({ scifi: "scifi", core: "core", fantasy: "fantasy", chronicle: "chronicle" });
-export const DEFAULT_THEME = THEMES.scifi;
+// ── Etched Glass palette ────────────────────────────────────────────────
+// Etched Glass is the suite's single theme, so this is one flat palette rather
+// than a set keyed by theme name. The suite previously shipped four (scifi /
+// core / fantasy / chronicle) selected by an `init.theme` world setting; the
+// other three have been removed.
+//
+// These are the GPU-side twins of the CSS tokens in styles/gl-tokens.css:
+// PIXI/WebGL cannot read CSS custom properties, so the same hues appear here as
+// 0xRRGGBB ints and vec3 floats. When a hue changes in gl-tokens.css it MUST be
+// changed here too — the comment on each line names the token it mirrors.
+//
+// The exported palettes stay mutable objects (rather than frozen literals) so
+// existing call sites that snapshot them (`const P = TOKEN_OVERLAY_PALETTE`)
+// keep working unchanged.
 
-// Per-theme master palettes. The exported live palettes (TOKEN_OVERLAY_PALETTE,
-// DISPOSITION_PALETTE) are mutated in place from one of these on theme change so
-// existing call sites that snapshot the palette (`const P = TOKEN_OVERLAY_PALETTE`)
-// continue to see live values. `shader` colours are vec3 floats consumed directly
-// by the WebGL filter uniforms in CardFXManager / TokenOverlayManager / BreakSplashGL.
-export const PALETTES = Object.freeze({
-  scifi: Object.freeze({
-    tokenOverlay: Object.freeze({
-      delayed: 0x4aa3ff, delayedHi: 0x9ad8ff,
-      broken: 0xffb12d, brokenHot: 0xffe070, brokenDeep: 0xff6f1a,
-      dying: 0xcf85e0, dyingHot: 0xf6d9fb, dyingDeep: 0x842f9e,
-      saveSuccess: 0x57e08b, saveSuccessHot: 0xb6ffd0,
-      saveFailure: 0xff5d6c, saveFailureHot: 0xffc0c6,
-      stable: 0x4ad9c0, stableHot: 0xb6fff2,
-      ink: 0x02070b, white: 0xf3fbff,
-      violet: 0xb497ff, magenta: 0xff66b3
-    }),
-    disposition: Object.freeze({
-      friendly: Object.freeze({ base: 0x5eeaff, hi: 0xb9f7ff }),
-      hostile:  Object.freeze({ base: 0xff4a52, hi: 0xff9098 }),   // unified --gl-hazard (design-language.md §2.4/§9.2)
-      neutral:  Object.freeze({ base: 0xffce6a, hi: 0xffe6b0 }),
-      secret:   Object.freeze({ base: 0xb497ff, hi: 0xe0d4ff })
-    }),
-    shader: Object.freeze({
-      veinBase:   Object.freeze([0.812, 0.522, 0.878]),   // FX_FRAG_DYING orchid (distinct from secret)
-      veinHot:    Object.freeze([0.965, 0.851, 0.984]),
-      mysteryA:   Object.freeze([0.71, 0.59, 1.0]),   // FX_FRAG_SCRAMBLE violet
-      mysteryB:   Object.freeze([0.37, 0.92, 1.0]),   // FX_FRAG_SCRAMBLE cyan
-      delayBase:  Object.freeze([0.29, 0.64, 1.0]),   // FX_FRAG_DELAY blue
-      delayHot:   Object.freeze([0.60, 0.85, 1.0]),
-      breakAmber: Object.freeze([1.0, 0.694, 0.176]), // FX_FRAG_BREAK amber
-      breakHot:   Object.freeze([1.0, 0.878, 0.439]),
-      splashHot:  Object.freeze([1.0, 0.694, 0.176]), // BREAK_GL_FRAG full-screen
-      splashGlow: Object.freeze([1.0, 0.878, 0.439]),
-      apexBase:   Object.freeze([0.694, 0.294, 1.0]),   // FX_FRAG_APEX eclipse-violet ember
-      apexHot:    Object.freeze([1.0, 0.482, 0.839])
-    })
-  }),
-  core: Object.freeze({
-    tokenOverlay: Object.freeze({
-      delayed: 0x6fa3c8, delayedHi: 0xa9c8de,
-      broken: 0xe89a3a, brokenHot: 0xffd29a, brokenDeep: 0xb87024,
-      dying: 0xb074bf, dyingHot: 0xecd0f0, dyingDeep: 0x7a4f8a,
-      saveSuccess: 0x5fb472, saveSuccessHot: 0xb1e0bd,
-      saveFailure: 0xd8484a, saveFailureHot: 0xf2a0a2,
-      stable: 0x4ad9c0, stableHot: 0xb6fff2,
-      ink: 0x1c1d20, white: 0xececec,
-      violet: 0xa48cc9, magenta: 0xc9789f
-    }),
-    disposition: Object.freeze({
-      friendly: Object.freeze({ base: 0x7ec4d4, hi: 0xc3e3eb }),
-      hostile:  Object.freeze({ base: 0xd8484a, hi: 0xf08a8c }),
-      neutral:  Object.freeze({ base: 0xe6e6e6, hi: 0xffffff }),
-      secret:   Object.freeze({ base: 0xa48cc9, hi: 0xd6c8ec })
-    }),
-    shader: Object.freeze({
-      veinBase:   Object.freeze([0.690, 0.455, 0.749]),   // muted orchid (distinct from secret)
-      veinHot:    Object.freeze([0.925, 0.816, 0.941]),
-      mysteryA:   Object.freeze([0.64, 0.55, 0.79]),   // muted lavender
-      mysteryB:   Object.freeze([0.49, 0.77, 0.83]),   // slate cyan
-      delayBase:  Object.freeze([0.44, 0.64, 0.78]),
-      delayHot:   Object.freeze([0.66, 0.78, 0.87]),
-      breakAmber: Object.freeze([0.91, 0.60, 0.23]),
-      breakHot:   Object.freeze([1.0, 0.82, 0.60]),
-      splashHot:  Object.freeze([0.91, 0.60, 0.23]),
-      splashGlow: Object.freeze([1.0, 0.82, 0.60]),
-      apexBase:   Object.freeze([0.616, 0.420, 0.753]),  // muted eclipse-violet
-      apexHot:    Object.freeze([0.843, 0.604, 0.839])
-    })
-  }),
-  fantasy: Object.freeze({
-    tokenOverlay: Object.freeze({
-      delayed: 0x5a7fa3, delayedHi: 0x9ab0c8,
-      broken: 0xc47438, brokenHot: 0xf4d27a, brokenDeep: 0x8a4a1f,
-      dying: 0x9a4f96, dyingHot: 0xd8a8cf, dyingDeep: 0x5a2f55,
-      saveSuccess: 0x4f8a55, saveSuccessHot: 0x9fc8a6,
-      saveFailure: 0xb03a3a, saveFailureHot: 0xe48b8b,
-      stable: 0x4ad9c0, stableHot: 0xb6fff2,
-      ink: 0x181428, white: 0xefe6d2,
-      violet: 0x7b5fb0, magenta: 0xb04a78
-    }),
-    disposition: Object.freeze({
-      friendly: Object.freeze({ base: 0x3f7d8e, hi: 0x8cbac7 }),
-      hostile:  Object.freeze({ base: 0xb03a3a, hi: 0xe48b8b }),
-      neutral:  Object.freeze({ base: 0xefe6d2, hi: 0xfff5e2 }),
-      secret:   Object.freeze({ base: 0x7b5fb0, hi: 0xc4b1e2 })
-    }),
-    shader: Object.freeze({
-      veinBase:   Object.freeze([0.69, 0.23, 0.23]),   // crimson cracking
-      veinHot:    Object.freeze([0.96, 0.82, 0.48]),   // gold heat
-      mysteryA:   Object.freeze([0.48, 0.37, 0.69]),   // arcane purple
-      mysteryB:   Object.freeze([0.83, 0.66, 0.29]),   // aged gold
-      delayBase:  Object.freeze([0.35, 0.49, 0.64]),
-      delayHot:   Object.freeze([0.60, 0.69, 0.78]),
-      breakAmber: Object.freeze([0.77, 0.45, 0.22]),   // ember orange
-      breakHot:   Object.freeze([0.96, 0.82, 0.48]),
-      splashHot:  Object.freeze([0.77, 0.45, 0.22]),
-      splashGlow: Object.freeze([0.96, 0.82, 0.48]),
-      apexBase:   Object.freeze([0.557, 0.310, 0.769]),  // arcane eclipse-violet
-      apexHot:    Object.freeze([0.847, 0.659, 0.910])
-    })
-  }),
-  // Mirrors the look of the companion "GLUniverse Clocks & Tracker" module: a
-  // glassy midnight-navy HUD with cornflower-blue accents, a warm gold highlight
-  // (its event/clock fill colour) and a coral danger red. Cool, polished, tactile.
-  chronicle: Object.freeze({
-    tokenOverlay: Object.freeze({
-      delayed: 0x5a78c8, delayedHi: 0x9fb2e6,
-      broken: 0xffc454, brokenHot: 0xffe6b5, brokenDeep: 0xe0964a,
-      dying: 0xb57fd6, dyingHot: 0xe6c8f0, dyingDeep: 0x6f4f90,
-      saveSuccess: 0x67d39b, saveSuccessHot: 0xa8ecc8,
-      saveFailure: 0xe0584f, saveFailureHot: 0xff9a8f,
-      stable: 0x4ad9c0, stableHot: 0xb6fff2,
-      ink: 0x0a0e15, white: 0xeef1f7,
-      violet: 0x9a8ce0, magenta: 0xb07acb
-    }),
-    disposition: Object.freeze({
-      friendly: Object.freeze({ base: 0x6b86d6, hi: 0xa9bdf0 }),
-      hostile:  Object.freeze({ base: 0xe0584f, hi: 0xff9a8f }),
-      neutral:  Object.freeze({ base: 0xeef1f7, hi: 0xffffff }),
-      secret:   Object.freeze({ base: 0x9a8ce0, hi: 0xd6cdf5 })
-    }),
-    shader: Object.freeze({
-      veinBase:   Object.freeze([0.710, 0.498, 0.839]),  // orchid dying veins (distinct from secret)
-      veinHot:    Object.freeze([0.902, 0.784, 0.941]),
-      mysteryA:   Object.freeze([0.420, 0.525, 0.839]),  // cornflower blue
-      mysteryB:   Object.freeze([1.0, 0.769, 0.329]),    // gold scramble counterpoint
-      delayBase:  Object.freeze([0.353, 0.471, 0.784]),  // steel blue
-      delayHot:   Object.freeze([0.624, 0.698, 0.902]),
-      breakAmber: Object.freeze([1.0, 0.769, 0.329]),    // companion gold
-      breakHot:   Object.freeze([1.0, 0.902, 0.710]),
-      splashHot:  Object.freeze([1.0, 0.769, 0.329]),
-      splashGlow: Object.freeze([1.0, 0.902, 0.710]),
-      apexBase:   Object.freeze([0.635, 0.373, 0.878]),  // eclipse-violet on midnight HUD
-      apexHot:    Object.freeze([0.843, 0.604, 0.839])
-    })
-  })
-});
+export const TOKEN_OVERLAY_PALETTE = {
+  delayed: 0x4aa3ff, delayedHi: 0x9ad8ff,                              // --gl-info / -hot
+  broken: 0xffb12d, brokenHot: 0xffe070, brokenDeep: 0xff6f1a,         // --gl-warn / -hot / -deep
+  dying: 0xcf85e0, dyingHot: 0xf6d9fb, dyingDeep: 0x842f9e,            // --gl-orchid / -hot
+  saveSuccess: 0x57e08b, saveSuccessHot: 0xb6ffd0,                     // --gl-good / -hot
+  saveFailure: 0xff5d6c, saveFailureHot: 0xffc0c6,                     // --gl-hazard / -hot
+  stable: 0x4ad9c0, stableHot: 0xb6fff2,                               // --gl-teal / -hot
+  ink: 0x02070b, white: 0xf3fbff,                                      // --gl-ink-0 / --gl-text-bright
+  violet: 0xb497ff, magenta: 0xff66b3                                  // --gl-violet / --gl-holo-c
+};
 
-// Active live palettes. Initialised from PALETTES[DEFAULT_THEME]; mutated in
-// place by applyThemePalette() on theme change so snapshot consumers
-// (`const P = TOKEN_OVERLAY_PALETTE`) automatically see the new values.
-export const TOKEN_OVERLAY_PALETTE = { ...PALETTES[DEFAULT_THEME].tokenOverlay };
 export const DISPOSITION_PALETTE = {
-  friendly: { ...PALETTES[DEFAULT_THEME].disposition.friendly },
-  hostile:  { ...PALETTES[DEFAULT_THEME].disposition.hostile },
-  neutral:  { ...PALETTES[DEFAULT_THEME].disposition.neutral },
-  secret:   { ...PALETTES[DEFAULT_THEME].disposition.secret }
+  friendly: { base: 0x5eeaff, hi: 0xb9f7ff },                          // --gl-cyan
+  hostile:  { base: 0xff4a52, hi: 0xff9098 },                          // --gl-hazard
+  neutral:  { base: 0xffce6a, hi: 0xffe6b0 },                          // neutral disposition amber
+  secret:   { base: 0xb497ff, hi: 0xe0d4ff }                           // --gl-violet / -hot
 };
-export const ACTIVE_SHADER_PALETTE = { ...PALETTES[DEFAULT_THEME].shader };
-// Tracks the active theme name so consumers can branch on it without re-reading
-// game settings on hot paths. Updated by applyThemePalette().
-export let ACTIVE_THEME = DEFAULT_THEME;
 
-export function applyThemePalette(themeName) {
-  const theme = PALETTES[themeName] ? themeName : DEFAULT_THEME;
-  const src = PALETTES[theme];
-  Object.assign(TOKEN_OVERLAY_PALETTE, src.tokenOverlay);
-  for (const key of Object.keys(DISPOSITION_PALETTE)) {
-    Object.assign(DISPOSITION_PALETTE[key], src.disposition[key]);
-  }
-  Object.assign(ACTIVE_SHADER_PALETTE, src.shader);
-  ACTIVE_THEME = theme;
-  return theme;
-}
+// vec3 floats consumed directly by the WebGL filter uniforms in
+// CardFXManager / TokenOverlayManager / BreakSplashGL.
+export const ACTIVE_SHADER_PALETTE = {
+  veinBase:   [0.812, 0.522, 0.878],   // FX_FRAG_DYING orchid (distinct from secret)
+  veinHot:    [0.965, 0.851, 0.984],
+  mysteryA:   [0.71, 0.59, 1.0],       // FX_FRAG_SCRAMBLE violet
+  mysteryB:   [0.37, 0.92, 1.0],       // FX_FRAG_SCRAMBLE cyan
+  delayBase:  [0.29, 0.64, 1.0],       // FX_FRAG_DELAY blue
+  delayHot:   [0.60, 0.85, 1.0],
+  breakAmber: [1.0, 0.694, 0.176],     // FX_FRAG_BREAK amber
+  breakHot:   [1.0, 0.878, 0.439],
+  splashHot:  [1.0, 0.694, 0.176],     // BREAK_GL_FRAG full-screen
+  splashGlow: [1.0, 0.878, 0.439],
+  apexBase:   [0.694, 0.294, 1.0],     // FX_FRAG_APEX eclipse-violet ember
+  apexHot:    [1.0, 0.482, 0.839]
+};
 
 export function getDispositionColors(disposition) {
   return DISPOSITION_PALETTE[disposition] ?? DISPOSITION_PALETTE.neutral;
@@ -309,12 +189,6 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.Settings.GuardBreakSound.Hint": "Audio file played for everyone when a combatant's guard is broken. Leave empty for no sound.",
   "GLUNI.Settings.GuardBreakSoundVolume.Name": "Guard break sound volume",
   "GLUNI.Settings.GuardBreakSoundVolume.Hint": "Playback volume of the guard break sound for this user.",
-  "GLUNI.Settings.Theme.Name": "Theme",
-  "GLUNI.Settings.Theme.Hint": "Overall visual style of the initiative rail, token markers, and effects. Sci-Fi is the default cinematic holographic look; Core matches Foundry's modern UI; Fantasy is a polished tome aesthetic; Chronicle matches the GLUniverse Clocks & Tracker companion module's midnight-HUD look.",
-  "GLUNI.Settings.Theme.SciFi": "Sci-Fi (Holographic)",
-  "GLUNI.Settings.Theme.Core": "Core (Modern Foundry)",
-  "GLUNI.Settings.Theme.Fantasy": "Fantasy (Polished Tome)",
-  "GLUNI.Settings.Theme.Chronicle": "Chronicle (Clocks & Tracker)",
   "GLUNI.TurnMarker.Next": "Next",
   "GLUNI.Settings.VisibleCount.Hint": "Number of normal initiative combatants to show from the current turn forward. Ignored when \"Show all combatants\" is enabled.",
   "GLUNI.Settings.VisibleCount.Name": "Visible combatants",

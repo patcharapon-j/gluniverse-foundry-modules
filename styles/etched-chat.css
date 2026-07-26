@@ -39,13 +39,13 @@
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   /* liquid-glass body */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.2)),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%) !important;
   border: 1px solid var(--gl-edge) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
   color: var(--gl-text);
@@ -60,7 +60,7 @@
   pointer-events: none;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 18%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.22), transparent 18%),
     linear-gradient(100deg, color-mix(in srgb, var(--gl-accent) 22%, transparent), transparent 30%);
   mix-blend-mode: screen;
   opacity: 0.7;
@@ -96,7 +96,7 @@
 /* Doubled-class lift for backgrounds Dorako pins one level deeper. */
 .chat-message.glec-card.glec-card .dice-roll .dice-total,
 .chat-message.glec-card.glec-card .dice-result {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)) !important;
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.2)) !important;
   border: 1px solid var(--gl-edge);
   color: var(--gl-text-bright);
 }
@@ -110,7 +110,7 @@
 .chat-message.glec-card .message-buttons button {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)), var(--gl-ink-2);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.18)), var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   color: var(--gl-text-bright);
   transition:
@@ -165,7 +165,7 @@
 .chat-message.glec-card .dice-result [style*="color"],
 .chat-message.glec-card .dice-result .damage-type,
 .chat-message.glec-card .damage-roll [style*="color"] {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.7);
 }
 /* Physical/untyped damage renders near-grey and stays hard to read. On damage
    cards there is no d20 chip, so a brightness+saturate filter over the result
@@ -236,7 +236,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--glec-vc, var(--gl-edge)) 60%, var(--gl-edge));
-  background: color-mix(in srgb, var(--glec-vc, #000) 14%, rgba(0, 0, 0, 0.42));
+  background: color-mix(in srgb, var(--glec-vc, #000) 14%, rgb(var(--gl-tint-dark) / 0.42));
   color: color-mix(in srgb, var(--glec-vc, var(--gl-text-bright)) 78%, var(--gl-text-bright));
   box-shadow: 0 0 8px color-mix(in srgb, var(--glec-vc, transparent) 28%, transparent);
   font-family: var(--gl-tech);
@@ -340,7 +340,7 @@
 .chat-message.glec-card.glec-has-art > *:not(.glec-portrait):not(.glec-fx),
 .chat-message.glec-card.glec-has-art .message-header,
 .chat-message.glec-card.glec-has-art .message-content {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.78), 0 0 2px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.78), 0 0 2px rgb(var(--gl-tint-dark) / 0.55);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -372,16 +372,16 @@
      card toward the lower-left, so the shatter never blankets the readable
      content. The GLSL origin (impact) is nucleated top-right to match. */
   -webkit-mask-image: radial-gradient(92% 92% at 100% 0%,
-      #000 0%, #000 13%, rgba(0, 0, 0, 0.4) 37%, transparent 56%);
+      #000 0%, #000 13%, rgb(var(--gl-tint-dark) / 0.4) 37%, transparent 56%);
           mask-image: radial-gradient(92% 92% at 100% 0%,
-      #000 0%, #000 13%, rgba(0, 0, 0, 0.4) 37%, transparent 56%);
+      #000 0%, #000 13%, rgb(var(--gl-tint-dark) / 0.4) 37%, transparent 56%);
 }
 
 /* Gold = positive valence: warm signal halo + border. */
 .chat-message.glec-card[data-glec-frac="gold"] {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -12px 28px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.18),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38),
     0 0 22px color-mix(in srgb, var(--gl-signal) 45%, transparent);
   border-color: color-mix(in srgb, var(--gl-signal) 60%, var(--gl-edge)) !important;
 }
@@ -399,8 +399,8 @@
 /* Red/purple = negative valence: hazard + violet halo. */
 .chat-message.glec-card[data-glec-frac="red"] {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -12px 28px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.42),
     0 0 24px color-mix(in srgb, var(--gl-hazard) 42%, transparent);
   border-color: color-mix(in srgb, var(--gl-hazard) 55%, var(--gl-edge)) !important;
 }
@@ -484,23 +484,23 @@
   font-weight: 700;
   line-height: 1;
   color: var(--gl-text-bright);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.28)), var(--gl-ink-2);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.14), rgb(var(--gl-tint-dark) / 0.28)), var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   /* d20 / hex silhouette */
   clip-path: polygon(50% 0, 100% 27%, 100% 73%, 50% 100%, 0 73%, 0 27%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2);
 }
 .chat-message.glec-card .glec-d20.glec-nat-max {
   color: var(--gl-ink-0);
   background: linear-gradient(180deg, var(--gl-signal-hot), var(--gl-signal));
   border-color: var(--gl-signal-hot);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 60%, transparent), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.4);
 }
 .chat-message.glec-card .glec-d20.glec-nat-min {
   color: var(--gl-text-bright);
   background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 78%, #000), color-mix(in srgb, var(--gl-hazard) 42%, #000));
   border-color: var(--gl-hazard);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-hazard) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-hazard) 55%, transparent), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -559,7 +559,7 @@
    ════════════════════════════════════════════════════════════════════════ */
 .chat-message.glec-card .pf2emm-is-ESSENTIAL { --glec-mm: var(--pf2emm-color-essential, #2fa84f); }
 .chat-message.glec-card .pf2emm-is-HELPFUL { --glec-mm: var(--pf2emm-color-helpful, #acc24a); }
-.chat-message.glec-card .pf2emm-is-HARMFUL { --glec-mm: var(--pf2emm-color-harmful, #ff4a52); }
+.chat-message.glec-card .pf2emm-is-HARMFUL { --glec-mm: var(--pf2emm-color-harmful, var(--gl-hazard)); }
 .chat-message.glec-card .pf2emm-is-DETRIMENTAL { --glec-mm: var(--pf2emm-color-detrimental, #ff852f); }
 
 .chat-message.glec-card .tag_alt[class*="pf2emm-is-"],
@@ -571,7 +571,7 @@
   border: 1px solid color-mix(in srgb, var(--glec-mm) 58%, transparent) !important;
   border-radius: 3px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.24),
     0 0 10px color-mix(in srgb, var(--glec-mm) 34%, transparent) !important;
   text-shadow: 0 0 6px color-mix(in srgb, var(--glec-mm) 42%, transparent);
   backdrop-filter: blur(3px) saturate(1.2);

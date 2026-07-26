@@ -11,14 +11,14 @@
     flex-direction: column;
     gap: 0.375rem;
     padding: 0.5rem 0.625rem;
-    border: 1px solid var(--t5e-separator-color, var(--t5e-faint-color, rgba(255, 255, 255, 0.1)));
+    border: 1px solid var(--t5e-separator-color, var(--t5e-faint-color, rgb(var(--gl-tint-light) / 0.1)));
     border-top: none;
     border-radius: 0 0 0.375rem 0.375rem;
     background: var(--t5e-header-background, #222);
     font-family: var(--t5e-body-font-family, "Signika", "Palatino Linotype", serif);
     font-size: 0.8125rem;
     color: var(--t5e-primary-color, #ddd);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px rgb(var(--gl-tint-dark) / 0.4);
     pointer-events: auto;
     box-sizing: border-box;
 }
@@ -38,7 +38,7 @@
 /* ─── Dark Theme ─────────────────────────────────────────────────── */
 
 .glinv-floating-panel.glinv-panel-dark {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px rgb(var(--gl-tint-dark) / 0.4);
 }
 
 /* ─── Quadrone Theme ─────────────────────────────────────────────── */
@@ -110,7 +110,7 @@
     color: var(--t5e-primary-color, #ccc);
     opacity: 0.8;
     padding-left: 0.5rem;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 1px solid rgb(var(--gl-tint-light) / 0.1);
 }
 
 .glinv-quickdraw-info i {
@@ -141,24 +141,24 @@
     width: 12px;
     height: 12px;
     border-radius: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.12);
 }
 
 .glinv-slot-box.glinv-empty {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--gl-tint-light) / 0.06);
+    border-color: rgb(var(--gl-tint-light) / 0.12);
 }
 
 .glinv-slot-box.glinv-filled {
     background: var(--t5e-primary-accent-color, #4a90d9);
     border-color: var(--t5e-primary-accent-color, #4a90d9);
-    box-shadow: inset 0 0 3px rgba(255, 255, 255, 0.25);
+    box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.25);
 }
 
 .glinv-slot-box.glinv-over {
     background: #cc3333;
     border-color: #cc3333;
-    box-shadow: inset 0 0 3px rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.2);
 }
 
 /* Quadrone slot boxes */
@@ -192,12 +192,12 @@
 
 .glinv-sq.glinv-sq-normal {
     background: var(--t5e-primary-accent-color, #4a90d9);
-    box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 0 2px rgb(var(--gl-tint-light) / 0.2);
 }
 
 .glinv-sq.glinv-sq-quickdraw {
     background: #daa520;
-    box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25);
+    box-shadow: inset 0 0 2px rgb(var(--gl-tint-light) / 0.25);
 }
 
 /* Compact format for items with 6+ bulk: [■] × N */
@@ -289,7 +289,7 @@
 
 .glinv-settings-btn:hover {
     opacity: 0.8;
-    background: var(--t5e-faint-color, rgba(0, 0, 0, 0.06));
+    background: var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.06));
 }
 
 /* ─── Item Sheet Bulk Config ──────────────────────────────────────── */
@@ -297,9 +297,9 @@
 .glinv-item-config {
     margin-top: 0.75rem;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.1));
+    border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.1));
     border-radius: 0.375rem;
-    background: var(--t5e-background, rgba(255, 255, 255, 0.3));
+    background: var(--t5e-background, rgb(var(--gl-tint-light) / 0.3));
     box-sizing: border-box;
     max-width: 100%;
     overflow: hidden;
@@ -319,7 +319,7 @@
     font-size: 0.8125rem;
     font-weight: 700;
     color: var(--t5e-primary-color, #333);
-    border-bottom: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.08));
+    border-bottom: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.08));
     display: flex;
     align-items: center;
     gap: 0.35rem;
@@ -348,7 +348,7 @@
 .glinv-item-field input[type="number"] {
     height: 1.75rem;
     padding: 0 0.375rem;
-    border: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.15));
+    border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.15));
     border-radius: 0.25rem;
     background: var(--t5e-background, #fff);
     color: var(--t5e-primary-color, #333);
@@ -392,15 +392,15 @@
 
 .tidy5e-sheet.tidy5e-dark .glinv-item-config,
 .tidy5e-sheet.quadrone .glinv-item-config {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(var(--gl-tint-light) / 0.03);
 }
 
 .tidy5e-sheet.tidy5e-dark .glinv-item-field select,
 .tidy5e-sheet.tidy5e-dark .glinv-item-field input[type="number"],
 .tidy5e-sheet.quadrone .glinv-item-field select,
 .tidy5e-sheet.quadrone .glinv-item-field input[type="number"] {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--gl-tint-light) / 0.06);
+    border-color: rgb(var(--gl-tint-light) / 0.12);
 }
 
 .tidy5e-sheet.quadrone .glinv-item-config {
@@ -409,7 +409,7 @@
 
 .tidy5e-sheet.tidy5e-dark .glinv-slot-compact,
 .tidy5e-sheet.quadrone .glinv-slot-compact {
-    color: rgba(255, 255, 255, 0.6);
+    color: rgb(var(--gl-tint-light) / 0.6);
 }
 
 /* ─── Item Config Floating Panel (right side of item sheet) ──────── */
@@ -421,13 +421,13 @@
     flex-direction: column;
     overflow-y: auto;
     padding: 0.5rem;
-    border: 1px solid var(--t5e-separator-color, var(--t5e-faint-color, rgba(255, 255, 255, 0.1)));
+    border: 1px solid var(--t5e-separator-color, var(--t5e-faint-color, rgb(var(--gl-tint-light) / 0.1)));
     border-radius: 0.375rem;
     background: var(--t5e-header-background, #222);
     font-family: var(--t5e-body-font-family, "Signika", "Palatino Linotype", serif);
     font-size: 0.75rem;
     color: var(--t5e-primary-color, #ddd);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px rgb(var(--gl-tint-dark) / 0.4);
     pointer-events: auto;
     box-sizing: border-box;
 }
@@ -580,9 +580,9 @@
 .glinv-notch-config {
     margin-top: 0.5rem;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.1));
+    border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.1));
     border-radius: 0.375rem;
-    background: var(--t5e-background, rgba(255, 255, 255, 0.3));
+    background: var(--t5e-background, rgb(var(--gl-tint-light) / 0.3));
     box-sizing: border-box;
     max-width: 100%;
     overflow: hidden;
@@ -650,14 +650,14 @@
     width: 10px;
     height: 10px;
     border-radius: 2px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
-    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgb(var(--gl-tint-dark) / 0.15);
+    background: rgb(var(--gl-tint-dark) / 0.05);
 }
 
 .glinv-notch-bar-pip.glinv-notch-bar-filled {
     background: #b55a30;
     border-color: #a04820;
-    box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 2px rgb(var(--gl-tint-light) / 0.15);
 }
 
 /* ─── Notch Controls ─────────────────────────────────────────────── */
@@ -678,13 +678,13 @@
     font-size: 0.6875rem;
     font-weight: 600;
     cursor: pointer;
-    border: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.12));
-    background: var(--t5e-background, rgba(0, 0, 0, 0.03));
+    border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.12));
+    background: var(--t5e-background, rgb(var(--gl-tint-dark) / 0.03));
     color: var(--t5e-primary-color, #555);
 }
 
 .glinv-notch-controls button:hover {
-    background: var(--t5e-faint-color, rgba(0, 0, 0, 0.08));
+    background: var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.08));
 }
 
 .glinv-notch-controls button:disabled {
@@ -693,7 +693,7 @@
 }
 
 .glinv-notch-controls button:disabled:hover {
-    background: var(--t5e-background, rgba(0, 0, 0, 0.03));
+    background: var(--t5e-background, rgb(var(--gl-tint-dark) / 0.03));
 }
 
 .glinv-notch-add:hover {
@@ -767,13 +767,13 @@
 
 .tidy5e-sheet.tidy5e-dark .glinv-notch-config,
 .tidy5e-sheet.quadrone .glinv-notch-config {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(var(--gl-tint-light) / 0.03);
 }
 
 .tidy5e-sheet.tidy5e-dark .glinv-notch-bar-pip,
 .tidy5e-sheet.quadrone .glinv-notch-bar-pip {
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: rgb(var(--gl-tint-light) / 0.12);
+    background: rgb(var(--gl-tint-light) / 0.06);
 }
 
 .tidy5e-sheet.tidy5e-dark .glinv-notch-bar-pip.glinv-notch-bar-filled,
@@ -784,13 +784,13 @@
 
 .tidy5e-sheet.tidy5e-dark .glinv-notch-controls button,
 .tidy5e-sheet.quadrone .glinv-notch-controls button {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--gl-tint-light) / 0.06);
+    border-color: rgb(var(--gl-tint-light) / 0.12);
 }
 
 .tidy5e-sheet.tidy5e-dark .glinv-notch-controls button:hover,
 .tidy5e-sheet.quadrone .glinv-notch-controls button:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--gl-tint-light) / 0.1);
 }
 
 .tidy5e-sheet.quadrone .glinv-notch-config {
@@ -828,7 +828,7 @@
 /* ─── Ammo Config Panel ─────────────────────────────────────────────── */
 
 .glinv-ammo-config {
-    border-top: 1px solid var(--t5e-separator-color, rgba(255, 255, 255, 0.08));
+    border-top: 1px solid var(--t5e-separator-color, rgb(var(--gl-tint-light) / 0.08));
     margin-top: 0.375rem;
     padding-top: 0.375rem;
 }
@@ -848,8 +848,8 @@
     font-weight: 700;
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgb(var(--gl-tint-light) / 0.06);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.1);
 }
 
 .glinv-ammo-die-display i {
@@ -905,9 +905,9 @@
     flex: 1;
     padding: 0.25rem 0.375rem;
     font-size: 0.7rem;
-    border: 1px solid var(--t5e-separator-color, rgba(255, 255, 255, 0.15));
+    border: 1px solid var(--t5e-separator-color, rgb(var(--gl-tint-light) / 0.15));
     border-radius: 0.25rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgb(var(--gl-tint-light) / 0.05);
     color: var(--t5e-primary-color, #ddd);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
@@ -915,7 +915,7 @@
 }
 
 .glinv-ammo-controls button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--gl-tint-light) / 0.12);
     border-color: var(--t5e-primary-accent-color, #7a68c8);
 }
 
@@ -1017,7 +1017,7 @@
 /* ─── Pool Config Container ──────────────────────────────────────── */
 
 .glinv-pool-config {
-    border-top: 1px solid var(--t5e-separator-color, rgba(255, 255, 255, 0.08));
+    border-top: 1px solid var(--t5e-separator-color, rgb(var(--gl-tint-light) / 0.08));
     margin-top: 0.375rem;
 }
 
@@ -1097,25 +1097,25 @@
 .glinv-pool-pip-filled.glinv-pool-healthy {
     background: rgba(155, 125, 219, 0.5);
     border-color: rgba(155, 125, 219, 0.6);
-    box-shadow: inset 0 0 3px rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.15);
 }
 
 .glinv-pool-pip-filled.glinv-pool-low {
     background: rgba(212, 148, 13, 0.5);
     border-color: rgba(212, 148, 13, 0.6);
-    box-shadow: inset 0 0 3px rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.15);
 }
 
 .glinv-pool-pip-filled.glinv-pool-critical {
     background: rgba(224, 96, 64, 0.5);
     border-color: rgba(224, 96, 64, 0.6);
-    box-shadow: inset 0 0 3px rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.15);
     animation: glinv-pool-pulse 2s ease-in-out infinite;
 }
 
 .glinv-pool-pip-empty {
-    background: rgba(0, 0, 0, 0.08);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: rgb(var(--gl-tint-dark) / 0.08);
+    border-color: rgb(var(--gl-tint-dark) / 0.12);
 }
 
 @keyframes glinv-pool-pulse {
@@ -1138,7 +1138,7 @@
     gap: 0.25rem;
     padding: 0.3rem 0.5rem;
     border-radius: 0.15rem;
-    border: 1px solid var(--t5e-faint-color, rgba(0, 0, 0, 0.1));
+    border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.1));
     color: var(--t5e-primary-color, #555);
     font-size: 0.75rem;
     cursor: pointer;
@@ -1317,6 +1317,6 @@
 
 .glinv-panel-dark .glinv-pool-pip-empty,
 .tidy5e-sheet.tidy5e-dark .glinv-pool-pip-empty {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--gl-tint-light) / 0.05);
+    border-color: rgb(var(--gl-tint-light) / 0.1);
 }

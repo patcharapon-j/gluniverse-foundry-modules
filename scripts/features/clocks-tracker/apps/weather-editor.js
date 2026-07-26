@@ -13,7 +13,7 @@
  * the world `weather` setting via WeatherStore.
  */
 
-import { MODULE_ID, SETTINGS, WEATHER_DIRECTIONS, WEATHER_ARCHETYPES, WEATHER_DRIFTS, WEATHER_DICE } from "../const.js";
+import { MODULE_ID, SETTINGS, WEATHER_DIRECTIONS, WEATHER_ARCHETYPES, WEATHER_DRIFTS, WEATHER_DICE, FALLBACK_TINTS } from "../const.js";
 import { HEX_LAYOUT, HEX_BOUNDS, HEX_COUNT } from "../weather/hex-geometry.js";
 import { WeatherStore } from "../weather/weather-store.js";
 import { WeatherEffect } from "../weather/effects.js";
@@ -257,8 +257,8 @@ export class WeatherEditor extends HandlebarsApplicationMixin(ApplicationV2) {
       tile.className = "wx-hex clickable" + (e.ominous ? " ominous" : "") + (h.index === this._working.startHexIndex ? " start" : "") + (h.index === this._selected ? " sel" : "");
       tile.style.left = `${c.x}px`; tile.style.top = `${c.y}px`;
       tile.style.width = `${TILE_W}px`; tile.style.height = `${TILE_H}px`;
-      tile.style.setProperty("--glct-weather-tint", e.tintParticle ?? "#3a4250");
-      tile.style.setProperty("--glct-weather-glow", e.tintGlow ?? "#7fb4e6");
+      tile.style.setProperty("--glct-weather-tint", e.tintParticle ?? FALLBACK_TINTS.weatherTile.tint);
+      tile.style.setProperty("--glct-weather-glow", e.tintGlow ?? FALLBACK_TINTS.weather.glow);
       tile.title = hex?.label ?? "";
       const ic = document.createElement("i"); ic.className = hex?.icon ?? "fa-solid fa-cloud"; tile.appendChild(ic);
       // a green flag tag on the start hex makes "the walk begins here" unmistakable
@@ -416,7 +416,7 @@ export class WeatherEditor extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!this._preview) this._preview = WeatherEffect.create(host, hex.effect);
     else this._preview.setSpec(hex.effect);
     this._preview?.resume();
-    host.style.setProperty("--glct-weather-glow", hex.effect?.tintGlow ?? "#7fb4e6");
+    host.style.setProperty("--glct-weather-glow", hex.effect?.tintGlow ?? FALLBACK_TINTS.weather.glow);
   }
 
   /* ------------------------------ Navigation Hex ------------------------------ */

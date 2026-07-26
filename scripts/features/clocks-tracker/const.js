@@ -1,5 +1,7 @@
 /** Shared constants for GLUniverse — Clocks & Tracker. */
 
+import { PALETTE, withAlpha } from "../../core/theme.mjs";
+
 /**
  * Ported into the GLUniverse Suite. The Foundry package id is the single suite
  * id (`gluniverse-foundry-modules`) used as the settings namespace and flag scope. Per-
@@ -89,13 +91,45 @@ export const TRACKER_TYPES = ["point", "clock", "pool", "task", "hazard", "separ
  * The four daily watches (YZE shifts), chronological from midnight.
  * Names are defaults; the GM may override them via the shiftNames setting.
  * Colours drive the per-shift HUD theming (CSS custom properties).
+ *
+ * These are DATA, not theme: they encode time of day, so they stay a hand-tuned
+ * ramp rather than being routed through the accent channel. The night tint is
+ * the suite accent because dead of night is the HUD's resting state.
  */
 export const WATCHES = [
-  { key: "night", tint: "#6b86d6", tint2: "#1a2233", glow: "rgba(120,150,225,.5)", soft: "rgba(120,150,225,.18)" },
+  { key: "night", tint: PALETTE.accent, tint2: "#1a2233", glow: "rgba(120,150,225,.5)", soft: "rgba(120,150,225,.18)" },
   { key: "dawn",  tint: "#e0a368", tint2: "#2f2316", glow: "rgba(230,170,100,.5)", soft: "rgba(230,170,100,.18)" },
   { key: "day",   tint: "#6fb8d8", tint2: "#162a36", glow: "rgba(110,184,216,.5)", soft: "rgba(110,184,216,.18)" },
   { key: "dusk",  tint: "#b884d0", tint2: "#241430", glow: "rgba(184,132,208,.5)", soft: "rgba(184,132,208,.18)" }
 ];
+
+/**
+ * Fallback tints for GM-editable preset records (weather effects, delving
+ * hazards, support factions). The records themselves are world data and may
+ * carry any colour the GM picks; these are only what we paint when a record
+ * omits one. They were previously repeated as literals across ~20 call sites in
+ * hud.js / weather-hud.js / weather-editor.js / support-hud.js, so a change had
+ * to be made in twenty places to take effect.
+ */
+export const FALLBACK_TINTS = Object.freeze({
+  weather: Object.freeze({ tint: "#cfe8ff", glow: "#7fb4e6" }),
+  weatherTile: Object.freeze({ tint: "#3a4250", glow: "#7fb4e6" }),
+  delving: Object.freeze({ tint: "#ff9a3c", glow: "#ffd27a" }),
+  support: Object.freeze({ accent: "#e0a368" }),
+  neutral: Object.freeze({ tint: "#9aa3b0", glow: "#9aa3b0" }),
+});
+
+/**
+ * The "signal lost" palette pinned while the HUD is glitching. Cold cyan on
+ * near-black with a violet bloom — deliberately off the per-shift ramp so the
+ * fault state reads as a different system, not a different time of day.
+ */
+export const GLITCH_PALETTE = Object.freeze({
+  tint: PALETTE.cyanHot,
+  tint2: "#0a0d16",
+  glow: withAlpha(PALETTE.cyanHot, 0.5),
+  soft: withAlpha(PALETTE.violet, 0.24),
+});
 
 /** Default watch display names (overridable per world). */
 export const DEFAULT_SHIFT_NAMES = ["Night Watch", "Dawn Watch", "Day Watch", "Dusk Watch"];

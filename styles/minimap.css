@@ -7,8 +7,8 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 .glmm {
-  --gl-accent: #5eeaff;
-  --glmm-party: #ffd24a;
+  --gl-accent: var(--gl-cyan);
+  --glmm-party: var(--gl-signal);
   /* Calmer motion aliases — everything eases, nothing snaps. */
   --glmm-morph: 640ms;
   --glmm-soft: var(--gl-ease);
@@ -30,8 +30,8 @@
   min-width: 0;
   min-height: 0;
   filter:
-    drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6))
-    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4))
+    drop-shadow(0 20px 40px rgb(var(--gl-tint-dark) / 0.6))
+    drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / 0.4))
     drop-shadow(0 0 26px var(--gl-bloom));
   transition: filter 600ms var(--gl-ease);
 }
@@ -47,7 +47,7 @@
   /* The defining glow during a broadcast is the liquid-glass rim (below); keep
      the outer drop-shadow a soft ambient lift rather than a competing halo. */
   filter:
-    drop-shadow(0 22px 46px rgba(0, 0, 0, 0.62))
+    drop-shadow(0 22px 46px rgb(var(--gl-tint-dark) / 0.62))
     drop-shadow(0 0 30px var(--gl-bloom));
 }
 
@@ -88,7 +88,7 @@
   height: 1px;
   z-index: 6;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55));
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.55));
   transform-origin: 100% 0;
   transform: rotate(45deg) translateX(1px);
   opacity: 0.5;
@@ -102,7 +102,7 @@
   width: 42%;
   z-index: 4;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  background: linear-gradient(100deg, transparent, rgb(var(--gl-tint-light) / 0.16), transparent);
   transform: translateX(-180%) skewX(-12deg);
   opacity: 0;
 }
@@ -150,7 +150,7 @@
   padding: 4px 5px 4px 9px;
   cursor: grab;
   border-bottom: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.07), transparent);
   user-select: none;
 }
 .glmm-vchrome:active { cursor: grabbing; }
@@ -237,7 +237,7 @@
   overflow-y: auto;
   padding: 8px 8px 10px;
   border-left: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.24), transparent);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.24), transparent);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--gl-cyan) 40%, transparent) transparent;
   animation: gl-cascade var(--gl-d-move) var(--gl-ease) both;
@@ -304,8 +304,8 @@
   border-radius: 999px;
   cursor: pointer;
   backdrop-filter: blur(8px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  animation: gl-slot-pop var(--gl-d-move) var(--gl-pop) both;
+  box-shadow: 0 4px 14px rgb(var(--gl-tint-dark) / 0.4);
+  animation: gl-pop-in var(--gl-d-move) var(--gl-pop) both;
 }
 .glmm-freelook:hover { border-color: var(--gl-cyan); box-shadow: 0 0 14px var(--gl-bloom); }
 .glmm-pending {
@@ -387,7 +387,7 @@
   font-size: 24px;
   font-weight: 600;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.55);
+  stroke: rgb(var(--gl-tint-dark) / 0.55);
   stroke-width: 4px;
   pointer-events: none;
 }
@@ -410,7 +410,7 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.6);
+  stroke: rgb(var(--gl-tint-dark) / 0.6);
   stroke-width: 5px;
   transition: fill var(--gl-d-move) var(--gl-ease);
 }
@@ -435,7 +435,7 @@
   font-family: var(--gl-tech);
   font-size: 18px;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.6);
+  stroke: rgb(var(--gl-tint-dark) / 0.6);
   stroke-width: 4px;
 }
 
@@ -444,7 +444,7 @@
   fill: var(--c);
   stroke: #fff;
   stroke-width: 2.5;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 2px 4px rgb(var(--gl-tint-dark) / 0.6));
   transition: fill var(--gl-d-move) var(--gl-ease);
 }
 .glmm-marker-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.5; }
@@ -455,7 +455,7 @@
   font-size: 20px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.65);
+  stroke: rgb(var(--gl-tint-dark) / 0.65);
   stroke-width: 4.5px;
   pointer-events: none;
 }
@@ -477,7 +477,7 @@
 }
 .glmm-party-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.55; animation: glmm-self 3.1s var(--gl-ease) infinite; }
 .glmm-party .glmm-marker-halo { fill: var(--c); opacity: 0.14; }
-.glmm-party-glyph { color: var(--c); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
+.glmm-party-glyph { color: var(--c); filter: drop-shadow(0 1px 2px rgb(var(--gl-tint-dark) / 0.6)); }
 
 /* ───────────────────────────────── FX ────────────────────────────────── */
 
@@ -490,7 +490,7 @@
   font-family: var(--gl-tech);
   font-size: 22px;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.7);
+  stroke: rgb(var(--gl-tint-dark) / 0.7);
   stroke-width: 5px;
   opacity: 0;
   animation: glmm-pingname 2.6s var(--gl-ease) forwards;
@@ -514,7 +514,7 @@
 }
 .glmm-trail.is-in { opacity: 0.85; animation: glmm-trail 2s linear forwards; }
 
-.glmm-enter { animation: glmm-enter 760ms var(--gl-pop) both; animation-delay: var(--gl-delay, 0ms); transform-box: fill-box; transform-origin: center; }
+.glmm-enter { animation: glmm-enter 760ms var(--gl-pop) both; animation-delay: var(--glmm-delay, 0ms); transform-box: fill-box; transform-origin: center; }
 .glmm-leave { animation: glmm-leave 760ms var(--gl-exit) both; transform-box: fill-box; transform-origin: center; }
 .glmm-changed .glmm-room-shape,
 .glmm-changed .glmm-marker-dot,
@@ -531,7 +531,7 @@
   background: color-mix(in srgb, var(--gl-ink-1) 92%, transparent);
   border: 1px solid var(--gl-edge);
   border-radius: 9px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 22px rgb(var(--gl-tint-dark) / 0.5), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1);
   backdrop-filter: blur(10px);
   color: var(--gl-text);
   font-size: 11.5px;
@@ -570,8 +570,8 @@
   overflow-y: auto;
   padding: 10px;
   gap: 6px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 22%), linear-gradient(160deg, rgba(94, 234, 255, 0.04), transparent 60%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.03), transparent 22%), linear-gradient(160deg, rgba(94, 234, 255, 0.04), transparent 60%);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05);
 }
 .glmm-st-libhead {
   display: flex;
@@ -601,10 +601,10 @@
   padding: 5px 7px;
   border: 1px solid transparent;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--gl-tint-light) / 0.02);
   transition: border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-.glmm-st-maprow:hover { background: rgba(255, 255, 255, 0.05); }
+.glmm-st-maprow:hover { background: rgb(var(--gl-tint-light) / 0.05); }
 .glmm-st-maprow.is-editing { border-color: var(--gl-edge); background: color-mix(in srgb, var(--gl-cyan) 8%, transparent); }
 .glmm-st-maprow.is-active { box-shadow: inset 3px 0 0 var(--gl-good); }
 .glmm-st-mapname {
@@ -640,7 +640,7 @@
   font-size: 10.5px;
   transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-.glmm-icobtn:hover { color: var(--gl-text-bright); background: rgba(255, 255, 255, 0.08); }
+.glmm-icobtn:hover { color: var(--gl-text-bright); background: rgb(var(--gl-tint-light) / 0.08); }
 .glmm-icobtn.is-danger:hover { color: var(--gl-hazard); background: color-mix(in srgb, var(--gl-hazard) 16%, transparent); }
 
 .glmm-st-viewmode { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--gl-hair); display: flex; flex-direction: column; gap: 5px; }
@@ -657,8 +657,8 @@
   gap: 6px 8px;
   padding: 6px 9px;
   border-bottom: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), transparent);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06);
 }
 .glmm-st-tb-left { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
 .glmm-st-tools { display: flex; gap: 3px; }
@@ -667,7 +667,7 @@
   display: grid; place-items: center;
   width: 28px; height: 28px;
   border: 1px solid var(--gl-edge); border-radius: 7px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.16)), var(--gl-ink-2);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-dark) / 0.16)), var(--gl-ink-2);
   color: var(--gl-text-dim); cursor: pointer;
   font-size: 12px;
   transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
@@ -723,8 +723,8 @@
   z-index: 8;
   pointer-events: none;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 0 44px -18px rgba(0, 0, 0, 0.55);
+    inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.05),
+    inset 0 0 44px -18px rgb(var(--gl-tint-dark) / 0.55);
 }
 
 .glmm-st-statusbar {
@@ -775,8 +775,8 @@
   border-left: 1px solid var(--gl-hair);
   overflow-y: auto;
   padding: 10px 11px 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 26%), linear-gradient(200deg, rgba(94, 234, 255, 0.03), transparent 55%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.2), transparent 26%), linear-gradient(200deg, rgba(94, 234, 255, 0.03), transparent 55%);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05);
 }
 .glmm-prop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .glmm-prop-title { font-weight: 700; font-size: 13.5px; color: var(--gl-text-bright); letter-spacing: 0.02em; }
@@ -794,11 +794,11 @@
   width: 21px; height: 21px;
   border: 2px solid transparent; border-radius: 6px;
   cursor: pointer; padding: 0;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.4);
   transition: transform var(--gl-d-quick) var(--gl-snap), border-color var(--gl-d-quick) var(--gl-ease);
 }
 .glmm-swatch:hover { transform: scale(1.12); }
-.glmm-swatch.is-on { border-color: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
+.glmm-swatch.is-on { border-color: #fff; box-shadow: 0 0 10px rgb(var(--gl-tint-light) / 0.5); }
 .glmm-swatch-custom { width: 25px; height: 23px; padding: 0; border: 1px solid var(--gl-edge); border-radius: 6px; background: var(--gl-ink-2); cursor: pointer; }
 
 .glmm-iconpick {
@@ -820,7 +820,7 @@
   font-size: 13px;
   transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-.glmm-iconpick-b:hover { color: var(--gl-text-bright); background: rgba(255, 255, 255, 0.08); }
+.glmm-iconpick-b:hover { color: var(--gl-text-bright); background: rgb(var(--gl-tint-light) / 0.08); }
 .glmm-iconpick-b.is-on { color: var(--gl-ink-0); background: var(--gl-cyan); }
 .glmm-iconfree { width: 100%; margin-top: 6px; font-family: var(--gl-tech); font-size: 11px; }
 

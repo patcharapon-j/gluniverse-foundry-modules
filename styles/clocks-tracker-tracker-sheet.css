@@ -16,19 +16,19 @@
    sheet's light/dark theme — mirrors the floating dock's backing. */
 .glct-trk-skin .glct-trk-sheet{
   margin:8px;border-radius:11px;overflow:hidden;isolation:isolate;position:relative;
-  background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 30%),
-    linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.22)),linear-gradient(160deg,#161d2c,#080b11 72%);
+  background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .10),rgb(var(--gl-tint-light) / 0) 30%),
+    linear-gradient(180deg,rgb(var(--gl-tint-light) / .02),rgb(var(--gl-tint-dark) / .22)),linear-gradient(160deg,var(--gl-ink-3),var(--gl-ink-1) 72%);
   border:1px solid var(--edge);
-  box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);
-  color:var(--ink);font:14px/1.45 "Oxanium","Segoe UI",system-ui,sans-serif}
+  box-shadow:0 14px 40px rgb(var(--gl-tint-dark) / .5),inset 0 1px 0 rgb(var(--gl-tint-light) / .12);
+  color:var(--ink);font:14px/1.45 var(--gl-display)}
 
 .glct-trk-skin .ts-head{display:flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 10px;
   border-bottom:1px solid var(--hair);position:relative;z-index:5}
 .glct-trk-skin .ts-title{flex:1;font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#7c869c;font-weight:700}
 .glct-trk-skin .ts-count{font-size:9.5px;color:#5b6478;font-variant-numeric:tabular-nums}
 .glct-trk-skin .ts-add{width:17px;height:17px;border:none;border-radius:4px;cursor:pointer;display:grid;place-items:center;
-  background:rgba(255,255,255,.07);color:#aab4c8;font-size:12px;line-height:1;transition:.15s}
-.glct-trk-skin .ts-add:hover{background:rgba(255,255,255,.16);color:#fff}
+  background:rgb(var(--gl-tint-light) / .07);color:#aab4c8;font-size:12px;line-height:1;transition:.15s}
+.glct-trk-skin .ts-add:hover{background:rgb(var(--gl-tint-light) / .16);color:#fff}
 
 .glct-trk-skin .ts-rows{display:flex;flex-direction:column}
 .glct-trk-skin .ts-empty{padding:14px 12px;text-align:center;color:#5b6478;font-size:10px;line-height:1.5}
@@ -38,8 +38,8 @@
   opacity:0;transition:opacity .15s;flex:none}
 .glct-trk-skin .ts-rows .trow:hover .trk-tools{opacity:1}
 .glct-trk-skin .trk-tools .tk-btn{width:18px;height:18px;border:none;border-radius:4px;cursor:pointer;
-  display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9aa4b8;font-size:9px;line-height:1;transition:.12s;padding:0}
-.glct-trk-skin .trk-tools .tk-btn:hover{background:rgba(255,255,255,.14);color:var(--gl-signal)}
+  display:grid;place-items:center;background:rgb(var(--gl-tint-light) / .06);color:#9aa4b8;font-size:9px;line-height:1;transition:.12s;padding:0}
+.glct-trk-skin .trk-tools .tk-btn:hover{background:rgb(var(--gl-tint-light) / .14);color:var(--gl-signal)}
 .glct-trk-skin .trk-tools .tk-btn.danger:hover{background:color-mix(in srgb,var(--gl-hazard) 18%,transparent);color:#ffd9d4}
 
 /* Injected nav button — inherit the sheet's nav sizing; just tint our glyph so

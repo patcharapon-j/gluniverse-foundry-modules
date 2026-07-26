@@ -27,20 +27,29 @@ scripts/
     suite-config-app.mjs    The "Control Center" — single grouped settings UI
     socket.mjs              One multiplexed socket channel (payloads feature-tagged)
     migration.mjs           One-time import from the old standalone modules
+    theme.mjs               JS side of the design system: palette mirror, colour
+                            maths, motion tiers, retheme hook (canvas/PIXI only)
     util.mjs                Shared pure helpers (clamp/toInt/hex6/escapeHTML/…)
   features/
     index.mjs               Imports every adapter (import order = UI order)
     <featureId>/index.mjs   Adapter: Suite.register({...}) + the ported code
 styles/
-  gl-tokens.css             CANONICAL design system: tokens, keyframes, utilities
+  gl-fonts.css              The ONLY @font-face declarations in the suite
+  gl-tokens.css             CANONICAL design system: tokens + utilities
+  gl-motion.css             CANONICAL keyframe pool + .gl-anim-* utilities
   <featureId>.css           Per-feature styles (may be several per feature)
 lang/
   en.json + <featureId>.en.json   Merged by Foundry; keep namespaces distinct
 templates/<featureId>/      Handlebars templates
+assets/fonts/               Bundled typefaces (Oxanium, JetBrains Mono)
 assets/<featureId>/         Images, sounds
+docs/DESIGN_SYSTEM.md       The token pool, the theme contract, retheming
 docs/FEATURE_CONTRACT.md    Binding contract for porting/adding a feature
 docs/PORTING_GUIDE.md       How a standalone module was migrated in
 ```
+
+The three `gl-*.css` files load first, in that order, so every feature sheet can
+assume the tokens exist.
 
 ### Lifecycle (`scripts/main.mjs`)
 
@@ -71,16 +80,32 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
   silently when a value's key is missing. When you add to an enum/archetype set,
   add the matching lang keys. Do NOT localize stored data values or
   parse/format vocabulary (e.g. statsblock parsing tokens).
-- **CSS** — `styles/gl-tokens.css` is the single source of truth for the design
-  system. Use the `--gl-*` tokens, `.gl-glass`/`.gl-btn`/`.gl-field`/`.gl-well`
-  utilities, semantic `--gl-surface*` tokens, and `gl-*` keyframes. Don't redefine tokens locally; derive from them if you need an
-  alias. Keep each feature's existing unique class prefix.
+- **CSS** — read `docs/DESIGN_SYSTEM.md`. Etched Glass is the suite's ONLY
+  theme; `styles/gl-tokens.css` is the single source of truth and
+  `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
+  the `.gl-*` utilities. The non-negotiables:
+  - Never redeclare a foundation token outside `gl-tokens.css`. Custom
+    properties are global — a feature setting `--gl-cut` on `:root` repaints
+    every feature loaded after it. Give feature-local values a feature prefix.
+  - Route identity through `--gl-accent` on a scoped selector; everything
+    derived follows. Don't hardcode a hue you could route through it.
+  - Veils come from a tint channel (`rgb(var(--gl-tint-light) / 0.06)`) or a
+    semantic token — never a raw `rgba(255,255,255,…)`.
+  - No raw durations or easings; no `@font-face`; no network `@import`.
+  - `@keyframes` names are GLOBAL. Reuse the pool, or prefix your own —
+    a bare `gl-` name silently overrides another feature's animation.
+  - Keep each feature's existing unique class prefix.
 - **Motion** — the suite does NOT honor the OS `prefers-reduced-motion`
   preference; animations always play so visuals are consistent for every user
   regardless of their PC settings. Do not add `@media (prefers-reduced-motion)`
   blocks or `matchMedia("(prefers-reduced-motion: reduce)")` checks. (Loot Gen,
   Destiny Dice and Statsblock Import keep their in-app "motion tier" setting,
-  which is an explicit user choice, not an OS preference.)
+  which is an explicit user choice, not an OS preference — implemented via
+  `applyMotionTier()` in `core/theme.mjs`, which sets `--gl-motion-scale`.)
+- **Colour in JS** — PIXI/WebGL/canvas can't read CSS variables, so
+  `scripts/core/theme.mjs` holds the palette mirror plus colour maths
+  (`hexToRgbFloat`, `mix`, `withAlpha`, `cssVar`). Import from it; never
+  hardcode a suite colour in JS. Keep the mirror in sync with `gl-tokens.css`.
 - **Shared helpers** — reach for `scripts/core/util.mjs` before re-declaring
   clamp/integer-coercion/hex-validation/HTML-escape. Keep that module
   dependency-free and side-effect-free.
@@ -89,19 +114,40 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
 
 ## Validation
 
-No package.json / CI build. Validate manually before committing:
+No package.json / CI build. Validate manually before committing. Node is the
+only interpreter you can count on here (there is no `python3` on the dev box):
 
 ```bash
-# JS/MJS syntax — every script must pass
 find scripts -name '*.mjs' -o -name '*.js' | xargs -I{} node --check {}
-
-# JSON validity — module.json + every lang file
-for f in module.json lang/*.json; do python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$f"; done
 ```
 
-When touching localization, also sanity-check that referenced keys resolve and
-that `module.json`'s `styles`/`languages`/`esmodules` lists still point at files
-that exist.
+```bash
+node -e "const fs=require('fs');for(const f of ['module.json',...fs.readdirSync('lang').map(x=>'lang/'+x)])JSON.parse(fs.readFileSync(f,'utf8'));console.log('JSON OK')"
+```
+
+Every path listed in `module.json` must still resolve:
+
+```bash
+node -e "const fs=require('fs'),m=require('./module.json');let n=0;for(const p of [...m.styles,...m.esmodules,...m.languages.map(l=>l.path)])if(!fs.existsSync(p)){console.log('MISSING '+p);n++}console.log(n?n+' missing':'all paths OK')"
+```
+
+When touching localization, also sanity-check that referenced keys resolve —
+especially keys built dynamically at runtime.
+
+**When touching CSS**, additionally confirm you have not reintroduced any of the
+drift this design system exists to prevent — a raw hex that duplicates a token,
+a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
+duplicate `gl-*` `@keyframes`, a foundation token redeclared outside
+`gl-tokens.css`, or a self-referential custom property (`--x: var(--x)`, which
+is invalid and silently does nothing):
+
+```bash
+grep -rnE "^\s*@(import url\(['\"]?http|font-face)" styles/ | grep -v gl-fonts.css
+```
+
+```bash
+grep -rhoE '@keyframes\s+gl-[A-Za-z0-9_-]+' styles/ | sort | uniq -d
+```
 
 ## Don't
 
