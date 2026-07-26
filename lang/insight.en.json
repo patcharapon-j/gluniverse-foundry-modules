@@ -1,8 +1,8 @@
 {
   "INSIGHT.ModuleTitle": "Gluniverse Insight",
 
-  "INSIGHT.SettingTheme": "Notification Theme",
-  "INSIGHT.SettingThemeHint": "Visual theme for Insight notifications.",
+  "INSIGHT.SettingTheme": "Notification Accent",
+  "INSIGHT.SettingThemeHint": "Accent colour and sound profile for Insight notifications. Both use the shared Etched Glass material.",
   "INSIGHT.ThemeDreadlight": "Dreadlight",
   "INSIGHT.ThemeFantasy": "Fantasy",
 

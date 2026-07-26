@@ -1,3 +1,4 @@
+import { applyMotionTier as applySuiteMotionTier } from "../../core/theme.mjs";
 import {
   FACE_NUMBERS,
   FATE_KINDS,
@@ -412,12 +413,20 @@ function accentRule(selector, color) {
   return `${selector} { --gl-accent: ${color}; }`;
 }
 
-// Applies the motion-tier setting as a body class (§6.4).
+// Applies the motion-tier setting (§6.4).
+//
+// Two effects, deliberately separate:
+//   • `--gl-motion-scale` — the shared multiplier every duration token in
+//     gl-tokens.css is derived through, so the tier retimes animations without
+//     this feature owning a duration table. Delegated to core/theme.mjs.
+//   • the `glddf-motion-*` body class — for the non-duration parts of a tier
+//     (which effects run at all, glow intensity), which are feature-specific.
 export function applyMotionTier() {
   if (typeof document === "undefined" || !document.body) return;
   const tier = MOTION_TIERS.includes(getSetting(SETTINGS.motionTier))
     ? getSetting(SETTINGS.motionTier)
     : MOTION_TIER_DEFAULT;
+  applySuiteMotionTier(tier);
   for (const candidate of MOTION_TIERS) {
     document.body.classList.toggle(`glddf-motion-${candidate}`, candidate === tier);
   }

@@ -53,8 +53,12 @@
   --glucargo-d-splash: var(--gl-d-reveal);
 
   /* Chamfer cut size + radii. Large glass keeps soft radii on three
-     corners and takes the diagonal cut on one (§4.1). */
-  --gl-cut: 14px;
+     corners and takes the diagonal cut on one (§4.1).
+     Feature-local: this used to redefine the foundation's `--gl-cut` on :root,
+     which silently widened the chamfer from 12px to 14px for EVERY feature
+     downstream (.gl-glass, etched-chat, tidy5e-slots) because this sheet loads
+     after gl-tokens.css. Cargo Grid's larger cut is now its own token. */
+  --glucargo-cut: 14px;
   --glucargo-r-lg: 15px;
   --glucargo-r-md: 11px;
   --glucargo-r-sm: 8px;
@@ -100,9 +104,9 @@
     linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 14%, transparent), color-mix(in srgb, var(--gl-accent) 4%, transparent)),
     var(--glucargo-ink);
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.5),
+    0 4px 16px rgb(var(--gl-tint-dark) / 0.5),
     0 0 12px color-mix(in srgb, var(--gl-accent) 8%, transparent),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.04);
   cursor: pointer;
   transition: transform var(--glucargo-d-quick) var(--glucargo-ease), box-shadow var(--glucargo-d-quick) var(--glucargo-ease);
   overflow: hidden;
@@ -122,9 +126,9 @@
 .glucargo-fab:hover {
   transform: translateX(-50%) translateY(2px);
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 8px 24px rgb(var(--gl-tint-dark) / 0.6),
     0 0 20px color-mix(in srgb, var(--gl-accent) 16%, transparent),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.06);
   border-bottom-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
 }
 
@@ -159,23 +163,23 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.22)),
-    linear-gradient(150deg, #161d2c, #080b11 72%);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-light) / 0) 30%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.22)),
+    linear-gradient(150deg, var(--gl-ink-3), var(--gl-ink-1) 72%);
   border: 1px solid var(--glucargo-line);
   /* Inset light catch / depth stay in box-shadow; the far drop + accent
      bloom move to filter so they follow the chamfer silhouette (clip-path
      clips box-shadows but filters apply post-clip — §9.1). */
   box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -14px 30px rgba(0, 0, 0, 0.34);
+    0 2px 0 rgb(var(--gl-tint-dark) / 0.4),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -14px 30px rgb(var(--gl-tint-dark) / 0.34);
   border-radius: var(--glucargo-r-lg);
   /* One cut corner — the family signature (§4.1). Soft radii on three
      corners, a diagonal chamfer on the top-right. */
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--glucargo-cut)) 0, 100% var(--glucargo-cut), 100% 100%, 0 100%);
   filter:
-    drop-shadow(0 30px 80px rgba(0, 0, 0, 0.62))
+    drop-shadow(0 30px 80px rgb(var(--gl-tint-dark) / 0.62))
     drop-shadow(0 0 24px var(--glucargo-glow-soft));
   backdrop-filter: blur(16px) saturate(1.15);
   contain: layout style;
@@ -192,7 +196,7 @@
 }
 
 .glucargo-window.is-dragging {
-  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 18px 36px rgb(var(--gl-tint-dark) / 0.5));
 }
 
 .glucargo-window::before {
@@ -200,8 +204,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(120% 60% at 20% 0%, rgba(255, 255, 255, 0.05), transparent 50%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 36%, rgba(0, 0, 0, 0.10) 100%);
+    radial-gradient(120% 60% at 20% 0%, rgb(var(--gl-tint-light) / 0.05), transparent 50%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02) 0%, transparent 36%, rgb(var(--gl-tint-dark) / 0.10) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -211,9 +215,9 @@
 .glucargo-window::after {
   content: "";
   position: absolute;
-  top: calc(var(--gl-cut) * 0.5);
-  right: calc(var(--gl-cut) * -0.207);
-  width: calc(var(--gl-cut) * 1.414);
+  top: calc(var(--glucargo-cut) * 0.5);
+  right: calc(var(--glucargo-cut) * -0.207);
+  width: calc(var(--glucargo-cut) * 1.414);
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 85%, #fff) 55%, transparent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 60%, transparent);
@@ -251,11 +255,11 @@
     linear-gradient(180deg, rgba(18, 34, 46, 0.96), rgba(2, 7, 11, 0.98));
   border: 1px solid color-mix(in srgb, var(--gl-accent) 34%, transparent);
   box-shadow:
-    0 22px 60px rgba(0, 0, 0, 0.68),
-    0 0 0 1px rgba(0, 0, 0, 0.70),
+    0 22px 60px rgb(var(--gl-tint-dark) / 0.68),
+    0 0 0 1px rgb(var(--gl-tint-dark) / 0.70),
     0 0 24px color-mix(in srgb, var(--gl-accent) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.72);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.72);
   border-radius: var(--glucargo-r-md);
   backdrop-filter: blur(14px) saturate(1.12);
 }
@@ -271,13 +275,13 @@
 .glucargo-minimap::before {
   background:
     linear-gradient(90deg, transparent 0 10px, color-mix(in srgb, var(--gl-accent) 48%, transparent) 10px 34px, transparent 34px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 42%, rgba(0, 0, 0, 0.18));
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.055), transparent 42%, rgb(var(--gl-tint-dark) / 0.18));
   opacity: 0.72;
 }
 
 .glucargo-minimap::after {
   inset: 1px;
-  border: 1px solid rgba(255, 255, 255, 0.045);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.045);
   border-radius: 10px;
 }
 
@@ -297,7 +301,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--gl-accent) 18%, transparent);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 22%, transparent), transparent 54%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.055), transparent),
     rgba(2, 7, 11, 0.74);
   cursor: grab;
 }
@@ -332,7 +336,7 @@
   padding: 0;
   border: 0;
   color: var(--glucargo-muted);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgb(var(--gl-tint-light) / 0.035);
   font-size: 10px;
   cursor: pointer;
   border-radius: 4px;
@@ -351,7 +355,7 @@
   padding: 10px;
   background:
     radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--gl-accent) 8%, transparent), transparent 62%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 36%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.035), transparent 36%),
     rgba(4, 10, 15, 0.96);
 }
 
@@ -364,13 +368,13 @@
   height: calc(var(--glucargo-rows) * var(--glucargo-mini-cell));
   isolation: isolate;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 30%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.05), transparent 30%),
     rgba(4, 9, 13, 0.98);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--gl-accent) 22%, transparent),
-    0 0 0 2px rgba(0, 0, 0, 0.72),
-    0 8px 20px rgba(0, 0, 0, 0.36),
-    inset 0 0 12px rgba(0, 0, 0, 0.58);
+    0 0 0 2px rgb(var(--gl-tint-dark) / 0.72),
+    0 8px 20px rgb(var(--gl-tint-dark) / 0.36),
+    inset 0 0 12px rgb(var(--gl-tint-dark) / 0.58);
 }
 
 .glucargo-minimap__grid::before,
@@ -392,8 +396,8 @@
 
 .glucargo-minimap__grid::after {
   background:
-    radial-gradient(120% 110% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.28)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 16%, transparent 84%, rgba(0, 0, 0, 0.22));
+    radial-gradient(120% 110% at 50% 50%, transparent 58%, rgb(var(--gl-tint-dark) / 0.28)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 16%, transparent 84%, rgb(var(--gl-tint-dark) / 0.22));
 }
 
 .glucargo-minimap__cell,
@@ -408,11 +412,11 @@
 .glucargo-minimap__cell {
   border: 1px solid rgba(80, 110, 140, 0.18);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 42%, rgba(0, 0, 0, 0.10)),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.045), transparent 42%, rgb(var(--gl-tint-dark) / 0.10)),
     rgba(8, 16, 22, 0.88);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.025),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.20);
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.025),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.20);
 }
 
 .glucargo-minimap__cell.is-broken {
@@ -428,13 +432,13 @@
   position: relative;
   border: 1px solid rgba(1, 6, 10, 0.92);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.30), transparent 28%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.26), transparent 44%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.30), transparent 28%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.26), transparent 44%),
     color-mix(in srgb, var(--cargo-accent) 66%, #111d26);
   box-shadow:
-    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 50%, rgba(255, 255, 255, 0.22)),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.48),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.18),
+    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 50%, rgb(var(--gl-tint-light) / 0.22)),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.48),
+    inset 0 -3px 6px rgb(var(--gl-tint-dark) / 0.18),
     0 0 8px color-mix(in srgb, var(--cargo-accent) 22%, transparent);
 }
 
@@ -442,7 +446,7 @@
   content: "";
   position: absolute;
   inset: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.10);
   opacity: 0.68;
   pointer-events: none;
 }
@@ -454,20 +458,20 @@
 
 .glucargo-minimap__tile.priority-high {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 28%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.24), transparent 44%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.34), transparent 28%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.24), transparent 44%),
     color-mix(in srgb, var(--cargo-accent) 48%, var(--glucargo-amber));
 }
 
 .glucargo-minimap__tile.priority-critical {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 28%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.24), transparent 44%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.36), transparent 28%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.24), transparent 44%),
     color-mix(in srgb, var(--cargo-accent) 50%, var(--glucargo-red));
   box-shadow:
-    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 50%, rgba(255, 255, 255, 0.22)),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.48),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.18),
+    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 50%, rgb(var(--gl-tint-light) / 0.22)),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.48),
+    inset 0 -3px 6px rgb(var(--gl-tint-dark) / 0.18),
     0 0 10px color-mix(in srgb, var(--gl-hazard) 24%, transparent);
 }
 
@@ -483,7 +487,7 @@
   border-bottom: 1px solid var(--glucargo-line);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 12%, transparent), transparent 46%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 60%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), transparent 60%),
     rgba(10, 14, 21, 0.55);
   cursor: grab;
   overflow: hidden;
@@ -508,7 +512,7 @@
   position: absolute;
   inset: 0;
   width: 40%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.07) 50%, transparent);
+  background: linear-gradient(100deg, transparent, rgb(var(--gl-tint-light) / 0.07) 50%, transparent);
   transform: translateX(-160%) skewX(-14deg);
   pointer-events: none;
   animation: glucargo-titlebar-sweep 7s var(--glucargo-ease) infinite;
@@ -537,7 +541,7 @@
   clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
   box-shadow:
     0 0 16px color-mix(in srgb, var(--gl-accent) 40%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3);
   font-size: 13px;
   animation: glucargo-brand-breathe var(--gl-breathe) ease-in-out infinite;
 }
@@ -559,7 +563,7 @@
   white-space: nowrap;
   text-shadow:
     0 0 12px color-mix(in srgb, var(--gl-accent) 20%, transparent),
-    0 2px 6px rgba(0, 0, 0, 0.8);
+    0 2px 6px rgb(var(--gl-tint-dark) / 0.8);
 }
 
 .glucargo-brand span,
@@ -624,7 +628,7 @@
 .glucargo-window input {
   border: 1px solid var(--glucargo-line);
   color: var(--glucargo-text);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--gl-tint-light) / 0.05);
 }
 
 .glucargo-window :where(button) {
@@ -659,7 +663,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0%, transparent 30%);
+  background: linear-gradient(115deg, rgb(var(--gl-tint-light) / 0.08) 0%, transparent 30%);
   pointer-events: none;
   opacity: 0;
   transition: opacity 150ms var(--glucargo-ease);
@@ -727,7 +731,7 @@
 
 .glucargo-chip.is-on {
   color: var(--glucargo-ink);
-  background: linear-gradient(90deg, var(--glucargo-green), #4ad9c0);
+  background: linear-gradient(90deg, var(--glucargo-green), var(--gl-teal));
   border-color: transparent;
   box-shadow: 0 0 14px rgba(87, 224, 139, 0.22);
 }
@@ -786,16 +790,16 @@
   position: relative;
   min-height: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 32%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-light) / 0) 32%),
     var(--glucargo-panel);
   border: 1px solid var(--glucargo-line);
   border-radius: var(--glucargo-r-md);
   /* Chamfered top-right — the cut corner signature on panel glass (§4.1). */
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -10px 22px rgba(0, 0, 0, 0.28),
-    0 10px 26px rgba(0, 0, 0, 0.22);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
+    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.28),
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.22);
 }
 
 /* L-bracket registration mark, top-left corner (§4.2) */
@@ -893,11 +897,11 @@
   /* Card silhouette — full notch on the top-right (§4.1) */
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 36%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 36%),
     linear-gradient(160deg, rgba(28, 37, 56, 0.9), rgba(8, 11, 17, 0.95));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.4);
   transition: border-color var(--glucargo-d-quick) var(--glucargo-ease), box-shadow var(--glucargo-d-quick) var(--glucargo-ease), transform var(--glucargo-d-quick) var(--glucargo-ease);
   overflow: hidden;
 }
@@ -977,7 +981,7 @@
     linear-gradient(180deg, rgba(13, 24, 34, 0.9), rgba(4, 8, 12, 0.95));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 12%, transparent),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.4),
     0 0 20px color-mix(in srgb, var(--gl-accent) 8%, transparent);
 }
 
@@ -1009,7 +1013,7 @@
   display: block;
   height: 3px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--gl-tint-light) / 0.06);
   margin-top: 2px;
   position: relative;
 }
@@ -1099,7 +1103,7 @@
   white-space: nowrap;
   text-shadow:
     0 0 14px color-mix(in srgb, var(--gl-accent) 14%, transparent),
-    0 2px 6px rgba(0, 0, 0, 0.7);
+    0 2px 6px rgb(var(--gl-tint-dark) / 0.7);
 }
 
 /* ─── Grid Wrap — Metallic Bay ──────────────────────────────────────── */
@@ -1111,13 +1115,13 @@
   overflow: auto;
   padding: 16px;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.14), transparent 10%, transparent 90%, rgba(0, 0, 0, 0.14)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.10), transparent 10%, transparent 90%, rgba(0, 0, 0, 0.10)),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.015), transparent 50%),
+    linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.14), transparent 10%, transparent 90%, rgb(var(--gl-tint-dark) / 0.14)),
+    linear-gradient(90deg, rgb(var(--gl-tint-dark) / 0.10), transparent 10%, transparent 90%, rgb(var(--gl-tint-dark) / 0.10)),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.015), transparent 50%),
     rgba(6, 12, 18, 0.92);
   border: 1px solid var(--glucargo-metal-mid);
   border-radius: var(--glucargo-r-sm);
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 2px 10px rgb(var(--gl-tint-dark) / 0.34);
 }
 
 .glucargo-grid {
@@ -1131,8 +1135,8 @@
   box-shadow:
     0 0 0 2px var(--glucargo-metal-mid),
     0 0 0 3px var(--glucargo-metal-lo),
-    0 12px 40px rgba(0, 0, 0, 0.4),
-    inset 0 0 16px rgba(0, 0, 0, 0.2);
+    0 12px 40px rgb(var(--gl-tint-dark) / 0.4),
+    inset 0 0 16px rgb(var(--gl-tint-dark) / 0.2);
   contain: layout paint;
 }
 
@@ -1152,13 +1156,13 @@
     var(--glucargo-metal-lo)
     var(--glucargo-metal-hi);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, transparent 40%, rgba(0, 0, 0, 0.10) 100%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.03) 0%, transparent 40%, rgb(var(--gl-tint-dark) / 0.10) 100%),
     rgba(6, 12, 18, 0.96);
   border-radius: 0;
   overflow: hidden;
   box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+    inset 0 1px 3px rgb(var(--gl-tint-dark) / 0.5),
+    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.02);
   transition: background var(--glucargo-d-quick) var(--glucargo-ease), box-shadow var(--glucargo-d-quick) var(--glucargo-ease);
   contain: layout paint style;
 }
@@ -1183,7 +1187,7 @@
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gl-hazard) 16%, transparent), transparent 62%),
     rgba(18, 7, 12, 0.96);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.03),
     inset 0 0 14px color-mix(in srgb, var(--gl-hazard) 18%, transparent),
     0 0 10px color-mix(in srgb, var(--gl-hazard) 12%, transparent);
 }
@@ -1202,10 +1206,10 @@
 .glucargo-cell:hover:not(:disabled) {
   background:
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gl-accent) 12%, transparent), transparent 60%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%, rgba(0, 0, 0, 0.08) 100%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.05) 0%, transparent 40%, rgb(var(--gl-tint-dark) / 0.08) 100%),
     rgba(8, 16, 24, 0.94);
   box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 3px rgb(var(--gl-tint-dark) / 0.4),
     inset 0 0 6px color-mix(in srgb, var(--gl-accent) 6%, transparent);
   transform: none;
   border-color:
@@ -1226,7 +1230,7 @@
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gl-hazard) 22%, transparent), transparent 62%),
     rgba(18, 7, 12, 0.96);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.04),
     inset 0 0 16px color-mix(in srgb, var(--gl-hazard) 24%, transparent),
     0 0 12px color-mix(in srgb, var(--gl-hazard) 18%, transparent);
 }
@@ -1261,9 +1265,9 @@
   padding: 0;
   border: 2px solid rgba(1, 6, 10, 0.95);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 22%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.20), transparent 38%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 7px),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.22), transparent 22%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.20), transparent 38%),
+    repeating-linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.05) 0 1px, transparent 1px 7px),
     color-mix(in srgb, var(--cargo-accent) 52%, #12202a);
   color: var(--glucargo-text);
   border-radius: 0;
@@ -1271,10 +1275,10 @@
   touch-action: none;
   user-select: none;
   box-shadow:
-    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 42%, rgba(255, 255, 255, 0.12)),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.42),
-    inset 0 -6px 14px rgba(0, 0, 0, 0.20),
-    0 1px 2px rgba(0, 0, 0, 0.30);
+    inset 1px 1px 0 color-mix(in srgb, var(--cargo-accent) 42%, rgb(var(--gl-tint-light) / 0.12)),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.42),
+    inset 0 -6px 14px rgb(var(--gl-tint-dark) / 0.20),
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.30);
   transition:
     filter 180ms var(--glucargo-ease),
     box-shadow 180ms var(--glucargo-ease),
@@ -1286,10 +1290,10 @@
   content: "";
   position: absolute;
   inset: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.10);
   box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.08),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.26);
+    inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.08),
+    inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.26);
   pointer-events: none;
 }
 
@@ -1297,8 +1301,8 @@
   content: "";
   position: absolute;
   inset: 35% 18%;
-  border-top: 1px solid color-mix(in srgb, var(--cargo-accent) 46%, rgba(255, 255, 255, 0.24));
-  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+  border-top: 1px solid color-mix(in srgb, var(--cargo-accent) 46%, rgb(var(--gl-tint-light) / 0.24));
+  border-bottom: 1px solid rgb(var(--gl-tint-dark) / 0.18);
   opacity: 0.55;
   pointer-events: none;
 }
@@ -1326,7 +1330,7 @@
   height: 20px;
   object-fit: cover;
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 40%, transparent);
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 4px rgb(var(--gl-tint-dark) / 0.5);
 }
 
 /* Keep only the cargo shape perimeter visible; shared cell edges stay merged. */
@@ -1339,11 +1343,11 @@
 .glucargo-tile-cell:hover,
 .glucargo-tile-cell.is-cargo-hovered {
   z-index: 6;
-  border-color: color-mix(in srgb, var(--cargo-accent) 76%, rgba(255, 255, 255, 0.42));
+  border-color: color-mix(in srgb, var(--cargo-accent) 76%, rgb(var(--gl-tint-light) / 0.42));
   filter: brightness(1.16);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--cargo-accent) 62%, rgba(255, 255, 255, 0.22)),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 1px color-mix(in srgb, var(--cargo-accent) 62%, rgb(var(--gl-tint-light) / 0.22)),
+    inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
     0 0 12px color-mix(in srgb, var(--cargo-accent) 32%, transparent);
   transform: none;
 }
@@ -1351,10 +1355,10 @@
 /* Selected */
 .glucargo-tile-cell.is-selected {
   z-index: 5;
-  border-color: color-mix(in srgb, var(--cargo-accent) 70%, rgba(255, 255, 255, 0.3));
+  border-color: color-mix(in srgb, var(--cargo-accent) 70%, rgb(var(--gl-tint-light) / 0.3));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -6px 14px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -6px 14px rgb(var(--gl-tint-dark) / 0.18),
     0 0 16px color-mix(in srgb, var(--cargo-accent) 45%, transparent),
     0 0 4px color-mix(in srgb, var(--cargo-accent) 28%, transparent);
 }
@@ -1380,7 +1384,7 @@
   border-color: rgba(255, 229, 115, 0.95) !important;
   box-shadow:
     inset 0 0 0 2px rgba(255, 229, 115, 0.78),
-    inset 0 0 18px rgba(0, 0, 0, 0.5),
+    inset 0 0 18px rgb(var(--gl-tint-dark) / 0.5),
     0 0 18px rgba(255, 177, 45, 0.22);
 }
 
@@ -1388,7 +1392,7 @@
   inset: 0;
   border: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 44%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.18), transparent 44%),
     radial-gradient(circle at 50% 50%, rgba(255, 244, 184, 0.16), transparent 70%);
 }
 
@@ -1399,7 +1403,7 @@
 .glucargo-tile-cell.is-own-lock {
   box-shadow:
     inset 0 0 0 2px rgba(255, 244, 184, 0.84),
-    inset 0 0 18px rgba(0, 0, 0, 0.42),
+    inset 0 0 18px rgb(var(--gl-tint-dark) / 0.42),
     0 0 20px rgba(255, 214, 76, 0.28);
 }
 
@@ -1435,7 +1439,7 @@
     rgba(255, 177, 45, 0.62);
   box-shadow:
     inset 0 0 0 2px rgba(255, 229, 115, 0.95),
-    inset 0 0 22px rgba(0, 0, 0, 0.46),
+    inset 0 0 22px rgb(var(--gl-tint-dark) / 0.46),
     0 0 18px rgba(255, 177, 45, 0.28);
 }
 
@@ -1447,7 +1451,7 @@
   border: 1px solid rgba(255, 230, 130, 0.82);
   color: #fff4b8;
   background: rgba(2, 7, 11, 0.86);
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 10px rgb(var(--gl-tint-dark) / 0.55);
   font-family: var(--glucargo-font-code);
   font-size: clamp(7px, calc(var(--glucargo-cell) * 0.18), 11px);
   font-weight: 800;
@@ -1461,16 +1465,16 @@
 /* Priority */
 .glucargo-tile-cell.priority-high {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
+    inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
     0 0 12px rgba(255, 177, 45, 0.18);
 }
 
 .glucargo-tile-cell.priority-critical {
   border-color: color-mix(in srgb, var(--cargo-accent) 45%, color-mix(in srgb, var(--gl-hazard) 50%, transparent));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+    inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
     0 0 14px color-mix(in srgb, var(--gl-hazard) 24%, transparent);
 }
 
@@ -1485,8 +1489,8 @@
 .glucargo-tile-cell.pattern-warning,
 .glucargo-tile-cell.pattern-hazard {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 20%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.42), transparent 44%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.18), transparent 20%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.42), transparent 44%),
     color-mix(in srgb, var(--cargo-accent) 58%, #302100);
   border-color: color-mix(in srgb, var(--cargo-accent) 82%, rgba(30, 16, 0, 0.70));
 }
@@ -1495,29 +1499,29 @@
 .glucargo-tile-cell.pattern-hazard::before {
   background:
     repeating-linear-gradient(135deg, rgba(2, 7, 11, 0.62) 0 5px, transparent 5px 10px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 44%);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.12), transparent 44%);
   border-color: color-mix(in srgb, var(--cargo-accent) 56%, rgba(10, 8, 0, 0.86));
 }
 
 /* Supplies — clean diagonal hatching */
 .glucargo-tile-cell.pattern-stripe {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.20), transparent 20%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.22), transparent 42%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.20), transparent 20%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.22), transparent 42%),
     color-mix(in srgb, var(--cargo-accent) 52%, #0c2728);
 }
 
 .glucargo-tile-cell.pattern-stripe::before {
   background:
-    linear-gradient(90deg, transparent 0 39%, rgba(255, 255, 255, 0.18) 39% 61%, transparent 61%),
-    linear-gradient(0deg, transparent 0 39%, rgba(0, 0, 0, 0.18) 39% 61%, transparent 61%);
-  border-color: color-mix(in srgb, var(--cargo-accent) 42%, rgba(255, 255, 255, 0.12));
+    linear-gradient(90deg, transparent 0 39%, rgb(var(--gl-tint-light) / 0.18) 39% 61%, transparent 61%),
+    linear-gradient(0deg, transparent 0 39%, rgb(var(--gl-tint-dark) / 0.18) 39% 61%, transparent 61%);
+  border-color: color-mix(in srgb, var(--cargo-accent) 42%, rgb(var(--gl-tint-light) / 0.12));
 }
 
 /* Comforts — soft rounded highlight */
 .glucargo-tile-cell.pattern-soft {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 28%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.22), transparent 28%),
     radial-gradient(circle at 72% 68%, color-mix(in srgb, var(--cargo-accent) 28%, transparent), transparent 38%),
     color-mix(in srgb, var(--cargo-accent) 46%, #241528);
 }
@@ -1525,16 +1529,16 @@
 .glucargo-tile-cell.pattern-soft::before {
   inset: 5px;
   background:
-    radial-gradient(circle at 38% 34%, rgba(255, 255, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 38% 34%, rgb(var(--gl-tint-light) / 0.16), transparent 34%),
     radial-gradient(circle at 72% 70%, color-mix(in srgb, var(--cargo-accent) 30%, transparent), transparent 38%);
-  border-color: color-mix(in srgb, var(--cargo-accent) 34%, rgba(255, 255, 255, 0.16));
+  border-color: color-mix(in srgb, var(--cargo-accent) 34%, rgb(var(--gl-tint-light) / 0.16));
 }
 
 /* Parts/Intel — tech circuit grid */
 .glucargo-tile-cell.pattern-circuit,
 .glucargo-tile-cell.pattern-scan {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 18%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.18), transparent 18%),
     linear-gradient(315deg, color-mix(in srgb, var(--cargo-accent) 24%, transparent), transparent 42%),
     color-mix(in srgb, var(--cargo-accent) 44%, #071421);
 }
@@ -1542,58 +1546,58 @@
 .glucargo-tile-cell.pattern-circuit::before,
 .glucargo-tile-cell.pattern-scan::before {
   background:
-    linear-gradient(90deg, transparent 0 18%, rgba(255, 255, 255, 0.14) 18% 23%, transparent 23% 68%, color-mix(in srgb, var(--cargo-accent) 36%, transparent) 68% 73%, transparent 73%),
-    linear-gradient(0deg, transparent 0 24%, color-mix(in srgb, var(--cargo-accent) 30%, transparent) 24% 29%, transparent 29% 74%, rgba(255, 255, 255, 0.10) 74% 79%, transparent 79%),
+    linear-gradient(90deg, transparent 0 18%, rgb(var(--gl-tint-light) / 0.14) 18% 23%, transparent 23% 68%, color-mix(in srgb, var(--cargo-accent) 36%, transparent) 68% 73%, transparent 73%),
+    linear-gradient(0deg, transparent 0 24%, color-mix(in srgb, var(--cargo-accent) 30%, transparent) 24% 29%, transparent 29% 74%, rgb(var(--gl-tint-light) / 0.10) 74% 79%, transparent 79%),
     radial-gradient(circle at 72% 28%, color-mix(in srgb, var(--cargo-accent) 52%, white) 0 2px, transparent 3px);
-  border-color: color-mix(in srgb, var(--cargo-accent) 48%, rgba(255, 255, 255, 0.10));
+  border-color: color-mix(in srgb, var(--cargo-accent) 48%, rgb(var(--gl-tint-light) / 0.10));
 }
 
 /* Specimens — biohazard bubbles */
 .glucargo-tile-cell.pattern-bio {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 22%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.16), transparent 22%),
     radial-gradient(circle at 72% 68%, color-mix(in srgb, var(--cargo-accent) 28%, transparent) 0 22%, transparent 23%),
     color-mix(in srgb, var(--cargo-accent) 46%, #0b1f16);
 }
 
 .glucargo-tile-cell.pattern-bio::before {
   background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.14) 0 14%, transparent 15%),
+    radial-gradient(circle at 30% 30%, rgb(var(--gl-tint-light) / 0.14) 0 14%, transparent 15%),
     radial-gradient(circle at 70% 66%, color-mix(in srgb, var(--cargo-accent) 42%, transparent) 0 19%, transparent 20%),
     radial-gradient(circle at 56% 24%, color-mix(in srgb, var(--cargo-accent) 20%, transparent) 0 9%, transparent 10%);
-  border-color: color-mix(in srgb, var(--cargo-accent) 42%, rgba(255, 255, 255, 0.10));
+  border-color: color-mix(in srgb, var(--cargo-accent) 42%, rgb(var(--gl-tint-light) / 0.10));
 }
 
 /* Salvage/Loot — brushed metal plates */
 .glucargo-tile-cell.pattern-plate,
 .glucargo-tile-cell.pattern-edge {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.20), transparent 20%),
-    linear-gradient(315deg, rgba(0, 0, 0, 0.26), transparent 44%),
+    linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.20), transparent 20%),
+    linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.26), transparent 44%),
     color-mix(in srgb, var(--cargo-accent) 48%, #131820);
 }
 
 .glucargo-tile-cell.pattern-plate::before,
 .glucargo-tile-cell.pattern-edge::before {
   background:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.20) 0 2px, transparent 3px),
-    radial-gradient(circle at 82% 78%, rgba(0, 0, 0, 0.28) 0 2px, transparent 3px),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 8px);
-  border-color: color-mix(in srgb, var(--cargo-accent) 34%, rgba(255, 255, 255, 0.14));
+    radial-gradient(circle at 18% 22%, rgb(var(--gl-tint-light) / 0.20) 0 2px, transparent 3px),
+    radial-gradient(circle at 82% 78%, rgb(var(--gl-tint-dark) / 0.28) 0 2px, transparent 3px),
+    repeating-linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.06) 0 2px, transparent 2px 8px);
+  border-color: color-mix(in srgb, var(--cargo-accent) 34%, rgb(var(--gl-tint-light) / 0.14));
 }
 
 /* Generic / Custom — simple crate panel */
 .glucargo-tile-cell.pattern-generic {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 26%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.16), transparent 26%),
     linear-gradient(315deg, color-mix(in srgb, var(--cargo-accent) 28%, transparent), transparent 40%),
     color-mix(in srgb, var(--cargo-accent) 42%, #071018);
 }
 
 .glucargo-tile-cell.pattern-generic::before {
   background:
-    linear-gradient(90deg, transparent 0 46%, rgba(255, 255, 255, 0.12) 46% 54%, transparent 54%),
-    linear-gradient(0deg, transparent 0 46%, rgba(0, 0, 0, 0.18) 46% 54%, transparent 54%);
+    linear-gradient(90deg, transparent 0 46%, rgb(var(--gl-tint-light) / 0.12) 46% 54%, transparent 54%),
+    linear-gradient(0deg, transparent 0 46%, rgb(var(--gl-tint-dark) / 0.18) 46% 54%, transparent 54%);
 }
 
 /* Image-backed tiles */
@@ -1611,11 +1615,11 @@
 
 .glucargo-tile-cell:hover,
 .glucargo-tile-cell.is-cargo-hovered {
-  border-color: color-mix(in srgb, var(--cargo-accent) 76%, rgba(255, 255, 255, 0.42));
+  border-color: color-mix(in srgb, var(--cargo-accent) 76%, rgb(var(--gl-tint-light) / 0.42));
 }
 
 .glucargo-tile-cell.is-selected {
-  border-color: color-mix(in srgb, var(--cargo-accent) 70%, rgba(255, 255, 255, 0.3));
+  border-color: color-mix(in srgb, var(--cargo-accent) 70%, rgb(var(--gl-tint-light) / 0.3));
 }
 
 /* ─── Tile Label Overlay (anchored to actual cells, not bounding box) */
@@ -1653,7 +1657,7 @@
 .glucargo-tile-emblem::before {
   background:
     linear-gradient(90deg, transparent 0 18%, color-mix(in srgb, var(--cargo-accent) 22%, transparent) 18% 22%, transparent 22% 78%, color-mix(in srgb, var(--cargo-accent) 22%, transparent) 78% 82%, transparent 82%),
-    linear-gradient(0deg, transparent 0 18%, rgba(255, 255, 255, 0.06) 18% 22%, transparent 22% 78%, rgba(0, 0, 0, 0.14) 78% 82%, transparent 82%);
+    linear-gradient(0deg, transparent 0 18%, rgb(var(--gl-tint-light) / 0.06) 18% 22%, transparent 22% 78%, rgb(var(--gl-tint-dark) / 0.14) 78% 82%, transparent 82%);
   opacity: 0.58;
 }
 
@@ -1662,7 +1666,7 @@
   filter:
     drop-shadow(0 0 1px rgba(1, 6, 10, 1))
     drop-shadow(0 0 3px rgba(1, 6, 10, 0.95))
-    drop-shadow(0 0 7px color-mix(in srgb, var(--cargo-accent) 78%, rgba(255, 255, 255, 0.35)))
+    drop-shadow(0 0 7px color-mix(in srgb, var(--cargo-accent) 78%, rgb(var(--gl-tint-light) / 0.35)))
     drop-shadow(0 0 14px color-mix(in srgb, var(--cargo-accent) 48%, transparent));
 }
 
@@ -1684,8 +1688,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(0deg, color-mix(in srgb, var(--cargo-accent) 58%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, var(--cargo-accent) 28%, rgba(255, 255, 255, 0.10))),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 6px);
+    linear-gradient(0deg, color-mix(in srgb, var(--cargo-accent) 58%, rgb(var(--gl-tint-light) / 0.18)), color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.10))),
+    repeating-linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.18) 0 1px, transparent 1px 6px);
   opacity: 0.72;
   transform: scaleY(0);
   transform-origin: bottom;
@@ -1705,13 +1709,13 @@
   place-items: center;
   width: min(40px, calc(var(--glucargo-cell) - 10px));
   height: min(40px, calc(var(--glucargo-cell) - 10px));
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 44%, rgba(255, 255, 255, 0.20));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 44%, rgb(var(--gl-tint-light) / 0.20));
   color: var(--glucargo-text);
   background:
-    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--cargo-accent) 28%, rgba(255, 255, 255, 0.05)), transparent 68%),
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.05)), transparent 68%),
     rgba(2, 7, 11, 0.38);
   box-shadow:
-    0 0 14px rgba(0, 0, 0, 0.32),
+    0 0 14px rgb(var(--gl-tint-dark) / 0.32),
     0 0 14px color-mix(in srgb, var(--cargo-accent) 28%, transparent);
 }
 
@@ -1719,7 +1723,7 @@
   color: color-mix(in srgb, var(--cargo-accent) 72%, white);
   font-size: clamp(11px, calc(var(--glucargo-cell) * 0.34), 18px);
   filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 1px 1px rgb(var(--gl-tint-dark) / 0.85))
     drop-shadow(0 0 5px color-mix(in srgb, var(--cargo-accent) 55%, transparent));
 }
 
@@ -1756,7 +1760,7 @@
   place-items: center;
   width: min(40px, calc(var(--glucargo-cell) - 10px));
   height: min(40px, calc(var(--glucargo-cell) - 10px));
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 55%, rgba(255, 255, 255, 0.30));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 55%, rgb(var(--gl-tint-light) / 0.30));
   background: rgba(2, 7, 11, 0.48);
   box-shadow: 0 0 14px color-mix(in srgb, var(--cargo-accent) 42%, transparent);
 }
@@ -1806,8 +1810,8 @@
   font-family: var(--glucargo-font-code);
   background: linear-gradient(180deg, transparent 42%, rgba(2, 7, 11, 0.38) 100%);
   text-shadow:
-    0 1px 6px rgba(0, 0, 0, 0.92),
-    0 0 3px rgba(0, 0, 0, 0.7);
+    0 1px 6px rgb(var(--gl-tint-dark) / 0.92),
+    0 0 3px rgb(var(--gl-tint-dark) / 0.7);
 }
 
 .glucargo-tile-label.is-selected {
@@ -2018,14 +2022,14 @@
   padding: 0 !important;
   aspect-ratio: 1;
   border-color: rgba(243, 251, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--gl-tint-light) / 0.03);
   border-radius: 0 !important;
   transition: background var(--glucargo-d-quick) var(--glucargo-ease), border-color var(--glucargo-d-quick) var(--glucargo-ease), box-shadow var(--glucargo-d-quick) var(--glucargo-ease);
 }
 
 .glucargo-shape-cell.is-on {
   border-color: var(--glucargo-cyan);
-  background: linear-gradient(135deg, var(--glucargo-cyan), #4ad9c0);
+  background: linear-gradient(135deg, var(--glucargo-cyan), var(--gl-teal));
   box-shadow: 0 0 10px color-mix(in srgb, var(--gl-accent) 32%, transparent);
 }
 
@@ -2038,7 +2042,7 @@
   letter-spacing: 0.08em;
   /* Bloom via filter so it survives the notch clip-path (§9.1). */
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--gl-accent) 30%, transparent));
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.3);
 }
 
 .glucargo-primary:hover:not(:disabled) {
@@ -2144,7 +2148,7 @@
   padding: 0 !important;
   font-size: 10px;
   line-height: 1;
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 40%, rgba(255, 255, 255, 0.12)) !important;
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 40%, rgb(var(--gl-tint-light) / 0.12)) !important;
   background: rgba(2, 7, 11, 0.82) !important;
   box-shadow: none !important;
   color: var(--glucargo-muted);
@@ -2171,7 +2175,7 @@
   opacity: 1;
   color: var(--glucargo-amber);
   border-style: solid !important;
-  border-color: color-mix(in srgb, var(--glucargo-amber) 55%, rgba(255, 255, 255, 0.12)) !important;
+  border-color: color-mix(in srgb, var(--glucargo-amber) 55%, rgb(var(--gl-tint-light) / 0.12)) !important;
 }
 
 .glucargo-floor-item.is-hidden > button {
@@ -2191,14 +2195,14 @@
   width: 100%;
   min-height: 82px !important;
   padding: 9px !important;
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 28%, rgba(255, 255, 255, 0.10)) !important;
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.10)) !important;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--cargo-accent) 16%, transparent), transparent 48%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 44%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.035), transparent 44%),
     rgba(7, 16, 24, 0.82) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.3) !important;
   text-align: left;
   border-radius: 5px !important;
   overflow: hidden;
@@ -2210,7 +2214,7 @@
     linear-gradient(180deg, color-mix(in srgb, var(--cargo-accent) 16%, transparent), transparent 50%),
     rgba(7, 16, 24, 0.90) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     0 0 12px color-mix(in srgb, var(--cargo-accent) 14%, transparent) !important;
   transform: none;
 }
@@ -2225,12 +2229,12 @@
     linear-gradient(180deg, color-mix(in srgb, var(--cargo-accent) 18%, transparent), color-mix(in srgb, var(--cargo-accent) 06%, transparent)),
     rgba(2, 7, 11, 0.92) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
     0 0 16px color-mix(in srgb, var(--cargo-accent) 24%, transparent) !important;
 }
 
 .glucargo-floor-item.is-locked > button {
-  border-color: color-mix(in srgb, var(--glucargo-amber) 58%, rgba(255, 255, 255, 0.12)) !important;
+  border-color: color-mix(in srgb, var(--glucargo-amber) 58%, rgb(var(--gl-tint-light) / 0.12)) !important;
   opacity: 0.86;
   cursor: default;
   filter: grayscale(0.2);
@@ -2238,7 +2242,7 @@
 
 .glucargo-floor-item.is-locked > button:hover:not(:disabled) {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
     0 0 10px rgba(255, 177, 45, 0.16) !important;
 }
 
@@ -2258,7 +2262,7 @@
     );
   box-shadow:
     inset 0 0 0 2px rgba(255, 229, 115, 0.9),
-    inset 0 0 24px rgba(0, 0, 0, 0.42);
+    inset 0 0 24px rgb(var(--gl-tint-dark) / 0.42);
 }
 
 .glucargo-lock-banner strong {
@@ -2267,7 +2271,7 @@
   border: 1px solid rgba(255, 230, 130, 0.82);
   color: #fff4b8;
   background: rgba(2, 7, 11, 0.88);
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 10px rgb(var(--gl-tint-dark) / 0.55);
   font-family: var(--glucargo-font-code);
   font-size: 10px;
   font-weight: 800;
@@ -2281,14 +2285,14 @@
 .glucargo-floor-item.priority-high > button {
   box-shadow:
     inset 0 -2px 0 var(--glucargo-amber),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04) !important;
 }
 
 .glucargo-floor-item.priority-critical > button {
   box-shadow:
     inset 0 -2px 0 var(--glucargo-red),
     0 0 10px color-mix(in srgb, var(--gl-hazard) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04) !important;
 }
 
 .glucargo-shape-preview {
@@ -2303,20 +2307,20 @@
   min-width: 54px;
   padding: 4px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.025), transparent),
     rgba(2, 7, 11, 0.48);
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 28%, rgba(255, 255, 255, 0.10));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.10));
 }
 
 .glucargo-shape-preview > span {
   display: block;
   width: var(--preview-cell);
   height: var(--preview-cell);
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 55%, rgba(255, 255, 255, 0.18));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 55%, rgb(var(--gl-tint-light) / 0.18));
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 42%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.18), transparent 42%),
     color-mix(in srgb, var(--cargo-accent) 36%, #071018);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10);
 }
 
 .glucargo-shape-preview > span:not([data-edges~="top"]) { border-top-color: transparent; }
@@ -2374,7 +2378,7 @@
   padding: 2px 5px;
   color: color-mix(in srgb, var(--cargo-accent) 72%, white);
   background: color-mix(in srgb, var(--cargo-accent) 12%, rgba(2, 7, 11, 0.76));
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgba(255, 255, 255, 0.10));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgb(var(--gl-tint-light) / 0.10));
   font-family: var(--glucargo-font-code);
   font-size: 8px;
   line-height: 1.1;
@@ -2391,13 +2395,13 @@
   align-items: center;
   gap: 9px;
   min-height: 52px;
-  border-color: color-mix(in srgb, var(--cargo-accent) 26%, rgba(255, 255, 255, 0.10));
+  border-color: color-mix(in srgb, var(--cargo-accent) 26%, rgb(var(--gl-tint-light) / 0.10));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--cargo-accent) 08%, transparent), transparent),
     rgba(7, 16, 24, 0.76);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.03),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.3);
   transition:
     border-color 180ms var(--glucargo-ease),
     transform 180ms var(--glucargo-ease),
@@ -2433,9 +2437,9 @@
 }
 
 .glucargo-manifest-card:hover > button {
-  border-color: color-mix(in srgb, var(--cargo-accent) 46%, rgba(255, 255, 255, 0.14));
+  border-color: color-mix(in srgb, var(--cargo-accent) 46%, rgb(var(--gl-tint-light) / 0.14));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     0 0 12px color-mix(in srgb, var(--cargo-accent) 10%, transparent);
 }
 
@@ -2534,7 +2538,7 @@
   width: 14px;
   height: 14px;
   font-size: 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(var(--gl-tint-dark) / 0.6);
   color: var(--glucargo-muted);
   border-radius: 0;
 }
@@ -2549,13 +2553,13 @@
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--cargo-accent) 12%, transparent), transparent 40%),
     rgba(2, 7, 11, 0.96);
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 36%, rgba(255, 255, 255, 0.12));
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 36%, rgb(var(--gl-tint-light) / 0.12));
   /* Chamfered top-right + active accent edge bar (§4.1, §7.3) */
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   box-shadow:
     inset 3px 0 0 var(--cargo-accent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 56px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
+    0 18px 56px rgb(var(--gl-tint-dark) / 0.28),
     0 0 14px color-mix(in srgb, var(--cargo-accent) 08%, transparent);
   animation: glucargo-report-in var(--gl-d-move) var(--gl-ease) both;
 }
@@ -2654,15 +2658,15 @@
   border: 1px solid color-mix(in srgb, var(--gl-accent) 22%, transparent);
   background:
     /* Blueprint grid behind the hero region (§4.6) */
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(rgb(var(--gl-tint-light) / 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
     linear-gradient(135deg, color-mix(in srgb, var(--gl-accent) 6%, transparent), transparent 40%),
     rgba(7, 16, 24, 0.88);
   /* Chamfered top-right (§4.1) */
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 24px 70px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+    0 24px 70px rgb(var(--gl-tint-dark) / 0.36),
     0 0 24px color-mix(in srgb, var(--gl-accent) 6%, transparent);
 }
 
@@ -2685,7 +2689,7 @@
   font-size: 22px;
   line-height: 1.15;
   font-weight: 600;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 2px 8px rgb(var(--gl-tint-dark) / 0.4);
 }
 
 .glucargo-inline-form {
@@ -2749,10 +2753,10 @@
   /* Inset light catch stays; the drop + accent bloom move to filter so they
      follow the chamfer instead of being clipped by it (§9.1). */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.4);
   filter:
-    drop-shadow(0 10px 28px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 10px 28px rgb(var(--gl-tint-dark) / 0.34))
     drop-shadow(0 0 22px color-mix(in srgb, var(--gl-accent) 14%, transparent));
   border-radius: 11px;
   /* Chamfered top-right — the cut corner signature (§4.1) */
@@ -2817,9 +2821,9 @@
   display: block;
 }
 
-.glucargo-cmyk i:nth-child(1) { background: var(--gl-ink-0); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.glucargo-cmyk i:nth-child(1) { background: var(--gl-ink-0); box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.18); }
 .glucargo-cmyk i:nth-child(2) { background: var(--gl-cyan); }
-.glucargo-cmyk i:nth-child(3) { background: #ff66b3; }
+.glucargo-cmyk i:nth-child(3) { background: var(--gl-holo-c); }
 .glucargo-cmyk i:nth-child(4) { background: var(--gl-signal); }
 
 @media (max-width: 360px) {
@@ -2874,7 +2878,7 @@
   white-space: nowrap;
   text-shadow:
     0 0 14px color-mix(in srgb, var(--gl-accent) 22%, transparent),
-    0 2px 6px rgba(0, 0, 0, 0.6);
+    0 2px 6px rgb(var(--gl-tint-dark) / 0.6);
 }
 
 .glucargo-chat-report__stats {
@@ -2952,8 +2956,8 @@
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--cargo-accent) 10%, transparent), transparent),
     rgba(7, 16, 24, 0.84);
-  border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgba(255, 255, 255, 0.10));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgb(var(--gl-tint-light) / 0.10));
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.03);
   /* Notched card corner (§4.1) */
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
   animation: glucargo-cascade var(--gl-d-move) var(--gl-ease) both;
@@ -3119,12 +3123,12 @@
   0%, 100% {
     box-shadow:
       0 0 12px color-mix(in srgb, var(--gl-accent) 28%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3);
   }
   50% {
     box-shadow:
       0 0 22px color-mix(in srgb, var(--gl-accent) 60%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.35);
   }
 }
 
@@ -3172,15 +3176,15 @@
 @keyframes glucargo-tile-selected {
   0% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 -6px 14px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+      inset 0 -6px 14px rgb(var(--gl-tint-dark) / 0.18),
       0 0 12px color-mix(in srgb, var(--cargo-accent) 38%, transparent),
       0 0 3px color-mix(in srgb, var(--cargo-accent) 22%, transparent);
   }
   100% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -6px 14px rgba(0, 0, 0, 0.16),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+      inset 0 -6px 14px rgb(var(--gl-tint-dark) / 0.16),
       0 0 20px color-mix(in srgb, var(--cargo-accent) 55%, transparent),
       0 0 5px color-mix(in srgb, var(--cargo-accent) 32%, transparent);
   }
@@ -3189,14 +3193,14 @@
 @keyframes glucargo-priority-pulse {
   0%, 100% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.10),
-      inset 0 -8px 16px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
+      inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
       0 0 10px color-mix(in srgb, var(--gl-hazard) 18%, transparent);
   }
   50% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      inset 0 -8px 16px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+      inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
       0 0 20px color-mix(in srgb, var(--gl-hazard) 38%, transparent);
   }
 }

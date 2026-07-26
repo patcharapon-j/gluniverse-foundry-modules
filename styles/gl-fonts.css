@@ -1,0 +1,61 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — canonical typeface layer
+   ════════════════════════════════════════════════════════════════════════
+
+   The ONE place the suite's faces are declared. Every feature reaches them
+   through `--gl-display` / `--gl-tech` (see gl-tokens.css) and must never
+   re-declare an @font-face or name a face literally.
+
+   Both faces are bundled (OFL) and served from `assets/fonts/`. Nothing here
+   touches the network: a Foundry world is routinely run offline or on a LAN,
+   and a `@import url(fonts.googleapis.com)` both stalls first paint and leaks
+   every player's IP to a third party. Three such imports used to live in
+   gl-tokens.css, clocks-tracker-hud.css and stream-pacer.css — all pulling
+   faces that were already sitting in `assets/`.
+
+   The two subsets per face mirror what Google Fonts serves, so the browser
+   only downloads latin-ext for documents that actually need it.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Display voice — headings, hero numerals, UI chrome ── */
+@font-face {
+  font-family: "Oxanium";
+  src: url("../assets/fonts/oxanium/Oxanium-latin.woff2") format("woff2-variations"),
+       url("../assets/fonts/oxanium/Oxanium-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Oxanium";
+  src: url("../assets/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2-variations"),
+       url("../assets/fonts/oxanium/Oxanium-latin-ext.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── Technical voice — micro-labels, readouts, tabular numerals ──
+   Bahnschrift (Windows-only) still wins where installed; JetBrains Mono is
+   bundled so macOS/Linux players get the same designed face instead of falling
+   through to a generic platform monospace. */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2-variations"),
+       url("../assets/fonts/jetbrains-mono/JetBrainsMono-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2-variations"),
+       url("../assets/fonts/jetbrains-mono/JetBrainsMono-latin-ext.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}

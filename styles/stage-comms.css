@@ -3,10 +3,9 @@
    Themed portrait cards stacked on a screen edge.
    ═══════════════════════════════════════════ */
 
-/* Match the gluniverse-clocks-and-tracker module's typeface (Oxanium). Imported
-   here so the comms overlay looks right even without that module installed; when
-   it IS installed we additionally inherit its exact --clock-font value below. */
-@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&display=swap');
+/* Typeface comes from the suite's canonical face layer (styles/gl-fonts.css),
+   which bundles Oxanium locally. When the clocks module is installed we still
+   inherit its exact --clock-font value below. */
 
 /* Shared comms font: use the clock module's variable when present, else our
    own Oxanium stack. */
@@ -237,10 +236,10 @@
     mix-blend-mode: multiply;
     background: repeating-linear-gradient(
         to bottom,
-        rgba(0, 0, 0, 0.0) 0px,
-        rgba(0, 0, 0, 0.0) 1px,
-        rgba(0, 0, 0, 0.45) 2px,
-        rgba(0, 0, 0, 0.45) 3px
+        rgb(var(--gl-tint-dark) / 0.0) 0px,
+        rgb(var(--gl-tint-dark) / 0.0) 1px,
+        rgb(var(--gl-tint-dark) / 0.45) 2px,
+        rgb(var(--gl-tint-dark) / 0.45) 3px
     );
     background-size: 100% 3px;
     animation: glcomms-scan 8s linear infinite;
@@ -325,7 +324,7 @@
     opacity: 1;
     background:
         radial-gradient(120% 60% at 50% 0%, rgba(80, 220, 255, 0.14), transparent 70%),
-        radial-gradient(100% 50% at 50% 100%, rgba(0, 0, 0, 0.45), transparent 60%);
+        radial-gradient(100% 50% at 50% 100%, rgb(var(--gl-tint-dark) / 0.45), transparent 60%);
 }
 .theme-scifi .glcomms-name {
     color: #bfefff;
@@ -460,18 +459,18 @@
 
 .theme-minimal { --comms-glow: rgba(255, 215, 100, 0.5); }
 .theme-minimal .glcomms-frame {
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.18);
+    box-shadow: 0 4px 16px rgb(var(--gl-tint-dark) / 0.5);
     background: #111;
 }
 .theme-minimal .glcomms-fx-glow {
     opacity: 1;
-    background: radial-gradient(100% 60% at 50% 100%, rgba(0, 0, 0, 0.4), transparent 60%);
+    background: radial-gradient(100% 60% at 50% 100%, rgb(var(--gl-tint-dark) / 0.4), transparent 60%);
 }
 .theme-minimal .glcomms-name {
     color: #eee;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgb(var(--gl-tint-dark) / 0.7);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.12);
 }
 .theme-minimal .glcomms-status { color: #06210f; background: rgba(120, 220, 140, 0.9); }
 .theme-minimal .glcomms-status-dot { background: #0a3; }
@@ -531,7 +530,7 @@
 /* Name badge */
 .glcomms-card.has-tint .glcomms-name {
     color: #fff;
-    background: color-mix(in srgb, var(--comms-tint) 34%, rgba(0, 0, 0, 0.82));
+    background: color-mix(in srgb, var(--comms-tint) 34%, rgb(var(--gl-tint-dark) / 0.82));
     border: 1px solid color-mix(in srgb, var(--comms-tint) 65%, transparent);
     text-shadow: 0 0 7px color-mix(in srgb, var(--comms-tint) 75%, transparent);
 }
@@ -579,8 +578,8 @@
     flex-direction: column;
     gap: 6px;
     padding: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgb(var(--gl-tint-light) / 0.04);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.08);
     border-radius: 8px;
     transition: border-color 0.2s ease;
 }
@@ -601,7 +600,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 4px 2px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgb(var(--gl-tint-light) / 0.06);
 }
 .glcomms-call-framing-icon {
     opacity: 0.5;
@@ -650,7 +649,7 @@
     width: 34px;
     height: 22px;
     padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgb(var(--gl-tint-light) / 0.2);
     border-radius: 4px;
     background: none;
     cursor: pointer;
@@ -694,7 +693,7 @@
     top: 4px;
     left: 4px;
     z-index: 1;
-    background: rgba(0, 0, 0, 0.5) !important;
+    background: rgb(var(--gl-tint-dark) / 0.5) !important;
     border-radius: 4px;
     opacity: 0;
     transition: opacity 0.15s ease;

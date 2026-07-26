@@ -116,29 +116,29 @@
     height: 0.82rem;
     border-radius: 2px;
     /* empty = subtle flat recess, not a heavy shaded tile */
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    background: rgb(var(--gl-tint-light) / 0.05);
+    box-shadow: inset 0 1px 1px rgb(var(--gl-tint-dark) / 0.4), inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.04);
     transition: background 0.16s var(--glinv-ease), box-shadow 0.16s var(--glinv-ease);
 }
 .glinv-scope .glinv-slot-box.glinv-filled {
     /* filled = raised shaded tile with a top sheen */
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.45), rgb(var(--gl-tint-light) / 0) 45%),
         linear-gradient(180deg, color-mix(in srgb, var(--glinv-tint) 78%, white), var(--glinv-tint) 60%, color-mix(in srgb, var(--glinv-tint) 70%, black));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.55),
-        inset 0 -2px 3px rgba(0, 0, 0, 0.35),
-        0 1px 2px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.55),
+        inset 0 -2px 3px rgb(var(--gl-tint-dark) / 0.35),
+        0 1px 2px rgb(var(--gl-tint-dark) / 0.45),
         0 0 6px var(--glinv-glow-soft);
 }
 .glinv-scope .glinv-slot-box.glinv-over {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.4), rgb(var(--gl-tint-light) / 0) 45%),
         linear-gradient(180deg, color-mix(in srgb, var(--glinv-danger) 80%, white), var(--glinv-danger) 60%, color-mix(in srgb, var(--glinv-danger) 70%, black));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.5),
-        inset 0 -2px 3px rgba(0, 0, 0, 0.4),
-        0 1px 2px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5),
+        inset 0 -2px 3px rgb(var(--gl-tint-dark) / 0.4),
+        0 1px 2px rgb(var(--gl-tint-dark) / 0.5),
         0 0 8px var(--glinv-danger-glow);
 }
 
@@ -167,7 +167,7 @@
     display: inline-block;
 }
 .tidy5e-sheet .glinv-sq-normal {
-    background: var(--glinv-tint, #6b86d6);
+    background: var(--glinv-tint, var(--gl-accent));
     box-shadow: 0 0 4px rgba(120, 150, 225, 0.45);
 }
 .tidy5e-sheet .glinv-sq-quickdraw {
@@ -178,10 +178,10 @@
 .tidy5e-sheet .glinv-icon-basic { color: #8aa1c2; font-size: 0.75rem; }
 .tidy5e-sheet .glinv-slot-compact-times,
 .tidy5e-sheet .glinv-slot-compact-num {
-    font-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--gl-display);
     font-size: 0.7rem;
     font-weight: 700;
-    color: var(--glinv-muted, #98a2b6);
+    color: var(--glinv-muted, var(--gl-text-dim));
     font-variant-numeric: tabular-nums;
 }
 
@@ -201,13 +201,13 @@
     padding: 0.02rem 0.42rem 0.02rem 0.34rem;
     border-radius: 5px;
     vertical-align: middle;
-    font-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--gl-display);
     font-weight: 700;
     font-size: 0.68rem;
     letter-spacing: 0.01em;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.2));
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-dark) / 0.2));
+    border: 1px solid rgb(var(--gl-tint-light) / 0.14);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12), 0 1px 2px rgb(var(--gl-tint-dark) / 0.4);
 }
 .tidy5e-sheet .glinv-ammo-indicator i,
 .tidy5e-sheet .glinv-pool-indicator i { font-size: 0.62rem; }
@@ -215,10 +215,10 @@
 .tidy5e-sheet .glinv-pool-ind-label { font-variant-numeric: tabular-nums; }
 
 .tidy5e-sheet .glinv-ammo-indicator { color: #cfe0ff; }
-.tidy5e-sheet .glinv-ammo-indicator i { color: var(--glinv-tint, #6b86d6); }
-.tidy5e-sheet .glinv-ammo-ind-low { color: #ffe6ad; border-color: rgba(231, 185, 85, 0.5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 8px rgba(231, 185, 85, 0.35); }
+.tidy5e-sheet .glinv-ammo-indicator i { color: var(--glinv-tint, var(--gl-accent)); }
+.tidy5e-sheet .glinv-ammo-ind-low { color: #ffe6ad; border-color: rgba(231, 185, 85, 0.5); box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12), 0 0 8px rgba(231, 185, 85, 0.35); }
 .tidy5e-sheet .glinv-ammo-ind-low i { color: var(--glinv-warn, #e7b955); }
-.tidy5e-sheet .glinv-ammo-ind-last { color: #ffc9c4; border-color: rgba(224, 88, 79, 0.6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 9px rgba(224, 88, 79, 0.5); }
+.tidy5e-sheet .glinv-ammo-ind-last { color: #ffc9c4; border-color: rgba(224, 88, 79, 0.6); box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12), 0 0 9px rgba(224, 88, 79, 0.5); }
 .tidy5e-sheet .glinv-ammo-ind-last i { color: var(--glinv-danger, #e0584f); }
 .tidy5e-sheet .glinv-ammo-ind-empty { color: #9aa3b5; opacity: 0.65; }
 
@@ -237,7 +237,7 @@
     gap: 0.1rem;
     margin-left: 0.4rem;
     vertical-align: middle;
-    font-family: 'Oxanium', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--gl-display);
 }
 .tidy5e-sheet .glinv-notch-pip {
     width: 3px;
@@ -245,10 +245,10 @@
     transform: skewX(-20deg);
     border-radius: 1px;
     background: linear-gradient(180deg, rgba(232, 96, 86, 0.98), rgba(120, 30, 25, 0.88));
-    box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.55), 0 0 4px rgba(224, 88, 79, 0.45);
+    box-shadow: inset -1px 0 0 rgb(var(--gl-tint-dark) / 0.55), 0 0 4px rgba(224, 88, 79, 0.45);
 }
 .tidy5e-sheet .glinv-notch-critical .glinv-notch-pip {
-    box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.55), 0 0 6px rgba(224, 88, 79, 0.6);
+    box-shadow: inset -1px 0 0 rgb(var(--gl-tint-dark) / 0.55), 0 0 6px rgba(224, 88, 79, 0.6);
 }
 .tidy5e-sheet .glinv-notch-count {
     font-size: 0.66rem;
@@ -273,7 +273,7 @@
     padding: 0.7rem;
     border-radius: var(--glinv-radius);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 40%),
         var(--glinv-surface);
     border: 1px solid var(--glinv-edge);
     box-shadow: var(--glinv-shadow-chip);
@@ -403,12 +403,12 @@
     height: 0.85rem;
     border-radius: 2px;
     transform: skewX(-14deg);
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(255, 255, 255, 0.03));
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+    background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.4), rgb(var(--gl-tint-light) / 0.03));
+    box-shadow: inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.6);
 }
 .glinv-scope .glinv-notch-bar-filled {
     background: linear-gradient(180deg, color-mix(in srgb, var(--glinv-danger) 85%, white), var(--glinv-danger), color-mix(in srgb, var(--glinv-danger) 70%, black));
-    box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 5px var(--glinv-danger-glow);
+    box-shadow: inset -1px 0 0 rgb(var(--gl-tint-dark) / 0.5), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.4), 0 0 5px var(--glinv-danger-glow);
 }
 
 /* Dice-pool pips: beveled dice cubes */
@@ -416,18 +416,18 @@
     width: 0.75rem;
     height: 0.75rem;
     border-radius: 3px;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.03));
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+    background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.34), rgb(var(--gl-tint-light) / 0.03));
+    box-shadow: inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.6);
 }
 .glinv-scope .glinv-pool-pip-filled {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.4), rgb(var(--gl-tint-light) / 0) 45%),
         linear-gradient(180deg, color-mix(in srgb, var(--glinv-good) 80%, white), var(--glinv-good) 60%, color-mix(in srgb, var(--glinv-good) 70%, black));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -2px 3px rgba(0, 0, 0, 0.35), 0 0 5px var(--glinv-good-glow);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5), inset 0 -2px 3px rgb(var(--gl-tint-dark) / 0.35), 0 0 5px var(--glinv-good-glow);
 }
-.glinv-scope .glinv-pool-pip-filled.glinv-pool-low { background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 45%), linear-gradient(180deg, color-mix(in srgb, var(--glinv-warn) 80%, white), var(--glinv-warn)); }
+.glinv-scope .glinv-pool-pip-filled.glinv-pool-low { background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.4), rgb(var(--gl-tint-light) / 0) 45%), linear-gradient(180deg, color-mix(in srgb, var(--glinv-warn) 80%, white), var(--glinv-warn)); }
 .glinv-scope .glinv-pool-pip-filled.glinv-pool-critical,
-.glinv-scope .glinv-pool-pip-filled.glinv-pool-empty { background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 45%), linear-gradient(180deg, color-mix(in srgb, var(--glinv-danger) 80%, white), var(--glinv-danger)); }
+.glinv-scope .glinv-pool-pip-filled.glinv-pool-empty { background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.4), rgb(var(--gl-tint-light) / 0) 45%), linear-gradient(180deg, color-mix(in srgb, var(--glinv-danger) 80%, white), var(--glinv-danger)); }
 
 /* ═══ Compact Card System (ammo dice / dice pool) ════════════════════ */
 .glinv-scope .glinv-card {
@@ -476,10 +476,10 @@
     place-items: center;
     border-radius: 8px;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 48%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.16), rgb(var(--gl-tint-light) / 0) 48%),
         var(--glinv-surface-2);
     border: 1px solid var(--glinv-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 6px rgba(0, 0, 0, 0.45);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2), 0 2px 6px rgb(var(--gl-tint-dark) / 0.45);
 }
 .glinv-scope .glinv-die-face { font-weight: 800; font-size: 0.92rem; color: var(--glinv-tint); }
 .glinv-scope .glinv-die-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.32rem; }
@@ -488,8 +488,8 @@
     flex: 1;
     height: 0.42rem;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.55);
+    background: rgb(var(--gl-tint-light) / 0.06);
+    box-shadow: inset 0 1px 1px rgb(var(--gl-tint-dark) / 0.55);
     transition: background 0.18s var(--glinv-ease), box-shadow 0.18s var(--glinv-ease);
 }
 .glinv-scope .glinv-step.on {
@@ -553,7 +553,7 @@
 .glinv-scope .glinv-ammo-die-low .glinv-step.on { background: linear-gradient(180deg, color-mix(in srgb, var(--glinv-warn) 82%, white), var(--glinv-warn)); box-shadow: 0 0 5px var(--glinv-warn-glow); }
 .glinv-scope .glinv-ammo-die-last .glinv-die-face,
 .glinv-scope .glinv-ammo-die-last .glinv-card-tag { color: var(--glinv-danger); }
-.glinv-scope .glinv-ammo-die-last .glinv-die { border-color: var(--glinv-danger); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 12px var(--glinv-danger-glow); }
+.glinv-scope .glinv-ammo-die-last .glinv-die { border-color: var(--glinv-danger); box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2), 0 0 12px var(--glinv-danger-glow); }
 .glinv-scope .glinv-ammo-die-last .glinv-step.on { background: linear-gradient(180deg, color-mix(in srgb, var(--glinv-danger) 82%, white), var(--glinv-danger)); box-shadow: 0 0 5px var(--glinv-danger-glow); }
 .glinv-scope .glinv-ammo-die-empty .glinv-die-face,
 .glinv-scope .glinv-ammo-die-empty .glinv-card-tag { color: var(--glinv-muted); }
@@ -571,9 +571,9 @@
     gap: 0.35rem;
     padding: 0.22rem 0.5rem;
     border-radius: 7px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 48%), var(--glinv-surface-2);
+    background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.12), rgb(var(--gl-tint-light) / 0) 48%), var(--glinv-surface-2);
     border: 1px solid var(--glinv-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 6px rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16), 0 2px 6px rgb(var(--gl-tint-dark) / 0.4);
     font-weight: 800;
     color: var(--glinv-tint);
 }
@@ -668,7 +668,7 @@
 .glinv-scope .glinv-reel-strip {
     display: flex;
     flex-direction: column;
-    transition: transform 0.55s cubic-bezier(0.2, 0.85, 0.25, 1);
+    transition: transform 0.55s var(--gl-ease);
 }
 .glinv-scope .glinv-reel-digit { height: 1em; line-height: 1; text-align: center; }
 
@@ -720,13 +720,13 @@
     border-radius: var(--glinv-radius-pill);
     background: linear-gradient(180deg, rgba(240, 199, 94, 0.12), rgba(240, 199, 94, 0.04));
     border: 1px solid color-mix(in srgb, var(--glinv-gold) 55%, var(--glinv-edge));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 10px var(--glinv-gold-glow);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12), 0 0 10px var(--glinv-gold-glow);
     overflow: hidden;
     transition: transform 0.16s var(--glinv-ease), box-shadow var(--glinv-dur) var(--glinv-ease);
 }
 .glinv-scope .glinv-qd-chip:hover {
     transform: translateY(-1px) scale(1.02);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 16px var(--glinv-gold-glow);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16), 0 0 16px var(--glinv-gold-glow);
 }
 .glinv-scope .glinv-qd-chip img {
     width: 1.2rem;
@@ -754,10 +754,10 @@
     padding: 0.5rem 0.6rem;
     border-radius: 8px;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 38%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-light) / 0) 38%),
         var(--glinv-surface);
     border: 1px solid var(--glinv-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1), 0 2px 8px rgb(var(--gl-tint-dark) / 0.4);
     color: var(--glinv-ink);
     font-family: var(--glinv-font);
 }
@@ -794,10 +794,10 @@
     place-items: center;
     border-radius: 9px;
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 48%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.18), rgb(var(--gl-tint-light) / 0) 48%),
         var(--glinv-surface-2);
     border: 1px solid var(--glinv-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.45);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.22), 0 2px 6px rgb(var(--gl-tint-dark) / 0.45);
     animation: glinv-die-step 0.45s var(--glinv-ease) 1;
 }
 .glinv-scope .glinv-cc-die-val { font-size: 1.3rem; font-weight: 800; }
@@ -820,11 +820,11 @@
 }
 .glinv-scope .glinv-cc-d-kept {
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 45%),
+        linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.28), rgb(var(--gl-tint-light) / 0) 45%),
         color-mix(in srgb, var(--glinv-good) 32%, var(--glinv-surface-2));
     color: #e2faee;
     border-color: color-mix(in srgb, var(--glinv-good) 55%, var(--glinv-edge));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0 6px var(--glinv-good-glow);
+    box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.25), 0 0 6px var(--glinv-good-glow);
 }
 .glinv-scope .glinv-cc-d-discarded {
     background: color-mix(in srgb, var(--glinv-danger) 24%, var(--glinv-surface-2));
@@ -855,5 +855,5 @@
 .glinv-scope .glinv-cc-good .glinv-cc-result, .glinv-scope .glinv-cc-good .glinv-cc-die-val { color: var(--glinv-good); }
 .glinv-scope .glinv-cc-warn .glinv-cc-result, .glinv-scope .glinv-cc-warn .glinv-cc-die-val { color: var(--glinv-warn); }
 .glinv-scope .glinv-cc-danger .glinv-cc-result, .glinv-scope .glinv-cc-danger .glinv-cc-die-val { color: var(--glinv-danger); }
-.glinv-scope .glinv-cc-danger .glinv-cc-die { border-color: var(--glinv-danger); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 12px var(--glinv-danger-glow); }
+.glinv-scope .glinv-cc-danger .glinv-cc-die { border-color: var(--glinv-danger); box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.22), 0 0 12px var(--glinv-danger-glow); }
 .glinv-scope .glinv-cc-warn .glinv-cc-die { border-color: color-mix(in srgb, var(--glinv-warn) 60%, var(--glinv-edge)); }

@@ -11,28 +11,11 @@
  * the dark HUD aesthetic applies regardless of the host sheet's theme.
  * ===================================================================== */
 
-/* ─── Bundled Font (variable, 200–800) ──────────────────────────────── */
-@font-face {
-    font-family: 'Oxanium';
-    font-style: normal;
-    font-weight: 200 800;
-    font-display: swap;
-    src: url('../assets/tidy5e-slots/fonts/oxanium/Oxanium-latin.woff2') format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
-        U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: 'Oxanium';
-    font-style: normal;
-    font-weight: 200 800;
-    font-display: swap;
-    src: url('../assets/tidy5e-slots/fonts/oxanium/Oxanium-latin-ext.woff2') format('woff2');
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
-        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
-        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-        U+A720-A7FF;
-}
+/* ─── Typeface ───────────────────────────────────────────────────────
+ * Declared once for the whole suite in styles/gl-fonts.css. This file used to
+ * ship its own Oxanium @font-face pair against a per-feature asset copy — and
+ * had its latin / latin-ext files swapped, so extended-Latin glyphs matched the
+ * wrong subset. Reach the face through --gl-display. */
 
 /* ═════════════════════════════════════════════════════════════════════
  * ETCHED GLASS — canonical GL Universe design language (--gl-* tokens)
@@ -42,18 +25,13 @@
  * tokens below alias onto them so the whole module shifts as one palette.
  * Ref: GL Universe Design Language Reference ("Etched Glass") v1.0.
  * ═════════════════════════════════════════════════════════════════════ */
-.glinv-scope {
-    /* ── Dynamic accent channel ──
-     * One variable carries the contextual color. This module's domain accent
-     * is the periwinkle brand tint; ceremony elements use --gl-signal. */
-    --gl-accent: #6b86d6;
-
-    /* ── Derived glows (always color-mix, never hand-picked) ── */
-    --gl-accent-glow:  color-mix(in srgb, var(--gl-accent) 45%, transparent);
-    --gl-accent-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
-    --gl-signal-glow:  color-mix(in srgb, var(--gl-signal) 45%, transparent);
-    --gl-signal-bloom: color-mix(in srgb, var(--gl-signal) 18%, transparent);
-}
+/* ── Accent channel ──
+ * This module's domain accent is the suite's periwinkle default, so it simply
+ * inherits `--gl-accent` — pinning it to a literal here would make the module
+ * the one thing that ignores a retheme. Ceremony elements use --gl-signal.
+ * The derived glow/bloom pairs (--gl-glow, --gl-bloom, --gl-signal-glow,
+ * --gl-signal-bloom) are defined once in gl-tokens.css; this file used to
+ * declare its own near-duplicates in the shared --gl-* namespace. */
 
 /* ─── Design Tokens (module-local, aliased onto --gl-*) ─────────────── */
 .glinv-scope {
@@ -95,15 +73,15 @@
 
     /* Depth */
     --glinv-shadow-raised:
-        0 18px 48px rgba(0, 0, 0, 0.55),
-        0 2px 0 rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        inset 0 -10px 24px rgba(0, 0, 0, 0.34),
+        0 18px 48px rgb(var(--gl-tint-dark) / 0.55),
+        0 2px 0 rgb(var(--gl-tint-dark) / 0.4),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+        inset 0 -10px 24px rgb(var(--gl-tint-dark) / 0.34),
         0 0 40px var(--glinv-glow-soft);
-    --glinv-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    --glinv-shadow-inset: inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.5);
     --glinv-shadow-chip:
-        0 4px 12px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        0 4px 12px rgb(var(--gl-tint-dark) / 0.45),
+        inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12);
 
     /* Motion */
     --glinv-ease: var(--gl-ease);
@@ -232,55 +210,24 @@
     100% { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Etched Glass motion vocabulary ────────────────────────────────── */
-
-/* Sheen sweep — the precision rule of light draws across from the leading
- * edge. Things it crosses light up. Used for active-enter / splash reveal. */
-@keyframes gl-sheen {
-    0% { transform: scaleX(0); opacity: 0; transform-origin: left center; }
-    20% { opacity: 1; }
-    100% { transform: scaleX(1); opacity: 0; transform-origin: left center; }
-}
-
-/* Diagonal wipe — panel reveals via a 45°-edged clip mask sliding in. */
-@keyframes gl-wipe {
-    0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); opacity: 0; }
-    100% { clip-path: polygon(0 0, 140% 0, 100% 100%, 0 100%); opacity: 1; }
-}
-
-/* Cascade stagger — list item enters sliding a few px along the diagonal. */
-@keyframes gl-cascade {
-    0% { opacity: 0; transform: translate(-6px, 4px); }
-    100% { opacity: 1; transform: translate(0, 0); }
-}
-
-/* Stamp — scale-in overshoot for ceremony verdicts (EMPTY / SHATTERED). */
-@keyframes gl-stamp {
-    0% { transform: scale(1.6); opacity: 0; filter: blur(2px); }
-    60% { transform: scale(0.94); opacity: 1; filter: blur(0); }
-    100% { transform: scale(1); }
-}
-
-/* Breathe — idle accent pulse (decorative loop). */
-@keyframes gl-breathe {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
-}
-
-/* Signal flash — a quick signal-amber fill sweep that recedes to outline. */
-@keyframes gl-signal-flash {
-    0% { background-position: -140% 0; }
-    100% { background-position: 140% 0; }
-}
+/* ─── Etched Glass motion vocabulary ──────────────────────────────────
+ * The shared motions (sheen / cascade / stamp / breathe / diagonal wipe /
+ * signal flash) used to be re-declared here. @keyframes names are GLOBAL in
+ * CSS, and this file loads late, so those copies were silently overriding the
+ * canonical ones for every other feature. They now live once in
+ * styles/gl-motion.css — use `gl-sheen`, `gl-cascade`, `gl-stamp`,
+ * `gl-breathe`, `gl-wipe-diag` and `gl-signal-flash` from there.
+ * Only genuinely tidy5e-specific motions belong below, `glinv-` prefixed.
+ * ------------------------------------------------------------------- */
 
 /* Bracket light-up — registration L-bracket brightening to accent. */
-@keyframes gl-bracket-lit {
+@keyframes glinv-bracket-lit {
     0% { border-color: var(--gl-line-strong); box-shadow: none; }
-    100% { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-accent-glow); }
+    100% { border-color: var(--gl-accent); box-shadow: 0 0 8px var(--gl-glow); }
 }
 
 /* Hero numeral reveal — etched ghost lit by a passing rule (decode). */
-@keyframes gl-numeral-pop {
+@keyframes glinv-numeral-pop {
     0% { transform: scale(0.6); opacity: 0; }
     65% { transform: scale(1.14); opacity: 1; }
     100% { transform: scale(1); }

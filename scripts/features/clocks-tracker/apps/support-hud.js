@@ -10,7 +10,7 @@
  * playerInvoke flag is set. State writes are GM-authoritative (see SupportStore).
  */
 
-import { MODULE_ID, SETTINGS, SUPPORT_ABILITY_KINDS, SUPPORT_FACTION_MOD, SUPPORT_ROUND_LIMITED_KINDS } from "../const.js";
+import { MODULE_ID, SETTINGS, SUPPORT_ABILITY_KINDS, SUPPORT_FACTION_MOD, SUPPORT_ROUND_LIMITED_KINDS, FALLBACK_TINTS } from "../const.js";
 import { SupportStore } from "../support/support-store.js";
 import { SupportCard } from "../support/support-card.js";
 
@@ -114,7 +114,7 @@ export class SupportHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _paintActive(s) {
     const root = this.element;
     const wrap = root.querySelector("[data-coinwrap]");
-    wrap.style.setProperty("--glct-sup-accent", s.accent || "#e0a368");
+    wrap.style.setProperty("--glct-sup-accent", s.accent || FALLBACK_TINTS.support.accent);
     wrap.classList.toggle("is-downed", !!s.downed);
 
     const max = SupportStore.poolMax(s);
@@ -286,7 +286,7 @@ export class SupportHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** Show `innerHTML` in Foundry's global tooltip while the row is hovered. */
   _bindTip(el, innerHTML) {
-    const accent = SupportStore.active()?.accent || "#e0a368";
+    const accent = SupportStore.active()?.accent || FALLBACK_TINTS.support.accent;
     const show = () => {
       const content = document.createElement("div");
       content.className = "glct-sup-tip";

@@ -1,4 +1,5 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
+import { onThemeChange } from "../../core/theme.mjs";
 
 // True when Foundry's socket subsystem is live. Emits are routed through the
 // suite's shared dispatcher (emitSocket); this guard only gates the optimistic
@@ -13,7 +14,7 @@ import {
   ADHOC_LIFECYCLE, ADHOC_LIFECYCLE_MODES, STATUS_ANIMATION, ADHOC_ICON_CHOICES,
   COMBATANT_RENDER_UPDATE_KEYS, ACTOR_RENDER_UPDATE_KEYS, FALLBACK_PORTRAIT,
   PORTRAIT_MIN_PIXELS, CONFIGURABLE_ACTOR_TYPES, PORTRAIT_FRAME_DEFAULTS,
-  PORTRAIT_FRAME_LIMITS, THEMES, DEFAULT_THEME, PALETTES, applyThemePalette
+  PORTRAIT_FRAME_LIMITS
 } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
 import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_APEX, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
@@ -38,10 +39,6 @@ const portraitQualityCache = new Map();
 export { registerSettings };
 
 export function onReady() {
-  // Mutate live palettes from the world theme setting BEFORE constructing the
-  // overlay / card FX / token overlays, so their initial paint uses the active
-  // palette directly (no first-frame in default theme then swap).
-  applyTheme({ skipRedraw: true });
   overlay = new GLUniverseInitiativeOverlay();
   cardFX = new CardFXManager();
   cardFX.ensureRenderer();
@@ -56,27 +53,17 @@ export function onReady() {
 
   // Route the feature's socket messages through the suite's shared dispatcher.
   onSocket(FEATURE_ID, data => overlay?.handleSocket(data));
-}
 
-// Reads the theme world setting, mutates the live palettes, toggles the theme
-// class on <html>, and refreshes every consumer (overlay HTML, card FX shader
-// uniforms, token overlay graphics, baked break-splash frames). Safe to call
-// before the singletons exist (ready); guards every consumer touch.
-function applyTheme({ skipRedraw = false } = {}) {
-  let themeName = DEFAULT_THEME;
-  try { themeName = game.settings.get(MODULE_ID, SETTINGS.theme) || DEFAULT_THEME; } catch {}
-  const resolved = applyThemePalette(themeName);
-  try {
-    const cls = document.documentElement.classList;
-    for (const t of Object.values(THEMES)) cls.remove(`gluni-theme--${t}`);
-    cls.add(`gluni-theme--${resolved}`);
-  } catch {}
-  if (skipRedraw) return resolved;
-  try { cardFX?.notifyThemeChange?.(); } catch {}
-  try { tokenOverlays?.notifyThemeChange?.(); } catch {}
-  try { breakSplashRenderer?.rebake?.(); } catch {}
-  try { overlay?.render?.(); } catch {}
-  return resolved;
+  // PIXI filters and WebGL shaders cannot observe a CSS custom-property change,
+  // so the rail registers its repaint path with the suite's theme module. Any
+  // retheme that calls refreshTheme() repaints the live FX rather than leaving
+  // the canvas layers on the previous palette until the next redraw.
+  onThemeChange(() => {
+    try { cardFX?.notifyThemeChange?.(); } catch { /* renderer may be gone */ }
+    try { tokenOverlays?.notifyThemeChange?.(); } catch { /* ditto */ }
+    try { breakSplashRenderer?.rebake?.(); } catch { /* ditto */ }
+    try { overlay?.render?.(); } catch { /* ditto */ }
+  });
 }
 
 // All Foundry hooks are attached here (called at init only when the feature is
@@ -330,22 +317,6 @@ function registerSettings() {
     type: Number,
     range: { min: 0, max: 1, step: 0.05 },
     default: 0.8
-  });
-
-  game.settings.register(MODULE_ID, SETTINGS.theme, {
-    name: localize("GLUNI.Settings.Theme.Name"),
-    hint: localize("GLUNI.Settings.Theme.Hint"),
-    scope: "world",
-    config: true,
-    type: String,
-    choices: {
-      [THEMES.scifi]:     localize("GLUNI.Settings.Theme.SciFi"),
-      [THEMES.core]:      localize("GLUNI.Settings.Theme.Core"),
-      [THEMES.fantasy]:   localize("GLUNI.Settings.Theme.Fantasy"),
-      [THEMES.chronicle]: localize("GLUNI.Settings.Theme.Chronicle")
-    },
-    default: DEFAULT_THEME,
-    onChange: () => applyTheme()
   });
 
   game.settings.register(MODULE_ID, SETTINGS.position, {

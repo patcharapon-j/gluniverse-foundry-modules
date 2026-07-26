@@ -9,7 +9,7 @@
  * history (the current weather is always visible).
  */
 
-import { MODULE_ID, SETTINGS, WEATHER_DIRECTIONS } from "../const.js";
+import { MODULE_ID, SETTINGS, WEATHER_DIRECTIONS, FALLBACK_TINTS } from "../const.js";
 import { HEX_LAYOUT, HEX_BOUNDS } from "../weather/hex-geometry.js";
 import { WeatherStore } from "../weather/weather-store.js";
 import { WeatherEngine } from "../weather/engine.js";
@@ -146,8 +146,8 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const curEl = root.querySelector("[data-current]");
     if (curEl) {
-      curEl.style.setProperty("--glct-weather-tint", e.tintParticle ?? "#cfe8ff");
-      curEl.style.setProperty("--glct-weather-glow", e.tintGlow ?? "#7fb4e6");
+      curEl.style.setProperty("--glct-weather-tint", e.tintParticle ?? FALLBACK_TINTS.weather.tint);
+      curEl.style.setProperty("--glct-weather-glow", e.tintGlow ?? FALLBACK_TINTS.weather.glow);
       curEl.classList.toggle("ominous", !!e.ominous);
     }
 
@@ -179,7 +179,7 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this._marker.style.top = `${c.y}px`;
       const om = !!cur.hex.effect?.ominous;
       this._marker.classList.toggle("ominous", om);
-      this._marker.style.setProperty("--glct-weather-glow", cur.hex.effect?.tintGlow ?? "#7fb4e6");
+      this._marker.style.setProperty("--glct-weather-glow", cur.hex.effect?.tintGlow ?? FALLBACK_TINTS.weather.glow);
       // arrival pulse
       this._marker.classList.remove("arrive"); void this._marker.offsetWidth; this._marker.classList.add("arrive");
     }
@@ -221,8 +221,8 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
       tile.style.top = `${c.y}px`;
       tile.style.width = `${TILE_W}px`;
       tile.style.height = `${TILE_H}px`;
-      tile.style.setProperty("--glct-weather-tint", e.tintParticle ?? "#3a4250");
-      tile.style.setProperty("--glct-weather-glow", e.tintGlow ?? "#7fb4e6");
+      tile.style.setProperty("--glct-weather-tint", e.tintParticle ?? FALLBACK_TINTS.weatherTile.tint);
+      tile.style.setProperty("--glct-weather-glow", e.tintGlow ?? FALLBACK_TINTS.weather.glow);
       tile.title = `${hex?.label ?? ""}${hex?.temperature ? " · " + hex.temperature : ""}`;
       const ic = document.createElement("i");
       ic.className = hex?.icon ?? "fa-solid fa-cloud";
@@ -283,7 +283,7 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const chips = odds.map(o => {
       const chip = document.createElement("span");
       chip.className = "wx-fc" + (o.ominous ? " ominous" : "") + (o.stay ? " stay" : "");
-      chip.style.setProperty("--glct-weather-glow", o.tintGlow ?? "#7fb4e6");
+      chip.style.setProperty("--glct-weather-glow", o.tintGlow ?? FALLBACK_TINTS.weather.glow);
       const stay = o.stay ? ` · ${game.i18n.localize("GLCT.weather.dir.stay")}` : "";
       chip.title = `${o.label} — ${pct(o.prob)}%${stay}`;
       const i = document.createElement("i");
@@ -312,7 +312,7 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
       const chip = document.createElement("span");
       chip.className = "wx-shist" + (hex?.effect?.ominous ? " ominous" : "");
       chip.title = hex?.label ?? "";
-      chip.style.setProperty("--glct-weather-glow", hex?.effect?.tintGlow ?? "#7fb4e6");
+      chip.style.setProperty("--glct-weather-glow", hex?.effect?.tintGlow ?? FALLBACK_TINTS.weather.glow);
       const i = document.createElement("i");
       i.className = hex?.icon ?? "fa-solid fa-cloud";
       chip.appendChild(i);

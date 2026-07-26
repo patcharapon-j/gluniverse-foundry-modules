@@ -28,8 +28,10 @@
 .application.gllg-generate,
 .application.gllg-llm-log,
 .chat-message:has(.gllg-card){
-  /* — dynamic accent channel (set per-context below) — */
-  --gl-accent:#6b86d6;
+  /* — dynamic accent channel —
+     Inherited from the foundation; per-context rules below remap it. This used
+     to restate the root default as a literal, which pinned the feature to one
+     hue and made it the one surface a retheme could not move. — */
 
   /* — legacy module-local aliases (keep old rules working) — */
   --ink:var(--gl-text); --muted:var(--gl-text-dim); --faint:#69748c;
@@ -76,19 +78,19 @@
 #gllg-auditor.application{
   border:1px solid var(--gl-edge); border-radius:15px; overflow:hidden;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 34%),
-    linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.20)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:
-    0 26px 70px rgba(0,0,0,.6),
-    0 2px 0 rgba(0,0,0,.4),
-    inset 0 1px 0 rgba(255,255,255,.16),
-    inset 0 -12px 28px rgba(0,0,0,.38),
+    0 26px 70px rgb(var(--gl-tint-dark) / .6),
+    0 2px 0 rgb(var(--gl-tint-dark) / .4),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / .16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38),
     0 0 46px var(--gl-bloom);
   backdrop-filter:blur(16px) saturate(1.15);
 }
 #gllg-auditor .window-header{
-  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+  background:linear-gradient(180deg, rgb(var(--gl-tint-light) / .06), rgb(var(--gl-tint-light) / 0));
   border-bottom:1px solid var(--gl-hair); color:var(--gl-text);
   font-family:var(--gl-tech); font-weight:700; letter-spacing:.14em; text-transform:uppercase;
 }
@@ -102,8 +104,8 @@
 /* ---- scrollbar ---- */
 #gllg-auditor .window-content::-webkit-scrollbar{width:9px}
 #gllg-auditor .window-content::-webkit-scrollbar-thumb{
-  background:rgba(255,255,255,.12); border-radius:99px; border:2px solid transparent; background-clip:padding-box}
-#gllg-auditor .window-content::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22);background-clip:padding-box}
+  background:rgb(var(--gl-tint-light) / .12); border-radius:99px; border:2px solid transparent; background-clip:padding-box}
+#gllg-auditor .window-content::-webkit-scrollbar-thumb:hover{background:rgb(var(--gl-tint-light) / .22);background-clip:padding-box}
 
 #gllg-auditor .gllg-audit-root{padding:11px 12px 12px; display:flex; flex-direction:column; gap:11px}
 
@@ -113,8 +115,8 @@
   padding:36px 24px;text-align:center;color:var(--gl-text-dim);overflow:hidden;border-radius:12px;
   background:
     linear-gradient(180deg, rgba(2,7,11,.55), rgba(2,7,11,.7)),
-    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    linear-gradient(rgb(var(--gl-tint-light) / .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gl-tint-light) / .04) 1px, transparent 1px);
   background-size:auto, 28px 28px, 28px 28px}
 #gllg-auditor .gllg-empty i{font-size:34px;color:var(--gl-accent);filter:drop-shadow(0 0 14px var(--gl-bloom));opacity:.85}
 #gllg-auditor .gllg-empty p{margin:0;max-width:34ch;line-height:1.5}
@@ -126,11 +128,11 @@
   padding:11px 13px;border-radius:13px;isolation:isolate;
   clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
     linear-gradient(98deg, color-mix(in srgb,var(--gl-accent) 12%,var(--gl-ink-1)), var(--gl-ink-1) 70%);
   border:1px solid var(--gl-edge);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.14), inset 0 -10px 22px rgba(0,0,0,.32);
-  filter:drop-shadow(0 12px 26px rgba(0,0,0,.4))}
+  box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .14), inset 0 -10px 22px rgb(var(--gl-tint-dark) / .32);
+  filter:drop-shadow(0 12px 26px rgb(var(--gl-tint-dark) / .4))}
 /* accent hairline tracing the cut corner */
 #gllg-auditor .gllg-party::after{content:"";position:absolute;top:5px;right:-3px;width:20px;height:1px;
   transform:rotate(-45deg);transform-origin:right center;
@@ -143,7 +145,7 @@
 /* technical-voice pills (glass-chip §3.2) */
 #gllg-auditor .gp-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--gl-tech);font-size:9px;font-weight:700;
   letter-spacing:.1em;text-transform:uppercase;color:var(--gl-text-dim);
-  padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid var(--gl-hair)}
+  padding:2px 8px;border-radius:99px;background:rgb(var(--gl-tint-light) / .05);border:1px solid var(--gl-hair)}
 #gllg-auditor .gp-pill i{font-size:8.5px;opacity:.8}
 
 #gllg-auditor .gp-tally{display:flex;gap:4px}
@@ -156,14 +158,14 @@
 
 /* ---- icon buttons (notched chips, sheen-on-hover, press) ---- */
 #gllg-auditor .gllg-btn{position:relative;display:grid;place-items:center;width:30px;height:30px;overflow:hidden;cursor:pointer;
-  color:var(--gl-text-dim);background:rgba(255,255,255,.05);border:1px solid var(--gl-hair);
+  color:var(--gl-text-dim);background:rgb(var(--gl-tint-light) / .05);border:1px solid var(--gl-hair);
   clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);
   transition:background var(--gl-d-quick),color var(--gl-d-quick),box-shadow var(--gl-d-quick),transform .1s}
 /* top precision rule sweeps in on hover (§4.3 / §6.2) */
 #gllg-auditor .gllg-btn::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;transform:scaleX(0);transform-origin:left;
   background:linear-gradient(90deg,transparent,var(--gl-accent) 24%,var(--gl-accent) 76%,transparent);
   box-shadow:0 0 10px var(--gl-glow);transition:transform var(--gl-d-quick) var(--gl-ease)}
-#gllg-auditor .gllg-btn:hover{background:rgba(255,255,255,.11);color:var(--gl-text);
+#gllg-auditor .gllg-btn:hover{background:rgb(var(--gl-tint-light) / .11);color:var(--gl-text);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 50%,transparent)}
 #gllg-auditor .gllg-btn:hover::before{transform:scaleX(1)}
 #gllg-auditor .gllg-btn:active{transform:translateY(1px) scale(.97)}
@@ -171,9 +173,9 @@
 
 /* ===================== party wealth strip ===================== */
 #gllg-auditor .gllg-party-wealth{display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:10px;
-  background:rgba(255,255,255,.025);border:1px solid var(--gl-hair)}
+  background:rgb(var(--gl-tint-light) / .025);border:1px solid var(--gl-hair)}
 #gllg-auditor .pw-lbl{font-family:var(--gl-tech);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700;white-space:nowrap}
-#gllg-auditor .pw-bar{flex:1;height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+#gllg-auditor .pw-bar{flex:1;height:6px;border-radius:99px;background:rgb(var(--gl-tint-light) / .08);overflow:hidden;position:relative}
 #gllg-auditor .pw-bar i{position:absolute;inset:0;width:0;border-radius:99px;
   background:linear-gradient(90deg,var(--gl-accent),color-mix(in srgb,var(--gl-accent) 70%,#fff));
   box-shadow:0 0 8px var(--gl-glow);transition:width .7s var(--gl-snap)}
@@ -193,15 +195,15 @@
 #gllg-auditor .gllg-member{position:relative;padding:11px 12px;isolation:isolate;
   clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 40%),
+    linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / 0) 40%),
     linear-gradient(98deg, color-mix(in srgb,var(--gl-accent) 7%,var(--gl-ink-1)), var(--gl-ink-1) 72%);
   border:1px solid var(--gl-hair);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), inset 0 -10px 22px rgba(0,0,0,.3);
-  filter:drop-shadow(0 10px 24px rgba(0,0,0,.34));
+  box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .08), inset 0 -10px 22px rgb(var(--gl-tint-dark) / .3);
+  filter:drop-shadow(0 10px 24px rgb(var(--gl-tint-dark) / .34));
   transition:transform var(--gl-d-quick) var(--gl-snap),filter .2s,border-color .2s;
   animation:gllg-cardin var(--gl-d-move) both var(--gl-snap);animation-delay:calc(var(--i,0)*50ms)}
 #gllg-auditor .gllg-member:hover{transform:translateY(-2px);
-  filter:drop-shadow(0 16px 32px rgba(0,0,0,.45)) drop-shadow(0 0 20px var(--gl-bloom));border-color:var(--gl-edge)}
+  filter:drop-shadow(0 16px 32px rgb(var(--gl-tint-dark) / .45)) drop-shadow(0 0 20px var(--gl-bloom));border-color:var(--gl-edge)}
 /* status spine down the left edge (3→4px on critical), tinted by severity */
 #gllg-auditor .gllg-member::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:99px;z-index:1;
   background:var(--gl-accent);box-shadow:0 0 10px var(--gl-glow);opacity:.92}
@@ -231,7 +233,7 @@
 #gllg-auditor .chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px 4px 7px;
   font-size:10.5px;font-weight:700;letter-spacing:.01em;line-height:1;cursor:default;
   clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);
-  border:1px solid var(--gl-edge);background:rgba(255,255,255,.04);color:var(--gl-text);
+  border:1px solid var(--gl-edge);background:rgb(var(--gl-tint-light) / .04);color:var(--gl-text);
   transition:transform .12s var(--gl-pop),box-shadow .15s,background .15s}
 #gllg-auditor .chip:hover{transform:translateY(-1px)}
 #gllg-auditor .chip i{font-size:9px;opacity:.95}
@@ -259,13 +261,13 @@
 /* ---- per-PC wealth — an INDEPENDENT readout, its bar coloured by wealth
         severity, not the card's overall (fundamentals-driven) status. ---- */
 #gllg-auditor .gm-wealth{display:flex;align-items:center;gap:8px;margin-top:9px;padding:6px 9px 6px 6px;border-radius:9px;
-  background:rgba(255,255,255,.02);
+  background:rgb(var(--gl-tint-light) / .02);
   --wsp:var(--ok); --wglow:var(--okglow)}
 #gllg-auditor .gm-wealth.sev-critical,#gllg-auditor .gm-wealth.sev-behind{--wsp:var(--behind);--wglow:var(--behindglow)}
 #gllg-auditor .gm-wealth.sev-ontrack{--wsp:var(--ok);--wglow:var(--okglow)}
 #gllg-auditor .gm-wealth.sev-ahead{--wsp:var(--ahead);--wglow:var(--aheadglow)}
 #gllg-auditor .gw-lbl{font-family:var(--gl-tech);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:700;white-space:nowrap}
-#gllg-auditor .gw-bar{flex:1;height:5px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+#gllg-auditor .gw-bar{flex:1;height:5px;border-radius:99px;background:rgb(var(--gl-tint-light) / .08);overflow:hidden;position:relative}
 #gllg-auditor .gw-bar i{position:absolute;inset:0;width:0;border-radius:99px;
   background:linear-gradient(90deg,var(--wsp),color-mix(in srgb,var(--wsp) 65%,#fff));
   box-shadow:0 0 7px var(--wglow);transition:width .7s var(--gl-snap)}
@@ -323,13 +325,13 @@
   border:1px solid var(--gl-edge); overflow:hidden;
   clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 34%),
-    linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.20)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 13%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.16),
-    inset 0 -12px 28px rgba(0,0,0,.38);
-  filter:drop-shadow(0 18px 44px rgba(0,0,0,.5)) drop-shadow(0 0 30px var(--gl-bloom));
+    inset 0 1px 0 rgb(var(--gl-tint-light) / .16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38);
+  filter:drop-shadow(0 18px 44px rgb(var(--gl-tint-dark) / .5)) drop-shadow(0 0 30px var(--gl-bloom));
   animation:gllg-cardin var(--gl-d-reveal) both var(--gl-ease);
 }
 .gllg-card *{box-sizing:border-box}
@@ -344,7 +346,7 @@
 .gllg-card>*{position:relative;z-index:1}
 
 .gllg-card-head{position:relative;padding:11px 13px 9px;border-bottom:1px solid var(--gl-hair);
-  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,0))}
+  background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .05),rgb(var(--gl-tint-light) / 0))}
 /* a precision rule of light underlines the head (§4.3) */
 .gllg-card-head::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
   background:linear-gradient(90deg,transparent,var(--gl-accent) 24%,var(--gl-accent) 76%,transparent);
@@ -371,7 +373,7 @@
 
 /* reasoning disclosure */
 .gllg-card .gllg-why{margin:9px 11px 0;border-radius:9px;border:1px solid var(--gl-hair);
-  background:rgba(255,255,255,.025);overflow:hidden}
+  background:rgb(var(--gl-tint-light) / .025);overflow:hidden}
 .gllg-card .gllg-why summary{cursor:pointer;list-style:none;padding:7px 10px;font-family:var(--gl-tech);font-size:9px;font-weight:700;
   letter-spacing:.13em;text-transform:uppercase;color:var(--gl-text-dim)}
 .gllg-card .gllg-why summary::-webkit-details-marker{display:none}
@@ -380,12 +382,12 @@
 
 /* parcels + items */
 .gllg-parcels{display:flex;flex-direction:column;gap:8px;padding:10px 11px}
-.gllg-parcel{border:1px solid var(--gl-hair);background:rgba(255,255,255,.02);overflow:hidden;
+.gllg-parcel{border:1px solid var(--gl-hair);background:rgb(var(--gl-tint-light) / .02);overflow:hidden;
   clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,0 100%)}
 /* parcel head: triangle bullet + technical voice */
 .gllg-parcel-head{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;
   font-family:var(--gl-tech);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gl-text-dim);
-  border-bottom:1px solid var(--gl-hair);background:rgba(255,255,255,.025)}
+  border-bottom:1px solid var(--gl-hair);background:rgb(var(--gl-tint-light) / .025)}
 .gllg-parcel-head::before{content:"▶";color:var(--gl-accent);font-size:7px;margin-right:6px;filter:drop-shadow(0 0 5px var(--gl-glow))}
 .gllg-parcel-tot{font-family:var(--gl-display);font-variant-numeric:tabular-nums;color:var(--gl-text);font-weight:800}
 .gllg-items{display:flex;flex-direction:column}
@@ -400,7 +402,7 @@
 .gllg-item:nth-child(4){animation-delay:150ms}
 .gllg-item:nth-child(n+5){animation-delay:190ms}
 .gllg-item:last-child{border-bottom:none}
-.gllg-item:hover{background:rgba(255,255,255,.045)}
+.gllg-item:hover{background:rgb(var(--gl-tint-light) / .045)}
 .gllg-item-img{width:34px;height:34px;flex:none;object-fit:cover;border:1px solid var(--gl-edge);background:var(--gl-ink-1);
   clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%)}
 .gllg-item-main{flex:1;min-width:0}
@@ -416,7 +418,7 @@
 .gllg-tier{font-family:var(--gl-tech);font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   padding:2px 7px;line-height:1;border:1px solid var(--gl-edge);color:var(--gl-text-dim);
   clip-path:polygon(3px 0,100% 0,100% 100%,0 100%,0 3px)}
-.gllg-tier.sev-rune{color:#d2dcff;background:color-mix(in srgb,#6b86d6 16%,transparent);border-color:color-mix(in srgb,#6b86d6 40%,transparent)}
+.gllg-tier.sev-rune{color:#d2dcff;background:color-mix(in srgb,var(--gl-accent) 16%,transparent);border-color:color-mix(in srgb,var(--gl-accent) 40%,transparent)}
 .gllg-tier.sev-core{color:#cfe9da;background:color-mix(in srgb,var(--gl-good) 13%,transparent);border-color:color-mix(in srgb,var(--gl-good) 28%,transparent)}
 .gllg-tier.sev-unusual{color:#f4dcc0;background:var(--behindsoft);border-color:color-mix(in srgb,var(--behind) 36%,transparent)}
 .gllg-tier.sev-consumable{color:#d2e8f3;background:var(--aheadsoft);border-color:color-mix(in srgb,var(--ahead) 30%,transparent)}
@@ -437,13 +439,13 @@
 
 .gllg-item-ctl{display:flex;gap:4px;flex:none}
 .gllg-mini{position:relative;display:grid;place-items:center;width:26px;height:26px;cursor:pointer;overflow:hidden;
-  color:var(--gl-text-dim);background:rgba(255,255,255,.05);border:1px solid var(--gl-hair);
+  color:var(--gl-text-dim);background:rgb(var(--gl-tint-light) / .05);border:1px solid var(--gl-hair);
   clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);
   transition:background var(--gl-d-quick),color var(--gl-d-quick),box-shadow var(--gl-d-quick),transform .1s}
 .gllg-mini::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;transform:scaleX(0);transform-origin:left;
   background:linear-gradient(90deg,transparent,var(--gl-accent),transparent);box-shadow:0 0 8px var(--gl-glow);
   transition:transform var(--gl-d-quick) var(--gl-ease)}
-.gllg-mini:hover{background:rgba(255,255,255,.12);color:var(--gl-text);
+.gllg-mini:hover{background:rgb(var(--gl-tint-light) / .12);color:var(--gl-text);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 50%,transparent)}
 .gllg-mini:hover::before{transform:scaleX(1)}
 .gllg-mini:active{transform:translateY(1px) scale(.97)}
@@ -475,13 +477,13 @@
 .gllg-card .gllg-btn{position:relative;flex:1 1 auto;min-width:84px;max-width:100%;display:inline-flex;align-items:center;
   justify-content:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   padding:8px 9px;cursor:pointer;font:inherit;font-size:12px;font-weight:700;
-  color:var(--gl-text);background:rgba(255,255,255,.06);border:1px solid var(--gl-edge);
+  color:var(--gl-text);background:rgb(var(--gl-tint-light) / .06);border:1px solid var(--gl-edge);
   clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px);
   transition:background var(--gl-d-quick),box-shadow .15s,transform .1s}
 .gllg-card .gllg-btn::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;transform:scaleX(0);transform-origin:left;
   background:linear-gradient(90deg,transparent,var(--gl-accent) 24%,var(--gl-accent) 76%,transparent);
   box-shadow:0 0 10px var(--gl-glow);transition:transform var(--gl-d-quick) var(--gl-ease)}
-.gllg-card .gllg-btn:hover{background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
+.gllg-card .gllg-btn:hover{background:rgb(var(--gl-tint-light) / .12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
 .gllg-card .gllg-btn:hover::before{transform:scaleX(1)}
 .gllg-card .gllg-btn:active{transform:translateY(1px) scale(.98)}
 .gllg-card .gllg-btn[disabled]{opacity:.5;pointer-events:none}
@@ -498,7 +500,7 @@
 .gllg-created{list-style:none;margin:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px}
 .gllg-created li{font-size:12px;display:flex;align-items:center;gap:8px}
 .gllg-mini-tag{font-family:var(--gl-tech);font-size:8.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--gl-text-dim);
-  padding:1px 6px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--gl-hair)}
+  padding:1px 6px;border-radius:99px;background:rgb(var(--gl-tint-light) / .06);border:1px solid var(--gl-hair)}
 /* an error result re-tints the whole card to hazard (it still carries .gllg-done) */
 .gllg-card:has(.gllg-err){--gl-accent:var(--gl-hazard)}
 .gllg-card:has(.gllg-err) .gllg-card-title i{color:var(--gl-hazard)}
@@ -516,8 +518,8 @@
 
 /* ---- GM-only icon-generation prompt folded into an item description ---- */
 .gllg-icon-note{margin:.5em 0 .2em;padding:7px 10px;border-radius:8px;
-  border:1px solid color-mix(in srgb,var(--gl-accent,#6b86d6) 28%,transparent);
-  background:color-mix(in srgb,var(--gl-accent,#6b86d6) 8%,transparent)}
+  border:1px solid color-mix(in srgb,var(--gl-accent,var(--gl-accent)) 28%,transparent);
+  background:color-mix(in srgb,var(--gl-accent,var(--gl-accent)) 8%,transparent)}
 .gllg-icon-note .gllg-icon-note-head{margin:0 0 .25em;font-size:.92em;color:#9bb3e0}
 .gllg-icon-note .gllg-icon-note-head i{margin-right:.35em}
 .gllg-icon-note .gllg-icon-note-body{margin:0;font-size:.92em;line-height:1.4;font-style:italic;opacity:.92}
@@ -540,14 +542,14 @@
 .application.gllg-generate{
   border:1px solid var(--gl-edge); border-radius:14px; overflow:hidden;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 34%),
-    linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.20)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
-  box-shadow:0 26px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.16), 0 0 50px var(--gl-bloom);
+  box-shadow:0 26px 70px rgb(var(--gl-tint-dark) / .6), inset 0 1px 0 rgb(var(--gl-tint-light) / .16), 0 0 50px var(--gl-bloom);
   backdrop-filter:blur(16px) saturate(1.15);
 }
 .application.gllg-generate .window-header{
-  background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0));
+  background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / 0));
   border-bottom:1px solid var(--gl-hair)}
 .application.gllg-generate .window-header .window-title{font-family:var(--gl-tech);font-weight:700;letter-spacing:.12em;
   text-transform:uppercase;font-size:11px;color:var(--gl-text)}
@@ -559,10 +561,10 @@
    the glyph into a tofu square). Notched, sheen on hover. */
 .application.gllg-generate button:not(.header-control):not([class*="fa-"]){
   position:relative;overflow:hidden;font-family:var(--gl-display);font-weight:700;color:var(--gl-text);
-  background:rgba(255,255,255,.06);border:1px solid var(--gl-edge);
+  background:rgb(var(--gl-tint-light) / .06);border:1px solid var(--gl-edge);
   clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px);transition:background var(--gl-d-quick),box-shadow .15s,transform .1s}
 .application.gllg-generate button:not(.header-control):not([class*="fa-"]):hover{
-  background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
+  background:rgb(var(--gl-tint-light) / .12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
 .application.gllg-generate button:not(.header-control):not([class*="fa-"]):active{transform:translateY(1px) scale(.98)}
 
 /* fills the dialog (explicit, resizable width) and shrinks with it. */
@@ -609,12 +611,12 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
 .application.gllg-llm-log{
   border:1px solid var(--gl-edge);border-radius:14px;overflow:hidden;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
-  box-shadow:0 26px 70px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.16);
+  box-shadow:0 26px 70px rgb(var(--gl-tint-dark) / .6),inset 0 1px 0 rgb(var(--gl-tint-light) / .16);
   backdrop-filter:blur(16px) saturate(1.15);
 }
-.application.gllg-llm-log .window-header{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0));border-bottom:1px solid var(--gl-hair)}
+.application.gllg-llm-log .window-header{background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / 0));border-bottom:1px solid var(--gl-hair)}
 .application.gllg-llm-log .window-header .window-title{font-family:var(--gl-tech);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:11px;color:var(--gl-text)}
 .application.gllg-llm-log .window-content{font-family:var(--gl-display);color:var(--gl-text);background:none;padding:0}
 .gllg-llmlog-wrap{display:flex;flex-direction:column;height:100%;min-height:0}
@@ -623,13 +625,13 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
 .gllg-llmlog-count{font-family:var(--gl-tech);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700}
 .gllg-llmlog-actions{display:flex;gap:7px}
 .gllg-llmlog-btn{position:relative;overflow:hidden;font:inherit;font-size:11px;font-weight:700;color:var(--gl-text);cursor:pointer;
-  padding:5px 10px;border:1px solid var(--gl-edge);background:rgba(255,255,255,.06);
+  padding:5px 10px;border:1px solid var(--gl-edge);background:rgb(var(--gl-tint-light) / .06);
   clip-path:polygon(5px 0,100% 0,100% 100%,0 100%,0 5px);transition:background var(--gl-d-quick),box-shadow .15s,transform .1s}
-.gllg-llmlog-btn:hover{background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
+.gllg-llmlog-btn:hover{background:rgb(var(--gl-tint-light) / .12);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gl-accent) 45%,transparent)}
 .gllg-llmlog-btn:active{transform:translateY(1px) scale(.98)}
 .gllg-llmlog-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 .gllg-llmlog-list .gllg-empty{padding:18px 12px;text-align:center;color:var(--faint);font-size:12px;line-height:1.5}
-.gllg-llmlog-row{padding:7px 10px;border:1px solid var(--gl-hair);background:rgba(255,255,255,.03);
+.gllg-llmlog-row{padding:7px 10px;border:1px solid var(--gl-hair);background:rgb(var(--gl-tint-light) / .03);
   clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);animation:gllg-rise var(--gl-d-move) both var(--gl-ease)}
 .gllg-llmlog-row.is-fail{--gl-accent:var(--gl-hazard);border-color:color-mix(in srgb,var(--gl-hazard) 35%,transparent);background:color-mix(in srgb,var(--gl-hazard) 7%,transparent)}
 .gllg-llmlog-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
@@ -660,7 +662,7 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
     color-mix(in srgb,var(--gl-line-strong) 55%,transparent) 3px 4px, transparent 4px 8px);
   opacity:.5}
 .gllg-cmyk{display:inline-block;width:16px;height:4px;
-  background:linear-gradient(90deg,var(--gl-ink-0) 0 4px,var(--gl-cyan) 4px 8px,#ff66b3 8px 12px,var(--gl-signal) 12px 16px)}
+  background:linear-gradient(90deg,var(--gl-ink-0) 0 4px,var(--gl-cyan) 4px 8px,var(--gl-holo-c) 8px 12px,var(--gl-signal) 12px 16px)}
 
 /* card-head registration row — normal flow, right-aligned, below the sub */
 .gllg-card-head .gllg-headreg{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:7px;opacity:.62}
@@ -676,6 +678,9 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
 /* REDUCED — collapse durations, kill sheens + decorative loops, ceremonies
    become straight fades. */
 body.gllg-motion-reduced :is(#gllg-auditor,.gllg-card,.application.gllg-generate,.application.gllg-llm-log){
+  /* Deliberately NOT --gl-motion-scale: this tier CLAMPS every duration to a
+     ~160ms ceiling rather than scaling them proportionally, so long ceremony
+     beats collapse to a straight cut while short feedback stays readable. */
   --gl-d-quick:120ms; --gl-d-move:160ms; --gl-d-reveal:160ms; --gl-d-splash:160ms;
 }
 body.gllg-motion-reduced .gllg-card,
@@ -689,7 +694,8 @@ body.gllg-motion-reduced .gllg-card .gllg-btn::before{display:none}
 /* CINEMATIC — durations ×1.4, sheens gain a trailing flare, head rule echoes,
    ceremony holds linger. */
 body.gllg-motion-cinematic :is(#gllg-auditor,.gllg-card,.application.gllg-generate,.application.gllg-llm-log){
-  --gl-d-quick:252ms; --gl-d-move:588ms; --gl-d-reveal:868ms; --gl-d-splash:1008ms;
+  /* exactly 1.4x the base durations — expressed as the shared multiplier */
+  --gl-motion-scale:1.4;
 }
 body.gllg-motion-cinematic .gllg-btn::before,
 body.gllg-motion-cinematic .gllg-mini::before,

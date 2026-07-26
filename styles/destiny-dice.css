@@ -60,13 +60,13 @@
   clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
 
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.2)),
     linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -10px 22px rgba(0, 0, 0, 0.34),
-    0 2px 0 rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.34),
+    0 2px 0 rgb(var(--gl-tint-dark) / 0.4);
   transition:
     color var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease),
@@ -114,7 +114,7 @@
   z-index: 2;
   text-shadow:
     0 0 6px color-mix(in oklab, var(--gl-accent) 26%, transparent),
-    0 1px 0 rgba(0, 0, 0, 0.5);
+    0 1px 0 rgb(var(--gl-tint-dark) / 0.5);
 }
 
 /* Triangle bullet — the etched indicator (§4.2) */
@@ -145,16 +145,16 @@
   color: var(--gl-signal-hot);
   box-shadow:
     inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 70%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -10px 22px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.34),
     0 0 22px color-mix(in oklab, var(--gl-accent) 34%, transparent),
-    0 2px 0 rgba(0, 0, 0, 0.4);
+    0 2px 0 rgb(var(--gl-tint-dark) / 0.4);
 }
 
 .glddf-fated-roll-toggle:has(input:checked) > span {
   text-shadow:
     0 0 10px color-mix(in oklab, var(--gl-accent) 50%, transparent),
-    0 1px 0 rgba(0, 0, 0, 0.5);
+    0 1px 0 rgb(var(--gl-tint-dark) / 0.5);
 }
 
 .glddf-fated-roll-toggle:has(input:checked) > span::before {
@@ -166,7 +166,7 @@
   appearance: none;
   -webkit-appearance: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.3)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.3)),
     var(--gl-ink-2);
   border: 1px solid color-mix(in oklab, var(--gl-accent) 40%, var(--gl-edge));
   clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
@@ -234,17 +234,17 @@
 
   /* Glass-panel fill (§3.1) */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.2)),
     linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38);
 
   /* clip-path clips outer shadows → drop + bloom ride on filter (§9.1 note) */
   filter:
-    drop-shadow(0 18px 42px rgba(0, 0, 0, 0.55))
-    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4))
+    drop-shadow(0 18px 42px rgb(var(--gl-tint-dark) / 0.55))
+    drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / 0.4))
     drop-shadow(0 0 26px color-mix(in oklab, var(--gl-accent) 18%, transparent));
 
   backdrop-filter: blur(16px) saturate(1.15);
@@ -324,13 +324,13 @@
 .glddf-fate-glyph {
   align-self: stretch;
   background:
-    radial-gradient(ellipse at 50% 32%, rgba(255, 255, 255, 0.07), transparent 60%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.36));
+    radial-gradient(ellipse at 50% 32%, rgb(var(--gl-tint-light) / 0.07), transparent 60%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.03), rgb(var(--gl-tint-dark) / 0.36));
   border: none;
   border-right: 1px solid color-mix(in oklab, var(--gl-accent) 32%, var(--gl-hair));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset -1px 0 0 rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
+    inset -1px 0 0 rgb(var(--gl-tint-dark) / 0.4);
   display: flex;
   flex: 0 0 var(--glddf-leading-size);
   height: auto;
@@ -345,7 +345,7 @@
   filter:
     drop-shadow(0 0 6px color-mix(in oklab, var(--gl-accent) 55%, transparent))
     drop-shadow(0 0 13px color-mix(in oklab, var(--gl-accent) 35%, transparent))
-    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+    drop-shadow(0 1px 2px rgb(var(--gl-tint-dark) / 0.65));
 }
 
 .glddf-fate-glyph {
@@ -354,7 +354,7 @@
   justify-content: center;
   text-shadow:
     0 0 8px color-mix(in oklab, var(--gl-accent) 55%, transparent),
-    0 1px 2px rgba(0, 0, 0, 0.55);
+    0 1px 2px rgb(var(--gl-tint-dark) / 0.55);
 }
 
 .glddf-fate-glyph i {
@@ -423,22 +423,22 @@
   line-height: 1.05;
   text-shadow:
     0 0 10px color-mix(in oklab, var(--gl-accent) 30%, transparent),
-    0 1px 0 rgba(0, 0, 0, 0.55);
+    0 1px 0 rgb(var(--gl-tint-dark) / 0.55);
 }
 
 /* --- Hero bonus numeral lockup (§5 "numbers are heroes") ----------------- */
 .glddf-fate-bonus {
   align-items: center;
   background:
-    radial-gradient(ellipse at 50% 28%, rgba(255, 255, 255, 0.14), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.42));
+    radial-gradient(ellipse at 50% 28%, rgb(var(--gl-tint-light) / 0.14), transparent 70%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), rgb(var(--gl-tint-dark) / 0.42));
   border: 1px solid color-mix(in oklab, var(--gl-accent) 60%, var(--gl-edge));
   border-radius: 11px;
   /* Small notch top-left (§4.1) */
   clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.45),
     0 0 10px color-mix(in oklab, var(--gl-accent) 40%, transparent),
     0 0 20px color-mix(in oklab, var(--gl-accent) 22%, transparent);
   display: inline-flex;
@@ -462,7 +462,7 @@
   text-shadow:
     0 0 8px color-mix(in oklab, var(--gl-accent) 70%, transparent),
     0 0 16px color-mix(in oklab, var(--gl-accent) 40%, transparent),
-    0 1px 1px rgba(0, 0, 0, 0.8);
+    0 1px 1px rgb(var(--gl-tint-dark) / 0.8);
 }
 
 .glddf-fate-bonus-unit {
@@ -502,7 +502,7 @@
 .glddf-fate-strip.glddf-refused {
   filter:
     saturate(0.18) brightness(0.62)
-    drop-shadow(0 14px 30px rgba(0, 0, 0, 0.5));
+    drop-shadow(0 14px 30px rgb(var(--gl-tint-dark) / 0.5));
   opacity: 0.65;
 }
 
@@ -644,11 +644,11 @@
   border-radius: 11px;
   clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 40%),
     linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 6%, var(--gl-ink-2)), var(--gl-ink-1) 70%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -8px 18px rgba(0, 0, 0, 0.3);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
+    inset 0 -8px 18px rgb(var(--gl-tint-dark) / 0.3);
 }
 
 /* L-bracket registration on each face row */
@@ -698,7 +698,7 @@
 
 .glddf-face-config-preview {
   background:
-    radial-gradient(ellipse at 50% 30%, rgba(255, 255, 255, 0.06), transparent 60%),
+    radial-gradient(ellipse at 50% 30%, rgb(var(--gl-tint-light) / 0.06), transparent 60%),
     var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   border-radius: 7px;

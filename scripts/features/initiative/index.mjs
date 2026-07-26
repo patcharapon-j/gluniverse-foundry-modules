@@ -58,7 +58,6 @@ Suite.register({
       conditionBadgeLayout: "init.conditionBadgeLayout",
       guardBreakSound: "init.guardBreakSound",
       guardBreakSoundVolume: "init.guardBreakSoundVolume",
-      theme: "init.theme",
     },
   },
 

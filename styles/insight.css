@@ -103,7 +103,7 @@
   /* §4.1 drop + bloom move to filter so they follow the chamfer
      silhouette (clip-path clips box-shadows). */
   filter:
-    drop-shadow(0 26px 46px rgba(0, 0, 0, .6))
+    drop-shadow(0 26px 46px rgb(var(--gl-tint-dark) / .6))
     drop-shadow(0 0 30px color-mix(in srgb, var(--gl-accent) 18%, transparent));
 }
 
@@ -146,15 +146,15 @@
   /* one cut corner — the family signature */
   clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(0, 0, 0, .20)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
     linear-gradient(98deg,
       color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)),
       var(--gl-ink-1) 64%);
   box-shadow:
-    0 2px 0 rgba(0, 0, 0, .4),
-    inset 0 1px 0 rgba(255, 255, 255, .16),
-    inset 0 -12px 28px rgba(0, 0, 0, .38);
+    0 2px 0 rgb(var(--gl-tint-dark) / .4),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / .16),
+    inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38);
   backdrop-filter: blur(16px) saturate(1.15);
 }
 
@@ -293,7 +293,7 @@
   background-clip: text;
   color: transparent;
   filter: drop-shadow(0 0 14px color-mix(in srgb, var(--gl-accent) 38%, transparent))
-          drop-shadow(0 1px 0 rgba(0, 0, 0, .35));
+          drop-shadow(0 1px 0 rgb(var(--gl-tint-dark) / .35));
   opacity: 0;
   translate: 5px 3px;
 }
@@ -414,15 +414,14 @@
    8. MOTION TIERS  (§6.4) — animation-speed setting maps to tiers
    ---------------------------------------------------------- */
 
-/* fast — tighter durations, sheen kept */
-.insight-speed-fast { --gl-d-reveal: 360ms; --gl-d-move: 240ms; --gl-d-quick: 120ms; }
+/* fast — tighter durations, sheen kept. One multiplier retimes every
+   --gl-d-* token rather than restating each one. */
+.insight-speed-fast { --gl-motion-scale: 0.6; }
 
 /* instant — straight cut, no decorative motion */
 .insight-speed-instant,
 .insight-speed-instant * {
-  --gl-d-reveal: 0ms;
-  --gl-d-move: 0ms;
-  --gl-d-quick: 0ms;
+  --gl-motion-scale: 0;
   transition-duration: 0s !important;
   animation: none !important;
 }
@@ -434,7 +433,7 @@
 .insight-compose .window-content {
   padding: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .06), rgb(var(--gl-tint-light) / 0) 30%),
     linear-gradient(98deg,
       color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-1)),
       var(--gl-ink-1) 70%);
@@ -446,7 +445,7 @@
 .insight-compose .window-header {
   background: var(--gl-ink-0);
   border-bottom: 1px solid var(--gl-edge);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / .08);
 }
 
 .insight-compose .window-header .window-title {
@@ -511,7 +510,7 @@
 .insight-compose-form select,
 .insight-compose-form textarea {
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, .25), rgba(0, 0, 0, .1)),
+    linear-gradient(180deg, rgb(var(--gl-tint-dark) / .25), rgb(var(--gl-tint-dark) / .1)),
     var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   border-radius: 0;
@@ -520,7 +519,7 @@
   font-family: var(--gl-font-display);
   font-size: 13px;
   padding: 8px 11px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .4);
+  box-shadow: inset 0 1px 2px rgb(var(--gl-tint-dark) / .4);
   transition: border-color var(--gl-d-quick) var(--gl-ease),
               box-shadow var(--gl-d-quick) var(--gl-ease);
 }
@@ -536,7 +535,7 @@
   border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent);
   outline: none;
   box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, .4),
+    inset 0 1px 2px rgb(var(--gl-tint-dark) / .4),
     0 0 0 1px color-mix(in srgb, var(--gl-accent) 35%, transparent),
     0 0 16px color-mix(in srgb, var(--gl-accent) 22%, transparent);
 }
@@ -561,7 +560,7 @@
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .12), rgb(var(--gl-tint-light) / 0) 50%),
     color-mix(in srgb, var(--gl-signal) 16%, var(--gl-ink-2));
   border: 1px solid color-mix(in srgb, var(--gl-signal) 45%, transparent);
   border-radius: 0;
@@ -582,7 +581,7 @@
 
 .insight-send-btn:hover {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / .16), rgb(var(--gl-tint-light) / 0) 50%),
     color-mix(in srgb, var(--gl-signal) 24%, var(--gl-ink-2));
   border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
 }

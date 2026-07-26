@@ -42,16 +42,38 @@ with the suite registry. This document is the binding contract for that port.
 
 ### Theme interface
 
-- `styles/gl-tokens.css` owns every canonical `--gl-*` value. Feature CSS must
-  consume those tokens and must not redeclare the ink, text, line, semantic
-  accent, typography, motion, radius, or material tokens.
-- Set only `--gl-accent` on a feature root or state selector. Derived surfaces,
+Etched Glass is the suite's **only** theme. Full rules and the complete token
+pool live in [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md); the binding minimum is:
+
+- `styles/gl-tokens.css` owns every canonical `--gl-*` value. Feature CSS
+  consumes those tokens and must not redeclare the ink, text, line, semantic
+  accent, typography, motion, geometry, scale, or material tokens. Custom
+  properties are global — a feature writing `--gl-cut` on `:root` repaints every
+  feature that loads after it.
+- Set only `--gl-accent`, on a feature root or state selector. Derived surfaces,
   glow, and bloom come from `--gl-surface*`, `--gl-glow`, and `--gl-bloom`.
-- Reuse `.gl-glass`, `.gl-btn`, `.gl-field`, `.gl-well`, `.gl-tech-label`, and
-  `.gl-divider` where markup permits. Feature-local aliases must point to the
-  canonical semantic tokens.
+  Never pin it to a literal that just restates the default.
+- Translucent veils are struck from a tint channel —
+  `rgb(var(--gl-tint-light) / 0.06)` — or from a semantic token (`--gl-hair`,
+  `--gl-edge`, `--gl-shadow`). No raw `rgba(255,255,255,…)`.
+- No raw durations or easings: use `--gl-d-*` and the six easing tokens. All
+  durations derive through `--gl-motion-scale`, which is also how a feature's
+  motion-tier setting is implemented (`applyMotionTier` in `core/theme.mjs`).
+- `@keyframes` names are global. Reuse `styles/gl-motion.css` where one fits;
+  anything bespoke takes the feature's prefix, never a bare `gl-` name.
+- No `@font-face` and no network `@import` in a feature sheet. Typefaces are
+  declared once in `styles/gl-fonts.css`; reach them via `--gl-display` /
+  `--gl-tech`, and add `.gl-type` to any root that sets a font so Foundry's
+  element-level rules don't win.
+- JS-side colour comes from `scripts/core/theme.mjs` (`PALETTE`, `cssVar`,
+  colour maths), never a hardcoded hex. Canvas/PIXI features register their
+  repaint path with `onThemeChange()`.
+- Reuse `.gl-glass`, `.gl-btn`, `.gl-field`, `.gl-well`, `.gl-tech-label`,
+  `.gl-scroll`, `.gl-numeric`, and `.gl-divider` where markup permits.
+  Feature-local aliases must point to the canonical semantic tokens.
 - Retheming must be possible by changing canonical values in `gl-tokens.css`;
-  feature styles may keep domain colors only when they carry distinct meaning.
+  feature styles may keep domain colors only when they carry distinct meaning
+  (a weather tint, a cargo category) — those are data, not theme.
 
 ## The adapter (`index.mjs`)
 

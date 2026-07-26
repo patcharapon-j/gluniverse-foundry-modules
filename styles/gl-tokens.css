@@ -1,13 +1,47 @@
 /* ════════════════════════════════════════════════════════════════════════
    GLUniverse Suite — Etched Glass design system (canonical token set)
-   The single source of truth shared by every feature. Individual features
-   keep their own scoped accent overrides; these tokens never change.
+   ════════════════════════════════════════════════════════════════════════
+
+   THE single source of truth for every surface the suite draws. Etched Glass is
+   the suite's one and only theme; the token layer below is what makes it
+   *rethemeable* rather than hardcoded.
+
+   ── How this file is organised ──────────────────────────────────────────
+     L0  PRIMITIVES     raw material. Two channels (light/dark tint) + the ink
+                        ramp + fixed semantic hues. A retheme rewrites L0.
+     L1  THEME CONTRACT the short list a theme is ALLOWED to override, and the
+                        only tokens whose value a feature may assume changes.
+     L2  SEMANTIC       derived meaning — surfaces, veils, elevation, motion.
+                        Features consume THESE, never L0 directly.
+     L3  SCALES         space / type / radius / z-index. Discrete steps only.
+     L4  UTILITIES      opt-in classes (.gl-glass, .gl-btn, .gl-field, …).
+
+   ── Rules for feature stylesheets ───────────────────────────────────────
+     • Consume L2/L3 tokens. Never redeclare an L0/L1 token outside this file.
+     • Remapping `--gl-accent` on a scoped selector is the SANCTIONED way to
+       give a feature (or a state) its own identity hue:
+           .my-feature            { --gl-accent: var(--gl-cyan); }
+           .my-feature[data-x="hot"] { --gl-accent: var(--gl-hazard); }
+       Everything derived — glow, bloom, surfaces, focus rings, button sheen —
+       follows automatically. Do NOT hardcode a hue you could route through it.
+     • Never name a typeface literally; use --gl-display / --gl-tech.
+     • Never write a raw duration or easing; use the motion vocabulary.
    ════════════════════════════════════════════════════════════════════════ */
 
-@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=Share+Tech+Mono&display=swap");
-
+/* ════════════════════════════════════════════════════════════════════════
+   L0 — PRIMITIVES
+   ════════════════════════════════════════════════════════════════════════ */
 :root {
-  /* ── Ink ramp (surfaces) ── */
+  /* ── Tint channels ──
+     Every translucent veil in the suite is struck from one of these two
+     channels, as `rgb(var(--gl-tint-light) / <alpha>)`. Expressed as bare
+     `R G B` components precisely so a call site can vary the alpha without
+     restating the colour. Inverting the suite to a light mode is these two
+     lines plus the ink ramp. */
+  --gl-tint-light: 255 255 255;
+  --gl-tint-dark: 0 0 0;
+
+  /* ── Ink ramp (surfaces, darkest → lightest) ── */
   --gl-ink-0: #02070b;
   --gl-ink-1: #080b11;
   --gl-ink-2: #0b0f17;
@@ -19,62 +53,269 @@
   --gl-text-dim: #98a2b6;
   --gl-text-faint: rgba(243, 251, 255, 0.38);
 
-  /* ── Lines & rims ── */
-  --gl-hair: rgba(255, 255, 255, 0.08);
-  --gl-edge: rgba(255, 255, 255, 0.13);
-  --gl-line-strong: rgba(244, 252, 255, 0.55);
-
-  /* ── Fixed semantic accents ── */
-  --gl-signal: #ffd24a;
+  /* ── Fixed semantic hues ──
+     These carry MEANING and are deliberately independent of the accent: a
+     hazard must read as hazard whatever the campaign colour is. Each has a
+     `-hot` (brighter, for glow/peak states); several also have a `-pale`.
+     Promoted here from the features that invented them so any feature can
+     reuse the same vocabulary. */
+  --gl-signal: #ffd24a;          /* amber — ceremony, commit, attention */
   --gl-signal-hot: #ffe070;
   --gl-signal-pale: #ffe9b8;
-  --gl-cyan: #5eeaff;
-  --gl-hazard: #ff4a52;
-  --gl-good: #5fdb92;
-  --gl-violet: #b497ff;
-  --gl-mission: #37d99a;
+  --gl-cyan: #5eeaff;            /* the suite's neutral "system" hue */
+  --gl-cyan-hot: #b6f7ff;
+  --gl-hazard: #ff4a52;          /* danger, failure, destructive */
+  --gl-hazard-hot: #ffc0c6;
+  --gl-peril: #d6184a;           /* deep crimson — escalation beyond hazard,
+                                    for full-screen dread (Stream Pacer's Dire
+                                    Peril). Darker and bluer than --gl-hazard
+                                    so the two read as different severities. */
+  --gl-good: #5fdb92;            /* success, enabled, safe */
+  --gl-good-hot: #b6ffd0;
+  --gl-info: #4aa3ff;            /* deferred / informational / delayed */
+  --gl-info-hot: #9ad8ff;
+  --gl-warn: #ffb12d;            /* strain, breaking point, caution */
+  --gl-warn-hot: #ffe070;
+  --gl-warn-deep: #ff6f1a;
+  --gl-violet: #b497ff;          /* secret, hidden, mystery */
+  --gl-violet-hot: #e0d4ff;
+  --gl-orchid: #cf85e0;          /* dying / unstable — distinct from violet */
+  --gl-orchid-hot: #f6d9fb;
+  --gl-jade: #54d6a6;            /* conditions, sustained effects */
+  --gl-jade-hot: #c2ffe8;
+  --gl-teal: #4ad9c0;            /* stabilised, held, at rest */
+  --gl-teal-hot: #b6fff2;
+  --gl-mission: #37d99a;         /* objective / mission-critical */
+
+  /* Holographic prism — the three stops of a shimmer/edge-spec gradient.
+     A feature may remap these on its own scope to tint the shimmer to its
+     accent. `-a` and `-b` were referenced by tidy5e-slots without ever being
+     defined, which silently dropped that gradient; they live here now. */
+  --gl-holo-a: var(--gl-cyan);
+  --gl-holo-b: var(--gl-violet);
   --gl-holo-c: #ff66b3;
+
+  /* Apex — the solo-boss eclipse-violet set. */
   --gl-apex: #b14bff;
   --gl-apex-deep: #3c0a6b;
   --gl-apex-hot: #ff7bd6;
   --gl-apex-ink: #140422;
+}
 
-  /* ── Dynamic accent channel (features override this) ── */
+/* ════════════════════════════════════════════════════════════════════════
+   L1 — THEME CONTRACT
+   The complete set of tokens a theme may override. Nothing outside this block
+   (plus the L0 ramps above) should ever be rewritten to change the look.
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Accent channel ──
+     The one dynamic hue. Features and states remap this on their own scope;
+     every derived surface, glow and focus ring follows. */
   --gl-accent: #6b86d6;
-  --gl-glow: color-mix(in srgb, var(--gl-accent) 50%, transparent);
-  --gl-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
 
-  /* Semantic material interface. Retheme these to shift every opted-in feature. */
-  --gl-surface: color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-1));
-  --gl-surface-raised: color-mix(in srgb, var(--gl-accent) 8%, var(--gl-ink-3));
-  --gl-surface-inset: color-mix(in srgb, var(--gl-accent) 4%, var(--gl-ink-2));
-  --gl-scrim: rgba(2, 7, 11, 0.72);
-  --gl-shadow: rgba(0, 0, 0, 0.6);
-  --gl-glass-highlight: rgba(255, 255, 255, 0.1);
-  --gl-glass-shade: rgba(0, 0, 0, 0.2);
+  /* ── Material character ──
+     How much the glass tints, blurs and saturates. Turning --gl-blur to 0 and
+     --gl-surface-mix to 0% yields a flat opaque skin from the same rules. */
+  --gl-surface-mix: 10%;
+  --gl-surface-raised-mix: 8%;
+  --gl-surface-inset-mix: 4%;
   --gl-blur: 16px;
   --gl-saturation: 1.15;
 
-  /* ── Typography ── */
+  /* ── Typography ── faces are declared once in gl-fonts.css ── */
   --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
-  --gl-tech: "Bahnschrift", "Share Tech Mono", "JetBrains Mono", Consolas, monospace;
+  --gl-tech: "Bahnschrift", "JetBrains Mono", "Share Tech Mono", Consolas, monospace;
 
-  /* ── Motion ── */
-  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);
-  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);
-  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);
-  --gl-d-quick: 180ms;
-  --gl-d-move: 420ms;
-  --gl-d-reveal: 620ms;
-  --gl-d-splash: 720ms;
-  --gl-breathe: 2.6s;
-  --gl-dread: 3.2s;
-
-  /* ── Silhouette ── */
+  /* ── Silhouette ── the notched-corner signature ── */
   --gl-cut: 12px;
   --gl-cut-sm: 6px;
   --gl-radius: 14px;
+
+  /* ── Global motion multiplier ──
+     Scales EVERY duration token at once. This is the single mechanism behind
+     the per-feature "motion tier" settings (Loot Gen, Destiny Dice, Statsblock
+     Import): a tier sets this one number instead of restating each duration.
+       0    → instant (animations resolve immediately)
+       0.6  → reduced
+       1    → full (default)
+     Note the suite deliberately does NOT read the OS prefers-reduced-motion
+     setting; motion is an explicit in-app choice. See CLAUDE.md. */
+  --gl-motion-scale: 1;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   L2 — SEMANTIC (derived; features consume these)
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Accent derivatives ── */
+  --gl-glow: color-mix(in srgb, var(--gl-accent) 50%, transparent);
+  --gl-bloom: color-mix(in srgb, var(--gl-accent) 18%, transparent);
+  --gl-accent-soft: color-mix(in srgb, var(--gl-accent) 30%, transparent);
+  --gl-accent-faint: color-mix(in srgb, var(--gl-accent) 10%, transparent);
+
+  /* Signal derivatives — ceremony/commit elements glow on the fixed amber
+     rather than the accent, so they need their own pair. */
+  --gl-signal-glow: color-mix(in srgb, var(--gl-signal) 45%, transparent);
+  --gl-signal-bloom: color-mix(in srgb, var(--gl-signal) 18%, transparent);
+
+  /* ── Veils ────────────────────────────────────────────────────────────
+     Translucent white/black overlays are the bulk of this design system —
+     every rim-light, hairline, inner shadow and glass highlight is one. There
+     are ~80 distinct alpha values in use, so a named token per value is not
+     workable. Instead strike a veil from a TINT CHANNEL and keep the alpha
+     inline, where it belongs (the opacity is a local design decision; the
+     colour it is struck from is a theme decision):
+
+         border-top: 1px solid rgb(var(--gl-tint-light) / 0.06);
+         box-shadow: inset 0 -8px 20px rgb(var(--gl-tint-dark) / 0.42);
+
+     Prefer a SEMANTIC token below when one fits — it says what the veil is
+     for, not just what it looks like. Reach for the raw channel form only
+     when none does. Both retheme together; a light-mode theme swaps the two
+     channel definitions in L0 and every veil in the suite inverts. */
+
+  /* ── Lines & rims ── */
+  --gl-hair: rgb(var(--gl-tint-light) / 0.08);
+  --gl-edge: rgb(var(--gl-tint-light) / 0.13);
+  --gl-line-strong: rgba(244, 252, 255, 0.55);
+
+  /* ── Material interface ──
+     Retheme these (or just --gl-accent / the mix ratios in L1) to shift every
+     opted-in feature at once. */
+  --gl-surface: color-mix(in srgb, var(--gl-accent) var(--gl-surface-mix), var(--gl-ink-1));
+  --gl-surface-raised: color-mix(in srgb, var(--gl-accent) var(--gl-surface-raised-mix), var(--gl-ink-3));
+  --gl-surface-inset: color-mix(in srgb, var(--gl-accent) var(--gl-surface-inset-mix), var(--gl-ink-2));
+  --gl-scrim: rgba(2, 7, 11, 0.72);
+  --gl-shadow: rgb(var(--gl-tint-dark) / 0.60);
+  --gl-glass-highlight: rgb(var(--gl-tint-light) / 0.10);
+  --gl-glass-shade: rgb(var(--gl-tint-dark) / 0.20);
+
+  /* ── Elevation ──
+     A four-step shadow ramp. Replaces the ad-hoc box-shadow stacks that were
+     tuned independently in a dozen stylesheets and never quite matched. */
+  --gl-elev-0: none;
+  --gl-elev-1: 0 1px 2px rgb(var(--gl-tint-dark) / 0.30);
+  --gl-elev-2: 0 4px 12px rgb(var(--gl-tint-dark) / 0.40);
+  --gl-elev-3: 0 10px 30px rgb(var(--gl-tint-dark) / 0.55);
+  --gl-elev-4: 0 24px 60px rgb(var(--gl-tint-dark) / 0.70);
+  /* Inner etch — the "pressed into glass" rim shared by panels and wells. */
+  --gl-etch: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16), inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38);
+  --gl-etch-soft: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06), inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.50);
+  /* Accent ring — the shared focus/active affordance. */
+  --gl-ring: 0 0 0 3px var(--gl-bloom);
+  --gl-ring-strong: 0 0 14px var(--gl-bloom);
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOTION VOCABULARY
+     Every duration routes through --gl-motion-scale, so one number retimes
+     the whole suite (and powers the motion-tier settings).
+     ════════════════════════════════════════════════════════════════════ */
+  /* Easing vocabulary. Six curves cover everything the suite does; the sweep
+     collapsed 28 hand-written béziers onto them (eleven were variants of the
+     same overshoot, differing only in the second control point — drift, not
+     intent). Pick by GESTURE, not by feel: */
+  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);        /* default — decelerate to rest */
+  --gl-snap: cubic-bezier(0.2, 1.35, 0.22, 1);     /* slight overshoot, settles */
+  --gl-pop: cubic-bezier(0.34, 1.56, 0.5, 1);      /* pronounced overshoot, bouncy */
+  --gl-exit: cubic-bezier(0.55, 0, 0.84, 0);       /* accelerate away, no return */
+  --gl-ease-inout: cubic-bezier(0.4, 0, 0.2, 1);   /* symmetric — reversible motion */
+  --gl-ease-sharp: cubic-bezier(0.7, 0, 0.1, 1);   /* decisive in-out, fast middle */
+  --gl-linear: linear;                             /* loops, tickers, spinners */
+
+  --gl-d-instant: calc(0ms * var(--gl-motion-scale));
+  --gl-d-tap: calc(120ms * var(--gl-motion-scale));      /* press feedback */
+  --gl-d-quick: calc(180ms * var(--gl-motion-scale));    /* hover, tint, focus */
+  --gl-d-move: calc(420ms * var(--gl-motion-scale));     /* position / layout */
+  --gl-d-reveal: calc(620ms * var(--gl-motion-scale));   /* entrance */
+  --gl-d-splash: calc(720ms * var(--gl-motion-scale));   /* full-screen beat */
+  --gl-d-cinematic: calc(1200ms * var(--gl-motion-scale));
+
+  /* Ambient loops — slow, continuous, never gated on interaction. */
+  --gl-breathe: calc(2.6s * var(--gl-motion-scale));
+  --gl-dread: calc(3.2s * var(--gl-motion-scale));
+  --gl-drift: calc(4.2s * var(--gl-motion-scale));
+
+  /* Stagger step for cascading list entrances (multiply by child index). */
+  --gl-stagger: calc(45ms * var(--gl-motion-scale));
+}
+
+/* ── Motion tiers ──
+   The one implementation behind every feature's motion-tier setting. Apply the
+   class to <body>; features keep their own setting UI but stop shipping their
+   own duration tables. */
+body.gl-motion-none { --gl-motion-scale: 0; }
+body.gl-motion-reduced { --gl-motion-scale: 0.6; }
+body.gl-motion-full { --gl-motion-scale: 1; }
+body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   L3 — SCALES
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Space ──
+     A dense ladder: this is a HUD-heavy UI where 2px granularity is real
+     design intent, not sloppiness. Bespoke one-off offsets stay literal. */
+  --gl-sp-1: 2px;
+  --gl-sp-2: 4px;
+  --gl-sp-3: 6px;
+  --gl-sp-4: 8px;
+  --gl-sp-5: 10px;
+  --gl-sp-6: 12px;
+  --gl-sp-7: 14px;
+  --gl-sp-8: 16px;
+  --gl-sp-9: 18px;
+  --gl-sp-10: 24px;
+  --gl-sp-11: 32px;
+
+  /* ── Type ── */
+  --gl-fs-3xs: 9px;
+  --gl-fs-2xs: 10px;
+  --gl-fs-xs: 11px;
+  --gl-fs-sm: 12px;
+  --gl-fs-md: 13px;
+  --gl-fs-lg: 14px;
+  --gl-fs-xl: 18px;
+  --gl-fs-2xl: 24px;
+  --gl-fs-3xl: 32px;
+
+  --gl-lh-tight: 1.1;
+  --gl-lh-snug: 1.3;
+  --gl-lh-normal: 1.45;
+  --gl-lh-loose: 1.6;
+
+  /* Letter-spacing — the technical voice is always tracked out. */
+  --gl-track-tight: 0.02em;
+  --gl-track-normal: 0.06em;
+  --gl-track-wide: 0.12em;
+  --gl-track-xwide: 0.16em;
+
+  --gl-weight-normal: 400;
+  --gl-weight-medium: 600;
+  --gl-weight-bold: 700;
+  --gl-weight-heavy: 800;
+
+  /* ── Radius (the notch silhouette lives in L1) ── */
+  --gl-r-xs: 4px;
+  --gl-r-sm: 6px;
+  --gl-r-md: 8px;
+  --gl-r-lg: 10px;
+  --gl-r-xl: 14px;
+  --gl-r-pill: 999px;
+
+  /* ── Z-index ──
+     One ordering for every layer the suite injects, so a new feature does not
+     have to guess a number and lose a stacking fight. Foundry's own UI sits
+     around 30–70, which is why the HUD band starts where it does. */
+  --gl-z-below: -1;
+  --gl-z-base: 1;
+  --gl-z-raised: 2;
+  --gl-z-sticky: 10;
+  --gl-z-hud: 70;
+  --gl-z-overlay: 100;
+  --gl-z-splash: 120;
+  --gl-z-toast: 140;
+  --gl-z-modal: 160;
+  --gl-z-tooltip: 180;
 
   /* ── Interface scale (per-client, suite-wide) ──
      Set live on <html> from the core.uiScale setting; consumed by the global
@@ -135,49 +376,29 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Shared keyframe vocabulary
+   L4 — UTILITIES (opt-in via class)
    ════════════════════════════════════════════════════════════════════════ */
-@keyframes gl-slot-pop {
-  0% { transform: scale(0.2); opacity: 0; }
-  60% { transform: scale(1.18); opacity: 1; }
-  100% { transform: scale(1); }
-}
-@keyframes gl-sheen {
-  0% { transform: scaleX(0); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: scaleX(1); opacity: 0; }
-}
-@keyframes gl-cascade {
-  0% { opacity: 0; transform: translate(-6px, 4px); }
-  100% { opacity: 1; transform: translate(0, 0); }
-}
-@keyframes gl-stamp {
-  0% { transform: scale(1.6); opacity: 0; filter: blur(2px); }
-  60% { transform: scale(0.94); opacity: 1; filter: blur(0); }
-  100% { transform: scale(1); }
-}
-@keyframes gl-breathe {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-@keyframes gl-dread {
-  0%, 100% { box-shadow: 0 0 10px var(--gl-bloom), inset 0 0 12px var(--gl-bloom); }
-  50% { box-shadow: 0 0 26px var(--gl-glow), inset 0 0 18px var(--gl-bloom); }
+
+/* ── Typography reset ──
+   Foundry styles h1–h6/button/input/select/textarea/a/label at element level,
+   which beats an inherited font-family on a feature root. Any feature root
+   that sets --gl-display must also carry this class (or replicate the rule) or
+   its controls silently render in Foundry's Signika. */
+.gl-type,
+.gl-type :is(h1, h2, h3, h4, h5, h6, button, input, select, textarea, a, label) {
+  font-family: inherit;
 }
 
-/* ════════════════════════════════════════════════════════════════════════
-   Reusable etched-glass utilities (opt-in via class)
-   ════════════════════════════════════════════════════════════════════════ */
 .gl-glass {
   position: relative;
   border-radius: var(--gl-radius);
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   background:
     linear-gradient(180deg, var(--gl-glass-highlight), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), var(--gl-glass-shade)),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), var(--gl-glass-shade)),
     linear-gradient(98deg, var(--gl-surface), var(--gl-ink-1) 64%);
   border: 1px solid var(--gl-edge);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -12px 28px rgba(0, 0, 0, 0.38);
+  box-shadow: var(--gl-etch);
   backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
@@ -194,27 +415,35 @@
   font: inherit;
   transition: border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-.gl-field:focus { outline: 0; border-color: var(--gl-accent); box-shadow: 0 0 0 3px var(--gl-bloom); }
-.gl-tech-label { color: var(--gl-text-dim); font-family: var(--gl-tech); letter-spacing: .12em; text-transform: uppercase; }
+.gl-field:focus { outline: 0; border-color: var(--gl-accent); box-shadow: var(--gl-ring); }
+.gl-tech-label {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
 .gl-divider { border-color: var(--gl-hair); }
+
+/* Tabular numerals — any live-updating readout should not jitter. */
+.gl-numeric { font-family: var(--gl-tech); font-variant-numeric: tabular-nums; }
 
 .gl-btn {
   position: relative;
   overflow: hidden;
   border-radius: 0;
   clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)), var(--gl-ink-2);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.18)), var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   color: var(--gl-text);
   font-family: var(--gl-tech);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--gl-track-normal);
   text-transform: uppercase;
   cursor: pointer;
   padding: 0.5em 1em;
   transition: color var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease),
-    transform 120ms var(--gl-ease);
+    transform var(--gl-d-tap) var(--gl-ease);
 }
 .gl-btn::before {
   content: "";
@@ -227,12 +456,35 @@
 }
 .gl-btn:hover:not(:disabled) {
   border-color: var(--gl-accent);
-  box-shadow: 0 0 14px var(--gl-bloom);
+  box-shadow: var(--gl-ring-strong);
 }
 .gl-btn:hover:not(:disabled)::before { transform: translateX(120%); }
 .gl-btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
 .gl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .gl-btn-accent { border-color: var(--gl-accent); color: var(--gl-text-bright); }
+
+/* ── Scrollbar ──
+   The suite's scrollable panels all want the same thin accent-tinted bar.
+   Was hand-rolled in the Control Center and re-invented in several features. */
+.gl-scroll,
+.gls-fm-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gl-accent-soft) transparent;
+}
+.gl-scroll::-webkit-scrollbar,
+.gls-fm-list::-webkit-scrollbar { width: 10px; height: 10px; }
+.gl-scroll::-webkit-scrollbar-thumb,
+.gls-fm-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--gl-accent) 35%, transparent);
+  border-radius: var(--gl-r-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.gl-scroll::-webkit-scrollbar-thumb:hover,
+.gls-fm-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  background-clip: content-box;
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    Control Center (suite config app)
@@ -259,41 +511,29 @@
   min-height: 0;
   font-family: var(--gl-display);
   color: var(--gl-text);
-  padding: 16px 18px 18px;
+  padding: var(--gl-sp-8) var(--gl-sp-9) var(--gl-sp-9);
   background:
     radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--gl-cyan) 8%, transparent), transparent 55%),
     linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
 }
 .gls-fm-intro {
   flex: 0 0 auto;
-  margin: 0 0 14px;
+  margin: 0 0 var(--gl-sp-7);
   color: var(--gl-text-dim);
-  font-size: 12px;
+  font-size: var(--gl-fs-sm);
   line-height: 1.5;
 }
 .gls-fm-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--gl-sp-5);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   /* room so the scrollbar doesn't clip the sections' glass edges/glow */
   padding: 2px 8px 2px 2px;
   margin: -2px -8px -2px -2px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--gl-cyan) 40%, transparent) transparent;
-}
-.gls-fm-list::-webkit-scrollbar { width: 10px; }
-.gls-fm-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--gl-cyan) 35%, transparent);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-.gls-fm-list::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--gl-cyan) 55%, transparent);
-  background-clip: content-box;
+  --gl-accent: var(--gl-cyan);
 }
 
 .gls-fm-section {
@@ -314,15 +554,15 @@
   display: grid;
   grid-template-columns: 42px 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: var(--gl-sp-6);
+  padding: var(--gl-sp-6) var(--gl-sp-7);
 }
 
 /* Feature body (settings + editors) — revealed when the feature is enabled. */
 .gls-sec-body {
   display: none;
-  padding: 4px 14px 14px 14px;
-  margin: 2px 14px 0 14px;
+  padding: var(--gl-sp-2) var(--gl-sp-7) var(--gl-sp-7) var(--gl-sp-7);
+  margin: var(--gl-sp-1) var(--gl-sp-7) 0 var(--gl-sp-7);
   border-top: 1px solid var(--gl-hair);
 }
 .gls-fm-section.is-on .gls-sec-body { display: block; }
@@ -332,45 +572,45 @@
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 10px;
+  border-radius: var(--gl-r-lg);
   background: color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-2));
   border: 1px solid var(--gl-edge);
   color: var(--gl-accent);
-  font-size: 18px;
+  font-size: var(--gl-fs-xl);
   box-shadow: inset 0 0 14px color-mix(in srgb, var(--gl-accent) 20%, transparent);
 }
 .gls-fm-name {
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-tight);
   color: var(--gl-text-bright);
 }
-.gls-fm-hint { font-size: 11px; color: var(--gl-text-dim); line-height: 1.4; margin-top: 2px; }
+.gls-fm-hint { font-size: var(--gl-fs-xs); color: var(--gl-text-dim); line-height: 1.4; margin-top: 2px; }
 .gls-fm-lock {
-  margin-top: 4px;
-  font-size: 10px;
+  margin-top: var(--gl-sp-2);
+  font-size: var(--gl-fs-2xs);
   font-family: var(--gl-tech);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--gl-track-normal);
   color: var(--gl-signal);
 }
 .gls-fm-corechip {
   font-family: var(--gl-tech);
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
   color: var(--gl-cyan);
   border: 1px solid color-mix(in srgb, var(--gl-cyan) 50%, transparent);
-  border-radius: 999px;
+  border-radius: var(--gl-r-pill);
   padding: 3px 9px;
 }
 
 /* Toggle switch */
-.gls-switch { background: none; border: none; padding: 4px; cursor: pointer; }
+.gls-switch { background: none; border: none; padding: var(--gl-sp-2); cursor: pointer; }
 .gls-switch-track {
   display: block;
   width: 46px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--gl-r-pill);
   background: var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   position: relative;
@@ -387,7 +627,7 @@
   background: linear-gradient(180deg, #fff, var(--gl-text-dim));
   transform: translateY(-50%);
   transition: left var(--gl-d-quick) var(--gl-snap), background var(--gl-d-quick) var(--gl-ease);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.50);
 }
 .gls-switch.is-on .gls-switch-track {
   background: color-mix(in srgb, var(--gl-good) 30%, var(--gl-ink-2));
@@ -405,12 +645,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: 14px;
-  padding-top: 14px;
+  gap: var(--gl-sp-7);
+  margin-top: var(--gl-sp-7);
+  padding-top: var(--gl-sp-7);
   border-top: 1px solid var(--gl-hair);
 }
-.gls-fm-note { font-size: 11px; color: var(--gl-text-faint); }
+.gls-fm-note { font-size: var(--gl-fs-xs); color: var(--gl-text-faint); }
 
 /* ---- Control Center: settings controls inside a feature section ---- */
 
@@ -424,12 +664,12 @@
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 14px;
+  gap: var(--gl-sp-7);
   padding: 9px 0;
   border-bottom: 1px solid var(--gl-hair);
 }
 .gls-set-row:last-of-type { border-bottom: none; }
-.gls-set-name { font-weight: 600; font-size: 12.5px; color: var(--gl-text-bright); }
+.gls-set-name { font-weight: var(--gl-weight-medium); font-size: 12.5px; color: var(--gl-text-bright); }
 .gls-set-hint {
   font-size: 10.5px;
   color: var(--gl-text-dim);
@@ -442,10 +682,10 @@
 .gls-input {
   background: var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
-  border-radius: 8px;
+  border-radius: var(--gl-r-md);
   color: var(--gl-text-bright);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--gl-fs-sm);
   padding: 5px 9px;
   min-width: 120px;
   transition: border-color var(--gl-d-quick) var(--gl-ease),
@@ -458,18 +698,18 @@
 }
 .gls-input:disabled { opacity: 0.45; cursor: not-allowed; }
 .gls-select { cursor: pointer; }
-.gls-range { display: flex; align-items: center; gap: 10px; }
+.gls-range { display: flex; align-items: center; gap: var(--gl-sp-5); }
 .gls-range input[type="range"] { min-width: 140px; padding: 0; accent-color: var(--gl-accent); }
 .gls-range-val {
   font-family: var(--gl-tech);
-  font-size: 11px;
+  font-size: var(--gl-fs-xs);
   color: var(--gl-accent);
   min-width: 2.5ch;
   text-align: right;
 }
 
-.gls-editor-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.gls-editor-btn { font-size: 11.5px; padding: 6px 12px; }
+.gls-editor-row { display: flex; flex-wrap: wrap; gap: var(--gl-sp-4); margin-top: var(--gl-sp-6); }
+.gls-editor-btn { font-size: 11.5px; padding: var(--gl-sp-3) var(--gl-sp-6); }
 
 /* Reload affordance highlight after an enable toggle that needs a reload. */
 .gls-needs-reload .gls-fm-note { color: var(--gl-signal); }
