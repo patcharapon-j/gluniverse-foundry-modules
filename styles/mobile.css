@@ -347,11 +347,11 @@ body.gl-mobile .gl-mobile-toast {
   border-radius: var(--gl-radius);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  animation: glmob-toast-in 0.4s var(--gl-snap);
+  animation: glmob-toast-in var(--gl-d-move) var(--gl-snap);
 }
 
 body.gl-mobile .gl-mobile-toast.out {
-  animation: glmob-toast-out 0.35s ease forwards;
+  animation: glmob-toast-out var(--gl-d-swift) ease forwards;
 }
 
 body.gl-mobile .gl-mobile-toast .who {
@@ -456,14 +456,14 @@ body.gl-mobile .gl-mobile-toast.v5 .who {
 body.gl-mobile .gl-mobile-toast.v5 .what {
   font-family: var(--gl-serif, Georgia, serif);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   color: var(--gl-ink, #1b1712);
 }
 
 body.gl-mobile .gl-mobile-toast.v5 .res .num {
   font-family: var(--gl-serif, Georgia, serif);
   font-size: 20px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-shadow: none;
 }
 
@@ -471,7 +471,7 @@ body.gl-mobile .gl-mobile-toast.v5 .res .num {
 body.gl-mobile .gl-mobile-toast.v5 .res .lbl {
   font-family: var(--gl-cond, "Arial Narrow", sans-serif);
   font-size: 9px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 2px;
   opacity: 1;
 }

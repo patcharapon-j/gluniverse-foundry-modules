@@ -18,7 +18,7 @@
   /* ── Module-local aliases (keep --glucargo-* markup working) ─────── */
   --glucargo-ink: var(--gl-ink-1);
   --glucargo-ink-2: var(--gl-ink-2);
-  --glucargo-panel: rgba(22, 29, 44, 0.78);
+  --glucargo-panel: color-mix(in srgb, var(--gl-ink-3) 78%, transparent);
   --glucargo-panel-soft: rgba(20, 27, 40, 0.66);
   --glucargo-glass: rgba(16, 22, 34, 0.52);
   --glucargo-line: var(--gl-edge);
@@ -97,7 +97,7 @@
   color: var(--glucargo-text);
   font-family: var(--glucargo-font-code);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   background:
@@ -219,7 +219,7 @@
   right: calc(var(--glucargo-cut) * -0.207);
   width: calc(var(--glucargo-cut) * 1.414);
   height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 85%, #fff) 55%, transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 85%, rgb(var(--gl-tint-light))) 55%, transparent);
   box-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 60%, transparent);
   transform: rotate(45deg);
   transform-origin: center;
@@ -251,8 +251,8 @@
   font-family: var(--glucargo-font-ui);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--gl-accent) 18%, transparent), transparent 24%),
-    linear-gradient(315deg, rgba(180, 151, 255, 0.10), transparent 34%),
-    linear-gradient(180deg, rgba(18, 34, 46, 0.96), rgba(2, 7, 11, 0.98));
+    linear-gradient(315deg, color-mix(in srgb, var(--gl-violet) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, rgba(18, 34, 46, 0.96), color-mix(in srgb, var(--gl-ink-0) 98%, transparent));
   border: 1px solid color-mix(in srgb, var(--gl-accent) 34%, transparent);
   box-shadow:
     0 22px 60px rgb(var(--gl-tint-dark) / 0.68),
@@ -302,7 +302,7 @@
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 22%, transparent), transparent 54%),
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.055), transparent),
-    rgba(2, 7, 11, 0.74);
+    color-mix(in srgb, var(--gl-ink-0) 74%, transparent);
   cursor: grab;
 }
 
@@ -430,7 +430,7 @@
 .glucargo-minimap__tile {
   z-index: 2;
   position: relative;
-  border: 1px solid rgba(1, 6, 10, 0.92);
+  border: 1px solid color-mix(in srgb, var(--gl-ink-0) 92%, transparent);
   background:
     linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.30), transparent 28%),
     linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.26), transparent 44%),
@@ -515,7 +515,7 @@
   background: linear-gradient(100deg, transparent, rgb(var(--gl-tint-light) / 0.07) 50%, transparent);
   transform: translateX(-160%) skewX(-14deg);
   pointer-events: none;
-  animation: glucargo-titlebar-sweep 7s var(--glucargo-ease) infinite;
+  animation: glucargo-titlebar-sweep var(--gl-loop-sm) var(--glucargo-ease) infinite;
 }
 
 .glucargo-titlebar:active {
@@ -538,12 +538,12 @@
   color: #06101e;
   background: linear-gradient(135deg, var(--glucargo-cyan), var(--glucargo-violet));
   /* Notched chip silhouette (§4.1) */
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   box-shadow:
     0 0 16px color-mix(in srgb, var(--gl-accent) 40%, transparent),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3);
   font-size: 13px;
-  animation: glucargo-brand-breathe var(--gl-breathe) ease-in-out infinite;
+  animation: glucargo-brand-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .glucargo-brand div {
@@ -641,7 +641,7 @@
   padding: 6px 10px;
   overflow: hidden;
   font-family: var(--glucargo-font-ui);
-  font-weight: 650;
+  font-weight: var(--gl-weight-bold);
   font-size: 11px;
   line-height: 1.05;
   letter-spacing: 0.06em;
@@ -650,13 +650,13 @@
   cursor: pointer;
   border-radius: var(--glucargo-r-xs);
   /* Small notch top-left — chips/buttons go notched (§4.1). */
-  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
   transition:
-    transform 110ms var(--glucargo-ease),
-    border-color 130ms var(--glucargo-ease),
-    background 130ms var(--glucargo-ease),
-    color 130ms var(--glucargo-ease),
-    box-shadow 130ms var(--glucargo-ease);
+    transform var(--gl-d-tap) var(--glucargo-ease),
+    border-color var(--gl-d-tap) var(--glucargo-ease),
+    background var(--gl-d-tap) var(--glucargo-ease),
+    color var(--gl-d-tap) var(--glucargo-ease),
+    box-shadow var(--gl-d-tap) var(--glucargo-ease);
 }
 
 .glucargo-window :where(button)::after {
@@ -666,7 +666,7 @@
   background: linear-gradient(115deg, rgb(var(--gl-tint-light) / 0.08) 0%, transparent 30%);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 150ms var(--glucargo-ease);
+  transition: opacity var(--gl-d-quick) var(--glucargo-ease);
 }
 
 .glucargo-window :where(button:hover:not(:disabled))::after {
@@ -677,11 +677,11 @@
   border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent);
   background: color-mix(in srgb, var(--gl-accent) 14%, transparent);
   box-shadow: 0 0 14px var(--glucargo-glow-soft);
-  transform: translateY(-1px);
+  transform: translateY(var(--gl-lift));
 }
 
 .glucargo-window :where(button:active:not(:disabled)) {
-  transform: translateY(1px) scale(0.98);
+  transform: translateY(var(--gl-press)) scale(var(--gl-press-scale));
 }
 
 .glucargo-window :where(button.is-on) {
@@ -704,7 +704,7 @@
   min-width: 0;
   font-family: var(--glucargo-font-ui);
   outline: 0;
-  transition: border-color 150ms var(--glucargo-ease), box-shadow 150ms var(--glucargo-ease);
+  transition: border-color var(--gl-d-quick) var(--glucargo-ease), box-shadow var(--gl-d-quick) var(--glucargo-ease);
 }
 
 .glucargo-window input:focus,
@@ -740,7 +740,7 @@
   color: var(--glucargo-ink);
   background: linear-gradient(90deg, var(--glucargo-amber), #f5a623);
   border-color: transparent;
-  box-shadow: 0 0 14px rgba(255, 177, 45, 0.22);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gl-warn) 22%, transparent);
 }
 
 /* ─── Board Layout ──────────────────────────────────────────────────── */
@@ -795,7 +795,7 @@
   border: 1px solid var(--glucargo-line);
   border-radius: var(--glucargo-r-md);
   /* Chamfered top-right — the cut corner signature on panel glass (§4.1). */
-  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
     inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.28),
@@ -895,10 +895,10 @@
   padding: 0;
   border: 1px solid var(--glucargo-line);
   /* Card silhouette — full notch on the top-right (§4.1) */
-  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 36%),
-    linear-gradient(160deg, rgba(28, 37, 56, 0.9), rgba(8, 11, 17, 0.95));
+    linear-gradient(160deg, rgba(28, 37, 56, 0.9), color-mix(in srgb, var(--gl-ink-1) 95%, transparent));
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.4);
@@ -915,7 +915,7 @@
      casing rather than inheriting the control-label uppercase/tracking. */
   text-transform: none;
   letter-spacing: 0;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
 }
 
 .glucargo-container-card::before {
@@ -993,7 +993,7 @@
 .glucargo-container-card__name {
   overflow: hidden;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   color: var(--glucargo-text);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1023,7 +1023,7 @@
   height: 100%;
   background: linear-gradient(90deg, var(--glucargo-cyan), var(--glucargo-green));
   box-shadow: 0 0 8px color-mix(in srgb, var(--gl-accent) 32%, transparent);
-  transition: width 0.5s var(--glucargo-snap);
+  transition: width var(--gl-d-glide) var(--glucargo-snap);
   position: relative;
 }
 
@@ -1096,7 +1096,7 @@
   overflow: hidden;
   font-family: var(--glucargo-font-display);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   line-height: 1;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
@@ -1242,7 +1242,7 @@
   height: 100%;
   place-items: start end;
   padding: 3px;
-  color: rgba(243, 251, 255, 0.20);
+  color: rgb(var(--gl-tint-light) / 0.20);
   font-size: 7px;
   font-family: var(--glucargo-font-code);
   line-height: 1;
@@ -1263,7 +1263,7 @@
   height: var(--glucargo-cell);
   min-height: 0;
   padding: 0;
-  border: 2px solid rgba(1, 6, 10, 0.95);
+  border: 2px solid color-mix(in srgb, var(--gl-ink-0) 95%, transparent);
   background:
     linear-gradient(135deg, rgb(var(--gl-tint-light) / 0.22), transparent 22%),
     linear-gradient(315deg, rgb(var(--gl-tint-dark) / 0.20), transparent 38%),
@@ -1280,9 +1280,9 @@
     inset 0 -6px 14px rgb(var(--gl-tint-dark) / 0.20),
     0 1px 2px rgb(var(--gl-tint-dark) / 0.30);
   transition:
-    filter 180ms var(--glucargo-ease),
-    box-shadow 180ms var(--glucargo-ease),
-    border-color 180ms var(--glucargo-ease);
+    filter var(--gl-d-quick) var(--glucargo-ease),
+    box-shadow var(--gl-d-quick) var(--glucargo-ease),
+    border-color var(--gl-d-quick) var(--glucargo-ease);
   contain: layout paint style;
 }
 
@@ -1385,7 +1385,7 @@
   box-shadow:
     inset 0 0 0 2px rgba(255, 229, 115, 0.78),
     inset 0 0 18px rgb(var(--gl-tint-dark) / 0.5),
-    0 0 18px rgba(255, 177, 45, 0.22);
+    0 0 18px color-mix(in srgb, var(--gl-warn) 22%, transparent);
 }
 
 .glucargo-tile-cell.is-locked::before {
@@ -1436,11 +1436,11 @@
       rgba(255, 214, 76, 0.86) 0 8px,
       rgba(38, 29, 8, 0.88) 8px 16px
     ),
-    rgba(255, 177, 45, 0.62);
+    color-mix(in srgb, var(--gl-warn) 62%, transparent);
   box-shadow:
     inset 0 0 0 2px rgba(255, 229, 115, 0.95),
     inset 0 0 22px rgb(var(--gl-tint-dark) / 0.46),
-    0 0 18px rgba(255, 177, 45, 0.28);
+    0 0 18px color-mix(in srgb, var(--gl-warn) 28%, transparent);
 }
 
 .glucargo-lock-overlay strong {
@@ -1450,11 +1450,11 @@
   padding: 3px 6px;
   border: 1px solid rgba(255, 230, 130, 0.82);
   color: #fff4b8;
-  background: rgba(2, 7, 11, 0.86);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: 0 0 10px rgb(var(--gl-tint-dark) / 0.55);
   font-family: var(--glucargo-font-code);
   font-size: clamp(7px, calc(var(--glucargo-cell) * 0.18), 11px);
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1.05;
   letter-spacing: 0;
   text-align: center;
@@ -1467,7 +1467,7 @@
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
     inset 0 -8px 16px rgb(var(--gl-tint-dark) / 0.22),
-    0 0 12px rgba(255, 177, 45, 0.18);
+    0 0 12px color-mix(in srgb, var(--gl-warn) 18%, transparent);
 }
 
 .glucargo-tile-cell.priority-critical {
@@ -1498,7 +1498,7 @@
 .glucargo-tile-cell.pattern-warning::before,
 .glucargo-tile-cell.pattern-hazard::before {
   background:
-    repeating-linear-gradient(135deg, rgba(2, 7, 11, 0.62) 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 62%, transparent) 0 5px, transparent 5px 10px),
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.12), transparent 44%);
   border-color: color-mix(in srgb, var(--cargo-accent) 56%, rgba(10, 8, 0, 0.86));
 }
@@ -1603,14 +1603,14 @@
 /* Image-backed tiles */
 .glucargo-tile-cell.has-image {
   background:
-    linear-gradient(180deg, rgba(2, 7, 11, 0.06), rgba(2, 7, 11, 0.50)),
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-ink-0) 6%, transparent), color-mix(in srgb, var(--gl-ink-0) 50%, transparent)),
     linear-gradient(135deg, color-mix(in srgb, var(--cargo-accent) 36%, transparent), transparent 44%),
     var(--cargo-image) center / cover no-repeat,
     color-mix(in srgb, var(--cargo-accent) 22%, #071018);
 }
 
 .glucargo-tile-cell {
-  border-color: rgba(1, 6, 10, 0.95);
+  border-color: color-mix(in srgb, var(--gl-ink-0) 95%, transparent);
 }
 
 .glucargo-tile-cell:hover,
@@ -1640,11 +1640,11 @@
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   filter:
-    drop-shadow(0 0 1px rgba(1, 6, 10, 1))
-    drop-shadow(0 0 3px rgba(1, 6, 10, 0.90));
+    drop-shadow(0 0 1px var(--gl-ink-0))
+    drop-shadow(0 0 3px color-mix(in srgb, var(--gl-ink-0) 90%, transparent));
   transition:
-    filter 180ms var(--glucargo-ease),
-    opacity 180ms var(--glucargo-ease);
+    filter var(--gl-d-quick) var(--glucargo-ease),
+    opacity var(--gl-d-quick) var(--glucargo-ease);
 }
 
 .glucargo-tile-emblem::before {
@@ -1664,8 +1664,8 @@
 .glucargo-tile-emblem.is-cargo-hovered {
   z-index: 7;
   filter:
-    drop-shadow(0 0 1px rgba(1, 6, 10, 1))
-    drop-shadow(0 0 3px rgba(1, 6, 10, 0.95))
+    drop-shadow(0 0 1px var(--gl-ink-0))
+    drop-shadow(0 0 3px color-mix(in srgb, var(--gl-ink-0) 95%, transparent))
     drop-shadow(0 0 7px color-mix(in srgb, var(--cargo-accent) 78%, rgb(var(--gl-tint-light) / 0.35)))
     drop-shadow(0 0 14px color-mix(in srgb, var(--cargo-accent) 48%, transparent));
 }
@@ -1678,7 +1678,7 @@
 .glucargo-tile-emblem.is-hold-arming {
   z-index: 10;
   filter:
-    drop-shadow(0 0 2px rgba(1, 6, 10, 1))
+    drop-shadow(0 0 2px var(--gl-ink-0))
     drop-shadow(0 0 10px color-mix(in srgb, var(--cargo-accent) 70%, transparent));
 }
 
@@ -1693,7 +1693,7 @@
   opacity: 0.72;
   transform: scaleY(0);
   transform-origin: bottom;
-  animation: glucargo-hold-fill 550ms linear forwards;
+  animation: glucargo-hold-fill var(--gl-d-glide) linear forwards;
 }
 
 .glucargo-tile-label.is-hold-arming {
@@ -1713,7 +1713,7 @@
   color: var(--glucargo-text);
   background:
     radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.05)), transparent 68%),
-    rgba(2, 7, 11, 0.38);
+    color-mix(in srgb, var(--gl-ink-0) 38%, transparent);
   box-shadow:
     0 0 14px rgb(var(--gl-tint-dark) / 0.32),
     0 0 14px color-mix(in srgb, var(--cargo-accent) 28%, transparent);
@@ -1761,7 +1761,7 @@
   width: min(40px, calc(var(--glucargo-cell) - 10px));
   height: min(40px, calc(var(--glucargo-cell) - 10px));
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 55%, rgb(var(--gl-tint-light) / 0.30));
-  background: rgba(2, 7, 11, 0.48);
+  background: color-mix(in srgb, var(--gl-ink-0) 48%, transparent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--cargo-accent) 42%, transparent);
 }
 
@@ -1808,7 +1808,7 @@
   text-align: center;
   padding: 4px 5px 5px;
   font-family: var(--glucargo-font-code);
-  background: linear-gradient(180deg, transparent 42%, rgba(2, 7, 11, 0.38) 100%);
+  background: linear-gradient(180deg, transparent 42%, color-mix(in srgb, var(--gl-ink-0) 38%, transparent) 100%);
   text-shadow:
     0 1px 6px rgb(var(--gl-tint-dark) / 0.92),
     0 0 3px rgb(var(--gl-tint-dark) / 0.7);
@@ -1833,7 +1833,7 @@
   overflow-wrap: anywhere;
   text-wrap: balance;
   font-size: clamp(8px, calc(var(--glucargo-cell) * 0.22), 11px);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0;
   text-transform: uppercase;
   line-height: 1.05;
@@ -1846,7 +1846,7 @@
   display: block;
   max-width: 100%;
   overflow: hidden;
-  color: rgba(243, 251, 255, 0.78);
+  color: rgb(var(--gl-tint-light) / 0.78);
   font-size: clamp(7px, calc(var(--glucargo-cell) * 0.18), 9px);
   line-height: 1.05;
   overflow-wrap: anywhere;
@@ -1863,7 +1863,7 @@
 .glucargo-tile-label.is-compact {
   align-content: end;
   padding: 2px;
-  background: linear-gradient(180deg, transparent 50%, rgba(2, 7, 11, 0.54) 100%);
+  background: linear-gradient(180deg, transparent 50%, color-mix(in srgb, var(--gl-ink-0) 54%, transparent) 100%);
 }
 
 .glucargo-tile-label.is-compact small {
@@ -1925,13 +1925,13 @@
   border-color: var(--glucargo-red);
   background: color-mix(in srgb, var(--gl-hazard) 16%, transparent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--gl-hazard) 22%, transparent);
-  animation: glucargo-invalid-pulse 0.4s ease-out;
+  animation: glucargo-invalid-pulse var(--gl-d-move) var(--gl-ease);
 }
 
 .glucargo-preview-cell.is-invalid.is-rejected {
   border-color: #ff2f46;
   background: rgba(255, 47, 70, 0.28);
-  animation: glucargo-invalid-shake 0.42s ease-out;
+  animation: glucargo-invalid-shake var(--gl-d-move) var(--gl-ease);
 }
 
 /* ─── Quick Cargo ───────────────────────────────────────────────────── */
@@ -2021,7 +2021,7 @@
   min-height: 20px !important;
   padding: 0 !important;
   aspect-ratio: 1;
-  border-color: rgba(243, 251, 255, 0.08);
+  border-color: rgb(var(--gl-tint-light) / 0.08);
   background: rgb(var(--gl-tint-light) / 0.03);
   border-radius: 0 !important;
   transition: background var(--glucargo-d-quick) var(--glucargo-ease), border-color var(--glucargo-d-quick) var(--glucargo-ease), box-shadow var(--glucargo-d-quick) var(--glucargo-ease);
@@ -2038,7 +2038,7 @@
   color: var(--gl-ink-0) !important;
   background: linear-gradient(90deg, var(--glucargo-cyan), var(--glucargo-green)) !important;
   border-color: transparent !important;
-  font-weight: 800 !important;
+  font-weight: var(--gl-weight-heavy) !important;
   letter-spacing: 0.08em;
   /* Bloom via filter so it survives the notch clip-path (§9.1). */
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--gl-accent) 30%, transparent));
@@ -2149,14 +2149,14 @@
   font-size: 10px;
   line-height: 1;
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 40%, rgb(var(--gl-tint-light) / 0.12)) !important;
-  background: rgba(2, 7, 11, 0.82) !important;
+  background: color-mix(in srgb, var(--gl-ink-0) 82%, transparent) !important;
   box-shadow: none !important;
   color: var(--glucargo-muted);
   border-radius: 5px !important;
   filter: none !important;
   cursor: pointer;
   opacity: 0.55;
-  transition: opacity 0.12s ease, color 0.12s ease;
+  transition: opacity var(--gl-d-tap) ease, color var(--gl-d-tap) ease;
 }
 
 .glucargo-floor-item:hover .glucargo-visibility-toggle {
@@ -2166,7 +2166,7 @@
 .glucargo-floor-item > .glucargo-visibility-toggle:hover {
   opacity: 1;
   color: var(--glucargo-cyan);
-  background: rgba(2, 7, 11, 0.92) !important;
+  background: color-mix(in srgb, var(--gl-ink-0) 92%, transparent) !important;
   box-shadow: none !important;
   transform: none !important;
 }
@@ -2199,7 +2199,7 @@
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--cargo-accent) 16%, transparent), transparent 48%),
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.035), transparent 44%),
-    rgba(7, 16, 24, 0.82) !important;
+    color-mix(in srgb, var(--gl-ink-2) 82%, transparent) !important;
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.3) !important;
@@ -2209,10 +2209,10 @@
 }
 
 .glucargo-floor-item > button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--cargo-accent) 55%, rgba(244, 252, 255, 0.20)) !important;
+  border-color: color-mix(in srgb, var(--cargo-accent) 55%, rgb(var(--gl-tint-light) / 0.20)) !important;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--cargo-accent) 16%, transparent), transparent 50%),
-    rgba(7, 16, 24, 0.90) !important;
+    color-mix(in srgb, var(--gl-ink-2) 90%, transparent) !important;
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     0 0 12px color-mix(in srgb, var(--cargo-accent) 14%, transparent) !important;
@@ -2227,7 +2227,7 @@
   border-color: var(--cargo-accent) !important;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--cargo-accent) 18%, transparent), color-mix(in srgb, var(--cargo-accent) 06%, transparent)),
-    rgba(2, 7, 11, 0.92) !important;
+    color-mix(in srgb, var(--gl-ink-0) 92%, transparent) !important;
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
     0 0 16px color-mix(in srgb, var(--cargo-accent) 24%, transparent) !important;
@@ -2243,7 +2243,7 @@
 .glucargo-floor-item.is-locked > button:hover:not(:disabled) {
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
-    0 0 10px rgba(255, 177, 45, 0.16) !important;
+    0 0 10px color-mix(in srgb, var(--gl-warn) 16%, transparent) !important;
 }
 
 .glucargo-lock-banner {
@@ -2270,11 +2270,11 @@
   padding: 4px 7px;
   border: 1px solid rgba(255, 230, 130, 0.82);
   color: #fff4b8;
-  background: rgba(2, 7, 11, 0.88);
+  background: color-mix(in srgb, var(--gl-ink-0) 88%, transparent);
   box-shadow: 0 0 10px rgb(var(--gl-tint-dark) / 0.55);
   font-family: var(--glucargo-font-code);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1.1;
   letter-spacing: 0;
   text-align: center;
@@ -2308,7 +2308,7 @@
   padding: 4px;
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.025), transparent),
-    rgba(2, 7, 11, 0.48);
+    color-mix(in srgb, var(--gl-ink-0) 48%, transparent);
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 28%, rgb(var(--gl-tint-light) / 0.10));
 }
 
@@ -2352,7 +2352,7 @@
 
 .glucargo-floor-item__copy strong {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0;
   text-transform: uppercase;
   line-height: 1.05;
@@ -2377,7 +2377,7 @@
 .glucargo-floor-item__meta span {
   padding: 2px 5px;
   color: color-mix(in srgb, var(--cargo-accent) 72%, white);
-  background: color-mix(in srgb, var(--cargo-accent) 12%, rgba(2, 7, 11, 0.76));
+  background: color-mix(in srgb, var(--cargo-accent) 12%, color-mix(in srgb, var(--gl-ink-0) 76%, transparent));
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgb(var(--gl-tint-light) / 0.10));
   font-family: var(--glucargo-font-code);
   font-size: 8px;
@@ -2398,14 +2398,14 @@
   border-color: color-mix(in srgb, var(--cargo-accent) 26%, rgb(var(--gl-tint-light) / 0.10));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--cargo-accent) 08%, transparent), transparent),
-    rgba(7, 16, 24, 0.76);
+    color-mix(in srgb, var(--gl-ink-2) 76%, transparent);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.03),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.3);
   transition:
-    border-color 180ms var(--glucargo-ease),
-    transform 180ms var(--glucargo-ease),
-    box-shadow 180ms var(--glucargo-ease);
+    border-color var(--gl-d-quick) var(--glucargo-ease),
+    transform var(--gl-d-quick) var(--glucargo-ease),
+    box-shadow var(--gl-d-quick) var(--glucargo-ease);
   overflow: hidden;
 }
 
@@ -2418,7 +2418,7 @@
   width: 3px;
   background: var(--cargo-accent);
   opacity: 0.45;
-  transition: opacity 180ms var(--glucargo-ease), box-shadow 180ms var(--glucargo-ease);
+  transition: opacity var(--gl-d-quick) var(--glucargo-ease), box-shadow var(--gl-d-quick) var(--glucargo-ease);
 }
 
 .glucargo-manifest-card:hover > button::before {
@@ -2429,7 +2429,7 @@
 .glucargo-manifest-card > button::after {
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--cargo-accent) 06%, transparent) 50%, transparent);
   transform: translateX(-100%);
-  transition: transform 400ms var(--glucargo-ease);
+  transition: transform var(--gl-d-move) var(--glucargo-ease);
 }
 
 .glucargo-manifest-card:hover > button::after {
@@ -2503,7 +2503,7 @@
 
 .glucargo-manifest-card__copy strong {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
 }
 
 .glucargo-manifest-card__copy small {
@@ -2522,7 +2522,7 @@
   color: var(--glucargo-ink);
   background: var(--glucargo-amber);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   border-radius: 3px;
 }
 
@@ -2552,10 +2552,10 @@
   padding: 12px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--cargo-accent) 12%, transparent), transparent 40%),
-    rgba(2, 7, 11, 0.96);
+    color-mix(in srgb, var(--gl-ink-0) 96%, transparent);
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 36%, rgb(var(--gl-tint-light) / 0.12));
   /* Chamfered top-right + active accent edge bar (§4.1, §7.3) */
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   box-shadow:
     inset 3px 0 0 var(--cargo-accent),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.04),
@@ -2661,9 +2661,9 @@
     linear-gradient(rgb(var(--gl-tint-light) / 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
     linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.04) 1px, transparent 1px) 0 0 / 28px 28px,
     linear-gradient(135deg, color-mix(in srgb, var(--gl-accent) 6%, transparent), transparent 40%),
-    rgba(7, 16, 24, 0.88);
+    color-mix(in srgb, var(--gl-ink-2) 88%, transparent);
   /* Chamfered top-right (§4.1) */
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     0 24px 70px rgb(var(--gl-tint-dark) / 0.36),
@@ -2688,7 +2688,7 @@
   margin: 8px 0 16px;
   font-size: 22px;
   line-height: 1.15;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   text-shadow: 0 2px 8px rgb(var(--gl-tint-dark) / 0.4);
 }
 
@@ -2748,7 +2748,7 @@
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--gl-accent) 10%, transparent), transparent 34%),
     linear-gradient(315deg, color-mix(in srgb, var(--gl-violet) 10%, transparent), transparent 38%),
-    rgba(2, 7, 11, 0.95);
+    color-mix(in srgb, var(--gl-ink-0) 95%, transparent);
   border: 1px solid color-mix(in srgb, var(--gl-accent) 30%, transparent);
   /* Inset light catch stays; the drop + accent bloom move to filter so they
      follow the chamfer instead of being clipped by it (§9.1). */
@@ -2760,7 +2760,7 @@
     drop-shadow(0 0 22px color-mix(in srgb, var(--gl-accent) 14%, transparent));
   border-radius: 11px;
   /* Chamfered top-right — the cut corner signature (§4.1) */
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   animation: glucargo-report-in var(--gl-d-splash) var(--gl-ease) both;
 }
 
@@ -2786,10 +2786,10 @@
   gap: 10px;
   align-items: center;
   padding: 12px;
-  border-bottom: 1px solid rgba(244, 252, 255, 0.10);
+  border-bottom: 1px solid rgb(var(--gl-tint-light) / 0.10);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 12%, transparent), transparent 60%),
-    rgba(2, 7, 11, 0.4);
+    color-mix(in srgb, var(--gl-ink-0) 40%, transparent);
 }
 
 /* Serial / metadata designator + CMYK registration garnish (§4.2) */
@@ -2851,7 +2851,7 @@
   color: var(--gl-ink-0);
   background: linear-gradient(135deg, var(--glucargo-cyan), var(--glucargo-green));
   /* Notched emblem (§4.1) */
-  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   box-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 32%, transparent);
   font-size: 14px;
   animation: glucargo-stamp var(--gl-d-reveal) var(--gl-pop) both;
@@ -2870,7 +2870,7 @@
   overflow: hidden;
   color: var(--gl-text-bright);
   font-family: var(--glucargo-font-display);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   font-size: 18px;
   line-height: 1.05;
   letter-spacing: 0.02em;
@@ -2886,7 +2886,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   padding: 1px;
-  background: rgba(244, 252, 255, 0.06);
+  background: rgb(var(--gl-tint-light) / 0.06);
 }
 
 .glucargo-chat-report__stats span {
@@ -2894,13 +2894,13 @@
   gap: 2px;
   place-items: center;
   padding: 10px 4px;
-  background: rgba(7, 16, 24, 0.92);
+  background: color-mix(in srgb, var(--gl-ink-2) 92%, transparent);
 }
 
 .glucargo-chat-report__stats strong {
   color: var(--gl-text-bright);
   font-size: 26px;
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   font-family: var(--glucargo-font-display);
   font-variant-numeric: tabular-nums;
@@ -2955,21 +2955,21 @@
   padding: 6px;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--cargo-accent) 10%, transparent), transparent),
-    rgba(7, 16, 24, 0.84);
+    color-mix(in srgb, var(--gl-ink-2) 84%, transparent);
   border: 1px solid color-mix(in srgb, var(--cargo-accent) 24%, rgb(var(--gl-tint-light) / 0.10));
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.03);
   /* Notched card corner (§4.1) */
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
   animation: glucargo-cascade var(--gl-d-move) var(--gl-ease) both;
 }
 
 /* Cascade stagger — each row a few ms after the last (§6.2) */
-.glucargo-chat-report__cargo:nth-child(1) { animation-delay: 120ms; }
-.glucargo-chat-report__cargo:nth-child(2) { animation-delay: 160ms; }
-.glucargo-chat-report__cargo:nth-child(3) { animation-delay: 200ms; }
-.glucargo-chat-report__cargo:nth-child(4) { animation-delay: 240ms; }
-.glucargo-chat-report__cargo:nth-child(5) { animation-delay: 280ms; }
-.glucargo-chat-report__cargo:nth-child(n+6) { animation-delay: 320ms; }
+.glucargo-chat-report__cargo:nth-child(1) { animation-delay: var(--gl-d-tap); }
+.glucargo-chat-report__cargo:nth-child(2) { animation-delay: var(--gl-d-quick); }
+.glucargo-chat-report__cargo:nth-child(3) { animation-delay: var(--gl-d-quick); }
+.glucargo-chat-report__cargo:nth-child(4) { animation-delay: var(--gl-d-brisk); }
+.glucargo-chat-report__cargo:nth-child(5) { animation-delay: var(--gl-d-brisk); }
+.glucargo-chat-report__cargo:nth-child(n+6) { animation-delay: var(--gl-d-swift); }
 
 .glucargo-chat-report__cargo.priority-high {
   box-shadow: inset 3px 0 0 var(--glucargo-amber);
@@ -3025,7 +3025,7 @@
 
 .glucargo-chat-report__cargo-meta {
   padding: 2px 5px;
-  border: 1px solid rgba(244, 252, 255, 0.12);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.12);
   font-family: var(--glucargo-font-code);
   font-size: 9px;
 }
@@ -3041,7 +3041,7 @@
 
 .glucargo-chat-report__lost {
   padding-bottom: 12px;
-  border-top: 1px solid rgba(244, 252, 255, 0.06);
+  border-top: 1px solid rgb(var(--gl-tint-light) / 0.06);
 }
 
 .glucargo-chat-report__lost strong {

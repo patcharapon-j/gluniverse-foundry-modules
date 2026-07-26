@@ -61,7 +61,7 @@
   max-width: 100%;
   padding: 0.4rem 0.65rem;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border: 1px solid currentColor;
@@ -116,7 +116,7 @@
   margin-bottom: 0.3rem;
   color: var(--gl-text-bright);
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.055em;
 }

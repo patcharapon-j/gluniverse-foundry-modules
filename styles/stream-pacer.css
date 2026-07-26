@@ -140,7 +140,7 @@
     inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38),
     0 0 40px var(--sp-glow-soft);
   backdrop-filter: blur(16px) saturate(1.15);
-  transition: box-shadow 0.6s ease, border-color 0.6s ease;
+  transition: box-shadow var(--gl-d-reveal) ease, border-color var(--gl-d-reveal) ease;
 }
 
 /* Ambient top glow */
@@ -152,7 +152,7 @@
   opacity: 0.22;
   pointer-events: none;
   z-index: 1;
-  transition: opacity 1s ease, background 1s ease;
+  transition: opacity var(--gl-d-slow) ease, background var(--gl-d-slow) ease;
 }
 
 /* Static accent element — kept for markup compatibility, no moving shimmer */
@@ -201,7 +201,7 @@
   height: 3px;
   border-radius: 99px;
   background: rgb(var(--gl-tint-light) / 0.22);
-  transition: background 0.3s ease;
+  transition: background var(--gl-d-swift) ease;
 }
 
 #stream-pacer-container .pacer-header:hover .drag-handle i {
@@ -220,7 +220,7 @@
   background: var(--sp-amber);
   box-shadow: 0 0 9px var(--sp-amber-glow);
   flex-shrink: 0;
-  animation: sp-pulse-dot 2.6s ease-in-out infinite;
+  animation: sp-pulse-dot var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container.countdown-active .sp-pulse {
@@ -235,7 +235,7 @@
 
 #stream-pacer-container .pacer-title {
   flex: 1;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   font-size: 9.5px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -246,7 +246,7 @@
 
 #stream-pacer-container .gm-badge {
   font-size: 7.5px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.14em;
   padding: 2px 6px;
   border-radius: 6px;
@@ -295,7 +295,7 @@
   border: 1px solid var(--sp-hair);
   color: var(--sp-text);
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06);
-  transition: all 0.25s var(--sp-ease-spring);
+  transition: all var(--gl-d-brisk) var(--sp-ease-spring);
   position: relative;
   overflow: hidden;
 }
@@ -311,7 +311,7 @@
 #stream-pacer-container .player-status .p-name {
   min-width: 0;
   font-size: 8.5px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
@@ -353,13 +353,13 @@
   box-shadow:
     0 0 14px rgba(90, 163, 240, 0.4),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.15);
-  animation: sp-hand-pulse 1.6s ease-in-out infinite;
+  animation: sp-hand-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .player-status.status-hand-raised i {
   color: var(--sp-blue);
   filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.9));
-  animation: sp-hand-icon-pulse 1.6s ease-in-out infinite;
+  animation: sp-hand-icon-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .no-players {
@@ -418,11 +418,11 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06);
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s var(--sp-ease-spring);
+    color var(--gl-d-quick) ease,
+    border-color var(--gl-d-quick) ease,
+    background var(--gl-d-quick) ease,
+    box-shadow var(--gl-d-quick) ease,
+    transform var(--gl-d-tap) var(--sp-ease-spring);
   position: relative;
 }
 
@@ -437,7 +437,7 @@
   border-color: rgb(var(--gl-tint-light) / 0.22);
   background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.09), rgb(var(--gl-tint-light) / 0.02));
   box-shadow: 0 0 12px var(--sp-glow-soft), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1);
-  transform: translateY(-1px);
+  transform: translateY(var(--gl-lift));
 }
 
 #stream-pacer-container .status-btn:active,
@@ -466,14 +466,14 @@
 }
 
 #stream-pacer-container .status-btn.status-hand-raised.active {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-blue);
   background: linear-gradient(180deg, #6fb0f5, var(--sp-blue));
   box-shadow:
     0 0 16px rgba(90, 163, 240, 0.6),
     0 0 32px rgba(90, 163, 240, 0.3),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.35);
-  animation: sp-hand-btn-pulse 1.6s ease-in-out infinite;
+  animation: sp-hand-btn-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
   overflow: hidden;
 }
 
@@ -489,7 +489,7 @@
 }
 
 #stream-pacer-container .status-btn.status-need-time.active {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-purple);
   background: linear-gradient(180deg, #b79bff, var(--sp-purple));
   box-shadow: 0 0 14px rgba(166, 132, 255, 0.5), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3);
@@ -505,7 +505,7 @@
 }
 
 #stream-pacer-container .gm-btn.soft-signal-btn.active {
-  animation: sp-btn-pulse-amber 2.4s ease-in-out infinite;
+  animation: sp-btn-pulse-amber var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .gm-btn.countdown-btn:hover,
@@ -560,7 +560,7 @@
   gap: 7px;
   padding: 5px 8px;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   border-top: 1px solid var(--sp-amber-dim);
@@ -570,7 +570,7 @@
   position: relative;
   z-index: 2;
   overflow: hidden;
-  animation: sp-signal-glow 3s ease-in-out infinite;
+  animation: sp-signal-glow var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .pacer-signal i {
@@ -605,7 +605,7 @@
   margin-left: auto;
   font-family: var(--sp-clock-font);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
   color: var(--sp-text);
@@ -614,7 +614,7 @@
 
 /* Urgency escalation */
 #stream-pacer-container.countdown-active.urgency-warning {
-  animation: sp-pulse-warning 2s ease-in-out infinite;
+  animation: sp-pulse-warning var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 #stream-pacer-container.countdown-active.urgency-warning .pacer-signal {
   color: var(--sp-warn);
@@ -625,7 +625,7 @@
 }
 
 #stream-pacer-container.countdown-active.urgency-critical {
-  animation: sp-pulse-critical 1s ease-in-out infinite;
+  animation: sp-pulse-critical var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 #stream-pacer-container.countdown-active.urgency-critical .pacer-signal {
   color: var(--sp-red);
@@ -633,7 +633,7 @@
 #stream-pacer-container.countdown-active.urgency-critical .countdown-timer {
   color: var(--sp-red);
   text-shadow: 0 0 8px rgba(239, 100, 100, 0.6);
-  animation: sp-flash-critical 0.5s ease-in-out infinite;
+  animation: sp-flash-critical var(--gl-d-glide) var(--gl-ease-inout) infinite;
 }
 
 @keyframes sp-signal-glow {
@@ -798,7 +798,7 @@
   visibility: hidden;
   overflow: hidden;
   transform: translateY(100%);
-  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-glass);
+  transition: opacity var(--gl-d-move) var(--sp-ease-glass), visibility var(--gl-d-move) var(--sp-ease-glass), transform var(--gl-d-move) var(--sp-ease-glass);
   color: var(--sp-text);
   font-family: var(--sp-clock-font);
   background:
@@ -824,7 +824,7 @@
   inset: 0;
   background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(228, 176, 85, 0.14) 10%, rgba(228, 176, 85, 0.06) 50%, rgba(228, 176, 85, 0.14) 90%, transparent 97%, transparent 100%);
   z-index: 1;
-  transition: background 0.4s ease;
+  transition: background var(--gl-d-move) ease;
 }
 
 /* Top rail — signal-colored glowing hairline */
@@ -861,7 +861,7 @@
 
 .stream-pacer-overlay.urgency-critical .sp-tint {
   background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(245, 60, 60, 0.24) 10%, rgba(245, 60, 60, 0.12) 50%, rgba(245, 60, 60, 0.24) 90%, transparent 97%, transparent 100%);
-  animation: sp-ticker-glow 1s ease-in-out infinite;
+  animation: sp-ticker-glow var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 /* Scrolling body with edge-fade mask */
@@ -871,7 +871,7 @@
   display: flex;
   align-items: center;
   white-space: nowrap;
-  animation: sp-ticker-scroll 30s linear infinite;
+  animation: sp-ticker-scroll var(--gl-loop-xl) linear infinite;
   -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
 }
@@ -926,7 +926,7 @@
 .stream-pacer-overlay .overlay-message {
   font-family: var(--sp-clock-font);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--sp-text);
@@ -936,7 +936,7 @@
 .stream-pacer-overlay .overlay-countdown {
   font-family: var(--sp-clock-font);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
   color: var(--sp-red);
@@ -944,7 +944,7 @@
 }
 
 .stream-pacer-overlay.urgency-critical .overlay-countdown {
-  animation: sp-flash-critical 0.5s ease-in-out infinite;
+  animation: sp-flash-critical var(--gl-d-glide) var(--gl-ease-inout) infinite;
 }
 
 /* Diamond separator */
@@ -981,7 +981,7 @@
   display: flex;
   align-items: center;
   z-index: 100;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   font-family: var(--sp-clock-font);
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.10), rgb(var(--gl-tint-light) / 0) 60%),
@@ -995,7 +995,7 @@
   opacity: 0;
   visibility: hidden;
   transform: translateY(-100%);
-  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-spring);
+  transition: opacity var(--gl-d-move) var(--sp-ease-glass), visibility var(--gl-d-move) var(--sp-ease-glass), transform var(--gl-d-move) var(--sp-ease-spring);
   overflow: hidden;
 }
 
@@ -1043,7 +1043,7 @@
 .stream-pacer-hand-bar .hb-ix {
   font-family: var(--sp-clock-font);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.22em;
   padding: 3px 9px;
   border-radius: 7px;
@@ -1056,9 +1056,9 @@
 
 .stream-pacer-hand-bar .hb-icon {
   font-size: 22px;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   flex-shrink: 0;
-  animation: sp-hb-icon 1.8s ease-in-out infinite;
+  animation: sp-hb-icon var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .stream-pacer-hand-bar .hb-icon i {
@@ -1074,10 +1074,10 @@
 .stream-pacer-hand-bar .hb-names {
   font-family: var(--sp-clock-font);
   font-size: 17px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   text-shadow:
     0 0 12px rgb(var(--gl-tint-light) / 0.55),
     0 0 26px rgba(90, 163, 240, 0.55),
@@ -1087,7 +1087,7 @@
 .stream-pacer-hand-bar .hb-tag {
   font-family: var(--sp-clock-font);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.2em;
   color: rgb(var(--gl-tint-light) / 0.75);
   text-transform: uppercase;
@@ -1100,7 +1100,7 @@
 }
 
 #stream-pacer-container .gm-btn.dire-peril-btn:hover:not(.disabled):not([disabled]) {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-peril);
   background: linear-gradient(180deg, rgba(175, 45, 185, 0.22), rgba(175, 45, 185, 0.08));
   box-shadow:
@@ -1123,7 +1123,7 @@
 
 #stream-pacer-container .gm-btn.campfire-btn:hover:not(.disabled):not([disabled]),
 #stream-pacer-container .gm-btn.campfire-btn.active {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-campfire);
   background: linear-gradient(180deg, rgba(255, 140, 50, 0.22), rgba(255, 140, 50, 0.06));
   box-shadow:
@@ -1150,13 +1150,13 @@
   z-index: 9998;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.18s ease-in;
+  transition: opacity var(--gl-d-quick) var(--gl-exit);
   will-change: opacity;
 }
 
 .stream-pacer-peril-webgl.visible {
   opacity: 1;
-  transition: opacity 0.65s ease-out;
+  transition: opacity var(--gl-d-reveal) var(--gl-ease);
 }
 
 .stream-pacer-peril-stage {
@@ -1168,15 +1168,15 @@
   opacity: 0;
   visibility: hidden;
   background: transparent;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   font-family: var(--gl-display);
-  transition: opacity 0.35s ease-out, visibility 0s linear 0.35s;
+  transition: opacity var(--gl-d-swift) var(--gl-ease), visibility var(--gl-d-instant) linear var(--gl-d-swift);
 }
 
 .stream-pacer-peril-stage.playing {
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.12s ease-in, visibility 0s linear;
+  transition: opacity var(--gl-d-tap) var(--gl-exit), visibility var(--gl-d-instant) linear;
 }
 
 /* Fine scanlines across the whole stage. */
@@ -1206,7 +1206,7 @@
     radial-gradient(ellipse at 50% 50%, transparent 28%, rgb(var(--gl-tint-dark) / 0.55) 100%),
     radial-gradient(ellipse at 50% 50%, var(--sp-peril-glow), transparent 60%);
   opacity: 0;
-  animation: pk-fade-hold 4200ms ease-in-out forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease-inout) forwards;
 }
 
 /* Drifting outline marquee of the title behind everything. */
@@ -1219,13 +1219,13 @@
   justify-content: space-around;
   overflow: hidden;
   opacity: 0;
-  animation: pk-fade-hold 4200ms ease-out forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease) forwards;
 }
 
 .stream-pacer-peril-stage .pk-marquee-row {
   display: flex;
   white-space: nowrap;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   font-size: 12vh;
   line-height: 1.05;
   letter-spacing: 0.12em;
@@ -1236,12 +1236,12 @@
 }
 
 .stream-pacer-peril-stage .pk-marquee-row span { padding: 0 0.4em; }
-.stream-pacer-peril-stage .pk-marquee-row:nth-child(1) { animation: pk-drift-l 28s linear infinite; }
+.stream-pacer-peril-stage .pk-marquee-row:nth-child(1) { animation: pk-drift-l var(--gl-loop-lg) linear infinite; }
 .stream-pacer-peril-stage .pk-marquee-row:nth-child(2) {
   -webkit-text-stroke-color: var(--sp-peril-red-glow);
-  animation: pk-drift-r 36s linear infinite;
+  animation: pk-drift-r var(--gl-loop-xl) linear infinite;
 }
-.stream-pacer-peril-stage .pk-marquee-row:nth-child(3) { animation: pk-drift-l 32s linear infinite; }
+.stream-pacer-peril-stage .pk-marquee-row:nth-child(3) { animation: pk-drift-l var(--gl-loop-xl) linear infinite; }
 
 @keyframes pk-drift-l { 0% { transform: translateX(0); } 100% { transform: translateX(-25%); } }
 @keyframes pk-drift-r { 0% { transform: translateX(-25%); } 100% { transform: translateX(0); } }
@@ -1256,7 +1256,7 @@
   background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 50%, transparent);
   opacity: 0;
   mix-blend-mode: screen;
-  animation: pk-sweep 4200ms ease-out forwards;
+  animation: pk-sweep var(--gl-drift) var(--gl-ease) forwards;
 }
 
 @keyframes pk-sweep {
@@ -1278,7 +1278,7 @@
   transform: translate(-50%, -50%) scale(0);
   opacity: 0;
   box-shadow: 0 0 40px var(--sp-peril-red-glow), inset 0 0 40px var(--sp-peril-glow);
-  animation: pk-shock 4200ms var(--gl-ease) forwards;
+  animation: pk-shock var(--gl-drift) var(--gl-ease) forwards;
 }
 
 @keyframes pk-shock {
@@ -1298,7 +1298,7 @@
   border: 0 solid var(--sp-peril-red);
   opacity: 0;
   filter: drop-shadow(0 0 6px var(--sp-peril-red-glow));
-  animation: pk-corner 4200ms var(--gl-ease) forwards;
+  animation: pk-corner var(--gl-drift) var(--gl-ease) forwards;
 }
 .stream-pacer-peril-stage .pk-tl { top: 30px; left: 30px; border-width: 2px 0 0 2px; }
 .stream-pacer-peril-stage .pk-tr { top: 30px; right: 30px; border-width: 2px 2px 0 0; }
@@ -1321,7 +1321,7 @@
   background: linear-gradient(90deg, transparent, var(--sp-peril-red) 50%, transparent);
   box-shadow: 0 0 6px var(--sp-peril-red-glow);
   opacity: 0;
-  animation: pk-fade-hold 4200ms ease-out forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease) forwards;
 }
 .stream-pacer-peril-stage .pk-edge-t { top: 34px; }
 .stream-pacer-peril-stage .pk-edge-b { bottom: 34px; }
@@ -1343,12 +1343,12 @@
   -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
   opacity: 0;
-  animation: pk-fade-hold 4200ms ease-out forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease) forwards;
 }
 .stream-pacer-peril-stage .pk-stream-t { top: 54px; }
 .stream-pacer-peril-stage .pk-stream-b { bottom: 54px; }
-.stream-pacer-peril-stage .pk-stream-track { display: inline-flex; animation: pk-stream-l 20s linear infinite; }
-.stream-pacer-peril-stage .pk-stream-rev { animation: pk-stream-r 24s linear infinite; }
+.stream-pacer-peril-stage .pk-stream-track { display: inline-flex; animation: pk-stream-l var(--gl-loop-lg) linear infinite; }
+.stream-pacer-peril-stage .pk-stream-rev { animation: pk-stream-r var(--gl-loop-lg) linear infinite; }
 .stream-pacer-peril-stage .pk-stream-track > span { padding: 0 1.4em; }
 
 @keyframes pk-stream-l { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
@@ -1364,7 +1364,7 @@
   transform: translate(-50%, -50%);
   z-index: 21;
   opacity: 0;
-  animation: pk-fade-hold 4200ms ease-out forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease) forwards;
 }
 .stream-pacer-peril-stage .pk-rh,
 .stream-pacer-peril-stage .pk-rv {
@@ -1388,7 +1388,7 @@
   height: 120px;
   border: 1px solid var(--sp-peril-red-glow);
   transform: translate(-50%, -50%) rotate(45deg);
-  animation: pk-spin 4200ms linear forwards;
+  animation: pk-spin var(--gl-drift) linear forwards;
 }
 @keyframes pk-spin {
   0% { transform: translate(-50%, -50%) rotate(0deg); }
@@ -1407,16 +1407,16 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   line-height: 1;
   font-size: clamp(180px, 32vw, 460px);
-  color: #fff;
-  text-shadow: 0 0 40px var(--sp-peril-glow), 0 0 90px var(--sp-peril-red-glow), 0 6px 16px #000;
+  color: rgb(var(--gl-tint-light));
+  text-shadow: 0 0 40px var(--sp-peril-glow), 0 0 90px var(--sp-peril-red-glow), 0 6px 16px rgb(var(--gl-tint-dark));
   opacity: 0;
   transform: translate(-50%, -50%) scale(1.22);
-  animation: pk-pf 92ms var(--gl-ease-sharp) both;
-  animation-delay: calc(160ms + var(--i) * 78ms);
+  animation: pk-pf var(--gl-d-tap) var(--gl-ease-sharp) both;
+  animation-delay: calc(var(--gl-d-quick) + var(--i) * var(--gl-d-flash));
 }
 @keyframes pk-pf {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(1.22); filter: blur(3px); }
@@ -1439,7 +1439,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  animation: pk-fade-hold 4200ms ease-out forwards, pk-jolt 4200ms linear forwards;
+  animation: pk-fade-hold var(--gl-drift) var(--gl-ease) forwards, pk-jolt var(--gl-drift) linear forwards;
 }
 
 /* Single sharp positional jolt as the second line lands — no scale bounce. */
@@ -1458,14 +1458,14 @@
   letter-spacing: 7px;
   color: var(--sp-peril-red);
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: var(--gl-weight-medium);
   margin-bottom: 14px;
   padding: 4px 14px;
   border: 1px solid var(--sp-peril-red-glow);
-  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   transform-origin: center;
   opacity: 0;
-  animation: pk-tag 4200ms var(--gl-ease-sharp) forwards;
+  animation: pk-tag var(--gl-drift) var(--gl-ease-sharp) forwards;
 }
 @keyframes pk-tag {
   0%, 17% { opacity: 0; transform: scaleX(0.1); }
@@ -1479,7 +1479,7 @@
 .stream-pacer-peril-stage .pk-line {
   display: flex;
   justify-content: center;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   line-height: 0.92;
   font-size: clamp(64px, 15vw, 168px);
@@ -1489,10 +1489,10 @@
 
 /* Tracking collapse + a quick brightness strobe as each line lands. */
 .stream-pacer-peril-stage .pk-line-1 {
-  animation: pk-track-1 4200ms var(--gl-ease-sharp) both, pk-strobe-1 4200ms steps(1) both;
+  animation: pk-track-1 var(--gl-drift) var(--gl-ease-sharp) both, pk-strobe-1 var(--gl-drift) steps(1) both;
 }
 .stream-pacer-peril-stage .pk-line-2 {
-  animation: pk-track-2 4200ms var(--gl-ease-sharp) both, pk-strobe-2 4200ms steps(1) both;
+  animation: pk-track-2 var(--gl-drift) var(--gl-ease-sharp) both, pk-strobe-2 var(--gl-drift) steps(1) both;
 }
 @keyframes pk-track-1 {
   0%, 20% { letter-spacing: 0.55em; }
@@ -1523,14 +1523,14 @@
   display: inline-block;
   white-space: pre;
   opacity: 0;
-  color: #fff;
-  text-shadow: 0 0 30px var(--sp-peril-glow), 0 0 70px var(--sp-peril-red-glow), 0 4px 10px #000;
+  color: rgb(var(--gl-tint-light));
+  text-shadow: 0 0 30px var(--sp-peril-glow), 0 0 70px var(--sp-peril-red-glow), 0 4px 10px rgb(var(--gl-tint-dark));
 }
 
 /* Line 1 — sharp downward micro-slide + rapid opacity flash. */
 .stream-pacer-peril-stage .pk-line-1 .pk-l {
-  animation: pk-char-y 240ms var(--gl-ease-sharp) both;
-  animation-delay: calc(900ms + var(--i) * 30ms);
+  animation: pk-char-y var(--gl-d-brisk) var(--gl-ease-sharp) both;
+  animation-delay: calc(var(--gl-d-slow) + var(--i) * var(--gl-d-flash));
 }
 @keyframes pk-char-y {
   0% { opacity: 0; transform: translateY(-0.16em); filter: blur(5px); }
@@ -1543,14 +1543,14 @@
 
 /* Line 2 — sharp sideways micro-slide + flash, heavier RGB-split shadow. */
 .stream-pacer-peril-stage .pk-line-2 .pk-l {
-  animation: pk-char-x 250ms var(--gl-ease-sharp) both;
-  animation-delay: calc(1280ms + var(--i) * 30ms);
+  animation: pk-char-x var(--gl-d-brisk) var(--gl-ease-sharp) both;
+  animation-delay: calc(var(--gl-d-cinematic) + var(--i) * var(--gl-d-flash));
   text-shadow:
     -3px 0 var(--sp-peril-red),
     2px 0 var(--sp-peril-ghost),
     0 0 30px var(--sp-peril-glow),
     0 0 70px var(--sp-peril-red-glow),
-    0 4px 10px #000;
+    0 4px 10px rgb(var(--gl-tint-dark));
 }
 @keyframes pk-char-x {
   0% { opacity: 0; transform: translateX(0.18em); filter: blur(6px); }
@@ -1567,7 +1567,7 @@
   margin: 10px 0;
   background: linear-gradient(90deg, transparent, var(--sp-peril-red) 30%, var(--sp-peril) 50%, var(--sp-peril-red) 70%, transparent);
   box-shadow: 0 0 12px var(--sp-peril-red-glow);
-  animation: pk-rule 4200ms var(--gl-ease-sharp) forwards;
+  animation: pk-rule var(--gl-drift) var(--gl-ease-sharp) forwards;
 }
 @keyframes pk-rule {
   0%, 39% { width: 0; opacity: 0; }
@@ -1586,7 +1586,7 @@
   max-width: 0;
   white-space: nowrap;
   overflow: hidden;
-  animation: pk-sub 4200ms steps(24) forwards;
+  animation: pk-sub var(--gl-drift) steps(24) forwards;
 }
 @keyframes pk-sub {
   0%, 46% { max-width: 0; }
@@ -1603,7 +1603,7 @@
   background: radial-gradient(ellipse at 50% 50%, rgb(var(--gl-tint-light) / 0.95), var(--sp-peril-red-glow) 55%, transparent 75%);
   opacity: 0;
   mix-blend-mode: screen;
-  animation: pk-flash 4200ms steps(1) forwards;
+  animation: pk-flash var(--gl-drift) steps(1) forwards;
 }
 @keyframes pk-flash {
   0%, 3% { opacity: 0; }
@@ -1640,20 +1640,20 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   font-family: var(--gl-display);
 
   background: linear-gradient(180deg, rgba(45, 10, 90, 0.96), rgba(20, 4, 42, 0.98));
   border: 1px solid rgba(175, 45, 185, 0.5);
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   box-shadow:
     0 8px 22px rgb(var(--gl-tint-dark) / 0.55),
     0 0 24px var(--sp-peril-glow);
 
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
-  animation: sp-peril-ind-pulse 2.4s ease-in-out infinite;
+  transition: opacity var(--gl-d-move) var(--gl-ease), transform var(--gl-d-move) var(--gl-ease);
+  animation: sp-peril-ind-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .stream-pacer-peril-indicator::before {
@@ -1674,7 +1674,7 @@
   width: 2px;
   background: linear-gradient(180deg, var(--sp-peril), var(--sp-peril-red));
   box-shadow: 0 0 8px var(--sp-peril);
-  animation: sp-peril-ind-bar 1.8s ease-in-out infinite;
+  animation: sp-peril-ind-bar var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .stream-pacer-peril-indicator .peril-ind-icon {
@@ -1685,7 +1685,7 @@
   height: 34px;
   border: 1px solid var(--sp-peril-red);
   color: var(--sp-peril-red);
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   font-size: 16px;
   filter: drop-shadow(0 0 4px var(--sp-peril-red-glow));
 }
@@ -1707,10 +1707,10 @@
 .stream-pacer-peril-indicator .peril-ind-main {
   font-family: var(--gl-display);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 2.5px;
   text-transform: uppercase;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
 }
 
 .stream-pacer-peril-indicator .peril-ind-dismiss {
@@ -1721,11 +1721,11 @@
   background: transparent;
   border: 1px solid rgba(175, 45, 185, 0.3);
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition: color var(--gl-d-quick) ease, border-color var(--gl-d-quick) ease;
 }
 
 .stream-pacer-peril-indicator .peril-ind-dismiss:hover {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-peril);
 }
 
@@ -1767,7 +1767,7 @@
 .stream-pacer-campfire-bar-wrap .stream-pacer-campfire-bar {
   transform: translateY(112%);
   opacity: 0;
-  transition: transform 0.5s var(--gl-snap, var(--gl-snap)), opacity 0.4s ease-out;
+  transition: transform var(--gl-d-glide) var(--gl-snap, var(--gl-snap)), opacity var(--gl-d-move) var(--gl-ease);
 }
 
 .stream-pacer-campfire-bar-wrap.visible .stream-pacer-campfire-bar {
@@ -1785,7 +1785,7 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   font-family: var(--gl-display);
   overflow: visible;
 
@@ -1799,7 +1799,7 @@
     0 -5px 20px var(--sp-campfire-glow),
     inset 0 1px 0 rgba(255, 205, 150, 0.2),
     inset 0 -16px 30px -24px rgba(255, 120, 40, 0.22);
-  animation: sp-campfire-bar-pulse 6s ease-in-out infinite;
+  animation: sp-campfire-bar-pulse var(--gl-loop-sm) var(--gl-ease-inout) infinite;
 }
 
 /* Keep the bar's text + controls above the WebGL fire canvas. */
@@ -1821,7 +1821,7 @@
   z-index: 0;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.6s ease-out;
+  transition: opacity var(--gl-d-reveal) var(--gl-ease);
 }
 
 .stream-pacer-campfire-bar .stream-pacer-campfire-webgl.visible {
@@ -1857,7 +1857,7 @@
   filter: blur(2px);
   transform-origin: bottom;
   opacity: 0.9;
-  animation: sp-campfire-flames 0.85s ease-in-out infinite alternate;
+  animation: sp-campfire-flames var(--gl-d-slow) var(--gl-ease-inout) infinite alternate;
 }
 
 @keyframes sp-campfire-flames {
@@ -1870,16 +1870,16 @@
   font-size: 22px;
   color: var(--sp-campfire-bright);
   text-shadow: 0 0 12px var(--sp-campfire-glow), 0 0 26px var(--sp-campfire-ember-glow);
-  animation: cf-flicker 1.6s ease-in-out infinite;
+  animation: cf-flicker var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .stream-pacer-campfire-bar .cf-bar-title {
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   font-size: 17px;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: #fff;
-  text-shadow: 0 0 14px var(--sp-campfire-glow), 0 2px 6px #000;
+  color: rgb(var(--gl-tint-light));
+  text-shadow: 0 0 14px var(--sp-campfire-glow), 0 2px 6px rgb(var(--gl-tint-dark));
 }
 
 .stream-pacer-campfire-bar .cf-bar-sep {
@@ -1908,7 +1908,7 @@
   padding: 4px 12px;
   color: var(--sp-campfire-bright);
   border: 1px solid color-mix(in srgb, var(--sp-campfire) 45%, transparent);
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   background: rgba(255, 140, 50, 0.08);
 }
 
@@ -1920,7 +1920,7 @@
 .stream-pacer-campfire-bar .cf-bar-timer {
   font-family: var(--gl-tech);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   font-variant-numeric: tabular-nums;
   letter-spacing: 1.5px;
 }
@@ -1928,9 +1928,9 @@
 /* Final stretch — push the timer chip toward the hot ember tone. */
 .stream-pacer-campfire-bar.is-ending .cf-bar-timer-wrap {
   border-color: var(--sp-campfire-ember);
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   background: rgba(255, 90, 30, 0.2);
-  animation: sp-campfire-timer-warn 1s ease-in-out infinite;
+  animation: sp-campfire-timer-warn var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 @keyframes sp-campfire-timer-warn {
@@ -1949,13 +1949,13 @@
   color: rgb(var(--gl-tint-light) / 0.6);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--sp-campfire) 32%, transparent);
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: color var(--gl-d-quick) ease, border-color var(--gl-d-quick) ease, background var(--gl-d-quick) ease;
 }
 
 .stream-pacer-campfire-bar .cf-bar-dismiss:hover {
-  color: #fff;
+  color: rgb(var(--gl-tint-light));
   border-color: var(--sp-campfire);
   background: rgba(255, 140, 50, 0.14);
 }
@@ -1995,7 +1995,7 @@
 
 .stream-pacer-appearance .form-group > label {
   flex: 1;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
 }
 
 .stream-pacer-appearance .sp-text-group input[type="text"] {
@@ -2036,7 +2036,7 @@
 }
 
 .stream-pacer-exempt-users-content .stream-pacer-exempt-table th {
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   font-size: 12px;
 }
 
@@ -2048,7 +2048,7 @@
 }
 
 .stream-pacer-exempt-users-content .stream-pacer-exempt-table td.user-name {
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
 }
 
 .stream-pacer-exempt-users-content .stream-pacer-exempt-table input[type="checkbox"] {
@@ -2069,7 +2069,7 @@
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-glass);
+  transition: opacity var(--gl-d-move) var(--sp-ease-glass), visibility var(--gl-d-move) var(--sp-ease-glass), transform var(--gl-d-move) var(--sp-ease-glass);
   --sp-aura-color: var(--sp-amber-glow);
   --sp-aura-mid:   var(--sp-amber-dim);
   will-change: opacity, transform;
@@ -2084,7 +2084,7 @@
   z-index: 99;
   transform: translateY(-100%);
   /* match the hand-bar's spring entrance */
-  transition: opacity 0.45s var(--sp-ease-glass), visibility 0.45s var(--sp-ease-glass), transform 0.45s var(--sp-ease-spring);
+  transition: opacity var(--gl-d-move) var(--sp-ease-glass), visibility var(--gl-d-move) var(--sp-ease-glass), transform var(--gl-d-move) var(--sp-ease-spring);
 }
 
 .stream-pacer-bar-aura.active {
@@ -2104,7 +2104,7 @@
       transparent 100%);
   -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
-  animation: sp-aura-breath 3.4s ease-in-out infinite;
+  animation: sp-aura-breath var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 /* Top-anchored aura — sits directly below the hand-raise bar, slides down. */
@@ -2118,7 +2118,7 @@
       transparent 100%);
   -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
-  animation: sp-aura-breath 3.4s ease-in-out infinite;
+  animation: sp-aura-breath var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 /* Breath pulses brightness only — never opacity. Animating opacity here would
@@ -2153,13 +2153,13 @@
 .stream-pacer-bar-aura.urgency-warning {
   --sp-aura-color: rgba(240, 168, 80, 0.5);
   --sp-aura-mid:   rgba(240, 168, 80, 0.2);
-  animation-duration: 1.6s;
+  animation-duration: var(--gl-d-cinematic);
 }
 
 .stream-pacer-bar-aura.urgency-critical {
   --sp-aura-color: rgba(245, 60, 60, 0.58);
   --sp-aura-mid:   rgba(245, 60, 60, 0.24);
-  animation-duration: 0.9s;
+  animation-duration: var(--gl-d-slow);
 }
 
 /* ========================================
@@ -2185,7 +2185,7 @@
   align-items: center;
   gap: 5px;
   font-size: 8px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--sp-muted-2);
@@ -2209,7 +2209,7 @@
   color: var(--sp-muted-2);
   font-size: 7.5px;
   cursor: pointer;
-  transition: all 0.2s var(--sp-ease-glass);
+  transition: all var(--gl-d-quick) var(--sp-ease-glass);
 }
 
 #stream-pacer-container .sl-reset:hover {
@@ -2231,7 +2231,7 @@
   padding: 2px 4px;
   border-radius: 6px;
   border: 1px solid transparent;
-  transition: background 0.25s var(--sp-ease-glass), border-color 0.25s var(--sp-ease-glass);
+  transition: background var(--gl-d-brisk) var(--sp-ease-glass), border-color var(--gl-d-brisk) var(--sp-ease-glass);
 }
 
 #stream-pacer-container .sl-row.is-active {
@@ -2251,7 +2251,7 @@
   color: var(--sp-muted);
   font-size: 9px;
   cursor: pointer;
-  transition: color 0.2s var(--sp-ease-glass), filter 0.2s var(--sp-ease-glass);
+  transition: color var(--gl-d-quick) var(--sp-ease-glass), filter var(--gl-d-quick) var(--sp-ease-glass);
 }
 
 #stream-pacer-container .sl-toggle:hover {
@@ -2266,7 +2266,7 @@
 #stream-pacer-container .sl-name {
   min-width: 0;
   font-size: 8.5px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
@@ -2289,7 +2289,7 @@
   width: 0;
   border-radius: 3px 0 0 3px;
   background: linear-gradient(90deg, rgba(120, 150, 225, 0.5), var(--sp-blue));
-  transition: width 0.6s var(--sp-ease-glass);
+  transition: width var(--gl-d-reveal) var(--sp-ease-glass);
 }
 
 #stream-pacer-container .sl-row.is-active .sl-bar-fill {
@@ -2299,7 +2299,7 @@
 #stream-pacer-container .sl-time {
   font-family: var(--sp-clock-font);
   font-size: 8.5px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
   color: var(--sp-muted-2);
@@ -2311,7 +2311,7 @@
   font-size: 8px;
   color: var(--sp-warn);
   opacity: 0;
-  transition: opacity 0.25s var(--sp-ease-glass);
+  transition: opacity var(--gl-d-brisk) var(--sp-ease-glass);
 }
 
 #stream-pacer-container .sl-row.is-underserved .sl-warn {
@@ -2350,7 +2350,7 @@
 
 #stream-pacer-container .spotlight-next .sl-next-name {
   color: var(--sp-text);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
 }
 
 #stream-pacer-container .spotlight-next .sl-next-deficit {
@@ -2430,7 +2430,7 @@
   min-width: 0;
   color: var(--gl-text);
   font-size: 8px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -2484,7 +2484,7 @@
   border-radius: 6px;
   color: var(--safety-color);
   background: linear-gradient(90deg, color-mix(in srgb, var(--safety-color) 13%, transparent), transparent 82%);
-  animation: sp-safety-result-in 360ms var(--gl-snap) both;
+  animation: sp-safety-result-in var(--gl-d-swift) var(--gl-snap) both;
 }
 
 #stream-pacer-container .safety-response.is-green { --safety-color: var(--gl-good); }
@@ -2509,7 +2509,7 @@
   overflow: hidden;
   color: var(--gl-text);
   font-size: 8.5px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2530,7 +2530,7 @@
   border-radius: 50%;
   background: var(--gl-signal);
   box-shadow: 0 0 9px color-mix(in srgb, var(--gl-signal) 60%, transparent);
-  animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
+  animation: gl-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .safety-pending {
@@ -2610,10 +2610,10 @@
     radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--gl-cyan) 9%, transparent), transparent 32%),
     radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--safety-green) 8%, transparent), transparent 28%),
     radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--safety-red) 8%, transparent), transparent 28%),
-    rgba(2, 7, 11, 0.82);
+    color-mix(in srgb, var(--gl-ink-0) 82%, transparent);
   backdrop-filter: blur(18px) saturate(0.82);
   -webkit-backdrop-filter: blur(18px) saturate(0.82);
-  transition: opacity 360ms var(--gl-ease), visibility 0s linear 360ms, background 520ms var(--gl-ease);
+  transition: opacity var(--gl-d-swift) var(--gl-ease), visibility var(--gl-d-instant) linear var(--gl-d-swift), background var(--gl-d-glide) var(--gl-ease);
 }
 
 #stream-pacer-safety-check::before {
@@ -2628,7 +2628,7 @@
   background-size: 46px 46px;
   transform: perspective(700px) rotateX(64deg) translateY(18%);
   mask-image: radial-gradient(circle, black 0%, transparent 64%);
-  animation: sp-safety-grid-drift 12s linear infinite;
+  animation: sp-safety-grid-drift var(--gl-loop-md) linear infinite;
 }
 
 #stream-pacer-safety-check::after {
@@ -2646,16 +2646,16 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition-delay: 0s;
+  transition-delay: var(--gl-d-instant);
 }
 
 #stream-pacer-safety-check.active::after {
-  animation: sp-safety-screen-sheen 1.1s var(--gl-ease) 180ms both;
+  animation: sp-safety-screen-sheen var(--gl-d-cinematic) var(--gl-ease) var(--gl-d-quick) both;
 }
 
-#stream-pacer-safety-check.answered-green { background-color: color-mix(in srgb, var(--safety-green) 16%, rgba(2, 7, 11, 0.88)); }
-#stream-pacer-safety-check.answered-yellow { background-color: color-mix(in srgb, var(--safety-yellow) 14%, rgba(2, 7, 11, 0.88)); }
-#stream-pacer-safety-check.answered-red { background-color: color-mix(in srgb, var(--safety-red) 18%, rgba(2, 7, 11, 0.9)); }
+#stream-pacer-safety-check.answered-green { background-color: color-mix(in srgb, var(--safety-green) 16%, color-mix(in srgb, var(--gl-ink-0) 88%, transparent)); }
+#stream-pacer-safety-check.answered-yellow { background-color: color-mix(in srgb, var(--safety-yellow) 14%, color-mix(in srgb, var(--gl-ink-0) 88%, transparent)); }
+#stream-pacer-safety-check.answered-red { background-color: color-mix(in srgb, var(--safety-red) 18%, color-mix(in srgb, var(--gl-ink-0) 90%, transparent)); }
 
 #stream-pacer-safety-check .safety-check-frame {
   position: relative;
@@ -2674,7 +2674,7 @@
     inset 0 -28px 54px rgb(var(--gl-tint-dark) / 0.34);
   transform: scale(calc(var(--gl-ui-scale, 1) * 0.86)) translateY(22px);
   opacity: 0;
-  transition: transform 480ms var(--gl-snap), opacity 360ms var(--gl-ease), filter 420ms var(--gl-ease);
+  transition: transform var(--gl-d-glide) var(--gl-snap), opacity var(--gl-d-swift) var(--gl-ease), filter var(--gl-d-move) var(--gl-ease);
 }
 
 #stream-pacer-safety-check .safety-check-frame::before {
@@ -2708,7 +2708,7 @@
   color: var(--gl-text-bright);
   font-size: clamp(38px, 6vw, 58px);
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--gl-cyan) 50%, transparent));
-  animation: sp-safety-mark-breathe 2.8s ease-in-out infinite;
+  animation: sp-safety-mark-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-safety-check .safety-check-actions {
@@ -2747,10 +2747,10 @@
   transform: translateY(14px) scale(0.86);
   opacity: 0;
   transition:
-    transform 240ms var(--gl-snap),
-    border-color 240ms var(--gl-ease),
-    box-shadow 240ms var(--gl-ease),
-    filter 240ms var(--gl-ease);
+    transform var(--gl-d-brisk) var(--gl-snap),
+    border-color var(--gl-d-brisk) var(--gl-ease),
+    box-shadow var(--gl-d-brisk) var(--gl-ease),
+    filter var(--gl-d-brisk) var(--gl-ease);
 }
 
 #stream-pacer-safety-check .safety-check-choice::before,
@@ -2770,7 +2770,7 @@
   inset: -30%;
   background: linear-gradient(110deg, transparent 42%, rgb(var(--gl-tint-light) / 0.32) 50%, transparent 58%);
   transform: translateX(-80%) rotate(12deg);
-  transition: transform 620ms var(--gl-ease);
+  transition: transform var(--gl-d-reveal) var(--gl-ease);
 }
 
 #stream-pacer-safety-check .safety-check-choice.is-green { --choice-color: var(--safety-green); }
@@ -2782,9 +2782,9 @@
   transform: translateY(0) scale(1);
 }
 
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(1) { transition-delay: 140ms; }
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(2) { transition-delay: 220ms; }
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(3) { transition-delay: 300ms; }
+#stream-pacer-safety-check.active .safety-check-choice:nth-child(1) { transition-delay: var(--gl-d-tap); }
+#stream-pacer-safety-check.active .safety-check-choice:nth-child(2) { transition-delay: var(--gl-d-brisk); }
+#stream-pacer-safety-check.active .safety-check-choice:nth-child(3) { transition-delay: var(--gl-d-swift); }
 
 #stream-pacer-safety-check .safety-check-choice:hover:not(:disabled),
 #stream-pacer-safety-check .safety-check-choice:focus-visible {
@@ -2804,7 +2804,7 @@
 }
 
 #stream-pacer-safety-check .safety-check-choice:active:not(:disabled) {
-  transform: translateY(-2px) scale(0.97);
+  transform: translateY(-2px) scale(var(--gl-press-scale));
 }
 
 #stream-pacer-safety-check .safety-check-choice.is-selected {

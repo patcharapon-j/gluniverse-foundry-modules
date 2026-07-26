@@ -35,7 +35,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     letter-spacing: 0.02em;
     text-transform: uppercase;
     font-size: 0.72rem;
@@ -52,17 +52,17 @@
 }
 .glinv-scope .glinv-count-used {
     font-size: 1.2rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 .glinv-scope .glinv-count-sep { color: var(--glinv-muted); opacity: 0.6; }
-.glinv-scope .glinv-count-max { color: var(--glinv-muted); font-weight: 600; }
+.glinv-scope .glinv-count-max { color: var(--glinv-muted); font-weight: var(--gl-weight-medium); }
 
 .glinv-scope .glinv-state-badge {
     margin-left: 0.45rem;
     padding: 0.08rem 0.45rem;
     border-radius: var(--glinv-radius-pill);
     font-size: 0.6rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     background: var(--glinv-warn-glow);
@@ -118,7 +118,7 @@
     /* empty = subtle flat recess, not a heavy shaded tile */
     background: rgb(var(--gl-tint-light) / 0.05);
     box-shadow: inset 0 1px 1px rgb(var(--gl-tint-dark) / 0.4), inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.04);
-    transition: background 0.16s var(--glinv-ease), box-shadow 0.16s var(--glinv-ease);
+    transition: background var(--gl-d-quick) var(--glinv-ease), box-shadow var(--gl-d-quick) var(--glinv-ease);
 }
 .glinv-scope .glinv-slot-box.glinv-filled {
     /* filled = raised shaded tile with a top sheen */
@@ -180,7 +180,7 @@
 .tidy5e-sheet .glinv-slot-compact-num {
     font-family: var(--gl-display);
     font-size: 0.7rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     color: var(--glinv-muted, var(--gl-text-dim));
     font-variant-numeric: tabular-nums;
 }
@@ -202,7 +202,7 @@
     border-radius: 5px;
     vertical-align: middle;
     font-family: var(--gl-display);
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.68rem;
     letter-spacing: 0.01em;
     background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-dark) / 0.2));
@@ -252,7 +252,7 @@
 }
 .tidy5e-sheet .glinv-notch-count {
     font-size: 0.66rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     color: var(--glinv-danger, #e0584f);
     font-variant-numeric: tabular-nums;
 }
@@ -284,7 +284,7 @@
     gap: 0.4rem;
     margin: 0 0 0.55rem;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--glinv-ink);
@@ -346,18 +346,18 @@
     color: var(--glinv-ink);
     font-family: var(--glinv-font);
     font-size: 0.74rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     cursor: pointer;
-    transition: transform 0.12s var(--glinv-ease-spring),
+    transition: transform var(--gl-d-tap) var(--glinv-ease-spring),
                 box-shadow var(--glinv-dur) var(--glinv-ease),
                 border-color var(--glinv-dur) var(--glinv-ease);
 }
 .glinv-scope button:hover:not(:disabled) {
     border-color: var(--glinv-tint);
     box-shadow: 0 0 14px var(--glinv-glow-soft);
-    transform: translateY(-1px);
+    transform: translateY(var(--gl-lift));
 }
-.glinv-scope button:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+.glinv-scope button:active:not(:disabled) { transform: translateY(0) scale(var(--gl-press-scale)); }
 .glinv-scope button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .glinv-scope .glinv-notch-controls,
@@ -383,7 +383,7 @@
 .glinv-scope .glinv-pool-fraction {
     margin-left: auto;
     font-variant-numeric: tabular-nums;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 
 /* Notch bar / pool dice bar pips */
@@ -443,7 +443,7 @@
     padding-bottom: 0.4rem;
     border-bottom: 1px solid var(--glinv-hair);
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -456,7 +456,7 @@
     background: var(--glinv-well);
     border: 1px solid var(--glinv-edge);
     font-size: 0.78rem;
-    font-weight: 800;
+    font-weight: var(--gl-weight-heavy);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.01em;
     text-transform: none;
@@ -481,7 +481,7 @@
     border: 1px solid var(--glinv-edge);
     box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2), 0 2px 6px rgb(var(--gl-tint-dark) / 0.45);
 }
-.glinv-scope .glinv-die-face { font-weight: 800; font-size: 0.92rem; color: var(--glinv-tint); }
+.glinv-scope .glinv-die-face { font-weight: var(--gl-weight-heavy); font-size: 0.92rem; color: var(--glinv-tint); }
 .glinv-scope .glinv-die-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.32rem; }
 .glinv-scope .glinv-die-track { display: flex; gap: 0.2rem; }
 .glinv-scope .glinv-step {
@@ -490,7 +490,7 @@
     border-radius: 2px;
     background: rgb(var(--gl-tint-light) / 0.06);
     box-shadow: inset 0 1px 1px rgb(var(--gl-tint-dark) / 0.55);
-    transition: background 0.18s var(--glinv-ease), box-shadow 0.18s var(--glinv-ease);
+    transition: background var(--gl-d-quick) var(--glinv-ease), box-shadow var(--gl-d-quick) var(--glinv-ease);
 }
 .glinv-scope .glinv-step.on {
     background: linear-gradient(180deg, color-mix(in srgb, var(--glinv-tint) 82%, white), var(--glinv-tint));
@@ -499,8 +499,8 @@
 .glinv-scope .glinv-die-sub { font-size: 0.64rem; color: var(--glinv-muted); letter-spacing: 0; text-transform: none; }
 
 /* Pool fraction readout */
-.glinv-scope .glinv-pool-fraction { margin-left: auto; font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.glinv-scope .glinv-pool-fraction small { color: var(--glinv-muted); font-weight: 600; font-size: 0.72rem; }
+.glinv-scope .glinv-pool-fraction { margin-left: auto; font-weight: var(--gl-weight-heavy); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.glinv-scope .glinv-pool-fraction small { color: var(--glinv-muted); font-weight: var(--gl-weight-medium); font-size: 0.72rem; }
 
 /* Tactile icon-button row */
 .glinv-scope .glinv-btn-row { display: flex; gap: 0.35rem; margin-bottom: 0.5rem; }
@@ -544,7 +544,7 @@
     border: 1px solid var(--glinv-danger);
     color: var(--glinv-danger);
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 
 /* ── Ammo card state accents (class on card root) ────────────────────── */
@@ -574,7 +574,7 @@
     background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.12), rgb(var(--gl-tint-light) / 0) 48%), var(--glinv-surface-2);
     border: 1px solid var(--glinv-edge);
     box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16), 0 2px 6px rgb(var(--gl-tint-dark) / 0.4);
-    font-weight: 800;
+    font-weight: var(--gl-weight-heavy);
     color: var(--glinv-tint);
 }
 .glinv-scope .glinv-ammo-die-display .glinv-ammo-die-label { font-size: 1rem; line-height: 1; }
@@ -589,7 +589,7 @@
     padding: 0.05rem 0.4rem;
     border-radius: var(--glinv-radius-pill);
     font-size: 0.6rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     border: 1px solid var(--glinv-edge);
@@ -613,7 +613,7 @@
     background: var(--glinv-danger-soft);
     color: var(--glinv-danger);
     border: 1px solid var(--glinv-danger);
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.74rem;
 }
 
@@ -639,14 +639,14 @@
     box-shadow: var(--glinv-shadow-chip);
     font-family: var(--glinv-font);
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-variant-numeric: tabular-nums;
     color: var(--glinv-ink);
     line-height: 1.2;
 }
 .glinv-scope .glinv-header-chip i { color: var(--glinv-tint); font-size: 0.72rem; align-self: center; }
 .glinv-scope .glinv-header-chip .glinv-hc-sep,
-.glinv-scope .glinv-header-chip .glinv-hc-max { color: var(--glinv-muted); font-weight: 600; }
+.glinv-scope .glinv-header-chip .glinv-hc-max { color: var(--glinv-muted); font-weight: var(--gl-weight-medium); }
 .glinv-scope .glinv-header-chip.glinv-heavy { box-shadow: var(--glinv-shadow-chip), 0 0 10px var(--glinv-warn-glow); }
 .glinv-scope .glinv-header-chip.glinv-encumbered { border-color: var(--glinv-warn); }
 .glinv-scope .glinv-header-chip.glinv-encumbered .glinv-hc-used { color: var(--glinv-warn); }
@@ -668,7 +668,7 @@
 .glinv-scope .glinv-reel-strip {
     display: flex;
     flex-direction: column;
-    transition: transform 0.55s var(--gl-ease);
+    transition: transform var(--gl-d-glide) var(--gl-ease);
 }
 .glinv-scope .glinv-reel-digit { height: 1em; line-height: 1; text-align: center; }
 
@@ -682,8 +682,8 @@
     pointer-events: none;
     text-shadow: 0 0 8px currentColor;
 }
-.glinv-scope .glinv-trend-up { color: var(--glinv-danger); animation: glinv-float-up 1.4s var(--glinv-ease-soft) both; }
-.glinv-scope .glinv-trend-down { color: var(--glinv-good); animation: glinv-float-down 1.4s var(--glinv-ease-soft) both; }
+.glinv-scope .glinv-trend-up { color: var(--glinv-danger); animation: glinv-float-up var(--gl-d-cinematic) var(--glinv-ease-soft) both; }
+.glinv-scope .glinv-trend-down { color: var(--glinv-good); animation: glinv-float-down var(--gl-d-cinematic) var(--glinv-ease-soft) both; }
 
 /* ─── Quickdraw Belt ────────────────────────────────────────────────── */
 .glinv-scope .glinv-quickdraw-belt {
@@ -696,7 +696,7 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.68rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--glinv-gold);
@@ -722,10 +722,10 @@
     border: 1px solid color-mix(in srgb, var(--glinv-gold) 55%, var(--glinv-edge));
     box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12), 0 0 10px var(--glinv-gold-glow);
     overflow: hidden;
-    transition: transform 0.16s var(--glinv-ease), box-shadow var(--glinv-dur) var(--glinv-ease);
+    transition: transform var(--gl-d-quick) var(--glinv-ease), box-shadow var(--glinv-dur) var(--glinv-ease);
 }
 .glinv-scope .glinv-qd-chip:hover {
-    transform: translateY(-1px) scale(1.02);
+    transform: translateY(var(--gl-lift)) scale(1.02);
     box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16), 0 0 16px var(--glinv-gold-glow);
 }
 .glinv-scope .glinv-qd-chip img {
@@ -739,7 +739,7 @@
 .glinv-scope .glinv-qd-chip i { color: var(--glinv-gold); font-size: 0.7rem; }
 .glinv-scope .glinv-qd-chip-name {
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     color: var(--glinv-ink);
     white-space: nowrap;
     overflow: hidden;
@@ -768,7 +768,7 @@
     margin-bottom: 0.5rem;
     padding-bottom: 0.4rem;
     border-bottom: 1px solid var(--glinv-hair);
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.82rem;
 }
 .glinv-scope .glinv-cc-head > i { color: var(--glinv-tint); }
@@ -780,7 +780,7 @@
     background: var(--glinv-well);
     border: 1px solid var(--glinv-edge);
     font-size: 0.74rem;
-    font-weight: 800;
+    font-weight: var(--gl-weight-heavy);
     font-variant-numeric: tabular-nums;
 }
 
@@ -798,11 +798,11 @@
         var(--glinv-surface-2);
     border: 1px solid var(--glinv-edge);
     box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.22), 0 2px 6px rgb(var(--gl-tint-dark) / 0.45);
-    animation: glinv-die-step 0.45s var(--glinv-ease) 1;
+    animation: glinv-die-step var(--gl-d-move) var(--glinv-ease) 1;
 }
-.glinv-scope .glinv-cc-die-val { font-size: 1.3rem; font-weight: 800; }
+.glinv-scope .glinv-cc-die-val { font-size: 1.3rem; font-weight: var(--gl-weight-heavy); }
 .glinv-scope .glinv-cc-die-spent { color: var(--glinv-danger); }
-.glinv-scope .glinv-cc-result { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 0.35rem; }
+.glinv-scope .glinv-cc-result { font-size: 0.82rem; font-weight: var(--gl-weight-medium); display: flex; align-items: center; gap: 0.35rem; }
 
 /* Pool result dice */
 .glinv-scope .glinv-cc-dice { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
@@ -813,10 +813,10 @@
     place-items: center;
     border-radius: 6px;
     border: 1px solid var(--glinv-edge);
-    font-weight: 800;
+    font-weight: var(--gl-weight-heavy);
     font-size: 0.82rem;
     font-variant-numeric: tabular-nums;
-    animation: glinv-die-roll 0.4s var(--glinv-ease-spring) both;
+    animation: glinv-die-roll var(--gl-d-move) var(--glinv-ease-spring) both;
 }
 .glinv-scope .glinv-cc-d-kept {
     background:
@@ -842,14 +842,14 @@
     padding-top: 0.42rem;
     border-top: 1px solid var(--glinv-hair);
     font-size: 0.76rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 .glinv-scope .glinv-cc-foot i { margin-right: 0.2rem; }
 .glinv-scope .glinv-cc-lost { color: var(--glinv-danger); }
 .glinv-scope .glinv-cc-safe { color: var(--glinv-good); }
-.glinv-scope .glinv-cc-depleted { color: var(--glinv-danger); font-weight: 800; }
+.glinv-scope .glinv-cc-depleted { color: var(--glinv-danger); font-weight: var(--gl-weight-heavy); }
 .glinv-scope .glinv-cc-remain { margin-left: auto; color: var(--glinv-muted); font-variant-numeric: tabular-nums; }
-.glinv-scope .glinv-cc-remain small { font-weight: 600; }
+.glinv-scope .glinv-cc-remain small { font-weight: var(--gl-weight-medium); }
 
 /* State tints */
 .glinv-scope .glinv-cc-good .glinv-cc-result, .glinv-scope .glinv-cc-good .glinv-cc-die-val { color: var(--glinv-good); }

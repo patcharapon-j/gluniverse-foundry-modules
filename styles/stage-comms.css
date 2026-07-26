@@ -26,7 +26,7 @@
        the stage. pointer-events: none keeps the UI underneath clickable. */
     z-index: 1;
     pointer-events: none;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--gl-d-swift) ease;
 }
 
 /* edge-right clears Foundry's right sidebar so cards stay visible on the canvas
@@ -82,7 +82,7 @@
     position: relative;
     width: var(--comms-width, 170px);
     transform-origin: center center;
-    transition: filter 0.35s ease, opacity 0.35s ease;
+    transition: filter var(--gl-d-swift) ease, opacity var(--gl-d-swift) ease;
     /* Accent colour driven by the active theme, overridden per-actor by tint. */
     --comms-glow: rgba(120, 220, 255, 0.55);
     /* Rim-light colour follows the actor tint, falling back to cool cyan. */
@@ -157,7 +157,7 @@
     padding: 3px 10px;
     font-family: var(--comms-font);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     letter-spacing: 0.6px;
     text-align: center;
     white-space: nowrap;
@@ -179,7 +179,7 @@
     padding: 2px 7px;
     font-family: var(--comms-font);
     font-size: 9px;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     letter-spacing: 1px;
     text-transform: uppercase;
     border-radius: 3px;
@@ -195,10 +195,10 @@
 .glcomms-connecting .glcomms-status-text::after { content: attr(data-connecting); }
 
 .glcomms-card:not(.glcomms-connecting) .glcomms-status-dot {
-    animation: glcomms-pulse 2s ease-in-out infinite;
+    animation: glcomms-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 .glcomms-connecting .glcomms-status-dot {
-    animation: glcomms-blink 0.5s steps(1) infinite;
+    animation: glcomms-blink var(--gl-d-glide) steps(1) infinite;
 }
 @keyframes glcomms-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @keyframes glcomms-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
@@ -219,7 +219,7 @@
     background: radial-gradient(closest-side, var(--comms-glow), transparent 78%);
     filter: blur(6px);
     pointer-events: none;
-    animation: glcomms-halo 2s ease-in-out infinite;
+    animation: glcomms-halo var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 @keyframes glcomms-halo {
     0%, 100% { opacity: 0.6; transform: scale(0.98); }
@@ -242,7 +242,7 @@
         rgb(var(--gl-tint-dark) / 0.45) 3px
     );
     background-size: 100% 3px;
-    animation: glcomms-scan 8s linear infinite;
+    animation: glcomms-scan var(--gl-loop-sm) linear infinite;
 }
 @keyframes glcomms-scan { from { background-position: 0 0; } to { background-position: 0 120px; } }
 
@@ -251,7 +251,7 @@
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
     background-size: 140px 140px;
-    animation: glcomms-grain 0.55s steps(3) infinite;
+    animation: glcomms-grain var(--gl-d-glide) steps(3) infinite;
 }
 @keyframes glcomms-grain {
     0%   { transform: translate(0, 0); }
@@ -272,7 +272,7 @@
     border: 1px solid rgba(80, 220, 255, 0.55);
     box-shadow: 0 0 12px rgba(40, 180, 230, 0.35), inset 0 0 24px rgba(0, 40, 60, 0.6);
     background: #02080c;
-    animation: glcomms-scifi-idle 6s ease-in-out infinite;
+    animation: glcomms-scifi-idle var(--gl-loop-sm) var(--gl-ease-inout) infinite;
 }
 .theme-scifi .glcomms-portrait { filter: contrast(1.05) brightness(1.02) saturate(0.92) hue-rotate(-6deg); }
 .theme-scifi .glcomms-fx-tint {
@@ -312,7 +312,7 @@
         rgba(170, 245, 255, 0) 100%
     );
     mix-blend-mode: screen;
-    animation: glcomms-crt-beam 3.4s linear infinite;
+    animation: glcomms-crt-beam var(--gl-dread) linear infinite;
 }
 @keyframes glcomms-crt-beam {
     0%   { top: -25%; opacity: 0; }
@@ -349,7 +349,7 @@
 /* Speaking */
 .glcomms-card.theme-scifi.speaking .glcomms-frame {
     border-color: rgba(140, 240, 255, 0.95);
-    animation: glcomms-scifi-speak 1.4s ease-in-out infinite;
+    animation: glcomms-scifi-speak var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 @keyframes glcomms-scifi-speak {
     0%, 100% { box-shadow: 0 0 14px rgba(80, 220, 255, 0.5), inset 0 0 24px rgba(0, 60, 90, 0.6); }
@@ -357,7 +357,7 @@
 }
 
 /* Connect — signal acquire flicker */
-.glcomms-card.theme-scifi.glcomms-connecting .glcomms-frame { animation: glcomms-scifi-connect 1.1s steps(1) 1; }
+.glcomms-card.theme-scifi.glcomms-connecting .glcomms-frame { animation: glcomms-scifi-connect var(--gl-d-cinematic) steps(1) 1; }
 .glcomms-card.theme-scifi.glcomms-connecting .glcomms-status {
     color: #2a1500;
     background: rgba(255, 170, 60, 0.9);
@@ -375,7 +375,7 @@
 }
 
 /* Hangup — static burst + CRT collapse */
-.glcomms-card.theme-scifi.glcomms-leaving { animation: glcomms-scifi-hangup 0.5s ease-in forwards; }
+.glcomms-card.theme-scifi.glcomms-leaving { animation: glcomms-scifi-hangup var(--gl-d-glide) var(--gl-exit) forwards; }
 @keyframes glcomms-scifi-hangup {
     0%   { opacity: 1; transform: scaleY(1); filter: brightness(1); }
     30%  { opacity: 1; transform: scaleY(1.02); filter: brightness(2) contrast(2); }
@@ -393,7 +393,7 @@
     border-radius: 14px;
     box-shadow: 0 0 18px rgba(160, 120, 255, 0.4), inset 0 0 30px rgba(60, 30, 110, 0.4);
     background: #0a0716;
-    animation: glcomms-ethereal-float 7s ease-in-out infinite;
+    animation: glcomms-ethereal-float var(--gl-loop-sm) var(--gl-ease-inout) infinite;
 }
 .theme-ethereal .glcomms-portrait { filter: saturate(1.05) brightness(1.05) contrast(0.98); }
 .theme-ethereal .glcomms-fx-tint {
@@ -406,7 +406,7 @@
     background:
         radial-gradient(120% 80% at 50% 0%, rgba(190, 150, 255, 0.22), transparent 70%),
         radial-gradient(80% 60% at 50% 110%, rgba(120, 200, 255, 0.18), transparent 60%);
-    animation: glcomms-ethereal-shimmer 6s ease-in-out infinite;
+    animation: glcomms-ethereal-shimmer var(--gl-loop-sm) var(--gl-ease-inout) infinite;
 }
 .theme-ethereal .glcomms-name {
     color: #ecdcff;
@@ -439,7 +439,7 @@
 }
 
 /* Connect — coalescing shimmer */
-.glcomms-card.theme-ethereal.glcomms-connecting .glcomms-frame { animation: glcomms-ethereal-connect 1.1s ease-out 1; }
+.glcomms-card.theme-ethereal.glcomms-connecting .glcomms-frame { animation: glcomms-ethereal-connect var(--gl-d-cinematic) var(--gl-ease) 1; }
 @keyframes glcomms-ethereal-connect {
     0%   { opacity: 0; filter: blur(14px) brightness(1.8); transform: scale(1.08); }
     60%  { opacity: 1; filter: blur(3px) brightness(1.2); transform: scale(1.0); }
@@ -447,7 +447,7 @@
 }
 
 /* Hangup — dissolve into motes */
-.glcomms-card.theme-ethereal.glcomms-leaving { animation: glcomms-ethereal-hangup 0.6s ease-in forwards; }
+.glcomms-card.theme-ethereal.glcomms-leaving { animation: glcomms-ethereal-hangup var(--gl-d-reveal) var(--gl-exit) forwards; }
 @keyframes glcomms-ethereal-hangup {
     0%   { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
     100% { opacity: 0; filter: blur(10px) brightness(1.5); transform: translateY(-12px) scale(0.96); }
@@ -479,8 +479,8 @@
     border-color: rgba(255, 215, 100, 0.7);
     box-shadow: 0 0 16px rgba(255, 215, 100, 0.5);
 }
-.glcomms-card.theme-minimal.glcomms-connecting .glcomms-frame { animation: glcomms-fade-in 0.4s ease; }
-.glcomms-card.theme-minimal.glcomms-leaving { animation: glcomms-fade-out 0.3s ease forwards; }
+.glcomms-card.theme-minimal.glcomms-connecting .glcomms-frame { animation: glcomms-fade-in var(--gl-d-move) ease; }
+.glcomms-card.theme-minimal.glcomms-leaving { animation: glcomms-fade-out var(--gl-d-swift) ease forwards; }
 @keyframes glcomms-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes glcomms-fade-out { from { opacity: 1; } to { opacity: 0; transform: scale(0.97); } }
 
@@ -524,12 +524,12 @@
     border-color: color-mix(in srgb, var(--comms-tint) 85%, white);
     box-shadow:
         0 0 14px color-mix(in srgb, var(--comms-tint) 55%, transparent),
-        inset 0 0 26px color-mix(in srgb, var(--comms-tint) 32%, #000);
+        inset 0 0 26px color-mix(in srgb, var(--comms-tint) 32%, rgb(var(--gl-tint-dark)));
 }
 
 /* Name badge */
 .glcomms-card.has-tint .glcomms-name {
-    color: #fff;
+    color: rgb(var(--gl-tint-light));
     background: color-mix(in srgb, var(--comms-tint) 34%, rgb(var(--gl-tint-dark) / 0.82));
     border: 1px solid color-mix(in srgb, var(--comms-tint) 65%, transparent);
     text-shadow: 0 0 7px color-mix(in srgb, var(--comms-tint) 75%, transparent);
@@ -537,12 +537,12 @@
 
 /* Live status badge */
 .glcomms-card.has-tint .glcomms-status {
-    color: #fff;
+    color: rgb(var(--gl-tint-light));
     background: var(--comms-tint);
     box-shadow: 0 0 9px color-mix(in srgb, var(--comms-tint) 65%, transparent);
 }
 .glcomms-card.has-tint .glcomms-status-dot {
-    background: color-mix(in srgb, #fff 72%, var(--comms-tint));
+    background: color-mix(in srgb, rgb(var(--gl-tint-light)) 72%, var(--comms-tint));
 }
 
 /* Sci-fi CRT scan beam follows the tint */
@@ -557,10 +557,10 @@
 /* Active caller: strong static tint glow (the halo behind it carries the pulse) */
 .glcomms-card.has-tint.speaking .glcomms-frame {
     animation: none;
-    border-color: color-mix(in srgb, #fff 28%, var(--comms-tint));
+    border-color: color-mix(in srgb, rgb(var(--gl-tint-light)) 28%, var(--comms-tint));
     box-shadow:
         0 0 26px color-mix(in srgb, var(--comms-tint) 78%, transparent),
-        inset 0 0 28px color-mix(in srgb, var(--comms-tint) 36%, #000);
+        inset 0 0 28px color-mix(in srgb, var(--comms-tint) 36%, rgb(var(--gl-tint-dark)));
 }
 
 /* ═══════════════════════════════════════════
@@ -581,7 +581,7 @@
     background: rgb(var(--gl-tint-light) / 0.04);
     border: 1px solid rgb(var(--gl-tint-light) / 0.08);
     border-radius: 8px;
-    transition: border-color 0.2s ease;
+    transition: border-color var(--gl-d-quick) ease;
 }
 .glcomms-call-card.speaking {
     border-color: rgba(255, 215, 100, 0.4);
@@ -670,7 +670,7 @@
     min-width: 0;
     font-size: 12px;
     color: #ddd;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -696,6 +696,6 @@
     background: rgb(var(--gl-tint-dark) / 0.5) !important;
     border-radius: 4px;
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--gl-d-quick) ease;
 }
 .glstage-actor-card:hover .glstage-actor-callin { opacity: 1; }

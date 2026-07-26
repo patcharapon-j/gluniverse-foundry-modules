@@ -10,7 +10,7 @@
   --gl-accent: var(--gl-cyan);
   --glmm-party: var(--gl-signal);
   /* Calmer motion aliases — everything eases, nothing snaps. */
-  --glmm-morph: 640ms;
+  --glmm-morph: var(--gl-d-reveal);
   --glmm-soft: var(--gl-ease);
 }
 
@@ -33,7 +33,7 @@
     drop-shadow(0 20px 40px rgb(var(--gl-tint-dark) / 0.6))
     drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / 0.4))
     drop-shadow(0 0 26px var(--gl-bloom));
-  transition: filter 600ms var(--gl-ease);
+  transition: filter var(--gl-d-reveal) var(--gl-ease);
 }
 .glmm-viewer-app .window-content { background: none; padding: 0; overflow: visible; height: 100%; }
 .glmm-viewer-app.is-animating {
@@ -72,13 +72,20 @@
   pointer-events: none;
   background: radial-gradient(78% 130% at 50% -28%, var(--gl-glow), transparent 64%);
   opacity: 0.2;
-  transition: opacity 600ms var(--gl-ease);
+  transition: opacity var(--gl-d-reveal) var(--gl-ease);
 }
 .glmm-viewer-app.is-broadcasting .glmm-viewer::before,
 .glmm-viewer-app.glmm-attn .glmm-viewer::before { opacity: 0.42; }
 /* hairline tracing the top-right chamfer cut. A neutral glass highlight at rest
    (no accent glow — that only happens on events); it picks up the attention
-   colour + a glow while drawing attention (see the is-attn rule below). */
+   colour + a glow while drawing attention (see the is-attn rule below).
+
+   This is the ONE feature that keeps its own chamfer edge rather than taking
+   the shared .gl-glass one: the shared edge is a static rim, whereas this glint
+   is a live indicator that recolours and blooms on broadcast. Note that the
+   .glmm-viewer::before bloom above therefore replaces .gl-glass::before (same
+   selector, later sheet), which is intentional and costs nothing — the corner
+   is drawn here instead. */
 .glmm-viewer::after {
   content: "";
   position: absolute;
@@ -106,7 +113,7 @@
   transform: translateX(-180%) skewX(-12deg);
   opacity: 0;
 }
-.glmm-sweep.is-run { animation: glmm-sweep 1.15s var(--gl-ease); }
+.glmm-sweep.is-run { animation: glmm-sweep var(--gl-d-cinematic) var(--gl-ease); }
 
 /* Liquid-glass edge refraction — a full-perimeter rim drawn ON TOP of the map
    (pointer-events:none, above the content layer) that bends the accent light
@@ -129,15 +136,15 @@
     inset 0 1px 0 transparent,
     inset 0 0 18px -3px transparent,
     inset 0 18px 36px -26px transparent;
-  transition: box-shadow 600ms var(--gl-ease);
+  transition: box-shadow var(--gl-d-reveal) var(--gl-ease);
 }
 /* broadcast tweening: the rim breathes in the accent colour — the same edge
    refraction as draw-attention, just calmer (the glass "charges up"). */
-.glmm-viewer-app.is-broadcasting .glmm-rim { animation: glmm-rim-broadcast 1.9s var(--gl-ease) infinite; }
+.glmm-viewer-app.is-broadcasting .glmm-rim { animation: glmm-rim-broadcast var(--gl-breathe) var(--gl-ease) infinite; }
 /* draw-attention: the rim pulses in the attention colour (an edge glow) */
-.glmm-viewer-app.is-attn .glmm-rim { animation: glmm-rim-attn 1.7s var(--gl-ease) infinite; }
+.glmm-viewer-app.is-attn .glmm-rim { animation: glmm-rim-attn var(--gl-d-cinematic) var(--gl-ease) infinite; }
 /* ping: a single rim pulse in the pinger's colour (same edge-glow vocabulary) */
-.glmm-viewer-app.glmm-attn .glmm-rim { animation: glmm-rim-ping 1s var(--gl-ease); }
+.glmm-viewer-app.glmm-attn .glmm-rim { animation: glmm-rim-ping var(--gl-d-slow) var(--gl-ease); }
 
 /* keep the interactive chrome above the bloom layer */
 .glmm-vchrome, .glmm-vbody { position: relative; z-index: 2; }
@@ -159,7 +166,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.02em;
   color: var(--gl-text-bright);
 }
@@ -385,7 +392,7 @@
   fill: var(--gl-text-bright);
   font-family: var(--gl-display);
   font-size: 24px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   paint-order: stroke;
   stroke: rgb(var(--gl-tint-dark) / 0.55);
   stroke-width: 4px;
@@ -407,7 +414,7 @@
 .glmm-label-text {
   fill: var(--c, var(--gl-text-bright));
   font-family: var(--gl-display);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.02em;
   paint-order: stroke;
   stroke: rgb(var(--gl-tint-dark) / 0.6);
@@ -442,7 +449,7 @@
 /* entity markers */
 .glmm-marker-dot {
   fill: var(--c);
-  stroke: #fff;
+  stroke: rgb(var(--gl-tint-light));
   stroke-width: 2.5;
   filter: drop-shadow(0 2px 4px rgb(var(--gl-tint-dark) / 0.6));
   transition: fill var(--gl-d-move) var(--gl-ease);
@@ -453,19 +460,19 @@
   fill: var(--gl-text-bright);
   font-family: var(--gl-display);
   font-size: 20px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   paint-order: stroke;
   stroke: rgb(var(--gl-tint-dark) / 0.65);
   stroke-width: 4.5px;
   pointer-events: none;
 }
-.glmm-marker.is-self .glmm-marker-ring { opacity: 0.9; animation: glmm-self 2.8s var(--gl-ease) infinite; }
+.glmm-marker.is-self .glmm-marker-ring { opacity: 0.9; animation: glmm-self var(--gl-breathe) var(--gl-ease) infinite; }
 .glmm-marker.is-self .glmm-marker-halo { opacity: 0.18; }
 .glmm-marker.is-dragging { cursor: grabbing; }
 .glmm-marker.is-dragging .glmm-marker-dot { stroke: var(--gl-signal); }
 .glmm-el.is-flash .glmm-marker-dot,
 .glmm-el.is-flash .glmm-room-shape,
-.glmm-el.is-flash .glmm-party-disc { animation: glmm-flash 1.3s var(--gl-ease); }
+.glmm-el.is-flash .glmm-party-disc { animation: glmm-flash var(--gl-d-cinematic) var(--gl-ease); }
 
 /* party marker — a glyph badge standing in for the whole group */
 .glmm-party-disc {
@@ -475,7 +482,7 @@
   filter: drop-shadow(0 0 11px color-mix(in srgb, var(--c) 55%, transparent));
   transition: fill var(--gl-d-move) var(--gl-ease), stroke var(--gl-d-move) var(--gl-ease);
 }
-.glmm-party-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.55; animation: glmm-self 3.1s var(--gl-ease) infinite; }
+.glmm-party-ring { fill: none; stroke: var(--c); stroke-width: 2; opacity: 0.55; animation: glmm-self var(--gl-dread) var(--gl-ease) infinite; }
 .glmm-party .glmm-marker-halo { fill: var(--c); opacity: 0.14; }
 .glmm-party-glyph { color: var(--c); filter: drop-shadow(0 1px 2px rgb(var(--gl-tint-dark) / 0.6)); }
 
@@ -483,8 +490,8 @@
 
 .glmm-l-fx { pointer-events: none; }
 
-.glmm-ping-ring { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-ping 1.8s var(--gl-ease) forwards; }
-.glmm-ping-core { fill: var(--c); animation: glmm-ping-core 1.8s var(--gl-ease) forwards; }
+.glmm-ping-ring { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-ping var(--gl-breathe) var(--gl-ease) forwards; }
+.glmm-ping-core { fill: var(--c); animation: glmm-ping-core var(--gl-breathe) var(--gl-ease) forwards; }
 .glmm-ping-name {
   fill: var(--gl-text-bright);
   font-family: var(--gl-tech);
@@ -493,15 +500,15 @@
   stroke: rgb(var(--gl-tint-dark) / 0.7);
   stroke-width: 5px;
   opacity: 0;
-  animation: glmm-pingname 2.6s var(--gl-ease) forwards;
+  animation: glmm-pingname var(--gl-breathe) var(--gl-ease) forwards;
 }
 
-.glmm-beacon { transition: opacity 600ms var(--gl-ease); }
+.glmm-beacon { transition: opacity var(--gl-d-reveal) var(--gl-ease); }
 .glmm-beacon.is-out { opacity: 0; }
-.glmm-beacon-pulse { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-beacon 2.6s var(--gl-ease) infinite; }
-.glmm-beacon-pulse.d2 { animation-delay: 1.3s; }
-.glmm-beacon-dot { fill: var(--c); filter: drop-shadow(0 0 10px var(--c)); animation: glmm-beacondot 1.6s var(--gl-ease) infinite; }
-.glmm-beacon-arrow { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: glmm-arrow 1.6s var(--gl-ease) infinite; }
+.glmm-beacon-pulse { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; animation: glmm-beacon var(--gl-breathe) var(--gl-ease) infinite; }
+.glmm-beacon-pulse.d2 { animation-delay: var(--gl-d-cinematic); }
+.glmm-beacon-dot { fill: var(--c); filter: drop-shadow(0 0 10px var(--c)); animation: glmm-beacondot var(--gl-d-cinematic) var(--gl-ease) infinite; }
+.glmm-beacon-arrow { fill: none; stroke: var(--c); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: glmm-arrow var(--gl-d-cinematic) var(--gl-ease) infinite; }
 
 .glmm-trail {
   stroke: var(--c, var(--gl-cyan));
@@ -509,18 +516,18 @@
   stroke-linecap: round;
   stroke-dasharray: 4 10;
   opacity: 0;
-  transition: opacity 360ms var(--gl-ease);
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c, var(--gl-cyan)) 60%, transparent));
 }
-.glmm-trail.is-in { opacity: 0.85; animation: glmm-trail 2s linear forwards; }
+.glmm-trail.is-in { opacity: 0.85; animation: glmm-trail var(--gl-breathe) linear forwards; }
 
-.glmm-enter { animation: glmm-enter 760ms var(--gl-pop) both; animation-delay: var(--glmm-delay, 0ms); transform-box: fill-box; transform-origin: center; }
-.glmm-leave { animation: glmm-leave 760ms var(--gl-exit) both; transform-box: fill-box; transform-origin: center; }
+.glmm-enter { animation: glmm-enter var(--gl-d-splash) var(--gl-pop) both; animation-delay: var(--glmm-delay, var(--gl-d-instant)); transform-box: fill-box; transform-origin: center; }
+.glmm-leave { animation: glmm-leave var(--gl-d-splash) var(--gl-exit) both; transform-box: fill-box; transform-origin: center; }
 .glmm-changed .glmm-room-shape,
 .glmm-changed .glmm-marker-dot,
 .glmm-changed .glmm-icon-disc,
 .glmm-changed .glmm-party-disc,
-.glmm-changed .glmm-label-text { animation: glmm-changed 1.3s var(--gl-ease); }
+.glmm-changed .glmm-label-text { animation: glmm-changed var(--gl-d-cinematic) var(--gl-ease); }
 
 /* tooltip */
 .glmm-html-fx { position: absolute; inset: 0; pointer-events: none; }
@@ -542,7 +549,7 @@
   z-index: 5;
 }
 .glmm-tip.is-in { opacity: 1; transform: translateY(0); }
-.glmm-tip-title { font-weight: 700; color: var(--gl-text-bright); }
+.glmm-tip-title { font-weight: var(--gl-weight-bold); color: var(--gl-text-bright); }
 .glmm-tip-note { color: var(--gl-text-dim); margin-top: 2px; }
 .glmm-tip-flag { margin-top: 4px; font-family: var(--gl-tech); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gl-signal); }
 
@@ -570,7 +577,7 @@
   overflow-y: auto;
   padding: 10px;
   gap: 6px;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.03), transparent 22%), linear-gradient(160deg, rgba(94, 234, 255, 0.04), transparent 60%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.03), transparent 22%), linear-gradient(160deg, color-mix(in srgb, var(--gl-cyan) 4%, transparent), transparent 60%);
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05);
 }
 .glmm-st-libhead {
@@ -615,7 +622,7 @@
   color: var(--gl-text-bright);
   text-align: left;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -629,7 +636,7 @@
   border: 1px solid color-mix(in srgb, var(--gl-good) 55%, transparent);
   border-radius: 999px;
   padding: 1px 6px;
-  animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
+  animation: gl-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 .glmm-st-maptools { display: flex; gap: 2px; }
 .glmm-icobtn {
@@ -699,7 +706,7 @@
   min-height: 0;
   overflow: hidden;
   background:
-    radial-gradient(120% 120% at 50% 0%, rgba(94, 234, 255, 0.05), transparent 60%),
+    radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--gl-cyan) 5%, transparent), transparent 60%),
     #05080e;
   touch-action: none;
 }
@@ -746,13 +753,13 @@
   stroke-dasharray: 8 6;
 }
 .glmm-st-preview.is-line { fill: none; }
-.glmm-st-prevdot { fill: var(--gl-cyan); stroke: #fff; stroke-width: 1.5; }
+.glmm-st-prevdot { fill: var(--gl-cyan); stroke: rgb(var(--gl-tint-light)); stroke-width: 1.5; }
 .glmm-st-marquee {
   fill: color-mix(in srgb, var(--gl-cyan) 12%, transparent);
   stroke: var(--gl-cyan);
   stroke-width: 1.5;
   stroke-dasharray: 6 5;
-  animation: glmm-march 0.8s linear infinite;
+  animation: glmm-march var(--gl-d-splash) linear infinite;
 }
 .glmm-st-sel { pointer-events: none; }
 .glmm-st-selbox {
@@ -760,7 +767,7 @@
   stroke: var(--gl-signal);
   stroke-width: 2;
   stroke-dasharray: 7 5;
-  animation: glmm-march 0.8s linear infinite;
+  animation: glmm-march var(--gl-d-splash) linear infinite;
 }
 .glmm-st-handle {
   fill: var(--gl-signal);
@@ -775,15 +782,15 @@
   border-left: 1px solid var(--gl-hair);
   overflow-y: auto;
   padding: 10px 11px 14px;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.2), transparent 26%), linear-gradient(200deg, rgba(94, 234, 255, 0.03), transparent 55%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.2), transparent 26%), linear-gradient(200deg, color-mix(in srgb, var(--gl-cyan) 3%, transparent), transparent 55%);
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05);
 }
 .glmm-prop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
-.glmm-prop-title { font-weight: 700; font-size: 13.5px; color: var(--gl-text-bright); letter-spacing: 0.02em; }
+.glmm-prop-title { font-weight: var(--gl-weight-bold); font-size: 13.5px; color: var(--gl-text-bright); letter-spacing: 0.02em; }
 .glmm-prop-hint { font-size: 11px; color: var(--gl-text-dim); line-height: 1.5; }
 .glmm-prop-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .glmm-prop-row.is-stacked { gap: 6px; }
-.glmm-prop-label { font-size: 10.5px; color: var(--gl-text-dim); font-weight: 600; letter-spacing: 0.02em; }
+.glmm-prop-label { font-size: 10.5px; color: var(--gl-text-dim); font-weight: var(--gl-weight-medium); letter-spacing: 0.02em; }
 .glmm-prop-row .gls-input { width: 100%; }
 .glmm-textarea { resize: vertical; min-height: 42px; font-family: inherit; }
 .glmm-prop-z { flex-direction: row; align-items: center; gap: 8px; }
@@ -798,7 +805,7 @@
   transition: transform var(--gl-d-quick) var(--gl-snap), border-color var(--gl-d-quick) var(--gl-ease);
 }
 .glmm-swatch:hover { transform: scale(1.12); }
-.glmm-swatch.is-on { border-color: #fff; box-shadow: 0 0 10px rgb(var(--gl-tint-light) / 0.5); }
+.glmm-swatch.is-on { border-color: rgb(var(--gl-tint-light)); box-shadow: 0 0 10px rgb(var(--gl-tint-light) / 0.5); }
 .glmm-swatch-custom { width: 25px; height: 23px; padding: 0; border: 1px solid var(--gl-edge); border-radius: 6px; background: var(--gl-ink-2); cursor: pointer; }
 
 .glmm-iconpick {
@@ -831,14 +838,14 @@
   0%, 100% {
     box-shadow:
       inset 0 0 0 1.5px color-mix(in srgb, var(--gl-accent) 55%, transparent),
-      inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 66%, #fff),
+      inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 66%, rgb(var(--gl-tint-light))),
       inset 0 0 24px -3px color-mix(in srgb, var(--gl-accent) 40%, transparent),
       inset 0 20px 42px -26px color-mix(in srgb, var(--gl-accent) 74%, transparent);
   }
   50% {
     box-shadow:
       inset 0 0 0 2px color-mix(in srgb, var(--gl-accent) 75%, transparent),
-      inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 84%, #fff),
+      inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 84%, rgb(var(--gl-tint-light))),
       inset 0 0 34px -1px color-mix(in srgb, var(--gl-accent) 56%, transparent),
       inset 0 24px 50px -24px color-mix(in srgb, var(--gl-accent) 88%, transparent);
   }
@@ -856,7 +863,7 @@
   40% {
     box-shadow:
       inset 0 0 0 2px var(--glmm-ping-c, var(--gl-cyan)),
-      inset 0 1px 0 color-mix(in srgb, var(--glmm-ping-c, var(--gl-cyan)) 80%, #fff),
+      inset 0 1px 0 color-mix(in srgb, var(--glmm-ping-c, var(--gl-cyan)) 80%, rgb(var(--gl-tint-light))),
       inset 0 0 30px -2px color-mix(in srgb, var(--glmm-ping-c, var(--gl-cyan)) 60%, transparent),
       inset 0 22px 46px -24px color-mix(in srgb, var(--glmm-ping-c, var(--gl-cyan)) 80%, transparent);
   }
@@ -870,13 +877,13 @@
   0%, 100% {
     box-shadow:
       inset 0 0 0 1.5px color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 45%, transparent),
-      inset 0 1px 0 color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 58%, #fff),
+      inset 0 1px 0 color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 58%, rgb(var(--gl-tint-light))),
       inset 0 0 22px -3px color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 38%, transparent);
   }
   50% {
     box-shadow:
       inset 0 0 0 2.5px var(--glmm-attn-c, var(--gl-signal)),
-      inset 0 1px 0 color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 82%, #fff),
+      inset 0 1px 0 color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 82%, rgb(var(--gl-tint-light))),
       inset 0 0 34px -1px color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 62%, transparent),
       inset 0 24px 50px -24px color-mix(in srgb, var(--glmm-attn-c, var(--gl-signal)) 85%, transparent);
   }

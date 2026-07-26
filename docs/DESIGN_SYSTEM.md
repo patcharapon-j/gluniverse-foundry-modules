@@ -41,8 +41,10 @@ vocabulary. **This is what feature CSS consumes.**
 
 **L3 — Scales.** Discrete steps for space, type, radius and z-index.
 
-**L4 — Utilities.** Opt-in classes: `.gl-glass`, `.gl-btn`, `.gl-field`,
-`.gl-well`, `.gl-tech-label`, `.gl-scroll`, `.gl-numeric`, `.gl-type`.
+**L4 — Utilities.** Opt-in classes: `.gl-glass`, `.gl-btn`, `.gl-icon-btn`,
+`.gl-field`, `.gl-well`, `.gl-chip`, `.gl-panel-head`, `.gl-rule`, `.gl-empty`,
+`.gl-notch`, `.gl-hover-lift`, `.gl-tech-label`, `.gl-scroll`, `.gl-numeric`,
+`.gl-type`.
 
 ---
 
@@ -123,13 +125,29 @@ animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
 
 | Duration | Base | For |
 |---|---|---|
+| `--gl-d-flash` | 70ms | micro-tick, beat gap |
 | `--gl-d-tap` | 120ms | press feedback |
 | `--gl-d-quick` | 180ms | hover, tint, focus |
+| `--gl-d-brisk` | 260ms | small state change |
+| `--gl-d-swift` | 340ms | card / row transition |
 | `--gl-d-move` | 420ms | position / layout |
+| `--gl-d-glide` | 540ms | long travel, exits |
 | `--gl-d-reveal` | 620ms | entrance |
 | `--gl-d-splash` | 720ms | full-screen beat |
+| `--gl-d-slow` | 920ms | alert cycle, dwell |
 | `--gl-d-cinematic` | 1200ms | ceremony |
-| `--gl-breathe` / `--gl-dread` / `--gl-drift` | 2.6s / 3.2s / 4.2s | ambient loops |
+| `--gl-breathe` / `--gl-dread` / `--gl-drift` | 2.6s / 3.2s / 4.2s | ambient loops with meaning |
+| `--gl-loop-sm` … `--gl-loop-xl` | 6s / 12s / 22s / 38s | texture that merely has to move |
+
+The ladder is deliberately fine-grained. It has to be: the features between them
+used ~50 distinct literal durations, and a rung gap wide enough to force a
+visible rounding error is a gap where literals survive — and **a literal
+duration is invisible to `--gl-motion-scale`**, which is to say invisible to
+every motion-tier setting the suite ships. Pick the nearest rung and move on;
+if nothing is within ~15%, that is worth a second look before adding a rung.
+
+Ambient loop values are not sacred. `9.5s`, `11s`, `12s`, `13s` and `14s` were
+five spellings of "a background texture drifts"; they are one token now.
 
 Six easings cover every gesture — pick by gesture, not by feel:
 `--gl-ease` (decelerate to rest) · `--gl-snap` (slight overshoot) · `--gl-pop`
@@ -151,6 +169,53 @@ Entrances: `gl-fade-in` `gl-cascade` `gl-rise-in` `gl-drop-in` `gl-pop-in`
 `gl-spin` `gl-blink` · Surface: `gl-sheen` `gl-sweep` `gl-scan` `gl-shimmer`
 `gl-wipe-x` `gl-wipe-diag` `gl-signal-flash` `gl-burst` · Emphasis: `gl-shake`
 `gl-flash` `gl-bump`.
+
+### 6b. One physical vocabulary for interaction
+
+An element rises slightly toward the cursor and sinks under the click. That is
+the whole vocabulary; anything more is a bespoke effect, not an affordance.
+
+```css
+.thing:hover  { transform: translateY(var(--gl-lift)); }     /* -1px, small controls */
+.card:hover   { transform: translateY(var(--gl-lift-lg)); }  /* -2px, cards + panels */
+.thing:active { transform: translateY(var(--gl-press)) scale(var(--gl-press-scale)); }
+```
+
+Buttons inside a suite root already get the press for free (see the universal
+`:active` rule in `gl-tokens.css`). That rule is written as the **independent
+`scale` property**, not `transform: scale()`, precisely so it composes with a
+control's existing transform instead of erasing it — the reason no blanket press
+rule existed before. If you write a global rule that touches a transform, use
+`scale` / `translate` / `rotate` for the same reason.
+
+Keyboard focus is `--gl-focus-outline`, applied by the shared `:focus-visible`
+rule to interactive elements inside every root the suite injects. It is an
+`outline` and hover is a `box-shadow`, deliberately: half the suite's controls
+draw their own border as an inset box-shadow, so a focus box-shadow would delete
+a control's edge exactly when it gained focus. Add a new floating root to that
+rule's selector list (and to the interface-scale list above it) when you build one.
+
+### 6c. The chamfer has three sizes
+
+`--gl-cut` (12px, panels/cards) · `--gl-cut-sm` (6px, buttons/chips) ·
+`--gl-cut-xs` (4px, tags/pips/bars). The cut has to stay proportional to the
+thing it cuts — 12px reads as a deliberate bevel on a panel and eats half the
+edge of a 20px tag — but features had drifted to twelve sizes picked by eye.
+
+`clip-path` cuts the *border* off the notched corner, so the suite's signature
+corner is the one edge a panel does not draw by default. `.gl-glass` fixes this
+for itself; anything else carrying a chamfer wants `.gl-notch`, or the gradient
+directly as a background layer when the pseudo-elements are spoken for:
+
+```css
+background:
+  var(--gl-chamfer-edge) top right / var(--gl-cut) var(--gl-cut) no-repeat,
+  /* …the real background… */;
+```
+
+A feature sheet that declares its own `::before` on a `.gl-glass` element
+replaces the shared chamfer edge (same specificity, later sheet). That is a
+supported opt-out — check for it before adding one.
 
 ### 7. Never name a typeface literally
 
@@ -227,6 +292,26 @@ applyMotionTier("cinematic", myRoot);  // scoped to one feature
 
 `none`/`off` → 0 · `reduced` → 0.6 · `default`/`full` → 1 · `cinematic` → 1.4.
 
+**A JS timer that shadows a CSS duration must scale with it.** A `setTimeout`
+that strips an animation class when the animation ends is a duplicate of a
+number living in the stylesheet; once the stylesheet value scales, the two
+disagree. At `cinematic` the timer fires *during* the animation and the element
+snaps; at `none` it holds the class long after the animation resolved. Pass the
+CSS baseline through `scaledMs()`:
+
+```js
+import { scaledMs } from "../../core/theme.mjs";
+window.setTimeout(() => el.classList.remove("is-entering"), scaledMs(620));
+```
+
+Prefer an `animationend` / `transitionend` listener where one is practical.
+`scaledMs()` is for the cases where several animations overlap on one element
+and there is no single event to wait for. `motionScale()` reads the live
+multiplier if you need it directly.
+
+A feature whose tier *clamps* rather than scales (Loot Gen) must name every rung
+it caps — anything omitted keeps its full length and the tier leaks.
+
 The suite deliberately does **not** honour the OS `prefers-reduced-motion`
 setting — motion is an explicit in-app choice. Do not add
 `@media (prefers-reduced-motion)` blocks.
@@ -234,6 +319,15 @@ setting — motion is an explicit in-app choice. Do not add
 ---
 
 ## Known hazards
+
+**`#000` and `#fff` inside a mask are alpha, not colour.** In
+`mask-image` / `-webkit-mask-image` the black and white stops of a gradient are
+the mask's opacity ramp — black hides, white shows. There are ~48 of them in the
+suite and they must NOT be routed through a tint channel: they are not veils,
+they carry no theme meaning, and a sweep that "tokenizes" them is rewriting a
+mask's geometry. Anything scripted over the stylesheets has to skip declarations
+whose property matches `mask`.
+
 
 **The game system may also use a `--gl-*` prefix.** `styles/mobile.css` reads
 `--gl-parch`, `--gl-blood`, `--gl-serif` and friends *from the game system's*
@@ -259,3 +353,23 @@ node -e "const fs=require('fs');for(const f of ['module.json',...fs.readdirSync(
 Then confirm every path in `module.json` still resolves, and that a stylesheet
 you touched has not reintroduced a raw hex, a network `@import`, a duplicate
 `gl-*` keyframe, or a self-referential custom property.
+
+Two greps catch the drift this document exists to prevent — a literal duration
+or easing (invisible to every motion tier) and a literal weight or chamfer:
+
+```bash
+grep -rhoE '(transition|animation)(-duration|-delay)?:[^;{}]*' styles/*.css \
+  | grep -oE '\b[0-9]*\.?[0-9]+(ms|s)\b|\b(ease-in-out|ease-out|ease-in)\b' | sort | uniq -c
+```
+
+```bash
+grep -rhoE 'font-weight:\s*[0-9]+' styles/*.css | sort | uniq -c
+grep -rhoE 'clip-path:[[:space:]]*polygon\([^;]*\)' styles/*.css \
+  | grep -oE '(^|[^-0-9.])[0-9]+px' | sort | uniq -c
+```
+
+Both should come back empty apart from the handful of documented outliers
+(`9px` / `16px` / `24px` chamfers, and `@font-face` weight ranges in
+`gl-fonts.css`). A custom property holding a bare duration
+(`--x: 640ms`) is the usual way one slips back in — the first grep will not see
+it, so check those by eye.

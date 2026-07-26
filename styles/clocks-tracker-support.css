@@ -34,7 +34,7 @@
 #glct-support-hud .sup-muster-coin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
   width:60px;height:60px;border-radius:50%;cursor:pointer;color:var(--muted);
   border:1px dashed rgb(var(--gl-tint-light) / .22);background:rgba(14,18,26,.7);backdrop-filter:blur(8px);
-  font:700 7px/1.1 var(--gl-display);letter-spacing:.1em;text-transform:uppercase;transition:.18s}
+  font:700 7px/1.1 var(--gl-display);letter-spacing:.1em;text-transform:uppercase;transition:var(--gl-d-quick)}
 #glct-support-hud .sup-muster-coin i{font-size:16px}
 #glct-support-hud .sup-muster-coin:hover{color:var(--ink);border-color:var(--acc);box-shadow:0 0 18px var(--soft)}
 /* while dragging the whole widget */
@@ -48,7 +48,7 @@
 #glct-support-hud .coin-wrap[hidden]{display:none}
 #glct-support-hud .coin{position:absolute;left:0;top:0;width:96px;height:96px;cursor:grab;overflow:visible;
   transform:scale(.75);transform-origin:top left;
-  filter:drop-shadow(0 11px 20px rgb(var(--gl-tint-dark) / .6));transition:transform .26s var(--gl-pop),opacity .22s}
+  filter:drop-shadow(0 11px 20px rgb(var(--gl-tint-dark) / .6));transition:transform var(--gl-d-brisk) var(--gl-pop),opacity var(--gl-d-brisk)}
 #glct-support-hud .coin:hover{transform:scale(.75) translateY(-3px)}
 #glct-support-hud .coin-wrap.is-open .coin{opacity:0;pointer-events:none;transform:scale(.675)}
 /* the disc: a clean circle the portrait fills (bleeds past the top, soft rim) */
@@ -63,16 +63,16 @@
 #glct-support-hud .disc.has-img .art{display:block}
 #glct-support-hud .disc.has-img .ph{display:none}
 #glct-support-hud .disc .ph{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:26px;
-  color:color-mix(in srgb,var(--acc) 80%,#fff);filter:drop-shadow(0 0 8px var(--glow))}
+  color:color-mix(in srgb,var(--acc) 80%,rgb(var(--gl-tint-light)));filter:drop-shadow(0 0 8px var(--glow))}
 
 #glct-support-hud .ring{position:absolute;inset:0;width:96px;height:96px;overflow:visible}
 #glct-support-hud .ring .track{fill:none;stroke:rgb(var(--gl-tint-light) / .07);stroke-width:7}
-#glct-support-hud .ring .seg{fill:none;stroke-width:7;stroke-linecap:butt;stroke:rgb(var(--gl-tint-light) / .14);transition:stroke .45s,filter .45s}
+#glct-support-hud .ring .seg{fill:none;stroke-width:7;stroke-linecap:butt;stroke:rgb(var(--gl-tint-light) / .14);transition:stroke var(--gl-d-move),filter var(--gl-d-move)}
 #glct-support-hud .ring .seg.on{stroke:var(--acc);filter:drop-shadow(0 0 5px var(--glow))}
 
 #glct-support-hud .coin .cname{position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);white-space:nowrap;z-index:6;
-  font:800 9.5px/1 var(--gl-display);letter-spacing:.05em;color:#fff;text-shadow:0 1px 5px #000;
-  padding:2px 8px;border-radius:99px;background:rgba(8,11,17,.72);border:1px solid var(--hair)}
+  font:800 9.5px/1 var(--gl-display);letter-spacing:.05em;color:rgb(var(--gl-tint-light));text-shadow:0 1px 5px rgb(var(--gl-tint-dark));
+  padding:2px 8px;border-radius:99px;background:color-mix(in srgb, var(--gl-ink-1) 72%, transparent);border:1px solid var(--hair)}
 
 /* DOWNED — red banner across the disc centre, above the art */
 #glct-support-hud .coin .dband{display:none}
@@ -81,14 +81,14 @@
 #glct-support-hud .is-downed .coin .dband{display:block;position:absolute;left:0;right:0;top:50%;z-index:7;
   transform:translateY(-50%);text-align:center;font:800 10.5px/1 var(--gl-display);
   letter-spacing:.3em;text-indent:.3em;text-transform:uppercase;color:#ff5a4d;
-  text-shadow:0 0 8px rgba(255,72,60,.55),0 1px 3px rgb(var(--gl-tint-dark) / .85);animation:glct-dthrob 2.4s ease-in-out infinite}
+  text-shadow:0 0 8px rgba(255,72,60,.55),0 1px 3px rgb(var(--gl-tint-dark) / .85);animation:glct-dthrob var(--gl-breathe) var(--gl-ease-inout) infinite}
 @keyframes glct-dthrob{0%,100%{opacity:.82;text-shadow:0 0 6px rgba(255,72,60,.38),0 1px 3px rgb(var(--gl-tint-dark) / .85)}
   50%{opacity:1;text-shadow:0 0 13px rgba(255,72,60,.75),0 1px 3px rgb(var(--gl-tint-dark) / .85)}}
 
 /* ---------------- Expanded sheet (click) ---------------- */
 #glct-support-hud .sheet{position:absolute;right:0;bottom:0;width:300px;border-radius:15px;overflow:hidden;
   display:none;transform-origin:bottom right;z-index:20}
-#glct-support-hud .coin-wrap.is-open .sheet{display:block;animation:glct-sup-pop .26s var(--gl-pop)}
+#glct-support-hud .coin-wrap.is-open .sheet{display:block;animation:glct-sup-pop var(--gl-d-brisk) var(--gl-pop)}
 @keyframes glct-sup-pop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
 
 /* diorama hero — portrait art bleeds top-left and fades out to the right/bottom */
@@ -101,10 +101,10 @@
 #glct-support-hud .hero.has-img .art{display:block}
 #glct-support-hud .hero.has-img .ph{display:none}
 #glct-support-hud .hero .ph{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:34px;
-  color:color-mix(in srgb,var(--acc) 78%,#fff);filter:drop-shadow(0 0 9px var(--glow))}
+  color:color-mix(in srgb,var(--acc) 78%,rgb(var(--gl-tint-light)));filter:drop-shadow(0 0 9px var(--glow))}
 #glct-support-hud .hero .htext{position:absolute;right:13px;bottom:11px;left:128px;text-align:right;z-index:2}
 #glct-support-hud .hero .nm{font:800 18px/1.05 var(--gl-display);
-  background:linear-gradient(180deg,#fff,#cdd6e6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  background:linear-gradient(180deg,rgb(var(--gl-tint-light)),#cdd6e6);-webkit-background-clip:text;background-clip:text;color:transparent}
 #glct-support-hud .hero .rl{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.25}
 #glct-support-hud .hero .state{position:absolute;left:13px;top:11px;z-index:2;display:inline-flex;align-items:center;gap:5px;
   font:800 8px/1 var(--gl-display);letter-spacing:.14em;text-transform:uppercase;padding:4px 8px;border-radius:99px;border:1px solid;white-space:nowrap}
@@ -114,15 +114,15 @@
 #glct-support-hud .is-downed .state.down{display:inline-flex}
 #glct-support-hud .is-downed .hero .art{filter:grayscale(.85) brightness(.58)}
 #glct-support-hud .sheet-close{position:absolute;right:9px;top:8px;z-index:3;width:22px;height:22px;border-radius:7px;
-  border:1px solid var(--hair);background:rgba(8,11,17,.55);color:#cdd6e6;cursor:pointer;display:grid;place-items:center;font-size:11px;transition:.14s}
-#glct-support-hud .sheet-close:hover{background:color-mix(in srgb,var(--gl-hazard) 25%,transparent);color:#fff}
+  border:1px solid var(--hair);background:color-mix(in srgb, var(--gl-ink-1) 55%, transparent);color:#cdd6e6;cursor:pointer;display:grid;place-items:center;font-size:11px;transition:var(--gl-d-tap)}
+#glct-support-hud .sheet-close:hover{background:color-mix(in srgb,var(--gl-hazard) 25%,transparent);color:rgb(var(--gl-tint-light))}
 
 /* DOWNED band across the hero (and reused by the card takeover header) */
 #glct-support-hud .dband-wide{display:none}
 #glct-support-hud .is-downed .dband-wide{display:block;position:absolute;left:0;right:0;top:50%;z-index:3;
   transform:translateY(-50%);text-align:center;font:800 17px/1 var(--gl-display);
   letter-spacing:.44em;text-indent:.44em;text-transform:uppercase;color:#ff5a4d;
-  text-shadow:0 0 13px rgba(255,72,60,.5),0 2px 5px rgb(var(--gl-tint-dark) / .85);animation:glct-dthrob 2.4s ease-in-out infinite}
+  text-shadow:0 0 13px rgba(255,72,60,.5),0 2px 5px rgb(var(--gl-tint-dark) / .85);animation:glct-dthrob var(--gl-breathe) var(--gl-ease-inout) infinite}
 
 #glct-support-hud .body{padding:11px}
 
@@ -134,7 +134,7 @@
 #glct-support-hud .pstrip .fac b{color:var(--acc)}
 #glct-support-hud .pool-edit{margin-left:auto;display:flex;align-items:center;gap:7px;flex:none}
 #glct-support-hud .pstep{width:22px;height:22px;border-radius:6px;border:1px solid var(--hair);background:rgb(var(--gl-tint-light) / .06);color:var(--ink);
-  cursor:pointer;font:800 14px/1 var(--gl-display);display:grid;place-items:center;transition:.14s}
+  cursor:pointer;font:800 14px/1 var(--gl-display);display:grid;place-items:center;transition:var(--gl-d-tap)}
 #glct-support-hud .pstep:hover{background:rgb(var(--gl-tint-light) / .14)}
 #glct-support-hud .pcur{min-width:46px;text-align:center;font:800 12px/1 var(--gl-display);color:#cdd6e6;display:flex;align-items:baseline;justify-content:center;gap:3px}
 #glct-support-hud .pcur b{color:var(--acc);font-size:17px}
@@ -142,18 +142,18 @@
 
 #glct-support-hud .dice{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px}
 #glct-support-hud .die{width:19px;height:19px;border-radius:5px;display:grid;place-items:center;flex:none;font:800 8px/1 var(--gl-display);color:#0c0a08;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 92%,#fff),var(--acc));
-  box-shadow:0 2px 5px rgb(var(--gl-tint-dark) / .5),inset 0 1px 0 rgb(var(--gl-tint-light) / .45);transition:transform .4s var(--gl-pop),opacity .4s,filter .4s,background .4s}
+  background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 92%,rgb(var(--gl-tint-light))),var(--acc));
+  box-shadow:0 2px 5px rgb(var(--gl-tint-dark) / .5),inset 0 1px 0 rgb(var(--gl-tint-light) / .45);transition:transform var(--gl-d-move) var(--gl-pop),opacity var(--gl-d-move),filter var(--gl-d-move),background var(--gl-d-move)}
 #glct-support-hud .is-gm .die{cursor:pointer}
 #glct-support-hud .die.spent{background:rgb(var(--gl-tint-light) / .06);color:#566;box-shadow:inset 0 0 0 1px rgb(var(--gl-tint-light) / .08);opacity:.5;transform:scale(.82) rotate(-8deg);filter:grayscale(1)}
 
 #glct-support-hud .acts{display:flex;flex-direction:column;gap:5px}
 #glct-support-hud .act{position:relative;display:flex;align-items:center;gap:9px;padding:8px 9px 8px 11px;border-radius:9px;text-align:left;width:100%;
   background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .035),rgb(var(--gl-tint-light) / .01));border:1px solid var(--hair);color:var(--ink);
-  cursor:pointer;transition:.14s;overflow:hidden}
+  cursor:pointer;transition:var(--gl-d-tap);overflow:hidden}
 #glct-support-hud .act::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2.5px;background:var(--ac,var(--acc))}
 #glct-support-hud .act:hover{background:rgb(var(--gl-tint-light) / .07);box-shadow:0 0 0 1px color-mix(in srgb,var(--ac) 30%,transparent),0 0 14px -4px var(--ac)}
-#glct-support-hud .act:active{transform:translateY(1px)}
+#glct-support-hud .act:active{transform:translateY(var(--gl-press))}
 #glct-support-hud .act .ai{width:18px;text-align:center;font-size:13px;color:var(--ac,var(--acc));flex:none}
 #glct-support-hud .act .am{flex:1;min-width:0}
 /* only the ability name shows; it wraps to a second line instead of clipping */
@@ -172,9 +172,9 @@
 #glct-support-hud .sup-gm{display:flex;gap:5px;margin-top:9px}
 #glct-support-hud .sup-gb{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:28px;padding:0 8px;border-radius:8px;
   border:1px solid var(--hair);background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / .02));color:var(--ink);cursor:pointer;
-  font:800 9px/1 var(--gl-display);letter-spacing:.06em;text-transform:uppercase;transition:.14s}
+  font:800 9px/1 var(--gl-display);letter-spacing:.06em;text-transform:uppercase;transition:var(--gl-d-tap)}
 #glct-support-hud .sup-gb i{font-size:11px}
-#glct-support-hud .sup-gb.primary{flex:1;color:#fff;border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 70%,#000),color-mix(in srgb,var(--acc) 45%,#000))}
+#glct-support-hud .sup-gb.primary{flex:1;color:rgb(var(--gl-tint-light));border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 70%,rgb(var(--gl-tint-dark))),color-mix(in srgb,var(--acc) 45%,rgb(var(--gl-tint-dark))))}
 #glct-support-hud .sup-gb:hover{background:rgb(var(--gl-tint-light) / .12);box-shadow:0 0 12px var(--soft)}
 #glct-support-hud .sup-gb.on{color:#9ff0c4}
 /* GM "clear this round's action" — only shown (JS) in combat once the lock is set */
@@ -185,7 +185,7 @@
 /* ---------------- Muster picker dialog ---------------- */
 .glct-sup-picker .sup-pick-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;margin-bottom:8px}
 .glct-sup-picker .sup-pick{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:10px;text-align:left;cursor:pointer;
-  --acc:var(--glct-sup-accent,#e0a368);border:1px solid rgb(var(--gl-tint-light) / .12);background:linear-gradient(120deg,color-mix(in srgb,var(--acc) 14%,#10141c),#10141c 70%);color:var(--gl-text);transition:.14s}
+  --acc:var(--glct-sup-accent,#e0a368);border:1px solid rgb(var(--gl-tint-light) / .12);background:linear-gradient(120deg,color-mix(in srgb,var(--acc) 14%,#10141c),#10141c 70%);color:var(--gl-text);transition:var(--gl-d-tap)}
 .glct-sup-picker .sup-pick:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 40%,transparent),0 0 16px -4px var(--acc)}
 .glct-sup-picker .sup-pick.active{box-shadow:0 0 0 1px var(--acc)}
 .glct-sup-picker .sup-pick-pic{width:38px;height:38px;border-radius:8px;flex:none;display:grid;place-items:center;overflow:hidden;font-size:18px;
@@ -202,11 +202,11 @@
 #tooltip.glct-sup-tip-wrap,aside.glct-sup-tip-wrap{white-space:normal;text-align:left;max-width:288px}
 .glct-sup-tip{--glct-sup-accent:#e0a368;max-width:262px;text-align:left;padding:2px 1px}
 .glct-sup-tip .tip-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.glct-sup-tip .tip-head b{font:800 12.5px/1.15 var(--gl-display);color:#fff}
+.glct-sup-tip .tip-head b{font:800 12.5px/1.15 var(--gl-display);color:rgb(var(--gl-tint-light))}
 .glct-sup-tip .tip-cost{flex:none;font:800 7px/1 var(--gl-display);letter-spacing:.08em;text-transform:uppercase;
   color:#e9eefb;border:1px solid rgb(var(--gl-tint-light) / .22);border-radius:5px;padding:3px 5px;white-space:nowrap}
 .glct-sup-tip .tip-kind{font:800 7.5px/1 var(--gl-display);letter-spacing:.12em;text-transform:uppercase;
-  color:color-mix(in srgb,var(--glct-sup-accent) 80%,#fff);margin-top:4px}
+  color:color-mix(in srgb,var(--glct-sup-accent) 80%,rgb(var(--gl-tint-light)));margin-top:4px}
 .glct-sup-tip .tip-traits{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .glct-sup-tip .tip-traits span{font:700 8px/1 var(--gl-display);letter-spacing:.05em;text-transform:uppercase;
   color:#d8b48a;background:#3a2a18;border:1px solid #5a4326;border-radius:3px;padding:3px 5px}
@@ -230,18 +230,18 @@
   -webkit-mask-image:linear-gradient(100deg,#000 28%,transparent 72%),linear-gradient(#000,#000 72%,transparent);
           mask-image:linear-gradient(100deg,#000 28%,transparent 72%),linear-gradient(#000,#000 72%,transparent);
   -webkit-mask-composite:source-in;mask-composite:intersect}
-.glct-support-card .glct-sc-ph{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:30px;color:color-mix(in srgb,var(--glct-sup-accent) 78%,#fff)}
+.glct-support-card .glct-sc-ph{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:30px;color:color-mix(in srgb,var(--glct-sup-accent) 78%,rgb(var(--gl-tint-light)))}
 .glct-support-card .glct-sc-who{position:relative;z-index:2;margin-left:auto;display:flex;flex-direction:column;
   align-items:flex-end;justify-content:center;gap:5px;text-align:right;padding:26px 13px 13px;min-width:0;max-width:62%}
 .glct-support-card .glct-sc-who .glct-sc-a{font:800 8px/1 var(--gl-display);letter-spacing:.12em;text-transform:uppercase;color:#cbb38c}
-.glct-support-card .glct-sc-who .glct-sc-b{font:800 15px/1.18 var(--gl-display);color:#fff;white-space:normal;overflow-wrap:anywhere}
+.glct-support-card .glct-sc-who .glct-sc-b{font:800 15px/1.18 var(--gl-display);color:rgb(var(--gl-tint-light));white-space:normal;overflow-wrap:anywhere}
 .glct-support-card .glct-sc-cost{align-self:flex-end;font:800 7px/1.3 var(--gl-display);letter-spacing:.08em;text-transform:uppercase;color:#e9eefb;
-  border:1px solid rgb(var(--gl-tint-light) / .22);border-radius:6px;padding:4px 7px;text-align:center;max-width:100%;white-space:nowrap;background:rgba(8,11,17,.4)}
+  border:1px solid rgb(var(--gl-tint-light) / .22);border-radius:6px;padding:4px 7px;text-align:center;max-width:100%;white-space:nowrap;background:color-mix(in srgb, var(--gl-ink-1) 40%, transparent)}
 .glct-support-card .glct-sc-traits{display:flex;gap:4px;flex-wrap:wrap;padding:8px 10px 0}
 .glct-support-card .glct-sc-trait{font:700 8px/1 var(--gl-display);letter-spacing:.06em;text-transform:uppercase;color:#d8b48a;
   background:#3a2a18;border:1px solid #5a4326;border-radius:3px;padding:3px 6px}
 .glct-support-card .glct-sc-body{padding:9px 10px 11px;font-size:13px;line-height:1.5;color:#cdd6e6}
-.glct-support-card .glct-sc-body b,.glct-support-card .glct-sc-body strong{color:#fff}
+.glct-support-card .glct-sc-body b,.glct-support-card .glct-sc-body strong{color:rgb(var(--gl-tint-light))}
 .glct-support-card .glct-sc-pool{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid rgb(var(--gl-tint-light) / .08);
   background:rgb(var(--gl-tint-dark) / .22);font:700 11px/1 var(--gl-display);color:#9aa3b6;flex-wrap:wrap}
 .glct-support-card .glct-sc-pool.empty{color:#ffb0a8}
@@ -272,15 +272,15 @@
 .glct-supeditor .sup-ed-spacer{flex:1}
 .glct-supeditor .sup-eb{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;cursor:pointer;
   border:1px solid var(--color-border-light-tertiary,rgb(var(--gl-tint-dark) / .2));background:rgb(var(--gl-tint-light) / .04);color:inherit;
-  font:600 12px/1 var(--gl-display);transition:.14s}
+  font:600 12px/1 var(--gl-display);transition:var(--gl-d-tap)}
 .glct-supeditor .sup-eb:hover{background:rgba(127,160,231,.16)}
-.glct-supeditor .sup-eb.primary{background:#5a7fd6;color:#fff;border-color:transparent}
+.glct-supeditor .sup-eb.primary{background:#5a7fd6;color:rgb(var(--gl-tint-light));border-color:transparent}
 .glct-supeditor .sup-eb.danger:hover{background:color-mix(in srgb,var(--gl-hazard) 20%,transparent)}
 .glct-supeditor .sup-eb.mini{padding:6px 8px}
 .glct-supeditor .sup-ed-body{display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start}
 .glct-supeditor .sup-ed-list{display:flex;flex-direction:column;gap:4px;max-height:62vh;overflow-y:auto;
   border:1px solid var(--color-border-light-tertiary,rgb(var(--gl-tint-dark) / .15));border-radius:8px;padding:6px}
-.glct-supeditor .sup-ed-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:.12s}
+.glct-supeditor .sup-ed-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:var(--gl-d-tap)}
 .glct-supeditor .sup-ed-row:hover{background:rgba(127,160,231,.14)}
 .glct-supeditor .sup-ed-row.sel{background:rgba(127,160,231,.24);box-shadow:inset 0 0 0 1px rgba(127,160,231,.5)}
 .glct-supeditor .sup-ed-row .dot{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 6px rgb(var(--gl-tint-dark) / .3)}
@@ -299,7 +299,7 @@
 .glct-supeditor label.full{display:flex;flex-direction:column;gap:3px}
 .glct-supeditor [data-drop].drop-hot{outline:2px dashed #7fb4ff;outline-offset:2px;border-radius:6px}
 .glct-supeditor .sup-ed-help{font-size:11px;color:var(--color-text-dark-secondary,#888)}
-.glct-supeditor .sup-ed-help summary{cursor:pointer;font-weight:600}
+.glct-supeditor .sup-ed-help summary{cursor:pointer;font-weight: var(--gl-weight-medium)}
 .glct-supeditor .sup-ed-tokens{margin-top:6px;line-height:1.7}
 .glct-supeditor .sup-ed-tokens code{background:rgba(127,160,231,.16);border-radius:4px;padding:1px 5px;font-size:11px}
 .glct-supeditor .sup-ed-abils{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -320,8 +320,8 @@
 .glct-frame-dlg .frm-tabs{display:flex;gap:6px}
 .glct-frame-dlg .frm-tab{flex:1;font:800 10px/1 var(--gl-display);letter-spacing:.05em;text-transform:uppercase;
   padding:9px 4px;border-radius:8px;cursor:pointer;border:1px solid var(--color-border-light-tertiary,rgb(var(--gl-tint-dark) / .2));
-  background:rgba(127,127,127,.08);color:inherit;transition:.14s}
-.glct-frame-dlg .frm-tab.on{color:#fff;border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--glct-sup-accent) 70%,#000),color-mix(in srgb,var(--glct-sup-accent) 45%,#000))}
+  background:rgba(127,127,127,.08);color:inherit;transition:var(--gl-d-tap)}
+.glct-frame-dlg .frm-tab.on{color:rgb(var(--gl-tint-light));border-color:transparent;background:linear-gradient(180deg,color-mix(in srgb,var(--glct-sup-accent) 70%,rgb(var(--gl-tint-dark))),color-mix(in srgb,var(--glct-sup-accent) 45%,rgb(var(--gl-tint-dark))))}
 .glct-frame-dlg .frm-previews{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:14px;border-radius:12px;
   background:#0c0f15;border:1px solid rgb(var(--gl-tint-light) / .08)}
 .glct-frame-dlg .frm-pv{display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -348,7 +348,7 @@
 .glct-sup-import .imp-row{display:flex;align-items:center;gap:8px}
 .glct-sup-import .imp-spacer{flex:1}
 .glct-sup-import .imp-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;
-  font:600 11.5px/1.3 var(--gl-display);transition:.16s}
+  font:600 11.5px/1.3 var(--gl-display);transition:var(--gl-d-quick)}
 .glct-sup-import .imp-chip.idle{background:rgba(127,160,231,.12);color:var(--color-text-dark-secondary,#888);border:1px solid rgba(127,160,231,.22)}
 .glct-sup-import .imp-chip.ok{background:rgba(127,214,160,.16);color:#2f8f5c;border:1px solid rgba(127,214,160,.45)}
 .glct-sup-import .imp-chip.err{background:color-mix(in srgb,var(--gl-hazard) 14%,transparent);color:#c0473e;border:1px solid color-mix(in srgb,var(--gl-hazard) 40%,transparent)}

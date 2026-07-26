@@ -142,7 +142,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--gl-accent) 38%, var(--gl-text-bright));
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.08em;
   text-shadow: 0 0 7px var(--gl-bloom);
   text-overflow: ellipsis;
@@ -155,7 +155,7 @@
   font-family: var(--gl-display);
   flex: 0 0 auto;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.08em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -167,7 +167,7 @@
   color: color-mix(in srgb, var(--gl-text-dim) 58%, var(--gl-text-bright));
   font-family: var(--gl-tech);
   font-size: 9px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   text-overflow: ellipsis;

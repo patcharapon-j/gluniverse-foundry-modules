@@ -341,6 +341,10 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   --gl-track-wide: 0.12em;
   --gl-track-xwide: 0.16em;
 
+  /* Weight. Both bundled faces are variable and cap at 800, so 850 / 900 / 950
+     all render as heavy — the suite had been spelling one weight four ways,
+     plus a band of eyeballed in-betweens (650/740/750/760/780). Five rungs. */
+  --gl-weight-light: 200;
   --gl-weight-normal: 400;
   --gl-weight-medium: 600;
   --gl-weight-bold: 700;
@@ -456,7 +460,13 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 }
 
 /* Close the silhouette: redraw the rim across the bevel the clip-path removed.
-   Free for every existing .gl-glass — no markup change, no extra element. */
+   Free for every existing .gl-glass — no markup change, no extra element.
+
+   A feature sheet declaring its own `::before` on a .gl-glass element replaces
+   this (same specificity, later sheet). That is a supported opt-out, not an
+   accident, and there is exactly one: .glmm-viewer, which draws a livelier
+   chamfer glint of its own. Check for it before adding a ::before to anything
+   carrying .gl-glass. */
 .gl-glass::before {
   content: "";
   position: absolute;
@@ -653,6 +663,39 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .gl-hover-lift:hover { transform: translateY(var(--gl-lift)); }
 .gl-hover-lift:active { transform: translateY(var(--gl-press)) scale(var(--gl-press-scale)); }
 
+/* ── Universal press feedback ──
+   Most buttons in the suite answered a hover and then said nothing at all when
+   clicked, so a press read as "nothing happened" until whatever it triggered
+   finished. This gives every button inside a suite root the same small sink.
+
+   Written as the independent `scale` property rather than `transform: scale()`
+   deliberately: `scale` COMPOSES with an element's existing transform instead
+   of replacing it. A blanket `transform` rule here would silently wipe out the
+   translate/rotate that dozens of these controls already carry — which is the
+   reason no such rule existed before.
+
+   .gl-btn is excluded because it already presses; doubling would over-sink it. */
+:is(
+  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
+  #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
+  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  .gluni-initiative, .glucargo-minimap, .glo-root
+) button:not(.gl-btn) {
+  transition: scale var(--gl-d-tap) var(--gl-ease);
+}
+:is(
+  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
+  #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
+  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  .gluni-initiative, .glucargo-minimap, .glo-root
+) button:not(.gl-btn):active:not(:disabled) {
+  scale: var(--gl-press-scale);
+}
+
 /* ── Keyboard focus ──
    ONE focus mark for the whole suite: the interactive elements inside every
    root the suite injects (the same roster as the interface-scale rule above),
@@ -764,7 +807,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   transition:
     border-color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease),
-    transform var(--gl-d-quick) var(--gl-ease);
+    translate var(--gl-d-quick) var(--gl-ease);
 }
 /* State reads on the lead edge — a hairline that thickens and takes the
    feature's accent when enabled, so the list is scannable without reading. */
@@ -779,15 +822,20 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   opacity: 0.28;
   transition: opacity var(--gl-d-quick) var(--gl-ease), width var(--gl-d-quick) var(--gl-ease);
 }
+/* `translate`, not `transform`: the cascade entrance above is `fill-mode: both`,
+   so its final `transform: translate(0,0)` stays applied for the life of the
+   element — and an animated value beats a plain declaration in the cascade. A
+   `transform` hover here would simply never fire. The independent property
+   composes on top of the animation instead of losing to it. */
 .gls-fm-section:hover {
   border-color: var(--gl-accent-soft);
-  transform: translateY(var(--gl-lift));
+  translate: 0 var(--gl-lift);
   box-shadow: var(--gl-etch), var(--gl-elev-2);
 }
 .gls-fm-section.is-on { --gl-accent: var(--gl-good); }
 .gls-fm-section.is-on::after { opacity: 1; width: 3px; }
 .gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
-.gls-fm-section.is-locked:hover { transform: none; }
+.gls-fm-section.is-locked:hover { translate: none; }
 /* The pinned suite-wide card is always "open" but is not a feature toggle, so
    keep it on the neutral cyan accent rather than the enabled-green. */
 .gls-fm-suite.is-on { --gl-accent: var(--gl-cyan); }

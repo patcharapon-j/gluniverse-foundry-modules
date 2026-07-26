@@ -167,7 +167,7 @@
     border: 0;
     border-radius: 0;
     clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
-    font-weight: 800;
+    font-weight: var(--gl-weight-heavy);
     letter-spacing: 0.1em;
     box-shadow: 0 0 12px var(--gl-signal-glow);
 }
@@ -229,7 +229,7 @@
     transition: color var(--gl-d-quick) var(--gl-ease),
                 border-color var(--gl-d-quick) var(--gl-ease),
                 box-shadow var(--gl-d-quick) var(--gl-ease),
-                transform 120ms var(--gl-ease);
+                transform var(--gl-d-tap) var(--gl-ease);
 }
 /* Sheen sweep — a precision rule of light draws across on hover. */
 .glinv-scope button::before {
@@ -248,7 +248,7 @@
     transform: none;
 }
 .glinv-scope button:hover:not(:disabled)::before { transform: translateX(120%); }
-.glinv-scope button:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.glinv-scope button:active:not(:disabled) { transform: translateY(var(--gl-press)) scale(var(--gl-press-scale)); }
 
 /* Settings cog keeps its rotate-on-hover identity but joins the notch family. */
 .glinv-scope .glinv-settings-btn {
@@ -404,11 +404,11 @@
     font-family: var(--gl-display);
     animation: gl-cascade var(--gl-d-move) var(--gl-snap) both;
 }
-.glinv-scope .glinv-cc-d:nth-child(2) { animation-delay: 40ms; }
-.glinv-scope .glinv-cc-d:nth-child(3) { animation-delay: 80ms; }
-.glinv-scope .glinv-cc-d:nth-child(4) { animation-delay: 120ms; }
-.glinv-scope .glinv-cc-d:nth-child(5) { animation-delay: 160ms; }
-.glinv-scope .glinv-cc-d:nth-child(6) { animation-delay: 200ms; }
+.glinv-scope .glinv-cc-d:nth-child(2) { animation-delay: var(--gl-d-flash); }
+.glinv-scope .glinv-cc-d:nth-child(3) { animation-delay: var(--gl-d-flash); }
+.glinv-scope .glinv-cc-d:nth-child(4) { animation-delay: var(--gl-d-tap); }
+.glinv-scope .glinv-cc-d:nth-child(5) { animation-delay: var(--gl-d-quick); }
+.glinv-scope .glinv-cc-d:nth-child(6) { animation-delay: var(--gl-d-quick); }
 
 /* Verdict channels: good keeps accent neutral; warn → signal; danger → hazard
  * and the card breathes the dread pulse. */
@@ -417,7 +417,7 @@
 .glinv-scope.glinv-chat-card.glinv-cc-danger {
     --gl-accent: var(--gl-hazard);
     animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both,
-               glinv-dread var(--gl-dread) var(--gl-ease) 0.7s infinite;
+               glinv-dread var(--gl-dread) var(--gl-ease) var(--gl-d-splash) infinite;
 }
 .glinv-scope.glinv-chat-card.glinv-cc-danger .glinv-cc-tag { background: var(--gl-hazard); color: var(--gl-text-bright); }
 

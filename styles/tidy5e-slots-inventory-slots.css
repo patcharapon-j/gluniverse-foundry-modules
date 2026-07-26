@@ -58,7 +58,7 @@
 }
 
 .glinv-slot-label {
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     display: flex;
     align-items: center;
     gap: 0.3rem;
@@ -71,7 +71,7 @@
 
 .glinv-slot-count {
     margin-left: auto;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-variant-numeric: tabular-nums;
     display: flex;
     align-items: center;
@@ -82,7 +82,7 @@
 
 .glinv-state-badge {
     font-size: 0.625rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.1rem 0.35rem;
@@ -206,7 +206,7 @@
     align-items: center;
     gap: 2px;
     font-size: 0.625rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     color: var(--t5e-primary-color, #555);
     line-height: 1;
 }
@@ -317,7 +317,7 @@
     margin: 0 0 0.5rem 0;
     padding: 0 0 0.375rem 0;
     font-size: 0.8125rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     color: var(--t5e-primary-color, #333);
     border-bottom: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.08));
     display: flex;
@@ -338,7 +338,7 @@
 
 .glinv-item-field label {
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     color: var(--t5e-primary-color, #555);
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -350,7 +350,7 @@
     padding: 0 0.375rem;
     border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.15));
     border-radius: 0.25rem;
-    background: var(--t5e-background, #fff);
+    background: var(--t5e-background, rgb(var(--gl-tint-light)));
     color: var(--t5e-primary-color, #333);
     font-size: 0.8125rem;
     font-family: inherit;
@@ -378,7 +378,7 @@
     cursor: pointer;
     font-size: 0.8125rem;
     text-transform: none;
-    font-weight: 500;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-checkbox-field input[type="checkbox"] {
@@ -544,7 +544,7 @@
 
 .glinv-notch-count {
     font-size: 0.5625rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     opacity: 0.7;
     font-variant-numeric: tabular-nums;
 }
@@ -555,7 +555,7 @@
 }
 
 .glinv-notch-indicator.glinv-shattered i {
-    animation: glinv-shatter-pulse 2s ease-in-out infinite;
+    animation: glinv-shatter-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 @keyframes glinv-shatter-pulse {
@@ -597,11 +597,11 @@
 }
 
 .glinv-notch-label {
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-notch-value {
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-variant-numeric: tabular-nums;
 }
 
@@ -609,7 +609,7 @@
 
 .glinv-quality-badge {
     font-size: 0.5625rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 0.1rem 0.3rem;
@@ -676,7 +676,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     cursor: pointer;
     border: 1px solid var(--t5e-faint-color, rgb(var(--gl-tint-dark) / 0.12));
     background: var(--t5e-background, rgb(var(--gl-tint-dark) / 0.03));
@@ -729,7 +729,7 @@
     background: rgba(204, 51, 51, 0.12);
     border: 1px solid rgba(204, 51, 51, 0.3);
     color: #cc3333;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.8125rem;
     text-align: center;
 }
@@ -755,7 +755,7 @@
 }
 
 .glinv-notch-fraction {
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     color: var(--t5e-primary-accent-color, #4a90d9);
 }
 
@@ -845,7 +845,7 @@
     align-items: center;
     gap: 0.25rem;
     font-size: 1.1rem;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     background: rgb(var(--gl-tint-light) / 0.06);
@@ -870,7 +870,7 @@
 .glinv-ammo-die-last {
     color: #e06040;
     border-color: rgba(224, 96, 64, 0.3);
-    animation: glinv-ammo-pulse 1.5s ease-in-out infinite;
+    animation: glinv-ammo-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .glinv-ammo-die-empty {
@@ -910,7 +910,7 @@
     background: rgb(var(--gl-tint-light) / 0.05);
     color: var(--t5e-primary-color, #ddd);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--gl-d-quick), border-color var(--gl-d-quick);
     white-space: nowrap;
 }
 
@@ -957,7 +957,7 @@
     gap: 0.2rem;
     margin-left: 0.375rem;
     font-size: 0.7rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     background: rgba(109, 191, 109, 0.1);
@@ -978,7 +978,7 @@
 .glinv-ammo-ind-last {
     color: #e06040;
     background: rgba(224, 96, 64, 0.12);
-    animation: glinv-ammo-pulse 1.5s ease-in-out infinite;
+    animation: glinv-ammo-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .glinv-ammo-ind-empty {
@@ -997,17 +997,17 @@
 
 .glinv-ammo-warning {
     color: #e06040;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 
 .glinv-ammo-degraded {
     color: #d4940d;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-ammo-depleted {
     color: #cc3333;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1037,7 +1037,7 @@
     padding: 0.25rem 0.5rem;
     border-radius: 0.2rem;
     border: 1px solid;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.9rem;
 }
 
@@ -1110,7 +1110,7 @@
     background: rgba(224, 96, 64, 0.5);
     border-color: rgba(224, 96, 64, 0.6);
     box-shadow: inset 0 0 3px rgb(var(--gl-tint-light) / 0.15);
-    animation: glinv-pool-pulse 2s ease-in-out infinite;
+    animation: glinv-pool-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .glinv-pool-pip-empty {
@@ -1142,7 +1142,7 @@
     color: var(--t5e-primary-color, #555);
     font-size: 0.75rem;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--gl-d-quick) ease;
     white-space: nowrap;
 }
 
@@ -1162,7 +1162,7 @@
 }
 
 .glinv-pool-roll {
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-pool-roll:hover:not(:disabled) {
@@ -1198,7 +1198,7 @@
     gap: 0.2rem;
     margin-left: 0.375rem;
     font-size: 0.7rem;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     background: rgba(155, 125, 219, 0.1);
@@ -1219,7 +1219,7 @@
 .glinv-pool-ind-critical {
     color: #e06040;
     background: rgba(224, 96, 64, 0.12);
-    animation: glinv-pool-pulse 1.5s ease-in-out infinite;
+    animation: glinv-pool-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .glinv-pool-ind-depleted {
@@ -1256,7 +1256,7 @@
     width: 28px;
     height: 28px;
     border-radius: 4px;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
     font-size: 0.875rem;
     border: 2px solid;
 }
@@ -1282,7 +1282,7 @@
 
 .glinv-pool-chat-lost {
     color: #e06040;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-pool-chat-lost i {
@@ -1291,7 +1291,7 @@
 
 .glinv-pool-chat-safe {
     color: #6dbf6d;
-    font-weight: 600;
+    font-weight: var(--gl-weight-medium);
 }
 
 .glinv-pool-chat-safe i {
@@ -1306,7 +1306,7 @@
 
 .glinv-pool-chat-depleted {
     color: #cc3333;
-    font-weight: 700;
+    font-weight: var(--gl-weight-bold);
 }
 
 .glinv-pool-chat-depleted i {
