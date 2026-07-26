@@ -255,7 +255,9 @@ export class SuiteConfigApp extends ApplicationV2 {
     wrap.appendChild(intro);
 
     const list = document.createElement("div");
-    list.className = "gls-fm-list";
+    // gl-stagger sets --gl-i per child so the feature cards cascade in rather
+    // than all landing on the same frame.
+    list.className = "gls-fm-list gl-stagger gl-scroll";
 
     // Pinned suite-wide section (e.g. interface scale) above the feature list.
     const suite = catalogFor(SUITE_SECTION);

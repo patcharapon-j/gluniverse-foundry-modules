@@ -126,9 +126,14 @@
   --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
   --gl-tech: "Bahnschrift", "JetBrains Mono", "Share Tech Mono", Consolas, monospace;
 
-  /* ── Silhouette ── the notched-corner signature ── */
-  --gl-cut: 12px;
-  --gl-cut-sm: 6px;
+  /* ── Silhouette ── the notched-corner signature ──
+     Three rungs, because the cut has to stay proportional to the thing it cuts:
+     12px reads as a deliberate bevel on a panel and eats half the edge of a
+     20px tag. Features had drifted to six sizes (2/3/4/6/7/14px) picked by eye
+     per element. */
+  --gl-cut: 12px;        /* panels, cards, decks */
+  --gl-cut-sm: 6px;      /* buttons, chips, controls */
+  --gl-cut-xs: 4px;      /* tags, pips, gauge bars */
   --gl-radius: 14px;
 
   /* ── Global motion multiplier ──
@@ -205,6 +210,32 @@
   --gl-ring: 0 0 0 3px var(--gl-bloom);
   --gl-ring-strong: 0 0 14px var(--gl-bloom);
 
+  /* ── Interaction states ──────────────────────────────────────────────
+     Hover and press were being invented per feature: one rail lifted 1px,
+     another 2px, a third brightened instead, and a fourth did nothing. These
+     three values are the suite's whole physical vocabulary for "you can touch
+     this" — an element rises slightly toward the cursor and sinks under the
+     click. Anything more is a bespoke effect, not an affordance. */
+  --gl-lift: -1px;               /* hover — rows, chips, small controls */
+  --gl-lift-lg: -2px;            /* hover — cards, panels, hero buttons */
+  --gl-press: 1px;               /* active — sink under the pointer */
+  --gl-press-scale: 0.985;
+
+  /* Keyboard focus — louder than hover, and a different channel entirely
+     (outline, not shadow) so it can never fight a control's own border.
+     See the `:focus-visible` rule in L4 for why. */
+  --gl-focus-outline: 2px solid var(--gl-accent);
+
+  /* Chamfer hairline. `clip-path` cuts the border off the notched corner, so
+     every .gl-glass panel in the suite has a 1px rim that stops dead at the
+     bevel and resumes after it — the signature corner is the one edge that was
+     never drawn. This gradient redraws it as a BACKGROUND layer (which the clip
+     keeps, unlike a border) inside a --gl-cut square parked on the corner: at
+     45° the half-way stop lands exactly on the bevel, and everything past it is
+     clipped away, so a single colour stop is the whole line.
+     Paint it via `.gl-notch`, which owns the geometry. */
+  --gl-chamfer-edge: linear-gradient(45deg, transparent calc(50% - 1.1px), var(--gl-edge) calc(50% - 1.1px));
+
   /* ════════════════════════════════════════════════════════════════════
      MOTION VOCABULARY
      Every duration routes through --gl-motion-scale, so one number retimes
@@ -222,18 +253,39 @@
   --gl-ease-sharp: cubic-bezier(0.7, 0, 0.1, 1);   /* decisive in-out, fast middle */
   --gl-linear: linear;                             /* loops, tickers, spinners */
 
+  /* Duration ladder. Ten steps from a micro-tick to a full ceremony beat.
+     The four interstitial steps (flash/brisk/glide/slow) exist because the
+     features collectively used ~50 distinct literal durations: without rungs
+     between quick(180) and move(420), or between splash(720) and
+     cinematic(1200), a sweep onto the vocabulary could only round to something
+     visibly wrong, so the literals survived — and anything literal is invisible
+     to --gl-motion-scale, i.e. to every motion-tier setting. */
   --gl-d-instant: calc(0ms * var(--gl-motion-scale));
+  --gl-d-flash: calc(70ms * var(--gl-motion-scale));     /* micro-tick, beat gap */
   --gl-d-tap: calc(120ms * var(--gl-motion-scale));      /* press feedback */
   --gl-d-quick: calc(180ms * var(--gl-motion-scale));    /* hover, tint, focus */
+  --gl-d-brisk: calc(260ms * var(--gl-motion-scale));    /* small state change */
+  --gl-d-swift: calc(340ms * var(--gl-motion-scale));    /* card / row transition */
   --gl-d-move: calc(420ms * var(--gl-motion-scale));     /* position / layout */
+  --gl-d-glide: calc(540ms * var(--gl-motion-scale));    /* long travel, exits */
   --gl-d-reveal: calc(620ms * var(--gl-motion-scale));   /* entrance */
   --gl-d-splash: calc(720ms * var(--gl-motion-scale));   /* full-screen beat */
+  --gl-d-slow: calc(920ms * var(--gl-motion-scale));     /* alert cycle, dwell */
   --gl-d-cinematic: calc(1200ms * var(--gl-motion-scale));
 
-  /* Ambient loops — slow, continuous, never gated on interaction. */
+  /* Ambient loops — slow, continuous, never gated on interaction.
+     breathe/dread/drift are the *semantic* short loops (a pulse, a menace, a
+     bob). The `loop-*` rungs above them are for texture that merely has to
+     move: background drifts, scanline beds, starfields. They collapse a long
+     tail of arbitrary literals (9.5s, 11s, 12s, 13s, 14s, 15s…) whose exact
+     values were never a design decision, and they stop when motion is off. */
   --gl-breathe: calc(2.6s * var(--gl-motion-scale));
   --gl-dread: calc(3.2s * var(--gl-motion-scale));
   --gl-drift: calc(4.2s * var(--gl-motion-scale));
+  --gl-loop-sm: calc(6s * var(--gl-motion-scale));
+  --gl-loop-md: calc(12s * var(--gl-motion-scale));
+  --gl-loop-lg: calc(22s * var(--gl-motion-scale));
+  --gl-loop-xl: calc(38s * var(--gl-motion-scale));
 
   /* Stagger step for cascading list entrances (multiply by child index). */
   --gl-stagger: calc(45ms * var(--gl-motion-scale));
@@ -403,6 +455,36 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 
+/* Close the silhouette: redraw the rim across the bevel the clip-path removed.
+   Free for every existing .gl-glass — no markup change, no extra element. */
+.gl-glass::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: var(--gl-z-raised);
+  width: var(--gl-cut);
+  height: var(--gl-cut);
+  pointer-events: none;
+  background: var(--gl-chamfer-edge);
+}
+
+/* ── Notch ──
+   The same corner hairline for surfaces that carry the suite's chamfer without
+   being .gl-glass. Requires `position: relative` on the host. */
+.gl-notch::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: var(--gl-z-raised);
+  width: var(--gl-cut);
+  height: var(--gl-cut);
+  pointer-events: none;
+  background: var(--gl-chamfer-edge);
+}
+.gl-notch-left::before { right: auto; left: 0; transform: scaleX(-1); }
+
 /* Structural utilities: features keep their selectors and opt into shared material. */
 .gl-surface { background: var(--gl-surface); color: var(--gl-text); border: 1px solid var(--gl-edge); }
 .gl-surface-raised { background: var(--gl-surface-raised); color: var(--gl-text); border: 1px solid var(--gl-edge); }
@@ -462,6 +544,139 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .gl-btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
 .gl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .gl-btn-accent { border-color: var(--gl-accent); color: var(--gl-text-bright); }
+
+/* ── Icon button ──
+   A square tap target for a lone glyph. Every HUD in the suite has a row of
+   these (close, collapse, pin, step, mute) and every one drew them differently. */
+.gl-icon-btn {
+  display: grid;
+  place-items: center;
+  width: var(--gl-sp-10);
+  height: var(--gl-sp-10);
+  padding: 0;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    transform var(--gl-d-tap) var(--gl-ease);
+}
+.gl-icon-btn:hover:not(:disabled) {
+  color: var(--gl-text-bright);
+  border-color: var(--gl-accent-soft);
+  background: var(--gl-accent-faint);
+  transform: translateY(var(--gl-lift));
+}
+.gl-icon-btn:active:not(:disabled) { transform: translateY(var(--gl-press)); }
+.gl-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Chip / badge ──
+   Chip = a small piece of live state (a count, a mode, a tag). Badge = the
+   same silhouette in a semantic hue. Route the hue through --gl-accent on the
+   call site and the border, tint and text all follow:
+       .my-thing .gl-chip { --gl-accent: var(--gl-hazard); } */
+.gl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  padding: 2px var(--gl-sp-4);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 40%, transparent);
+  border-radius: var(--gl-r-pill);
+  background: var(--gl-accent-faint);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  line-height: var(--gl-lh-tight);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gl-chip-solid {
+  background: var(--gl-accent);
+  border-color: var(--gl-accent);
+  color: var(--gl-ink-0);
+  font-weight: var(--gl-weight-bold);
+}
+
+/* ── Panel header ──
+   Title row for a floating panel: technical label on the lead edge, a hairline
+   running out to the trailing edge, controls after it. The rule is a flex
+   child so it absorbs whatever width is left. */
+.gl-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-6);
+  padding: var(--gl-sp-4) var(--gl-sp-6);
+  border-bottom: 1px solid var(--gl-hair);
+}
+.gl-panel-head > .gl-panel-title {
+  flex: 0 0 auto;
+  color: var(--gl-text-bright);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+.gl-panel-head > .gl-rule { flex: 1 1 auto; }
+
+/* Hairline that fades out at both ends — a divider that doesn't look sawn off. */
+.gl-rule {
+  min-width: var(--gl-sp-4);
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--gl-edge) 22%, var(--gl-edge) 78%, transparent);
+}
+
+/* ── Empty state ──
+   Shown when a list has nothing in it. Every feature wrote its own; they
+   disagreed on size, colour and whether to centre. */
+.gl-empty {
+  display: grid;
+  place-items: center;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-10) var(--gl-sp-8);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-sm);
+  text-align: center;
+}
+.gl-empty > i { font-size: var(--gl-fs-2xl); opacity: 0.45; }
+
+/* ── Interaction affordances ──
+   Opt-in versions of the state vocabulary for elements that are not .gl-btn. */
+.gl-hover-lift {
+  transition: transform var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gl-hover-lift:hover { transform: translateY(var(--gl-lift)); }
+.gl-hover-lift:active { transform: translateY(var(--gl-press)) scale(var(--gl-press-scale)); }
+
+/* ── Keyboard focus ──
+   ONE focus mark for the whole suite: the interactive elements inside every
+   root the suite injects (the same roster as the interface-scale rule above),
+   so a keyboard user is never guessing where they are.
+
+   Deliberately an `outline`, not the `box-shadow` ring hover uses. Half the
+   suite's controls draw their own border as an inset box-shadow — a focus
+   box-shadow would replace it and the control would lose its edge exactly when
+   it gained focus. `outline` composites on top of both, follows border-radius
+   on its own, and `outline-offset` keeps it clear of the glass rim.
+
+   :focus-visible, not :focus — a mouse click should not leave a ring behind. */
+.gl-focusable:focus-visible,
+:is(
+  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
+  #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
+  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  .gluni-initiative, .glucargo-minimap, .glo-root
+) :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--gl-focus-outline);
+  outline-offset: 2px;
+}
 
 /* ── Scrollbar ──
    The suite's scrollable panels all want the same thin accent-tinted bar.
@@ -539,13 +754,40 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .gls-fm-section {
   --gl-accent: var(--gl-cyan);
   animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
+  /* Cards arrive in sequence rather than all at once. --gl-i is set by the
+     .gl-stagger helper on the list. */
+  animation-delay: calc(var(--gl-stagger) * var(--gl-i, 0));
   overflow: hidden;
   /* Keep each card at its natural height; the list scrolls instead of
      squashing the cards (which would clip their settings) when space is tight. */
   flex: 0 0 auto;
+  transition:
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    transform var(--gl-d-quick) var(--gl-ease);
+}
+/* State reads on the lead edge — a hairline that thickens and takes the
+   feature's accent when enabled, so the list is scannable without reading. */
+.gls-fm-section::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--gl-accent);
+  opacity: 0.28;
+  transition: opacity var(--gl-d-quick) var(--gl-ease), width var(--gl-d-quick) var(--gl-ease);
+}
+.gls-fm-section:hover {
+  border-color: var(--gl-accent-soft);
+  transform: translateY(var(--gl-lift));
+  box-shadow: var(--gl-etch), var(--gl-elev-2);
 }
 .gls-fm-section.is-on { --gl-accent: var(--gl-good); }
+.gls-fm-section.is-on::after { opacity: 1; width: 3px; }
 .gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
+.gls-fm-section.is-locked:hover { transform: none; }
 /* The pinned suite-wide card is always "open" but is not a feature toggle, so
    keep it on the neutral cyan accent rather than the enabled-green. */
 .gls-fm-suite.is-on { --gl-accent: var(--gl-cyan); }
@@ -568,6 +810,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .gls-fm-section.is-on .gls-sec-body { display: block; }
 
 .gls-fm-icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 42px;
@@ -578,6 +821,27 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   color: var(--gl-accent);
   font-size: var(--gl-fs-xl);
   box-shadow: inset 0 0 14px color-mix(in srgb, var(--gl-accent) 20%, transparent);
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+/* A single specular arc across the top-left of the tile — the same light every
+   glass surface in the suite catches, at icon scale. */
+.gls-fm-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(150deg, var(--gl-glass-highlight), transparent 46%);
+}
+.gls-fm-section:hover .gls-fm-icon {
+  border-color: var(--gl-accent-soft);
+  box-shadow:
+    inset 0 0 18px color-mix(in srgb, var(--gl-accent) 30%, transparent),
+    0 0 12px var(--gl-bloom);
 }
 .gls-fm-name {
   font-weight: var(--gl-weight-bold);
@@ -606,6 +870,12 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
 /* Toggle switch */
 .gls-switch { background: none; border: none; padding: var(--gl-sp-2); cursor: pointer; }
+/* The thumb squashes toward the direction of travel while held, then springs
+   to the far end on release — the toggle's whole "satisfying" budget, spent in
+   one place. */
+.gls-switch:active:not(:disabled) .gls-switch-thumb { width: 22px; border-radius: var(--gl-r-pill); }
+.gls-switch:hover:not(:disabled) .gls-switch-track { border-color: var(--gl-text-dim); }
+.gls-switch.is-on:hover:not(:disabled) .gls-switch-track { border-color: var(--gl-good-hot); }
 .gls-switch-track {
   display: block;
   width: 46px;
@@ -624,9 +894,12 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #fff, var(--gl-text-dim));
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light)), var(--gl-text-dim));
   transform: translateY(-50%);
-  transition: left var(--gl-d-quick) var(--gl-snap), background var(--gl-d-quick) var(--gl-ease);
+  transition:
+    left var(--gl-d-quick) var(--gl-snap),
+    width var(--gl-d-tap) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease);
   box-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.50);
 }
 .gls-switch.is-on .gls-switch-track {
@@ -636,8 +909,12 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 }
 .gls-switch.is-on .gls-switch-thumb {
   left: 25px;
-  background: linear-gradient(180deg, #fff, var(--gl-good));
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light)), var(--gl-good));
 }
+/* Squashing an ON thumb has to grow leftward or it runs off the track. */
+.gls-switch.is-on:active:not(:disabled) .gls-switch-thumb { left: 21px; }
+.gls-switch-sm.is-on:active:not(:disabled) .gls-switch-thumb { left: 19px; }
+.gls-switch-sm:active:not(:disabled) .gls-switch-thumb { width: 18px; }
 .gls-switch:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .gls-fm-foot {
@@ -665,9 +942,15 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--gl-sp-7);
-  padding: 9px 0;
+  padding: 9px var(--gl-sp-3);
+  margin: 0 calc(var(--gl-sp-3) * -1);
   border-bottom: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease);
 }
+/* Row highlight on hover. Settings lists are dense two-column grids; without
+   it the eye loses which hint belongs to which control halfway across. */
+.gls-set-row:hover { background: rgb(var(--gl-tint-light) / 0.03); }
 .gls-set-row:last-of-type { border-bottom: none; }
 .gls-set-name { font-weight: var(--gl-weight-medium); font-size: 12.5px; color: var(--gl-text-bright); }
 .gls-set-hint {

@@ -1,5 +1,20 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
-import { onThemeChange } from "../../core/theme.mjs";
+import { onThemeChange, scaledMs } from "../../core/theme.mjs";
+
+/**
+ * Wall-clock for a timer that shadows a CSS animation on the rail.
+ *
+ * Every duration in initiative.css now derives through `--gl-motion-scale`, so
+ * the `setTimeout`s that strip an animation class when it finishes have to move
+ * with it — otherwise a `cinematic` tier (1.4x) fires cleanup mid-animation and
+ * the card snaps, while a `none` tier (0x) leaves the class on for most of a
+ * second after the animation already resolved.
+ *
+ * The floor keeps cleanup on a later tick than the class was added, which the
+ * 0x tier still needs; pass the millisecond figure exactly as the stylesheet
+ * writes it and let this do the scaling.
+ */
+const animMs = (ms) => scaledMs(ms, null, 16);
 
 // True when Foundry's socket subsystem is live. Emits are routed through the
 // suite's shared dispatcher (emitSocket); this guard only gates the optimistic
@@ -2159,7 +2174,7 @@ class GLUniverseInitiativeOverlay {
       item.classList.add("gluni-item--entering");
       if (!isActive) item.classList.add("gluni-item--entering-bottom");
       if (isActive && item.dataset.gluniKey !== previousActiveKey) item.classList.add("gluni-card--active-entering");
-      window.setTimeout(() => item.classList.remove("gluni-item--entering", "gluni-item--entering-bottom", "gluni-card--active-entering"), 680);
+      window.setTimeout(() => item.classList.remove("gluni-item--entering", "gluni-item--entering-bottom", "gluni-card--active-entering"), animMs(680));
     }
 
     for (const { item, dx, dy, scaleX, scaleY } of flipItems) {
@@ -2184,7 +2199,7 @@ class GLUniverseInitiativeOverlay {
           item.style.setProperty("--gluni-flip-scale-y", "1");
         });
 
-        window.setTimeout(() => item.classList.remove("gluni-item--flipping"), 680);
+        window.setTimeout(() => item.classList.remove("gluni-item--flipping"), animMs(680));
       }
     }
 
@@ -2837,7 +2852,7 @@ class GLUniverseInitiativeOverlay {
     button.classList.remove("gluni-end-turn--denied");
     void button.offsetWidth;
     button.classList.add("gluni-end-turn--denied");
-    window.setTimeout(() => button.classList.remove("gluni-end-turn--denied"), 240);
+    window.setTimeout(() => button.classList.remove("gluni-end-turn--denied"), animMs(240));
   }
 
   async onSocketEndTurnRequest(data) {
@@ -3296,7 +3311,7 @@ class GLUniverseInitiativeOverlay {
       void card.offsetWidth;
       card.classList.add("gluni-card--guard-break-impact");
       this.pulseTagEnter(card, ".gluni-guard-break-tag");
-      window.setTimeout(() => card.classList.remove("gluni-card--guard-break-impact"), 760);
+      window.setTimeout(() => card.classList.remove("gluni-card--guard-break-impact"), animMs(760));
     });
   }
 
@@ -3346,7 +3361,7 @@ class GLUniverseInitiativeOverlay {
     // Short screen-shake on impact.
     window.requestAnimationFrame(() => {
       splash.classList.add("gluni-break-splash--shake");
-      window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), 520);
+      window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), animMs(520));
     });
     window.setTimeout(() => splash.classList.add("gluni-break-splash--leave"), this.getBreakSplashHold());
     window.setTimeout(() => {
@@ -4042,7 +4057,7 @@ class GLUniverseInitiativeOverlay {
     // keeps the flash within the card silhouette.
     (card.querySelector(".gluni-card-surface") ?? card).appendChild(flash);
     window.requestAnimationFrame(() => flash.classList.add("gluni-status-flash--go"));
-    window.setTimeout(() => flash.remove(), 620);
+    window.setTimeout(() => flash.remove(), animMs(620));
   }
 
   // One-shot "stamp" entrance for a status tag chip when its status is first applied.
@@ -4052,7 +4067,7 @@ class GLUniverseInitiativeOverlay {
     tag.classList.remove("gluni-tag--enter");
     void tag.offsetWidth;
     tag.classList.add("gluni-tag--enter");
-    window.setTimeout(() => tag.classList.remove("gluni-tag--enter"), 480);
+    window.setTimeout(() => tag.classList.remove("gluni-tag--enter"), animMs(480));
   }
 
   createStatusSlideGhost(card, edge) {
@@ -4067,13 +4082,12 @@ class GLUniverseInitiativeOverlay {
     ghost.style.top = `${Math.round(rect.top)}px`;
     ghost.style.width = `${Math.round(rect.width)}px`;
     ghost.style.height = `${Math.round(rect.height)}px`;
-    ghost.style.zIndex = "71";
     ghost.style.margin = "0";
     document.body.appendChild(ghost);
     window.requestAnimationFrame(() => {
       ghost.classList.add(edge === "left" ? "gluni-status-slide-ghost--go-left" : "gluni-status-slide-ghost--go-right");
     });
-    window.setTimeout(() => ghost.remove(), 320);
+    window.setTimeout(() => ghost.remove(), animMs(320));
   }
 
   createStatusFlashGhost(card, text, colorClass, edge) {
@@ -4088,7 +4102,6 @@ class GLUniverseInitiativeOverlay {
     ghost.style.top = `${Math.round(rect.top)}px`;
     ghost.style.width = `${Math.round(rect.width)}px`;
     ghost.style.height = `${Math.round(rect.height)}px`;
-    ghost.style.zIndex = "71";
     ghost.style.margin = "0";
     const flash = document.createElement("div");
     flash.className = `gluni-status-flash gluni-status-flash--${colorClass}`;
@@ -4096,8 +4109,8 @@ class GLUniverseInitiativeOverlay {
     ghost.appendChild(flash);
     document.body.appendChild(ghost);
     window.requestAnimationFrame(() => flash.classList.add("gluni-status-flash--go"));
-    const flashDuration = 680;
-    const slideDuration = 420;
+    const flashDuration = animMs(680);
+    const slideDuration = animMs(420);
     window.setTimeout(() => {
       flash.remove();
       ghost.classList.add(edge === "left" ? "gluni-status-slide-ghost--go-left" : "gluni-status-slide-ghost--go-right");
@@ -4135,12 +4148,12 @@ class GLUniverseInitiativeOverlay {
         // Mirror the dying/break entrance richness: wipe the time-shift field in
         // and settle the card with a blue energy pulse rather than a bare slide.
         card.classList.add("gluni-card--delay-entering");
-        window.setTimeout(() => card.classList.remove("gluni-card--delay-entering"), 700);
+        window.setTimeout(() => card.classList.remove("gluni-card--delay-entering"), animMs(700));
       }
       this.pendingStatusFlashes.delete(id);
       this.pendingSlideInIds.delete(id);
       card.classList.add("gluni-card--slide-in");
-      window.setTimeout(() => card.classList.remove("gluni-card--slide-in"), 400);
+      window.setTimeout(() => card.classList.remove("gluni-card--slide-in"), animMs(400));
     }
   }
 
@@ -4155,7 +4168,7 @@ class GLUniverseInitiativeOverlay {
         : localize("GLUNI.Dying.Label");
       this.playInlineStatusFlash(card, flashLabel.toUpperCase(), "dying");
       this.pulseTagEnter(card, ".gluni-dying-tag");
-      window.setTimeout(() => card.classList.remove("gluni-card--dying-entering"), 640);
+      window.setTimeout(() => card.classList.remove("gluni-card--dying-entering"), animMs(640));
     }
     this.pendingDyingWipeIds.clear();
   }
@@ -4171,7 +4184,7 @@ class GLUniverseInitiativeOverlay {
       const card = this.root.querySelector(selector);
       if (!card) continue;
       card.classList.add("gluni-card--condition-entering");
-      window.setTimeout(() => this.root?.querySelector(selector)?.classList.remove("gluni-card--condition-entering"), 620);
+      window.setTimeout(() => this.root?.querySelector(selector)?.classList.remove("gluni-card--condition-entering"), animMs(620));
       texts.forEach((text, index) => {
         window.setTimeout(() => {
           const live = this.root?.querySelector(selector);

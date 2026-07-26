@@ -170,6 +170,44 @@ export function applyMotionTier(tier, root = null) {
   return scale;
 }
 
+/**
+ * The multiplier currently in force, read live from the cascade.
+ *
+ * @param {Element} [el]  Resolve against this element (a feature root may carry
+ *                        its own scoped tier). Defaults to <body>.
+ * @returns {number} A finite, non-negative multiplier; 1 if unreadable.
+ */
+export function motionScale(el = null) {
+  const raw = parseFloat(cssVar("--gl-motion-scale", "1", el ?? document.body));
+  return Number.isFinite(raw) && raw >= 0 ? raw : 1;
+}
+
+/**
+ * Scale a millisecond figure by the live motion multiplier.
+ *
+ * For the JS half of a CSS animation: a `setTimeout` that strips an animation
+ * class when the animation ends is a duplicate of a duration that lives in the
+ * stylesheet, and the two silently disagree the moment a motion tier scales one
+ * of them. At `cinematic` (1.4×) a fixed timeout fires *during* the animation
+ * and the element snaps; at `none` (0×) it holds the class long after the
+ * animation resolved. Passing the CSS baseline through here keeps the pair
+ * locked together.
+ *
+ *     window.setTimeout(() => el.classList.remove("is-entering"), scaledMs(620));
+ *
+ * Prefer an `animationend`/`transitionend` listener where one is practical;
+ * this is for the cases where several animations overlap on one element and
+ * there is no single event to wait for.
+ *
+ * @param {number} ms  The duration as written in the stylesheet, at scale 1.
+ * @param {Element} [el]  Element whose scope to resolve the scale against.
+ * @param {number} [floor=0]  Never return less than this (a 0× tier still needs
+ *                            a turn of the event loop to run cleanup).
+ */
+export function scaledMs(ms, el = null, floor = 0) {
+  return Math.max(floor, Math.round(ms * motionScale(el)));
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    Retheme notification
    Canvas-based features (PIXI filters, WebGL shaders) cannot observe a CSS
