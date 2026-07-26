@@ -48,21 +48,21 @@
 }
 
 #gltimer-hud[data-tier="calm"] .gltimer-rim {
-  animation: gltimer-edge var(--gl-breathe) ease-in-out infinite;
+  animation: gltimer-edge var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 #gltimer-hud[data-tier="urgent"] .gltimer-rim {
-  animation: gltimer-edge 1.05s var(--gl-ease) infinite;
+  animation: gltimer-edge var(--gl-d-slow) var(--gl-ease) infinite;
 }
 #gltimer-hud[data-tier="critical"] .gltimer-rim {
-  animation: gltimer-edge 0.5s var(--gl-ease) infinite;
+  animation: gltimer-edge var(--gl-d-glide) var(--gl-ease) infinite;
 }
 
 /* Critical jitter — keeps the centering translate so the plaque shakes in place. */
 #gltimer-hud[data-tier="critical"] {
-  animation: gltimer-shake 0.5s steps(2, jump-none) infinite;
+  animation: gltimer-shake var(--gl-d-glide) steps(2, jump-none) infinite;
 }
 
-#gltimer-hud.is-paused .gltimer-rim { animation: gl-breathe var(--gl-dread) ease-in-out infinite; }
+#gltimer-hud.is-paused .gltimer-rim { animation: gl-breathe var(--gl-dread) var(--gl-ease-inout) infinite; }
 #gltimer-hud.is-paused { animation: none; }
 #gltimer-hud.is-paused .gltimer-face { opacity: 0.55; }
 
@@ -92,7 +92,7 @@
 }
 
 /* Expire fracture flash (gold → red). */
-#gltimer-hud.is-burst { animation: gltimer-burst 720ms var(--gl-exit); }
+#gltimer-hud.is-burst { animation: gltimer-burst var(--gl-d-splash) var(--gl-exit); }
 
 /* ── Digits ──────────────────────────────────────────────────────────────── */
 .gltimer-face {
@@ -107,14 +107,14 @@
 }
 .gltimer-main {
   font-size: 48px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.03em;
   color: var(--gl-text-bright);
   text-shadow: 0 0 16px var(--gl-glow);
 }
 .gltimer-frac {
   font-size: 26px;
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   color: var(--gl-accent);
   margin-left: 1px;
   text-shadow: 0 0 12px var(--gl-glow);

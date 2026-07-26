@@ -240,7 +240,9 @@
 .gl-anim-bump { animation: gl-bump var(--gl-d-quick) var(--gl-pop) both; }
 
 /* Stagger helper — children enter in sequence off the shared step.
-   Covers the first 12; beyond that set --gl-i inline from JS. */
+   Covers the first 20 (the Control Center lists ~17 features); beyond that the
+   tail shares the last step, which reads as "the rest arrive together" rather
+   than as an error. Set --gl-i inline from JS for longer lists. */
 .gl-stagger > * { animation-delay: calc(var(--gl-stagger) * var(--gl-i, 0)); }
 .gl-stagger > *:nth-child(1) { --gl-i: 0; }
 .gl-stagger > *:nth-child(2) { --gl-i: 1; }
@@ -254,3 +256,11 @@
 .gl-stagger > *:nth-child(10) { --gl-i: 9; }
 .gl-stagger > *:nth-child(11) { --gl-i: 10; }
 .gl-stagger > *:nth-child(12) { --gl-i: 11; }
+.gl-stagger > *:nth-child(13) { --gl-i: 12; }
+.gl-stagger > *:nth-child(14) { --gl-i: 13; }
+.gl-stagger > *:nth-child(15) { --gl-i: 14; }
+.gl-stagger > *:nth-child(16) { --gl-i: 15; }
+.gl-stagger > *:nth-child(17) { --gl-i: 16; }
+.gl-stagger > *:nth-child(18) { --gl-i: 17; }
+.gl-stagger > *:nth-child(19) { --gl-i: 18; }
+.gl-stagger > *:nth-child(n + 20) { --gl-i: 19; }

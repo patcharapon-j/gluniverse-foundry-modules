@@ -21,7 +21,7 @@
     transparent 40%);
   -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
   mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
-  transition:opacity .6s ease;
+  transition:opacity var(--gl-d-reveal) ease;
 }
 #glct-hud .bar-dx.off{ opacity:0; }
 #glct-hud .bar-dx .glct-wx-canvas{ position:absolute; inset:0; }
@@ -31,10 +31,10 @@
    tinted rim. Sits above the diorama, below .main. Toggled with the diorama. */
 #glct-hud .bar-dx-scrim{
   position:absolute; inset:0; z-index:1; pointer-events:none;
-  border-radius:inherit; overflow:hidden; opacity:1; transition:opacity .6s ease;
+  border-radius:inherit; overflow:hidden; opacity:1; transition:opacity var(--gl-d-reveal) ease;
   background:
     linear-gradient(270deg, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 22%,transparent) 0, transparent 7px),
-    linear-gradient(260deg, rgba(8,11,17,.5) 0%, rgba(8,11,17,.26) 12%, rgba(8,11,17,0) 30%);
+    linear-gradient(260deg, color-mix(in srgb, var(--gl-ink-1) 50%, transparent) 0%, color-mix(in srgb, var(--gl-ink-1) 26%, transparent) 12%, transparent 30%);
 }
 #glct-hud .bar-dx-scrim.off{ opacity:0; }
 #glct-hud .bar.dx-ominous .bar-dx-scrim{
@@ -50,7 +50,7 @@
 #glct-hud .bar.has-dx .bar-dx-scrim{
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 55%,transparent),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 62%,#fff),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 62%,rgb(var(--gl-tint-light))),
     inset 0 0 14px -2px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 42%,transparent),
     inset -7px 0 16px -10px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 75%,transparent);
   -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 26%,transparent 100%);
@@ -70,14 +70,14 @@
 }
 #glct-hud .bar.dx-terminal .bar-dx-scrim{
   box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,#fff),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 80%,#fff),
+    inset 0 0 0 1.5px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,rgb(var(--gl-tint-light))),
+    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 80%,rgb(var(--gl-tint-light))),
     inset 0 0 22px -1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 62%,transparent),
     inset -22px 0 40px -16px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,transparent),
     inset -12px 0 26px -12px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 95%,transparent);
   -webkit-mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
   mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
-  animation:glctDxTerminalPulse 2.4s ease-in-out infinite;
+  animation:glctDxTerminalPulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 @keyframes glctDxTerminalPulse{ 0%,100%{ filter:brightness(1) saturate(1); } 50%{ filter:brightness(1.4) saturate(1.25); } }
 
@@ -104,23 +104,23 @@
   content:""; position:absolute; inset:-2px; border-radius:10px; pointer-events:none;
   background:radial-gradient(120% 140% at 12% 50%, color-mix(in srgb, var(--dxglow) 70%, transparent), transparent 70%);
   opacity:calc(.18 + .42 * var(--dxstage));
-  animation:dx-dread 2.6s ease-in-out infinite;
+  animation:dx-dread var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 @keyframes dx-dread{ 0%,100%{ filter:brightness(.85);} 50%{ filter:brightness(1.25);} }
 
 /* turn counter */
 #glct-hud .dx-turn{ display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; min-width:40px; }
 #glct-hud .dx-turn-num{
-  font-size:23px; font-weight:800; color:#fff; letter-spacing:.5px; line-height:1;
+  font-size:23px; font-weight: var(--gl-weight-heavy); color:rgb(var(--gl-tint-light)); letter-spacing:.5px; line-height:1;
   text-shadow:0 0 10px color-mix(in srgb, var(--dxglow) 60%, transparent), 0 1px 2px rgb(var(--gl-tint-dark) / .7);
 }
-#glct-hud .dx-turn-num.tick{ animation:dx-tick .42s var(--gl-pop); }
+#glct-hud .dx-turn-num.tick{ animation:dx-tick var(--gl-d-move) var(--gl-pop); }
 @keyframes dx-tick{ 0%{ transform:translateY(.32em) scale(.7); opacity:.2; } 100%{ transform:none; opacity:1; } }
 #glct-hud .dx-turn-lbl{ font-size:8.5px; text-transform:uppercase; letter-spacing:.12em; opacity:.8; margin-top:2px; text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7); }
 
 /* featured resource block */
 #glct-hud .dx-featured{ display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:120px; }
-#glct-hud .dx-stagebadge{ display:flex; align-items:center; gap:6px; font-weight:700; color:#fff; line-height:1.1; text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7); }
+#glct-hud .dx-stagebadge{ display:flex; align-items:center; gap:6px; font-weight: var(--gl-weight-bold); color:rgb(var(--gl-tint-light)); line-height:1.1; text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7); }
 #glct-hud .dx-stagebadge i{ color:var(--dxglow); filter:drop-shadow(0 0 5px color-mix(in srgb,var(--dxglow) 70%,transparent)); }
 #glct-hud .dx-stagename{ font-size:12.5px; letter-spacing:.02em; white-space:nowrap; }
 
@@ -128,13 +128,13 @@
 #glct-hud .dx-stagestep{
   appearance:none; border:1px solid rgb(var(--gl-tint-light) / .18); background:rgb(var(--gl-tint-light) / .06);
   color:#cfd6e0; width:18px; height:18px; border-radius:5px; cursor:pointer; padding:0;
-  display:inline-flex; align-items:center; justify-content:center; font-size:10px; transition:.15s;
+  display:inline-flex; align-items:center; justify-content:center; font-size:10px; transition:var(--gl-d-quick);
 }
 #glct-hud .dx-stagestep:hover:not(:disabled){ background:var(--dxglow); color:#13131a; border-color:transparent; }
 #glct-hud .dx-stagestep:disabled{ opacity:.25; cursor:default; }
-#glct-hud .dx-dice{ display:inline-flex; align-items:baseline; gap:2px; cursor:pointer; padding:0 4px; border-radius:6px; transition:background .15s; }
+#glct-hud .dx-dice{ display:inline-flex; align-items:baseline; gap:2px; cursor:pointer; padding:0 4px; border-radius:6px; transition:background var(--gl-d-quick); }
 #glct-hud .dx-dice:hover{ background:rgb(var(--gl-tint-light) / .08); }
-#glct-hud .dx-dice b{ font-size:19px; font-weight:800; color:#fff; line-height:1; text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7); }
+#glct-hud .dx-dice b{ font-size:19px; font-weight: var(--gl-weight-heavy); color:rgb(var(--gl-tint-light)); line-height:1; text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7); }
 #glct-hud .dx-dice i{ font-style:normal; font-size:10.5px; opacity:.65; }
 #glct-hud .dx-dice.empty b{ color:#ff6b6b; text-shadow:0 0 8px rgba(255,80,80,.5); }
 /* depleted at the worst stage — the delve pool has ENDED (no more dice). Its own
@@ -143,8 +143,8 @@
 #glct-hud .dx-dice.ended b{ font-size:16px; color:#ff5a5a; text-shadow:0 0 9px rgba(255,70,70,.65); }
 #glct-hud .dx-stagebadge.ended i{ color:#ff5a5a; filter:drop-shadow(0 0 5px rgba(255,70,70,.7)); }
 #glct-hud .dx-stagebadge.ended .dx-stagename{
-  color:#ff8a8a; font-weight:800; letter-spacing:.02em; text-shadow:0 0 9px rgba(255,70,70,.55);
-  animation:glctDxEndedName 2.4s ease-in-out infinite;
+  color:#ff8a8a; font-weight: var(--gl-weight-heavy); letter-spacing:.02em; text-shadow:0 0 9px rgba(255,70,70,.55);
+  animation:glctDxEndedName var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 @keyframes glctDxEndedName{ 0%,100%{ opacity:.82; } 50%{ opacity:1; } }
 
@@ -160,12 +160,12 @@
   --dxtint:#9aa3b0; --dxglow:#9aa3b0;
   display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px; cursor:pointer;
   background:color-mix(in srgb, var(--dxtint) 22%, rgba(20,22,30,.6));
-  border:1px solid color-mix(in srgb, var(--dxglow) 45%, transparent); color:#e7ecf3; transition:.15s;
+  border:1px solid color-mix(in srgb, var(--dxglow) 45%, transparent); color:#e7ecf3; transition:var(--gl-d-quick);
 }
-#glct-hud .dx-chip:hover{ background:color-mix(in srgb, var(--dxtint) 40%, rgba(20,22,30,.6)); transform:translateY(-1px); }
+#glct-hud .dx-chip:hover{ background:color-mix(in srgb, var(--dxtint) 40%, rgba(20,22,30,.6)); transform:translateY(var(--gl-lift)); }
 #glct-hud .dx-chip i{ color:var(--dxglow); font-size:11px; }
-#glct-hud .dx-chip b{ font-size:12px; font-weight:700; }
-#glct-hud .dx-chip.ominous{ animation:dx-dread 2.6s ease-in-out infinite; }
+#glct-hud .dx-chip b{ font-size:12px; font-weight: var(--gl-weight-bold); }
+#glct-hud .dx-chip.ominous{ animation:dx-dread var(--gl-breathe) var(--gl-ease-inout) infinite; }
 
 /* ---- dock controls: hidden until the feature / mode is on ---- */
 #glct-hud .delving-toggle, #glct-hud .delving-ctl{ display:none !important; }
@@ -173,7 +173,7 @@
 #glct-hud .hud-root.delving .delving-ctl{ display:inline-flex !important; }
 #glct-hud .gmdock .c.delving.on,
 #glct-hud .gmdock .c[data-delvebtn].on{ background:var(--dxglow,#ffd27a); color:#13131a; }
-#glct-hud .gmdock .c.pass{ font-weight:700; }
+#glct-hud .gmdock .c.pass{ font-weight: var(--gl-weight-bold); }
 #glct-hud .gmdock .c.roll i{ color:var(--dxglow,#ffd27a); }
 
 /* While delving is LIVE the clock/meter/shifts are hidden, so the time-advance and
@@ -192,7 +192,7 @@
   position:fixed; min-width:180px; padding:5px; border-radius:10px; opacity:0; transform:scale(.96);
   background:linear-gradient(180deg, rgba(28,30,40,.98), rgba(18,20,28,.98));
   border:1px solid rgb(var(--gl-tint-light) / .12); box-shadow:0 12px 36px rgb(var(--gl-tint-dark) / .55);
-  transition:opacity .12s ease, transform .12s ease; backdrop-filter:blur(6px);
+  transition:opacity var(--gl-d-tap) ease, transform var(--gl-d-tap) ease; backdrop-filter:blur(6px);
 }
 .glct-delve-ctx.show{ opacity:1; transform:none; }
 .glct-delve-ctx .ctx-item{
@@ -223,7 +223,7 @@
 /* keep the floated timestamp clear of the card's own title block */
 .chat-message.glct-delve-msg .glct-cc-head{ padding-right:64px; }
 
-.glct-delvecard .glct-cc-dice{ position:relative; min-height:26px; display:flex; flex-wrap:wrap; gap:3px; align-items:center; transition:min-height .25s ease; }
+.glct-delvecard .glct-cc-dice{ position:relative; min-height:26px; display:flex; flex-wrap:wrap; gap:3px; align-items:center; transition:min-height var(--gl-d-brisk) ease; }
 /* While the slot machine spins, give the reels room (the row grows, then settles
    back to the static-result height as the overlay fades) and hide the baked static
    spans beneath the reels. */
@@ -234,7 +234,7 @@
    Each die is a reel (a fixed window onto a vertical strip of numbers) that
    spins up and decelerates onto its rolled value. Discards are NOT shown until
    every reel has landed — only then do the dropped reels dim + strike. */
-.glct-slot{ position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; opacity:1; transition:opacity .36s ease; }
+.glct-slot{ position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; opacity:1; transition:opacity var(--gl-d-swift) ease; }
 .glct-slot.fade{ opacity:0; }
 .glct-slot .reel{
   position:relative; overflow:hidden; border-radius:8px; flex:none;
@@ -243,7 +243,7 @@
     inset 0 0 0 1px color-mix(in srgb,var(--slot-tint,#ff9a3c) 42%,transparent),
     inset 0 0 10px -3px color-mix(in srgb,var(--slot-tint,#ff9a3c) 60%,transparent),
     0 2px 8px rgb(var(--gl-tint-dark) / .5);
-  transition:opacity .32s ease, filter .32s ease, transform .32s ease;
+  transition:opacity var(--gl-d-swift) ease, filter var(--gl-d-swift) ease, transform var(--gl-d-swift) ease;
 }
 /* the slot "window": soft top/bottom shade so the spin reads as a machine reel */
 .glct-slot .reel::before{
@@ -254,7 +254,7 @@
 .glct-slot .strip{ display:flex; flex-direction:column; will-change:transform; }
 .glct-slot .cell{
   display:flex; align-items:center; justify-content:center; flex:none;
-  font-weight:800; color:#fff; line-height:1; font-variant-numeric:tabular-nums;
+  font-weight: var(--gl-weight-heavy); color:rgb(var(--gl-tint-light)); line-height:1; font-variant-numeric:tabular-nums;
   text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .6);
 }
 /* discard reveal — applied only once all reels have settled */
@@ -263,7 +263,7 @@
   content:""; position:absolute; left:14%; right:14%; top:50%; height:2px; z-index:3;
   background:var(--gl-hazard); box-shadow:0 0 6px var(--gl-hazard); border-radius:2px;
   transform:translateY(-1px) scaleX(0); transform-origin:left center;
-  transition:transform .3s ease .04s;
+  transition:transform var(--gl-d-swift) ease var(--gl-d-flash);
 }
 .glct-slot .reel.drop::after{ transform:translateY(-1px) scaleX(1); }
 
@@ -272,9 +272,9 @@
 .glct-delvecard .dx-row.ominous{ box-shadow:inset 3px 0 0 color-mix(in srgb,var(--dxtint) 80%, transparent); }
 .glct-delvecard .dx-row-head{ display:flex; align-items:center; gap:6px; margin-bottom:3px; }
 .glct-delvecard .dx-row-head i{ color:var(--dxtint); }
-.glct-delvecard .dx-name{ font-weight:700; }
+.glct-delvecard .dx-name{ font-weight: var(--gl-weight-bold); }
 .glct-delvecard .dx-stage{ margin-left:auto; font-size:11px; opacity:.7; }
-.glct-delvecard .dx-shift{ margin-left:auto; font-size:11px; font-weight:700; color:var(--dxtint); }
+.glct-delvecard .dx-shift{ margin-left:auto; font-size:11px; font-weight: var(--gl-weight-bold); color:var(--dxtint); }
 /* terminal (ended) badge — the resource's own end name, in alarm red */
 .glct-delvecard .dx-shift.dx-term{ color:#ff6b6b; text-transform:uppercase; letter-spacing:.04em; }
 .glct-delvecard .dx-shift.dx-term i{ filter:drop-shadow(0 0 4px rgba(255,80,80,.6)); }
@@ -284,12 +284,12 @@
    dice resolve (DiceSlot removes .dx-rolling at the discard reveal). Visibility is
    kept (opacity, not display) so the card never reflows. */
 .glct-delvecard .dx-row .dx-sum,
-.glct-delvecard .dx-row .dx-shift{ transition:opacity .3s ease; }
+.glct-delvecard .dx-row .dx-shift{ transition:opacity var(--gl-d-swift) ease; }
 .glct-delvecard .dx-row.dx-rolling .dx-sum,
 .glct-delvecard .dx-row.dx-rolling .dx-shift{ opacity:0; }
-.glct-delvecard .dx-sum b{ font-weight:800; }
-.glct-delvecard .dx-sum.wipe{ color:var(--dxtint); font-weight:700; }
-.glct-delvecard .dx-sum.terminal{ color:#ff6b6b; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.glct-delvecard .dx-sum b{ font-weight: var(--gl-weight-heavy); }
+.glct-delvecard .dx-sum.wipe{ color:var(--dxtint); font-weight: var(--gl-weight-bold); }
+.glct-delvecard .dx-sum.terminal{ color:#ff6b6b; font-weight: var(--gl-weight-heavy); text-transform:uppercase; letter-spacing:.04em; }
 .glct-delvecard .dx-empty{ opacity:.6; font-style:italic; padding:6px 4px; }
 
 /* ============================================================
@@ -319,7 +319,7 @@
 .glct-delveditor .dx-ed-endname{ flex:1; min-width:90px; }
 .glct-delveditor .dx-ed-featured{ display:flex; align-items:center; gap:4px; font-size:11px; white-space:nowrap; }
 .glct-delveditor .dx-ed-icon{ width:120px; }
-.glct-delveditor .dx-ed-name{ flex:1; min-width:90px; font-weight:700; }
+.glct-delveditor .dx-ed-name{ flex:1; min-width:90px; font-weight: var(--gl-weight-bold); }
 .glct-delveditor .dx-ed-vis{ display:flex; align-items:center; gap:4px; font-size:11px; white-space:nowrap; }
 .glct-delveditor .dx-ed-del{ appearance:none; border:0; background:color-mix(in srgb,var(--gl-hazard) 15%,transparent); color:#ff9a9a; width:26px; height:26px; border-radius:6px; cursor:pointer; }
 .glct-delveditor .dx-ed-del:hover:not(:disabled){ background:color-mix(in srgb,var(--gl-hazard) 40%,transparent); }

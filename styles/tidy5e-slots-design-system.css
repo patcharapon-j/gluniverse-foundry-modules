@@ -120,7 +120,7 @@
 
 /* Gradient text for headline numerals. */
 .glinv-text-gradient {
-    background: linear-gradient(180deg, #fff, #ccd5e8);
+    background: linear-gradient(180deg, rgb(var(--gl-tint-light)), #ccd5e8);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

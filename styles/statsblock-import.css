@@ -125,7 +125,7 @@
   margin: 0 0 0.2rem;
   font-family: var(--gl-tech);
   font-size: 0.6rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -147,7 +147,7 @@
   margin: 0;
   border: none;
   font-family: var(--gl-display);
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   font-size: 1.5rem;
   letter-spacing: 0.01em;
   line-height: 1.05;
@@ -231,7 +231,7 @@
   gap: 0.4rem;
   font-family: var(--gl-tech);
   font-size: 0.65rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -326,7 +326,7 @@
   color: var(--gl-text);
   font-family: var(--gl-tech);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
@@ -337,11 +337,11 @@
   border: 1px solid var(--gl-edge);
   border-radius: 0;
   /* small notch at top-left (§4.1) */
-  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
   /* clip-path clips outer box-shadows, so depth rides filter: drop-shadow (§9.1) */
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1);
   filter: drop-shadow(0 5px 12px rgb(var(--gl-tint-dark) / 0.4));
-  transition: transform 120ms var(--gl-ease),
+  transition: transform var(--gl-d-tap) var(--gl-ease),
     filter var(--gl-d-quick) var(--gl-ease),
     background var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease);
@@ -355,7 +355,7 @@
   bottom: 0;
   left: -40%;
   width: 40%;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 55%, #fff) 50%, transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-accent) 55%, rgb(var(--gl-tint-light))) 50%, transparent);
   opacity: 0;
   pointer-events: none;
 }
@@ -371,12 +371,12 @@
 }
 
 .gluni-importer button:hover::after {
-  animation: glsbi-sheen calc(520ms * var(--gl-motion-scale)) var(--gl-ease);
+  animation: glsbi-sheen calc(var(--gl-d-glide) * var(--gl-motion-scale)) var(--gl-ease);
 }
 
 /* Press (§6.2) */
 .gluni-importer button:active {
-  transform: translateY(1px) scale(0.985);
+  transform: translateY(var(--gl-press)) scale(var(--gl-press-scale));
 }
 
 .gluni-importer button:disabled {
@@ -392,7 +392,7 @@
   color: var(--gl-ink-0) !important;
   background:
     linear-gradient(180deg, var(--gl-signal-hot), var(--gl-signal)) !important;
-  border-color: color-mix(in srgb, var(--gl-signal) 60%, #000) !important;
+  border-color: color-mix(in srgb, var(--gl-signal) 60%, rgb(var(--gl-tint-dark))) !important;
   text-shadow: none;
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.45) !important;
   filter:
@@ -471,7 +471,7 @@
   border: 1px solid var(--gl-edge);
   border-radius: 14px;
   /* chamfer top-right (§4.1) */
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1),
     inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.35);
@@ -488,7 +488,7 @@
   margin: 0;
   font-family: var(--gl-tech);
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -512,7 +512,7 @@
   margin: 0.2rem 0 0;
   border: none;
   font-family: var(--gl-display);
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   font-size: 1.45rem;
   letter-spacing: 0.01em;
   color: var(--gl-text-bright);
@@ -524,7 +524,7 @@
   border: none;
   font-family: var(--gl-tech);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -551,7 +551,7 @@
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 7%, var(--gl-ink-2)), var(--gl-ink-2) 70%);
   border: 1px solid var(--gl-edge);
   /* full notch, no radius (§4.1 cards) */
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   box-shadow:
     inset 3px 0 0 color-mix(in srgb, var(--gl-accent) 55%, transparent),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
@@ -581,12 +581,12 @@
 }
 
 /* Cascade stagger for the parsed cards (§6.2) */
-.gluni-preview-card:nth-of-type(1) { animation-delay: 30ms; }
-.gluni-preview-card:nth-of-type(2) { animation-delay: 70ms; }
-.gluni-preview-card:nth-of-type(3) { animation-delay: 110ms; }
-.gluni-preview-card:nth-of-type(4) { animation-delay: 150ms; }
-.gluni-preview-card:nth-of-type(5) { animation-delay: 190ms; }
-.gluni-preview-card:nth-of-type(6) { animation-delay: 230ms; }
+.gluni-preview-card:nth-of-type(1) { animation-delay: var(--gl-d-flash); }
+.gluni-preview-card:nth-of-type(2) { animation-delay: var(--gl-d-flash); }
+.gluni-preview-card:nth-of-type(3) { animation-delay: var(--gl-d-tap); }
+.gluni-preview-card:nth-of-type(4) { animation-delay: var(--gl-d-quick); }
+.gluni-preview-card:nth-of-type(5) { animation-delay: var(--gl-d-quick); }
+.gluni-preview-card:nth-of-type(6) { animation-delay: var(--gl-d-brisk); }
 
 .gluni-ability-row {
   font-family: var(--gl-tech);
@@ -624,7 +624,7 @@
   width: 6.5rem;
   font-family: var(--gl-tech);
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -658,7 +658,7 @@
     linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 16%, transparent), color-mix(in srgb, var(--gl-accent) 5%, transparent)),
     var(--gl-ink-2);
   border: 1px solid color-mix(in srgb, var(--gl-accent) 30%, var(--gl-edge));
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1);
 }
 
@@ -695,7 +695,7 @@
 }
 
 .gluni-error {
-  font-weight: 600;
+  font-weight: var(--gl-weight-medium);
   color: var(--gl-text-bright);
 }
 
@@ -713,7 +713,7 @@
     color-mix(in srgb, var(--gl-hazard) 8%, transparent) 0 8px,
     transparent 8px 16px);
   pointer-events: none;
-  animation: glsbi-dread var(--gl-dread) ease-in-out infinite;
+  animation: glsbi-dread var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 /* ---------------------------------------------------------------------------
@@ -816,7 +816,7 @@
   color: var(--gl-accent);
   opacity: 0.7;
   filter: drop-shadow(0 0 14px color-mix(in srgb, var(--gl-accent) 50%, transparent));
-  animation: glsbi-breathe var(--gl-breathe) ease-in-out infinite;
+  animation: glsbi-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 .gluni-empty-preview h2 {
@@ -827,7 +827,7 @@
   letter-spacing: 0.4em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
-  animation: glsbi-stamp calc(550ms * var(--gl-motion-scale)) var(--gl-snap) both;
+  animation: glsbi-stamp calc(var(--gl-d-glide) * var(--gl-motion-scale)) var(--gl-snap) both;
 }
 
 .gluni-empty-preview p {

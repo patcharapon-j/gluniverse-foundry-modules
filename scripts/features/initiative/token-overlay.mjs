@@ -415,7 +415,7 @@ export class TokenOverlayManager {
       fontFamily: '"Bahnschrift", "Segoe UI", Arial, sans-serif',
       fontSize: 10,
       fontWeight: "bold",
-      fill: "#02070b",
+      fill: TOKEN_OVERLAY_PALETTE.ink,
       letterSpacing: 1.4,
       align: "center",
       trim: true
@@ -818,7 +818,7 @@ export class TokenOverlayManager {
       fontFamily: '"Bahnschrift", "Segoe UI", Arial, sans-serif',
       fontSize: 10,
       fontWeight: "bold",
-      fill: "#02070b",
+      fill: TOKEN_OVERLAY_PALETTE.ink,
       letterSpacing: 1.2,
       align: "center",
       trim: true
@@ -837,7 +837,7 @@ export class TokenOverlayManager {
       fontFamily: '"Bahnschrift", "Segoe UI", Arial, sans-serif',
       fontSize: 9,
       fontWeight: "bold",
-      fill: "#ffffff",
+      fill: TOKEN_OVERLAY_PALETTE.white,
       letterSpacing: 0.6,
       align: "right",
       trim: true,
@@ -940,7 +940,7 @@ export class TokenOverlayManager {
     gaugeGfx.beginFill(P.ink, 0.7);
     gaugeGfx.drawRect(x - 1, y - 1, barW + 2, barH + 2);
     gaugeGfx.endFill();
-    gaugeGfx.beginFill(0x1a0f02, 0.85);
+    gaugeGfx.beginFill(P.gaugeBed, 0.85);
     gaugeGfx.drawRect(x, y, barW, barH);
     gaugeGfx.endFill();
 
@@ -1201,7 +1201,7 @@ export class TokenOverlayManager {
             ? (stableSave ? localize("GLUNI.DeathSaves.Stable").toUpperCase() : `${localize("GLUNI.DeathSaves.Label").toUpperCase()} ${entry.dying.failures}/3`)
             : `${localize("GLUNI.Dying.Label").toUpperCase()} ${entry.dying.value}/${entry.dying.max}`)
         : localize("GLUNI.Delayed").toUpperCase();
-    label.style.fill = isBreak ? "#02070b" : isDying ? (stableSave ? "#04201c" : "#1a0033") : "#4aa3ff";
+    label.style.fill = isBreak ? P.ink : isDying ? (stableSave ? P.inkOnStable : P.inkOnDying) : P.delayed;
 
     const padX = fontSize * 0.6;
     const padY = fontSize * 0.32;

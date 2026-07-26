@@ -22,41 +22,50 @@
   --gluni-break-hot:   var(--gl-signal-hot);
   --gluni-break-deep:  var(--gl-warn-deep);
   --gluni-dying:       var(--gl-orchid);          /* orchid — kept distinct from secret violet */
-  --gluni-dying-hot:   #f6d9fb;
+  --gluni-dying-hot:   var(--gl-orchid-hot);
   --gluni-neutral:     #ffce6a;          /* neutral disposition reads amber, not white */
   /* Ceremony amber == signal (§2.4); the neutral disposition amber above stays. */
   --gluni-signal:      var(--gl-signal);
   --gluni-signal-hot:  var(--gl-signal-hot);
   --gluni-condition:     var(--gl-jade);
-  --gluni-condition-hot: #c2ffe8;
-  /* D&D 5e death saves — success green, failure red, calm stable teal. */
-  --gluni-save-success:     #57e08b;
-  --gluni-save-success-hot: #b6ffd0;
-  --gluni-save-failure:     #ff5d6c;
-  --gluni-save-failure-hot: #ffc0c6;
+  --gluni-condition-hot: var(--gl-jade-hot);
+  /* D&D 5e death saves — success green, failure red, calm stable teal. Each of
+     these was a near-miss literal of the semantic hue it means (#57e08b vs
+     --gl-good, #ff5d6c vs --gl-hazard): the same colour drifting by a few
+     points per feature is precisely what the token layer exists to stop. */
+  --gluni-save-success:     var(--gl-good);
+  --gluni-save-success-hot: var(--gl-good-hot);
+  --gluni-save-failure:     var(--gl-hazard);
+  --gluni-save-failure-hot: var(--gl-hazard-hot);
   --gluni-stable:           var(--gl-teal);
-  --gluni-stable-hot:       #b6fff2;
+  --gluni-stable-hot:       var(--gl-teal-hot);
   --gluni-violet:      var(--gl-violet);
   --gluni-apex:        var(--gl-apex);
   --gluni-apex-deep:   var(--gl-apex-deep);
   --gluni-apex-hot:    var(--gl-apex-hot);
   --gluni-apex-ink:    var(--gl-apex-ink);
   --gluni-ink:         var(--gl-ink-0);
-  --gluni-line:        rgba(244, 252, 255, 0.10);
+  --gluni-line:        rgb(var(--gl-tint-light) / 0.10);
   --gluni-line-strong: var(--gl-line-strong);
-  --gluni-text-dim:    rgba(243, 251, 255, 0.62);
+  --gluni-text-dim:    rgb(var(--gl-tint-light) / 0.62);
 
   /* Technical voice (micro-labels); display voice (hero numerals) is Oxanium. */
   --gluni-font-family: var(--gl-tech);
   --gluni-display-font: var(--gl-display);
 
   --gluni-ease:        var(--gl-ease);
-  --gluni-snap:        var(--gl-ease);
+  /* --gluni-snap named an overshoot and resolved to the plain decelerate curve,
+     so every "settles into place" motion on the rail — card reflow, active
+     lift, tag stamp, impact shake — landed dead flat. It maps to the real
+     overshoot now. */
+  --gluni-snap:        var(--gl-snap);
   --gluni-exit:        var(--gl-exit);
   --gluni-d-quick:     var(--gl-d-quick);
-  --gluni-d-card:      420ms;
-  --gluni-d-splash-in: 720ms;
-  --gluni-d-splash-out: 460ms;
+  /* These three were literals, which meant the rail's three most prominent
+     motions were the only ones --gl-motion-scale could not reach. */
+  --gluni-d-card:      var(--gl-d-move);
+  --gluni-d-splash-in: var(--gl-d-splash);
+  --gluni-d-splash-out: var(--gl-d-glide);
 }
 
 :root {
@@ -67,20 +76,23 @@
   --gluni-holo-c: var(--gl-holo-c);
   --gluni-magenta: var(--gl-holo-c);
 
-  /* Heavy turn-change beat timings (cinematic baseline; tiers scale via root class). */
-  --gluni-beat-anticipation: 80ms;
-  --gluni-beat-strike: 240ms;
-  --gluni-beat-gap: 60ms;
-  --gluni-beat-impact: 200ms;
-  --gluni-beat-settle: 220ms;
+  /* Heavy turn-change beat timings. The whole point of a beat sequence is that
+     the intervals stay in proportion to each other, so they all scale off the
+     one multiplier rather than being five independent literals that a motion
+     tier would leave untouched. */
+  --gluni-beat-anticipation: calc(80ms * var(--gl-motion-scale));
+  --gluni-beat-strike: calc(240ms * var(--gl-motion-scale));
+  --gluni-beat-gap: calc(60ms * var(--gl-motion-scale));
+  --gluni-beat-impact: calc(200ms * var(--gl-motion-scale));
+  --gluni-beat-settle: calc(220ms * var(--gl-motion-scale));
 
   /* Lift offsets for the active card (mockup .v4 active translate). */
-  --gluni-active-lift-y: -2px;
+  --gluni-active-lift-y: var(--gl-lift-lg);
 }
 
 .gluni-initiative {
   position: fixed;
-  z-index: 70;
+  z-index: var(--gl-z-hud);
   width: min(188px, calc(100vw - 20px));
   color: var(--gluni-white);
   font-family: var(--gluni-font-family);
@@ -165,7 +177,7 @@
   cursor: grab;
   pointer-events: auto;
   opacity: 0;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   transition:
     box-shadow var(--gluni-d-quick) var(--gluni-ease),
     opacity var(--gluni-d-quick) var(--gluni-ease);
@@ -197,17 +209,17 @@
   width: 12px;
   height: 8px;
   background:
-    linear-gradient(rgba(243, 251, 255, 0.5), rgba(243, 251, 255, 0.5)) top / 100% 1px no-repeat,
-    linear-gradient(rgba(243, 251, 255, 0.5), rgba(243, 251, 255, 0.5)) center / 100% 1px no-repeat,
-    linear-gradient(rgba(243, 251, 255, 0.5), rgba(243, 251, 255, 0.5)) bottom / 100% 1px no-repeat;
+    linear-gradient(rgb(var(--gl-tint-light) / 0.5), rgb(var(--gl-tint-light) / 0.5)) top / 100% 1px no-repeat,
+    linear-gradient(rgb(var(--gl-tint-light) / 0.5), rgb(var(--gl-tint-light) / 0.5)) center / 100% 1px no-repeat,
+    linear-gradient(rgb(var(--gl-tint-light) / 0.5), rgb(var(--gl-tint-light) / 0.5)) bottom / 100% 1px no-repeat;
   transition: background-color var(--gluni-d-quick) var(--gluni-ease);
 }
 
 .gluni-drag-handle:hover:not(:disabled) .gluni-drag-handle-grip {
   background:
-    linear-gradient(rgba(243, 251, 255, 0.9), rgba(243, 251, 255, 0.9)) top / 100% 1px no-repeat,
-    linear-gradient(rgba(243, 251, 255, 0.9), rgba(243, 251, 255, 0.9)) center / 100% 1px no-repeat,
-    linear-gradient(rgba(243, 251, 255, 0.9), rgba(243, 251, 255, 0.9)) bottom / 100% 1px no-repeat;
+    linear-gradient(rgb(var(--gl-tint-light) / 0.9), rgb(var(--gl-tint-light) / 0.9)) top / 100% 1px no-repeat,
+    linear-gradient(rgb(var(--gl-tint-light) / 0.9), rgb(var(--gl-tint-light) / 0.9)) center / 100% 1px no-repeat,
+    linear-gradient(rgb(var(--gl-tint-light) / 0.9), rgb(var(--gl-tint-light) / 0.9)) bottom / 100% 1px no-repeat;
 }
 
 .gluni-floating-turn-controls {
@@ -240,9 +252,9 @@
   border: 0;
   background: var(--gluni-ink);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
-  color: rgba(243, 251, 255, 0.78);
+  color: rgb(var(--gl-tint-light) / 0.78);
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   transition:
     background var(--gluni-d-quick) var(--gluni-ease),
     color var(--gluni-d-quick) var(--gluni-ease),
@@ -254,7 +266,14 @@
   background: var(--gluni-cyan);
   color: var(--gluni-ink);
   box-shadow: inset 0 0 0 1px transparent;
-  transform: translateY(-1px);
+  transform: translateY(var(--gl-lift));
+}
+
+/* The rail's controls had a hover state and no press state, so a click read as
+   nothing happening until the turn actually changed. */
+.gluni-turn-controls button:active {
+  transform: translateY(var(--gl-press)) scale(var(--gl-press-scale));
+  transition-duration: var(--gl-d-tap);
 }
 
 /* Horizontal round banner — fills the header row above the rail. The rail's
@@ -274,23 +293,23 @@
   min-width: 0;
   padding: 0 13px;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(2, 7, 11, 0.92), rgba(2, 7, 11, 0.74));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-ink-0) 92%, transparent), color-mix(in srgb, var(--gl-ink-0) 74%, transparent));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-cyan) 46%, var(--gluni-line) 54%),
-    inset 0 0 18px rgba(94, 234, 255, 0.14),
+    inset 0 0 18px color-mix(in srgb, var(--gl-cyan) 14%, transparent),
     0 2px 12px rgb(var(--gl-tint-dark) / 0.5);
-  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
 }
 
 .gluni-initiative--left .gluni-round-chip {
-  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 100%, 6px 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% 100%, var(--gl-cut-sm) 100%);
 }
 
 .gluni-round-chip-label {
   flex: 0 0 auto;
   color: var(--gluni-text-dim);
   font-size: 9px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   letter-spacing: 0.34em;
   text-transform: uppercase;
@@ -313,13 +332,13 @@
   color: var(--gluni-cyan);
   font-family: var(--gluni-display-font);
   font-size: 19px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
   text-shadow:
     0 0 14px color-mix(in srgb, var(--gluni-cyan) 60%, transparent),
-    0 0 30px rgba(94, 234, 255, 0.3);
+    0 0 30px color-mix(in srgb, var(--gl-cyan) 30%, transparent);
 }
 
 .gluni-rail,
@@ -385,14 +404,21 @@
   min-height: 58px;
   container-type: inline-size;
   contain: layout style;
-  background: linear-gradient(180deg, #0a1218 0%, #04080c 100%);
+  /* Two layers: the chamfer hairline parked on the notched corner, then the
+     body. The card's rim is an inset box-shadow, and clip-path cuts insets the
+     same way it cuts a border — so the bevel was the one edge of the card that
+     was never drawn. A background layer survives the clip, which is why the
+     line lives here rather than in the box-shadow stack below. */
+  background:
+    var(--gl-chamfer-edge) top right / var(--gl-cut) var(--gl-cut) no-repeat,
+    linear-gradient(180deg, var(--gl-ink-2) 0%, var(--gl-ink-0) 100%);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
     inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
     inset 0 0 0 1px var(--gluni-line),
     inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4);
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   transition:
     min-height var(--gluni-d-card) var(--gluni-ease),
     box-shadow var(--gluni-d-quick) var(--gluni-ease);
@@ -452,9 +478,9 @@
   z-index: 2;
   background: linear-gradient(
     95deg,
-    rgba(2, 5, 8, 0.95),
-    rgba(2, 5, 8, 0.48) 50%,
-    rgba(2, 5, 8, 0)
+    color-mix(in srgb, var(--gl-ink-0) 95%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 48%, transparent) 50%,
+    transparent
   );
   pointer-events: none;
 }
@@ -462,9 +488,9 @@
 .gluni-initiative--left .gluni-card-surface::before {
   background: linear-gradient(
     -95deg,
-    rgba(2, 5, 8, 0.95),
-    rgba(2, 5, 8, 0.48) 50%,
-    rgba(2, 5, 8, 0)
+    color-mix(in srgb, var(--gl-ink-0) 95%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 48%, transparent) 50%,
+    transparent
   );
 }
 
@@ -535,10 +561,10 @@
   transform: scale(calc(var(--gluni-portrait-normal-scale) * var(--gluni-portrait-quality-cap)));
   filter: contrast(1.08) saturate(1.06);
   transition:
-    transform 520ms var(--gluni-ease),
-    object-position 520ms var(--gluni-ease),
-    transform-origin 520ms var(--gluni-ease),
-    filter 360ms var(--gluni-ease);
+    transform var(--gl-d-glide) var(--gluni-ease),
+    object-position var(--gl-d-glide) var(--gluni-ease),
+    transform-origin var(--gl-d-glide) var(--gluni-ease),
+    filter var(--gl-d-swift) var(--gluni-ease);
 }
 
 .gluni-card-mystery-mark {
@@ -552,7 +578,7 @@
     var(--gluni-ink);
   font-family: var(--gluni-font-family);
   font-size: 56px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   text-shadow:
     0 0 18px color-mix(in srgb, var(--gluni-violet) 80%, transparent),
@@ -574,7 +600,7 @@
   color: var(--gluni-accent, var(--gluni-cyan));
   background:
     radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 16%, transparent), transparent 48%),
-    linear-gradient(135deg, rgba(2, 7, 11, 0.96), rgba(5, 12, 18, 0.9));
+    linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 96%, transparent), rgba(5, 12, 18, 0.9));
   pointer-events: none;
 }
 
@@ -588,7 +614,7 @@
   overflow: hidden;
   color: var(--gluni-accent, var(--gluni-cyan));
   font-size: 10px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.18em;
   line-height: 1.1;
   opacity: 0.13;
@@ -596,7 +622,7 @@
   pointer-events: none;
   text-transform: uppercase;
   transform: translateX(0);
-  animation: gluni-adhoc-repeat-drift 12s linear infinite;
+  animation: gluni-adhoc-repeat-drift var(--gl-loop-md) linear infinite;
 }
 
 .gluni-card-adhoc-repeat-line {
@@ -655,7 +681,7 @@
     );
   opacity: 0.28;
   transform: translate3d(0, 0, 0);
-  animation: gluni-delayed-triangle-wipe 7.6s linear infinite;
+  animation: gluni-delayed-triangle-wipe var(--gl-loop-sm) linear infinite;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 86%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 86%, transparent 100%);
 }
@@ -672,14 +698,14 @@
   overflow: hidden;
   color: var(--gluni-delay);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.18em;
   line-height: 1.1;
   opacity: 0.11;
   padding: 7px 0;
   text-transform: uppercase;
   transform: translateX(0);
-  animation: gluni-delayed-repeat-drift 13s linear infinite;
+  animation: gluni-delayed-repeat-drift var(--gl-loop-md) linear infinite;
 }
 
 .gluni-card-delayed-repeat-line {
@@ -734,13 +760,13 @@
   overflow: hidden;
   color: var(--gluni-condition);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.16em;
   line-height: 1.1;
   opacity: 0.12;
   padding: 7px 0;
   text-transform: uppercase;
-  animation: gluni-delayed-repeat-drift 14s linear infinite;
+  animation: gluni-delayed-repeat-drift var(--gl-loop-md) linear infinite;
 }
 
 .gluni-card-condition-repeat-line {
@@ -811,17 +837,17 @@
   padding: 2px 6px;
   overflow: hidden;
   pointer-events: auto;
-  background: rgba(2, 7, 11, 0.82);
+  background: color-mix(in srgb, var(--gl-ink-0) 82%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-condition) 46%, var(--gluni-line) 54%);
   color: var(--gluni-condition-hot);
   font-size: 8px;
-  font-weight: 900;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.08em;
   line-height: 1.3;
   text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
-  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-card-condition-label b {
@@ -859,7 +885,7 @@
   max-width: none;
   max-height: 100%;
   padding: 6px 2px;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 3px 100%, 0 calc(100% - 3px));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--gl-cut-xs) 100%, 0 calc(100% - var(--gl-cut-xs)));
 }
 
 .gluni-card-condition-labels--vertical .gluni-card-condition-label b {
@@ -879,7 +905,7 @@
   z-index: 4;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(2, 7, 11, 0.22), rgba(2, 7, 11, 0.04)),
+    linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 22%, transparent), color-mix(in srgb, var(--gl-ink-0) 4%, transparent)),
     radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--gluni-dying-hot) 30%, transparent), transparent 38%),
     radial-gradient(ellipse at 12% 80%, color-mix(in srgb, var(--gluni-dying) 14%, transparent), transparent 42%);
   opacity: 0.92;
@@ -920,7 +946,7 @@
   -webkit-mask-size: 300% 100%;
   mask-size: 300% 100%;
   opacity: 0.68;
-  animation: gluni-dying-vein-trace 4.2s ease-in-out infinite;
+  animation: gluni-dying-vein-trace var(--gl-drift) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card-dying-repeat {
@@ -931,7 +957,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--gluni-dying-hot) 86%, var(--gluni-white));
   font-size: 10px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.18em;
   line-height: 1.1;
   opacity: 0.22;
@@ -940,7 +966,7 @@
     0 0 10px color-mix(in srgb, var(--gluni-dying) 96%, transparent),
     0 0 24px color-mix(in srgb, var(--gluni-dying-hot) 58%, transparent);
   text-transform: uppercase;
-  animation: gluni-dying-repeat-drift 11s linear infinite;
+  animation: gluni-dying-repeat-drift var(--gl-loop-md) linear infinite;
 }
 
 .gluni-card-dying-repeat-line {
@@ -1005,7 +1031,7 @@
   -webkit-mask-size: 300% 300%;
   mask-size: 300% 300%;
   opacity: 0.82;
-  animation: gluni-guard-break-crack-trace 3.6s ease-in-out infinite;
+  animation: gluni-guard-break-crack-trace var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card-guard-break-repeat {
@@ -1016,7 +1042,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--gluni-break-hot) 78%, var(--gluni-white) 22%);
   font-size: 11px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.2em;
   line-height: 1;
   opacity: 0.16;
@@ -1025,7 +1051,7 @@
     0 0 10px color-mix(in srgb, var(--gluni-break-accent, var(--gluni-break)) 92%, transparent),
     0 0 22px color-mix(in srgb, var(--gluni-break-hot) 48%, transparent);
   text-transform: uppercase;
-  animation: gluni-guard-break-repeat-drift 9.5s linear infinite;
+  animation: gluni-guard-break-repeat-drift var(--gl-loop-md) linear infinite;
 }
 
 .gluni-card-guard-break-repeat-line {
@@ -1121,21 +1147,21 @@
   color: var(--gluni-ink);
   background: var(--gluni-accent, var(--gluni-cyan));
   font-size: 7px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.22em;
   line-height: 1;
-  clip-path: polygon(2px 0, 100% 0, 100% 100%, 0 100%, 0 2px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-active-tag {
   box-shadow:
     0 0 12px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent);
-  animation: gluni-active-tag-pulse 1600ms ease-in-out infinite;
+  animation: gluni-active-tag-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .gluni-adhoc-tag {
   color: var(--gluni-accent, var(--gluni-cyan));
-  background: rgba(2, 7, 11, 0.55);
+  background: color-mix(in srgb, var(--gl-ink-0) 55%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 66%, transparent);
 }
 
@@ -1151,7 +1177,7 @@
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-white) 46%, transparent),
     0 0 16px color-mix(in srgb, var(--gluni-break-accent, var(--gluni-break)) 72%, transparent);
-  animation: gluni-guard-break-tag-pulse 560ms steps(2, end) infinite;
+  animation: gluni-guard-break-tag-pulse var(--gl-d-glide) steps(2, end) infinite;
 }
 
 .gluni-dying-tag {
@@ -1160,7 +1186,7 @@
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-white) 46%, transparent),
     0 0 18px color-mix(in srgb, var(--gluni-dying) 74%, transparent);
-  animation: gluni-dying-tag-pulse 720ms ease-in-out infinite;
+  animation: gluni-dying-tag-pulse var(--gl-d-splash) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card h3 {
@@ -1169,7 +1195,7 @@
   overflow: hidden;
   color: var(--gluni-white);
   font-size: 12px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1.04;
   letter-spacing: 0.08em;
   text-overflow: ellipsis;
@@ -1194,7 +1220,7 @@
   box-shadow: none;
   font-family: var(--gluni-display-font);
   font-size: 22px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   font-variant-numeric: tabular-nums;
   line-height: 0.9;
   letter-spacing: 0;
@@ -1264,7 +1290,7 @@
     0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
     0 0 9px color-mix(in srgb, var(--gluni-dying-hot) 82%, transparent),
     0 0 20px color-mix(in srgb, var(--gluni-dying) 62%, transparent);
-  animation: gluni-dying-pip-pulse 1.1s ease-in-out infinite;
+  animation: gluni-dying-pip-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 /* bright specular glint pinned to the top facet of a lit gem */
@@ -1288,10 +1314,10 @@
   background: linear-gradient(180deg, var(--gluni-break-hot), var(--gluni-break));
   padding: 2px 3px 1px;
   font-size: 6.5px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   letter-spacing: 0.16em;
-  clip-path: polygon(2px 0, 100% 0, 100% 100%, 0 100%, 0 2px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-break-gauge-track {
@@ -1310,7 +1336,7 @@
   transform: translateY(-50%);
   color: var(--gluni-white);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1323,16 +1349,16 @@
 
 .gluni-break-gauge-value small {
   font-size: 6.5px;
-  font-weight: 900;
-  color: rgba(243, 251, 255, 0.6);
+  font-weight: var(--gl-weight-heavy);
+  color: rgb(var(--gl-tint-light) / 0.6);
 }
 
 .gluni-break-gauge-bar {
-  background: linear-gradient(180deg, rgba(255, 177, 45, 0.06), rgba(255, 177, 45, 0.14));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-warn) 6%, transparent), color-mix(in srgb, var(--gl-warn) 14%, transparent));
   box-shadow:
-    inset 0 0 0 1px rgba(255, 177, 45, 0.3),
+    inset 0 0 0 1px color-mix(in srgb, var(--gl-warn) 30%, transparent),
     inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.45);
-  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   overflow: hidden;
 }
 
@@ -1342,7 +1368,7 @@
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, var(--gluni-break-deep), var(--gluni-break) 58%, var(--gluni-break-hot));
   box-shadow: 0 0 10px color-mix(in srgb, var(--gluni-break) 70%, transparent);
-  transition: width 0.5s var(--gl-ease);
+  transition: width var(--gl-d-glide) var(--gl-ease);
 }
 
 .gluni-break-gauge-fill::after {
@@ -1370,7 +1396,7 @@
   );
   background-size: 220% 100%;
   background-position: 120% 0;
-  animation: gluni-gauge-sheen 3.4s ease-in-out infinite;
+  animation: gluni-gauge-sheen var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 @keyframes gluni-gauge-sheen {
@@ -1392,10 +1418,10 @@
 .gluni-break-gauge-seg {
   flex: 1 1 0;
   min-width: 1px;
-  background: rgba(255, 177, 45, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 177, 45, 0.22);
-  clip-path: polygon(2px 0, 100% 0, 100% 100%, 0 100%, 0 2px);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
+  background: color-mix(in srgb, var(--gl-warn) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-warn) 22%, transparent);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  transition: background var(--gl-d-swift) ease, box-shadow var(--gl-d-swift) ease;
 }
 
 .gluni-break-gauge-seg--on {
@@ -1408,7 +1434,7 @@
 /* segmented value sits over a short dark fade so it stays legible over pips */
 .gluni-break-gauge-track--seg .gluni-break-gauge-value {
   padding-left: 8px;
-  background: linear-gradient(90deg, transparent, rgba(2, 7, 11, 0.82) 45%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-ink-0) 82%, transparent) 45%);
 }
 
 .gluni-break-gauge--empty .gluni-break-gauge-value {
@@ -1417,11 +1443,11 @@
 
 /* value-change flash: amber pop when depleting, cyan-white when replenished */
 .gluni-break-gauge-track--down {
-  animation: gluni-gauge-flash-down 0.55s ease-out;
+  animation: gluni-gauge-flash-down var(--gl-d-glide) var(--gl-ease);
 }
 
 .gluni-break-gauge-track--up {
-  animation: gluni-gauge-flash-up 0.6s ease-out;
+  animation: gluni-gauge-flash-up var(--gl-d-reveal) var(--gl-ease);
 }
 
 @keyframes gluni-gauge-flash-down {
@@ -1465,18 +1491,22 @@
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.10), rgb(var(--gl-tint-light) / 0) 34%),
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.20)),
-    linear-gradient(98deg, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 14%, #0d1822), #04080c 64%);
+    linear-gradient(98deg, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 14%, var(--gl-ink-2)), var(--gl-ink-0) 64%);
   box-shadow:
-    inset 0 1px 0 rgba(94, 234, 255, 0.20),
+    inset 0 1px 0 color-mix(in srgb, var(--gl-cyan) 20%, transparent),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.6),
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 70%, var(--gluni-line) 30%),
     inset 0 0 32px rgb(var(--gl-tint-dark) / 0.4),
     0 18px 36px rgb(var(--gl-tint-dark) / 0.7),
     0 0 32px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 34%, transparent);
+  /* Same chamfer as the resting card (--gl-cut), not the 14px it used to
+     carry — the active card is the one every eye is on, and it was the one
+     card whose corner did not match the rest of the rail. The box starts at
+     -42px so the portrait can overflow above the content. */
   clip-path: polygon(
     0 -42px,
-    calc(100% - 14px) -42px,
-    100% calc(-42px + 14px),
+    calc(100% - var(--gl-cut)) -42px,
+    100% calc(-42px + var(--gl-cut)),
     100% 100%,
     0 100%
   );
@@ -1526,8 +1556,8 @@
   height: calc(100% + 42px);
   clip-path: polygon(
     0 0,
-    calc(100% - 14px) 0,
-    100% 14px,
+    calc(100% - var(--gl-cut)) 0,
+    100% var(--gl-cut),
     100% 100%,
     0 100%
   );
@@ -1545,9 +1575,9 @@
   height: 38px;
   background: linear-gradient(
     95deg,
-    rgba(2, 5, 8, 0.92),
-    rgba(2, 5, 8, 0.42) 68%,
-    rgba(2, 5, 8, 0)
+    color-mix(in srgb, var(--gl-ink-0) 92%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 42%, transparent) 68%,
+    transparent
   );
   -webkit-mask-image: linear-gradient(to top, #000 0%, rgb(var(--gl-tint-dark) / 0.82) 48%, transparent 100%);
   mask-image: linear-gradient(to top, #000 0%, rgb(var(--gl-tint-dark) / 0.82) 48%, transparent 100%);
@@ -1589,7 +1619,7 @@
     );
   opacity: 0.36;
   transform: translate3d(0, 0, 0);
-  animation: gluni-active-triangle-field 8s linear infinite;
+  animation: gluni-active-triangle-field var(--gl-loop-sm) linear infinite;
   -webkit-mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
   mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
 }
@@ -1597,9 +1627,9 @@
 .gluni-initiative--left .gluni-card--active .gluni-card-surface::before {
   background: linear-gradient(
     -95deg,
-    rgba(2, 5, 8, 0.92),
-    rgba(2, 5, 8, 0.42) 68%,
-    rgba(2, 5, 8, 0)
+    color-mix(in srgb, var(--gl-ink-0) 92%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 42%, transparent) 68%,
+    transparent
   );
 }
 
@@ -1609,7 +1639,7 @@
 
 .gluni-card--active.gluni-card--adhoc .gluni-card-surface {
   overflow: hidden;
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
 }
 
 .gluni-card--active.gluni-card--adhoc .gluni-card-bracket {
@@ -1701,7 +1731,7 @@
   color: var(--gluni-ink);
   white-space: nowrap;
   cursor: pointer;
-  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
   transition:
     transform var(--gluni-d-quick) var(--gluni-ease),
     filter var(--gluni-d-quick) var(--gluni-ease),
@@ -1710,7 +1740,7 @@
 
 .gluni-end-turn span {
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.18em;
   line-height: 1;
   text-transform: uppercase;
@@ -1718,17 +1748,17 @@
 
 .gluni-end-turn:hover {
   filter: brightness(1.12);
-  transform: translateY(-1px);
+  transform: translateY(var(--gl-lift));
   box-shadow: 0 0 32px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 64%, transparent);
 }
 
 .gluni-end-turn:active {
-  transform: translateY(0) scale(0.97);
-  transition-duration: 120ms;
+  transform: translateY(var(--gl-press)) scale(var(--gl-press-scale));
+  transition-duration: var(--gl-d-tap);
 }
 
 .gluni-end-turn.gluni-end-turn--denied {
-  animation: gluni-end-turn-shake 220ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  animation: gluni-end-turn-shake var(--gl-d-brisk) var(--gl-ease-inout) both;
 }
 
 .gluni-card--friendly {
@@ -1788,12 +1818,12 @@
 }
 
 .gluni-card--dying-high {
-  animation: gluni-dying-card-alert 920ms ease-in-out infinite;
+  animation: gluni-dying-card-alert var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--dying-critical {
   filter: brightness(1.14) saturate(1.28);
-  animation: gluni-dying-card-alert-critical 680ms ease-in-out infinite;
+  animation: gluni-dying-card-alert-critical var(--gl-d-splash) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--dying .gluni-card-accent {
@@ -1802,7 +1832,7 @@
   box-shadow:
     0 0 14px color-mix(in srgb, var(--gluni-dying) 92%, transparent),
     0 0 32px color-mix(in srgb, var(--gluni-dying-hot) 52%, transparent);
-  animation: gluni-dying-accent-pulse 920ms ease-in-out infinite;
+  animation: gluni-dying-accent-pulse var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--dying .gluni-card-sheen {
@@ -1821,12 +1851,12 @@
 }
 
 .gluni-card--dying.gluni-card--active .gluni-card-sheen {
-  animation: gluni-dying-sheen 820ms ease-in-out infinite;
+  animation: gluni-dying-sheen var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--guard-broken {
   --gluni-break-accent: color-mix(in srgb, var(--gluni-break) 62%, var(--gluni-accent, var(--gluni-cyan)) 38%);
-  animation: gluni-guard-break-card-pulse 1280ms ease-in-out infinite;
+  animation: gluni-guard-break-card-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--guard-broken .gluni-card-surface {
@@ -1883,17 +1913,17 @@
 .gluni-card--guard-broken:not(.gluni-card--active) .gluni-card-surface::after {
   opacity: 1;
   transform: scaleX(1);
-  animation: gluni-guard-break-sheen 680ms ease-in-out infinite;
+  animation: gluni-guard-break-sheen var(--gl-d-splash) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--guard-break-impact {
   animation:
-    gluni-guard-break-impact 700ms var(--gluni-snap) both,
-    gluni-guard-break-card-pulse 1280ms ease-in-out 700ms infinite;
+    gluni-guard-break-impact var(--gl-d-splash) var(--gluni-snap) both,
+    gluni-guard-break-card-pulse var(--gl-d-cinematic) var(--gl-ease-inout) var(--gl-d-splash) infinite;
 }
 
 .gluni-card--guard-break-impact .gluni-card-guard-break-bg::before {
-  animation: gluni-guard-break-crack-burst 620ms var(--gluni-snap) both;
+  animation: gluni-guard-break-crack-burst var(--gl-d-reveal) var(--gluni-snap) both;
 }
 
 .gluni-card--gm-hidden .gluni-card-surface {
@@ -1927,14 +1957,14 @@
   height: 13px;
   min-width: 30px;
   padding: 0 5px;
-  background: rgba(2, 6, 9, 0.78);
+  background: color-mix(in srgb, var(--gl-ink-0) 78%, transparent);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
   color: var(--gluni-text-dim);
   font-size: 7px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.22em;
   line-height: 1;
-  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-initiative--left .gluni-gm-visibility {
@@ -1972,8 +2002,8 @@
   opacity: 0;
   transform: translateX(3px);
   transition:
-    opacity 140ms var(--gluni-ease),
-    transform 140ms var(--gluni-ease);
+    opacity var(--gl-d-tap) var(--gluni-ease),
+    transform var(--gl-d-tap) var(--gluni-ease);
 }
 
 .gluni-initiative--left .gluni-card-controls {
@@ -2027,11 +2057,11 @@
   height: 16px;
   padding: 0;
   border: 0;
-  background: rgba(3, 8, 12, 0.82);
+  background: color-mix(in srgb, var(--gl-ink-0) 82%, transparent);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
-  color: rgba(243, 251, 255, 0.86);
+  color: rgb(var(--gl-tint-light) / 0.86);
   cursor: pointer;
-  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   font-size: 9px;
   transition:
     background var(--gluni-d-quick) var(--gluni-ease),
@@ -2073,20 +2103,20 @@
 
 .gluni-context-menu {
   position: fixed;
-  z-index: 120;
+  z-index: var(--gl-z-modal);
   display: grid;
   gap: 7px;
   width: 154px;
   padding: 8px;
   color: var(--gluni-white);
   background:
-    linear-gradient(135deg, rgba(2, 7, 11, 0.96), rgba(10, 18, 24, 0.94));
+    linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 96%, transparent), rgba(10, 18, 24, 0.94));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-cyan) 34%, var(--gluni-line) 66%),
     0 10px 28px rgb(var(--gl-tint-dark) / 0.42),
     0 0 20px color-mix(in srgb, var(--gluni-cyan) 16%, transparent);
   font-family: var(--gluni-font-family);
-  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
 }
 
 .gluni-context-field {
@@ -2096,9 +2126,9 @@
 }
 
 .gluni-context-field span {
-  color: rgba(243, 251, 255, 0.68);
+  color: rgb(var(--gl-tint-light) / 0.68);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.16em;
   line-height: 1;
   text-transform: uppercase;
@@ -2108,13 +2138,13 @@
   width: 100%;
   height: 28px;
   box-sizing: border-box;
-  border: 1px solid rgba(224, 246, 255, 0.22);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.22);
   border-radius: 3px;
   color: var(--gluni-white);
   background: rgb(var(--gl-tint-dark) / 0.46);
   font: inherit;
   font-size: 13px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   text-align: right;
 }
 
@@ -2133,15 +2163,15 @@
   background: var(--gluni-cyan);
   font: inherit;
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.12em;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-context-actions button[type="button"] {
-  color: rgba(243, 251, 255, 0.88);
-  background: rgba(3, 8, 12, 0.86);
+  color: rgb(var(--gl-tint-light) / 0.88);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
 }
 
@@ -2153,15 +2183,15 @@
   gap: 6px;
   height: 24px;
   border: 0;
-  color: rgba(255, 224, 112, 0.92);
-  background: rgba(3, 8, 12, 0.86);
+  color: color-mix(in srgb, var(--gl-warn-hot) 92%, transparent);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-break) 32%, var(--gluni-line) 68%);
   font: inherit;
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.14em;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-context-gauge:hover {
@@ -2185,7 +2215,7 @@
 .gluni-context-conditions-label {
   color: var(--gluni-text-dim);
   font-size: 7px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.22em;
 }
 
@@ -2197,15 +2227,15 @@
   padding: 0 7px;
   border: 0;
   color: var(--gluni-condition-hot);
-  background: rgba(3, 8, 12, 0.86);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-condition) 32%, var(--gluni-line) 68%);
   font: inherit;
   font-size: 8px;
-  font-weight: 900;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.1em;
   text-align: left;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-context-condition span {
@@ -2233,7 +2263,7 @@
 
 .gluni-break-gauge-editor {
   position: fixed;
-  z-index: 121;
+  z-index: calc(var(--gl-z-modal) + 1);
   display: grid;
   gap: 8px;
   width: 196px;
@@ -2246,13 +2276,13 @@
     0 10px 28px rgb(var(--gl-tint-dark) / 0.42),
     0 0 20px color-mix(in srgb, var(--gluni-break) 16%, transparent);
   font-family: var(--gluni-font-family);
-  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
 }
 
 .gluni-break-gauge-editor-title {
   color: var(--gluni-break-hot);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
@@ -2268,13 +2298,13 @@
   width: 100%;
   height: 30px;
   box-sizing: border-box;
-  border: 1px solid rgba(224, 246, 255, 0.22);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.22);
   border-radius: 3px;
   color: var(--gluni-white);
   background: rgb(var(--gl-tint-dark) / 0.46);
   font: inherit;
   font-size: 14px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   text-align: center;
 }
 
@@ -2287,7 +2317,7 @@
   background: linear-gradient(180deg, var(--gluni-break-hot), var(--gluni-break));
   font-size: 9px;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-break-gauge-modes {
@@ -2299,15 +2329,15 @@
 .gluni-break-gauge-modes button {
   height: 24px;
   border: 0;
-  color: rgba(243, 251, 255, 0.82);
-  background: rgba(3, 8, 12, 0.86);
+  color: rgb(var(--gl-tint-light) / 0.82);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
   font: inherit;
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.1em;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-break-gauge-modes button.active {
@@ -2326,10 +2356,10 @@
   border: 0;
   font: inherit;
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.12em;
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
 .gluni-break-gauge-apply {
@@ -2338,8 +2368,8 @@
 }
 
 .gluni-break-gauge-remove {
-  color: rgba(243, 251, 255, 0.88);
-  background: rgba(3, 8, 12, 0.86);
+  color: rgb(var(--gl-tint-light) / 0.88);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-red) 42%, var(--gluni-line) 58%);
 }
 
@@ -2360,17 +2390,17 @@
   justify-content: center;
   gap: 5px;
   min-height: 19px;
-  border: 1px solid rgba(94, 234, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--gl-cyan) 24%, transparent);
   border-radius: 4px;
-  background: linear-gradient(90deg, transparent, rgba(94, 234, 255, 0.18), transparent);
-  color: rgba(243, 251, 255, 0.72);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gl-cyan) 18%, transparent), transparent);
+  color: rgb(var(--gl-tint-light) / 0.72);
   font-size: 8px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   transform:
     translate(var(--gluni-flip-x), var(--gluni-flip-y))
     scaleX(var(--gluni-flip-scale-x))
     scaleY(var(--gluni-flip-scale-y));
-  transition: transform 440ms var(--gluni-snap), opacity 240ms var(--gluni-ease);
+  transition: transform var(--gl-d-move) var(--gluni-snap), opacity var(--gl-d-brisk) var(--gluni-ease);
 }
 
 .gluni-round-separator strong {
@@ -2390,7 +2420,7 @@
   padding: 2px 0;
   color: color-mix(in srgb, var(--gluni-delay) 82%, var(--gluni-white));
   font-size: 9px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.32em;
   line-height: 1;
   text-transform: uppercase;
@@ -2446,18 +2476,35 @@
 }
 
 .gluni-item--entering-bottom {
-  animation: gluni-card-enter-bottom 360ms var(--gluni-ease) both;
+  animation: gluni-card-enter-bottom var(--gl-d-swift) var(--gluni-ease) both;
 }
 
+/* ── FLIP transition override ─────────────────────────────────────────────
+   These two are the only load-bearing !important declarations on the rail, and
+   they earn it: a FLIP has to own `transition` outright for the duration of the
+   morph. The same element also matches .gluni-card (which transitions transform
+   on --gluni-d-card) and, when it is the active card, the turn-beat rules that
+   retime transform to --gluni-beat-anticipation. Those are equal-specificity
+   single-class selectors declared LATER in this file, so ordinary cascade order
+   loses — and a losing preflip means the card animates to its pre-flip offset
+   instead of snapping there, which reads as the rail lurching backwards before
+   every reorder.
+
+   Raising specificity instead would mean pinning these to .gluni-card, and the
+   flip classes are applied to whatever the row element is — deliberately
+   decoupled from the card's own class list. !important is the narrower tool. */
 .gluni-item--preflip {
+  /* Snap to the measured start offset with no interpolation — the "first" half
+     of the FLIP must be instantaneous or there is nothing to invert from. */
   transition: none !important;
 }
 
 .gluni-item--flipping {
   will-change: transform;
   /* Magic-move morph: one smooth easeOut for both the shrinking outgoing card and the
-     growing incoming active card. Longer + softer than the default snap for a premium glide. */
-  transition: transform 520ms var(--gluni-ease) !important;
+     growing incoming active card. Longer + softer than the default snap for a premium glide.
+     Paired with animMs(680) in the JS, which strips this class after the morph. */
+  transition: transform var(--gl-d-glide) var(--gluni-ease) !important;
 }
 
 .gluni-card--active-entering,
@@ -2501,10 +2548,19 @@
   transform-origin: right center;
 }
 
+/* The hover transform must restate the base transform's whole Y expression.
+   It previously dropped --gluni-card-lift-y and --gluni-reorder-shift-y, so
+   hovering a card mid-reorder — exactly when the pointer is most likely to be
+   over a moving card — yanked it back to its unshifted position and then
+   snapped it forward again on mouseout. It also carries the suite's hover lift
+   now, so the rail answers the pointer the same way every other surface does. */
 .gluni-card:hover:not(.gluni-card--active):not(.gluni-card--defeated) {
   cursor: pointer;
   transform:
-    translate(var(--gluni-flip-x), var(--gluni-flip-y))
+    translate(
+      var(--gluni-flip-x),
+      calc(var(--gluni-flip-y) + var(--gluni-card-lift-y) + var(--gluni-reorder-shift-y) + var(--gl-lift))
+    )
     translateX(var(--gluni-active-shift))
     scaleX(var(--gluni-flip-scale-x))
     scaleY(var(--gluni-flip-scale-y))
@@ -2558,7 +2614,7 @@
     0 0 30px color-mix(in srgb, var(--gluni-dying-hot) 56%, transparent);
   opacity: 1;
   transform: scaleX(1);
-  animation: gluni-dying-sheen 820ms ease-in-out infinite;
+  animation: gluni-dying-sheen var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--drop-before .gluni-card-surface::after,
@@ -2589,7 +2645,7 @@
 }
 
 .gluni-card--active-entering .gluni-card-sheen {
-  animation: gluni-card-sheen-draw 360ms var(--gluni-ease) 140ms both;
+  animation: gluni-card-sheen-draw var(--gl-d-swift) var(--gluni-ease) var(--gl-d-tap) both;
 }
 
 .gluni-card.gluni-item--entering.gluni-card--active-entering {
@@ -2597,15 +2653,15 @@
 }
 
 .gluni-card--active-entering .gluni-card-portrait {
-  animation: gluni-active-portrait 620ms var(--gluni-snap) both;
+  animation: gluni-active-portrait var(--gl-d-reveal) var(--gluni-snap) both;
 }
 
 .gluni-card--active-entering .gluni-card-mystery-mark {
-  animation: gluni-active-mystery 620ms var(--gluni-snap) both;
+  animation: gluni-active-mystery var(--gl-d-reveal) var(--gluni-snap) both;
 }
 
 .gluni-card--active-entering .gluni-card-content {
-  animation: gluni-active-content 560ms var(--gluni-ease) both;
+  animation: gluni-active-content var(--gl-d-glide) var(--gluni-ease) both;
 }
 
 /* The previously-active card now morphs back down to rail size via the FLIP transform
@@ -2616,7 +2672,7 @@
 
 .gluni-card-ghost {
   position: fixed;
-  z-index: 69;
+  z-index: calc(var(--gl-z-hud) - 1);
   pointer-events: none;
   margin: 0;
   /* clip-path is set inline by createOutgoingGhost so the cloned card keeps its silhouette. */
@@ -2626,11 +2682,11 @@
 }
 
 .gluni-card-ghost--leave.gluni-card-ghost--left {
-  animation: gluni-active-exit-left 520ms var(--gluni-exit) forwards;
+  animation: gluni-active-exit-left var(--gl-d-glide) var(--gluni-exit) forwards;
 }
 
 .gluni-card-ghost--leave.gluni-card-ghost--right {
-  animation: gluni-active-exit-right 520ms var(--gluni-exit) forwards;
+  animation: gluni-active-exit-right var(--gl-d-glide) var(--gluni-exit) forwards;
 }
 
 /* Edge specular highlight sweep — mockup `.v4 .card::before`. Separate layer so the
@@ -2726,7 +2782,7 @@
 }
 
 .gluni-card--active .gluni-card-holo::before {
-  animation: gluni-holo-drift 5s linear infinite;
+  animation: gluni-holo-drift var(--gl-drift) linear infinite;
   will-change: transform;
 }
 
@@ -2798,7 +2854,7 @@
     0 0 12px color-mix(in srgb, var(--gluni-holo-a) 52%, transparent),
     inset 0 0 12px color-mix(in srgb, var(--gluni-holo-a) 26%, transparent);
   will-change: transform, opacity;
-  animation: gluni-shockwave 440ms var(--gluni-ease) forwards;
+  animation: gluni-shockwave var(--gl-d-move) var(--gluni-ease) forwards;
 }
 
 @keyframes gluni-shockwave {
@@ -2820,7 +2876,7 @@
 .gluni-card--impact-settle .gluni-card-content,
 .gluni-card--impact-settle .gluni-initiative-badge,
 .gluni-card--impact-settle .gluni-card-portrait-wrap {
-  animation: gluni-impact-shake 220ms var(--gluni-snap) both;
+  animation: gluni-impact-shake var(--gl-d-brisk) var(--gluni-snap) both;
 }
 
 /* Gentle vertical settle on impact — NO side-to-side wobble (felt too jittery). The card
@@ -2833,7 +2889,7 @@
 
 /* Accent / holo flare on impact: brief brightness pop on the accent + holo. */
 .gluni-card--impact-settle .gluni-card-accent {
-  animation: gluni-impact-flare 320ms var(--gluni-ease) both;
+  animation: gluni-impact-flare var(--gl-d-swift) var(--gluni-ease) both;
 }
 
 @keyframes gluni-impact-flare {
@@ -2843,7 +2899,7 @@
 
 /* Incoming active SLAM (impact beat) — overshoot into place. JS adds .gluni-card--impact. */
 .gluni-card--impact {
-  animation: gluni-active-slam 200ms var(--gluni-snap) both;
+  animation: gluni-active-slam var(--gl-d-quick) var(--gluni-snap) both;
 }
 
 /* Softer slam: a small scale overshoot that eases down to rest with NO sub-1.0 bounce-back
@@ -2898,7 +2954,7 @@
 
 /* Replace the flickery steps() strobe on the break tag with a smooth heartbeat glow. */
 .gluni-guard-break-tag {
-  animation: gluni-guard-break-tag-glow 1080ms ease-in-out infinite;
+  animation: gluni-guard-break-tag-glow var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 @keyframes gluni-guard-break-tag-glow {
@@ -2917,7 +2973,7 @@
 /* One-shot entrance — declared AFTER the resting animations so it wins while present,
    then the resting pulse/glow resumes when JS removes the class. */
 .gluni-tag--enter {
-  animation: gluni-tag-stamp 460ms var(--gluni-snap) both;
+  animation: gluni-tag-stamp var(--gl-d-move) var(--gluni-snap) both;
 }
 
 @keyframes gluni-tag-stamp {
@@ -2960,7 +3016,7 @@
 .gluni-round-splash {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--gl-z-splash);
   display: grid;
   place-items: center;
   pointer-events: none;
@@ -2973,11 +3029,11 @@
   opacity: 1;
   background:
     radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gluni-cyan) 7%, transparent) 0%, transparent 38%),
-    radial-gradient(ellipse at 50% 50%, transparent 24%, rgba(2, 5, 8, 0.20) 58%, rgba(2, 5, 8, 0.46) 100%);
+    radial-gradient(ellipse at 50% 50%, transparent 24%, color-mix(in srgb, var(--gl-ink-0) 20%, transparent) 58%, color-mix(in srgb, var(--gl-ink-0) 46%, transparent) 100%);
 }
 
 .gluni-round-splash--leave {
-  animation: gluni-splash-shell-out 260ms var(--gluni-exit) 120ms forwards;
+  animation: gluni-splash-shell-out var(--gl-d-brisk) var(--gluni-exit) var(--gl-d-tap) forwards;
 }
 
 .gluni-round-rule {
@@ -3037,8 +3093,8 @@
   background: linear-gradient(
     180deg,
     rgba(10, 22, 30, 0.62),
-    rgba(2, 7, 11, 0.78) 52%,
-    rgba(2, 6, 10, 0.7)
+    color-mix(in srgb, var(--gl-ink-0) 78%, transparent) 52%,
+    color-mix(in srgb, var(--gl-ink-0) 70%, transparent)
   );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--gluni-cyan) 30%, rgb(var(--gl-tint-light) / 0.22)),
@@ -3076,9 +3132,9 @@
 }
 
 .gluni-round-label span:last-child {
-  color: rgba(243, 251, 255, 0.85);
+  color: rgb(var(--gl-tint-light) / 0.85);
   font-size: 14px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.7em;
   line-height: 1;
   padding-left: 0.7em;
@@ -3093,7 +3149,7 @@
   color: var(--gluni-white);
   font-family: var(--gluni-display-font);
   font-size: clamp(104px, 16vw, 216px);
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   font-variant-numeric: tabular-nums;
   line-height: 0.78;
   letter-spacing: 0.01em;
@@ -3102,9 +3158,13 @@
     0 14px 42px rgb(var(--gl-tint-dark) / 0.86);
 }
 
+/* Round-number digits land left-to-right off a per-digit index rather than ten
+   hand-written delays. Both ladders were literal, so the one flourish the
+   splash is built around was invisible to every motion tier. */
 .gluni-round-num .d {
-  --gluni-digit-delay: 150ms;
-  --gluni-digit-cinematic-delay: 220ms;
+  --gluni-digit-i: 0;
+  --gluni-digit-delay: calc((150ms + 14ms * var(--gluni-digit-i)) * var(--gl-motion-scale));
+  --gluni-digit-cinematic-delay: calc((220ms + 24ms * var(--gluni-digit-i)) * var(--gl-motion-scale));
   display: inline-block;
   opacity: 0.16;
   filter: brightness(0.88) blur(3px);
@@ -3121,56 +3181,41 @@
 
 .gluni-round-sub span {
   display: inline-block;
-  color: rgba(243, 251, 255, 0.36);
+  color: rgb(var(--gl-tint-light) / 0.36);
   font-size: 10px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.45em;
   text-transform: uppercase;
   opacity: 0;
 }
 
 .gluni-round-splash--show .gluni-round-rule {
-  animation: gluni-splash-rule-in 220ms var(--gluni-ease) forwards;
+  animation: gluni-splash-rule-in var(--gl-d-brisk) var(--gluni-ease) forwards;
 }
 
 .gluni-round-splash--show .gluni-round-splash-inner {
-  animation: gluni-splash-deck-in 360ms var(--gluni-snap) 70ms forwards;
+  animation: gluni-splash-deck-in var(--gl-d-swift) var(--gluni-snap) var(--gl-d-flash) forwards;
 }
 
 .gluni-round-splash--show .gluni-round-label .tick {
-  animation: gluni-splash-tick-in 180ms var(--gluni-ease) 170ms forwards;
+  animation: gluni-splash-tick-in var(--gl-d-quick) var(--gluni-ease) var(--gl-d-quick) forwards;
 }
 
 .gluni-round-splash--show .gluni-round-label span:last-child {
-  animation: gluni-splash-label-in 240ms var(--gluni-ease) 170ms forwards;
+  animation: gluni-splash-label-in var(--gl-d-brisk) var(--gluni-ease) var(--gl-d-quick) forwards;
 }
 
 .gluni-round-splash--show .gluni-round-num .d {
-  animation: gluni-splash-digit-in 300ms var(--gluni-snap) var(--gluni-digit-delay) both;
+  animation: gluni-splash-digit-in var(--gl-d-swift) var(--gluni-snap) var(--gluni-digit-delay) both;
 }
 
-.gluni-round-splash--show .gluni-round-num .d:nth-child(2) {
-  --gluni-digit-delay: 164ms;
-  --gluni-digit-cinematic-delay: 244ms;
-}
-
-.gluni-round-splash--show .gluni-round-num .d:nth-child(3) {
-  --gluni-digit-delay: 178ms;
-  --gluni-digit-cinematic-delay: 268ms;
-}
-
-.gluni-round-splash--show .gluni-round-num .d:nth-child(4) {
-  --gluni-digit-delay: 192ms;
-  --gluni-digit-cinematic-delay: 292ms;
-}
-
-.gluni-round-splash--show .gluni-round-num .d:nth-child(5) {
-  --gluni-digit-delay: 206ms;
-  --gluni-digit-cinematic-delay: 316ms;
-}
+.gluni-round-num .d:nth-child(2) { --gluni-digit-i: 1; }
+.gluni-round-num .d:nth-child(3) { --gluni-digit-i: 2; }
+.gluni-round-num .d:nth-child(4) { --gluni-digit-i: 3; }
+.gluni-round-num .d:nth-child(n + 5) { --gluni-digit-i: 4; }
 
 .gluni-round-splash--show .gluni-round-sub span {
-  animation: gluni-splash-sub-in 220ms var(--gluni-ease) 280ms forwards;
+  animation: gluni-splash-sub-in var(--gl-d-brisk) var(--gluni-ease) var(--gl-d-brisk) forwards;
 }
 
 .gluni-round-splash--leave .gluni-round-num .d {
@@ -3181,11 +3226,11 @@
 }
 
 .gluni-round-splash--leave .gluni-round-rule {
-  animation: gluni-splash-rule-out 220ms var(--gluni-exit) forwards;
+  animation: gluni-splash-rule-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 .gluni-round-splash--leave .gluni-round-splash-inner {
-  animation: gluni-splash-deck-out 260ms var(--gluni-exit) forwards;
+  animation: gluni-splash-deck-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 .gluni-round-splash--leave .gluni-round-sub span {
@@ -3197,7 +3242,7 @@
 }
 
 .gluni-round-splash--leave .gluni-round-label span:last-child {
-  animation: gluni-splash-label-out 260ms var(--gluni-exit) forwards;
+  animation: gluni-splash-label-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 /* ============================================================
@@ -3205,16 +3250,16 @@
    ============================================================ */
 
 .gluni-initiative--cinematic .gluni-card {
-  transition-duration: 620ms;
+  transition-duration: var(--gl-d-reveal);
 }
 
 .gluni-initiative--cinematic .gluni-card-portrait,
 .gluni-initiative--cinematic .gluni-card-mystery-mark {
-  transition-duration: 780ms;
+  transition-duration: var(--gl-d-splash);
 }
 
 .gluni-initiative--cinematic .gluni-card--active-entering .gluni-card-sheen {
-  animation-duration: 520ms;
+  animation-duration: var(--gl-d-glide);
   animation-timing-function: var(--gluni-ease);
 }
 
@@ -3234,49 +3279,49 @@
 }
 
 .gluni-initiative--cinematic .gluni-card--active-entering .gluni-card-sheen::after {
-  animation: gluni-card-sheen-flare 520ms var(--gluni-ease) 140ms both;
+  animation: gluni-card-sheen-flare var(--gl-d-glide) var(--gluni-ease) var(--gl-d-tap) both;
 }
 
 .gluni-initiative--cinematic .gluni-card-ghost--leave.gluni-card-ghost--left {
-  animation: gluni-active-exit-left-cinematic 720ms var(--gluni-exit) forwards;
+  animation: gluni-active-exit-left-cinematic var(--gl-d-splash) var(--gluni-exit) forwards;
 }
 
 .gluni-initiative--cinematic .gluni-card-ghost--leave.gluni-card-ghost--right {
-  animation: gluni-active-exit-right-cinematic 720ms var(--gluni-exit) forwards;
+  animation: gluni-active-exit-right-cinematic var(--gl-d-splash) var(--gluni-exit) forwards;
 }
 
 .gluni-initiative--cinematic .gluni-item--entering-bottom {
-  animation: gluni-card-enter-bottom-cinematic 480ms var(--gluni-ease) both;
+  animation: gluni-card-enter-bottom-cinematic var(--gl-d-glide) var(--gluni-ease) both;
 }
 
 .gluni-initiative--cinematic .gluni-card:not(.gluni-card--active) .gluni-card-surface::after {
-  transition-duration: 280ms;
+  transition-duration: var(--gl-d-brisk);
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-rule {
-  animation: gluni-splash-rule-in 300ms var(--gluni-ease) forwards;
+  animation: gluni-splash-rule-in var(--gl-d-swift) var(--gluni-ease) forwards;
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-splash-inner {
-  animation-duration: 320ms;
+  animation-duration: var(--gl-d-swift);
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-label .tick {
-  animation-duration: 260ms;
-  animation-delay: 240ms;
+  animation-duration: var(--gl-d-brisk);
+  animation-delay: var(--gl-d-brisk);
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-label span:last-child {
-  animation-duration: 320ms;
-  animation-delay: 240ms;
+  animation-duration: var(--gl-d-swift);
+  animation-delay: var(--gl-d-brisk);
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-num .d {
-  animation: gluni-splash-digit-in-cinematic 360ms var(--gluni-ease) var(--gluni-digit-cinematic-delay) both;
+  animation: gluni-splash-digit-in-cinematic var(--gl-d-swift) var(--gluni-ease) var(--gluni-digit-cinematic-delay) both;
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-sub span {
-  animation-delay: 420ms;
+  animation-delay: var(--gl-d-move);
 }
 
 .gluni-round-splash--cinematic .gluni-round-rule::after {
@@ -3299,7 +3344,7 @@
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--show .gluni-round-rule::after {
-  animation: gluni-splash-echo-rule-in 300ms var(--gluni-ease) 80ms forwards;
+  animation: gluni-splash-echo-rule-in var(--gl-d-swift) var(--gluni-ease) var(--gl-d-flash) forwards;
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--leave .gluni-round-num .d {
@@ -3307,16 +3352,16 @@
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--leave .gluni-round-rule {
-  animation: gluni-splash-rule-out 260ms var(--gluni-exit) forwards;
+  animation: gluni-splash-rule-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--leave .gluni-round-rule::after {
-  animation: gluni-splash-echo-rule-out 260ms var(--gluni-exit) forwards;
+  animation: gluni-splash-echo-rule-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 .gluni-round-splash--cinematic.gluni-round-splash--leave .gluni-round-splash-inner {
-  animation-duration: 320ms;
-  animation-delay: 0ms;
+  animation-duration: var(--gl-d-swift);
+  animation-delay: var(--gl-d-instant);
 }
 
 /* ============================================================
@@ -3326,7 +3371,7 @@
 .gluni-break-splash {
   position: fixed;
   inset: 0;
-  z-index: 91;
+  z-index: calc(var(--gl-z-splash) + 1);
   display: grid;
   place-items: center;
   pointer-events: none;
@@ -3339,11 +3384,11 @@
   opacity: 1;
   background:
     radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gluni-break) 9%, transparent) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(2, 5, 8, 0.26) 60%, rgba(2, 5, 8, 0.56) 100%);
+    radial-gradient(ellipse at 50% 50%, transparent 20%, color-mix(in srgb, var(--gl-ink-0) 26%, transparent) 60%, color-mix(in srgb, var(--gl-ink-0) 56%, transparent) 100%);
 }
 
 .gluni-break-splash--leave {
-  animation: gluni-break-shell-out 360ms var(--gluni-exit) 80ms forwards;
+  animation: gluni-break-shell-out var(--gl-d-swift) var(--gluni-exit) var(--gl-d-flash) forwards;
 }
 
 /* WebGL glass-crack + shockwave layer. Fullscreen, additively blended, sits
@@ -3357,7 +3402,7 @@
   pointer-events: none;
   mix-blend-mode: screen;
   opacity: 0;
-  transition: opacity 220ms var(--gluni-ease);
+  transition: opacity var(--gl-d-brisk) var(--gluni-ease);
 }
 
 .gluni-break-splash--show .gluni-break-splash-gl {
@@ -3366,7 +3411,7 @@
 
 .gluni-break-splash--leave .gluni-break-splash-gl {
   opacity: 0;
-  transition: opacity 360ms var(--gluni-exit);
+  transition: opacity var(--gl-d-swift) var(--gluni-exit);
 }
 
 .gluni-break-splash-burst {
@@ -3389,7 +3434,7 @@
 }
 
 .gluni-break-splash--show .gluni-break-splash-burst {
-  animation: gluni-break-burst-in 420ms var(--gluni-snap) forwards;
+  animation: gluni-break-burst-in var(--gl-d-move) var(--gluni-snap) forwards;
 }
 
 .gluni-break-splash-rule {
@@ -3434,11 +3479,11 @@
 }
 
 .gluni-break-splash--show .gluni-break-splash-rule {
-  animation: gluni-break-rule-in 260ms var(--gluni-snap) forwards;
+  animation: gluni-break-rule-in var(--gl-d-brisk) var(--gluni-snap) forwards;
 }
 
 .gluni-break-splash--show .gluni-break-splash-rule::before {
-  animation: gluni-break-rule-echo-in 200ms var(--gluni-ease) 120ms forwards;
+  animation: gluni-break-rule-echo-in var(--gl-d-quick) var(--gluni-ease) var(--gl-d-tap) forwards;
 }
 
 /* Foreground TYPE layer only — glass lives on the deck plate. */
@@ -3507,7 +3552,7 @@
 .gluni-break-splash-label span:last-child {
   color: color-mix(in srgb, var(--gluni-break-hot) 82%, var(--gluni-white));
   font-size: 13px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.62em;
   line-height: 1;
   padding-left: 0.62em;
@@ -3524,7 +3569,7 @@
   color: var(--gluni-break-hot);
   font-family: var(--gluni-display-font);
   font-size: clamp(112px, 18vw, 232px);
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   line-height: 0.78;
   letter-spacing: 0.06em;
   text-shadow:
@@ -3533,51 +3578,32 @@
     0 16px 48px rgb(var(--gl-tint-dark) / 0.88);
 }
 
+/* Letters of the GUARD BREAK banner land in sequence. Both ladders were twenty
+   hand-written literals forming two exact arithmetic runs (96+22n, 150+28n) —
+   which meant a motion tier could not reach the splash's signature flourish,
+   and an 11th letter silently reverted to the first letter's delay and landed
+   out of order. */
 .gluni-break-splash-text .d {
-  --gluni-break-letter-delay: 96ms;
-  --gluni-break-letter-cinematic-delay: 150ms;
+  --gluni-break-letter-i: 0;
+  --gluni-break-letter-delay: calc((96ms + 22ms * var(--gluni-break-letter-i)) * var(--gl-motion-scale));
+  --gluni-break-letter-cinematic-delay: calc((150ms + 28ms * var(--gluni-break-letter-i)) * var(--gl-motion-scale));
   display: inline-block;
   opacity: 0;
   filter: brightness(0.8) blur(3px);
   transform: translateY(16px) scaleY(1.14);
 }
 
-.gluni-break-splash-text .d:nth-child(2) {
-  --gluni-break-letter-delay: 118ms;
-  --gluni-break-letter-cinematic-delay: 178ms;
-}
-.gluni-break-splash-text .d:nth-child(3) {
-  --gluni-break-letter-delay: 140ms;
-  --gluni-break-letter-cinematic-delay: 206ms;
-}
-.gluni-break-splash-text .d:nth-child(4) {
-  --gluni-break-letter-delay: 162ms;
-  --gluni-break-letter-cinematic-delay: 234ms;
-}
-.gluni-break-splash-text .d:nth-child(5) {
-  --gluni-break-letter-delay: 184ms;
-  --gluni-break-letter-cinematic-delay: 262ms;
-}
-.gluni-break-splash-text .d:nth-child(6) {
-  --gluni-break-letter-delay: 206ms;
-  --gluni-break-letter-cinematic-delay: 290ms;
-}
-.gluni-break-splash-text .d:nth-child(7) {
-  --gluni-break-letter-delay: 228ms;
-  --gluni-break-letter-cinematic-delay: 318ms;
-}
-.gluni-break-splash-text .d:nth-child(8) {
-  --gluni-break-letter-delay: 250ms;
-  --gluni-break-letter-cinematic-delay: 346ms;
-}
-.gluni-break-splash-text .d:nth-child(9) {
-  --gluni-break-letter-delay: 272ms;
-  --gluni-break-letter-cinematic-delay: 374ms;
-}
-.gluni-break-splash-text .d:nth-child(10) {
-  --gluni-break-letter-delay: 294ms;
-  --gluni-break-letter-cinematic-delay: 402ms;
-}
+.gluni-break-splash-text .d:nth-child(2) { --gluni-break-letter-i: 1; }
+.gluni-break-splash-text .d:nth-child(3) { --gluni-break-letter-i: 2; }
+.gluni-break-splash-text .d:nth-child(4) { --gluni-break-letter-i: 3; }
+.gluni-break-splash-text .d:nth-child(5) { --gluni-break-letter-i: 4; }
+.gluni-break-splash-text .d:nth-child(6) { --gluni-break-letter-i: 5; }
+.gluni-break-splash-text .d:nth-child(7) { --gluni-break-letter-i: 6; }
+.gluni-break-splash-text .d:nth-child(8) { --gluni-break-letter-i: 7; }
+.gluni-break-splash-text .d:nth-child(9) { --gluni-break-letter-i: 8; }
+/* Letters past the tenth share the last step rather than resetting to the
+   first, so a long name still reads left-to-right. */
+.gluni-break-splash-text .d:nth-child(n + 10) { --gluni-break-letter-i: 9; }
 
 .gluni-break-splash-name {
   position: absolute;
@@ -3591,7 +3617,7 @@
   display: inline-block;
   color: color-mix(in srgb, var(--gluni-break-hot) 52%, var(--gluni-white) 48%);
   font-size: 12px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.38em;
   text-transform: uppercase;
   text-shadow:
@@ -3602,23 +3628,23 @@
 /* Default intensity */
 
 .gluni-break-splash--show .gluni-break-splash-inner {
-  animation: gluni-break-deck-in 340ms var(--gluni-snap) 50ms forwards;
+  animation: gluni-break-deck-in var(--gl-d-swift) var(--gluni-snap) var(--gl-d-flash) forwards;
 }
 
 .gluni-break-splash--show .gluni-break-splash-label .tick {
-  animation: gluni-break-tick-in 220ms var(--gluni-snap) 140ms forwards;
+  animation: gluni-break-tick-in var(--gl-d-brisk) var(--gluni-snap) var(--gl-d-tap) forwards;
 }
 
 .gluni-break-splash--show .gluni-break-splash-label span:last-child {
-  animation: gluni-break-label-in 260ms var(--gluni-ease) 140ms forwards;
+  animation: gluni-break-label-in var(--gl-d-brisk) var(--gluni-ease) var(--gl-d-tap) forwards;
 }
 
 .gluni-break-splash--show .gluni-break-splash-text .d {
-  animation: gluni-break-letter-in 300ms var(--gluni-snap) var(--gluni-break-letter-delay) both;
+  animation: gluni-break-letter-in var(--gl-d-swift) var(--gluni-snap) var(--gluni-break-letter-delay) both;
 }
 
 .gluni-break-splash--show .gluni-break-splash-name span {
-  animation: gluni-break-name-in 260ms var(--gluni-ease) 320ms forwards;
+  animation: gluni-break-name-in var(--gl-d-brisk) var(--gluni-ease) var(--gl-d-swift) forwards;
 }
 
 /* Leave state */
@@ -3631,7 +3657,7 @@
 }
 
 .gluni-break-splash--leave .gluni-break-splash-rule {
-  animation: gluni-break-rule-out 280ms var(--gluni-exit) forwards;
+  animation: gluni-break-rule-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 .gluni-break-splash--leave .gluni-break-splash-rule::before {
@@ -3639,11 +3665,11 @@
 }
 
 .gluni-break-splash--leave .gluni-break-splash-inner {
-  animation: gluni-break-deck-out 320ms var(--gluni-exit) forwards;
+  animation: gluni-break-deck-out var(--gl-d-swift) var(--gluni-exit) forwards;
 }
 
 .gluni-break-splash--leave .gluni-break-splash-burst {
-  animation: gluni-break-burst-out 400ms var(--gluni-exit) forwards;
+  animation: gluni-break-burst-out var(--gl-d-move) var(--gluni-exit) forwards;
 }
 
 .gluni-break-splash--leave .gluni-break-splash-name span,
@@ -3652,39 +3678,39 @@
 }
 
 .gluni-break-splash--leave .gluni-break-splash-label span:last-child {
-  animation: gluni-break-label-out 280ms var(--gluni-exit) forwards;
+  animation: gluni-break-label-out var(--gl-d-brisk) var(--gluni-exit) forwards;
 }
 
 /* Cinematic tier */
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-burst {
-  animation: gluni-break-burst-in-cinematic 540ms var(--gluni-snap) forwards;
+  animation: gluni-break-burst-in-cinematic var(--gl-d-glide) var(--gluni-snap) forwards;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-rule {
-  animation: gluni-break-rule-in 320ms var(--gluni-snap) forwards;
+  animation: gluni-break-rule-in var(--gl-d-swift) var(--gluni-snap) forwards;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-inner {
-  animation-duration: 340ms;
+  animation-duration: var(--gl-d-swift);
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-label .tick {
-  animation-duration: 280ms;
-  animation-delay: 200ms;
+  animation-duration: var(--gl-d-brisk);
+  animation-delay: var(--gl-d-quick);
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-label span:last-child {
-  animation-duration: 340ms;
-  animation-delay: 200ms;
+  animation-duration: var(--gl-d-swift);
+  animation-delay: var(--gl-d-quick);
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-text .d {
-  animation: gluni-break-letter-in-cinematic 400ms var(--gluni-snap) var(--gluni-break-letter-cinematic-delay) both;
+  animation: gluni-break-letter-in-cinematic var(--gl-d-move) var(--gluni-snap) var(--gluni-break-letter-cinematic-delay) both;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-name span {
-  animation-delay: 460ms;
+  animation-delay: var(--gl-d-move);
 }
 
 .gluni-break-splash--cinematic .gluni-break-splash-rule::after {
@@ -3707,7 +3733,7 @@
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--show .gluni-break-splash-rule::after {
-  animation: gluni-break-rule-echo-in 240ms var(--gluni-ease) 100ms forwards;
+  animation: gluni-break-rule-echo-in var(--gl-d-brisk) var(--gluni-ease) var(--gl-d-tap) forwards;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--leave .gluni-break-splash-text .d {
@@ -3715,24 +3741,24 @@
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--leave .gluni-break-splash-rule {
-  animation: gluni-break-rule-out 320ms var(--gluni-exit) forwards;
+  animation: gluni-break-rule-out var(--gl-d-swift) var(--gluni-exit) forwards;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--leave .gluni-break-splash-rule::after {
-  animation: gluni-break-rule-echo-out 300ms var(--gluni-exit) forwards;
+  animation: gluni-break-rule-echo-out var(--gl-d-swift) var(--gluni-exit) forwards;
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--leave .gluni-break-splash-inner {
-  animation-duration: 380ms;
-  animation-delay: 0ms;
+  animation-duration: var(--gl-d-move);
+  animation-delay: var(--gl-d-instant);
 }
 
 .gluni-portrait-dialog .window-content,
 .gluni-adhoc-dialog .window-content {
   color: var(--gluni-white);
   background:
-    linear-gradient(135deg, rgba(5, 9, 13, 0.96), rgba(12, 22, 30, 0.94)),
-    radial-gradient(circle at 78% 12%, rgba(94, 234, 255, 0.12), transparent 34%);
+    linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 96%, transparent), rgba(12, 22, 30, 0.94)),
+    radial-gradient(circle at 78% 12%, color-mix(in srgb, var(--gl-cyan) 12%, transparent), transparent 34%);
   font-family: var(--gluni-font-family);
 }
 
@@ -3754,9 +3780,9 @@
 }
 
 .gluni-adhoc-field span {
-  color: rgba(243, 251, 255, 0.72);
+  color: rgb(var(--gl-tint-light) / 0.72);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.12em;
   line-height: 1;
   text-transform: uppercase;
@@ -3766,13 +3792,13 @@
 .gluni-adhoc-field select {
   width: 100%;
   height: 30px;
-  border: 1px solid rgba(224, 246, 255, 0.2);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.2);
   border-radius: 4px;
   color: var(--gluni-white);
   background: rgb(var(--gl-tint-dark) / 0.42);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: var(--gl-weight-heavy);
 }
 
 .gluni-adhoc-field input {
@@ -3796,8 +3822,8 @@
   width: 34px;
   height: 30px;
   color: var(--gluni-cyan);
-  background: rgba(2, 7, 11, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(94, 234, 255, 0.26);
+  background: color-mix(in srgb, var(--gl-ink-0) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-cyan) 26%, transparent);
   font-size: 15px;
 }
 
@@ -3808,7 +3834,7 @@
 
 .gluni-portrait-config-note {
   margin: 0;
-  color: rgba(243, 251, 255, 0.72);
+  color: rgb(var(--gl-tint-light) / 0.72);
   font-size: 11px;
   line-height: 1.35;
 }
@@ -3824,9 +3850,9 @@
   gap: 9px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid rgba(224, 246, 255, 0.18);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.18);
   border-radius: 5px;
-  background: rgba(2, 7, 11, 0.62);
+  background: color-mix(in srgb, var(--gl-ink-0) 62%, transparent);
   box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.03);
 }
 
@@ -3841,7 +3867,7 @@
 .gluni-portrait-config-panel-head strong {
   color: var(--gluni-white);
   font-size: 12px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0;
   line-height: 1;
   text-transform: uppercase;
@@ -3849,9 +3875,9 @@
 
 .gluni-portrait-config-panel-head span {
   overflow: hidden;
-  color: rgba(243, 251, 255, 0.56);
+  color: rgb(var(--gl-tint-light) / 0.56);
   font-size: 8px;
-  font-weight: 850;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -3904,9 +3930,9 @@
 }
 
 .gluni-portrait-control span {
-  color: rgba(243, 251, 255, 0.72);
+  color: rgb(var(--gl-tint-light) / 0.72);
   font-size: 9px;
-  font-weight: 850;
+  font-weight: var(--gl-weight-heavy);
   line-height: 1;
   text-transform: uppercase;
 }
@@ -3921,13 +3947,13 @@
   width: 58px;
   height: 24px;
   padding: 0 5px;
-  border: 1px solid rgba(224, 246, 255, 0.2);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.2);
   border-radius: 4px;
   color: var(--gluni-white);
   background: rgb(var(--gl-tint-dark) / 0.42);
   font-family: inherit;
   font-size: 10px;
-  font-weight: 900;
+  font-weight: var(--gl-weight-heavy);
   text-align: right;
 }
 
@@ -3953,7 +3979,7 @@
 
 .gluni-status-flash span {
   font-size: clamp(24px, 18cqw, 34px);
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.12em;
   line-height: 1;
   text-transform: uppercase;
@@ -3964,11 +3990,11 @@
 }
 
 .gluni-status-flash--go span {
-  animation: gluni-status-flash-text 520ms var(--gluni-snap) both;
+  animation: gluni-status-flash-text var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-status-flash--break {
-  background: linear-gradient(90deg, rgba(2, 7, 11, 0.92), rgba(255, 111, 26, 0.14) 50%, rgba(2, 7, 11, 0.92));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-ink-0) 92%, transparent), color-mix(in srgb, var(--gl-warn-deep) 14%, transparent) 50%, color-mix(in srgb, var(--gl-ink-0) 92%, transparent));
 }
 
 .gluni-status-flash--break span {
@@ -3980,7 +4006,7 @@
 }
 
 .gluni-status-flash--delay {
-  background: linear-gradient(90deg, rgba(2, 7, 11, 0.92), rgba(74, 163, 255, 0.12) 50%, rgba(2, 7, 11, 0.92));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-ink-0) 92%, transparent), color-mix(in srgb, var(--gl-info) 12%, transparent) 50%, color-mix(in srgb, var(--gl-ink-0) 92%, transparent));
 }
 
 .gluni-status-flash--delay::before {
@@ -3999,14 +4025,14 @@
 }
 
 .gluni-status-flash--delay.gluni-status-flash--go::before {
-  animation: gluni-delay-sweep 540ms var(--gluni-snap) both;
+  animation: gluni-delay-sweep var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-status-flash--delay span {
   color: var(--gluni-delay-hot);
   text-shadow:
     0 0 24px var(--gluni-delay),
-    0 0 52px rgba(74, 163, 255, 0.42),
+    0 0 52px color-mix(in srgb, var(--gl-info) 42%, transparent),
     0 4px 14px rgb(var(--gl-tint-dark) / 0.92);
 }
 
@@ -4020,15 +4046,15 @@
   inset: 0;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--gluni-dying) 26%, rgba(2, 7, 11, 0.94)),
-    color-mix(in srgb, var(--gluni-dying-hot) 38%, rgba(2, 7, 11, 0.88)) 36%,
+    color-mix(in srgb, var(--gluni-dying) 26%, color-mix(in srgb, var(--gl-ink-0) 94%, transparent)),
+    color-mix(in srgb, var(--gluni-dying-hot) 38%, color-mix(in srgb, var(--gl-ink-0) 88%, transparent)) 36%,
     transparent 56%
   );
   transform: translateX(-120%);
 }
 
 .gluni-status-flash--dying.gluni-status-flash--go::before {
-  animation: gluni-dying-wipe-mask 540ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-mask var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-status-flash--dying span {
@@ -4042,9 +4068,9 @@
 .gluni-status-flash--condition {
   background: linear-gradient(
     90deg,
-    rgba(2, 7, 11, 0.92),
+    color-mix(in srgb, var(--gl-ink-0) 92%, transparent),
     color-mix(in srgb, var(--gluni-condition) 14%, transparent) 50%,
-    rgba(2, 7, 11, 0.92)
+    color-mix(in srgb, var(--gl-ink-0) 92%, transparent)
   );
 }
 
@@ -4071,13 +4097,13 @@
 .gluni-card--condition-entering .gluni-card-condition-bg,
 .gluni-card--condition-entering .gluni-card-condition-repeat {
   clip-path: inset(0 100% 0 0);
-  animation: gluni-dying-wipe-reveal 560ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-initiative--left .gluni-card--condition-entering .gluni-card-condition-bg,
 .gluni-initiative--left .gluni-card--condition-entering .gluni-card-condition-repeat {
   clip-path: inset(0 0 0 100%);
-  animation: gluni-dying-wipe-reveal-left 560ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal-left var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 /* Dying layer wipe reveal */
@@ -4085,18 +4111,18 @@
 .gluni-card--dying-entering .gluni-card-dying-bg,
 .gluni-card--dying-entering .gluni-card-dying-repeat {
   clip-path: inset(0 100% 0 0);
-  animation: gluni-dying-wipe-reveal 540ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-initiative--left .gluni-card--dying-entering .gluni-card-dying-bg,
 .gluni-initiative--left .gluni-card--dying-entering .gluni-card-dying-repeat {
   clip-path: inset(0 0 0 100%);
-  animation: gluni-dying-wipe-reveal-left 540ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal-left var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-card--dying-entering .gluni-dying-pips {
   opacity: 0;
-  animation: gluni-dying-pips-fade-in 320ms var(--gluni-ease) 420ms both;
+  animation: gluni-dying-pips-fade-in var(--gl-d-swift) var(--gluni-ease) var(--gl-d-move) both;
 }
 
 .gluni-card--dying-entering .gluni-card-accent {
@@ -4109,27 +4135,27 @@
 .gluni-card--delay-entering .gluni-card-delayed-bg,
 .gluni-card--delay-entering .gluni-card-delayed-repeat {
   clip-path: inset(0 100% 0 0);
-  animation: gluni-dying-wipe-reveal 560ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 .gluni-initiative--left .gluni-card--delay-entering .gluni-card-delayed-bg,
 .gluni-initiative--left .gluni-card--delay-entering .gluni-card-delayed-repeat {
   clip-path: inset(0 0 0 100%);
-  animation: gluni-dying-wipe-reveal-left 560ms var(--gluni-snap) both;
+  animation: gluni-dying-wipe-reveal-left var(--gl-d-glide) var(--gluni-snap) both;
 }
 
 /* Run the glow settle alongside the shared slide-in (which owns transform/
    opacity/filter) — higher specificity so both animations apply on the card. */
 .gluni-initiative--right .gluni-card--delay-entering.gluni-card--slide-in {
   animation:
-    gluni-card-slide-in-right 360ms var(--gluni-snap) both,
-    gluni-delay-settle 700ms var(--gluni-snap) both;
+    gluni-card-slide-in-right var(--gl-d-swift) var(--gluni-snap) both,
+    gluni-delay-settle var(--gl-d-splash) var(--gluni-snap) both;
 }
 
 .gluni-initiative--left .gluni-card--delay-entering.gluni-card--slide-in {
   animation:
-    gluni-card-slide-in-left 360ms var(--gluni-snap) both,
-    gluni-delay-settle 700ms var(--gluni-snap) both;
+    gluni-card-slide-in-left var(--gl-d-swift) var(--gluni-snap) both,
+    gluni-delay-settle var(--gl-d-splash) var(--gluni-snap) both;
 }
 
 @keyframes gluni-delay-settle {
@@ -4176,33 +4202,37 @@
 /* Slide-out ghost for status transitions */
 
 .gluni-status-slide-ghost {
+  /* One step above the rail, matching .gluni-card-ghost-layer. Was set
+     inline from JS as a bare 71, so the stylesheet did not describe its own
+     stacking. */
+  z-index: calc(var(--gl-z-hud) + 1);
   pointer-events: none;
   contain: layout style;
   box-shadow: inset 0 0 0 1px var(--gluni-line);
 }
 
 .gluni-status-slide-ghost--go-right {
-  transition: transform 280ms var(--gluni-exit), opacity 280ms var(--gluni-exit), filter 280ms var(--gluni-exit);
+  transition: transform var(--gl-d-brisk) var(--gluni-exit), opacity var(--gl-d-brisk) var(--gluni-exit), filter var(--gl-d-brisk) var(--gluni-exit);
   transform: translateX(100px);
   opacity: 0;
   filter: blur(5px);
 }
 
 .gluni-status-slide-ghost--go-left {
-  transition: transform 280ms var(--gluni-exit), opacity 280ms var(--gluni-exit), filter 280ms var(--gluni-exit);
+  transition: transform var(--gl-d-brisk) var(--gluni-exit), opacity var(--gl-d-brisk) var(--gluni-exit), filter var(--gl-d-brisk) var(--gluni-exit);
   transform: translateX(-100px);
   opacity: 0;
   filter: blur(5px);
 }
 
 .gluni-status-slide-ghost--cinematic.gluni-status-slide-ghost--go-right {
-  transition-duration: 380ms;
+  transition-duration: var(--gl-d-move);
   transform: translateX(140px);
   filter: blur(8px);
 }
 
 .gluni-status-slide-ghost--cinematic.gluni-status-slide-ghost--go-left {
-  transition-duration: 380ms;
+  transition-duration: var(--gl-d-move);
   transform: translateX(-140px);
   filter: blur(8px);
 }
@@ -4210,11 +4240,11 @@
 /* Slide-in for cards arriving at new position */
 
 .gluni-initiative--right .gluni-card--slide-in {
-  animation: gluni-card-slide-in-right 360ms var(--gluni-snap) both;
+  animation: gluni-card-slide-in-right var(--gl-d-swift) var(--gluni-snap) both;
 }
 
 .gluni-initiative--left .gluni-card--slide-in {
-  animation: gluni-card-slide-in-left 360ms var(--gluni-snap) both;
+  animation: gluni-card-slide-in-left var(--gl-d-swift) var(--gluni-snap) both;
 }
 
 @keyframes gluni-card-enter {
@@ -5352,7 +5382,7 @@
 
 /* Round rule glint: fires on settle (after --show), gated to high+cinematic for premium feel. */
 .gluni-round-splash--show .gluni-round-rule::before {
-  animation: gluni-splash-rule-glint 540ms var(--gluni-ease) 220ms forwards;
+  animation: gluni-splash-rule-glint var(--gl-d-glide) var(--gluni-ease) var(--gl-d-brisk) forwards;
 }
 
 @keyframes gluni-splash-rule-glint {
@@ -5365,14 +5395,14 @@
    Applied to the deck/type plate so the scrim stays still. Reduced tier never gets the class. */
 .gluni-break-splash--shake .gluni-break-splash-inner {
   animation:
-    gluni-break-deck-in 340ms var(--gluni-snap) 50ms forwards,
-    gluni-break-shake 420ms ease-out 40ms;
+    gluni-break-deck-in var(--gl-d-swift) var(--gluni-snap) var(--gl-d-flash) forwards,
+    gluni-break-shake var(--gl-d-move) var(--gl-ease) var(--gl-d-flash);
 }
 
 .gluni-break-splash--cinematic.gluni-break-splash--shake .gluni-break-splash-inner {
   animation:
-    gluni-break-deck-in 340ms var(--gluni-snap) 50ms forwards,
-    gluni-break-shake-strong 520ms ease-out 40ms;
+    gluni-break-deck-in var(--gl-d-swift) var(--gluni-snap) var(--gl-d-flash) forwards,
+    gluni-break-shake-strong var(--gl-d-glide) var(--gl-ease) var(--gl-d-flash);
 }
 
 @keyframes gluni-break-shake {
@@ -5431,8 +5461,8 @@
   width: 9px;
   aspect-ratio: 1 / 1;
   background:
-    radial-gradient(circle at 50% 50%, rgba(243, 251, 255, 0.12), transparent 54%),
-    linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
+    radial-gradient(circle at 50% 50%, rgb(var(--gl-tint-light) / 0.12), transparent 54%),
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
     inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
     inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
@@ -5453,7 +5483,7 @@
 .gluni-deathsave-pip--success {
   background:
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gluni-save-success) 16%, transparent), transparent 54%),
-    linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
     inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
     inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
@@ -5468,7 +5498,7 @@
 .gluni-deathsave-pip--failure {
   background:
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gluni-save-failure) 16%, transparent), transparent 54%),
-    linear-gradient(145deg, rgba(243, 251, 255, 0.18), rgba(18, 22, 22, 0.76));
+    linear-gradient(145deg, rgb(var(--gl-tint-light) / 0.18), rgba(18, 22, 22, 0.76));
   box-shadow:
     inset 1px 1px 0 rgb(var(--gl-tint-light) / 0.24),
     inset -1px -1px 0 rgb(var(--gl-tint-dark) / 0.68),
@@ -5507,7 +5537,7 @@
     0 1px 2px rgb(var(--gl-tint-dark) / 0.7),
     0 0 10px color-mix(in srgb, var(--gluni-save-failure-hot) 86%, transparent),
     0 0 22px color-mix(in srgb, var(--gluni-save-failure) 64%, transparent);
-  animation: gluni-deathsave-fail-pulse 1.1s ease-in-out infinite;
+  animation: gluni-deathsave-fail-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .gluni-deathsave-pip--failure.gluni-deathsave-pip--filled::before {
@@ -5564,7 +5594,7 @@
   box-shadow:
     0 0 10px color-mix(in srgb, var(--gluni-stable) 70%, transparent),
     0 0 22px color-mix(in srgb, var(--gluni-stable-hot) 34%, transparent);
-  animation: gluni-stable-accent-breathe 3.6s ease-in-out infinite;
+  animation: gluni-stable-accent-breathe var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 .gluni-card--stable .gluni-card-sheen {
@@ -5590,7 +5620,7 @@
 /* Recolour the ambient background + repeat text toward calm teal. */
 .gluni-card--stable .gluni-card-dying-bg {
   background:
-    linear-gradient(135deg, rgba(2, 7, 11, 0.22), rgba(2, 7, 11, 0.04)),
+    linear-gradient(135deg, color-mix(in srgb, var(--gl-ink-0) 22%, transparent), color-mix(in srgb, var(--gl-ink-0) 4%, transparent)),
     radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--gluni-stable-hot) 24%, transparent), transparent 38%),
     radial-gradient(ellipse at 12% 80%, color-mix(in srgb, var(--gluni-stable) 12%, transparent), transparent 42%);
   opacity: 0.7;
@@ -5661,11 +5691,11 @@
   margin-left: 1px;
   padding: 1px 4px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 22%, rgba(3, 8, 12, 0.86));
+  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 22%, color-mix(in srgb, var(--gl-ink-0) 86%, transparent));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 46%, transparent);
   color: var(--gluni-white);
   font-size: 9px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.04em;
 }
 
@@ -5681,11 +5711,11 @@
   height: 19px;
   padding: 0;
   border: 0;
-  background: rgba(3, 8, 12, 0.86);
+  background: color-mix(in srgb, var(--gl-ink-0) 86%, transparent);
   box-shadow: inset 0 0 0 1px var(--gluni-line);
-  color: rgba(243, 251, 255, 0.9);
+  color: rgb(var(--gl-tint-light) / 0.9);
   cursor: pointer;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   font-size: 10px;
   transition:
     background var(--gluni-d-quick) var(--gluni-ease),
@@ -5696,7 +5726,7 @@
 .gluni-initiative--left .gluni-card-swap {
   left: auto;
   right: 7px;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--gl-cut-xs) 100%, 0 calc(100% - var(--gl-cut-xs)));
 }
 
 .gluni-card-swap:hover,
@@ -5711,7 +5741,7 @@
 /* While selecting a swap target, the source card holds a steady pulse and the
    eligible targets light up with a clickable overlay. */
 .gluni-card--swap-source {
-  animation: gluni-card-swap-source-pulse 1100ms var(--gluni-ease) infinite;
+  animation: gluni-card-swap-source-pulse var(--gl-d-cinematic) var(--gluni-ease) infinite;
 }
 
 @keyframes gluni-card-swap-source-pulse {
@@ -5734,16 +5764,16 @@
   gap: 4px;
   border: 1px dashed color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 70%, transparent);
   border-radius: 5px;
-  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 16%, rgba(2, 7, 11, 0.5));
+  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 16%, color-mix(in srgb, var(--gl-ink-0) 50%, transparent));
   color: var(--gluni-white);
   cursor: pointer;
   font-size: 9px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.12em;
   opacity: 0;
   transition: opacity var(--gluni-d-quick) var(--gluni-ease),
               background var(--gluni-d-quick) var(--gluni-ease);
-  animation: gluni-swap-pick-in 200ms var(--gluni-ease) forwards;
+  animation: gluni-swap-pick-in var(--gl-d-quick) var(--gluni-ease) forwards;
 }
 
 .gluni-card-swap-pick i {
@@ -5751,7 +5781,7 @@
 }
 
 .gluni-card-swap-pick:hover {
-  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 30%, rgba(2, 7, 11, 0.45));
+  background: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 30%, color-mix(in srgb, var(--gl-ink-0) 45%, transparent));
 }
 
 @keyframes gluni-swap-pick-in {
@@ -5842,7 +5872,7 @@
 }
 
 .gluni-initiative--card-mode .gluni-card--active {
-  --gluni-active-lift-y: -4px;
+  --gluni-active-lift-y: calc(var(--gl-lift-lg) * 2);
 }
 
 /* --- Hover-to-expand: peek a compressed card without changing turn order --- */
@@ -5926,11 +5956,11 @@
 .gluni-sliver-icon--cond {
   padding: 0 3px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--gluni-condition) 32%, rgba(2, 7, 11, 0.8));
+  background: color-mix(in srgb, var(--gluni-condition) 32%, color-mix(in srgb, var(--gl-ink-0) 80%, transparent));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-condition) 55%, transparent);
   color: var(--gluni-condition-hot);
   font-size: 9px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6015,7 +6045,7 @@
   opacity: 1;
   visibility: visible;
   border-radius: 3px;
-  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
 }
 
 .gluni-card-deck-stub-pile .gluni-card-back-emblem {
@@ -6031,21 +6061,21 @@
 .gluni-card-deck-stub-label {
   color: var(--gluni-text-dim);
   font-size: 9px;
-  font-weight: 900;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.18em;
 }
 
 .gluni-card-deck-stub-count {
   color: color-mix(in srgb, var(--gluni-deck-a, var(--gluni-violet)) 60%, var(--gluni-white));
   font-size: 18px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   font-variant-numeric: tabular-nums;
 }
 
 /* --- Deal-in: freshly dealt cards rise out of the deck and resolve ------- */
 .gluni-initiative--card-mode .gluni-item--entering,
 .gluni-initiative--card-mode .gluni-item--entering-bottom {
-  animation: gluni-card-deal-in 460ms var(--gluni-snap) both;
+  animation: gluni-card-deal-in var(--gl-d-move) var(--gluni-snap) both;
 }
 
 @keyframes gluni-card-deal-in {
@@ -6075,16 +6105,16 @@
 
 /* --- Reshuffle flourish: a holo sweep + a brief flash of card-backs ------ */
 .gluni-initiative--reshuffling .gluni-rail {
-  animation: gluni-deck-shimmer 760ms var(--gluni-ease);
+  animation: gluni-deck-shimmer var(--gl-d-splash) var(--gluni-ease);
 }
 
 .gluni-initiative--reshuffling .gluni-card-deck-stub-pile {
-  animation: gluni-deck-riffle 520ms var(--gluni-ease);
+  animation: gluni-deck-riffle var(--gl-d-glide) var(--gluni-ease);
 }
 
 /* Cards flash their face-down back as the deck re-deals, then reveal face-up. */
 .gluni-initiative--reshuffling .gluni-rail .gluni-card .gluni-card-back {
-  animation: gluni-deck-veil 480ms var(--gluni-ease);
+  animation: gluni-deck-veil var(--gl-d-glide) var(--gluni-ease);
 }
 
 @keyframes gluni-deck-veil {
@@ -6110,7 +6140,7 @@
 .gluni-card-ghost-layer {
   position: fixed;
   inset: 0;
-  z-index: 71;
+  z-index: calc(var(--gl-z-hud) + 1);
   width: 100vw;
   height: 100vh;
   pointer-events: none;
@@ -6168,7 +6198,7 @@
 
 .gluni-card-config-note {
   margin: 0;
-  color: rgba(243, 251, 255, 0.72);
+  color: rgb(var(--gl-tint-light) / 0.72);
   font-size: 11px;
   line-height: 1.35;
 }
@@ -6179,15 +6209,15 @@
   align-items: center;
   gap: 4px 10px;
   padding: 10px;
-  border: 1px solid rgba(224, 246, 255, 0.18);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.18);
   border-radius: 5px;
-  background: rgba(2, 7, 11, 0.62);
+  background: color-mix(in srgb, var(--gl-ink-0) 62%, transparent);
 }
 
 .gluni-card-config-field-label {
   color: var(--gluni-white);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
 }
 
 .gluni-card-config-field input {
@@ -6197,7 +6227,7 @@
 
 .gluni-card-config-field-hint {
   grid-column: 1 / -1;
-  color: rgba(243, 251, 255, 0.6);
+  color: rgb(var(--gl-tint-light) / 0.6);
   font-size: 10px;
   line-height: 1.3;
 }
@@ -6248,9 +6278,9 @@
  * ==========================================================================*/
 @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
   :root {
-    --gluni-line:        rgba(244, 252, 255, 0.5) !important;
-    --gluni-line-strong: rgba(244, 252, 255, 0.8) !important;
-    --gluni-text-dim:    rgba(243, 251, 255, 0.86) !important;
+    --gluni-line:        rgb(var(--gl-tint-light) / 0.5) !important;
+    --gluni-line-strong: rgb(var(--gl-tint-light) / 0.8) !important;
+    --gluni-text-dim:    rgb(var(--gl-tint-light) / 0.86) !important;
   }
   /* Drop the glass blur so the big splash type and card chrome read on a solid
      backdrop rather than a translucent, low-contrast one. */
@@ -6262,7 +6292,7 @@
   }
   .gluni-round-deck,
   .gluni-break-deck {
-    background-color: rgba(2, 7, 11, 0.92) !important;
+    background-color: color-mix(in srgb, var(--gl-ink-0) 92%, transparent) !important;
   }
 }
 
@@ -6281,7 +6311,7 @@
  * ==========================================================================*/
 .gluni-card--apex {
   --gluni-accent: var(--gluni-apex);
-  --gluni-apex-breath: 3.4s;
+  --gluni-apex-breath: var(--gl-dread);
 }
 
 /* the default single corner bracket gives way to the four-corner filigree */
@@ -6353,10 +6383,10 @@
   color: var(--gluni-apex-ink);
   background: linear-gradient(90deg, var(--gluni-apex-deep), var(--gluni-apex-hot), var(--gluni-apex));
   font-size: 7px;
-  font-weight: 950;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.22em;
   line-height: 1;
-  clip-path: polygon(2px 0, 100% 0, 100% 100%, 0 100%, 0 2px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-white) 40%, transparent),
     0 0 16px color-mix(in srgb, var(--gluni-apex) 70%, transparent);
@@ -6365,7 +6395,7 @@
 .gluni-apex-tag--ordinal,
 .gluni-apex-tag--phase {
   color: var(--gluni-apex-hot);
-  background: rgba(2, 5, 8, 0.6);
+  background: color-mix(in srgb, var(--gl-ink-0) 60%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 64%, transparent);
   font-variant-numeric: tabular-nums;
 }
@@ -6377,7 +6407,7 @@
   width: 14px;
   height: 3px;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--gluni-apex) 22%, #000);
+  background: color-mix(in srgb, var(--gluni-apex) 22%, var(--gl-ink-0));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 30%, transparent);
 }
 .gluni-apex-phase-pip--on {
@@ -6389,10 +6419,10 @@
 .gluni-card--apex .gluni-card-portrait { filter: contrast(1.12) saturate(1.04) brightness(0.98); }
 
 /* ---- phase escalation ------------------------------------------------------ */
-.gluni-card--apex-phase-1 { --gluni-apex-breath: 3.4s; }
-.gluni-card--apex-phase-2 { --gluni-apex-breath: 1.9s; }
+.gluni-card--apex-phase-1 { --gluni-apex-breath: var(--gl-dread); }
+.gluni-card--apex-phase-2 { --gluni-apex-breath: calc(var(--gl-dread) * 0.58); }
 .gluni-card--apex-phase-2 .gluni-card h3 { color: color-mix(in srgb, var(--gluni-apex-hot) 26%, var(--gluni-white)); }
-.gluni-card--apex-phase-3 { --gluni-apex-breath: 1.05s; }
+.gluni-card--apex-phase-3 { --gluni-apex-breath: calc(var(--gl-dread) * 0.32); }
 .gluni-card--apex-phase-3 .gluni-card h3 { color: var(--gluni-apex-hot); }
 .gluni-card--apex-phase-3 .gluni-card-apex-corona {
   background: radial-gradient(85% 70% at 50% 60%, color-mix(in srgb, var(--gluni-apex) 38%, transparent), transparent 72%);
@@ -6415,7 +6445,7 @@
 .gluni-card--apex-phase-3 .gluni-card-surface {
   animation:
     gluni-apex-breathe var(--gluni-apex-breath) var(--gluni-ease) infinite,
-    gluni-apex-shudder 2.4s steps(6, end) infinite;
+    gluni-apex-shudder var(--gl-breathe) steps(6, end) infinite;
 }
 @keyframes gluni-apex-shudder {
   0%, 100% { transform: translateX(0); }
@@ -6440,7 +6470,7 @@
 .gluni-card--apex-reprise .gluni-card-apex-corona { opacity: 0.4; }
 .gluni-card--apex-reprise .gluni-card-apex-corners span { opacity: 0.45; filter: none; }
 .gluni-card--apex-reprise .gluni-apex-tag {
-  background: rgba(2, 5, 8, 0.5);
+  background: color-mix(in srgb, var(--gl-ink-0) 50%, transparent);
   color: color-mix(in srgb, var(--gluni-apex-hot) 70%, var(--gluni-text-dim));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 40%, transparent);
 }
@@ -6451,7 +6481,7 @@
 
 /* reprise while it IS its turn: lifts back to near-prime intensity */
 .gluni-card--apex-reprise.gluni-card--active .gluni-card-surface {
-  animation: gluni-apex-breathe 2.2s var(--gluni-ease) infinite;
+  animation: gluni-apex-breathe var(--gl-breathe) var(--gluni-ease) infinite;
 }
 .gluni-card--apex-reprise.gluni-card--active .gluni-card-portrait { filter: grayscale(0.12) brightness(0.92) contrast(1.08); }
 .gluni-card--apex-reprise.gluni-card--active .gluni-card-accent {

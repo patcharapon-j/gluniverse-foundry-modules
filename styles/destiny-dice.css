@@ -41,7 +41,7 @@
   flex: 0 0 auto;
   font-family: var(--gl-font-tech);
   font-size: 0.76rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   gap: 0.6rem;
   isolation: isolate;
   justify-content: space-between;
@@ -57,7 +57,7 @@
   /* Chip notch — top-left (§4.1) */
   border: 1px solid color-mix(in oklab, var(--gl-accent) 30%, var(--gl-edge));
   border-radius: 8px;
-  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
 
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
@@ -71,7 +71,7 @@
     color var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease),
-    transform 120ms var(--gl-ease);
+    transform var(--gl-d-tap) var(--gl-ease);
 }
 
 /* Edge bar — the accent rail (§7.1) */
@@ -137,7 +137,7 @@
 
 /* Press (§6.2) */
 .glddf-fated-roll-toggle:active {
-  transform: translateY(1px);
+  transform: translateY(var(--gl-press));
 }
 
 .glddf-fated-roll-toggle:has(input:checked) {
@@ -169,7 +169,7 @@
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.3)),
     var(--gl-ink-2);
   border: 1px solid color-mix(in oklab, var(--gl-accent) 40%, var(--gl-edge));
-  clip-path: polygon(3px 0, 100% 0, 100% 100%, 0 100%, 0 3px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   cursor: pointer;
   display: inline-block;
   flex: 0 0 auto;
@@ -230,7 +230,7 @@
   /* Chamfer — three soft corners, one diagonal cut top-right (§4.1) */
   border: 1px solid var(--gl-edge);
   border-radius: 13px;
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
 
   /* Glass-panel fill (§3.1) */
   background:
@@ -407,7 +407,7 @@
   color: var(--gl-text-faint);
   font-family: var(--gl-font-tech);
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.2em;
   line-height: 1;
   white-space: nowrap;
@@ -418,7 +418,7 @@
   color: var(--gl-text-bright);
   font-family: var(--gl-font-display);
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.12em;
   line-height: 1.05;
   text-shadow:
@@ -435,7 +435,7 @@
   border: 1px solid color-mix(in oklab, var(--gl-accent) 60%, var(--gl-edge));
   border-radius: 11px;
   /* Small notch top-left (§4.1) */
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
     inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.45),
@@ -457,7 +457,7 @@
   font-family: var(--gl-font-display);
   font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: var(--gl-weight-heavy);
   letter-spacing: 0.01em;
   text-shadow:
     0 0 8px color-mix(in oklab, var(--gl-accent) 70%, transparent),
@@ -469,7 +469,7 @@
   color: var(--gl-text-faint);
   font-family: var(--gl-font-tech);
   font-size: 0.5rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.32em;
   margin-top: 0.05rem;
   padding-left: 0.32em;
@@ -489,7 +489,7 @@
 }
 
 .glddf-fate-strip.glddf-blank {
-  --gl-accent: #aeb6c6;
+  --gl-accent: var(--gl-text-dim);
 }
 
 /* Active / featured emphasis — every freshly-rolled strip reads as "live" */
@@ -521,20 +521,20 @@
 }
 
 .glddf-fate-strip.glddf-reveal::after {
-  animation: glddf-sweep calc(var(--gl-d-splash) * var(--glddf-motion-scale)) var(--gl-ease) 80ms both;
+  animation: glddf-sweep calc(var(--gl-d-splash) * var(--glddf-motion-scale)) var(--gl-ease) var(--gl-d-flash) both;
 }
 
 .glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
 .glddf-fate-strip.glddf-reveal .glddf-fate-name {
-  animation: glddf-ghost-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) 200ms both;
+  animation: glddf-ghost-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) var(--gl-d-quick) both;
 }
 
 .glddf-fate-strip.glddf-reveal .glddf-fate-name {
-  animation-delay: 280ms;
+  animation-delay: var(--gl-d-brisk);
 }
 
 .glddf-fate-strip.glddf-reveal .glddf-fate-bonus {
-  animation: glddf-pop calc(var(--gl-d-move) * var(--glddf-motion-scale)) var(--gl-pop) 360ms both;
+  animation: glddf-pop calc(var(--gl-d-move) * var(--glddf-motion-scale)) var(--gl-pop) var(--gl-d-swift) both;
 }
 
 .glddf-fate-strip.glddf-reveal .glddf-fate-face,
@@ -642,7 +642,7 @@
   /* Row chip — soft three-corner radius, notch top-right */
   border: 1px solid var(--gl-edge);
   border-radius: 11px;
-  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 40%),
     linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 6%, var(--gl-ink-2)), var(--gl-ink-1) 70%);
@@ -683,7 +683,7 @@
   color: var(--gl-text-faint);
   font-family: var(--gl-font-tech);
   font-size: 0.56rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.2em;
   line-height: 1;
 }
@@ -691,7 +691,7 @@
 .glddf-face-config-label strong {
   font-family: var(--gl-font-tech);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -719,7 +719,7 @@
   color: var(--gl-text-dim);
   font-family: var(--gl-font-tech);
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
@@ -768,7 +768,7 @@ body.glddf-motion-cinematic .glddf-fate-strip.glddf-reveal::after {
 
 /* Reduced — ceremonies become straight fades, no sheens */
 body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal {
-  animation: glddf-fade-in 240ms ease both;
+  animation: glddf-fade-in var(--gl-d-brisk) ease both;
 }
 
 body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal::after,

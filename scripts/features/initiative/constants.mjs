@@ -46,11 +46,23 @@ export const TOKEN_OVERLAY_PALETTE = {
   delayed: 0x4aa3ff, delayedHi: 0x9ad8ff,                              // --gl-info / -hot
   broken: 0xffb12d, brokenHot: 0xffe070, brokenDeep: 0xff6f1a,         // --gl-warn / -hot / -deep
   dying: 0xcf85e0, dyingHot: 0xf6d9fb, dyingDeep: 0x842f9e,            // --gl-orchid / -hot
-  saveSuccess: 0x57e08b, saveSuccessHot: 0xb6ffd0,                     // --gl-good / -hot
-  saveFailure: 0xff5d6c, saveFailureHot: 0xffc0c6,                     // --gl-hazard / -hot
+  // saveSuccess/saveFailure were 0x57e08b / 0xff5d6c: near-misses of the hues
+  // their own comments named, so a dying combatant's death-save pips on the
+  // rail and the same combatant's token chip painted two different greens.
+  saveSuccess: 0x5fdb92, saveSuccessHot: 0xb6ffd0,                     // --gl-good / -hot
+  saveFailure: 0xff4a52, saveFailureHot: 0xffc0c6,                     // --gl-hazard / -hot
   stable: 0x4ad9c0, stableHot: 0xb6fff2,                               // --gl-teal / -hot
   ink: 0x02070b, white: 0xf3fbff,                                      // --gl-ink-0 / --gl-text-bright
-  violet: 0xb497ff, magenta: 0xff66b3                                  // --gl-violet / --gl-holo-c
+  violet: 0xb497ff, magenta: 0xff66b3,                                 // --gl-violet / --gl-holo-c
+
+  // Chip label inks. A status chip is filled with its own hue, so its text has
+  // to be a heavily darkened version of that same hue rather than the shared
+  // ink — otherwise the label either vanishes or reads as a foreign colour.
+  // These were written inline at the one call site that needed them.
+  inkOnStable: 0x04201c,                                               // darkened --gl-teal
+  inkOnDying: 0x1a0033,                                                // darkened --gl-orchid
+
+  gaugeBed: 0x1a0f02                                                   // darkened --gl-warn: break-gauge track
 };
 
 export const DISPOSITION_PALETTE = {

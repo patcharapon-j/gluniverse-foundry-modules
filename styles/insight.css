@@ -128,7 +128,7 @@
 
 /* §6.2 breathe — light drifts, glass never "glitches" */
 .insight-fracture-bg-back.insight-glitch {
-  animation: insight-breathe var(--gl-breathe) ease-in-out infinite;
+  animation: insight-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 @keyframes insight-breathe {
@@ -211,13 +211,13 @@
   background: linear-gradient(105deg,
     transparent 0%,
     color-mix(in srgb, var(--gl-accent) 32%, transparent) 46%,
-    color-mix(in srgb, #fff 55%, transparent) 50%,
+    color-mix(in srgb, rgb(var(--gl-tint-light)) 55%, transparent) 50%,
     color-mix(in srgb, var(--gl-accent) 32%, transparent) 54%,
     transparent 100%);
   mix-blend-mode: screen;
 }
 .insight-fracture-card.insight-visible .insight-sheen {
-  animation: insight-sheen-sweep var(--gl-d-reveal) var(--gl-ease) 120ms 1;
+  animation: insight-sheen-sweep var(--gl-d-reveal) var(--gl-ease) var(--gl-d-tap) 1;
 }
 
 @keyframes insight-sheen-sweep {
@@ -262,7 +262,7 @@
 .insight-sense {
   font-family: var(--gl-font-tech);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: var(--gl-text-dim);
@@ -274,7 +274,7 @@
   margin-left: auto;
   font-family: var(--gl-font-tech);
   font-size: 7px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.12em;
   color: var(--gl-text-faint);
   text-transform: uppercase;
@@ -285,10 +285,10 @@
 .insight-title {
   font-family: var(--gl-font-display);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.01em;
   margin-bottom: 9px;
-  background: linear-gradient(180deg, #fff, #cdd6e8);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light)), #cdd6e8);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -318,13 +318,13 @@
   opacity: 0;
   border: 1px solid var(--gl-edge);
   /* §3.5 legibility — keep the diorama behind a faint scrim */
-  box-shadow: inset 0 0 40px rgba(2, 5, 8, .55);
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--gl-ink-0) 55%, transparent);
 }
 
 .insight-body {
   font-family: var(--gl-font-display);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: var(--gl-weight-normal);
   line-height: 1.72;
   color: var(--gl-text);
   font-style: var(--insight-body-style, normal);
@@ -336,7 +336,7 @@
 
 .insight-body b, .insight-body strong {
   color: var(--gl-text-bright);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
 }
 .insight-body i, .insight-body em { font-style: italic; }
 
@@ -382,7 +382,7 @@
 }
 
 /* §6.2 press */
-.insight-dismiss:active { transform: translateY(1px); }
+.insight-dismiss:active { transform: translateY(var(--gl-press)); }
 
 /* ----------------------------------------------------------
    6. CONTENT REVEAL  (§6.3) — cascade stagger along diagonal,
@@ -422,7 +422,7 @@
 .insight-speed-instant,
 .insight-speed-instant * {
   --gl-motion-scale: 0;
-  transition-duration: 0s !important;
+  transition-duration: var(--gl-d-instant) !important;
   animation: none !important;
 }
 
@@ -452,7 +452,7 @@
   font-family: var(--gl-font-tech);
   color: var(--gl-text);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.18em;
 }
@@ -465,7 +465,7 @@
   padding: 0;
   font-family: var(--gl-font-tech);
   font-size: 8px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
@@ -499,7 +499,7 @@
   gap: 5px;
   font-family: var(--gl-font-tech);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   color: var(--gl-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -514,7 +514,7 @@
     var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
   border-radius: 0;
-  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
   color: var(--gl-text);
   font-family: var(--gl-font-display);
   font-size: 13px;
@@ -550,7 +550,7 @@
   font-family: var(--gl-font-tech);
   font-size: 8px;
   color: var(--gl-text-faint);
-  font-weight: 400;
+  font-weight: var(--gl-weight-normal);
   text-transform: none;
   letter-spacing: 0.04em;
 }
@@ -564,11 +564,11 @@
     color-mix(in srgb, var(--gl-signal) 16%, var(--gl-ink-2));
   border: 1px solid color-mix(in srgb, var(--gl-signal) 45%, transparent);
   border-radius: 0;
-  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
   color: var(--gl-signal);
   font-family: var(--gl-font-tech);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.2em;
   padding: 11px;
@@ -586,7 +586,7 @@
   border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
 }
 
-.insight-send-btn:active { transform: translateY(1px) scale(.99); }
+.insight-send-btn:active { transform: translateY(var(--gl-press)) scale(.99); }
 
 /* §6.2 signal flash sweep on commit */
 .insight-send-btn.insight-sent {

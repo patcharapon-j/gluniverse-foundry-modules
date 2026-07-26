@@ -236,12 +236,12 @@
   padding: 1px 7px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--glec-vc, var(--gl-edge)) 60%, var(--gl-edge));
-  background: color-mix(in srgb, var(--glec-vc, #000) 14%, rgb(var(--gl-tint-dark) / 0.42));
+  background: color-mix(in srgb, var(--glec-vc, rgb(var(--gl-tint-dark))) 14%, rgb(var(--gl-tint-dark) / 0.42));
   color: color-mix(in srgb, var(--glec-vc, var(--gl-text-bright)) 78%, var(--gl-text-bright));
   box-shadow: 0 0 8px color-mix(in srgb, var(--glec-vc, transparent) 28%, transparent);
   font-family: var(--gl-tech);
   font-size: 0.66em;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1.4;
@@ -433,7 +433,7 @@
   transform-origin: left center;
   background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--gl-violet) 38%, transparent) 50%, transparent);
   mix-blend-mode: screen;
-  animation: gluni-dying-sheen 1600ms var(--gl-ease) infinite;
+  animation: gluni-dying-sheen var(--gl-d-cinematic) var(--gl-ease) infinite;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -456,7 +456,7 @@
       transparent 15deg 27deg),
     radial-gradient(40% 40% at 62% 36%,
       color-mix(in srgb, var(--glec-crack, var(--gl-signal)) 50%, transparent), transparent 70%);
-  animation: glec-crack-burst 900ms var(--gl-ease) both;
+  animation: glec-crack-burst var(--gl-d-slow) var(--gl-ease) both;
 }
 .chat-message.glec-card.glec-crack-css[data-glec-frac="gold"] { --glec-crack: var(--gl-signal-hot); }
 .chat-message.glec-card.glec-crack-css[data-glec-frac="red"] { --glec-crack: var(--gl-hazard); }
@@ -481,7 +481,7 @@
   height: 1.7em;
   font-family: var(--gl-tech);
   font-size: 0.8em;
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
   line-height: 1;
   color: var(--gl-text-bright);
   background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.14), rgb(var(--gl-tint-dark) / 0.28)), var(--gl-ink-2);
@@ -498,7 +498,7 @@
 }
 .chat-message.glec-card .glec-d20.glec-nat-min {
   color: var(--gl-text-bright);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 78%, #000), color-mix(in srgb, var(--gl-hazard) 42%, #000));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 78%, rgb(var(--gl-tint-dark))), color-mix(in srgb, var(--gl-hazard) 42%, rgb(var(--gl-tint-dark))));
   border-color: var(--gl-hazard);
   box-shadow: 0 0 12px color-mix(in srgb, var(--gl-hazard) 55%, transparent), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2);
 }
@@ -580,7 +580,7 @@
 .chat-message.glec-card .pf2emm-suffix[class*="pf2emm-is-"] {
   color: color-mix(in srgb, var(--glec-mm) 85%, var(--gl-text-bright)) !important;
   text-shadow: 0 0 6px color-mix(in srgb, var(--glec-mm) 40%, transparent);
-  font-weight: 700;
+  font-weight: var(--gl-weight-bold);
 }
 .chat-message.glec-card .pf2emm-potential {
   color: var(--gl-signal-hot);

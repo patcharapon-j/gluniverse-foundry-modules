@@ -4,7 +4,7 @@
 
 /* ── Bounce ── */
 .anim-bounce {
-    animation: glstage-bounce 0.6s var(--gl-ease);
+    animation: glstage-bounce var(--gl-d-reveal) var(--gl-ease);
 }
 @keyframes glstage-bounce {
     0%   { transform: translateY(0) scale(var(--_sx, 1)); }
@@ -16,7 +16,7 @@
 
 /* ── Shake ── */
 .anim-shake {
-    animation: glstage-shake 0.5s ease;
+    animation: glstage-shake var(--gl-d-glide) ease;
 }
 @keyframes glstage-shake {
     0%   { transform: translateX(0); }
@@ -30,7 +30,7 @@
 
 /* ── Flip (3D Y-axis) ── */
 .anim-flip {
-    animation: glstage-flip 0.8s ease;
+    animation: glstage-flip var(--gl-d-splash) ease;
     transform-style: preserve-3d;
 }
 @keyframes glstage-flip {
@@ -41,7 +41,7 @@
 
 /* ── Nod ── */
 .anim-nod {
-    animation: glstage-nod 0.5s ease;
+    animation: glstage-nod var(--gl-d-glide) ease;
     transform-origin: bottom center;
 }
 @keyframes glstage-nod {
@@ -54,7 +54,7 @@
 
 /* ── Jiggle ── */
 .anim-jiggle {
-    animation: glstage-jiggle 0.5s ease;
+    animation: glstage-jiggle var(--gl-d-glide) ease;
     transform-origin: bottom center;
 }
 @keyframes glstage-jiggle {
@@ -69,7 +69,7 @@
 
 /* ── Fade In ── */
 .anim-fadeIn {
-    animation: glstage-fadeIn 0.6s ease;
+    animation: glstage-fadeIn var(--gl-d-reveal) ease;
 }
 @keyframes glstage-fadeIn {
     0%   { opacity: 0; transform: scale(0.9); }
@@ -78,7 +78,7 @@
 
 /* ── Slide In (from bottom) ── */
 .anim-slideIn {
-    animation: glstage-slideIn 0.5s var(--gl-ease);
+    animation: glstage-slideIn var(--gl-d-glide) var(--gl-ease);
 }
 @keyframes glstage-slideIn {
     0%   { transform: translateY(80px); opacity: 0; }
@@ -91,7 +91,7 @@
 
 /* ── Slot Enter (new actor appears — fade in + subtle rise) ── */
 .glstage-slot-entering {
-    animation: glstage-slot-enter 0.4s ease-out both;
+    animation: glstage-slot-enter var(--gl-d-move) var(--gl-ease) both;
 }
 @keyframes glstage-slot-enter {
     0%   { opacity: 0; translate: 0 -10px; }
@@ -100,7 +100,7 @@
 
 /* ── Slot Exit (slot removed — fade out + subtle sink) ── */
 .glstage-slot-exiting {
-    animation: glstage-slot-exit 0.3s ease-in both;
+    animation: glstage-slot-exit var(--gl-d-swift) var(--gl-exit) both;
     pointer-events: none;
 }
 @keyframes glstage-slot-exit {
@@ -111,7 +111,7 @@
 /* ── Content Exit (actor unassigned — fade out + subtle sink) ── */
 .glstage-content-exiting > .stage-actor-img-wrap,
 .glstage-content-exiting > .stage-actor-name {
-    animation: glstage-content-exit 0.3s ease-in both;
+    animation: glstage-content-exit var(--gl-d-swift) var(--gl-exit) both;
 }
 @keyframes glstage-content-exit {
     0%   { opacity: 1; translate: 0 0; }
