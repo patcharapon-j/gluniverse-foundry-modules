@@ -781,41 +781,62 @@
 }
 
 /* ========================================
-   Bottom Ticker — Arcane Glass
+   Centre Ticker — Arcane Glass
+   Ambient scenery, not UI. The element is mounted directly after the canvas
+   (see PacerOverlay._mountAboveCanvas), so it paints just above the scene and
+   below every interface layer — z-index here only orders it against its own
+   aura. It runs at reduced opacity across the middle of the screen so it
+   never competes with what the table is actually looking at.
    ======================================== */
 
 .stream-pacer-overlay {
+  /* Feature-local knobs — nudged aside when the safety banner owns the centre. */
+  --sp-ticker-shift: 0px;
+  --sp-ticker-opacity: 0.32;
   position: fixed;
-  bottom: 0;
+  top: 50%;
   left: 0;
   right: 0;
-  height: 36px;
+  height: 34px;
   display: flex;
   align-items: center;
   pointer-events: none;
+  /* Fallback value, used only when the band could not be mounted next to the
+     canvas and lives on <body> instead: as low as it can go while still
+     clearing the (opaque) scene. The .above-canvas variant drops to 0. */
   z-index: 10;
   opacity: 0;
   visibility: hidden;
   overflow: hidden;
-  transform: translateY(100%);
-  transition: opacity var(--gl-d-move) var(--sp-ease-glass), visibility var(--gl-d-move) var(--sp-ease-glass), transform var(--gl-d-move) var(--sp-ease-glass);
+  transform: translateY(calc(-50% + var(--sp-ticker-shift))) scaleY(0.55);
+  transition:
+    opacity var(--gl-d-move) var(--sp-ease-glass),
+    visibility var(--gl-d-move) var(--sp-ease-glass),
+    transform var(--gl-d-move) var(--sp-ease-glass);
   color: var(--sp-text);
   font-family: var(--sp-clock-font);
   background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-light) / 0) 60%),
-    linear-gradient(90deg, transparent 0%, rgba(10, 13, 18, 0.5) 2%, rgba(22, 28, 40, 0.92) 8%, rgba(10, 13, 19, 0.94) 50%, rgba(22, 28, 40, 0.92) 92%, rgba(10, 13, 18, 0.5) 98%, transparent 100%);
-  border-top: 1px solid var(--sp-edge);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 62%),
+    linear-gradient(90deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.28) 12%, rgb(var(--gl-tint-dark) / 0.44) 50%, rgb(var(--gl-tint-dark) / 0.28) 88%, transparent 100%);
   box-shadow:
-    0 -8px 30px rgb(var(--gl-tint-dark) / 0.5),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
-    0 0 30px var(--sp-glow-soft);
-  backdrop-filter: blur(12px) saturate(1.1);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.07),
+    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.05);
 }
 
 .stream-pacer-overlay.active {
-  opacity: 1;
+  opacity: var(--sp-ticker-opacity);
   visibility: visible;
-  transform: translateY(0);
+  transform: translateY(calc(-50% + var(--sp-ticker-shift))) scaleY(1);
+}
+
+/* Mounted as the canvas's next sibling — the floor of the interface stack. */
+.stream-pacer-overlay.above-canvas,
+.stream-pacer-bar-aura.aura-centre.above-canvas { z-index: 0; }
+
+/* The safety banner takes the centre line; the ticker steps below it. */
+body.sp-safety-request .stream-pacer-overlay,
+body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
+  --sp-ticker-shift: 76px;
 }
 
 /* Tint overlay — signal-colored band */
@@ -2079,7 +2100,13 @@
    above the scene canvas so it isn't washed out by terrain. */
 /* Hidden state: parked just off-screen past the bar's edge, so the aura
    slides into place together with its bar instead of merely cross-fading. */
-.stream-pacer-bar-aura.aura-bottom { z-index: 9; transform: translateY(100%); }
+.stream-pacer-bar-aura.aura-centre {
+  /* Sits with the ticker at the bottom of the stack; DOM order (aura first)
+     keeps the band itself in front. The 9 is the <body> fallback value, one
+     below the ticker's own fallback. */
+  z-index: 9;
+  transform: translateY(calc(-50% + var(--sp-ticker-shift, 0px))) scaleY(0.4);
+}
 .stream-pacer-bar-aura.aura-top {
   z-index: 99;
   transform: translateY(-100%);
@@ -2093,18 +2120,27 @@
   transform: translateY(0);
 }
 
-/* Bottom-anchored aura — sits directly above the bottom ticker, slides up. */
-.stream-pacer-bar-aura.aura-bottom {
-  bottom: 36px; /* equals overlay height */
-  height: 114px; /* ~3x */
+/* Centre aura — a symmetric halo bleeding out of the centred ticker. */
+.stream-pacer-bar-aura.aura-centre {
+  top: 50%;
+  height: 120px;
+  opacity: 0;
   background:
-    linear-gradient(to top,
-      var(--sp-aura-color) 0%,
-      var(--sp-aura-mid) 32%,
+    linear-gradient(to bottom,
+      transparent 0%,
+      var(--sp-aura-mid) 34%,
+      var(--sp-aura-color) 50%,
+      var(--sp-aura-mid) 66%,
       transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
-          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
   animation: sp-aura-breath var(--gl-dread) var(--gl-ease-inout) infinite;
+}
+
+/* Muted to match the ticker's ambient weight — it sits behind play, not over it. */
+.stream-pacer-bar-aura.aura-centre.active {
+  opacity: 0.26;
+  transform: translateY(calc(-50% + var(--sp-ticker-shift, 0px))) scaleY(1);
 }
 
 /* Top-anchored aura — sits directly below the hand-raise bar, slides down. */
@@ -2396,9 +2432,9 @@
   z-index: 1;
 }
 
-#stream-pacer-container .gm-btn.safety-check-btn[disabled] {
-  opacity: 1;
-  cursor: default;
+/* The trigger is a toggle now — an open ask keeps breathing until stopped. */
+#stream-pacer-container .gm-btn.safety-check-btn.active {
+  animation: sp-safety-ask-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .safety-results-sec {
@@ -2411,8 +2447,9 @@
   animation: sp-safety-panel-in var(--gl-d-move) var(--gl-snap) both;
 }
 
-#stream-pacer-container .safety-results-sec.is-complete {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--gl-good) 72%, transparent);
+/* An open ask, with nothing raised yet: the board waits in amber. */
+#stream-pacer-container .safety-results-sec.is-requesting {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--gl-signal) 66%, transparent);
 }
 
 #stream-pacer-container .safety-results-head,
@@ -2586,273 +2623,642 @@
 }
 
 /* ========================================
-   Safety Check — full-screen player prompt
+   Safety Traffic Light — player HUD
+   A compact three-lamp signal on the right flank of the player's HUD. It
+   carries the player's standing answer to the GM: green by default, raised to
+   yellow or red with one press. Colour identity is routed through --sp-lamp so
+   every lamp shares one recipe.
    ======================================== */
 
-#stream-pacer-safety-check {
-  --safety-green: var(--gl-good);
-  --safety-yellow: var(--gl-signal);
-  --safety-red: var(--gl-hazard);
-  position: fixed;
-  inset: 0;
-  z-index: 10050;
-  display: grid;
-  place-items: center;
+#stream-pacer-container .my-status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#stream-pacer-container .my-status-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Readout — the light in words, and the GM's ask when one is open. */
+#stream-pacer-container .sp-light-readout {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--gl-text-dim);
+  font-size: 7.5px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color var(--gl-d-brisk) var(--gl-ease);
+}
+
+#stream-pacer-container .sp-light-readout i {
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+#stream-pacer-container .sp-light-word {
+  min-width: 0;
   overflow: hidden;
-  padding: clamp(24px, 6vw, 80px);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  isolation: isolate;
-  color: var(--gl-text);
-  font-family: var(--gl-display);
-  background:
-    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--gl-cyan) 9%, transparent), transparent 32%),
-    radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--safety-green) 8%, transparent), transparent 28%),
-    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--safety-red) 8%, transparent), transparent 28%),
-    color-mix(in srgb, var(--gl-ink-0) 82%, transparent);
-  backdrop-filter: blur(18px) saturate(0.82);
-  -webkit-backdrop-filter: blur(18px) saturate(0.82);
-  transition: opacity var(--gl-d-swift) var(--gl-ease), visibility var(--gl-d-instant) linear var(--gl-d-swift), background var(--gl-d-glide) var(--gl-ease);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#stream-pacer-safety-check::before {
-  content: '';
-  position: absolute;
-  inset: -20%;
-  z-index: -1;
-  opacity: 0.18;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--gl-cyan) 14%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--gl-cyan) 14%, transparent) 1px, transparent 1px);
-  background-size: 46px 46px;
-  transform: perspective(700px) rotateX(64deg) translateY(18%);
-  mask-image: radial-gradient(circle, black 0%, transparent 64%);
-  animation: sp-safety-grid-drift var(--gl-loop-md) linear infinite;
+/* The readout carries the player's own colour, so the words and the lamps
+   always agree at a glance. */
+#stream-pacer-container.my-light-yellow .sp-light-readout { color: var(--gl-signal); }
+#stream-pacer-container.my-light-red .sp-light-readout { color: var(--gl-hazard); }
+
+#stream-pacer-container.safety-requested .sp-light-readout {
+  color: var(--gl-signal);
+  animation: sp-safety-ask-blink var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
-#stream-pacer-safety-check::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.22;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 42%, rgb(var(--gl-tint-light) / 0.08) 50%, transparent 58%);
-  transform: translateX(-120%);
-}
-
-#stream-pacer-safety-check.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transition-delay: var(--gl-d-instant);
-}
-
-#stream-pacer-safety-check.active::after {
-  animation: sp-safety-screen-sheen var(--gl-d-cinematic) var(--gl-ease) var(--gl-d-quick) both;
-}
-
-#stream-pacer-safety-check.answered-green { background-color: color-mix(in srgb, var(--safety-green) 16%, color-mix(in srgb, var(--gl-ink-0) 88%, transparent)); }
-#stream-pacer-safety-check.answered-yellow { background-color: color-mix(in srgb, var(--safety-yellow) 14%, color-mix(in srgb, var(--gl-ink-0) 88%, transparent)); }
-#stream-pacer-safety-check.answered-red { background-color: color-mix(in srgb, var(--safety-red) 18%, color-mix(in srgb, var(--gl-ink-0) 90%, transparent)); }
-
-#stream-pacer-safety-check .safety-check-frame {
+/* ---- The housing ---- */
+#stream-pacer-container .sp-light {
   position: relative;
-  width: min(680px, 92vw);
-  padding: clamp(30px, 5vw, 54px);
-  border: 1px solid var(--gl-edge);
-  border-radius: var(--gl-radius);
-  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 24px 100%, 0 calc(100% - 24px));
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 4px;
+  border: 1px solid var(--sp-edge);
+  border-radius: 12px;
   background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), transparent 34%),
-    linear-gradient(145deg, color-mix(in srgb, var(--gl-cyan) 8%, var(--gl-ink-2)), var(--gl-ink-0) 70%);
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), transparent 42%),
+    linear-gradient(180deg, var(--gl-ink-2), var(--gl-ink-0));
   box-shadow:
-    0 32px 100px rgb(var(--gl-tint-dark) / 0.68),
-    0 0 70px color-mix(in srgb, var(--gl-cyan) 10%, transparent),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.18),
-    inset 0 -28px 54px rgb(var(--gl-tint-dark) / 0.34);
-  transform: scale(calc(var(--gl-ui-scale, 1) * 0.86)) translateY(22px);
-  opacity: 0;
-  transition: transform var(--gl-d-glide) var(--gl-snap), opacity var(--gl-d-swift) var(--gl-ease), filter var(--gl-d-move) var(--gl-ease);
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+    inset 0 -6px 12px rgb(var(--gl-tint-dark) / 0.5),
+    0 3px 10px rgb(var(--gl-tint-dark) / 0.45);
+  transition: border-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }
 
-#stream-pacer-safety-check .safety-check-frame::before {
-  content: '';
+/* Hood — a thin gloss cap so the housing reads as moulded, not drawn. */
+#stream-pacer-container .sp-light-hood {
   position: absolute;
-  inset: 0;
+  top: 1px;
+  left: 4px;
+  right: 4px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.22), transparent);
   pointer-events: none;
-  background:
-    radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--safety-green) 13%, transparent), transparent 30%),
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--safety-yellow) 12%, transparent), transparent 31%),
-    radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--safety-red) 13%, transparent), transparent 30%);
 }
 
-#stream-pacer-safety-check.active .safety-check-frame {
-  transform: scale(var(--gl-ui-scale, 1)) translateY(0);
-  opacity: 1;
-}
-
-#stream-pacer-safety-check.is-answering .safety-check-frame {
-  transform: scale(calc(var(--gl-ui-scale, 1) * 1.035));
-  opacity: 0;
-  filter: blur(6px) brightness(1.25);
-}
-
-#stream-pacer-safety-check .safety-check-mark {
+/* ---- Lamps ---- */
+#stream-pacer-container .sp-lamp {
+  --sp-lamp: var(--gl-text-dim);
   position: relative;
-  z-index: 1;
-  display: block;
-  width: fit-content;
-  margin: 0 auto clamp(24px, 4vw, 38px);
-  color: var(--gl-text-bright);
-  font-size: clamp(38px, 6vw, 58px);
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--gl-cyan) 50%, transparent));
-  animation: sp-safety-mark-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
-}
-
-#stream-pacer-safety-check .safety-check-actions {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(14px, 3vw, 28px);
-}
-
-#stream-pacer-safety-check .safety-check-choice {
-  --choice-color: var(--gl-text);
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 120px;
+  width: 16px;
+  height: 16px;
   margin: 0;
   padding: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--choice-color) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-lamp) 30%, transparent);
   border-radius: 50%;
-  outline: none;
-  color: var(--choice-color);
   background:
-    radial-gradient(circle at 38% 28%, rgb(var(--gl-tint-light) / 0.28), transparent 17%),
-    radial-gradient(circle, color-mix(in srgb, var(--choice-color) 42%, var(--gl-ink-2)) 0 38%, color-mix(in srgb, var(--choice-color) 18%, var(--gl-ink-0)) 66%, var(--gl-ink-0) 100%);
-  box-shadow:
-    0 18px 38px rgb(var(--gl-tint-dark) / 0.48),
-    0 0 0 6px rgb(var(--gl-tint-light) / 0.025),
-    0 0 34px color-mix(in srgb, var(--choice-color) 20%, transparent),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.34),
-    inset 0 -16px 30px rgb(var(--gl-tint-dark) / 0.42);
+    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.14), transparent 40%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 16%, var(--gl-ink-0)) 0 52%, var(--gl-ink-0) 100%);
+  box-shadow: inset 0 -2px 4px rgb(var(--gl-tint-dark) / 0.6);
   cursor: pointer;
-  transform: translateY(14px) scale(0.86);
-  opacity: 0;
   transition:
-    transform var(--gl-d-brisk) var(--gl-snap),
-    border-color var(--gl-d-brisk) var(--gl-ease),
-    box-shadow var(--gl-d-brisk) var(--gl-ease),
-    filter var(--gl-d-brisk) var(--gl-ease);
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    transform var(--gl-d-tap) var(--sp-ease-spring);
 }
 
-#stream-pacer-safety-check .safety-check-choice::before,
-#stream-pacer-safety-check .safety-check-choice::after {
-  content: '';
+#stream-pacer-container .sp-lamp.lamp-green { --sp-lamp: var(--gl-good); }
+#stream-pacer-container .sp-lamp.lamp-yellow { --sp-lamp: var(--gl-signal); }
+#stream-pacer-container .sp-lamp.lamp-red { --sp-lamp: var(--gl-hazard); }
+
+/* Lens — the specular pip that sells the glass. */
+#stream-pacer-container .sp-lamp-lens {
   position: absolute;
-  pointer-events: none;
-}
-
-#stream-pacer-safety-check .safety-check-choice::before {
-  inset: 8%;
-  border: 1px solid color-mix(in srgb, var(--choice-color) 34%, transparent);
+  top: 2px;
+  left: 3px;
+  width: 5px;
+  height: 4px;
   border-radius: 50%;
+  background: rgb(var(--gl-tint-light) / 0.3);
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
 }
 
-#stream-pacer-safety-check .safety-check-choice::after {
-  inset: -30%;
-  background: linear-gradient(110deg, transparent 42%, rgb(var(--gl-tint-light) / 0.32) 50%, transparent 58%);
-  transform: translateX(-80%) rotate(12deg);
-  transition: transform var(--gl-d-reveal) var(--gl-ease);
+#stream-pacer-container .sp-lamp:hover {
+  border-color: color-mix(in srgb, var(--sp-lamp) 70%, transparent);
+  background:
+    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.2), transparent 40%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 34%, var(--gl-ink-0)) 0 52%, var(--gl-ink-0) 100%);
+  transform: scale(1.08);
 }
 
-#stream-pacer-safety-check .safety-check-choice.is-green { --choice-color: var(--safety-green); }
-#stream-pacer-safety-check .safety-check-choice.is-yellow { --choice-color: var(--safety-yellow); }
-#stream-pacer-safety-check .safety-check-choice.is-red { --choice-color: var(--safety-red); }
-
-#stream-pacer-safety-check.active .safety-check-choice {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+#stream-pacer-container .sp-lamp:active {
+  transform: scale(var(--gl-press-scale));
 }
 
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(1) { transition-delay: var(--gl-d-tap); }
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(2) { transition-delay: var(--gl-d-brisk); }
-#stream-pacer-safety-check.active .safety-check-choice:nth-child(3) { transition-delay: var(--gl-d-swift); }
-
-#stream-pacer-safety-check .safety-check-choice:hover:not(:disabled),
-#stream-pacer-safety-check .safety-check-choice:focus-visible {
-  transform: translateY(-7px) scale(1.045);
-  border-color: color-mix(in srgb, var(--choice-color) 88%, white);
+#stream-pacer-container .sp-lamp.is-lit {
+  border-color: color-mix(in srgb, var(--sp-lamp) 92%, white);
+  background:
+    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.5), transparent 44%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 92%, white) 0 44%, var(--sp-lamp) 100%);
   box-shadow:
-    0 24px 48px rgb(var(--gl-tint-dark) / 0.52),
-    0 0 0 7px color-mix(in srgb, var(--choice-color) 8%, transparent),
-    0 0 52px color-mix(in srgb, var(--choice-color) 48%, transparent),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.42),
-    inset 0 -16px 30px rgb(var(--gl-tint-dark) / 0.38);
+    0 0 10px color-mix(in srgb, var(--sp-lamp) 62%, transparent),
+    0 0 20px color-mix(in srgb, var(--sp-lamp) 28%, transparent),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5);
 }
 
-#stream-pacer-safety-check .safety-check-choice:hover:not(:disabled)::after,
-#stream-pacer-safety-check .safety-check-choice:focus-visible::after {
-  transform: translateX(80%) rotate(12deg);
+#stream-pacer-container .sp-lamp.is-lit .sp-lamp-lens { opacity: 0.85; }
+
+/* A lit yellow or red keeps breathing so the player can see their own raise. */
+#stream-pacer-container .sp-lamp.lamp-yellow.is-lit,
+#stream-pacer-container .sp-lamp.lamp-red.is-lit {
+  animation: sp-lamp-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
-#stream-pacer-safety-check .safety-check-choice:active:not(:disabled) {
-  transform: translateY(-2px) scale(var(--gl-press-scale));
+/* The housing takes the colour of the standing light. */
+#stream-pacer-container .sp-light.light-yellow {
+  border-color: color-mix(in srgb, var(--gl-signal) 46%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+    0 0 12px color-mix(in srgb, var(--gl-signal) 24%, transparent);
 }
 
-#stream-pacer-safety-check .safety-check-choice.is-selected {
-  transform: scale(1.18);
-  filter: brightness(1.45);
+#stream-pacer-container .sp-light.light-red {
+  border-color: color-mix(in srgb, var(--gl-hazard) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+    0 0 16px color-mix(in srgb, var(--gl-hazard) 34%, transparent);
 }
 
-#stream-pacer-safety-check .safety-check-choice:disabled {
-  cursor: default;
+/* An open GM ask makes the whole light pulse — the arrow points right here. */
+#stream-pacer-container.safety-requested .sp-light {
+  border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
+  animation: sp-safety-ask-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
-#stream-pacer-safety-check .safety-check-choice i {
+@keyframes sp-lamp-breathe {
+  0%, 100% { filter: brightness(0.94); }
+  50% { filter: brightness(1.2); }
+}
+
+@keyframes sp-safety-ask-blink {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
+@keyframes sp-safety-ask-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
+      0 0 10px color-mix(in srgb, var(--gl-signal) 26%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2),
+      0 0 20px color-mix(in srgb, var(--gl-signal) 52%, transparent);
+  }
+}
+
+/* ========================================
+   Safety lights on the GM roster
+   Each player chip carries their standing light. Yellow is prominent; red is
+   unmistakable and drags the whole panel's rim with it.
+   ======================================== */
+
+#stream-pacer-container .player-status .p-light {
+  --sp-lamp: var(--gl-good);
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--sp-lamp);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--sp-lamp) 70%, transparent);
+}
+
+#stream-pacer-container .player-status.light-yellow .p-light { --sp-lamp: var(--gl-signal); }
+#stream-pacer-container .player-status.light-red .p-light { --sp-lamp: var(--gl-hazard); }
+
+#stream-pacer-container .player-status.light-yellow {
+  border-color: var(--gl-signal);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-signal) 22%, transparent), color-mix(in srgb, var(--gl-signal) 5%, transparent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 30%, transparent);
+  animation: sp-safety-chip-yellow var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+}
+
+#stream-pacer-container .player-status.light-red {
+  border-color: var(--gl-hazard);
+  color: var(--gl-hazard-hot);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 34%, transparent), color-mix(in srgb, var(--gl-hazard) 8%, transparent));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--gl-hazard) 44%, transparent);
+  animation: sp-safety-chip-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+/* Still owes the GM an answer to an open ask. */
+#stream-pacer-container .player-status.awaiting-light .p-light {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--gl-signal) 70%, transparent);
+  box-shadow: none;
+  animation: sp-safety-ask-blink var(--gl-breathe) var(--gl-ease-inout) infinite;
+}
+
+@keyframes sp-safety-chip-yellow {
+  0%, 100% { box-shadow: 0 0 10px color-mix(in srgb, var(--gl-signal) 24%, transparent); }
+  50% { box-shadow: 0 0 18px color-mix(in srgb, var(--gl-signal) 46%, transparent); }
+}
+
+@keyframes sp-safety-chip-red {
+  0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 38%, transparent); }
+  50% { box-shadow: 0 0 26px color-mix(in srgb, var(--gl-hazard) 70%, transparent); }
+}
+
+/* The panel itself carries the loudest colour on the table. */
+#stream-pacer-container.safety-alert-yellow {
+  --sp-glow: color-mix(in srgb, var(--gl-signal) 42%, transparent);
+  --sp-glow-soft: color-mix(in srgb, var(--gl-signal) 16%, transparent);
+  border-color: color-mix(in srgb, var(--gl-signal) 46%, transparent);
+}
+
+#stream-pacer-container.safety-alert-red {
+  --sp-glow: color-mix(in srgb, var(--gl-hazard) 52%, transparent);
+  --sp-glow-soft: color-mix(in srgb, var(--gl-hazard) 22%, transparent);
+  border-color: color-mix(in srgb, var(--gl-hazard) 62%, transparent);
+  animation: sp-safety-panel-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+@keyframes sp-safety-panel-red {
+  0%, 100% { border-color: color-mix(in srgb, var(--gl-hazard) 48%, transparent); }
+  50% { border-color: color-mix(in srgb, var(--gl-hazard) 92%, transparent); }
+}
+
+/* Board tiers — the results section inherits the same escalation. */
+#stream-pacer-container .safety-results-sec.has-yellow {
+  box-shadow: inset 2px 0 0 var(--gl-signal);
+}
+
+#stream-pacer-container .safety-results-sec.has-red {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-hazard) 14%, transparent), transparent 70%);
+  box-shadow: inset 2px 0 0 var(--gl-hazard);
+}
+
+#stream-pacer-container .safety-response-word {
+  margin-left: auto;
+  font-size: 7px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+#stream-pacer-container .safety-response.is-red {
+  animation: sp-safety-chip-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+/* ========================================
+   Safety request — player banner + pointer
+   A reduced-opacity band across the middle of the screen, and an arrow parked
+   beside the HUD's traffic light. Neither one blocks play: the band never
+   takes the pointer, and only its lamps (shown when there is no HUD to point
+   at) are interactive.
+   ======================================== */
+
+.stream-pacer-safety-request {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  right: 0;
+  z-index: 62;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-50%) scaleY(0.6);
+  transition:
+    opacity var(--gl-d-move) var(--gl-ease),
+    visibility var(--gl-d-move) var(--gl-ease),
+    transform var(--gl-d-move) var(--gl-snap);
+  font-family: var(--gl-display);
+}
+
+.stream-pacer-safety-request.active {
+  opacity: 0.72;
+  visibility: visible;
+  transform: translateY(-50%) scaleY(1);
+}
+
+.stream-pacer-safety-request.is-acknowledged { opacity: 0.46; }
+
+.stream-pacer-safety-request .sp-sr-band {
   position: relative;
-  z-index: 1;
-  font-size: clamp(34px, 5vw, 54px);
-  line-height: 1;
-  text-shadow: 0 0 22px color-mix(in srgb, var(--choice-color) 72%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 46px;
+  overflow: hidden;
+  border-top: 1px solid color-mix(in srgb, var(--gl-signal) 42%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--gl-signal) 42%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-signal) 12%, transparent), transparent 60%),
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-dark) / 0.62) 12%, rgb(var(--gl-tint-dark) / 0.72) 50%, rgb(var(--gl-tint-dark) / 0.62) 88%, transparent);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--gl-signal) 20%, transparent);
 }
 
-@media (max-width: 560px) {
-  #stream-pacer-safety-check {
-    padding: 18px;
-  }
+.stream-pacer-safety-request.is-acknowledged .sp-sr-band {
+  border-color: color-mix(in srgb, var(--gl-good) 42%, transparent);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--gl-good) 16%, transparent);
+}
 
-  #stream-pacer-safety-check .safety-check-frame {
-    padding: 28px 20px;
-  }
+.stream-pacer-safety-request .sp-sr-track {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: sp-safety-band-scroll var(--gl-loop-lg) linear infinite;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+}
 
-  #stream-pacer-safety-check .safety-check-actions {
-    gap: 10px;
-  }
+.stream-pacer-safety-request .sp-sr-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  color: var(--gl-signal-pale);
+  font-size: 13px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-signal) 46%, transparent);
+}
 
-  #stream-pacer-safety-check .safety-check-choice {
-    min-height: 82px;
+.stream-pacer-safety-request.is-acknowledged .sp-sr-segment {
+  color: var(--gl-good-hot);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--gl-good) 40%, transparent);
+}
+
+.stream-pacer-safety-request .sp-sr-icon { font-size: 14px; }
+
+.stream-pacer-safety-request .sp-sr-sep {
+  width: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.6;
+}
+
+@keyframes sp-safety-band-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Fallback lamps — only for clients with no pacer HUD to point at. */
+/* Parked on the left, clear of Foundry's right-hand sidebar. */
+.stream-pacer-safety-request .sp-sr-lamps {
+  display: none;
+  position: absolute;
+  left: 24px;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.stream-pacer-safety-request.no-hud .sp-sr-lamps { display: inline-flex; }
+
+.stream-pacer-safety-request .sp-sr-lamp {
+  --sp-lamp: var(--gl-text-dim);
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sp-lamp) 60%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.28), transparent 42%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 60%, var(--gl-ink-0)) 0 50%, var(--gl-ink-0) 100%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sp-lamp) 34%, transparent);
+  cursor: pointer;
+  transition: transform var(--gl-d-tap) var(--gl-snap), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.stream-pacer-safety-request .sp-sr-lamp:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--sp-lamp) 60%, transparent);
+}
+
+.stream-pacer-safety-request .sp-sr-lamp.lamp-green { --sp-lamp: var(--gl-good); }
+.stream-pacer-safety-request .sp-sr-lamp.lamp-yellow { --sp-lamp: var(--gl-signal); }
+.stream-pacer-safety-request .sp-sr-lamp.lamp-red { --sp-lamp: var(--gl-hazard); }
+
+/* ---- The arrow ---- */
+.stream-pacer-safety-pointer {
+  position: fixed;
+  z-index: 63;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-100%, -50%);
+  transform-origin: right center;
+  border: 1px solid color-mix(in srgb, var(--gl-signal) 52%, transparent);
+  border-radius: var(--gl-radius);
+  color: var(--gl-signal-pale);
+  font-family: var(--gl-display);
+  font-size: 10px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-signal) 14%, var(--gl-ink-1)), var(--gl-ink-0));
+  box-shadow:
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+    0 0 22px color-mix(in srgb, var(--gl-signal) 26%, transparent);
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), visibility var(--gl-d-brisk) var(--gl-ease);
+}
+
+.stream-pacer-safety-pointer.active {
+  opacity: 0.94;
+  visibility: visible;
+}
+
+.stream-pacer-safety-pointer .sp-sp-arrow {
+  font-size: 12px;
+  animation: sp-safety-arrow-nudge var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+}
+
+/* Parked on the other flank when the HUD hugs the left edge. */
+.stream-pacer-safety-pointer.from-right {
+  flex-direction: row-reverse;
+  transform: translate(0, -50%);
+  transform-origin: left center;
+}
+
+.stream-pacer-safety-pointer.from-right .sp-sp-arrow {
+  transform: scaleX(-1);
+  animation-name: sp-safety-arrow-nudge-rev;
+}
+
+@keyframes sp-safety-arrow-nudge {
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+}
+
+@keyframes sp-safety-arrow-nudge-rev {
+  0%, 100% { transform: scaleX(-1) translateX(-3px); }
+  50% { transform: scaleX(-1) translateX(3px); }
+}
+
+/* ========================================
+   Safety alert — GM only
+   The part that cannot be missed while the GM is looking at the canvas.
+   ======================================== */
+
+.stream-pacer-safety-alert {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 64;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(720px, 76vw);
+  padding: 7px 16px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -18px);
+  border: 1px solid var(--sp-edge);
+  border-radius: var(--gl-radius);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  background: linear-gradient(180deg, var(--gl-ink-2), var(--gl-ink-0));
+  box-shadow: 0 16px 40px rgb(var(--gl-tint-dark) / 0.6);
+  transition:
+    opacity var(--gl-d-brisk) var(--gl-ease),
+    visibility var(--gl-d-brisk) var(--gl-ease),
+    transform var(--gl-d-swift) var(--gl-snap),
+    border-color var(--gl-d-brisk) var(--gl-ease),
+    box-shadow var(--gl-d-brisk) var(--gl-ease);
+}
+
+.stream-pacer-safety-alert.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.stream-pacer-safety-alert .sp-sa-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--gl-text-dim);
+  font-size: 9px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.stream-pacer-safety-alert .sp-sa-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.stream-pacer-safety-alert .sp-sa-chip {
+  --sp-lamp: var(--gl-signal);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--sp-lamp) 60%, transparent);
+  border-radius: 999px;
+  color: var(--sp-lamp);
+  font-size: 11px;
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.08em;
+  background: color-mix(in srgb, var(--sp-lamp) 14%, transparent);
+}
+
+.stream-pacer-safety-alert .sp-sa-chip.is-red {
+  --sp-lamp: var(--gl-hazard);
+  color: var(--gl-hazard-hot);
+  background: color-mix(in srgb, var(--gl-hazard) 26%, transparent);
+}
+
+.stream-pacer-safety-alert .sp-sa-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-pacer-safety-alert .sp-sa-word {
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.stream-pacer-safety-alert.is-yellow {
+  border-color: color-mix(in srgb, var(--gl-signal) 58%, transparent);
+  box-shadow:
+    0 16px 40px rgb(var(--gl-tint-dark) / 0.6),
+    0 0 26px color-mix(in srgb, var(--gl-signal) 30%, transparent);
+}
+
+.stream-pacer-safety-alert.is-red {
+  border-color: var(--gl-hazard);
+  box-shadow:
+    0 16px 44px rgb(var(--gl-tint-dark) / 0.66),
+    0 0 40px color-mix(in srgb, var(--gl-hazard) 52%, transparent);
+  animation: sp-safety-alert-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+@keyframes sp-safety-alert-red {
+  0%, 100% {
+    box-shadow:
+      0 16px 44px rgb(var(--gl-tint-dark) / 0.66),
+      0 0 30px color-mix(in srgb, var(--gl-hazard) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 16px 44px rgb(var(--gl-tint-dark) / 0.66),
+      0 0 62px color-mix(in srgb, var(--gl-hazard) 78%, transparent);
   }
 }
 
-@keyframes sp-safety-screen-sheen {
-  from { transform: translateX(-120%); }
-  to { transform: translateX(120%); }
+/* Red also rims the whole viewport — impossible to scroll past. */
+.stream-pacer-safety-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--gl-d-swift) var(--gl-ease), visibility var(--gl-d-swift) var(--gl-ease);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--gl-hazard) 46%, transparent),
+    inset 0 0 90px color-mix(in srgb, var(--gl-hazard) 26%, transparent);
 }
 
-@keyframes sp-safety-grid-drift {
-  from { transform: perspective(700px) rotateX(64deg) translate3d(0, 18%, 0); }
-  to { transform: perspective(700px) rotateX(64deg) translate3d(46px, calc(18% + 46px), 0); }
+.stream-pacer-safety-vignette.active {
+  opacity: 1;
+  visibility: visible;
+  animation: sp-safety-vignette-breathe var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
-@keyframes sp-safety-mark-breathe {
-  0%, 100% { opacity: 0.72; transform: scale(0.97); }
-  50% { opacity: 1; transform: scale(1.03); }
+@keyframes sp-safety-vignette-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
