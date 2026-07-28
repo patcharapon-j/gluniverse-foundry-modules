@@ -134,6 +134,17 @@ node -e "const fs=require('fs'),m=require('./module.json');let n=0;for(const p o
 When touching localization, also sanity-check that referenced keys resolve —
 especially keys built dynamically at runtime.
 
+**When touching the stat block parser** (`features/statsblock-import/`), re-check
+the two Load Sample payloads, which are the format's only in-app documentation:
+
+```bash
+node tools/parse-check.mjs --samples
+```
+
+Zero errors required. The same tool checks a file directly
+(`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
+export/import symmetry rules and the `ult.*` cross-feature flag contract.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
