@@ -2623,73 +2623,26 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
 }
 
 /* ========================================
-   Safety Traffic Light — player HUD
-   A compact three-lamp signal on the right flank of the player's HUD. It
-   carries the player's standing answer to the GM: green by default, raised to
-   yellow or red with one press. Colour identity is routed through --sp-lamp so
-   every lamp shares one recipe.
+   Safety Traffic Light — the player's docked fixture
+   Its own small housing welded to the flank of the Pacer HUD rather than a box
+   inside it: three lamps and nothing else, so it stays the size of the light
+   instead of stretching to whatever row it shared. Position, dock side and
+   stacking order are written by SafetyLightPanel, which follows the HUD.
+   Colour identity is routed through --sp-lamp so every lamp shares one recipe.
    ======================================== */
 
-#stream-pacer-container .my-status-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-#stream-pacer-container .my-status-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+.stream-pacer-safety-light {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: none;
+  box-sizing: border-box;
   flex-direction: column;
-  gap: 5px;
-}
-
-/* Readout — the light in words, and the GM's ask when one is open. */
-#stream-pacer-container .sp-light-readout {
-  display: flex;
   align-items: center;
-  gap: 5px;
-  min-width: 0;
-  color: var(--gl-text-dim);
-  font-size: 7.5px;
-  font-weight: var(--gl-weight-medium);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  transition: color var(--gl-d-brisk) var(--gl-ease);
-}
-
-#stream-pacer-container .sp-light-readout i {
-  font-size: 8px;
-  flex-shrink: 0;
-}
-
-#stream-pacer-container .sp-light-word {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The readout carries the player's own colour, so the words and the lamps
-   always agree at a glance. */
-#stream-pacer-container.my-light-yellow .sp-light-readout { color: var(--gl-signal); }
-#stream-pacer-container.my-light-red .sp-light-readout { color: var(--gl-hazard); }
-
-#stream-pacer-container.safety-requested .sp-light-readout {
-  color: var(--gl-signal);
-  animation: sp-safety-ask-blink var(--gl-breathe) var(--gl-ease-inout) infinite;
-}
-
-/* ---- The housing ---- */
-#stream-pacer-container .sp-light {
-  position: relative;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 5px 4px;
+  gap: 3px;
+  padding: 4px 3px;
   border: 1px solid var(--sp-edge);
-  border-radius: 12px;
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), transparent 42%),
     linear-gradient(180deg, var(--gl-ink-2), var(--gl-ink-0));
@@ -2697,29 +2650,49 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
     inset 0 -6px 12px rgb(var(--gl-tint-dark) / 0.5),
     0 3px 10px rgb(var(--gl-tint-dark) / 0.45);
+  pointer-events: auto;
   transition: border-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }
 
+.stream-pacer-safety-light.is-mounted { display: flex; }
+
+/* The docked edge stays square and drops its rim, so the light and the HUD
+   read as one fixture instead of two panels touching. */
+.stream-pacer-safety-light.dock-right {
+  border-radius: 0 11px 11px 0;
+  border-left-color: transparent;
+}
+
+.stream-pacer-safety-light.dock-left {
+  border-radius: 11px 0 0 11px;
+  border-right-color: transparent;
+}
+
 /* Hood — a thin gloss cap so the housing reads as moulded, not drawn. */
-#stream-pacer-container .sp-light-hood {
+.stream-pacer-safety-light .sp-sl-hood {
   position: absolute;
   top: 1px;
-  left: 4px;
-  right: 4px;
-  height: 5px;
+  left: 3px;
+  right: 3px;
+  height: 4px;
   border-radius: 999px;
   background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.22), transparent);
   pointer-events: none;
 }
 
 /* ---- Lamps ---- */
-#stream-pacer-container .sp-lamp {
+.stream-pacer-safety-light .sp-sl-lamp {
   --sp-lamp: var(--gl-text-dim);
   position: relative;
-  width: 16px;
-  height: 16px;
+  flex: none;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
   padding: 0;
+  line-height: 0;
   border: 1px solid color-mix(in srgb, var(--sp-lamp) 30%, transparent);
   border-radius: 50%;
   background:
@@ -2734,17 +2707,17 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
     transform var(--gl-d-tap) var(--sp-ease-spring);
 }
 
-#stream-pacer-container .sp-lamp.lamp-green { --sp-lamp: var(--gl-good); }
-#stream-pacer-container .sp-lamp.lamp-yellow { --sp-lamp: var(--gl-signal); }
-#stream-pacer-container .sp-lamp.lamp-red { --sp-lamp: var(--gl-hazard); }
+.stream-pacer-safety-light .sp-sl-lamp.lamp-green { --sp-lamp: var(--gl-good); }
+.stream-pacer-safety-light .sp-sl-lamp.lamp-yellow { --sp-lamp: var(--gl-signal); }
+.stream-pacer-safety-light .sp-sl-lamp.lamp-red { --sp-lamp: var(--gl-hazard); }
 
 /* Lens — the specular pip that sells the glass. */
-#stream-pacer-container .sp-lamp-lens {
+.stream-pacer-safety-light .sp-sl-lens {
   position: absolute;
-  top: 2px;
-  left: 3px;
-  width: 5px;
-  height: 4px;
+  top: 1px;
+  left: 2px;
+  width: 4px;
+  height: 3px;
   border-radius: 50%;
   background: rgb(var(--gl-tint-light) / 0.3);
   opacity: 0.5;
@@ -2752,46 +2725,46 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   transition: opacity var(--gl-d-quick) var(--gl-ease);
 }
 
-#stream-pacer-container .sp-lamp:hover {
+.stream-pacer-safety-light .sp-sl-lamp:hover {
   border-color: color-mix(in srgb, var(--sp-lamp) 70%, transparent);
   background:
     radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.2), transparent 40%),
     radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 34%, var(--gl-ink-0)) 0 52%, var(--gl-ink-0) 100%);
-  transform: scale(1.08);
+  transform: scale(1.12);
 }
 
-#stream-pacer-container .sp-lamp:active {
+.stream-pacer-safety-light .sp-sl-lamp:active {
   transform: scale(var(--gl-press-scale));
 }
 
-#stream-pacer-container .sp-lamp.is-lit {
+.stream-pacer-safety-light .sp-sl-lamp.is-lit {
   border-color: color-mix(in srgb, var(--sp-lamp) 92%, white);
   background:
     radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.5), transparent 44%),
     radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 92%, white) 0 44%, var(--sp-lamp) 100%);
   box-shadow:
-    0 0 10px color-mix(in srgb, var(--sp-lamp) 62%, transparent),
-    0 0 20px color-mix(in srgb, var(--sp-lamp) 28%, transparent),
+    0 0 8px color-mix(in srgb, var(--sp-lamp) 62%, transparent),
+    0 0 16px color-mix(in srgb, var(--sp-lamp) 28%, transparent),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5);
 }
 
-#stream-pacer-container .sp-lamp.is-lit .sp-lamp-lens { opacity: 0.85; }
+.stream-pacer-safety-light .sp-sl-lamp.is-lit .sp-sl-lens { opacity: 0.85; }
 
 /* A lit yellow or red keeps breathing so the player can see their own raise. */
-#stream-pacer-container .sp-lamp.lamp-yellow.is-lit,
-#stream-pacer-container .sp-lamp.lamp-red.is-lit {
+.stream-pacer-safety-light .sp-sl-lamp.lamp-yellow.is-lit,
+.stream-pacer-safety-light .sp-sl-lamp.lamp-red.is-lit {
   animation: sp-lamp-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 /* The housing takes the colour of the standing light. */
-#stream-pacer-container .sp-light.light-yellow {
+.stream-pacer-safety-light.light-yellow {
   border-color: color-mix(in srgb, var(--gl-signal) 46%, transparent);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
     0 0 12px color-mix(in srgb, var(--gl-signal) 24%, transparent);
 }
 
-#stream-pacer-container .sp-light.light-red {
+.stream-pacer-safety-light.light-red {
   border-color: color-mix(in srgb, var(--gl-hazard) 58%, transparent);
   box-shadow:
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
@@ -2799,7 +2772,7 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
 }
 
 /* An open GM ask makes the whole light pulse — the arrow points right here. */
-#stream-pacer-container.safety-requested .sp-light {
+.stream-pacer-safety-light.is-asking {
   border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
   animation: sp-safety-ask-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }

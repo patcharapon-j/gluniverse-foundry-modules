@@ -1,4 +1,4 @@
-import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS } from './settings.js';
+import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { featurePath } from '../../core/const.mjs';
 
@@ -142,30 +142,15 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
-   * Everything the traffic light needs, on both sides of the screen: the
-   * player's own lamps and readout, and the GM's board of raised lights.
+   * What the HUD itself needs to know about the traffic light. The player's own
+   * lamps live outside this panel (SafetyLightPanel), so the player branch is
+   * empty; the GM branch is the board of raised lights.
    */
   _prepareSafetyContext(state) {
     const request = state.safetyRequest;
     const requested = request.active === true;
 
-    if (!game.user.isGM) {
-      const myLight = state.mySafetyLight;
-      return {
-        requested,
-        myLight,
-        lamps: Object.values(SAFETY_STATUS).map(status => ({
-          id: status,
-          active: status === myLight,
-          label: game.i18n.localize(`STREAM_PACER.SafetyCheck.${status}`)
-        })),
-        readout: requested
-          ? game.i18n.localize('STREAM_PACER.SafetyCheck.RequestPrompt')
-          : game.i18n.format('STREAM_PACER.SafetyCheck.Readout', {
-              status: game.i18n.localize(`STREAM_PACER.SafetyCheck.Word.${myLight}`)
-            })
-      };
-    }
+    if (!game.user.isGM) return { requested };
 
     const summary = PacerManager.getSafetySummary();
     // The loudest colour on the table drives the panel's alert tier: yellow
@@ -299,11 +284,21 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     // The spotlight roster and active set are structural; the seconds, bars,
     // and underserved flags tick in place and are deliberately excluded.
     let spotlightSig = '';
+    // Safety lights only render on the GM's side of the HUD — the player's own
+    // light lives in its own docked panel, which repaints itself.
+    let safetySig = '';
     if (game.user.isGM) {
       spotlightSig = PacerManager.getSpotlightSummary().players
         .map(p => `${p.userId}:${p.active ? 1 : 0}`)
         .sort()
         .join('|');
+      safetySig = [
+        state.safetyRequest.active,
+        state.safetyRequest.id,
+        // Lights and acknowledgements both change what the panel renders.
+        Object.entries(state.safetyLights).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|'),
+        Object.keys(state.safetyRequest.acknowledged).sort().join('|')
+      ].join('~');
     }
 
     return [
@@ -314,11 +309,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       PacerManager.getPlayerStatus(game.user.id),
       playerSig,
       spotlightSig,
-      state.safetyRequest.active,
-      state.safetyRequest.id,
-      // Lights and acknowledgements both change what the panel renders.
-      Object.entries(state.safetyLights).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|'),
-      Object.keys(state.safetyRequest.acknowledged).sort().join('|')
+      safetySig
     ].join('#');
   }
 
@@ -441,12 +432,6 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         case 'declare-campfire':
           if (game.user.isGM) this._showCampfireDialog();
           break;
-        case 'set-safety-light': {
-          if (game.user.isGM) break;
-          const light = target.dataset.light;
-          PacerManager.setSafetyLight(game.user.id, light);
-          break;
-        }
         case 'toggle-safety-request':
           if (game.user.isGM) PacerManager.toggleSafetyRequest();
           break;

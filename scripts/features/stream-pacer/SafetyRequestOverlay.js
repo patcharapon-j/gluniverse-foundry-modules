@@ -1,6 +1,9 @@
 import { PacerManager } from './PacerManager.js';
 import { SAFETY_STATUS } from './settings.js';
 
+/** The player's traffic light, docked to the flank of the Pacer HUD. */
+const LIGHT_SELECTOR = '#stream-pacer-safety-light.is-mounted';
+
 /**
  * Player-side surface for a GM safety request.
  *
@@ -142,9 +145,9 @@ export class SafetyRequestOverlay {
     }
   }
 
-  /** Banner lamps appear only when there is no HUD light to point at. */
+  /** Banner lamps appear only when there is no docked light to point at. */
   _syncHudPresence() {
-    const hasLight = !!document.querySelector('#stream-pacer-hud .sp-light');
+    const hasLight = !!document.querySelector(LIGHT_SELECTOR);
     this._element?.classList.toggle('no-hud', !hasLight);
     return hasLight;
   }
@@ -178,28 +181,30 @@ export class SafetyRequestOverlay {
   }
 
   /**
-   * Park the arrow beside the HUD's traffic light. The HUD is draggable, so
-   * this runs on a frame loop while the ask is open — cheap, and it keeps the
-   * arrow glued to the light wherever the player parked the panel.
+   * Park the arrow beside the traffic light. The HUD it docks to is draggable,
+   * so this runs on a frame loop while the ask is open — cheap, and it keeps
+   * the arrow glued to the light wherever the player parked the panel.
    */
   _syncAnchor() {
     if (!this._pointerEl) return;
     if (!this._syncHudPresence()) {
-      // No HUD on this client — the banner carries its own lamps instead.
+      // No light on this client — the banner carries its own lamps instead.
       this._pointerEl.classList.remove('active');
       return;
     }
 
-    const light = document.querySelector('#stream-pacer-hud .sp-light');
+    const light = document.querySelector(LIGHT_SELECTOR);
     const rect = light.getBoundingClientRect();
     if (!rect.width && !rect.height) {
       this._pointerEl.classList.remove('active');
       return;
     }
 
-    // Point inward from whichever side has room, so the arrow never runs off
-    // screen when the HUD is parked against an edge.
-    const fromLeft = rect.left > 190;
+    // Approach from the light's free flank — the HUD occupies the side the
+    // light is docked to — and flip when that side has no room left.
+    let fromLeft = light.classList.contains('dock-left');
+    if (fromLeft && rect.left < 190) fromLeft = false;
+    else if (!fromLeft && window.innerWidth - rect.right < 190) fromLeft = true;
     const key = `${Math.round(rect.left)}:${Math.round(rect.top)}:${fromLeft ? 'l' : 'r'}`;
     if (key === this._lastAnchor) return;
     this._lastAnchor = key;
