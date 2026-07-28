@@ -80,13 +80,24 @@ Creatures in a @Template[cone|distance:30] take @Damage[6d6[fire]|options:area-d
 
 ### Lead with flavour, then mechanics
 
-Official abilities open with one short italic line of fiction and then get out
-of the way. Copy that shape:
+A description carries two budgets, and they are **not** the same budget. Brevity
+is a virtue in the mechanics and a defect in the fiction.
 
-    Description: *He reads a lane out of the wreckage and calls it aloud.*
+**The flavour line is where the creature becomes real — spend words there.** One
+or two italic sentences of concrete, sensory fiction: what a person at the table
+would see, hear or smell in the half-second before the dice resolve. Reach for a
+specific image, a tell, a tic, a wrongness:
 
-    Designate a contiguous path of squares up to 30 feet long, entirely
-    within 60 feet and in his line of sight...
+    Description: *A charge out of the socket in her palm, and something she
+    means, said out loud. The flash arrives first; her voice arrives after it,
+    still finishing the sentence.*
+
+    Nuke throws a charge at a point within 60 feet...
+
+Not `*She throws an explosive.*` — that is the mechanics wearing italics. If the
+line could be deduced from the rules text beneath it, it is doing no work. The
+flavour is the only part of a stat block that tells the GM how to *narrate* the
+ability, so make it worth reading aloud. Evocative beats terse here.
 
 Do **not** open with a role label — `**Primary Signature.**`, `**Engine —**`,
 `**Ultimate.**`. The `Function:` field already records the role and the
@@ -94,9 +105,10 @@ Ultimates sheet displays it; repeating it costs a line and tells the GM nothing
 they cannot see. A stock one-liner (`Razor Strides twice.`) needs no flavour
 line at all.
 
-Then keep the mechanics tight. Every clause should change what happens at the
-table. Cut any sentence that only restates the flavour, and fold paired state
-clauses onto one line rather than giving each its own paragraph:
+**The mechanics are where you cut.** Below the flavour, every clause should
+change what happens at the table. Delete any sentence that only restates the
+fiction, and fold paired state clauses onto one line rather than giving each its
+own paragraph:
 
     **Contained** she can exclude up to two allies. In **Excursion** the burst
     is 15 feet and she excludes no one.

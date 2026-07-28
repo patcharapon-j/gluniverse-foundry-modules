@@ -52,6 +52,10 @@ Follow `references/engine-design.md`. What each tier owes:
 | `elite` | Two Signatures, Trigger, Engine, Signature Utility, Ultimate, `## Engine`, `## Recall Knowledge` |
 | `boss` | Everything in elite, plus `## Phases` |
 
+If the boss is meant to carry an encounter **alone**, also read
+`references/boss-design.md` — solo bosses break the XP table above five bodies,
+and the Apex/Break patterns there are what fix it.
+
 ### 3. Set the numbers
 
 Use `references/benchmarks.md`. Two rules do most of the work:
@@ -106,9 +110,12 @@ Two things are easy to get wrong and both make the result worse at the table:
   activations. A run-on paragraph is the single most common defect in a
   generated stat block. Write rollable numbers as inline enrichers —
   `@Damage[...]`, `@Check[...|basic]`, `@Template[...]`.
-- **One italic line of flavour, then mechanics, then stop.** Never open with a
-  role label (`**Primary Signature.**`, `**Ultimate.**`) — `Function:` already
-  records it. Cut any sentence that only restates the flavour.
+- **Evocative flavour first, tight mechanics second.** Open with one or two
+  italic sentences of concrete sensory fiction — the flavour is the only part
+  that tells the GM how to narrate the ability, so spend words there. Never open
+  with a role label (`**Primary Signature.**`, `**Ultimate.**`) — `Function:`
+  already records it. Then cut hard in the *rules* text: delete any sentence
+  that only restates the fiction.
 - **Never restate a number the actor already owns.** "up to its Speed", not "up
   to 35 feet"; "a Bladed Iron Whip Strike", not "+15 for 2d6+7". The suite runs
   Proficiency Without Level, so a statistic copied into prose silently stops
@@ -152,6 +159,7 @@ a creature that pretends to be one.
 | `references/grammar.md` | Always. The exact format, every field and alias. |
 | `references/benchmarks.md` | Always on the design path. Verified against 1,214 official creatures. |
 | `references/engine-design.md` | Design path, `standard` tier and above. |
+| `references/boss-design.md` | A `boss` that fights solo. Apex two-turn template, Break/Toughness bars, destructible parts, and the PWL budget maths for parties above four. |
 | `references/stock-chassis.md` | Naming, traits, senses, languages, action economy, spellcasting conventions. |
 | `references/rule-elements.md` | Before emitting any rule element. 48 precedent-backed recipes. |
 | `references/conversion.md` | Convert path. Includes the full Remaster rename table. |
@@ -172,7 +180,12 @@ a creature that pretends to be one.
   `improved-push` work as `Effects:` slugs. Everything else goes in prose.
 - Every description is formatted — paragraphs, lists, bolded `Trigger`/`Effect`.
   Rollable numbers go in inline enrichers.
-- Descriptions open with one italic flavour line, not a role label, and carry no
-  sentence that only restates the flavour.
+- Descriptions open with one or two evocative italic flavour sentences, not a
+  role label. Compress the rules text, never the fiction; drop any rules
+  sentence that only restates the fiction.
 - Never copy a statistic the actor owns into prose. Proficiency Without Level is
   in play; a copied number stops scaling.
+- Never name a bespoke state after a real PF2e condition. The auto-linker turns
+  every mention into a link to the actual rule — a boss stagger state called
+  "Broken" links to the damaged-equipment condition on every line. Check
+  `CONDITION_WORDS` in `importer.js` before naming a state.
