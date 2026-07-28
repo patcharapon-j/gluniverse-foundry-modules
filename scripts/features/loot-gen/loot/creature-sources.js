@@ -73,8 +73,32 @@ function describeCreature(actor) {
     size: String(traitsObj?.size?.value ?? traitsObj?.size ?? "med").slice(0, 12),
     traits: [...new Set(traitVals.map(slug).filter(Boolean))].slice(0, MAX_TRAITS),
     gear: carriedGear(actor),
-    lore: loreSnippet(sys)
+    lore: loreSnippet(sys),
+    // Optional art reference for the GM's icon prompts (never sent to the LLM).
+    portrait: portraitUrl(actor)
   };
+}
+
+/** Foundry's stock placeholders — no reference value, so never offered as one. */
+const GENERIC_ART = /^icons\/svg\/(mystery-man|cowled|item-bag|blank)/i;
+
+/**
+ * An absolute URL for the creature's portrait (falling back to its token art),
+ * for use as a Midjourney image reference. Relative Foundry paths are resolved
+ * against the world's own origin — which only helps if that origin is reachable
+ * from the outside; the GM is warned about that where the prompt is shown.
+ */
+export function portraitUrl(actor) {
+  const src = String(actor?.img ?? actor?.prototypeToken?.texture?.src ?? "").trim();
+  if (!src || GENERIC_ART.test(src)) return "";
+  if (/^https?:\/\//i.test(src)) return src;
+  const origin = globalThis.location?.origin;
+  if (!origin) return "";
+  try {
+    return new URL(globalThis.foundry?.utils?.getRoute?.(src) ?? src, origin).href;
+  } catch {
+    return "";
+  }
 }
 
 /**

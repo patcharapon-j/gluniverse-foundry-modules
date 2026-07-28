@@ -241,6 +241,13 @@
   "GLLG.workshop.requestFailed": "GLLG: the loot workshop request failed (see console).",
   "GLLG.workshop.noItems": "GLLG: the workshop returned no items — try a more specific request.",
 
+  "GLLG.workshop.labelUsePortrait": "Use the creature's portrait as an art reference",
+  "GLLG.workshop.usePortraitHint": "Adds the creature's portrait to each item's Midjourney icon prompt as an image reference — for its shapes, materials and colours only, never its art style. Midjourney must be able to reach the image URL.",
+
+  "GLLG.icon.head": "GM — Midjourney icon prompt",
+  "GLLG.icon.hint": "Copy the line above into Midjourney (/imagine). It's written for a generator that knows nothing about your campaign or game system — edit freely.",
+  "GLLG.icon.refHint": "The leading URL is the source creature's portrait, used as an image reference for its shapes, materials and mood — not its art style. Midjourney must be able to reach that URL; if your Foundry isn't public, upload the portrait to Midjourney and paste its URL instead.",
+
   "GLLG.card.onlyGm": "GLLG: only the GM can act on a loot proposal.",
   "GLLG.card.proposalExpired": "GLLG: this proposal has expired.",
   "GLLG.card.actionFailed": "GLLG: action failed (see console).",

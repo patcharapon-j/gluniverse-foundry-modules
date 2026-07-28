@@ -516,13 +516,17 @@
 .gllg-flavor-block{margin-bottom:.4em}
 .gllg-flavor-block p{margin:.2em 0}
 
-/* ---- GM-only icon-generation prompt folded into an item description ---- */
+/* ---- GM-only Midjourney icon prompt folded into an item description ---- */
 .gllg-icon-note{margin:.5em 0 .2em;padding:7px 10px;border-radius:8px;
   border:1px solid color-mix(in srgb,var(--gl-accent,var(--gl-accent)) 28%,transparent);
   background:color-mix(in srgb,var(--gl-accent,var(--gl-accent)) 8%,transparent)}
-.gllg-icon-note .gllg-icon-note-head{margin:0 0 .25em;font-size:.92em;color:#9bb3e0}
+.gllg-icon-note .gllg-icon-note-head{margin:0 0 .25em;font-size:.92em;color:var(--gl-text-dim)}
 .gllg-icon-note .gllg-icon-note-head i{margin-right:.35em}
-.gllg-icon-note .gllg-icon-note-body{margin:0;font-size:.92em;line-height:1.4;font-style:italic;opacity:.92}
+/* The body is meant to be selected and pasted verbatim — mono, not italic. */
+.gllg-icon-note .gllg-icon-note-body{margin:0;font:.86em/1.45 var(--gl-tech);
+  overflow-wrap:anywhere;user-select:all;opacity:.95}
+.gllg-icon-note .gllg-icon-note-hint{margin:.35em 0 0;font-size:.82em;line-height:1.35;
+  color:var(--gl-text-faint);font-style:italic}
 
 /* ============================================================
    5 · Plain chat hand-out  (.gllg-handout)
@@ -600,6 +604,8 @@
   clip-path: polygon(var(--gl-cut-xs) 0,100% 0,100% 100%,0 100%,0 var(--gl-cut-xs));
   background:color-mix(in srgb,var(--gl-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--gl-accent) 30%,transparent);cursor:help}
 .gllg-workshop .gllg-creature-chip .gllg-dim{font-weight: var(--gl-weight-medium)}
+/* portrait-as-art-reference opt-in — the caption sits under its checkbox */
+.gllg-workshop .gllg-portrait-hint{margin:3px 0 0 24px;font-size:10.5px;line-height:1.4}
 
 /* roomy multi-line campaign-context field in the settings window */
 textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;

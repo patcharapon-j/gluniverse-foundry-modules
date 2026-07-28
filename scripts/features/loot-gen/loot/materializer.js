@@ -392,7 +392,11 @@ function applyIconNote(data, pick) {
     rarity: foundry.utils.getProperty(data, "system.traits.rarity") ?? pick?.rarity,
     traits: foundry.utils.getProperty(data, "system.traits.value") ?? [],
     flavor: pick?.flavor ?? "",
-    hint: pick?.iconHint ?? ""
+    hint: pick?.iconHint ?? "",
+    // The concrete object to draw ("hand crossbow", "potion") beats the item type.
+    baseItem: foundry.utils.getProperty(data, "system.baseItem") ?? "",
+    category: foundry.utils.getProperty(data, "system.category") ?? "",
+    group: foundry.utils.getProperty(data, "system.group") ?? ""
   });
   if (!note) return data;
   adapter()?.applyGmNote?.(data, note);

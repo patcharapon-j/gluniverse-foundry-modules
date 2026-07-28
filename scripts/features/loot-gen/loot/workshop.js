@@ -92,7 +92,10 @@ function normalizeParams(p = {}) {
     // Creature-sourced loot (DESIGN §7, §13): the model authors items found on /
     // harvested from these creatures. Empty → a plain free-text workshop request.
     sources,
-    lootKind
+    lootKind,
+    // GM opt-in: attach the source creature's portrait to each item's icon
+    // prompt as an image reference. Local to the icon note — never sent to the LLM.
+    usePortrait: !!p.usePortrait
   };
 }
 
@@ -109,7 +112,9 @@ function normalizeSources(raw) {
     traits: Array.isArray(s?.traits) ? s.traits.map(t => String(t).slice(0, 40)).slice(0, 16) : [],
     gear: Array.isArray(s?.gear) ? s.gear.map(g => String(g).slice(0, 80)).slice(0, 12) : [],
     lore: String(s?.lore ?? "").slice(0, 300),
-    count: clampInt(s?.count, 1, 99, 1)
+    count: clampInt(s?.count, 1, 99, 1),
+    // Only an absolute http(s) URL is usable as an image reference downstream.
+    portrait: /^https?:\/\/\S+$/i.test(String(s?.portrait ?? "")) ? String(s.portrait).slice(0, 400) : ""
   })).filter(s => s.name);
 }
 
@@ -129,7 +134,10 @@ async function callWorkshop(params) {
     rarity: params.rarity,
     // Creature sources (DESIGN §7, §13) — when present the model authors loot
     // found on / harvested from these creatures, provenance attributed per one.
-    ...(params.sources?.length ? { sources: params.sources, lootKind: params.lootKind } : {}),
+    // Portraits are a local art-reference concern — strip them from the payload.
+    ...(params.sources?.length
+      ? { sources: params.sources.map(({ portrait, ...s }) => s), lootKind: params.lootKind }
+      : {}),
     campaign: String(safeSetting(SETTINGS.campaignContext, "") ?? "").trim(),
     notes: params.notes,
     party: partyBlurb(),
@@ -189,6 +197,7 @@ function buildWorkshopProposal(params, specs) {
   specs.forEach((raw, i) => {
     const spec = sanitizeSpec(raw);
     if (!spec.name) return;
+    spec.iconRef = portraitRefFor(spec, params);   // optional creature art reference
     const { data: itemData, runeInfo } = buildCustomItemData(spec, params.prompt, params.sources);
     const gp = round2(runeInfo?.totalGp ?? spec.price);
     picks.push({
@@ -237,9 +246,25 @@ function buildWorkshopProposal(params, specs) {
     currencyGp: 0,
     workshop: {
       prompt: params.prompt, count: params.count, level: params.level, rarity: params.rarity,
-      notes: params.notes, label: params.label, sources: params.sources, lootKind: params.lootKind
+      notes: params.notes, label: params.label, sources: params.sources, lootKind: params.lootKind,
+      usePortrait: params.usePortrait
     }
   };
+}
+
+/**
+ * Which creature portrait (if any) should ride along with this item's icon
+ * prompt as an image reference. One source → that creature. Several → the one
+ * this item actually names in its own text; ambiguous items get no reference
+ * rather than the wrong creature's art.
+ */
+function portraitRefFor(spec, params) {
+  if (!params?.usePortrait) return "";
+  const withArt = (params.sources ?? []).filter(s => s.portrait);
+  if (!withArt.length) return "";
+  if (withArt.length === 1) return withArt[0].portrait;
+  const hay = `${spec.name} ${spec.provenance} ${spec.flavor} ${spec.description}`.toLowerCase();
+  return withArt.find(s => hay.includes(s.name.toLowerCase()))?.portrait ?? "";
 }
 
 /**
@@ -356,6 +381,14 @@ function buildDnd5eItemData(spec, description, flags) {
   }
 
   const data = { name: spec.name, type, img: defaultImg5e(type), system, flags };
+  // 5e has no GM-note field; the adapter appends the icon prompt to the
+  // description (which is where a 5e GM will look for it).
+  getAdapter()?.applyGmNote?.(data, iconNoteHtml({
+    name: spec.name, type: spec.type, rarity: spec.rarity,
+    traits: spec.traits, flavor: spec.flavor, hint: spec.iconHint,
+    baseItem: spec.baseItem, category: spec.category, group: spec.group,
+    ref: spec.iconRef
+  }));
   return { data: validateItemData(data) ?? data, runeInfo: null };
 }
 
@@ -460,7 +493,10 @@ function buildDescription(spec) {
 function buildSystemForType(spec, description, runeInfo = null) {
   const gmNote = iconNoteHtml({
     name: spec.name, type: spec.type, rarity: spec.rarity,
-    traits: spec.traits, flavor: spec.flavor, hint: spec.iconHint
+    traits: spec.traits, flavor: spec.flavor, hint: spec.iconHint,
+    // The concrete object to draw ("hand crossbow", "potion") beats the item type.
+    baseItem: spec.baseItem, category: spec.category, group: spec.group,
+    ref: spec.iconRef
   });
   const base = {
     description: { value: description, gm: gmNote },
