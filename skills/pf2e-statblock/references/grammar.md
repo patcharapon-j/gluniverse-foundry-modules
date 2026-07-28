@@ -78,6 +78,29 @@ Creatures in a @Template[cone|distance:30] take @Damage[6d6[fire]|options:area-d
 **Critical Failure** The creature also takes 1d6 persistent fire damage.
 ```
 
+### Lead with flavour, then mechanics
+
+Official abilities open with one short italic line of fiction and then get out
+of the way. Copy that shape:
+
+    Description: *He reads a lane out of the wreckage and calls it aloud.*
+
+    Designate a contiguous path of squares up to 30 feet long, entirely
+    within 60 feet and in his line of sight...
+
+Do **not** open with a role label — `**Primary Signature.**`, `**Engine —**`,
+`**Ultimate.**`. The `Function:` field already records the role and the
+Ultimates sheet displays it; repeating it costs a line and tells the GM nothing
+they cannot see. A stock one-liner (`Razor Strides twice.`) needs no flavour
+line at all.
+
+Then keep the mechanics tight. Every clause should change what happens at the
+table. Cut any sentence that only restates the flavour, and fold paired state
+clauses onto one line rather than giving each its own paragraph:
+
+    **Contained** she can exclude up to two allies. In **Excursion** the burst
+    is 15 feet and she excludes no one.
+
 ## Inline enrichers
 
 Anything you write in PF2e's inline syntax is passed through **verbatim** — it is

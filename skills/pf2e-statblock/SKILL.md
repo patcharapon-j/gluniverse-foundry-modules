@@ -106,6 +106,9 @@ Two things are easy to get wrong and both make the result worse at the table:
   activations. A run-on paragraph is the single most common defect in a
   generated stat block. Write rollable numbers as inline enrichers —
   `@Damage[...]`, `@Check[...|basic]`, `@Template[...]`.
+- **One italic line of flavour, then mechanics, then stop.** Never open with a
+  role label (`**Primary Signature.**`, `**Ultimate.**`) — `Function:` already
+  records it. Cut any sentence that only restates the flavour.
 - **Never restate a number the actor already owns.** "up to its Speed", not "up
   to 35 feet"; "a Bladed Iron Whip Strike", not "+15 for 2d6+7". The suite runs
   Proficiency Without Level, so a statistic copied into prose silently stops
@@ -169,5 +172,7 @@ a creature that pretends to be one.
   `improved-push` work as `Effects:` slugs. Everything else goes in prose.
 - Every description is formatted — paragraphs, lists, bolded `Trigger`/`Effect`.
   Rollable numbers go in inline enrichers.
+- Descriptions open with one italic flavour line, not a role label, and carry no
+  sentence that only restates the flavour.
 - Never copy a statistic the actor owns into prose. Proficiency Without Level is
   in play; a copied number stops scaling.
