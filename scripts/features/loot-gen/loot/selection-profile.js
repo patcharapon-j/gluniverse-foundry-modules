@@ -21,12 +21,10 @@ import { filterCandidates, weightFor, weightedPick, mundaneBases } from "./item-
 import { buildRuneSet } from "../pf2e/runes.js";
 import { logLlmCall } from "./llm-log.js";
 import { clamp } from "../../../core/util.mjs";
-import { safeSetting } from "../settings-util.js";
+import { safeSetting, llmTimeoutMs } from "../settings-util.js";
 
 export const PROFILE_TYPES = ["weapon", "armor", "equipment", "consumable", "treasure"];
 const PERMANENT_TYPES = new Set(["weapon", "armor", "shield", "equipment"]);
-
-const DEFAULT_TIMEOUT_MS = 90000; // client cap; must exceed the sidecar's own
 
 /* ------------------------------ transport ------------------------------ */
 
@@ -37,7 +35,7 @@ const DEFAULT_TIMEOUT_MS = 90000; // client cap; must exceed the sidecar's own
  * the structured LLM log line. Throws on transport/HTTP error so the caller can
  * log-and-fall-back; returns null when no sidecar is configured.
  */
-export async function requestSelectionProfile({ endpoint, payload, kind, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export async function requestSelectionProfile({ endpoint, payload, kind, timeoutMs = llmTimeoutMs() }) {
   const base = String(safeSetting(SETTINGS.sidecarUrl, "")).trim().replace(/\/+$/, "");
   if (!base) return null;
   const secret = String(safeSetting(SETTINGS.sidecarSecret, "")).trim();

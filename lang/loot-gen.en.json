@@ -79,6 +79,9 @@
   "GLLG.settings.llmModel.name": "Claude Model",
   "GLLG.settings.llmModel.hint": "Which Claude model the sidecar uses for flavor and workshop generation. Accepts a CLI alias (opus, sonnet, haiku) or a full model id (e.g. claude-sonnet-4-6). Leave blank to use the sidecar's own default (its GLLG_MODEL, or the claude CLI default). The model must be available to the Claude login the sidecar runs under.",
 
+  "GLLG.settings.llmTimeout.name": "LLM Request Timeout (seconds)",
+  "GLLG.settings.llmTimeout.hint": "How long to wait for a sidecar reply before giving up. Raise it if slower models (or a busy sidecar host) time out before answering; it must be at least as long as the sidecar's own per-call timeout, or the browser aborts a request the sidecar would have answered. Batch authoring in the Workshop scales this up per extra item (up to 4x). Timing out is always graceful — the loot still drops with plain rules-text.",
+
   "GLLG.settings.campaignContext.name": "Campaign Context (for the LLM)",
   "GLLG.settings.campaignContext.hint": "A short blurb describing your campaign — setting, tone, region, recurring villains, signature themes. Fed to the LLM as baseline context so generated flavor, provenance, and custom workshop loot fit your world. Leave blank to keep flavor generic. Only used when the LLM sidecar is enabled.",
 

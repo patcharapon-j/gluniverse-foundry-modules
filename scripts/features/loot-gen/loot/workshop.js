@@ -12,28 +12,27 @@
  * draft.
  */
 
-import { MODULE_ID, SETTINGS, TARGET } from "../const.js";
+import { MODULE_ID, SETTINGS, TARGET, LLM_TIMEOUT } from "../const.js";
 import { getAdapter } from "../systems/registry.js";
 import { iconNoteHtml } from "./icon-note.js";
 import { logLlmCall } from "./llm-log.js";
 import { sourcesLabel } from "./creature-sources.js";
-import { safeSetting } from "../settings-util.js";
+import { safeSetting, llmTimeoutMs } from "../settings-util.js";
 import { sanitizeRuneSet, buildRuneSet, runePriceOf, runeSetNames, themeRuneSlugs } from "../pf2e/runes.js";
 
 function resolveParty() { return getAdapter()?.resolveParty() ?? { partyActor: null, members: [] }; }
 function actorLevel(a) { return getAdapter()?.actorLevel(a) ?? 1; }
 
 // Authoring scales with how many items the model writes — a single item is
-// quick, but a batch can take a while. The cap keeps a runaway request bounded.
-// These must stay >= the sidecar's own per-call timeout (server.mjs) or the
-// browser aborts a request the sidecar would have answered (the 502 case).
-const REQUEST_TIMEOUT_BASE_MS = 60000;     // first item
-const REQUEST_TIMEOUT_PER_ITEM_MS = 30000; // each additional item
-const REQUEST_TIMEOUT_MAX_MS = 240000;     // hard ceiling
-
+// quick, but a batch can take a while. The GM-configured client cap covers the
+// first item; each additional one adds a share of it, bounded by a ceiling that
+// keeps a runaway request from hanging forever. The base must stay >= the
+// sidecar's own per-call timeout (server.mjs) or the browser aborts a request
+// the sidecar would have answered (the 502 case).
 function workshopTimeoutMs(count) {
+  const base = llmTimeoutMs();
   const extra = Math.max(0, (Math.trunc(Number(count)) || 1) - 1);
-  return Math.min(REQUEST_TIMEOUT_MAX_MS, REQUEST_TIMEOUT_BASE_MS + extra * REQUEST_TIMEOUT_PER_ITEM_MS);
+  return Math.min(base * LLM_TIMEOUT.MAX_FACTOR, base + extra * base * LLM_TIMEOUT.PER_ITEM_FACTOR);
 }
 
 /** The workshop needs the sidecar; it's available once a URL is configured. */

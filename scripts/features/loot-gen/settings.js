@@ -1,6 +1,6 @@
 /** Setting registration for GLUniverse — Loot Generator. */
 
-import { MODULE_ID, SETTINGS, SOURCE_MODE, MOTION_TIER } from "./const.js";
+import { MODULE_ID, SETTINGS, SOURCE_MODE, MOTION_TIER, LLM_TIMEOUT } from "./const.js";
 import { applyMotionTier as applySuiteMotionTier } from "../../core/theme.mjs";
 import { LlmLogViewer } from "./apps/llm-log.js";
 
@@ -133,6 +133,16 @@ export function registerSettings() {
     name: "GLLG.settings.llmModel.name",
     hint: "GLLG.settings.llmModel.hint",
     scope: "world", config: true, type: String, default: ""
+  });
+
+  // How long the browser waits on a sidecar reply before aborting. Slower models
+  // (or a busy box) need a longer leash; every LLM path fails gracefully, so the
+  // only cost of a generous value is waiting longer for the plain-text fallback.
+  reg(SETTINGS.llmTimeoutSec, {
+    name: "GLLG.settings.llmTimeout.name",
+    hint: "GLLG.settings.llmTimeout.hint",
+    scope: "world", config: true, type: Number, default: LLM_TIMEOUT.DEFAULT_SEC,
+    range: { min: LLM_TIMEOUT.MIN_SEC, max: LLM_TIMEOUT.MAX_SEC, step: LLM_TIMEOUT.STEP_SEC }
   });
 
   reg(SETTINGS.campaignContext, {
