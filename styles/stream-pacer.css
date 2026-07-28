@@ -2640,16 +2640,20 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   box-sizing: border-box;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 4px 3px;
+  gap: 4px;
+  padding: 5px 4px;
   border: 1px solid var(--sp-edge);
+  /* The same frosted glass the HUD is cut from, so the fixture reads as part
+     of the same object rather than a widget parked next to it. */
   background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), transparent 42%),
-    linear-gradient(180deg, var(--gl-ink-2), var(--gl-ink-0));
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.10), rgb(var(--gl-tint-light) / 0) 34%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.20)),
+    linear-gradient(160deg, var(--sp-glass-tint), var(--gl-ink-1) 64%);
   box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
-    inset 0 -6px 12px rgb(var(--gl-tint-dark) / 0.5),
-    0 3px 10px rgb(var(--gl-tint-dark) / 0.45);
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
+  backdrop-filter: blur(16px) saturate(1.15);
   pointer-events: auto;
   transition: border-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }
@@ -2668,37 +2672,76 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   border-right-color: transparent;
 }
 
+/* Well — the recessed strip the lamps sit in. A real signal head is a hollow
+   body with lenses set into it; this one line of depth is what separates the
+   fixture from three dots on a slab. */
+.stream-pacer-safety-light::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.42), rgb(var(--gl-tint-dark) / 0.24));
+  box-shadow:
+    inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.6),
+    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.06);
+  pointer-events: none;
+}
+
+/* Seam — a soft hairline where the housing meets the HUD, so the joint reads
+   as a moulding line rather than a missing edge. */
+.stream-pacer-safety-light::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgb(var(--gl-tint-light) / 0.16), transparent);
+  pointer-events: none;
+}
+
+.stream-pacer-safety-light.dock-right::after { left: 0; }
+.stream-pacer-safety-light.dock-left::after { right: 0; }
+
 /* Hood — a thin gloss cap so the housing reads as moulded, not drawn. */
 .stream-pacer-safety-light .sp-sl-hood {
   position: absolute;
   top: 1px;
-  left: 3px;
-  right: 3px;
+  left: 4px;
+  right: 4px;
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.22), transparent);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.20), transparent);
   pointer-events: none;
 }
 
-/* ---- Lamps ---- */
+/* ---- Lamps ----
+   Each lamp carries its own bloom budget: green is the resting state of the
+   whole table, so it glows just enough to read as lit. Yellow and red buy more
+   halo because they are meant to be noticed. */
 .stream-pacer-safety-light .sp-sl-lamp {
   --sp-lamp: var(--gl-text-dim);
+  --sp-lamp-bloom: 46%;
+  --sp-lamp-halo: 7px;
   position: relative;
   flex: none;
   box-sizing: border-box;
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   min-width: 0;
   min-height: 0;
   margin: 0;
   padding: 0;
   line-height: 0;
-  border: 1px solid color-mix(in srgb, var(--sp-lamp) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-lamp) 32%, transparent);
   border-radius: 50%;
   background:
-    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.14), transparent 40%),
-    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 16%, var(--gl-ink-0)) 0 52%, var(--gl-ink-0) 100%);
-  box-shadow: inset 0 -2px 4px rgb(var(--gl-tint-dark) / 0.6);
+    radial-gradient(circle at 34% 26%, rgb(var(--gl-tint-light) / 0.12), transparent 42%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 17%, var(--gl-ink-0)) 0 54%, var(--gl-ink-0) 100%);
+  /* Visor above, seat below — the pair is what makes the lens read as recessed
+     glass instead of a flat dot. */
+  box-shadow:
+    inset 0 3px 4px -2px rgb(var(--gl-tint-dark) / 0.85),
+    inset 0 -2px 4px rgb(var(--gl-tint-dark) / 0.55);
   cursor: pointer;
   transition:
     border-color var(--gl-d-quick) var(--gl-ease),
@@ -2707,48 +2750,68 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
     transform var(--gl-d-tap) var(--sp-ease-spring);
 }
 
-.stream-pacer-safety-light .sp-sl-lamp.lamp-green { --sp-lamp: var(--gl-good); }
-.stream-pacer-safety-light .sp-sl-lamp.lamp-yellow { --sp-lamp: var(--gl-signal); }
-.stream-pacer-safety-light .sp-sl-lamp.lamp-red { --sp-lamp: var(--gl-hazard); }
+.stream-pacer-safety-light .sp-sl-lamp.lamp-green {
+  --sp-lamp: var(--gl-good);
+  --sp-lamp-bloom: 40%;
+  --sp-lamp-halo: 6px;
+}
+
+.stream-pacer-safety-light .sp-sl-lamp.lamp-yellow {
+  --sp-lamp: var(--gl-signal);
+  --sp-lamp-bloom: 60%;
+  --sp-lamp-halo: 9px;
+}
+
+.stream-pacer-safety-light .sp-sl-lamp.lamp-red {
+  --sp-lamp: var(--gl-hazard);
+  --sp-lamp-bloom: 72%;
+  --sp-lamp-halo: 11px;
+}
 
 /* Lens — the specular pip that sells the glass. */
 .stream-pacer-safety-light .sp-sl-lens {
   position: absolute;
-  top: 1px;
-  left: 2px;
+  top: 2px;
+  left: 3px;
   width: 4px;
   height: 3px;
   border-radius: 50%;
   background: rgb(var(--gl-tint-light) / 0.3);
-  opacity: 0.5;
+  opacity: 0.45;
   pointer-events: none;
   transition: opacity var(--gl-d-quick) var(--gl-ease);
 }
 
 .stream-pacer-safety-light .sp-sl-lamp:hover {
-  border-color: color-mix(in srgb, var(--sp-lamp) 70%, transparent);
+  border-color: color-mix(in srgb, var(--sp-lamp) 66%, transparent);
   background:
-    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.2), transparent 40%),
-    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 34%, var(--gl-ink-0)) 0 52%, var(--gl-ink-0) 100%);
-  transform: scale(1.12);
+    radial-gradient(circle at 34% 26%, rgb(var(--gl-tint-light) / 0.18), transparent 42%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 32%, var(--gl-ink-0)) 0 54%, var(--gl-ink-0) 100%);
+  transform: scale(1.1);
 }
 
 .stream-pacer-safety-light .sp-sl-lamp:active {
   transform: scale(var(--gl-press-scale));
 }
 
-.stream-pacer-safety-light .sp-sl-lamp.is-lit {
-  border-color: color-mix(in srgb, var(--sp-lamp) 92%, white);
-  background:
-    radial-gradient(circle at 34% 28%, rgb(var(--gl-tint-light) / 0.5), transparent 44%),
-    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 92%, white) 0 44%, var(--sp-lamp) 100%);
-  box-shadow:
-    0 0 8px color-mix(in srgb, var(--sp-lamp) 62%, transparent),
-    0 0 16px color-mix(in srgb, var(--sp-lamp) 28%, transparent),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.5);
+.stream-pacer-safety-light .sp-sl-lamp:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--sp-lamp) 80%, transparent);
+  outline-offset: 2px;
 }
 
-.stream-pacer-safety-light .sp-sl-lamp.is-lit .sp-sl-lens { opacity: 0.85; }
+.stream-pacer-safety-light .sp-sl-lamp.is-lit {
+  border-color: color-mix(in srgb, var(--sp-lamp) 88%, white);
+  background:
+    radial-gradient(circle at 34% 26%, rgb(var(--gl-tint-light) / 0.55), transparent 46%),
+    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 90%, white) 0 42%, var(--sp-lamp) 100%);
+  box-shadow:
+    0 0 var(--sp-lamp-halo) color-mix(in srgb, var(--sp-lamp) var(--sp-lamp-bloom), transparent),
+    0 0 calc(var(--sp-lamp-halo) * 2) color-mix(in srgb, var(--sp-lamp) 20%, transparent),
+    inset 0 2px 3px -2px rgb(var(--gl-tint-dark) / 0.5),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.45);
+}
+
+.stream-pacer-safety-light .sp-sl-lamp.is-lit .sp-sl-lens { opacity: 0.82; }
 
 /* A lit yellow or red keeps breathing so the player can see their own raise. */
 .stream-pacer-safety-light .sp-sl-lamp.lamp-yellow.is-lit,
@@ -2756,30 +2819,54 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   animation: sp-lamp-breathe var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
-/* The housing takes the colour of the standing light. */
+/* The housing takes the colour of the standing light — green stays quiet, so
+   the resting state of the table never draws the eye. */
 .stream-pacer-safety-light.light-yellow {
-  border-color: color-mix(in srgb, var(--gl-signal) 46%, transparent);
+  border-color: color-mix(in srgb, var(--gl-signal) 44%, transparent);
   box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
-    0 0 12px color-mix(in srgb, var(--gl-signal) 24%, transparent);
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+    0 0 12px color-mix(in srgb, var(--gl-signal) 22%, transparent),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
 }
 
 .stream-pacer-safety-light.light-red {
-  border-color: color-mix(in srgb, var(--gl-hazard) 58%, transparent);
+  border-color: color-mix(in srgb, var(--gl-hazard) 50%, transparent);
   box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.12),
-    0 0 16px color-mix(in srgb, var(--gl-hazard) 34%, transparent);
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+    0 0 16px color-mix(in srgb, var(--gl-hazard) 32%, transparent),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
 }
 
-/* An open GM ask makes the whole light pulse — the arrow points right here. */
+/* An open GM ask makes the whole light pulse — the arrow points right here.
+   Its own keyframe, so the housing keeps its depth while the halo breathes. */
 .stream-pacer-safety-light.is-asking {
-  border-color: color-mix(in srgb, var(--gl-signal) 70%, transparent);
-  animation: sp-safety-ask-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
+  border-color: color-mix(in srgb, var(--gl-signal) 52%, transparent);
+  animation: sp-safety-light-ask var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
+@keyframes sp-safety-light-ask {
+  0%, 100% {
+    box-shadow:
+      0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+      0 0 10px color-mix(in srgb, var(--gl-signal) 22%, transparent),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+      inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
+  }
+  50% {
+    box-shadow:
+      0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+      0 0 20px color-mix(in srgb, var(--gl-signal) 40%, transparent),
+      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.22),
+      inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
+  }
+}
+
+/* Gentle on purpose: the player already knows they raised it. */
 @keyframes sp-lamp-breathe {
-  0%, 100% { filter: brightness(0.94); }
-  50% { filter: brightness(1.2); }
+  0%, 100% { filter: brightness(0.96); }
+  50% { filter: brightness(1.14); }
 }
 
 @keyframes sp-safety-ask-blink {
