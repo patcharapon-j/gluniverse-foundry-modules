@@ -30,7 +30,9 @@ export const ABILITY_FUNCTIONS = Object.freeze({
 });
 
 export const COMPLEXITY_TIERS = new Set(["background", "standard", "elite", "boss"]);
-export const ALLEGIANCES = new Set(["enemy", "ally"]);
+// "neutral" covers wildcards, rival parties and escort targets: their engine
+// keys off events rather than sides, so both parties can feed or starve it.
+export const ALLEGIANCES = new Set(["enemy", "ally", "neutral"]);
 
 export const ICON_SUGGESTIONS = [
   "fa-solid fa-star",

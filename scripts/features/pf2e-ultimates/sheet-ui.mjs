@@ -303,7 +303,7 @@ function renderConfig(actor, state) {
   const options = ICON_SUGGESTIONS.map((icon) => `<option value="${escapeAttr(icon)}"></option>`).join("");
   const tierOptions = ["background", "standard", "elite", "boss"]
     .map((value) => option(value, t(`GLULT.Tier.${value}`), state.tier)).join("");
-  const allegianceOptions = ["enemy", "ally"]
+  const allegianceOptions = ["enemy", "ally", "neutral"]
     .map((value) => option(value, t(`GLULT.Allegiance.${value}`), state.allegiance)).join("");
   return `
     <form class="glult-config-form" style="--gl-accent:${escapeAttr(state.color)}">
@@ -383,7 +383,7 @@ function renderConfig(actor, state) {
         ${textArea("gainRule", "GLULT.Config.GainRule", "GLULT.Config.GainRuleHint", state.gainRule)}
         ${textArea("cashOut", "GLULT.Config.CashOut", "GLULT.Config.CashOutHint", state.cashOut)}
       </details>
-      <details class="glult-engine-details" ${state.allegiance === "enemy" ? "open" : ""}>
+      <details class="glult-engine-details" ${state.allegiance === "ally" ? "" : "open"}>
         <summary>${escapeHTML(t("GLULT.Config.CounterplayDesign"))}</summary>
         ${textArea("tell", "GLULT.Config.Tell", "GLULT.Config.TellHint", state.tell)}
         ${textArea("threat", "GLULT.Config.Threat", "GLULT.Config.ThreatHint", state.threat)}
