@@ -103,6 +103,18 @@ When touching localization, also sanity-check that referenced keys resolve and
 that `module.json`'s `styles`/`languages`/`esmodules` lists still point at files
 that exist.
 
+**When touching the stat block parser** (`features/statsblock-import/`), re-check
+the two Load Sample payloads (the format's only in-app documentation) plus the
+description-rendering round trip, all of which `--samples` covers:
+
+```bash
+node tools/parse-check.mjs --samples
+```
+
+Zero errors required. The same tool checks a file directly
+(`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
+export/import symmetry rules and the `ult.*` cross-feature flag contract.
+
 ## Don't
 
 - Don't add a build step, bundler, or transpile — Foundry consumes the source.

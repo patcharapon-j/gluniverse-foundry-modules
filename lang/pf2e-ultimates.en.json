@@ -69,6 +69,7 @@
   "GLULT.Tier.boss": "Boss",
   "GLULT.Allegiance.enemy": "Enemy",
   "GLULT.Allegiance.ally": "Allied NPC",
+  "GLULT.Allegiance.neutral": "Neutral / wildcard",
   "GLULT.Config.Save": "Save",
   "GLULT.Config.Cancel": "Cancel",
   "GLULT.Notify.Spent": "{item} spent its Ultimate charge.",

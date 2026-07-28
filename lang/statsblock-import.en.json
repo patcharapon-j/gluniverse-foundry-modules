@@ -39,6 +39,7 @@
   "GLSBI.dialog.sourcePlaceholder": "Paste strict Markdown stat block here",
   "GLSBI.dialog.parsePreview": "Parse Preview",
   "GLSBI.dialog.loadSample": "Load Sample",
+  "GLSBI.dialog.loadEngineSample": "Load Engine Sample",
   "GLSBI.dialog.updateModeLabel": "Update mode",
   "GLSBI.dialog.ruleHelperLegend": "Rule Element Helper",
   "GLSBI.dialog.ruleHelperSelectorPlaceholder": "selector/domain/radius",
@@ -50,6 +51,7 @@
   "GLSBI.dialog.hint": "Strict Markdown lets the importer build PF2e NPC fields, strikes, actions, spellcasting entries, items, effects, auras, inline checks and damage, condition links, and explicit rule elements.",
 
   "GLSBI.notes.importedSource": "Imported Source",
+  "GLSBI.notes.recallKnowledge": "Recall Knowledge",
 
   "GLSBI.preview.standbyTitle": "STANDBY",
   "GLSBI.preview.standbyHint": "Paste a strict Markdown stat block and click <strong>Parse Preview</strong>.",
@@ -105,6 +107,12 @@
   "GLSBI.validation.spellNotFound": "Spell not found in PF2e spell compendium: {name}",
   "GLSBI.validation.itemMatch": "Item: {name} -> {pack}",
   "GLSBI.validation.itemGeneric": "Inventory item will be created as generic {type}: {name}",
+  "GLSBI.validation.functionsWithoutEngine": "Abilities are tagged with Functions but there is no \"## Engine\" section, so the NPC has no resource for them to build or spend.",
+  "GLSBI.validation.engineOnHazard": "An \"## Engine\" section was ignored: combat engines apply to NPC actors, not hazards.",
+  "GLSBI.validation.ultimateWithoutGain": "An Ultimate is tagged but the Engine has no Gain rule, so there is no stated way to earn it.",
+  "GLSBI.validation.tierMissingFunction": "Tier \"{tier}\" expects a {role} function, but no ability is tagged with it.",
+  "GLSBI.validation.backgroundUltimate": "Background-tier NPCs should not carry an Ultimate; consider raising the Tier or dropping the tag.",
+  "GLSBI.validation.thresholdAboveMax": "Ready threshold ({threshold}) exceeds the charge maximum ({max}); it will be clamped.",
 
   "GLSBI.parse.ignoredField": "Ignored field \"{field}\" in section \"{section}\".",
   "GLSBI.parse.ignoredBlock": "Ignored block \"{name}\" in section \"{section}\".",
@@ -121,6 +129,11 @@
   "GLSBI.parse.criticalOnly": "Critical-only damage on {name} is preserved in the text but cannot be represented as an NPC Strike damage category.",
   "GLSBI.parse.looseReader": "Parsed using the loose stat block reader; review the preview before importing.",
 
+  "GLSBI.parse.badEngineValue": "Engine field \"{field}\" has an unrecognised value \"{value}\"; expected one of: {allowed}.",
+  "GLSBI.parse.badFunction": "Unknown Function \"{value}\" on \"{name}\"; expected one of: {allowed}.",
+  "GLSBI.parse.functionIgnored": "Function on \"{name}\" was ignored: section \"{section}\" does not create an item that can carry one.",
+
   "GLSBI.label.npc": "NPC",
-  "GLSBI.label.hazard": "hazard"
+  "GLSBI.label.hazard": "hazard",
+  "GLSBI.label.trigger": "Trigger:"
 }
