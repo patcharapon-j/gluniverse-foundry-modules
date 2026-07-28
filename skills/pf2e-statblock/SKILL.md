@@ -52,6 +52,10 @@ Follow `references/engine-design.md`. What each tier owes:
 | `elite` | Two Signatures, Trigger, Engine, Signature Utility, Ultimate, `## Engine`, `## Recall Knowledge` |
 | `boss` | Everything in elite, plus `## Phases` |
 
+If the boss is meant to carry an encounter **alone**, also read
+`references/boss-design.md` — solo bosses break the XP table above five bodies,
+and the Apex/Break patterns there are what fix it.
+
 ### 3. Set the numbers
 
 Use `references/benchmarks.md`. Two rules do most of the work:
@@ -155,6 +159,7 @@ a creature that pretends to be one.
 | `references/grammar.md` | Always. The exact format, every field and alias. |
 | `references/benchmarks.md` | Always on the design path. Verified against 1,214 official creatures. |
 | `references/engine-design.md` | Design path, `standard` tier and above. |
+| `references/boss-design.md` | A `boss` that fights solo. Apex two-turn template, Break/Toughness bars, destructible parts, and the PWL budget maths for parties above four. |
 | `references/stock-chassis.md` | Naming, traits, senses, languages, action economy, spellcasting conventions. |
 | `references/rule-elements.md` | Before emitting any rule element. 48 precedent-backed recipes. |
 | `references/conversion.md` | Convert path. Includes the full Remaster rename table. |
@@ -180,3 +185,7 @@ a creature that pretends to be one.
   sentence that only restates the fiction.
 - Never copy a statistic the actor owns into prose. Proficiency Without Level is
   in play; a copied number stops scaling.
+- Never name a bespoke state after a real PF2e condition. The auto-linker turns
+  every mention into a link to the actual rule — a boss stagger state called
+  "Broken" links to the damaged-equipment condition on every line. Check
+  `CONDITION_WORDS` in `importer.js` before naming a state.
