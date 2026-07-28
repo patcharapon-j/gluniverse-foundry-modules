@@ -111,6 +111,11 @@ function buildForm(presetPrompt, sources) {
     <div class="gllg-field gllg-lootkind" data-creature-only style="${sources.length ? "" : "display:none"}">
       <label>${esc(loc("GLLG.workshop.labelLootKind"))}</label><select name="lootKind">${lootKind}</select>
     </div>
+    <div class="gllg-field" data-creature-only style="${sources.length ? "" : "display:none"}">
+      <label class="gllg-check"><input type="checkbox" name="usePortrait">
+        <span>${esc(loc("GLLG.workshop.labelUsePortrait"))}</span></label>
+      <p class="gllg-dim gllg-portrait-hint">${esc(loc("GLLG.workshop.usePortraitHint"))}</p>
+    </div>
     <div class="gllg-field"><label>${esc(loc("GLLG.workshop.labelDescribe"))} <span class="gllg-dim gllg-prompt-hint">${sources.length ? esc(loc("GLLG.workshop.describeHintOptional")) : ""}</span></label>
       <textarea name="prompt" rows="3" placeholder="${attr(loc("GLLG.workshop.describePlaceholder"))}">${esc(presetPrompt)}</textarea></div>
     <div class="gllg-row">
@@ -190,6 +195,9 @@ function readForm(form) {
     rarity: get("rarity") || "any",
     useCreatures: useCreatures && sources.length > 0,
     lootKind: get("lootKind") || "both",
+    // Feed each source creature's portrait to the icon prompt as an image
+    // reference (art only — it never reaches the LLM).
+    usePortrait: useCreatures && !!form?.elements?.["usePortrait"]?.checked,
     sources
   };
 }
