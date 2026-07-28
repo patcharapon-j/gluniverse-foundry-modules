@@ -1,4 +1,4 @@
-<div id="stream-pacer-container" class="{{#unless isGM}}is-player{{/unless}} {{#if hasActiveSignal}}signal-active{{/if}} {{#if isCountdown}}countdown-active urgency-{{countdownUrgency}}{{/if}} {{#if safety.hudAlert}}safety-alert-{{safety.hudAlert}}{{/if}} {{#if safety.myLight}}my-light-{{safety.myLight}}{{/if}} {{#if safety.requested}}safety-requested{{/if}}">
+<div id="stream-pacer-container" class="{{#unless isGM}}is-player{{/unless}} {{#if hasActiveSignal}}signal-active{{/if}} {{#if isCountdown}}countdown-active urgency-{{countdownUrgency}}{{/if}} {{#if safety.hudAlert}}safety-alert-{{safety.hudAlert}}{{/if}}">
   <div class="sp-accent"></div>
   {{!-- Header --}}
   <div class="pacer-header">
@@ -30,53 +30,31 @@
     </div>
   </div>
 
-  {{!-- Player Status Buttons + Safety Traffic Light (non-GM only) --}}
+  {{!-- Player Status Buttons (non-GM only). The safety traffic light is a
+       separate fixture docked to the HUD's flank — see SafetyLightPanel. --}}
   {{#unless isGM}}
   <div class="p-sec pacer-my-status">
-    <div class="my-status-row">
-      <div class="my-status-main">
-        <div class="status-buttons">
-          <button type="button" class="status-btn status-engaged {{#if myStatusEngaged}}active{{/if}}"
-                  data-action="set-status" data-status="engaged"
-                  title="{{localize 'STREAM_PACER.Status.engaged'}}">
-            <i class="fa-solid fa-hourglass-half"></i>
-          </button>
-          <button type="button" class="status-btn status-hand-raised {{#if myStatusHandRaised}}active{{/if}}"
-                  data-action="set-status" data-status="hand_raised"
-                  title="{{localize 'STREAM_PACER.Status.hand_raised'}}">
-            <i class="fa-solid fa-hand"></i>
-          </button>
-          <button type="button" class="status-btn status-need-time {{#if myStatusNeedTime}}active{{/if}}"
-                  data-action="set-status" data-status="need_time"
-                  title="{{localize 'STREAM_PACER.Status.need_time'}}">
-            <i class="fa-solid fa-brain"></i>
-          </button>
-          <button type="button" class="status-btn status-ready {{#if myStatusReady}}active{{/if}}"
-                  data-action="set-status" data-status="ready"
-                  title="{{localize 'STREAM_PACER.Status.ready'}}">
-            <i class="fa-solid fa-circle-check"></i>
-          </button>
-        </div>
-
-        <div class="sp-light-readout">
-          <i class="fa-solid {{#if safety.requested}}fa-bell{{else}}fa-traffic-light{{/if}}" aria-hidden="true"></i>
-          <span class="sp-light-word">{{safety.readout}}</span>
-        </div>
-      </div>
-
-      {{!-- The traffic light: the player's standing safety signal to the GM --}}
-      <div class="sp-light light-{{safety.myLight}}" role="group"
-           aria-label="{{localize 'STREAM_PACER.SafetyCheck.LightGroupLabel'}}">
-        <span class="sp-light-hood" aria-hidden="true"></span>
-        {{#each safety.lamps}}
-        <button type="button" class="sp-lamp lamp-{{id}} {{#if active}}is-lit{{/if}}"
-                data-action="set-safety-light" data-light="{{id}}"
-                aria-pressed="{{#if active}}true{{else}}false{{/if}}"
-                aria-label="{{label}}" title="{{label}}">
-          <span class="sp-lamp-lens" aria-hidden="true"></span>
-        </button>
-        {{/each}}
-      </div>
+    <div class="status-buttons">
+      <button type="button" class="status-btn status-engaged {{#if myStatusEngaged}}active{{/if}}"
+              data-action="set-status" data-status="engaged"
+              title="{{localize 'STREAM_PACER.Status.engaged'}}">
+        <i class="fa-solid fa-hourglass-half"></i>
+      </button>
+      <button type="button" class="status-btn status-hand-raised {{#if myStatusHandRaised}}active{{/if}}"
+              data-action="set-status" data-status="hand_raised"
+              title="{{localize 'STREAM_PACER.Status.hand_raised'}}">
+        <i class="fa-solid fa-hand"></i>
+      </button>
+      <button type="button" class="status-btn status-need-time {{#if myStatusNeedTime}}active{{/if}}"
+              data-action="set-status" data-status="need_time"
+              title="{{localize 'STREAM_PACER.Status.need_time'}}">
+        <i class="fa-solid fa-brain"></i>
+      </button>
+      <button type="button" class="status-btn status-ready {{#if myStatusReady}}active{{/if}}"
+              data-action="set-status" data-status="ready"
+              title="{{localize 'STREAM_PACER.Status.ready'}}">
+        <i class="fa-solid fa-circle-check"></i>
+      </button>
     </div>
   </div>
   {{/unless}}

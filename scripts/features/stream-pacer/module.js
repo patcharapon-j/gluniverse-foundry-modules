@@ -16,6 +16,7 @@ import { AudioManager } from './AudioManager.js';
 import { HandRaiseSidebar } from './HandRaiseSidebar.js';
 import { PerilOverlay } from './PerilOverlay.js';
 import { CampfireOverlay } from './CampfireOverlay.js';
+import { SafetyLightPanel } from './SafetyLightPanel.js';
 import { SafetyRequestOverlay } from './SafetyRequestOverlay.js';
 import { SafetyAlertOverlay } from './SafetyAlertOverlay.js';
 import { ThemeManager } from './ThemeManager.js';
@@ -43,6 +44,7 @@ let audioManager = null;
 let handRaiseSidebar = null;
 let perilOverlay = null;
 let campfireOverlay = null;
+let safetyLightPanel = null;
 let safetyRequestOverlay = null;
 let safetyAlertOverlay = null;
 let isReady = false;
@@ -124,6 +126,11 @@ export function onReady() {
     pacerHUD = new PacerHUD();
     pacerHUD.render(true);
 
+    // The player's traffic light: its own small fixture docked to the HUD's
+    // flank, so it never has to share the panel's layout.
+    safetyLightPanel = new SafetyLightPanel();
+    safetyLightPanel.initialize();
+
     // Initialize overlay for signals
     pacerOverlay = new PacerOverlay();
     pacerOverlay.initialize();
@@ -174,6 +181,7 @@ export function onReady() {
     handSidebar: handRaiseSidebar,
     peril: perilOverlay,
     campfire: campfireOverlay,
+    safetyLight: safetyLightPanel,
     safetyRequest: safetyRequestOverlay,
     safetyAlert: safetyAlertOverlay,
     theme: ThemeManager
