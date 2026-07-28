@@ -431,6 +431,59 @@
   display: none;
 }
 
+/* Material overlay — one shared pass of glass over every button, whatever
+   colour its state paints underneath: a sheen falling off from the top edge,
+   a bounce coming back off the panel below, and a bevelled lip top and bottom.
+   It lives on a pseudo-element so the per-state rules keep owning `background`
+   and `box-shadow` without ever losing the material. */
+#stream-pacer-container .status-btn::before,
+#stream-pacer-container .gm-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.16), rgb(var(--gl-tint-light) / 0.03) 38%, transparent 58%),
+    radial-gradient(120% 62% at 50% 122%, rgb(var(--gl-tint-light) / 0.10), transparent 72%);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.42);
+  opacity: 0.85;
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
+}
+
+/* Icons ride above the glass. */
+#stream-pacer-container .status-btn i,
+#stream-pacer-container .gm-btn i {
+  position: relative;
+  z-index: 1;
+}
+
+#stream-pacer-container .status-btn:hover::before,
+#stream-pacer-container .gm-btn:hover::before {
+  opacity: 1;
+}
+
+/* A pressed key catches less of the room. */
+#stream-pacer-container .status-btn:active::before,
+#stream-pacer-container .gm-btn:active::before {
+  opacity: 0.6;
+}
+
+/* Filled states read as backlit resin rather than paint: a stronger gloss on
+   the crown and a wider bounce beneath it. */
+#stream-pacer-container .status-btn.active::before,
+#stream-pacer-container .gm-btn.active::before {
+  background:
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.34), rgb(var(--gl-tint-light) / 0.07) 42%, transparent 62%),
+    radial-gradient(110% 66% at 50% 120%, rgb(var(--gl-tint-light) / 0.20), transparent 74%);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.34),
+    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.30);
+  opacity: 1;
+}
+
 #stream-pacer-container .status-btn:hover,
 #stream-pacer-container .gm-btn:hover {
   color: var(--sp-text);
@@ -2732,11 +2785,13 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   margin: 0;
   padding: 0;
   line-height: 0;
-  border: 1px solid color-mix(in srgb, var(--sp-lamp) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-lamp) 30%, transparent);
   border-radius: 50%;
+  /* Dark tinted glass: a shallow scatter pooled below centre (light that got
+     into the lens and bounced), over a body that falls off to an unlit rim. */
   background:
-    radial-gradient(circle at 34% 26%, rgb(var(--gl-tint-light) / 0.12), transparent 42%),
-    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 17%, var(--gl-ink-0)) 0 54%, var(--gl-ink-0) 100%);
+    radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--sp-lamp) 20%, transparent) 0 30%, transparent 74%),
+    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--sp-lamp) 15%, var(--gl-ink-0)) 0 50%, var(--gl-ink-0) 100%);
   /* Visor above, seat below — the pair is what makes the lens read as recessed
      glass instead of a flat dot. */
   box-shadow:
@@ -2768,16 +2823,49 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   --sp-lamp-halo: 11px;
 }
 
-/* Lens — the specular pip that sells the glass. */
+/* Fresnel — a curved lens reflects hardest where it turns away from you, so
+   the rim carries more of its own colour than the face does. */
+.stream-pacer-safety-light .sp-sl-lamp::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 54%,
+    color-mix(in srgb, var(--sp-lamp) 26%, transparent) 86%,
+    color-mix(in srgb, var(--sp-lamp) 44%, transparent) 100%);
+  opacity: 0.55;
+  transition: opacity var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
+}
+
+/* Environment — the panel's own light from above, and a weak bounce off the
+   housing floor. Two soft sheens are what make the lens read as convex. */
+.stream-pacer-safety-light .sp-sl-lamp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 40% at 50% 6%, rgb(var(--gl-tint-light) / 0.20), transparent 72%),
+    radial-gradient(70% 32% at 50% 100%, rgb(var(--gl-tint-light) / 0.09), transparent 78%);
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
+}
+
+/* Lens — the specular pip: the hard reflection of the key light, sitting on
+   top of everything else. */
 .stream-pacer-safety-light .sp-sl-lens {
   position: absolute;
+  z-index: 1;
   top: 2px;
   left: 3px;
   width: 4px;
   height: 3px;
   border-radius: 50%;
-  background: rgb(var(--gl-tint-light) / 0.3);
-  opacity: 0.45;
+  background: radial-gradient(circle, rgb(var(--gl-tint-light) / 0.85), rgb(var(--gl-tint-light) / 0.1) 72%, transparent);
+  opacity: 0.5;
   pointer-events: none;
   transition: opacity var(--gl-d-quick) var(--gl-ease);
 }
@@ -2799,19 +2887,41 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   outline-offset: 2px;
 }
 
+/* Lit — an emitter, not a filled circle: a hot core that washes out to white,
+   the colour saturating as it leaves the core, and a rim left darker because
+   the light has further glass to travel through on its way out. */
 .stream-pacer-safety-light .sp-sl-lamp.is-lit {
-  border-color: color-mix(in srgb, var(--sp-lamp) 88%, white);
+  border-color: color-mix(in srgb, var(--sp-lamp) 86%, white);
   background:
-    radial-gradient(circle at 34% 26%, rgb(var(--gl-tint-light) / 0.55), transparent 46%),
-    radial-gradient(circle, color-mix(in srgb, var(--sp-lamp) 90%, white) 0 42%, var(--sp-lamp) 100%);
+    radial-gradient(circle at 42% 34%, rgb(var(--gl-tint-light) / 0.72) 0 10%, transparent 40%),
+    radial-gradient(circle at 50% 54%, color-mix(in srgb, var(--sp-lamp) 55%, white) 0 20%, transparent 70%),
+    radial-gradient(circle at 50% 50%,
+      color-mix(in srgb, var(--sp-lamp) 88%, white) 0 34%,
+      var(--sp-lamp) 72%,
+      color-mix(in srgb, var(--sp-lamp) 74%, var(--gl-ink-0)) 100%);
+  /* Three-stop falloff: a tight core bloom, the halo proper, then the wide
+     spill that lands on the housing. */
   box-shadow:
+    0 0 calc(var(--sp-lamp-halo) * 0.5) color-mix(in srgb, var(--sp-lamp) 70%, transparent),
     0 0 var(--sp-lamp-halo) color-mix(in srgb, var(--sp-lamp) var(--sp-lamp-bloom), transparent),
-    0 0 calc(var(--sp-lamp-halo) * 2) color-mix(in srgb, var(--sp-lamp) 20%, transparent),
-    inset 0 2px 3px -2px rgb(var(--gl-tint-dark) / 0.5),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.45);
+    0 0 calc(var(--sp-lamp-halo) * 2.2) color-mix(in srgb, var(--sp-lamp) 16%, transparent),
+    inset 0 2px 3px -2px rgb(var(--gl-tint-dark) / 0.42),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.4);
 }
 
-.stream-pacer-safety-light .sp-sl-lamp.is-lit .sp-sl-lens { opacity: 0.82; }
+/* Lit glass throws its own colour at the rim rather than catching the room's. */
+.stream-pacer-safety-light .sp-sl-lamp.is-lit::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 48%,
+    color-mix(in srgb, var(--sp-lamp) 40%, white) 88%,
+    color-mix(in srgb, var(--sp-lamp) 60%, transparent) 100%);
+  opacity: 0.4;
+}
+
+.stream-pacer-safety-light .sp-sl-lamp.is-lit::after { opacity: 0.55; }
+
+.stream-pacer-safety-light .sp-sl-lamp.is-lit .sp-sl-lens { opacity: 0.9; }
 
 /* A lit yellow or red keeps breathing so the player can see their own raise. */
 .stream-pacer-safety-light .sp-sl-lamp.lamp-yellow.is-lit,
