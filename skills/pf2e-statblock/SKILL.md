@@ -99,6 +99,19 @@ nothing at the table. No precedent → write the mechanic as prose in
 Write the statblock in the grammar from `references/grammar.md`, to a `.md`
 file. Never emit a "pretty" statblock and offer to convert it after.
 
+Two things are easy to get wrong and both make the result worse at the table:
+
+- **Format every description.** Blank lines between paragraphs, `- ` for a list
+  of choices, `**Trigger**` / `**Effect**` / `**Requirements**` on reactions and
+  activations. A run-on paragraph is the single most common defect in a
+  generated stat block. Write rollable numbers as inline enrichers —
+  `@Damage[...]`, `@Check[...|basic]`, `@Template[...]`.
+- **Never restate a number the actor already owns.** "up to its Speed", not "up
+  to 35 feet"; "a Bladed Iron Whip Strike", not "+15 for 2d6+7". The suite runs
+  Proficiency Without Level, so a statistic copied into prose silently stops
+  scaling. Absolute distances, damage dice and flat circumstance bonuses are
+  correct to write literally.
+
 ### 7. Verify — not optional
 
 ```bash
@@ -154,3 +167,7 @@ a creature that pretends to be one.
 - An Ultimate can never generate the resource that paid for it.
 - Only `grab`, `improved-grab`, `knockdown`, `improved-knockdown`, `push`,
   `improved-push` work as `Effects:` slugs. Everything else goes in prose.
+- Every description is formatted — paragraphs, lists, bolded `Trigger`/`Effect`.
+  Rollable numbers go in inline enrichers.
+- Never copy a statistic the actor owns into prose. Proficiency Without Level is
+  in play; a copied number stops scaling.

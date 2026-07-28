@@ -118,6 +118,61 @@ function report(label, parsed) {
   return ok;
 }
 
+// --- Description rendering --------------------------------------------------
+//
+// Descriptions carry a little Markdown (paragraphs, `- ` lists, `---`, `**bold**`)
+// and may embed PF2e inline enrichers verbatim. Two things have to hold: the
+// enrichers must survive untouched, and the render → export → render cycle must
+// not drift, or every round trip through the exporter degrades the formatting.
+
+function renderSelfTest() {
+  const { toHtml, toSource } = api.render;
+  const failures = [];
+  const expect = (label, actual, expected) => {
+    if (actual !== expected) failures.push(`${label}\n       expected ${JSON.stringify(expected)}\n       actual   ${JSON.stringify(actual)}`);
+  };
+  const contains = (label, haystack, needle) => {
+    if (!haystack.includes(needle)) failures.push(`${label}\n       missing ${JSON.stringify(needle)} in ${JSON.stringify(haystack)}`);
+  };
+
+  expect("blank line splits paragraphs", toHtml("One.\n\nTwo."), "<p>One.</p>\n<p>Two.</p>");
+  expect("single newline is a line break", toHtml("a\nb"), "<p>a<br>b</p>");
+  expect("bullet list", toHtml("- one\n- two"), "<ul><li>one</li><li>two</li></ul>");
+  expect("lead-in plus bullets", toHtml("Choose one:\n- pull\n- step"), "<p>Choose one:</p><ul><li>pull</li><li>step</li></ul>");
+  expect("horizontal rule", toHtml("A.\n\n---\n\nB."), "<p>A.</p>\n<hr />\n<p>B.</p>");
+  expect("hand-written bold", toHtml("**Requirements** Two Routes."), "<p><strong>Requirements</strong> Two Routes.</p>");
+  contains("auto-bolds a leading keyword", toHtml("Trigger An ally is hit."), "<strong>Trigger</strong> ");
+  contains("auto-bolds a degree of success", toHtml("Critical Success Unaffected."), "<strong>Critical Success</strong> ");
+
+  const uuid = "@UUID[Compendium.pf2e.conditionitems.Item.AJh5ex99aV6VTggg]{Off-Guard}";
+  const damage = "@Damage[(2d6+7)[slashing]]{2d6+7 slashing}";
+  contains("hand-written @Damage survives", toHtml(damage), damage);
+  contains("hand-written @UUID survives", toHtml(uuid), uuid);
+  expect("@UUID is not wrapped twice", (toHtml(uuid).match(/@UUID\[/g) ?? []).length, 1);
+  contains("@Template survives", toHtml("@Template[burst|distance:15]"), "@Template[burst|distance:15]");
+  contains("plain prose DC still auto-links", toHtml("a DC 21 Reflex save"), "@Check[type:reflex|dc:21");
+
+  const normalize = (html) => html.replace(/>\s+</g, "><").trim();
+  const cases = [
+    "**Trigger** An ally within 30 feet is hit.\n\n**Effect** The ally Steps.",
+    "Choose one:\n- pull the target 5 feet\n- Razor Steps",
+    "First.\n\n---\n\nSecond.",
+    `He deals ${damage} and the target is ${uuid}.`
+  ];
+  for (const [index, source] of cases.entries()) {
+    const first = toHtml(source);
+    const roundTripped = toSource(first);
+    const second = toHtml(roundTripped);
+    expect(`round trip #${index + 1} renders the same HTML`, normalize(second), normalize(first));
+    expect(`round trip #${index + 1} reaches a fixed point`, toSource(second), roundTripped);
+  }
+
+  const ok = failures.length === 0;
+  console.log(`${ok ? green("OK  ") : red("ERR ")} render ${dim("·")} description formatting ${dim("(paragraphs, lists, emphasis, inline enrichers, round trip)")}`);
+  for (const failure of failures) console.log(`     ${red("error")}   ${failure}`);
+  return ok;
+}
+
 // --- Entry ------------------------------------------------------------------
 
 const importerUrl = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "scripts", "features", "statsblock-import", "importer.js"));
@@ -139,6 +194,8 @@ if (args.includes("--samples")) {
     checked += 1;
     if (!report(`sample:${name}`, api.parse(build()))) failed += 1;
   }
+  checked += 1;
+  if (!renderSelfTest()) failed += 1;
 } else {
   for (const file of args) {
     checked += 1;

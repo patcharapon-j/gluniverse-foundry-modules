@@ -104,7 +104,8 @@ that `module.json`'s `styles`/`languages`/`esmodules` lists still point at files
 that exist.
 
 **When touching the stat block parser** (`features/statsblock-import/`), re-check
-the two Load Sample payloads, which are the format's only in-app documentation:
+the two Load Sample payloads (the format's only in-app documentation) plus the
+description-rendering round trip, all of which `--samples` covers:
 
 ```bash
 node tools/parse-check.mjs --samples

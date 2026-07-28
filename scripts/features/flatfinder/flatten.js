@@ -57,7 +57,27 @@ function getSourceLevel(context) {
         : [];
   const opt = options.find((o) => /^(?:item|origin)(?::item)?:level:-?\d+$/.test(o ?? ""));
   if (opt) return Number(opt.split(":").pop());
-  return null;
+  return getOriginCreatureLevel(context);
+}
+
+/**
+ * Last resort: the level of the creature the effect came from.
+ *
+ * An NPC ability item ("action" / "passive") carries no level of its own, so a
+ * static DC written into a stat block description — `@Check[fortitude|dc:21]`
+ * on a monster's breath weapon — has nothing for the lookups above to find and
+ * would stay un-flattened under PwL. The level that DC was authored against is
+ * the creature's own, so use it.
+ *
+ * Deliberately reads only the *origin* chain, never `context.actor`: on a saving
+ * throw `context.actor` is the PC rolling the save, and flattening a monster's
+ * DC by the defender's level would be wrong in both directions.
+ */
+function getOriginCreatureLevel(context) {
+  const actor = getSourceItem(context)?.actor ?? context?.origin?.actor ?? null;
+  if (actor?.type !== "npc" && actor?.type !== "hazard") return null;
+  const level = actor.level ?? actor.system?.details?.level?.value;
+  return typeof level === "number" ? level : null;
 }
 
 /**

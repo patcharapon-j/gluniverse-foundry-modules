@@ -135,7 +135,8 @@ When touching localization, also sanity-check that referenced keys resolve —
 especially keys built dynamically at runtime.
 
 **When touching the stat block parser** (`features/statsblock-import/`), re-check
-the two Load Sample payloads, which are the format's only in-app documentation:
+the two Load Sample payloads (the format's only in-app documentation) plus the
+description-rendering round trip, all of which `--samples` covers:
 
 ```bash
 node tools/parse-check.mjs --samples

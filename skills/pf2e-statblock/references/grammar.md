@@ -38,6 +38,85 @@ Rules the parser actually enforces:
 If a statblock does not look like this format at all, the parser falls back to a
 loose reader and warns. Do not rely on that — emit strict form.
 
+## Description formatting
+
+`Description:`, `Effect:` and `Text:` are multi-line blocks that carry a little
+Markdown. **Use it.** A description written as one long run-on paragraph is the
+most common defect in a generated stat block — it renders as an unreadable slab
+on the Foundry sheet.
+
+| Write | Renders as |
+|---|---|
+| blank line between two lines | separate `<p>` paragraphs |
+| single newline | `<br>` inside the same paragraph |
+| `- item` lines | `<ul><li>` list |
+| `---` alone on a line | `<hr />` |
+| `**text**` / `*text*` | `<strong>` / `<em>` |
+
+A line that *opens* with a structural keyword is bolded automatically, so
+`Trigger An ally is hit.` renders as **Trigger** An ally is hit. The keywords:
+`Trigger`, `Effect`, `Requirements`, `Prerequisites`, `Frequency`, `Special`,
+`Targets`, `Range`, `Area`, `Duration`, `Onset`, `Saving Throw`,
+`Maximum Duration`, `Stage N`, and the four degrees of success. Bolding them by
+hand works too and is clearer to read in source.
+
+The shape official abilities use, and the one to copy:
+
+```
+Description: **Trigger** A creature targets the courier with an attack.
+
+**Effect** The courier gains a +2 circumstance bonus to AC against it.
+```
+
+```
+Description: The warden breathes a cone of fire.
+
+Creatures in a @Template[cone|distance:30] take @Damage[6d6[fire]|options:area-damage] damage with a @Check[reflex|dc:22|basic|options:area-effect] save.
+
+---
+
+**Critical Failure** The creature also takes 1d6 persistent fire damage.
+```
+
+## Inline enrichers
+
+Anything you write in PF2e's inline syntax is passed through **verbatim** — it is
+masked before the auto-linkers run, so it is never processed twice.
+
+| Enricher | Use for |
+|---|---|
+| `@Damage[(2d6+7)[slashing]]` | any rollable damage. Multiple types: `@Damage[6d6[fire],2d6[persistent,fire]]` |
+| `@Check[reflex\|dc:22\|basic]` | a saving throw. Add `\|options:area-effect` for areas |
+| `@Template[cone\|distance:30]` | cones, bursts, lines, emanations |
+| `@UUID[...]{Off-Guard}` | a condition link |
+| `[[/gmr 1d4 #Recharge]]{1d4 rounds}` | a GM roll, e.g. breath weapon recharge |
+
+You do not have to write them. Plain prose is auto-converted for the two common
+cases: `DC 22 Reflex` (either word order) becomes an inline check, and
+`2d6 fire damage` becomes an inline damage roll. Conditions named in prose are
+linked automatically. Write enrichers by hand when you need something the
+auto-linker cannot infer — a basic save, an area template, a persistent-damage
+rider, a recharge roll.
+
+## Do not restate the creature's own numbers
+
+The suite is used with Proficiency Without Level. Under that variant
+`pf2e-flatten` subtracts the creature's level from everything derived from its
+statistics, and the suite's own **Flatfinder** feature flattens static DCs
+written into item descriptions. Both work off *live* values — so a number
+copied into prose is a number that will not scale.
+
+| Instead of | Write |
+|---|---|
+| "Strides up to 35 feet" | "Strides up to its Speed" |
+| "makes a +15 Strike for 2d6+7" | "makes a Bladed Iron Whip Strike" |
+| "against AC 21" / "its Reflex DC is 27" | reference the statistic by name |
+| a DC as bare prose | `@Check[fortitude\|dc:21]`, so Flatfinder can flatten it |
+
+Numbers that are **correct** to hardcode, because they do not scale with level:
+absolute distances (30 feet, a 15-foot burst), damage dice, and flat
+circumstance or status bonuses (+1, +2).
+
 ## Top-level fields
 
 | Field | Accepts | Notes |

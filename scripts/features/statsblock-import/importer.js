@@ -165,7 +165,11 @@ export const api = {
   exportActor: exportActorToMarkdown,
   // The two Load Sample payloads, exposed so tools/parse-check.mjs can verify
   // the format's own documentation still parses.
-  samples: { basic: sampleStatBlock, engine: sampleEngineStatBlock }
+  samples: { basic: sampleStatBlock, engine: sampleEngineStatBlock },
+  // The description renderer and its inverse, exposed so the round trip can be
+  // asserted headlessly — formatting that survives import but not export is the
+  // failure mode this pair exists to prevent.
+  render: { toHtml: htmlDescription, toSource: htmlToSource }
 };
 
 class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
@@ -917,7 +921,7 @@ function renderRecallKnowledge(npc) {
 }
 
 function buildNpcActorSource(npc, source) {
-  const publicNotes = [npc.description, ...npc.notes].filter(Boolean).map((p) => `<p>${autoLinkText(escapeHtml(p))}</p>`).join("\n");
+  const publicNotes = [npc.description, ...npc.notes].filter(Boolean).map(htmlDescription).join("\n");
   return {
     name: npc.name,
     type: "npc",
@@ -960,7 +964,7 @@ function buildNpcActorSource(npc, source) {
 
 function buildHazardActorSource(npc, source) {
   const html = (text) => (text ? `<p>${autoLinkText(escapeHtml(text))}</p>` : "");
-  const description = [npc.description, ...npc.notes].filter(Boolean).map((p) => `<p>${autoLinkText(escapeHtml(p))}</p>`).join("\n");
+  const description = [npc.description, ...npc.notes].filter(Boolean).map(htmlDescription).join("\n");
   return {
     name: npc.name,
     type: "hazard",
@@ -1745,12 +1749,127 @@ function skillSlug(name, configSkills) {
   return Object.keys(configSkills).find((key) => slugify(game.i18n.localize(configSkills[key].label)) === slug || key === normalized) ?? slug;
 }
 
+// ---------------------------------------------------------------------------
+// Description rendering
+//
+// A description arrives as plain text carrying a little Markdown: a blank line
+// separates paragraphs, `- ` opens a list, `---` is a horizontal rule, and
+// `**bold**` / `*italic*` do what they look like. Published PF2e abilities also
+// open with a bolded structural keyword ("Trigger", "Effect", "Critical
+// Success", …), so those are bolded automatically when a line starts with one
+// and the author has not already done it by hand.
+//
+// Without this, every ability renders as a single undifferentiated paragraph.
+// ---------------------------------------------------------------------------
+
+const DESC_KEYWORD_RE = /^(Trigger|Effect|Requirements?|Prerequisites?|Frequency|Critical Success|Critical Failure|Success|Failure|Special|Targets?|Range|Area|Duration|Onset|Saving Throw|Maximum Duration|Stage \d+)\b[ \t]*/;
+
 function htmlDescription(text) {
   if (!text) return "";
-  return text.split(/\n{2,}/).map((paragraph) => `<p>${autoLinkText(escapeHtml(paragraph.trim()).replace(/\n/g, "<br>"))}</p>`).join("\n");
+  return String(text).split(/\n{2,}/).map(renderDescriptionChunk).filter(Boolean).join("\n");
 }
 
+function renderDescriptionChunk(chunk) {
+  if (/^\s*[-*_]{3,}\s*$/.test(chunk)) return "<hr />";
+  const out = [];
+  let bullets = [];
+  let paragraph = [];
+  const flushBullets = () => { if (bullets.length) { out.push(`<ul>${bullets.join("")}</ul>`); bullets = []; } };
+  const flushParagraph = () => { if (paragraph.length) { out.push(`<p>${paragraph.join("<br>")}</p>`); paragraph = []; } };
+  for (const raw of chunk.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const bullet = line.match(/^[-*]\s+(.*)$/);
+    if (bullet) {
+      flushParagraph();
+      bullets.push(`<li>${inlineMarkup(bullet[1])}</li>`);
+    } else {
+      flushBullets();
+      paragraph.push(inlineMarkup(line));
+    }
+  }
+  flushBullets();
+  flushParagraph();
+  return out.join("");
+}
+
+function inlineMarkup(line) {
+  let html = escapeHtml(line);
+  // escapeHTML also escapes quotes so a value is safe inside an attribute. A
+  // description is a text node, so put them back rather than storing "&#39;"
+  // for every apostrophe in the stat block.
+  html = html.replace(/&#39;/g, "'").replace(/&quot;/g, "\"");
+  html = html.replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[\s([])\*(\S(?:[^*]*\S)?)\*(?=$|[\s.,;:!?)\]])/g, "$1<em>$2</em>");
+  // A hand-bolded keyword already starts with "<strong>", so this only fires on
+  // lines the author left plain.
+  html = html.replace(DESC_KEYWORD_RE, (_match, keyword) => `<strong>${keyword}</strong> `);
+  return autoLinkText(html);
+}
+
+// Inline PF2e enrichers (`@Damage[…]{…}`, `@Check[…]`, `@UUID[…]{…}`, `[[…]]`)
+// are hand-authored and already final. Mask them before the auto-linkers run,
+// or a condition name sitting in a UUID's own label gets wrapped a second time
+// and the link breaks.
 function autoLinkText(text) {
+  const { masked, spans } = maskInlineSpans(String(text));
+  return enrichPlainText(masked).replace(/\u0000(\d+)\u0000/g, (_match, index) => spans[Number(index)] ?? "");
+}
+
+function maskInlineSpans(text) {
+  const spans = [];
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const end = inlineSpanEnd(text, i);
+    if (end > i) {
+      spans.push(text.slice(i, end));
+      out += `\u0000${spans.length - 1}\u0000`;
+      i = end;
+      continue;
+    }
+    out += text[i];
+    i += 1;
+  }
+  return { masked: out, spans };
+}
+
+/** Index just past an inline enricher starting at `i`, or `i` when none does. */
+function inlineSpanEnd(text, i) {
+  let cursor;
+  if (text.startsWith("[[", i)) {
+    cursor = i;
+  } else if (text[i] === "@") {
+    const opener = /^@[A-Za-z]+\[/.exec(text.slice(i));
+    if (!opener) return i;
+    cursor = i + opener[0].length - 1;
+  } else {
+    return i;
+  }
+  cursor = balancedEnd(text, cursor, "[", "]");
+  if (cursor < 0) return i;
+  if (text[cursor] === "{") {
+    const labelled = balancedEnd(text, cursor, "{", "}");
+    if (labelled > 0) cursor = labelled;
+  }
+  return cursor;
+}
+
+/** Index just past the balanced bracket group opening at `start`, or -1. */
+function balancedEnd(text, start, open, close) {
+  if (text[start] !== open) return -1;
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    if (text[i] === open) depth += 1;
+    else if (text[i] === close) {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+function enrichPlainText(text) {
   let enriched = text;
   enriched = enriched.replace(/\b(DC)\s+(\d+)\s+(Fortitude|Fort|Reflex|Ref|Will)\b/gi, (_match, _dc, dc, save) => `@Check[type:${SAVE_MAP[slugify(save)]}|dc:${dc}|showDC:all]`);
   enriched = enriched.replace(/\b(Fortitude|Fort|Reflex|Ref|Will)\s+DC\s+(\d+)\b/gi, (_match, save, dc) => `@Check[type:${SAVE_MAP[slugify(save)]}|dc:${dc}|showDC:all]`);
@@ -1761,10 +1880,7 @@ function autoLinkText(text) {
     const label = titleCase(condition.replace(/-/g, " "));
     const uuid = conditionUuid(condition);
     const pattern = new RegExp(`\\b${condition.replace(/-/g, "[- ]")}\\b`, "gi");
-    enriched = enriched.replace(pattern, (match, offset, full) => {
-      if (full.slice(Math.max(0, offset - 12), offset).includes("@UUID[")) return match;
-      return `@UUID[${uuid}]{${label}}`;
-    });
+    enriched = enriched.replace(pattern, () => `@UUID[${uuid}]{${label}}`);
   }
   return enriched;
 }
@@ -1997,14 +2113,14 @@ function exportAttack(item) {
     `Traits: ${(system.traits?.value ?? []).join(", ")}`,
     (system.attackEffects?.value ?? []).length ? `Effects: ${system.attackEffects.value.join(", ")}` : "",
     exportFunctions(item),
-    `Description: ${stripHtml(system.description?.value ?? "")}`,
+    `Description: ${htmlToSource(system.description?.value ?? "")}`,
     formatRules(system.rules)
   ].filter(Boolean);
 }
 
 function exportAction(item) {
   const system = item.system;
-  return ["", `### ${item.name}`, `Type: ${system.actionType?.value ?? "action"}`, `Actions: ${system.actions?.value ?? 1}`, `Category: ${system.category ?? "offensive"}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${stripHtml(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
+  return ["", `### ${item.name}`, `Type: ${system.actionType?.value ?? "action"}`, `Actions: ${system.actions?.value ?? 1}`, `Category: ${system.category ?? "offensive"}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${htmlToSource(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
 }
 
 // --- Engine / Recall Knowledge / Phases -------------------------------------
@@ -2020,22 +2136,29 @@ function exportFunctions(item) {
 
 function exportPhase(item) {
   const system = item.system;
-  const text = stripHtml(system.description?.value ?? "");
+  const text = htmlToSource(system.description?.value ?? "");
   // The trigger is stored verbatim on its own flag, so peeling it back out of
   // the description is an exact string removal rather than a guess. Actors
   // predating that flag fall back to matching the rendered label.
   const flagged = item.getFlag(MODULE_ID, FLAG_PHASE_TRIGGER);
   const label = game.i18n.localize("GLSBI.label.trigger");
+  // htmlDescription bolds a leading structural keyword, so the rendered text
+  // reads "**Trigger** …". Accept both forms: bolded for anything imported
+  // since, plain for actors written before.
+  const labels = [`**${label}**`, label];
   let trigger = typeof flagged === "string" ? flagged.trim() : "";
   let description = text;
   if (trigger) {
-    const prefix = `${label} ${trigger}`;
-    description = text.startsWith(prefix) ? text.slice(prefix.length).trim() : text;
-  } else if (text.startsWith(label)) {
-    const rest = text.slice(label.length).trim();
-    const stop = rest.search(/(?<=[.!?])\s/);
-    trigger = stop > 0 ? rest.slice(0, stop + 1).trim() : rest;
-    description = stop > 0 ? rest.slice(stop + 1).trim() : "";
+    const prefix = labels.map((form) => `${form} ${trigger}`).find((form) => text.startsWith(form));
+    description = prefix ? text.slice(prefix.length).trim() : text;
+  } else {
+    const marker = labels.find((form) => text.startsWith(form));
+    if (marker) {
+      const rest = text.slice(marker.length).trim();
+      const stop = rest.search(/(?<=[.!?])\s/);
+      trigger = stop > 0 ? rest.slice(0, stop + 1).trim() : rest;
+      description = stop > 0 ? rest.slice(stop + 1).trim() : "";
+    }
   }
   return ["", `### ${item.name}`, trigger ? `Trigger: ${trigger}` : "", `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${description}`, formatRules(system.rules)].filter(Boolean);
 }
@@ -2115,13 +2238,13 @@ function exportSpellcasting(entry, actor) {
 
 function exportInventory(item) {
   const system = item.system;
-  return ["", `### ${item.name}`, `Type: ${item.type}`, `Level: ${system.level?.value ?? 0}`, `Quantity: ${system.quantity ?? 1}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, `Description: ${stripHtml(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
+  return ["", `### ${item.name}`, `Type: ${item.type}`, `Level: ${system.level?.value ?? 0}`, `Quantity: ${system.quantity ?? 1}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, `Description: ${htmlToSource(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
 }
 
 function exportEffect(item) {
   const system = item.system;
   const aura = (system.rules ?? []).find((rule) => rule.key === "Aura");
-  return ["", `### ${item.name}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, aura?.radius ? `Radius: ${aura.radius} feet` : "", `Duration: ${formatDuration(system.duration)}`, `Description: ${stripHtml(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
+  return ["", `### ${item.name}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, aura?.radius ? `Radius: ${aura.radius} feet` : "", `Duration: ${formatDuration(system.duration)}`, `Description: ${htmlToSource(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
 }
 
 function formatDamageRolls(rolls) {
@@ -2157,6 +2280,40 @@ function formatRules(rules = []) {
 
 function stripHtml(value) {
   return String(value ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
+const HTML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
+
+function decodeEntities(value) {
+  return String(value).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code) => {
+    const key = code.toLowerCase();
+    if (key in HTML_ENTITIES) return HTML_ENTITIES[key];
+    if (key.startsWith("#x")) return String.fromCodePoint(Number.parseInt(key.slice(2), 16));
+    if (key.startsWith("#")) return String.fromCodePoint(Number(key.slice(1)));
+    return match;
+  });
+}
+
+/**
+ * Inverse of htmlDescription. Turns rendered description HTML back into the
+ * Markdown-flavoured source the parser reads, so paragraphs, lists and emphasis
+ * survive an export → import round trip instead of collapsing into one line.
+ *
+ * Only for fields the parser reads as multi-line blocks (`Description:`,
+ * `Effect:`, `Text:`). Single-line top-level fields must keep using stripHtml,
+ * because a newline there would end the field.
+ */
+function htmlToSource(value) {
+  let text = String(value ?? "");
+  text = text.replace(/<\s*br\s*\/?>/gi, "\n");
+  text = text.replace(/<\s*hr\s*\/?>/gi, "\n\n---\n\n");
+  text = text.replace(/<\s*li[^>]*>/gi, "\n- ").replace(/<\s*\/\s*li\s*>/gi, "");
+  text = text.replace(/<\s*\/\s*(?:p|div|ul|ol|section|h[1-6])\s*>/gi, "\n\n");
+  text = text.replace(/<\s*\/?\s*(?:strong|b)\s*>/gi, "**");
+  text = text.replace(/<\s*\/?\s*(?:em|i)\s*>/gi, "*");
+  text = text.replace(/<[^>]+>/g, "");
+  text = decodeEntities(text);
+  return text.replace(/[ \t]+/g, " ").replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -2444,7 +2601,7 @@ Type: melee
 Bonus: +15
 Damage: 2d8+7 piercing
 Traits: magical, reach-10
-Effects: grabbed
+Effects: grab
 Description: On a critical hit, the target is frightened 1.
 
 ### Tail
@@ -2457,8 +2614,14 @@ Traits: agile, reach-10
 ### Breath Weapon
 Type: action
 Actions: 2
-Traits: arcane, evocation, fire
-Description: The warden breathes fire in a 30-foot cone. Creatures in the area take 6d6 fire damage with a DC 22 Reflex save.
+Category: offensive
+Traits: arcane, fire
+Frequency: once per 1d4 rounds
+Description: The warden breathes a cone of fire.
+
+Creatures in a @Template[cone|distance:30] take @Damage[6d6[fire]|options:area-damage] damage with a @Check[reflex|dc:22|basic|options:area-effect] save.
+
+Formatting: a blank line starts a new paragraph, a leading dash starts a list, three dashes draw a rule, and **bold** works. A line opening with Trigger, Effect, Requirements or a degree of success is bolded for you. Inline enrichers written by hand are left exactly as typed; plain prose like 2d6 fire damage or a DC 22 Reflex save is converted automatically.
 RuleElements: []
 
 ## Spellcasting
@@ -2565,7 +2728,11 @@ Actions: 2
 Category: offensive
 Traits: divine, fire, manipulate
 Function: signature
-Description: A 10-foot burst of burning glass settles on the ground within 60 feet, lasting until the end of the encounter. A creature that enters or ends its turn in the ring takes 4d6 fire damage with a DC 32 basic Reflex save. A creature can spend 2 actions to douse one ring; doing so strips 1 Verdict from the arbiter.
+Description: A @Template[burst|distance:10] of burning glass settles on the ground within 60 feet, lasting until the end of the encounter.
+
+A creature that enters or ends its turn in the ring takes @Damage[4d6[fire]] damage with a @Check[reflex|dc:32|basic] save.
+
+A creature can spend 2 actions to douse one ring; doing so strips 1 Verdict from the arbiter.
 
 ### Kindle Verdict
 Type: passive
@@ -2580,7 +2747,9 @@ Category: defensive
 Traits: divine, visual
 Function: trigger
 Frequency: once per round
-Description: Trigger A marked creature leaves a pyre ring. Effect The arbiter makes a Solar Lance Strike against the triggering creature. On a hit, the mark transfers to the nearest other creature the arbiter can see.
+Description: Trigger A marked creature leaves a pyre ring.
+
+Effect The arbiter makes a Solar Lance Strike against the triggering creature. On a hit, the mark transfers to the nearest other creature the arbiter can see.
 
 ### Sear the Record
 Type: action
@@ -2596,7 +2765,14 @@ Actions: 2
 Category: offensive
 Traits: divine, fire, incapacitation
 Function: ultimate
-Description: Requires 3 Verdict, which are all spent. Every pyre ring erupts at once. Each creature in any ring takes 12d6 fire damage with a DC 35 basic Reflex save, and a marked creature that fails is knocked prone and blinded until the end of its next turn. All pyre rings are consumed.
+Description: Requirements The arbiter has 3 Verdict, which are all spent.
+
+Effect Every pyre ring erupts at once.
+
+- Each creature in any ring takes @Damage[12d6[fire]|options:area-damage] damage with a @Check[reflex|dc:35|basic|options:area-effect] save.
+- A marked creature that fails is knocked prone and blinded until the end of its next turn.
+
+All pyre rings are consumed.
 
 ## Phases
 ### Phase 2 — The Halo Splits
