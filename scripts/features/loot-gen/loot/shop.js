@@ -29,7 +29,7 @@ import { runWorkshop } from "./workshop.js";
 import { logLlmCall } from "./llm-log.js";
 import { getAdapter } from "../systems/registry.js";
 import { clamp } from "../../../core/util.mjs";
-import { safeSetting } from "../settings-util.js";
+import { safeSetting, llmTimeoutMs } from "../settings-util.js";
 import {
   requestSelectionProfile, resolveWanted, pickByProfile, makeRuned, toPick, rarityLeanBias
 } from "./selection-profile.js";
@@ -205,8 +205,6 @@ function pickTheme(index, opts, consumableShare) {
 
 /* ------------------------------ stock planning ------------------------------ */
 
-const STOCK_REQUEST_TIMEOUT_MS = 90000; // client cap; must exceed the sidecar's own
-
 /**
  * Ask the sidecar to turn the GM's free-text shop concept into a selection
  * profile. Gated (needs the LLM toggle + a brief + a sidecar) and graceful —
@@ -232,9 +230,8 @@ async function callShopStock(brief, ctx) {
     model: String(safeSetting(SETTINGS.llmModel, "") ?? "").trim(),
     party: partyBlurb()
   };
-  return requestSelectionProfile({
-    endpoint: "/shop-stock", payload, kind: "shop-stock", timeoutMs: STOCK_REQUEST_TIMEOUT_MS
-  });
+  // Timeout omitted on purpose: the shared GM-configured client cap applies.
+  return requestSelectionProfile({ endpoint: "/shop-stock", payload, kind: "shop-stock" });
 }
 
 /* ------------------------------ LLM enrichment ------------------------------ */
@@ -315,8 +312,6 @@ async function applyShopFlavor(proposal, { force }) {
   }
 }
 
-const SHOP_REQUEST_TIMEOUT_MS = 90000; // client cap; must exceed the sidecar's own
-
 async function callShop(proposal, targets) {
   const base = String(safeSetting(SETTINGS.sidecarUrl, "")).trim().replace(/\/+$/, "");
   if (!base) return null;
@@ -339,7 +334,7 @@ async function callShop(proposal, targets) {
   const t0 = Date.now();
   const modelNote = payload.model ? ` · model ${payload.model}` : "";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SHOP_REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), llmTimeoutMs()); // GM-configured client cap
   try {
     const res = await fetch(`${base}/shop`, {
       method: "POST",

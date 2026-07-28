@@ -10,11 +10,9 @@
  */
 
 import { MODULE_ID, SETTINGS } from "../const.js";
-import { safeSetting } from "../settings-util.js";
+import { safeSetting, llmTimeoutMs } from "../settings-util.js";
 import { logLlmCall } from "./llm-log.js";
 import { getAdapter } from "../systems/registry.js";
-
-const REQUEST_TIMEOUT_MS = 60000; // client cap; the sidecar enforces its own, shorter
 
 /** Flavor is on only when explicitly enabled and a sidecar URL is configured. */
 export function flavorEnabled() {
@@ -105,7 +103,7 @@ async function callSidecar(payload) {
   const itemCount = Array.isArray(payload.items) ? payload.items.length : 0;
   const modelNote = payload.model ? ` · model ${payload.model}` : "";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), llmTimeoutMs()); // GM-configured client cap
   try {
     const res = await fetch(`${base}/flavor`, {
       method: "POST",

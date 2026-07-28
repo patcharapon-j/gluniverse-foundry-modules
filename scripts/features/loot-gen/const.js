@@ -56,6 +56,7 @@ export const SETTINGS = {
   sidecarUrl: "lg.sidecarUrl",               // String (world): base URL of the claude -p sidecar (same-origin path or full URL)
   sidecarSecret: "lg.sidecarSecret",         // String (world, GM-only): shared secret sent as a header
   llmModel: "lg.llmModel",                   // String (world): Claude model the sidecar should use (alias or full id; blank = sidecar default)
+  llmTimeoutSec: "lg.llmTimeoutSec",         // Number (world): client-side cap on one sidecar call, in seconds (see LLM_TIMEOUT)
   campaignContext: "lg.campaignContext",     // String (world): GM's campaign blurb fed to the LLM as baseline flavor context
   llmLog: "lg.llmLog",                       // Array (client, hidden): recent LLM sidecar calls for the diagnostics viewer
 
@@ -78,6 +79,28 @@ export const MOTION_TIER = {
   REDUCED: "reduced",
   DEFAULT: "default",
   CINEMATIC: "cinematic"
+};
+
+/**
+ * Client-side cap on how long to wait for one `claude -p` sidecar reply before
+ * aborting (SETTINGS.llmTimeoutSec, in seconds). This is only the browser's
+ * patience: it must stay >= the sidecar's OWN per-call timeout, or the browser
+ * aborts a request the sidecar would have answered. Every LLM path is graceful,
+ * so an abort just means plain rules-text — never a broken loot loop.
+ *
+ * Batch authoring (the Workshop) scales the cap with the item count: the
+ * configured value covers the first item, each additional item adds HALF of it,
+ * and the total is capped at MAX_FACTOR × the configured value.
+ */
+export const LLM_TIMEOUT = {
+  DEFAULT_SEC: 90,
+  MIN_SEC: 15,
+  MAX_SEC: 600,
+  STEP_SEC: 15,
+  /** Extra patience per additional batch-authored item, as a share of the base. */
+  PER_ITEM_FACTOR: 0.5,
+  /** Hard ceiling for a batch request, as a multiple of the base. */
+  MAX_FACTOR: 4
 };
 
 /** Shopping-access → baseline share of budget spent on "core" items (AoN guidance). */
