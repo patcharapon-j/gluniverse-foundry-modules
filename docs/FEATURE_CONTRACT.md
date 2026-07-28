@@ -168,3 +168,4 @@ Suite.register({
 | timer              | timer      | null              | —               | off     |
 | pf2e-ultimates     | ult        | pf2e              | —               | off     |
 | mobile             | mob        | null              | —               | off     |
+| pf2e-damage-dice   | dmg        | pf2e              | dice-so-nice    | off     |

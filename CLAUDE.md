@@ -41,7 +41,8 @@ styles/
 lang/
   en.json + <featureId>.en.json   Merged by Foundry; keep namespaces distinct
 templates/<featureId>/      Handlebars templates
-assets/fonts/               Bundled typefaces (Oxanium, JetBrains Mono)
+assets/fonts/               Bundled typefaces (Oxanium, JetBrains Mono,
+                            Google Sans Code — the 3D dice numerals)
 assets/<featureId>/         Images, sounds
 docs/DESIGN_SYSTEM.md       The token pool, the theme contract, retheming
 docs/FEATURE_CONTRACT.md    Binding contract for porting/adding a feature
@@ -145,6 +146,24 @@ node tools/parse-check.mjs --samples
 Zero errors required. The same tool checks a file directly
 (`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
 export/import symmetry rules and the `ult.*` cross-feature flag contract.
+
+**When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
+texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
+hand-drawn. Re-bake it after any change to a recipe or to the damage-type table,
+and confirm the set is complete:
+
+```bash
+node tools/gen-damage-textures.mjs && node tools/gen-damage-textures.mjs --check
+```
+
+The tool fails if `damage-types.mjs` declares a glow a type's baked emission map
+does not have (or vice versa). To review a recipe change without launching
+Foundry, render a contact sheet — a tiling seam or a blown-out glow is obvious
+there and invisible in a diff:
+
+```bash
+node tools/gen-damage-textures.mjs --sheet=/tmp/damage-dice.png
+```
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

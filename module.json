@@ -155,6 +155,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/mobile.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-damage-dice.en.json"
     }
   ],
   "packs": [

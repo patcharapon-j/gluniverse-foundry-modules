@@ -1,0 +1,32 @@
+{
+  "GLDMG": {
+    "feature": {
+      "title": "PF2e Damage Dice",
+      "hint": "Gives every PF2e damage roll 3D dice that look like the damage — colour, texture, relief and glow chosen by damage type, across all sixteen types. Needs Dice So Nice."
+    },
+    "dsn": {
+      "category": "GLUniverse — PF2e Damage"
+    },
+    "settings": {
+      "appearance": {
+        "name": "Damage dice treatment",
+        "hint": "How much of the damage-type look to apply to 3D damage dice.",
+        "full": "Full — colour, texture, relief and glow",
+        "surface": "Surface — colour, texture and relief, keep my dice set",
+        "tint": "Tint — colour only"
+      },
+      "font": {
+        "name": "Use the bundled dice numeral font",
+        "hint": "Sets damage dice numerals in Google Sans Code Bold, bundled with the suite. Turn this off to keep whatever font your dice set already uses."
+      },
+      "glow": {
+        "name": "Glow strength",
+        "hint": "Multiplies the emission map on damage types that light up — fire, electricity, force, vitality and the rest. 0 turns the glow off entirely. Needs Dice So Nice's realistic lighting to be on."
+      },
+      "persistent": {
+        "name": "Mark persistent damage",
+        "hint": "Persistent damage rolls its dice hotter — brighter numerals, glowing edges — so a bleed tick reads differently from the hit that caused it."
+      }
+    }
+  }
+}

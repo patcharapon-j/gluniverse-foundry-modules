@@ -228,6 +228,21 @@ level, which beats an inherited `font-family`. Any feature root that sets a font
 must also carry `.gl-type` (or replicate its reset), or those controls silently
 render in Foundry's Signika.
 
+There is one face with no token: **Google Sans Code**, the numerals engraved on
+3D dice by `pf2e-damage-dice`. It is declared in `gl-fonts.css` like the others,
+but nothing in CSS consumes it — Dice So Nice reads it by family *name* into a
+`<canvas>`, so a custom property would never reach it. Two consequences worth
+knowing before touching it:
+
+- Its `@font-face` pins `font-weight: 700` on the sole face of the family. The
+  canvas shorthand DSN builds (`"<size>pt <family>"`) carries no weight, so this
+  is the only way Bold ever renders. Widening that range silently drops the
+  suite's dice back to Regular.
+- The family is announced to Foundry through `CONFIG.fontDefinitions` with an
+  **empty** `fonts` array, which marks it "already provided". Give it real URLs
+  there and you get a second, competing `@font-face`; omit the entry entirely
+  and DSN calls `FontConfig.loadFont()`, which reaches for Google's CDN.
+
 ### 8. Keep JS colour out of features
 
 PIXI, WebGL and `<canvas>` cannot read CSS custom properties, so
