@@ -16,6 +16,10 @@ const FLAG_SOURCE = `${PREFIX}sourceMarkdown`;
 const FLAG_PARSED = `${PREFIX}parsedData`;
 const FLAG_IMPORTED = `${PREFIX}imported`;
 const FLAG_PHASE = `${PREFIX}phase`;
+// The trigger is kept as its own flag rather than re-derived from the rendered
+// description: stripHtml() collapses whitespace, so a trigger and the prose
+// after it are indistinguishable once rendered.
+const FLAG_PHASE_TRIGGER = `${PREFIX}phaseTrigger`;
 // Cross-feature flags owned by pf2e-ultimates ("ult." prefix). We only WRITE
 // them; that feature owns their meaning. See scripts/features/pf2e-ultimates.
 const FLAG_ULT_STATE = "ult.state";
@@ -1147,8 +1151,10 @@ function buildActionItem(action) {
 // sits on the sheet next to the abilities it changes. The phase ordinal is
 // flagged so export can round-trip it back into a "## Phases" section.
 function buildPhaseItem(phase) {
+  // Blank line between them so htmlDescription renders two paragraphs; the
+  // exact trigger text also rides along as a flag for lossless export.
   const description = [phase.trigger ? `${game.i18n.localize("GLSBI.label.trigger")} ${phase.trigger}` : "", phase.description]
-    .filter(Boolean).join("\n");
+    .filter(Boolean).join("\n\n");
   const system = {
     description: { value: htmlDescription(description), gm: "" },
     rules: phase.rules,
@@ -1160,7 +1166,7 @@ function buildPhaseItem(phase) {
   };
   return importedItem(
     { name: phase.name, type: "action", img: "systems/pf2e/icons/default-icons/action.svg", system },
-    { ...ultimateFlags(phase.functions), [FLAG_PHASE]: phase.order }
+    { ...ultimateFlags(phase.functions), [FLAG_PHASE]: phase.order, [FLAG_PHASE_TRIGGER]: phase.trigger || "" }
   );
 }
 
@@ -2015,12 +2021,22 @@ function exportFunctions(item) {
 function exportPhase(item) {
   const system = item.system;
   const text = stripHtml(system.description?.value ?? "");
-  const triggerLabel = game.i18n.localize("GLSBI.label.trigger");
-  // buildPhaseItem folds the trigger into the description as "<label> <text>";
-  // peel it back off so a round-trip restores the original Trigger: field.
-  const match = text.match(new RegExp(`^${escapeRegExp(triggerLabel)}\\s*(.+?)(?:\\n|$)`));
-  const trigger = match ? match[1].trim() : "";
-  const description = match ? text.slice(match[0].length).trim() : text;
+  // The trigger is stored verbatim on its own flag, so peeling it back out of
+  // the description is an exact string removal rather than a guess. Actors
+  // predating that flag fall back to matching the rendered label.
+  const flagged = item.getFlag(MODULE_ID, FLAG_PHASE_TRIGGER);
+  const label = game.i18n.localize("GLSBI.label.trigger");
+  let trigger = typeof flagged === "string" ? flagged.trim() : "";
+  let description = text;
+  if (trigger) {
+    const prefix = `${label} ${trigger}`;
+    description = text.startsWith(prefix) ? text.slice(prefix.length).trim() : text;
+  } else if (text.startsWith(label)) {
+    const rest = text.slice(label.length).trim();
+    const stop = rest.search(/(?<=[.!?])\s/);
+    trigger = stop > 0 ? rest.slice(0, stop + 1).trim() : rest;
+    description = stop > 0 ? rest.slice(stop + 1).trim() : "";
+  }
   return ["", `### ${item.name}`, trigger ? `Trigger: ${trigger}` : "", `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${description}`, formatRules(system.rules)].filter(Boolean);
 }
 
