@@ -36,12 +36,42 @@ export class PacerOverlay {
     this._update(PacerManager.getState());
   }
 
+  /**
+   * The ticker is ambient scenery, not UI: it belongs directly above the
+   * canvas and below every other module's interface. Mounting it as the
+   * canvas's next sibling puts it exactly there without an arms race over
+   * z-index values — Foundry's own layers (HUD, controls, sidebar) come later
+   * in the same parent and keep painting on top.
+   */
+  _mountAboveCanvas(element, after = null) {
+    const board = document.getElementById('board');
+    const parent = board?.parentElement;
+    // A transformed/filtered ancestor would become the containing block for
+    // our fixed positioning and clip the band; in that case fall back to the
+    // body, where the stylesheet keeps the old just-above-the-canvas z-index.
+    if (!parent || this._createsFixedContainingBlock(parent)) {
+      document.body.appendChild(element);
+      return element;
+    }
+    element.classList.add('above-canvas');
+    parent.insertBefore(element, (after ?? board).nextSibling);
+    return element;
+  }
+
+  _createsFixedContainingBlock(element) {
+    const style = getComputedStyle(element);
+    return style.transform !== 'none'
+      || style.filter !== 'none'
+      || style.perspective !== 'none'
+      || style.contain.includes('paint');
+  }
+
   _createElement() {
-    // Aura sibling — sits directly above the ticker and fades upward. Lives as
-    // a sibling so it can extend past the ticker's overflow-hidden box.
+    // Aura sibling — a soft halo around the centred ticker. Lives as a sibling
+    // so it can extend past the ticker's overflow-hidden box.
     this._auraEl = document.createElement('div');
-    this._auraEl.className = 'stream-pacer-bar-aura aura-bottom';
-    document.body.appendChild(this._auraEl);
+    this._auraEl.className = 'stream-pacer-bar-aura aura-centre';
+    this._mountAboveCanvas(this._auraEl);
 
     this._element = document.createElement('div');
     this._element.id = 'stream-pacer-overlay';
@@ -59,7 +89,8 @@ export class PacerOverlay {
     this._contentEl.className = 'overlay-content';
     this._element.appendChild(this._contentEl);
 
-    document.body.appendChild(this._element);
+    // Directly after the aura, so the ticker paints over its own halo.
+    this._mountAboveCanvas(this._element, this._auraEl);
 
     // Initial segment creation
     this._adjustSegments();

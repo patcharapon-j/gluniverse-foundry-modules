@@ -18,13 +18,24 @@ class PacerManagerClass {
     this._handRaiseCallbacks = new Set();
     this._direPerilCallbacks = new Set();
     this._campfireCallbacks = new Set();
+    this._safetyLightCallbacks = new Set();
     this._notifyPending = false;
 
-    // Safety check-ins intentionally never enter Foundry settings. The GM's
-    // currently-running client owns this live state and shares it over the
-    // socket so reconnecting players can be prompted again without retaining
-    // sensitive responses after a reload.
-    this._safetyCheck = this._emptySafetyCheck();
+    // Safety traffic lights. Every player carries a standing light (green by
+    // default) that they set from their HUD; the GM is the only client that
+    // retains everyone else's. Lights intentionally never enter Foundry
+    // settings — they are live session state, and a client that reloads
+    // re-announces its own light rather than reading a stored one.
+    //
+    // Player clients keep ONLY their own entry here; the socket layer and
+    // receiveSafetyLight() both refuse to store another player's light for a
+    // non-GM client.
+    this._safetyLights = {};
+
+    // A GM-driven "please set your light" request. While active, players see
+    // the mid-screen banner + the arrow pointing at their HUD light, and the
+    // GM tracks who has answered since the request opened.
+    this._safetyRequest = this._emptySafetyRequest();
 
     // Spotlight tracker: per-user { accrued: seconds, activeSince: ms|null }.
     // A user "in the light" carries an activeSince timestamp; their live total
@@ -115,6 +126,28 @@ class PacerManagerClass {
     }
   }
 
+  /**
+   * Register a callback for safety-light changes. Fires on every accepted
+   * light, local or remote, so the GM's alert layer and audio cue can react
+   * to an escalation the moment it lands.
+   * @param {Function} callback - Called with ({ userId, status, previous, escalated })
+   * @returns {Function} Unsubscribe function
+   */
+  onSafetyLight(callback) {
+    this._safetyLightCallbacks.add(callback);
+    return () => this._safetyLightCallbacks.delete(callback);
+  }
+
+  _notifySafetyLight(detail) {
+    for (const callback of this._safetyLightCallbacks) {
+      try {
+        callback(detail);
+      } catch (e) {
+        console.error(`${MODULE_ID} | Safety light callback error:`, e);
+      }
+    }
+  }
+
   _notifySubscribers() {
     // Use requestAnimationFrame to batch updates and prevent UI freezing
     if (this._notifyPending) return;
@@ -150,20 +183,21 @@ class PacerManagerClass {
       campfireActive: this._campfireActive,
       campfireEnd: this._campfireEnd,
       campfireRemaining: this.getCampfireRemaining(),
-      safetyCheck: this.getSafetyCheck()
+      safetyRequest: this.getSafetyRequest(),
+      safetyLights: { ...this._safetyLights },
+      mySafetyLight: this.getSafetyLight(game.user.id)
     };
   }
 
-  _emptySafetyCheck() {
-    return { id: null, active: false, targetUserIds: [], responses: {} };
+  _emptySafetyRequest() {
+    return { id: null, active: false, acknowledged: {} };
   }
 
-  getSafetyCheck() {
+  getSafetyRequest() {
     return {
-      id: this._safetyCheck.id,
-      active: this._safetyCheck.active === true,
-      targetUserIds: [...this._safetyCheck.targetUserIds],
-      responses: { ...this._safetyCheck.responses }
+      id: this._safetyRequest.id,
+      active: this._safetyRequest.active === true,
+      acknowledged: { ...this._safetyRequest.acknowledged }
     };
   }
 
@@ -223,64 +257,127 @@ class PacerManagerClass {
     this._saveToSettings();
   }
 
-  // --- Safety Check-in (session-only, GM-facing) ---
+  // --- Safety traffic lights (session-only) ---
 
-  startSafetyCheck(targetUserIds = this.getActivePlayerIds(), broadcast = true) {
-    if (!game.user.isGM && broadcast) return false;
-    if (this._safetyCheck.active) return false;
-
-    const targets = [...new Set(targetUserIds)].filter(userId => {
-      const user = game.users.get(userId);
-      return user && !user.isGM && user.active;
-    });
-    if (!targets.length) return false;
-
-    const id = foundry.utils.randomID();
-    this._safetyCheck = { id, active: true, targetUserIds: targets, responses: {} };
-    if (broadcast) SocketHandler.emitSafetyCheckStart(id, targets);
-    this._notifySubscribers();
-    return true;
+  /** A player's standing light. Everyone starts — and stays — green until set. */
+  getSafetyLight(userId) {
+    return this._safetyLights[userId] || SAFETY_STATUS.GREEN;
   }
 
-  clearSafetyCheck(broadcast = true) {
-    if (!game.user.isGM && broadcast) return false;
-    if (!this._safetyCheck.active) return false;
-
-    const id = foundry.utils.randomID();
-    this._safetyCheck = { ...this._safetyCheck, id, responses: {} };
-    if (broadcast) SocketHandler.emitSafetyCheckClear(id);
-    this._notifySubscribers();
-    return true;
+  /**
+   * The GM-facing roster: every active player with their light and whether
+   * they have touched it since the current request opened.
+   */
+  getSafetyRoster() {
+    const request = this._safetyRequest;
+    const roster = [];
+    for (const user of game.users) {
+      if (user.isGM || !user.active) continue;
+      const status = this.getSafetyLight(user.id);
+      roster.push({
+        userId: user.id,
+        name: user.name,
+        status,
+        isGreen: status === SAFETY_STATUS.GREEN,
+        isYellow: status === SAFETY_STATUS.YELLOW,
+        isRed: status === SAFETY_STATUS.RED,
+        acknowledged: request.active ? request.acknowledged[user.id] === true : true
+      });
+    }
+    return roster;
   }
 
-  dismissSafetyCheck(broadcast = true) {
-    if (!game.user.isGM && broadcast) return false;
-    if (!this._safetyCheck.active) return false;
-
-    const id = this._safetyCheck.id;
-    this._safetyCheck = this._emptySafetyCheck();
-    if (broadcast) SocketHandler.emitSafetyCheckDismiss(id);
-    this._notifySubscribers();
-    return true;
+  /** Tally of the current lights + how many still owe the GM an answer. */
+  getSafetySummary() {
+    const roster = this.getSafetyRoster();
+    return {
+      players: roster,
+      total: roster.length,
+      green: roster.filter(p => p.isGreen).length,
+      yellow: roster.filter(p => p.isYellow).length,
+      red: roster.filter(p => p.isRed).length,
+      pending: roster.filter(p => !p.acknowledged).length,
+      // "Raised" is the attention set: anything the GM should look at.
+      raised: roster.filter(p => !p.isGreen)
+    };
   }
 
-  submitSafetyResponse(userId, status, broadcast = true) {
+  /**
+   * Set a light. Players may only set their own (that is the only case that
+   * broadcasts); the GM's copy of everyone else's light arrives through
+   * receiveSafetyLight().
+   */
+  setSafetyLight(userId, status, broadcast = true) {
+    if (!Object.values(SAFETY_STATUS).includes(status)) return false;
     if (broadcast && userId !== game.user.id) return false;
-    const checkId = this._safetyCheck.id;
-    if (!this._canAcceptSafetyResponse(checkId, userId, status)) return false;
 
-    this._safetyCheck.responses[userId] = status;
-    if (broadcast) SocketHandler.emitSafetyCheckResponse(checkId, userId, status);
+    const previous = this.getSafetyLight(userId);
+    this._safetyLights[userId] = status;
+    // Touching the light at all answers an open request, even when the player
+    // re-affirms the same colour — that acknowledgement is the point.
+    if (this._safetyRequest.active) this._safetyRequest.acknowledged[userId] = true;
+
+    if (broadcast) SocketHandler.emitSafetyLight(userId, status, this._safetyRequest.id);
+
+    this._notifySafetyLight({
+      userId,
+      status,
+      previous,
+      escalated: status !== SAFETY_STATUS.GREEN && status !== previous
+    });
     this._notifySubscribers();
     return true;
   }
 
-  _canAcceptSafetyResponse(checkId, userId, status) {
-    return this._safetyCheck.active
-      && this._safetyCheck.id === checkId
-      && this._safetyCheck.targetUserIds.includes(userId)
-      && !this._safetyCheck.responses[userId]
-      && Object.values(SAFETY_STATUS).includes(status);
+  /** GM: open the table-wide "set your light" request. */
+  startSafetyRequest(broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+    if (this._safetyRequest.active) return false;
+
+    const id = foundry.utils.randomID();
+    this._safetyRequest = { id, active: true, acknowledged: {} };
+    if (broadcast) SocketHandler.emitSafetyRequestStart(id);
+    this._notifySubscribers();
+    return true;
+  }
+
+  /** GM: close the request. Lights themselves are left exactly as they are. */
+  stopSafetyRequest(broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+    if (!this._safetyRequest.active) return false;
+
+    this._safetyRequest = this._emptySafetyRequest();
+    if (broadcast) SocketHandler.emitSafetyRequestStop();
+    this._notifySubscribers();
+    return true;
+  }
+
+  /** The GM's traffic-light button is a plain toggle. */
+  toggleSafetyRequest() {
+    return this._safetyRequest.active ? this.stopSafetyRequest() : this.startSafetyRequest();
+  }
+
+  /**
+   * GM: put every light back to green. Deliberately separate from resetAll —
+   * a scene change must never quietly clear a player's red.
+   */
+  resetSafetyLights(broadcast = true) {
+    if (!game.user.isGM && broadcast) return false;
+
+    this._safetyLights = {};
+    if (broadcast) SocketHandler.emitSafetyLightsReset();
+    this._notifySafetyLight({ userId: null, status: SAFETY_STATUS.GREEN, previous: null, escalated: false });
+    this._notifySubscribers();
+    return true;
+  }
+
+  /**
+   * Re-broadcast this client's own light. Used when a GM joins (or reloads)
+   * and needs to rebuild the board it never persisted.
+   */
+  announceSafetyLight() {
+    if (game.user.isGM) return;
+    SocketHandler.emitSafetyLight(game.user.id, this.getSafetyLight(game.user.id), this._safetyRequest.id);
   }
 
   // --- GM Actions ---
@@ -665,39 +762,53 @@ class PacerManagerClass {
     if (game.user.isGM) this._saveSpotlight();
   }
 
-  receiveSafetyCheckStart(id, targetUserIds) {
-    if (typeof id !== 'string' || !id || this._safetyCheck.active) return;
-    const targets = Array.isArray(targetUserIds) ? targetUserIds.filter(userId => {
-      const user = game.users.get(userId);
-      return user && !user.isGM;
-    }) : [];
-    if (!targets.length) return;
-    this._safetyCheck = { id, active: true, targetUserIds: [...new Set(targets)], responses: {} };
+  receiveSafetyRequestStart(id) {
+    if (typeof id !== 'string' || !id) return;
+    if (this._safetyRequest.active && this._safetyRequest.id === id) return;
+    this._safetyRequest = { id, active: true, acknowledged: {} };
     this._notifySubscribers();
   }
 
-  receiveSafetyCheckClear(id) {
-    if (typeof id !== 'string' || !id || !this._safetyCheck.active) return;
-    this._safetyCheck = { ...this._safetyCheck, id, responses: {} };
+  receiveSafetyRequestStop() {
+    if (!this._safetyRequest.active) return;
+    this._safetyRequest = this._emptySafetyRequest();
     this._notifySubscribers();
   }
 
-  receiveSafetyCheckDismiss(id) {
-    if (!this._safetyCheck.active || this._safetyCheck.id !== id) return;
-    this._safetyCheck = this._emptySafetyCheck();
+  /**
+   * A light arriving over the socket. Only the GM retains other players'
+   * lights; a player client stores nothing but its own.
+   */
+  receiveSafetyLight(userId, status, requestId = null) {
+    if (!Object.values(SAFETY_STATUS).includes(status)) return;
+    if (!game.user.isGM && userId !== game.user.id) return;
+
+    const previous = this.getSafetyLight(userId);
+    this._safetyLights[userId] = status;
+    // Accept the acknowledgement for the request we currently know about; a
+    // stale id (the player answered a request we already closed) does not.
+    if (this._safetyRequest.active && (!requestId || requestId === this._safetyRequest.id)) {
+      this._safetyRequest.acknowledged[userId] = true;
+    }
+
+    this._notifySafetyLight({
+      userId,
+      status,
+      previous,
+      escalated: status !== SAFETY_STATUS.GREEN && status !== previous
+    });
     this._notifySubscribers();
   }
 
-  receiveSafetyCheckReset() {
-    if (!this._safetyCheck.active) return;
-    this._safetyCheck = this._emptySafetyCheck();
+  receiveSafetyLightsReset() {
+    this._safetyLights = {};
+    this._notifySafetyLight({ userId: null, status: SAFETY_STATUS.GREEN, previous: null, escalated: false });
     this._notifySubscribers();
   }
 
-  receiveSafetyCheckResponse(checkId, userId, status) {
-    if (!this._canAcceptSafetyResponse(checkId, userId, status)) return;
-    this._safetyCheck.responses[userId] = status;
-    this._notifySubscribers();
+  /** A GM asked the table to re-announce; only players answer. */
+  receiveSafetyLightRequest() {
+    this.announceSafetyLight();
   }
 
   // --- State Sync (for socket updates) ---
@@ -817,14 +928,23 @@ class PacerManagerClass {
     this._direPerilActive = state.direPerilActive === true;
     this._campfireActive = state.campfireActive === true;
     this._campfireEnd = state.campfireEnd || null;
-    this._safetyCheck = state.safetyCheck?.active === true
+    this._safetyRequest = state.safetyRequest?.active === true
       ? {
-          id: typeof state.safetyCheck.id === 'string' ? state.safetyCheck.id : null,
+          id: typeof state.safetyRequest.id === 'string' ? state.safetyRequest.id : null,
           active: true,
-          targetUserIds: Array.isArray(state.safetyCheck.targetUserIds) ? [...state.safetyCheck.targetUserIds] : [],
-          responses: { ...(state.safetyCheck.responses || {}) }
+          acknowledged: { ...(state.safetyRequest.acknowledged || {}) }
         }
-      : this._emptySafetyCheck();
+      : this._emptySafetyRequest();
+
+    // The sender already trimmed this to what we're allowed to hold: every
+    // light for a GM, only our own for a player.
+    const lights = state.safetyLights || {};
+    this._safetyLights = {};
+    for (const [userId, status] of Object.entries(lights)) {
+      if (!Object.values(SAFETY_STATUS).includes(status)) continue;
+      if (!game.user.isGM && userId !== game.user.id) continue;
+      this._safetyLights[userId] = status;
+    }
 
     this._clearCountdownInterval();
     if (this._gmSignal === GM_SIGNAL.COUNTDOWN && this._countdownEnd) {

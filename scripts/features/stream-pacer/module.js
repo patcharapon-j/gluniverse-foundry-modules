@@ -16,7 +16,8 @@ import { AudioManager } from './AudioManager.js';
 import { HandRaiseSidebar } from './HandRaiseSidebar.js';
 import { PerilOverlay } from './PerilOverlay.js';
 import { CampfireOverlay } from './CampfireOverlay.js';
-import { SafetyCheckOverlay } from './SafetyCheckOverlay.js';
+import { SafetyRequestOverlay } from './SafetyRequestOverlay.js';
+import { SafetyAlertOverlay } from './SafetyAlertOverlay.js';
 import { ThemeManager } from './ThemeManager.js';
 
 export { registerSettings };
@@ -42,7 +43,8 @@ let audioManager = null;
 let handRaiseSidebar = null;
 let perilOverlay = null;
 let campfireOverlay = null;
-let safetyCheckOverlay = null;
+let safetyRequestOverlay = null;
+let safetyAlertOverlay = null;
 let isReady = false;
 let isFirstCanvas = true;
 
@@ -66,13 +68,13 @@ export function onInit() {
     }
   });
 
-  // Never strand players behind a non-dismissible prompt after the last GM
-  // leaves. This only clears transient client state; safety responses are not
-  // stored anywhere persistent.
+  // Never leave players staring at a safety ask nobody can answer. When the
+  // last GM drops, close the request locally — the players' own lights are
+  // untouched, since those are their standing signal, not a reply to the ask.
   Hooks.on('updateUser', (user, changes) => {
     if (!user.isGM || changes.active !== false) return;
     const hasActiveGM = game.users.some(candidate => candidate.isGM && candidate.active);
-    if (!hasActiveGM) PacerManager.receiveSafetyCheckReset();
+    if (!hasActiveGM) PacerManager.receiveSafetyRequestStop();
   });
 }
 
@@ -101,15 +103,20 @@ export function onReady() {
   // Initialize the pacer manager
   PacerManager.initialize();
 
-  // When the sole GM reloads, their in-memory check no longer exists. Tell
-  // still-connected players to release any orphaned prompt from that client.
+  // Safety lights are live state, never persisted. When the sole GM reloads,
+  // close any request orphaned by the old client and ask the table to
+  // re-announce their lights so the board rebuilds itself.
   const hasOtherActiveGM = game.users.some(user => user.isGM && user.active && user.id !== game.user.id);
-  if (game.user.isGM && !hasOtherActiveGM) SocketHandler.emitSafetyCheckReset();
+  if (game.user.isGM && !hasOtherActiveGM) {
+    SocketHandler.emitSafetyRequestStop();
+    SocketHandler.emitSafetyLightRequest();
+  }
 
-  // Independent of the normal HUD exemption: a safety check-in must reach
-  // every active player even when their pacing bars are intentionally hidden.
-  safetyCheckOverlay = new SafetyCheckOverlay();
-  safetyCheckOverlay.initialize();
+  // Independent of the normal HUD exemption: a safety ask must reach every
+  // active player even when their pacing bars are intentionally hidden — the
+  // banner grows its own lamps when there is no HUD light to point at.
+  safetyRequestOverlay = new SafetyRequestOverlay();
+  safetyRequestOverlay.initialize();
 
   // Only initialize the general pacer UI if not exempt from the bars
   if (!isExempt) {
@@ -146,6 +153,15 @@ export function onReady() {
     // Hand raise sidebar (GM-only prominent notification)
     handRaiseSidebar = new HandRaiseSidebar();
     handRaiseSidebar.initialize();
+
+    // A raised safety light must never be lost in the canvas: the alert layer
+    // keeps it on screen, and an escalation also rings.
+    safetyAlertOverlay = new SafetyAlertOverlay();
+    safetyAlertOverlay.initialize();
+
+    PacerManager.onSafetyLight(({ status, escalated }) => {
+      if (escalated) audioManager.playSafetyChime(status);
+    });
   }
 
   // Expose global API
@@ -158,7 +174,8 @@ export function onReady() {
     handSidebar: handRaiseSidebar,
     peril: perilOverlay,
     campfire: campfireOverlay,
-    safetyCheck: safetyCheckOverlay,
+    safetyRequest: safetyRequestOverlay,
+    safetyAlert: safetyAlertOverlay,
     theme: ThemeManager
   };
 

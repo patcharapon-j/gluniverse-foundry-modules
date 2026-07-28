@@ -47,18 +47,27 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const state = PacerManager.getState();
     const playerStates = PacerManager.getAllPlayerStates();
+    const safetyRequest = state.safetyRequest;
 
-    // Format player states for template
-    const players = Object.values(playerStates).map(p => ({
-      ...p,
-      isEngaged: p.status === PLAYER_STATUS.ENGAGED,
-      isHandRaised: p.status === PLAYER_STATUS.HAND_RAISED,
-      isNeedTime: p.status === PLAYER_STATUS.NEED_TIME,
-      isReady: p.status === PLAYER_STATUS.READY,
-      statusIcon: this._getStatusIcon(p.status),
-      statusClass: this._getStatusClass(p.status),
-      statusTitle: game.i18n.localize(`STREAM_PACER.Status.${p.status}`)
-    }));
+    // Format player states for template. On a GM client each chip also carries
+    // that player's standing safety light; player clients never receive
+    // another player's light, so the fields stay off their roster.
+    const players = Object.values(playerStates).map(p => {
+      const safetyLight = PacerManager.getSafetyLight(p.userId);
+      return {
+        ...p,
+        isEngaged: p.status === PLAYER_STATUS.ENGAGED,
+        isHandRaised: p.status === PLAYER_STATUS.HAND_RAISED,
+        isNeedTime: p.status === PLAYER_STATUS.NEED_TIME,
+        isReady: p.status === PLAYER_STATUS.READY,
+        statusIcon: this._getStatusIcon(p.status),
+        statusClass: this._getStatusClass(p.status),
+        statusTitle: game.i18n.localize(`STREAM_PACER.Status.${p.status}`),
+        safetyLight,
+        safetyLightTitle: game.i18n.localize(`STREAM_PACER.SafetyCheck.${safetyLight}`),
+        safetyAcknowledged: !safetyRequest.active || safetyRequest.acknowledged[p.userId] === true
+      };
+    });
 
     // Current user's status
     const myStatus = PacerManager.getPlayerStatus(game.user.id);
@@ -105,36 +114,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       };
     }
 
-    // Safety results are prepared only for GM clients. Unanswered players are
-    // represented by the aggregate pending count, never by a guessed status.
-    let safetyCheck = null;
-    if (game.user.isGM) {
-      const check = state.safetyCheck;
-      const responses = check.targetUserIds.flatMap(userId => {
-        const status = check.responses[userId];
-        if (!status) return [];
-        return [{
-          userId,
-          name: game.users.get(userId)?.name || game.i18n.localize('STREAM_PACER.SafetyCheck.UnknownPlayer'),
-          status,
-          isGreen: status === SAFETY_STATUS.GREEN,
-          isYellow: status === SAFETY_STATUS.YELLOW,
-          isRed: status === SAFETY_STATUS.RED,
-          icon: status === SAFETY_STATUS.GREEN ? 'fa-check' : status === SAFETY_STATUS.YELLOW ? 'fa-triangle-exclamation' : 'fa-hand',
-          title: game.i18n.localize(`STREAM_PACER.SafetyCheck.${status}`)
-        }];
-      });
-      const targetCount = check.targetUserIds.length;
-      safetyCheck = {
-        active: check.active,
-        responses,
-        responseCount: responses.length,
-        targetCount,
-        pendingCount: Math.max(0, targetCount - responses.length),
-        hasResponses: responses.length > 0,
-        allResponded: targetCount > 0 && responses.length === targetCount
-      };
-    }
+    const safety = this._prepareSafetyContext(state);
 
     return {
       isGM: game.user.isGM,
@@ -155,9 +135,66 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       handRaisedCount: state.handRaisedCount,
       direPerilActive: state.direPerilActive,
       campfireActive: state.campfireActive,
-      safetyCheck,
+      safety,
       PLAYER_STATUS,
       GM_SIGNAL
+    };
+  }
+
+  /**
+   * Everything the traffic light needs, on both sides of the screen: the
+   * player's own lamps and readout, and the GM's board of raised lights.
+   */
+  _prepareSafetyContext(state) {
+    const request = state.safetyRequest;
+    const requested = request.active === true;
+
+    if (!game.user.isGM) {
+      const myLight = state.mySafetyLight;
+      return {
+        requested,
+        myLight,
+        lamps: Object.values(SAFETY_STATUS).map(status => ({
+          id: status,
+          active: status === myLight,
+          label: game.i18n.localize(`STREAM_PACER.SafetyCheck.${status}`)
+        })),
+        readout: requested
+          ? game.i18n.localize('STREAM_PACER.SafetyCheck.RequestPrompt')
+          : game.i18n.format('STREAM_PACER.SafetyCheck.Readout', {
+              status: game.i18n.localize(`STREAM_PACER.SafetyCheck.Word.${myLight}`)
+            })
+      };
+    }
+
+    const summary = PacerManager.getSafetySummary();
+    // The loudest colour on the table drives the panel's alert tier: yellow
+    // is prominent, red overrides it and is unmissable.
+    const hudAlert = summary.red > 0 ? 'red' : summary.yellow > 0 ? 'yellow' : null;
+
+    return {
+      requested,
+      hudAlert,
+      // Keep the board up whenever there is something to act on, so a raised
+      // light stays visible long after the request that surfaced it closed.
+      show: requested || summary.raised.length > 0,
+      raised: summary.raised.map(p => ({
+        userId: p.userId,
+        name: p.name,
+        isGreen: p.isGreen,
+        isYellow: p.isYellow,
+        isRed: p.isRed,
+        icon: p.isGreen ? 'fa-check' : p.isYellow ? 'fa-triangle-exclamation' : 'fa-hand',
+        word: game.i18n.localize(`STREAM_PACER.SafetyCheck.Word.${p.status}`),
+        title: game.i18n.localize(`STREAM_PACER.SafetyCheck.${p.status}`)
+      })),
+      pendingCount: summary.pending,
+      countLabel: requested
+        ? `${summary.total - summary.pending} / ${summary.total}`
+        : `${summary.raised.length} / ${summary.total}`,
+      countTooltip: game.i18n.localize(requested
+        ? 'STREAM_PACER.SafetyCheck.ResponseCountTooltip'
+        : 'STREAM_PACER.SafetyCheck.RaisedCountTooltip')
     };
   }
 
@@ -277,9 +314,11 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       PacerManager.getPlayerStatus(game.user.id),
       playerSig,
       spotlightSig,
-      state.safetyCheck.active,
-      state.safetyCheck.id,
-      Object.entries(state.safetyCheck.responses).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|')
+      state.safetyRequest.active,
+      state.safetyRequest.id,
+      // Lights and acknowledgements both change what the panel renders.
+      Object.entries(state.safetyLights).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|'),
+      Object.keys(state.safetyRequest.acknowledged).sort().join('|')
     ].join('#');
   }
 
@@ -402,14 +441,17 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         case 'declare-campfire':
           if (game.user.isGM) this._showCampfireDialog();
           break;
-        case 'start-safety-check':
-          if (game.user.isGM) this._confirmSafetyCheckStart();
+        case 'set-safety-light': {
+          if (game.user.isGM) break;
+          const light = target.dataset.light;
+          PacerManager.setSafetyLight(game.user.id, light);
           break;
-        case 'clear-safety-check':
-          if (game.user.isGM) this._confirmSafetyCheckClear();
+        }
+        case 'toggle-safety-request':
+          if (game.user.isGM) PacerManager.toggleSafetyRequest();
           break;
-        case 'dismiss-safety-check':
-          if (game.user.isGM) PacerManager.dismissSafetyCheck();
+        case 'reset-safety-lights':
+          if (game.user.isGM) this._confirmSafetyLightsReset();
           break;
         case 'spotlight-toggle': {
           if (!game.user.isGM) break;
@@ -550,30 +592,15 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     if (confirmed) PacerManager.resetSpotlight();
   }
 
-  async _confirmSafetyCheckStart() {
-    const targets = PacerManager.getActivePlayerIds();
-    if (!targets.length) {
-      ui.notifications?.warn(game.i18n.localize('STREAM_PACER.SafetyCheck.NoPlayers'));
-      return;
-    }
-
+  // Clearing the board discards what players told the GM, so confirm first.
+  async _confirmSafetyLightsReset() {
     const confirmed = await foundry.applications.api.DialogV2.confirm({
-      window: { title: game.i18n.localize('STREAM_PACER.SafetyCheck.StartTitle') },
-      content: `<p>${game.i18n.format('STREAM_PACER.SafetyCheck.StartConfirm', { count: targets.length })}</p>`,
+      window: { title: game.i18n.localize('STREAM_PACER.SafetyCheck.ResetTitle') },
+      content: `<p>${game.i18n.localize('STREAM_PACER.SafetyCheck.ResetConfirm')}</p>`,
       rejectClose: false,
       modal: true
     });
-    if (confirmed) PacerManager.startSafetyCheck(targets);
-  }
-
-  async _confirmSafetyCheckClear() {
-    const confirmed = await foundry.applications.api.DialogV2.confirm({
-      window: { title: game.i18n.localize('STREAM_PACER.SafetyCheck.ClearTitle') },
-      content: `<p>${game.i18n.localize('STREAM_PACER.SafetyCheck.ClearConfirm')}</p>`,
-      rejectClose: false,
-      modal: true
-    });
-    if (confirmed) PacerManager.clearSafetyCheck();
+    if (confirmed) PacerManager.resetSafetyLights();
   }
 
   _onClose(options) {

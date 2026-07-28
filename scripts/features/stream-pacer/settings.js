@@ -318,6 +318,16 @@ export function registerSettings() {
     default: true
   });
 
+  // Safety-light escalation cue (GM-facing, shares the volume slider below).
+  game.settings.register(MODULE_ID, 'sp.safetyAudioEnabled', {
+    name: 'STREAM_PACER.Settings.SafetyAudioEnabled',
+    hint: 'STREAM_PACER.Settings.SafetyAudioEnabledHint',
+    scope: 'client',
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
   // Hand raise audio volume (0-1)
   game.settings.register(MODULE_ID, 'sp.handRaiseAudioVolume', {
     name: 'STREAM_PACER.Settings.HandRaiseAudioVolume',

@@ -18,11 +18,11 @@ const EVENTS = {
   CAMPFIRE_DISMISS: 'campfireDismiss',
   SPOTLIGHT_UPDATE: 'spotlightUpdate',
   SPOTLIGHT_RESET: 'spotlightReset',
-  SAFETY_CHECK_START: 'safetyCheckStart',
-  SAFETY_CHECK_CLEAR: 'safetyCheckClear',
-  SAFETY_CHECK_DISMISS: 'safetyCheckDismiss',
-  SAFETY_CHECK_RESET: 'safetyCheckReset',
-  SAFETY_CHECK_RESPONSE: 'safetyCheckResponse'
+  SAFETY_REQUEST_START: 'safetyRequestStart',
+  SAFETY_REQUEST_STOP: 'safetyRequestStop',
+  SAFETY_LIGHT: 'safetyLight',
+  SAFETY_LIGHTS_RESET: 'safetyLightsReset',
+  SAFETY_LIGHT_REQUEST: 'safetyLightRequest'
 };
 
 class SocketHandlerClass {
@@ -147,35 +147,33 @@ class SocketHandlerClass {
         PacerManager.receiveSpotlightReset();
         break;
 
-      case EVENTS.SAFETY_CHECK_START:
+      case EVENTS.SAFETY_REQUEST_START:
         if (!senderIsGM) break;
-        PacerManager.receiveSafetyCheckStart(payload.checkId, payload.targetUserIds);
+        PacerManager.receiveSafetyRequestStart(payload.requestId);
         break;
 
-      case EVENTS.SAFETY_CHECK_CLEAR:
+      case EVENTS.SAFETY_REQUEST_STOP:
         if (!senderIsGM) break;
-        PacerManager.receiveSafetyCheckClear(payload.checkId);
+        PacerManager.receiveSafetyRequestStop();
         break;
 
-      case EVENTS.SAFETY_CHECK_DISMISS:
-        if (!senderIsGM) break;
-        PacerManager.receiveSafetyCheckDismiss(payload.checkId);
-        break;
-
-      case EVENTS.SAFETY_CHECK_RESET:
-        if (!senderIsGM) break;
-        PacerManager.receiveSafetyCheckReset();
-        break;
-
-      case EVENTS.SAFETY_CHECK_RESPONSE:
-        // A player may only submit a response for themselves. The manager
-        // additionally verifies that they belong to this check-in's snapshot.
-        // The transport is broadcast by Foundry, but only GM clients retain
-        // other users' results; player clients keep only their local answer.
+      case EVENTS.SAFETY_LIGHT:
+        // A player may only announce their own light. The transport is a
+        // Foundry broadcast, so every client hears it — but the manager only
+        // retains other users' lights on a GM client.
         if (senderIsGM || payload.userId !== senderId) break;
-        if (game.user.isGM) {
-          PacerManager.receiveSafetyCheckResponse(payload.checkId, payload.userId, payload.status);
-        }
+        PacerManager.receiveSafetyLight(payload.userId, payload.status, payload.requestId ?? null);
+        break;
+
+      case EVENTS.SAFETY_LIGHTS_RESET:
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyLightsReset();
+        break;
+
+      case EVENTS.SAFETY_LIGHT_REQUEST:
+        // A GM rebuilding its board after a reload. Only players answer.
+        if (!senderIsGM) break;
+        PacerManager.receiveSafetyLightRequest();
         break;
     }
   }
@@ -216,14 +214,14 @@ class SocketHandlerClass {
   _sendSyncState(targetUserId) {
     const state = PacerManager.getState();
     const targetIsGM = game.users.get(targetUserId)?.isGM === true;
-    const safetyCheck = targetIsGM
-      ? state.safetyCheck
-      : {
-          ...state.safetyCheck,
-          responses: state.safetyCheck.responses[targetUserId]
-            ? { [targetUserId]: state.safetyCheck.responses[targetUserId] }
-            : {}
-        };
+    // Co-GMs get the whole board; a player gets nothing but their own light
+    // and the bare fact that a request is open.
+    const safetyLights = targetIsGM
+      ? state.safetyLights
+      : (state.safetyLights[targetUserId] ? { [targetUserId]: state.safetyLights[targetUserId] } : {});
+    const safetyRequest = targetIsGM
+      ? state.safetyRequest
+      : { ...state.safetyRequest, acknowledged: {} };
     this._emit(EVENTS.SYNC_STATE, {
       targetUserId,
       state: {
@@ -233,7 +231,8 @@ class SocketHandlerClass {
         direPerilActive: state.direPerilActive,
         campfireActive: state.campfireActive,
         campfireEnd: state.campfireEnd,
-        safetyCheck
+        safetyRequest,
+        safetyLights
       }
     });
   }
@@ -266,24 +265,24 @@ class SocketHandlerClass {
     this._emit(EVENTS.SPOTLIGHT_RESET);
   }
 
-  emitSafetyCheckStart(checkId, targetUserIds) {
-    this._emit(EVENTS.SAFETY_CHECK_START, { checkId, targetUserIds });
+  emitSafetyRequestStart(requestId) {
+    this._emit(EVENTS.SAFETY_REQUEST_START, { requestId });
   }
 
-  emitSafetyCheckClear(checkId) {
-    this._emit(EVENTS.SAFETY_CHECK_CLEAR, { checkId });
+  emitSafetyRequestStop() {
+    this._emit(EVENTS.SAFETY_REQUEST_STOP);
   }
 
-  emitSafetyCheckDismiss(checkId) {
-    this._emit(EVENTS.SAFETY_CHECK_DISMISS, { checkId });
+  emitSafetyLight(userId, status, requestId = null) {
+    this._emit(EVENTS.SAFETY_LIGHT, { userId, status, requestId });
   }
 
-  emitSafetyCheckReset() {
-    this._emit(EVENTS.SAFETY_CHECK_RESET);
+  emitSafetyLightsReset() {
+    this._emit(EVENTS.SAFETY_LIGHTS_RESET);
   }
 
-  emitSafetyCheckResponse(checkId, userId, status) {
-    this._emit(EVENTS.SAFETY_CHECK_RESPONSE, { checkId, userId, status });
+  emitSafetyLightRequest() {
+    this._emit(EVENTS.SAFETY_LIGHT_REQUEST);
   }
 }
 

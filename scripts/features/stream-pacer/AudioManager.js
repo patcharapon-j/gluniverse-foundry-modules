@@ -1,4 +1,4 @@
-import { MODULE_ID } from './settings.js';
+import { MODULE_ID, SAFETY_STATUS } from './settings.js';
 
 /**
  * AudioManager - Handles audio notifications for Stream Pacer
@@ -78,10 +78,36 @@ export class AudioManager {
   }
 
   /**
+   * Play the safety-light escalation cue (GM only). Yellow gets a soft
+   * two-tone attention chime; red gets a lower, slower, unmistakably serious
+   * one. Green never rings — lowering a light is good news, not an alert.
+   * @param {string} status - A SAFETY_STATUS value
+   */
+  playSafetyChime(status) {
+    if (!game.user.isGM) return;
+    if (status !== SAFETY_STATUS.YELLOW && status !== SAFETY_STATUS.RED) return;
+    if (!game.settings.get(MODULE_ID, 'sp.safetyAudioEnabled')) return;
+
+    const isRed = status === SAFETY_STATUS.RED;
+    // A safety escalation is never spam — no cooldown here, but the red cue
+    // is deliberately distinct so two colours can't be confused.
+    this._synthesizeChime(isRed
+      ? { frequencies: [392, 262], durations: [1.1, 1.3], gain: 0.5, shimmer: false, repeat: 3, spacing: 0.34 }
+      : { frequencies: [660, 880], durations: [0.5, 0.6], gain: 0.36, shimmer: false, repeat: 2, spacing: 0.26 });
+  }
+
+  /**
    * Synthesize and play a soft bell/chime sound using Web Audio API
    * Creates a pleasant two-tone chime with quick attack and natural decay
    */
-  _synthesizeChime() {
+  _synthesizeChime({
+    frequencies = [830, 1245],   // Roughly G5 and D#6 — pleasant bell interval
+    durations = [0.4, 0.5],
+    gain = 0.3,
+    shimmer = true,
+    repeat = 1,
+    spacing = 0
+  } = {}) {
     try {
       const ctx = this._getContext();
       const now = ctx.currentTime;
@@ -90,51 +116,54 @@ export class AudioManager {
       // Master gain node
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.setValueAtTime(volume * 0.3, now);
+      masterGain.gain.setValueAtTime(volume * gain, now);
 
-      // Create two oscillators for a richer bell sound
-      const frequencies = [830, 1245]; // Roughly G5 and D#6 - pleasant bell interval
-      const durations = [0.4, 0.5];
+      // One strike of the bell: the two-tone body plus optional shimmer.
+      const strike = (at) => {
+        frequencies.forEach((freq, i) => {
+          // Oscillator
+          const osc = ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, at);
 
-      frequencies.forEach((freq, i) => {
-        // Oscillator
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now);
+          // Individual gain envelope for this oscillator
+          const voiceGain = ctx.createGain();
+          voiceGain.gain.setValueAtTime(0, at);
 
-        // Individual gain envelope for this oscillator
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0, now);
-        
-        // Quick attack
-        gain.gain.linearRampToValueAtTime(i === 0 ? 1 : 0.6, now + 0.01);
-        
-        // Natural decay
-        gain.gain.exponentialRampToValueAtTime(0.001, now + durations[i]);
+          // Quick attack
+          voiceGain.gain.linearRampToValueAtTime(i === 0 ? 1 : 0.6, at + 0.01);
 
-        // Connect: oscillator -> gain -> master
-        osc.connect(gain);
-        gain.connect(masterGain);
+          // Natural decay
+          voiceGain.gain.exponentialRampToValueAtTime(0.001, at + durations[i]);
 
-        // Start and stop
-        osc.start(now);
-        osc.stop(now + durations[i] + 0.1);
-      });
+          // Connect: oscillator -> gain -> master
+          osc.connect(voiceGain);
+          voiceGain.connect(masterGain);
 
-      // Add a subtle high harmonic for shimmer
-      const shimmerOsc = ctx.createOscillator();
-      shimmerOsc.type = 'sine';
-      shimmerOsc.frequency.setValueAtTime(2490, now); // High harmonic
+          // Start and stop
+          osc.start(at);
+          osc.stop(at + durations[i] + 0.1);
+        });
 
-      const shimmerGain = ctx.createGain();
-      shimmerGain.gain.setValueAtTime(0, now);
-      shimmerGain.gain.linearRampToValueAtTime(0.15, now + 0.005);
-      shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        if (!shimmer) return;
 
-      shimmerOsc.connect(shimmerGain);
-      shimmerGain.connect(masterGain);
-      shimmerOsc.start(now);
-      shimmerOsc.stop(now + 0.3);
+        // Add a subtle high harmonic for shimmer
+        const shimmerOsc = ctx.createOscillator();
+        shimmerOsc.type = 'sine';
+        shimmerOsc.frequency.setValueAtTime(2490, at); // High harmonic
+
+        const shimmerGain = ctx.createGain();
+        shimmerGain.gain.setValueAtTime(0, at);
+        shimmerGain.gain.linearRampToValueAtTime(0.15, at + 0.005);
+        shimmerGain.gain.exponentialRampToValueAtTime(0.001, at + 0.2);
+
+        shimmerOsc.connect(shimmerGain);
+        shimmerGain.connect(masterGain);
+        shimmerOsc.start(at);
+        shimmerOsc.stop(at + 0.3);
+      };
+
+      for (let i = 0; i < Math.max(1, repeat); i++) strike(now + i * spacing);
 
     } catch (e) {
       console.warn(`${MODULE_ID} | Failed to play audio notification:`, e);

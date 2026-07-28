@@ -1,4 +1,4 @@
-<div id="stream-pacer-container" class="{{#unless isGM}}is-player{{/unless}} {{#if hasActiveSignal}}signal-active{{/if}} {{#if isCountdown}}countdown-active urgency-{{countdownUrgency}}{{/if}}">
+<div id="stream-pacer-container" class="{{#unless isGM}}is-player{{/unless}} {{#if hasActiveSignal}}signal-active{{/if}} {{#if isCountdown}}countdown-active urgency-{{countdownUrgency}}{{/if}} {{#if safety.hudAlert}}safety-alert-{{safety.hudAlert}}{{/if}} {{#if safety.myLight}}my-light-{{safety.myLight}}{{/if}} {{#if safety.requested}}safety-requested{{/if}}">
   <div class="sp-accent"></div>
   {{!-- Header --}}
   <div class="pacer-header">
@@ -16,9 +16,13 @@
   <div class="p-sec">
     <div class="pacer-players">
       {{#each players}}
-      <div class="player-status {{statusClass}}" title="{{name}}: {{statusTitle}}">
+      <div class="player-status {{statusClass}} {{#if ../isGM}}light-{{safetyLight}}{{#unless safetyAcknowledged}} awaiting-light{{/unless}}{{/if}}"
+           title="{{name}}: {{statusTitle}}{{#if ../isGM}} — {{safetyLightTitle}}{{/if}}">
         <i class="fa-solid {{statusIcon}}"></i>
         <span class="p-name">{{name}}</span>
+        {{#if ../isGM}}
+        <span class="p-light" aria-hidden="true"></span>
+        {{/if}}
       </div>
       {{else}}
       <div class="no-players">{{localize "STREAM_PACER.NoPlayers"}}</div>
@@ -26,30 +30,53 @@
     </div>
   </div>
 
-  {{!-- Player Status Buttons (non-GM only) --}}
+  {{!-- Player Status Buttons + Safety Traffic Light (non-GM only) --}}
   {{#unless isGM}}
   <div class="p-sec pacer-my-status">
-    <div class="status-buttons">
-      <button type="button" class="status-btn status-engaged {{#if myStatusEngaged}}active{{/if}}"
-              data-action="set-status" data-status="engaged"
-              title="{{localize 'STREAM_PACER.Status.engaged'}}">
-        <i class="fa-solid fa-hourglass-half"></i>
-      </button>
-      <button type="button" class="status-btn status-hand-raised {{#if myStatusHandRaised}}active{{/if}}"
-              data-action="set-status" data-status="hand_raised"
-              title="{{localize 'STREAM_PACER.Status.hand_raised'}}">
-        <i class="fa-solid fa-hand"></i>
-      </button>
-      <button type="button" class="status-btn status-need-time {{#if myStatusNeedTime}}active{{/if}}"
-              data-action="set-status" data-status="need_time"
-              title="{{localize 'STREAM_PACER.Status.need_time'}}">
-        <i class="fa-solid fa-brain"></i>
-      </button>
-      <button type="button" class="status-btn status-ready {{#if myStatusReady}}active{{/if}}"
-              data-action="set-status" data-status="ready"
-              title="{{localize 'STREAM_PACER.Status.ready'}}">
-        <i class="fa-solid fa-circle-check"></i>
-      </button>
+    <div class="my-status-row">
+      <div class="my-status-main">
+        <div class="status-buttons">
+          <button type="button" class="status-btn status-engaged {{#if myStatusEngaged}}active{{/if}}"
+                  data-action="set-status" data-status="engaged"
+                  title="{{localize 'STREAM_PACER.Status.engaged'}}">
+            <i class="fa-solid fa-hourglass-half"></i>
+          </button>
+          <button type="button" class="status-btn status-hand-raised {{#if myStatusHandRaised}}active{{/if}}"
+                  data-action="set-status" data-status="hand_raised"
+                  title="{{localize 'STREAM_PACER.Status.hand_raised'}}">
+            <i class="fa-solid fa-hand"></i>
+          </button>
+          <button type="button" class="status-btn status-need-time {{#if myStatusNeedTime}}active{{/if}}"
+                  data-action="set-status" data-status="need_time"
+                  title="{{localize 'STREAM_PACER.Status.need_time'}}">
+            <i class="fa-solid fa-brain"></i>
+          </button>
+          <button type="button" class="status-btn status-ready {{#if myStatusReady}}active{{/if}}"
+                  data-action="set-status" data-status="ready"
+                  title="{{localize 'STREAM_PACER.Status.ready'}}">
+            <i class="fa-solid fa-circle-check"></i>
+          </button>
+        </div>
+
+        <div class="sp-light-readout">
+          <i class="fa-solid {{#if safety.requested}}fa-bell{{else}}fa-traffic-light{{/if}}" aria-hidden="true"></i>
+          <span class="sp-light-word">{{safety.readout}}</span>
+        </div>
+      </div>
+
+      {{!-- The traffic light: the player's standing safety signal to the GM --}}
+      <div class="sp-light light-{{safety.myLight}}" role="group"
+           aria-label="{{localize 'STREAM_PACER.SafetyCheck.LightGroupLabel'}}">
+        <span class="sp-light-hood" aria-hidden="true"></span>
+        {{#each safety.lamps}}
+        <button type="button" class="sp-lamp lamp-{{id}} {{#if active}}is-lit{{/if}}"
+                data-action="set-safety-light" data-light="{{id}}"
+                aria-pressed="{{#if active}}true{{else}}false{{/if}}"
+                aria-label="{{label}}" title="{{label}}">
+          <span class="sp-lamp-lens" aria-hidden="true"></span>
+        </button>
+        {{/each}}
+      </div>
     </div>
   </div>
   {{/unless}}
@@ -102,10 +129,10 @@
               title="{{localize 'STREAM_PACER.Campfire.Tooltip'}}">
         <i class="fa-solid fa-fire"></i>
       </button>
-      <button type="button" class="gm-btn safety-check-btn {{#if safetyCheck.active}}active{{/if}}"
-              data-action="start-safety-check"
-              {{#if safetyCheck.active}}disabled{{/if}}
-              title="{{localize 'STREAM_PACER.SafetyCheck.TriggerTooltip'}}">
+      <button type="button" class="gm-btn safety-check-btn {{#if safety.requested}}active{{/if}}"
+              data-action="toggle-safety-request"
+              aria-pressed="{{#if safety.requested}}true{{else}}false{{/if}}"
+              title="{{#if safety.requested}}{{localize 'STREAM_PACER.SafetyCheck.StopTooltip'}}{{else}}{{localize 'STREAM_PACER.SafetyCheck.TriggerTooltip'}}{{/if}}">
         <i class="fa-solid fa-traffic-light"></i>
       </button>
       {{#if hasActiveSignal}}
@@ -124,50 +151,60 @@
   </div>
   {{/if}}
 
-  {{!-- Safety Check Results (GM only) --}}
-  {{#if isGM}}{{#if safetyCheck.active}}
-  <div class="p-sec safety-results-sec {{#if safetyCheck.allResponded}}is-complete{{/if}}">
+  {{!-- Safety Lights board (GM only) — shown while a request is open or while
+        any player is off green, so a raised light can never be missed. --}}
+  {{#if isGM}}{{#if safety.show}}
+  <div class="p-sec safety-results-sec {{#if safety.requested}}is-requesting{{/if}} {{#if safety.hudAlert}}has-{{safety.hudAlert}}{{/if}}">
     <div class="safety-results-head">
       <span class="safety-results-title">
         <span class="safety-mini-lights" aria-hidden="true"><i></i><i></i><i></i></span>
         {{localize "STREAM_PACER.SafetyCheck.ResultsTitle"}}
       </span>
-      <span class="safety-results-count" title="{{localize 'STREAM_PACER.SafetyCheck.ResponseCountTooltip'}}">
-        {{safetyCheck.responseCount}} / {{safetyCheck.targetCount}}
-      </span>
+      <span class="safety-results-count" title="{{safety.countTooltip}}">{{safety.countLabel}}</span>
     </div>
 
     <div class="safety-response-list">
-      {{#each safetyCheck.responses}}
+      {{#each safety.raised}}
       <div class="safety-response {{#if isGreen}}is-green{{else if isYellow}}is-yellow{{else}}is-red{{/if}}"
            data-user-id="{{userId}}" title="{{name}}: {{title}}">
         <span class="safety-response-icon"><i class="fa-solid {{icon}}"></i></span>
         <span class="safety-response-name">{{name}}</span>
+        <span class="safety-response-word">{{word}}</span>
       </div>
       {{else}}
       <div class="safety-waiting">
         <span class="safety-waiting-pulse"></span>
-        {{localize "STREAM_PACER.SafetyCheck.Waiting"}}
+        {{#if safety.requested}}
+          {{localize "STREAM_PACER.SafetyCheck.Waiting"}}
+        {{else}}
+          {{localize "STREAM_PACER.SafetyCheck.AllGreen"}}
+        {{/if}}
       </div>
       {{/each}}
     </div>
 
     <div class="safety-results-foot">
-      <span class="safety-pending {{#if safetyCheck.allResponded}}is-complete{{/if}}">
-        {{#if safetyCheck.allResponded}}
-          <i class="fa-solid fa-circle-check"></i> {{localize "STREAM_PACER.SafetyCheck.AllResponded"}}
+      <span class="safety-pending {{#unless safety.pendingCount}}is-complete{{/unless}}">
+        {{#if safety.requested}}
+          {{#if safety.pendingCount}}
+            <i class="fa-solid fa-hourglass-half"></i> {{safety.pendingCount}} {{localize "STREAM_PACER.SafetyCheck.Pending"}}
+          {{else}}
+            <i class="fa-solid fa-circle-check"></i> {{localize "STREAM_PACER.SafetyCheck.AllResponded"}}
+          {{/if}}
         {{else}}
-          <i class="fa-solid fa-hourglass-half"></i> {{safetyCheck.pendingCount}} {{localize "STREAM_PACER.SafetyCheck.Pending"}}
+          <i class="fa-solid fa-traffic-light"></i> {{localize "STREAM_PACER.SafetyCheck.Standing"}}
         {{/if}}
       </span>
       <span class="safety-result-actions">
-        <button type="button" data-action="clear-safety-check"
-                title="{{localize 'STREAM_PACER.SafetyCheck.ClearTooltip'}}">
-          <i class="fa-solid fa-rotate"></i>
+        {{#if safety.requested}}
+        <button type="button" data-action="toggle-safety-request"
+                title="{{localize 'STREAM_PACER.SafetyCheck.StopTooltip'}}">
+          <i class="fa-solid fa-bell-slash"></i>
         </button>
-        <button type="button" data-action="dismiss-safety-check"
-                title="{{localize 'STREAM_PACER.SafetyCheck.DismissTooltip'}}">
-          <i class="fa-solid fa-xmark"></i>
+        {{/if}}
+        <button type="button" data-action="reset-safety-lights"
+                title="{{localize 'STREAM_PACER.SafetyCheck.ResetTooltip'}}">
+          <i class="fa-solid fa-rotate"></i>
         </button>
       </span>
     </div>
