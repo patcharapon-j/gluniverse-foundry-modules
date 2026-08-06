@@ -526,6 +526,21 @@ function hasNat20Result(message) {
   }
   return false;
 }
+/**
+ * A ChatMessage has no `rollMode` field — Foundry stores the chosen mode in
+ * `flags.core.rollMode` and only projects it onto `blind`/`whisper`. Reading
+ * `message.rollMode` therefore always yielded `undefined`, so every roll looked
+ * public. Fall back to the projection when the flag is absent (messages created
+ * without going through `applyRollMode`).
+ */
+function readRollMode(message) {
+  const flagged = message.flags?.core?.rollMode;
+  if (typeof flagged === "string") return flagged;
+  if (typeof message.rollMode === "string") return message.rollMode;
+  if (message.blind) return "blindroll";
+  if (Array.isArray(message.whisper) && message.whisper.length) return "gmroll";
+  return "publicroll";
+}
 function getAttackCriticalHit(message) {
   const rolls = message.rolls;
   if (!Array.isArray(rolls)) return void 0;
@@ -548,6 +563,56 @@ function getAttackCriticalHit(message) {
 const NEVER_FIRES = /* @__PURE__ */ new Set(["damage", "initiative"]);
 function isPerceptionSkill(skillId) {
   return skillId === DND5E_PERCEPTION_SKILL_ID || skillId === "perception";
+}
+/**
+ * Read the roll descriptor out of a dnd5e message, across both data layouts the
+ * system has shipped.
+ *
+ * Up to dnd5e 5.x every roll was a plain ChatMessage tagged with
+ * `flags.dnd5e.roll = { type, skillId, ability }`. From dnd5e 6.0 rolls became
+ * ChatMessage *sub-types*: the descriptor moved into the document's `type` plus
+ * its `system` data, and the system's own migration deletes the old flag. Since
+ * the flag simply vanishes, the detector used to see `no-context` for every roll
+ * and the cut-in never fired automatically on those versions.
+ *
+ * Both shapes are read here and normalised onto the one roll-type vocabulary
+ * `detectDnd5e` speaks, so a world can move between system versions (or hold
+ * mixed message history) without losing automation.
+ */
+function readDnd5eRoll(message) {
+  const flag = message.flags?.dnd5e?.roll;
+  if (flag?.type) {
+    return { type: flag.type, skillId: flag.skillId, ability: flag.ability };
+  }
+  return readDnd5eSubtypeRoll(message);
+}
+function readDnd5eSubtypeRoll(message) {
+  const type = message.type;
+  if (typeof type !== "string" || type === "base") return null;
+  const system = message.system ?? {};
+  switch (type) {
+    case "attack":
+      return { type: "attack", ability: system.ability };
+    case "check":
+      // A check message carries at most one of skill/tool; neither means a
+      // bare ability check.
+      if (system.skill) return { type: "skill", skillId: system.skill, ability: system.ability };
+      if (system.tool) return { type: "tool", toolId: system.tool, ability: system.ability };
+      return { type: "ability", ability: system.ability };
+    case "save":
+      // `system.type` is one of ability | concentration | death; only death
+      // saves have their own roll type in the detector's vocabulary.
+      return { type: system.type === "death" ? "death" : "save", ability: system.ability };
+    case "damage":
+    case "healing":
+      return { type: "damage" };
+    case "hitDie":
+    case "hitPoints":
+    case "generic":
+      return { type };
+    default:
+      return null;
+  }
 }
 function detectDnd5e(input) {
   if (input.systemId !== DND5E_SYSTEM_ID) return { fire: false, reason: "wrong-system" };
@@ -601,13 +666,12 @@ function detectDnd5e(input) {
 function buildInputFromMessage$1(message) {
   const actorId = message.speaker?.actor;
   const actor = actorId ? game.actors.get(actorId) : void 0;
-  const rollFlag = message.flags?.dnd5e?.roll ?? null;
   return {
     systemId: game.system.id,
     context: null,
-    dnd5eRoll: rollFlag ? { type: rollFlag.type, skillId: rollFlag.skillId, ability: rollFlag.ability } : null,
+    dnd5eRoll: readDnd5eRoll(message),
     criticalHit: getAttackCriticalHit(message),
-    rollMode: message.rollMode ?? "publicroll",
+    rollMode: readRollMode(message),
     whisperLength: message.whisper?.length ?? 0,
     blind: message.blind ?? false,
     hasActor: !!actor,
@@ -681,7 +745,7 @@ function buildInputFromMessage(message) {
     systemId: game.system.id,
     context: message.flags?.pf2e?.context ?? null,
     dnd5eRoll: null,
-    rollMode: message.rollMode ?? "publicroll",
+    rollMode: readRollMode(message),
     whisperLength: message.whisper?.length ?? 0,
     blind: message.blind ?? false,
     hasActor: !!actor,
