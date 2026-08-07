@@ -37,13 +37,31 @@ uniform sampler2D u_nrm;      // rg = normal xy, b = thickness, a = alpha
 
 uniform vec3  u_ambient;      // scene ambient colour
 uniform vec3  u_key;          // key light colour
-uniform vec2  u_keyDir;       // direction toward the key light, screen space
 uniform vec3  u_shadowColor;  // colour a dimmed character recedes toward
 uniform float u_intensity;    // master strength, 0..1
 uniform float u_rim;          // rim strength
 uniform float u_exposure;     // darkness-derived exposure
 uniform float u_shadow;       // dim amount, 0..1
 uniform float u_lift;         // highlight boost, 0..1
+
+// ── Light placement ──
+// The key light is a point in the art's own space rather than one direction
+// shared by the whole figure. On a full-body pose the head and the shins are a
+// long way apart, and a lamp in the room does not shine on both from the same
+// angle — the head should catch a rim the legs do not. Feeding a position makes
+// that fall out per fragment instead of being faked.
+uniform vec2  u_lightP;       // light position, aspect-corrected art space
+uniform float u_lightZ;       // how far in front of the art plane it sits
+uniform float u_refDist;      // light-to-figure-centre distance, for falloff
+uniform vec2  u_uvScale;      // (artAspect, 1.0) — makes art space isotropic
+
+// ── Framing ──
+// Where the silhouette starts and ends vertically, and how much of a whole body
+// that represents. A knee-up crop has no floor in frame, so it must not get a
+// grounding shadow smeared across its bottom edge.
+uniform float u_figTop;
+uniform float u_figBottom;
+uniform float u_ground;       // grounding shadow strength, 0..1
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -61,22 +79,41 @@ void main() {
   // Invented surface: faces the viewer deep inside the silhouette, rolls away
   // toward the edges. Thin regions get a shallower Z so they catch more rim.
   vec3 N = normalize(vec3(n2, mix(0.35, 1.0, thick)));
-  vec3 L = normalize(vec3(u_keyDir, 0.55));
+
+  // Vector to the light from *this* point on the figure.
+  vec3 toLight = vec3(u_lightP - v_uv * u_uvScale, u_lightZ);
+  float dist = max(length(toLight), 0.0001);
+  vec3 L = toLight / dist;
+
+  // Falloff normalised at the figure's centre, so overall exposure is unchanged
+  // and only the gradient across the body is added. A distant light flattens to
+  // 1.0 everywhere by itself — no special case needed.
+  // Bounded: a light placed almost on top of the figure would otherwise blow
+  // the near end out and crush the far one.
+  float atten = clamp(u_refDist / dist, 0.65, 1.45);
 
   // Half-Lambert wrap blended with true Lambert: pure Lambert crushes the
   // unlit side to black, which looks wrong on stylised art.
   float lambert = max(dot(N, L), 0.0);
   float wrapped = dot(N, L) * 0.5 + 0.5;
-  float diffuse = mix(wrapped, lambert, 0.5);
+  float diffuse = mix(wrapped, lambert, 0.5) * atten;
 
-  // Rim: bright where the surface is thin *and* turned toward the light.
+  // Rim: bright where the surface is thin *and* turned toward the light. With a
+  // positioned light this now sweeps the parts of the silhouette that actually
+  // face it — the lit shoulder and jaw under a high lamp, not the whole outline.
   float edge = pow(1.0 - thick, 2.5);
-  float rimTerm = edge * max(dot(normalize(vec3(n2, 0.25)), L), 0.0) * u_rim;
+  float rimTerm = edge * max(dot(normalize(vec3(n2, 0.25)), L), 0.0) * u_rim * atten;
 
   // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
   float ao = mix(0.78, 1.0, thick);
 
   vec3 lit = art.rgb * (u_ambient * ao + u_key * diffuse) + u_key * rimTerm;
+
+  // Grounding: light reaching the floor is blocked by the figure itself, so the
+  // lowest part of a full body sits darker. Confined to the bottom of the
+  // silhouette by the cube, and scaled to nothing when the feet are out of frame.
+  float fy = clamp((v_uv.y - u_figTop) / max(u_figBottom - u_figTop, 0.0001), 0.0, 1.0);
+  lit *= 1.0 - fy * fy * fy * u_ground;
 
   // Highlighted characters step forward into the light.
   lit *= (1.0 + u_lift * 0.35);
@@ -184,7 +221,13 @@ export class StageGL {
       nrm: gl.getUniformLocation(program, "u_nrm"),
       ambient: gl.getUniformLocation(program, "u_ambient"),
       key: gl.getUniformLocation(program, "u_key"),
-      keyDir: gl.getUniformLocation(program, "u_keyDir"),
+      lightP: gl.getUniformLocation(program, "u_lightP"),
+      lightZ: gl.getUniformLocation(program, "u_lightZ"),
+      refDist: gl.getUniformLocation(program, "u_refDist"),
+      uvScale: gl.getUniformLocation(program, "u_uvScale"),
+      figTop: gl.getUniformLocation(program, "u_figTop"),
+      figBottom: gl.getUniformLocation(program, "u_figBottom"),
+      ground: gl.getUniformLocation(program, "u_ground"),
       shadowColor: gl.getUniformLocation(program, "u_shadowColor"),
       intensity: gl.getUniformLocation(program, "u_intensity"),
       rim: gl.getUniformLocation(program, "u_rim"),
@@ -350,7 +393,13 @@ export class StageGL {
     const u = this.uniforms;
     gl.uniform3fv(u.ambient, params.ambient);
     gl.uniform3fv(u.key, params.key);
-    gl.uniform2fv(u.keyDir, params.keyDir);
+    gl.uniform2fv(u.lightP, params.lightP);
+    gl.uniform1f(u.lightZ, params.lightZ);
+    gl.uniform1f(u.refDist, params.refDist);
+    gl.uniform2fv(u.uvScale, params.uvScale);
+    gl.uniform1f(u.figTop, params.figTop);
+    gl.uniform1f(u.figBottom, params.figBottom);
+    gl.uniform1f(u.ground, params.ground);
     gl.uniform3fv(u.shadowColor, params.shadowColor);
     gl.uniform1f(u.intensity, params.intensity);
     gl.uniform1f(u.rim, params.rim);

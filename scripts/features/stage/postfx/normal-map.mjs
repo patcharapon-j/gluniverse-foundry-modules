@@ -17,13 +17,17 @@
  *   B   — thickness (blurred alpha), for rim falloff and occlusion
  *   A   — the original alpha, for masking
  *
+ * The same scan also measures where the figure actually sits in the frame and
+ * how much of a body is shown, which is what lets the lighting treat a full-body
+ * pose differently from a knee-up crop. See {@link describeFigure}.
+ *
  * The prepass is pure CPU and runs once per art asset, cached by src. It needs
  * pixel access, which `asset.mjs` negotiates; art the browser will render but
  * refuses to let us read returns null here and the caller drops to the CSS
  * fallback path.
  */
 
-import { clamp01 } from "../../../core/util.mjs";
+import { clamp, clamp01 } from "../../../core/util.mjs";
 import { loadPixelImage, markTainted, invalidateAsset } from "./asset.mjs";
 
 /** Prepass resolution. The normal field is low-frequency; 256 is plenty and
@@ -130,9 +134,62 @@ export function boxBlur(src, dst, width, height, radius) {
   }
 }
 
+/** Alpha above which a pixel counts as part of the figure, not a soft edge. */
+const FIGURE_ALPHA = 24;
+
+/**
+ * Height-to-width ratio of a whole standing figure at typical stage framing.
+ * Character art is drawn to be looked at, so poses cluster tightly around this:
+ * a full body lands near 2.9, a knee-up three-quarter shot near 1.8, and a
+ * waist-up portrait near 1.4.
+ */
+const FULL_BODY_ASPECT = 2.9;
+
+/**
+ * Work out how the figure is framed from its silhouette alone.
+ *
+ * This is the only framing signal available — nothing tells us whether a given
+ * PNG is a full body or a knee-up crop — but it is a good one, because the
+ * bounding box of a human silhouette is dominated by how much of the human is
+ * in it. Art with no transparency at all degrades to the image's own aspect,
+ * which is still roughly right and never absurd.
+ *
+ * `bodyFraction` is what the lighting actually consumes: how much of a whole
+ * standing body is on screen, measured down from the head. It decides how far
+ * the light sits relative to the figure and how much floor shadow is plausible
+ * — a knee-up crop has no floor in frame, so it must not get a grounding
+ * shadow across its bottom edge.
+ *
+ * Exported for testing; coordinates come back as 0..1 fractions of the art.
+ */
+export function describeFigure(box, width, height) {
+  // No silhouette at all (an opaque rectangle, or an empty decode): treat the
+  // whole image as the figure.
+  const empty = !box || box.x1 < box.x0 || box.y1 < box.y0;
+  const x0 = empty ? 0 : box.x0 / width;
+  const y0 = empty ? 0 : box.y0 / height;
+  const x1 = empty ? 1 : (box.x1 + 1) / width;
+  const y1 = empty ? 1 : (box.y1 + 1) / height;
+
+  const pxW = Math.max((x1 - x0) * width, 1);
+  const pxH = Math.max((y1 - y0) * height, 1);
+  const aspect = pxH / pxW;
+
+  return {
+    x0,
+    y0,
+    x1,
+    y1,
+    aspect,
+    // Clamped low so a head-and-shoulders bust still gets *some* vertical
+    // modelling, and at 1 so a stretched pose can't invent extra body.
+    bodyFraction: clamp(aspect / FULL_BODY_ASPECT, 0.3, 1),
+  };
+}
+
 /**
  * Build the normal/thickness buffer for one decoded art source.
- * @returns {{width:number,height:number,data:Uint8ClampedArray}}
+ * @returns {{width:number,height:number,data:Uint8ClampedArray,figure:object}}
  */
 function buildNormals(source, width, height) {
   const canvas = document.createElement("canvas");
@@ -148,10 +205,20 @@ function buildNormals(source, width, height) {
   const count = width * height;
   const alpha = new Uint8ClampedArray(count);
   const field = new Float32Array(count);
+  // The silhouette's extent, gathered on the pass we were making anyway.
+  const box = { x0: width, y0: height, x1: -1, y1: -1 };
   for (let i = 0; i < count; i++) {
     const a = pixels[i * 4 + 3];
     alpha[i] = a;
     field[i] = a / 255;
+    if (a > FIGURE_ALPHA) {
+      const x = i % width;
+      const y = (i / width) | 0;
+      if (x < box.x0) box.x0 = x;
+      if (x > box.x1) box.x1 = x;
+      if (y < box.y0) box.y0 = y;
+      if (y > box.y1) box.y1 = y;
+    }
   }
 
   const scratch = new Float32Array(count);
@@ -187,7 +254,7 @@ function buildNormals(source, width, height) {
     }
   }
 
-  return { width, height, data };
+  return { width, height, data, figure: describeFigure(box, width, height) };
 }
 
 /**

@@ -1,4 +1,48 @@
-# Stage character lighting — asset hosting
+# Stage character lighting
+
+Two things decide how a character ends up looking: **how it is framed**, and
+**where it is hosted**. The first shapes the light; the second decides whether
+the full effect is available at all.
+
+## Framing — knee-up vs full body
+
+Stage art is composited over the background, not placed in it, so nothing tells
+the shader where the figure is standing or how much of a body is on screen. Both
+are inferred.
+
+The normal-map prepass already scans every pixel of the alpha channel, so it also
+measures the silhouette's bounding box. Its height-to-width ratio is the framing
+signal — a whole standing figure lands near 2.9, a knee-up three-quarter shot
+near 1.8, a waist-up portrait near 1.4 — and `describeFigure` turns that into
+`bodyFraction`: how much of a whole body is in frame, measured down from the
+head. Art with no transparency degrades to the image's own aspect, which is
+still roughly right.
+
+Two things depend on it:
+
+- **Where the light sits relative to the figure.** The key light is passed to the
+  shader as a *position* in the art's own space, not as one direction shared by
+  the whole figure. On a full body the head and the shins are far apart, and a
+  lamp in the room does not shine on both from the same angle — so the head
+  catches a rim the legs do not, and `dot(N, L)` varies down the body. A knee-up
+  crop at the same pixel height is not the same distance from that lamp, so it
+  gets a gentler gradient.
+- **Grounding shadow.** A full body has a floor in frame and its lowest part sits
+  in its own shadow. A knee-up crop has no floor, so a dark band across its hem
+  would read as a bug. Strength scales with `bodyFraction` cubed, which takes a
+  knee-up crop to roughly a quarter of a full body's.
+
+The scene model behind this is two constants in `postfx/index.mjs`: a standing
+figure's feet land near the bottom of the frame (`FEET_SCENE_Y`) and the figure
+covers about half the frame's height (`BODY_SCENE_HEIGHT`). They hold for painted
+VN-style backgrounds, where the horizon is high and the foreground floor fills
+the lower third. Both spaces are made isotropic before any angle is computed,
+because 0.1 across a 16:9 background is nearly twice the distance of 0.1 down it.
+
+The CSS fallback cannot do any of this — it has no normal map, which is why it is
+the fallback — so it uses a single direction measured from mid-body.
+
+## Asset hosting
 
 The Stage feature can light and colour-grade character art to match the current
 scene's background (`stage.ppEnabled`). Doing that means *reading* pixels, not
@@ -77,9 +121,16 @@ Hosts that already work without any change: Foundry's own `Data` directory
 
 ## Verifying a change
 
-The strategy ladder is pure logic over URLs and load outcomes, so it is testable
-without a browser. `boxBlur` and the lighting geometry are exported for the same
-reason — see the checks described in `CLAUDE.md`. When touching `asset.mjs`, the
-cases that matter are: a presigned URL is never rewritten, an absent file is
-reported as `missing` rather than `cors` (otherwise a GM goes and edits a bucket
-policy over a typo), and concurrent slots share one probe.
+Almost none of this is reviewable by eye, so the maths is factored into pure
+exported helpers and pinned down by:
+
+```bash
+node tools/postfx-check.mjs
+```
+
+Zero failures required. It covers the blur kernel, the light geometry and its
+sign conventions, framing detection, the CORS strategy ladder, and a cross-check
+that every shader uniform is both declared in the GLSL and looked up from JS — a
+typo there returns `null` and every write to it becomes a silent no-op.
+
+It cannot check how any of it *looks*. That needs a real session with real art.

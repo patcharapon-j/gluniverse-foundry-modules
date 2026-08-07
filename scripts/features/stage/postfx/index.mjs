@@ -22,8 +22,26 @@ import { StageGL } from "./gl.mjs";
 /** Matches the `--gl-d-reveal` rung; routed through the motion scale. */
 const TWEEN_MS = 620;
 
-/** Characters stand low in the frame — this is where light is measured from. */
-const SLOT_ANCHOR_Y = 0.78;
+// ── Where a character stands in the scene ──
+// Stage art is composited over the background rather than placed in it, so
+// nothing tells us where the figure "is". These two numbers are the model, and
+// everything geometric derives from them: a standing figure's feet land near the
+// bottom of the frame, and the figure spans about half the frame's height. They
+// hold for the painted VN-style backgrounds this feature targets, where the
+// horizon sits high and the foreground floor fills the lower third.
+
+/** Scene Y where a standing figure's feet land. */
+const FEET_SCENE_Y = 0.94;
+
+/** How much of the background's height a whole standing figure covers. */
+const BODY_SCENE_HEIGHT = 0.52;
+
+/**
+ * Where light is measured from when the figure's real extent is unknown — the
+ * middle of the body, not its feet. Only the CSS fallback uses this; the shader
+ * path measures the silhouette instead.
+ */
+export const SLOT_ANCHOR_Y = FEET_SCENE_Y - BODY_SCENE_HEIGHT * 0.5;
 
 const LUMA = [0.2126, 0.7152, 0.0722];
 
@@ -69,6 +87,72 @@ export function keyDirection(centroid, position, anchorY = SLOT_ANCHOR_Y) {
   let dy = centroid[1] - anchorY;
   const length = Math.hypot(dx, dy) || 1;
   return [dx / length, dy / length];
+}
+
+/**
+ * Place the key light inside the art's own coordinate space.
+ *
+ * The shader shades one character at a time in its own texture, but the light
+ * lives in the *background*. This is the bridge: it works out where that light
+ * would fall if the art were standing in the scene, and expresses it in art
+ * coordinates the fragment shader can subtract from `v_uv`.
+ *
+ * Both spaces are made isotropic first (X multiplied by aspect), because a step
+ * of 0.1 across a 16:9 background is nearly twice the distance of 0.1 down it,
+ * and mixing the two would skew every angle.
+ *
+ * The figure's measured silhouette is the yardstick between the two spaces: its
+ * on-screen height is known in art units, and the scene model says what fraction
+ * of a body that is. This is what makes framing matter — a knee-up crop and a
+ * full body at the same pixel height are *not* the same distance from the lamp,
+ * and the light lands higher above the head on the crop because less of the body
+ * is between them.
+ *
+ * Exported for testing.
+ *
+ * @param {[number,number]} centroid  Luminance centroid of the background.
+ * @param {number} position           Slot's horizontal position across the stage, 0..1.
+ * @param {object} figure             From `describeFigure` in the normal-map prepass.
+ * @param {number} artAspect          Character art width / height.
+ * @param {number} bgAspect           Background width / height.
+ */
+export function lightPlacement(centroid, position, figure, artAspect, bgAspect) {
+  const visibleSpan = BODY_SCENE_HEIGHT * figure.bodyFraction;
+  const headY = FEET_SCENE_Y - BODY_SCENE_HEIGHT;
+
+  // Art units per scene unit, taken from the one measurement both spaces share:
+  // how tall the visible figure is.
+  const figHeight = Math.max(figure.y1 - figure.y0, 1e-4);
+  const scale = figHeight / Math.max(visibleSpan, 1e-4);
+
+  // Figure centre, in each space.
+  const artCx = ((figure.x0 + figure.x1) / 2) * artAspect;
+  const artCy = (figure.y0 + figure.y1) / 2;
+  const sceneCx = position * bgAspect;
+  const sceneCy = headY + visibleSpan / 2;
+
+  const lightP = [
+    artCx + (centroid[0] * bgAspect - sceneCx) * scale,
+    artCy + (centroid[1] - sceneCy) * scale,
+  ];
+
+  // The light is in the room, not on the art plane. Scaling its depth by the
+  // figure's size keeps the wrap consistent across art of any resolution.
+  const lightZ = figHeight * 0.55;
+
+  const refDist = Math.hypot(lightP[0] - artCx, lightP[1] - artCy, lightZ);
+
+  return {
+    lightP,
+    lightZ,
+    refDist,
+    uvScale: [artAspect, 1],
+    figTop: figure.y0,
+    figBottom: figure.y1,
+    // Floor shadow needs a floor. Cubed so a knee-up crop, whose feet are out
+    // of frame, gets essentially none rather than a dark band across its hem.
+    ground: 0.32 * figure.bodyFraction ** 3,
+  };
 }
 
 /**
@@ -282,8 +366,12 @@ export class StagePostFX {
     // Key light colour comes from the background where the light appears to be.
     const key = toKeyLight(columnAt(this._sample, params.centroid[0]));
 
-    // Direction: from this slot toward the scene's brightest region. Two
-    // characters flanking a central fire get rims from opposite sides.
+    // A single direction from this slot toward the scene's brightest region.
+    // Two characters flanking a central fire get rims from opposite sides. Only
+    // the CSS fallback consumes this now — the shader gets a light *position*
+    // via `lightPlacement` and works the direction out per fragment, which it
+    // can do because it has the figure's measured silhouette and the fallback
+    // does not.
     const keyDir = keyDirection(params.centroid, state.position);
     return { ambient, key, keyDir };
   }
@@ -318,10 +406,18 @@ export class StagePostFX {
       return;
     }
 
+    const placement = lightPlacement(
+      this._params.centroid,
+      state.position,
+      normal.figure,
+      normal.width / Math.max(normal.height, 1),
+      this._sample.aspect || 16 / 9
+    );
+
     const canvas = await this._gl.render(src, normal, {
+      ...placement,
       ambient: lighting.ambient,
       key: lighting.key,
-      keyDir: lighting.keyDir,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
       rim: 0.9,

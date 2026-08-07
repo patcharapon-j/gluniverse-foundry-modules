@@ -34,6 +34,9 @@ const _pending = new Map();
 
 const VIDEO_RE = /\.(webm|mp4|m4v|ogv)(\?.*)?$/i;
 
+/** Assumed background aspect when the real one is unavailable. */
+const DEFAULT_ASPECT = 16 / 9;
+
 /** Neutral sample: the effect renders as a no-op against this. */
 export const NEUTRAL_SAMPLE = Object.freeze({
   ok: false,
@@ -43,6 +46,7 @@ export const NEUTRAL_SAMPLE = Object.freeze({
   centroid: [0.5, 0.5],
   luminance: 0.5,
   darkness: 0,
+  aspect: DEFAULT_ASPECT,
   reason: "none",
 });
 
@@ -85,19 +89,25 @@ async function decodeImage(src) {
   // Shared loader: a background on S3 needs the same CORS negotiation the
   // character art does, and benefits from the same cache-busted retry.
   const img = await loadPixelImage(src);
+  // Captured before the thumbnail squashes it to a square. Scene coordinates
+  // are normalised 0..1 on both axes, so without the real aspect a horizontal
+  // step would be treated as the same distance as a vertical one — and on a
+  // 16:9 background it is nearly twice as far.
+  const aspect = img.naturalWidth / Math.max(img.naturalHeight, 1) || DEFAULT_ASPECT;
 
   if (typeof createImageBitmap === "function") {
     try {
-      return await createImageBitmap(img, {
+      const source = await createImageBitmap(img, {
         resizeWidth: THUMB_W,
         resizeHeight: THUMB_H,
         resizeQuality: "low",
       });
+      return { source, aspect };
     } catch (_e) {
       // Older engines reject the resize options — fall through to the element.
     }
   }
-  return img;
+  return { source: img, aspect };
 }
 
 /** Load a video in CORS mode, far enough to have a frame to draw. */
@@ -128,6 +138,8 @@ async function decodeVideo(src) {
     video = await openVideo(retry);
   }
 
+  const aspect = video.videoWidth / Math.max(video.videoHeight, 1) || DEFAULT_ASPECT;
+
   // Nudge past frame 0 — many encodes open on a black or fade-in frame, which
   // would grade the whole cast to pitch black.
   try {
@@ -142,7 +154,7 @@ async function decodeVideo(src) {
   } catch (_e) {
     /* keep whatever frame we have */
   }
-  return video;
+  return { source: video, aspect };
 }
 
 /**
@@ -233,6 +245,7 @@ function degradedSample(scene, reason) {
     centroid: [0.5, 0.3],
     luminance: luma(flat),
     darkness: readDarkness(scene),
+    aspect: DEFAULT_ASPECT,
     reason,
   };
 }
@@ -265,13 +278,14 @@ export async function sampleScene(scene) {
   const job = (async () => {
     let sample;
     try {
-      const source = VIDEO_RE.test(src) ? await decodeVideo(src) : await decodeImage(src);
+      const { source, aspect } = VIDEO_RE.test(src) ? await decodeVideo(src) : await decodeImage(src);
       const data = readPixels(source);
       sample = {
         ok: true,
         degraded: false,
         ...analyse(data),
         darkness,
+        aspect,
         reason: "image",
       };
       if (typeof source.close === "function") source.close();
