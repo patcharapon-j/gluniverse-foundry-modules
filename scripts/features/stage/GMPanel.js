@@ -304,7 +304,12 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
 
         const notes = [];
         if (!status.webglAvailable) notes.push(i18n('panel.ppNoWebGL'));
+        // A CORS-blocked host is the one case with a concrete fix, so it takes
+        // precedence over the generic message and points at the console, where
+        // the exact bucket rule was printed.
+        else if (status.corsFallbacks > 0) notes.push(i18n('panel.ppArtCORS'));
         else if (status.cssFallbacks > 0) notes.push(i18n('panel.ppArtNotSampled'));
+        if (status.missingArt > 0) notes.push(i18n('panel.ppArtMissing'));
         if (status.backgroundDegraded) {
             notes.push(
                 status.backgroundReason === 'cors'

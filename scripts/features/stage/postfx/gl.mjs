@@ -16,6 +16,8 @@
  * in stream-pacer sets the same precedent.
  */
 
+import { loadPixelImage, markTainted } from "./asset.mjs";
+
 const VERT = `
 attribute vec2 a_pos;
 varying vec2 v_uv;
@@ -249,22 +251,15 @@ export class StageGL {
     }
   }
 
-  /** Upload the character art. Cross-origin art without CORS headers throws
-   *  here exactly as it does in the normal-map prepass, so both gate together. */
+  /** Upload the character art. Uses the shared loader, so it reaches exactly the
+   *  same verdict as the normal-map prepass — the two must never disagree about
+   *  whether an asset is readable. */
   async _artTexture(src) {
     const cached = this._touch(this._artTextures, src);
     if (cached) return cached;
 
     const gl = this.gl;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.decoding = "async";
-    img.src = src;
-    await new Promise((resolve, reject) => {
-      if (img.complete && img.naturalWidth) return resolve();
-      img.addEventListener("load", resolve, { once: true });
-      img.addEventListener("error", () => reject(new Error("art load failed")), { once: true });
-    });
+    const img = await loadPixelImage(src);
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -325,7 +320,10 @@ export class StageGL {
     let art;
     try {
       art = await this._artTexture(src);
-    } catch (_e) {
+    } catch (err) {
+      // `texImage2D` rejects a tainted image the same way `getImageData` does.
+      // Record it so the next render goes straight to the fallback.
+      if (err?.name === "SecurityError") markTainted(src);
       return null;
     }
     // The context can be lost while the art texture is in flight.

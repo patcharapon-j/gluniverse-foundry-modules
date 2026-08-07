@@ -18,11 +18,13 @@
  *   A   — the original alpha, for masking
  *
  * The prepass is pure CPU and runs once per art asset, cached by src. It needs
- * pixel access, so cross-origin art without CORS headers throws here — the
- * caller treats that as "no normal map" and drops to the CSS fallback path.
+ * pixel access, which `asset.mjs` negotiates; art the browser will render but
+ * refuses to let us read returns null here and the caller drops to the CSS
+ * fallback path.
  */
 
 import { clamp01 } from "../../../core/util.mjs";
+import { loadPixelImage, markTainted, invalidateAsset } from "./asset.mjs";
 
 /** Prepass resolution. The normal field is low-frequency; 256 is plenty and
  *  keeps the blur passes cheap even for a 4k portrait. */
@@ -62,16 +64,9 @@ function cacheSet(key, value) {
 /** Decode art at reduced size. Resizing during decode avoids ever holding the
  *  full-resolution bitmap. */
 async function decodeArt(src) {
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.decoding = "async";
-  img.src = src;
-
-  await new Promise((resolve, reject) => {
-    if (img.complete && img.naturalWidth) return resolve();
-    img.addEventListener("load", resolve, { once: true });
-    img.addEventListener("error", () => reject(new Error("art load failed")), { once: true });
-  });
+  // Goes through the shared loader so remotely-hosted art (S3 and friends) gets
+  // the CORS-mode retry rather than one all-or-nothing attempt.
+  const img = await loadPixelImage(src);
 
   const nw = img.naturalWidth || MAX_DIM;
   const nh = img.naturalHeight || MAX_DIM;
@@ -146,7 +141,8 @@ function buildNormals(source, width, height) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("no 2d context");
   ctx.drawImage(source, 0, 0, width, height);
-  // Throws SecurityError on cross-origin art served without CORS headers.
+  // Throws SecurityError if the source tainted the canvas anyway — `asset.mjs`
+  // should have ruled that out, so the caller records it and stops retrying.
   const pixels = ctx.getImageData(0, 0, width, height).data;
 
   const count = width * height;
@@ -212,9 +208,10 @@ export async function getNormalMap(src) {
       const { source, width, height } = await decodeArt(src);
       result = buildNormals(source, width, height);
       if (typeof source.close === "function") source.close();
-    } catch (_err) {
+    } catch (err) {
       // Cache the failure too — otherwise every re-render retries a decode that
       // is never going to succeed.
+      if (err?.name === "SecurityError") markTainted(src);
       result = null;
     }
     cacheSet(src, result);
@@ -228,6 +225,9 @@ export async function getNormalMap(src) {
 
 /** Drop cached prepasses. Called when an actor's image changes. */
 export function invalidateNormalMap(src = null) {
+  // The load strategy is keyed on the same src and can go stale the same way —
+  // a host that gains a CORS rule should not stay written off until reload.
+  invalidateAsset(src);
   if (src) {
     _cache.delete(src);
     _pending.delete(src);

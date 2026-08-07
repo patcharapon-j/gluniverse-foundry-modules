@@ -88,6 +88,21 @@
     opacity: 0.75;
 }
 
+/* Shade: the same gradient reversed, darkening the side turned away from the
+   light. Without it the fallback only ever adds brightness, which flattens the
+   art instead of giving it form — and for art whose pixels can't be read, this
+   is the only shading it will ever get. Deepens when the slot is dimmed, since
+   the shader's shadow term isn't available here. */
+.glstage-pp-shade {
+    background: linear-gradient(
+        var(--glstage-pp-shade-angle, 180deg),
+        var(--glstage-pp-shadow, transparent) 0%,
+        transparent 70%
+    );
+    mix-blend-mode: multiply;
+    opacity: calc(0.55 + var(--glstage-pp-dim, 0) * 0.3);
+}
+
 /* Scene darkness dims the fallback the same way exposure dims the shader. */
 .stage-actor-img-wrap.glstage-pp-css .stage-actor-img {
     filter: brightness(var(--glstage-pp-exposure, 1));

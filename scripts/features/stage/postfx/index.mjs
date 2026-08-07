@@ -16,6 +16,7 @@ import { clamp01 } from "../../../core/util.mjs";
 import { scaledMs } from "../../../core/theme.mjs";
 import { sampleScene, columnAt, NEUTRAL_SAMPLE, invalidateSceneSamples } from "./scene-sample.mjs";
 import { getNormalMap, invalidateNormalMap } from "./normal-map.mjs";
+import { assetReason } from "./asset.mjs";
 import { StageGL } from "./gl.mjs";
 
 /** Matches the `--gl-d-reveal` rung; routed through the motion scale. */
@@ -148,13 +149,24 @@ export class StagePostFX {
    */
   getStatus() {
     let cssFallbacks = 0;
-    for (const state of this._slots.values()) if (state.mode === "css") cssFallbacks++;
+    let corsFallbacks = 0;
+    let missingArt = 0;
+    for (const state of this._slots.values()) {
+      if (state.mode !== "css") continue;
+      cssFallbacks++;
+      // Only the CORS case has a fix the GM can act on; a missing file is a
+      // broken image path and says so on its own.
+      if (state.reason === "cors" || state.reason === "tainted") corsFallbacks++;
+      else if (state.reason === "missing") missingArt++;
+    }
     return {
       active: this.active,
       backgroundDegraded: !!this._sample.degraded,
       backgroundReason: this._sample.reason,
       webglAvailable: this._gl ? this._gl.isSupported() : true,
       cssFallbacks,
+      corsFallbacks,
+      missingArt,
     };
   }
 
@@ -211,6 +223,7 @@ export class StagePostFX {
       dimmed: !!info.dimmed,
       optOut: !!info.optOut,
       mode: previous?.mode ?? "off",
+      reason: previous?.src === (info.src || "") ? previous?.reason : undefined,
       canvas: previous?.canvas ?? null,
       fallback: previous?.fallback ?? null,
       renderedSrc: previous?.src === (info.src || "") ? previous?.renderedSrc : null,
@@ -299,7 +312,9 @@ export class StagePostFX {
     const lighting = this._slotLighting(state);
 
     if (!normal) {
-      this._applyCssFallback(wrap, state, lighting);
+      // `assetReason` is undefined when WebGL is missing (nothing probed the
+      // asset at all), which is exactly the distinction the panel needs.
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "no-webgl");
       return;
     }
 
@@ -321,7 +336,7 @@ export class StagePostFX {
     if (!state || state.src !== src) return;
 
     if (!canvas) {
-      this._applyCssFallback(wrap, state, lighting);
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");
       return;
     }
 
@@ -350,17 +365,25 @@ export class StagePostFX {
     state.fallback?.remove();
     state.fallback = null;
     state.mode = "full";
+    state.reason = undefined;
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on");
     wrap.classList.remove("glstage-pp-css");
   }
 
   /**
-   * CSS path: two masked overlays taking the character's exact silhouette.
-   * Masks reference the art by URL and never read its pixels, so this works
-   * unconditionally on cross-origin assets.
+   * CSS path: masked overlays taking the character's exact silhouette. Masks
+   * reference the art by URL and never read its pixels, so this works
+   * unconditionally on cross-origin assets — including a bucket that will never
+   * send a CORS header.
+   *
+   * Three layers rather than two: an ambient wash, a lit gradient from the key
+   * direction, and a shadow gradient from the opposite side. The third costs
+   * nothing and is what stops the fallback reading as a flat colour overlay,
+   * which matters because for un-CORS-able art this is the *only* look there is.
    */
-  _applyCssFallback(wrap, state, lighting) {
+  _applyCssFallback(wrap, state, lighting, reason) {
+    state.reason = reason;
     state.canvas?.remove();
     state.canvas = null;
 
@@ -370,7 +393,9 @@ export class StagePostFX {
       layer.className = "glstage-pp-fallback";
       layer.setAttribute("aria-hidden", "true");
       layer.innerHTML =
-        '<span class="glstage-pp-tint"></span><span class="glstage-pp-key"></span>';
+        '<span class="glstage-pp-tint"></span>' +
+        '<span class="glstage-pp-shade"></span>' +
+        '<span class="glstage-pp-key"></span>';
       wrap.appendChild(layer);
       state.fallback = layer;
     }
@@ -381,12 +406,20 @@ export class StagePostFX {
     // Feature-prefixed custom properties on the element — never bare --gl-* on
     // :root, which would repaint every feature loaded after Stage.
     const url = `url("${state.src.replace(/["\\]/g, "\\$&")}")`;
+    const angle = cssGradientAngle(lighting.keyDir);
     layer.style.setProperty("--glstage-pp-mask", url);
     layer.style.setProperty("--glstage-pp-ambient", css(lighting.ambient));
     layer.style.setProperty("--glstage-pp-key", css(lighting.key));
-    layer.style.setProperty("--glstage-pp-angle", `${cssGradientAngle(lighting.keyDir)}deg`);
+    layer.style.setProperty("--glstage-pp-angle", `${angle}deg`);
+    // The shadow gradient runs the other way, so its lit-side stop is the one
+    // that fades out — the dark end lands opposite the key.
+    layer.style.setProperty("--glstage-pp-shade-angle", `${(angle + 180) % 360}deg`);
+    layer.style.setProperty("--glstage-pp-shadow", css(this._params.shadowColor));
     layer.style.setProperty("--glstage-pp-strength", String(this._intensity));
     layer.style.setProperty("--glstage-pp-exposure", String(this._params.exposure));
+    // Dimming is carried by the shader on the full path; the fallback has to do
+    // it here or a dimmed character would read as brightly lit as a spotlit one.
+    layer.style.setProperty("--glstage-pp-dim", state.dimmed ? "1" : "0");
 
     state.mode = "css";
     state.renderedSrc = state.src;
@@ -399,6 +432,7 @@ export class StagePostFX {
     state.fallback?.remove();
     state.fallback = null;
     state.mode = "off";
+    state.reason = undefined;
     state.renderedSrc = null;
     wrap.classList.remove("glstage-pp-on", "glstage-pp-css");
   }

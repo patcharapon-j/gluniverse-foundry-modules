@@ -20,6 +20,7 @@
  */
 
 import { clamp01, hex6 } from "../../../core/util.mjs";
+import { loadPixelImage, corsRetryUrl, invalidateAsset } from "./asset.mjs";
 
 /** Width of the sampling thumbnail — also the number of columns we keep. */
 const THUMB_W = 32;
@@ -81,17 +82,9 @@ function readFlatColor(scene) {
 /** Load a still image, downsampling *during* decode so an 8k map never
  *  materialises at full size. */
 async function decodeImage(src) {
-  const img = new Image();
-  // Required for pixel access; harmless when the asset is same-origin.
-  img.crossOrigin = "anonymous";
-  img.decoding = "async";
-  img.src = src;
-
-  await new Promise((resolve, reject) => {
-    if (img.complete && img.naturalWidth) return resolve();
-    img.addEventListener("load", resolve, { once: true });
-    img.addEventListener("error", () => reject(new Error("load failed")), { once: true });
-  });
+  // Shared loader: a background on S3 needs the same CORS negotiation the
+  // character art does, and benefits from the same cache-busted retry.
+  const img = await loadPixelImage(src);
 
   if (typeof createImageBitmap === "function") {
     try {
@@ -107,20 +100,33 @@ async function decodeImage(src) {
   return img;
 }
 
-/** Grab a single frame from a video background, then treat it as static. */
-async function decodeVideo(src) {
+/** Load a video in CORS mode, far enough to have a frame to draw. */
+function openVideo(url) {
   const video = document.createElement("video");
   video.crossOrigin = "anonymous";
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
-  video.src = src;
+  video.src = url;
 
-  await new Promise((resolve, reject) => {
-    const fail = () => reject(new Error("video load failed"));
-    video.addEventListener("loadeddata", resolve, { once: true });
-    video.addEventListener("error", fail, { once: true });
+  return new Promise((resolve, reject) => {
+    video.addEventListener("loadeddata", () => resolve(video), { once: true });
+    video.addEventListener("error", () => reject(new Error("video load failed")), { once: true });
   });
+}
+
+/** Grab a single frame from a video background, then treat it as static. */
+async function decodeVideo(src) {
+  let video;
+  try {
+    video = await openVideo(src);
+  } catch (err) {
+    // Same poisoned-cache retry the image path gets: a header-less copy cached
+    // from Foundry's own no-CORS playback would otherwise fail us permanently.
+    const retry = corsRetryUrl(src);
+    if (!retry) throw err;
+    video = await openVideo(retry);
+  }
 
   // Nudge past frame 0 — many encodes open on a black or fade-in frame, which
   // would grade the whole cast to pitch black.
@@ -270,9 +276,13 @@ export async function sampleScene(scene) {
       };
       if (typeof source.close === "function") source.close();
     } catch (err) {
-      // Tainted canvas, 404, decode failure — all degrade the same way.
+      // Tainted canvas, 404, decode failure — all degrade the same way, but the
+      // reason drives what the GM panel offers to do about it. `loadPixelImage`
+      // has already told CORS and missing apart; a raw SecurityError means the
+      // canvas tainted despite a clean load.
       const reason =
-        err?.name === "SecurityError" ? "cors" : VIDEO_RE.test(src) ? "video" : "decode";
+        err?.reason ||
+        (err?.name === "SecurityError" ? "cors" : VIDEO_RE.test(src) ? "video" : "decode");
       sample = degradedSample(scene, reason);
     }
     _cache.set(key, sample);
@@ -298,6 +308,7 @@ export function columnAt(sample, t) {
 
 /** Drop cached samples — call when a background asset may have changed. */
 export function invalidateSceneSamples(src = null) {
+  invalidateAsset(src);
   if (src) {
     _cache.delete(src);
     _pending.delete(src);
