@@ -210,7 +210,11 @@ function sceneParams(sample) {
   const ambient = sample.ambient;
   const darkness = clamp01(sample.darkness);
   return {
-    ambient: mixRgb(ambient, [1, 1, 1], 0.25),
+    // Pulled toward white only enough to stop a saturated room turning the art
+    // monochrome. Kept deliberately low: a character standing in a green room
+    // reads as *being* in it because the room's colour is all over them, and
+    // washing the ambient out is the fastest way to lose that.
+    ambient: mixRgb(ambient, [1, 1, 1], 0.15),
     centroid: sample.centroid,
     // Perceptual, because the CSS fallback feeds it straight to `brightness()`.
     // The shader wants it in linear light and squares it up on the way in.
@@ -411,7 +415,7 @@ export class StagePostFX {
     const local = columnAt(this._sample, state.position);
     // Ambient is mostly the local column — that's what makes the character in
     // front of the fire read differently from the one by the window.
-    const ambient = mixRgb(params.ambient, mixRgb(local, [1, 1, 1], 0.2), 0.6);
+    const ambient = mixRgb(params.ambient, mixRgb(local, [1, 1, 1], 0.12), 0.6);
 
     // Key light colour comes from the background where the light appears to be.
     const key = toKeyLight(columnAt(this._sample, params.centroid[0]));
@@ -492,12 +496,25 @@ export class StagePostFX {
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      // Both add in linear light, where mid-grey is 0.22 rather than 0.5 — so
-      // they are not comparable to the gamma-space strengths they replaced and
-      // look too large next to them. At full strength the rim lands around 0.83
-      // encoded on mid-tone art, where it used to pin at white.
+      // These all add in linear light, where mid-grey is 0.22 rather than 0.5 —
+      // so they are not comparable to the gamma-space strengths they replaced
+      // and look far too large next to them.
       rim: 1.6,
+      // The tight core, in encoded light and on its own scale — it is added past
+      // the strength dial's crossfade rather than through it, for the reason set
+      // out in the shader. Peaks just over 1.0 so the outermost texels clip to
+      // white and everything behind them is the falloff.
+      rimEdge: 1.15,
+      // Light spilling past the outline. Free, in the sense that the falloff it
+      // needs is the prepass's blurred alpha, which already extends past the
+      // silhouette — see the note in the shader.
+      glow: 1.35,
+      // Interior contours. Deliberately small: this term traces every form edge
+      // the art draws, and past roughly 0.5 it starts finding facial lineart too
+      // and reads as an outline filter rather than as light.
+      contour: 0.4,
       spec: 0.33,
+      sheen: 0.12,
       // The model works in linear light; `exposure` is stored perceptually for
       // the CSS fallback's `brightness()` filter, so convert it here.
       exposure: Math.pow(this._params.exposure, 2.2),

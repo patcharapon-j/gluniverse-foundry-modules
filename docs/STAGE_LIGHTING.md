@@ -42,8 +42,11 @@ The terms, in the order they apply:
 | --- | --- |
 | ambient / bounce | Two luminance-matched colours, not one wash. Light that misses the key side arrives bounced off the room and carries the *room's* colour, not the lamp's — see `bounceLight`. Matching luminance keeps it a colour separation rather than a second lamp. |
 | diffuse | Half-Lambert wrapped with true Lambert, attenuated by distance to the positioned key. |
-| rim | Bright where the surface is thin *and* turned toward the light. |
-| specular | Gated on thickness and on the art's own brightness, so a highlight lands on a pauldron and never on black cloth. |
+| rim halo | The wide inward falloff from the outline. On its own this is a soft wash with no edge in it. |
+| rim core | A tight, near-white line hugging the outline. On its own this is a drawn outline with no light in it. See below — together they are the effect. |
+| spill | The same edge continuing *past* the silhouette into the air. |
+| contour | Interior form edges — a lapel over a shirt, a collar, an arm crossing hair. The alpha silhouette cannot see any of them. |
+| specular / sheen | A tight lobe and a broad one. Both gated on thickness and on the art's own brightness, so a highlight lands on a pauldron and never on black cloth. The tight lobe alone puts a speck on metal and nothing on cloth; the broad one is what separates satin from wool and gives hair a band. |
 | grounding | The bottom of a full body sits in its own shadow. Framing-dependent — see below. |
 | exposure / night | Scene darkness dims, and deep darkness desaturates and drifts blue. |
 | tone map | A shoulder above `KNEE`, applied to luminance and rescaled. Clamping channels independently is what turns a warm-lit face magenta; only the very top desaturates. |
@@ -56,6 +59,55 @@ shows up as faint diamond creases on a ramp this smooth. And art is downscaled b
 the browser at decode rather than by the GPU at sample time, because WebGL1
 cannot mipmap a non-power-of-two texture: minifying a 4000px portrait would
 otherwise be a single bilinear tap, which crawls on hair and fine outlines.
+
+## The edge
+
+The rim is most of what people mean when they say art is "lit into" a scene, so
+it gets four things the rest of the model does not. Each one is there because the
+obvious version of it demonstrably did not work.
+
+**It has its own light, behind the figure.** A rim light *is* a light behind the
+subject; the key cannot be, because it has to sit in front or nothing would be
+diffusely lit. So the rim takes the key's bearing across the frame and throws its
+depth away. Using the full 3D key instead lets `u_lightZ` — roughly half a
+body-height in front of the art plane — dominate the dot product, so nearly every
+outward-facing normal scores the same and the rim comes out even the whole way
+round. That reads as a sticker cut from white paper.
+
+**It is measured twice, at two scales.** The prepass field is blurred wide on
+purpose: its job is inventing a rounded *surface*, and its ramp runs several
+percent of the frame. A core taken from it is a soft band however hard the
+exponent is raised. So the core gets its own measurement — eight taps on a small
+ring of the art's own alpha, at full render resolution — while the halo and the
+outer bloom keep using the prepass field. Hot line, soft air behind it.
+
+**Both are rescaled before the exponent.** A blurred step edge reads 0.5 *at* the
+outline and climbs to 1.0 going inward, so a bare `1 - thickness` tops out at 0.5
+on the outermost real pixel. Any exponent sharp enough to make a line out of that
+annihilates the term instead — 0.5 to the 11th is 0.0005 — which is why the rim
+has to be normalised against the half of the ramp that is actually inside the
+figure.
+
+**The core is added past the strength dial, not through it.** Every other term
+crossfades with `u_intensity`, which is right for anything that *modifies*
+pixels. It is wrong for the rim: the crossfade mixes the flat original art back
+over the lit edge, and at the default 60% that caps the core at 0.72 over dark
+art no matter how hard it is driven. A rim that cannot reach white is not a rim.
+So the core and the spill scale with the dial rather than crossfading with it.
+Strength 0 is still exactly the original pixels — that was the property that
+mattered, and `tools/stage-lighting-preview.mjs` asserts it channel-for-channel.
+
+The spill is the one place this feature gets something for free. Drawing light
+past the outline normally means a second render target and a blur pass; here the
+prepass already blurred the alpha channel, so the field it hands over already
+extends a blur-radius beyond the silhouette, already shaped like a falloff. The
+branch for `art.a ≈ 0` is that falloff, drawn.
+
+One honest limit: the spill composites with normal alpha blending, because the
+canvas also carries the opaque character and `screen`/`plus-lighter` on the
+element would blow the figure itself through the background. Over the dark
+painted backgrounds this feature targets that is indistinguishable from additive.
+Over a bright background the spill is subtler than it should be.
 
 ## Framing — knee-up vs full body
 
@@ -121,6 +173,38 @@ So: **no `await` between `draw` and `_blit`.** `tools/postfx-check.mjs` pins thi
 down two ways — structurally (`draw` must not be an async function) and by
 driving two slots through one coalesced render pass against a fake context that
 poisons the shared canvas on the next microtask.
+
+## Checking it
+
+Two tools, and they cover different things.
+
+```bash
+node tools/postfx-check.mjs             # the maths, no browser
+node tools/stage-lighting-preview.mjs   # the shader, in a real GPU context
+```
+
+`postfx-check` is pure logic — blur kernel, light geometry, framing, the CORS
+strategy, slot ownership, and a cross-check that every shader uniform is both
+declared in the GLSL and looked up from JS. It cannot compile a line of GLSL,
+which matters more than it sounds: a shader that fails to compile does not throw,
+it degrades silently to the CSS fallback.
+
+`stage-lighting-preview` fills that gap. It serves the repo, drives the real
+`getNormalMap` / `prepare` / `draw` in headless Chromium against a synthetic
+character, and asserts the things a diff cannot show — that the shader compiles
+and links, that strength 0 is bit-identical to the source art, that a lamp on the
+left rims the left edge and one on the right rims the right, that the core
+reaches near-white at the default strength, and that light actually crosses the
+silhouette. It also writes a four-room contact sheet with a magnified detail row,
+which is the only way to tell a crisp edge from a soft one:
+
+```bash
+node tools/stage-lighting-preview.mjs --out=/tmp/sheet.png
+```
+
+It needs Playwright (`npm i -g playwright`; Chromium is usually already present)
+and skips cleanly with exit 0 when that is missing. Neither tool can tell you how
+any of this looks on real art — that still needs a session.
 
 Re-registering a slot with different art drops its canvas rather than carrying it
 forward, for the same reason: the shaded canvas is what the viewer sees and the
