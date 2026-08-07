@@ -210,7 +210,11 @@ function sceneParams(sample) {
   const ambient = sample.ambient;
   const darkness = clamp01(sample.darkness);
   return {
-    ambient: mixRgb(ambient, [1, 1, 1], 0.25),
+    // Pulled toward white only enough to stop a saturated room turning the art
+    // monochrome. Kept deliberately low: a character standing in a green room
+    // reads as *being* in it because the room's colour is all over them, and
+    // washing the ambient out is the fastest way to lose that.
+    ambient: mixRgb(ambient, [1, 1, 1], 0.15),
     centroid: sample.centroid,
     // Perceptual, because the CSS fallback feeds it straight to `brightness()`.
     // The shader wants it in linear light and squares it up on the way in.
@@ -340,18 +344,27 @@ export class StagePostFX {
    */
   register(wrap, info) {
     if (!wrap) return;
+    const src = info.src || "";
     const previous = this._slots.get(wrap);
+    // A slot that changed art carries nothing forward. Its canvas holds the
+    // *old* character, and the shaded canvas is what the viewer sees — keeping
+    // it would leave the previous face on screen until the new render lands.
+    // Dropping it shows the plain <img> for that gap instead, which is the right
+    // character merely unlit.
+    const sameArt = !!previous && previous.src === src;
+    if (previous && !sameArt) this._clearSlot(wrap, previous);
+
     const state = {
-      src: info.src || "",
+      src,
       position: clamp01(info.position ?? 0.5),
       highlighted: !!info.highlighted,
       dimmed: !!info.dimmed,
       optOut: !!info.optOut,
-      mode: previous?.mode ?? "off",
-      reason: previous?.src === (info.src || "") ? previous?.reason : undefined,
-      canvas: previous?.canvas ?? null,
-      fallback: previous?.fallback ?? null,
-      renderedSrc: previous?.src === (info.src || "") ? previous?.renderedSrc : null,
+      mode: sameArt ? previous.mode : "off",
+      reason: sameArt ? previous.reason : undefined,
+      canvas: sameArt ? previous.canvas : null,
+      fallback: sameArt ? previous.fallback : null,
+      renderedSrc: sameArt ? previous.renderedSrc : null,
     };
     this._slots.set(wrap, state);
     this._scheduleRender();
@@ -402,7 +415,7 @@ export class StagePostFX {
     const local = columnAt(this._sample, state.position);
     // Ambient is mostly the local column — that's what makes the character in
     // front of the fire read differently from the one by the window.
-    const ambient = mixRgb(params.ambient, mixRgb(local, [1, 1, 1], 0.2), 0.6);
+    const ambient = mixRgb(params.ambient, mixRgb(local, [1, 1, 1], 0.12), 0.6);
 
     // Key light colour comes from the background where the light appears to be.
     const key = toKeyLight(columnAt(this._sample, params.centroid[0]));
@@ -442,12 +455,28 @@ export class StagePostFX {
     state = this._slots.get(wrap);
     if (!state || state.src !== src) return;
 
-    const lighting = this._slotLighting(state);
-
     if (!normal) {
       // `assetReason` is undefined when WebGL is missing (nothing probed the
       // asset at all), which is exactly the distinction the panel needs.
-      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "no-webgl");
+      this._applyCssFallback(wrap, state, this._slotLighting(state), assetReason(src) ?? "no-webgl");
+      return;
+    }
+
+    // Uploading the art can suspend; shading and copying out must not. See the
+    // note on `StageGL.draw` — the render target is shared by every slot, so
+    // anything that yields between the draw and the blit lets another slot's
+    // character land in this one.
+    const prepared = await this._gl.prepare(src, normal);
+
+    if (this._destroyed || !wrap.isConnected) return;
+    // `prepare` awaits the art upload, so re-check the slot once more.
+    state = this._slots.get(wrap);
+    if (!state || state.src !== src) return;
+
+    const lighting = this._slotLighting(state);
+
+    if (!prepared) {
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");
       return;
     }
 
@@ -459,19 +488,33 @@ export class StagePostFX {
       this._sample.aspect || 16 / 9
     );
 
-    const canvas = await this._gl.render(src, normal, {
+    // ── Nothing below this line may await. ──
+    const canvas = this._gl.draw(prepared, {
       ...placement,
       ambient: lighting.ambient,
       bounce: lighting.bounce,
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      // Both add in linear light, where mid-grey is 0.22 rather than 0.5 — so
-      // they are not comparable to the gamma-space strengths they replaced and
-      // look too large next to them. At full strength the rim lands around 0.83
-      // encoded on mid-tone art, where it used to pin at white.
+      // These all add in linear light, where mid-grey is 0.22 rather than 0.5 —
+      // so they are not comparable to the gamma-space strengths they replaced
+      // and look far too large next to them.
       rim: 1.6,
+      // The tight core, in encoded light and on its own scale — it is added past
+      // the strength dial's crossfade rather than through it, for the reason set
+      // out in the shader. Peaks just over 1.0 so the outermost texels clip to
+      // white and everything behind them is the falloff.
+      rimEdge: 1.15,
+      // Light spilling past the outline. Free, in the sense that the falloff it
+      // needs is the prepass's blurred alpha, which already extends past the
+      // silhouette — see the note in the shader.
+      glow: 1.35,
+      // Interior contours. Deliberately small: this term traces every form edge
+      // the art draws, and past roughly 0.5 it starts finding facial lineart too
+      // and reads as an outline filter rather than as light.
+      contour: 0.4,
       spec: 0.33,
+      sheen: 0.12,
       // The model works in linear light; `exposure` is stored perceptually for
       // the CSS fallback's `brightness()` filter, so convert it here.
       exposure: Math.pow(this._params.exposure, 2.2),
@@ -479,11 +522,6 @@ export class StagePostFX {
       shadow: state.dimmed ? 1 : 0,
       lift: state.highlighted ? 1 : 0,
     });
-
-    if (this._destroyed || !wrap.isConnected) return;
-    // `render` awaits the art upload, so re-check the slot once more.
-    state = this._slots.get(wrap);
-    if (!state || state.src !== src) return;
 
     if (!canvas) {
       this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");

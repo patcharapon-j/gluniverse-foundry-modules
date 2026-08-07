@@ -157,8 +157,24 @@ node tools/postfx-check.mjs
 
 Zero failures required. It also cross-checks that every shader uniform is both
 declared in the GLSL and looked up from JS — a typo there is a silent no-op, not
-an error. It cannot check how anything *looks*; that needs a real session. See
-`docs/STAGE_LIGHTING.md` for the asset-hosting contract (S3/CORS).
+an error.
+
+**When you touch the GLSL itself**, that tool is not enough — it cannot compile a
+line of it, and a shader that fails to compile degrades *silently* to the CSS
+fallback rather than erroring. Run the browser-backed one too:
+
+```bash
+node tools/stage-lighting-preview.mjs
+```
+
+It drives the real modules in headless Chromium, fails on a compile or link
+error, asserts the edge behaviour (strength 0 is bit-identical to the source art;
+the rim follows the lamp; the core reaches near-white), and writes a four-room
+contact sheet with a magnified detail row — `--out=/tmp/sheet.png` to put it
+somewhere you'll look. Needs Playwright; skips cleanly with exit 0 without it.
+Neither tool can check how any of this *looks* on real art; that needs a real
+session. See `docs/STAGE_LIGHTING.md` for the shading model, the edge terms and
+the asset-hosting contract (S3/CORS).
 
 **When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
 texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
