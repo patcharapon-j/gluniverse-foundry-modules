@@ -32,6 +32,7 @@
     "styles/stage-main.css",
     "styles/stage-animations.css",
     "styles/stage-comms.css",
+    "styles/stage-postfx.css",
     "styles/stream-pacer.css",
     "styles/statsblock-import.css",
     "styles/loot-gen.css",

@@ -280,7 +280,43 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                         <input type="number" data-field="offsetY" value="${offsetY}" step="1" />
                     </div>
                 </div>
+                <div class="glstage-field glstage-field-check">
+                    <label title="${i18n('panel.ppOptOutHint')}">
+                        <input type="checkbox" data-field="ppOptOut" ${actor.ppOptOut ? 'checked' : ''} />
+                        ${i18n('panel.ppOptOut')}
+                    </label>
+                </div>
             </div>
+        </div>`;
+    }
+
+    /**
+     * A quiet, GM-only line explaining a weaker-than-expected result.
+     *
+     * Players never see any of this — a cosmetic effect degrading is not worth
+     * interrupting play for. But without it a GM whose assets are served from a
+     * host with no CORS headers gets the fallback look and no way to find out
+     * why, which is the worse failure.
+     */
+    _buildPostFXNote() {
+        const status = game.modules.get(MODULE_ID)?.stageOverlay?.getPostFXStatus?.();
+        if (!status || !status.active) return '';
+
+        const notes = [];
+        if (!status.webglAvailable) notes.push(i18n('panel.ppNoWebGL'));
+        else if (status.cssFallbacks > 0) notes.push(i18n('panel.ppArtNotSampled'));
+        if (status.backgroundDegraded) {
+            notes.push(
+                status.backgroundReason === 'cors'
+                    ? i18n('panel.ppBackgroundCORS')
+                    : i18n('panel.ppBackgroundFlat')
+            );
+        }
+        if (!notes.length) return '';
+
+        return `<div class="glstage-pp-note">
+            <i class="fas fa-circle-info"></i>
+            <span>${notes.map(escapeHTML).join(' ')}</span>
         </div>`;
     }
 
@@ -294,6 +330,8 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const currentWidth = finiteNumber(state.stageWidth || getSetting('stageWidth'), 100);
         const currentXOffset = finiteNumber(state.stageXOffset ?? getSetting('stageXOffset'), 0);
         const currentYOffset = finiteNumber(state.stageYOffset ?? getSetting('stageYOffset'), 0);
+        const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 60);
+        const ppEnabled = getSetting('ppEnabled') !== false;
         html += `<div class="glstage-toolbar">
             <button class="glstage-btn ${isVisible ? 'glstage-btn-active' : ''}" data-action="toggle-visibility">
                 <i class="fas fa-${isVisible ? 'eye' : 'eye-slash'}"></i>
@@ -327,7 +365,14 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 <input type="range" min="0" max="50" step="1" value="${currentYOffset}" data-action="stage-y-offset"/>
                 <span class="glstage-yoffset-value">${currentYOffset}%</span>
             </div>
-        </div>`;
+            <div class="glstage-height-control">
+                <label>${i18n('panel.ppIntensity')}</label>
+                <input type="range" min="0" max="100" step="5" value="${currentPPIntensity}" data-action="stage-pp-intensity"
+                    ${ppEnabled ? '' : 'disabled'}/>
+                <span class="glstage-pp-value">${currentPPIntensity}%</span>
+            </div>
+        </div>
+        ${this._buildPostFXNote()}`;
 
         const slots = state.slots || [];
         if (slots.length === 0) {
@@ -645,7 +690,9 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
             card.querySelectorAll('input[data-field]').forEach(input => {
                 input.addEventListener('change', async () => {
                     let value = input.value;
-                    if (input.type === 'number') value = parseFloat(value) || 0;
+                    // A checkbox's `value` is "on" whether or not it is ticked.
+                    if (input.type === 'checkbox') value = input.checked;
+                    else if (input.type === 'number') value = parseFloat(value) || 0;
                     await mgr.updateActor(actorId, { [input.dataset.field]: value });
                 });
             });
@@ -987,6 +1034,22 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 await setSetting('stageYOffset', parseInt(yOffsetSlider.value));
             });
         }
+
+        // Character lighting strength. Lighting is tuned by looking at it, so
+        // `input` previews live on the overlay and only `change` commits the
+        // world setting — dragging the slider doesn't spam every client.
+        const ppSlider = el.querySelector('[data-action="stage-pp-intensity"]');
+        if (ppSlider) {
+            const ppLabel = el.querySelector('.glstage-pp-value');
+            ppSlider.addEventListener('input', () => {
+                if (ppLabel) ppLabel.textContent = `${ppSlider.value}%`;
+                const overlay = game.modules.get(MODULE_ID)?.stageOverlay;
+                overlay?.previewPostFXIntensity?.(parseInt(ppSlider.value) / 100);
+            });
+            ppSlider.addEventListener('change', async () => {
+                await setSetting('ppIntensity', parseInt(ppSlider.value));
+            });
+        }
     }
 
     _bindMeasureListeners(el) {
@@ -1025,7 +1088,9 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
             row.querySelectorAll('input[data-field]').forEach(input => {
                 input.addEventListener('change', async () => {
                     let value = input.value;
-                    if (input.type === 'number') value = parseFloat(value) || 0;
+                    // A checkbox's `value` is "on" whether or not it is ticked.
+                    if (input.type === 'checkbox') value = input.checked;
+                    else if (input.type === 'number') value = parseFloat(value) || 0;
                     await mgr.updateActor(actorId, { [input.dataset.field]: value });
                 });
             });
