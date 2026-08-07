@@ -147,6 +147,19 @@ Zero errors required. The same tool checks a file directly
 (`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
 export/import symmetry rules and the `ult.*` cross-feature flag contract.
 
+**When touching Stage character lighting** (`features/stage/postfx/`), re-run the
+pure-logic checks. The blur kernel, light geometry, framing detection and CORS
+strategy are all things a diff cannot show you were wrong about:
+
+```bash
+node tools/postfx-check.mjs
+```
+
+Zero failures required. It also cross-checks that every shader uniform is both
+declared in the GLSL and looked up from JS — a typo there is a silent no-op, not
+an error. It cannot check how anything *looks*; that needs a real session. See
+`docs/STAGE_LIGHTING.md` for the asset-hosting contract (S3/CORS).
+
 **When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
 texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
 hand-drawn. Re-bake it after any change to a recipe or to the damage-type table,

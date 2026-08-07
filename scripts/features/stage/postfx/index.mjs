@@ -16,13 +16,32 @@ import { clamp01 } from "../../../core/util.mjs";
 import { scaledMs } from "../../../core/theme.mjs";
 import { sampleScene, columnAt, NEUTRAL_SAMPLE, invalidateSceneSamples } from "./scene-sample.mjs";
 import { getNormalMap, invalidateNormalMap } from "./normal-map.mjs";
+import { assetReason } from "./asset.mjs";
 import { StageGL } from "./gl.mjs";
 
 /** Matches the `--gl-d-reveal` rung; routed through the motion scale. */
 const TWEEN_MS = 620;
 
-/** Characters stand low in the frame — this is where light is measured from. */
-const SLOT_ANCHOR_Y = 0.78;
+// ── Where a character stands in the scene ──
+// Stage art is composited over the background rather than placed in it, so
+// nothing tells us where the figure "is". These two numbers are the model, and
+// everything geometric derives from them: a standing figure's feet land near the
+// bottom of the frame, and the figure spans about half the frame's height. They
+// hold for the painted VN-style backgrounds this feature targets, where the
+// horizon sits high and the foreground floor fills the lower third.
+
+/** Scene Y where a standing figure's feet land. */
+const FEET_SCENE_Y = 0.94;
+
+/** How much of the background's height a whole standing figure covers. */
+const BODY_SCENE_HEIGHT = 0.52;
+
+/**
+ * Where light is measured from when the figure's real extent is unknown — the
+ * middle of the body, not its feet. Only the CSS fallback uses this; the shader
+ * path measures the silhouette instead.
+ */
+export const SLOT_ANCHOR_Y = FEET_SCENE_Y - BODY_SCENE_HEIGHT * 0.5;
 
 const LUMA = [0.2126, 0.7152, 0.0722];
 
@@ -51,6 +70,39 @@ function toKeyLight(rgb) {
 }
 
 /**
+ * The colour of light arriving from the side the key *isn't* on.
+ *
+ * Nothing in a room is lit by one lamp and nothing else — the rest arrives
+ * bounced off walls and floor, and it arrives carrying the room's colour rather
+ * than the lamp's. Giving the shadow side its own hue is what stops a figure
+ * reading as one flat tint with a bright edge.
+ *
+ * The result is luminance-matched to the ambient it came from, deliberately: it
+ * is a colour separation, not a second light. If it changed brightness it would
+ * compete with the key term for the shape of the figure, and the exposure of the
+ * whole stage would drift with the background's hue.
+ *
+ * Exported for testing.
+ */
+export function bounceLight(ambient, key) {
+  const peak = Math.max(key[0], key[1], key[2], 0.001);
+  // What the key is *not* made of. A warm lamp bounces cool, and vice versa.
+  const complement = [1 - key[0] / peak, 1 - key[1] / peak, 1 - key[2] / peak];
+  // Biased toward cool: skylight and painted VN interiors both fill blue, and a
+  // pure complement of a blue key would read as a second orange lamp.
+  const tinted = mixRgb(complement, [0.55, 0.65, 0.9], 0.5);
+  // Mostly still the room's own colour — this is a nudge, not a repaint.
+  const mixed = mixRgb(ambient, tinted, 0.45);
+
+  const target = luma(ambient);
+  const current = luma(mixed);
+  let gain = current > 1e-4 ? target / current : 1;
+  // Never let the match clip a channel; a clipped bounce is no longer matched.
+  gain = Math.min(gain, 1 / Math.max(mixed[0], mixed[1], mixed[2], 1e-4));
+  return mixed.map((c) => clamp01(c * gain));
+}
+
+/**
  * Direction from a character toward the scene's brightest region.
  *
  * Y stays in image space (+Y downward) — the same convention the normal map's
@@ -68,6 +120,72 @@ export function keyDirection(centroid, position, anchorY = SLOT_ANCHOR_Y) {
   let dy = centroid[1] - anchorY;
   const length = Math.hypot(dx, dy) || 1;
   return [dx / length, dy / length];
+}
+
+/**
+ * Place the key light inside the art's own coordinate space.
+ *
+ * The shader shades one character at a time in its own texture, but the light
+ * lives in the *background*. This is the bridge: it works out where that light
+ * would fall if the art were standing in the scene, and expresses it in art
+ * coordinates the fragment shader can subtract from `v_uv`.
+ *
+ * Both spaces are made isotropic first (X multiplied by aspect), because a step
+ * of 0.1 across a 16:9 background is nearly twice the distance of 0.1 down it,
+ * and mixing the two would skew every angle.
+ *
+ * The figure's measured silhouette is the yardstick between the two spaces: its
+ * on-screen height is known in art units, and the scene model says what fraction
+ * of a body that is. This is what makes framing matter — a knee-up crop and a
+ * full body at the same pixel height are *not* the same distance from the lamp,
+ * and the light lands higher above the head on the crop because less of the body
+ * is between them.
+ *
+ * Exported for testing.
+ *
+ * @param {[number,number]} centroid  Luminance centroid of the background.
+ * @param {number} position           Slot's horizontal position across the stage, 0..1.
+ * @param {object} figure             From `describeFigure` in the normal-map prepass.
+ * @param {number} artAspect          Character art width / height.
+ * @param {number} bgAspect           Background width / height.
+ */
+export function lightPlacement(centroid, position, figure, artAspect, bgAspect) {
+  const visibleSpan = BODY_SCENE_HEIGHT * figure.bodyFraction;
+  const headY = FEET_SCENE_Y - BODY_SCENE_HEIGHT;
+
+  // Art units per scene unit, taken from the one measurement both spaces share:
+  // how tall the visible figure is.
+  const figHeight = Math.max(figure.y1 - figure.y0, 1e-4);
+  const scale = figHeight / Math.max(visibleSpan, 1e-4);
+
+  // Figure centre, in each space.
+  const artCx = ((figure.x0 + figure.x1) / 2) * artAspect;
+  const artCy = (figure.y0 + figure.y1) / 2;
+  const sceneCx = position * bgAspect;
+  const sceneCy = headY + visibleSpan / 2;
+
+  const lightP = [
+    artCx + (centroid[0] * bgAspect - sceneCx) * scale,
+    artCy + (centroid[1] - sceneCy) * scale,
+  ];
+
+  // The light is in the room, not on the art plane. Scaling its depth by the
+  // figure's size keeps the wrap consistent across art of any resolution.
+  const lightZ = figHeight * 0.55;
+
+  const refDist = Math.hypot(lightP[0] - artCx, lightP[1] - artCy, lightZ);
+
+  return {
+    lightP,
+    lightZ,
+    refDist,
+    uvScale: [artAspect, 1],
+    figTop: figure.y0,
+    figBottom: figure.y1,
+    // Floor shadow needs a floor. Cubed so a knee-up crop, whose feet are out
+    // of frame, gets essentially none rather than a dark band across its hem.
+    ground: 0.32 * figure.bodyFraction ** 3,
+  };
 }
 
 /**
@@ -90,10 +208,17 @@ export function cssGradientAngle(keyDir) {
 /** Scene-level values that tween when the background changes. */
 function sceneParams(sample) {
   const ambient = sample.ambient;
+  const darkness = clamp01(sample.darkness);
   return {
     ambient: mixRgb(ambient, [1, 1, 1], 0.25),
     centroid: sample.centroid,
-    exposure: 1 - clamp01(sample.darkness) * 0.65,
+    // Perceptual, because the CSS fallback feeds it straight to `brightness()`.
+    // The shader wants it in linear light and squares it up on the way in.
+    exposure: 1 - darkness * 0.65,
+    // Colour vision goes before acuity does, so a properly dark scene should
+    // desaturate as well as dim. Squared: it should be absent at dusk and only
+    // arrive when the scene is genuinely night.
+    night: darkness * darkness * 0.55,
     // Dimmed characters recede toward a cool, darkened version of the room.
     shadowColor: mixRgb(mixRgb(ambient, [0.06, 0.08, 0.14], 0.6), [0, 0, 0], 0.25),
   };
@@ -107,6 +232,7 @@ function lerpParams(a, b, t) {
       a.centroid[1] + (b.centroid[1] - a.centroid[1]) * t,
     ],
     exposure: a.exposure + (b.exposure - a.exposure) * t,
+    night: a.night + (b.night - a.night) * t,
     shadowColor: mixRgb(a.shadowColor, b.shadowColor, t),
   };
 }
@@ -148,13 +274,24 @@ export class StagePostFX {
    */
   getStatus() {
     let cssFallbacks = 0;
-    for (const state of this._slots.values()) if (state.mode === "css") cssFallbacks++;
+    let corsFallbacks = 0;
+    let missingArt = 0;
+    for (const state of this._slots.values()) {
+      if (state.mode !== "css") continue;
+      cssFallbacks++;
+      // Only the CORS case has a fix the GM can act on; a missing file is a
+      // broken image path and says so on its own.
+      if (state.reason === "cors" || state.reason === "tainted") corsFallbacks++;
+      else if (state.reason === "missing") missingArt++;
+    }
     return {
       active: this.active,
       backgroundDegraded: !!this._sample.degraded,
       backgroundReason: this._sample.reason,
       webglAvailable: this._gl ? this._gl.isSupported() : true,
       cssFallbacks,
+      corsFallbacks,
+      missingArt,
     };
   }
 
@@ -211,6 +348,7 @@ export class StagePostFX {
       dimmed: !!info.dimmed,
       optOut: !!info.optOut,
       mode: previous?.mode ?? "off",
+      reason: previous?.src === (info.src || "") ? previous?.reason : undefined,
       canvas: previous?.canvas ?? null,
       fallback: previous?.fallback ?? null,
       renderedSrc: previous?.src === (info.src || "") ? previous?.renderedSrc : null,
@@ -269,10 +407,18 @@ export class StagePostFX {
     // Key light colour comes from the background where the light appears to be.
     const key = toKeyLight(columnAt(this._sample, params.centroid[0]));
 
-    // Direction: from this slot toward the scene's brightest region. Two
-    // characters flanking a central fire get rims from opposite sides.
+    // A single direction from this slot toward the scene's brightest region.
+    // Two characters flanking a central fire get rims from opposite sides. Only
+    // the CSS fallback consumes this now — the shader gets a light *position*
+    // via `lightPlacement` and works the direction out per fragment, which it
+    // can do because it has the figure's measured silhouette and the fallback
+    // does not.
     const keyDir = keyDirection(params.centroid, state.position);
-    return { ambient, key, keyDir };
+
+    // The shadow side gets the room's colour rather than the lamp's. Only the
+    // shader consumes this — the CSS fallback has one gradient per direction and
+    // no normal to aim a third one with.
+    return { ambient, key, keyDir, bounce: bounceLight(ambient, key) };
   }
 
   async _renderSlot(wrap) {
@@ -299,18 +445,37 @@ export class StagePostFX {
     const lighting = this._slotLighting(state);
 
     if (!normal) {
-      this._applyCssFallback(wrap, state, lighting);
+      // `assetReason` is undefined when WebGL is missing (nothing probed the
+      // asset at all), which is exactly the distinction the panel needs.
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "no-webgl");
       return;
     }
 
+    const placement = lightPlacement(
+      this._params.centroid,
+      state.position,
+      normal.figure,
+      normal.width / Math.max(normal.height, 1),
+      this._sample.aspect || 16 / 9
+    );
+
     const canvas = await this._gl.render(src, normal, {
+      ...placement,
       ambient: lighting.ambient,
+      bounce: lighting.bounce,
       key: lighting.key,
-      keyDir: lighting.keyDir,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      rim: 0.9,
-      exposure: this._params.exposure,
+      // Both add in linear light, where mid-grey is 0.22 rather than 0.5 — so
+      // they are not comparable to the gamma-space strengths they replaced and
+      // look too large next to them. At full strength the rim lands around 0.83
+      // encoded on mid-tone art, where it used to pin at white.
+      rim: 1.6,
+      spec: 0.33,
+      // The model works in linear light; `exposure` is stored perceptually for
+      // the CSS fallback's `brightness()` filter, so convert it here.
+      exposure: Math.pow(this._params.exposure, 2.2),
+      night: this._params.night,
       shadow: state.dimmed ? 1 : 0,
       lift: state.highlighted ? 1 : 0,
     });
@@ -321,7 +486,7 @@ export class StagePostFX {
     if (!state || state.src !== src) return;
 
     if (!canvas) {
-      this._applyCssFallback(wrap, state, lighting);
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");
       return;
     }
 
@@ -350,17 +515,25 @@ export class StagePostFX {
     state.fallback?.remove();
     state.fallback = null;
     state.mode = "full";
+    state.reason = undefined;
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on");
     wrap.classList.remove("glstage-pp-css");
   }
 
   /**
-   * CSS path: two masked overlays taking the character's exact silhouette.
-   * Masks reference the art by URL and never read its pixels, so this works
-   * unconditionally on cross-origin assets.
+   * CSS path: masked overlays taking the character's exact silhouette. Masks
+   * reference the art by URL and never read its pixels, so this works
+   * unconditionally on cross-origin assets — including a bucket that will never
+   * send a CORS header.
+   *
+   * Three layers rather than two: an ambient wash, a lit gradient from the key
+   * direction, and a shadow gradient from the opposite side. The third costs
+   * nothing and is what stops the fallback reading as a flat colour overlay,
+   * which matters because for un-CORS-able art this is the *only* look there is.
    */
-  _applyCssFallback(wrap, state, lighting) {
+  _applyCssFallback(wrap, state, lighting, reason) {
+    state.reason = reason;
     state.canvas?.remove();
     state.canvas = null;
 
@@ -370,7 +543,9 @@ export class StagePostFX {
       layer.className = "glstage-pp-fallback";
       layer.setAttribute("aria-hidden", "true");
       layer.innerHTML =
-        '<span class="glstage-pp-tint"></span><span class="glstage-pp-key"></span>';
+        '<span class="glstage-pp-tint"></span>' +
+        '<span class="glstage-pp-shade"></span>' +
+        '<span class="glstage-pp-key"></span>';
       wrap.appendChild(layer);
       state.fallback = layer;
     }
@@ -381,12 +556,20 @@ export class StagePostFX {
     // Feature-prefixed custom properties on the element — never bare --gl-* on
     // :root, which would repaint every feature loaded after Stage.
     const url = `url("${state.src.replace(/["\\]/g, "\\$&")}")`;
+    const angle = cssGradientAngle(lighting.keyDir);
     layer.style.setProperty("--glstage-pp-mask", url);
     layer.style.setProperty("--glstage-pp-ambient", css(lighting.ambient));
     layer.style.setProperty("--glstage-pp-key", css(lighting.key));
-    layer.style.setProperty("--glstage-pp-angle", `${cssGradientAngle(lighting.keyDir)}deg`);
+    layer.style.setProperty("--glstage-pp-angle", `${angle}deg`);
+    // The shadow gradient runs the other way, so its lit-side stop is the one
+    // that fades out — the dark end lands opposite the key.
+    layer.style.setProperty("--glstage-pp-shade-angle", `${(angle + 180) % 360}deg`);
+    layer.style.setProperty("--glstage-pp-shadow", css(this._params.shadowColor));
     layer.style.setProperty("--glstage-pp-strength", String(this._intensity));
     layer.style.setProperty("--glstage-pp-exposure", String(this._params.exposure));
+    // Dimming is carried by the shader on the full path; the fallback has to do
+    // it here or a dimmed character would read as brightly lit as a spotlit one.
+    layer.style.setProperty("--glstage-pp-dim", state.dimmed ? "1" : "0");
 
     state.mode = "css";
     state.renderedSrc = state.src;
@@ -399,6 +582,7 @@ export class StagePostFX {
     state.fallback?.remove();
     state.fallback = null;
     state.mode = "off";
+    state.reason = undefined;
     state.renderedSrc = null;
     wrap.classList.remove("glstage-pp-on", "glstage-pp-css");
   }

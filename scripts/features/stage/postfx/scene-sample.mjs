@@ -20,6 +20,7 @@
  */
 
 import { clamp01, hex6 } from "../../../core/util.mjs";
+import { loadPixelImage, corsRetryUrl, invalidateAsset } from "./asset.mjs";
 
 /** Width of the sampling thumbnail — also the number of columns we keep. */
 const THUMB_W = 32;
@@ -33,6 +34,9 @@ const _pending = new Map();
 
 const VIDEO_RE = /\.(webm|mp4|m4v|ogv)(\?.*)?$/i;
 
+/** Assumed background aspect when the real one is unavailable. */
+const DEFAULT_ASPECT = 16 / 9;
+
 /** Neutral sample: the effect renders as a no-op against this. */
 export const NEUTRAL_SAMPLE = Object.freeze({
   ok: false,
@@ -42,6 +46,7 @@ export const NEUTRAL_SAMPLE = Object.freeze({
   centroid: [0.5, 0.5],
   luminance: 0.5,
   darkness: 0,
+  aspect: DEFAULT_ASPECT,
   reason: "none",
 });
 
@@ -81,46 +86,59 @@ function readFlatColor(scene) {
 /** Load a still image, downsampling *during* decode so an 8k map never
  *  materialises at full size. */
 async function decodeImage(src) {
-  const img = new Image();
-  // Required for pixel access; harmless when the asset is same-origin.
-  img.crossOrigin = "anonymous";
-  img.decoding = "async";
-  img.src = src;
-
-  await new Promise((resolve, reject) => {
-    if (img.complete && img.naturalWidth) return resolve();
-    img.addEventListener("load", resolve, { once: true });
-    img.addEventListener("error", () => reject(new Error("load failed")), { once: true });
-  });
+  // Shared loader: a background on S3 needs the same CORS negotiation the
+  // character art does, and benefits from the same cache-busted retry.
+  const img = await loadPixelImage(src);
+  // Captured before the thumbnail squashes it to a square. Scene coordinates
+  // are normalised 0..1 on both axes, so without the real aspect a horizontal
+  // step would be treated as the same distance as a vertical one — and on a
+  // 16:9 background it is nearly twice as far.
+  const aspect = img.naturalWidth / Math.max(img.naturalHeight, 1) || DEFAULT_ASPECT;
 
   if (typeof createImageBitmap === "function") {
     try {
-      return await createImageBitmap(img, {
+      const source = await createImageBitmap(img, {
         resizeWidth: THUMB_W,
         resizeHeight: THUMB_H,
         resizeQuality: "low",
       });
+      return { source, aspect };
     } catch (_e) {
       // Older engines reject the resize options — fall through to the element.
     }
   }
-  return img;
+  return { source: img, aspect };
 }
 
-/** Grab a single frame from a video background, then treat it as static. */
-async function decodeVideo(src) {
+/** Load a video in CORS mode, far enough to have a frame to draw. */
+function openVideo(url) {
   const video = document.createElement("video");
   video.crossOrigin = "anonymous";
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
-  video.src = src;
+  video.src = url;
 
-  await new Promise((resolve, reject) => {
-    const fail = () => reject(new Error("video load failed"));
-    video.addEventListener("loadeddata", resolve, { once: true });
-    video.addEventListener("error", fail, { once: true });
+  return new Promise((resolve, reject) => {
+    video.addEventListener("loadeddata", () => resolve(video), { once: true });
+    video.addEventListener("error", () => reject(new Error("video load failed")), { once: true });
   });
+}
+
+/** Grab a single frame from a video background, then treat it as static. */
+async function decodeVideo(src) {
+  let video;
+  try {
+    video = await openVideo(src);
+  } catch (err) {
+    // Same poisoned-cache retry the image path gets: a header-less copy cached
+    // from Foundry's own no-CORS playback would otherwise fail us permanently.
+    const retry = corsRetryUrl(src);
+    if (!retry) throw err;
+    video = await openVideo(retry);
+  }
+
+  const aspect = video.videoWidth / Math.max(video.videoHeight, 1) || DEFAULT_ASPECT;
 
   // Nudge past frame 0 — many encodes open on a black or fade-in frame, which
   // would grade the whole cast to pitch black.
@@ -136,7 +154,7 @@ async function decodeVideo(src) {
   } catch (_e) {
     /* keep whatever frame we have */
   }
-  return video;
+  return { source: video, aspect };
 }
 
 /**
@@ -155,26 +173,66 @@ function readPixels(source) {
 }
 
 /**
+ * Fraction of the frame's peak luminance a pixel has to reach before it counts
+ * as part of the light *source* rather than merely a lit surface.
+ */
+const KEY_THRESHOLD = 0.62;
+
+/**
+ * Locate the scene's key light in the luminance field.
+ *
+ * Weighting every pixel by luma² — which is what this used to do — finds the
+ * centre of mass of everything bright, and on a daylit exterior that is the
+ * middle of the sky rather than the sun. Measuring only from the top slice of
+ * the histogram finds the lamp, the window, the fire: the thing that is actually
+ * casting. Everything below the threshold contributes nothing, so a large dim
+ * region can no longer outvote a small brilliant one.
+ */
+function findKeyLight(lum) {
+  let peak = 0;
+  for (let i = 0; i < lum.length; i++) if (lum[i] > peak) peak = lum[i];
+
+  const floorL = peak * KEY_THRESHOLD;
+  let cx = 0;
+  let cy = 0;
+  let weight = 0;
+  for (let i = 0; i < lum.length; i++) {
+    const over = lum[i] - floorL;
+    if (over <= 0) continue;
+    const w = over * over;
+    cx += (i % THUMB_W) * w;
+    cy += ((i / THUMB_W) | 0) * w;
+    weight += w;
+  }
+
+  // A black frame has no light to find; assume one slightly above and in front.
+  if (weight <= 1e-9) return [0.5, 0.35];
+  return [clamp01(cx / weight / (THUMB_W - 1)), clamp01(cy / weight / (THUMB_H - 1))];
+}
+
+/**
  * Turn a thumbnail buffer into the lighting sample.
  *
  * Rows are weighted toward the lower part of the frame: stage characters stand
  * at the bottom of the viewport, so the ground and mid-ground matter more to
  * how they read than the sky does.
+ *
+ * Exported for testing — the centroid it produces is what every light direction
+ * in the feature is measured from.
  */
-function analyse(data) {
+export function analyse(data) {
   const columns = [];
+  const lum = new Float32Array(THUMB_W * THUMB_H);
   let ambient = [0, 0, 0];
   let ambientWeight = 0;
-  let cx = 0;
-  let cy = 0;
-  let centroidWeight = 0;
 
   for (let x = 0; x < THUMB_W; x++) {
     let col = [0, 0, 0];
     let colWeight = 0;
 
     for (let y = 0; y < THUMB_H; y++) {
-      const i = (y * THUMB_W + x) * 4;
+      const p = y * THUMB_W + x;
+      const i = p * 4;
       const a = data[i + 3] / 255;
       if (a <= 0) continue;
 
@@ -194,13 +252,7 @@ function analyse(data) {
       ambient[2] += b;
       ambientWeight += 1;
 
-      // Luminance-weighted centroid — where the picture is brightest. Painted
-      // backgrounds put their light source in frame, so this tracks it well.
-      const l = luma([r, g, b]);
-      const lw = l * l; // square it so highlights dominate midtones
-      cx += (x / (THUMB_W - 1)) * lw;
-      cy += (y / (THUMB_H - 1)) * lw;
-      centroidWeight += lw;
+      lum[p] = luma([r, g, b]);
     }
 
     columns.push(colWeight > 0 ? col.map((v) => clamp01(v / colWeight)) : [0.5, 0.5, 0.5]);
@@ -209,10 +261,7 @@ function analyse(data) {
   if (ambientWeight > 0) ambient = ambient.map((v) => clamp01(v / ambientWeight));
   else ambient = [0.5, 0.5, 0.5];
 
-  const centroid =
-    centroidWeight > 1e-6 ? [clamp01(cx / centroidWeight), clamp01(cy / centroidWeight)] : [0.5, 0.35];
-
-  return { ambient, columns, centroid, luminance: luma(ambient) };
+  return { ambient, columns, centroid: findKeyLight(lum), luminance: luma(ambient) };
 }
 
 /** Build the degraded sample used when pixels are unavailable. */
@@ -227,6 +276,7 @@ function degradedSample(scene, reason) {
     centroid: [0.5, 0.3],
     luminance: luma(flat),
     darkness: readDarkness(scene),
+    aspect: DEFAULT_ASPECT,
     reason,
   };
 }
@@ -259,20 +309,25 @@ export async function sampleScene(scene) {
   const job = (async () => {
     let sample;
     try {
-      const source = VIDEO_RE.test(src) ? await decodeVideo(src) : await decodeImage(src);
+      const { source, aspect } = VIDEO_RE.test(src) ? await decodeVideo(src) : await decodeImage(src);
       const data = readPixels(source);
       sample = {
         ok: true,
         degraded: false,
         ...analyse(data),
         darkness,
+        aspect,
         reason: "image",
       };
       if (typeof source.close === "function") source.close();
     } catch (err) {
-      // Tainted canvas, 404, decode failure — all degrade the same way.
+      // Tainted canvas, 404, decode failure — all degrade the same way, but the
+      // reason drives what the GM panel offers to do about it. `loadPixelImage`
+      // has already told CORS and missing apart; a raw SecurityError means the
+      // canvas tainted despite a clean load.
       const reason =
-        err?.name === "SecurityError" ? "cors" : VIDEO_RE.test(src) ? "video" : "decode";
+        err?.reason ||
+        (err?.name === "SecurityError" ? "cors" : VIDEO_RE.test(src) ? "video" : "decode");
       sample = degradedSample(scene, reason);
     }
     _cache.set(key, sample);
@@ -292,12 +347,22 @@ export async function sampleScene(scene) {
 export function columnAt(sample, t) {
   const cols = sample?.columns;
   if (!cols?.length) return [0.5, 0.5, 0.5];
-  const idx = Math.round(clamp01(t) * (cols.length - 1));
-  return cols[idx] || cols[0];
+  if (cols.length === 1) return cols[0];
+
+  // Interpolated rather than snapped. There are only 32 columns, so rounding to
+  // the nearest gave two slots a few percent apart identical light, and sliding
+  // a slot across the stage stepped the colour instead of blending it.
+  const p = clamp01(t) * (cols.length - 1);
+  const i = Math.min(Math.floor(p), cols.length - 2);
+  const f = p - i;
+  const a = cols[i];
+  const b = cols[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
 }
 
 /** Drop cached samples — call when a background asset may have changed. */
 export function invalidateSceneSamples(src = null) {
+  invalidateAsset(src);
   if (src) {
     _cache.delete(src);
     _pending.delete(src);
