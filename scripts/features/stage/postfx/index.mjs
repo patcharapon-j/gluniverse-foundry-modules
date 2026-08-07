@@ -45,6 +45,38 @@ export const SLOT_ANCHOR_Y = FEET_SCENE_Y - BODY_SCENE_HEIGHT * 0.5;
 
 const LUMA = [0.2126, 0.7152, 0.0722];
 
+/**
+ * How hard each term of the character pass is driven.
+ *
+ * Exported because the preview harness has to render the picture a world
+ * actually gets: a second copy of these numbers is a second chance for the
+ * contact sheet to be reassuring about a build nobody is running.
+ *
+ * The first three add in linear light, where mid-grey is 0.22 rather than 0.5 —
+ * they are not comparable to the gamma-space strengths they replaced and look
+ * far too large next to them.
+ */
+export const SHADER_STRENGTHS = Object.freeze({
+  /** The wide rim lobe — the halo the core sits inside. */
+  rim: 1.45,
+  /** The tight core, in encoded light and on its own scale: it is added past the
+   *  strength dial's crossfade rather than through it, for the reason set out in
+   *  the shader. Bright enough that the outermost texels of a backlit shoulder
+   *  clip to white, and no brighter — drive this and the edge stops looking like
+   *  light landing on a figure and starts looking like a cut-out being traced. */
+  rimEdge: 0.72,
+  /** Light spilling past the outline. Free, in the sense that the falloff it
+   *  needs is the prepass's blurred alpha, which already extends past the
+   *  silhouette — see the note in the shader. */
+  glow: 0.85,
+  /** Interior contours. Deliberately small: this term traces every form edge the
+   *  art draws, and past roughly 0.5 it starts finding facial lineart too and
+   *  reads as an outline filter rather than as light. */
+  contour: 0.4,
+  spec: 0.33,
+  sheen: 0.12,
+});
+
 function luma(rgb) {
   return LUMA[0] * rgb[0] + LUMA[1] * rgb[1] + LUMA[2] * rgb[2];
 }
@@ -496,25 +528,7 @@ export class StagePostFX {
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      // These all add in linear light, where mid-grey is 0.22 rather than 0.5 —
-      // so they are not comparable to the gamma-space strengths they replaced
-      // and look far too large next to them.
-      rim: 1.6,
-      // The tight core, in encoded light and on its own scale — it is added past
-      // the strength dial's crossfade rather than through it, for the reason set
-      // out in the shader. Peaks just over 1.0 so the outermost texels clip to
-      // white and everything behind them is the falloff.
-      rimEdge: 1.15,
-      // Light spilling past the outline. Free, in the sense that the falloff it
-      // needs is the prepass's blurred alpha, which already extends past the
-      // silhouette — see the note in the shader.
-      glow: 1.35,
-      // Interior contours. Deliberately small: this term traces every form edge
-      // the art draws, and past roughly 0.5 it starts finding facial lineart too
-      // and reads as an outline filter rather than as light.
-      contour: 0.4,
-      spec: 0.33,
-      sheen: 0.12,
+      ...SHADER_STRENGTHS,
       // The model works in linear light; `exposure` is stored perceptually for
       // the CSS fallback's `brightness()` filter, so convert it here.
       exposure: Math.pow(this._params.exposure, 2.2),
