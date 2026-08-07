@@ -109,6 +109,47 @@ element would blow the figure itself through the background. Over the dark
 painted backgrounds this feature targets that is indistinguishable from additive.
 Over a bright background the spill is subtler than it should be.
 
+## Art with a dark rind
+
+A rim is only a rim if it lands on the character. Land it on a black outline
+instead and it reads as a halo: the eye takes the bright line, then the dark band
+immediately behind it, and the pair together look like a sticker cut out and
+pasted onto the scene. Two separate things put a dark band there, and they need
+different answers.
+
+**The sampler can invent one.** Bilinear filtering blends whatever is stored, and
+in straight alpha the fully transparent pixels of a cut-out PNG carry rgb 0,0,0
+almost without exception. Interpolating against those darkens every texel on the
+boundary — a black rind that is nowhere in the asset, appearing only once the art
+is magnified to the render size. The fix is not a workaround: premultiplied is
+the space interpolation is *correct* in, so the art texture is uploaded
+premultiplied and every colour read goes back through `artAt()`, which divides
+the coverage out again. `tools/postfx-check.mjs` fails the build on a bare
+`texture2D(u_art, …).rgb`, because that reads as ordinary code and silently
+shades a half-covered pixel as though the artist had painted it darker.
+
+**The asset can carry one of its own** — an authored outline stroke, or the
+residue of a matte lifted off a black background. Nothing can be done about those
+pixels; they are the art. So the shader stands down instead. A guard measures the
+boundary against the body a few pixels inside it and fades the core, the halo,
+the spill and the contour term where it fires.
+
+Two conditions have to hold together, and the pair is what makes the guard safe:
+
+- the boundary is **markedly darker** than the body just inside it, and
+- the boundary is **near black in absolute terms**.
+
+Relative darkness alone cannot tell a matte from a navy coat with a pale lining —
+that test alone cost the clean reference figure 9% of its edge. Absolute darkness
+alone would strip the rim from any character dressed head to foot in black.
+Requiring both leaves the clean figure measurably untouched while cutting the
+matted one by a third.
+
+The contour term is the one that gains most from the guard, which is not obvious:
+a matte rind is the largest tonal step anywhere in the asset, so the term that
+looks for form edges finds its inner boundary first and draws a *second* bright
+line just inside the rim. That pair is most of what makes a halo look like one.
+
 ## Framing — knee-up vs full body
 
 Stage art is composited over the background, not placed in it, so nothing tells
@@ -194,9 +235,14 @@ it degrades silently to the CSS fallback.
 character, and asserts the things a diff cannot show — that the shader compiles
 and links, that strength 0 is bit-identical to the source art, that a lamp on the
 left rims the left edge and one on the right rims the right, that the core
-reaches near-white at the default strength, and that light actually crosses the
-silhouette. It also writes a four-room contact sheet with a magnified detail row,
-which is the only way to tell a crisp edge from a soft one:
+reaches near-white at the default strength, that light actually crosses the
+silhouette, and that the rim stands down on art carrying its own black rind. That
+last one renders the same silhouette twice, differing only in the colour of its
+boundary pixels, so the two numbers are directly comparable.
+
+It also writes a four-room contact sheet with two magnified detail rows — the
+clean cut-out and the matted one — which is the only way to tell a crisp edge
+from a soft one, or a rim from a halo:
 
 ```bash
 node tools/stage-lighting-preview.mjs --out=/tmp/sheet.png

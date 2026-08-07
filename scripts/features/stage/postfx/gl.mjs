@@ -117,6 +117,11 @@ const float CONTOUR_STEP = 0.004;
 // Radius of the tight silhouette probe, in uv — see nearAlpha().
 const float EDGE_RING = 0.004;
 
+// How far inward the rind guard looks, in uv. The near tap has to clear a matte
+// a few pixels thick; the far one has to still be on the same garment, or the
+// guard starts reading a lapel as an outline. See the guard in main().
+const float RIND_STEP = 0.012;
+
 /**
  * How much of a small ring around this point is inside the figure.
  *
@@ -144,6 +149,20 @@ float nearAlpha(vec2 uv, vec2 r) {
     + texture2D(u_art, uv + vec2(-d.x, -d.y)).a);
 }
 
+/**
+ * The art, with the upload's premultiply divided back out.
+ *
+ * Everything downstream wants the colour the artist painted, not that colour
+ * faded toward black by its own coverage — a half-covered pixel of white hair is
+ * white hair, and shading it as mid-grey is what makes an edge look grubby. The
+ * floor on the divisor is a hair under one 8-bit step: below that there is no
+ * colour left to recover, only quantisation noise to amplify.
+ */
+vec4 artAt(vec2 uv) {
+  vec4 t = texture2D(u_art, uv);
+  return vec4(t.rgb / max(t.a, 0.0039), t.a);
+}
+
 vec4 sampleField(vec2 uv) {
   vec2 p = uv * u_nrmSize - 0.5;
   vec2 i = floor(p);
@@ -153,7 +172,7 @@ vec4 sampleField(vec2 uv) {
 }
 
 void main() {
-  vec4 art = texture2D(u_art, v_uv);
+  vec4 art = artAt(v_uv);
   vec4 nm = sampleField(v_uv);
   vec2 n2 = nm.rg * 2.0 - 1.0;
   float thick = nm.b;
@@ -185,6 +204,43 @@ void main() {
   vec2 ring = vec2(EDGE_RING / max(u_uvScale.x, 0.0001), EDGE_RING);
   float tight = nearAlpha(v_uv, ring);
 
+  // ── The dark-rind guard ──
+  // Cut-out character art very often carries a dark rind around its silhouette:
+  // an authored outline stroke, or the residue of a matte lifted off a black
+  // background. A hot core painted along one of those is exactly what turns a rim
+  // into a halo — the eye reads the bright line, then the dark band immediately
+  // behind it, and the pair together look like a sticker pasted onto the scene.
+  //
+  // Real backlight consumes an outline rather than tracing it, and this pass
+  // cannot repaint the asset's own pixels, so the honest move is to stand down:
+  // where the boundary is markedly darker than the body a few pixels inside it,
+  // every term that draws on the edge backs off — hardest for the core and the
+  // contour, which are the two that make a line, and least for the wide halo,
+  // which is soft enough to read as light wherever it lands.
+  //
+  // Both taps run inward along the field normal, which is the one direction that
+  // means "into the figure" at every point on the outline. Taking the darker of
+  // the near tap and this pixel is what makes the test work from either side of
+  // the boundary: outside, this pixel is empty and the near tap lands on the
+  // rind; inside, this pixel *is* the rind. A transparent tap scores 1.0 rather
+  // than 0.0, so a thin limb — where the far tap has left the figure entirely —
+  // disables the guard instead of triggering it at full strength.
+  vec2 inward = -normalize(n2 + vec2(1e-6));
+  vec2 rstep = vec2(RIND_STEP / max(u_uvScale.x, 0.0001), RIND_STEP);
+  vec4 rindNear = artAt(v_uv + inward * rstep * 0.4);
+  vec4 rindBody = artAt(v_uv + inward * rstep * 1.6);
+  float rindLuma = min(mix(1.0, dot(art.rgb, LUMA), step(0.02, art.a)),
+                       mix(1.0, dot(rindNear.rgb, LUMA), step(0.02, rindNear.a)));
+  // Two conditions, and both have to hold. Relative darkness alone is not enough
+  // to tell a matte from a navy coat with a pale lining, so the boundary also has
+  // to be near black in absolute terms — which a matte lifted off black always is
+  // and a garment essentially never is. Requiring both is also what keeps the
+  // guard off a character dressed head to foot in black: there the body inside is
+  // no brighter than the outline, so the first condition fails and the rim stays.
+  float rind = rindBody.a
+             * smoothstep(0.04, 0.20, dot(rindBody.rgb, LUMA) - rindLuma)
+             * (1.0 - smoothstep(0.03, 0.14, rindLuma));
+
   // ── Outside the silhouette: the spill ──
   // What separates an edge that is *outlined* from one that is *lit* is that a
   // lit edge does not stop at the outline — light spills past it and blooms into
@@ -201,6 +257,7 @@ void main() {
     float wide = pow(smoothstep(0.0, 0.5, thick), 3.5);
     float reach = clamp(hot * 0.85 + wide * 0.4, 0.0, 1.0);
     float a = reach * facing * u_glow * u_intensity
+            * mix(1.0, 0.30, rind)         // not against the asset's own outline
             * mix(1.0, 0.22, u_shadow)     // a dimmed character does not glow
             * mix(0.4, 1.0, u_exposure)    // nor does one in a dark room, much
             * (1.0 + u_lift * 0.6);        // a spotlit one glows harder
@@ -261,8 +318,8 @@ void main() {
   // a core exist at all.
   float edge = clamp((1.0 - thick) * 2.0, 0.0, 1.0);
   float edgeTight = clamp((1.0 - tight) * 2.0, 0.0, 1.0);
-  float rimHalo = pow(edge, 3.5) * facing * atten;
-  float rimCore = pow(edgeTight, 2.0) * facing * atten;
+  float rimHalo = pow(edge, 3.5) * facing * atten * mix(1.0, 0.5, rind);
+  float rimCore = pow(edgeTight, 2.0) * facing * atten * mix(1.0, 0.15, rind);
 
   // ── Interior contours ──
   // The alpha silhouette knows about exactly one edge: the outside one. Every
@@ -279,14 +336,19 @@ void main() {
   // for a contour to catch.
   vec2 tx = vec2(CONTOUR_STEP / max(u_uvScale.x, 0.0001), CONTOUR_STEP);
   vec2 grad = vec2(
-    dot(texture2D(u_art, v_uv + vec2(tx.x, 0.0)).rgb, LUMA)
-      - dot(texture2D(u_art, v_uv - vec2(tx.x, 0.0)).rgb, LUMA),
-    dot(texture2D(u_art, v_uv + vec2(0.0, tx.y)).rgb, LUMA)
-      - dot(texture2D(u_art, v_uv - vec2(0.0, tx.y)).rgb, LUMA)
+    dot(artAt(v_uv + vec2(tx.x, 0.0)).rgb, LUMA)
+      - dot(artAt(v_uv - vec2(tx.x, 0.0)).rgb, LUMA),
+    dot(artAt(v_uv + vec2(0.0, tx.y)).rgb, LUMA)
+      - dot(artAt(v_uv - vec2(0.0, tx.y)).rgb, LUMA)
   );
   float gradLen = max(length(grad), 1e-5);
+  // Guarded too, and this is the term the guard buys the most from. A matte rind
+  // is the largest tonal step anywhere in the asset — black against whatever the
+  // character is wearing — so the contour term reads its inner boundary as the
+  // strongest form edge in the picture and draws a second bright line just inside
+  // the first. That pair is most of what makes a halo look like a halo.
   float contour = smoothstep(0.05, 0.4, gradLen) * max(dot(grad / gradLen, L.xy), 0.0)
-                * thick * atten * u_contour;
+                * thick * atten * u_contour * mix(1.0, 0.15, rind);
 
   // ── Specular, two lobes as well ──
   // Both gated on thickness (never on the antialiased fringe) and on how bright
@@ -605,7 +667,15 @@ export class StageGL {
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    // Premultiplied on upload, divided back out at every sample — see artAt().
+    // This is not a formality. Bilinear filtering blends whatever is *stored*,
+    // and in straight alpha the fully transparent pixels of a cut-out PNG carry
+    // rgb 0,0,0 almost without exception. Interpolating against them darkens
+    // every texel on the boundary, so the sampler manufactures a black rind that
+    // is nowhere in the asset — and the rim then draws a hot line along the
+    // outside of it, which is a halo, not an edge. Premultiplied is the space
+    // interpolation is correct in.
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fitted.source);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);

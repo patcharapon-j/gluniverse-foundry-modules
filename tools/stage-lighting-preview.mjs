@@ -62,13 +62,17 @@ const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;backgro
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { getNormalMap } from "/scripts/features/stage/postfx/normal-map.mjs";
-import { lightPlacement, bounceLight } from "/scripts/features/stage/postfx/index.mjs";
+import { lightPlacement, bounceLight, SHADER_STRENGTHS } from "/scripts/features/stage/postfx/index.mjs";
 
 // ── A synthetic character ──
 // Not art, but it carries the three things the shader reads: an alpha
 // silhouette with curvature, a large tonal split (pale coat over dark shirt) for
 // the contour term, and some thin lineart the contour term must NOT latch onto.
-function buildArt() {
+// \`rind\` reproduces the asset defect this pass has to survive: a cut-out whose
+// silhouette carries a dark outline, either authored or left behind by a matte
+// lifted off a black background. A hot core traced along one of those reads as a
+// sticker, not as light, so the shader is supposed to back off there.
+function buildArt(rind) {
   const c = document.createElement("canvas");
   c.width = 420; c.height = 760;
   const g = c.getContext("2d");
@@ -95,13 +99,22 @@ function buildArt() {
   g.moveTo(228, 120); g.lineTo(248, 120);
   g.moveTo(200, 168); g.lineTo(228, 168); g.stroke();
   g.restore();
+
+  if (rind) {
+    // Stroked inside the clip, so the alpha silhouette is identical to the clean
+    // figure's and the only difference between the two renders is the colour of
+    // the boundary pixels.
+    g.save(); g.clip(body);
+    g.strokeStyle = "#050508"; g.lineWidth = 7; g.stroke(body);
+    g.restore();
+  }
   return c.toDataURL("image/png");
 }
 
 const ROOMS = ${JSON.stringify(ROOMS)};
 
 window.run = async () => {
-  const src = buildArt();
+  const src = buildArt(false);
   const normal = await getNormalMap(src);
   if (!normal) return { error: "normal-map prepass returned null" };
 
@@ -110,13 +123,21 @@ window.run = async () => {
   const prepared = await gl.prepare(src, normal);
   if (!prepared) return { error: "prepare() returned null — shader compile/link or texture upload failed" };
 
+  const rindSrc = buildArt(true);
+  const rindNormal = await getNormalMap(rindSrc);
+  const rindPrepared = rindNormal ? await gl.prepare(rindSrc, rindNormal) : null;
+  if (!rindPrepared) return { error: "prepare() returned null for the dark-rind figure" };
+
   const strip = document.createElement("canvas");
   const tileW = 300, tileH = 543;
   // A 2x crop of the head and shoulder under each tile. The rim core is a few
   // pixels wide by design, and at tile scale a crisp line and a soft band are
   // indistinguishable — which is the whole thing being judged here.
+  // The third row is the same crop of the matted figure, so the sheet answers
+  // the question the numbers can only score: does an asset with its own black
+  // outline still get a halo drawn round it.
   const detailH = 300;
-  strip.width = tileW * ROOMS.length; strip.height = tileH + detailH;
+  strip.width = tileW * ROOMS.length; strip.height = tileH + detailH * 2;
   const sg = strip.getContext("2d");
   sg.imageSmoothingEnabled = false;
 
@@ -124,45 +145,56 @@ window.run = async () => {
     const room = ROOMS[i];
     const place = lightPlacement(room.centroid, 0.5, normal.figure,
                                  normal.width / normal.height, 16 / 9);
-    const out = gl.draw(prepared, {
+    const params = {
       ...place,
       // The real bounce, not a copy of the ambient — the shadow-side colour
       // separation is a big part of what the figure ends up looking like.
       ambient: room.ambient, bounce: bounceLight(room.ambient, room.key), key: room.key,
       // The GM dial's default, so this is the picture a world actually gets.
       shadowColor: [0.06, 0.08, 0.14], intensity: 0.6,
-      rim: 1.6, rimEdge: 1.15, glow: 1.35, contour: 0.4, spec: 0.33, sheen: 0.12,
+      ...SHADER_STRENGTHS,
       exposure: Math.pow(1 - room.darkness * 0.65, 2.2),
       night: room.darkness * room.darkness * 0.55, shadow: 0, lift: 0,
-    });
+    };
+    const out = gl.draw(prepared, params);
     if (!out) return { error: "draw() returned null at room " + i };
 
     // Paint the room behind it, so the spill has something to spill onto.
     const px = (c) => "rgb(" + c.map((v) => Math.round(v * 255)).join(",") + ")";
-    sg.fillStyle = px(room.ambient.map((v) => v * 0.55));
+    const room_ = px(room.ambient.map((v) => v * 0.55));
+    sg.fillStyle = room_;
     sg.fillRect(i * tileW, 0, tileW, tileH);
     sg.drawImage(out, i * tileW, 0, tileW, tileH);
 
     // Detail: the top-left quarter of the figure, at native pixels.
-    sg.fillStyle = px(room.ambient.map((v) => v * 0.55));
+    sg.fillStyle = room_;
     sg.fillRect(i * tileW, tileH, tileW, detailH);
     sg.drawImage(out, 0, 0, tileW, detailH, i * tileW, tileH, tileW, detailH);
 
     sg.fillStyle = "rgba(255,255,255,0.75)";
     sg.font = "13px system-ui, sans-serif";
     sg.fillText(room.name, i * tileW + 10, tileH - 12);
+
+    // Same crop, same light, art with a black rind round its silhouette.
+    const rindOut = gl.draw(rindPrepared, params);
+    if (!rindOut) return { error: "draw() returned null for the dark-rind figure" };
+    sg.fillStyle = room_;
+    sg.fillRect(i * tileW, tileH + detailH, tileW, detailH);
+    sg.drawImage(rindOut, 0, 0, tileW, detailH, i * tileW, tileH + detailH, tileW, detailH);
+    sg.fillStyle = "rgba(255,255,255,0.6)";
+    sg.fillText("same art, black rind", i * tileW + 10, tileH + detailH + 20);
   }
 
   // ── Assertions ──
   const BASE = {
     ambient: [0.12, 0.11, 0.14], bounce: [0.1, 0.12, 0.18], key: [1.0, 0.95, 0.88],
-    shadowColor: [0.06, 0.08, 0.14], rim: 1.6, rimEdge: 1.15, glow: 1.35,
-    contour: 0.4, spec: 0.33, sheen: 0.12, exposure: 0.5, night: 0, shadow: 0, lift: 0,
+    shadowColor: [0.06, 0.08, 0.14], ...SHADER_STRENGTHS,
+    exposure: 0.5, night: 0, shadow: 0, lift: 0,
   };
-  const shoot = (centroid, intensity) => {
+  const shoot = (centroid, intensity, target = prepared) => {
     const place = lightPlacement(centroid, 0.5, normal.figure,
                                  normal.width / normal.height, 16 / 9);
-    const out = gl.draw(prepared, { ...BASE, ...place, intensity });
+    const out = gl.draw(target, { ...BASE, ...place, intensity });
     // Copy out immediately — the canvas is shared and the next draw owns it.
     const c = document.createElement("canvas");
     c.width = out.width; c.height = out.height;
@@ -245,7 +277,47 @@ window.run = async () => {
     if (ad[p + 3] > 8) { insidePixels++; continue; }
     if (pd[p + 3] > 2) { spillPixels++; spillPeak = Math.max(spillPeak, pd[p + 3]); }
   }
-  return { png: strip.toDataURL("image/png"), spillPixels, spillPeak, insidePixels, ...rim };
+  // ── The dark-rind case ──
+  // Same silhouette, same lamp, same strengths; only the colour of the boundary
+  // pixels differs. Tracing a hot core along an asset's own black outline is the
+  // halo the guard exists to prevent, so the matted figure has to come out
+  // visibly cooler at the edge than the clean one — while the clean one keeps
+  // every property asserted above.
+  const edgePeak = (px, side) => {
+    let sum = 0, n = 0;
+    for (let y = 0; y < H; y += 2) {
+      let x0 = -1, x1 = -1;
+      for (let x = 0; x < W; x++) if (artPx[(y * W + x) * 4 + 3] > 200) { if (x0 < 0) x0 = x; x1 = x; }
+      if (x0 < 0 || x1 - x0 < 24) continue;
+      let m = 0;
+      // A narrow band straddling the outline: the core and the hot end of the
+      // spill both live in it, and which texel they peak on moves with the
+      // curvature. Kept narrow deliberately — reach a few texels further in and
+      // the maximum finds the character's own lit body, which is bright on any
+      // figure and would swamp the thing being measured.
+      //
+      // Weighted by coverage, because getImageData hands back *unassociated*
+      // colour: the faintest breath of spill reads as pure white at alpha 3, and
+      // an unweighted maximum over this band measures the spill's hue rather
+      // than its brightness — which is to say, nothing at all.
+      for (let d = -3; d < 3; d++) {
+        const x = side === "left" ? x0 + d : x1 - d;
+        if (x < 0 || x >= W) continue;
+        const p = (y * W + x) * 4;
+        const l = (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
+        m = Math.max(m, l * (px[p + 3] / 255));
+      }
+      sum += m; n++;
+    }
+    return n ? sum / n : 0;
+  };
+  const cleanEdge = edgePeak(fromLeft, "left");
+  const rindEdge = edgePeak(shoot([0.02, 0.5], 0.6, rindPrepared).data, "left");
+
+  return {
+    png: strip.toDataURL("image/png"),
+    spillPixels, spillPeak, insidePixels, cleanEdge, rindEdge, ...rim,
+  };
 };
 </script></body>`;
 
@@ -348,6 +420,11 @@ ok(
   result.peakLuma > 0.85,
   "the rim core reaches near-white at the default strength",
   `peak luminance ${f(result.peakLuma)}`
+);
+ok(
+  result.rindEdge < result.cleanEdge * 0.70,
+  "the rim stands down on art with its own dark outline",
+  `edge peak ${f(result.rindEdge)} vs ${f(result.cleanEdge)} on the clean cut-out`
 );
 
 console.log(`\nwrote ${OUT}`);

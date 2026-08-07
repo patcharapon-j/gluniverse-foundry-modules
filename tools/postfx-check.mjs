@@ -127,6 +127,7 @@ const {
   lightPlacement,
   bounceLight,
   SLOT_ANCHOR_Y,
+  SHADER_STRENGTHS,
 } = await import(mod("index.mjs"));
 const { StageGL } = await import(mod("gl.mjs"));
 const { analyse, columnAt, NEUTRAL_SAMPLE } = await import(mod("scene-sample.mjs"));
@@ -453,6 +454,37 @@ section("shader uniform wiring");
   for (const name of requested) {
     ok(declared.has(name), `getUniformLocation("${name}") matches a declared uniform`);
   }
+
+  // The art texture is uploaded premultiplied — the only space bilinear
+  // filtering is correct in, and the difference between a clean silhouette and
+  // one the sampler has drawn a black rind around. The cost is that every colour
+  // read has to divide the coverage back out. A bare texture2D(u_art, …).rgb is
+  // not an error anywhere: it compiles, it renders, and it quietly shades a
+  // half-covered pixel as though the artist had painted it darker.
+  const rawColour = [...src.matchAll(/texture2D\(u_art,[^)]*\)\s*\.(?:rgb|xyz|r\b|g\b|b\b)/g)];
+  ok(
+    rawColour.length === 0,
+    "every art colour read goes through artAt()",
+    rawColour[0]?.[0] ?? "no bare texture2D(u_art, …).rgb"
+  );
+  ok(
+    /UNPACK_PREMULTIPLY_ALPHA_WEBGL,\s*true/.test(src),
+    "…because the art texture is uploaded premultiplied"
+  );
+
+  // Three copies of the strengths — production, the contact sheet, the
+  // assertions — is three chances for the preview to vouch for a build nobody
+  // runs. One frozen export is the only thing keeping them honest.
+  ok(
+    SHADER_STRENGTHS && Object.isFrozen(SHADER_STRENGTHS),
+    "the shader strengths are a single frozen export"
+  );
+  ok(
+    ["rim", "rimEdge", "glow", "contour", "spec", "sheen"].every(
+      (k) => Number.isFinite(SHADER_STRENGTHS?.[k])
+    ),
+    "…covering every term the shader takes a strength for"
+  );
 
   // The night tint claims to recolour without dimming, which is only true if it
   // is luma-normalised. Nothing on screen would say it had drifted — dark scenes
