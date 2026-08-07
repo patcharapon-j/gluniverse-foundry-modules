@@ -28,19 +28,29 @@ void main() {
 `;
 
 const FRAG = `
+// highp where it exists. The shading ramp here is very smooth and very wide,
+// which is exactly the case mediump's ~10-bit mantissa bands on.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 
 varying vec2 v_uv;
 
 uniform sampler2D u_art;      // the character art
 uniform sampler2D u_nrm;      // rg = normal xy, b = thickness, a = alpha
+uniform vec2      u_nrmSize;  // normal-map dimensions, for the smooth fetch
 
 uniform vec3  u_ambient;      // scene ambient colour
+uniform vec3  u_bounce;       // colour of light bounced back from the far side
 uniform vec3  u_key;          // key light colour
 uniform vec3  u_shadowColor;  // colour a dimmed character recedes toward
 uniform float u_intensity;    // master strength, 0..1
 uniform float u_rim;          // rim strength
-uniform float u_exposure;     // darkness-derived exposure
+uniform float u_spec;         // specular strength
+uniform float u_exposure;     // darkness-derived exposure, already linear
+uniform float u_night;        // scotopic desaturation, 0..1
 uniform float u_shadow;       // dim amount, 0..1
 uniform float u_lift;         // highlight boost, 0..1
 
@@ -65,6 +75,42 @@ uniform float u_ground;       // grounding shadow strength, 0..1
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
+// Where the highlight roll-off starts. Below this the tone curve is the exact
+// identity, so midtones keep whatever exposure the lighting model computed.
+const float KNEE = 0.72;
+
+// Colour vision falls away in the dark and what is left drifts blue (the
+// Purkinje shift). Weighted against LUMA these sum to 1.0, so the tint recolours
+// without also dimming — darkness already has u_exposure for that.
+const vec3 NIGHT = vec3(0.88, 1.00, 1.32);
+
+// ── sRGB ⇄ linear ──
+// Every value sampled out of an image or a CSS colour is gamma-encoded, and the
+// operations that matter here behave differently on encoded numbers: adding two
+// lights saturates early, mixing two colours passes through a muddy midpoint,
+// and clamping a highlight shifts its hue instead of rolling it off. So the pass
+// works in linear light and encodes once, at the end.
+//
+// The one deliberate exception is the diffuse *multiplier* below. A multiplier
+// is a ratio, and a ratio means the same thing in either space provided it is
+// raised to the same power the values were — so it is converted rather than
+// re-derived, which is what keeps the shading contrast exactly as it was tuned
+// while everything genuinely additive moves to linear.
+vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
+vec3 toSRGB(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
+
+// The normal field is prepassed small and stretched across a render several
+// times its size. Plain bilinear is only C0, so on a shading ramp this smooth
+// the texel lattice shows up as faint diamond creases. Smoothstepping the
+// interpolant makes the reconstruction look C1 for four extra instructions.
+vec4 sampleField(vec2 uv) {
+  vec2 p = uv * u_nrmSize - 0.5;
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  return texture2D(u_nrm, (i + f + 0.5) / u_nrmSize);
+}
+
 void main() {
   vec4 art = texture2D(u_art, v_uv);
   if (art.a <= 0.003) {
@@ -72,13 +118,16 @@ void main() {
     return;
   }
 
-  vec4 nm = texture2D(u_nrm, v_uv);
+  vec4 nm = sampleField(v_uv);
   vec2 n2 = nm.rg * 2.0 - 1.0;
   float thick = nm.b;
 
   // Invented surface: faces the viewer deep inside the silhouette, rolls away
   // toward the edges. Thin regions get a shallower Z so they catch more rim.
   vec3 N = normalize(vec3(n2, mix(0.35, 1.0, thick)));
+
+  vec3 base = toLinear(art.rgb);
+  vec3 keyL = toLinear(u_key);
 
   // Vector to the light from *this* point on the figure.
   vec3 toLight = vec3(u_lightP - v_uv * u_uvScale, u_lightZ);
@@ -94,9 +143,21 @@ void main() {
 
   // Half-Lambert wrap blended with true Lambert: pure Lambert crushes the
   // unlit side to black, which looks wrong on stylised art.
-  float lambert = max(dot(N, L), 0.0);
-  float wrapped = dot(N, L) * 0.5 + 0.5;
+  float ndl = dot(N, L);
+  float lambert = max(ndl, 0.0);
+  float wrapped = ndl * 0.5 + 0.5;
   float diffuse = mix(wrapped, lambert, 0.5) * atten;
+
+  // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
+  float ao = mix(0.78, 1.0, thick);
+
+  // Ambient is not one flat wash. Light that misses the key side arrives having
+  // bounced off the room, and it arrives from the *other* side, carrying the
+  // room's colour rather than the lamp's. That split is most of what separates a
+  // figure that reads as lit from one that reads as tinted — and because the two
+  // colours are luminance-matched it costs no exposure to add.
+  float bounce = dot(N, normalize(vec3(-L.x, -L.y, 0.6))) * 0.5 + 0.5;
+  vec3 amb = mix(u_ambient, u_bounce, bounce * 0.7) * ao;
 
   // Rim: bright where the surface is thin *and* turned toward the light. With a
   // positioned light this now sweeps the parts of the silhouette that actually
@@ -104,10 +165,18 @@ void main() {
   float edge = pow(1.0 - thick, 2.5);
   float rimTerm = edge * max(dot(normalize(vec3(n2, 0.25)), L), 0.0) * u_rim * atten;
 
-  // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
-  float ao = mix(0.78, 1.0, thick);
+  // A little specular, so cloth and metal stop reading as the same material.
+  // Gated on thickness (never on the antialiased fringe) and on how bright the
+  // art already is there: a highlight belongs on a pauldron or a cheekbone,
+  // never on black cloth that would have swallowed it.
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  float spec = pow(max(dot(N, H), 0.0), 28.0) * u_spec * thick * atten
+             * smoothstep(0.18, 0.7, dot(base, LUMA));
 
-  vec3 lit = art.rgb * (u_ambient * ao + u_key * diffuse) + u_key * rimTerm;
+  // The diffuse shading is a multiplier and is converted, not re-derived — see
+  // the note on toLinear. The rim and specular are light *arriving*, so they add
+  // in linear, where two highlights overlapping no longer pin at white.
+  vec3 lit = base * toLinear(amb + u_key * diffuse) + keyL * (rimTerm + spec);
 
   // Grounding: light reaching the floor is blocked by the figure itself, so the
   // lowest part of a full body sits darker. Confined to the bottom of the
@@ -116,30 +185,99 @@ void main() {
   lit *= 1.0 - fy * fy * fy * u_ground;
 
   // Highlighted characters step forward into the light.
-  lit *= (1.0 + u_lift * 0.35);
+  lit *= (1.0 + u_lift * 0.9);
 
-  // Scene darkness pulls exposure down for everyone.
+  // Scene darkness pulls exposure down for everyone, and deep darkness takes the
+  // colour with it.
   lit *= u_exposure;
+  lit = mix(lit, vec3(dot(lit, LUMA)) * NIGHT, u_night);
 
   // Dimmed characters recede into the room's shadow rather than fading out.
   float lum = dot(lit, LUMA);
-  vec3 receded = mix(vec3(lum), u_shadowColor, 0.55) * 0.7;
+  vec3 receded = mix(vec3(lum), toLinear(u_shadowColor), 0.55) * 0.45;
   lit = mix(lit, receded, u_shadow);
 
-  vec3 outc = mix(art.rgb, lit, u_intensity);
-  outc = clamp(outc, 0.0, 1.0);
+  // Shoulder, not a clip. Clamping each channel independently is what turns a
+  // warm-lit face magenta at the highlight: red pins at 1.0 while green and blue
+  // keep climbing. Rolling luminance and rescaling keeps the hue, and the last
+  // step lets only the very top desaturate, the way film and sensors do.
+  float l = max(dot(lit, LUMA), 0.0001);
+  float over = max(l - KNEE, 0.0);
+  float mapped = min(l, KNEE) + (1.0 - KNEE) * over / (over + (1.0 - KNEE));
+  lit *= mapped / l;
+  lit = mix(lit, vec3(mapped), smoothstep(KNEE, 1.0, mapped) * 0.45);
+
+  // Encode first, then blend. u_intensity is a strength dial a GM drags, not a
+  // light quantity: blending in linear makes the same slider position deliver
+  // visibly less effect in a dark room than a bright one, because a linear
+  // crossfade between a bright and a dark value re-encodes brighter than a
+  // perceptual one. Blending after the encode also makes strength 0 exactly the
+  // original pixels and strength 1 exactly the model, with nothing in between
+  // that the dial does not account for.
+  vec3 outc = mix(art.rgb, toSRGB(lit), u_intensity);
+
+  // The output is 8-bit and most of this image is a very slow ramp, which is the
+  // one thing 8 bits cannot hold — the banding would be the most obvious artefact
+  // in the whole effect. A sub-LSB dither costs three instructions and removes it
+  // completely. (Interleaved gradient noise: no texture, no visible pattern.)
+  // Scaled by intensity, because the ramp it is breaking up is: at strength zero
+  // this pass must hand back the original pixels untouched, noise included.
+  float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  outc = clamp(outc + (d - 0.5) * u_intensity / 255.0, 0.0, 1.0);
 
   // Premultiplied — the context is created with premultipliedAlpha.
   gl_FragColor = vec4(outc * art.a, art.a);
 }
 `;
 
-/** Longest edge of the render target. Stage art displays at roughly 40vh, so
- *  1024 is comfortably above what any realistic viewport shows. */
-const MAX_RENDER_DIM = 1024;
+/** Longest edge of the render target, before display scaling. Stage art shows at
+ *  roughly 40vh, so this only has to beat the tallest viewport that will ever
+ *  display it — but on a HiDPI panel that is twice the CSS height, and rendering
+ *  below the display size is the one softness the effect cannot hide. */
+const BASE_RENDER_DIM = 1280;
+
+/** Hard ceiling. Nothing is gained past this and the upload cost is quadratic. */
+const MAX_RENDER_DIM = 2048;
 
 /** Art textures are GPU memory; bound the same way normal maps are. */
 const TEXTURE_LIMIT = 24;
+
+function renderDim() {
+  const dpr = Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));
+  return Math.min(MAX_RENDER_DIM, Math.round(BASE_RENDER_DIM * dpr));
+}
+
+/**
+ * Downscale oversized art *before* upload rather than letting the GPU do it at
+ * sample time.
+ *
+ * WebGL1 can't mipmap a non-power-of-two texture, so minifying a 4000px portrait
+ * into a 1280px render is a single bilinear tap — it samples 4 of every 9 source
+ * pixels and drops the rest. On hair, lace and fine outlines that reads as
+ * crawling aliasing. The browser's own resampler is a proper filter, and doing
+ * it once at decode also cuts the texture to a fraction of the VRAM.
+ */
+async function fitForUpload(img, maxDim) {
+  const nw = img.naturalWidth || 0;
+  const nh = img.naturalHeight || 0;
+  const scale = Math.min(1, maxDim / Math.max(nw, nh, 1));
+  if (scale >= 1 || typeof createImageBitmap !== "function") {
+    return { source: img, width: nw, height: nh, close: false };
+  }
+  const width = Math.max(1, Math.round(nw * scale));
+  const height = Math.max(1, Math.round(nh * scale));
+  try {
+    const bitmap = await createImageBitmap(img, {
+      resizeWidth: width,
+      resizeHeight: height,
+      resizeQuality: "high",
+    });
+    return { source: bitmap, width, height, close: true };
+  } catch (_e) {
+    // Older engines reject the resize options — upload the element as-is.
+    return { source: img, width: nw, height: nh, close: false };
+  }
+}
 
 export class StageGL {
   constructor() {
@@ -147,6 +285,7 @@ export class StageGL {
     this.gl = null;
     this.program = null;
     this.uniforms = null;
+    this._renderDim = BASE_RENDER_DIM;
     this._artTextures = new Map(); // src → { tex, width, height }
     this._nrmTextures = new Map(); // src → tex
     this._supported = null;
@@ -215,11 +354,16 @@ export class StageGL {
     this.program = program;
     this._lost = false;
     this._buffer = buffer;
+    // Resolved once per context rather than per render, so the art textures and
+    // the viewport can never be sized against different values.
+    this._renderDim = renderDim();
 
     this.uniforms = {
       art: gl.getUniformLocation(program, "u_art"),
       nrm: gl.getUniformLocation(program, "u_nrm"),
+      nrmSize: gl.getUniformLocation(program, "u_nrmSize"),
       ambient: gl.getUniformLocation(program, "u_ambient"),
+      bounce: gl.getUniformLocation(program, "u_bounce"),
       key: gl.getUniformLocation(program, "u_key"),
       lightP: gl.getUniformLocation(program, "u_lightP"),
       lightZ: gl.getUniformLocation(program, "u_lightZ"),
@@ -231,7 +375,9 @@ export class StageGL {
       shadowColor: gl.getUniformLocation(program, "u_shadowColor"),
       intensity: gl.getUniformLocation(program, "u_intensity"),
       rim: gl.getUniformLocation(program, "u_rim"),
+      spec: gl.getUniformLocation(program, "u_spec"),
       exposure: gl.getUniformLocation(program, "u_exposure"),
+      night: gl.getUniformLocation(program, "u_night"),
       shadow: gl.getUniformLocation(program, "u_shadow"),
       lift: gl.getUniformLocation(program, "u_lift"),
     };
@@ -303,18 +449,20 @@ export class StageGL {
 
     const gl = this.gl;
     const img = await loadPixelImage(src);
+    const fitted = await fitForUpload(img, this._renderDim);
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fitted.source);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (fitted.close) fitted.source.close();
 
-    const entry = { tex, width: img.naturalWidth, height: img.naturalHeight };
+    const entry = { tex, width: fitted.width, height: fitted.height };
     this._artTextures.set(src, entry);
     this._evict(this._artTextures, (v) => gl.deleteTexture(v.tex));
     return entry;
@@ -375,7 +523,7 @@ export class StageGL {
     const gl = this.gl;
     const nrmTex = this._normalTexture(src, normal);
 
-    const scale = Math.min(1, MAX_RENDER_DIM / Math.max(art.width, art.height, 1));
+    const scale = Math.min(1, this._renderDim / Math.max(art.width, art.height, 1));
     const width = Math.max(1, Math.round(art.width * scale));
     const height = Math.max(1, Math.round(art.height * scale));
 
@@ -391,7 +539,9 @@ export class StageGL {
     gl.bindTexture(gl.TEXTURE_2D, nrmTex);
 
     const u = this.uniforms;
+    gl.uniform2f(u.nrmSize, normal.width, normal.height);
     gl.uniform3fv(u.ambient, params.ambient);
+    gl.uniform3fv(u.bounce, params.bounce);
     gl.uniform3fv(u.key, params.key);
     gl.uniform2fv(u.lightP, params.lightP);
     gl.uniform1f(u.lightZ, params.lightZ);
@@ -403,7 +553,9 @@ export class StageGL {
     gl.uniform3fv(u.shadowColor, params.shadowColor);
     gl.uniform1f(u.intensity, params.intensity);
     gl.uniform1f(u.rim, params.rim);
+    gl.uniform1f(u.spec, params.spec);
     gl.uniform1f(u.exposure, params.exposure);
+    gl.uniform1f(u.night, params.night);
     gl.uniform1f(u.shadow, params.shadow);
     gl.uniform1f(u.lift, params.lift);
 

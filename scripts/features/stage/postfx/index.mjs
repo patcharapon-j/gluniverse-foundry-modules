@@ -70,6 +70,39 @@ function toKeyLight(rgb) {
 }
 
 /**
+ * The colour of light arriving from the side the key *isn't* on.
+ *
+ * Nothing in a room is lit by one lamp and nothing else — the rest arrives
+ * bounced off walls and floor, and it arrives carrying the room's colour rather
+ * than the lamp's. Giving the shadow side its own hue is what stops a figure
+ * reading as one flat tint with a bright edge.
+ *
+ * The result is luminance-matched to the ambient it came from, deliberately: it
+ * is a colour separation, not a second light. If it changed brightness it would
+ * compete with the key term for the shape of the figure, and the exposure of the
+ * whole stage would drift with the background's hue.
+ *
+ * Exported for testing.
+ */
+export function bounceLight(ambient, key) {
+  const peak = Math.max(key[0], key[1], key[2], 0.001);
+  // What the key is *not* made of. A warm lamp bounces cool, and vice versa.
+  const complement = [1 - key[0] / peak, 1 - key[1] / peak, 1 - key[2] / peak];
+  // Biased toward cool: skylight and painted VN interiors both fill blue, and a
+  // pure complement of a blue key would read as a second orange lamp.
+  const tinted = mixRgb(complement, [0.55, 0.65, 0.9], 0.5);
+  // Mostly still the room's own colour — this is a nudge, not a repaint.
+  const mixed = mixRgb(ambient, tinted, 0.45);
+
+  const target = luma(ambient);
+  const current = luma(mixed);
+  let gain = current > 1e-4 ? target / current : 1;
+  // Never let the match clip a channel; a clipped bounce is no longer matched.
+  gain = Math.min(gain, 1 / Math.max(mixed[0], mixed[1], mixed[2], 1e-4));
+  return mixed.map((c) => clamp01(c * gain));
+}
+
+/**
  * Direction from a character toward the scene's brightest region.
  *
  * Y stays in image space (+Y downward) — the same convention the normal map's
@@ -175,10 +208,17 @@ export function cssGradientAngle(keyDir) {
 /** Scene-level values that tween when the background changes. */
 function sceneParams(sample) {
   const ambient = sample.ambient;
+  const darkness = clamp01(sample.darkness);
   return {
     ambient: mixRgb(ambient, [1, 1, 1], 0.25),
     centroid: sample.centroid,
-    exposure: 1 - clamp01(sample.darkness) * 0.65,
+    // Perceptual, because the CSS fallback feeds it straight to `brightness()`.
+    // The shader wants it in linear light and squares it up on the way in.
+    exposure: 1 - darkness * 0.65,
+    // Colour vision goes before acuity does, so a properly dark scene should
+    // desaturate as well as dim. Squared: it should be absent at dusk and only
+    // arrive when the scene is genuinely night.
+    night: darkness * darkness * 0.55,
     // Dimmed characters recede toward a cool, darkened version of the room.
     shadowColor: mixRgb(mixRgb(ambient, [0.06, 0.08, 0.14], 0.6), [0, 0, 0], 0.25),
   };
@@ -192,6 +232,7 @@ function lerpParams(a, b, t) {
       a.centroid[1] + (b.centroid[1] - a.centroid[1]) * t,
     ],
     exposure: a.exposure + (b.exposure - a.exposure) * t,
+    night: a.night + (b.night - a.night) * t,
     shadowColor: mixRgb(a.shadowColor, b.shadowColor, t),
   };
 }
@@ -373,7 +414,11 @@ export class StagePostFX {
     // can do because it has the figure's measured silhouette and the fallback
     // does not.
     const keyDir = keyDirection(params.centroid, state.position);
-    return { ambient, key, keyDir };
+
+    // The shadow side gets the room's colour rather than the lamp's. Only the
+    // shader consumes this — the CSS fallback has one gradient per direction and
+    // no normal to aim a third one with.
+    return { ambient, key, keyDir, bounce: bounceLight(ambient, key) };
   }
 
   async _renderSlot(wrap) {
@@ -417,11 +462,20 @@ export class StagePostFX {
     const canvas = await this._gl.render(src, normal, {
       ...placement,
       ambient: lighting.ambient,
+      bounce: lighting.bounce,
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      rim: 0.9,
-      exposure: this._params.exposure,
+      // Both add in linear light, where mid-grey is 0.22 rather than 0.5 — so
+      // they are not comparable to the gamma-space strengths they replaced and
+      // look too large next to them. At full strength the rim lands around 0.83
+      // encoded on mid-tone art, where it used to pin at white.
+      rim: 1.6,
+      spec: 0.33,
+      // The model works in linear light; `exposure` is stored perceptually for
+      // the CSS fallback's `brightness()` filter, so convert it here.
+      exposure: Math.pow(this._params.exposure, 2.2),
+      night: this._params.night,
       shadow: state.dimmed ? 1 : 0,
       lift: state.highlighted ? 1 : 0,
     });

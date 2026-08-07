@@ -173,26 +173,66 @@ function readPixels(source) {
 }
 
 /**
+ * Fraction of the frame's peak luminance a pixel has to reach before it counts
+ * as part of the light *source* rather than merely a lit surface.
+ */
+const KEY_THRESHOLD = 0.62;
+
+/**
+ * Locate the scene's key light in the luminance field.
+ *
+ * Weighting every pixel by luma² — which is what this used to do — finds the
+ * centre of mass of everything bright, and on a daylit exterior that is the
+ * middle of the sky rather than the sun. Measuring only from the top slice of
+ * the histogram finds the lamp, the window, the fire: the thing that is actually
+ * casting. Everything below the threshold contributes nothing, so a large dim
+ * region can no longer outvote a small brilliant one.
+ */
+function findKeyLight(lum) {
+  let peak = 0;
+  for (let i = 0; i < lum.length; i++) if (lum[i] > peak) peak = lum[i];
+
+  const floorL = peak * KEY_THRESHOLD;
+  let cx = 0;
+  let cy = 0;
+  let weight = 0;
+  for (let i = 0; i < lum.length; i++) {
+    const over = lum[i] - floorL;
+    if (over <= 0) continue;
+    const w = over * over;
+    cx += (i % THUMB_W) * w;
+    cy += ((i / THUMB_W) | 0) * w;
+    weight += w;
+  }
+
+  // A black frame has no light to find; assume one slightly above and in front.
+  if (weight <= 1e-9) return [0.5, 0.35];
+  return [clamp01(cx / weight / (THUMB_W - 1)), clamp01(cy / weight / (THUMB_H - 1))];
+}
+
+/**
  * Turn a thumbnail buffer into the lighting sample.
  *
  * Rows are weighted toward the lower part of the frame: stage characters stand
  * at the bottom of the viewport, so the ground and mid-ground matter more to
  * how they read than the sky does.
+ *
+ * Exported for testing — the centroid it produces is what every light direction
+ * in the feature is measured from.
  */
-function analyse(data) {
+export function analyse(data) {
   const columns = [];
+  const lum = new Float32Array(THUMB_W * THUMB_H);
   let ambient = [0, 0, 0];
   let ambientWeight = 0;
-  let cx = 0;
-  let cy = 0;
-  let centroidWeight = 0;
 
   for (let x = 0; x < THUMB_W; x++) {
     let col = [0, 0, 0];
     let colWeight = 0;
 
     for (let y = 0; y < THUMB_H; y++) {
-      const i = (y * THUMB_W + x) * 4;
+      const p = y * THUMB_W + x;
+      const i = p * 4;
       const a = data[i + 3] / 255;
       if (a <= 0) continue;
 
@@ -212,13 +252,7 @@ function analyse(data) {
       ambient[2] += b;
       ambientWeight += 1;
 
-      // Luminance-weighted centroid — where the picture is brightest. Painted
-      // backgrounds put their light source in frame, so this tracks it well.
-      const l = luma([r, g, b]);
-      const lw = l * l; // square it so highlights dominate midtones
-      cx += (x / (THUMB_W - 1)) * lw;
-      cy += (y / (THUMB_H - 1)) * lw;
-      centroidWeight += lw;
+      lum[p] = luma([r, g, b]);
     }
 
     columns.push(colWeight > 0 ? col.map((v) => clamp01(v / colWeight)) : [0.5, 0.5, 0.5]);
@@ -227,10 +261,7 @@ function analyse(data) {
   if (ambientWeight > 0) ambient = ambient.map((v) => clamp01(v / ambientWeight));
   else ambient = [0.5, 0.5, 0.5];
 
-  const centroid =
-    centroidWeight > 1e-6 ? [clamp01(cx / centroidWeight), clamp01(cy / centroidWeight)] : [0.5, 0.35];
-
-  return { ambient, columns, centroid, luminance: luma(ambient) };
+  return { ambient, columns, centroid: findKeyLight(lum), luminance: luma(ambient) };
 }
 
 /** Build the degraded sample used when pixels are unavailable. */
@@ -316,8 +347,17 @@ export async function sampleScene(scene) {
 export function columnAt(sample, t) {
   const cols = sample?.columns;
   if (!cols?.length) return [0.5, 0.5, 0.5];
-  const idx = Math.round(clamp01(t) * (cols.length - 1));
-  return cols[idx] || cols[0];
+  if (cols.length === 1) return cols[0];
+
+  // Interpolated rather than snapped. There are only 32 columns, so rounding to
+  // the nearest gave two slots a few percent apart identical light, and sliding
+  // a slot across the stage stepped the colour instead of blending it.
+  const p = clamp01(t) * (cols.length - 1);
+  const i = Math.min(Math.floor(p), cols.length - 2);
+  const f = p - i;
+  const a = cols[i];
+  const b = cols[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
 }
 
 /** Drop cached samples — call when a background asset may have changed. */

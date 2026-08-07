@@ -71,9 +71,10 @@ globalThis.Image = class {
 };
 
 const { boxBlur, describeFigure } = await import(mod("normal-map.mjs"));
-const { keyDirection, cssGradientAngle, lightPlacement, SLOT_ANCHOR_Y } = await import(
+const { keyDirection, cssGradientAngle, lightPlacement, bounceLight, SLOT_ANCHOR_Y } = await import(
   mod("index.mjs")
 );
+const { analyse, columnAt } = await import(mod("scene-sample.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
   mod("asset.mjs")
 );
@@ -261,7 +262,122 @@ section("key light placement");
   ok(knee.ground < 0.1, "knee-up crop gets almost none", knee.ground.toFixed(3));
 }
 
-// ═══ 4. Shader uniforms ═══
+// ═══ 4. Background sampling ═══
+// Everything geometric in the feature is measured from the centroid this
+// produces, so a centroid that lands on the wrong thing mis-lights every
+// character in the scene — silently, and consistently enough to look deliberate.
+section("background sampling");
+{
+  const W = 32;
+  const H = 32;
+  /** Paint a 32×32 RGBA thumbnail from a per-pixel grey function. */
+  const thumb = (fn) => {
+    const data = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const v = Math.round(fn(x, y) * 255);
+        data[i] = data[i + 1] = data[i + 2] = v;
+        data[i + 3] = 255;
+      }
+    }
+    return data;
+  };
+
+  // The case the old luma² weighting got wrong: a large, moderately bright sky
+  // and a small brilliant lamp low on the left. By area the sky wins by ~20×; by
+  // brightness the lamp is the only thing casting anything.
+  const lampX = 3;
+  const lampY = 25;
+  const scene = analyse(
+    thumb((x, y) => {
+      if (y < 16) return 0.55; // sky
+      if (Math.abs(x - lampX) <= 1 && Math.abs(y - lampY) <= 1) return 1.0; // lamp
+      return 0.12; // dark interior
+    })
+  );
+  ok(
+    scene.centroid[0] < 0.25,
+    "the key lands on a small bright lamp, not the wide bright sky (x)",
+    scene.centroid[0].toFixed(3)
+  );
+  ok(
+    scene.centroid[1] > 0.6,
+    "…and below the horizon, where the lamp actually is (y)",
+    scene.centroid[1].toFixed(3)
+  );
+
+  // A smooth vertical gradient — no discrete source. The key should still sit in
+  // the bright half rather than defaulting to the middle of the frame.
+  const gradient = analyse(thumb((_x, y) => 1 - y / (H - 1)));
+  ok(gradient.centroid[1] < 0.3, "a top-lit gradient keys from the top", gradient.centroid[1].toFixed(3));
+
+  // A black frame has nothing to measure; it must not divide by zero.
+  const black = analyse(thumb(() => 0));
+  ok(
+    near(black.centroid[0], 0.5) && near(black.centroid[1], 0.35),
+    "a black frame falls back to a light above and in front"
+  );
+
+  ok(scene.columns.length === W, "one colour column per thumbnail column");
+  ok(
+    scene.columns[lampX][0] > scene.columns[W - 1][0],
+    "the column holding the lamp is brighter than one across the room"
+  );
+}
+
+section("column interpolation");
+{
+  const sample = { columns: [[0, 0, 0], [1, 1, 1], [0.5, 0.5, 0.5]] };
+  ok(near(columnAt(sample, 0)[0], 0), "t=0 is the first column exactly");
+  ok(near(columnAt(sample, 1)[0], 0.5), "t=1 is the last column exactly");
+  // The reason this exists: snapping meant two slots a few percent apart picked
+  // up identical light and sliding one stepped the colour.
+  ok(near(columnAt(sample, 0.25)[0], 0.5), "a midpoint blends its two neighbours");
+  ok(
+    columnAt(sample, 0.26)[0] !== columnAt(sample, 0.24)[0],
+    "a small move in position moves the colour"
+  );
+  ok(near(columnAt({ columns: [[0.2, 0.3, 0.4]] }, 0.7)[1], 0.3), "a single-column sample is safe");
+  ok(columnAt(null, 0.5).length === 3, "a missing sample still returns a colour");
+}
+
+section("bounce light");
+{
+  // Luminance matching is the whole contract: the bounce recolours the shadow
+  // side without adding exposure. If it changed brightness it would read as a
+  // second lamp, and the stage's overall exposure would drift with the
+  // background's hue.
+  const cases = [
+    ["warm firelit room", [0.42, 0.3, 0.22], [0.95, 0.62, 0.35]],
+    ["cold moonlit room", [0.24, 0.28, 0.38], [0.55, 0.68, 0.95]],
+    ["neutral grey room", [0.5, 0.5, 0.5], [0.7, 0.7, 0.7]],
+    ["near-black room", [0.03, 0.03, 0.04], [0.2, 0.2, 0.25]],
+  ];
+  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  for (const [label, ambient, key] of cases) {
+    const b = bounceLight(ambient, key);
+    ok(
+      Math.abs(lum(b) - lum(ambient)) < 0.02,
+      `${label}: bounce is luminance-matched to the ambient`,
+      `${lum(b).toFixed(3)} vs ${lum(ambient).toFixed(3)}`
+    );
+    ok(b.every((c) => c >= 0 && c <= 1), `${label}: bounce stays in gamut`);
+  }
+
+  // A warm key must bounce cooler than the room, and a cool key warmer —
+  // otherwise there is no separation and the term is doing nothing.
+  const warm = bounceLight([0.42, 0.3, 0.22], [0.95, 0.62, 0.35]);
+  ok(warm[2] - warm[0] > 0.3 - 0.42, "a warm key bounces cool", `${warm[0].toFixed(2)}/${warm[2].toFixed(2)}`);
+  const cool = bounceLight([0.24, 0.28, 0.38], [0.55, 0.68, 0.95]);
+  ok(
+    cool[2] - cool[0] < 0.38 - 0.24,
+    "a cool key bounces less cool than the room itself",
+    `${cool[0].toFixed(2)}/${cool[2].toFixed(2)}`
+  );
+}
+
+// ═══ 5. Shader uniforms ═══
 // getUniformLocation on a name the shader doesn't declare returns null, and
 // gl.uniform*(null, …) is a silent no-op. A typo here costs nothing at load and
 // everything at render.
@@ -282,6 +398,17 @@ section("shader uniform wiring");
   for (const name of requested) {
     ok(declared.has(name), `getUniformLocation("${name}") matches a declared uniform`);
   }
+
+  // The night tint claims to recolour without dimming, which is only true if it
+  // is luma-normalised. Nothing on screen would say it had drifted — dark scenes
+  // would simply get quietly darker than the exposure term intended.
+  const night = /const vec3 NIGHT = vec3\(([^)]*)\)/.exec(src)?.[1].split(",").map(Number);
+  ok(night?.length === 3, "the NIGHT tint is parseable");
+  if (night?.length === 3) {
+    const w = 0.2126 * night[0] + 0.7152 * night[1] + 0.0722 * night[2];
+    ok(Math.abs(w - 1) < 0.01, "the NIGHT tint is luma-normalised", w.toFixed(4));
+    ok(night[2] > night[0], "and drifts blue, not warm");
+  }
   for (const name of declared) {
     // Every declared uniform must be both read by the shader and set from JS,
     // or it is dead weight that reads as configuration.
@@ -293,7 +420,7 @@ section("shader uniform wiring");
   }
 }
 
-// ═══ 5. Asset CORS strategy ═══
+// ═══ 6. Asset CORS strategy ═══
 section("asset CORS strategy");
 {
   ok(isSameOrigin("worlds/foo/art.webp"), "relative Foundry path is same-origin");

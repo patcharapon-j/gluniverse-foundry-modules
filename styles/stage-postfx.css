@@ -79,10 +79,14 @@
 /* Key: a directional gradient along the inferred light angle, so the lit side
    brightens and the far side falls away. */
 .glstage-pp-key {
+    /* Three stops, not two. A straight ramp to `transparent` fades linearly,
+       which reads as a flat wedge across the art rather than light falling off;
+       the extra stop bends it so most of the decay happens early. */
     background: linear-gradient(
         var(--glstage-pp-angle, 0deg),
         var(--glstage-pp-key, transparent) 0%,
-        transparent 62%
+        color-mix(in srgb, var(--glstage-pp-key, transparent) 35%, transparent) 30%,
+        transparent 66%
     );
     mix-blend-mode: screen;
     opacity: 0.75;
@@ -97,7 +101,8 @@
     background: linear-gradient(
         var(--glstage-pp-shade-angle, 180deg),
         var(--glstage-pp-shadow, transparent) 0%,
-        transparent 70%
+        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 40%, transparent) 34%,
+        transparent 74%
     );
     mix-blend-mode: multiply;
     opacity: calc(0.55 + var(--glstage-pp-dim, 0) * 0.3);

@@ -1,8 +1,61 @@
 # Stage character lighting
 
-Two things decide how a character ends up looking: **how it is framed**, and
-**where it is hosted**. The first shapes the light; the second decides whether
-the full effect is available at all.
+Three things decide how a character ends up looking: **the shading model**, **how
+the art is framed**, and **where it is hosted**. The last one decides whether the
+full effect is available at all.
+
+## The shading model
+
+The pass works in **linear light**. Every number arriving from an image or a CSS
+colour is gamma-encoded, and the operations that matter here behave differently
+on encoded values: adding two lights saturates early, mixing two colours passes
+through a muddy midpoint, and clamping a highlight shifts its hue instead of
+rolling it off.
+
+Two things are deliberately *not* in linear, and both were arrived at by
+computing the old and new results side by side rather than by eye:
+
+- **The diffuse multiplier is converted, not re-derived.** A multiplier is a
+  ratio, and a ratio means the same thing in either space provided it is raised
+  to the same power the values were: `base * toLinear(amb + key * diffuse)`
+  reproduces the previous shading contrast exactly. Re-deriving it instead —
+  linearising the ambient and key separately — cannot be made to match, because
+  a gamma-space *sum* of two lights is not any fixed pair of linear gains; a fit
+  that lands on one room's balance is wrong for the next one.
+- **The strength dial blends after the encode.** `u_intensity` is a control a GM
+  drags, not a light quantity. Blending in linear makes the same slider position
+  deliver visibly less effect in a dark room than a bright one.
+
+The upshot is that the baseline — the model with the new terms inert — is
+numerically the same picture it was before, so every visible difference is
+attributable to a term that was added on purpose. The largest baseline deviation
+across four test rooms and four art tones is 0.03 in encoded luminance, all of it
+where the tone-map shoulder engages on a highlight that used to clip.
+
+The rim and specular strengths passed from `index.mjs` *do* add in linear, where
+mid-grey is 0.22 rather than 0.5 — which is why they look far too large next to
+the values they replaced.
+
+The terms, in the order they apply:
+
+| Term | What it is for |
+| --- | --- |
+| ambient / bounce | Two luminance-matched colours, not one wash. Light that misses the key side arrives bounced off the room and carries the *room's* colour, not the lamp's — see `bounceLight`. Matching luminance keeps it a colour separation rather than a second lamp. |
+| diffuse | Half-Lambert wrapped with true Lambert, attenuated by distance to the positioned key. |
+| rim | Bright where the surface is thin *and* turned toward the light. |
+| specular | Gated on thickness and on the art's own brightness, so a highlight lands on a pauldron and never on black cloth. |
+| grounding | The bottom of a full body sits in its own shadow. Framing-dependent — see below. |
+| exposure / night | Scene darkness dims, and deep darkness desaturates and drifts blue. |
+| tone map | A shoulder above `KNEE`, applied to luminance and rescaled. Clamping channels independently is what turns a warm-lit face magenta; only the very top desaturates. |
+| dither | Sub-LSB interleaved-gradient noise. The output is 8-bit and most of the image is a slow ramp, which is the one thing 8 bits cannot hold. |
+
+Two sampling details carry more weight than their size suggests. The normal field
+is prepassed small and stretched over a much larger render, so it is fetched with
+a smoothstepped interpolant — plain bilinear is only C0 and its texel lattice
+shows up as faint diamond creases on a ramp this smooth. And art is downscaled by
+the browser at decode rather than by the GPU at sample time, because WebGL1
+cannot mipmap a non-power-of-two texture: minifying a 4000px portrait would
+otherwise be a single bilinear tap, which crawls on hair and fine outlines.
 
 ## Framing — knee-up vs full body
 
@@ -129,8 +182,18 @@ node tools/postfx-check.mjs
 ```
 
 Zero failures required. It covers the blur kernel, the light geometry and its
-sign conventions, framing detection, the CORS strategy ladder, and a cross-check
-that every shader uniform is both declared in the GLSL and looked up from JS — a
-typo there returns `null` and every write to it becomes a silent no-op.
+sign conventions, framing detection, background sampling (where the key light is
+located, and the luminance-matching contract `bounceLight` has to hold), column
+interpolation, the CORS strategy ladder, and a cross-check that every shader
+uniform is both declared in the GLSL and looked up from JS — a typo there returns
+`null` and every write to it becomes a silent no-op.
+
+The fragment shader itself is not covered: GLSL needs a GPU to run, and mirroring
+its maths in JS would only create a second copy to drift. The uniform cross-check
+and the NIGHT-constant check are the only automated guards it has. When changing
+a lighting term, reproduce the old and new arithmetic side by side over a few
+rooms and art tones before trusting it — the baseline figures quoted above came
+from exactly that, and it caught two rebalances that would have re-exposed every
+stage in the process of "improving" it.
 
 It cannot check how any of it *looks*. That needs a real session with real art.
