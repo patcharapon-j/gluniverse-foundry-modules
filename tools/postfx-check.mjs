@@ -35,11 +35,60 @@ function section(title) {
   console.log(`\n── ${title} ──`);
 }
 
-// ═══ A browser-ish environment, enough for asset.mjs ═══
-// asset.mjs reads window.location and constructs Image; nothing else touches
-// the DOM at import time.
+// ═══ A browser-ish environment ═══
+// asset.mjs reads window.location and constructs Image; the slot-ownership
+// section below drives the real StagePostFX, which needs enough of a document
+// to hang canvases off. Nothing touches any of this at import time.
 const ORIGIN = "https://vtt.example.com";
 globalThis.window = { location: { href: `${ORIGIN}/game`, origin: ORIGIN } };
+globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
+
+/**
+ * The smallest element that satisfies the effect. A canvas records what was
+ * last drawn into it, which is the whole point of the ownership section.
+ */
+function fakeElement(tag) {
+  const el = {
+    tagName: String(tag).toUpperCase(),
+    isConnected: true,
+    children: [],
+    width: 0,
+    height: 0,
+    painted: null,
+    style: { setProperty() {}, removeProperty() {} },
+    classList: {
+      _s: new Set(),
+      add(...c) { c.forEach((x) => this._s.add(x)); },
+      remove(...c) { c.forEach((x) => this._s.delete(x)); },
+      contains(c) { return this._s.has(c); },
+    },
+    setAttribute() {},
+    appendChild(child) { el.children.push(child); return child; },
+    remove() {},
+  };
+  if (tag === "canvas") {
+    el.getContext = () => ({
+      clearRect() {},
+      drawImage(source) { el.painted = source?.content ?? null; },
+      // The normal-map prepass reads a synthetic silhouette: a figure occupying
+      // the middle of the frame, so `describeFigure` gets something plausible.
+      getImageData(_x, _y, w, h) {
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const inside = x > w * 0.3 && x < w * 0.7 && y > h * 0.1 && y < h * 0.95;
+            data[(y * w + x) * 4 + 3] = inside ? 255 : 0;
+          }
+        }
+        return { data };
+      },
+    });
+  }
+  return el;
+}
+globalThis.document = { createElement: fakeElement, body: fakeElement("div") };
 
 let HOSTS = {};
 let requests = [];
@@ -70,11 +119,17 @@ globalThis.Image = class {
   }
 };
 
-const { boxBlur, describeFigure } = await import(mod("normal-map.mjs"));
-const { keyDirection, cssGradientAngle, lightPlacement, bounceLight, SLOT_ANCHOR_Y } = await import(
-  mod("index.mjs")
-);
-const { analyse, columnAt } = await import(mod("scene-sample.mjs"));
+const { boxBlur, describeFigure, getNormalMap } = await import(mod("normal-map.mjs"));
+const {
+  StagePostFX,
+  keyDirection,
+  cssGradientAngle,
+  lightPlacement,
+  bounceLight,
+  SLOT_ANCHOR_Y,
+} = await import(mod("index.mjs"));
+const { StageGL } = await import(mod("gl.mjs"));
+const { analyse, columnAt, NEUTRAL_SAMPLE } = await import(mod("scene-sample.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
   mod("asset.mjs")
 );
@@ -510,6 +565,93 @@ section("asset CORS strategy");
   requests = [];
   await Promise.all([loadPixelImage(shared), loadPixelImage(shared), loadPixelImage(shared)]);
   ok(requests.length <= 4, "concurrent slots share one probe", `${requests.length} requests`);
+}
+
+// ═══ 7. Slot ownership ═══
+// One WebGL canvas shades every character in turn, so each slot's pixels exist
+// alone for exactly as long as the synchronous block that drew them. Yield in
+// the middle of that and a slot copies out whatever the *next* character drew —
+// which is how adding an actor to the stage once repainted the actor beside them
+// with the new arrival's face. Nothing on screen suggests a timing bug; it looks
+// like the wrong art was assigned.
+section("slot ownership (one shared render target, N slots)");
+{
+  ok(
+    StageGL.prototype.draw?.constructor?.name === "Function",
+    "StageGL.draw is synchronous",
+    "an await between the draw and the copy-out hands the canvas to another slot"
+  );
+  ok(
+    StageGL.prototype.prepare?.constructor?.name === "AsyncFunction",
+    "…and everything that can suspend lives in StageGL.prepare"
+  );
+
+  /** Stands in for the real context: async upload, synchronous draw. */
+  class FakeGL {
+    constructor() {
+      this.canvas = { width: 8, height: 8, content: null };
+      this.draws = 0;
+    }
+    isSupported() { return true; }
+    async prepare(src) {
+      await null; // the art-texture upload
+      return { src };
+    }
+    draw(prepared) {
+      this.draws++;
+      this.canvas.content = prepared.src;
+      // Poison on the very next microtask. The canvas belongs to this slot only
+      // until the caller yields, so any await before the blit reads "POISON".
+      queueMicrotask(() => { this.canvas.content = "POISON"; });
+      return this.canvas;
+    }
+    invalidate() {}
+    destroy() {}
+  }
+
+  const ALICE = `${ORIGIN}/art/alice.webp`;
+  const BOB = `${ORIGIN}/art/bob.webp`;
+  HOSTS = { [ALICE]: { cors: true, plain: true }, [BOB]: { cors: true, plain: true } };
+
+  // Warm the prepass for both, so the render path is all microtasks — which is
+  // exactly what it is on a live stage from the second render onward, and the
+  // condition under which the slots interleave most tightly.
+  await getNormalMap(ALICE);
+  await getNormalMap(BOB);
+
+  const fx = new StagePostFX();
+  fx._gl = new FakeGL();
+  fx._sample = { ...NEUTRAL_SAMPLE, ok: true };
+
+  const wrapA = fakeElement("div");
+  const wrapB = fakeElement("div");
+  fx.register(wrapA, { src: ALICE, position: 0.25 });
+  fx.register(wrapB, { src: BOB, position: 0.75 });
+
+  // `register` schedules the render itself — the same coalesced pass a live
+  // stage runs when a second actor is dropped onto it.
+  await new Promise((r) => setTimeout(r, 20));
+
+  const paintedA = fx._slots.get(wrapA)?.canvas?.painted;
+  const paintedB = fx._slots.get(wrapB)?.canvas?.painted;
+  ok(fx._gl.draws === 2, "one coalesced pass shades both slots", `${fx._gl.draws} draws`);
+  ok(paintedA === ALICE, "the first slot keeps its own character", String(paintedA));
+  ok(paintedB === BOB, "the second slot keeps its own character", String(paintedB));
+
+  // Re-registering the same wrap with different art must not leave the old
+  // character's canvas on screen — it is what the viewer sees, and the <img>
+  // underneath is hidden while it is there.
+  fx.register(wrapA, { src: BOB, position: 0.25 });
+  ok(
+    fx._slots.get(wrapA)?.canvas === null,
+    "changing a slot's art drops the previous character's canvas"
+  );
+  ok(
+    !wrapA.classList.contains("glstage-pp-on"),
+    "…and unhides the plain <img> until the new render lands"
+  );
+
+  fx.destroy();
 }
 
 console.log(

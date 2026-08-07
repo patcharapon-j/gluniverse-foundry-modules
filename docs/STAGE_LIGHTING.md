@@ -95,6 +95,38 @@ because 0.1 across a 16:9 background is nearly twice the distance of 0.1 down it
 The CSS fallback cannot do any of this — it has no normal map, which is why it is
 the fallback — so it uses a single direction measured from mid-body.
 
+## One canvas, many characters
+
+There is a single WebGL context and a single render target for the whole feature
+— a browser caps out around sixteen contexts, and a stage can hold more slots
+than that. Characters are shaded into it one at a time and each result is copied
+into that slot's own 2D canvas.
+
+That makes the copy-out a **synchronisation point**, and the pipeline is split
+around it:
+
+| | Suspends? | Touches the shared canvas? |
+| --- | --- | --- |
+| `StageGL.prepare` | yes — fetch, decode, upload | no |
+| `StageGL.draw` | **never** | yes |
+| `StagePostFX._blit` | never | reads it |
+
+A slot's pixels exist alone for exactly as long as the synchronous block that
+drew them. Yield anywhere between `draw` and `_blit` and the slot copies out
+whatever the *next* character drew — which is what made adding an actor to the
+stage repaint the actor beside them with the new arrival's face. Nothing about
+that looks like a timing bug on screen; it looks like the wrong art was assigned.
+
+So: **no `await` between `draw` and `_blit`.** `tools/postfx-check.mjs` pins this
+down two ways — structurally (`draw` must not be an async function) and by
+driving two slots through one coalesced render pass against a fake context that
+poisons the shared canvas on the next microtask.
+
+Re-registering a slot with different art drops its canvas rather than carrying it
+forward, for the same reason: the shaded canvas is what the viewer sees and the
+`<img>` beneath it is hidden, so a stale canvas is a stale *face*. Dropping it
+shows the plain art, unlit, until the new render lands.
+
 ## Asset hosting
 
 The Stage feature can light and colour-grade character art to match the current

@@ -499,12 +499,19 @@ export class StageGL {
   }
 
   /**
-   * Shade one character and return the shared canvas holding the result.
-   * The caller must copy it out before the next `render` call.
+   * Get everything one character needs onto the GPU.
    *
-   * @returns {Promise<HTMLCanvasElement|null>} null when shading isn't possible.
+   * Split from {@link draw} deliberately. Uploading art is asynchronous — it may
+   * still have to be fetched and decoded — and the draw target is shared by
+   * every slot, so the two must not be one call: an `await` between a draw and
+   * the copy-out is enough to hand one character's pixels to another. Everything
+   * that can suspend lives here; everything that touches the shared canvas lives
+   * in `draw`.
+   *
+   * @returns {Promise<object|null>} A handle for `draw`, or null when shading
+   *                                 isn't possible.
    */
-  async render(src, normal, params) {
+  async prepare(src, normal) {
     if (!normal || !src) return null;
     if (!this._ensureContext()) return null;
 
@@ -520,8 +527,34 @@ export class StageGL {
     // The context can be lost while the art texture is in flight.
     if (!this.gl || this._lost) return null;
 
+    return {
+      src,
+      art,
+      nrmTex: this._normalTexture(src, normal),
+      nrmWidth: normal.width,
+      nrmHeight: normal.height,
+    };
+  }
+
+  /**
+   * Shade one prepared character and return the shared canvas holding the
+   * result. The caller must copy it out *before returning to the event loop* —
+   * not merely before the next `draw`.
+   *
+   * Synchronous on purpose, and it has to stay that way. One canvas serves every
+   * slot, so the only thing keeping one character's pixels out of another's slot
+   * is that nothing else gets a turn between this draw and that copy. When this
+   * work sat behind an `await`, adding a second actor to the stage repainted the
+   * first one with the new actor's art: both slots drew into the shared canvas
+   * before either copied out, and the last draw won twice.
+   *
+   * @returns {HTMLCanvasElement|null} null when shading isn't possible.
+   */
+  draw(prepared, params) {
+    if (!prepared || !this.gl || this._lost) return null;
+
     const gl = this.gl;
-    const nrmTex = this._normalTexture(src, normal);
+    const { art, nrmTex } = prepared;
 
     const scale = Math.min(1, this._renderDim / Math.max(art.width, art.height, 1));
     const width = Math.max(1, Math.round(art.width * scale));
@@ -539,7 +572,7 @@ export class StageGL {
     gl.bindTexture(gl.TEXTURE_2D, nrmTex);
 
     const u = this.uniforms;
-    gl.uniform2f(u.nrmSize, normal.width, normal.height);
+    gl.uniform2f(u.nrmSize, prepared.nrmWidth, prepared.nrmHeight);
     gl.uniform3fv(u.ambient, params.ambient);
     gl.uniform3fv(u.bounce, params.bounce);
     gl.uniform3fv(u.key, params.key);

@@ -340,18 +340,27 @@ export class StagePostFX {
    */
   register(wrap, info) {
     if (!wrap) return;
+    const src = info.src || "";
     const previous = this._slots.get(wrap);
+    // A slot that changed art carries nothing forward. Its canvas holds the
+    // *old* character, and the shaded canvas is what the viewer sees — keeping
+    // it would leave the previous face on screen until the new render lands.
+    // Dropping it shows the plain <img> for that gap instead, which is the right
+    // character merely unlit.
+    const sameArt = !!previous && previous.src === src;
+    if (previous && !sameArt) this._clearSlot(wrap, previous);
+
     const state = {
-      src: info.src || "",
+      src,
       position: clamp01(info.position ?? 0.5),
       highlighted: !!info.highlighted,
       dimmed: !!info.dimmed,
       optOut: !!info.optOut,
-      mode: previous?.mode ?? "off",
-      reason: previous?.src === (info.src || "") ? previous?.reason : undefined,
-      canvas: previous?.canvas ?? null,
-      fallback: previous?.fallback ?? null,
-      renderedSrc: previous?.src === (info.src || "") ? previous?.renderedSrc : null,
+      mode: sameArt ? previous.mode : "off",
+      reason: sameArt ? previous.reason : undefined,
+      canvas: sameArt ? previous.canvas : null,
+      fallback: sameArt ? previous.fallback : null,
+      renderedSrc: sameArt ? previous.renderedSrc : null,
     };
     this._slots.set(wrap, state);
     this._scheduleRender();
@@ -442,12 +451,28 @@ export class StagePostFX {
     state = this._slots.get(wrap);
     if (!state || state.src !== src) return;
 
-    const lighting = this._slotLighting(state);
-
     if (!normal) {
       // `assetReason` is undefined when WebGL is missing (nothing probed the
       // asset at all), which is exactly the distinction the panel needs.
-      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "no-webgl");
+      this._applyCssFallback(wrap, state, this._slotLighting(state), assetReason(src) ?? "no-webgl");
+      return;
+    }
+
+    // Uploading the art can suspend; shading and copying out must not. See the
+    // note on `StageGL.draw` — the render target is shared by every slot, so
+    // anything that yields between the draw and the blit lets another slot's
+    // character land in this one.
+    const prepared = await this._gl.prepare(src, normal);
+
+    if (this._destroyed || !wrap.isConnected) return;
+    // `prepare` awaits the art upload, so re-check the slot once more.
+    state = this._slots.get(wrap);
+    if (!state || state.src !== src) return;
+
+    const lighting = this._slotLighting(state);
+
+    if (!prepared) {
+      this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");
       return;
     }
 
@@ -459,7 +484,8 @@ export class StagePostFX {
       this._sample.aspect || 16 / 9
     );
 
-    const canvas = await this._gl.render(src, normal, {
+    // ── Nothing below this line may await. ──
+    const canvas = this._gl.draw(prepared, {
       ...placement,
       ambient: lighting.ambient,
       bounce: lighting.bounce,
@@ -479,11 +505,6 @@ export class StagePostFX {
       shadow: state.dimmed ? 1 : 0,
       lift: state.highlighted ? 1 : 0,
     });
-
-    if (this._destroyed || !wrap.isConnected) return;
-    // `render` awaits the art upload, so re-check the slot once more.
-    state = this._slots.get(wrap);
-    if (!state || state.src !== src) return;
 
     if (!canvas) {
       this._applyCssFallback(wrap, state, lighting, assetReason(src) ?? "render");
