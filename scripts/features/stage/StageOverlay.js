@@ -1,5 +1,6 @@
 import { MODULE_ID, getSetting } from './settings.js';
 import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
+import { StagePostFX } from './postfx/index.mjs';
 
 const SHOW_DURATION = 400;
 const HIDE_DURATION = 350;
@@ -7,6 +8,37 @@ const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
 
 function actorImage(actor) {
     return actor?.image || DEFAULT_ACTOR_IMAGE;
+}
+
+/**
+ * The markup for a slot's contents.
+ *
+ * Single source of truth on purpose: this used to be written out in three
+ * places (fresh slot, previously-empty slot, and the crossfade swap), which is
+ * exactly the kind of triplication where an overlay layer gets added to two of
+ * them and silently vanishes on the third.
+ *
+ * @param {object} actor
+ * @param {boolean} isHighlighted
+ * @param {{hidden?: boolean}} [options]  `hidden` starts the content at zero
+ *                                        opacity for the crossfade to raise.
+ */
+function slotContentHTML(actor, isHighlighted, { hidden = false } = {}) {
+    const scale = clampNumber(actor.scale, 0.1, 5, 1.0);
+    const offsetX = clampNumber(actor.offsetX, -500, 500, 0);
+    const offsetY = clampNumber(actor.offsetY, -500, 500, 0);
+    const image = escapeAttr(actorImage(actor));
+    const nameAttr = escapeAttr(actor.name || '');
+    const nameHTML = escapeHTML(actor.name || '');
+    const hide = hidden ? 'opacity: 0; ' : '';
+    const nameStyle = hidden ? ' style="opacity: 0;"' : '';
+
+    return `
+            <div class="stage-actor-img-wrap" style="${hide}transform: scale(${scale}) translate(${offsetX}%, ${offsetY}%);">
+                <img class="stage-actor-img" src="${image}" alt="${nameAttr}" draggable="false"/>
+            </div>
+            <div class="stage-actor-name ${isHighlighted ? 'highlighted' : ''}"${nameStyle}>${nameHTML}</div>
+        `;
 }
 
 /**
@@ -33,6 +65,104 @@ export class StageOverlay {
         this._isHidden = true;
         /** Currently running show/hide animation (so we can cancel it) */
         this._visibilityAnim = null;
+        /** @type {StagePostFX|null} Created on first show, never before. */
+        this._postfx = null;
+    }
+
+    // ─── Character art post-processing ───
+
+    /**
+     * Create the post-processing pipeline. Deliberately lazy: it allocates a
+     * WebGL context, and a stage nobody has opened should cost nothing.
+     */
+    _ensurePostFX() {
+        if (this._postfx) return this._postfx;
+        this._postfx = new StagePostFX();
+        this.updatePostFXConfig();
+        return this._postfx;
+    }
+
+    /** Read the current settings into the effect and re-sample the scene. */
+    updatePostFXConfig() {
+        if (!this._postfx) return;
+        this._postfx.setConfig({
+            enabled: getSetting('ppEnabled') !== false,
+            intensity: (Number(getSetting('ppIntensity')) || 0) / 100,
+            quality: getSetting('ppQuality') || 'auto'
+        });
+        this.refreshPostFXScene();
+    }
+
+    /**
+     * Re-derive the grade from the scene the *viewing client* is looking at.
+     * Each client computes this locally: the point is to match the background
+     * actually behind the art, which is a per-client fact, so there is nothing
+     * to broadcast.
+     */
+    refreshPostFXScene() {
+        if (!this._postfx) return;
+        this._postfx.refreshScene(canvas?.scene ?? game.scenes?.current ?? null);
+    }
+
+    /**
+     * Live preview while the GM drags the strength slider. Local only — the
+     * world setting is committed on release, which is what reaches other
+     * clients, so dragging doesn't broadcast a value per frame.
+     */
+    previewPostFXIntensity(intensity) {
+        this._postfx?.setConfig({ intensity });
+    }
+
+    /** Report degradation for the GM panel. Never surfaced to players. */
+    getPostFXStatus() {
+        return this._postfx?.getStatus() ?? null;
+    }
+
+    /** An actor's art changed — drop every cached derivative of the old asset. */
+    invalidatePostFXArt(src) {
+        this._postfx?.invalidateArt(src);
+    }
+
+    /** A background was re-uploaded to a path we have already sampled. */
+    invalidatePostFXBackground(src) {
+        this._postfx?.invalidateBackground(src);
+    }
+
+    /**
+     * Attach the effect to every currently rendered character.
+     * Called after any change that can replace a `.stage-actor-img-wrap`.
+     */
+    _syncPostFX() {
+        const fx = this._postfx;
+        const container = this._charactersEl;
+        if (!fx || !container) return;
+
+        fx.prune();
+
+        const slots = this._state.slots || [];
+        const total = Math.max(slots.length, 1);
+        const hasHighlight = this._state.highlightedSlot >= 0;
+
+        for (let i = 0; i < slots.length; i++) {
+            const slot = slots[i];
+            if (!slot?.slotId || !slot.actor) continue;
+
+            const el = container.querySelector(`:scope > [data-slot-id="${slot.slotId}"]`);
+            const wrap = el?.querySelector('.stage-actor-img-wrap');
+            if (!wrap) continue;
+
+            const isHighlighted = this._state.highlightedSlot === i;
+            fx.register(wrap, {
+                src: actorImage(slot.actor),
+                // Centre of this slot's share of the stage. Slot X maps straight
+                // to background X — no camera transform — so every client lands
+                // on the same value and panning never re-grades.
+                position: (i + 0.5) / total,
+                highlighted: isHighlighted,
+                dimmed: hasHighlight && !isHighlighted,
+                optOut: slot.actor.ppOptOut === true
+            });
+        }
     }
 
     render() {
@@ -192,7 +322,9 @@ export class StageOverlay {
 
         // ── Show ──
         this._isHidden = false;
+        this._ensurePostFX();
         this._reconcileSlots(wasHidden);
+        this._syncPostFX();
 
         if (wasHidden) {
             this._animateShow();
@@ -355,19 +487,7 @@ export class StageOverlay {
         if (isHighlighted) el.classList.add('highlighted');
         if (isDimmed) el.classList.add('dimmed');
 
-        const scale = clampNumber(actor.scale, 0.1, 5, 1.0);
-        const offsetX = clampNumber(actor.offsetX, -500, 500, 0);
-        const offsetY = clampNumber(actor.offsetY, -500, 500, 0);
-        const image = escapeAttr(actorImage(actor));
-        const nameAttr = escapeAttr(actor.name || '');
-        const nameHTML = escapeHTML(actor.name || '');
-
-        el.innerHTML = `
-            <div class="stage-actor-img-wrap" style="transform: scale(${scale}) translate(${offsetX}%, ${offsetY}%);">
-                <img class="stage-actor-img" src="${image}" alt="${nameAttr}" draggable="false"/>
-            </div>
-            <div class="stage-actor-name ${isHighlighted ? 'highlighted' : ''}">${nameHTML}</div>
-        `;
+        el.innerHTML = slotContentHTML(actor, isHighlighted);
         return el;
     }
 
@@ -418,12 +538,7 @@ export class StageOverlay {
         } else {
             // Actor was assigned to a previously empty slot — build content + enter anim
             el.classList.remove('stage-slot-empty');
-            el.innerHTML = `
-                <div class="stage-actor-img-wrap" style="transform: scale(${scale}) translate(${offsetX}%, ${offsetY}%);">
-                    <img class="stage-actor-img" src="${escapeAttr(actorImage(actor))}" alt="${escapeAttr(actor.name || '')}" draggable="false"/>
-                </div>
-                <div class="stage-actor-name ${isHighlighted ? 'highlighted' : ''}">${escapeHTML(actor.name || '')}</div>
-            `;
+            el.innerHTML = slotContentHTML(actor, isHighlighted);
             el.classList.add('glstage-slot-entering');
             el.addEventListener('animationend', () => {
                 el.classList.remove('glstage-slot-entering');
@@ -437,12 +552,11 @@ export class StageOverlay {
      */
     _crossfadeContent(el, actor, index, hasHighlight) {
         const isHighlighted = this._state.highlightedSlot === index;
-        const scale = clampNumber(actor.scale, 0.1, 5, 1.0);
-        const offsetX = clampNumber(actor.offsetX, -500, 500, 0);
-        const offsetY = clampNumber(actor.offsetY, -500, 500, 0);
-        const image = escapeAttr(actorImage(actor));
-        const nameAttr = escapeAttr(actor.name || '');
-        const nameHTML = escapeHTML(actor.name || '');
+
+        // The outgoing wrap is about to be discarded — drop its post-processing
+        // registration so the effect doesn't hold a detached element alive.
+        const outgoing = el.querySelector('.stage-actor-img-wrap');
+        if (outgoing) this._postfx?.unregister(outgoing);
 
         // Fade out + subtle downward drift
         const oldChildren = el.querySelectorAll('.stage-actor-img-wrap, .stage-actor-name');
@@ -459,12 +573,10 @@ export class StageOverlay {
 
         Promise.all(fadeOutAnims).then(() => {
             // Swap in new content
-            el.innerHTML = `
-                <div class="stage-actor-img-wrap" style="opacity: 0; transform: scale(${scale}) translate(${offsetX}%, ${offsetY}%);">
-                    <img class="stage-actor-img" src="${image}" alt="${nameAttr}" draggable="false"/>
-                </div>
-                <div class="stage-actor-name ${isHighlighted ? 'highlighted' : ''}" style="opacity: 0;">${nameHTML}</div>
-            `;
+            el.innerHTML = slotContentHTML(actor, isHighlighted, { hidden: true });
+
+            // The wrap is a new element, so the effect has to be re-attached.
+            this._syncPostFX();
 
             // Fade in + subtle upward rise
             const newChildren = el.querySelectorAll('.stage-actor-img-wrap, .stage-actor-name');
@@ -498,6 +610,8 @@ export class StageOverlay {
 
         const onDone = () => {
             el.classList.remove('glstage-content-exiting');
+            const wrap = el.querySelector('.stage-actor-img-wrap');
+            if (wrap) this._postfx?.unregister(wrap);
             el.innerHTML = '';
             el.classList.add('stage-slot-empty');
             // Smoothly shrink to the empty slot size
@@ -554,6 +668,10 @@ export class StageOverlay {
             this._visibilityAnim.cancel();
             this._visibilityAnim = null;
         }
+        // Releases the WebGL context and its textures. Without this a module
+        // reload leaks one context per cycle until the browser starts evicting.
+        this._postfx?.destroy();
+        this._postfx = null;
         if (this._element) {
             this._element.remove();
             this._element = null;

@@ -40,7 +40,11 @@ function normalizeActorData(data = {}) {
         commsOffsetY: clampNumber(data.commsOffsetY, -1000, 1000, 0),
         commsTheme: cleanCommsTheme(data.commsTheme),
         commsTint: cleanTint(data.commsTint) || DEFAULT_COMMS_TINT,
-        measureHidden: data.measureHidden === true
+        measureHidden: data.measureHidden === true,
+        // Some portraits ship already lit — painted highlights, or a hard-edged
+        // stylised silhouette that re-lighting only muddies. Without a per-actor
+        // opt-out the GM's only recourse would be killing the whole feature.
+        ppOptOut: data.ppOptOut === true
     };
 }
 
@@ -57,6 +61,7 @@ function normalizeActorUpdates(updates = {}) {
     if ('commsTheme' in updates) normalized.commsTheme = cleanCommsTheme(updates.commsTheme);
     if ('commsTint' in updates) normalized.commsTint = cleanTint(updates.commsTint);
     if ('measureHidden' in updates) normalized.measureHidden = updates.measureHidden === true;
+    if ('ppOptOut' in updates) normalized.ppOptOut = updates.ppOptOut === true;
     return normalized;
 }
 
@@ -103,7 +108,15 @@ export class StageManager {
         if (idx === -1) return;
         const normalizedUpdates = normalizeActorUpdates(updates);
         if (!Object.keys(normalizedUpdates).length) return;
+
+        // Repointing the art invalidates its cached normal-map prepass and GPU
+        // textures, which are keyed by the *old* path.
+        const previousImage = actors[idx].image;
         Object.assign(actors[idx], normalizedUpdates);
+        if ('image' in normalizedUpdates && previousImage !== actors[idx].image) {
+            game.modules.get(MODULE_ID)?.stageOverlay?.invalidatePostFXArt(previousImage);
+        }
+
         await setSetting('actorLibrary', actors);
 
         // If this actor is on stage, update stage too

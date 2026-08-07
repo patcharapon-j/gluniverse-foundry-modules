@@ -10,6 +10,16 @@ function k(key) {
     return `${PREFIX}${key}`;
 }
 
+/**
+ * Push the current post-processing configuration into the live overlay.
+ * Settings register unconditionally (even when the feature is disabled), so
+ * this has to tolerate there being no overlay yet.
+ */
+function notifyPostFXConfig() {
+    const overlay = game.modules.get(MODULE_ID)?.stageOverlay;
+    overlay?.updatePostFXConfig?.();
+}
+
 export function registerSettings() {
     // Stage height as percentage of viewport
     game.settings.register(MODULE_ID, k('stageHeight'), {
@@ -63,6 +73,49 @@ export function registerSettings() {
             const overlay = game.modules.get(MODULE_ID)?.stageOverlay;
             if (overlay) overlay.updateLayout();
         }
+    });
+
+    // --- Character art post-processing ---
+
+    // Master on/off. World-scoped: the GM decides the table's look.
+    game.settings.register(MODULE_ID, k('ppEnabled'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppEnabled.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppEnabled.hint'),
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        default: true,
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // One master strength dial. Deliberately not split into separate grade and
+    // rim knobs — most GMs move both together, and two dials double the tuning
+    // surface for no gain. Fine-tuning happens live in the Stage Director panel.
+    game.settings.register(MODULE_ID, k('ppIntensity'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppIntensity.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppIntensity.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 60,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // Per-player escape hatch. Client-scoped so someone on a weak machine can
+    // kill the shader without having to argue with the GM about the look.
+    game.settings.register(MODULE_ID, k('ppQuality'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppQuality.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppQuality.hint'),
+        scope: 'client',
+        config: true,
+        type: String,
+        choices: {
+            auto: game.i18n.localize('GLSTAGE.settings.ppQuality.auto'),
+            off: game.i18n.localize('GLSTAGE.settings.ppQuality.off')
+        },
+        default: 'auto',
+        onChange: () => notifyPostFXConfig()
     });
 
     // --- Comms / Call-In overlay ---

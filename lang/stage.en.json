@@ -10,6 +10,20 @@
                 "name": "Stage Width (%)",
                 "hint": "Width of the visual novel stage area as a percentage of the viewport width."
             },
+            "ppEnabled": {
+                "name": "Character Lighting",
+                "hint": "Light and colour-grade stage character art to match the current scene's background, so the cast reads as standing in the room rather than pasted over it."
+            },
+            "ppIntensity": {
+                "name": "Character Lighting Strength (%)",
+                "hint": "How strongly the scene's colour and light affect the character art. Fine-tune this live from the Stage Director panel."
+            },
+            "ppQuality": {
+                "name": "Character Lighting Quality",
+                "hint": "Your own setting only — it does not change what anyone else sees. Turn this off if the stage costs you performance.",
+                "auto": "Automatic",
+                "off": "Off"
+            },
             "commsTheme": {
                 "name": "Comms Theme",
                 "hint": "Visual style for the call-in overlay.",
@@ -87,6 +101,13 @@
             "screenLine": "Screen Line",
             "stageXOffset": "Stage X Offset",
             "stageYOffset": "Stage Y Offset",
+            "ppIntensity": "Scene Lighting",
+            "ppOptOut": "Skip lighting",
+            "ppOptOutHint": "Leave this character's art untouched. Use it for portraits that are already lit, where re-lighting only muddies them.",
+            "ppNoWebGL": "Scene lighting is running in reduced mode — this client has no WebGL.",
+            "ppArtNotSampled": "Some character art can't be read for lighting (it's served without CORS headers), so those characters use the simpler tinted look.",
+            "ppBackgroundCORS": "This scene's background can't be read for colour (it's served without CORS headers), so lighting falls back to the scene's flat background colour.",
+            "ppBackgroundFlat": "This scene's background couldn't be sampled, so lighting falls back to the scene's flat background colour.",
             "stageYOffsetHint": "Percentage of character to crop from the bottom. The visible portion scales up to fill the stage.",
             "noActorsConfigured": "No actors configured. Click Add Actor or import one to get started.",
             "noSlotsConfigured": "No slots on stage. Click Add Slot to create character positions.",

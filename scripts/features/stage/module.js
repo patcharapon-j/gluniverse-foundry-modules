@@ -81,6 +81,22 @@ export function onReady() {
         (state) => commsOverlay.applyState(state)
     );
 
+    // Character art post-processing follows whatever scene this client is
+    // actually looking at — including a GM previewing a non-active scene, whose
+    // own screen then stays internally coherent.
+    Hooks.on('canvasReady', () => overlay.refreshPostFXScene());
+
+    // Darkness and background edits re-grade the cast. The background asset is
+    // cached by path, so a re-upload to the same path needs its entry dropped.
+    Hooks.on('updateScene', (scene, changes) => {
+        if (scene?.id !== (canvas?.scene?.id ?? null)) return;
+        const touchesLook =
+            'background' in changes || 'environment' in changes || 'backgroundColor' in changes;
+        if (!touchesLook) return;
+        if (changes.background?.src) overlay.invalidatePostFXBackground(changes.background.src);
+        overlay.refreshPostFXScene();
+    });
+
     // If GM, load saved state into overlays immediately
     if (game.user.isGM) {
         overlay.applyState(mgr.getFullState());

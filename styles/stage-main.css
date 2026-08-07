@@ -855,6 +855,7 @@
 .glstage-height-control .glstage-width-value,
 .glstage-height-control .glstage-xoffset-value,
 .glstage-height-control .glstage-yoffset-value,
+.glstage-height-control .glstage-pp-value,
 .glstage-height-control .glstage-measure-screenline-value {
     font-size: 11px;
     color: #bbb;
