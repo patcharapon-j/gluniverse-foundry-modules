@@ -113,9 +113,64 @@
     filter: brightness(var(--glstage-pp-exposure, 1));
 }
 
+/* ── Cel style, on the fallback ──
+   The shader bands the shading itself; three gradients over art whose pixels
+   were never readable cannot. What they can do is stop being ramps: each
+   gradient repeats its stop to hold a tone flat, then jumps at a terminator, so
+   the lit and shadow sides meet at a line rather than fading into one another.
+   That is the same decision the shader makes, made with what this path has.
+
+   Percentages, not lengths — the terminator has to land in the same place on a
+   portrait and on a full body. */
+.glstage-pp-css.glstage-pp-cel .glstage-pp-key {
+    background: linear-gradient(
+        var(--glstage-pp-angle, 0deg),
+        var(--glstage-pp-key, transparent) 0%,
+        var(--glstage-pp-key, transparent) 26%,
+        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 26%,
+        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 44%,
+        transparent 44%
+    );
+    /* The band is flat, so it covers more of the figure than the ramp did at the
+       same opacity — eased back to land in the same place overall. */
+    opacity: 0.62;
+}
+
+.glstage-pp-css.glstage-pp-cel .glstage-pp-shade {
+    background: linear-gradient(
+        var(--glstage-pp-shade-angle, 180deg),
+        var(--glstage-pp-shadow, transparent) 0%,
+        var(--glstage-pp-shadow, transparent) 30%,
+        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 30%,
+        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 52%,
+        transparent 52%
+    );
+    opacity: calc(0.48 + var(--glstage-pp-dim, 0) * 0.3);
+}
+
 /* ── GM panel controls ──
    The strength dial lives in the Stage Director toolbar alongside the framing
    controls, because lighting is tuned by looking at it. */
+
+/* Style picker, sitting in the same toolbar row as the strength slider — the
+   two are one decision and get looked at together. Sized to the sliders beside
+   it rather than to its own content, so the row doesn't reflow on selection. */
+.glstage-pp-style-select {
+    width: 116px;
+    height: 22px;
+    padding: 0 4px;
+    border: 1px solid var(--gl-edge);
+    border-radius: 4px;
+    background: rgb(var(--gl-tint-dark) / 0.35);
+    color: var(--gl-text);
+    font-size: var(--gl-fs-xs, 11px);
+    cursor: pointer;
+}
+
+.glstage-pp-style-select:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
 
 .glstage-field-check {
     margin-top: 2px;

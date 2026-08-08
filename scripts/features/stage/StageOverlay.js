@@ -88,7 +88,8 @@ export class StageOverlay {
         this._postfx.setConfig({
             enabled: getSetting('ppEnabled') !== false,
             intensity: (Number(getSetting('ppIntensity')) || 0) / 100,
-            quality: getSetting('ppQuality') || 'auto'
+            quality: getSetting('ppQuality') || 'auto',
+            style: getSetting('ppStyle') || 'realistic'
         });
         this.refreshPostFXScene();
     }

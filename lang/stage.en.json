@@ -18,6 +18,12 @@
                 "name": "Character Lighting Strength (%)",
                 "hint": "How strongly the scene's colour and light affect the character art. Fine-tune this live from the Stage Director panel."
             },
+            "ppStyle": {
+                "name": "Character Lighting Style",
+                "hint": "Which shading model the lighting uses. Semi-realistic gives soft falloffs and a glowing rim, and suits painted or rendered portraits. Cel / Anime gives flat tones with a drawn terminator, hard-edged highlights and a crisp rim band, and suits anime-style art.",
+                "realistic": "Semi-realistic",
+                "cel": "Cel / Anime"
+            },
             "ppQuality": {
                 "name": "Character Lighting Quality",
                 "hint": "Your own setting only — it does not change what anyone else sees. Turn this off if the stage costs you performance.",
@@ -102,6 +108,12 @@
             "stageXOffset": "Stage X Offset",
             "stageYOffset": "Stage Y Offset",
             "ppIntensity": "Scene Lighting",
+            "ppStyleLabel": "Lighting Style",
+            "ppStyleHint": "Semi-realistic suits painted portraits; Cel / Anime flattens the shading into bands with a drawn terminator and a crisp rim.",
+            "ppStyle": {
+                "realistic": "Semi-realistic",
+                "cel": "Cel / Anime"
+            },
             "ppOptOut": "Skip lighting",
             "ppOptOutHint": "Leave this character's art untouched. Use it for portraits that are already lit, where re-lighting only muddies them.",
             "ppNoWebGL": "Scene lighting is running in reduced mode — this client has no WebGL.",

@@ -128,6 +128,8 @@ const {
   bounceLight,
   SLOT_ANCHOR_Y,
   SHADER_STRENGTHS,
+  CEL_SHADER_STRENGTHS,
+  shaderStrengths,
 } = await import(mod("index.mjs"));
 const { StageGL } = await import(mod("gl.mjs"));
 const { analyse, columnAt, NEUTRAL_SAMPLE } = await import(mod("scene-sample.mjs"));
@@ -480,10 +482,68 @@ section("shader uniform wiring");
     "the shader strengths are a single frozen export"
   );
   ok(
-    ["rim", "rimEdge", "glow", "contour", "spec", "sheen"].every(
+    ["rim", "rimEdge", "glow", "contour", "spec", "sheen", "cel"].every(
       (k) => Number.isFinite(SHADER_STRENGTHS?.[k])
     ),
     "…covering every term the shader takes a strength for"
+  );
+
+  // ── The two styles ──
+  // Each style is one table, spread into `draw` in one go. The thing that must
+  // not happen is a partial set: a strength arriving from one style and the
+  // banding it was balanced against from the other, which is exactly what a
+  // per-key override or a missing key would produce — silently, and only on the
+  // style nobody was looking at.
+  ok(
+    CEL_SHADER_STRENGTHS && Object.isFrozen(CEL_SHADER_STRENGTHS),
+    "the cel strengths are their own frozen export"
+  );
+  const realKeys = Object.keys(SHADER_STRENGTHS).sort().join(",");
+  const celKeys = Object.keys(CEL_SHADER_STRENGTHS).sort().join(",");
+  ok(realKeys === celKeys, "both styles set exactly the same uniforms", celKeys);
+  ok(
+    Object.values(CEL_SHADER_STRENGTHS).every((v) => Number.isFinite(v)),
+    "…and every cel strength is a number"
+  );
+  ok(SHADER_STRENGTHS.cel === 0, "the semi-realistic style is cel = 0 — the old model exactly");
+  ok(CEL_SHADER_STRENGTHS.cel === 1, "…and the cel style is cel = 1");
+  ok(shaderStrengths("cel") === CEL_SHADER_STRENGTHS, "shaderStrengths('cel') selects the cel set");
+  ok(
+    shaderStrengths("realistic") === SHADER_STRENGTHS &&
+      shaderStrengths(undefined) === SHADER_STRENGTHS &&
+      shaderStrengths("nonsense") === SHADER_STRENGTHS,
+    "…and anything else falls back to semi-realistic"
+  );
+  // A flat band covers far more of its shape than the falloff it replaces peaks
+  // over, so carrying the realistic gains into cel blows the rim into a white
+  // bar. This is the one relationship between the two tables worth pinning: if
+  // a future rebalance raises the cel rim above the realistic one, that is a
+  // decision, not a typo, and it should have to be made deliberately.
+  ok(
+    CEL_SHADER_STRENGTHS.rim < SHADER_STRENGTHS.rim,
+    "the cel rim is driven below the realistic one — the band is flat, not a peak",
+    `${CEL_SHADER_STRENGTHS.rim} vs ${SHADER_STRENGTHS.rim}`
+  );
+
+  // Every banded term is a crossfade against its continuous twin, which is what
+  // makes cel = 0 the previous shader term for term. A bare celStep() reaching
+  // the output without passing through mix(…, u_cel) would change the realistic
+  // look too, and nothing in a cel-mode screenshot would show it.
+  // Statement by statement through main(), which is the only place a banded term
+  // can reach the output — the two helpers above it compose freely.
+  // The vertex shader has a main() too, and it comes first in the file.
+  const mainStart = src.indexOf("void main() {", src.indexOf("const FRAG ="));
+  const mainBody = src.slice(mainStart, src.indexOf("\n`;", mainStart));
+  const celStatements = mainBody
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => /celS(?:tep|hade)\(/.test(s));
+  ok(celStatements.length > 0, "the cel bands reach main()", `${celStatements.length} banded terms`);
+  const unmixed = celStatements.filter((s) => !/u_cel/.test(s));
+  ok(
+    unmixed.length === 0,
+    "…and every one of them is mixed by u_cel, never applied outright",
+    unmixed[0]?.split("\n")[0] ?? "all banded terms crossfade"
   );
 
   // The night tint claims to recolour without dimming, which is only true if it

@@ -1,8 +1,66 @@
 # Stage character lighting
 
-Three things decide how a character ends up looking: **the shading model**, **how
-the art is framed**, and **where it is hosted**. The last one decides whether the
-full effect is available at all.
+Four things decide how a character ends up looking: **the style**, **the shading
+model**, **how the art is framed**, and **where it is hosted**. The last one
+decides whether the full effect is available at all.
+
+## The two styles
+
+`stage.ppStyle` picks between **semi-realistic** and **cel / anime**. They are
+one shader, not two: `u_cel` crossfades every term below against a banded twin,
+so semi-realistic is `u_cel = 0` and is the model term for term — a style cannot
+quietly rebalance the look of a world that never switched. `tools/postfx-check.mjs`
+reads main() statement by statement and fails on any banded term that reaches the
+output without passing through `mix(…, u_cel)`.
+
+What cel changes, and why each one is a separate decision rather than a filter
+over the finished image:
+
+| Term | Semi-realistic | Cel |
+| --- | --- | --- |
+| diffuse | continuous wrap ramp | three flat tones, two terminators |
+| rim halo / core | falloffs peaking at the outline | strips of constant brightness |
+| facing | fades out round the silhouette | the arc terminates |
+| ambient bounce | hue creeping across the figure | a fill with an edge on it |
+| specular / sheen | lobes | hard-edged shapes with the lobe's own contour |
+| contour | form edges catch light | a drawn line along them |
+| grounding | a fade at the hem | a shadow with a boundary |
+
+Two orderings inside that carry more weight than they look like they should.
+
+**The diffuse is banded after the distance falloff, not before.** Fold a
+continuous attenuation into a quantised tone and every fill acquires a slow
+gradient again, which is the one thing this style cannot have. Applied
+afterwards, the lamp's distance moves the *terminator* — a shape, which is how
+the style expresses distance anyway.
+
+**The additive terms take a flattened attenuation.** Same failure, arriving from
+the other side: a flat shape multiplied by a continuous gain is a gradient, and
+the sheen lobe is broad enough to do that across half a garment. A third of the
+falloff is kept so a lamp across the room is still weaker than one beside it.
+
+The cel strengths are their own frozen table and are lower almost across the
+board — not a taste judgement but arithmetic, since a flat band delivers several
+times the light of the falloff peaking at one contour that it replaces. Carrying
+the realistic numbers over turns the rim into a white bar. The two that go *up*
+are the core and the contour, which are the terms the style leans on.
+
+One honest limit. The normal field is invented from the blurred alpha, so deep
+inside a silhouette it barely turns and the diffuse hardly varies there in either
+style — the banding mostly shows where the shading actually ramps, which is near
+the outline and across the form edges the contour term finds. On art that is
+already flat-shaded that is the right amount; do not expect cel to invent
+interior form the model cannot see.
+
+The claim that this is a change of *shape* is checked rather than asserted:
+`tools/stage-lighting-preview.mjs` measures the fill past the terminator (0.004
+against the realistic model's 0.012 — the cel fill sits on the dither floor) and
+the mean luminance over the whole figure (0.384 against 0.382, so the strength
+dial does not need re-tuning when a stage switches style).
+
+The CSS fallback follows the style as far as three masked gradients can: hard
+stops instead of ramps, so the lit and shadow sides meet at a line. It cannot
+band the art's own shading, because it never reads a pixel.
 
 ## The shading model
 
@@ -240,9 +298,15 @@ silhouette, and that the rim stands down on art carrying its own black rind. Tha
 last one renders the same silhouette twice, differing only in the colour of its
 boundary pixels, so the two numbers are directly comparable.
 
-It also writes a four-room contact sheet with two magnified detail rows — the
-clean cut-out and the matted one — which is the only way to tell a crisp edge
-from a soft one, or a rim from a halo:
+Every one of those is a property of the effect rather than of one style, so the
+cel set is put through them again — none of it follows from the realistic set
+passing, because the banded terms are a separate path through the shader. On top
+of that it measures the two things that make cel a style and not a second set of
+dials: the fill past the terminator is flat, and the exposure has not moved.
+
+It also writes a four-room contact sheet with magnified detail rows — the clean
+cut-out, the matted one, and the cel style — which is the only way to tell a
+crisp edge from a soft one, or a rim from a halo:
 
 ```bash
 node tools/stage-lighting-preview.mjs --out=/tmp/sheet.png

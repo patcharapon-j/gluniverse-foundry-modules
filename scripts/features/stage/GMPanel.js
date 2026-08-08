@@ -337,6 +337,10 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const currentYOffset = finiteNumber(state.stageYOffset ?? getSetting('stageYOffset'), 0);
         const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 60);
         const ppEnabled = getSetting('ppEnabled') !== false;
+        const ppStyle = getSetting('ppStyle') === 'cel' ? 'cel' : 'realistic';
+        const ppStyleOptions = ['realistic', 'cel']
+            .map(s => `<option value="${s}" ${s === ppStyle ? 'selected' : ''}>${i18n(`panel.ppStyle.${s}`)}</option>`)
+            .join('');
         html += `<div class="glstage-toolbar">
             <button class="glstage-btn ${isVisible ? 'glstage-btn-active' : ''}" data-action="toggle-visibility">
                 <i class="fas fa-${isVisible ? 'eye' : 'eye-slash'}"></i>
@@ -375,6 +379,13 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 <input type="range" min="0" max="100" step="5" value="${currentPPIntensity}" data-action="stage-pp-intensity"
                     ${ppEnabled ? '' : 'disabled'}/>
                 <span class="glstage-pp-value">${currentPPIntensity}%</span>
+            </div>
+            <div class="glstage-height-control">
+                <label>${i18n('panel.ppStyleLabel')}</label>
+                <select class="glstage-pp-style-select" data-action="stage-pp-style"
+                    title="${escapeAttr(i18n('panel.ppStyleHint'))}" ${ppEnabled ? '' : 'disabled'}>
+                    ${ppStyleOptions}
+                </select>
             </div>
         </div>
         ${this._buildPostFXNote()}`;
@@ -1053,6 +1064,15 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
             });
             ppSlider.addEventListener('change', async () => {
                 await setSetting('ppIntensity', parseInt(ppSlider.value));
+            });
+        }
+
+        // Shading style. No live preview to do here: the setting's own onChange
+        // pushes the new style into every client's overlay, including this one.
+        const ppStyleSelect = el.querySelector('[data-action="stage-pp-style"]');
+        if (ppStyleSelect) {
+            ppStyleSelect.addEventListener('change', async () => {
+                await setSetting('ppStyle', ppStyleSelect.value === 'cel' ? 'cel' : 'realistic');
             });
         }
     }
