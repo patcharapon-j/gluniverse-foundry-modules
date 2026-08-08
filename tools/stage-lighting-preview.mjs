@@ -62,7 +62,8 @@ const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;backgro
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { getNormalMap } from "/scripts/features/stage/postfx/normal-map.mjs";
-import { lightPlacement, bounceLight, SHADER_STRENGTHS } from "/scripts/features/stage/postfx/index.mjs";
+import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS }
+  from "/scripts/features/stage/postfx/index.mjs";
 
 // ── A synthetic character ──
 // Not art, but it carries the three things the shader reads: an alpha
@@ -136,10 +137,20 @@ window.run = async () => {
   // The third row is the same crop of the matted figure, so the sheet answers
   // the question the numbers can only score: does an asset with its own black
   // outline still get a halo drawn round it.
+  // Rows four and five are the cel style, tile and detail. Both are needed: the
+  // tile shows whether the terminator lands somewhere a viewer would accept, the
+  // detail whether the rim is a drawn line or a soft band pretending to be one.
   const detailH = 300;
-  strip.width = tileW * ROOMS.length; strip.height = tileH + detailH * 2;
+  strip.width = tileW * ROOMS.length;
+  strip.height = tileH * 2 + detailH * 3;
   const sg = strip.getContext("2d");
   sg.imageSmoothingEnabled = false;
+
+  const label = (text, x, y, alpha) => {
+    sg.fillStyle = "rgba(255,255,255," + alpha + ")";
+    sg.font = "13px system-ui, sans-serif";
+    sg.fillText(text, x, y);
+  };
 
   for (let i = 0; i < ROOMS.length; i++) {
     const room = ROOMS[i];
@@ -171,9 +182,7 @@ window.run = async () => {
     sg.fillRect(i * tileW, tileH, tileW, detailH);
     sg.drawImage(out, 0, 0, tileW, detailH, i * tileW, tileH, tileW, detailH);
 
-    sg.fillStyle = "rgba(255,255,255,0.75)";
-    sg.font = "13px system-ui, sans-serif";
-    sg.fillText(room.name, i * tileW + 10, tileH - 12);
+    label(room.name, i * tileW + 10, tileH - 12, 0.75);
 
     // Same crop, same light, art with a black rind round its silhouette.
     const rindOut = gl.draw(rindPrepared, params);
@@ -181,8 +190,20 @@ window.run = async () => {
     sg.fillStyle = room_;
     sg.fillRect(i * tileW, tileH + detailH, tileW, detailH);
     sg.drawImage(rindOut, 0, 0, tileW, detailH, i * tileW, tileH + detailH, tileW, detailH);
-    sg.fillStyle = "rgba(255,255,255,0.6)";
-    sg.fillText("same art, black rind", i * tileW + 10, tileH + detailH + 20);
+    label("same art, black rind", i * tileW + 10, tileH + detailH + 20, 0.6);
+
+    // ── The same room, the cel style ──
+    // Same light, same dial, same art: everything that differs between these two
+    // rows is the style, which is the only way to judge whether the cel set is
+    // balanced against the realistic one or merely different from it.
+    const celOut = gl.draw(prepared, { ...params, ...CEL_SHADER_STRENGTHS });
+    if (!celOut) return { error: "draw() returned null for the cel style at room " + i };
+    const celTop = tileH + detailH * 2;
+    sg.fillStyle = room_;
+    sg.fillRect(i * tileW, celTop, tileW, tileH + detailH);
+    sg.drawImage(celOut, i * tileW, celTop, tileW, tileH);
+    sg.drawImage(celOut, 0, 0, tileW, detailH, i * tileW, celTop + tileH, tileW, detailH);
+    label("cel — " + room.name, i * tileW + 10, celTop + tileH - 12, 0.75);
   }
 
   // ── Assertions ──
@@ -191,10 +212,10 @@ window.run = async () => {
     shadowColor: [0.06, 0.08, 0.14], ...SHADER_STRENGTHS,
     exposure: 0.5, night: 0, shadow: 0, lift: 0,
   };
-  const shoot = (centroid, intensity, target = prepared) => {
+  const shoot = (centroid, intensity, target = prepared, style = SHADER_STRENGTHS) => {
     const place = lightPlacement(centroid, 0.5, normal.figure,
                                  normal.width / normal.height, 16 / 9);
-    const out = gl.draw(target, { ...BASE, ...place, intensity });
+    const out = gl.draw(target, { ...BASE, ...style, ...place, intensity });
     // Copy out immediately — the canvas is shared and the next draw owns it.
     const c = document.createElement("canvas");
     c.width = out.width; c.height = out.height;
@@ -214,12 +235,19 @@ window.run = async () => {
   // Strength 0 must be the original pixels, exactly. The rim core and the spill
   // are now added *past* the dial's crossfade, which is precisely the change
   // that could break this.
-  const off = shoot([0.5, 0.15], 0).data;
-  let maxDelta = 0;
-  for (let p = 0; p < off.length; p += 4) {
-    if (artPx[p + 3] < 250) continue;              // premultiplied edges round
-    for (let k = 0; k < 3; k++) maxDelta = Math.max(maxDelta, Math.abs(off[p + k] - artPx[p + k]));
-  }
+  const driftFromArt = (px) => {
+    let m = 0;
+    for (let p = 0; p < px.length; p += 4) {
+      if (artPx[p + 3] < 250) continue;            // premultiplied edges round
+      for (let k = 0; k < 3; k++) m = Math.max(m, Math.abs(px[p + k] - artPx[p + k]));
+    }
+    return m;
+  };
+  const maxDelta = driftFromArt(shoot([0.5, 0.15], 0).data);
+  // The same property has to hold for the cel style, and it is not implied by
+  // the realistic one: the banded terms are a different arithmetic path, and a
+  // band that does not go to zero with the dial would tint the art at strength 0.
+  const celZeroDelta = driftFromArt(shoot([0.5, 0.15], 0, prepared, CEL_SHADER_STRENGTHS).data);
 
   // Where the rim lands. Walk each row of the silhouette, take a band just
   // inside the left and right extremes, and average its luminance.
@@ -250,13 +278,97 @@ window.run = async () => {
     return m;
   };
 
+  const celFromLeft = shoot([0.02, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
+  const celFromRight = shoot([0.98, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
+
   const rim = {
     zeroDelta: maxDelta,
+    celZeroDelta,
     leftLampLeftBand: bandLuma(fromLeft, "left"),
     leftLampRightBand: bandLuma(fromLeft, "right"),
     rightLampLeftBand: bandLuma(fromRight, "left"),
     rightLampRightBand: bandLuma(fromRight, "right"),
     peakLuma: peak(fromLeft),
+    celLeftLampLeftBand: bandLuma(celFromLeft, "left"),
+    celLeftLampRightBand: bandLuma(celFromLeft, "right"),
+    celRightLampLeftBand: bandLuma(celFromRight, "left"),
+    celRightLampRightBand: bandLuma(celFromRight, "right"),
+    celPeakLuma: peak(celFromLeft),
+  };
+
+  // ── Is it actually banded? ──
+  // The claim the cel style makes is that the shading is flat tones with a drawn
+  // terminator rather than a ramp, and that is exactly the thing a screenshot
+  // argues about. Measured over the pale coat panel only: that panel is a single
+  // flat fill in the source art, so every difference across it in the render is
+  // the lighting and nothing else — base colour cannot leak into the number.
+  //
+  // Counting tone levels does not separate the two styles, and the reason is
+  // worth knowing: deep inside a silhouette the invented normal barely turns, so
+  // the shading of *both* styles is dominated by one broad tone and a ramp near
+  // the edge. What the styles disagree about is that ramp's tail. Cel reaches a
+  // tone and stops; the continuous model never quite stops, and keeps drifting
+  // across the fill for as far as the panel runs.
+  //
+  // So the measurement is the flatness of the fill *past* the terminator: per
+  // row of the panel, the peak-to-trough spread over its inner half. Inner half
+  // because both styles have finished their edge ramp well before it, so this
+  // compares like with like rather than scoring one style's terminator against
+  // the other's plateau. Dither puts a floor of about one 8-bit step on it.
+  const PANEL = [201, 194, 180];
+  const inPanel = new Uint8Array(W * H);
+  let panelPixels = 0;
+  for (let i = 0; i < W * H; i++) {
+    const p = i * 4;
+    if (artPx[p + 3] < 250) continue;
+    if (Math.abs(artPx[p] - PANEL[0]) < 6 && Math.abs(artPx[p + 1] - PANEL[1]) < 6 &&
+        Math.abs(artPx[p + 2] - PANEL[2]) < 6) { inPanel[i] = 1; panelPixels++; }
+  }
+  const fillSpread = (px) => {
+    let sum = 0, rows = 0;
+    for (let y = 0; y < H; y++) {
+      let x0 = -1, x1 = -1;
+      for (let x = 0; x < W; x++) {
+        if (!inPanel[y * W + x]) continue;
+        if (x0 < 0) x0 = x;
+        x1 = x;
+      }
+      if (x0 < 0 || x1 - x0 < 80) continue;
+      let lo = 1, hi = 0;
+      // Stopping short of the far end as well: the panel's inner edge is where
+      // it meets the dark shirt, and both styles draw a contour highlight along
+      // that. A drawn line is not the fill, and including it measures the term
+      // this is not asking about.
+      for (let x = x0 + Math.floor((x1 - x0) / 2); x <= x1 - 20; x++) {
+        const q = (y * W + x) * 4;
+        const l = (0.2126 * px[q] + 0.7152 * px[q + 1] + 0.0722 * px[q + 2]) / 255;
+        lo = Math.min(lo, l);
+        hi = Math.max(hi, l);
+      }
+      sum += hi - lo;
+      rows++;
+    }
+    return rows ? sum / rows : 0;
+  };
+  // A style is a decision about shape. If it also moves the exposure, every
+  // stage that switches to it needs its strength dial re-tuned and the scene
+  // grade stops matching the room — so the two have to land in the same place
+  // overall, and only the arrangement of light within the figure differs.
+  const meanLuma = (px) => {
+    let sum = 0, n = 0;
+    for (let p = 0; p < px.length; p += 4) {
+      if (artPx[p + 3] < 250) continue;
+      sum += (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
+      n++;
+    }
+    return n ? sum / n : 0;
+  };
+  const banding = {
+    panelPixels,
+    realisticFill: fillSpread(fromLeft),
+    celFill: fillSpread(celFromLeft),
+    realisticMean: meanLuma(fromLeft),
+    celMean: meanLuma(celFromLeft),
   };
 
   // Alpha outside the silhouette proves the spill is being drawn at all.
@@ -316,7 +428,7 @@ window.run = async () => {
 
   return {
     png: strip.toDataURL("image/png"),
-    spillPixels, spillPeak, insidePixels, cleanEdge, rindEdge, ...rim,
+    spillPixels, spillPeak, insidePixels, cleanEdge, rindEdge, ...rim, ...banding,
   };
 };
 </script></body>`;
@@ -425,6 +537,44 @@ ok(
   result.rindEdge < result.cleanEdge * 0.70,
   "the rim stands down on art with its own dark outline",
   `edge peak ${f(result.rindEdge)} vs ${f(result.cleanEdge)} on the clean cut-out`
+);
+
+// ── The cel style ──
+// Every property asserted above is a property of the *effect*, not of one style,
+// so the cel set has to hold them all over again — and none of them follows from
+// the realistic set passing, because the banded terms are a separate path
+// through the shader.
+ok(
+  result.celZeroDelta <= 1,
+  "cel: strength 0 returns the original pixels untouched",
+  `worst channel drift ${result.celZeroDelta}/255`
+);
+ok(
+  result.celLeftLampLeftBand > result.celLeftLampRightBand * 1.15,
+  "cel: a lamp on the left rims the left edge",
+  `${f(result.celLeftLampLeftBand)} vs ${f(result.celLeftLampRightBand)}`
+);
+ok(
+  result.celRightLampRightBand > result.celRightLampLeftBand * 1.15,
+  "cel: …and a lamp on the right rims the right edge",
+  `${f(result.celRightLampRightBand)} vs ${f(result.celRightLampLeftBand)}`
+);
+ok(
+  result.celPeakLuma > 0.85,
+  "cel: the rim core still reaches near-white",
+  `peak luminance ${f(result.celPeakLuma)}`
+);
+// And the thing that makes it a second style rather than a second set of dials.
+ok(
+  result.celFill < result.realisticFill * 0.5,
+  "cel: the fill past the terminator is flat, where the ramp keeps drifting",
+  `spread ${f(result.celFill)} vs ${f(result.realisticFill)} semi-realistic` +
+    ` (${result.panelPixels} px of flat coat)`
+);
+ok(
+  Math.abs(result.celMean - result.realisticMean) < result.realisticMean * 0.08,
+  "cel: …at the same exposure, so switching style doesn't re-tune the stage",
+  `mean ${f(result.celMean)} vs ${f(result.realisticMean)} semi-realistic`
 );
 
 console.log(`\nwrote ${OUT}`);

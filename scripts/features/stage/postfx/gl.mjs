@@ -59,6 +59,14 @@ uniform float u_night;        // scotopic desaturation, 0..1
 uniform float u_shadow;       // dim amount, 0..1
 uniform float u_lift;         // highlight boost, 0..1
 
+// ── Style ──
+// 0 = the semi-realistic model, 1 = cel/anime. Every banded term below is a
+// crossfade against its continuous twin rather than a branch, so 0 is the old
+// shader term for term. That is the same property the strength dial has, and it
+// is what makes a second style safe to add: nothing here can quietly rebalance
+// the look every existing world is already using.
+uniform float u_cel;
+
 // ── Light placement ──
 // The key light is a point in the art's own space rather than one direction
 // shared by the whole figure. On a full-body pose the head and the shins are a
@@ -121,6 +129,37 @@ const float EDGE_RING = 0.004;
 // a few pixels thick; the far one has to still be on the same garment, or the
 // guard starts reading a lapel as an outline. See the guard in main().
 const float RIND_STEP = 0.012;
+
+// ── Cel banding ──
+// Cel art is not a softer version of a smooth ramp; it is a different signal. A
+// few flat tones separated by a drawn terminator, and the highlights and the rim
+// as discrete *shapes* rather than falloffs. So every continuous term in the
+// model below has a banded twin and u_cel mixes between them.
+//
+// The terminators keep a texel or two of softness rather than being a true
+// step(). These ramps are shallow — a hard threshold on one crawls a jagged
+// staircase across the figure, and nothing here is supersampled.
+
+/** A terminator: flat below, flat above, w of softness across. */
+float celStep(float x, float t, float w) {
+  return smoothstep(t - w, t + w, x);
+}
+
+// Three flat tones and the two terminators between them, replacing the diffuse
+// ramp. The levels bracket the ramp rather than sitting under it: averaged over
+// the ramp this is within a couple of percent of the continuous term, so
+// switching styles changes the *shape* of the shading and not the exposure of
+// the stage. Everything it does gain is contrast at the two terminators, which
+// is the entire point.
+const float CEL_T0 = 0.30, CEL_T1 = 0.62;              // terminator positions
+const float CEL_D0 = 0.14, CEL_D1 = 0.45, CEL_D2 = 0.85; // the three tones
+const float CEL_TERM = 0.035;                          // terminator half-width
+
+float celShade(float d) {
+  return CEL_D0
+       + (CEL_D1 - CEL_D0) * celStep(d, CEL_T0, CEL_TERM)
+       + (CEL_D2 - CEL_D1) * celStep(d, CEL_T1, CEL_TERM);
+}
 
 /**
  * How much of a small ring around this point is inside the figure.
@@ -197,7 +236,10 @@ void main() {
   // Wrapped rather than clipped at 90°: a rim that stops dead at the tangent
   // looks severed. This keeps a trace most of the way round and concentrates the
   // heat on the lamp's side.
-  float facing = pow(max(dot(normalize(n2 + vec2(1e-6)), lBearing) * 0.5 + 0.5, 0.0), 2.2);
+  float facingRaw = max(dot(normalize(n2 + vec2(1e-6)), lBearing) * 0.5 + 0.5, 0.0);
+  // Cel wants the opposite of that trace: an anime rim *ends*, it does not thin.
+  // The arc it sweeps is a decision the artist made, so it terminates.
+  float facing = mix(pow(facingRaw, 2.2), celStep(facingRaw, 0.56, 0.09), u_cel);
 
   // Isotropic in pixels: uv.x spans the width and uv.y the height, so a step in
   // x has to be divided by the aspect to cover the same distance.
@@ -256,6 +298,10 @@ void main() {
     float hot = smoothstep(0.0, 0.5, tight);
     float wide = pow(smoothstep(0.0, 0.5, thick), 3.5);
     float reach = clamp(hot * 0.85 + wide * 0.4, 0.0, 1.0);
+    // Cel keeps the spill but not the haze: it tightens to a band following the
+    // silhouette, which is how the style draws light escaping past a contour.
+    // Most of the wide lobe goes; enough stays to keep the band off the outline.
+    reach = mix(reach, clamp(celStep(hot, 0.30, 0.22) * 0.9 + wide * 0.2, 0.0, 1.0), u_cel);
     float a = reach * facing * u_glow * u_intensity
             * mix(1.0, 0.30, rind)         // not against the asset's own outline
             * mix(1.0, 0.22, u_shadow)     // a dimmed character does not glow
@@ -282,22 +328,49 @@ void main() {
   // the near end out and crush the far one.
   float atten = clamp(u_refDist / dist, 0.65, 1.45);
 
+  // Cel: the terms that *add* light — rim, contour, the two speculars — take a
+  // flattened version of that falloff. They are flat shapes now, and a
+  // continuous gain multiplied over a flat shape puts back exactly the gradient
+  // the banding just took out of it; the sheen lobe is broad enough to do that
+  // across half a garment. Distance still decides where those shapes fall, which
+  // is where it belongs — it is in the N·L that positions them. A third of the
+  // falloff is kept so a lamp across the room is still weaker than one beside it.
+  float attenAdd = mix(atten, mix(1.0, atten, 0.35), u_cel);
+
   // Half-Lambert wrap blended with true Lambert: pure Lambert crushes the
   // unlit side to black, which looks wrong on stylised art.
   float ndl = dot(N, L);
   float lambert = max(ndl, 0.0);
   float wrapped = ndl * 0.5 + 0.5;
-  float diffuse = mix(wrapped, lambert, 0.5) * atten;
+  // The one term that decides which style you are looking at. Everything else
+  // below is detail on top of the answer this gives: a continuous ramp, or three
+  // flat tones with a drawn line between them.
+  //
+  // Banded *after* the distance falloff, not before, and that ordering is the
+  // whole difference between flat tones and nearly-flat ones: fold a continuous
+  // attenuation into a quantised tone and every fill acquires a slow gradient
+  // again, which is the one thing this style cannot have. Applied afterwards,
+  // the lamp's distance moves the terminator instead of shading the fill — a
+  // shape, which is how the style expresses it anyway.
+  float shade = mix(wrapped, lambert, 0.5) * atten;
+  float diffuse = mix(shade, celShade(shade), u_cel);
 
   // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
   float ao = mix(0.78, 1.0, thick);
+  // Cel: contact darkening is a gradient, and a gradient is the one thing this
+  // style does not have. Flattened rather than dropped — remove it entirely and
+  // the silhouette stops sitting in the room at all.
+  ao = mix(ao, mix(0.90, 1.0, celStep(thick, 0.30, 0.16)), u_cel);
 
   // Ambient is not one flat wash. Light that misses the key side arrives having
   // bounced off the room, and it arrives from the *other* side, carrying the
   // room's colour rather than the lamp's. That split is most of what separates a
   // figure that reads as lit from one that reads as tinted — and because the two
   // colours are luminance-matched it costs no exposure to add.
-  float bounce = dot(N, normalize(vec3(-L.x, -L.y, 0.6))) * 0.5 + 0.5;
+  float bounceRaw = dot(N, normalize(vec3(-L.x, -L.y, 0.6))) * 0.5 + 0.5;
+  // Cel takes the same separation as a fill with an edge on it: the shadow side
+  // is a colour the art is *painted* in, not a hue creeping across the figure.
+  float bounce = mix(bounceRaw, celStep(bounceRaw, 0.50, 0.10), u_cel);
   vec3 amb = mix(u_ambient, u_bounce, bounce * 0.7) * ao;
 
   // ── Rim, in two lobes ──
@@ -316,10 +389,19 @@ void main() {
   // exponent sharp enough to make a line out of it annihilates the term instead
   // (0.5 to the 11th is 0.0005). Rescaling so the outline reads 1.0 is what lets
   // a core exist at all.
+  //
+  // Under cel both lobes stop being falloffs and become strips of constant
+  // brightness: the halo is the wide band drawn along a backlit contour, the
+  // core the hard line inside it. Their widths still come from the two ramps'
+  // own scales — the wide prepass field and the tight alpha ring — so they stay
+  // in proportion on art of any resolution, which is the same reason the
+  // exponents they replace were picked rather than a fixed number of texels.
   float edge = clamp((1.0 - thick) * 2.0, 0.0, 1.0);
   float edgeTight = clamp((1.0 - tight) * 2.0, 0.0, 1.0);
-  float rimHalo = pow(edge, 3.5) * facing * atten * mix(1.0, 0.5, rind);
-  float rimCore = pow(edgeTight, 2.0) * facing * atten * mix(1.0, 0.15, rind);
+  float rimHalo = mix(pow(edge, 3.5), celStep(edge, 0.62, 0.06), u_cel)
+                * facing * attenAdd * mix(1.0, 0.5, rind);
+  float rimCore = mix(pow(edgeTight, 2.0), celStep(edgeTight, 0.55, 0.08), u_cel)
+                * facing * attenAdd * mix(1.0, 0.15, rind);
 
   // ── Interior contours ──
   // The alpha silhouette knows about exactly one edge: the outside one. Every
@@ -347,8 +429,12 @@ void main() {
   // character is wearing — so the contour term reads its inner boundary as the
   // strongest form edge in the picture and draws a second bright line just inside
   // the first. That pair is most of what makes a halo look like a halo.
-  float contour = smoothstep(0.05, 0.4, gradLen) * max(dot(grad / gradLen, L.xy), 0.0)
-                * thick * atten * u_contour * mix(1.0, 0.15, rind);
+  // Cel gives this a threshold instead of a ramp, which is what turns it from
+  // "form edges catch a little light" into a drawn line along them — the closest
+  // thing in the model to the ink an artist would have put there.
+  float contour = mix(smoothstep(0.05, 0.4, gradLen), celStep(gradLen, 0.11, 0.045), u_cel)
+                * max(dot(grad / gradLen, L.xy), 0.0)
+                * thick * attenAdd * u_contour * mix(1.0, 0.15, rind);
 
   // ── Specular, two lobes as well ──
   // Both gated on thickness (never on the antialiased fringe) and on how bright
@@ -356,12 +442,18 @@ void main() {
   // never on black cloth that would have swallowed it.
   vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
   float ndh = max(dot(N, H), 0.0);
-  float gate = thick * atten * smoothstep(0.18, 0.7, dot(base, LUMA));
-  float spec = pow(ndh, 28.0) * u_spec * gate;
+  float gate = thick * attenAdd * smoothstep(0.18, 0.7, dot(base, LUMA));
+  float specLobe = pow(ndh, 28.0);
   // The tight lobe alone puts a dot on a pauldron and nothing anywhere else. The
   // broad one is sheen — what separates satin from wool, and what gives hair its
   // band rather than a speck.
-  float sheen = pow(ndh, 5.0) * u_sheen * gate;
+  float sheenLobe = pow(ndh, 5.0);
+  // Under cel a highlight is a shape with an edge, not a peak with a falloff.
+  // The threshold is taken on the lobe rather than on N·H, so what comes out is
+  // a hard-edged version of exactly where the smooth highlight already was —
+  // its own contour, following the invented surface, rather than a disc.
+  float spec = mix(specLobe, celStep(specLobe, 0.22, 0.09), u_cel) * u_spec * gate;
+  float sheen = mix(sheenLobe, celStep(sheenLobe, 0.45, 0.07), u_cel) * u_sheen * gate;
 
   // The diffuse shading is a multiplier and is converted, not re-derived — see
   // the note on toLinear. Everything else here is light *arriving*, so it adds in
@@ -374,8 +466,11 @@ void main() {
   // Grounding: light reaching the floor is blocked by the figure itself, so the
   // lowest part of a full body sits darker. Confined to the bottom of the
   // silhouette by the cube, and scaled to nothing when the feet are out of frame.
+  // Cel draws it as a shadow with a boundary instead — same placement, same
+  // framing scaling, but a shape rather than a fade.
   float fy = clamp((v_uv.y - u_figTop) / max(u_figBottom - u_figTop, 0.0001), 0.0, 1.0);
-  lit *= 1.0 - fy * fy * fy * u_ground;
+  float groundShape = mix(fy * fy * fy, celStep(fy, 0.78, 0.05) * 0.85, u_cel);
+  lit *= 1.0 - groundShape * u_ground;
 
   // Highlighted characters step forward into the light.
   lit *= (1.0 + u_lift * 0.9);
@@ -594,6 +689,7 @@ export class StageGL {
       night: gl.getUniformLocation(program, "u_night"),
       shadow: gl.getUniformLocation(program, "u_shadow"),
       lift: gl.getUniformLocation(program, "u_lift"),
+      cel: gl.getUniformLocation(program, "u_cel"),
     };
 
     gl.uniform1i(this.uniforms.art, 0);
@@ -817,6 +913,7 @@ export class StageGL {
     gl.uniform1f(u.night, params.night);
     gl.uniform1f(u.shadow, params.shadow);
     gl.uniform1f(u.lift, params.lift);
+    gl.uniform1f(u.cel, params.cel);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

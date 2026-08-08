@@ -46,7 +46,9 @@ export const SLOT_ANCHOR_Y = FEET_SCENE_Y - BODY_SCENE_HEIGHT * 0.5;
 const LUMA = [0.2126, 0.7152, 0.0722];
 
 /**
- * How hard each term of the character pass is driven.
+ * How hard each term of the character pass is driven, in the semi-realistic
+ * style. See `CEL_SHADER_STRENGTHS` for the cel/anime set and why it is not the
+ * same numbers.
  *
  * Exported because the preview harness has to render the picture a world
  * actually gets: a second copy of these numbers is a second chance for the
@@ -75,7 +77,45 @@ export const SHADER_STRENGTHS = Object.freeze({
   contour: 0.4,
   spec: 0.33,
   sheen: 0.12,
+  /** Style blend. 0 is this model exactly; see the cel set below. */
+  cel: 0,
 });
+
+/**
+ * The same terms, driven for cel/anime art.
+ *
+ * These are lower than the realistic set almost across the board, and that is
+ * not a taste judgement — it is arithmetic. Every banded term is *flat* over its
+ * shape where the term it replaces was a falloff peaking at one contour, so it
+ * delivers several times the light for the same strength. Carrying the realistic
+ * numbers over blows the rim into a white bar and the specular into a plate.
+ *
+ * Where a number does go up it is because the style leans on that term rather
+ * than because the maths asked for it: the core, which is the hard line cel
+ * shading is recognised by, and the contour, which is the nearest thing this
+ * model has to ink.
+ */
+export const CEL_SHADER_STRENGTHS = Object.freeze({
+  /** A flat band, not a falloff — roughly half, for the same light. */
+  rim: 0.7,
+  /** Up: the drawn line is the whole look, and it should clip to white. */
+  rimEdge: 0.8,
+  /** Down: cel spills a band along the contour, it doesn't fog the air. */
+  glow: 0.55,
+  /** Up: form edges reading as drawn lines is a signature of the style. */
+  contour: 0.5,
+  /** Down: a flat shape covers far more of the lobe than the lobe's own peak. */
+  spec: 0.26,
+  /** Up in absolute terms, down against the area it now covers — this is the
+   *  hard band across hair, which cel art always has and realism rarely does. */
+  sheen: 0.2,
+  cel: 1,
+});
+
+/** The strength set for a style id, falling back to the semi-realistic one. */
+export function shaderStrengths(style) {
+  return style === "cel" ? CEL_SHADER_STRENGTHS : SHADER_STRENGTHS;
+}
 
 function luma(rgb) {
   return LUMA[0] * rgb[0] + LUMA[1] * rgb[1] + LUMA[2] * rgb[2];
@@ -287,16 +327,20 @@ export class StagePostFX {
     this._enabled = true;
     this._intensity = 0.6;
     this._quality = "auto";
+    this._style = "realistic";
     this._destroyed = false;
   }
 
   // ─── Configuration ───
 
-  /** @param {{enabled?:boolean, intensity?:number, quality?:string}} config */
+  /** @param {{enabled?:boolean, intensity?:number, quality?:string, style?:string}} config */
   setConfig(config = {}) {
     if ("enabled" in config) this._enabled = config.enabled !== false;
     if ("intensity" in config) this._intensity = clamp01(Number(config.intensity) || 0);
     if ("quality" in config) this._quality = config.quality === "off" ? "off" : "auto";
+    // Anything unrecognised is the semi-realistic model, which is also what a
+    // world that has never seen this setting gets.
+    if ("style" in config) this._style = config.style === "cel" ? "cel" : "realistic";
     this._scheduleRender();
   }
 
@@ -528,7 +572,10 @@ export class StagePostFX {
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      ...SHADER_STRENGTHS,
+      // Carries `cel` as well as the six term strengths — the style is one
+      // frozen table, so a strength and the banding it was balanced against can
+      // never arrive from different places.
+      ...shaderStrengths(this._style),
       // The model works in linear light; `exposure` is stored perceptually for
       // the CSS fallback's `brightness()` filter, so convert it here.
       exposure: Math.pow(this._params.exposure, 2.2),
@@ -570,7 +617,7 @@ export class StagePostFX {
     state.reason = undefined;
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on");
-    wrap.classList.remove("glstage-pp-css");
+    wrap.classList.remove("glstage-pp-css", "glstage-pp-cel");
   }
 
   /**
@@ -626,6 +673,11 @@ export class StagePostFX {
     state.mode = "css";
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on", "glstage-pp-css");
+    // The fallback follows the style too, as far as three gradients can: hard
+    // stops instead of ramps. It cannot band the art's own shading — it never
+    // reads a pixel — but a figure whose lit and shadow sides meet at a line is
+    // still recognisably the same choice as the shader's.
+    wrap.classList.toggle("glstage-pp-cel", this._style === "cel");
   }
 
   _clearSlot(wrap, state) {
@@ -636,7 +688,7 @@ export class StagePostFX {
     state.mode = "off";
     state.reason = undefined;
     state.renderedSrc = null;
-    wrap.classList.remove("glstage-pp-on", "glstage-pp-css");
+    wrap.classList.remove("glstage-pp-on", "glstage-pp-css", "glstage-pp-cel");
   }
 
   // ─── Invalidation ───
@@ -665,7 +717,7 @@ export class StagePostFX {
     for (const [wrap, state] of this._slots) {
       state.canvas?.remove();
       state.fallback?.remove();
-      wrap.classList?.remove("glstage-pp-on", "glstage-pp-css");
+      wrap.classList?.remove("glstage-pp-on", "glstage-pp-css", "glstage-pp-cel");
     }
     this._slots.clear();
     this._gl?.destroy();

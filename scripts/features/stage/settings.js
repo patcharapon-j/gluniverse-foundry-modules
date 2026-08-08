@@ -102,6 +102,24 @@ export function registerSettings() {
         onChange: () => notifyPostFXConfig()
     });
 
+    // Which shading model the lighting uses. World-scoped alongside the strength
+    // dial, because it is a decision about the table's art: a cast drawn in a
+    // cel/anime style and a cast of painted portraits want different answers, and
+    // mixing the two per client would put two looks on one stage.
+    game.settings.register(MODULE_ID, k('ppStyle'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppStyle.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppStyle.hint'),
+        scope: 'world',
+        config: true,
+        type: String,
+        choices: {
+            realistic: game.i18n.localize('GLSTAGE.settings.ppStyle.realistic'),
+            cel: game.i18n.localize('GLSTAGE.settings.ppStyle.cel')
+        },
+        default: 'realistic',
+        onChange: () => notifyPostFXConfig()
+    });
+
     // Per-player escape hatch. Client-scoped so someone on a weak machine can
     // kill the shader without having to argue with the GM about the look.
     game.settings.register(MODULE_ID, k('ppQuality'), {
