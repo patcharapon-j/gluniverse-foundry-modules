@@ -5,6 +5,10 @@ import { escapeHTML } from '../../core/util.mjs';
 const i18n = (key) => game.i18n.localize(`GLSTAGE.${key}`);
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
 
+/** Character-lighting styles, in the order the picker offers them. Mirrors the
+ *  `ppStyle` setting's choices; anything else falls back to the first. */
+const PP_STYLES = ['realistic', 'cel', 'rim'];
+
 function escapeAttr(value) {
     return escapeHTML(value);
 }
@@ -337,8 +341,8 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const currentYOffset = finiteNumber(state.stageYOffset ?? getSetting('stageYOffset'), 0);
         const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 60);
         const ppEnabled = getSetting('ppEnabled') !== false;
-        const ppStyle = getSetting('ppStyle') === 'cel' ? 'cel' : 'realistic';
-        const ppStyleOptions = ['realistic', 'cel']
+        const ppStyle = PP_STYLES.includes(getSetting('ppStyle')) ? getSetting('ppStyle') : 'realistic';
+        const ppStyleOptions = PP_STYLES
             .map(s => `<option value="${s}" ${s === ppStyle ? 'selected' : ''}>${i18n(`panel.ppStyle.${s}`)}</option>`)
             .join('');
         html += `<div class="glstage-toolbar">
@@ -1072,7 +1076,8 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const ppStyleSelect = el.querySelector('[data-action="stage-pp-style"]');
         if (ppStyleSelect) {
             ppStyleSelect.addEventListener('change', async () => {
-                await setSetting('ppStyle', ppStyleSelect.value === 'cel' ? 'cel' : 'realistic');
+                const picked = ppStyleSelect.value;
+                await setSetting('ppStyle', PP_STYLES.includes(picked) ? picked : 'realistic');
             });
         }
     }

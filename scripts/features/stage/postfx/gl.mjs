@@ -67,6 +67,17 @@ uniform float u_lift;         // highlight boost, 0..1
 // the look every existing world is already using.
 uniform float u_cel;
 
+// ── Rim-only ──
+// 0 = the key lights the figure, 1 = it only touches the outline.
+//
+// The scene's *colour* still grades the art under this — that is the pass's
+// first job and it is not a light, it is what makes a character standing in a
+// green room look like they are in one. What goes is every term that puts a
+// gradient on the body from the lamp's direction, leaving the rim and the spill
+// as the only things the key draws. Same crossfade discipline as u_cel: at 0
+// this is the model untouched, term for term.
+uniform float u_rimOnly;
+
 // ── Light placement ──
 // The key light is a point in the art's own space rather than one direction
 // shared by the whole figure. On a full-body pose the head and the shins are a
@@ -160,6 +171,37 @@ float celShade(float d) {
        + (CEL_D1 - CEL_D0) * celStep(d, CEL_T0, CEL_TERM)
        + (CEL_D2 - CEL_D1) * celStep(d, CEL_T1, CEL_TERM);
 }
+
+// ── Rim-only ──
+// What the key contributes when it is not allowed to shade anything.
+//
+// Not zero, and that is the whole design of this mode. Dropping the key term
+// outright would darken every stage by however much it was carrying, so a GM
+// switching styles would have to go and re-tune the strength dial and the grade
+// would stop matching the room. Instead the lamp stops being a *direction* and
+// becomes an *exposure*: one flat number, sitting at the diffuse term's own mean
+// over a figure, so the art keeps the brightness it had and loses only the
+// gradient. Same property the cel tones were picked for, checked the same way —
+// the preview harness measures mean luminance across all three styles.
+const float KEY_FLAT = 0.5;
+
+// How far inward the rim reaches when it is the only thing the key draws.
+//
+// The prepass field is blurred wide on purpose — it is inventing a rounded
+// surface, and a rounded surface needs a shading ramp several percent of the
+// frame across. That ramp is the halo's width, and the width is the entire
+// complaint this mode answers, so the exponent is the handle. It is a large
+// number because the field it is raising sits at 0.5 right on the outline and
+// climbs slowly: nothing gentler than this actually bites.
+//
+// The value is measured, not chosen. tools/stage-lighting-preview differences
+// the render against the same render with the rim switched off, which isolates
+// the light from the art underneath it, and reports how far in it survives: 3.5
+// (the semi-realistic exponent) reaches 11.8% of the figure's width, 9.0 reaches
+// 6.0%, and this reaches 3.2% — a line on the outline rather than a wash over
+// the ribs. Past here it stops paying: the remaining width is the tight core,
+// which is a line already.
+const float RIM_ONLY_FALLOFF = 22.0;
 
 /**
  * How much of a small ring around this point is inside the figure.
@@ -354,6 +396,11 @@ void main() {
   // shape, which is how the style expresses it anyway.
   float shade = mix(wrapped, lambert, 0.5) * atten;
   float diffuse = mix(shade, celShade(shade), u_cel);
+  // Rim-only: the one line that stops the key reaching the body at all. Every
+  // gradient the lamp draws across the figure — N·L, the wrap, the distance
+  // falloff, all of it — collapses into a single flat exposure, and what is
+  // left of the key is the edge terms below.
+  diffuse = mix(diffuse, KEY_FLAT, u_rimOnly);
 
   // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
   float ao = mix(0.78, 1.0, thick);
@@ -361,6 +408,11 @@ void main() {
   // style does not have. Flattened rather than dropped — remove it entirely and
   // the silhouette stops sitting in the room at all.
   ao = mix(ao, mix(0.90, 1.0, celStep(thick, 0.30, 0.16)), u_cel);
+  // Rim-only: dropped outright, and here that is right where it was wrong for
+  // cel. This term darkens exactly the band the rim is about to be drawn on, so
+  // leaving it in would put a grey lip immediately inside the light — which is
+  // the reading this mode exists to avoid.
+  ao = mix(ao, 1.0, u_rimOnly);
 
   // Ambient is not one flat wash. Light that misses the key side arrives having
   // bounced off the room, and it arrives from the *other* side, carrying the
@@ -371,6 +423,11 @@ void main() {
   // Cel takes the same separation as a fill with an edge on it: the shadow side
   // is a colour the art is *painted* in, not a hue creeping across the figure.
   float bounce = mix(bounceRaw, celStep(bounceRaw, 0.50, 0.10), u_cel);
+  // Rim-only: the split is a *direction* — one hue on the lamp's side, the
+  // room's on the other — so it goes the same way the diffuse did. The colours
+  // stay, at the midpoint: the character is still lit by this room, just not
+  // from anywhere in it.
+  bounce = mix(bounce, 0.5, u_rimOnly);
   vec3 amb = mix(u_ambient, u_bounce, bounce * 0.7) * ao;
 
   // ── Rim, in two lobes ──
@@ -398,7 +455,12 @@ void main() {
   // exponents they replace were picked rather than a fixed number of texels.
   float edge = clamp((1.0 - thick) * 2.0, 0.0, 1.0);
   float edgeTight = clamp((1.0 - tight) * 2.0, 0.0, 1.0);
-  float rimHalo = mix(pow(edge, 3.5), celStep(edge, 0.62, 0.06), u_cel)
+  // Rim-only tightens the halo rather than removing it. The core alone is a
+  // drawn line with no light in it — the same failure the two lobes exist to
+  // avoid — so what this mode wants is both lobes, pulled in against the
+  // outline instead of one of them washing inward.
+  float haloShape = mix(pow(edge, 3.5), pow(edge, RIM_ONLY_FALLOFF), u_rimOnly);
+  float rimHalo = mix(haloShape, celStep(edge, 0.62, 0.06), u_cel)
                 * facing * attenAdd * mix(1.0, 0.5, rind);
   float rimCore = mix(pow(edgeTight, 2.0), celStep(edgeTight, 0.55, 0.08), u_cel)
                 * facing * attenAdd * mix(1.0, 0.15, rind);
@@ -469,8 +531,11 @@ void main() {
   // Cel draws it as a shadow with a boundary instead — same placement, same
   // framing scaling, but a shape rather than a fade.
   float fy = clamp((v_uv.y - u_figTop) / max(u_figBottom - u_figTop, 0.0001), 0.0, 1.0);
+  // Rim-only drops it: it is the last gradient the lamp puts on the body, and
+  // the strength for it arrives from the framing measurement rather than from a
+  // style table, so it has to be switched off here or nowhere.
   float groundShape = mix(fy * fy * fy, celStep(fy, 0.78, 0.05) * 0.85, u_cel);
-  lit *= 1.0 - groundShape * u_ground;
+  lit *= mix(1.0 - groundShape * u_ground, 1.0, u_rimOnly);
 
   // Highlighted characters step forward into the light.
   lit *= (1.0 + u_lift * 0.9);
@@ -690,6 +755,7 @@ export class StageGL {
       shadow: gl.getUniformLocation(program, "u_shadow"),
       lift: gl.getUniformLocation(program, "u_lift"),
       cel: gl.getUniformLocation(program, "u_cel"),
+      rimOnly: gl.getUniformLocation(program, "u_rimOnly"),
     };
 
     gl.uniform1i(this.uniforms.art, 0);
@@ -914,6 +980,7 @@ export class StageGL {
     gl.uniform1f(u.shadow, params.shadow);
     gl.uniform1f(u.lift, params.lift);
     gl.uniform1f(u.cel, params.cel);
+    gl.uniform1f(u.rimOnly, params.rimOnly);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
