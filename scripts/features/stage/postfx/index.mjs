@@ -79,6 +79,8 @@ export const SHADER_STRENGTHS = Object.freeze({
   sheen: 0.12,
   /** Style blend. 0 is this model exactly; see the cel set below. */
   cel: 0,
+  /** Ditto: 0 lets the key shade the body, which is what this model is. */
+  rimOnly: 0,
 });
 
 /**
@@ -110,11 +112,73 @@ export const CEL_SHADER_STRENGTHS = Object.freeze({
    *  hard band across hair, which cel art always has and realism rarely does. */
   sheen: 0.2,
   cel: 1,
+  rimOnly: 0,
+});
+
+/**
+ * The same terms again, for art that should be graded by the room but not lit
+ * by it — the key touches the outline and nothing else.
+ *
+ * The three zeroes are the mode. Contour, specular and sheen all draw *inside*
+ * the silhouette, and no amount of tuning makes an interior highlight not be
+ * one, so they are switched off outright rather than driven low. What the
+ * shader's `u_rimOnly` then removes is the rest: the diffuse gradient, the
+ * contact darkening, the directional half of the ambient split and the
+ * grounding shadow. Between them there is no term left that puts a gradient on
+ * the body from the lamp's direction.
+ *
+ * The three that survive go *up*, and for one reason: they are now carrying the
+ * whole effect. With no diffuse gradient there is no bright side for a modest
+ * rim to sit on top of, so the same numbers that read as a lit edge in the
+ * semi-realistic model read as a faint outline here.
+ */
+export const RIM_SHADER_STRENGTHS = Object.freeze({
+  /** Up, but the shader's narrowing is what does the work here: past a certain
+   *  tightness the halo is thin enough that its own gain barely moves the
+   *  picture, and the core is what the eye lands on. Measured, the difference
+   *  between 1.3 and 1.7 is a tenth of a pixel of reach. */
+  rim: 1.7,
+  /** Up: with nothing else drawing, the core is what the eye lands on. */
+  rimEdge: 0.95,
+  /** Up: the spill is the half of the glow that lands outside the art, and it
+   *  is the half this mode can spend freely — nothing out there is the
+   *  character's own painted detail. */
+  glow: 1.0,
+  contour: 0,
+  spec: 0,
+  sheen: 0,
+  cel: 0,
+  rimOnly: 1,
 });
 
 /** The strength set for a style id, falling back to the semi-realistic one. */
 export function shaderStrengths(style) {
-  return style === "cel" ? CEL_SHADER_STRENGTHS : SHADER_STRENGTHS;
+  if (style === "cel") return CEL_SHADER_STRENGTHS;
+  if (style === "rim") return RIM_SHADER_STRENGTHS;
+  return SHADER_STRENGTHS;
+}
+
+/**
+ * Style ids, and the class each one puts on the wrap for the CSS fallback.
+ *
+ * Listed in one place so nothing can add a style the teardown paths don't know
+ * to clean up — a stale style class survives every subsequent render, since the
+ * fallback only ever *sets* the one it wants.
+ */
+const STYLE_CLASS = Object.freeze({ realistic: "", cel: "glstage-pp-cel", rim: "glstage-pp-rim" });
+const STYLE_CLASSES = Object.values(STYLE_CLASS).filter(Boolean);
+
+/**
+ * Drop the custom properties the CSS fallback writes onto the wrap itself.
+ *
+ * The layer's own properties leave with the layer; these outlive it, and one of
+ * them drives a `filter` on the `<img>` — so a slot that graduates from the
+ * fallback to the shader would otherwise keep a stale glow around art the
+ * shader is already rimming.
+ */
+function clearWrapVars(wrap) {
+  wrap.style?.removeProperty?.("--glstage-pp-exposure");
+  wrap.style?.removeProperty?.("--glstage-pp-rim-glow");
 }
 
 function luma(rgb) {
@@ -340,7 +404,9 @@ export class StagePostFX {
     if ("quality" in config) this._quality = config.quality === "off" ? "off" : "auto";
     // Anything unrecognised is the semi-realistic model, which is also what a
     // world that has never seen this setting gets.
-    if ("style" in config) this._style = config.style === "cel" ? "cel" : "realistic";
+    if ("style" in config) {
+      this._style = Object.hasOwn(STYLE_CLASS, config.style) ? config.style : "realistic";
+    }
     this._scheduleRender();
   }
 
@@ -617,7 +683,8 @@ export class StagePostFX {
     state.reason = undefined;
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on");
-    wrap.classList.remove("glstage-pp-css", "glstage-pp-cel");
+    wrap.classList.remove("glstage-pp-css", ...STYLE_CLASSES);
+    clearWrapVars(wrap);
   }
 
   /**
@@ -649,8 +716,10 @@ export class StagePostFX {
       state.fallback = layer;
     }
 
-    const css = (rgb) =>
-      `rgb(${Math.round(rgb[0] * 255)} ${Math.round(rgb[1] * 255)} ${Math.round(rgb[2] * 255)})`;
+    const css = (rgb, alpha = 1) => {
+      const c = `${Math.round(rgb[0] * 255)} ${Math.round(rgb[1] * 255)} ${Math.round(rgb[2] * 255)}`;
+      return alpha >= 1 ? `rgb(${c})` : `rgb(${c} / ${alpha.toFixed(3)})`;
+    };
 
     // Feature-prefixed custom properties on the element — never bare --gl-* on
     // :root, which would repaint every feature loaded after Stage.
@@ -665,19 +734,33 @@ export class StagePostFX {
     layer.style.setProperty("--glstage-pp-shade-angle", `${(angle + 180) % 360}deg`);
     layer.style.setProperty("--glstage-pp-shadow", css(this._params.shadowColor));
     layer.style.setProperty("--glstage-pp-strength", String(this._intensity));
-    layer.style.setProperty("--glstage-pp-exposure", String(this._params.exposure));
     // Dimming is carried by the shader on the full path; the fallback has to do
     // it here or a dimmed character would read as brightly lit as a spotlit one.
     layer.style.setProperty("--glstage-pp-dim", state.dimmed ? "1" : "0");
 
+    // These two are read by the <img>, which is the layer's *sibling* — custom
+    // properties inherit downward, so they have to be set on the wrap the two
+    // share or they never arrive.
+    wrap.style.setProperty("--glstage-pp-exposure", String(this._params.exposure));
+    // The rim glow's strength lives in its alpha: a filter has no opacity of its
+    // own, so this is the only way the dial reaches it. Dimmed and highlighted
+    // characters scale the same way the shader's core does.
+    const glow = this._intensity * (state.dimmed ? 0.25 : 1) * (state.highlighted ? 1.5 : 1);
+    wrap.style.setProperty("--glstage-pp-rim-glow", css(lighting.key, clamp01(glow)));
+
     state.mode = "css";
     state.renderedSrc = state.src;
     wrap.classList.add("glstage-pp-on", "glstage-pp-css");
-    // The fallback follows the style too, as far as three gradients can: hard
-    // stops instead of ramps. It cannot band the art's own shading — it never
-    // reads a pixel — but a figure whose lit and shadow sides meet at a line is
-    // still recognisably the same choice as the shader's.
-    wrap.classList.toggle("glstage-pp-cel", this._style === "cel");
+    // The fallback follows the style too, as far as masked gradients can. Cel
+    // gets hard stops instead of ramps: it cannot band the art's own shading —
+    // it never reads a pixel — but a figure whose lit and shadow sides meet at
+    // a line is still recognisably the same choice as the shader's. Rim-only
+    // drops the directional gradients entirely and glows the silhouette, which
+    // for once this path can do exactly: a drop-shadow is a blur of the alpha,
+    // which is all the shader's spill term is either.
+    wrap.classList.remove(...STYLE_CLASSES);
+    const styleClass = STYLE_CLASS[this._style];
+    if (styleClass) wrap.classList.add(styleClass);
   }
 
   _clearSlot(wrap, state) {
@@ -688,7 +771,8 @@ export class StagePostFX {
     state.mode = "off";
     state.reason = undefined;
     state.renderedSrc = null;
-    wrap.classList.remove("glstage-pp-on", "glstage-pp-css", "glstage-pp-cel");
+    wrap.classList.remove("glstage-pp-on", "glstage-pp-css", ...STYLE_CLASSES);
+    clearWrapVars(wrap);
   }
 
   // ─── Invalidation ───
@@ -717,7 +801,8 @@ export class StagePostFX {
     for (const [wrap, state] of this._slots) {
       state.canvas?.remove();
       state.fallback?.remove();
-      wrap.classList?.remove("glstage-pp-on", "glstage-pp-css", "glstage-pp-cel");
+      wrap.classList?.remove("glstage-pp-on", "glstage-pp-css", ...STYLE_CLASSES);
+      clearWrapVars(wrap);
     }
     this._slots.clear();
     this._gl?.destroy();

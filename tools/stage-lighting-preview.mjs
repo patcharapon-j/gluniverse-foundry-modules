@@ -62,7 +62,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;backgro
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { getNormalMap } from "/scripts/features/stage/postfx/normal-map.mjs";
-import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS }
+import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS, RIM_SHADER_STRENGTHS }
   from "/scripts/features/stage/postfx/index.mjs";
 
 // ── A synthetic character ──
@@ -140,9 +140,13 @@ window.run = async () => {
   // Rows four and five are the cel style, tile and detail. Both are needed: the
   // tile shows whether the terminator lands somewhere a viewer would accept, the
   // detail whether the rim is a drawn line or a soft band pretending to be one.
+  // Six and seven are rim-only, and the pairing matters most there: the tile is
+  // where you check that the body really is just the flat art graded to the room
+  // (the failure mode is a mode that looks "off" rather than deliberate), and the
+  // detail is where you check the light still reads as light and not as a stroke.
   const detailH = 300;
   strip.width = tileW * ROOMS.length;
-  strip.height = tileH * 2 + detailH * 3;
+  strip.height = tileH * 3 + detailH * 4;
   const sg = strip.getContext("2d");
   sg.imageSmoothingEnabled = false;
 
@@ -204,6 +208,19 @@ window.run = async () => {
     sg.drawImage(celOut, i * tileW, celTop, tileW, tileH);
     sg.drawImage(celOut, 0, 0, tileW, detailH, i * tileW, celTop + tileH, tileW, detailH);
     label("cel — " + room.name, i * tileW + 10, celTop + tileH - 12, 0.75);
+
+    // ── The same room again, rim-light-only ──
+    // The row to read against the first one, not against the cel rows: what is
+    // being judged is whether the body still belongs in the room once the key
+    // has stopped shading it, which is a question about the *grade*.
+    const rimOut = gl.draw(prepared, { ...params, ...RIM_SHADER_STRENGTHS });
+    if (!rimOut) return { error: "draw() returned null for the rim-only style at room " + i };
+    const rimTop = celTop + tileH + detailH;
+    sg.fillStyle = room_;
+    sg.fillRect(i * tileW, rimTop, tileW, tileH + detailH);
+    sg.drawImage(rimOut, i * tileW, rimTop, tileW, tileH);
+    sg.drawImage(rimOut, 0, 0, tileW, detailH, i * tileW, rimTop + tileH, tileW, detailH);
+    label("rim only — " + room.name, i * tileW + 10, rimTop + tileH - 12, 0.75);
   }
 
   // ── Assertions ──
@@ -248,6 +265,10 @@ window.run = async () => {
   // the realistic one: the banded terms are a different arithmetic path, and a
   // band that does not go to zero with the dial would tint the art at strength 0.
   const celZeroDelta = driftFromArt(shoot([0.5, 0.15], 0, prepared, CEL_SHADER_STRENGTHS).data);
+  // And again for rim-only, where it is the least obvious of the three: that
+  // style's key term is a constant rather than a shading function, and a
+  // constant that survives the dial would tint every character at strength 0.
+  const rimZeroDelta = driftFromArt(shoot([0.5, 0.15], 0, prepared, RIM_SHADER_STRENGTHS).data);
 
   // Where the rim lands. Walk each row of the silhouette, take a band just
   // inside the left and right extremes, and average its luminance.
@@ -280,10 +301,13 @@ window.run = async () => {
 
   const celFromLeft = shoot([0.02, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
   const celFromRight = shoot([0.98, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
+  const rimFromLeft = shoot([0.02, 0.5], 0.6, prepared, RIM_SHADER_STRENGTHS).data;
+  const rimFromRight = shoot([0.98, 0.5], 0.6, prepared, RIM_SHADER_STRENGTHS).data;
 
   const rim = {
     zeroDelta: maxDelta,
     celZeroDelta,
+    rimZeroDelta,
     leftLampLeftBand: bandLuma(fromLeft, "left"),
     leftLampRightBand: bandLuma(fromLeft, "right"),
     rightLampLeftBand: bandLuma(fromRight, "left"),
@@ -294,6 +318,11 @@ window.run = async () => {
     celRightLampLeftBand: bandLuma(celFromRight, "left"),
     celRightLampRightBand: bandLuma(celFromRight, "right"),
     celPeakLuma: peak(celFromLeft),
+    rimLeftLampLeftBand: bandLuma(rimFromLeft, "left"),
+    rimLeftLampRightBand: bandLuma(rimFromLeft, "right"),
+    rimRightLampLeftBand: bandLuma(rimFromRight, "left"),
+    rimRightLampRightBand: bandLuma(rimFromRight, "right"),
+    rimPeakLuma: peak(rimFromLeft),
   };
 
   // ── Is it actually banded? ──
@@ -363,31 +392,123 @@ window.run = async () => {
     }
     return n ? sum / n : 0;
   };
+  // ── Does the light stay out of the art? ──
+  // The claim rim-only makes is not "less light" — it is that the key does not
+  // reach the *interior* at all, only the outline. Flatness alone would not
+  // prove that: a wash that happens to be even is still a wash, and dimming the
+  // whole model would score well on it.
+  //
+  // What proves it is moving the lamp. Light the figure from hard left, then
+  // from hard right, and compare the pixels well inside the silhouette. If the
+  // key touches them, swinging it 180° changes them — that is what a shading
+  // gradient *is*. If it does not, the two renders are the same picture, and
+  // the only place the lamp exists is the band this excludes.
+  //
+  // The erosion is what makes it honest: the rim is *supposed* to move, so the
+  // measurement has to start past where it reaches. INSET is a comfortable
+  // margin beyond the widened halo — measured on the panel, not guessed.
+  const INSET = 45;
+  const inside = (x, y) =>
+    x >= INSET && y >= INSET && x < W - INSET && y < H - INSET &&
+    artPx[(y * W + x) * 4 + 3] > 250 &&
+    artPx[(y * W + x - INSET) * 4 + 3] > 250 && artPx[(y * W + x + INSET) * 4 + 3] > 250 &&
+    artPx[((y - INSET) * W + x) * 4 + 3] > 250 && artPx[((y + INSET) * W + x) * 4 + 3] > 250;
+  const lum = (px, p) => (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
+  const interiorDelta = (a, b) => {
+    let sum = 0, n = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!inside(x, y)) continue;
+        const p = (y * W + x) * 4;
+        sum += Math.abs(lum(a, p) - lum(b, p));
+        n++;
+      }
+    }
+    return { delta: n ? sum / n : 0, pixels: n };
+  };
+  const realisticSwing = interiorDelta(fromLeft, fromRight);
+  const rimSwing = interiorDelta(rimFromLeft, rimFromRight);
+
+  // ── How far in does the rim reach? ──
+  // The swing measurement above proves the light stops *somewhere*; it does not
+  // say where, and "somewhere inside 45px" is not the same claim as "on the
+  // outline".
+  //
+  // Reading it off a profile does not work, and the reason took a while to see:
+  // walking inward from the outline crosses the art's own materials — a dark
+  // shirt, then a pale coat — so a threshold against any single baseline scores
+  // the artwork's edges as light. The number that came out was three times the
+  // truth.
+  //
+  // So the rim is measured against itself with the rim switched off. Same style,
+  // same lamp, same dial, rim/rimEdge/glow zeroed: the difference between
+  // the two renders is the light and nothing else, whatever the art underneath
+  // is doing. The dither is deterministic and identical in both, so it cancels
+  // rather than setting a floor. Reach is then the depth at which that
+  // difference drops under one 8-bit step and stays there.
+  //
+  // Expressed as a fraction of the figure's width, not in pixels: the render
+  // target is sized from the source art, so a pixel count would score the same
+  // rim differently on a 900px portrait and a 2000px one.
+  const noRim = (style) => ({ ...style, rim: 0, rimEdge: 0, glow: 0 });
+  const rimReach = (px, ref, side) => {
+    let sum = 0, rows = 0, widths = 0;
+    for (let y = 0; y < H; y += 2) {
+      let x0 = -1, x1 = -1;
+      for (let x = 0; x < W; x++) if (artPx[(y * W + x) * 4 + 3] > 250) { if (x0 < 0) x0 = x; x1 = x; }
+      if (x0 < 0 || x1 - x0 < 140) continue;
+      const at = (d) => {
+        const p = (y * W + (side === "left" ? x0 + d : x1 - d)) * 4;
+        return Math.abs(lum(px, p) - lum(ref, p));
+      };
+      let peak = 0;
+      for (let d = 0; d < 60; d++) peak = Math.max(peak, at(d));
+      if (peak < 0.05) continue;                     // no rim on this row to measure
+      let reach = 120;
+      for (let d = 0; d < 120; d++) {
+        if (at(d) < 0.004 && at(d + 1) < 0.004 && at(d + 2) < 0.004) { reach = d; break; }
+      }
+      sum += reach; rows++; widths += x1 - x0;
+    }
+    return rows ? { px: sum / rows, frac: sum / rows / (widths / rows), rows } : { px: 0, frac: 0, rows: 0 };
+  };
+  const reach = rimReach(
+    rimFromLeft,
+    shoot([0.02, 0.5], 0.6, prepared, noRim(RIM_SHADER_STRENGTHS)).data,
+    "left"
+  );
+  const realisticReach = rimReach(
+    fromLeft,
+    shoot([0.02, 0.5], 0.6, prepared, noRim(SHADER_STRENGTHS)).data,
+    "left"
+  );
+
   const banding = {
     panelPixels,
     realisticFill: fillSpread(fromLeft),
     celFill: fillSpread(celFromLeft),
+    rimFill: fillSpread(rimFromLeft),
     realisticMean: meanLuma(fromLeft),
     celMean: meanLuma(celFromLeft),
+    rimMean: meanLuma(rimFromLeft),
+    interiorPixels: rimSwing.pixels,
+    realisticSwing: realisticSwing.delta,
+    rimSwing: rimSwing.delta,
+    rimReachPx: reach.px,
+    rimReachFrac: reach.frac,
+    rimReachRows: reach.rows,
+    realisticReachFrac: realisticReach.frac,
   };
 
-  // Alpha outside the silhouette proves the spill is being drawn at all.
-  const probe = document.createElement("canvas");
-  probe.width = gl.canvas.width; probe.height = gl.canvas.height;
-  const pg = probe.getContext("2d");
-  pg.drawImage(gl.canvas, 0, 0);
-  const pd = pg.getImageData(0, 0, probe.width, probe.height).data;
-  const artProbe = document.createElement("canvas");
-  artProbe.width = probe.width; artProbe.height = probe.height;
-  const ag = artProbe.getContext("2d");
-  const img = new Image(); img.src = src; await img.decode();
-  ag.drawImage(img, 0, 0, probe.width, probe.height);
-  const ad = ag.getImageData(0, 0, probe.width, probe.height).data;
-
+  // Alpha outside the silhouette proves the spill is being drawn at all. Shot
+  // deliberately rather than read off gl.canvas: the render target is shared, so
+  // scraping it measures whichever style happened to draw last — which made this
+  // block silently change what it was scoring every time a shot was added above.
+  const spillShot = shoot([0.5, 0.15], 0.6).data;
   let spillPixels = 0, spillPeak = 0, insidePixels = 0;
-  for (let p = 0; p < pd.length; p += 4) {
-    if (ad[p + 3] > 8) { insidePixels++; continue; }
-    if (pd[p + 3] > 2) { spillPixels++; spillPeak = Math.max(spillPeak, pd[p + 3]); }
+  for (let p = 0; p < spillShot.length; p += 4) {
+    if (artPx[p + 3] > 8) { insidePixels++; continue; }
+    if (spillShot[p + 3] > 2) { spillPixels++; spillPeak = Math.max(spillPeak, spillShot[p + 3]); }
   }
   // ── The dark-rind case ──
   // Same silhouette, same lamp, same strengths; only the colour of the boundary
@@ -575,6 +696,55 @@ ok(
   Math.abs(result.celMean - result.realisticMean) < result.realisticMean * 0.08,
   "cel: …at the same exposure, so switching style doesn't re-tune the stage",
   `mean ${f(result.celMean)} vs ${f(result.realisticMean)} semi-realistic`
+);
+
+// ── Rim-light-only ──
+// Same drill: it is a third path through the shader, so it re-earns every
+// property rather than inheriting one.
+ok(
+  result.rimZeroDelta <= 1,
+  "rim-only: strength 0 returns the original pixels untouched",
+  `worst channel drift ${result.rimZeroDelta}/255`
+);
+ok(
+  result.rimLeftLampLeftBand > result.rimLeftLampRightBand * 1.15,
+  "rim-only: a lamp on the left rims the left edge",
+  `${f(result.rimLeftLampLeftBand)} vs ${f(result.rimLeftLampRightBand)}`
+);
+ok(
+  result.rimRightLampRightBand > result.rimRightLampLeftBand * 1.15,
+  "rim-only: …and a lamp on the right rims the right edge",
+  `${f(result.rimRightLampRightBand)} vs ${f(result.rimRightLampLeftBand)}`
+);
+ok(
+  result.rimPeakLuma > 0.85,
+  "rim-only: the rim core still reaches near-white",
+  `peak luminance ${f(result.rimPeakLuma)}`
+);
+// The assertion the mode exists for. Swing the lamp from one side of the room
+// to the other and the interior of the art must not notice.
+ok(
+  result.rimSwing < result.realisticSwing * 0.1,
+  "rim-only: swinging the lamp 180° leaves the interior of the art unchanged",
+  `mean shift ${f(result.rimSwing)} vs ${f(result.realisticSwing)} semi-realistic` +
+    ` (${result.interiorPixels} px past the rim)`
+);
+ok(
+  result.rimSwing < 0.005,
+  "…to within the dither floor, which is as unchanged as 8 bits get",
+  `${(result.rimSwing * 255).toFixed(2)} of one 8-bit step`
+);
+ok(
+  result.rimReachFrac < 0.035 && result.rimReachFrac < result.realisticReachFrac * 0.5,
+  "rim-only: …and the light itself sits on the outline, not over the art",
+  `reaches ${(result.rimReachFrac * 100).toFixed(1)}% of the figure's width in` +
+    ` vs ${(result.realisticReachFrac * 100).toFixed(1)}% semi-realistic` +
+    ` (${result.rimReachPx.toFixed(1)} px over ${result.rimReachRows} rows)`
+);
+ok(
+  Math.abs(result.rimMean - result.realisticMean) < result.realisticMean * 0.1,
+  "rim-only: …and at the same exposure — the key becomes a level, not nothing",
+  `mean ${f(result.rimMean)} vs ${f(result.realisticMean)} semi-realistic`
 );
 
 console.log(`\nwrote ${OUT}`);

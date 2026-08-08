@@ -148,6 +148,33 @@
     opacity: calc(0.48 + var(--glstage-pp-dim, 0) * 0.3);
 }
 
+/* ── Rim-light-only style, on the fallback ──
+   The one style this path can render honestly rather than approximate. The two
+   directional gradients are the whole thing rim-only removes, so they go; the
+   ambient tint stays, because grading the art to the room is the half of the
+   effect this mode keeps.
+
+   What replaces them is a drop-shadow on the art itself, which is a blur of the
+   image's own alpha — the same quantity the shader's spill term reads, arrived
+   at by a different route. Two of them: a tight one for the line and a wide one
+   for the glow behind it, which is the two-lobe rim the shader draws, and for
+   the same reason. Both sit *outside* the silhouette, since the <img> paints
+   over its own shadow — so on this path the light provably cannot bleed into
+   the art, which is exactly what the mode promises.
+
+   The strength dial rides in the colour's alpha; a filter cannot be faded any
+   other way. */
+.glstage-pp-css.glstage-pp-rim .glstage-pp-key,
+.glstage-pp-css.glstage-pp-rim .glstage-pp-shade {
+    display: none;
+}
+
+.stage-actor-img-wrap.glstage-pp-css.glstage-pp-rim .stage-actor-img {
+    filter: brightness(var(--glstage-pp-exposure, 1))
+        drop-shadow(0 0 3px var(--glstage-pp-rim-glow, transparent))
+        drop-shadow(0 0 14px var(--glstage-pp-rim-glow, transparent));
+}
+
 /* ── GM panel controls ──
    The strength dial lives in the Stage Director toolbar alongside the framing
    controls, because lighting is tuned by looking at it. */

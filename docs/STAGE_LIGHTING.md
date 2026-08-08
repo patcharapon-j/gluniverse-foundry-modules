@@ -4,14 +4,16 @@ Four things decide how a character ends up looking: **the style**, **the shading
 model**, **how the art is framed**, and **where it is hosted**. The last one
 decides whether the full effect is available at all.
 
-## The two styles
+## The three styles
 
-`stage.ppStyle` picks between **semi-realistic** and **cel / anime**. They are
-one shader, not two: `u_cel` crossfades every term below against a banded twin,
-so semi-realistic is `u_cel = 0` and is the model term for term — a style cannot
-quietly rebalance the look of a world that never switched. `tools/postfx-check.mjs`
-reads main() statement by statement and fails on any banded term that reaches the
-output without passing through `mix(…, u_cel)`.
+`stage.ppStyle` picks between **semi-realistic**, **cel / anime** and **rim light
+only**. They are one shader, not three: `u_cel` and `u_rimOnly` crossfade every
+affected term below against its twin, so semi-realistic is both switches at 0 and
+is the model term for term — a style cannot quietly rebalance the look of a world
+that never switched. `tools/postfx-check.mjs` reads main() statement by statement
+and fails on any banded term that reaches the output without passing through
+`mix(…, u_cel)`, and on any statement touching `u_rimOnly` that is not itself a
+`mix()`.
 
 What cel changes, and why each one is a separate decision rather than a filter
 over the finished image:
@@ -58,9 +60,52 @@ against the realistic model's 0.012 — the cel fill sits on the dither floor) a
 the mean luminance over the whole figure (0.384 against 0.382, so the strength
 dial does not need re-tuning when a stage switches style).
 
-The CSS fallback follows the style as far as three masked gradients can: hard
-stops instead of ramps, so the lit and shadow sides meet at a line. It cannot
-band the art's own shading, because it never reads a pixel.
+### Rim light only
+
+For art that is already lit — a portrait with its own painted shading, which
+re-lighting only muddies — but that still has to belong to the room it is
+standing in. The colour grade stays; the light stops at the outline.
+
+Everything that puts a gradient on the body from the lamp's direction goes:
+
+| Term | Semi-realistic | Rim only |
+| --- | --- | --- |
+| diffuse | N·L ramp × distance falloff | one flat level (`KEY_FLAT`) |
+| ambient bounce | lamp's side vs the room's | held at the midpoint, both hues kept |
+| contact darkening | edge sits in its own shadow | off — it greys the band the rim lands on |
+| grounding | a fade at the hem | off |
+| contour / specular / sheen | interior form and highlights | strength 0 |
+| rim halo | `edge³·⁵`, dies out over the ribs | `edge²²`, a line on the outline |
+| rim core, spill | the outline and just past it | driven harder — all that is left |
+
+`KEY_FLAT` is not zero, and that is the design. Dropping the key term would
+darken every stage by whatever it was carrying, so instead the lamp stops being a
+*direction* and becomes an *exposure*: mean luminance lands at 0.380 against the
+semi-realistic model's 0.382, so a GM switching style does not then have to
+re-tune the strength dial.
+
+`RIM_ONLY_FALLOFF` is large because the field it raises sits at 0.5 exactly on
+the outline and climbs slowly — gentler exponents do not bite. The value is
+measured, not chosen; see *Checking it* below.
+
+The interior terms are zeroed in the strength table rather than flattened in the
+shader, because no amount of tuning makes an interior highlight not be one.
+`postfx-check` fails if any of the three acquires a value.
+
+### On the CSS fallback
+
+Cel follows as far as three masked gradients can: hard stops instead of ramps, so
+the lit and shadow sides meet at a line. It cannot band the art's own shading,
+because it never reads a pixel.
+
+Rim-only is the one style this path renders honestly rather than approximates.
+The two directional gradients are exactly what the mode removes, so they are
+hidden, and the glow becomes two stacked `drop-shadow()`s on the `<img>` — tight
+plus wide, the same two lobes for the same reason. A drop-shadow is a blur of the
+image's own alpha, which is the quantity the shader's spill term reads, reached
+by a different route; and because the `<img>` paints over its own shadow, on this
+path the light *cannot* reach the art. The strength dial rides in the shadow
+colour's alpha, since a filter has no opacity of its own.
 
 ## The shading model
 
@@ -298,15 +343,35 @@ silhouette, and that the rim stands down on art carrying its own black rind. Tha
 last one renders the same silhouette twice, differing only in the colour of its
 boundary pixels, so the two numbers are directly comparable.
 
-Every one of those is a property of the effect rather than of one style, so the
-cel set is put through them again — none of it follows from the realistic set
-passing, because the banded terms are a separate path through the shader. On top
-of that it measures the two things that make cel a style and not a second set of
-dials: the fill past the terminator is flat, and the exposure has not moved.
+Every one of those is a property of the effect rather than of one style, so each
+style is put through them again — none of it follows from the realistic set
+passing, because the styles are separate paths through the shader. On top of that
+each gets the measurements that make it a style and not a second set of dials.
+
+For **cel**: the fill past the terminator is flat (0.004 spread against 0.012, on
+the flat coat panel only, so the art's own colour cannot leak into the number) and
+the exposure has not moved (0.384 against 0.382).
+
+For **rim only**, two, and they answer different halves of the claim:
+
+- **The lamp swings, the art does not.** Light the figure from hard left, then
+  hard right, and compare every pixel more than 45px inside the silhouette. A
+  shading gradient *is* the thing that would change; the mean shift is 0.000
+  against the semi-realistic model's 0.025, over 127k pixels. Flatness alone
+  would not have proved this — an even wash is still a wash.
+- **The rim reaches 3.2% of the figure's width in**, against 11.4%
+  semi-realistic. Getting this number honestly took a second attempt: reading a
+  luminance profile inward from the outline crosses the art's own materials — a
+  dark shirt, then a pale coat — so any single baseline scores the *artwork's*
+  edges as light, and the first version read three times the truth. The
+  measurement now differences the render against the same render with
+  `rim`/`rimEdge`/`glow` zeroed, which isolates the light whatever is underneath
+  it. The dither is deterministic and identical in both, so it cancels instead of
+  setting a floor.
 
 It also writes a four-room contact sheet with magnified detail rows — the clean
-cut-out, the matted one, and the cel style — which is the only way to tell a
-crisp edge from a soft one, or a rim from a halo:
+cut-out, the matted one, the cel style and the rim-only style — which is the only
+way to tell a crisp edge from a soft one, or a rim from a halo:
 
 ```bash
 node tools/stage-lighting-preview.mjs --out=/tmp/sheet.png

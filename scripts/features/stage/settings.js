@@ -114,7 +114,8 @@ export function registerSettings() {
         type: String,
         choices: {
             realistic: game.i18n.localize('GLSTAGE.settings.ppStyle.realistic'),
-            cel: game.i18n.localize('GLSTAGE.settings.ppStyle.cel')
+            cel: game.i18n.localize('GLSTAGE.settings.ppStyle.cel'),
+            rim: game.i18n.localize('GLSTAGE.settings.ppStyle.rim')
         },
         default: 'realistic',
         onChange: () => notifyPostFXConfig()

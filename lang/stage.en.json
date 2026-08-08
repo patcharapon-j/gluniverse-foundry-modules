@@ -20,9 +20,10 @@
             },
             "ppStyle": {
                 "name": "Character Lighting Style",
-                "hint": "Which shading model the lighting uses. Semi-realistic gives soft falloffs and a glowing rim, and suits painted or rendered portraits. Cel / Anime gives flat tones with a drawn terminator, hard-edged highlights and a crisp rim band, and suits anime-style art.",
+                "hint": "Which shading model the lighting uses. Semi-realistic gives soft falloffs and a glowing rim, and suits painted or rendered portraits. Cel / Anime gives flat tones with a drawn terminator, hard-edged highlights and a crisp rim band, and suits anime-style art. Rim Light Only still grades the art to the room's colour, but keeps the light itself on the outline — nothing washes across the artwork, so already-shaded art keeps its own shading.",
                 "realistic": "Semi-realistic",
-                "cel": "Cel / Anime"
+                "cel": "Cel / Anime",
+                "rim": "Rim Light Only"
             },
             "ppQuality": {
                 "name": "Character Lighting Quality",
@@ -109,10 +110,11 @@
             "stageYOffset": "Stage Y Offset",
             "ppIntensity": "Scene Lighting",
             "ppStyleLabel": "Lighting Style",
-            "ppStyleHint": "Semi-realistic suits painted portraits; Cel / Anime flattens the shading into bands with a drawn terminator and a crisp rim.",
+            "ppStyleHint": "Semi-realistic suits painted portraits; Cel / Anime flattens the shading into bands with a drawn terminator and a crisp rim; Rim Light Only keeps the scene's colour but confines the light to the outline.",
             "ppStyle": {
                 "realistic": "Semi-realistic",
-                "cel": "Cel / Anime"
+                "cel": "Cel / Anime",
+                "rim": "Rim Light Only"
             },
             "ppOptOut": "Skip lighting",
             "ppOptOutHint": "Leave this character's art untouched. Use it for portraits that are already lit, where re-lighting only muddies them.",

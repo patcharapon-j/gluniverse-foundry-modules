@@ -129,6 +129,7 @@ const {
   SLOT_ANCHOR_Y,
   SHADER_STRENGTHS,
   CEL_SHADER_STRENGTHS,
+  RIM_SHADER_STRENGTHS,
   shaderStrengths,
 } = await import(mod("index.mjs"));
 const { StageGL } = await import(mod("gl.mjs"));
@@ -482,13 +483,13 @@ section("shader uniform wiring");
     "the shader strengths are a single frozen export"
   );
   ok(
-    ["rim", "rimEdge", "glow", "contour", "spec", "sheen", "cel"].every(
+    ["rim", "rimEdge", "glow", "contour", "spec", "sheen", "cel", "rimOnly"].every(
       (k) => Number.isFinite(SHADER_STRENGTHS?.[k])
     ),
     "…covering every term the shader takes a strength for"
   );
 
-  // ── The two styles ──
+  // ── The three styles ──
   // Each style is one table, spread into `draw` in one go. The thing that must
   // not happen is a partial set: a strength arriving from one style and the
   // banding it was balanced against from the other, which is exactly what a
@@ -498,21 +499,62 @@ section("shader uniform wiring");
     CEL_SHADER_STRENGTHS && Object.isFrozen(CEL_SHADER_STRENGTHS),
     "the cel strengths are their own frozen export"
   );
+  ok(
+    RIM_SHADER_STRENGTHS && Object.isFrozen(RIM_SHADER_STRENGTHS),
+    "the rim-only strengths are their own frozen export"
+  );
   const realKeys = Object.keys(SHADER_STRENGTHS).sort().join(",");
   const celKeys = Object.keys(CEL_SHADER_STRENGTHS).sort().join(",");
-  ok(realKeys === celKeys, "both styles set exactly the same uniforms", celKeys);
+  const rimKeys = Object.keys(RIM_SHADER_STRENGTHS).sort().join(",");
+  ok(realKeys === celKeys && realKeys === rimKeys, "every style sets exactly the same uniforms", celKeys);
   ok(
-    Object.values(CEL_SHADER_STRENGTHS).every((v) => Number.isFinite(v)),
-    "…and every cel strength is a number"
+    [...Object.values(CEL_SHADER_STRENGTHS), ...Object.values(RIM_SHADER_STRENGTHS)].every((v) =>
+      Number.isFinite(v)
+    ),
+    "…and every strength in both is a number"
   );
-  ok(SHADER_STRENGTHS.cel === 0, "the semi-realistic style is cel = 0 — the old model exactly");
-  ok(CEL_SHADER_STRENGTHS.cel === 1, "…and the cel style is cel = 1");
+  ok(
+    SHADER_STRENGTHS.cel === 0 && SHADER_STRENGTHS.rimOnly === 0,
+    "the semi-realistic style is every style switch at 0 — the old model exactly"
+  );
+  ok(
+    CEL_SHADER_STRENGTHS.cel === 1 && CEL_SHADER_STRENGTHS.rimOnly === 0,
+    "…the cel style is cel = 1 and nothing else"
+  );
+  ok(
+    RIM_SHADER_STRENGTHS.rimOnly === 1 && RIM_SHADER_STRENGTHS.cel === 0,
+    "…and rim-only is rimOnly = 1 and nothing else"
+  );
   ok(shaderStrengths("cel") === CEL_SHADER_STRENGTHS, "shaderStrengths('cel') selects the cel set");
+  ok(
+    shaderStrengths("rim") === RIM_SHADER_STRENGTHS,
+    "shaderStrengths('rim') selects the rim-only set"
+  );
   ok(
     shaderStrengths("realistic") === SHADER_STRENGTHS &&
       shaderStrengths(undefined) === SHADER_STRENGTHS &&
       shaderStrengths("nonsense") === SHADER_STRENGTHS,
     "…and anything else falls back to semi-realistic"
+  );
+
+  // Rim-only's promise is that the key does not touch the interior of the art.
+  // Three of the model's terms draw *inside* the silhouette by construction —
+  // no strength makes an interior highlight not be one — so they are off, not
+  // merely low. A rebalance that gives one of them a value is not a tuning
+  // change; it breaks the one thing the mode is named for.
+  const interior = ["contour", "spec", "sheen"].filter((k) => RIM_SHADER_STRENGTHS[k] !== 0);
+  ok(
+    interior.length === 0,
+    "rim-only draws nothing inside the silhouette",
+    interior.length ? `${interior.join(", ")} still driven` : "contour, spec and sheen are all 0"
+  );
+  // …and with the interior gone there is no lit body for a modest rim to sit
+  // on, so the edge terms have to carry the whole effect.
+  const edgeTerms = ["rim", "rimEdge", "glow"];
+  ok(
+    edgeTerms.every((k) => RIM_SHADER_STRENGTHS[k] > SHADER_STRENGTHS[k]),
+    "…so every edge term is driven above the semi-realistic one",
+    edgeTerms.map((k) => `${k} ${RIM_SHADER_STRENGTHS[k]} vs ${SHADER_STRENGTHS[k]}`).join(", ")
   );
   // A flat band covers far more of its shape than the falloff it replaces peaks
   // over, so carrying the realistic gains into cel blows the rim into a white
@@ -544,6 +586,30 @@ section("shader uniform wiring");
     unmixed.length === 0,
     "…and every one of them is mixed by u_cel, never applied outright",
     unmixed[0]?.split("\n")[0] ?? "all banded terms crossfade"
+  );
+
+  // Rim-only is the same discipline read the other way round. Its terms are
+  // *flattenings* rather than a distinct arithmetic, so there is no celStep() to
+  // grep for — what identifies one is the uniform itself. Every statement that
+  // touches it has to be a crossfade, or semi-realistic stops being the model.
+  const statements = mainBody.split(";").map((s) => s.trim());
+  const rimStatements = statements.filter((s) => /u_rimOnly/.test(s));
+  ok(rimStatements.length > 0, "the rim-only flattenings reach main()", `${rimStatements.length} terms`);
+  const rimUnmixed = rimStatements.filter((s) => !/\bmix\(/.test(s));
+  ok(
+    rimUnmixed.length === 0,
+    "…and every one of them is a mix(), never applied outright",
+    rimUnmixed[0]?.split("\n")[0] ?? "all rim-only terms crossfade"
+  );
+  // The two constants the mode introduces are only ever the far end of one of
+  // those crossfades. A stray KEY_FLAT would flatten the key for every style.
+  const strayConst = statements.filter(
+    (s) => /\b(?:KEY_FLAT|RIM_ONLY_FALLOFF)\b/.test(s) && !/u_rimOnly/.test(s)
+  );
+  ok(
+    strayConst.length === 0,
+    "…and the rim-only constants are reachable only through it",
+    strayConst[0]?.split("\n")[0] ?? "KEY_FLAT and RIM_ONLY_FALLOFF are gated"
   );
 
   // The night tint claims to recolour without dimming, which is only true if it
