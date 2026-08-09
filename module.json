@@ -49,7 +49,8 @@
     "styles/mythic-gme.css",
     "styles/oracles.css",
     "styles/pf2e-ultimates.css",
-    "styles/mobile.css"
+    "styles/mobile.css",
+    "styles/locations.css"
   ],
   "languages": [
     {
@@ -161,6 +162,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-damage-dice.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/locations.en.json"
     }
   ],
   "packs": [

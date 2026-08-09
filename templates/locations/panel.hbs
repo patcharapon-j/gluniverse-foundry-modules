@@ -1,0 +1,89 @@
+<div class="glloc-body gl-glass gl-type">
+
+  <div class="glloc-toolbar">
+    <input type="search" class="gls-input glloc-search" placeholder="{{localize 'GLLOC.panel.search'}}" />
+    {{#if home}}
+      <button type="button" class="gl-btn" data-action="home" data-tooltip="{{localize 'GLLOC.panel.homeHint'}}">
+        <i class="fa-solid fa-house"></i> {{localize "GLLOC.panel.home"}}
+      </button>
+    {{/if}}
+    <button type="button" class="gl-btn" data-action="reset" data-tooltip="{{localize 'GLLOC.panel.newHint'}}">
+      <i class="fa-solid fa-plus"></i>
+    </button>
+  </div>
+
+  {{#if hasEntries}}
+    <div class="glloc-grid gl-scroll">
+      {{#each entries}}
+        <div class="glloc-card {{#if this.isCurrent}}is-current{{/if}}"
+             data-action="travel" data-id="{{this.id}}"
+             data-name="{{this.name}}" data-subtitle="{{this.subtitle}}"
+             data-tooltip="{{localize 'GLLOC.panel.travelHint'}}">
+          <img class="glloc-thumb" src="{{this.img}}" alt="" />
+          <div class="glloc-meta">
+            <div class="glloc-name">{{this.name}}</div>
+            {{#if this.subtitle}}<div class="glloc-sub">{{this.subtitle}}</div>{{/if}}
+          </div>
+          <button type="button" class="gl-btn glloc-card-more" data-action="edit" data-id="{{this.id}}"
+                  data-tooltip="{{localize 'GLLOC.panel.edit'}}">
+            <i class="fa-solid fa-ellipsis"></i>
+          </button>
+        </div>
+      {{/each}}
+    </div>
+  {{else}}
+    <div class="glloc-empty">{{localize "GLLOC.panel.empty"}}</div>
+  {{/if}}
+
+  <div class="glloc-editor">
+    <label for="glloc-img">{{localize "GLLOC.field.img"}}</label>
+    <div class="glloc-pick">
+      <input id="glloc-img" class="gls-input" type="text" name="img" value="{{draft.img}}" />
+      <button type="button" class="gl-btn" data-action="pick"><i class="fa-solid fa-folder-open"></i></button>
+    </div>
+
+    <label for="glloc-name">{{localize "GLLOC.field.name"}}</label>
+    <input id="glloc-name" class="gls-input" type="text" name="name" value="{{draft.name}}" />
+
+    <label for="glloc-subtitle">{{localize "GLLOC.field.subtitle"}}</label>
+    <input id="glloc-subtitle" class="gls-input" type="text" name="subtitle" value="{{draft.subtitle}}" />
+
+    <label for="glloc-style">{{localize "GLLOC.field.style"}}</label>
+    <select id="glloc-style" class="gls-input" name="style">
+      {{#each styleGroups}}
+        <optgroup label="{{this.label}}">
+          {{#each this.styles}}
+            <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+          {{/each}}
+        </optgroup>
+      {{/each}}
+    </select>
+
+    <label for="glloc-accent">{{localize "GLLOC.field.accent"}}</label>
+    <input id="glloc-accent" class="gls-input" type="text" name="accent" placeholder="#7a4be0" value="{{draft.accent}}" />
+
+    <label for="glloc-darkness">{{localize "GLLOC.field.darkness"}}</label>
+    <input id="glloc-darkness" class="gls-input" type="number" name="darkness" min="0" max="1" step="0.05"
+           placeholder="{{localize 'GLLOC.field.darknessKeep'}}" value="{{draft.darkness}}" />
+
+    <label for="glloc-playlist">{{localize "GLLOC.field.playlist"}}</label>
+    <input id="glloc-playlist" class="gls-input" type="text" name="playlistId" value="{{draft.playlistId}}" />
+
+    <div class="glloc-span">
+      {{#if draft.id}}
+        <button type="button" class="gl-btn" data-action="remove" data-id="{{draft.id}}">
+          <i class="fa-solid fa-trash"></i> {{localize "GLLOC.panel.delete"}}
+        </button>
+      {{/if}}
+      <button type="button" class="gl-btn" data-action="preview">
+        <i class="fa-solid fa-eye"></i> {{localize "GLLOC.panel.preview"}}
+      </button>
+      <button type="button" class="gl-btn" data-action="save">
+        <i class="fa-solid fa-floppy-disk"></i> {{localize "GLLOC.panel.save"}}
+      </button>
+      <button type="button" class="gl-btn gl-btn-accent" data-action="go">
+        <i class="fa-solid fa-plane-departure"></i> {{localize "GLLOC.panel.go"}}
+      </button>
+    </div>
+  </div>
+</div>

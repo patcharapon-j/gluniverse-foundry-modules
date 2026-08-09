@@ -28,3 +28,4 @@ import "./oracles/index.mjs";
 import "./pf2e-ultimates/index.mjs";
 import "./mobile/index.mjs";
 import "./pf2e-damage-dice/index.mjs";
+import "./locations/index.mjs";
