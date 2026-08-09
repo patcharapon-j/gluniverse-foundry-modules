@@ -194,6 +194,21 @@ there and invisible in a diff:
 node tools/gen-damage-textures.mjs --sheet=/tmp/damage-dice.png
 ```
 
+**When touching Locations** (`features/locations/`, `styles/locations.css`),
+re-run its consistency check. Everything it covers fails *silently* — a duration
+that disagrees between the CSS token and the `ms` mirror, a `url(#…)` naming a
+filter that does not exist, an `animation:` with no `@keyframes`, a style with no
+i18n key, a `feComposite` that blacks out the plate:
+
+```bash
+node tools/locations-check.mjs
+```
+
+Zero problems required. It cannot check how any of it *looks* — for that,
+`--sheet=/tmp/locations.html` writes a page with every style frozen
+mid-transition; open it. See `docs/LOCATIONS.md` for the one-phase curtain model
+and the v13/v14 background split.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

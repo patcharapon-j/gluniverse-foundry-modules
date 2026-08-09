@@ -1,0 +1,653 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Locations
+   Theatre-of-mind backdrop travel: the curtain, the transition catalogue, the
+   name card, and the GM panel.
+
+   THE MODEL. The curtain mounts a still of the *outgoing* backdrop over the
+   live canvas, the document write happens behind it, and then the transition
+   runs. So every style in here is one thing: a way of destroying that plate to
+   reveal a canvas that is already correct underneath. Nothing has to cover and
+   then uncover — even a fade to black is the veil riding 0 → 1 → 0 while the
+   plate cuts at the midpoint.
+
+   THE DRIVER. One registered custom property, --gl-loc-t, animates 0% → 100%
+   on the curtain root and inherits down. Masks read it inside calc(). SVG
+   filter primitives are NOT CSS-animatable and cannot see custom properties, so
+   every filter here is static and only the gradient underneath it moves; the
+   sole exception is #gl-loc-ripple, which needs SMIL.
+
+   ORDERING TRAPS, all of them load-bearing:
+     · filter applies BEFORE mask on the same element, so they cannot roughen
+       each other — mask on the inner element, filter on its wrapper.
+     · opacity applies AFTER filter, so an opacity ramp that must feed a filter
+       has to sit on the inner element with the filter on the wrapper.
+     · a filter deforms its own element's rectangle, which on a full-screen
+       effect reads as rounded corners — filtered layers are oversized past the
+       viewport and .gl-loc-stage clips the ragged edge away.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@property --gl-loc-t {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+/* Ink radius is separate because it is non-monotonic: the blot advances, then
+   retracts along the path it came, which is what makes it read as a brush
+   withdrawing rather than an edit. */
+@property --gl-loc-r {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+/* ── The curtain ──────────────────────────────────────────────────────── */
+
+.gl-loc-curtain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Above the board, below Foundry's chrome, so the sidebar and hotbar stay
+     both visible and usable through a transition. */
+  z-index: var(--gl-z-sticky);
+  --gl-loc-dur: var(--gl-d-splash);
+  --gl-loc-ease: var(--gl-ease-inout);
+  --gl-loc-veil-color: var(--gl-ink-0);
+}
+
+.gl-loc-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.gl-loc-platewrap,
+.gl-loc-veilwrap {
+  position: absolute;
+  inset: 0;
+}
+
+.gl-loc-plate {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gl-loc-plate-blank {
+  background: var(--gl-ink-0);
+}
+
+.gl-loc-veil {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--gl-loc-veil-color);
+}
+
+@keyframes gl-loc-drive {
+  from { --gl-loc-t: 0%; }
+  to   { --gl-loc-t: 100%; }
+}
+
+.gl-loc-curtain.is-playing {
+  animation: gl-loc-drive var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+/* Shared plate behaviours the mechanisms compose from. */
+@keyframes gl-loc-plate-out {
+  to { opacity: 0; }
+}
+@keyframes gl-loc-plate-cut {
+  0%, 49.99% { opacity: 1; }
+  50%, 100%  { opacity: 0; }
+}
+@keyframes gl-loc-plate-cut-late {
+  0%, 64.99% { opacity: 1; }
+  65%, 100%  { opacity: 0; }
+}
+
+/* ══ 1. Colour field ══ fade · bleach · flash ═══════════════════════════════
+   A solid plate of colour rides in and back out while the picture cuts under
+   the peak. One implementation, three meanings. */
+
+@keyframes gl-loc-veil-inout {
+  0%   { opacity: 0; }
+  50%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.is-playing[data-gl-loc-mech="field"] .gl-loc-veil {
+  animation: gl-loc-veil-inout var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+.is-playing[data-gl-loc-mech="field"] .gl-loc-plate {
+  animation: gl-loc-plate-cut var(--gl-loc-dur) linear forwards;
+}
+
+[data-gl-loc-style="cut"]    { --gl-loc-dur: var(--gl-d-instant); }
+[data-gl-loc-style="fade"]   { --gl-loc-dur: var(--gl-d-splash); }
+[data-gl-loc-style="bleach"] {
+  --gl-loc-dur: var(--gl-d-cinematic);
+  --gl-loc-veil-color: var(--gl-text-bright);
+  --gl-loc-ease: var(--gl-ease-inout);
+}
+[data-gl-loc-style="flash"] {
+  --gl-loc-dur: var(--gl-d-flash);
+  --gl-loc-veil-color: var(--gl-text-bright);
+  --gl-loc-ease: linear;
+}
+
+/* ══ 2. Plate opacity ══ dissolve ═══════════════════════════════════════════
+   No veil at all: the outgoing picture simply thins out over the incoming one,
+   which is the only style here that is a true cross-fade rather than a pass
+   through some third thing. */
+
+[data-gl-loc-style="dissolve"] { --gl-loc-dur: var(--gl-d-glide); }
+
+.is-playing[data-gl-loc-mech="plate"] .gl-loc-plate {
+  animation: gl-loc-plate-out var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+/* ══ 3. Gradient mask ══ wipe · slash · iris · clock · shutter · shoji ══════
+   The plate is masked away along a shape whose stops are driven by --gl-loc-t.
+   The mask is applied unconditionally: at t = 0 every one of these is fully
+   opaque, so there is no pop when .is-playing lands. */
+
+[data-gl-loc-mech="mask"] .gl-loc-plate {
+  mask-image: var(--gl-loc-mask);
+  -webkit-mask-image: var(--gl-loc-mask);
+}
+
+/* Overshoot past 100%: an angled or radial sweep has to cross the far corner,
+   not the near edge, or it finishes with a sliver of the old frame still up. */
+[data-gl-loc-style="wipe"] {
+  --gl-loc-dur: var(--gl-d-move);
+  --gl-loc-ease: var(--gl-ease-sharp);
+  --gl-loc-mask: linear-gradient(to right,
+    #0000 calc(var(--gl-loc-t) * 1.08 - 8%),
+    #000  calc(var(--gl-loc-t) * 1.08));
+}
+
+[data-gl-loc-style="slash"] {
+  --gl-loc-dur: var(--gl-d-swift);
+  --gl-loc-ease: var(--gl-ease-sharp);
+  --gl-loc-mask: linear-gradient(115deg,
+    #0000 calc(var(--gl-loc-t) * 1.5 - 3%),
+    #000  calc(var(--gl-loc-t) * 1.5));
+}
+/* The bright leading edge is the whole point of a slash — a bare diagonal wipe
+   is just a wipe. Routed through --gl-accent so a place's own colour carries it. */
+[data-gl-loc-style="slash"] .gl-loc-veil {
+  opacity: 1;
+  background: var(--gl-accent);
+  mask-image: linear-gradient(115deg,
+    #0000 calc(var(--gl-loc-t) * 1.5 - 4%),
+    #000  calc(var(--gl-loc-t) * 1.5 - 2.6%),
+    #000  calc(var(--gl-loc-t) * 1.5),
+    #0000 calc(var(--gl-loc-t) * 1.5 + 0.6%));
+  -webkit-mask-image: linear-gradient(115deg,
+    #0000 calc(var(--gl-loc-t) * 1.5 - 4%),
+    #000  calc(var(--gl-loc-t) * 1.5 - 2.6%),
+    #000  calc(var(--gl-loc-t) * 1.5),
+    #0000 calc(var(--gl-loc-t) * 1.5 + 0.6%));
+}
+
+/* steps() is not a shortcut here: Cuphead runs its iris at 24fps over 60fps
+   gameplay, and the quantisation is what makes it read as drawn. */
+[data-gl-loc-style="iris"] {
+  --gl-loc-dur: var(--gl-d-glide);
+  --gl-loc-ease: steps(12, end);
+  --gl-loc-mask: radial-gradient(circle at 50% 50%,
+    #0000 calc(var(--gl-loc-t) * 1.04),
+    #000  calc(var(--gl-loc-t) * 1.04 + 0.4%));
+}
+
+[data-gl-loc-style="clock"] {
+  --gl-loc-dur: var(--gl-d-slow);
+  --gl-loc-ease: linear;
+  /* From twelve o'clock, because the reference is a clock hand. */
+  --gl-loc-mask: conic-gradient(from 0deg,
+    #0000 var(--gl-loc-t),
+    #000  var(--gl-loc-t));
+}
+
+/* Eight slats retracting in step. */
+[data-gl-loc-style="shutter"] {
+  --gl-loc-dur: var(--gl-d-move);
+  --gl-loc-ease: var(--gl-ease-sharp);
+  --gl-loc-mask: repeating-linear-gradient(to bottom,
+    #000  0%,
+    #000  calc(12.5% - var(--gl-loc-t) / 8),
+    #0000 calc(12.5% - var(--gl-loc-t) / 8),
+    #0000 12.5%);
+}
+
+/* Two panels parting from the centre line. */
+[data-gl-loc-style="shoji"] {
+  --gl-loc-dur: var(--gl-d-glide);
+  --gl-loc-ease: var(--gl-ease-inout);
+  --gl-loc-mask: linear-gradient(to right,
+    #000  calc(50% - var(--gl-loc-t) / 2),
+    #0000 calc(50% - var(--gl-loc-t) / 2),
+    #0000 calc(50% + var(--gl-loc-t) / 2),
+    #000  calc(50% + var(--gl-loc-t) / 2));
+}
+
+/* ══ 4. Transform ══ push · whip · defocus ══════════════════════════════════ */
+
+@keyframes gl-loc-push {
+  to { transform: translateX(-100%); }
+}
+@keyframes gl-loc-whip {
+  0%   { transform: translateX(0);      filter: blur(0); }
+  45%  {                                filter: blur(18px); }
+  100% { transform: translateX(-112%);  filter: blur(0); }
+}
+@keyframes gl-loc-defocus {
+  to { transform: scale(1.06); filter: blur(24px); opacity: 0; }
+}
+
+[data-gl-loc-style="push"] {
+  --gl-loc-dur: var(--gl-d-move);
+  --gl-loc-ease: var(--gl-ease-sharp);
+}
+.is-playing[data-gl-loc-style="push"] .gl-loc-plate {
+  animation: gl-loc-push var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+[data-gl-loc-style="whip"] {
+  --gl-loc-dur: var(--gl-d-brisk);
+  --gl-loc-ease: var(--gl-ease-sharp);
+}
+.is-playing[data-gl-loc-style="whip"] .gl-loc-plate {
+  animation: gl-loc-whip var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+[data-gl-loc-style="defocus"] {
+  --gl-loc-dur: var(--gl-d-splash);
+  --gl-loc-ease: var(--gl-ease-inout);
+}
+.is-playing[data-gl-loc-style="defocus"] .gl-loc-plate {
+  animation: gl-loc-defocus var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+/* A blur pulls transparency in from outside the element's own box, so a
+   full-screen blurred layer grows a soft frame unless it is oversized past the
+   viewport and clipped. */
+[data-gl-loc-style="whip"] .gl-loc-platewrap,
+[data-gl-loc-style="defocus"] .gl-loc-platewrap,
+[data-gl-loc-mech="ripple"] .gl-loc-platewrap {
+  inset: -8%;
+}
+
+/* ══ 5. Ink flood ══ ink-bleed · ink-brush ══════════════════════════════════
+   The photograph is never filtered. A flat ink layer floods over it and the
+   filter is applied to the ink alone, so the art stays sharp — which is also
+   how Okami and Ghost of Tsushima actually do it. See #gl-loc-ink in
+   travel.mjs for what each primitive contributes. */
+
+[data-gl-loc-mech="ink"] .gl-loc-veilwrap {
+  inset: -15%;
+  filter: url(#gl-loc-ink);
+}
+[data-gl-loc-mech="ink"] .gl-loc-veil {
+  opacity: 1;
+  background: var(--gl-loc-veil-color);
+  mask-image: radial-gradient(circle at var(--gl-loc-ox, 42%) var(--gl-loc-oy, 46%),
+    #000  calc(var(--gl-loc-r) - 12%),
+    #0000 var(--gl-loc-r));
+  -webkit-mask-image: radial-gradient(circle at var(--gl-loc-ox, 42%) var(--gl-loc-oy, 46%),
+    #000  calc(var(--gl-loc-r) - 12%),
+    #0000 var(--gl-loc-r));
+}
+
+/* Advance, hold, retract. The retraction is the entire reason this reads as a
+   hand rather than a cut. */
+@keyframes gl-loc-ink-bleed {
+  0%   { --gl-loc-r: 0%; }
+  48%  { --gl-loc-r: 155%; }
+  52%  { --gl-loc-r: 155%; }
+  100% { --gl-loc-r: 0%; }
+}
+@keyframes gl-loc-ink-sweep {
+  from { --gl-loc-r: 0%; }
+  to   { --gl-loc-r: 175%; }
+}
+
+[data-gl-loc-style="ink-bleed"] {
+  --gl-loc-dur: var(--gl-d-slow);
+  --gl-loc-ease: var(--gl-ease-inout);
+}
+.is-playing[data-gl-loc-style="ink-bleed"] .gl-loc-veil {
+  animation: gl-loc-ink-bleed var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+.is-playing[data-gl-loc-style="ink-bleed"] .gl-loc-plate {
+  animation: gl-loc-plate-cut var(--gl-loc-dur) linear forwards;
+}
+
+/* Same ink, arriving as a sweep from off the left edge instead of a blot. */
+[data-gl-loc-style="ink-brush"] {
+  --gl-loc-dur: var(--gl-d-glide);
+  --gl-loc-ease: var(--gl-ease-sharp);
+  --gl-loc-ox: -12%;
+  --gl-loc-oy: 54%;
+}
+.is-playing[data-gl-loc-style="ink-brush"] .gl-loc-veil {
+  animation: gl-loc-ink-sweep var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+.is-playing[data-gl-loc-style="ink-brush"] .gl-loc-plate {
+  animation: gl-loc-plate-cut-late var(--gl-loc-dur) linear forwards;
+}
+
+/* ══ 6. Threshold dissolve ══ noise-dissolve · paper-tear · film-burn ═══════
+   The opacity ramp is on the inner plate and the threshold filter on its
+   wrapper, so the ramp is INSIDE the filter's input. The filter multiplies the
+   plate's alpha by a noise field and snaps the product at a threshold, which
+   turns a plain fade into an advancing ragged edge. The threshold multiplier is
+   the hardness dial — the same integer VN engines call ramplen or vague. */
+
+[data-gl-loc-mech="shred"] .gl-loc-platewrap {
+  filter: var(--gl-loc-shred, url(#gl-loc-shred));
+}
+.is-playing[data-gl-loc-mech="shred"] .gl-loc-plate {
+  animation: gl-loc-plate-out var(--gl-loc-dur) linear forwards;
+}
+
+[data-gl-loc-style="noise-dissolve"] { --gl-loc-dur: var(--gl-d-splash); }
+
+[data-gl-loc-style="paper-tear"] {
+  --gl-loc-dur: var(--gl-d-glide);
+  --gl-loc-shred: url(#gl-loc-tear);
+}
+
+[data-gl-loc-style="film-burn"] {
+  --gl-loc-dur: var(--gl-d-splash);
+  --gl-loc-shred: url(#gl-loc-burn);
+}
+/* Domain colour, not theme: this is the orange of a stalled projector eating a
+   frame, and routing it through --gl-accent would destroy the reference. */
+[data-gl-loc-style="film-burn"] .gl-loc-veil {
+  mix-blend-mode: screen;
+  background: radial-gradient(ellipse at 62% 44%, #ff9a3c, #7a1e00 42%, #0000 70%);
+}
+@keyframes gl-loc-burn-glow {
+  0%   { opacity: 0; }
+  38%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.is-playing[data-gl-loc-style="film-burn"] .gl-loc-veil {
+  animation: gl-loc-burn-glow var(--gl-loc-dur) linear forwards;
+}
+
+/* ══ 7. Chromatic split ══ glitch ═══════════════════════════════════════════ */
+
+[data-gl-loc-mech="rgb"] .gl-loc-platewrap {
+  filter: url(#gl-loc-rgb);
+}
+@keyframes gl-loc-glitch {
+  0%   { transform: translate3d(0, 0, 0);       opacity: 1; }
+  14%  { transform: translate3d(-2%, 0.8%, 0); }
+  28%  { transform: translate3d(3%, -1%, 0); }
+  42%  { transform: translate3d(-4%, 0, 0);     opacity: 1; }
+  50%  {                                        opacity: 0; }
+  58%  { transform: translate3d(2%, 1.6%, 0);   opacity: 1; }
+  74%  { transform: translate3d(-1%, 0, 0); }
+  100% { transform: translate3d(0, 0, 0);       opacity: 0; }
+}
+[data-gl-loc-style="glitch"] {
+  --gl-loc-dur: var(--gl-d-swift);
+  --gl-loc-ease: steps(1, end);
+}
+.is-playing[data-gl-loc-style="glitch"] .gl-loc-plate {
+  animation: gl-loc-glitch var(--gl-loc-dur) steps(1, end) forwards;
+}
+
+/* ══ 8. Displacement ══ ripple ══════════════════════════════════════════════
+   The one filter in the feature that animates, because feDisplacementMap/@scale
+   is unreachable from CSS at any price. travel.mjs retimes and starts the SMIL. */
+
+[data-gl-loc-mech="ripple"] .gl-loc-platewrap {
+  filter: url(#gl-loc-ripple);
+}
+[data-gl-loc-style="ripple"] {
+  --gl-loc-dur: var(--gl-d-slow);
+  --gl-loc-ease: var(--gl-ease-inout);
+}
+.is-playing[data-gl-loc-mech="ripple"] .gl-loc-plate {
+  animation: gl-loc-plate-out var(--gl-loc-dur) var(--gl-loc-ease) forwards;
+}
+
+/* The shared filter defs are mounted into <body>; they must never paint. */
+#gl-loc-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The name card
+   Lower-left rather than centred: centred always reads as a title card, and it
+   would fight Stage's character art for the middle of the screen.
+
+   The band is Elden Ring's structure — a horizontal wash that fades out at BOTH
+   ends, softly blurred, with a hairline under it. A band that ends in nothing
+   carries text over arbitrary art without ever looking like a box, which a bare
+   hairline cannot do. The underline's stops are deliberately asymmetric; the
+   symmetry is what makes a rule look like UI chrome.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.gl-loc-card {
+  position: fixed;
+  left: clamp(24px, 5vw, 76px);
+  bottom: clamp(72px, 13vh, 148px);
+  z-index: var(--gl-z-splash);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--gl-d-swift) var(--gl-ease),
+    transform var(--gl-d-swift) var(--gl-ease);
+}
+
+.gl-loc-card.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.gl-loc-card-band {
+  position: relative;
+  padding: 0.28em 0 0.42em;
+}
+
+.gl-loc-card-band::before {
+  content: "";
+  position: absolute;
+  inset: -0.5em -3.5em -0.5em -1.8em;
+  z-index: -1;
+  background: linear-gradient(to right,
+    rgb(var(--gl-tint-dark) / 0),
+    rgb(var(--gl-tint-dark) / 0.4) 20%,
+    rgb(var(--gl-tint-dark) / 0.4) 80%,
+    rgb(var(--gl-tint-dark) / 0));
+  filter: blur(2px);
+}
+
+.gl-loc-card-band::after {
+  content: "";
+  position: absolute;
+  left: -1.4em;
+  right: -2.6em;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(to right,
+    transparent,
+    var(--gl-accent) 30%,
+    var(--gl-accent) 80%,
+    transparent);
+  opacity: 0.8;
+}
+
+.gl-loc-card-name {
+  font-family: var(--gl-display);
+  font-variant: small-caps;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  font-size: clamp(1.35rem, 2.4vw, 2.1rem);
+  line-height: 1.1;
+  color: var(--gl-text-bright);
+  text-shadow: 0 2px 12px var(--gl-shadow);
+}
+
+.gl-loc-card-sub {
+  margin-top: 0.15em;
+  font-family: var(--gl-display);
+  font-size: clamp(0.76rem, 1.1vw, 0.95rem);
+  letter-spacing: 0.08em;
+  color: var(--gl-text-dim);
+  text-shadow: 0 1px 8px var(--gl-shadow);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The GM panel
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.glloc-panel .window-content {
+  padding: 0;
+}
+
+.glloc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  max-height: 70vh;
+}
+
+.glloc-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.glloc-toolbar .glloc-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.glloc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 0.5rem;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.glloc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-cut-sm);
+  overflow: hidden;
+  background: var(--gl-surface-inset);
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+              box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.glloc-card:hover {
+  border-color: var(--gl-accent-soft);
+  box-shadow: 0 0 0 1px var(--gl-accent-faint), 0 6px 18px var(--gl-shadow);
+}
+
+.glloc-card.is-current {
+  border-color: var(--gl-accent);
+  box-shadow: 0 0 12px var(--gl-bloom);
+}
+
+.glloc-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--gl-ink-2);
+}
+
+.glloc-meta {
+  padding: 0.32rem 0.45rem 0.4rem;
+  min-width: 0;
+}
+
+.glloc-name {
+  font-family: var(--gl-display);
+  font-size: 0.82rem;
+  color: var(--gl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glloc-sub {
+  font-family: var(--gl-display);
+  font-size: 0.68rem;
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glloc-card-more {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  opacity: 0;
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
+}
+
+.glloc-card:hover .glloc-card-more {
+  opacity: 1;
+}
+
+.glloc-empty {
+  padding: 1.4rem 0.8rem;
+  text-align: center;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-display);
+  font-size: 0.85rem;
+}
+
+.glloc-editor {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 0.6rem;
+  align-items: center;
+  border-top: 1px solid var(--gl-hair);
+  padding-top: 0.6rem;
+}
+
+.glloc-editor label {
+  font-family: var(--gl-display);
+  font-size: 0.76rem;
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+}
+
+.glloc-editor .glloc-span {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.glloc-pick {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.glloc-pick input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
