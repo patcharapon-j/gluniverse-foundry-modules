@@ -209,6 +209,22 @@ Zero problems required. It cannot check how any of it *looks* — for that,
 mid-transition; open it. See `docs/LOCATIONS.md` for the one-phase curtain model
 and the v13/v14 background split.
 
+**When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
+`apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.
+Every GM control on an event resolves its row by the event's `id`, so an event
+with a missing, blank or duplicated id renders perfectly and then ignores edit,
+delete, pin and visibility alike — silently. Read events through
+`readEvents()`/`findEvent()` and write them through `writeEvents()`; never reach
+for the `ct.events` setting directly from a UI:
+
+```bash
+node tools/calendar-events-check.mjs
+```
+
+Zero failures required. Minted ids must stay **deterministic** — the id a row
+renders with has to be the id its click resolves, including on a client that
+never wrote the repair back.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
