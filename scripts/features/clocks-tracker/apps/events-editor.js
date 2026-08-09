@@ -1,7 +1,8 @@
 /** GM editor for events & holidays (single day, day range, or whole month). */
 
-import { MODULE_ID, SETTINGS } from "../const.js";
+import { MODULE_ID } from "../const.js";
 import { GlctHud } from "./hud.js";
+import { readEvents, writeEvents, ensureEventIds, findEvent, reportMissingEvent } from "../calendar/events.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 
@@ -10,6 +11,9 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async show() {
     if (!game.user.isGM) return;
+    // Repair event identity before the first render, so the ids the rows carry
+    // are the ids stored in the world (see ../calendar/events.js).
+    await ensureEventIds();
     if (!this.instance) this.instance = new this();
     await this.instance.render(true);
     return this.instance;
@@ -33,11 +37,23 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/clocks-tracker/events-editor.hbs` } };
 
   static getEvents() {
-    return foundry.utils.deepClone(game.settings.get(MODULE_ID, SETTINGS.events) ?? []);
+    return readEvents();
   }
   static async setEvents(events) {
-    await game.settings.set(MODULE_ID, SETTINGS.events, events);
+    await writeEvents(events);
     GlctHud.refreshState();
+  }
+
+  /**
+   * The event a row control was clicked in, or null (having said so). Both the
+   * id and the lookup can miss on data this editor did not create, and every
+   * caller below is a control that would otherwise just do nothing.
+   */
+  static resolveTarget(target, events) {
+    const id = target?.closest("[data-event-id]")?.dataset.eventId ?? "";
+    const event = findEvent(events, id);
+    if (!event) reportMissingEvent(id, events);
+    return event;
   }
 
   _months() { return game.time.calendar?.months?.values ?? []; }
@@ -95,6 +111,10 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
         classes: ["glct", "glct-events"],
         window: { title: existing ? game.i18n.localize("GLCT.events.edit") : game.i18n.localize("GLCT.events.add") },
         content: this.formContent(existing ?? {}),
+        // Dismissing the dialog resolves to null instead of throwing, so the
+        // catch below is left to report faults only — it used to swallow both,
+        // which turned any error in the form into a button that did nothing.
+        rejectClose: false,
         ok: {
           label: game.i18n.localize("GLCT.editor.save"),
           callback: (event, button) => {
@@ -115,7 +135,11 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
         }
       });
       return result ?? null;
-    } catch { return null; }   // dialog dismissed
+    } catch (err) {
+      console.error(`${MODULE_ID} | clocks-tracker | event form failed`, err);
+      ui.notifications?.error(game.i18n.localize("GLCT.events.formFailed"));
+      return null;
+    }
   }
 
   /** Create a new event (optionally seeded with defaults). Returns it or null. */
@@ -135,8 +159,8 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   static async editEvent(id) {
     if (!game.user.isGM) return null;
     const events = this.getEvents();
-    const existing = events.find(e => e.id === id);
-    if (!existing) return null;
+    const existing = findEvent(events, id);
+    if (!existing) { reportMissingEvent(id, events); return null; }
     const data = await this.promptEvent(existing);
     if (!data) return null;
     Object.assign(existing, data);
@@ -148,15 +172,29 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   /** Delete an event by id (with confirmation). Returns true if removed. */
   static async deleteEvent(id) {
     if (!game.user.isGM) return false;
+    const events = this.getEvents();
+    // Resolve before asking: confirming a delete that then removes nothing is
+    // the same dead control in a costlier disguise.
+    if (!findEvent(events, id)) { reportMissingEvent(id, events); return false; }
     const confirmed = await DialogV2.confirm({
       classes: ["glct", "glct-events"],
       window: { title: game.i18n.localize("GLCT.events.title") },
       content: `<p>${game.i18n.localize("GLCT.events.confirmDelete")}</p>`
     });
     if (!confirmed) return false;
-    await this.setEvents(this.getEvents().filter(e => e.id !== id));
+    await this.setEvents(events.filter(e => e.id !== id));
     this.instance?.render();
     return true;
+  }
+
+  /** Flip one boolean field on the clicked row's event and persist it. */
+  async _toggleField(target, field) {
+    const events = EventsEditor.getEvents();
+    const e = EventsEditor.resolveTarget(target, events);
+    if (!e) { this.render(); return; }   // the list on screen is stale — rebuild it
+    e[field] = !e[field];
+    await EventsEditor.setEvents(events);
+    this.render();
   }
 
   async _onAdd() {
@@ -164,32 +202,18 @@ export class EventsEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _onEdit(ev, target) {
-    const id = target.closest("[data-event-id]")?.dataset.eventId;
-    await EventsEditor.editEvent(id);
+    await EventsEditor.editEvent(target.closest("[data-event-id]")?.dataset.eventId);
   }
 
   async _onDelete(ev, target) {
-    const id = target.closest("[data-event-id]")?.dataset.eventId;
-    await EventsEditor.deleteEvent(id);
+    await EventsEditor.deleteEvent(target.closest("[data-event-id]")?.dataset.eventId);
   }
 
   async _onToggleVis(ev, target) {
-    const id = target.closest("[data-event-id]")?.dataset.eventId;
-    const events = EventsEditor.getEvents();
-    const e = events.find(x => x.id === id);
-    if (!e) return;
-    e.visibleToPlayers = !e.visibleToPlayers;
-    await EventsEditor.setEvents(events);
-    this.render();
+    await this._toggleField(target, "visibleToPlayers");
   }
 
   async _onTogglePin(ev, target) {
-    const id = target.closest("[data-event-id]")?.dataset.eventId;
-    const events = EventsEditor.getEvents();
-    const e = events.find(x => x.id === id);
-    if (!e) return;
-    e.pinned = !e.pinned;
-    await EventsEditor.setEvents(events);
-    this.render();
+    await this._toggleField(target, "pinned");
   }
 }

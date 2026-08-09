@@ -164,6 +164,8 @@
   "GLCT.events.next": "Next: {name} · {days}d",
   "GLCT.events.count": "{n} event(s)",
   "GLCT.events.emptyHint": "No events yet. Add holidays, festivals, or one-off events.",
+  "GLCT.events.notFound": "That event is no longer in the world's event list — the calendar has been refreshed.",
+  "GLCT.events.formFailed": "The event form could not be completed. See the console (F12) for details.",
 
   "GLCT.calendarView.title": "Calendar",
   "GLCT.calendarView.weekend": "Weekend",

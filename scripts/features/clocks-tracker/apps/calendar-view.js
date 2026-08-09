@@ -3,9 +3,10 @@
  *  connected band); clicking a day opens an in-window detail panel with the
  *  day's events and notes. GMs can edit, delete or add events/notes from there. */
 
-import { MODULE_ID, SETTINGS } from "../const.js";
+import { MODULE_ID } from "../const.js";
 import { TimeEngine } from "../engine.js";
 import { getActiveCalendarConfig, getEraLabel } from "../calendar/calendar.js";
+import { readEvents, ensureEventIds } from "../calendar/events.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -13,6 +14,9 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
   static instance = null;
 
   static async show() {
+    // Repair event identity before the first render so the detail panel's
+    // edit/delete buttons can resolve their row (see ../calendar/events.js).
+    await ensureEventIds();
     if (!this.instance) this.instance = new this();
     const c = game.time.components;
     this.instance._viewYear ??= c.year;
@@ -67,8 +71,7 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _visibleEvents() {
-    return (game.settings.get(MODULE_ID, SETTINGS.events) ?? [])
-      .filter(e => game.user.isGM || e.visibleToPlayers);
+    return readEvents().filter(e => game.user.isGM || e.visibleToPlayers);
   }
 
   _describe(e) {
@@ -273,14 +276,20 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!game.user.isGM) return;
     const id = target.closest("[data-event-id]")?.dataset.eventId;
     const { EventsEditor } = await import("./events-editor.js");
-    if (await EventsEditor.editEvent(id)) this.render();
+    await EventsEditor.editEvent(id);
+    // Re-render unconditionally: on success to pick up the edit, otherwise
+    // because the panel on screen may no longer match the stored list.
+    this.render();
   }
 
   async _onDeleteEvent(ev, target) {
     if (!game.user.isGM) return;
     const id = target.closest("[data-event-id]")?.dataset.eventId;
     const { EventsEditor } = await import("./events-editor.js");
-    if (await EventsEditor.deleteEvent(id)) this.render();
+    // The deleted event may have been the one the detail panel is pinned to,
+    // which would otherwise leave the panel showing a row that no longer exists.
+    if (await EventsEditor.deleteEvent(id) && this._selectedEventId === id) this._selectedEventId = null;
+    this.render();
   }
 
   async _onAddForDay() {
