@@ -1,5 +1,5 @@
 import { onSocket, emitSocket } from "../../core/socket.mjs";
-import { clamp01 } from "../../core/util.mjs";
+import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
 
 const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "critical";
@@ -18,11 +18,30 @@ const DEDUPE_WINDOW_MS = 500;
 const DSN_ANIMATION_WAIT_TIMEOUT_MS = 5e3;
 const OVERLAY_Z_INDEX = 99999;
 const OVERLAY_CONTAINER_ID = "gls-critical-overlay";
+// A video cut-in is not bound by the still-image duration slider: it may run for
+// its own natural length, up to this ceiling (a mis-picked feature-length file
+// must not hold the overlay hostage).
+const VIDEO_DURATION_MAX_MS = 3e4;
+// How long to wait for the first video frame before starting the cinematic
+// anyway. Playback keeps buffering; this only bounds the stall.
+const VIDEO_LOAD_TIMEOUT_MS = 8e3;
+// Grace period past a video cut-in's own length before it is torn down anyway.
+const VIDEO_WATCHDOG_SLACK_MS = 2e3;
+// Edge budgets for the video path. The still-image path expresses its fades as
+// fractions of a duration capped at 3s; a 20s video would turn that 15% into a
+// 3s fade. These cap each edge in real time (see videoEdges).
+const VIDEO_EDGE_IN_MS = 400;
+const VIDEO_EDGE_OUT_MS = 500;
+const VIDEO_BG_IN_MS = 500;
+const VIDEO_BG_OUT_MS = 700;
+const VIDEO_EXTENSIONS = ["webm", "mp4", "m4v", "ogv", "ogg", "mov"];
 const SETTINGS = {
   GM_AVATAR: "crit.gmAvatar",
   PC_CRITICAL_SFX: "crit.pcCriticalSfx",
   GM_CRITICAL_SFX: "crit.gmCriticalSfx",
   CINEMATIC_DURATION: "crit.cinematicDuration",
+  VIDEO_DURATION_MODE: "crit.videoDurationMode",
+  VIDEO_AUDIO_DEFAULT: "crit.videoAudioDefault",
   TRIGGER_MODE: "crit.triggerMode",
   ENABLE_SKILL_CRITS: "crit.enableSkillCrits",
   ENABLE_PERCEPTION_CRITS: "crit.enablePerceptionCrits",
@@ -30,7 +49,24 @@ const SETTINGS = {
   SHOW_CINEMATICS: "crit.showCinematics",
   NPC_DEFAULT: "crit.npcDefault",
   AUDIO_ENABLED: "crit.audioEnabled",
-  VOLUME: "crit.volume"
+  VOLUME: "crit.volume",
+  VIDEO_AUDIO_ENABLED: "crit.videoAudioEnabled",
+  VIDEO_VOLUME: "crit.videoVolume"
+};
+const VIDEO_DURATION_MODES = {
+  VIDEO: "video",
+  FIXED: "fixed"
+};
+/**
+ * Per-actor override for "does this clip's own soundtrack play?". Some cut-in
+ * videos carry a usable sting, others carry silence or a watermark jingle, so
+ * the choice is per asset (actor) rather than one global switch — `default`
+ * defers to the world setting.
+ */
+const VIDEO_AUDIO_CHOICES = {
+  DEFAULT: "default",
+  ON: "on",
+  OFF: "off"
 };
 const TRIGGER_MODES = {
   PF2E_DEGREE_OF_SUCCESS: "pf2e",
@@ -40,7 +76,8 @@ const TRIGGER_MODES = {
 const ACTOR_FLAGS = {
   SCHEMA_VERSION: "crit.schemaVersion",
   ENABLED: "crit.enabled",
-  PORTRAIT_OVERRIDE: "crit.portraitOverride"
+  PORTRAIT_OVERRIDE: "crit.portraitOverride",
+  VIDEO_AUDIO: "crit.videoAudio"
 };
 const LEGACY_ACTOR_FLAG_KEYS = [
   "crit.templateSlug",
@@ -56,11 +93,7 @@ let app = null;
 let container = null;
 let resizeHandler = null;
 function mountOverlay() {
-  if (app) return;
-  if (typeof PIXI === "undefined") {
-    console.warn(`${MODULE_ID} | ${FEATURE_ID} | PIXI not available on globalThis; overlay not mounted.`);
-    return;
-  }
+  if (container) return;
   container = document.createElement("div");
   container.id = OVERLAY_CONTAINER_ID;
   Object.assign(container.style, {
@@ -70,6 +103,12 @@ function mountOverlay() {
     zIndex: String(OVERLAY_Z_INDEX)
   });
   document.body.appendChild(container);
+  // The video cut-in is plain DOM and needs only the container above; PIXI is
+  // required for the still-image path alone, so its absence is not fatal.
+  if (typeof PIXI === "undefined") {
+    console.warn(`${MODULE_ID} | ${FEATURE_ID} | PIXI not available on globalThis; image cinematics disabled.`);
+    return;
+  }
   app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -88,6 +127,9 @@ function mountOverlay() {
 }
 function getOverlayApp() {
   return app;
+}
+function getOverlayContainer() {
+  return container;
 }
 const Base$1 = foundry.applications.api.HandlebarsApplicationMixin(
   foundry.applications.api.ApplicationV2
@@ -109,15 +151,29 @@ class GMConfigMenu extends Base$1 {
     form: { template: `modules/${MODULE_ID}/templates/${FEATURE_ID}/gm-config.html` }
   };
   async _prepareContext() {
+    const durationMode = getSetting(SETTINGS.VIDEO_DURATION_MODE);
     return {
       data: {
         gmAvatar: getSetting(SETTINGS.GM_AVATAR),
         pcCriticalSfx: getSetting(SETTINGS.PC_CRITICAL_SFX),
         gmCriticalSfx: getSetting(SETTINGS.GM_CRITICAL_SFX),
-        cinematicDuration: getSetting(SETTINGS.CINEMATIC_DURATION)
+        cinematicDuration: getSetting(SETTINGS.CINEMATIC_DURATION),
+        videoAudioDefault: getSetting(SETTINGS.VIDEO_AUDIO_DEFAULT)
       },
       durationMin: DURATION_MIN_MS,
-      durationMax: DURATION_MAX_MS
+      durationMax: DURATION_MAX_MS,
+      videoDurationChoices: [
+        {
+          value: VIDEO_DURATION_MODES.VIDEO,
+          label: "GLUC.Settings.VideoDurationModeChoiceVideo",
+          selected: durationMode !== VIDEO_DURATION_MODES.FIXED
+        },
+        {
+          value: VIDEO_DURATION_MODES.FIXED,
+          label: "GLUC.Settings.VideoDurationModeChoiceFixed",
+          selected: durationMode === VIDEO_DURATION_MODES.FIXED
+        }
+      ]
     };
   }
   static async #onSubmit(_event, _form, formData) {
@@ -126,9 +182,14 @@ class GMConfigMenu extends Base$1 {
       setSetting(SETTINGS.GM_AVATAR, String(data.gmAvatar ?? "")),
       setSetting(SETTINGS.PC_CRITICAL_SFX, String(data.pcCriticalSfx ?? "")),
       setSetting(SETTINGS.GM_CRITICAL_SFX, String(data.gmCriticalSfx ?? "")),
-      setSetting(SETTINGS.CINEMATIC_DURATION, Number(data.cinematicDuration))
+      setSetting(SETTINGS.CINEMATIC_DURATION, Number(data.cinematicDuration)),
+      setSetting(SETTINGS.VIDEO_DURATION_MODE, normalizeDurationMode(data.videoDurationMode)),
+      setSetting(SETTINGS.VIDEO_AUDIO_DEFAULT, Boolean(data.videoAudioDefault))
     ]);
   }
+}
+function normalizeDurationMode(value) {
+  return value === VIDEO_DURATION_MODES.FIXED ? VIDEO_DURATION_MODES.FIXED : VIDEO_DURATION_MODES.VIDEO;
 }
 function triggerModeConfig() {
   if (game.system.id === DND5E_SYSTEM_ID) {
@@ -189,6 +250,26 @@ function registerSettings() {
     type: Number,
     default: DURATION_DEFAULT_MS,
     range: { min: DURATION_MIN_MS, max: DURATION_MAX_MS, step: 50 }
+  });
+  game.settings.register(MODULE_ID, SETTINGS.VIDEO_DURATION_MODE, {
+    name: "GLUC.Settings.VideoDurationMode",
+    hint: "GLUC.Settings.VideoDurationModeHint",
+    scope: "world",
+    config: false,
+    type: String,
+    choices: {
+      [VIDEO_DURATION_MODES.VIDEO]: "GLUC.Settings.VideoDurationModeChoiceVideo",
+      [VIDEO_DURATION_MODES.FIXED]: "GLUC.Settings.VideoDurationModeChoiceFixed"
+    },
+    default: VIDEO_DURATION_MODES.VIDEO
+  });
+  game.settings.register(MODULE_ID, SETTINGS.VIDEO_AUDIO_DEFAULT, {
+    name: "GLUC.Settings.VideoAudioDefault",
+    hint: "GLUC.Settings.VideoAudioDefaultHint",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: true
   });
   const triggerMode = triggerModeConfig();
   game.settings.register(MODULE_ID, SETTINGS.TRIGGER_MODE, {
@@ -257,6 +338,23 @@ function registerSettings() {
     default: 0.8,
     range: { min: 0, max: 1, step: 0.05 }
   });
+  game.settings.register(MODULE_ID, SETTINGS.VIDEO_AUDIO_ENABLED, {
+    name: "GLUC.Settings.VideoAudioEnabled",
+    hint: "GLUC.Settings.VideoAudioEnabledHint",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+  game.settings.register(MODULE_ID, SETTINGS.VIDEO_VOLUME, {
+    name: "GLUC.Settings.VideoVolume",
+    hint: "GLUC.Settings.VideoVolumeHint",
+    scope: "client",
+    config: true,
+    type: Number,
+    default: 0.8,
+    range: { min: 0, max: 1, step: 0.05 }
+  });
 }
 function getSetting(key) {
   return game.settings.get(MODULE_ID, key);
@@ -297,7 +395,28 @@ const FALLBACK_IMAGE$1 = "icons/svg/mystery-man.svg";
 const BG_FADE_IN_FRACTION = 0.2;
 const BG_FADE_OUT_FRACTION = 0.28;
 const BG_PEAK_ALPHA = 0.85;
+const VIDEO_LAYER_CLASS = "gluc-video-layer";
+
+/** Does this asset path name a video the cut-in should play rather than blit? */
+function isVideoPath(path) {
+  const clean = String(path ?? "").split("?")[0].split("#")[0];
+  const ext = clean.slice(clean.lastIndexOf(".") + 1).toLowerCase();
+  return VIDEO_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Dispatch on asset kind. A video cut-in is DOM (`<video>` in the overlay
+ * container), not a PIXI sprite: the element plays its own soundtrack, needs no
+ * CORS headers to display, and cannot fail a WebGL texture upload — all three of
+ * which the texture path would cost us for remotely hosted clips.
+ */
 async function runCinematic(event) {
+  if (event.isVideo ?? isVideoPath(event.imagePath)) {
+    return runVideoCinematic(event);
+  }
+  return runImageCinematic(event);
+}
+async function runImageCinematic(event) {
   const app2 = getOverlayApp();
   if (!app2) {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | no overlay app; skipping cinematic`);
@@ -364,14 +483,174 @@ async function runCinematic(event) {
   stage.destroy?.({ children: true });
   app2.stop();
 }
+
+/**
+ * The video counterpart of runImageCinematic: same backdrop / wipe / drift beat
+ * sheet, applied to a `<video>` through opacity, transform and clip-path instead
+ * of sprite properties, so both cut-in kinds read as the same effect.
+ */
+async function runVideoCinematic(event) {
+  const host = getOverlayContainer();
+  if (!host) {
+    console.warn(`${MODULE_ID} | ${FEATURE_ID} | no overlay container; skipping cinematic`);
+    return;
+  }
+  const video = await loadVideo(event.imagePath);
+  if (!video) {
+    console.warn(`${MODULE_ID} | ${FEATURE_ID} | could not load video:`, event.imagePath);
+    return;
+  }
+  const layer = document.createElement("div");
+  layer.className = VIDEO_LAYER_CLASS;
+  const backdrop = document.createElement("div");
+  backdrop.className = "gluc-video-backdrop";
+  backdrop.style.opacity = "0";
+  video.style.opacity = "0";
+  layer.append(backdrop, video);
+  host.appendChild(layer);
+  const withAudio = useVideoAudio(event);
+  video.muted = !withAudio;
+  video.volume = videoVolume();
+  // The clip's own soundtrack replaces the configured sting; playing both at
+  // once is never what the GM picked the clip for.
+  if (!withAudio) playSfx(event.isPC ? "pc" : "gm");
+  await startVideo(video);
+  const durationMs = videoDuration(event, video);
+  const edges = videoEdges(durationMs);
+  let laidOutW = 0;
+  let laidOutH = 0;
+  const start = performance.now();
+  try {
+    await new Promise((resolve) => {
+      // requestAnimationFrame stops in a background tab, so the tick alone could
+      // never settle and would wedge the queue behind it. The timer is throttled
+      // there too, but it still fires — it is the guarantee that this resolves.
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(watchdog);
+        resolve();
+      };
+      const watchdog = setTimeout(finish, durationMs + VIDEO_WATCHDOG_SLACK_MS);
+      const tick = () => {
+        if (done) return;
+        const t = Math.min(1, (performance.now() - start) / durationMs);
+        const frame = animate(t, edges);
+        const { sw, sh } = screenSize();
+        if (sw !== laidOutW || sh !== laidOutH) {
+          laidOutW = sw;
+          laidOutH = sh;
+          layoutVideo(video, sw, sh);
+        }
+        backdrop.style.opacity = String(frame.bgAlpha);
+        video.style.opacity = String(frame.imgAlpha);
+        video.style.transform = `translate(-50%, -50%) scale(${frame.scaleMul})`;
+        const inset = (1 - clamp01(frame.wipe)) * 50;
+        video.style.clipPath = `inset(${inset}% 0% ${inset}% 0%)`;
+        if (t >= 1) {
+          finish();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  } finally {
+    releaseVideo(video);
+    layer.remove();
+  }
+}
+
+/** Size the element to its aspect-fit box so the wipe clips the frame, not the viewport. */
+function layoutVideo(video, sw, sh) {
+  const vw = video.videoWidth || 16;
+  const vh = video.videoHeight || 9;
+  const scale = Math.min(sw / vw, sh / vh);
+  video.style.width = `${(vw * scale).toFixed(2)}px`;
+  video.style.height = `${(vh * scale).toFixed(2)}px`;
+}
+
+/**
+ * Cut-in length for a video. In `video` mode the clip's own length wins (capped,
+ * so a mis-picked long file cannot hold the overlay); otherwise the still-image
+ * duration slider applies and a longer clip is simply cut off.
+ */
+function videoDuration(event, video) {
+  const fixed = clampNumber(event.durationMs, DURATION_MIN_MS, DURATION_MAX_MS, DURATION_DEFAULT_MS);
+  if (getSetting(SETTINGS.VIDEO_DURATION_MODE) === VIDEO_DURATION_MODES.FIXED) return fixed;
+  const natural = Number(video.duration) * 1e3;
+  // Live/streamed sources report Infinity, an unloaded one NaN.
+  if (!Number.isFinite(natural) || natural <= 0) return fixed;
+  return clamp(natural, DURATION_MIN_MS, VIDEO_DURATION_MAX_MS);
+}
+
+/**
+ * Fade fractions for a video, each capped to a real-time budget. The image path
+ * runs at most 3s so its fractions stay short in absolute terms; on a 20s clip
+ * the same 15% would be a three-second fade-in.
+ */
+function videoEdges(durationMs) {
+  const span = Math.max(1, durationMs);
+  const cap = (fraction, ms) => Math.min(fraction, ms / span);
+  return {
+    easeIn: cap(EASE_IN_FRACTION, VIDEO_EDGE_IN_MS),
+    easeOut: cap(EASE_OUT_FRACTION, VIDEO_EDGE_OUT_MS),
+    bgIn: cap(BG_FADE_IN_FRACTION, VIDEO_BG_IN_MS),
+    bgOut: cap(BG_FADE_OUT_FRACTION, VIDEO_BG_OUT_MS)
+  };
+}
+
+/** Does this client play the clip's own audio for this event? */
+function useVideoAudio(event) {
+  if (!getSetting(SETTINGS.AUDIO_ENABLED)) return false;
+  if (!getSetting(SETTINGS.VIDEO_AUDIO_ENABLED)) return false;
+  return event.videoAudio === true;
+}
+function videoVolume() {
+  return clamp01(clamp01(getSetting(SETTINGS.VIDEO_VOLUME)) * readGlobalInterfaceVolume());
+}
+
+/**
+ * Start playback, falling back to muted on rejection. Browsers block autoplay
+ * with sound until the page has been interacted with; losing the soundtrack is
+ * far better than losing the cut-in.
+ */
+async function startVideo(video) {
+  try {
+    await video.play();
+    return true;
+  } catch (err) {
+    if (video.muted) {
+      console.warn(`${MODULE_ID} | ${FEATURE_ID} | video playback failed:`, err);
+      return false;
+    }
+    video.muted = true;
+    try {
+      await video.play();
+      console.warn(`${MODULE_ID} | ${FEATURE_ID} | autoplay with audio was blocked; playing muted.`);
+      return true;
+    } catch (err2) {
+      console.warn(`${MODULE_ID} | ${FEATURE_ID} | video playback failed:`, err2);
+      return false;
+    }
+  }
+}
 const HOLD_DRIFT = 0.04;
 const OUT_SCALE_BOOST = 0.16;
-function animate(t) {
+const DEFAULT_EDGES = {
+  easeIn: EASE_IN_FRACTION,
+  easeOut: EASE_OUT_FRACTION,
+  bgIn: BG_FADE_IN_FRACTION,
+  bgOut: BG_FADE_OUT_FRACTION
+};
+function animate(t, edges = DEFAULT_EDGES) {
+  const { easeIn, easeOut, bgIn, bgOut } = edges;
   let bgAlpha;
-  if (t < BG_FADE_IN_FRACTION) {
-    bgAlpha = easeOutCubic(t / BG_FADE_IN_FRACTION) * BG_PEAK_ALPHA;
-  } else if (t > 1 - BG_FADE_OUT_FRACTION) {
-    const k = (t - (1 - BG_FADE_OUT_FRACTION)) / BG_FADE_OUT_FRACTION;
+  if (t < bgIn) {
+    bgAlpha = easeOutCubic(t / bgIn) * BG_PEAK_ALPHA;
+  } else if (t > 1 - bgOut) {
+    const k = (t - (1 - bgOut)) / bgOut;
     bgAlpha = BG_PEAK_ALPHA * (1 - easeInCubic(k));
   } else {
     bgAlpha = BG_PEAK_ALPHA;
@@ -379,18 +658,18 @@ function animate(t) {
   let imgAlpha = 1;
   let scaleMul = 1;
   let wipe = 1;
-  if (t < EASE_IN_FRACTION) {
-    const k = t / EASE_IN_FRACTION;
+  if (t < easeIn) {
+    const k = t / easeIn;
     imgAlpha = easeOutCubic(k);
     scaleMul = 0.92 + 0.08 * easeOutQuint(k);
     wipe = easeOutQuart(k);
-  } else if (t > 1 - EASE_OUT_FRACTION) {
-    const k = (t - (1 - EASE_OUT_FRACTION)) / EASE_OUT_FRACTION;
+  } else if (t > 1 - easeOut) {
+    const k = (t - (1 - easeOut)) / easeOut;
     imgAlpha = 1 - easeInCubic(k);
     scaleMul = 1 + HOLD_DRIFT + OUT_SCALE_BOOST * easeOutCubic(k);
   } else {
-    const holdLen = 1 - EASE_IN_FRACTION - EASE_OUT_FRACTION;
-    const k = (t - EASE_IN_FRACTION) / holdLen;
+    const holdLen = 1 - easeIn - easeOut;
+    const k = (t - easeIn) / holdLen;
     scaleMul = 1 + HOLD_DRIFT * easeInOutSine(k);
   }
   return { bgAlpha, imgAlpha, scaleMul, wipe };
@@ -435,6 +714,57 @@ async function loadImage(src) {
   }
   return null;
 }
+
+/**
+ * Build the `<video>` and hold until it has a frame (or the wait times out —
+ * playback keeps buffering, the timeout only bounds the stall). No `crossOrigin`
+ * on purpose: nothing here reads the pixels back, and requesting CORS would make
+ * every clip on a header-less host fail outright.
+ */
+function loadVideo(src) {
+  if (!src) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.className = "gluc-video";
+    video.preload = "auto";
+    video.playsInline = true;
+    video.loop = false;
+    video.muted = true;
+    video.disablePictureInPicture = true;
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      console.warn(`${MODULE_ID} | ${FEATURE_ID} | video slow to load; starting anyway:`, src);
+      finish(video);
+    }, VIDEO_LOAD_TIMEOUT_MS);
+    video.addEventListener("loadeddata", () => finish(video), { once: true });
+    video.addEventListener(
+      "error",
+      () => {
+        releaseVideo(video);
+        finish(null);
+      },
+      { once: true }
+    );
+    video.src = src;
+  });
+}
+
+/** Stop the element and drop its buffer so a finished cut-in keeps no decoder alive. */
+function releaseVideo(video) {
+  try {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  } catch (err) {
+    console.debug(`${MODULE_ID} | ${FEATURE_ID} | video teardown:`, err);
+  }
+}
 const queue = [];
 const recentMessages = /* @__PURE__ */ new Map();
 let playing = false;
@@ -478,16 +808,27 @@ const FALLBACK_IMAGE = "icons/svg/mystery-man.svg";
 function resolveCritEvent(input) {
   const actor = game.actors.get(input.actorId);
   if (!actor) return null;
+  const imagePath = resolveImage(actor, input.isPC);
   return {
     messageId: input.messageId,
     actorId: input.actorId,
     actorName: actor.name ?? game.i18n.localize("GLUC.Actor.UnknownName"),
     isPC: input.isPC,
-    imagePath: resolveImage(actor, input.isPC),
+    imagePath,
+    isVideo: isVideoPath(imagePath),
+    // The actor/world half of the audio decision travels with the event; each
+    // receiving client still applies its own mute toggle and volume.
+    videoAudio: resolveVideoAudio(actor),
     durationMs: getSetting(SETTINGS.CINEMATIC_DURATION),
     startTimestamp: Date.now(),
     originUserId: input.originUserId
   };
+}
+function resolveVideoAudio(actor) {
+  const choice = actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.VIDEO_AUDIO);
+  if (choice === VIDEO_AUDIO_CHOICES.ON) return true;
+  if (choice === VIDEO_AUDIO_CHOICES.OFF) return false;
+  return Boolean(getSetting(SETTINGS.VIDEO_AUDIO_DEFAULT));
 }
 function resolveImage(actor, isPC) {
   const override = actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.PORTRAIT_OVERRIDE);
@@ -842,7 +1183,8 @@ function readActorFlags(actor) {
   return {
     schemaVersion: actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.SCHEMA_VERSION) ?? 0,
     enabled: actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.ENABLED) ?? false,
-    portraitOverride: actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.PORTRAIT_OVERRIDE) ?? null
+    portraitOverride: actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.PORTRAIT_OVERRIDE) ?? null,
+    videoAudio: actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.VIDEO_AUDIO) ?? VIDEO_AUDIO_CHOICES.DEFAULT
   };
 }
 async function writeActorFlags(actor, patch) {
@@ -856,7 +1198,14 @@ async function writeActorFlags(actor, patch) {
   if (patch.portraitOverride !== void 0) {
     writes.push(actor.setFlag(FLAG_SCOPE, ACTOR_FLAGS.PORTRAIT_OVERRIDE, patch.portraitOverride));
   }
+  if (patch.videoAudio !== void 0) {
+    writes.push(actor.setFlag(FLAG_SCOPE, ACTOR_FLAGS.VIDEO_AUDIO, patch.videoAudio));
+  }
   await Promise.all(writes);
+}
+function normalizeVideoAudioChoice(value) {
+  const choice = String(value ?? "");
+  return Object.values(VIDEO_AUDIO_CHOICES).includes(choice) ? choice : VIDEO_AUDIO_CHOICES.DEFAULT;
 }
 function migrateActorFlags(actor) {
   const current = actor.getFlag(FLAG_SCOPE, ACTOR_FLAGS.SCHEMA_VERSION) ?? 0;
@@ -963,12 +1312,25 @@ class ActorConfigModal extends Base {
   async _prepareContext() {
     const flags = readActorFlags(this.#baseActor);
     const isNPC = !this.#actor.hasPlayerOwner;
+    const videoAudio = normalizeVideoAudioChoice(flags.videoAudio);
+    const worldDefault = getSetting(SETTINGS.VIDEO_AUDIO_DEFAULT)
+      ? "GLUC.Actor.VideoAudioDefaultOn"
+      : "GLUC.Actor.VideoAudioDefaultOff";
     return {
       isNPC,
       isGM: game.user.isGM,
+      // Reflects the asset actually resolved for this actor (override, actor art
+      // or the NPC default), not just the override field.
+      isVideo: isVideoPath(resolveImage(this.#baseActor, !isNPC)),
+      videoAudioChoices: [
+        { value: VIDEO_AUDIO_CHOICES.DEFAULT, label: worldDefault },
+        { value: VIDEO_AUDIO_CHOICES.ON, label: "GLUC.Actor.VideoAudioOn" },
+        { value: VIDEO_AUDIO_CHOICES.OFF, label: "GLUC.Actor.VideoAudioOff" }
+      ].map((c) => ({ ...c, selected: c.value === videoAudio })),
       data: {
         enabled: flags.enabled ?? false,
-        portraitOverride: flags.portraitOverride ?? ""
+        portraitOverride: flags.portraitOverride ?? "",
+        videoAudio
       }
     };
   }
@@ -979,7 +1341,8 @@ class ActorConfigModal extends Base {
     const enabled = isNPC ? Boolean(data.enabled) : true;
     await writeActorFlags(base, {
       enabled,
-      portraitOverride: String(data.portraitOverride ?? "") || null
+      portraitOverride: String(data.portraitOverride ?? "") || null,
+      videoAudio: normalizeVideoAudioChoice(data.videoAudio)
     });
   }
   static #onTest() {

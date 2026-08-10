@@ -34,7 +34,7 @@ flat native list — the Control Center is the single place to configure everyth
 | **Cargo Grid** | any | Polyomino cargo-packing board. |
 | **Tidy 5e Inventory Slots** | D&D 5e + `tidy5e-sheet` | Slot encumbrance and wear-and-tear for the Tidy 5e sheet. |
 | **Flatten Proficiency** | PF2e | Proficiency Without Level variant automation. |
-| **Critical** | PF2e / D&D 5e | JRPG-style cinematic critical-hit / critical-success animations. |
+| **Critical** | PF2e / D&D 5e | JRPG-style cinematic critical-hit / critical-success animations, from an image or a video clip. |
 
 ## Migrating from the standalone modules
 

@@ -11,6 +11,34 @@
   height: 100% !important;
 }
 
+/* Video cut-in. The still-image cut-in is a PIXI sprite; a video is plain DOM in
+   the same overlay container, animated frame-by-frame from JS (opacity /
+   transform / clip-path), so there is no transition or keyframe to declare. */
+.gluc-video-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gluc-video-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--gl-tint-dark));
+}
+
+.gluc-video-layer video.gluc-video {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  object-fit: contain;
+  background: transparent;
+  pointer-events: none;
+  will-change: transform, opacity, clip-path;
+}
+
 .gluc-gm-config section {
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;

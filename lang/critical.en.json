@@ -20,7 +20,15 @@
       "GMCriticalSFXHint": "Audio file played when an NPC scores a Critical Success.",
 
       "CinematicDuration": "Cinematic Duration (ms)",
-      "CinematicDurationHint": "Total length of the snap-in / hold / snap-out animation. 600–3000ms.",
+      "CinematicDurationHint": "Total length of the snap-in / hold / snap-out animation. 600–3000ms. Applies to still images, and to videos when the length mode below is set to the fixed duration.",
+
+      "VideoDurationMode": "Video Length",
+      "VideoDurationModeHint": "How long a video cut-in runs. Playing in full is capped at 30 seconds.",
+      "VideoDurationModeChoiceVideo": "Play the video in full",
+      "VideoDurationModeChoiceFixed": "Cut off at the Cinematic Duration above",
+
+      "VideoAudioDefault": "Use video audio by default",
+      "VideoAudioDefaultHint": "When ON, a video cut-in plays its own soundtrack instead of the critical SFX above. Individual actors can override this on their sheet.",
 
       "TriggerMode": "Trigger Mode",
       "TriggerModeHint": "Choose what counts as a critical: the system's critical outcome (PF2e Critical Success / D&D 5e critical hit), or any natural 20 on the d20.",
@@ -44,7 +52,11 @@
       "AudioEnabled": "Cinematic audio",
       "AudioEnabledHint": "Play critical SFX on this client.",
       "Volume": "Cinematic volume",
-      "VolumeHint": "Volume for critical SFX (0–100%)."
+      "VolumeHint": "Volume for critical SFX (0–100%).",
+      "VideoAudioEnabled": "Video cut-in audio",
+      "VideoAudioEnabledHint": "Play the soundtrack of video cut-ins on this client. When OFF, videos play silently and the critical SFX is used instead.",
+      "VideoVolume": "Video cut-in volume",
+      "VideoVolumeHint": "Volume for the audio track of video cut-ins (0–100%)."
     },
 
     "Actor": {
@@ -58,7 +70,15 @@
       "EnableForNPCHint": "GM-only. When OFF, this NPC never triggers a cinematic.",
 
       "PortraitOverride": "Image Override",
-      "PortraitOverrideHint": "Image shown full-screen for this actor's critical. Leave empty to use actor art (PC) or the NPC Default Image (NPC).",
+      "PortraitOverrideHint": "Image or video shown full-screen for this actor's critical. Leave empty to use actor art (PC) or the NPC Default Image (NPC).",
+
+      "VideoAudio": "Video Audio",
+      "VideoAudioHint": "Whether a video cut-in for this actor plays its own soundtrack instead of the critical SFX. Players can still mute video audio on their own client.",
+      "VideoAudioNotVideo": "This actor's current cut-in asset is not a video, so this has no effect yet.",
+      "VideoAudioDefaultOn": "Use world default (on)",
+      "VideoAudioDefaultOff": "Use world default (off)",
+      "VideoAudioOn": "Always play the video's audio",
+      "VideoAudioOff": "Never play the video's audio",
 
       "TestButton": "Test Cinematic",
       "TestButtonHint": "Play this cinematic locally. Not broadcast to other clients.",
@@ -73,6 +93,7 @@
     "Notifications": {
       "UnsupportedSystemWarning": "GLUniverse Critical supports the PF2e and D&D 5e systems. Cinematics are disabled for this system.",
       "PortraitLoadFailed": "Could not load image for cinematic.",
+      "VideoLoadFailed": "Could not load video for cinematic.",
       "SFXLoadFailed": "Could not load critical SFX audio file."
     }
   }
