@@ -7,7 +7,7 @@
 //   - onReady()           (the old `ready` hook body, + socket wiring)
 // Nothing runs at import time except definitions.
 
-import { MODULE_ID, registerSettings } from './settings.js';
+import { MODULE_ID, registerSettings, captureLocalSafetyExemption } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { SocketHandler } from './socket-handler.js';
 import { PacerHUD } from './PacerHUD.js';
@@ -91,13 +91,19 @@ export function onReady() {
   // Apply the fixed Arcane Glass palette before any UI renders.
   ThemeManager.initialize();
 
-  // Two independent exemptions: the general pacer UI (bars/signals) and the
-  // Dire Peril splash. A user can be hidden from one while still seeing the
-  // other — e.g. a streaming overlay that shows only the Dire Peril reveal.
+  // Three independent exemptions: the general pacer UI (bars/signals), the
+  // Dire Peril splash, and the whole traffic-light safety tool. A user can be
+  // hidden from one while still seeing the others — e.g. a streaming overlay
+  // that shows only the Dire Peril reveal. All three are read ONCE, here: they
+  // decide whether a surface is ever constructed, so they share one boundary —
+  // a change applies on that client's next reload.
   const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
   const isExempt = exemptUsers.includes(game.user.id);
   const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
   const isPerilExempt = perilExemptUsers.includes(game.user.id);
+  // Snapshot kept inside settings.js so PacerHUD and PacerManager read the same
+  // value without importing this module (which would be circular).
+  const isSafetySurfaceExempt = captureLocalSafetyExemption();
 
   // Initialize the socket handler (always needed for state sync)
   SocketHandler.initialize();
@@ -114,11 +120,18 @@ export function onReady() {
     SocketHandler.emitSafetyLightRequest();
   }
 
-  // Independent of the normal HUD exemption: a safety ask must reach every
-  // active player even when their pacing bars are intentionally hidden — the
-  // banner grows its own lamps when there is no HUD light to point at.
-  safetyRequestOverlay = new SafetyRequestOverlay();
-  safetyRequestOverlay.initialize();
+  // Independent of the normal HUD exemption: a safety ask reaches every active
+  // player who is not explicitly safety-exempt, even when their pacing bars are
+  // intentionally hidden — the banner grows its own lamps when there is no HUD
+  // light to point at. The safety exemption is the one thing that stops it,
+  // because a capture login must never put the table's private safety signals on
+  // the recording. Gated by not constructing it: nothing then toggles the
+  // `body.sp-safety-request` class (itself a tell that a check-in is running),
+  // and no fallback lamp cluster is ever grown.
+  if (!isSafetySurfaceExempt) {
+    safetyRequestOverlay = new SafetyRequestOverlay();
+    safetyRequestOverlay.initialize();
+  }
 
   // Only initialize the general pacer UI if not exempt from the bars
   if (!isExempt) {
@@ -127,9 +140,13 @@ export function onReady() {
     pacerHUD.render(true);
 
     // The player's traffic light: its own small fixture docked to the HUD's
-    // flank, so it never has to share the panel's layout.
-    safetyLightPanel = new SafetyLightPanel();
-    safetyLightPanel.initialize();
+    // flank, so it never has to share the panel's layout. Needs both
+    // exemptions to be clear — the panel is docked to the bars, and it is
+    // itself a safety surface.
+    if (!isSafetySurfaceExempt) {
+      safetyLightPanel = new SafetyLightPanel();
+      safetyLightPanel.initialize();
+    }
 
     // Initialize overlay for signals
     pacerOverlay = new PacerOverlay();
@@ -162,13 +179,22 @@ export function onReady() {
     handRaiseSidebar.initialize();
 
     // A raised safety light must never be lost in the canvas: the alert layer
-    // keeps it on screen, and an escalation also rings.
-    safetyAlertOverlay = new SafetyAlertOverlay();
-    safetyAlertOverlay.initialize();
+    // keeps it on screen, and an escalation also rings. Both are suppressed for
+    // a safety-exempt client — the capture login is sometimes given GM rights,
+    // and the escalated viewport treatment and the tone would otherwise land in
+    // the video and audio capture. Gating the subscription rather than the
+    // AudioManager leaves the hand-raise chime untouched, and means the cue is
+    // owned by this world-scoped list instead of the client-scoped
+    // `sp.safetyAudioEnabled` — which would need someone to sign in as the
+    // puppet to tick it.
+    if (!isSafetySurfaceExempt) {
+      safetyAlertOverlay = new SafetyAlertOverlay();
+      safetyAlertOverlay.initialize();
 
-    PacerManager.onSafetyLight(({ status, escalated }) => {
-      if (escalated) audioManager.playSafetyChime(status);
-    });
+      PacerManager.onSafetyLight(({ status, escalated }) => {
+        if (escalated) audioManager.playSafetyChime(status);
+      });
+    }
   }
 
   // Expose global API

@@ -6,6 +6,7 @@
         <th class="user-col">{{localize "STREAM_PACER.Settings.ExemptUserColumn"}}</th>
         <th class="exempt-col">{{localize "STREAM_PACER.Settings.ExemptBarsColumn"}}</th>
         <th class="exempt-col">{{localize "STREAM_PACER.Settings.ExemptPerilColumn"}}</th>
+        <th class="exempt-col">{{localize "STREAM_PACER.Settings.ExemptSafetyColumn"}}</th>
       </tr>
     </thead>
     <tbody>
@@ -17,6 +18,9 @@
         </td>
         <td class="exempt-cell">
           <input type="checkbox" name="peril-{{id}}" {{#if isPerilExempt}}checked{{/if}}>
+        </td>
+        <td class="exempt-cell">
+          <input type="checkbox" name="safety-{{id}}" {{#if isSafetyExempt}}checked{{/if}}>
         </td>
       </tr>
       {{/each}}

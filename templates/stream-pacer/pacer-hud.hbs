@@ -16,11 +16,15 @@
   <div class="p-sec">
     <div class="pacer-players">
       {{#each players}}
-      <div class="player-status {{statusClass}} {{#if ../isGM}}light-{{safetyLight}}{{#unless safetyAcknowledged}} awaiting-light{{/unless}}{{/if}}"
-           title="{{name}}: {{statusTitle}}{{#if ../isGM}} — {{safetyLightTitle}}{{/if}}">
+      {{!-- The safety colour, the lamp and the colour word are guarded on
+            showSafetyLights, NOT on isGM: a safety-exempt GM client must show
+            none of them, and omitting the values alone would emit a bare
+            `light-` class and add `awaiting-light` to every row. --}}
+      <div class="player-status {{statusClass}} {{#if ../showSafetyLights}}light-{{safetyLight}}{{#unless safetyAcknowledged}} awaiting-light{{/unless}}{{/if}}"
+           title="{{name}}: {{statusTitle}}{{#if ../showSafetyLights}} — {{safetyLightTitle}}{{/if}}">
         <i class="fa-solid {{statusIcon}}"></i>
         <span class="p-name">{{name}}</span>
-        {{#if ../isGM}}
+        {{#if ../showSafetyLights}}
         <span class="p-light" aria-hidden="true"></span>
         {{/if}}
       </div>
@@ -107,12 +111,16 @@
               title="{{localize 'STREAM_PACER.Campfire.Tooltip'}}">
         <i class="fa-solid fa-fire"></i>
       </button>
+      {{!-- Absent entirely when safety-exempt, so the button's own state can
+            never reveal that a check-in is running. --}}
+      {{#if showSafetyLights}}
       <button type="button" class="gm-btn safety-check-btn {{#if safety.requested}}active{{/if}}"
               data-action="toggle-safety-request"
               aria-pressed="{{#if safety.requested}}true{{else}}false{{/if}}"
               title="{{#if safety.requested}}{{localize 'STREAM_PACER.SafetyCheck.StopTooltip'}}{{else}}{{localize 'STREAM_PACER.SafetyCheck.TriggerTooltip'}}{{/if}}">
         <i class="fa-solid fa-traffic-light"></i>
       </button>
+      {{/if}}
       {{#if hasActiveSignal}}
       <button type="button" class="gm-btn cancel-btn"
               data-action="cancel-signal"
@@ -131,7 +139,7 @@
 
   {{!-- Safety Lights board (GM only) — shown while a request is open or while
         any player is off green, so a raised light can never be missed. --}}
-  {{#if isGM}}{{#if safety.show}}
+  {{#if showSafetyLights}}{{#if safety.show}}
   <div class="p-sec safety-results-sec {{#if safety.requested}}is-requesting{{/if}} {{#if safety.hudAlert}}has-{{safety.hudAlert}}{{/if}}">
     <div class="safety-results-head">
       <span class="safety-results-title">

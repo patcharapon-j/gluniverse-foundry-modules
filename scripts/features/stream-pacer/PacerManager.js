@@ -1,4 +1,4 @@
-import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS } from './settings.js';
+import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS, isSafetyExempt, isLocallySafetyExempt } from './settings.js';
 import { SocketHandler } from './socket-handler.js';
 
 class PacerManagerClass {
@@ -265,14 +265,22 @@ class PacerManagerClass {
   }
 
   /**
-   * The GM-facing roster: every active player with their light and whether
-   * they have touched it since the current request opened.
+   * The GM-facing roster: every active, non-exempt player with their light and
+   * whether they have touched it since the current request opened.
+   *
+   * A safety-exempt user is left out entirely, so `total`, `pending`, `raised`
+   * and the answered-of-total readout all follow from this one filter. Without
+   * it a capture login would sit unanswered forever and no check-in could ever
+   * read as complete. The exemption is read live here (not from the local
+   * snapshot) so a GM already connected when the list changed picks it up on its
+   * next board update, with no reload of its own.
    */
   getSafetyRoster() {
     const request = this._safetyRequest;
     const roster = [];
     for (const user of game.users) {
       if (user.isGM || !user.active) continue;
+      if (isSafetyExempt(user.id)) continue;
       const status = this.getSafetyLight(user.id);
       roster.push({
         userId: user.id,
@@ -377,6 +385,10 @@ class PacerManagerClass {
    */
   announceSafetyLight() {
     if (game.user.isGM) return;
+    // A safety-exempt client has no light of its own to report — it never shows
+    // the controls that would set one. Staying quiet keeps it out of the board
+    // the GM is rebuilding; the roster filter is the authoritative gate.
+    if (isLocallySafetyExempt()) return;
     SocketHandler.emitSafetyLight(game.user.id, this.getSafetyLight(game.user.id), this._safetyRequest.id);
   }
 

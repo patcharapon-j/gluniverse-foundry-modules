@@ -1,4 +1,4 @@
-import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL } from './settings.js';
+import { MODULE_ID, FEATURE_ID, PLAYER_STATUS, GM_SIGNAL, isLocallySafetyExempt } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { featurePath } from '../../core/const.mjs';
 
@@ -49,12 +49,17 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     const playerStates = PacerManager.getAllPlayerStates();
     const safetyRequest = state.safetyRequest;
 
+    // The GM roster carries safety colour outside anything named "safety", so it
+    // needs its own flag: the template guards that branch on it, because merely
+    // dropping the values would emit a bare `light-` class and stamp
+    // `awaiting-light` onto every row instead.
+    const showSafetyLights = game.user.isGM && !isLocallySafetyExempt();
+
     // Format player states for template. On a GM client each chip also carries
     // that player's standing safety light; player clients never receive
     // another player's light, so the fields stay off their roster.
     const players = Object.values(playerStates).map(p => {
-      const safetyLight = PacerManager.getSafetyLight(p.userId);
-      return {
+      const base = {
         ...p,
         isEngaged: p.status === PLAYER_STATUS.ENGAGED,
         isHandRaised: p.status === PLAYER_STATUS.HAND_RAISED,
@@ -62,7 +67,13 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         isReady: p.status === PLAYER_STATUS.READY,
         statusIcon: this._getStatusIcon(p.status),
         statusClass: this._getStatusClass(p.status),
-        statusTitle: game.i18n.localize(`STREAM_PACER.Status.${p.status}`),
+        statusTitle: game.i18n.localize(`STREAM_PACER.Status.${p.status}`)
+      };
+      if (!showSafetyLights) return base;
+
+      const safetyLight = PacerManager.getSafetyLight(p.userId);
+      return {
+        ...base,
         safetyLight,
         safetyLightTitle: game.i18n.localize(`STREAM_PACER.SafetyCheck.${safetyLight}`),
         safetyAcknowledged: !safetyRequest.active || safetyRequest.acknowledged[p.userId] === true
@@ -118,6 +129,7 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
 
     return {
       isGM: game.user.isGM,
+      showSafetyLights,
       players,
       spotlight,
       myStatus,
@@ -149,6 +161,13 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
   _prepareSafetyContext(state) {
     const request = state.safetyRequest;
     const requested = request.active === true;
+
+    // A safety-exempt client renders no part of the tool, at any permission
+    // level. Return the shape the template already handles for "nothing to
+    // show" rather than making it tolerate a missing `safety` object: the
+    // container's alert tier, the check-in button and the board then all fall
+    // away from this one return.
+    if (isLocallySafetyExempt()) return { requested: false, show: false };
 
     if (!game.user.isGM) return { requested };
 
@@ -295,6 +314,10 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       safetySig = [
         state.safetyRequest.active,
         state.safetyRequest.id,
+        // Roster membership is structural: it changes when the GM edits the
+        // safety exemption list, which nothing else here would notice — the
+        // board would then keep the old total through a ticking countdown.
+        PacerManager.getSafetyRoster().map(p => p.userId).sort().join(','),
         // Lights and acknowledgements both change what the panel renders.
         Object.entries(state.safetyLights).sort(([a], [b]) => a.localeCompare(b)).map(([id, status]) => `${id}:${status}`).join('|'),
         Object.keys(state.safetyRequest.acknowledged).sort().join('|')

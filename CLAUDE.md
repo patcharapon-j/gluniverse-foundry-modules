@@ -225,6 +225,25 @@ Zero failures required. Minted ids must stay **deterministic** — the id a row
 renders with has to be the id its click resolves, including on a client that
 never wrote the repair back.
 
+**When touching Stream Pacer's safety lights or its exempt-users form**
+(`features/stream-pacer/`, `templates/stream-pacer/`), re-run the exemption
+check. A safety-exempt user is normally the login whose screen is being captured,
+so every miss here fails *silently* — it looks correct on your own screen and
+appears on the recording. It covers the four sites each exemption column must
+agree on (registration, save branch, form context, `name=` attribute), that every
+enumerated safety surface in `module.js` sits inside the exemption gate, that the
+HUD template's safety branches are keyed on `showSafetyLights` rather than
+`isGM`, the two deliberately different liveness rules (local snapshot vs per-call
+roster read), and that the hint still warns that exempting a real person removes
+their means of signalling distress:
+
+```bash
+node tools/stream-pacer-safety-check.mjs
+```
+
+Zero problems required. It is a source-shape check and cannot prove the rendered
+result — only a session with the capture login signed in can do that.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

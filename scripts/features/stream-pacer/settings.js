@@ -38,20 +38,61 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 async function saveExemptUsers(_event, _form, formData) {
   const data = formData?.object ?? {};
-  // Two independent exemption lists share one form. "bars-" checkboxes drive
-  // the general pacer UI; "peril-" checkboxes drive the Dire Peril splash.
+  // Three independent exemption lists share one form. "bars-" checkboxes drive
+  // the general pacer UI; "peril-" the Dire Peril splash; "safety-" the whole
+  // traffic-light safety tool. A prefix added here without a matching column in
+  // exempt-users.hbs (or vice versa) stores nothing and fails silently, so
+  // tools/stream-pacer-safety-check.mjs asserts the four sites agree.
   const exemptUsers = [];
   const perilExemptUsers = [];
+  const safetyExemptUsers = [];
   for (const [key, value] of Object.entries(data)) {
     if (!value) continue;
     if (key.startsWith('bars-')) {
       exemptUsers.push(key.replace('bars-', ''));
     } else if (key.startsWith('peril-')) {
       perilExemptUsers.push(key.replace('peril-', ''));
+    } else if (key.startsWith('safety-')) {
+      safetyExemptUsers.push(key.replace('safety-', ''));
     }
   }
   await game.settings.set(MODULE_ID, 'sp.exemptUsers', exemptUsers);
   await game.settings.set(MODULE_ID, 'sp.perilExemptUsers', perilExemptUsers);
+  await game.settings.set(MODULE_ID, 'sp.safetyExemptUsers', safetyExemptUsers);
+}
+
+/**
+ * Is this user hidden from every part of the traffic-light safety tool?
+ *
+ * The setting is read on EVERY call, deliberately. This is the "is user X
+ * exempt?" question, asked by a GM client about someone else while building the
+ * safety roster — a GM that connected before the list changed has no reload of
+ * its own to refresh a snapshot, and would otherwise count a capture login as
+ * an unanswered player forever. `game.settings.get` is an in-memory map lookup
+ * and the roster is table-sized; a cache here is exactly what would reintroduce
+ * the staleness. See design.md — "Two questions, one setting".
+ */
+export function isSafetyExempt(userId) {
+  const list = game.settings.get(MODULE_ID, 'sp.safetyExemptUsers');
+  return Array.isArray(list) && list.includes(userId);
+}
+
+// The local client's own answer to "am *I* exempt?", captured once during
+// onReady. Deliberately a snapshot rather than a live read: it decides whether
+// imperative DOM surfaces are ever constructed, so every consumer must agree on
+// one boundary — that client's next reload — exactly like the two sibling
+// exemptions. See design.md — "Two questions, one setting".
+let localSafetyExempt = false;
+
+/** Called once from onReady, before any safety surface is constructed. */
+export function captureLocalSafetyExemption() {
+  localSafetyExempt = isSafetyExempt(game.user.id);
+  return localSafetyExempt;
+}
+
+/** The snapshot taken by captureLocalSafetyExemption(). */
+export function isLocallySafetyExempt() {
+  return localSafetyExempt;
 }
 
 class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -64,7 +105,8 @@ class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
       icon: 'fas fa-users-slash'
     },
     position: {
-      width: 400,
+      // Three exemption columns need more room than the original two.
+      width: 480,
       height: 'auto'
     },
     form: {
@@ -82,11 +124,13 @@ class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext() {
     const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
     const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
+    const safetyExemptUsers = game.settings.get(MODULE_ID, 'sp.safetyExemptUsers');
     const users = game.users.map(u => ({
       id: u.id,
       name: u.name,
       isExempt: exemptUsers.includes(u.id),
-      isPerilExempt: perilExemptUsers.includes(u.id)
+      isPerilExempt: perilExemptUsers.includes(u.id),
+      isSafetyExempt: safetyExemptUsers.includes(u.id)
     }));
     return { users };
   }
@@ -283,6 +327,23 @@ export function registerSettings() {
   game.settings.register(MODULE_ID, 'sp.perilExemptUsers', {
     name: 'STREAM_PACER.Settings.PerilExemptUsers',
     hint: 'STREAM_PACER.Settings.PerilExemptUsersHint',
+    scope: 'world',
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  // Safety-light exempt users (see none of the traffic-light safety tool).
+  // Tracked separately from the other two lists because it is answering a
+  // different question: the bars and the Dire Peril splash are presentation, so
+  // hiding them costs nothing, whereas this one removes a channel. A capture or
+  // overlay login is a puppet and must never broadcast the table's private
+  // safety signals; a real person exempted here loses their only way to signal
+  // distress, which is why it is opt-in, empty by default, and spelled out in
+  // the hint rather than folded into either sibling.
+  game.settings.register(MODULE_ID, 'sp.safetyExemptUsers', {
+    name: 'STREAM_PACER.Settings.SafetyExemptUsers',
+    hint: 'STREAM_PACER.Settings.SafetyExemptUsersHint',
     scope: 'world',
     config: false,
     type: Array,
