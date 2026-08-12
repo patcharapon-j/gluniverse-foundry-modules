@@ -90,8 +90,14 @@ Suite.register({
                            //   Control Center and hides it from the native sheet.
   system: null,            // null | "pf2e" | "dnd5e" | ["pf2e","dnd5e"]
   requires: [],            // other active module ids required, e.g. ["tidy5e-sheet"]
+  requiresFeature: null,   // string | string[]: sibling suite feature(s) that must
+                           //   be ENABLED for this one to be available. Used by
+                           //   promoted sub-features to gate on their parent
+                           //   engine. Cyclic or unknown ids are rejected by
+                           //   Suite.validate() at init.
   core: false,             // true only for clocks-tracker
-  defaultEnabled: false,   // core-on-rest-opt-in: only clocks-tracker is on
+  defaultEnabled: false,   // opt-in by default; only clocks-tracker (core) and
+                           //   clocks-trackers ship enabled
 
   // Always called at init. Register ALL of the feature's settings/menus here so
   // the toggles exist even when the feature is disabled.
@@ -111,6 +117,15 @@ Suite.register({
     migrate: async (ctx) => {},
   },
 
+  // Optional: back the enable toggle on an EXISTING world setting instead of the
+  // shared `moduleConfig` blob. Supplying `enableSet` also makes the toggle apply
+  // LIVE (`Suite.appliesLive(id)` → true), because writing through the setting
+  // fires its own onChange side-effects (opening/closing HUDs, re-seating auras…)
+  // instead of waiting for a reload. `enableGet` must not throw — if it does, the
+  // registry falls back to `defaultEnabled`.
+  enableGet: () => false,
+  enableSet: async (on) => {},
+
   // Optional: object exposed on game.modules.get(SUITE_ID).api.features[id]
   api: null,
 });
@@ -125,6 +140,25 @@ Suite.register({
 - Gameplay code that previously checked `game.system.id` can stay; the registry
   already prevents the feature from running on the wrong system when `system` is
   set, but keep internal guards for safety.
+- A feature that throws in `registerSettings`, `onInit` or `onReady` is logged
+  against its own id and does not stop the rest of the suite from loading. A phase
+  that takes over 500ms logs a warning naming the feature.
+
+### Promoted sub-features
+
+A large feature may promote parts of itself to first-class suite entries so each
+gets its own toggle and Control Center group (today: the four clocks-tracker
+sub-features in `features/clocks-tracker/sub-features.mjs`). Such a sub-feature:
+
+- declares `requiresFeature: "<parentId>"`, so it is unavailable — with a reason
+  naming the parent by its localized title — whenever the parent is off;
+- claims a **longer** `settingPrefix` nested inside the parent's catch-all
+  (`ct.weather` inside `ct.`). The catalog sorts rules longest-prefix-first, so
+  the child claims its own keys before the parent engine's prefix does;
+- is registered by the parent adapter *after* its own `Suite.register(...)` call,
+  so it groups immediately beneath the parent in the Control Center;
+- backs its enable state on the setting the engine already reacts to via
+  `enableGet`/`enableSet`, so there is one source of truth and no reload.
 
 ### Left-bar scene controls
 
@@ -149,23 +183,44 @@ Suite.register({
 
 ## Per-feature system/dependency matrix
 
-| featureId          | prefix     | system            | requires        | default |
-|--------------------|------------|-------------------|-----------------|---------|
-| clocks-tracker     | ct         | null              | —               | core ON |
-| initiative         | init       | null              | —               | off     |
-| flatfinder         | ff         | pf2e              | —               | off     |
-| destiny-dice       | dd         | pf2e              | —               | off     |
-| insight            | insight    | null              | —               | off     |
-| stage              | stage      | null              | —               | off     |
-| stream-pacer       | sp         | null              | —               | off     |
-| statsblock-import  | sbi        | pf2e              | —               | off     |
-| loot-gen           | lg         | ["pf2e","dnd5e"]  | —               | off     |
-| cargo-grid         | cargo      | null              | —               | off     |
-| tidy5e-slots       | tidy       | dnd5e             | tidy5e-sheet    | off     |
-| pf2e-flatten       | flatten    | pf2e              | —               | off     |
-| pf2e-level-zero    | l0         | pf2e              | —               | off     |
-| critical           | crit       | ["pf2e","dnd5e"]  | —               | off     |
-| timer              | timer      | null              | —               | off     |
-| pf2e-ultimates     | ult        | pf2e              | —               | off     |
-| mobile             | mob        | null              | —               | off     |
-| pf2e-damage-dice   | dmg        | pf2e              | dice-so-nice    | off     |
+Registration order (= Control Center display order), which is the import order in
+`scripts/features/index.mjs`. The four `clocks-*` rows are promoted sub-features
+registered by the clocks-tracker adapter itself, which is why they sit beneath it
+rather than at the end.
+
+| featureId          | prefix                       | system            | requires        | default |
+|--------------------|------------------------------|-------------------|-----------------|---------|
+| clocks-tracker     | ct.                          | null              | —               | core ON |
+| clocks-trackers    | ct.tracker, ct.sheetTrackers | null              | ⤷ clocks-tracker | ON     |
+| clocks-weather     | ct.weather                   | null              | ⤷ clocks-tracker | off    |
+| clocks-support     | ct.support                   | null              | ⤷ clocks-tracker | off    |
+| clocks-delving     | ct.delving                   | null              | ⤷ clocks-tracker | off    |
+| initiative         | init.                        | null              | —               | off     |
+| flatfinder         | ff.                          | pf2e              | —               | off     |
+| destiny-dice       | dd.                          | pf2e              | —               | off     |
+| insight            | insight.                     | null              | —               | off     |
+| stage              | stage.                       | null              | —               | off     |
+| stream-pacer       | sp.                          | null              | —               | off     |
+| statsblock-import  | sbi.                         | pf2e              | —               | off     |
+| loot-gen           | lg.                          | ["pf2e","dnd5e"]  | —               | off     |
+| cargo-grid         | cargo.                       | null              | —               | off     |
+| tidy5e-slots       | tidy.                        | dnd5e             | tidy5e-sheet    | off     |
+| pf2e-flatten       | flatten.                     | pf2e              | —               | off     |
+| pf2e-level-zero    | l0.                          | pf2e              | —               | off     |
+| critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |
+| minimap            | mm.                          | null              | —               | off     |
+| etched-chat        | ec.                          | pf2e              | —               | off     |
+| timer              | timer.                       | null              | —               | off     |
+| mythic-gme         | mythic.                      | null              | —               | off     |
+| oracles            | oracle.                      | null              | —               | off     |
+| pf2e-ultimates     | ult.                         | pf2e              | —               | off     |
+| mobile             | mob.                         | null              | —               | off     |
+| pf2e-damage-dice   | dmg.                         | pf2e              | dice-so-nice    | off     |
+| locations          | loc.                         | null              | —               | off     |
+
+`⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
+feature that must be enabled), not a `requires` module id.
+
+This table is hand-maintained and has drifted before. The authority is always the
+`Suite.register(...)` call in each adapter; `settingPrefix` is what the catalog
+actually routes on.
