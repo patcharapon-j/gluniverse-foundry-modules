@@ -51,11 +51,23 @@ should be budgeted as a hazard rather than handwaved.
 
 ## Allied NPCs
 
-A combat-meaningful ally is **not** subtracted from the enemy side. It counts as
-an additional party member: add one character adjustment to the budget (Trivial
-+10, Low +15, Moderate +20, Severe +30, Extreme +40) and scale the *enemies up*.
-An ally two or more levels below the party can be halved or ignored. XP awards
-still use the four-character listing.
+A combat-meaningful ally is **not** subtracted from the enemy side. It adds
+character adjustments to the budget (Trivial +10, Low +15, Moderate +20, Severe
++30, Extreme +40) and you scale the *enemies up*. How many adjustments depends
+on the tier:
+
+| Ally | Counts as | Why |
+|---|---|---|
+| `elite` ally | **a full body** — one whole adjustment | Runs a 3-rung Posture ladder and a real resource |
+| `standard` ally | **half a body** — half an adjustment, rounded up when it is the only one | Auto-attacks and does nothing else unless a PC presses something |
+| Escort / protect target | **zero** | A hazard-chassis objective, not a combatant. Award XP for the objective instead. |
+
+So five PCs plus one elite ally is six bodies; five PCs plus two standard allies
+is also six. This matters most against a solo boss, where body count is exactly
+what breaks the XP table — see `boss-design.md` §1.
+
+An ally two or more levels below the party can be halved again or ignored. XP
+awards still use the four-character listing.
 
 ## Neutral wildcards
 

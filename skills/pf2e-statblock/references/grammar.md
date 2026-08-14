@@ -282,23 +282,38 @@ characters; `Counterplay` at 560. Write tight.
 
 ### `Function:` on an ability
 
-Tags which of the six functions an ability performs. Valid on `## Attacks`,
-`## Actions` and `## Phases` blocks only — anywhere else it warns and is
-dropped, because those are the item types the Ultimates feature can tag.
+Tags which kit slot an ability fills. Valid on `## Attacks`, `## Actions` and
+`## Phases` blocks only — anywhere else it warns and is dropped, because those
+are the item types the Ultimates feature can tag.
 
 ```
 Function: signature
 Function: ultimate
-Function: signature, engine
+Function: talent, engine
 ```
 
-Four roles exist in the data model: `signature`, `trigger`, `engine`,
-`ultimate`. Both the Primary and the Pivot Signature use `signature`. The
-Signature Utility takes **no** tag — it is an accent, not one of the four
-tracked roles.
+Six roles exist in the data model:
+
+| Role | Slot |
+|---|---|
+| `signature` | the Signature. A second Signature uses the same tag. |
+| `combo` | the Combo — the reaction pointed at another creature. |
+| `talent` | either Talent. |
+| `ultimate` | the Ultimate. |
+| `engine` | whichever ability carries the resource rule. Usually a Talent, so `Function: talent, engine`. |
+| `trigger` | **legacy.** v1's name for what is now `combo`. Still parses, and still satisfies the Combo slot in validation, so v1 sheets keep importing. Do not emit it in new work. |
+
+An optional utility accent takes **no** tag — it is an accent, not a slot.
+
+`Function: Combo Trigger` resolves to `combo`, not `trigger`; matching is by
+substring and `combo` is tested first.
 
 An ability tagged `ultimate` also sets `ult.isUltimate`, which is what lights up
 the token overlay and the charge counter.
+
+At `elite` and `boss` the validator warns for any of `signature`, `combo`,
+`talent` and `ultimate` that no ability claims — and for `engine` too when
+`## Engine` names a `Resource`.
 
 ### `## Recall Knowledge`
 
@@ -311,18 +326,33 @@ DC 32: Each detached halo ring is a stored Verdict.
 Religion DC 35: At half health it splits its halo.
 ```
 
-### `## Phases`
+### `## Phases` — where Postures live
 
-Boss phase changes. Each becomes a passive action item in the `interaction`
-category, flagged with its ordinal so export can round-trip it.
+Postures and boss phase changes share this section. Each entry becomes a passive
+action item in the `interaction` category, flagged with its ordinal and its
+verbatim trigger so export can round-trip it.
 
 ```
 ## Phases
-### Phase 2 — The Halo Splits
-Trigger: The arbiter is reduced to half its Hit Points or fewer.
-Traits: divine, visual
-Description: It marks every creature it can see, and can no longer fly.
+### Posture 2 — Undertow
+Trigger: A creature within 30 feet is off-guard at the start of its turn.
+Traits: water, emotion
+Description: *The deck water stops sloshing and starts pulling, all of it one
+direction, toward her.*
+
+**Ladder**
+1. A creature within reach is off-guard → **Riptide Cut**.
+2. Otherwise → Stride, then Strike.
+
+**Exit** None — she remains in Undertow until Break.
 ```
+
+The ordinal is what makes the map linear: entries run in file order, and the
+grammar has no way to express a back-edge. See `references/postures.md`.
+
+**Nothing activates a Posture.** The importer has no state-machine concept — the
+entry is inert documentation. The GM changes Posture by hand and mirrors it as a
+token effect, which is what makes the state public.
 
 ## Rule elements
 

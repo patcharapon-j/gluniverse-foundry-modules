@@ -21,8 +21,11 @@ at **+30 XP per character past four** for Severe.
 | 6 | 120 | **180** | 240 | **no — above the table's ceiling** |
 | 7 | 140 | 210 | 280 | no |
 
-**A combat-capable allied NPC counts as an additional party member.** Five PCs
-plus one ally is six bodies, not five.
+**Allied NPCs count as bodies, by tier:** an `elite` ally is a **full body**, a
+`standard` ally is **half** (it auto-attacks and does nothing else unless a PC
+presses something), and an escort or objective on a hazard chassis is **zero**.
+Five PCs plus one elite ally is six bodies; five PCs plus two standard allies is
+also six.
 
 So for any party above five bodies, a solo boss is *structurally* under-budget —
 and it is also getting 3 actions against 18. Both problems have the same fix.
@@ -39,8 +42,10 @@ creature's effective XP, so a level 9 Apex ≈ 144 XP and a level 10 Apex ≈ 18
 - **MAP resets per turn.** This is the sharpest edge of the template — the boss
   gets two fresh attack chains. **Keep Strike damage at Moderate or below.**
   Extreme damage plus two turns kills a PC per round.
-- **Reactions** — one per round as normal. Optionally it may spend one action on
-  a turn to bank an extra reaction, at most once per turn.
+- **Reactions** — one per round as normal, **plus** its Combo, which is a
+  separate once-per-round slot at this tier (see `kit-design.md`). Give it a
+  stock defensive reaction so the two never compete. Optionally it may spend one
+  action on a turn to bank an extra reaction, at most once per turn.
 - **HP — take the Low band and double it.** Moderate doubled is a wall: under
   PWL, PC damage does not scale with level as fast as creature HP does, so an
   over-HP'd Apex boss produces a long fight rather than a tense one.
@@ -60,9 +65,14 @@ Translated from HSR Toughness/Weakness Break. The creature carries a public
 track that is *not* HP; emptying it puts the creature in **Break**, a short
 window where the party can do something it otherwise cannot.
 
+**Break is a Posture**, not a parallel system. Emptying the bar puts the creature
+into a named state with its own two-rung ladder, exactly like every other
+Posture — see `references/postures.md`, which also carries the naming rules and
+the worked Break example.
+
 **Do not name the state "Broken".** `broken` is a real PF2e condition (damaged
 equipment) and the importer's auto-linker will turn every mention into a link to
-the wrong rule. Use "Break", "Staggered", "Exposed" — anything outside
+the wrong rule. Use "Exposed", "Unwound", "Slack" — anything outside
 `CONDITION_WORDS` in `importer.js`.
 
 ### Who moves the bar
@@ -86,10 +96,13 @@ is a three-hour fight. Prefer action-driven.
 3. **At the end of any round without a Break, the bar refills by 1.** Pressure
    has to be sustained rather than dumped in one turn — and this replaces an
    arbitrary "max N per round" cap.
-4. **At 0 → Break** until the end of its next Turn B: it loses its next Turn A
-   entirely, takes −2 to AC and all saves, cannot use reactions, and its weak
-   points are exposed.
-5. **Break ends → the bar refills to full.**
+4. **At 0 → it enters the Break Posture** until the end of its next Turn B: it
+   loses its next Turn A entirely, takes −2 to AC and all saves, cannot use
+   reactions, and its weak points are exposed. Author that Posture's ladder —
+   what it *does* while broken — per `postures.md`.
+5. **Break ends → it returns to the Posture it left, and the bar refills to
+   full.** This is the one sanctioned back-edge in an otherwise linear Posture
+   map, because Break is an interruption rather than a progression.
 
 Five or six bodies realistically drain 3–4 a round against the +1 refill, so
 **Break lands about every two rounds.** Shrink the clock to 5 to speed that up,
@@ -98,7 +111,9 @@ grow it to 8 to slow it down. That one number is the fight's whole tempo dial.
 ## 4. Make Break mean something
 
 A Break that only grants "−2 and a lost turn" is a *reward*, not a mechanic.
-Take at least one of these:
+Writing it as a Posture is the structural fix — a Posture owes a ladder, so you
+are forced to author what the boss actually **does** while broken instead of
+listing what it loses. On top of that, take at least one of these:
 
 | Shape | What it does |
 |---|---|
@@ -150,15 +165,22 @@ Ultimate clock, so the mechanic is still how you win — but nothing is *forbidd
 the damage dealers watch their numbers matter more every round, and destroying
 the final part can still drop it to 0 outright as a clean cinematic kill.
 
-## 6. Phase triggers should be earned
+## 6. Posture triggers should be earned
 
-`## Phases` accepts any prose `Trigger:`. Prefer **"the second weak point is
-destroyed"** over **"reduced to half Hit Points"** whenever the fight is built
-around a mechanic: an HP trigger lets a high-damage party skip the content, and
-it drifts out of sync with the mechanic so the story beat lands at a random
-moment. A phase change should also *invert* the tactical problem, not amplify
-it — a mobile hunter that anchors into a stationary artillery platform gives the
-party a different fight, which is what a second act is for.
+A boss's phases are Postures — 3–4 per phase, written into `## Phases`, which
+accepts any prose `Trigger:`. Prefer **"the second weak point is destroyed"**
+over **"reduced to half Hit Points"** whenever the fight is built around a
+mechanic: an HP trigger lets a high-damage party skip the content, and it drifts
+out of sync with the mechanic so the story beat lands at a random moment.
+
+A phase change should also *invert* the tactical problem, not amplify it — a
+mobile hunter that anchors into a stationary artillery platform gives the party a
+different fight, which is what a second act is for.
+
+**Put the Ultimate on a visible rung.** A boss's Ultimate Posture may take three
+ladder rungs so that `resource is full → Ultimate` sits at the top. That rung is
+the telegraph: the players can read it off the table without you saying a word,
+which is the whole reason Postures exist.
 
 ## 7. Wiring it into the suite
 
@@ -167,7 +189,21 @@ party a different fight, which is what a second act is for.
 | Boss's own resource | `## Engine` — renders on the token overlay via PF2e Ultimates |
 | Party-facing Break bar | A passive ability, plus a `clock` in the clocks-tracker feature (6 slices, `bad` flag) |
 | Weak points | Prose in a passive. Do **not** invent rule elements for them |
-| Phase change | `## Phases` with a prose `Trigger:` |
+| Postures, incl. Break and phases | `## Phases` with a prose `Trigger:` |
+| Current Posture | A token effect the GM sets by hand |
+
+Two things to know before you rely on any of it.
+
+**The Break clock is not imported.** The importer has no clock support at all —
+`## Clocks` would trip the unknown-section path. The clocks-tracker is a separate
+feature whose trackers are created by hand in its editor. The line above is a
+manual GM instruction, and always was.
+
+**Postures are not automated either.** `## Phases` entries import as inert
+passive items in the `interaction` category, tagged with an ordinal and a
+verbatim trigger string. Nothing activates a Posture; the GM changes it and
+mirrors it as a token effect. That mirroring is the part that does the work — it
+is what makes the state public — so do not skip it because it is manual.
 
 Two tracks, each dumb, beat one clever track. A single bar both sides push reads
 elegantly on paper, but its Ultimate trigger becomes a nested conditional and it
@@ -176,15 +212,19 @@ cannot use the token counter the suite already provides.
 ## 8. Boss checklist
 
 - Both tracks visible to the players from round 1 — neither is a secret.
-- The Ultimate's tell is narrated *every* time its resource ticks up.
+- The current Posture is mirrored as a token effect the players can see.
+- The Ultimate sits on a visible ladder rung, so the telegraph reads off the table.
+- Break is written as a Posture with its own ladder, not as a list of penalties.
 - Break does at least one of: part-break, interrupt, kill window.
 - Each destructible part switches off a *different* ability.
 - Object numbers are pre-flattened, and the text says so.
 - HP is the Low band doubled; Strike damage is Moderate or below.
 - At least one Low stat. A boss with no soft spot has no fight in it.
-- Phase trigger is earned by the mechanic, not by an HP threshold.
+- Posture triggers are earned by the mechanic, not by an HP threshold.
+- The boss has exactly **one** board object against the explanation budget — and
+  that object is the Break bar. No placed-device network on top of it.
 - More than three Recall Knowledge routes, plus at least one free tell that
   needs no roll.
-- Allied NPCs counted as additional party members in the budget.
+- Allied NPCs counted at their tier weight — elite full, standard half, escort zero.
 - A dial prepared in both directions — what to add if the party steamrolls,
   what to shrink if they drown. Shrinking the Break clock is the cheapest one.

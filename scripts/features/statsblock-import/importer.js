@@ -688,10 +688,19 @@ function parseDefenseField(slug, value, npc) {
   else parseCompoundStats(`${slug}: ${value}`, npc);
 }
 
-// Which of the six NPC functions this ability performs. Only meaningful on
-// items pf2e-ultimates can tag (action / melee / spell), so a Function on any
-// other block warns rather than silently vanishing.
-const ENGINE_FUNCTIONS = ["signature", "trigger", "engine", "ultimate"];
+// Which kit slot this ability fills. Only meaningful on items pf2e-ultimates
+// can tag (action / melee / spell), so a Function on any other block warns
+// rather than silently vanishing.
+//
+// `combo` and `talent` are the v2 kit slots. `trigger` is v1's name for what is
+// now `combo` and stays legal so existing sheets keep importing; `engine` is
+// still the tag for whichever ability carries the resource rule.
+const ENGINE_FUNCTIONS = ["signature", "combo", "trigger", "engine", "talent", "ultimate"];
+
+// What an elite/boss sheet owes under the v2 contract. `trigger` is absent
+// because `combo` replaced it, and `engine` is conditional — a kit with no
+// resource has nothing to tag.
+const REQUIRED_TIER_FUNCTIONS = ["signature", "combo", "talent", "ultimate"];
 const FUNCTION_ELIGIBLE_SECTIONS = [
   "phases", "phase", "boss-phases",
   "attacks", "strikes", "melee-attacks", "ranged-attacks",
@@ -704,11 +713,17 @@ function parseFunctions(value, blockName, warnings) {
   for (const entry of raw) {
     // "Primary Signature" / "Pivot Signature" / "Signature Utility" all map to
     // the single `signature` role the Ultimates data model stores.
+    //
+    // `combo` is tested before `trigger` so that "Combo Trigger" — the spelling
+    // the skill emitted before this tag existed — resolves to `combo`, not to
+    // the legacy role it was smuggled through.
     const role = entry.includes("signature") ? "signature"
-      : entry.includes("trigger") ? "trigger"
-        : entry.includes("engine") ? "engine"
-          : entry.includes("ultimate") ? "ultimate"
-            : null;
+      : entry.includes("combo") ? "combo"
+        : entry.includes("trigger") ? "trigger"
+          : entry.includes("engine") ? "engine"
+            : entry.includes("talent") ? "talent"
+              : entry.includes("ultimate") ? "ultimate"
+                : null;
     if (role) { if (!functions.includes(role)) functions.push(role); }
     else warnings.push(game.i18n.format("GLSBI.parse.badFunction", { name: blockName, value: entry, allowed: ENGINE_FUNCTIONS.join(", ") }));
   }
@@ -858,8 +873,15 @@ function validateEngine(npc, warnings) {
   }
   if (roles.has("ultimate") && !npc.engine.gainRule) warnings.push(game.i18n.localize("GLSBI.validation.ultimateWithoutGain"));
   if (["elite", "boss"].includes(npc.engine.tier)) {
-    for (const role of ENGINE_FUNCTIONS) {
-      if (!roles.has(role)) warnings.push(game.i18n.format("GLSBI.validation.tierMissingFunction", { tier: npc.engine.tier, role }));
+    // `combo` satisfies the slot even when a v1 sheet still spells it `trigger`.
+    const filled = new Set(roles);
+    if (filled.has("trigger")) filled.add("combo");
+    for (const role of REQUIRED_TIER_FUNCTIONS) {
+      if (!filled.has(role)) warnings.push(game.i18n.format("GLSBI.validation.tierMissingFunction", { tier: npc.engine.tier, role }));
+    }
+    // A named resource needs an ability that owns the rule for gaining it.
+    if (npc.engine.resourceName && !filled.has("engine")) {
+      warnings.push(game.i18n.format("GLSBI.validation.tierMissingFunction", { tier: npc.engine.tier, role: "engine" }));
     }
   }
   if (npc.engine.tier === "background" && roles.has("ultimate")) warnings.push(game.i18n.localize("GLSBI.validation.backgroundUltimate"));
