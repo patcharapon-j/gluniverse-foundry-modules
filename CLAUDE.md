@@ -176,6 +176,29 @@ Neither tool can check how any of this *looks* on real art; that needs a real
 session. See `docs/STAGE_LIGHTING.md` for the shading model, the edge terms and
 the asset-hosting contract (S3/CORS).
 
+**When touching the PF2e Ultimates token overlay** (`features/pf2e-ultimates/token-overlay.mjs`),
+the three shaders there draw in the quad's UV space, so how big a feature lands
+on screen depends on the scene's grid size and the canvas zoom — a rim that
+reads correctly on a grid-100 map is sub-pixel on a grid-50 one and crawls
+between pixel centres. The shaders defend against that with `uTexel` (one
+device pixel in UV units, fed from the mesh's world transform each frame) and
+the helpers in `SCALE_PRELUDE`. None of it is visible in a diff, and a shader
+that fails to compile falls back to a static icon rather than erroring, so run:
+
+```bash
+node tools/ultimate-overlay-check.mjs
+```
+
+Zero problems required. It compiles all three in headless Chromium and scores
+them against a box-filtered ground truth at five quad sizes: the still frame,
+the movement between frames, and the movement under a half-pixel pan. It also
+pins the two invariants the design rests on — that the filtering is inert at
+`uTexel` 0 (a missing uniform must degrade to the old look, not a blank quad)
+and that it changes nothing at sizes with room for the detail. Needs Playwright;
+skips cleanly with exit 0 without it. `--sheet=/tmp/ult.png` writes a
+before/after/truth contact sheet — the only way to see what any of it looks
+like short of a session.
+
 **When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
 texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
 hand-drawn. Re-bake it after any change to a recipe or to the damage-type table,
