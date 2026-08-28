@@ -57,9 +57,16 @@ function registerSettings() {
 
 /* -------------------------------------------------- integration --------- */
 
-/** Resolve the document a sheet/config application is showing. */
+/**
+ * Resolve the document a sheet/config application is showing.
+ *
+ * RecallApp is excluded explicitly: it carries a `document` of its own, so
+ * without this guard the header-controls hook would add a Recall Knowledge
+ * button to the Recall Knowledge window's own header.
+ */
 function docOf(app) {
-  const doc = app?.document ?? app?.object;
+  if (!app || app instanceof RecallApp) return null;
+  const doc = app.document ?? app.object;
   return SUBJECT_TYPES.includes(doc?.documentName) ? doc : null;
 }
 
@@ -113,27 +120,43 @@ function registerHeaderButtons() {
  * producing two identical menu items.
  */
 function registerContextMenus() {
-  const entry = {
+  /**
+   * A FRESH entry object per menu, never a shared one.
+   *
+   * ContextMenu writes `entry.element` onto the object it renders and deletes
+   * it again on close, then resolves a click with
+   * `menuItems.find(i => i.element === clicked)`. One object pushed into the
+   * Actor, JournalEntry, Item and Scene menus means all four instances fight
+   * over that single slot: whichever rendered last owns it, and every other
+   * menu's lookup returns undefined, so the click silently does nothing.
+   */
+  const makeEntry = (collection) => ({
     name: "GLRK.action.open",
     icon: '<i class="fa-solid fa-book-open-reader"></i>',
     condition: () => game.user.isGM,
     callback: (target) => {
-      const id = target?.dataset?.entryId ?? target?.dataset?.documentId ?? target?.[0]?.dataset?.entryId;
-      const collection = { Actor: game.actors, JournalEntry: game.journal, Item: game.items, Scene: game.scenes };
-      for (const store of Object.values(collection)) {
-        const doc = store.get(id);
-        if (doc) return RecallApp.show(doc);
-      }
-      return null;
+      const li = target instanceof HTMLElement ? target : target?.[0];
+      const id = li?.dataset?.entryId ?? li?.dataset?.documentId;
+      const doc = collection()?.get(id);
+      return doc ? RecallApp.show(doc) : null;
     },
+  });
+
+  const COLLECTIONS = {
+    Actor: () => game.actors,
+    JournalEntry: () => game.journal,
+    Item: () => game.items,
+    Scene: () => game.scenes,
   };
 
-  const add = (options) => {
-    if (options.some((o) => o.name === entry.name)) return;
-    options.push(entry);
-  };
-
-  for (const type of ["Actor", "JournalEntry", "Item", "Scene"]) {
+  for (const [type, collection] of Object.entries(COLLECTIONS)) {
+    const add = (options) => {
+      if (options.some((o) => o.name === "GLRK.action.open")) return;
+      options.push(makeEntry(collection));
+    };
+    // v13 renamed these hooks; only `get<Type>ContextOptions` fires on v14, but
+    // both are registered because the suite supports v13 too. The guard above
+    // keeps a double-registration from producing two identical menu items.
     Hooks.on(`get${type}DirectoryEntryContext`, (_html, options) => add(options));
     Hooks.on(`get${type}ContextOptions`, (_app, options) => add(options));
   }
@@ -147,8 +170,10 @@ function registerLadderMarker() {
   const mark = (app, element) => {
     const doc = docOf(app);
     const root = element instanceof HTMLElement ? element : element?.[0];
-    if (!doc || !root || !hasLadder(doc)) return;
-    root.classList.add("glrk-has-ladder");
+    if (!doc || !root) return;
+    // Toggle rather than add: a re-render reuses the existing frame, so adding
+    // would leave the mark behind after the ladder is deleted.
+    root.classList.toggle("glrk-has-ladder", hasLadder(doc));
   };
   Hooks.on("renderActorSheetV2", mark);
   Hooks.on("renderJournalEntrySheet", mark);

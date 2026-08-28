@@ -78,8 +78,14 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   static DEFAULT_OPTIONS = {
+    // Frame classes stay feature-prefixed. Never put `.gl-glass` (or any
+    // utility that declares `position`) on an ApplicationV2 frame: Foundry
+    // sets `.application { position: absolute }` inside `@layer applications`,
+    // and the suite's sheets are unlayered, so an unlayered `position:
+    // relative` wins outright and the window falls into normal document flow.
+    // The glass treatment belongs on `.glrk-root`, inside `.window-content`.
     id: "glrk-app",
-    classes: ["glrk", "gl-glass", "gl-type"],
+    classes: ["glrk", "glrk-app"],
     tag: "div",
     window: { title: "GLRK.app.title", icon: "fa-solid fa-book-open-reader", resizable: true },
     position: { width: 560, height: 640 },

@@ -46,6 +46,21 @@ vocabulary. **This is what feature CSS consumes.**
 `.gl-notch`, `.gl-hover-lift`, `.gl-tech-label`, `.gl-scroll`, `.gl-numeric`,
 `.gl-type`.
 
+> **Never put a utility that declares `position` — `.gl-glass` above all — in an
+> ApplicationV2's `DEFAULT_OPTIONS.classes`.**
+>
+> Foundry declares `.application { position: absolute }` inside
+> `@layer applications`, and every suite stylesheet is **unlayered**. Unlayered
+> rules beat *all* layered rules regardless of specificity or source order, so
+> `.gl-glass { position: relative }` silently demotes the window frame into
+> normal document flow. `setPosition()`'s inline `left`/`top` then read as
+> offsets from its static position and the window renders as a clipped strip
+> beside the sidebar rather than a floating panel — with no console error.
+>
+> Frame classes stay feature-prefixed. Apply glass to an element *inside*
+> `.window-content`, and scope `--gl-accent` to the frame class so the header
+> inherits it. `styles/pf2e-recall.css` and `styles/oracles.css` show the shape.
+
 ---
 
 ## The rules
