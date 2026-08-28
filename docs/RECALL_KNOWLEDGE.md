@@ -1,65 +1,82 @@
 # Recall Knowledge — the lore ladder
 
 `features/pf2e-recall/` is a GM prep-and-play tool. It turns any Actor,
-JournalEntry, Item or Scene into a **three-tier lore ladder** authored with
+JournalEntry, Item or Scene into **eight short read-aloud answers** authored with
 Claude through the clipboard, and reads the right slice of it back at the table
 according to the roller's Flatfinder competence band.
 
 It is GM-facing. Nothing is posted to players, nothing is auto-rolled, and no
-statblock values are revealed — the GM reads the tier and narrates it in their
-own voice. Auto-delivery turns lore into a loot drop.
+statblock values are revealed — the GM reads one paragraph and narrates it in
+their own voice. Auto-delivery turns lore into a loot drop.
 
-## The tier model
+## The band model
 
-| Tier | Label | Content | Bullets |
-|---|---|---|---|
-| 1 | Everyone knows | What it is, and what it is known *for* — reputation, rumour | 3–4 |
-| 2 | One might know | How it fights and how it dies | 2–3 |
-| 3 | Very few know | The secret: true origin, an unexpected lever, a hook | 1–2 |
-| — | Misremembered | One plausible, folklore-shaped wrong belief | 1 |
+**One short paragraph per competence band, and the GM reads exactly one.**
 
-**Mechanics sit in the middle, not at the top.** This is the load-bearing
-decision and it is deliberate. The best-known community DC ladder puts ecology
-and society at its *hardest* rung, and Stonetop's "Very few know" is likewise
-the secret rather than the statistic. Because tier 2 is the *typical* roll, the
-common outcome is actionable — satisfying Paizo's own standard that a Recall
-Knowledge answer must be something you can act on — while the rare roll buys
-story instead of numbers.
-
-Tier naming follows the "Everyone knows / One might know / Very few know" device
-from **Stonetop** by Jeremy Strandberg (Lampblack & Brimstone), used here as a
-structural idiom with credit. The tiers describe **how widely a fact is known in
-the world**, not how well the player rolled — that framing is what makes them
-read as lore rather than as a success table, and it is why they should not be
-casually reskinned.
-
-## Band → reveal
+| Band | Total | What it knows |
+|---|---|---|
+| Disastrous | < 0 | Nothing at all. No frame of reference, played for comedy, containing no true fact. |
+| Inept | 0–4 | Confidently wrong: a folklore-shaped belief the character would act on. |
+| Poor | 5–9 | The reputation, hedged. True in outline, vague in detail. No tactics. |
+| Passable | 10–14 | Plain identification: what it is and what it is known for. |
+| Solid | 15–19 | Identification plus **one** useful thing — a damage type, a weak save, a defence. |
+| Impressive | 20–24 | How it actually fights: the signature mechanic and the vulnerability. |
+| Remarkable | 25–29 | The secret: true origin, an unexpected lever, something not in any bestiary. |
+| Phenomenal | 30+ | The secret and what it opens onto — a name, a connection, a hook. |
 
 Flatfinder already maps a PF2e skill-check total onto one of eight competence
-bands (Lore +1 band, natural 20 +1, natural 1 −1). This feature adds only the
+bands (Lore +1, natural 20 +1, natural 1 −1). This feature adds only the
 right-hand column.
 
-| Band | Total | Depth | Mode |
-|---|---|---|---|
-| Disastrous | < 0 | — | `blank` — nothing at all |
-| Inept | 0–4 | — | `wrong` — the misremembered line, or a mistaken identity |
-| Poor | 5–9 | 1 | `hedged` — tier 1, delivered with visible uncertainty |
-| Passable | 10–14 | 1 | `clean` |
-| Solid | 15–19 | 2 | `clean` |
-| Impressive | 20–24 | 2 | `lead` — clean, plus a nudge that more exists |
-| Remarkable | 25–29 | 3 | `clean` |
-| Phenomenal | 30+ | 3 | `bonus` — plus the GM's own secret |
+### Why paragraphs rather than tiers of bullets
 
-Three authored tiers, eight distinct table experiences. `tools/recall-check.mjs`
-asserts that **no two bands resolve identically** — a duplicate `(depth, mode)`
-pair means two bands are indistinguishable in play, which defeats the point of
-using competence checks at all.
+v1 authored three cumulative tiers — the "Everyone knows / One might know / Very
+few know" device from **Stonetop** by Jeremy Strandberg (Lampblack & Brimstone) —
+and derived eight table experiences from them by unlocking progressively more
+bullets.
 
-`blank` and `wrong` are split rather than collapsed because Flatfinder's own
-band flavour distinguishes them: *Unbelievably bad* is comically disconnected
-from the question, where *Gross* is wrong but engaged. Giving no information is
-also explicitly permitted by the remaster on a critical failure, so the bottom
-rung stays rules-legal.
+It read well as a design and failed as a table tool. At the top bands the GM was
+holding nine or ten bullets and asked to perform them mid-combat. Nobody does
+that: they skim, pick two, and the authored depth is wasted. Worse, the bands
+that shared a depth differed only in *delivery*, so two rolls five points apart
+often produced the same content read two ways.
+
+v2 authors all eight directly. Whatever the roll, the GM reads one paragraph
+aloud and the scene keeps moving. The escalation that used to live in "how many
+bullets you unlocked" now lives in what the paragraph is *about* — which is
+where it always belonged, and it is why mechanics still sit in the middle of the
+climb rather than at the top: Solid and Impressive are the common rolls and must
+be actionable, while the rare roll buys story.
+
+The Stonetop headings are retired, but the shape of the climb they describe still
+governs the band guidance, and the credit stands.
+
+### Uniqueness is the load-bearing property
+
+The payload demands all eight paragraphs differ, the parser warns when two come
+back identical, and `tools/recall-check.mjs` asserts it of its own sample. Two
+bands that read the same are two rolls that play the same, which defeats the
+point of using competence checks at all.
+
+### Pitched to what the subject is
+
+The payload tells the model to use level, rarity and statistics to decide **how
+much is knowable at all**: a common low-level creature has no cosmic secret, so
+its top bands get smaller and more specific rather than grander; a rare or
+high-level subject can carry campaign weight; a famous creature is well known at
+the *bottom* bands, and an obscure one may be barely identifiable at Passable.
+
+Without that steer every subject produces the same shape of ladder, and a goblin
+ends up with a buried prophecy.
+
+### Delivery, and what survived from v1
+
+`BAND_REVEAL` still maps each band to a delivery mode (`blank`, `wrong`,
+`hedged`, `clean`, `lead`, `bonus`). It no longer selects content — the
+paragraph is the content — but it colours the panel, drives the GM-facing hint,
+and chooses the mistaken-identity fallback when a band was never authored. Modes
+now repeat across bands, which is correct: three bands deliver `clean` and are
+still entirely distinct, because they are three different paragraphs.
 
 **A trained character cannot reach `blank` at all.** Under Proficiency-without-
 Level, realistic skill modifiers run about +3 to +18 across levels 1–20, so the
@@ -98,7 +115,8 @@ raw. (The suite's only correct PWoL detection currently lives in
 
 The flag is the source of truth:
 
-- `actor.getFlag(SUITE_ID, "rk.ladder")` — the ladder
+- `actor.getFlag(SUITE_ID, "rk.ladder")` — `{name, bands, generatedAt}`, where
+  `bands` maps each competence band key to its paragraph
 - `rk.context` — the GM's free-text steer, persisted so regenerating never means
   retyping it
 - `rk.mistaken` — the cached misidentification pick
@@ -112,24 +130,24 @@ mirror is rebuilt.
 >
 > `features/statsblock-import` recovers its own DC-keyed ladder by scraping
 > `privateNotes` for that exact `<h3>` followed by a `<ul>` (see
-> `exportRecallKnowledge`). If this feature wrote a *tiered* ladder under the
-> same heading, that exporter would scrape it and round-trip tiered prose back
-> out as `{dc, skills, text}` entries — silent corruption of a documented
-> format. Both keys are **data**. `tools/recall-check.mjs` asserts they differ.
+> `exportRecallKnowledge`). If this feature wrote its *banded* paragraphs under
+> the same heading, that exporter would scrape them and round-trip them back out
+> as `{dc, skills, text}` entries — silent corruption of a documented format. Both keys are **data**. `tools/recall-check.mjs` asserts they differ.
 
 Only **Actors** get a mirror. A JournalEntry, Item or Scene has no GM-only prose
 field, and writing into their public description would leak the ladder to
 players. Those subjects are flag-only.
 
 Existing statsblock-import entries are offered to the generation prompt as **raw
-material**, never auto-migrated into tiers: a `DC 20` line carries no reliable
-tier signal, least of all under PWoL.
+material**, never auto-assigned to a band: a `DC 20` line carries no reliable
+band signal, least of all under PWoL.
 
 ## What the payload carries
 
-The brief is the **entire statblock**, not a summary. Tier 2 is defined as "how
-it fights and how it dies", and that is unanswerable from a name and an AC — the
-model has to see the attacks, the action economy and the spell list to write it.
+The brief is the **entire statblock**, not a summary. Solid and Impressive are
+defined as "how it fights and how it dies", and that is unanswerable from a name
+and an AC — the model has to see the attacks, the action economy and the spell
+list to write them.
 
 For a creature: level, rarity, size, traits · Perception with senses · languages
 · **skills** · **ability modifiers** · items · AC · saves (with per-save notes
@@ -167,33 +185,51 @@ wins.
 
 ```markdown
 # Recall Knowledge: <Subject>
-<!-- glrk:1 -->
+<!-- glrk:2 -->
 
-## Everyone knows
-- …
+## Disastrous
+<one paragraph>
 
-## One might know
-- …
+## Inept
+<one paragraph>
 
-## Very few know
-- …
+## Poor
+<one paragraph>
 
-## Misremembered
-- …
+## Passable
+<one paragraph>
+
+## Solid
+<one paragraph>
+
+## Impressive
+<one paragraph>
+
+## Remarkable
+<one paragraph>
+
+## Phenomenal
+<one paragraph>
 ```
 
 The parser is **strict about structure, forgiving about noise**. A wrapping code
 fence, `*` instead of `-`, a bold lead-in, and trailing commentary are all
 absorbed, because none of that should cost the GM a re-paste. What is *not*
 absorbed: an unrecognised heading closes the current section rather than letting
-its bullets leak into the wrong tier, and an empty ladder is refused outright
+its prose leak into the wrong band, and an empty ladder is refused outright
 rather than half-stored.
+
+**A v1 reply still parses.** Its three tiers are projected onto the bands and the
+GM is told to regenerate. A v1 ladder already stored is likewise read in place
+rather than migrated, so a world that rolls back to an older build still finds
+it intact.
 
 ## Mistaken identity
 
-On a `wrong` band the authored Misremembered line always wins — a specific lie
+On the Inept band the authored paragraph always wins — a specific lie
 about *your* creature beats a generic misidentification. When a creature has
-none, `mistaken.mjs` finds a **real, similar creature** and answers as though
+none — an un-prepped actor, or a partial paste — `mistaken.mjs` finds a **real,
+similar creature** and answers as though
 the target were that instead. The lie is then internally consistent, plausible,
 and free, which directly addresses the most-cited GM complaint about Recall
 Knowledge: improvising a convincing falsehood mid-combat is hard prep.
@@ -248,6 +284,6 @@ Zero problems required. Everything it covers fails *silently* in a session: a
 grammar that drifts between the emitter and the parser reads to the GM as "the
 model got it wrong"; a band with no reveal rule falls through to the default and
 shows the wrong depth; the two **dynamic** i18n families (`GLRK.mode.*`,
-`GLRK.parse.warn.emptyTier.*`) are built at runtime, so nothing else catches a
+`GLRK.parse.warn.emptyBand.*`) are built at runtime, so nothing else catches a
 missing key; and the heading collision above corrupts world data with no error
 at all.

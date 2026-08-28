@@ -137,7 +137,9 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
   _mistakenName(ladder) {
     const doc = this.document;
     if (!game.settings.get(SUITE_ID, "rk.mistakenIdentity")) return null;
-    if (doc?.documentName !== "Actor" || ladder?.misremembered) return null;
+    // Only needed when the Inept band was never authored: an authored paragraph
+    // about YOUR creature always beats a generic misidentification.
+    if (doc?.documentName !== "Actor" || ladder?.bands?.inept) return null;
     const cached = cachedMistakenIdentity(doc);
     if (cached?.name) return cached.name;
     const pick = pickMistakenIdentity(doc, candidatePool(doc));

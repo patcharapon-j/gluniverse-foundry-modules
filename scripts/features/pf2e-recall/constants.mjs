@@ -1,15 +1,17 @@
 /**
- * GLUniverse Suite — Recall Knowledge: the tier model and the band mapping.
+ * GLUniverse Suite — Recall Knowledge: the band model.
  *
- * The feature stores a three-tier lore ladder per document and reveals a
- * progressively deeper slice of it as the roller's Flatfinder competence band
- * rises. It deliberately computes NO DCs: under Proficiency-without-Level the
- * level-based DC collapses to a seven-point band across levels 0-20 and rarity
- * dominates it, so the number carries almost no signal. The band does.
+ * The feature stores one short read-aloud paragraph per Flatfinder competence
+ * band and hands the GM exactly the one their player's roll landed in. It
+ * deliberately computes NO DCs: under Proficiency-without-Level the level-based
+ * DC collapses to a seven-point band across levels 0-20 and rarity dominates
+ * it, so the number carries almost no signal. The band does.
  *
- * Tier naming follows the "Everyone knows / One might know / Very few know"
- * device from Stonetop by Jeremy Strandberg (Lampblack & Brimstone), used here
- * as a structural idiom with credit; see docs/RECALL_KNOWLEDGE.md.
+ * v1 stored three cumulative tiers of bullets, named after the "Everyone knows
+ * / One might know / Very few know" device from Stonetop by Jeremy Strandberg
+ * (Lampblack & Brimstone). Those headings are retired, but the shape of the
+ * climb they describe still governs what each band is about, and the credit
+ * stands; see docs/RECALL_KNOWLEDGE.md.
  */
 
 export const FEATURE_ID = "pf2e-recall";
@@ -23,49 +25,64 @@ export const FLAG_CONTEXT = "rk.context";
 export const FLAG_MISTAKEN = "rk.mistaken";
 
 /**
- * The three authored tiers, shallowest first.
- *
- * Ordering note: mechanics sit in the MIDDLE, not at the top. Both the
- * community's best-known DC ladder (which puts ecology/society at the hardest
- * rung) and Stonetop's own structure agree that the deepest tier is story, not
- * statistics. Because tier 2 is the typical outcome, Paizo's "answers must be
- * actionable" standard is met on the common roll while the rare roll buys lore.
+ * The v1 tier keys, kept only so a stored v1 ladder can still be read and a v1
+ * reply can still be pasted. Nothing renders them: v2 authors the eight bands
+ * below directly. See parse.mjs parseLegacyLadder() and store.mjs
+ * bandsFromLegacy().
  */
-export const TIERS = Object.freeze([
-  Object.freeze({
-    key: "everyone",
-    label: "GLRK.tier.everyone.label",
-    brief: "GLRK.tier.everyone.brief",
-    bullets: [3, 4],
-  }),
-  Object.freeze({
-    key: "might",
-    label: "GLRK.tier.might.label",
-    brief: "GLRK.tier.might.brief",
-    bullets: [2, 3],
-  }),
-  Object.freeze({
-    key: "few",
-    label: "GLRK.tier.few.label",
-    brief: "GLRK.tier.few.brief",
-    bullets: [1, 2],
-  }),
-]);
+export const TIER_KEYS = Object.freeze(["everyone", "might", "few"]);
 
-export const TIER_KEYS = Object.freeze(TIERS.map((t) => t.key));
 
 /**
- * Competence band -> what the GM may reveal.
+ * The eight authored bands — the v2 model, and the one the payload asks for.
  *
- * `depth` is how many tiers are unlocked (0 = none). `mode` colours the
- * delivery so all eight bands feel distinct even though only three tiers are
- * ever authored:
- *   blank  - no information at all
- *   wrong  - the misremembered variant, or a mistaken-identity read
- *   hedged - tier 1, delivered with visible uncertainty
- *   clean  - exactly what the tier says
- *   lead   - clean, plus a nudge that something deeper exists
- *   bonus  - everything, plus the GM's own secret or a hook
+ * v1 authored three cumulative tiers of bullets and derived eight table
+ * experiences from them. That worked on paper and failed at the table: at the
+ * top bands the GM was handed nine or ten bullets to read out mid-combat, which
+ * is not something anyone does. v2 authors ONE self-contained paragraph per
+ * band, so whatever the roll, the GM reads exactly one paragraph aloud.
+ *
+ * Order mirrors COMPETENCE_BANDS in features/flatfinder/constants.js, shallowest
+ * first. It is duplicated here rather than imported so this module stays free of
+ * cross-feature dependencies; tools/recall-check.mjs asserts the two agree.
+ */
+export const BAND_KEYS = Object.freeze([
+  "disastrous",
+  "inept",
+  "poor",
+  "passable",
+  "solid",
+  "impressive",
+  "remarkable",
+  "phenomenal",
+]);
+
+/**
+ * Word budget for one band paragraph, [min, max].
+ *
+ * The upper bound is the load-bearing one: this is read aloud, and roughly
+ * seventy words is about fifteen seconds of speech. Past that a GM starts
+ * skimming and paraphrasing, which is exactly the failure v1 had.
+ */
+export const PARAGRAPH_WORDS = Object.freeze([25, 70]);
+
+/**
+ * Competence band -> how the answer is DELIVERED.
+ *
+ * In v2 the band no longer selects content — every band has its own authored
+ * paragraph, and that paragraph is the answer. What survives here is delivery:
+ *   blank  - nothing came to mind at all
+ *   wrong  - a confidently wrong belief
+ *   hedged - true in outline, uncertain in detail
+ *   clean  - said plainly
+ *   lead   - said plainly, with a sense that more exists
+ *   bonus  - said plainly, and the GM is invited to add their own secret
+ *
+ * Modes repeat across bands and that is correct now: three bands deliver
+ * "clean" and are still entirely distinct, because they are three different
+ * paragraphs. In v1 the mode had to carry that distinctness alone, which is why
+ * the check used to assert every (depth, mode) pair was unique. Depth is gone;
+ * the uniqueness that matters is now between the paragraphs themselves.
  *
  * Band keys mirror COMPETENCE_BANDS in features/flatfinder/constants.js. That
  * module already maps a PF2e skill-check total onto a band (with Lore +1,
@@ -80,18 +97,18 @@ export const TIER_KEYS = Object.freeze(TIERS.map((t) => t.key));
  * happens when someone is entirely out of their depth.
  */
 export const BAND_REVEAL = Object.freeze({
-  disastrous: Object.freeze({ depth: 0, mode: "blank" }),
-  inept: Object.freeze({ depth: 0, mode: "wrong" }),
-  poor: Object.freeze({ depth: 1, mode: "hedged" }),
-  passable: Object.freeze({ depth: 1, mode: "clean" }),
-  solid: Object.freeze({ depth: 2, mode: "clean" }),
-  impressive: Object.freeze({ depth: 2, mode: "lead" }),
-  remarkable: Object.freeze({ depth: 3, mode: "clean" }),
-  phenomenal: Object.freeze({ depth: 3, mode: "bonus" }),
+  disastrous: Object.freeze({ mode: "blank" }),
+  inept: Object.freeze({ mode: "wrong" }),
+  poor: Object.freeze({ mode: "hedged" }),
+  passable: Object.freeze({ mode: "clean" }),
+  solid: Object.freeze({ mode: "clean" }),
+  impressive: Object.freeze({ mode: "lead" }),
+  remarkable: Object.freeze({ mode: "clean" }),
+  phenomenal: Object.freeze({ mode: "bonus" }),
 });
 
 /** Fallback when Flatfinder is absent or the band is unrecognised. */
-export const DEFAULT_REVEAL = Object.freeze({ depth: 1, mode: "clean" });
+export const DEFAULT_REVEAL = Object.freeze({ mode: "clean" });
 
 /** Document types the feature can build a ladder for. */
 export const SUBJECT_TYPES = Object.freeze(["Actor", "JournalEntry", "Item", "Scene"]);
@@ -106,4 +123,4 @@ export const SUBJECT_TYPES = Object.freeze(["Actor", "JournalEntry", "Item", "Sc
 export const EXTRACT_CHAR_CAP = 8000;
 
 /** Grammar version stamped into the payload and checked on parse. */
-export const GRAMMAR_VERSION = 1;
+export const GRAMMAR_VERSION = 2;

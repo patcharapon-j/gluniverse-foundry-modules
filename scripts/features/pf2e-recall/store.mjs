@@ -25,7 +25,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { FLAG_CONTEXT, FLAG_LADDER, TIER_KEYS } from "./constants.mjs";
+import { BAND_KEYS, FLAG_CONTEXT, FLAG_LADDER } from "./constants.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
 const escapeRegExp = (v) => String(v ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -38,13 +38,67 @@ const mirrorHeading = () => game.i18n.localize("GLRK.notes.ladder");
 /** Read the stored ladder, or null. */
 export function readLadder(doc) {
   const raw = doc?.getFlag?.(SUITE_ID, FLAG_LADDER) ?? null;
-  if (!raw?.tiers) return null;
-  return {
-    name: raw.name ?? doc?.name ?? "",
-    tiers: Object.fromEntries(TIER_KEYS.map((k) => [k, Array.isArray(raw.tiers[k]) ? raw.tiers[k] : []])),
-    misremembered: raw.misremembered ?? null,
-    generatedAt: raw.generatedAt ?? null,
-  };
+  if (!raw) return null;
+
+  // v2: one paragraph per competence band.
+  if (raw.bands && typeof raw.bands === "object") {
+    const bands = {};
+    for (const key of BAND_KEYS) {
+      const value = raw.bands[key];
+      if (typeof value === "string" && value.trim()) bands[key] = value.trim();
+    }
+    if (!Object.keys(bands).length) return null;
+    return {
+      name: raw.name ?? doc?.name ?? "",
+      bands,
+      version: 2,
+      generatedAt: raw.generatedAt ?? null,
+    };
+  }
+
+  // v1: three cumulative tiers of bullets. Read in place and converted on the
+  // fly rather than migrated, so a world that rolls back to an older build
+  // still finds its ladder intact. Regenerating replaces it with v2.
+  if (raw.tiers && typeof raw.tiers === "object") {
+    return {
+      name: raw.name ?? doc?.name ?? "",
+      bands: bandsFromLegacy(raw),
+      version: 1,
+      generatedAt: raw.generatedAt ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * Project a stored v1 ladder onto the eight bands.
+ *
+ * The mapping mirrors what v1 did at read time: the shallow tier answers the
+ * lower bands, the middle tier the middle, the deep tier the top, and the
+ * Misremembered line becomes Inept. Prose quality suffers — these were written
+ * as bullets — but nothing is lost and nothing needs migrating.
+ */
+function bandsFromLegacy(raw) {
+  const tier = (k) => (Array.isArray(raw.tiers?.[k]) ? raw.tiers[k].filter(Boolean) : []);
+  const join = (list) => list.map((s) => (/[.!?]$/.test(s) ? s : `${s}.`)).join(" ");
+  const bands = {};
+  const everyone = tier("everyone");
+  const might = tier("might");
+  const few = tier("few");
+  if (raw.misremembered) bands.inept = raw.misremembered;
+  if (everyone.length) {
+    bands.poor = join(everyone.slice(0, 2));
+    bands.passable = join(everyone);
+  }
+  if (might.length) {
+    bands.solid = join(might.slice(0, 1));
+    bands.impressive = join(might);
+  }
+  if (few.length) {
+    bands.remarkable = join(few.slice(0, 1));
+    bands.phenomenal = join(few);
+  }
+  return bands;
 }
 
 export function hasLadder(doc) {
@@ -58,10 +112,14 @@ export function hasLadder(doc) {
  */
 export async function writeLadder(doc, ladder) {
   if (!doc) return null;
+  const bands = {};
+  for (const key of BAND_KEYS) {
+    const value = ladder.bands?.[key];
+    if (typeof value === "string" && value.trim()) bands[key] = value.trim();
+  }
   const record = {
     name: ladder.name ?? doc.name ?? "",
-    tiers: Object.fromEntries(TIER_KEYS.map((k) => [k, ladder.tiers?.[k] ?? []])),
-    misremembered: ladder.misremembered ?? null,
+    bands,
     generatedAt: Date.now(),
   };
   await doc.setFlag(SUITE_ID, FLAG_LADDER, record);
@@ -100,17 +158,11 @@ function mirrorable(doc) {
 }
 
 function renderMirror(record) {
-  const rows = TIER_KEYS.filter((k) => record.tiers[k]?.length)
-    .map((key) => {
-      const items = record.tiers[key].map((b) => `<li>${escapeHTML(b)}</li>`).join("");
-      return `<h4>${escapeHTML(HEADINGS[key])}</h4><ul>${items}</ul>`;
-    })
+  const rows = BAND_KEYS.filter((k) => record.bands?.[k])
+    .map((key) => `<h4>${escapeHTML(HEADINGS[key])}</h4><p>${escapeHTML(record.bands[key])}</p>`)
     .join("");
-  const wrong = record.misremembered
-    ? `<h4>${escapeHTML(HEADINGS.misremembered)}</h4><ul><li>${escapeHTML(record.misremembered)}</li></ul>`
-    : "";
-  if (!rows && !wrong) return "";
-  return `<section data-glrk="ladder"><h3>${escapeHTML(mirrorHeading())}</h3>${rows}${wrong}</section>`;
+  if (!rows) return "";
+  return `<section data-glrk="ladder"><h3>${escapeHTML(mirrorHeading())}</h3>${rows}</section>`;
 }
 
 /** Replace (or remove) our section in privateNotes, leaving everything else. */
