@@ -158,5 +158,25 @@ export class Benchmarks {
     return (n >= 0 ? "+" : "−") + Math.abs(n);
   }
 
+  /**
+   * The raw table row for `stat` at `level` as { tier: value } — never
+   * flattened, whatever the PWoL setting says.
+   *
+   * `resolve()` deliberately subtracts level under Proficiency-without-Level,
+   * which is right when GENERATING a number from scratch. It is wrong when
+   * COMPARING against an actor's stored statistics: those sit un-flattened on
+   * disk, and `pf2e-flatten` applies PWoL as an "all"-selector modifier without
+   * setting the system variant `proficiencyWithoutLevel` reads. Anything that
+   * shows a benchmark beside a stat block's own numbers must use this instead,
+   * or the two columns silently disagree by the creature's level.
+   */
+  static rawRow(stat, level) {
+    const spec = STAT_TABLES[stat];
+    if (!spec) return null;
+    const row = spec.table[clampLevel(level) - LEVEL_MIN];
+    if (!row) return null;
+    return Object.fromEntries(spec.cols.map((tier, i) => [tier, row[i]]));
+  }
+
   static get levelRange() { return { min: LEVEL_MIN, max: LEVEL_MAX }; }
 }

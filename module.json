@@ -35,6 +35,7 @@
     "styles/stage-postfx.css",
     "styles/stream-pacer.css",
     "styles/statsblock-import.css",
+    "styles/statsblock-import-reflavor.css",
     "styles/loot-gen.css",
     "styles/cargo-grid.css",
     "styles/tidy5e-slots-design-system.css",

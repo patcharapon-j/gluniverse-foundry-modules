@@ -135,5 +135,32 @@
 
   "GLSBI.label.npc": "NPC",
   "GLSBI.label.hazard": "hazard",
-  "GLSBI.label.trigger": "Trigger:"
+  "GLSBI.label.trigger": "Trigger:",
+
+  "GLSBI.reflavor.window.title": "Reflavor",
+  "GLSBI.reflavor.kicker": "GLU·SB // REFLAVOR",
+  "GLSBI.reflavor.subtitle": "Copy a prompt, paste it into Claude, bring the answer back to the importer.",
+  "GLSBI.reflavor.contextMenu.open": "Reflavor with Claude",
+  "GLSBI.reflavor.label.rung": "How much may change",
+  "GLSBI.reflavor.label.concept": "What should it become?",
+  "GLSBI.reflavor.label.required": "required",
+  "GLSBI.reflavor.label.targetLevel": "Target level",
+  "GLSBI.reflavor.label.fromLevel": "currently level {level}",
+  "GLSBI.reflavor.label.fallback": "Copy this manually",
+  "GLSBI.reflavor.placeholder.concept": "A bog-cult flagellant: waterlogged, chanting, wrapped in weighted chains.",
+  "GLSBI.reflavor.rung.reskin": "Reskin — new identity, identical mechanics",
+  "GLSBI.reflavor.rung.retheme": "Retheme — new identity and surface mechanics, same maths",
+  "GLSBI.reflavor.rung.rebuild": "Rebuild — a new kit at the same power",
+  "GLSBI.reflavor.rung.retune": "Retune — the same concept at a different level",
+  "GLSBI.reflavor.action.copy": "Copy prompt",
+  "GLSBI.reflavor.action.openImporter": "Open importer",
+  "GLSBI.reflavor.hint.newActor": "Create a new actor rather than updating this one. A reflavour usually renames abilities, and the importer matches items by name, so updating in place leaves the old kit sitting beside the new one.",
+  "GLSBI.reflavor.hint.loreLadder": "A Recall Knowledge lore ladder does not travel with a reflavour: it lives on a flag the exporter cannot see. The new creature starts without one.",
+  "GLSBI.reflavor.hint.hazardRungs": "Retune is unavailable for hazards: the Building Creatures hazard tables are not carried by this module, so there is nothing to retune against.",
+  "GLSBI.reflavor.notify.copied": "Reflavor prompt copied ({chars} characters). Paste it into Claude.",
+  "GLSBI.reflavor.notify.copyFailed": "Clipboard blocked. The payload is in the box below; copy it manually.",
+  "GLSBI.reflavor.notify.conceptRequired": "Describe what it should become. Above the first rung, a reflavour without a concept is just an unpredictable rewrite.",
+  "GLSBI.reflavor.notify.targetTypeOnly": "Reflavor works on NPC and hazard actors.",
+  "GLSBI.reflavor.notify.notFound": "Could not resolve that actor.",
+  "GLSBI.reflavor.notify.forcedReplaceAll": "Reflavour import: item mode forced to Replace All, because renamed abilities never match the existing ones."
 }
