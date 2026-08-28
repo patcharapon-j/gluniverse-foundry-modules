@@ -8,9 +8,31 @@
    suite's semantic hues rather than tints of one accent.
    ========================================================================== */
 
-.glrk-root {
+/* ── window frame ──
+   The frame carries ONLY feature-prefixed classes. `.gl-glass` must never be
+   applied to an ApplicationV2 frame: Foundry declares
+   `.application { position: absolute }` inside `@layer applications`, and this
+   suite's stylesheets are unlayered. Unlayered rules beat every layered rule
+   regardless of specificity, so `.gl-glass { position: relative }` silently
+   demoted the window into normal document flow — `setPosition()`'s inline
+   left/top then read as offsets from its static position and the panel
+   rendered as a clipped dark strip beside the sidebar instead of a floating
+   window. Route identity here; paint the glass on `.glrk-root` below. */
+.glrk {
   --gl-accent: var(--gl-holo-b);
+}
 
+.glrk .window-content {
+  padding: 0;
+  background: var(--gl-ink-0);
+}
+
+.glrk .window-header {
+  font-family: var(--gl-display);
+  letter-spacing: var(--gl-track-wide);
+}
+
+.glrk-root {
   /* Feature-local only. Prefixed so nothing here can repaint another feature. */
   --glrk-gap: var(--gl-sp-4);
   --glrk-band-h: var(--gl-sp-7);
@@ -18,10 +40,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--glrk-gap);
+  /* Fill the content box so the tab scrollers below have something to scroll
+     against; without this the root sizes to content and `overflow-y: auto`
+     never engages. */
+  height: 100%;
+  min-height: 0;
   padding: var(--gl-sp-4);
   color: var(--gl-text);
   font-size: var(--gl-fs-sm);
   line-height: var(--gl-lh-normal);
+  background:
+    radial-gradient(130% 60% at 100% 0%,
+      color-mix(in srgb, var(--gl-accent) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
 }
 
 /* ---------------------------------------------------------------- tabs -- */
