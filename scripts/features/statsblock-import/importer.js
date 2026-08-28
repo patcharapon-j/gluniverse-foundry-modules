@@ -129,23 +129,47 @@ export function registerSettings() {
 }
 
 /** Run at init only when enabled & available. Wire Foundry hooks here. */
+/**
+ * Resolve the document a directory row stands for.
+ *
+ * v14's Compendium application extends DocumentDirectory and fires the SAME
+ * `get<Type>ContextOptions` hook as the sidebar, so every entry registered for
+ * the sidebar also appears on compendium rows. A compendium row's id is not in
+ * `game.actors`, and its document must be loaded from the pack, which is async.
+ * Reading the collection off the application handles both cases; falling back
+ * to `game.actors` covers a caller with no application to hand.
+ *
+ * Always returns a Promise so callers need not know which kind of row it was.
+ */
+export function resolveDirectoryDocument(app, li) {
+  const id = li?.dataset?.entryId ?? li?.dataset?.documentId;
+  if (!id) return Promise.resolve(null);
+  const collection = app?.collection;
+  if (typeof collection?.getDocument === "function") {
+    return Promise.resolve(collection.getDocument(id)).catch(() => null);
+  }
+  return Promise.resolve(collection?.get?.(id) ?? game.actors.get(id) ?? null);
+}
+
 export function onInit() {
-  Hooks.on("getActorContextOptions", (_app, options) => {
+  Hooks.on("getActorContextOptions", (app, options) => {
     options.push({
       name: "GLSBI.contextMenu.import",
       icon: '<i class="fa-solid fa-file-import"></i>',
       condition: () => game.user?.isGM && game.system.id === "pf2e",
       callback: (target) => {
         const li = target instanceof HTMLElement ? target : target?.[0];
-        const actorId = li?.dataset.entryId ?? li?.dataset.documentId;
-        const actor = game.actors.get(actorId);
-        if (!actor || !["npc", "hazard"].includes(actor.type)) {
-          ui.notifications.warn(game.i18n.localize("GLSBI.notify.targetTypeOnly"));
-          return;
-        }
-        const importer = new PF2EStatBlockImporter();
-        importer.setTargetActor(actor.id);
-        importer.render({ force: true });
+        resolveDirectoryDocument(app, li).then((actor) => {
+          if (!actor || !["npc", "hazard"].includes(actor.type)) {
+            ui.notifications.warn(game.i18n.localize("GLSBI.notify.targetTypeOnly"));
+            return;
+          }
+          const importer = new PF2EStatBlockImporter();
+          // A compendium actor cannot be an update target: it is not in the
+          // world collection the target selector is built from.
+          if (!actor.pack) importer.setTargetActor(actor.id);
+          importer.render({ force: true });
+        });
       }
     });
   });
