@@ -1,0 +1,230 @@
+/* ==========================================================================
+   GLUniverse Suite — Recall Knowledge
+
+   Identity routes through --gl-accent on the feature root; everything derived
+   (surfaces, glow, bloom) follows from the token pool. Band colours are the one
+   exception the design system allows: they are DATA, not theme — the eight
+   competence bands must stay distinguishable at a glance, so they map onto the
+   suite's semantic hues rather than tints of one accent.
+   ========================================================================== */
+
+.glrk-root {
+  --gl-accent: var(--gl-holo-b);
+
+  /* Feature-local only. Prefixed so nothing here can repaint another feature. */
+  --glrk-gap: var(--gl-sp-4);
+  --glrk-band-h: var(--gl-sp-7);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--glrk-gap);
+  padding: var(--gl-sp-4);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-normal);
+}
+
+/* ---------------------------------------------------------------- tabs -- */
+
+.glrk-tabs {
+  display: flex;
+  gap: var(--gl-sp-2);
+  border-bottom: 1px solid var(--gl-hair);
+  padding-bottom: var(--gl-sp-2);
+}
+
+.glrk-tab {
+  flex: 1;
+  justify-content: center;
+  transition: color var(--gl-d-quick) var(--gl-ease),
+              background-color var(--gl-d-quick) var(--gl-ease);
+}
+
+.glrk-tab.is-active {
+  background: var(--gl-surface-raised);
+  color: var(--gl-text-bright);
+  box-shadow: inset 0 -2px 0 0 var(--gl-accent);
+}
+
+.glrk-tab[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------- scroller -- */
+
+.glrk-read,
+.glrk-generate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glrk-gap);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* --------------------------------------------------------------- bands -- */
+
+.glrk-bands {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gl-sp-2);
+}
+
+.glrk-band {
+  min-height: var(--glrk-band-h);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  border: 1px solid var(--gl-hair);
+  transition: border-color var(--gl-d-quick) var(--gl-ease),
+              box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+
+.glrk-band.is-active {
+  border-color: var(--glrk-band, var(--gl-accent));
+  box-shadow: 0 0 0 1px var(--glrk-band, var(--gl-accent)),
+              0 0 var(--gl-sp-4) rgb(var(--gl-tint-light) / 0.08);
+  color: var(--gl-text-bright);
+}
+
+/* Band identity. Data, not theme — see the header note. */
+.glrk-tier-disastrous { --glrk-band: var(--gl-peril); }
+.glrk-tier-inept      { --glrk-band: var(--gl-hazard); }
+.glrk-tier-poor       { --glrk-band: var(--gl-warn); }
+.glrk-tier-passable   { --glrk-band: var(--gl-text-dim); }
+.glrk-tier-solid      { --glrk-band: var(--gl-info); }
+.glrk-tier-impressive { --glrk-band: var(--gl-teal); }
+.glrk-tier-remarkable { --glrk-band: var(--gl-jade); }
+.glrk-tier-phenomenal { --glrk-band: var(--gl-signal); }
+
+/* -------------------------------------------------------------- reveal -- */
+
+.glrk-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  animation: glrk-reveal-in var(--gl-d-reveal) var(--gl-ease) both;
+}
+
+@keyframes glrk-reveal-in {
+  from { opacity: 0; transform: translateY(calc(var(--gl-sp-2) * -1)); }
+  to   { opacity: 1; transform: none; }
+}
+
+.glrk-tier h3 {
+  margin: 0 0 var(--gl-sp-2);
+  color: var(--gl-text-bright);
+  border-left: 2px solid var(--gl-accent);
+  padding-left: var(--gl-sp-3);
+}
+
+.glrk-tier ul {
+  margin: 0;
+  padding-left: var(--gl-sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+}
+
+.glrk-wrong {
+  border-left: 2px solid var(--gl-peril);
+  padding: var(--gl-sp-3);
+}
+
+.glrk-wrong p {
+  margin: var(--gl-sp-2) 0 0;
+  color: var(--gl-text-bright);
+}
+
+.glrk-source,
+.glrk-help {
+  display: block;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-2xs);
+}
+
+/* A hedged reveal reads as provisional, so the GM delivers it that way. */
+.glrk-mode-hedged .glrk-tier ul { font-style: italic; color: var(--gl-text-dim); }
+
+.glrk-hint {
+  margin: 0;
+  padding: var(--gl-sp-3);
+  border: 1px dashed var(--gl-edge);
+  border-radius: var(--gl-r-sm);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+/* -------------------------------------------------------------- matrix -- */
+
+.glrk-prompt { margin: 0; color: var(--gl-text-dim); }
+
+.glrk-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  overflow: hidden;
+}
+
+.glrk-matrix-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  background: var(--gl-surface);
+  border-left: 2px solid var(--glrk-band, transparent);
+}
+
+.glrk-matrix-band { color: var(--gl-text-bright); }
+.glrk-matrix-depth { color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+
+/* ------------------------------------------------------------ generate -- */
+
+.glrk-generate textarea { width: 100%; resize: vertical; }
+
+.glrk-extras {
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  padding: var(--gl-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+}
+
+.glrk-extras label {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  color: var(--gl-text-dim);
+}
+
+.glrk-seed {
+  margin: 0;
+  padding: var(--gl-sp-3);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.glrk-primary { justify-content: center; }
+.glrk-danger { color: var(--gl-peril); }
+
+/* -------------------------------------------------------------- footer -- */
+
+.glrk-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding-top: var(--gl-sp-3);
+  border-top: 1px solid var(--gl-hair);
+  color: var(--gl-text-faint);
+}
+
+/* A sheet whose subject already has a ladder carries a quiet mark, so a GM
+   scanning a folder can see what is prepped without opening each one. */
+.glrk-has-ladder .window-header {
+  box-shadow: inset 2px 0 0 0 var(--gl-holo-b);
+}

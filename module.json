@@ -50,7 +50,8 @@
     "styles/oracles.css",
     "styles/pf2e-ultimates.css",
     "styles/mobile.css",
-    "styles/locations.css"
+    "styles/locations.css",
+    "styles/pf2e-recall.css"
   ],
   "languages": [
     {
@@ -167,6 +168,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/locations.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-recall.en.json"
     }
   ],
   "packs": [

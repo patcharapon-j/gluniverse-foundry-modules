@@ -267,6 +267,29 @@ node tools/stream-pacer-safety-check.mjs
 Zero problems required. It is a source-shape check and cannot prove the rendered
 result — only a session with the capture login signed in can do that.
 
+**When touching Recall Knowledge** (`features/pf2e-recall/`, `styles/pf2e-recall.css`,
+`skills/pf2e-recall/`), re-run its consistency check. Everything it covers fails
+*silently*: a grammar that drifts between the prompt emitter and the parser
+reads to the GM as "the model got it wrong" rather than as an error; a
+competence band with no reveal rule falls through to the default and shows the
+wrong depth; the two **dynamic** i18n families (`GLRK.mode.*`,
+`GLRK.parse.warn.emptyTier.*`) are built at runtime, so nothing else catches a
+missing key; and if the `privateNotes` mirror heading ever equals
+`statsblock-import`'s, that module's exporter scrapes this feature's tiered
+prose and round-trips it back out as DC-keyed entries — silent corruption of a
+documented format:
+
+```bash
+node tools/recall-check.mjs
+```
+
+Zero problems required. Note that this feature deliberately computes **no DCs**:
+under PWoL the level-based DC collapses to a seven-point band and rarity
+dominates it, and `pf2e-flatten` applies PWoL as an `"all"`-selector modifier
+without setting `game.pf2e.settings.variants.pwol.enabled`, so the system's own
+`identificationDCs` are un-flattened in these worlds. See
+`docs/RECALL_KNOWLEDGE.md` for the tier model and the band mapping.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

@@ -1,0 +1,109 @@
+{{!--
+  Recall Knowledge panel. Two tabs: Read (at the table) and Generate (in prep).
+  GM-only; nothing here posts to chat.
+--}}
+<div class="glrk-root gl-type">
+
+  <nav class="glrk-tabs gl-tech-label">
+    <button type="button" class="gl-btn glrk-tab{{#if isRead}} is-active{{/if}}"
+            data-action="setTab" data-tab="read" {{#unless hasLadder}}disabled{{/unless}}>
+      <i class="fa-solid fa-book-open"></i> {{localize "GLRK.tab.read"}}
+    </button>
+    <button type="button" class="gl-btn glrk-tab{{#unless isRead}} is-active{{/unless}}"
+            data-action="setTab" data-tab="generate">
+      <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "GLRK.tab.generate"}}
+    </button>
+  </nav>
+
+  {{#if isRead}}
+  <section class="glrk-read gl-scroll">
+
+    <div class="glrk-bands">
+      {{#each bands}}
+      <button type="button" class="gl-btn glrk-band glrk-tier-{{key}}{{#if active}} is-active{{/if}}"
+              data-action="setBand" data-band="{{key}}">{{label}}</button>
+      {{/each}}
+    </div>
+
+    {{#if reveal}}
+    <article class="glrk-reveal glrk-mode-{{reveal.mode}}">
+      {{#if reveal.wrong}}
+      <div class="glrk-wrong gl-well">
+        <span class="gl-tech-label">{{localize "GLRK.reveal.wrongLabel"}}</span>
+        <p>{{reveal.wrong}}</p>
+        {{#if reveal.isMistaken}}
+        <small class="glrk-source">{{localize "GLRK.reveal.wrongSource.mistaken"}}</small>
+        {{/if}}
+      </div>
+      {{/if}}
+
+      {{#each reveal.tiers}}
+      <div class="glrk-tier">
+        <h3 class="gl-tech-label">{{label}}</h3>
+        <ul>{{#each bullets}}<li>{{this}}</li>{{/each}}</ul>
+      </div>
+      {{/each}}
+
+      {{#if reveal.hint}}
+      <p class="glrk-hint">{{reveal.hint}}</p>
+      {{/if}}
+    </article>
+    {{else}}
+    <p class="glrk-prompt">{{localize "GLRK.read.pickBand"}}</p>
+    <div class="glrk-matrix">
+      {{#each matrix}}
+      <div class="glrk-matrix-row glrk-tier-{{band}}">
+        <span class="gl-tech-label glrk-matrix-band">{{label}}</span>
+        <span class="glrk-matrix-depth">{{modeLabel}}</span>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if generatedAt}}
+    <footer class="glrk-meta">
+      <small>{{localize "GLRK.read.generatedAt"}} {{generatedAt}}</small>
+      <button type="button" class="gl-btn glrk-danger" data-action="clearLadder">
+        <i class="fa-solid fa-trash"></i> {{localize "GLRK.action.clear"}}
+      </button>
+    </footer>
+    {{/if}}
+
+  </section>
+  {{else}}
+  <section class="glrk-generate gl-scroll">
+
+    <label class="gl-tech-label" for="glrk-context">{{localize "GLRK.generate.contextLabel"}}</label>
+    <p class="glrk-help">{{localize "GLRK.generate.contextHint"}}</p>
+    <textarea class="gl-field" id="glrk-context" name="glrk-context" rows="4"
+              placeholder="{{localize 'GLRK.generate.contextPlaceholder'}}">{{contextText}}</textarea>
+
+    <fieldset class="glrk-extras">
+      <legend class="gl-tech-label">{{localize "GLRK.generate.extrasLabel"}}</legend>
+      <label><input type="checkbox" name="glrk-extra" value="folder"> {{localize "GLRK.generate.extra.folder"}}</label>
+      <label><input type="checkbox" name="glrk-extra" value="scene"> {{localize "GLRK.generate.extra.scene"}}</label>
+    </fieldset>
+
+    {{#if seedCount}}
+    <p class="glrk-seed gl-well">{{localize "GLRK.generate.seedFound"}} ({{seedCount}})</p>
+    {{/if}}
+
+    <button type="button" class="gl-btn glrk-primary" data-action="copyPayload">
+      <i class="fa-solid fa-clipboard"></i> {{localize "GLRK.action.copy"}}
+    </button>
+
+    <hr class="gl-divider">
+
+    <label class="gl-tech-label" for="glrk-paste">{{localize "GLRK.generate.pasteLabel"}}</label>
+    <p class="glrk-help">{{localize "GLRK.generate.pasteHint"}}</p>
+    <textarea class="gl-field gl-numeric" id="glrk-paste" name="glrk-paste" rows="10"
+              placeholder="{{localize 'GLRK.generate.pastePlaceholder'}}"></textarea>
+
+    <button type="button" class="gl-btn glrk-primary" data-action="importLadder">
+      <i class="fa-solid fa-file-import"></i> {{localize "GLRK.action.import"}}
+    </button>
+
+  </section>
+  {{/if}}
+
+</div>
