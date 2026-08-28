@@ -116,9 +116,31 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
 
 const brief = {
   kind: "creature", name: "Barrow Troll", subtitle: "Troll · Level 5", rarity: "uncommon",
-  traits: ["giant"], fields: { AC: 21 }, abilities: [], prose: { text: "", truncated: false },
+  traits: ["giant"], fields: { AC: 21 }, prose: { text: "", truncated: false },
+  sections: [
+    { title: "Attacks", entries: [{ name: "Jaws", meta: "melee · attack +18", text: "Bites." }] },
+    { title: "Spellcasting", entries: [{ name: "Innate", meta: "primal · DC 24", text: "Rank 3: Fireball" }] },
+  ],
 };
 const payload = buildPayload(brief, {});
+
+/* The statblock is what tier 2 ("how it fights and how it dies") is written
+   from. A section silently dropped by the renderer costs the model the only
+   data that makes that tier answerable, and nothing else would catch it. */
+for (const section of brief.sections) {
+  if (!payload.includes(`### ${section.title}`)) {
+    fail(`Payload dropped the "${section.title}" section.`);
+  }
+  for (const entry of section.entries) {
+    if (!payload.includes(entry.name)) fail(`Payload dropped entry "${entry.name}".`);
+    if (entry.meta && !payload.includes(entry.meta)) {
+      fail(`Payload dropped the meta line for "${entry.name}" (cost/bonus/damage).`);
+    }
+    if (entry.text && !payload.includes(entry.text)) {
+      fail(`Payload dropped the description for "${entry.name}".`);
+    }
+  }
+}
 if (!payload.includes(VERSION_MARK)) fail("Payload omits the version marker the parser looks for.");
 for (const [key, heading] of Object.entries(HEADINGS)) {
   if (!payload.includes(`## ${heading}`)) fail(`Payload never shows the "${key}" heading (${heading}).`);

@@ -80,9 +80,17 @@ function renderBrief(brief) {
     out.push(...fields.map(([k, v]) => `- ${k}: ${v}`));
   }
 
-  if (brief.abilities?.length) {
-    out.push("", "### Abilities");
-    out.push(...brief.abilities.map((a) => `- **${a.name}** — ${a.text}`));
+  // Attacks, actions and spellcasting. Each entry leads with its mechanical
+  // meta line (cost, attack bonus, damage, traits) because that is what tier 2
+  // is written from — "how it fights and how it dies" cannot be answered from
+  // a name alone.
+  for (const section of brief.sections ?? []) {
+    if (!section.entries?.length) continue;
+    out.push("", `### ${section.title}`);
+    for (const entry of section.entries) {
+      out.push(`- **${entry.name}**${entry.meta ? ` — ${entry.meta}` : ""}`);
+      if (entry.text) out.push(...entry.text.split("\n").map((line) => `  ${line}`));
+    }
   }
 
   if (brief.blurb) out.push("", "### Blurb", brief.blurb);
@@ -108,9 +116,13 @@ function renderBrief(brief) {
  */
 export function buildPayload(brief, { context = "", extras = [], seed = [] } = {}) {
   const kindWord =
-    { creature: "creature", journal: "place, group or topic", item: "item", scene: "location" }[
-      brief.kind
-    ] ?? "subject";
+    {
+      creature: "creature",
+      hazard: "hazard or trap",
+      journal: "place, group or topic",
+      item: "item",
+      scene: "location",
+    }[brief.kind] ?? "subject";
 
   const sections = [
     "# Task: write a Recall Knowledge lore ladder",

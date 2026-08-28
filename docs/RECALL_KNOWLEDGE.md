@@ -125,6 +125,38 @@ Existing statsblock-import entries are offered to the generation prompt as **raw
 material**, never auto-migrated into tiers: a `DC 20` line carries no reliable
 tier signal, least of all under PWoL.
 
+## What the payload carries
+
+The brief is the **entire statblock**, not a summary. Tier 2 is defined as "how
+it fights and how it dies", and that is unanswerable from a name and an AC — the
+model has to see the attacks, the action economy and the spell list to write it.
+
+For a creature: level, rarity, size, traits · Perception with senses · languages
+· **skills** · **ability modifiers** · items · AC · saves (with per-save notes
+and which is lowest) · HP · immunities/weaknesses/resistances · **every movement
+mode** · then three sections —
+
+- **Attacks** — melee or ranged, attack bonus, every damage roll, range
+  increment, area, traits (reach, agile, deadly) and attack effects.
+- **Actions, reactions and passive abilities** — each labelled with its real
+  cost (`one action`, `two actions`, `reaction`, `free action`, `passive`).
+  Without the label a passive aura and a three-action ritual read identically.
+- **Spellcasting** — each entry's tradition, preparation, DC and attack, plus
+  **the actual spell list** grouped by rank, highest first, cantrips last.
+
+**Hazards are a separate shape** and get their own extractor: stealth, hardness,
+and the disable/routine/reset triad, with prose from `details.description`
+rather than `publicNotes`. Extracting one as a creature yielded a near-empty
+brief.
+
+Field paths were verified against PF2e `template.json` at both **7.12.2** (the
+installed version) and **8.4.1** (latest upstream); the NPC data model is
+byte-identical between them, and the hazard model was checked against
+`src/module/actor/hazard/data.ts` at the 8.4.1 tag.
+
+Numbers are kept throughout. The "types, never numbers" rule governs what the
+model is asked to *write*, not what it is allowed to *read*.
+
 ## The grammar
 
 `prompt.mjs` emits it and `parse.mjs` reads it. The payload is **self-contained
