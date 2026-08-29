@@ -37,7 +37,7 @@ import {
   MODULE_ID,
 } from "./constants.js";
 import { asElement, getSetting } from "./settings.js";
-import { registerWrapper, WRAPPER } from "./lib/wrapper.js";
+import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
 /* --------------------------------------------------------------------------- *
  * Small shared helpers

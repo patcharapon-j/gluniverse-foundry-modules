@@ -23,7 +23,7 @@
 
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
-import { registerWrapper, WRAPPER } from "./lib/wrapper.js";
+import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
 /** Roll option set once we have flattened a DC, so we never re-flatten the same roll. */
 const FLATTENED_OPTION = "flatfinder:dc-flattened";

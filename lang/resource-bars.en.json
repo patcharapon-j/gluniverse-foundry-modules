@@ -1,0 +1,41 @@
+{
+  "GLS.feature.resource-bars.title": "Resource Bars",
+  "GLS.feature.resource-bars.hint": "Replaces Foundry's token bars with shaded, animated bars that respond to damage and healing. System-agnostic, with temp-HP and shield layers under PF2e.",
+
+  "GLRB.Settings.EnabledBars.Name": "Bars to replace",
+  "GLRB.Settings.EnabledBars.Hint": "Whether the secondary bar (bar2) is drawn alongside the primary one. Whatever each token's bars are bound to is respected either way.",
+  "GLRB.Settings.EnabledBars.Both": "Both bars",
+  "GLRB.Settings.EnabledBars.Primary": "Primary bar only",
+
+  "GLRB.Settings.Segments.Name": "Divisions",
+  "GLRB.Settings.Segments.Hint": "How many plates the primary bar is assembled from. Divisions let players read health by position as well as by colour, which matters for colour-blind viewers. 0 draws one continuous fill.",
+
+  "GLRB.Settings.LowThreshold.Name": "Low-health threshold (%)",
+  "GLRB.Settings.LowThreshold.Hint": "Below this fraction the bar's frame pulses, its glow turns red, and a diagonal hatch fades into the fill.",
+
+  "GLRB.Settings.FloatingDeltas.Name": "Floating damage numbers",
+  "GLRB.Settings.FloatingDeltas.Hint": "Show the amount lost or gained as a number that rises off the bar. Off by default; dedicated modules cover this ground and some tables find it noisy.",
+
+  "GLRB.Settings.Pf2eLayers.Name": "PF2e temp HP and shields",
+  "GLRB.Settings.Pf2eLayers.Hint": "Draw temporary hit points as a shield plate over the bar, and a raised shield as its own rail beneath it. Ignored outside Pathfinder 2e.",
+
+  "GLRB.Settings.Bloom.Name": "Bloom",
+  "GLRB.Settings.Bloom.Hint": "Let highlights and impacts cast light past the edge of the bar. Costs one extra render pass over all bars together. Turn it off if the canvas struggles.",
+
+  "GLRB.Settings.MotionTier.Name": "Motion",
+  "GLRB.Settings.MotionTier.Hint": "How much the bars animate on your screen. This is your choice alone and does not affect anyone else at the table.",
+  "GLRB.Settings.MotionTier.Full": "Full",
+  "GLRB.Settings.MotionTier.Reduced": "Reduced",
+  "GLRB.Settings.MotionTier.None": "None",
+
+  "GLRB.Settings.Ramp.Name": "Colour ramp",
+  "GLRB.Settings.Ramp.Hint": "The default ramp runs green to red. The colour-blind-safe ramp runs blue to orange instead, avoiding the red/green axis entirely.",
+  "GLRB.Settings.Ramp.Default": "Default (green to red)",
+  "GLRB.Settings.Ramp.Safe": "Colour-blind safe (blue to orange)",
+
+  "GLRB.Settings.Numbers.Name": "Show values",
+  "GLRB.Settings.Numbers.Hint": "When the numeric readout is drawn. This can never show more than the token's own Display Bars setting already permits — if the GM has hidden a token's bars from you, no number appears.",
+  "GLRB.Settings.Numbers.Hover": "On hover or selection",
+  "GLRB.Settings.Numbers.Always": "Always",
+  "GLRB.Settings.Numbers.Never": "Never"
+}
