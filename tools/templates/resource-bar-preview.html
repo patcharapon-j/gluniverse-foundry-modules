@@ -842,16 +842,17 @@ function draw(now) {
       const big = h * 0.46 * punch, small = h * 0.24 * punch;
       /* `num`, not `frac`: the fill snaps on impact and the readout counts. */
       const cur = Math.round((a ? a.num : frac) * s.max);
-      /* Colour follows the event and decays back to white; the maximum is the
-         scale the reading is measured against, so it is smaller and quieter. */
+      /* Colour follows the event and decays back to white. Value and maximum
+         share it: the hierarchy between them is size and nothing else, so the
+         run reads as one number with its scale beside it. */
       const heat = a ? a.hit * 0.70 : 0;
       const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
       const rest = [0.97, 0.99, 1.0];
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
         { text: String(cur), size: big, ink },
-        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.22, bottom: true },
-        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.30, bottom: true },
+        { text: "/", size: h * 0.23 * punch, ink, bottom: true },
+        { text: String(s.max), size: small, ink, bottom: true },
       ], rightPx, h * 0.5, w, h, shear);
 
       /* Floating deltas rise out of the bar and fade. The number that changed

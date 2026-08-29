@@ -215,12 +215,17 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
-The **maximum is the scale, not the reading**, so it is smaller, fainter and on
-the reading's baseline. Fainter matters as much as smaller: a small numeral at
-full ink is still high-contrast against the plate and still lands first on a bar
-whose value has not changed. Baseline matters because a run where every part is
-separately centred reads as three sizes of number rather than as one reading
-with its scale beside it. Alignment is measured against the **ink**, not the
+The **maximum is the scale, not the reading**. It differs from the value by
+size and by nothing else: same white, same opacity, one size down, on the
+reading's baseline. That is a constraint the run's construction enforces rather
+than a choice re-made at each call site — a run is one mesh with one `uInk` and
+one `uOpacity`, so there is nowhere to put a per-part weight without adding a
+second mesh and a second geometry to keep in sync, for what is visually one
+number.
+
+The baseline matters because a run where every part is separately centred reads
+as three sizes of number rather than as one reading with its scale beside it.
+Alignment is measured against the **ink**, not the
 glyph cell: the atlas bakes with `textBaseline "middle"`, so lining the cells up
 leaves the ink a couple of pixels out, which at this size reads as a mistake.
 `runGeometry` takes the offset from `actualBoundingBoxDescent`, measured once
@@ -335,8 +340,8 @@ inside the permission gate, that every animated behaviour is shed-able *and*
 that no `SHED_ORDER` entry is dead, that the hitstop actually holds every
 channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
-per-token offset still means "inherit" rather than "zero", that the readout's
-per-glyph weight is wired end to end, that the shear has one home, and that
+per-token offset still means "inherit" rather than "zero", that value and
+maximum still differ by size alone, that the shear has one home, and that
 every detail gate still resolves at the reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 

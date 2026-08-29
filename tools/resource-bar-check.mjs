@@ -212,20 +212,20 @@ const tokensCss = await src("styles/gl-tokens.css");
     fail("The Token Config inputs are not named for the flag path; they will not be saved by the sheet's own submit.");
 }
 
-/* ── 7d. Per-glyph weight survives ──────────────────────────────────────── */
+/* ── 7d. The readout differs by size and by nothing else ────────────────── */
 {
-  /* The maximum is drawn quieter than the current value through a per-vertex
-     attribute rather than a second mesh. Drop either half and the run still
-     renders — at full strength, silently undoing the hierarchy. */
+  /* Every part of the reading is the same white at the same opacity; only its
+     size says which part is the value and which the maximum. That holds only
+     because the run is one mesh with one uInk and one uOpacity, so the way to
+     break it is to reintroduce a per-glyph weight — which renders perfectly and
+     just quietly fades the maximum again. */
   const atlasSrc = strip(await src("scripts/features/resource-bars/atlas.mjs"));
-  const declared = /attribute float aDim/.test(atlasSrc);
-  const supplied = /addAttribute\("aDim"/.test(atlasSrc);
-  const used = /vDim/.test(atlasSrc);
-  if (!declared || !supplied || !used)
-    fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength.");
-  else if (!/dim:\s*0?\.\d+/.test(strip(hostSrc)))
-    fail("Nothing in host.mjs passes a dim weight, so every part of the readout draws at the same strength.");
-  else ok("the maximum is drawn at reduced weight through the run's own attribute");
+  const h = strip(hostSrc);
+  if (/aDim|vDim/.test(atlasSrc) || /\bdim:/.test(h))
+    fail("A per-glyph weight is back in the readout; the maximum will draw fainter than the value it belongs to instead of the same white, one size smaller.");
+  else if (!/size:\s*h\s*\*\s*0\.46/.test(h) || !/size:\s*h\s*\*\s*0\.2\d/.test(h))
+    fail("The readout's parts no longer differ in size, which was the only thing separating the value from its maximum.");
+  else ok("value and maximum differ by size alone, at one ink and one opacity");
 }
 
 /* ── 7e. The readout's scale sits on the reading's baseline ─────────────── */
