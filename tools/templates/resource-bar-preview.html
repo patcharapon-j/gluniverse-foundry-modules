@@ -136,9 +136,8 @@ input[type=range]{padding:0; width:230px}
     snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
     reaction read as a reaction rather than as the tail of a transition. On release: a
     <b style="color:var(--text)">wave crosses the whole bar</b> in the direction the value moved —
-    seen from directly above: a bowed crest line, a decaying train of crests behind it shaded by the
-    slope of the surface rather than its height, and a three-stop colour ramp trailing the front,
-    red down the bar on a hit and green out along it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
+    a glowing line with a three-stop colour ramp trailing it, red down the bar on a hit and green out
+    along it on a heal, and nothing at all ahead of the front; the chip trail is cut white-hot and cools as it drains; a ring expands from the
     point that moved, throwing spokes and debris along the bar's axis; the readout counts to the new
     number in the colour of what happened; and the delta punches in at 1.35× before drifting off.</p>
   <p class="note"><b style="color:var(--text)">Nothing about the geometry moves.</b> Not the frame,
@@ -175,6 +174,15 @@ input[type=range]{padding:0; width:230px}
     between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
     8:1 quad.</p>
   <div class="ladder" id="row-scale"></div>
+
+  <h2>Divisions</h2>
+  <p class="note">Two ways to ask for plates, answering different questions. A <b style="color:var(--text)">fixed
+    count</b> makes position along the bar mean the same fraction on every creature, which is what makes
+    divisions useful to a colour-blind player. <b style="color:var(--text)">One plate per N hit points</b>
+    instead makes one plate mean one quantity of damage everywhere, so &ldquo;took about three blocks&rdquo;
+    is the same hit on a goblin and on a dragon. Rounded up, so the short plate is the last one rather
+    than the one at the full-health end.</p>
+  <div class="grid" id="row-div"></div>
 
   <h2>Colour-blind ramp</h2>
   <p class="note">The opt-in client setting: blue→cyan→yellow→orange abandons the red/green axis
@@ -647,7 +655,7 @@ add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost
 add(motion, { title: "Damage wave", sub: "crest running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
 add(motion, { title: "Heal wave", sub: "crest running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
 add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
-add(motion, { title: "The wake", sub: "slope-shaded crests, seen from above", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
+add(motion, { title: "The wake", sub: "the ramp, late in its crossing", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");
@@ -659,6 +667,16 @@ add(pf, { title: "Secondary rail", sub: "bar2, understated", frac: 0.55, role: 1
 const scale = document.getElementById("row-scale");
 for (const [w, h, label] of [[220, 26, "grid 200"], [128, 19, "grid 128"], [80, 12, "grid 80"], [44, 8, "grid 44, zoomed out"]]) {
   add(scale, { title: label, sub: "<i>bar body " + w + "×" + h + "px</i>", frac: 0.62, seg: 10, w, h });
+}
+
+const div = document.getElementById("row-div");
+for (const [max, per] of [[12, null], [58, null], [12, 5], [58, 5], [200, 5], [200, 25]]) {
+  const seg = per ? Math.ceil(max / per) : 10;
+  add(div, {
+    title: per ? max + " HP, one per " + per : max + " HP, fixed 10",
+    sub: "<i>uSeg " + seg + "</i>",
+    frac: 0.62, seg, max,
+  });
 }
 
 const cb = document.getElementById("row-cb");
@@ -682,9 +700,9 @@ function frozen(row, { from, to, marks, max }) {
   }
 }
 frozen(document.getElementById("row-seq-hit"),
-  { from: 0.8, to: 0.45, marks: [0, 55, 140, 300, 520, 820], max: 58 });
+  { from: 0.8, to: 0.45, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 frozen(document.getElementById("row-seq-heal"),
-  { from: 0.35, to: 0.72, marks: [0, 55, 140, 300, 520, 820], max: 58 });
+  { from: 0.35, to: 0.72, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 
 /* The token stage. */
 const stage = document.getElementById("stage");

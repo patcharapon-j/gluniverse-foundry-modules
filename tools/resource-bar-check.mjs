@@ -291,6 +291,41 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("the per-token offsets are anchored to the Resources tab body, not to its nav link");
 }
 
+/* ── 7i. Divisions agree on one source ──────────────────────────────────── */
+{
+  /* uSeg is written from three places — mesh creation, configure, and the
+     per-frame write — and the per-HP mode makes the value depend on the
+     creature rather than on the setting. Any one of them still reading
+     opts.segments directly produces a bar that is divided one way when it is
+     created and another way on its next frame, which reads as a flicker on
+     first draw and as nothing at all on a bar that never animates. */
+  const h = strip(hostSrc);
+  if (!/segmentsFor\(/.test(h))
+    fail("host.mjs has no segmentsFor helper, so the per-HP division mode cannot be resolved per creature.");
+  else if (/uSeg\s*=\s*[^;]*opts\.segments/.test(h))
+    fail("Something still writes uSeg straight from opts.segments; that path ignores the per-HP mode.");
+  else if (!/Math\.ceil\(max \/ per\)/.test(h))
+    fail("The per-HP division count does not round up, so the remainder lands in the first plate — the one at the full-health end.");
+  else if (!/per > 0/.test(h) || !/Number\.isFinite\(max\)/.test(h))
+    fail("segmentsFor does not guard its divisor and its maximum; a creature with no maximum divides by zero and asks for an infinite plate count.");
+  else ok("divisions resolve through one helper, round up, and fall back to a continuous fill");
+}
+
+/* ── 7j. Every registered setting has its strings ───────────────────────── */
+{
+  /* A missing key does not throw. Foundry renders the key itself, so the
+     Control Center shows "GLRB.Settings.SegmentMode.Name" as a label and the
+     setting still works — which is exactly the kind of thing that ships. */
+  const idx = await src("scripts/features/resource-bars/index.mjs");
+  const lang = JSON.parse(await src("lang/resource-bars.en.json"));
+  const missing = [...idx.matchAll(/"(GLRB\.[A-Za-z0-9.]+)"/g)]
+    .map((m) => m[1])
+    .filter((k) => !(k in lang));
+  if (missing.length)
+    fail(`${missing.length} i18n key(s) referenced by the settings do not exist: ${missing.join(", ")}`);
+  else ok("every GLRB string the settings reference resolves");
+}
+
 /* ── 8. The shear has one home ──────────────────────────────────────────── */
 {
   const glsl = shader.FRAGMENT_SHADER;
