@@ -3,10 +3,11 @@
  *
  * One quad per bar, everything computed per-pixel: the recessed well, the
  * health fill and its cylindrical shading, the chip trail, the temp-HP overlay,
- * the segment ticks, the danger hatch, the specular sweep, and the chamfered
- * Etched Glass frame with its bevel. Doing it in a shader rather than in
- * PIXI.Graphics is what makes "shading" and "animates every frame" cheap
- * instead of a per-token retessellation.
+ * the segment ticks, the low-health breath, the change wave, the impact and its
+ * debris, the specular sweep, and the chamfered Etched Glass frame with its
+ * bevel. Doing it in a shader rather than in PIXI.Graphics is what makes
+ * "shading" and "animates every frame" cheap instead of a per-token
+ * retessellation.
  *
  * ── A note on units, because it is the one genuinely subtle thing here ──
  *
@@ -65,6 +66,11 @@ export const UNIFORMS = Object.freeze({
   uHit: "float",      // impact envelope, 1 at the frame of the hit decaying to 0
   uHitX: "float",     // where the hit landed, as a fraction along the bar
   uHeal: "float",     // 1 while the impact envelope is a heal rather than a hit
+  uSpark: "float",    // debris + spoke intensity, 0 once shed under load
+  uChip: "float",     // how fresh the chip trail is, 1 = just cut and white-hot
+  uWave: "float",     // change-wave amplitude, 0..1
+  uWaveX: "float",    // the wave front's position, as a fraction along the bar
+  uShock: "float",    // compression spring through the fill, signed, 0 at rest
   uSeg: "float",      // segment count across the fill, 0 = one continuous plate
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
@@ -121,6 +127,11 @@ uniform float uCracked;
 uniform float uHit;
 uniform float uHitX;
 uniform float uHeal;
+uniform float uSpark;
+uniform float uChip;
+uniform float uWave;
+uniform float uWaveX;
+uniform float uShock;
 uniform float uSeg;
 uniform float uRole;
 uniform vec3  uRamp[4];
@@ -243,7 +254,20 @@ void main(void) {
 
   float dBody   = sdBox(q, bb);
   float dTrough = dBody + sw + air;
-  float dFillA  = dTrough + lip;
+
+  /* ── The compression ───────────────────────────────────────────────────
+     The impact squeezes what is *inside* the frame. The frame itself — body,
+     stroke, trough, cap, pip — never moves: a bar that shakes or scales around
+     its own anchor reads as a screen-shake bolted onto a widget, and it is the
+     one note in this whole HUD that would announce itself as an effect rather
+     than as a material. The fill plate flexing inside a rigid housing says the
+     same thing and says it about the thing that actually changed.
+
+     Clamped on the low side so the spring's negative swing relaxes the plate
+     back toward its resting height without ever pushing it out through the
+     trough it sits in. */
+  float squeeze = clamp(uShock, -0.30, 1.0) * 0.150;
+  float dFillA  = max(dTrough + lip, abs(q.y) - (bb.y - sw - air - lip - squeeze));
 
   float mBody   = rbCover(dBody);
   float mStroke = clamp(mBody - rbCover(dBody + sw), 0.0, 1.0);
@@ -260,15 +284,29 @@ void main(void) {
      GOLD is PALETTE.signalPale. It is the only warm note and it appears in
      exactly two places — the top of the stroke and the cap — which is what
      keeps it reading as a material rather than as a colour scheme. */
-  vec3 base = uRole < 0.5 ? rampAt(uFrac) : (uRole < 1.5 ? uRailCol : uShieldCol);
+  /* The ramp is sampled through a curve, not linearly. Linear sampling spends
+     the whole lower half of the bar's range on orange and only reaches red in
+     the last few percent — so a creature at a third of its hit points looks
+     merely warm. Biasing the sample downward pulls red up into the band where
+     it is actually load-bearing, without touching the ramp stops themselves
+     (which mirror gl-tokens.css and are pinned to it). */
+  float rampT = pow(clamp(uFrac, 0.0, 1.0), 1.45);
+  vec3 base = uRole < 0.5 ? rampAt(rampT) : (uRole < 1.5 ? uRailCol : uShieldCol);
   float grey = dot(base, vec3(0.299, 0.587, 0.114));
   base = mix(base, vec3(grey), mix(0.24, 0.06, hero));
+  /* …and the bottom of the range goes further, into a hot arterial red that no
+     ramp stop reaches. This is the one place the fill is allowed to editorialise,
+     because "you are about to die" is not a shade of the same information. */
+  base = mix(base, vec3(1.000, 0.106, 0.153), uLow * 0.55 * hero);
 
   /* ── The trough ────────────────────────────────────────────────────────*/
-  vec3 troughCol = mix(INK0, INK, 0.28 + 0.55 * smoothstep(1.0, -0.85, hb));
-  float scan = smoothstep(0.34, 0.50, abs(fract((q.x + q.y * 1.25) / 0.155) - 0.5));
-  troughCol *= 1.0 + 0.42 * scan * rbDetail(0.078);
-  troughCol *= 1.0 - 0.35 * rbBand(hb - 0.92, 0.14);
+  /* Flat and dark, with one shadow under the top edge. There used to be a
+     diagonal scan pattern in here; on a bar that is mostly empty — which is
+     every bar that matters — those stripes are the largest thing on screen and
+     the fill has to compete with them. A well is not supposed to be the
+     interesting part. */
+  vec3 troughCol = mix(INK0, INK, 0.24 + 0.62 * smoothstep(1.0, -0.85, hb));
+  troughCol *= 1.0 - 0.38 * rbBand(hb - 0.92, 0.14);
 
   /* ── The fill ──────────────────────────────────────────────────────────
      Flat and high-key, with the light carried by one hot hairline rather than
@@ -277,13 +315,45 @@ void main(void) {
      what a lit surface actually does. */
   vec3 fillCol = base * (1.04 - 0.17 * smoothstep(0.35, -1.0, hb));
   fillCol += vec3(1.0) * rbBand(hb - 0.55, 0.30) * 0.10;
-  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * 1.15 * hero;
+  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * (1.15 + 1.30 * max(uShock, 0.0)) * hero;
   fillCol *= 1.0 - 0.34 * rbBand(hb + 0.92, 0.13);
 
-  /* Danger hatch: a second, non-hue channel for the low band. */
-  float diag = fract((q.x + q.y * 1.6) / 0.30);
-  float hatch = smoothstep(0.34, 0.46, abs(diag - 0.5)) * rbDetail(0.135);
-  fillCol = mix(fillCol, fillCol * 0.58, hatch * uLow * 0.9 * hero);
+  /* ── Low health ────────────────────────────────────────────────────────
+     A slow red breath through the fill, not a hatch.
+
+     The hatch that used to live here was a *spatial* second channel — stripes
+     you could read without colour. It also sat on the bar permanently once you
+     dropped below the threshold, and a static stripe pattern on the one element
+     a player checks constantly is exactly the kind of decoration that has to be
+     looked past. The second channel is now *temporal*: the pulse is slow enough
+     (~4.6s) to read as breathing rather than as an alarm, and it carries the
+     "this is different" information without occupying any of the bar's surface.
+
+     The mottle is two drifting sine fields multiplied together. Multiplying two
+     incommensurate frequencies gives an interference field with no repeat the
+     eye can lock onto — the surface reads as having grain, and never as having
+     a pattern. That distinction is the whole difference between texture and
+     distraction. */
+  float breathe = 0.5 + 0.5 * sin(uTime * 1.35);
+
+  /* The texture is domain-warped, and that is the whole trick. Two sine fields
+     multiplied together give a plaid — a grid you can see the axes of, which is
+     a pattern rather than a material. Displacing the sample point by *another*
+     pair of sines before evaluating it breaks the alignment: the cells stretch,
+     drift and fold, and the result reads as something moving inside the liquid
+     rather than as a texture laid over it. Four sines, no texture fetch. */
+  vec2 wq = q + vec2(sin(q.y * 3.10 + uTime * 0.55) * 0.11,
+                     sin(q.x * 2.70 - uTime * 0.43) * 0.07);
+  float cell = 0.5 + 0.5 * sin(wq.x * 5.2 + uTime * 0.80) * sin(wq.y * 4.6 - uTime * 0.62);
+  float ember = pow(cell, 2.6);
+
+  float lowGlow = uLow * (0.34 + 0.66 * breathe) * hero;
+  /* Dark where the cells are thin, so the liquid has depth rather than an even
+     wash of red over it. */
+  fillCol = mix(fillCol, vec3(0.80, 0.05, 0.09), lowGlow * (0.26 + 0.42 * (1.0 - cell)));
+  /* …and emitted above 1.0 where they are thick, so the bright-pass finds it:
+     at low health the fill is not a darker colour, it is a light source. */
+  fillCol += vec3(1.25, 0.22, 0.26) * lowGlow * (0.20 + 0.90 * ember);
 
   /* ── Segments ──────────────────────────────────────────────────────────
      Real gaps between discrete plates, not grooves cut into one continuous
@@ -316,8 +386,15 @@ void main(void) {
   float mFill  = mFillA * rbEdge(fillX + px, fillX - px, q.x) * segMask;
   float mGhost = mFillA * rbEdge(ghostX + px, ghostX - px, q.x) * segMask * (1.0 - mFill);
 
-  /* ── The chip trail ────────────────────────────────────────────────────*/
-  vec3 ghostCol = mix(base, vec3(1.0), 0.52) * 0.62;
+  /* ── The chip trail ────────────────────────────────────────────────────
+     The span that was just lost. It is cut white-hot and cools over its own
+     lifetime rather than appearing pre-cooled: a trail that is the same colour
+     the instant it is cut and half a second later carries no information about
+     *when* — which, in a round where three things hit the same creature, is the
+     only thing that tells the three apart. */
+  float chipT = clamp((ghostX - q.x) / max(ghostX - fillX, 0.0001), 0.0, 1.0);
+  vec3 ghostCol = mix(mix(base, vec3(1.0), 0.52) * 0.62,
+                      vec3(1.40, 1.02, 0.86), uChip * chipT * 0.72);
 
   /* ── Temp HP: a shield, not a stripe ───────────────────────────────────
      A thin band read as "some other bar happens to be here". A shield has to
@@ -396,6 +473,50 @@ void main(void) {
   C += vec3(0.16, 0.19, 0.26) * troughDiv * 0.55;
   C = mix(C, ghostCol, mGhost * step(uFrac, uGhost));
   C = mix(C, fillCol, mFill);
+
+  /* ── The change wave ───────────────────────────────────────────────────
+     A front travelling the exact span the value moved, in the direction it
+     moved: outward through the new fill on a heal, backward through the trail
+     on a hit. The fill does not simply become a different length — something
+     pushes it there.
+
+     The profile is deliberately asymmetric. A hard gaussian front with a long
+     exponential tail *behind* it is what encodes direction: a symmetric band
+     travelling along a bar is just a highlight, and a highlight can move either
+     way. The chevrons riding the tail are phase-locked to the front's own
+     position, so the texture travels with the wave instead of the wave sliding
+     across a stationary pattern. */
+  if (uWave > 0.001) {
+    float wx = mix(fx0, fx1, clamp(uWaveX, 0.0, 1.0));
+    float dir = uHeal > 0.5 ? 1.0 : -1.0;
+    float wd = (q.x - wx) * dir;
+
+    vec3 waveCol = mix(vec3(1.00, 0.20, 0.15), vec3(0.30, 1.00, 0.52), uHeal);
+
+    /* Behind the front, never ahead of it. The asymmetry is the direction cue:
+       a symmetric band travelling along a bar is a highlight, and a highlight
+       can be going either way. */
+    float tail = exp(min(wd, 0.0) / 0.22) * (1.0 - step(0.0, wd));
+
+    /* Chevrons phase-locked to the front's own position, so the texture travels
+       *with* the wave instead of the wave sliding across a fixed pattern. */
+    float chev = smoothstep(0.34, 0.50,
+      abs(fract((q.x - q.y * 0.55 - uWaveX * 2.6) / 0.190) - 0.5));
+    float tex = 0.45 + 0.55 * chev * rbDetail(0.095);
+
+    /* On a heal the wave runs through the fill it just created; on a hit it
+       runs back through the span being given up, which is the trail. */
+    float waveArea = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
+
+    /* Hue before light. Adding the wave's colour on top of an already-bright
+       plate just saturates to white — the green of a heal and the red of a hit
+       both arrive as the same pale smear, which is the one thing this effect
+       must not do. Tinting the material the front is passing through keeps the
+       colour, and *then* one hot line rides on top of it. */
+    C = mix(C, waveCol * (0.55 + 0.60 * tex), clamp(tail * waveArea * 0.88, 0.0, 1.0));
+    C += waveCol * rbGauss(wd, 0.055) * waveArea * 2.10;
+    C += vec3(1.0) * rbGauss(wd, 0.016) * waveArea * 0.40;
+  }
   /* The shield plate: a translucent pane over the fill, then its lattice, its
      top rim, and a hot leading edge where it ends. */
   vec3 shieldPane = uTempCol * (0.42 + 0.30 * shimmer);
@@ -409,7 +530,7 @@ void main(void) {
   C += vec3(0.62, 0.74, 0.96) * sweep * 0.34;
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
-  capCol = mix(capCol, vec3(2.4, 2.2, 1.9), uFlash * 0.9);
+  capCol = mix(capCol, vec3(1.9, 1.7, 1.5), uFlash * 0.55);
   C = mix(C, capCol, mCap);       A = mix(A, 1.0, mCap);
   C = mix(C, mix(STEEL, GOLD, 0.35) * 0.90, mPip); A = mix(A, 1.0, mPip);
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));
@@ -447,16 +568,38 @@ void main(void) {
        running slightly ahead of it. */
     float ring = rbBand(r - radius, 0.028) * uHit * uHit * 2.6;
     float spokes = pow(abs(sin(atan(hp.y, hp.x) * 4.0)), 11.0);
-    float spark = exp(-abs(r - radius * 1.22) / 0.045) * spokes * uHit * 1.8;
+    float spark = exp(-abs(r - radius * 1.22) / 0.045) * spokes * uHit * 1.8 * uSpark;
 
-    C += hitCol * (ring + spark) * mix(1.0, 0.45, 1.0 - hero);
+    /* Debris. Three streaks thrown along the bar's own axis, stretching as they
+       travel and thinning as they go — the ring says how hard, the debris says
+       which way. They are the first thing shed under load, which is why they are
+       additive light on top of a complete picture rather than part of it. */
+    float debris = 0.0;
+    for (int k = 0; k < 3; k++) {
+      float fk = float(k);
+      float side = mod(fk, 2.0) < 0.5 ? -1.0 : 1.0;
+      float travel = radius * (1.10 + fk * 0.26);
+      float dx = hp.x - side * travel;
+      float dy = hp.y - (fk - 1.0) * 0.34 * (1.0 - uHit);
+      debris += exp(-abs(dx) / (0.012 + 0.070 * (1.0 - uHit)))
+              * exp(-abs(dy) / 0.055);
+    }
+
+    C += hitCol * (ring + spark + debris * uHit * uHit * uSpark * 1.5)
+       * mix(1.0, 0.45, 1.0 - hero);
   }
 
-  /* Low-health state rides the chrome, never the fill: the fill is reporting a
-     number and must not be editorialised. */
-  float pulse = 0.5 + 0.5 * sin(uTime * 4.2);
-  C = mix(C, vec3(1.00, 0.29, 0.32), mStroke * uLow * (0.30 + 0.45 * pulse));
-  C = mix(C, vec3(1.0), uFlash * 0.42);
+  /* The flare sits at the wound, and *only* at the wound.
+     A full-quad whiteout is the obvious way to write this and it is wrong twice
+     over: held through the hitstop it turns the whole bar white for 55ms, which
+     buries the readout and the trail exactly when they are the two things worth
+     looking at, and it says "the HUD blinked" rather than "it was hit there". */
+  C += vec3(1.0, 0.92, 0.86) * uFlash * 1.25 * rbGauss(q.x - fillX, 0.060) * mFillA;
+
+  /* The chrome breathes on the same slow clock as the fill. Two red pulses at
+     different rates read as two unrelated warnings rather than as one state. */
+  C = mix(C, vec3(1.00, 0.20, 0.24), mStroke * uLow * (0.28 + 0.52 * breathe));
+  C = mix(C, vec3(1.0), uFlash * 0.06);
 
   vec3 outC = C * A * mix(0.80, 1.0, hero);
   float outA = A * mix(0.80, 1.0, hero);
@@ -480,10 +623,10 @@ void main(void) {
      two falloffs do not agree and the mismatch looks like fog. What stays here
      is the contact light immediately against the body, which a low-resolution
      blur cannot resolve. */
-  vec3 glowCol = mix(base, vec3(1.00, 0.29, 0.32), uLow * 0.7);
+  vec3 glowCol = mix(base, vec3(1.00, 0.16, 0.20), uLow * 0.85);
   float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, q.x) * 0.22;
   glow += exp(-outside / 0.045) * exp(-abs(q.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
-  glow += exp(-outside / 0.050) * uLow * pulse * 0.34 * hero;
+  glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
   glow *= outMask * mix(0.45, 1.0, hero);
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;

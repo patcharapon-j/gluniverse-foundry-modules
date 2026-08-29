@@ -70,26 +70,42 @@ export function resetAtlas() {
   cached = null;
 }
 
+/**
+ * `aDim` carries per-glyph weight.
+ *
+ * A run is one mesh with one `uInk`, so without it the only way to draw part of
+ * a readout quieter than the rest is a second mesh, a second draw call and a
+ * second geometry to keep in sync — for what is, visually, one number. A single
+ * float per vertex costs nothing and keeps the run atomic.
+ */
 export const TEXT_VERTEX_SHADER = `
 attribute vec2 aVertexPosition;
 attribute vec2 aUvs;
+attribute float aDim;
 uniform mat3 translationMatrix;
 uniform mat3 projectionMatrix;
 varying vec2 vUv;
+varying float vDim;
 void main(void) {
   vUv = aUvs;
+  vDim = aDim;
   gl_Position = vec4((projectionMatrix * translationMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0);
 }`;
 
 export const TEXT_FRAGMENT_SHADER = PRECISION + `
 varying vec2 vUv;
+varying float vDim;
 uniform sampler2D uAtlas;
 uniform vec3 uInk;
 uniform vec3 uEdge;
 uniform float uOpacity;
 void main(void) {
   vec4 t = texture2D(uAtlas, vUv);
-  float a = t.a * uOpacity;
+  /* Weight is applied to colour and alpha together because the output is
+     premultiplied; scaling only one of them dims the glyph and leaves its
+     outline at full strength, which reads as a smudge rather than as quieter
+     text. */
+  float a = t.a * uOpacity * vDim;
   /* The green channel is the glyph body, the red is its outline: tint one
      without tinting the other. */
   gl_FragColor = vec4(mix(uEdge, uInk, t.g) * a, a);
@@ -99,7 +115,8 @@ void main(void) {
  * Build the geometry for one right-aligned run, in local pixel coordinates
  * where y runs downward (PIXI's convention, unlike the shader's).
  *
- * @param {Array<{text: string, size: number}>} parts
+ * @param {Array<{text: string, size: number, dim?: number}>} parts
+ *        `dim` is the part's weight, 1 = full strength.
  * @param {{right: number, mid: number, skew: number}} at
  * @returns {PIXI.Geometry|null}
  */
@@ -107,6 +124,7 @@ export function runGeometry(parts, { right, mid, skew }) {
   const atlas = getAtlas();
   const pos = [];
   const uvs = [];
+  const dim = [];
   const idx = [];
 
   let total = 0;
@@ -116,6 +134,7 @@ export function runGeometry(parts, { right, mid, skew }) {
   let penX = right - total;
   let n = 0;
   for (const part of parts) {
+    const weight = Number.isFinite(part.dim) ? part.dim : 1;
     const gh = part.size * (atlas.cellH / atlas.fontPx);
     const gw = gh * atlas.cellRatio;
     for (const ch of part.text) {
@@ -132,6 +151,7 @@ export function runGeometry(parts, { right, mid, skew }) {
       const s1 = (mid - y1) * skew;
       pos.push(x0 + s0, y0, x1 + s0, y0, x1 + s1, y1, x0 + s1, y1);
       uvs.push(m.u0, 0, m.u1, 0, m.u1, 1, m.u0, 1);
+      dim.push(weight, weight, weight, weight);
       idx.push(n, n + 1, n + 2, n, n + 2, n + 3);
       n += 4;
       penX += adv;
@@ -142,5 +162,6 @@ export function runGeometry(parts, { right, mid, skew }) {
   return new PIXI.Geometry()
     .addAttribute("aVertexPosition", pos, 2)
     .addAttribute("aUvs", uvs, 2)
+    .addAttribute("aDim", dim, 1)
     .addIndex(idx);
 }
