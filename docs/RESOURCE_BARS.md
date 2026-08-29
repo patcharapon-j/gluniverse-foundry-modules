@@ -199,6 +199,17 @@ fades a division out once its gap falls under a device pixel, but the count is
 also what sets that gap, so past the cap the bar is more gap than plate long
 before the fade takes over.
 
+The gap itself is **six device pixels**, floored at 0.030 in geometry units and
+capped at 0.42 of a plate. Six rather than the two it started at because the gap
+is what makes the fill read as assembled plates rather than as a bar with
+scratches in it, and because it clears `GL_FADE_HI` several times over so it is
+never caught half-faded. Device pixels rather than geometry units for the reason
+in **Units** above: a fixed value is two pixels on a retina display and
+sub-pixel on an ordinary one, where `rbDetail` deletes it and the colour-blind
+position channel silently disappears for half the table. The cap is what holds
+the line at forty divisions, where the px term would otherwise win and leave
+more gap than plate.
+
 `uSeg` therefore depends on the *creature*, not only on the setting, and it is
 written from three places — mesh creation, `configure`, and the per-frame write.
 All three go through `segmentsFor()`. Any one of them reading `opts.segments`
@@ -384,32 +395,21 @@ Three things sit off the ramp on purpose:
 | **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
 
 Temp HP is drawn as a plate laid over the fill, and what sells it as a plate is
-the pattern rather than the colour: colour alone just makes a second fill. Six
-are available, chosen by the GM through `rb.shieldStyle` and listed in
-`SHIELD_STYLES` — ribs, chevrons, hex mesh, scales, grid and wave. All of them go
-through one function, `shieldPattern`, which returns a distance to the nearest
-line of whatever family is selected; everything downstream draws the same bright
-rib from it. Adding a pattern is a branch there and nothing else, and no family
-can quietly ship at a different weight from the rest.
+the pattern rather than the colour: colour alone just makes a second fill. The
+pattern is **one family of diagonal ribs** at `SHIELD_PITCH`, drawn as bright
+lines on top of the health rather than as filled cells that would hide it — a
+pattern that obscures the health it sits on has broken the one rule the layer
+has. Parallel ribs also say *plating*, which is what temporary hit points are.
 
-They share `SHIELD_PITCH`, and that is not tidiness. It used to be two crossed
+The pitch is a legibility floor rather than a taste. It used to be two crossed
 families at 0.185, making diamond scales — a nice idea at preview size and noise
 at the size it actually draws. On a 128px grid the bar is 19px tall, so those
 diamonds were about three pixels across and the crossing halved the feature size
 again. Detail below a couple of pixels stops being a pattern and becomes grain
-over the one reading the player came to take. One pitch for all six means the
-floor below which none of them survives is a single number, and it means the six
-are compared on their shape rather than on how dense each happens to be.
-
-Each is drawn as bright lines on top of the health rather than as filled cells,
-because a pattern that hides the health it sits on has broken the one rule the
-layer has.
-
-The choices are built at runtime from `SHIELD_STYLES`, so no literal key for them
-appears in `index.mjs` and the ordinary i18n sweep cannot see them. That is the
-dynamic-key hazard `CLAUDE.md` warns about: a style added without a string
-renders the key itself as its label, which works and ships. `resource-bar-check`
-builds the same key list and checks it.
+over the one reading the player came to take. 0.44 puts a cell at about 8px,
+which is the smallest that still reads as a pattern; chevrons, a hex mesh,
+scales, a grid and a wave were all built and compared at that pitch before the
+ribs were kept.
 
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in

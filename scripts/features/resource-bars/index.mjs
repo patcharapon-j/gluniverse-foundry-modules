@@ -2,7 +2,6 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
-import { SHIELD_STYLES } from "./shader.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -94,20 +93,6 @@ function registerSettings() {
     hint: "GLRB.Settings.Pf2eLayers.Hint",
     type: Boolean,
     default: true,
-  });
-
-  /* The shield's pattern is what tells a player the plate is *in front of* the
-     hit points rather than being more of them, so it is the table's to agree on
-     rather than each viewer's. Choices are built from the shader's own list, so
-     a style added there without a string here shows up as a missing key rather
-     than as a choice nobody can pick. */
-  world(SETTINGS.shieldStyle, {
-    name: "GLRB.Settings.ShieldStyle.Name",
-    hint: "GLRB.Settings.ShieldStyle.Hint",
-    type: String,
-    choices: Object.fromEntries(SHIELD_STYLES.map((s) =>
-      [s, `GLRB.Settings.ShieldStyle.${s.charAt(0).toUpperCase()}${s.slice(1)}`])),
-    default: SHIELD_STYLES[0],
   });
 
   world(SETTINGS.bloom, {

@@ -71,7 +71,6 @@ export const UNIFORMS = Object.freeze({
   uWave: "float",     // change-sweep amplitude, 0..1
   uWaveX: "float",    // the sweep front's position, as a fraction along the bar
   uSeg: "float",      // divisions across the fill, 0 = one continuous plate
-  uShieldStyle: "float", // which pattern the temp-HP plate carries, 0..5
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
@@ -126,20 +125,16 @@ export const BODY_INSET = 0.130;
 export const READOUT_INSET = 0.275;
 
 /**
- * The shield pattern's cell pitch, in bar heights, and the styles that use it.
+ * The shield ribs' pitch, in bar heights.
  *
- * One pitch for every family so they can be compared on their shape rather than
- * on how dense each one happens to be, and so the size floor below which none of
- * them survives is a single number. On a 128px grid the bar is 19px tall, which
- * puts a 0.44 cell at about 8px — the smallest a repeating pattern can be and
- * still read as one rather than as grain.
- *
- * The order is the setting's order; the index is what reaches the shader.
+ * Named and generous because the number is a legibility floor rather than a
+ * taste: on a 128px grid the bar is 19px tall, which puts a 0.44 cell at about
+ * 8px, and that is the smallest a repeating pattern can be and still read as one
+ * rather than as grain over the value the player came to take. This replaced two
+ * crossed families at 0.185, whose cells were three pixels across before the
+ * crossing halved them again.
  */
 export const SHIELD_PITCH = 0.44;
-export const SHIELD_STYLES = Object.freeze([
-  "ribs", "chevron", "hex", "scale", "grid", "wave",
-]);
 
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + CUT.toFixed(4) + `;
@@ -165,7 +160,6 @@ uniform float uChip;
 uniform float uWave;
 uniform float uWaveX;
 uniform float uSeg;
-uniform float uShieldStyle;
 uniform float uRole;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
@@ -279,60 +273,6 @@ vec3 rampAt(float t) {
 /* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. */
 const vec3 INK  = vec3(0.043, 0.059, 0.090);
 const vec3 INK0 = vec3(0.008, 0.027, 0.043);
-
-/* The shield plate's pattern, as a distance to the nearest line of it.
-
-   One interface for every family: whatever comes back is drawn as the same
-   bright rib downstream, so adding a pattern is a branch here and nothing else,
-   and no family can quietly ship at a different weight from the rest.
-
-   Every one of these is bounded by the same thing, which is not taste: the bar
-   is 19px tall on a 128px grid, so a pattern whose cells are smaller than a few
-   pixels is not a pattern, it is grain laid over the one reading the player came
-   to take. That is why the pitch is shared and generous, why nothing here
-   crosses two families at full density, and why the caller fades the whole thing
-   out through rbDetail when even this cannot hold a pixel. */
-float shieldPattern(vec2 sp, float style) {
-  float sc = SHIELD_PITCH;
-
-  if (style < 0.5) {                    /* 0 · ribs — parallel diagonal plating */
-    float k = (sp.x + sp.y * 1.35) / sc;
-    return abs(fract(k) - 0.5) * sc / 1.675;
-  }
-  if (style < 1.5) {                    /* 1 · chevrons — the ribs, folded */
-    float k = (sp.x + abs(sp.y) * 1.35) / sc;
-    return abs(fract(k) - 0.5) * sc / 1.675;
-  }
-  if (style < 2.5) {                    /* 2 · hex mesh — an energy screen */
-    /* Two offset rectangular lattices; whichever centre is nearer is the hex
-       this pixel belongs to. Cheaper than any closed form and exact. */
-    vec2 hs = vec2(1.0, 1.7320508) * sc * 0.62;
-    vec2 a = mod(sp, hs) - hs * 0.5;
-    vec2 c = mod(sp - hs * 0.5, hs) - hs * 0.5;
-    vec2 g = dot(a, a) < dot(c, c) ? a : c;
-    vec2 ag = abs(g) / (sc * 0.62);
-    float d = max(dot(ag, vec2(0.5, 0.8660254)), ag.x);
-    return abs(0.5 - d) * sc * 0.62;
-  }
-  if (style < 3.5) {                    /* 3 · scales — staggered arcs */
-    float rh = sc * 0.66;
-    float row = floor(sp.y / rh);
-    float ox = mod(row, 2.0) * 0.5 * sc;
-    float cx = (floor((sp.x - ox) / sc) + 0.5) * sc + ox;
-    float cy = (row + 0.5) * rh;
-    /* Squashed on y, because a circular scale on an 8:1 bar is a dot. */
-    return abs(length(vec2(sp.x - cx, (sp.y - cy) * 1.45)) - sc * 0.44);
-  }
-  if (style < 4.5) {                    /* 4 · grid — riveted rectangular plate */
-    float ch = sc * 0.66;
-    float dx = abs(fract(sp.x / sc) - 0.5) * sc;
-    float dy = abs(fract(sp.y / ch) - 0.5) * ch;
-    return min(dx, dy);
-  }
-  /* 5 · wave — the ribs, bent. Reads as a field rather than as hardware. */
-  float k = (sp.x + sin(sp.y * 7.5) * 0.085) / sc;
-  return abs(fract(k) - 0.5) * sc;
-}
 
 void main(void) {
   vec2 uv = vTextureCoord;
@@ -499,11 +439,12 @@ void main(void) {
        without a HiDPI monitor. Previewing at dpr 2 cannot show you this.
 
        Pinned to px, the gap is the same width at every size and on every
-       display; 4.0 clears GL_FADE_HI with room to spare so it is never
-       half-faded. The segW cap keeps a bar with many divisions from becoming
-       more gap than plate — and it is the cap, not the px term, that does the
-       work once a per-HP division count runs into the dozens. */
-    float gapP = min(max(px * 4.0, 0.020), segW * 0.34);
+       display; 6.0 clears GL_FADE_HI several times over, so it is never
+       half-faded and the plates read as assembled parts rather than as a bar
+       with scratches in it. The segW cap keeps a bar with many divisions from
+       becoming more gap than plate — and it is the cap, not the px term, that
+       does the work once a per-HP division count runs into the dozens. */
+    float gapP = min(max(px * 6.0, 0.030), segW * 0.42);
     segMask = mix(1.0, rbEdge(0.0, gapP, sx), rbDetail(gapP) * hero);
   }
 
@@ -552,9 +493,14 @@ void main(void) {
      Drawn as bright lines rather than as filled cells, so the shield adds light
      to the fill underneath instead of masking it. A pattern that hides the
      health it sits on top of has broken the one rule the layer has. */
-  float dRib = shieldPattern(p, uShieldStyle);
+  float sc = SHIELD_PITCH;
+  float k = (p.x + p.y * 1.35) / sc;
+  /* fract() gives distance along the gradient; the ribs run perpendicular to
+     it, so divide by the gradient's length to get a real distance and keep the
+     rib the same width whatever angle it is set at. */
+  float dRib = abs(fract(k) - 0.5) * sc / 1.675;
   float ribW = max(px * 1.1, 0.020);
-  float lattice = rbBand(dRib, ribW) * rbDetail(SHIELD_PITCH * 0.5);
+  float lattice = rbBand(dRib, ribW) * rbDetail(sc * 0.5);
 
   /* A slow shimmer travelling along it, so it reads as held rather than
      painted. */

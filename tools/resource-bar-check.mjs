@@ -373,20 +373,19 @@ const tokensCss = await src("styles/gl-tokens.css");
      setting still works — which is exactly the kind of thing that ships. */
   const idx = await src("scripts/features/resource-bars/index.mjs");
   const lang = JSON.parse(await src("lang/resource-bars.en.json"));
-  const literal = [...idx.matchAll(/"(GLRB\.[A-Za-z0-9.]+)"/g)].map((m) => m[1]);
-
-  /* The shield-style choices are built at runtime from the shader's own list, so
-     no literal key for them appears in index.mjs and the sweep above cannot see
-     them. That is the dynamic-key hazard CLAUDE.md warns about: add a style to
-     SHIELD_STYLES without a string here and Foundry renders the key itself as
-     the label, which works, ships, and looks like a bug nobody wrote. */
-  const built = shader.SHIELD_STYLES.map(
-    (s) => `GLRB.Settings.ShieldStyle.${s.charAt(0).toUpperCase()}${s.slice(1)}`);
-
-  const missing = [...literal, ...built].filter((k) => !(k in lang));
+  const missing = [...idx.matchAll(/"(GLRB\.[A-Za-z0-9.]+)"/g)]
+    .map((m) => m[1])
+    .filter((k) => !(k in lang));
   if (missing.length)
-    fail(`${missing.length} i18n key(s) the settings reference do not exist: ${missing.join(", ")}`);
-  else ok(`every GLRB string the settings reference resolves, including the ${built.length} built from SHIELD_STYLES`);
+    fail(`${missing.length} i18n key(s) referenced by the settings do not exist: ${missing.join(", ")}`);
+  else ok("every GLRB string the settings reference resolves");
+
+  /* Every setting here names its keys as literals, which is what makes the sweep
+     above sufficient. Build one at runtime instead and nothing catches a missing
+     string: Foundry renders the key itself as the label, so the setting works,
+     ships, and looks like a bug nobody wrote. */
+  if (/name:\s*`|hint:\s*`|\[s,\s*`GLRB/.test(strip(idx)))
+    fail("index.mjs builds an i18n key from a template literal; the sweep above only sees quoted keys, so a missing string there is invisible to this check.");
 }
 
 /* ── 8. The readout fits under the corner the bar cuts off itself ───────── */
