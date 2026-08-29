@@ -60,7 +60,19 @@ export function getAtlas() {
   const texture = PIXI.Texture.from(canvas);
   texture.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? texture.baseTexture.scaleMode;
 
-  cached = { texture, metrics, cellRatio: CELL_W / CELL_H, cellH: CELL_H, fontPx: FONT_PX };
+  /* How far a digit's ink sits below the cell centre, as a fraction of the
+     cell. Baked rather than guessed because it is what bottom-alignment is
+     measured against: with textBaseline "middle" the *cell* centres line up but
+     the ink does not, so aligning cell bottoms puts a small run visibly lower
+     than the big one it is supposed to sit level with. The difference is a
+     couple of pixels, which is exactly the size at which it reads as a mistake
+     rather than as a style. */
+  const inkM = ctx.measureText("0");
+  const inkDrop = Number.isFinite(inkM.actualBoundingBoxDescent)
+    ? inkM.actualBoundingBoxDescent / CELL_H
+    : 0.26;
+
+  cached = { texture, metrics, cellRatio: CELL_W / CELL_H, cellH: CELL_H, fontPx: FONT_PX, inkDrop };
   return cached;
 }
 
@@ -115,8 +127,9 @@ void main(void) {
  * Build the geometry for one right-aligned run, in local pixel coordinates
  * where y runs downward (PIXI's convention, unlike the shader's).
  *
- * @param {Array<{text: string, size: number, dim?: number}>} parts
- *        `dim` is the part's weight, 1 = full strength.
+ * @param {Array<{text: string, size: number, dim?: number, bottom?: boolean}>} parts
+ *        `dim` is the part's weight, 1 = full strength. `bottom` sits the part's
+ *        ink on the same line as the run's largest part instead of centring it.
  * @param {{right: number, mid: number, skew: number}} at
  * @returns {PIXI.Geometry|null}
  */
@@ -131,6 +144,12 @@ export function runGeometry(parts, { right, mid, skew }) {
   for (const part of parts)
     for (const ch of part.text) total += (atlas.metrics[ch]?.advance ?? 0.5) * part.size;
 
+  /* The line the bottom-aligned parts sit on: the ink bottom of the run's
+     largest part, which is the one that stays centred on `mid`. */
+  let maxSize = 0;
+  for (const part of parts) maxSize = Math.max(maxSize, part.size);
+  const inkLine = mid + maxSize * (atlas.cellH / atlas.fontPx) * atlas.inkDrop;
+
   let penX = right - total;
   let n = 0;
   for (const part of parts) {
@@ -143,7 +162,8 @@ export function runGeometry(parts, { right, mid, skew }) {
       const adv = m.advance * part.size;
       const cx = penX + adv / 2;
       const x0 = cx - gw / 2, x1 = cx + gw / 2;
-      const y0 = mid - gh / 2, y1 = mid + gh / 2;
+      const cy = part.bottom ? inkLine - gh * atlas.inkDrop : mid;
+      const y0 = cy - gh / 2, y1 = cy + gh / 2;
       /* Sheared about the run's own mid-line, by the same amount as the bar.
          y grows downward here, so the sign is inverted relative to the shader —
          get this wrong and the numerals lean into the bar instead of with it. */

@@ -105,6 +105,54 @@ placement was the reason for the override moves furthest. An unset override is
 `offsetFor` tests for *finiteness* rather than truthiness. 0 is a legitimate
 override meaning "hold still while the world default moves".
 
+The Token Config fields are anchored on the **bar attribute pickers**, not on
+the tab id. `data-tab="resources"` matches the navigation *link* as well as the
+body it switches to, the link comes first in document order, and
+`querySelector` returns the first — so the obvious selector appends the fields
+inside the header's Resources button, where they render correctly, save
+correctly, and are in the header. `bar1.attribute` exists only in the tab body,
+so walking up from it cannot land on the nav.
+
+---
+
+## Divisions
+
+The primary bar is assembled from plates. They let a player read health by
+**position** as well as by colour, which is the whole reason a colour-blind
+viewer can use this bar at all, so how many there are is not decoration.
+
+| | |
+|---|---|
+| **Fixed count** | `rb.segmentMode` = count, `rb.segments` plates across the whole bar. 0 draws one continuous fill. |
+| **One per N HP** | `rb.segmentMode` = perHp, `rb.segmentSize` hit points per plate. |
+
+The two answer different questions and neither is the default answer. A fixed
+count makes position along the bar mean the same *fraction* on every creature,
+so half-way is half-way on a goblin and on a dragon. One plate per N HP makes a
+plate mean the same *quantity* everywhere, so "took about three blocks" is the
+same hit on both, and a 12 HP goblin honestly gets three plates while a 200 HP
+dragon gets forty.
+
+Rounded **up**, so the short plate is the last one. Rounding down puts the
+remainder in the first plate, which is the one at the full-health end that a GM
+is looking at before anything has happened.
+
+Two things this has to survive. A creature with **no maximum** — some actor
+types genuinely have none — falls back to a continuous fill rather than to a
+count derived from zero, and `segmentSize` is guarded above zero rather than
+trusted, because `ceil(max / 0)` is `Infinity` and it reaches the shader as a
+uniform. And the computed count is capped at `SEGMENTS.max`: the shader already
+fades a division out once its gap falls under a device pixel, but the count is
+also what sets that gap, so past the cap the bar is more gap than plate long
+before the fade takes over.
+
+`uSeg` therefore depends on the *creature*, not only on the setting, and it is
+written from three places — mesh creation, `configure`, and the per-frame write.
+All three go through `segmentsFor()`. Any one of them reading `opts.segments`
+directly divides the bar one way on creation and another way on its next frame,
+which reads as a flicker on first draw and as nothing at all on a bar that never
+animates. The check tool pins it.
+
 ---
 
 ## The shape of a change
@@ -137,28 +185,26 @@ direction the value moved — scoped to just the span that changed it is a detai
 you have to already be looking at the bar to catch, and on a one-point heal it
 is a flicker two pixels wide.
 
-Three things separate a wave from a coloured band sliding along a bar, and all
-three are here because the band was built first and that is exactly what it
-looked like:
+It is **deliberately simple**: a glowing line, and a colour ramp trailing it.
+An earlier pass gave it a bowed crest, a decaying crest train, slope shading, a
+domed cross-section and flow streaks, and all of it fought the one thing the
+effect is for. This is read peripherally, in under half a second, while you are
+looking at something else. Structure inside the ramp is detail nobody has time
+to resolve, and every extra term was one more thing driving the colour to white.
+Three parts, and nothing else:
 
-1. **The crest is bowed.** A straight vertical edge travelling sideways is a
-   wipe. A front that leads at the centre line and lags at the rim is a wave
-   seen side-on.
-2. **There is a wake.** A single monotone ramp behind the front is a gradient in
-   motion; water leaves a decaying train of crests, and that train is most of
-   the read.
-3. **The wake has a surface.** The coloured region stops at an undulating
-   boundary partway up the fill rather than filling its full height, with a lit
-   meniscus along it and a shadow just under — a line alone reads as a drawn
-   stroke, a line with darkness beneath it reads as the edge of a volume. The
-   fill's *silhouette* is never touched; this boundary lives inside it.
+1. **The line.** Three widths — a coloured halo, a hot core, a white filament —
+   so it reads as light rather than as a painted stroke.
+2. **The ramp.** One exponential decay behind the front, coloured in three
+   stops: deep at the tail, the wave's hue through the body, a hot shoulder just
+   behind the line. Three stops rather than a fade to nothing, because a fade in
+   motion is a smear.
+3. **Nothing ahead of it.** That asymmetry is the direction cue, since a
+   symmetric band travelling along a bar is a highlight and a highlight can be
+   going either way.
 
-Nothing at all is drawn ahead of the front. That asymmetry is the direction cue,
-since a symmetric band travelling along a bar is a highlight and a highlight can
-be going either way.
-
-The wake *replaces* the colour of the material it crosses and only then adds
-light on top. Written the obvious way, as pure additive light over an
+The ramp *replaces* the colour of the material it crosses; only the line goes on
+top as light. Written the obvious way, as pure additive light over an
 already-bright plate, the green of a heal and the red of a hit both arrive as
 the same pale smear. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth
@@ -169,13 +215,45 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
+The **maximum is the scale, not the reading**, so it is smaller, fainter and on
+the reading's baseline. Fainter matters as much as smaller: a small numeral at
+full ink is still high-contrast against the plate and still lands first on a bar
+whose value has not changed. Baseline matters because a run where every part is
+separately centred reads as three sizes of number rather than as one reading
+with its scale beside it. Alignment is measured against the **ink**, not the
+glyph cell: the atlas bakes with `textBaseline "middle"`, so lining the cells up
+leaves the ink a couple of pixels out, which at this size reads as a mistake.
+`runGeometry` takes the offset from `actualBoundingBoxDescent`, measured once
+when the atlas is built.
+
 ---
 
 ## Hot and cold
 
-A bar that is not changing is **not ticked at all** — it keeps its last frame.
-The ticker is attached only while at least one bar is hot, so a quiet scene
-costs nothing and a scene where one creature is being hit costs one bar.
+Two things are true of a bar that is doing nothing, and only the first used to
+be:
+
+- **It is not ticked.** The ticker is attached only while at least one bar is
+  hot, so a quiet scene costs nothing and a scene where one creature is being
+  hit costs one bar.
+- **It is not measured.** A filtered container measures itself from its children
+  on every render and sizes the bloom's intermediate textures from that
+  measurement, whether or not anything is animating. One token parked in the far
+  corner of a large scene therefore sizes those textures to the whole distance
+  between them. Entries outside the viewport have `renderable` cleared, which
+  PIXI honours in `calculateBounds` as well as in the render, so the same flag
+  fixes the measurement and the draw call together. The cull is re-run on
+  `canvasPan` and for a single entry on a drag, with a 96px margin so the bloom
+  a bar just off the edge would have spilled inward does not pop.
+
+The bloom filter's **resolution is taken from the renderer**, not left at
+PIXI's default. `PIXI.Filter` defaults `resolution` to 1 and the filter system
+sizes its textures from the filter rather than from the target, so on a HiDPI
+display the entire bar container renders at half the device pixels and is
+scaled back up. There is no error and no warning: the bars are simply soft, and
+softer the further you zoom in, because what is being upscaled is a fixed
+fraction of the real pixel count. It is re-read rather than set once, since
+moving the window to a display with a different pixel ratio changes it.
 
 Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear

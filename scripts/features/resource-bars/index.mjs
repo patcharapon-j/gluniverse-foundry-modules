@@ -1,7 +1,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { FEATURE_ID, OFFSET, PREFIX, SETTINGS } from "./constants.mjs";
+import { FEATURE_ID, OFFSET, PREFIX, SEGMENTS, SETTINGS } from "./constants.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -27,12 +27,31 @@ function registerSettings() {
     default: "both",
   });
 
+  world(SETTINGS.segmentMode, {
+    name: "GLRB.Settings.SegmentMode.Name",
+    hint: "GLRB.Settings.SegmentMode.Hint",
+    type: String,
+    choices: {
+      count: "GLRB.Settings.SegmentMode.Count",
+      perHp: "GLRB.Settings.SegmentMode.PerHp",
+    },
+    default: "count",
+  });
+
   world(SETTINGS.segments, {
     name: "GLRB.Settings.Segments.Name",
     hint: "GLRB.Settings.Segments.Hint",
     type: Number,
     range: { min: 0, max: 20, step: 1 },
     default: 10,
+  });
+
+  world(SETTINGS.segmentSize, {
+    name: "GLRB.Settings.SegmentSize.Name",
+    hint: "GLRB.Settings.SegmentSize.Hint",
+    type: Number,
+    range: { min: SEGMENTS.sizeMin, max: SEGMENTS.sizeMax, step: 1 },
+    default: 5,
   });
 
   world(SETTINGS.lowThreshold, {

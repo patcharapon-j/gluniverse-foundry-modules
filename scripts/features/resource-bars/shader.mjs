@@ -484,54 +484,48 @@ void main(void) {
   C = mix(C, fillCol, mFill);
 
   /* ── The wave ──────────────────────────────────────────────────────────
-     The loudest thing this bar does, and the only one meant to be caught
-     peripherally. It crosses the *whole* length in the direction the value
-     moved — outward on a heal, back down the bar on a hit.
+     A glowing line crossing the bar in the direction the value moved, with a
+     colour ramp trailing behind it. Outward on a heal, back down the bar on a
+     hit.
 
-     Three things separate a wave from a coloured band sliding along a bar, and
-     all three are here because the band was built first and that is exactly
-     what it looked like:
+     Deliberately simple. An earlier pass gave this a crest train, slope
+     shading, flow streaks and a domed cross-section, and all of it fought the
+     one thing the effect is for: being read peripherally, in under half a
+     second, while you are looking at something else. Structure inside the ramp
+     is detail nobody has time to resolve, and every extra term was one more
+     thing to blow the colour out to white.
 
-       1. **The crest is bowed.** A straight vertical edge travelling sideways
-          is a wipe. A front that leads at the centre line and lags at the rim
-          is a wave seen side-on.
-       2. **There is a wake.** A single monotone ramp behind the front is a
-          gradient in motion. Water leaves a decaying train of crests, each
-          smaller than the last, and that train is most of the read.
-       3. **The lit surface rides it.** The height of the specular line inside
-          the fill rises and falls with the crests. The fill's *silhouette* is
-          never touched — what moves is where the light sits on it, which is
-          what a deforming surface actually looks like, and which a sliding
-          band can never do.
+     Three parts, and nothing else:
 
-     Ahead of the front there is nothing at all. That asymmetry is the direction
-     cue: a symmetric band travelling along a bar is a highlight, and a
-     highlight can be going either way. */
+       1. **The line.** Three widths — a coloured halo, a hot core, a white
+          filament — so it reads as light rather than as a painted stroke.
+       2. **The ramp.** One exponential decay behind the front, coloured in
+          three stops: deep at the tail, the wave's hue through the body, a hot
+          shoulder just behind the line. Three stops rather than a fade to
+          nothing, because a fade in motion is a smear.
+       3. **Nothing ahead of it.** That asymmetry is the direction cue: a
+          symmetric band travelling along a bar is a highlight, and a highlight
+          can be going either way. */
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-
-    /* The bow. Leads at mid-height by about a quarter of a bar height. */
-    float bow = (1.0 - hb * hb) * 0.26;
-    float wd = (q.x - (wx + bow * dir)) * dir;
+    float wd = (q.x - wx) * dir;                 /* < 0 behind the front */
 
     vec3 waveCol = mix(vec3(1.00, 0.17, 0.12), vec3(0.26, 1.00, 0.48), uHeal);
+    vec3 hotCol  = mix(vec3(1.00, 0.60, 0.40), vec3(0.74, 1.00, 0.82), uHeal);
+    vec3 deepCol = mix(vec3(0.34, 0.03, 0.05), vec3(0.02, 0.30, 0.24), uHeal);
 
-    /* The envelope is a fraction of the *bar*, not a fixed distance. Written as
-       a constant in p units it is a third of a stubby rail and a twelfth of a
-       wide hero bar, so the effect that is supposed to be the loudest thing
-       here quietly becomes a local highlight on the bars with room to show it. */
-    float rampLen = max(span * 0.42, 0.35);
+    /* The ramp's length is a fraction of the *bar*, not a fixed distance in
+       shader units. Written as a constant it is a third of a stubby rail and a
+       twelfth of a wide hero bar, so the effect that is meant to be the loudest
+       thing here quietly becomes a local highlight on exactly the bars with the
+       most room to show it. */
+    float rampLen = max(span * 0.44, 0.35);
     float env = exp(min(wd, 0.0) / rampLen) * (1.0 - step(0.0, wd));
 
-    /* The wake: roughly two and a half crests inside the envelope. */
-    float kw = 6.2832 / max(span * 0.165, 0.22);
-    float crests = 0.5 + 0.5 * cos(wd * kw);
-    float ramp = env * (0.32 + 0.68 * crests);
-
-    float chev = smoothstep(0.30, 0.50,
-      abs(fract((q.x - q.y * 0.55 - uWaveX * 3.4) / 0.190) - 0.5));
-    float tex = 0.58 + 0.42 * chev * rbDetail(0.095);
+    float f = clamp(env, 0.0, 1.0);
+    vec3 rampCol = mix(deepCol, waveCol, smoothstep(0.00, 0.45, f));
+    rampCol = mix(rampCol, hotCol, smoothstep(0.62, 1.00, f));
 
     /* On a heal the wave runs through the fill; on a hit it runs through the
        fill *and* the span being given up, so it crosses the trail on its way
@@ -541,28 +535,13 @@ void main(void) {
     /* Hue before light. Added as pure light on top of an already-bright plate
        it just saturates: the green of a heal and the red of a hit both arrive
        as the same pale smear, which is the one thing this must not do. So the
-       wake *replaces* the material's colour where it passes, and only then does
-       light go on top. */
-    /* The wake has a *surface*, and it is the surface that makes this read as
-       liquid rather than as tinting. The coloured region stops at an undulating
-       boundary partway up the fill instead of filling its full height, so what
-       travels along the bar is something with a top to it. The fill's own
-       silhouette is untouched throughout — this boundary lives inside it. */
-    float surfY = 0.46 + 0.40 * cos(wd * kw) * env;
-    float below = smoothstep(surfY + 0.12, surfY - 0.20, hb);
+       ramp *replaces* the material's colour where it passes, and only the line
+       itself goes on top as light. */
+    C = mix(C, rampCol, clamp(env * area * 1.90, 0.0, 1.0));
 
-    C = mix(C, waveCol * (0.70 + 0.75 * tex), clamp(ramp * area * 1.45 * below, 0.0, 1.0));
-
-    /* The lit meniscus along that boundary, and a shadow just under it: one
-       line alone reads as a drawn stroke, a line with darkness beneath it reads
-       as the edge of a volume. */
-    C = mix(C, C * 0.62, rbBand(hb - (surfY - 0.30), 0.13) * area * ramp * 0.75);
-    C += waveCol * rbBand(hb - surfY, 0.075) * area * 1.90;
-    C += vec3(1.00, 0.97, 0.94) * rbBand(hb - surfY, 0.030) * area * 1.25;
-
-    /* The leading crest itself, and its foam. */
-    C += waveCol * rbGauss(wd, 0.145) * area * 2.60;
-    C += vec3(1.00, 0.96, 0.92) * rbGauss(wd, 0.030) * area * 0.95;
+    C += waveCol * rbGauss(wd, 0.100) * area * 1.55;
+    C += hotCol  * rbGauss(wd, 0.034) * area * 1.60;
+    C += vec3(1.00, 0.97, 0.94) * rbGauss(wd, 0.014) * area * 0.85;
 
     /* It spills past the silhouette as well, so the wave is visible on a bar
        that is nearly empty — where the fill it would otherwise tint is a few

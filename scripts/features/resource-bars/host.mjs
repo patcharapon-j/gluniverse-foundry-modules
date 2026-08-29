@@ -26,7 +26,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER, SKEW } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
-import { FLAGS, LAYOUT, ROLE } from "./constants.mjs";
+import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
@@ -51,6 +51,15 @@ const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
  * never be in front of a click target.
  */
 const CONTAINER_Z = 900;
+
+/**
+ * How far outside the viewport a bar is still drawn, in world pixels.
+ *
+ * Wide enough to cover the bloom a bar just off the edge would have spilled
+ * back inward, so culling is invisible rather than a fringe that pops at the
+ * screen edge while panning.
+ */
+const CULL_PAD = 96;
 
 /** The three rows, in stacking order. */
 const ROLES = ["hero", "rail", "shield"];
@@ -166,7 +175,7 @@ class BarHost {
         const mesh = entry.meshes[role];
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
-          mesh.shader.uniforms.uSeg = role === "hero" ? opts.segments : 0;
+          mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
         }
         if (entry.anims[role]) entry.anims[role].motionScale = opts.motionScale;
       }
@@ -178,6 +187,14 @@ class BarHost {
     if (!this.container) return;
     if (this.opts.bloom) {
       if (!this.bloom) this.bloom = createBloomFilter();
+      if (this.bloom) {
+        this.syncFilterResolution();
+        /* Nothing here has a geometric edge to antialias — every shape in the
+           bar is an SDF the fragment shader already resolves against px, and the
+           numerals are alpha-blended from an atlas. Multisampling the filter
+           target would resolve an extra buffer every frame for no difference. */
+        this.bloom.multisample = PIXI.MSAA_QUALITY?.NONE ?? 0;
+      }
       this.container.filters = this.bloom ? [this.bloom] : null;
     } else {
       this.container.filters = null;
@@ -229,6 +246,7 @@ class BarHost {
     for (const [id, entry] of this.entries) {
       if (!seen.has(id)) { entry.destroy(); this.entries.delete(id); }
     }
+    this.cull();
     this.syncTicker();
   }
 
@@ -244,6 +262,7 @@ class BarHost {
     if (!entry || !entry.reading) return;
     entry.token = token;
     this.layout(entry);
+    this.cullEntry(entry);
     this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
   }
 
@@ -308,6 +327,33 @@ class BarHost {
     };
   }
 
+  /**
+   * How many divisions the primary bar carries.
+   *
+   * Two ways to ask for them, and they answer different questions. A fixed
+   * **count** keeps every bar on the table looking alike, so position along the
+   * bar means the same fraction on every creature — which is the thing that
+   * makes divisions useful to a colour-blind player in the first place. A block
+   * **per N HP** instead makes one division mean one quantity of damage
+   * everywhere, so a 12 HP goblin gets two plates and a 200 HP dragon gets
+   * forty, and "took about three blocks" is the same hit on both.
+   *
+   * Rounded *up*, so the last plate is the short one. Rounding down would put
+   * the remainder in the first plate, which is the one at the full-health end
+   * that a GM is looking at when nothing has happened yet.
+   *
+   * A creature with no maximum — some actor types genuinely have none — falls
+   * back to a continuous fill rather than to a division count derived from
+   * zero.
+   */
+  segmentsFor(bar) {
+    if (this.opts.segmentMode !== "perHp") return this.opts.segments;
+    const per = Number(this.opts.segmentSize);
+    const max = Number(bar?.max);
+    if (!(per > 0) || !Number.isFinite(max) || max <= 0) return 0;
+    return clamp(Math.ceil(max / per), 0, SEGMENTS.max);
+  }
+
   layout(entry) {
     const token = entry.token;
     const grid = canvas.dimensions?.size ?? 100;
@@ -330,7 +376,7 @@ class BarHost {
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
       if (!mesh) {
-        mesh = makeBarMesh(roleId, { segments: role === "hero" ? this.opts.segments : 0, ramp: this.ramp });
+        mesh = makeBarMesh(roleId, { segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0, ramp: this.ramp });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
       }
@@ -346,9 +392,84 @@ class BarHost {
     }
     entry.heroH = heroH;
     entry.heroW = w;
+    /* The stack's world-space extent, for culling. Grown upward by a hero
+       height because the floating deltas rise out of the top of the bar. */
+    entry.box = { x0: entry.baseX, y0: token.y + token.h - heroH * 1.5 + off.y * grid,
+                  x1: entry.baseX + w, y1: y };
   }
 
   /* ── Per-frame ───────────────────────────────────────────────────────── */
+
+  /**
+   * Keep the bloom's render target at the renderer's own resolution.
+   *
+   * This is the blur. `PIXI.Filter` defaults its resolution to 1, *not* to the
+   * renderer's, and the filter system sizes the intermediate textures from the
+   * filter rather than from the target it is drawing into. On any HiDPI display
+   * — which is every retina Mac and most modern laptops — the renderer runs at
+   * resolution 2 and the entire bar container is therefore rendered at half the
+   * device pixels and scaled back up on composite. Nothing errors. The bars
+   * simply arrive soft, and worse the harder you zoom in, because the thing
+   * being upscaled is a fixed fraction of the real pixel count.
+   *
+   * It has to be re-read rather than set once: dragging the window to a display
+   * with a different pixel ratio changes `renderer.resolution` underneath us.
+   */
+  syncFilterResolution() {
+    const r = canvas?.app?.renderer;
+    if (!this.bloom || !r) return;
+    const res = r.resolution || 1;
+    if (this.bloom.resolution !== res) this.bloom.resolution = res;
+  }
+
+  /**
+   * Stop drawing the bars that are not on screen.
+   *
+   * Two costs, and the second is the one that hurts. Off-screen bars are draw
+   * calls that render nothing — annoying but linear. They are also *bounds*:
+   * a filtered container measures itself every frame by walking each child, and
+   * the filter's texture is allocated from that measurement, so one token
+   * parked in the far corner of a large scene sizes the bloom's intermediate
+   * buffers to the whole distance between them. In a forty-token combat spread
+   * across a battlemap that is the single largest thing this feature does, and
+   * it costs the same whether or not anything is animating.
+   *
+   * PIXI skips a non-renderable child in `calculateBounds` as well as in the
+   * render, so clearing the flag fixes both at once.
+   *
+   * Nothing visible changes: the margin is wide enough that a bar just outside
+   * the viewport still contributes the bloom it would have spilled inward.
+   */
+  cull() {
+    if (!this.container) return;
+    this.syncFilterResolution();
+    const screen = canvas?.app?.renderer?.screen;
+    if (!screen) return;
+
+    const a = this.container.toLocal({ x: screen.x, y: screen.y });
+    const b = this.container.toLocal({ x: screen.x + screen.width, y: screen.y + screen.height });
+    this._view = {
+      x0: Math.min(a.x, b.x) - CULL_PAD, x1: Math.max(a.x, b.x) + CULL_PAD,
+      y0: Math.min(a.y, b.y) - CULL_PAD, y1: Math.max(a.y, b.y) + CULL_PAD,
+    };
+    for (const entry of this.entries.values()) this.cullEntry(entry);
+  }
+
+  /**
+   * Apply the last computed view to one entry.
+   *
+   * Split out because a dragged token needs re-testing on every frame of the
+   * drag while the *view* has not moved at all, and recomputing the rectangle
+   * there would put two matrix inversions inside the drag loop.
+   */
+  cullEntry(entry) {
+    const v = this._view;
+    const box = entry.box;
+    /* No view or no box yet means nothing has been measured; leave the bar
+       visible rather than hiding one this pass has no information about. */
+    entry.group.renderable =
+      !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
+  }
 
   syncTicker() {
     const wanted = [...this.entries.values()].some((e) =>
@@ -411,6 +532,7 @@ class BarHost {
       const a = entry.anims[role];
       const u = mesh.shader.uniforms;
 
+      u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
       u.uTime = time;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
@@ -496,11 +618,18 @@ class BarHost {
       /* The current value is the reading; the maximum is the scale it is read
          against, and a scale printed at the same weight as its reading competes
          with it. Smaller and quieter, so the eye lands on the number that
-         changes and the denominator is there when it is wanted. */
+         changes and the denominator is there when it is wanted.
+
+         Quieter here means *fainter*, not merely smaller: a small numeral at
+         full ink is still high-contrast against the plate and still catches the
+         eye first on a bar whose value has not changed. And the two of them sit
+         on a shared baseline rather than each on the mid-line, because a run
+         where every part is separately centred reads as three sizes of number
+         rather than as one reading with its scale beside it. */
       const geo = runGeometry([
         { text: String(value), size: h * 0.46 },
-        { text: "/", size: h * 0.23, dim: 0.34 },
-        { text: String(r.hero.max), size: h * 0.24, dim: 0.46 },
+        { text: "/", size: h * 0.23, dim: 0.22, bottom: true },
+        { text: String(r.hero.max), size: h * 0.24, dim: 0.30, bottom: true },
       ], { right, mid, skew: SKEW });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number

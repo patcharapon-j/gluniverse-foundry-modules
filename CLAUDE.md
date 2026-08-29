@@ -349,6 +349,14 @@ and sub-pixel on an ordinary one, where `rbDetail` deletes it, so the detail
 silently vanishes for every player without a retina monitor and no preview you
 run yourself will show you that.
 
+A third: `PIXI.Filter` defaults its `resolution` to **1**, not to the
+renderer's, and the filter system sizes its intermediate textures from the
+filter. Left alone, the whole bar container renders at half the device pixels on
+any HiDPI display and is scaled back up. Nothing errors; the bars are just soft,
+and softer the harder you zoom. `syncFilterResolution()` in `host.mjs` is the
+only thing standing between that and a blurry feature, and no preview you run at
+dpr 1 will show you it is missing.
+
 And the bar container's `zIndex` is load-bearing. `canvas.interface` sorts its
 children and every Foundry layer declares one; left at the default the bars sort
 under the tokens layer, so the hover border draws over them — correct in every

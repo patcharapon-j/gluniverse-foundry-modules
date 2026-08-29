@@ -25,7 +25,9 @@ function currentOptions() {
   const tier = get(SETTINGS.motionTier, MOTION_TIER_DEFAULT);
   return {
     bothBars: get(SETTINGS.enabledBars, "both") === "both",
+    segmentMode: get(SETTINGS.segmentMode, "count") === "perHp" ? "perHp" : "count",
     segments: Number(get(SETTINGS.segments, 10)) || 0,
+    segmentSize: Number(get(SETTINGS.segmentSize, 5)) || 0,
     lowAt: (Number(get(SETTINGS.lowThreshold, LOW_HEALTH_AT * 100)) || 25) / 100,
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
@@ -99,6 +101,10 @@ export function onReady() {
 
   on("canvasReady", () => { host.attach(); });
   on("canvasTearDown", () => host.detach());
+
+  /* Pan and zoom change which bars are on screen, and the filtered container is
+     measured from the ones that are. */
+  on("canvasPan", () => host.cull());
 
   on("drawToken", (token) => { suppressNative(token); host.refreshToken(token); });
   on("destroyToken", (token) => host.remove(token?.id));

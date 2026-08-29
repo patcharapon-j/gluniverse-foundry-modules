@@ -136,8 +136,8 @@ input[type=range]{padding:0; width:230px}
     snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
     reaction read as a reaction rather than as the tail of a transition. On release: a
     <b style="color:var(--text)">wave crosses the whole bar</b> in the direction the value moved —
-    a bowed crest, a decaying train of crests behind it, and an undulating lit surface partway up the
-    fill, red down the bar on a hit and green out along it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
+    a glowing line with a three-stop colour ramp trailing it, red down the bar on a hit and green out
+    along it on a heal, and nothing at all ahead of the front; the chip trail is cut white-hot and cools as it drains; a ring expands from the
     point that moved, throwing spokes and debris along the bar's axis; the readout counts to the new
     number in the colour of what happened; and the delta punches in at 1.35× before drifting off.</p>
   <p class="note"><b style="color:var(--text)">Nothing about the geometry moves.</b> Not the frame,
@@ -174,6 +174,15 @@ input[type=range]{padding:0; width:230px}
     between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
     8:1 quad.</p>
   <div class="ladder" id="row-scale"></div>
+
+  <h2>Divisions</h2>
+  <p class="note">Two ways to ask for plates, answering different questions. A <b style="color:var(--text)">fixed
+    count</b> makes position along the bar mean the same fraction on every creature, which is what makes
+    divisions useful to a colour-blind player. <b style="color:var(--text)">One plate per N hit points</b>
+    instead makes one plate mean one quantity of damage everywhere, so &ldquo;took about three blocks&rdquo;
+    is the same hit on a goblin and on a dragon. Rounded up, so the short plate is the last one rather
+    than the one at the full-health end.</p>
+  <div class="grid" id="row-div"></div>
 
   <h2>Colour-blind ramp</h2>
   <p class="note">The opt-in client setting: blue→cyan→yellow→orange abandons the red/green axis
@@ -338,6 +347,13 @@ function buildAtlas() {
     };
   }
 
+  /* How far a digit"s ink sits below the cell centre. Baked, because bottom
+     alignment is measured against the ink and not against the cell: with
+     textBaseline "middle" the cells line up but the ink does not. */
+  const im = x.measureText("0");
+  const inkDrop = Number.isFinite(im.actualBoundingBoxDescent)
+    ? im.actualBoundingBoxDescent / CELL_H : 0.26;
+
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -346,7 +362,7 @@ function buildAtlas() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return { tex, metrics, cellRatio: CELL_W / CELL_H };
+  return { tex, metrics, cellRatio: CELL_W / CELL_H, inkDrop };
 }
 
 const TEXT_VERT = `
@@ -425,6 +441,13 @@ function drawRun(parts, rightPx, midPx, w, h, shear) {
   for (const part of parts)
     for (const ch of part.text) total += (atlas.metrics[ch]?.advance ?? 0.5) * part.size;
 
+  /* The line the bottom-aligned parts sit on: the ink bottom of the largest
+     part, which is the one that stays centred on mid. y is up here, so the ink
+     bottom is *below* mid. */
+  let maxSize = 0;
+  for (const part of parts) maxSize = Math.max(maxSize, part.size);
+  const inkLine = midPx - maxSize * (CELL_H / FONT_PX) * atlas.inkDrop;
+
   let penX = rightPx - total;
   for (const part of parts) {
     gl.uniform3fv(TU.uInk, part.ink);
@@ -437,7 +460,8 @@ function drawRun(parts, rightPx, midPx, w, h, shear) {
       const gw = atlas.cellRatio * part.size * (CELL_H / FONT_PX);
       const gh = part.size * (CELL_H / FONT_PX);
       const cx = penX + adv / 2;
-      gl.uniform4f(TU.uQuad, (cx / w) * 2 - 1, (midPx / h) * 2 - 1, gw / w, gh / h);
+      const cy = part.bottom ? inkLine + gh * atlas.inkDrop : midPx;
+      gl.uniform4f(TU.uQuad, (cx / w) * 2 - 1, (cy / h) * 2 - 1, gw / w, gh / h);
       gl.uniform4f(TU.uUv, m.u0, 0, m.u1, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       penX += adv;
@@ -631,7 +655,7 @@ add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost
 add(motion, { title: "Damage wave", sub: "crest running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
 add(motion, { title: "Heal wave", sub: "crest running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
 add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
-add(motion, { title: "The wake", sub: "crests trailing behind the front", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
+add(motion, { title: "The wake", sub: "the ramp, late in its crossing", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");
@@ -643,6 +667,16 @@ add(pf, { title: "Secondary rail", sub: "bar2, understated", frac: 0.55, role: 1
 const scale = document.getElementById("row-scale");
 for (const [w, h, label] of [[220, 26, "grid 200"], [128, 19, "grid 128"], [80, 12, "grid 80"], [44, 8, "grid 44, zoomed out"]]) {
   add(scale, { title: label, sub: "<i>bar body " + w + "×" + h + "px</i>", frac: 0.62, seg: 10, w, h });
+}
+
+const div = document.getElementById("row-div");
+for (const [max, per] of [[12, null], [58, null], [12, 5], [58, 5], [200, 5], [200, 25]]) {
+  const seg = per ? Math.ceil(max / per) : 10;
+  add(div, {
+    title: per ? max + " HP, one per " + per : max + " HP, fixed 10",
+    sub: "<i>uSeg " + seg + "</i>",
+    frac: 0.62, seg, max,
+  });
 }
 
 const cb = document.getElementById("row-cb");
@@ -666,9 +700,9 @@ function frozen(row, { from, to, marks, max }) {
   }
 }
 frozen(document.getElementById("row-seq-hit"),
-  { from: 0.8, to: 0.45, marks: [0, 55, 140, 300, 520, 820], max: 58 });
+  { from: 0.8, to: 0.45, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 frozen(document.getElementById("row-seq-heal"),
-  { from: 0.35, to: 0.72, marks: [0, 55, 140, 300, 520, 820], max: 58 });
+  { from: 0.35, to: 0.72, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 
 /* The token stage. */
 const stage = document.getElementById("stage");
@@ -816,8 +850,8 @@ function draw(now) {
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
         { text: String(cur), size: big, ink },
-        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.34 },
-        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.46 },
+        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.22, bottom: true },
+        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.30, bottom: true },
       ], rightPx, h * 0.5, w, h, shear);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
