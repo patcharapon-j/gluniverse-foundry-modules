@@ -17,9 +17,9 @@ every frame" cost nothing extra.
 
 The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
 layers separated by air rather than welded into one frame, a flat high-key fill
-lit by a single hard specular, asymmetric furniture at the ends, and **one cut
-corner, top-right**. The palette is entirely the suite's own; the gold is
-`PALETTE.signalPale`.
+lit by a single hard specular, and **one cut corner, top-left**. The palette is
+entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
+exactly one place — the top of the stroke.
 
 The bar is **axis-aligned**. It used to lean, by a shear of 0.32 shared between
 the GLSL and the numerals' layout, and the lean was doing most of the work of
@@ -31,16 +31,39 @@ corner replaces it — the same corner `gl-tokens.css` takes out of every panel 
 the suite, so the family resemblance is now to the suite's own mark rather than
 to a borrowed angle.
 
-The shear also cost length. A body leaning 0.32 per unit of height overhangs its
-own box by half that on each side, and the quad had to carry the margin; with it
-gone the body is inset 0.235 rather than 0.30, and the extra is fill.
+**The end furniture is gone too.** There used to be a milled gold bracket
+anchoring the left end and two pips of unequal height past the right, there to
+break the symmetry so the bar would not read as a form control. The cut corner
+does that job now, with none of the width.
+
+Between them the shear and the furniture were costing most of the inset. A body
+leaning 0.32 per unit of height overhangs its own box by half that on each side,
+and the quad had to carry the margin; the cap and the pips wanted the rest. What
+remains is 0.13, which is the bloom margin — light that stops dead at the quad
+edge is the clearest tell that something was drawn rather than lit — and the
+difference is fill. On the one element whose length *is* its content, that is
+the trade worth making twice. At true size on a 128px grid the pips were two
+three-pixel marks anyway, and ornament that cannot be resolved is just a shorter
+bar.
+
+**The cut is top-left, and the side is load-bearing.** The readout is anchored to
+the bar's right end, so a corner taken out of the top-right is taken out of
+exactly the space the digits stand in: either the numbers sit on the diagonal, or
+they retreat inward and hand back the length the cut was saving. Putting the mark
+at the end nobody reads from costs nothing.
 
 `CUT`, `BODY_INSET` and `READOUT_INSET` are exported from `shader.mjs` together,
 for the reason the shear used to be: the bar is drawn in GLSL and the numerals
-are laid out in JS, and the readout has to clear the corner the bar takes out of
-itself. `resource-bar-check` recomputes the clearance from the three of them
-rather than trusting the number, so enlarging the cut and forgetting the readout
-fails the check instead of putting the digits on the diagonal.
+are laid out in JS, and one piece of geometry described from two files is how a
+bar and its readout end up disagreeing.
+
+`READOUT_INSET` is measured to the **fill area**, not to the body. Between the
+body's edge and the fill there is a stroke, a gap of air and a lip; anchor to the
+body and the last digit is drawn over the frame, which reads as a clipped numeral
+rather than as a misplaced one. `resource-bar-check` derives that inset from the
+GLSL's own `sw`/`air`/`lip` rather than repeating it, so widening any of the
+three moves the requirement with it, and pins that the cut has not wandered back
+to the readout's end.
 
 ---
 
@@ -351,6 +374,19 @@ Three things sit off the ramp on purpose:
 | **Shield rail** | `cyan` | The same idea, so they read as related |
 | **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
 
+Temp HP is drawn as a plate laid over the fill, and what sells it as a plate is
+the pattern rather than the colour: colour alone just makes a second fill. The
+pattern is **one family of diagonal ribs** at a 0.44 pitch, drawn as bright lines
+on top of the health rather than as filled cells that would hide it.
+
+It used to be two crossed families at 0.185, making diamond scales. That is a
+nice idea at preview size and noise at the size it actually draws: on a 128px
+grid the bar is 19px tall, so the diamonds were about three pixels across and the
+crossing halved the feature size again. Detail below a couple of pixels stops
+being a pattern and becomes grain over the one reading the player came to take.
+One family at more than twice the pitch survives — and reads better anyway, since
+parallel ribs say *plating*, which is exactly what temporary hit points are.
+
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in
 the last few percent, so a creature at a third of its hit points looks merely
@@ -393,11 +429,13 @@ channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
 per-token offset still means "inherit" rather than "zero", that value and
 maximum still differ by one step of weight rather than by none or by a fade to
-furniture, that the readout's geometry cache is keyed on
+furniture, that the readout still stands inside the fill rather than on the
+frame and the cut corner is still at the other end, that the readout's geometry
+cache is keyed on
 its size so the size setting is not silently inert, that the GM's readout
 override never reaches the permission gate and never outruns `displayBars`, that
-the readout still clears the cut corner and nothing has been sheared again, and
-that every detail gate still resolves at the
+nothing has been sheared again, and that every detail gate still resolves at
+the
 reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 

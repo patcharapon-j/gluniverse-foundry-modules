@@ -381,40 +381,51 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("every GLRB string the settings reference resolves");
 }
 
-/* ── 8. The readout clears the corner the bar cuts off itself ───────────── */
+/* ── 8. The cut corner keeps out of the readout's way ───────────────────── */
 {
-  /* The bar takes a corner out of its own top-right, and the numerals are laid
-     out in JS against a bar drawn in GLSL. If the two disagree the digits sit on
-     the diagonal — which does not read as a small error, it reads as two people
-     having drawn the same bar. So the geometry is exported and the clearance is
-     recomputed here rather than trusted.
+  /* The bar takes a corner out of itself and the numerals are laid out in JS
+     against a bar drawn in GLSL, so the two have to agree about where the
+     numbers can stand. They agree by staying at opposite ends: the readout is
+     anchored to the right edge and the cut is taken out of the top-LEFT.
 
-     Reading right-to-left from the quad's right edge: the body is inset by
-     BODY_INSET; the cut reaches CUT half-heights back from the corner, of which
-     everything past one half-height is outside the body already; and the digits
-     stand half their cap height above the mid-line, which is where they first
-     meet the diagonal. */
+     Move the cut back to the right and nothing errors. The digits simply land
+     on the diagonal, and the only way back out is to retreat the readout inward
+     and hand back the length the cut was there to save. So the side is pinned,
+     not just the numbers. */
   const glsl = shader.FRAGMENT_SHADER;
   const { CUT, BODY_INSET, READOUT_INSET } = shader;
 
-  const padY = Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
-  const capH = Number(/size:\s*h\s*\*\s*(0\.\d+)/.exec(strip(hostSrc))?.[1]);
+  const cutFn = /float sdCut\([\s\S]*?\n}/.exec(glsl)?.[0] ?? "";
+  const heroHalf = 0.5 - Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
 
-  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(await src('scripts/features/resource-bars/atlas.mjs'))))
+  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(await src("scripts/features/resource-bars/atlas.mjs"))))
     fail("A shear is back. The bar is meant to be axis-aligned; a lean in the GLSL or in runGeometry that the other one does not share is the exact drift this pin replaced.");
   else if (!glsl.includes(`const float CUT = ${CUT.toFixed(4)};`) ||
            !glsl.includes(`const float BODY_INSET = ${BODY_INSET.toFixed(4)};`))
     fail("The GLSL no longer takes CUT and BODY_INSET from the exported constants, so the readout is positioned against geometry the shader may not be drawing.");
   else if (!/READOUT_INSET/.test(strip(hostSrc)))
     fail("host.mjs anchors the readout with something other than the exported READOUT_INSET.");
-  else if (!Number.isFinite(padY) || !Number.isFinite(capH))
-    fail("Could not read padY out of the GLSL or the readout cap height out of host.mjs; the clearance below cannot be checked and is now unpinned.");
+  else if (!/-p\.x/.test(cutFn))
+    fail("sdCut no longer negates x, so the cut has moved to the top-right — the same corner the readout stands in. The numerals will sit on the diagonal.");
+  else if (CUT * heroHalf > heroHalf * 1.6)
+    fail(`The cut reaches ${(CUT * heroHalf).toFixed(3)} bar-heights along a bar ${(heroHalf * 2).toFixed(2)} tall; past this it stops being a corner and starts being a wedge taken out of the fill.`);
   else {
-    const heroHalf = 0.5 - padY;
-    const needed = BODY_INSET + heroHalf * (CUT - 1) + capH / 2;
-    if (READOUT_INSET < needed)
-      fail(`READOUT_INSET is ${READOUT_INSET} but the cut corner reaches ${needed.toFixed(3)} bar-heights in; the numerals will overlap the diagonal.`);
-    else ok(`the readout clears the cut corner by ${(READOUT_INSET - needed).toFixed(3)} bar-heights, and nothing is sheared`);
+    /* Between the body's edge and the fill there is a stroke, a gap of air and a
+       lip. The readout stands against the *fill*, so it has to clear all three:
+       anchored to the body it is drawn over the frame, which reads as a clipped
+       numeral rather than as a misplaced one. Derived from the GLSL so that
+       widening any of the three moves the requirement with it. */
+    const sw  = Number(/float sw\s*=\s*max\(([\d.]+),/.exec(glsl)?.[1]);
+    const air = Number(/float air\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
+    const lip = Number(/float lip\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
+    const inner = BODY_INSET + sw + air + lip;
+    if (![sw, air, lip].every(Number.isFinite))
+      fail("Could not read the stroke, air and lip widths out of the GLSL; the readout's clearance from the frame is now unpinned.");
+    else if (READOUT_INSET < inner)
+      fail(`READOUT_INSET is ${READOUT_INSET} but the fill area starts ${inner.toFixed(3)} bar-heights in; the last digit is drawn over the bar's own frame.`);
+    else if (READOUT_INSET > inner + 0.12)
+      fail(`READOUT_INSET floats ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill; the readout is meant to sit against the right end of it.`);
+    else ok(`the cut is top-left, the readout stands ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill's right end, and nothing is sheared`);
   }
 }
 

@@ -99,22 +99,30 @@ precision mediump float;
 `;
 
 /**
- * The cut corner, as a multiple of the bar's half-height, and how far inside
- * the quad's right edge the readout is anchored, in whole bar heights.
+ * The cut corner, as a multiple of the bar's half-height; how far the body is
+ * inset from the quad; and where the readout's right edge sits, both in whole
+ * bar heights from the quad's edge.
  *
- * They are exported and paired for the same reason the shear used to be: the
- * bar is drawn in GLSL and the numerals are laid out in JS, and the readout has
- * to clear the corner the bar takes out of itself. Get them out of step and the
- * digits sit *on* the diagonal — which does not read as a two-pixel error, it
- * reads as two people having drawn the same bar.
+ * They are exported together for the reason the shear used to be: the bar is
+ * drawn in GLSL and the numerals are laid out in JS, and two numbers describing
+ * one piece of geometry from two files is how a bar and its readout end up
+ * disagreeing. That does not read as a two-pixel error; it reads as two people
+ * having drawn the same bar.
  *
- * The inset is derived, not guessed: the cut's edge at the top of the numerals
- * is BODY_INSET + CUT * heroHalf - capHeight/2 from the quad edge, and this is
- * that with a little air. `tools/resource-bar-check.mjs` recomputes it.
+ * READOUT_INSET sits just inside the *fill area*, not just inside the body: the
+ * numbers are meant to stand against the right end of the fill, and between the
+ * body's edge and the fill there is a stroke, a gap of air and a lip. Anchor to
+ * the body and the last digit is drawn over the frame, which reads as a clipped
+ * numeral rather than as a misplaced one.
+ *
+ * What makes standing that close safe at all is that the cut is on the *left* —
+ * see sdCut. Move the cut back to the right and this number is immediately
+ * wrong. `tools/resource-bar-check.mjs` pins both halves of that, and derives
+ * the fill area's inset from the GLSL rather than repeating it.
  */
-export const CUT = 1.05;
-export const BODY_INSET = 0.235;
-export const READOUT_INSET = 0.54;
+export const CUT = 0.85;
+export const BODY_INSET = 0.130;
+export const READOUT_INSET = 0.275;
 
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + CUT.toFixed(4) + `;
@@ -188,18 +196,25 @@ float sdBox(vec2 p, vec2 b) {
   return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
 
-/* The same box with one corner taken off, top-right.
+/* The same box with one corner taken off, top-LEFT.
 
    This is the suite mark — the corner gl-tokens.css cuts out of every panel —
    and it is what carries the family identity now that the bar is axis-aligned.
    A cut corner is a mark; the shear it replaces was a costume, and one that
    made the bar disagree with every other rectangle on the canvas.
 
-   Note p and not abs(p): mirroring would cut all four corners and turn an
-   instrument with a front and a back into a lozenge. */
+   Left and not right, and that is load-bearing rather than taste: the readout
+   is anchored to the bar's right edge, and a corner taken out of the top-right
+   is taken out of exactly the space the digits stand in. The two cannot both
+   have that corner — either the numbers sit on the diagonal, or they retreat
+   inward and give up the length the cut was supposed to be saving. Putting the
+   mark at the end nobody reads from costs nothing.
+
+   Note the negated x, and p rather than abs(p): mirroring would cut all four
+   corners and turn an instrument with a front and a back into a lozenge. */
 float sdCut(vec2 p, vec2 b, float c) {
   float k = (b.x + b.y - c) * 0.7071068;
-  return max(sdBox(p, b), dot(p, vec2(0.7071068)) - k);
+  return max(sdBox(p, b), dot(vec2(-p.x, p.y), vec2(0.7071068)) - k);
 }
 
 /* ── OKLab → sRGB ────────────────────────────────────────────────────────
@@ -256,10 +271,12 @@ void main(void) {
      quad edge is the single clearest tell that something was drawn rather than
      lit.
 
-     The horizontal inset used to be 0.30, and a third of that was headroom for
-     the shear: a body leaning by 0.32 per unit of height overhangs its own box
-     by half that on each side. With the bar axis-aligned that headroom is free
-     length, and length is the one dimension a resource bar is read with. */
+     The inset used to be 0.30, and almost all of it was paying for things that
+     are gone: headroom for the shear (a body leaning 0.32 per unit of height
+     overhangs its own box by half that on each side), and room at each end for
+     the cap and the pips. What is left is the bloom margin, which is the only
+     thing the inset was ever really for. Everything else is fill, and length is
+     the one dimension a resource bar is actually read with. */
   float padY = mix(0.21, 0.18, hero);
   vec2 bb = vec2(b.x - BODY_INSET, b.y - padY);
 
@@ -296,8 +313,8 @@ void main(void) {
 
   /* ── Palette ───────────────────────────────────────────────────────────
      GOLD is PALETTE.signalPale. It is the only warm note and it appears in
-     exactly two places — the top of the stroke and the cap — which is what
-     keeps it reading as a material rather than as a colour scheme. */
+     exactly one place — the top of the stroke — which is what keeps it reading
+     as a material catching light rather than as a colour scheme. */
   /* The ramp is sampled through a curve, not linearly. Linear sampling spends
      the whole lower half of the bar's range on orange and only reaches red in
      the last few percent — so a creature at a third of its hit points looks
@@ -440,13 +457,30 @@ void main(void) {
   float mTempArea = mFillA * rbEdge(tempX + px, tempX - px, p.x)
                   * rbEdge(-0.86, -0.66, hb) * rbEdge(0.88, 0.68, hb) * tempOn;
 
-  /* Two crossed diagonal families make diamond scales. The lattice is drawn in
-     the shield plate itself rather than over the whole bar, so it stops exactly
-     where the shield does. */
-  float sc = 0.185;
-  float l1 = abs(fract((p.x * 1.0 + p.y * 2.05) / sc) - 0.5);
-  float l2 = abs(fract((p.x * 1.0 - p.y * 2.05) / sc) - 0.5);
-  float lattice = smoothstep(0.30, 0.50, max(l1, l2)) * rbDetail(sc * 0.5);
+  /* One family of diagonal ribs, not two crossed ones.
+
+     Crossing two families at a 0.185 pitch made diamond scales, which is a nice
+     idea at preview size and noise at the size this actually draws: on a 128px
+     grid the bar is 19px tall, so those diamonds were about three pixels across
+     and the crossing halved the feature size again. Anything with detail below
+     a couple of pixels stops being a pattern and becomes grain over the one
+     reading the player came to take.
+
+     One family at more than twice the pitch survives. It is also the more
+     legible idea: parallel ribs read as plating, and plating is what temporary
+     hit points are — something strapped over the health rather than part of it.
+
+     Drawn as bright lines rather than as filled cells, so the shield adds light
+     to the fill underneath instead of masking it. A pattern that hides the
+     health it sits on top of has broken the one rule the layer has. */
+  float sc = 0.44;
+  float k = (p.x + p.y * 1.35) / sc;
+  /* fract() gives distance along the gradient; the ribs are perpendicular to it,
+     so divide by the gradient's length to get a real distance and keep the rib
+     the same width whatever angle it is set at. */
+  float dRib = abs(fract(k) - 0.5) * sc / 1.675;
+  float ribW = max(px * 1.1, 0.020);
+  float lattice = rbBand(dRib, ribW) * rbDetail(sc * 0.5);
 
   /* A slow shimmer travelling along it, so it reads as held rather than
      painted. */
@@ -460,33 +494,22 @@ void main(void) {
   float sweepX = mix(fx0 - 0.9, fx1 + 0.9, fract(uTime * 0.30));
   float sweep = rbGauss(p.x - sweepX, 0.15) * mFill * uSweep;
 
-  /* ── Stroke, cap, pip ──────────────────────────────────────────────────
-     The furniture. A solid plate anchoring the left end and a detached pip past
-     the right are what break the symmetry — a bar that is the same at both ends
-     reads as a form control no matter how it is shaded. */
+  /* ── Stroke ────────────────────────────────────────────────────────────
+     There used to be end furniture here: a milled gold bracket anchoring the
+     left end and two pips of unequal height past the right, there to break the
+     symmetry so the bar would not read as a form control.
+
+     They are gone, and the asymmetry they were providing now comes from the cut
+     corner instead — which does the same job with none of the width. The
+     furniture was costing about a fifth of the bar's length at both ends
+     together, on the one element whose length *is* its content, and at true
+     size on a 128px grid the pips were two three-pixel marks nobody could read
+     as anything. Ornament that cannot be resolved is just a shorter bar. */
   vec3 GOLD  = vec3(1.000, 0.914, 0.722);
   vec3 STEEL = vec3(0.55, 0.62, 0.78);
   vec3 strokeCol = mix(vec3(0.085, 0.100, 0.140),
                        mix(STEEL, GOLD, 0.60), smoothstep(-0.75, 0.92, hb));
 
-  /* The cap is a machined bracket, not a slab: an outer plate with a dark inlay
-     milled out of it and a lit top edge. One inset is the whole difference
-     between a part and a rectangle — a solid block of gold reads as a swatch,
-     and a swatch reads as placeholder art. */
-  float capCx = -b.x + 0.140;
-  float dCapOut = sdBox(vec2(p.x - capCx, p.y), vec2(0.098, bb.y + 0.055));
-  float dCapIn  = sdBox(vec2(p.x - capCx, p.y), vec2(0.036, bb.y * 0.52));
-  float mCap = rbCover(dCapOut) * hero;
-  float mCapIn = rbCover(dCapIn) * hero;
-  vec3 capCol = mix(vec3(0.115, 0.135, 0.19), GOLD * 0.92, smoothstep(-0.95, 0.70, hb));
-  capCol = mix(capCol, GOLD * 1.6, rbBand(hb - 0.90, 0.10) * 0.75);
-  capCol = mix(capCol, vec3(0.030, 0.040, 0.062), mCapIn);
-  capCol += GOLD * rbBand(hb - 0.30, 0.06) * mCapIn * 0.55;
-
-  /* Two pips of unequal height rather than one slab. Asymmetry at the tail is
-     what stops the eye reading the bar as a symmetrical widget. */
-  float mPip = rbCover(sdBox(vec2(p.x - (b.x - 0.148), p.y), vec2(0.036, bb.y * 0.62))) * hero;
-  mPip = max(mPip, rbCover(sdBox(vec2(p.x - (b.x - 0.056), p.y), vec2(0.025, bb.y * 0.30))) * hero);
 
   /* Register marks stepping outside the body at the quarters — the detail that
      says this was laid out on an instrument rather than drawn as a box. They
@@ -575,8 +598,8 @@ void main(void) {
   /* The shield plate: a translucent pane over the fill, then its lattice, its
      top rim, and a hot leading edge where it ends. */
   vec3 shieldPane = uTempCol * (0.42 + 0.30 * shimmer);
-  C = mix(C, shieldPane, mTempArea * 0.44);
-  C += uTempCol * lattice * mTempArea * (0.30 + 0.22 * shimmer);
+  C = mix(C, shieldPane, mTempArea * 0.34);
+  C += uTempCol * lattice * mTempArea * (0.85 + 0.45 * shimmer);
   C += uTempCol * rbBand(hb - 0.70, 0.07) * mTempArea * 0.85;
   C += uTempCol * rbBand(hb + 0.70, 0.06) * mTempArea * 0.35;
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
@@ -585,9 +608,6 @@ void main(void) {
   C += vec3(0.62, 0.74, 0.96) * sweep * 0.34;
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
-  capCol = mix(capCol, vec3(1.9, 1.7, 1.5), uFlash * 0.55);
-  C = mix(C, capCol, mCap);       A = mix(A, 1.0, mCap);
-  C = mix(C, mix(STEEL, GOLD, 0.35) * 0.90, mPip); A = mix(A, 1.0, mPip);
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));
 
   /* Shield break: fractures wide enough to survive the 12px rail that is the
