@@ -1,22 +1,22 @@
 /**
  * GLUniverse Suite — Recall Knowledge feature adapter.
  *
- * A GM prep-and-play tool: turn any Actor, JournalEntry, Item or Scene into a
- * three-tier lore ladder (authored with Claude via the clipboard), then read
- * the right slice of it back at the table according to the roller's Flatfinder
- * competence band.
+ * A GM prep-and-play tool: turn any Actor, JournalEntry, Item or Scene into one
+ * read-aloud paragraph per competence band (authored with Claude via the
+ * clipboard), then hand back the one the roller earned, in the presentation the
+ * GM chose — memory, investigation, archive, console log, vision or readout.
  *
  * PF2e-gated but Flatfinder-independent: without Flatfinder the ladder is still
  * a perfectly good prep document, it simply has no band to resolve against.
  * That is why `requiresFeature` is null rather than "flatfinder".
  *
- * See docs/RECALL_KNOWLEDGE.md for the tier model, the band mapping, and why
+ * See docs/RECALL_KNOWLEDGE.md for the band model, the presentations, and why
  * this feature computes no DCs at all.
  */
 
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
-import { FEATURE_ID, SUBJECT_TYPES } from "./constants.mjs";
+import { DEFAULT_PRESENTATION, FEATURE_ID, PRESENTATIONS, SUBJECT_TYPES } from "./constants.mjs";
 import { RecallApp } from "./app.mjs";
 import { hasLadder } from "./store.mjs";
 
@@ -44,6 +44,30 @@ function registerSettings() {
   // is not one. Registering a toggle nothing reads would be a setting that
   // silently lies. It belongs with the roll-driven path (see the v2 notes in
   // docs/RECALL_KNOWLEDGE.md), where an attempt has a real trigger.
+
+  // A campaign that is entirely ship's logs should be configured once, not on
+  // every creature. These only supply the initial value of the Generate tab's
+  // box; once a ladder exists, its own stamp is what the Read tab reports.
+  game.settings.register(SUITE_ID, "rk.defaultPresentation", {
+    name: "GLRK.settings.defaultPresentation.name",
+    hint: "GLRK.settings.defaultPresentation.hint",
+    scope: "world",
+    config: true,
+    type: String,
+    default: DEFAULT_PRESENTATION,
+    choices: Object.fromEntries(
+      PRESENTATIONS.map((p) => [p.key, `GLRK.presentation.${p.key}`])
+    ),
+  });
+
+  game.settings.register(SUITE_ID, "rk.defaultPresentationNote", {
+    name: "GLRK.settings.defaultPresentationNote.name",
+    hint: "GLRK.settings.defaultPresentationNote.hint",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "",
+  });
 
   game.settings.register(SUITE_ID, "rk.sheetButton", {
     name: "GLRK.settings.sheetButton.name",

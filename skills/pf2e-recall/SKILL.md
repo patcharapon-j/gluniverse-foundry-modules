@@ -32,11 +32,12 @@ Three consequences:
 2. **Each band must add something the one below it did not have.** The carried
    material is shared by design; the new layer is not. A band that adds nothing
    its predecessor lacked wastes that roll.
-3. **The word budget climbs, because the carry costs words.** Disastrous 15–40,
-   Inept 25–50, Poor 25–50, Passable 25–50, Solid 35–65, Impressive 50–85,
-   Remarkable 65–100, Phenomenal 75–115. One paragraph, no bullets, no internal
+3. **The word budget climbs, because the carry costs words.** Disastrous 15–45,
+   Inept 30–60, Poor 30–60, Passable 30–65, Solid 50–90, Impressive 70–120,
+   Remarkable 90–150, Phenomenal 110–180. One paragraph, no bullets, no internal
    headings. Carried layers arrive as a clause each, never re-told at length;
-   the newest layer always gets the most words.
+   the newest layer always gets the most words. The common rolls stay brisk; the
+   rare ones are allowed to stop the table, which is what they are for.
 
 **Carrying is not concatenating.** Write each band from the top with everything
 it knows in hand — identification as a clause, weakness as a clause, tactics as
@@ -50,29 +51,50 @@ paragraph and bolting sentences onto it.
 <!-- glrk:2 -->
 
 ## Disastrous
-<one paragraph, 15-40 words>
+<one paragraph, 15-45 words>
 
 ## Inept
-<one paragraph, 25-50 words>
+<one paragraph, 30-60 words>
 
 ## Poor
-<one paragraph, 25-50 words>
+<one paragraph, 30-60 words>
 
 ## Passable
-<one paragraph, 25-50 words>
+<one paragraph, 30-65 words>
 
 ## Solid
-<one paragraph, 35-65 words>
+<one paragraph, 50-90 words>
 
 ## Impressive
-<one paragraph, 50-85 words>
+<one paragraph, 70-120 words>
 
 ## Remarkable
-<one paragraph, 65-100 words>
+<one paragraph, 90-150 words>
 
 ## Phenomenal
-<one paragraph, 75-115 words>
+<one paragraph, 110-180 words>
 ```
+
+## How the knowledge reaches the player
+
+Before writing anything, settle **who is speaking and what the knowing is made
+of**. The bands say how much is known; this says how it arrives, and it changes
+the content, not just the wording. If the user pasted a prompt from the feature
+it names the presentation explicitly — follow it. If they have not, ask, or
+default to the character's own memory.
+
+| Presentation | Speaker | Made of | How it goes wrong |
+|---|---|---|---|
+| The character remembers | you, to the character | memory: taught, overheard, half kept | misremembering, rumour, two creatures confused |
+| Worked out on the spot | you, as they examine it | remains, tracks, damage, smell | a confident misreading of real evidence |
+| Research | the book or expert, quoted | entries, monographs, marginal notes | an outdated entry, or the facing page |
+| Console or system log | the system, to nobody | catalogue entries, sensor returns, logs | a corrupted record, a redacted field, the wrong specimen matched with total confidence |
+| Vision or augury | you, describing what is shown | images that arrive whole | a true image, misread — the vision does not lie |
+| Bestiary / stat readout | the entry itself | catalogued statistics and rules text | a typo, an erratum, a superseded printing |
+
+The fourth column is the one people forget. A terminal does not misremember and
+an augury does not repeat gossip, so the two false bands must fail **the way
+that source fails**, not the way a person does.
 
 ## What goes in each band
 
@@ -137,19 +159,32 @@ This is what separates a real ladder from a generic one.
 
 ## Rules
 
-1. **GM's narrating voice, addressing the character as "you".** Short, concrete,
-   sayable out loud. No stat-block formatting, no rules jargon players would not
-   hear.
-2. **Types, never numbers.** "Fire scars it and it does not heal", not "weakness
-   10 fire". "Slow to dodge", not "Reflex +12".
-3. **Never invert a real fact at Inept.** Wrong in *flavour* — a mistaken
+These hold whatever the presentation is:
+
+1. **No interiority.** Describe the world and what is known of it, never what the
+   character feels, notices in themselves, or decides. "Your blood runs cold" is
+   the GM's line to write; taking it is taking the scene from them.
+2. **No advice.** State what is true, do not say what to do about it. "Only fire
+   keeps a wound shut" — not "so you should burn it".
+3. **Plain and concrete, sayable in one breath.** Immersion comes from specific
+   images — a smell, a mark on the ground, the detail nobody would invent — never
+   from ornament. Write nothing the GM must perform to make it land; the mood is
+   theirs to add.
+4. **Types, never numbers.** "Fire scars it and it does not heal", not "weakness
+   10 fire". "Slow to dodge", not "Reflex +12". The bestiary/stat readout
+   presentation is the single documented exception: a readout that refuses to
+   print a number is not one.
+
+The presentation owns the rest — **speaker, addressee and register**. Where it
+disagrees with how these usually sound, the presentation wins.
+5. **Never invert a real fact at Inept.** Wrong in *flavour* — a mistaken
    origin, a garbled name, a rumour — never a lie that reverses a weakness or a
    save. A character who acts on it should be unlucky, not punished.
-4. **Do not contradict a supplied statistic.** Invent freely in the gaps,
+6. **Do not contradict a supplied statistic.** Invent freely in the gaps,
    especially at the deepest bands.
-5. **Do not name the band inside its own paragraph.** The GM reads the prose,
+7. **Do not name the band inside its own paragraph.** The GM reads the prose,
    not the label.
-6. **Never hand back a fragment.** From Passable up, a paragraph that identifies
+8. **Never hand back a fragment.** From Passable up, a paragraph that identifies
    nothing, or that gives the secret with no idea how to fight the thing, is not
    a shorter answer — it is an incomplete one, and the GM has no second
    paragraph to fix it with.

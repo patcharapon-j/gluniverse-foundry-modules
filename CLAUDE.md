@@ -296,8 +296,12 @@ coming back with the same paragraph means two rolls that play identically, which
 is the exact failure the band model exists to remove and which renders perfectly
 happily; `BAND_KEYS` silently disagreeing with Flatfinder's own band list or
 order; the two **dynamic** i18n families (`GLRK.mode.*`,
-`GLRK.parse.warn.emptyBand.*`) are built at runtime, so nothing else catches a
-missing key; and if the `privateNotes` mirror heading ever equals
+`GLRK.parse.warn.emptyBand.*`, `GLRK.presentation.*`) are built at runtime, so
+nothing else catches a missing key; a presentation row missing one of its fields
+renders as `undefined` in the GM's clipboard and cannot be fixed from inside
+Foundry; a second presentation quietly permitting numbers turns the feature back
+into the stat readout it exists to replace; the cumulative-carry warning either
+crying wolf on a good ladder or never firing on a fragmented one; and if the `privateNotes` mirror heading ever equals
 `statsblock-import`'s, that module's exporter scrapes this feature's paragraphs
 and round-trips them back out as DC-keyed entries — silent corruption of a
 documented format:

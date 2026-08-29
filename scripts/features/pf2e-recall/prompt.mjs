@@ -34,6 +34,22 @@
  * paragraph is the whole answer for that roll. The word budget climbs with the
  * rung to pay for it (BAND_WORDS).
  *
+ * ## What changed in v2.2
+ *
+ * The eight bands say how MUCH is known. They said nothing about how the
+ * knowing reaches the player, so every ladder sounded like a person
+ * remembering — which is wrong for a party reading a ship's log, researching in
+ * an archive, or being shown a vision. v2.2 adds the presentation: a table of
+ * what changes (speaker, evidence, how falsehood arrives, who is addressed),
+ * chosen by the GM and baked in at authoring time, because nothing here can
+ * re-voice stored prose at read time.
+ *
+ * It also splits the rule list. Some rules are the presentation's to set —
+ * speaker, addressee, register — and some hold no matter what: no interiority,
+ * no advice, no contradicting the statistics. Leaving that unstated meant the
+ * model had to break one rule or the other silently, and a terminal log
+ * addressing the character as "you" is not a terminal log.
+ *
  * The tier idiom this feature borrowed from Stonetop ("Everyone knows / One
  * might know / Very few know") no longer appears as headings, but it still
  * shapes the guidance below: the ladder still climbs from what a farmhand
@@ -41,7 +57,13 @@
  * docs/RECALL_KNOWLEDGE.md.
  */
 
-import { BAND_KEYS, BAND_WORDS, GRAMMAR_VERSION } from "./constants.mjs";
+import {
+  BAND_KEYS,
+  BAND_WORDS,
+  DEFAULT_PRESENTATION,
+  GRAMMAR_VERSION,
+  presentationByKey,
+} from "./constants.mjs";
 
 /**
  * The literal headings the parser will look for. Data, not copy.
@@ -79,20 +101,19 @@ export const VERSION_MARK = `<!-- glrk:${GRAMMAR_VERSION} -->`;
  */
 const BAND_GUIDANCE = Object.freeze({
   disastrous: [
-    "**Carries nothing.** The character has no frame of reference at all, and it",
-    "should be funny rather than cruel — a blank, a wrong category, a confident",
-    "guess about something else entirely. This paragraph must contain **no true",
-    "fact whatsoever**, not even the creature's kind. It is the only rung that",
-    "is allowed to be a joke.",
+    "**Carries nothing.** No frame of reference at all — a blank, a wrong",
+    "category, a confident answer about something else entirely, arriving the",
+    "way the presentation above says falsehood arrives here. Funny rather than",
+    "cruel. This paragraph must contain **no true fact whatsoever**, not even",
+    "the creature's kind. It is the only rung allowed to be a joke.",
   ].join(" "),
   inept: [
-    "**Carries nothing true.** Confidently wrong: a plausible, folklore-shaped",
-    "belief the character holds and would act on. Wrong in **flavour** — a",
-    "mistaken origin, a garbled name, a rumour that inflates or deflates it, or",
-    "an outright misidentification as a different creature. Never invert a real",
-    "fact: do not claim it fears something it is immune to, or that its",
-    "strongest save is its weakest. A character who acts on this should be",
-    "unlucky, not punished.",
+    "**Carries nothing true.** Confidently wrong, in exactly the way the",
+    "presentation above says this source goes wrong — and wrong in **flavour**:",
+    "a mistaken origin, a garbled name, a rumour or record that inflates or",
+    "deflates it, an outright misidentification. Never invert a real fact: do",
+    "not claim it fears something it is immune to, or that its strongest save",
+    "is its weakest. Whoever acts on this should be unlucky, not punished.",
   ].join(" "),
   poor: [
     "**The floor of true knowledge.** The reputation, hedged: what people say",
@@ -137,6 +158,40 @@ const BAND_GUIDANCE = Object.freeze({
     "is still one paragraph the GM reads in place of every other.",
   ].join(" "),
 });
+
+/**
+ * The presentation block: who is speaking, and what the knowing is made of.
+ *
+ * Rendered high in the payload, before the bands, because it governs how every
+ * band is written. The GM's own note comes last and is explicitly allowed to
+ * win, the same way their table context outranks anything generic.
+ */
+function renderPresentation(presentation, note) {
+  const out = [
+    "## How this reaches the player",
+    "",
+    `This is not a style preference; it decides who is speaking and what the knowledge is made of. **${presentation.label}.**`,
+    "",
+    `- **Speaker.** ${presentation.speaker}`,
+    `- **What the knowledge is made of.** ${presentation.evidence}`,
+    `- **How it goes wrong.** At the two false bands below: ${presentation.falsehood}`,
+    `- **Who is addressed.** ${presentation.address}`,
+  ];
+  if (presentation.numbers) {
+    out.push(
+      "- **Numbers.** This presentation is the one exception to the no-numbers rule below: it is a readout, and a readout that refuses to print a number is not one. Give the statistics as the record would."
+    );
+  }
+  if (note.trim()) {
+    out.push(
+      "",
+      "The GM has described how this should look and sound. Prefer it over anything generic above:",
+      "",
+      note.trim()
+    );
+  }
+  return out.join("\n");
+}
 
 function renderGrammar(name) {
   // The per-band budget is repeated inside the template as well as in the band
@@ -199,8 +254,15 @@ function renderBrief(brief) {
  * @param {string}   opts.context  the GM's free-text steer (the highest-value field)
  * @param {string[]} opts.extras   rendered blocks of opted-in extra context
  * @param {object[]} opts.seed     existing DC-keyed RK entries offered as source material
+ * @param {object}   opts.presentation  `{key, note}` — how the knowledge reaches
+ *                                      the player. Falls back to the baseline.
  */
-export function buildPayload(brief, { context = "", extras = [], seed = [] } = {}) {
+export function buildPayload(
+  brief,
+  { context = "", extras = [], seed = [], presentation = null } = {}
+) {
+  const style = presentationByKey(presentation?.key ?? DEFAULT_PRESENTATION);
+  const styleNote = String(presentation?.note ?? "");
   const kindWord =
     {
       creature: "creature",
@@ -224,6 +286,8 @@ export function buildPayload(brief, { context = "", extras = [], seed = [] } = {
     "1. **Every paragraph is the whole answer for that roll.** Not just readable cold — *complete*. From Passable upward each band carries everything the bands below it would have told me, then adds its own new layer. If I read only the Remarkable paragraph, the player must still learn what the thing is, how it fights and how it dies, as well as the secret. A paragraph that gives me the payoff without the setup is unusable: it forces me to read a second one, which is the one thing I cannot do.",
     "2. **Each band must add something the one below it did not have.** The carried material is shared by design, but the new layer is not: if a band adds nothing its predecessor lacked, that roll was wasted. Carry briefly, add substantially.",
     "3. **Length is a hard constraint, and it is per band.** The budget is given with each band below. One paragraph, no bullets, no headings inside it. This is spoken aloud — every ten words is about two seconds — so the carried layers must arrive as a clause each, never re-told at their original length. The newest layer always gets the most words.",
+    "",
+    renderPresentation(style, styleNote),
     "",
     "## The bands, shallowest to deepest",
     "",
@@ -249,11 +313,17 @@ export function buildPayload(brief, { context = "", extras = [], seed = [] } = {
     "",
     "## Rules for what you write",
     "",
-    "1. Write in the GM's narrating voice, addressing the character as \"you\". Short, concrete, sayable out loud. No stat-block formatting and no rules jargon the players would not hear.",
-    "2. Name weaknesses and resistances as **types, never numbers** — \"fire scars it and it does not heal\" rather than \"weakness 10 fire\". The same goes for saves: \"slow to dodge\" rather than \"Reflex +12\".",
-    "3. Do not contradict the statistics given below. Invent freely in the gaps, especially at the deepest bands.",
-    "4. No bullets, no bold labels, no headings inside a paragraph, no trailing commentary.",
-    "5. Do not name the band inside its own paragraph. I read the prose, not the label.",
+    "These hold whatever the presentation is:",
+    "",
+    `1. Name weaknesses and resistances as **types, never numbers** — "fire scars it and it does not heal" rather than "weakness 10 fire". The same goes for saves: "slow to dodge" rather than "Reflex +12".${style.numbers ? " (This presentation is the stated exception: give the numbers as the record would.)" : ""}`,
+    "2. **No interiority.** Describe the world and what is known about it, never what the character feels, notices in themselves, or decides. \"Your blood runs cold\" is my line to write, not yours, and it is the fastest way to take the scene away from me.",
+    "3. **No advice.** State what is true; do not tell the player what to do about it. \"Fire is the only thing that keeps a wound shut\" — not \"so you should burn it\".",
+    "4. **Plain and concrete, sayable in one breath.** The immersion comes from specific images — a smell, a mark on the ground, the one detail nobody would invent — never from ornament. Write nothing I have to perform to make it land; the mood is mine to add.",
+    "5. Do not contradict the statistics given below. Invent freely in the gaps, especially at the deepest bands.",
+    "6. No bullets, no bold labels, no headings inside a paragraph, no trailing commentary.",
+    "7. Do not name the band inside its own paragraph. I read the prose, not the label.",
+    "",
+    "The presentation above owns the rest — **who is speaking, who is addressed, and the register**. Where it disagrees with your instinct for how these usually sound, the presentation wins.",
     "",
     "## Output format",
     "",

@@ -254,8 +254,34 @@
   font-size: var(--gl-fs-xs);
 }
 
+/* The presentation note sits directly under its picker as one control, so it
+   loses the gap the flex column would otherwise put between them. */
+.glrk-presentation-note {
+  margin-top: calc(var(--gl-sp-2) * -1);
+  width: 100%;
+  resize: vertical;
+}
+
 .glrk-primary { justify-content: center; }
 .glrk-danger { color: var(--gl-peril); }
+
+/* What the stored paragraphs were authored under. Quiet by default — it is
+   provenance, not an instruction — and only raised to a warning colour when the
+   picker has since moved, because then the ladder and the box disagree. */
+.glrk-authored {
+  margin: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.glrk-authored.is-stale {
+  color: var(--gl-warn);
+}
+
+.glrk-authored small {
+  display: block;
+  color: var(--gl-text-faint);
+}
 
 /* -------------------------------------------------------------- footer -- */
 

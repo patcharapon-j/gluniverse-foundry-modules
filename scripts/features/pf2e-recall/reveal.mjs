@@ -106,16 +106,38 @@ export function resolveReveal(ladder, bandKey, { mistakenName = null } = {}) {
   };
 }
 
+/** Words of tail shown per matrix row. Two lines' worth at the panel's width. */
+const PREVIEW_WORDS = 15;
+
+/**
+ * The END of a paragraph, not its beginning.
+ *
+ * The bands are cumulative, so every band from Passable up now OPENS with the
+ * same identification clause. Previewing the opening therefore shows eight rows
+ * of the same sentence, which is precisely the thing this widget exists not to
+ * do. The layer each rung adds lands last, so the tail is what distinguishes
+ * one rung from the next.
+ */
+function tailPreview(text) {
+  const words = String(text ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length <= PREVIEW_WORDS) return words.join(" ");
+  return `… ${words.slice(-PREVIEW_WORDS).join(" ")}`;
+}
+
 /**
  * Preview every band at once, for the Read tab. Lets a GM see the whole shape
  * of what they authored before a die is ever rolled.
  */
 export function revealMatrix(ladder, opts) {
-  return BAND_ORDER.map((key) => ({
-    band: key,
-    label: bandLabel(key),
-    ...resolveReveal(ladder, key, opts),
-  }));
+  return BAND_ORDER.map((key) => {
+    const reveal = resolveReveal(ladder, key, opts);
+    return {
+      band: key,
+      label: bandLabel(key),
+      ...reveal,
+      preview: reveal.text ? tailPreview(reveal.text) : null,
+    };
+  });
 }
 
 /** Heading text for a band key, for templates that render outside a reveal. */
