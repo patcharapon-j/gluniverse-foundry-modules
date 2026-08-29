@@ -1,14 +1,14 @@
 /**
- * libWrapper integration.
+ * libWrapper integration — suite-wide.
  *
  * Prefers the lib-wrapper module (https://github.com/ruipin/fvtt-lib-wrapper) when it
- * is installed and active, so this module plays nicely with every other module that
+ * is installed and active, so the suite plays nicely with every other module that
  * wraps the same methods. When lib-wrapper is absent, a small, guarded fallback patch
  * is used instead, exposing the same WRAPPER/MIXED/OVERRIDE semantics for the subset
- * of behaviour this module relies on (wrapping a named function on an object).
+ * of behaviour the suite relies on (wrapping a named function on an object).
  */
 
-import { MODULE_ID } from "../constants.js";
+import { SUITE_ID } from "./const.mjs";
 
 export const WRAPPER = "WRAPPER";
 export const MIXED = "MIXED";
@@ -66,7 +66,7 @@ function fallbackRegister(target, fn, type) {
 
 /**
  * Per-target handler registry. libWrapper (and our fallback) only allow ONE
- * registration per (package, target); flatfinder wraps `game.pf2e.Check.roll`
+ * registration per (package, target); Flatfinder wraps `game.pf2e.Check.roll`
  * from both the Incapacitation and DC-flattening features, so we register a
  * single dispatcher per target and chain any additional handlers onto it.
  * target → { handlers: Function[], backend: "libwrapper"|"fallback" }
@@ -108,7 +108,7 @@ export function registerWrapper(target, fn, type = MIXED) {
 
   let backend;
   if (hasLibWrapper()) {
-    libWrapper.register(MODULE_ID, target, dispatcher, type);
+    libWrapper.register(SUITE_ID, target, dispatcher, type);
     backend = "libwrapper";
   } else {
     fallbackRegister(target, dispatcher, type);

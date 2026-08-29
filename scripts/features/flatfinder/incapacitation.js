@@ -21,7 +21,7 @@
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { flatfinderEffectiveLevel } from "./adjustments.js";
-import { registerWrapper, WRAPPER } from "./lib/wrapper.js";
+import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
 /** Does this save context carry the incapacitation trait? */
 function isIncapacitation(context) {
