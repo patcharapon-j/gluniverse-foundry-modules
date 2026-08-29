@@ -267,16 +267,39 @@ node tools/stream-pacer-safety-check.mjs
 Zero problems required. It is a source-shape check and cannot prove the rendered
 result — only a session with the capture login signed in can do that.
 
+**When touching Reflavor** (`features/statsblock-import/reflavor*.js`,
+`styles/statsblock-import-reflavor.css`), re-run its consistency check. The payload
+*teaches* the importer's grammar section by section, so a field renamed in
+`importer.js` and not there trains the model on a field the parser no longer
+accepts — which breaks every reflavour at once and reads to the GM as the model
+getting worse. It also pins the things that cannot be seen in a diff: benchmark
+rows must come from `Benchmarks.rawRow()` (never `resolve()`, which subtracts
+level under PWoL and would disagree with the un-flattened numbers printed beside
+it), rung 4 must never reach a hazard (no hazard tables exist in this repo), and
+the single-fence output contract must survive, because `parseTopLevelField`
+reads `Key: value` under *any* heading and one line of commentary inside the
+fence silently rewrites the creature:
+
+```bash
+node tools/reflavor-check.mjs
+```
+
+Zero problems required. See `docs/REFLAVOR.md` for the rung ladder and the
+hand-off contract.
+
 **When touching Recall Knowledge** (`features/pf2e-recall/`, `styles/pf2e-recall.css`,
 `skills/pf2e-recall/`), re-run its consistency check. Everything it covers fails
 *silently*: a grammar that drifts between the prompt emitter and the parser
 reads to the GM as "the model got it wrong" rather than as an error; a
-competence band with no reveal rule falls through to the default and shows the
-wrong depth; the two **dynamic** i18n families (`GLRK.mode.*`,
-`GLRK.parse.warn.emptyTier.*`) are built at runtime, so nothing else catches a
+competence band with no delivery mode falls through to the default; two bands
+coming back with the same paragraph means two rolls that play identically, which
+is the exact failure the band model exists to remove and which renders perfectly
+happily; `BAND_KEYS` silently disagreeing with Flatfinder's own band list or
+order; the two **dynamic** i18n families (`GLRK.mode.*`,
+`GLRK.parse.warn.emptyBand.*`) are built at runtime, so nothing else catches a
 missing key; and if the `privateNotes` mirror heading ever equals
-`statsblock-import`'s, that module's exporter scrapes this feature's tiered
-prose and round-trips it back out as DC-keyed entries — silent corruption of a
+`statsblock-import`'s, that module's exporter scrapes this feature's paragraphs
+and round-trips them back out as DC-keyed entries — silent corruption of a
 documented format:
 
 ```bash

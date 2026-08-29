@@ -33,7 +33,7 @@ const note = (msg) => notes.push(msg);
 
 /* ------------------------------------------------------------ imports --- */
 
-const { TIERS, TIER_KEYS, BAND_REVEAL, DEFAULT_REVEAL, GRAMMAR_VERSION } = await import(
+const { BAND_KEYS, BAND_REVEAL, DEFAULT_REVEAL, GRAMMAR_VERSION, PARAGRAPH_WORDS } = await import(
   join(FEATURE, "constants.mjs")
 );
 const { HEADINGS, VERSION_MARK, buildPayload } = await import(join(FEATURE, "prompt.mjs"));
@@ -75,42 +75,121 @@ for (const key of bandKeys) {
 for (const key of Object.keys(BAND_REVEAL)) {
   if (!bandKeys.includes(key)) fail(`BAND_REVEAL has "${key}", which is not a Flatfinder band.`);
 }
-for (const [key, rule] of Object.entries(BAND_REVEAL)) {
-  if (rule.depth < 0 || rule.depth > TIERS.length) fail(`Band "${key}" has out-of-range depth ${rule.depth}.`);
+// BAND_KEYS is duplicated from Flatfinder so this module carries no cross-feature
+// import. Duplication is only safe while the two agree, including in ORDER — the
+// payload lists the bands shallowest-first and the model reads that ordering as
+// the shape of the ladder.
+if (BAND_KEYS.join() !== bandKeys.join()) {
+  fail(`BAND_KEYS ${BAND_KEYS.join(",")} disagrees with Flatfinder's ${bandKeys.join(",")}.`);
 }
-// The design rests on all eight bands feeling distinct; a duplicate (depth,mode)
-// pair means two bands are indistinguishable at the table.
-const seen = new Map();
 for (const [key, rule] of Object.entries(BAND_REVEAL)) {
-  const sig = `${rule.depth}/${rule.mode}`;
-  if (seen.has(sig)) fail(`Bands "${seen.get(sig)}" and "${key}" resolve identically (${sig}).`);
-  seen.set(sig, key);
+  if (!rule.mode) fail(`Band "${key}" has no delivery mode.`);
+  if ("depth" in rule) fail(`Band "${key}" still carries a depth; v2 derives no content from it.`);
 }
-if (DEFAULT_REVEAL.depth < 1) fail("DEFAULT_REVEAL must show at least one tier when Flatfinder is absent.");
+if (!DEFAULT_REVEAL.mode) fail("DEFAULT_REVEAL has no mode; a missing Flatfinder would render nothing.");
 
 /* ------------------------------------------------- 3. grammar round trip */
 
 const sample = {
   name: "Barrow Troll",
-  tiers: {
-    everyone: ["Blamed for every emptied grave.", "Enormous and hunched.", "Comes back from killing wounds."],
-    might: ["Fire stops it knitting itself back together.", "Slow to resist a clever trick."],
-    few: ["It was a Hillfolk grave-warden, and the barrow is its own."],
+  bands: {
+    disastrous: "You have absolutely no idea. You are fairly sure it is not a kind of bird.",
+    inept: "You are certain these things turn to stone in daylight, which is why nobody sees them at noon.",
+    poor: "You have heard the barrow country blamed for emptied graves, though you could not swear to what does the emptying.",
+    passable: "That is a barrow troll. The Hillfolk blame them for every opened grave in the uplands, and the blame is mostly earned.",
+    solid: "A barrow troll. Fire is the thing: burn it and the wounds stay shut, otherwise it simply knits itself together and comes on again.",
+    impressive: "A barrow troll, and the fight turns on fire. Cut it and it closes; burn it and it does not. It is strong but slow to see a trick coming, so misdirection lands where force will not.",
+    remarkable: "A barrow troll, and it was a person once. This one was a Hillfolk grave-warden who would not leave his post, and the barrow it guards is its own.",
+    phenomenal: "A barrow troll, and it was a grave-warden who would not leave his post. The barrow is his own, and the name cut above the door is one your patron has been looking for.",
   },
-  misremembered: "They turn to stone in daylight.",
 };
 
 const round = parseLadder(formatLadder(sample, sample.name));
 if (!round.ok) fail(`Round trip failed: ${round.errors.join(", ")}`);
 if (round.name !== sample.name) fail(`Round trip lost the title (${round.name}).`);
 if (round.version !== GRAMMAR_VERSION) fail(`Round trip version ${round.version} != ${GRAMMAR_VERSION}.`);
-for (const key of TIER_KEYS) {
-  const a = JSON.stringify(sample.tiers[key]);
-  const b = JSON.stringify(round.tiers[key]);
-  if (a !== b) fail(`Round trip altered tier "${key}".`);
+for (const key of BAND_KEYS) {
+  if (round.bands[key] !== sample.bands[key]) fail(`Round trip altered band "${key}".`);
 }
-if (round.misremembered !== sample.misremembered) fail("Round trip altered the misremembered line.");
 if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}`);
+
+/* Every band must resolve to its OWN paragraph. Two bands reading the same is
+   the exact failure this rewrite exists to remove, and it is invisible unless
+   asserted: the panel renders a duplicate perfectly happily. */
+{
+  const seen = new Map();
+  for (const key of BAND_KEYS) {
+    const text = sample.bands[key];
+    if (seen.has(text)) fail(`Bands "${seen.get(text)}" and "${key}" are identical.`);
+    seen.set(text, key);
+  }
+}
+
+/* The word budget is the whole point of v2: it is what a GM can say aloud
+   without skimming. A sample that breaks its own rule is a bad example to
+   assert against. */
+{
+  const [minWords, maxWords] = PARAGRAPH_WORDS;
+  for (const key of BAND_KEYS) {
+    const words = sample.bands[key].split(/\s+/).filter(Boolean).length;
+    if (words > maxWords * 1.5) fail(`Sample band "${key}" is ${words} words, far past the ${maxWords}-word budget.`);
+  }
+  if (minWords >= maxWords) fail("PARAGRAPH_WORDS is not a range.");
+}
+
+/* Trailing chatter must not reach the last paragraph.
+   Models routinely close the fence and then add "Let me know if you'd like
+   these pitched differently!". v1 was immune for free — it only ever collected
+   bullet lines — but v2 collects prose, so an unguarded parser appends the
+   sign-off to the Phenomenal band and the GM reads it out at the table. */
+{
+  const body = [
+    "# Recall Knowledge: Barrow Troll",
+    "<!-- glrk:2 -->",
+    ...BAND_KEYS.flatMap((key) => ["", `## ${HEADINGS[key]}`, `The ${key} answer.`]),
+  ].join("\n");
+  for (const [shape, source] of [
+    ["fenced with a sign-off", `\`\`\`markdown\n${body}\n\`\`\`\n\nLet me know if you'd like these pitched differently!`],
+    ["fenced with a preamble", `Here you go!\n\n\`\`\`markdown\n${body}\n\`\`\``],
+    ["no fence at all", body],
+  ]) {
+    const parsed = parseLadder(source);
+    if (!parsed.ok) fail(`A reply ${shape} failed to parse.`);
+    const last = parsed.bands[BAND_KEYS[BAND_KEYS.length - 1]] ?? "";
+    if (last !== "The phenomenal answer.") {
+      fail(`A reply ${shape} leaked into the last band: "${last}".`);
+    }
+  }
+}
+
+/* A v1 ladder must still parse. A GM with an old chat window open should not
+   be stranded, and silently refusing their paste would look like a bug. */
+{
+  const legacy = [
+    "# Recall Knowledge: Barrow Troll",
+    "<!-- glrk:1 -->",
+    "",
+    "## Everyone knows",
+    "- Blamed for every emptied grave.",
+    "- Enormous and hunched.",
+    "",
+    "## One might know",
+    "- Fire stops it knitting itself back together.",
+    "",
+    "## Very few know",
+    "- It was a Hillfolk grave-warden.",
+    "",
+    "## Misremembered",
+    "- They turn to stone in daylight.",
+  ].join("\n");
+  const converted = parseLadder(legacy);
+  if (!converted.ok) fail("A v1 ladder no longer parses; existing chat logs would be refused.");
+  if (!converted.bands.inept) fail("v1 conversion dropped the misremembered line.");
+  if (!converted.bands.passable) fail("v1 conversion dropped the shallow tier.");
+  if (!converted.warnings.includes("GLRK.parse.warn.convertedFromV1")) {
+    fail("v1 conversion happened silently; the GM should be told to regenerate.");
+  }
+}
 
 /* --------------------------- 4. the payload teaches the grammar it reads */
 
@@ -124,9 +203,9 @@ const brief = {
 };
 const payload = buildPayload(brief, {});
 
-/* The statblock is what tier 2 ("how it fights and how it dies") is written
-   from. A section silently dropped by the renderer costs the model the only
-   data that makes that tier answerable, and nothing else would catch it. */
+/* The statblock is what the middle bands ("how it fights and how it dies") are
+   written from. A section silently dropped by the renderer costs the model the
+   only data that makes those bands answerable, and nothing else would catch it. */
 for (const section of brief.sections) {
   if (!payload.includes(`### ${section.title}`)) {
     fail(`Payload dropped the "${section.title}" section.`);
@@ -218,11 +297,7 @@ for (const file of sources) {
 // Dynamic families: built at runtime, so they are enumerated rather than scanned.
 for (const rule of Object.values(BAND_REVEAL)) referenced.add(`GLRK.mode.${rule.mode}`);
 referenced.add(`GLRK.mode.${DEFAULT_REVEAL.mode}`);
-for (const key of TIER_KEYS) referenced.add(`GLRK.parse.warn.emptyTier.${key}`);
-for (const tier of TIERS) {
-  referenced.add(tier.label);
-  referenced.add(tier.brief);
-}
+for (const key of BAND_KEYS) referenced.add(`GLRK.parse.warn.emptyBand.${key}`);
 
 for (const key of [...referenced].sort()) {
   if (!(key in lang)) fail(`i18n key referenced but not defined: ${key}`);
@@ -237,6 +312,6 @@ for (const p of problems) console.log(`PROBLEM ${p}`);
 console.log(
   problems.length
     ? `\nrecall-check: ${problems.length} problem(s)`
-    : `\nrecall-check: OK (${bandKeys.length} bands, ${TIER_KEYS.length} tiers, grammar v${GRAMMAR_VERSION}, ${referenced.size} i18n keys)`
+    : `\nrecall-check: OK (${bandKeys.length} bands, grammar v${GRAMMAR_VERSION}, ${referenced.size} i18n keys)`
 );
 process.exit(problems.length ? 1 : 0);

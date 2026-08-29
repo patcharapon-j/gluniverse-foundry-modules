@@ -14,8 +14,12 @@ metadata already wired.
 
 **Did the user paste an existing statblock?**
 
-- **Yes** → read `references/conversion.md`. Transcribe faithfully. Do not
-  redesign, do not add a kit, do not rebalance.
+- **Yes, and they want it changed into something else** (a "reflavor" payload
+  naming a rung, or any ask to reskin/retheme/rebuild/retune what they pasted)
+  → read `references/reflavor.md`. The rung says what you may touch; obey it
+  literally.
+- **Yes, and they want it in this format** → read `references/conversion.md`.
+  Transcribe faithfully. Do not redesign, do not add a kit, do not rebalance.
 - **No** → design path. Continue below.
 
 ## Design path
@@ -199,6 +203,7 @@ not a combatant.
 | `references/stock-chassis.md` | Naming, traits, senses, languages, action economy, spellcasting conventions. |
 | `references/rule-elements.md` | Before emitting any rule element. 48 precedent-backed recipes. |
 | `references/conversion.md` | Convert path. Includes the full Remaster rename table. |
+| `references/reflavor.md` | Reflavor path. The four rungs and the fence rule. |
 | `references/encounter-budget.md` | Whenever a party level or size is mentioned. |
 | `references/design-patterns.md` | For inspiration when a concept is thin. |
 

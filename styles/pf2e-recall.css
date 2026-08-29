@@ -142,19 +142,18 @@
   to   { opacity: 1; transform: none; }
 }
 
-.glrk-tier h3 {
-  margin: 0 0 var(--gl-sp-2);
-  color: var(--gl-text-bright);
-  border-left: 2px solid var(--gl-accent);
-  padding-left: var(--gl-sp-3);
-}
-
-.glrk-tier ul {
+/* The one paragraph the GM reads aloud.
+   Sized and spaced for performance rather than for scanning: larger than the
+   surrounding UI, generous line height, and nothing competing beside it. A GM
+   glancing down mid-sentence has to find their place instantly. */
+.glrk-say {
   margin: 0;
-  padding-left: var(--gl-sp-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gl-sp-2);
+  padding-left: var(--gl-sp-4);
+  border-left: 2px solid var(--glrk-band, var(--gl-accent));
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-md);
+  line-height: var(--gl-lh-loose);
+  text-wrap: pretty;
 }
 
 .glrk-wrong {
@@ -175,7 +174,7 @@
 }
 
 /* A hedged reveal reads as provisional, so the GM delivers it that way. */
-.glrk-mode-hedged .glrk-tier ul { font-style: italic; color: var(--gl-text-dim); }
+.glrk-mode-hedged .glrk-say { font-style: italic; color: var(--gl-text-dim); }
 
 .glrk-hint {
   margin: 0;
@@ -202,15 +201,31 @@
 .glrk-matrix-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--gl-sp-3);
   padding: var(--gl-sp-2) var(--gl-sp-3);
   background: var(--gl-surface);
   border-left: 2px solid var(--glrk-band, transparent);
 }
 
-.glrk-matrix-band { color: var(--gl-text-bright); }
+.glrk-matrix-band { color: var(--gl-text-bright); flex: 0 0 auto; }
 .glrk-matrix-depth { color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+
+/* The matrix previews all eight paragraphs at once, so each row shows the
+   opening of its own prose rather than a mode label. Clamped to two lines: the
+   point is to see the shape of the ladder, not to read it here. */
+.glrk-matrix-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  text-align: right;
+}
+
+.glrk-matrix-row.is-unwritten { opacity: 0.55; }
 
 /* ------------------------------------------------------------ generate -- */
 

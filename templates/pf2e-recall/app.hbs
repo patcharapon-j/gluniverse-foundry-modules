@@ -37,12 +37,10 @@
       </div>
       {{/if}}
 
-      {{#each reveal.tiers}}
-      <div class="glrk-tier">
-        <h3 class="gl-tech-label">{{label}}</h3>
-        <ul>{{#each bullets}}<li>{{this}}</li>{{/each}}</ul>
-      </div>
-      {{/each}}
+      {{#if reveal.text}}
+      {{!-- The one paragraph the GM reads aloud. Nothing else competes with it. --}}
+      <p class="glrk-say">{{reveal.text}}</p>
+      {{/if}}
 
       {{#if reveal.hint}}
       <p class="glrk-hint">{{reveal.hint}}</p>
@@ -52,9 +50,13 @@
     <p class="glrk-prompt">{{localize "GLRK.read.pickBand"}}</p>
     <div class="glrk-matrix">
       {{#each matrix}}
-      <div class="glrk-matrix-row glrk-tier-{{band}}">
+      <div class="glrk-matrix-row glrk-tier-{{band}}{{#unless hasText}} is-unwritten{{/unless}}">
         <span class="gl-tech-label glrk-matrix-band">{{label}}</span>
-        <span class="glrk-matrix-depth">{{modeLabel}}</span>
+        {{#if text}}
+        <span class="glrk-matrix-text">{{text}}</span>
+        {{else}}
+        <span class="glrk-matrix-depth">{{localize "GLRK.read.unwritten"}}</span>
+        {{/if}}
       </div>
       {{/each}}
     </div>

@@ -129,23 +129,58 @@ export function registerSettings() {
 }
 
 /** Run at init only when enabled & available. Wire Foundry hooks here. */
+/**
+ * Resolve the document a directory row stands for.
+ *
+ * v14's Compendium application extends DocumentDirectory and fires the SAME
+ * `get<Type>ContextOptions` hook as the sidebar, so every entry registered for
+ * the sidebar also appears on compendium rows. A compendium row's id is not in
+ * `game.actors`, and its document must be loaded from the pack, which is async.
+ * Reading the collection off the application handles both cases; falling back
+ * to `game.actors` covers a caller with no application to hand.
+ *
+ * Always returns a Promise so callers need not know which kind of row it was.
+ */
+export function resolveDirectoryDocument(app, li) {
+  const id = li?.dataset?.entryId ?? li?.dataset?.documentId;
+  if (!id) return Promise.resolve(null);
+  const collection = app?.collection;
+  if (typeof collection?.getDocument === "function") {
+    return Promise.resolve(collection.getDocument(id)).catch(() => null);
+  }
+  return Promise.resolve(collection?.get?.(id) ?? game.actors.get(id) ?? null);
+}
+
+/** Open the importer primed for a reflavour hand-off. */
+export function openImporterForReflavor(sourceActor, rung) {
+  const importer = new PF2EStatBlockImporter();
+  // A compendium source has no world actor to update, so it is not pre-selected
+  // as a target; Create is the steer for a reflavour in any case.
+  if (sourceActor?.id && !sourceActor.pack) importer.setTargetActor(sourceActor.id);
+  importer.setReflavorOrigin(sourceActor?.uuid ?? null, rung);
+  importer.render({ force: true });
+  return importer;
+}
+
 export function onInit() {
-  Hooks.on("getActorContextOptions", (_app, options) => {
+  Hooks.on("getActorContextOptions", (app, options) => {
     options.push({
       name: "GLSBI.contextMenu.import",
       icon: '<i class="fa-solid fa-file-import"></i>',
       condition: () => game.user?.isGM && game.system.id === "pf2e",
       callback: (target) => {
         const li = target instanceof HTMLElement ? target : target?.[0];
-        const actorId = li?.dataset.entryId ?? li?.dataset.documentId;
-        const actor = game.actors.get(actorId);
-        if (!actor || !["npc", "hazard"].includes(actor.type)) {
-          ui.notifications.warn(game.i18n.localize("GLSBI.notify.targetTypeOnly"));
-          return;
-        }
-        const importer = new PF2EStatBlockImporter();
-        importer.setTargetActor(actor.id);
-        importer.render({ force: true });
+        resolveDirectoryDocument(app, li).then((actor) => {
+          if (!actor || !["npc", "hazard"].includes(actor.type)) {
+            ui.notifications.warn(game.i18n.localize("GLSBI.notify.targetTypeOnly"));
+            return;
+          }
+          const importer = new PF2EStatBlockImporter();
+          // A compendium actor cannot be an update target: it is not in the
+          // world collection the target selector is built from.
+          if (!actor.pack) importer.setTargetActor(actor.id);
+          importer.render({ force: true });
+        });
       }
     });
   });
@@ -193,9 +228,15 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
   #validation = null;
   #updateMode = "replaceMatching";
   #targetActorId = null;
+  /** Set only by the reflavour hand-off; a fresh window has no provenance. */
+  #reflavorOrigin = null;
 
   setTargetActor(actorId) {
     this.#targetActorId = actorId;
+  }
+
+  setReflavorOrigin(uuid, rung) {
+    this.#reflavorOrigin = uuid ? { uuid, rung: rung ?? null } : null;
   }
 
   async _renderHTML() {
@@ -318,6 +359,14 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
     const folder = await getOrCreateFolder();
     const actorData = await buildActorSource(this.#parsed.npc, this.#source);
     actorData.folder = folder?.id ?? null;
+    // Provenance, when the GM came through the reflavour hand-off. Pasting into
+    // a fresh importer window simply leaves it absent — that degrades quietly
+    // rather than warning, because a hand-written stat block has no origin.
+    if (this.#reflavorOrigin) {
+      foundry.utils.mergeObject(actorData, {
+        flags: suiteFlags({ [`${PREFIX}reflavor.origin`]: this.#reflavorOrigin })
+      });
+    }
     const actor = await Actor.create(actorData, { renderSheet: false });
     const failures = await importItems(actor, this.#parsed.npc, { mode: "appendOnly" });
     await actor.sheet.render(true);
@@ -345,10 +394,25 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
       // leave the actor image and prototype token (portrait/token) untouched.
       delete actorData.img;
       delete actorData.prototypeToken;
+      if (this.#reflavorOrigin) {
+        foundry.utils.mergeObject(actorData, {
+          flags: suiteFlags({ [`${PREFIX}reflavor.origin`]: this.#reflavorOrigin })
+        });
+      }
       await actor.update(actorData);
     }
     let failures = [];
-    if (this.#updateMode !== "coreOnly") failures = await importItems(actor, this.#parsed.npc, { mode: this.#updateMode });
+    if (this.#updateMode !== "coreOnly") {
+      // A reflavour renames abilities, and importItems matches on
+      // `type:slug(name)` — so every other mode matches nothing and leaves the
+      // old kit sitting beside the new one. replaceAll is the only mode whose
+      // behaviour is correct under renaming.
+      const mode = this.#reflavorOrigin ? "replaceAll" : this.#updateMode;
+      if (mode !== this.#updateMode) {
+        ui.notifications.info(game.i18n.localize("GLSBI.reflavor.notify.forcedReplaceAll"));
+      }
+      failures = await importItems(actor, this.#parsed.npc, { mode });
+    }
     await actor.sheet.render(true);
     ui.notifications.info(game.i18n.format("GLSBI.notify.updated", { actorType: actor.type, name: actor.name }));
     notifyImportFailures(failures);
@@ -399,7 +463,7 @@ function parseStrictMarkdown(source) {
   const npc = createEmptyNpc();
   const warnings = [];
   const errors = [];
-  const original = String(source ?? "");
+  const original = stripCodeFence(String(source ?? ""));
   const markdown = looksLikeStrictMarkdown(original) ? original : convertLooseToStrict(original, warnings);
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   let section = "core";
@@ -2043,7 +2107,7 @@ function titleCase(value) {
   return String(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function exportActorToMarkdown(actor) {
+export function exportActorToMarkdown(actor) {
   if (actor.type === "hazard") return exportHazardToMarkdown(actor);
   const system = actor.system;
   const lines = [
@@ -2349,6 +2413,28 @@ function htmlToSource(value) {
 const LOOSE_RARITIES = new Set(["common", "uncommon", "rare", "unique"]);
 const LOOSE_SIZES = new Set(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
 const LOOSE_ALIGNMENTS = new Set(["lg", "ng", "cg", "ln", "n", "cn", "le", "ne", "ce", "any"]);
+
+/**
+ * Peel one wrapping \`\`\` fence off a paste.
+ *
+ * A GM copying a stat block out of a chat client routinely brings the fence
+ * markers with them. A stray fence line is neither a heading nor a key/value,
+ * so the parser would push it into whichever `Description:` was last open —
+ * invisibly, into the imported creature's prose. pf2e-recall's parser absorbs a
+ * wrapping fence for exactly this reason; this is the same forgiveness.
+ */
+function stripCodeFence(text) {
+  const lines = String(text ?? "").split("\n");
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !lines[start].trim()) start++;
+  while (end > start && !lines[end - 1].trim()) end--;
+  if (start >= end || !/^```/.test(lines[start].trim())) return text;
+  // An unterminated fence is still better off without its opener, so the
+  // closing marker is optional.
+  if (end - 1 > start && /^```\s*$/.test(lines[end - 1].trim())) end--;
+  return lines.slice(start + 1, end).join("\n");
+}
 
 function looksLikeStrictMarkdown(text) {
   return /^\s*#\s+\S/m.test(String(text ?? ""));

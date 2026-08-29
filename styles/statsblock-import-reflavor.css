@@ -1,0 +1,256 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   GLUniverse Suite — Stat Block Importer: the Reflavor dialog.
+
+   A sibling sheet to statsblock-import.css, kept separate because that file is
+   already long and these two windows share nothing but a feature id.
+
+   Identity routes through --gl-accent on the frame scope; everything below is
+   derived from it. Feature-local values carry the `--glrf-` prefix so they
+   cannot repaint a feature that loads after this one.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Scoped to the frame, never to :root — a foundation token redeclared globally
+   repaints every feature loaded after this stylesheet. */
+.gluni-reflavor-frame {
+  --gl-accent: var(--gl-holo-c);
+}
+
+.gluni-reflavor-frame .window-content {
+  padding: 0;
+  background: var(--gl-ink-0);
+}
+
+.gluni-reflavor-frame .window-header {
+  font-family: var(--gl-display);
+  letter-spacing: var(--gl-track-wide);
+}
+
+.gluni-reflavor {
+  --glrf-gap: var(--gl-sp-6);
+  --glrf-rule-pad: var(--gl-sp-4);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--glrf-gap);
+  height: 100%;
+  min-height: 0;
+  padding: var(--gl-sp-8);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-normal);
+  background:
+    radial-gradient(130% 60% at 100% 0%,
+      color-mix(in srgb, var(--gl-accent) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+.gluni-reflavor-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  padding-bottom: var(--gl-sp-6);
+  border-bottom: 1px solid var(--gl-edge);
+}
+
+.gluni-reflavor-header .gluni-kicker {
+  margin: 0;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gl-accent) 70%, var(--gl-text-dim));
+}
+
+.gluni-reflavor-header h1 {
+  margin: 0;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-xl);
+  line-height: var(--gl-lh-tight);
+  letter-spacing: var(--gl-track-normal);
+  color: var(--gl-text-bright);
+  border: none;
+}
+
+.gluni-reflavor-header h1 i {
+  margin-right: var(--gl-sp-3);
+  color: var(--gl-accent);
+}
+
+.gluni-reflavor-subtitle {
+  margin: 0;
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+}
+
+/* ── body & fields ──────────────────────────────────────────────────────── */
+
+.gluni-reflavor-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--glrf-gap);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.gluni-reflavor .gluni-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+}
+
+.gluni-reflavor .gluni-field-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.gluni-reflavor .gluni-label {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.gluni-reflavor .gluni-required {
+  font-style: normal;
+  color: var(--gl-warn);
+}
+
+.gluni-reflavor select,
+.gluni-reflavor input[type="number"],
+.gluni-reflavor textarea {
+  width: 100%;
+  padding: var(--gl-sp-4) var(--gl-sp-5);
+  color: var(--gl-text);
+  font-family: inherit;
+  font-size: var(--gl-fs-sm);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-sm);
+  transition: border-color var(--gl-d-quick) var(--gl-ease-inout);
+}
+
+.gluni-reflavor textarea {
+  min-height: 5.5em;
+  height: 100%;
+  resize: vertical;
+}
+
+.gluni-reflavor select:focus,
+.gluni-reflavor input[type="number"]:focus,
+.gluni-reflavor textarea:focus {
+  outline: none;
+  border-color: var(--gl-accent-soft);
+}
+
+.gluni-reflavor-level {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--gl-sp-5);
+}
+
+.gluni-reflavor-level input[type="number"] {
+  width: 6ch;
+  font-family: var(--gl-tech);
+  font-variant-numeric: tabular-nums;
+}
+
+.gluni-reflavor-from {
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+}
+
+/* ── the rung's own rules ───────────────────────────────────────────────── */
+
+.gluni-reflavor-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  margin: 0;
+  padding: var(--glrf-rule-pad) var(--gl-sp-6);
+  list-style: none;
+  font-size: var(--gl-fs-xs);
+  background: rgb(var(--gl-tint-light) / 0.03);
+  border-left: 2px solid var(--gl-accent-soft);
+  border-radius: 0 var(--gl-cut-sm) var(--gl-cut-sm) 0;
+}
+
+.gluni-reflavor-rules li {
+  display: flex;
+  gap: var(--gl-sp-4);
+  align-items: baseline;
+  margin: 0;
+  color: var(--gl-text-dim);
+}
+
+.gluni-reflavor-rules li i {
+  flex: 0 0 auto;
+  width: 1em;
+  text-align: center;
+}
+
+.gluni-reflavor-rules .is-allowed i { color: var(--gl-good); }
+.gluni-reflavor-rules .is-frozen i { color: var(--gl-text-faint); }
+
+/* ── actions & notes ────────────────────────────────────────────────────── */
+
+.gluni-reflavor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-4);
+}
+
+.gluni-reflavor-actions button {
+  display: inline-flex;
+  gap: var(--gl-sp-3);
+  align-items: center;
+  padding: var(--gl-sp-4) var(--gl-sp-8);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-xs);
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  background: rgb(var(--gl-tint-light) / 0.05);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-sm);
+  cursor: pointer;
+  transition:
+    background var(--gl-d-quick) var(--gl-ease-inout),
+    border-color var(--gl-d-quick) var(--gl-ease-inout);
+}
+
+.gluni-reflavor-actions button:hover {
+  background: var(--gl-accent-faint);
+  border-color: var(--gl-accent-soft);
+}
+
+.gluni-reflavor-actions .gluni-primary {
+  color: var(--gl-text-bright);
+  background: var(--gl-accent-faint);
+  border-color: var(--gl-accent-soft);
+}
+
+.gluni-reflavor-note {
+  display: flex;
+  gap: var(--gl-sp-4);
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+}
+
+.gluni-reflavor-note i {
+  flex: 0 0 auto;
+  color: var(--gl-warn);
+}
+
+.gluni-reflavor-fallback[hidden] { display: none; }
+
+.gluni-reflavor-fallback textarea {
+  min-height: 8em;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+}

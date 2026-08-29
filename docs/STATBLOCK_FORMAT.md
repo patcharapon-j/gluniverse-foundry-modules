@@ -90,6 +90,11 @@ Every section the parser accepts, the emitter produces:
 Export → edit → re-import must not lose the engine. When you add to one side,
 add to the other in the same commit.
 
+`features/statsblock-import/reflavor.js` rests entirely on this symmetry: it
+exports a creature, has a model rewrite it, and imports the result. An emitter
+that stops producing what the parser accepts breaks reflavouring silently. See
+[`docs/REFLAVOR.md`](REFLAVOR.md).
+
 Two asymmetries are intentional and worth knowing about:
 
 - The Recall Knowledge ladder is stored as rendered HTML inside `privateNotes`,

@@ -9,6 +9,8 @@
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
 import { registerSettings, onInit, onReady, api } from "./importer.js";
+import { ReflavorApp, onReflavorInit } from "./reflavor.js";
+import { buildReflavorPayload } from "./reflavor-prompt.js";
 
 const OLD_ID = "gluniverse-pf2e-statsblock-import";
 
@@ -75,6 +77,10 @@ Suite.register({
 
   onInit() {
     onInit();
+    // Wired from the adapter rather than from importer.js so the dependency
+    // between the two modules runs one way only: reflavor imports the importer,
+    // never the reverse. A cycle there is a class-initialization hazard.
+    onReflavorInit();
   },
 
   onReady() {
@@ -90,5 +96,11 @@ Suite.register({
     migrate: migrateFlags,
   },
 
-  api,
+  api: {
+    ...api,
+    reflavor: {
+      open: (actor) => ReflavorApp.show(actor),
+      payload: buildReflavorPayload,
+    },
+  },
 });

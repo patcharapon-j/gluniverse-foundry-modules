@@ -2,9 +2,11 @@
  * GLUniverse Suite — Recall Knowledge: resolving a band into a reveal.
  *
  * The play-time half of the feature. Given a stored ladder and the roller's
- * Flatfinder competence band, decide how deep the GM may go and how the answer
- * should be coloured. Three authored tiers become eight distinct table
- * experiences without eight lots of authoring.
+ * Flatfinder competence band, hand the GM the one paragraph they read aloud.
+ *
+ * v2 authors all eight bands directly, so this is a lookup rather than a
+ * derivation. What is left here is the fallback behaviour for a band nobody
+ * wrote, and the delivery colouring the panel uses.
  *
  * No DCs are computed anywhere, deliberately: under Proficiency-without-Level
  * the level-based DC collapses to a seven-point band across all twenty levels
@@ -16,11 +18,12 @@
  *
  * Flatfinder is SOFT-detected: `COMPETENCE_BANDS` is pure data with no
  * side effects, so importing it costs nothing when the feature is off. Without
- * a band the ladder still works as a prep document at DEFAULT_REVEAL depth.
+ * a band the ladder still works as a prep document, and every paragraph stays
+ * readable from the matrix.
  */
 
 import { COMPETENCE_BANDS } from "../flatfinder/constants.js";
-import { BAND_REVEAL, DEFAULT_REVEAL, TIERS, TIER_KEYS } from "./constants.mjs";
+import { BAND_KEYS, BAND_REVEAL, DEFAULT_REVEAL } from "./constants.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
 /** Map a raw check total onto a band key, mirroring Flatfinder's own rule. */
@@ -42,39 +45,38 @@ export function bandLabel(key) {
 /**
  * Resolve what the GM may say.
  *
- * @param {object} ladder      from store.readLadder
+ * v2 is a direct lookup: one authored paragraph per band, read aloud as it
+ * stands. `mode` survives from v1 because it still earns its place — it colours
+ * the panel, it selects the mistaken-identity fallback when a creature has no
+ * authored Inept line, and it drives the GM-facing hint. It no longer selects
+ * *content*; the paragraph is the content.
+ *
+ * @param {object} ladder      from store.readLadder (already normalised to bands)
  * @param {string} bandKey     a COMPETENCE_BANDS key, or null when unknown
  * @param {object} opts
  * @param {string} opts.mistakenName  fallback wrong answer for creatures with
- *                                    no authored Misremembered line
+ *                                    no authored Inept paragraph
  * @returns {{
- *   band: string|null, mode: string, depth: number,
- *   tiers: Array<{key:string,label:string,bullets:string[]}>,
+ *   band: string|null, mode: string, text: string|null,
  *   wrong: string|null, wrongSource: string|null, hint: string|null
  * }}
  */
 export function resolveReveal(ladder, bandKey, { mistakenName = null } = {}) {
   const rule = BAND_REVEAL[bandKey] ?? DEFAULT_REVEAL;
-  const unlocked = TIERS.slice(0, rule.depth).map((tier) => ({
-    key: tier.key,
-    label: game.i18n.localize(tier.label),
-    bullets: ladder?.tiers?.[tier.key] ?? [],
-  }));
+  const key = bandKey && BAND_KEYS.includes(bandKey) ? bandKey : null;
+  const text = key ? (ladder?.bands?.[key] ?? null) : null;
 
+  // The authored paragraph always wins. The fallbacks below only fire for a
+  // band nobody wrote — an un-prepped creature, or a partial paste.
   let wrong = null;
   let wrongSource = null;
-  if (rule.mode === "blank") {
-    // Not a lie — a blank. The character has no frame of reference at all.
+  if (!text && rule.mode === "blank") {
     wrong = game.i18n.localize("GLRK.reveal.nothingComesToMind");
     wrongSource = "none";
-  } else if (rule.mode === "wrong") {
-    // The authored line always wins: a specific lie about YOUR creature beats a
-    // generic misidentification. Mistaken identity is the fallback for every
-    // creature nobody prepped.
-    if (ladder?.misremembered) {
-      wrong = ladder.misremembered;
-      wrongSource = "authored";
-    } else if (mistakenName) {
+  } else if (!text && rule.mode === "wrong") {
+    // A specific lie about YOUR creature beats a generic misidentification, so
+    // mistaken identity is only reached when the Inept paragraph is missing.
+    if (mistakenName) {
       wrong = game.i18n.format("GLRK.reveal.mistakenFor", { name: mistakenName });
       wrongSource = "mistaken";
     } else {
@@ -83,28 +85,18 @@ export function resolveReveal(ladder, bandKey, { mistakenName = null } = {}) {
     }
   }
 
-  // A "lead" nudges toward the next tier without spending it; "bonus" invites
-  // the GM to add their own secret on top of a ladder already fully spent.
   let hint = null;
-  const nextTier = TIERS[rule.depth];
-  if (rule.mode === "lead" && nextTier && (ladder?.tiers?.[nextTier.key] ?? []).length) {
-    hint = game.i18n.format("GLRK.reveal.hint.lead", {
-      tier: game.i18n.localize(nextTier.label),
-    });
-  } else if (rule.mode === "bonus") {
-    hint = game.i18n.localize("GLRK.reveal.hint.bonus");
-  } else if (rule.mode === "hedged") {
-    hint = game.i18n.localize("GLRK.reveal.hint.hedged");
-  } else if (rule.mode === "blank") {
-    hint = game.i18n.localize("GLRK.reveal.hint.blank");
-  }
+  if (rule.mode === "bonus") hint = game.i18n.localize("GLRK.reveal.hint.bonus");
+  else if (rule.mode === "hedged") hint = game.i18n.localize("GLRK.reveal.hint.hedged");
+  else if (rule.mode === "blank") hint = game.i18n.localize("GLRK.reveal.hint.blank");
+  else if (rule.mode === "lead") hint = game.i18n.localize("GLRK.reveal.hint.lead");
 
   return {
     band: bandKey ?? null,
     mode: rule.mode,
     modeLabel: game.i18n.localize(`GLRK.mode.${rule.mode}`),
-    depth: rule.depth,
-    tiers: unlocked,
+    text,
+    hasText: !!text,
     wrong,
     wrongSource,
     // Precomputed for the template: the suite registers no Handlebars helpers,
@@ -126,7 +118,5 @@ export function revealMatrix(ladder, opts) {
   }));
 }
 
-/** Heading text for a tier key, for templates that render outside a reveal. */
-export const tierHeading = (key) => HEADINGS[key] ?? key;
-
-export { TIER_KEYS };
+/** Heading text for a band key, for templates that render outside a reveal. */
+export const bandHeading = (key) => HEADINGS[key] ?? key;
