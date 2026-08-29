@@ -26,7 +26,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
-import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
+import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
@@ -103,7 +103,8 @@ function makeBarMesh(role, opts) {
   const uniforms = {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
-    uTemp: 0, uCracked: 0, uSeg: opts.segments, uRole: role,
+    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default,
+    uRole: role,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uRamp: opts.ramp,
@@ -224,6 +225,7 @@ class BarHost {
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
+          mesh.shader.uniforms.uSegW = this.dividerWidth();
         }
         if (entry.anims[role]) entry.anims[role].motionScale = opts.motionScale;
       }
@@ -399,11 +401,28 @@ class BarHost {
    * zero.
    */
   segmentsFor(bar) {
+    /* The switch belongs here rather than beside each write, for the same
+       reason the per-HP count does: three call sites resolving "are there
+       divisions" independently is three chances for one of them to keep
+       dividing a bar the GM turned the dividers off on. */
+    if (this.opts.dividers === false) return 0;
     if (this.opts.segmentMode !== "perHp") return this.opts.segments;
     const per = Number(this.opts.segmentSize);
     const max = Number(bar?.max);
     if (!(per > 0) || !Number.isFinite(max) || max <= 0) return 0;
     return clamp(Math.ceil(max / per), 0, SEGMENTS.max);
+  }
+
+  /**
+   * The gap between two plates, in device pixels.
+   *
+   * Clamped here as well as ranged in the settings UI, because the shader
+   * multiplies the floor by it: a negative value out of a hand-edited world
+   * would invert the clamp and take the *whole* fill out.
+   */
+  dividerWidth() {
+    const w = Number(this.opts.dividerWidth);
+    return Number.isFinite(w) ? clamp(w, DIVIDER.min, DIVIDER.max) : DIVIDER.default;
   }
 
   layout(entry) {
@@ -430,6 +449,7 @@ class BarHost {
       if (!mesh) {
         mesh = makeBarMesh(roleId, {
           segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0,
+          dividerWidth: this.dividerWidth(),
           ramp: this.ramp,
           seed: entry.seed,
         });
@@ -589,6 +609,7 @@ class BarHost {
       const u = mesh.shader.uniforms;
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
+      u.uSegW = this.dividerWidth();
       u.uTime = time;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;

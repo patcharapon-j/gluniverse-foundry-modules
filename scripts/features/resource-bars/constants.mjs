@@ -16,6 +16,8 @@ export const SETTINGS = Object.freeze({
   segmentMode: PREFIX + "segmentMode",     // "count" | "perHp"
   segments: PREFIX + "segments",           // divisions across the fill, 0 = continuous
   segmentSize: PREFIX + "segmentSize",     // HP per division, when mode is perHp
+  dividers: PREFIX + "dividers",           // draw the divisions at all
+  dividerWidth: PREFIX + "dividerWidth",   // gap between plates, in device pixels
   numbersForce: PREFIX + "numbersForce",   // player | hover | always | never
   lowThreshold: PREFIX + "lowThreshold",   // percent at which the low state engages
   floatingDeltas: PREFIX + "floatingDeltas",
@@ -87,6 +89,24 @@ export const OFFSET = Object.freeze({ min: -3, max: 3, step: 0.05 });
  * gap than plate long before the fade takes over.
  */
 export const SEGMENTS = Object.freeze({ max: 60, sizeMin: 1, sizeMax: 100 });
+
+/**
+ * How wide the gap between two plates is, in **device pixels**.
+ *
+ * Device pixels and not geometry units for the reason the shader's comment
+ * gives at length: a fixed geometry width is ~2px on a HiDPI display and
+ * sub-pixel on an ordinary one, where `rbDetail` correctly deletes it and the
+ * divisions — and with them the colour-blind position channel — silently
+ * disappear for every player without a retina monitor.
+ *
+ * `min` is not a taste. `rbDetail` fades anything under GL_FADE_HI (2.2 device
+ * pixels) out, so a thinner choice than that would not give the GM a *finer*
+ * divider, it would give them a *fainter* one — a setting whose lowest values
+ * look like a bug. Three is the first whole pixel above that line, so every
+ * value the GM can pick draws at full strength. `tools/resource-bar-check.mjs`
+ * pins it against the shader's own thresholds.
+ */
+export const DIVIDER = Object.freeze({ min: 3, max: 14, step: 1, default: 6 });
 
 /**
  * Readout size limits, as a multiplier on the size the bar's own height gives.

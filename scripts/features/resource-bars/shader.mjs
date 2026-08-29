@@ -72,6 +72,7 @@ export const UNIFORMS = Object.freeze({
   uWave: "float",     // change-sweep amplitude, 0..1
   uWaveX: "float",    // the sweep front's position, as a fraction along the bar
   uSeg: "float",      // divisions across the fill, 0 = one continuous plate
+  uSegW: "float",     // the gap between two plates, in device pixels
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
   uBreak: "float",     // guard-break fracture, 0..1 (0 = intact); hero row only
@@ -207,6 +208,7 @@ uniform float uChip;
 uniform float uWave;
 uniform float uWaveX;
 uniform float uSeg;
+uniform float uSegW;
 uniform float uRole;
 uniform float uBreak;
 uniform float uBreakT;
@@ -499,12 +501,15 @@ void main(void) {
        without a HiDPI monitor. Previewing at dpr 2 cannot show you this.
 
        Pinned to px, the gap is the same width at every size and on every
-       display; 6.0 clears GL_FADE_HI several times over, so it is never
-       half-faded and the plates read as assembled parts rather than as a bar
-       with scratches in it. The segW cap keeps a bar with many divisions from
+       display; uSegW is that width, in device pixels, and every value the GM
+       can choose clears GL_FADE_HI (see DIVIDER in constants.mjs), so it is
+       never half-faded and the plates read as assembled parts rather than as a
+       bar with scratches in it. The floor scales with it rather than sitting at
+       a fixed 0.030, so a wider divider is still wider on a bar tall enough for
+       the floor to win. The segW cap keeps a bar with many divisions from
        becoming more gap than plate — and it is the cap, not the px term, that
        does the work once a per-HP division count runs into the dozens. */
-    float gapP = min(max(px * 6.0, 0.030), segW * 0.42);
+    float gapP = min(max(px * uSegW, 0.005 * uSegW), segW * 0.42);
     segMask = mix(1.0, rbEdge(0.0, gapP, sx), rbDetail(gapP) * hero);
   }
 

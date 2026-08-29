@@ -30,6 +30,7 @@ const src = async (p) => readFile(rel(p), "utf8");
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const shader = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
+const { DIVIDER } = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
 const anim = await import(new URL("scripts/features/resource-bars/anim.mjs", ROOT).href);
 const ramp = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 
@@ -367,7 +368,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail("The per-HP division count does not round up, so the remainder lands in the first plate — the one at the full-health end.");
   else if (!/per > 0/.test(h) || !/Number\.isFinite\(max\)/.test(h))
     fail("segmentsFor does not guard its divisor and its maximum; a creature with no maximum divides by zero and asks for an infinite plate count.");
-  else ok("divisions resolve through one helper, round up, and fall back to a continuous fill");
+  else if (!/opts\.dividers === false/.test(h))
+    fail("segmentsFor does not consult the dividers switch, so turning the dividers off is resolved somewhere else — or not at all in the per-HP mode, which has no count to zero.");
+  else if (!/uSegW\s*=\s*this\.dividerWidth\(\)/.test(h))
+    fail("Something writes uSegW without going through dividerWidth(), so an out-of-range width reaches the shader unclamped.");
+  else ok("divisions resolve through one helper, round up, honour the on/off switch, and fall back to a continuous fill");
 }
 
 /* ── 7j. Every registered setting has its strings ───────────────────────── */
@@ -667,9 +672,22 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   /* The segment gap is deliberately *not* a fixed magnitude: pinned to px it is
      the same hairline on every display. Check that it still is — a literal
      creeping back in here is the retina-only-divisions bug returning. */
-  if (!/float gapP = min\(max\(px \* [0-9.]+,/.test(glsl))
+  if (!/float gapP = min\(max\(px \* (?:[0-9.]+|uSegW),/.test(glsl))
     fail("The segment gap is not derived from px. A fixed value is ~2px on a HiDPI display and sub-pixel on an ordinary one, so the divisions vanish for players without a retina monitor.");
   else ok("segment gap is pinned to device pixels, not geometry units");
+
+  /* And every width the GM can *choose* has to clear the fade, or the thin end
+     of the slider hands them a fainter divider rather than a finer one — which
+     renders perfectly and reads as the setting being broken. The floor scales
+     with the width for the same reason: a fixed floor makes every width below
+     it draw identically on a tall bar. */
+  if (DIVIDER.min < GL_FADE_HI)
+    fail(`The thinnest divider the GM can pick is ${DIVIDER.min} device pixels, under rbDetail's ${GL_FADE_HI}px fade. That end of the slider fades the divisions out instead of thinning them.`);
+  else if (DIVIDER.default < DIVIDER.min || DIVIDER.default > DIVIDER.max)
+    fail(`The default divider width (${DIVIDER.default}) is outside the range the setting offers.`);
+  else if (!/max\(px \* uSegW, [0-9.]+ \* uSegW\)/.test(glsl))
+    fail("The segment gap's floor does not scale with uSegW, so every width below it draws the same on a bar tall enough for the floor to win — the thickness setting silently stops doing anything.");
+  else ok(`every divider width ${DIVIDER.min}–${DIVIDER.max}px clears the ${GL_FADE_HI}px fade, and the floor scales with it`);
 
   const gated = [...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)]
     .map((m) => ({ raw: m[0], value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) }));
