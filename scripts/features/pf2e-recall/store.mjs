@@ -32,6 +32,8 @@ import {
   FLAG_LADDER,
   FLAG_PRESENTATION,
   presentationByKey,
+  presentationForKey,
+  presentationForText,
 } from "./constants.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
@@ -169,7 +171,11 @@ export async function writeContext(doc, text) {
 /* -------------------------------------------------- presentation -------- */
 
 /**
- * How the knowledge reaches the player: `{key, note}`, kept in ONE flag.
+ * How the knowledge reaches the player: `{key, text}`, kept in ONE flag.
+ *
+ * `text` is the GM's own words and the authority; `key` only remembers which
+ * preset last filled the box, so the payload can offer that preset's scaffolding
+ * behind their words rather than instead of them.
  *
  * Both halves travel together for the reason statsblock-import keeps
  * `{context, rung, level}` in one flag — they are a single intent, and redoing
@@ -183,18 +189,35 @@ export async function writeContext(doc, text) {
  */
 export function readPresentation(doc) {
   const stored = doc?.getFlag?.(SUITE_ID, FLAG_PRESENTATION);
-  const fallbackKey = worldSetting("rk.defaultPresentation", DEFAULT_PRESENTATION);
-  const fallbackNote = worldSetting("rk.defaultPresentationNote", "");
-  const key = typeof stored?.key === "string" ? stored.key : fallbackKey;
-  const note = typeof stored?.note === "string" ? stored.note : fallbackNote;
-  return { key: presentationByKey(key).key, note };
+
+  // `note` is read for anyone who ran the two-field build of this branch; it was
+  // never released, so this is courtesy rather than a migration path.
+  const storedText = typeof stored?.text === "string" ? stored.text : stored?.note;
+  if (typeof storedText === "string") {
+    return { key: presentationForKey(stored?.key)?.key ?? null, text: storedText };
+  }
+
+  // Nothing set on this subject: the world's default fills the box. A world that
+  // typed its OWN sentence there has no preset behind it, and saying otherwise
+  // would hand the model scaffolding nobody chose.
+  const defaultKey = presentationByKey(
+    worldSetting("rk.defaultPresentation", DEFAULT_PRESENTATION)
+  );
+  const defaultText = String(worldSetting("rk.defaultPresentationText", "") ?? "").trim();
+  if (!defaultText) return { key: defaultKey.key, text: defaultKey.text };
+  return { key: presentationForText(defaultText)?.key ?? null, text: defaultText };
 }
 
-export async function writePresentation(doc, { key, note }) {
+export async function writePresentation(doc, { key, text }) {
   if (!doc) return;
+  const written = String(text ?? "").trim();
   await doc.setFlag(SUITE_ID, FLAG_PRESENTATION, {
-    key: presentationByKey(key).key,
-    note: String(note ?? "").trim(),
+    // Strict, and null-preserving: coercing an absent key to the baseline here
+    // would invent a preset the GM never picked and quietly put its scaffolding
+    // behind their words. A preset the box still quotes verbatim is recognised
+    // from the text itself, so nothing is lost by being honest about it.
+    key: presentationForKey(key)?.key ?? presentationForText(written)?.key ?? null,
+    text: written,
   });
 }
 
@@ -223,8 +246,8 @@ function renderMirror(record) {
   // The presentation is part of what these paragraphs ARE, so a GM reading the
   // mirror with the feature disabled still needs to know they are looking at a
   // console log rather than a memory.
-  const stamp = record.presentation?.key
-    ? `<p><em>${escapeHTML(presentationByKey(record.presentation.key).label)}</em></p>`
+  const stamp = record.presentation?.text
+    ? `<p><em>${escapeHTML(record.presentation.text)}</em></p>`
     : "";
   return `<section data-glrk="ladder"><h3>${escapeHTML(mirrorHeading())}</h3>${stamp}${rows}</section>`;
 }

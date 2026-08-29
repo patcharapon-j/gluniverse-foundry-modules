@@ -80,8 +80,14 @@ paragraph and bolting sentences onto it.
 Before writing anything, settle **who is speaking and what the knowing is made
 of**. The bands say how much is known; this says how it arrives, and it changes
 the content, not just the wording. If the user pasted a prompt from the feature
-it names the presentation explicitly — follow it. If they have not, ask, or
-default to the character's own memory.
+it names the presentation in the GM's own words — those words win, and anything
+listed under them is background. If they have not, ask, or default to the
+character's own memory.
+
+When the description is the user's own rather than one of the rows below, work
+out the same four things from it — speaker, what the knowledge is made of, how
+*that* source goes wrong, and whether there is anyone to address at all — instead
+of assuming a person is remembering. Five of the six rows below are not a person.
 
 | Presentation | Speaker | Made of | How it goes wrong |
 |---|---|---|---|

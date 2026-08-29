@@ -44,6 +44,7 @@ const {
   OVERLONG_FACTOR,
   PRESENTATIONS,
   presentationByKey,
+  presentationForText,
 } = await import(
   join(FEATURE, "constants.mjs")
 );
@@ -258,7 +259,7 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
 {
   const seenKeys = new Set();
   for (const style of PRESENTATIONS) {
-    for (const field of ["key", "label", "speaker", "evidence", "falsehood", "address"]) {
+    for (const field of ["key", "label", "text", "speaker", "evidence", "falsehood", "address"]) {
       if (!style[field] || !String(style[field]).trim()) {
         fail(`Presentation "${style.key ?? "?"}" has no ${field}; the payload would print undefined.`);
       }
@@ -271,6 +272,20 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
   }
   if (presentationByKey("no-such-presentation").key !== DEFAULT_PRESENTATION) {
     fail("presentationByKey did not fall back to the default; a stale flag would throw at read time.");
+  }
+  // The box is matched back to a preset by its SENTENCE, so two presets sharing
+  // one sentence would make that lookup arbitrary, and a preset whose sentence
+  // does not round-trip could never be recognised as itself again.
+  for (const style of PRESENTATIONS) {
+    if (presentationForText(style.text)?.key !== style.key) {
+      fail(`Preset "${style.key}" is not recognised from its own sentence.`);
+    }
+    if (presentationForText(` ${style.text.toUpperCase()} `)?.key !== style.key) {
+      fail(`Preset "${style.key}" stops being itself over whitespace or capitals.`);
+    }
+  }
+  if (presentationForText("something a GM typed") !== null) {
+    fail("Arbitrary text matched a preset; the GM's own words would be overwritten by scaffolding.");
   }
   // "types, never numbers" is a load-bearing rule, and exactly one presentation
   // is documented as its exception. A second one arriving unnoticed would quietly
@@ -325,34 +340,85 @@ const brief = {
 };
 const payload = buildPayload(brief, {});
 
-/* The presentation is baked into the paragraphs, so every field of the chosen
-   one has to actually reach the model. A field silently dropped here produces a
-   ladder in the wrong voice with nothing to show it went wrong. */
+/* One field, and the GM's words outrank the preset behind them.
+   Three cases, and the precedence between them is the whole feature: a preset
+   taken as offered brings its scaffolding as fact; a preset written over brings
+   it as background, ranked below the GM; free text brings none and asks the
+   model to derive the same four things. Getting this wrong is silent — the
+   payload simply argues with itself and the ladder comes back confused. */
+const WINS = "my words win";
+const DERIVE = "Work out from that description";
+
 for (const style of PRESENTATIONS) {
-  const styled = buildPayload(brief, {
-    presentation: { key: style.key, note: "the ship's medical scanner, terse" },
+  // 1. the preset's own sentence, untouched.
+  const asOffered = buildPayload(brief, {
+    presentation: { key: style.key, text: style.text },
   });
-  for (const field of ["label", "speaker", "evidence", "falsehood", "address"]) {
-    if (!styled.includes(style[field])) {
-      fail(`Payload for presentation "${style.key}" dropped its ${field}.`);
+  for (const field of ["speaker", "evidence", "falsehood", "address"]) {
+    if (!asOffered.includes(style[field])) {
+      fail(`Payload for preset "${style.key}" taken as offered dropped its ${field}.`);
     }
   }
-  if (!styled.includes("the ship's medical scanner, terse")) {
-    fail(`Payload for presentation "${style.key}" dropped the GM's own note.`);
+  if (!asOffered.includes(style.text)) fail(`Payload for preset "${style.key}" dropped its own sentence.`);
+  if (asOffered.includes(WINS)) {
+    fail(`Payload for preset "${style.key}" ranked its scaffolding below words the GM never wrote.`);
   }
-  // The numbers exception must be stated where the rule is, not left implied.
-  const statesException = /stated exception/.test(styled);
-  if (style.numbers !== statesException) {
-    fail(`Presentation "${style.key}" and the payload disagree about the numbers exception.`);
+  if (asOffered.includes(DERIVE)) {
+    fail(`Payload for preset "${style.key}" asked the model to derive fields it was handed.`);
+  }
+
+  // 2. the same preset, written over by the GM.
+  const written = "A cracked bronze mirror that answers in someone else's voice.";
+  const overridden = buildPayload(brief, { presentation: { key: style.key, text: written } });
+  if (!overridden.includes(written)) fail(`Payload dropped the GM's own words over preset "${style.key}".`);
+  if (!overridden.includes(WINS)) {
+    fail(`Payload kept preset "${style.key}" as fact under words that replaced it; the two would argue.`);
+  }
+  if (!overridden.includes(style.speaker)) {
+    fail(`Payload dropped preset "${style.key}"'s scaffolding entirely; it is still worth offering as background.`);
+  }
+
+  // The numbers exception belongs to the preset's own sentence, not to a key
+  // left lying behind text that no longer describes a readout.
+  const exceptionShown = /stated exception/.test(asOffered);
+  if (style.numbers !== exceptionShown) {
+    fail(`Preset "${style.key}" and the payload disagree about the numbers exception.`);
+  }
+  if (/stated exception/.test(overridden)) {
+    fail(`Preset "${style.key}" licensed numbers under words the GM wrote over it with.`);
   }
 }
 
-/* An unknown key must still produce a usable payload: a world whose default
-   setting names a presentation this build no longer ships still has to prep. */
-if (!buildPayload(brief, { presentation: { key: "gone" } }).includes(
-  presentationByKey(DEFAULT_PRESENTATION).speaker
-)) {
-  fail("An unrecognised presentation key did not fall back to the default in the payload.");
+/* 3. free text nobody picked: no scaffolding to hand over, so the model is
+   asked the same four questions rather than left to assume a person is
+   speaking — which is what it does by default, and which is wrong for five of
+   the six presets. */
+{
+  const free = buildPayload(brief, {
+    presentation: { key: null, text: "A dead god mumbling in your sleep." },
+  });
+  if (!free.includes("A dead god mumbling in your sleep.")) fail("Payload dropped free-typed presentation text.");
+  if (!free.includes(DERIVE)) fail("Free-typed presentation did not ask the model to derive speaker/evidence/falsehood.");
+  if (free.includes(presentationByKey(DEFAULT_PRESENTATION).speaker)) {
+    fail("Free-typed presentation silently inherited the default preset's scaffolding.");
+  }
+}
+
+/* 4. an empty box is the baseline, not the absence of a presentation. An
+   unknown key must still prep: a world whose default setting names a
+   presentation this build no longer ships is somebody's Tuesday. */
+{
+  const empty = buildPayload(brief, { presentation: { key: DEFAULT_PRESENTATION, text: "" } });
+  if (!empty.includes(presentationByKey(DEFAULT_PRESENTATION).speaker)) {
+    fail("An empty presentation box did not fall back to the default preset.");
+  }
+  if (empty.includes(DERIVE)) fail("An empty box asked the model to derive fields the fallback already supplies.");
+
+  if (!buildPayload(brief, { presentation: { key: "gone", text: "" } }).includes(
+    presentationByKey(DEFAULT_PRESENTATION).speaker
+  )) {
+    fail("An unrecognised presentation key did not fall back to the default in the payload.");
+  }
 }
 
 /* The statblock is what the middle bands ("how it fights and how it dies") are

@@ -129,12 +129,20 @@ export const OVERLONG_FACTOR = 1.25;
  * — the payload is copied out and the reply pasted back — so a paragraph
  * cannot be re-voiced at read time. What is stored was authored this way.
  *
+ * There is ONE field for this in the UI: a box the GM writes in. The presets
+ * below fill that box in a click and bring their own scaffolding with them, but
+ * they never outrank it — whatever the GM has written is the presentation, and
+ * a preset whose sentence the GM has edited away is no longer describing what
+ * they asked for. See renderPresentation() in prompt.mjs for the precedence.
+ *
  * Each entry is a TABLE OF WHAT CHANGES, not an adjective, for the reason
  * statsblock-import's RUNGS states outright: a model cannot calibrate "make it
  * feel like a terminal", but it can obey "the system is never unsure; it is
  * wrong with total confidence". The fields are deliberately few and each one
  * does work in the payload:
  *
+ *   text      - the one sentence the preset types into the GM's box. The box is
+ *               the field; the presets are only a fast way to fill it.
  *   speaker   - who or what is talking, and to whom
  *   evidence  - what the knowledge is MADE of at every true band
  *   falsehood - how it goes wrong at Disastrous and Inept. This is the field
@@ -155,6 +163,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "recall",
     label: "What the character remembers",
+    text: "What the character themselves remembers.",
     speaker: "You, the GM, narrating to the character who rolled.",
     evidence:
       "The character's own memory — what they were taught, what they overheard, what they once saw and half kept.",
@@ -166,6 +175,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "investigation",
     label: "What they work out on the spot",
+    text: "What they work out on the spot, from the thing in front of them.",
     speaker:
       "You, the GM, narrating to the character as they examine the thing in front of them.",
     evidence:
@@ -179,6 +189,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "archive",
     label: "Research: books, records, an expert",
+    text: "Research — a book, a record, or an expert answering.",
     speaker:
       "The source itself — a book, a record, a scholar answering — quoted or closely paraphrased.",
     evidence:
@@ -192,6 +203,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "terminal",
     label: "A console, datapad or system log",
+    text: "A console, datapad or system log.",
     speaker: "The system. No narrator and no addressee — output on a screen.",
     evidence:
       "Records the system holds: catalogue entries, sensor returns, incident logs, maintenance notes, timestamps, whatever a machine would actually have stored.",
@@ -204,6 +216,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "divination",
     label: "A vision, augury or spirit answering",
+    text: "A vision, an augury, or a spirit answering.",
     speaker:
       "You, the GM, describing what the character is shown rather than what they know.",
     evidence:
@@ -217,6 +230,7 @@ export const PRESENTATIONS = Object.freeze([
   Object.freeze({
     key: "readout",
     label: "A bestiary or game-style stat readout",
+    text: "A bestiary entry or game-style stat readout.",
     speaker:
       "A game system's own entry, quoted deliberately — a bestiary page, a scanner panel, a codex record.",
     evidence:
@@ -241,8 +255,36 @@ const PRESENTATION_BY_KEY = new Map(PRESENTATIONS.map((p) => [p.key, p]));
 export const presentationByKey = (key) =>
   PRESENTATION_BY_KEY.get(key) ?? PRESENTATION_BY_KEY.get(DEFAULT_PRESENTATION);
 
-/** Flag key holding `{key, note}` — the presentation and its free-text refinement. */
+/** Flag key holding `{key, text}` — the GM's own words, and the preset behind them. */
 export const FLAG_PRESENTATION = "rk.presentation";
+
+/**
+ * The preset a piece of typed text still is, or null.
+ *
+ * Compared loosely (case and trailing punctuation are not meaning) because the
+ * question being asked is "has the GM written their own thing here?", and a
+ * stray full stop is not the GM writing their own thing.
+ */
+const normalizeText = (value) =>
+  String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?]+$/, "");
+
+const PRESENTATION_BY_TEXT = new Map(
+  PRESENTATIONS.map((style) => [normalizeText(style.text), style])
+);
+
+export const presentationForText = (text) =>
+  PRESENTATION_BY_TEXT.get(normalizeText(text)) ?? null;
+
+/**
+ * Strict lookup: null for "no preset", where presentationByKey() would hand
+ * back the baseline.
+ *
+ * The difference is load-bearing. A null key means nobody picked a preset, so
+ * there is no scaffolding to offer behind the GM's words and the payload has to
+ * ask for it instead; falling back to the baseline there would quietly tell the
+ * model a character is speaking when the GM described a machine.
+ */
+export const presentationForKey = (key) => PRESENTATION_BY_KEY.get(key) ?? null;
 
 /**
  * Competence band -> how the answer is DELIVERED.

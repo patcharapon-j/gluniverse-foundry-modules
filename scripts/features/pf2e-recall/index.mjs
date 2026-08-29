@@ -60,9 +60,9 @@ function registerSettings() {
     ),
   });
 
-  game.settings.register(SUITE_ID, "rk.defaultPresentationNote", {
-    name: "GLRK.settings.defaultPresentationNote.name",
-    hint: "GLRK.settings.defaultPresentationNote.hint",
+  game.settings.register(SUITE_ID, "rk.defaultPresentationText", {
+    name: "GLRK.settings.defaultPresentationText.name",
+    hint: "GLRK.settings.defaultPresentationText.hint",
     scope: "world",
     config: true,
     type: String,

@@ -84,14 +84,17 @@
 
     <label class="gl-tech-label" for="glrk-presentation">{{localize "GLRK.generate.presentationLabel"}}</label>
     <p class="glrk-help">{{localize "GLRK.generate.presentationHint"}}</p>
-    <select class="gl-field" id="glrk-presentation" name="glrk-presentation">
-      {{#each presentations}}
-      <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+    {{!-- Presets fill the box below; they are not a value it holds. Whatever is
+          left in the box is what gets used. --}}
+    <div class="glrk-presets">
+      {{#each presets}}
+      <button type="button" class="gl-btn glrk-preset{{#if active}} is-active{{/if}}"
+              data-action="usePreset" data-preset="{{key}}" data-text="{{text}}">{{label}}</button>
       {{/each}}
-    </select>
-    <textarea class="gl-field glrk-presentation-note" id="glrk-presentation-note"
-              name="glrk-presentation-note" rows="2"
-              placeholder="{{localize 'GLRK.generate.presentationNotePlaceholder'}}">{{presentationNote}}</textarea>
+    </div>
+    <textarea class="gl-field" id="glrk-presentation" name="glrk-presentation" rows="2"
+              data-preset="{{presentationKey}}"
+              placeholder="{{localize 'GLRK.generate.presentationPlaceholder'}}">{{presentationText}}</textarea>
 
     <hr class="gl-divider">
 
