@@ -1,7 +1,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { FEATURE_ID, OFFSET, PREFIX, SEGMENTS, SETTINGS } from "./constants.mjs";
+import { FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -52,6 +52,25 @@ function registerSettings() {
     type: Number,
     range: { min: SEGMENTS.sizeMin, max: SEGMENTS.sizeMax, step: 1 },
     default: 5,
+  });
+
+  /* The GM's say over the readout. It overrides each player's own choice
+     rather than replacing the setting, so turning it back to "let each player
+     choose" restores whatever they had picked. It cannot widen what a player is
+     allowed to see: canViewNumbers consults the token's Display Bars first and
+     the mode second, so a forced "always" still draws nothing on a token whose
+     bars that player cannot see. */
+  world(SETTINGS.numbersForce, {
+    name: "GLRB.Settings.NumbersForce.Name",
+    hint: "GLRB.Settings.NumbersForce.Hint",
+    type: String,
+    choices: {
+      player: "GLRB.Settings.NumbersForce.Player",
+      hover: "GLRB.Settings.NumbersForce.Hover",
+      always: "GLRB.Settings.NumbersForce.Always",
+      never: "GLRB.Settings.NumbersForce.Never",
+    },
+    default: "player",
   });
 
   world(SETTINGS.lowThreshold, {
@@ -120,6 +139,14 @@ function registerSettings() {
     type: String,
     choices: { default: "GLRB.Settings.Ramp.Default", safe: "GLRB.Settings.Ramp.Safe" },
     default: "default",
+  });
+
+  client(SETTINGS.numberScale, {
+    name: "GLRB.Settings.NumberScale.Name",
+    hint: "GLRB.Settings.NumberScale.Hint",
+    type: Number,
+    range: { min: READOUT.min, max: READOUT.max, step: READOUT.step },
+    default: 1,
   });
 
   client(SETTINGS.numbers, {

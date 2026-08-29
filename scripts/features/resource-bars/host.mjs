@@ -23,7 +23,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { FRAGMENT_SHADER, VERTEX_SHADER, SKEW } from "./shader.mjs";
+import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
 import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
@@ -601,7 +601,10 @@ class BarHost {
        Only its own scale and colour animate — the punch is the number
        reacting, not the bar being thrown around. */
     const w = base.w, h = base.h;
-    const right = w * (((w / h) - 0.40) / (w / h));
+    const numScale = this.opts.numberScale > 0 ? this.opts.numberScale : 1;
+    /* Measured in bar heights from the quad's right edge, and shared with the
+       shader, because what it has to clear is the corner the shader cuts. */
+    const right = w - READOUT_INSET * h;
     const mid = h * 0.5;
     const anchorX = hm.position.x + right;
     const anchorY = hm.position.y + mid;
@@ -613,24 +616,33 @@ class BarHost {
     const value = Math.round((a ? a.num : r.hero.frac) * r.hero.max);
     const label = value + "/" + r.hero.max;
 
-    if (label !== entry.lastNumber || !entry.textMesh) {
-      entry.lastNumber = label;
+    /* Cached against everything that shapes the run, not only its text. Size
+       comes from the bar's height and the viewer's setting, and neither of
+       those changes the label — so a key of the label alone leaves a resized
+       token, or a just-moved size slider, drawing the old geometry until the
+       creature next takes damage. It looks like the setting does nothing. */
+    const stamp = label + "@" + (h * numScale).toFixed(2) + ":" + w.toFixed(1);
+    if (stamp !== entry.lastNumber || !entry.textMesh) {
+      entry.lastNumber = stamp;
       /* The current value is the reading; the maximum is the scale it is read
-         against, and a scale printed at the same weight as its reading competes
-         with it. Smaller and quieter, so the eye lands on the number that
-         changes and the denominator is there when it is wanted.
+         against, so it steps back — but only by one step. It was 0.22/0.30
+         once, which is furniture: a denominator you have to go looking for is
+         not serving the reading it belongs to. At full strength it competes
+         instead, because a small numeral at full ink is still high-contrast
+         against the plate. A slight step down carries the hierarchy while
+         leaving both halves legible at a glance.
 
-         Quieter here means *fainter*, not merely smaller: a small numeral at
-         full ink is still high-contrast against the plate and still catches the
-         eye first on a bar whose value has not changed. And the two of them sit
-         on a shared baseline rather than each on the mid-line, because a run
-         where every part is separately centred reads as three sizes of number
-         rather than as one reading with its scale beside it. */
+         The separator takes one step further than the maximum does, because it
+         is punctuation rather than information.
+
+         They also sit on a shared baseline rather than each on the mid-line,
+         because a run where every part is separately centred reads as three
+         sizes of number instead of as one reading. */
       const geo = runGeometry([
-        { text: String(value), size: h * 0.46 },
-        { text: "/", size: h * 0.23, dim: 0.22, bottom: true },
-        { text: String(r.hero.max), size: h * 0.24, dim: 0.30, bottom: true },
-      ], { right, mid, skew: SKEW });
+        { text: String(value), size: h * 0.46 * numScale },
+        { text: "/", size: h * 0.23 * numScale, dim: 0.62, bottom: true },
+        { text: String(r.hero.max), size: h * 0.24 * numScale, dim: 0.80, bottom: true },
+      ], { right, mid });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number
          rather than throwing it across the bar. */
@@ -660,9 +672,10 @@ class BarHost {
       return;
     }
 
-    if (pop.text !== entry.popupText || !entry.popupMesh) {
-      entry.popupText = pop.text;
-      const geo = runGeometry([{ text: pop.text, size: h * 0.44 }], { right, mid, skew: SKEW });
+    const popStamp = pop.text + "@" + (h * numScale).toFixed(2);
+    if (popStamp !== entry.popupText || !entry.popupMesh) {
+      entry.popupText = popStamp;
+      const geo = runGeometry([{ text: pop.text, size: h * 0.44 * numScale }], { right, mid });
       entry.popupMesh = this.swapTextMesh(entry, entry.popupMesh, geo,
         pop.heal ? HEAL_INK : HIT_INK, 1);
       entry.popupMesh?.pivot.set(right, mid);

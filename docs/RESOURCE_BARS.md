@@ -15,11 +15,64 @@ gloss without redrawing geometry, which is why the stock bars look the way they
 do. One quad and a fragment shader makes all of that free, and makes "animates
 every frame" cost nothing extra.
 
-The visual language is Etched Glass materials on *Honkai: Star Rail* geometry —
-a consistent shear, layers separated by air rather than welded into one frame, a
-flat high-key fill lit by a single hard specular, and asymmetric furniture at
-the ends. The palette is entirely the suite's own; the gold is
-`PALETTE.signalPale`.
+The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
+layers separated by air rather than welded into one frame, a flat high-key fill
+lit by a single hard specular, and **one cut corner, top-right**. The palette is
+entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
+exactly one place — the top of the stroke.
+
+The bar is **axis-aligned**. It used to lean, by a shear of 0.32 shared between
+the GLSL and the numerals' layout, and the lean was doing most of the work of
+making it look like this suite rather than like a progress bar. It was also the
+only thing on the canvas at that angle, which is the problem: a token, its
+border, its nameplate and every other module's furniture are all rectangles, and
+a bar that disagrees with them reads as costume rather than as design. The cut
+corner replaces it — the same corner `gl-tokens.css` takes out of every panel in
+the suite, so the family resemblance is now to the suite's own mark rather than
+to a borrowed angle.
+
+**The end furniture is gone too.** There used to be a milled gold bracket
+anchoring the left end and two pips of unequal height past the right, there to
+break the symmetry so the bar would not read as a form control. The cut corner
+does that job now, with none of the width.
+
+Between them the shear and the furniture were costing most of the inset. A body
+leaning 0.32 per unit of height overhangs its own box by half that on each side,
+and the quad had to carry the margin; the cap and the pips wanted the rest. What
+remains is 0.13, which is the bloom margin — light that stops dead at the quad
+edge is the clearest tell that something was drawn rather than lit — and the
+difference is fill. On the one element whose length *is* its content, that is
+the trade worth making twice. At true size on a 128px grid the pips were two
+three-pixel marks anyway, and ornament that cannot be resolved is just a shorter
+bar.
+
+**The cut and the readout share the bar's right end**, which sounds like a
+collision and is not. The reason is the shape of the run rather than the room
+left over: the run is right-aligned, so the part nearest the corner is the
+*maximum* — two-thirds the size of the value and sitting on the shared baseline
+rather than on the mid-line. Its ink reaches about a tenth of a bar-height above
+centre where the value reaches three tenths, so the small low part passes under
+the diagonal and the tall part is already well to its left.
+
+That is a real dependency between two decisions that look unrelated. Make the
+maximum bigger, or stop bottom-aligning it, or enlarge the cut, and the digits
+move up into the corner — and the rendered result is numerals lying across a
+diagonal, which reads as a clipped glyph rather than as a geometry error.
+`resource-bar-check` recomputes the clearance from those sizes and the atlas's
+own cell metrics rather than trusting the number.
+
+`CUT`, `BODY_INSET` and `READOUT_INSET` are exported from `shader.mjs` together,
+for the reason the shear used to be: the bar is drawn in GLSL and the numerals
+are laid out in JS, and one piece of geometry described from two files is how a
+bar and its readout end up disagreeing.
+
+`READOUT_INSET` is measured to the **fill area**, not to the body. Between the
+body's edge and the fill there is a stroke, a gap of air and a lip; anchor to the
+body and the last digit is drawn over the frame, which reads as a clipped numeral
+rather than as a misplaced one. `resource-bar-check` derives that inset from the
+GLSL's own `sw`/`air`/`lip` rather than repeating it, so widening any of the
+three moves the requirement with it, and pins that the cut has not wandered back
+to the readout's end.
 
 ---
 
@@ -146,6 +199,17 @@ fades a division out once its gap falls under a device pixel, but the count is
 also what sets that gap, so past the cap the bar is more gap than plate long
 before the fade takes over.
 
+The gap itself is **six device pixels**, floored at 0.030 in geometry units and
+capped at 0.42 of a plate. Six rather than the two it started at because the gap
+is what makes the fill read as assembled plates rather than as a bar with
+scratches in it, and because it clears `GL_FADE_HI` several times over so it is
+never caught half-faded. Device pixels rather than geometry units for the reason
+in **Units** above: a fixed value is two pixels on a retina display and
+sub-pixel on an ordinary one, where `rbDetail` deletes it and the colour-blind
+position channel silently disappears for half the table. The cap is what holds
+the line at forty divisions, where the px term would otherwise win and leave
+more gap than plate.
+
 `uSeg` therefore depends on the *creature*, not only on the setting, and it is
 written from three places — mesh creation, `configure`, and the per-frame write.
 All three go through `segmentsFor()`. Any one of them reading `opts.segments`
@@ -215,16 +279,41 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
-The **maximum is the scale, not the reading**, so it is smaller, fainter and on
-the reading's baseline. Fainter matters as much as smaller: a small numeral at
-full ink is still high-contrast against the plate and still lands first on a bar
-whose value has not changed. Baseline matters because a run where every part is
-separately centred reads as three sizes of number rather than as one reading
-with its scale beside it. Alignment is measured against the **ink**, not the
-glyph cell: the atlas bakes with `textBaseline "middle"`, so lining the cells up
-leaves the ink a couple of pixels out, which at this size reads as a mistake.
-`runGeometry` takes the offset from `actualBoundingBoxDescent`, measured once
-when the atlas is built.
+The **maximum is the scale, not the reading**, so it steps back: one size
+down, one step of opacity down, on the reading's baseline. One step, and the
+band matters in both directions. At full strength a small numeral is still
+high-contrast against the plate and competes with the number that actually
+changes; at the 0.22/0.30 this used to carry, the denominator becomes furniture
+you have to go looking for. 0.80 ranks the two and leaves both legible at a
+glance. The separator goes one further, to 0.62, because it is punctuation
+rather than information.
+
+The weight rides on `aDim`, a per-vertex attribute, because a run is one mesh
+with one `uInk`. Anything else means a second mesh and a second geometry to keep
+in sync for what is visually one number, so the attribute is what keeps the run
+atomic — and `resource-bar-check` pins both halves of it and the band.
+
+The baseline matters because a run where every part is separately centred reads
+as three sizes of number rather than as one reading with its scale beside it.
+Alignment is measured against the **ink**, not the glyph cell: the atlas bakes
+with `textBaseline "middle"`, so lining the cells up leaves the ink a couple of
+pixels out, which at this size reads as a mistake. `runGeometry` takes the
+offset from `actualBoundingBoxDescent`, measured once when the atlas is built.
+
+**Size is the viewer's**, as a multiplier on what the bar's own height gives
+rather than as a pixel count. Every other dimension here is derived from the
+scene's grid, so an absolute size that reads correctly on a 100px-grid scene is
+a smudge or a banner on a 70px one and the whole stack needs re-tuning per
+scene; a multiplier holds its proportion at every grid size and zoom. The
+floating delta scales with it — they are one readout.
+
+The trap is the cache. Geometry is rebuilt only when its inputs change, and the
+obvious key is the label text, which is exactly what a size setting does *not*
+change. Keyed that way the slider moves, nothing happens, and the new size
+appears minutes later when the creature next takes damage, which reads as a
+broken setting rather than as a stale cache. `writeNumbers` keys on the resolved
+size and the row width as well as on the text; the same key is what re-sizes a
+readout when its token is resized.
 
 ---
 
@@ -274,6 +363,16 @@ it exists, rather than reimplementing the rule, so it cannot drift from core.
 The numeric readout is gated *more* narrowly still: a number is a more precise
 disclosure than a length, so it can be turned down but never up.
 
+**The GM's override rides on top of that gate, never around it.** Players choose
+when their own readout appears; a world setting can overrule that choice for the
+table, and the GM keeps their own. It is resolved in `main.mjs`, where the rest
+of the settings are resolved, and `visibility.mjs` is deliberately kept ignorant
+of it: `canViewNumbers` refuses on `canViewBars` **before** it reads the mode, so
+a forced `"always"` still draws nothing on a token whose bars that player cannot
+see. Resolving the override inside the permission file, or reordering those two
+tests, would print a hostile's hit points on every player's screen and look
+entirely correct doing it. `resource-bar-check` pins both.
+
 Foundry's bars are suppressed with `renderable = false`, never `visible = false`
 — `visible` is the permission answer this feature reads.
 
@@ -294,6 +393,23 @@ Three things sit off the ramp on purpose:
 | **Temp HP** | `cyanHot` | A buffer in front of your hit points |
 | **Shield rail** | `cyan` | The same idea, so they read as related |
 | **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
+
+Temp HP is drawn as a plate laid over the fill, and what sells it as a plate is
+the pattern rather than the colour: colour alone just makes a second fill. The
+pattern is **one family of diagonal ribs** at `SHIELD_PITCH`, drawn as bright
+lines on top of the health rather than as filled cells that would hide it — a
+pattern that obscures the health it sits on has broken the one rule the layer
+has. Parallel ribs also say *plating*, which is what temporary hit points are.
+
+The pitch is a legibility floor rather than a taste. It used to be two crossed
+families at 0.185, making diamond scales — a nice idea at preview size and noise
+at the size it actually draws. On a 128px grid the bar is 19px tall, so those
+diamonds were about three pixels across and the crossing halved the feature size
+again. Detail below a couple of pixels stops being a pattern and becomes grain
+over the one reading the player came to take. 0.44 puts a cell at about 8px,
+which is the smallest that still reads as a pattern; chevrons, a hex mesh,
+scales, a grid and a wave were all built and compared at that pitch before the
+ribs were kept.
 
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in
@@ -335,9 +451,16 @@ inside the permission gate, that every animated behaviour is shed-able *and*
 that no `SHED_ORDER` entry is dead, that the hitstop actually holds every
 channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
-per-token offset still means "inherit" rather than "zero", that the readout's
-per-glyph weight is wired end to end, that the shear has one home, and that
-every detail gate still resolves at the reference size. With Playwright present
+per-token offset still means "inherit" rather than "zero", that value and
+maximum still differ by one step of weight rather than by none or by a fade to
+furniture, that the readout still stands inside the fill rather than on the
+frame and the cut corner is still at the other end, that the readout's geometry
+cache is keyed on
+its size so the size setting is not silently inert, that the GM's readout
+override never reaches the permission gate and never outruns `displayBars`, that
+nothing has been sheared again, and that every detail gate still resolves at
+the
+reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 
 ```bash

@@ -212,20 +212,75 @@ const tokensCss = await src("styles/gl-tokens.css");
     fail("The Token Config inputs are not named for the flag path; they will not be saved by the sheet's own submit.");
 }
 
-/* ── 7d. Per-glyph weight survives ──────────────────────────────────────── */
+/* ── 7d. The maximum steps back by one step, not into furniture ─────────── */
 {
-  /* The maximum is drawn quieter than the current value through a per-vertex
-     attribute rather than a second mesh. Drop either half and the run still
-     renders — at full strength, silently undoing the hierarchy. */
+  /* The maximum is the scale the reading is measured against, so it ranks below
+     the value — by one step. Both failure modes render perfectly. At full
+     strength a small numeral is still high-contrast against the plate and
+     competes with the number that actually changes; down at the 0.22/0.30 this
+     once used, the denominator becomes furniture you have to go looking for.
+     So the weight is pinned to a band, not merely to existing, and the
+     mechanism carrying it is pinned end to end: drop either half of aDim and
+     the run still draws, at full strength, silently flattening the hierarchy. */
   const atlasSrc = strip(await src("scripts/features/resource-bars/atlas.mjs"));
+  const h = strip(hostSrc);
   const declared = /attribute float aDim/.test(atlasSrc);
   const supplied = /addAttribute\("aDim"/.test(atlasSrc);
   const used = /vDim/.test(atlasSrc);
+  const weights = [...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1]));
+  const faint = weights.filter((w) => w < 0.5);
   if (!declared || !supplied || !used)
-    fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength.");
-  else if (!/dim:\s*0?\.\d+/.test(strip(hostSrc)))
-    fail("Nothing in host.mjs passes a dim weight, so every part of the readout draws at the same strength.");
-  else ok("the maximum is drawn at reduced weight through the run's own attribute");
+    fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength and compete with the value.");
+  else if (!weights.length)
+    fail("Nothing in host.mjs passes a dim weight, so the maximum draws at exactly the value's strength and the two compete.");
+  else if (faint.length)
+    fail(`The readout carries a weight of ${Math.min(...faint)}; below 0.5 the maximum stops being a quieter number and becomes furniture the reader has to go looking for.`);
+  else if (!weights.some((w) => w < 1))
+    fail("Every readout weight is 1, so there is no step between the value and the maximum at all.");
+  else ok(`the maximum steps back by one step (weights ${weights.join(", ")}), through the run's own attribute`);
+}
+
+/* ── 7d2. The readout's size setting actually takes effect ──────────────── */
+{
+  /* The run's geometry is cached, and the cache key is what decides whether a
+     setting does anything. Key it on the label alone and the size slider moves,
+     nothing happens, and the new size appears minutes later when the creature
+     next takes damage — which reads as the setting being broken rather than as
+     a stale cache. The same key is what re-sizes a resized token's readout. */
+  const h = strip(hostSrc);
+  if (!/numberScale/.test(h))
+    fail("host.mjs never reads numberScale, so the readout size setting does nothing.");
+  else if (!/lastNumber\s*=\s*stamp/.test(h) || !/stamp\s*=[^;]*numScale/.test(h))
+    fail("The readout's geometry cache is not keyed on its size, so changing the size setting leaves the old geometry until the value next changes.");
+  else if (!/popupText\s*=\s*popStamp/.test(h) || !/popStamp\s*=[^;]*numScale/.test(h))
+    fail("The floating delta's cache is not keyed on its size, so it keeps whatever size it was first drawn at.");
+  else ok("the readout and the delta cache on their size, not only on their text");
+}
+
+/* ── 7d3. The GM override cannot widen what a player may see ────────────── */
+{
+  /* This is the one addition to this feature that could leak hit points. The
+     override picks *when* the readout is drawn; canViewNumbers decides whether
+     this client may see the bar at all, and it has to keep doing that first. An
+     override applied inside visibility.mjs, or a canViewNumbers that consulted
+     the mode before the permission, would let a forced "always" print a
+     hostile's hit points on every player's screen and look entirely correct. */
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const vis = strip(await src("scripts/features/resource-bars/visibility.mjs"));
+
+  const body = vis.slice(vis.indexOf("export function canViewNumbers"));
+
+  if (!/numbersForce/.test(mainSrc))
+    fail("Nothing resolves the numbersForce override, so the GM's setting is registered and then ignored.");
+  else if (/numbersForce/.test(vis) || /isGM/.test(body))
+    fail("The readout override has leaked into canViewNumbers; the permission gate must not know about it, or the two rules can drift apart.");
+  else {
+    const bars = body.indexOf("canViewBars");
+    const always = body.indexOf('"always"');
+    if (bars < 0 || always < 0 || bars > always)
+      fail('canViewNumbers reads the mode before it calls canViewBars, so a forced readout escapes the displayBars gate.');
+    else ok("a forced readout is still refused by displayBars before the mode is read");
+  }
 }
 
 /* ── 7e. The readout's scale sits on the reading's baseline ─────────────── */
@@ -324,16 +379,93 @@ const tokensCss = await src("styles/gl-tokens.css");
   if (missing.length)
     fail(`${missing.length} i18n key(s) referenced by the settings do not exist: ${missing.join(", ")}`);
   else ok("every GLRB string the settings reference resolves");
+
+  /* Every setting here names its keys as literals, which is what makes the sweep
+     above sufficient. Build one at runtime instead and nothing catches a missing
+     string: Foundry renders the key itself as the label, so the setting works,
+     ships, and looks like a bug nobody wrote. */
+  if (/name:\s*`|hint:\s*`|\[s,\s*`GLRB/.test(strip(idx)))
+    fail("index.mjs builds an i18n key from a template literal; the sweep above only sees quoted keys, so a missing string there is invisible to this check.");
 }
 
-/* ── 8. The shear has one home ──────────────────────────────────────────── */
+/* ── 8. The readout fits under the corner the bar cuts off itself ───────── */
 {
+  /* The bar takes a corner out of its own top-right and the readout is anchored
+     to that same end, which sounds like a collision. It is not, and the reason
+     is worth pinning because it is entirely about the *shape of the run*.
+
+     The run is right-aligned and its last part is the maximum: smaller than the
+     value and sitting on the shared baseline rather than on the mid-line, so its
+     ink reaches only about a tenth of a bar-height above centre. The diagonal at
+     that height is still outside it. The value, which does reach three tenths,
+     is already well to the left by the width of the maximum.
+
+     So the clearance is recomputed here from the two sizes host.mjs actually
+     asks for, plus the atlas's own cell geometry. Make the maximum bigger, stop
+     bottom-aligning it, or enlarge the cut, and this fails — where the rendered
+     result would simply be numerals lying across a diagonal, which reads as a
+     clipped glyph rather than as a geometry error. */
   const glsl = shader.FRAGMENT_SHADER;
-  if (!glsl.includes(`const float SKEW = ${shader.SKEW.toFixed(4)};`))
-    fail("The GLSL's SKEW does not come from the exported constant; the bar and its numerals will drift apart.");
-  else if (!/skew: SKEW/.test(strip(hostSrc)))
-    fail("host.mjs lays out numerals with something other than the exported SKEW.");
-  else ok(`shear is ${shader.SKEW} in exactly one place, shared by bar and numerals`);
+  const { CUT, BODY_INSET, READOUT_INSET } = shader;
+  const atlasSrc = await src("scripts/features/resource-bars/atlas.mjs");
+  const h = strip(hostSrc);
+
+  const cutFn = /float sdCut\([\s\S]*?\n}/.exec(glsl)?.[0] ?? "";
+  const heroHalf = 0.5 - Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
+
+  /* The readout's parts, in the order runGeometry lays them out — and only
+     those. host.mjs builds a second run for the floating delta, which is a
+     single centred part at nearly the value's size; sweeping it in here makes
+     the pin measure a glyph that rises three times as high as the maximum does
+     and lives above the bar anyway, so it fails on geometry that is fine. */
+  const run = /runGeometry\(\[([\s\S]*?)\]/.exec(h)?.[1] ?? "";
+  const parts = [...run.matchAll(/\{\s*text:[^}]*?size:\s*h\s*\*\s*(\d*\.?\d+)[^}]*?\}/g)]
+    .map((m) => ({ size: Number(m[1]), bottom: /bottom:\s*true/.test(m[0]) }));
+  const cellH = Number(/const CELL_H = (\d+)/.exec(atlasSrc)?.[1]);
+  const fontPx = Number(/const FONT_PX = (\d+)/.exec(atlasSrc)?.[1]);
+  const inkDrop = Number(/:\s*(0\.\d+);/.exec(/actualBoundingBoxDescent[\s\S]{0,160}?:\s*0\.\d+;/.exec(atlasSrc)?.[0] ?? "")?.[1]);
+
+  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(atlasSrc)))
+    fail("A shear is back. The bar is meant to be axis-aligned; a lean in the GLSL or in runGeometry that the other one does not share is the exact drift this pin replaced.");
+  else if (!glsl.includes(`const float CUT = ${CUT.toFixed(4)};`) ||
+           !glsl.includes(`const float BODY_INSET = ${BODY_INSET.toFixed(4)};`))
+    fail("The GLSL no longer takes CUT and BODY_INSET from the exported constants, so the readout is positioned against geometry the shader may not be drawing.");
+  else if (!/READOUT_INSET/.test(h))
+    fail("host.mjs anchors the readout with something other than the exported READOUT_INSET.");
+  else if (/-p\.x/.test(cutFn))
+    fail("sdCut negates x, so the cut has moved away from the readout's end. That is safe, but it is not what READOUT_INSET was measured against — re-derive it or put the cut back.");
+  else if (![cellH, fontPx, inkDrop].every(Number.isFinite) || parts.length < 2)
+    fail("Could not read the atlas cell geometry or the readout's parts; the corner clearance is now unpinned and a clipped numeral will ship silently.");
+  else {
+    /* Between the body's edge and the fill there is a stroke, a gap of air and a
+       lip. The readout stands against the fill, so it clears all three; anchored
+       to the body the last digit is drawn over the frame. */
+    const sw  = Number(/float sw\s*=\s*max\(([\d.]+),/.exec(glsl)?.[1]);
+    const air = Number(/float air\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
+    const lip = Number(/float lip\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
+    const inner = BODY_INSET + sw + air + lip;
+
+    /* How far the last part's ink reaches above the mid-line. Bottom-aligned
+       parts hang off the largest part's ink line; a centred one is symmetric. */
+    const R = cellH / fontPx;
+    const biggest = Math.max(...parts.map((p) => p.size));
+    const last = parts[parts.length - 1];
+    const rise = last.bottom
+      ? last.size * R * (0.5 + inkDrop) - biggest * R * inkDrop
+      : last.size * R * 0.5;
+    /* The diagonal, measured back from the quad's right edge at that height. */
+    const diagonal = BODY_INSET - heroHalf + CUT * heroHalf + rise;
+
+    if (![sw, air, lip].every(Number.isFinite))
+      fail("Could not read the stroke, air and lip widths out of the GLSL; the readout's clearance from the frame is now unpinned.");
+    else if (READOUT_INSET < inner)
+      fail(`READOUT_INSET is ${READOUT_INSET} but the fill area starts ${inner.toFixed(3)} bar-heights in; the last digit is drawn over the bar's own frame.`);
+    else if (READOUT_INSET > inner + 0.12)
+      fail(`READOUT_INSET floats ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill; the readout is meant to sit against the right end of it.`);
+    else if (READOUT_INSET < diagonal)
+      fail(`The maximum's ink rises ${rise.toFixed(3)} bar-heights, where the cut's diagonal is still ${diagonal.toFixed(3)} in from the edge and the readout stands at ${READOUT_INSET}. The last digits will lie across the corner.`);
+    else ok(`the readout stands ${(READOUT_INSET - inner).toFixed(3)} inside the fill and passes ${(READOUT_INSET - diagonal).toFixed(3)} under the cut, and nothing is sheared`);
+  }
 }
 
 /* ── 9. Detail survives the reference token size ────────────────────────── */

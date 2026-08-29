@@ -85,10 +85,14 @@ export function resetAtlas() {
 /**
  * `aDim` carries per-glyph weight.
  *
- * A run is one mesh with one `uInk`, so without it the only way to draw part of
- * a readout quieter than the rest is a second mesh, a second draw call and a
- * second geometry to keep in sync — for what is, visually, one number. A single
- * float per vertex costs nothing and keeps the run atomic.
+ * A run is one mesh with one `uInk`, so this is the only way to draw one part
+ * of a readout at a different strength from the rest without a second mesh, a
+ * second draw call and a second geometry to keep in sync — for what is,
+ * visually, one number. A single float per vertex costs nothing and keeps the
+ * run atomic.
+ *
+ * The weight it carries is meant to be a *step*, not a fade: see the readout in
+ * host.mjs for what the values are for.
  */
 export const TEXT_VERTEX_SHADER = `
 attribute vec2 aVertexPosition;
@@ -130,10 +134,10 @@ void main(void) {
  * @param {Array<{text: string, size: number, dim?: number, bottom?: boolean}>} parts
  *        `dim` is the part's weight, 1 = full strength. `bottom` sits the part's
  *        ink on the same line as the run's largest part instead of centring it.
- * @param {{right: number, mid: number, skew: number}} at
+ * @param {{right: number, mid: number}} at
  * @returns {PIXI.Geometry|null}
  */
-export function runGeometry(parts, { right, mid, skew }) {
+export function runGeometry(parts, { right, mid }) {
   const atlas = getAtlas();
   const pos = [];
   const uvs = [];
@@ -164,12 +168,7 @@ export function runGeometry(parts, { right, mid, skew }) {
       const x0 = cx - gw / 2, x1 = cx + gw / 2;
       const cy = part.bottom ? inkLine - gh * atlas.inkDrop : mid;
       const y0 = cy - gh / 2, y1 = cy + gh / 2;
-      /* Sheared about the run's own mid-line, by the same amount as the bar.
-         y grows downward here, so the sign is inverted relative to the shader —
-         get this wrong and the numerals lean into the bar instead of with it. */
-      const s0 = (mid - y0) * skew;
-      const s1 = (mid - y1) * skew;
-      pos.push(x0 + s0, y0, x1 + s0, y0, x1 + s1, y1, x0 + s1, y1);
+      pos.push(x0, y0, x1, y0, x1, y1, x0, y1);
       uvs.push(m.u0, 0, m.u1, 0, m.u1, 1, m.u0, 1);
       dim.push(weight, weight, weight, weight);
       idx.push(n, n + 1, n + 2, n, n + 2, n + 3);

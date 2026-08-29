@@ -81,6 +81,11 @@ h2::after{content:""; flex:1; height:1px; background:var(--line)}
 }
 .play .slot{height:58px; margin-bottom:18px}
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+table.perm{border-collapse:collapse; margin:14px 0 0; font-size:12.5px; max-width:760px}
+table.perm th,table.perm td{border:1px solid var(--line); padding:7px 12px; text-align:left}
+table.perm th{color:var(--text); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase}
+table.perm td{color:var(--text)}
+table.perm td.no{color:var(--text-dim); font-style:italic}
 button{
   font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.06em;
   text-transform:uppercase; color:var(--text); cursor:pointer;
@@ -157,7 +162,7 @@ input[type=range]{padding:0; width:230px}
 
   <h2>PF2e layers</h2>
   <p class="note">Temp HP is a shield plate laid over the fill — nearly full height, translucent
-    enough that the health underneath still reads, and carrying a scaled lattice that no other layer
+    enough that the health underneath still reads, and carrying a pattern that no other layer
     has. It never extends past the bar's end, so the scale cannot shift underneath the viewer. A
     raised shield gets its own hairline rail rather than stealing <i>bar2</i>, which a GM may
     legitimately have bound to something else.</p>
@@ -170,7 +175,7 @@ input[type=range]{padding:0; width:230px}
 
   <h2>Scale and zoom</h2>
   <p class="note">The same 62% bar as the quad shrinks — a 128px grid down to a 44px one zoomed out.
-    Bevel, segments and chevrons fade out as each stops spanning a device pixel, rather than crawling
+    Bevel, segments, ribs and register marks fade out as each stops spanning a device pixel, rather than crawling
     between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
     8:1 quad.</p>
   <div class="ladder" id="row-scale"></div>
@@ -183,6 +188,34 @@ input[type=range]{padding:0; width:230px}
     is the same hit on a goblin and on a dragon. Rounded up, so the short plate is the last one rather
     than the one at the full-health end.</p>
   <div class="grid" id="row-div"></div>
+
+  <h2>The readout</h2>
+  <p class="note">The maximum is the scale the reading is measured against, so it steps back &mdash;
+    by one step, not into furniture. At 0.22 ink it was a denominator you had to go looking for;
+    at full ink it competed with the number that actually changes. 0.80 ranks the two and leaves
+    both legible at a glance, and the separator goes one further at 0.62 because it is punctuation.
+    They share a baseline measured from the baked ink, not from the glyph
+    cell, which is a couple of pixels apart and reads as a mistake when it is wrong.
+    <b style="color:var(--text)">Value text size</b> is a per-viewer setting: it multiplies the
+    size the bar&rsquo;s own height gives, so the readout stays in proportion on every grid size
+    and zoom rather than being pinned to a pixel count that only suits one scene.</p>
+  <div class="grid" id="row-read"></div>
+
+  <p class="note">When it is drawn is a separate question, and one the GM can settle for the table:
+    <b style="color:var(--text)">Force value display for players</b> overrides each player&rsquo;s own
+    choice without replacing it, so setting it back restores what they had picked. It cannot widen
+    what anyone may see. <i>canViewNumbers</i> refuses on the token&rsquo;s own Display Bars before it
+    ever looks at the mode, so the right-hand column below stays empty at every setting &mdash; which
+    is the one thing in this feature that would leak hit points while looking entirely correct.</p>
+  <table class="perm">
+    <thead><tr><th>Setting</th><th>Display Bars permits this player</th><th>Display Bars hides it</th></tr></thead>
+    <tbody>
+      <tr><td>Let each player choose</td><td>their own choice</td><td class="no">nothing</td></tr>
+      <tr><td>On hover or selection</td><td>on hover or selection</td><td class="no">nothing</td></tr>
+      <tr><td>Always</td><td>always</td><td class="no">nothing</td></tr>
+      <tr><td>Never</td><td class="no">nothing</td><td class="no">nothing</td></tr>
+    </tbody>
+  </table>
 
   <h2>Colour-blind ramp</h2>
   <p class="note">The opt-in client setting: blue→cyan→yellow→orange abandons the red/green axis
@@ -225,7 +258,9 @@ const RAMPS = /*__RAMPS__*/;
 const TEMP_COL = /*__TEMP_COL__*/;
 const SHIELD_COL = /*__SHIELD_COL__*/;
 const RAIL_COL = /*__RAIL_COL__*/;
-const SKEW = /*__SKEW__*/;   /* the one shear, shared by the bar and its numerals */
+/* Shared with the shader: what the readout has to clear is the corner the
+   shader cuts out of the bar. */
+const READOUT_INSET = /*__READOUT_INSET__*/;
 
 const canvas = document.getElementById("gl");
 
@@ -370,7 +405,6 @@ attribute vec2 aVertexPosition;
 attribute vec2 aUvs;
 uniform vec4 uQuad;     /* centreX, centreY, halfW, halfH — clip space */
 uniform vec4 uUv;       /* u0, v0, u1, v1 */
-uniform float uShear;   /* clip-space x shift per unit clip y */
 varying vec2 vUv;
 void main(void) {
   vUv = mix(uUv.xy, uUv.zw, aUvs);
@@ -378,7 +412,6 @@ void main(void) {
   /* Sheared about the cell's centre line, by the same amount as the bar — a
      numeral standing upright on a leaning bar is the tell that the two were
      drawn by different people. */
-  pos.x += pos.y * uShear;
   gl_Position = vec4(pos, 0.0, 1.0);
 }`;
 
@@ -407,7 +440,7 @@ gl.linkProgram(tprog);
 if (!gl.getProgramParameter(tprog, gl.LINK_STATUS)) fail("Text program failed to link:\n" + gl.getProgramInfoLog(tprog));
 
 const TU = {};
-for (const n of ["uQuad", "uUv", "uShear", "uAtlas", "uInk", "uEdge", "uOpacity"]) TU[n] = gl.getUniformLocation(tprog, n);
+for (const n of ["uQuad", "uUv", "uAtlas", "uInk", "uEdge", "uOpacity"]) TU[n] = gl.getUniformLocation(tprog, n);
 
 const tAPos = gl.getAttribLocation(tprog, "aVertexPosition");
 const tAUv  = gl.getAttribLocation(tprog, "aUvs");
@@ -427,14 +460,13 @@ let atlas = null;
  * Draw a right-aligned run inside the current viewport.
  * `rightPx` / `midPx` are in cell pixels, `sizePx` is the cap height.
  */
-function drawRun(parts, rightPx, midPx, w, h, shear) {
+function drawRun(parts, rightPx, midPx, w, h) {
   if (!atlas) return;
   gl.useProgram(tprog);
   pointAttribs(tAPos, tAUv);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, atlas.tex);
   gl.uniform1i(TU.uAtlas, 0);
-  gl.uniform1f(TU.uShear, shear);
 
   // Total width first, so the run can be right-aligned as one unit.
   let total = 0;
@@ -679,6 +711,15 @@ for (const [max, per] of [[12, null], [58, null], [12, 5], [58, 5], [200, 5], [2
   });
 }
 
+const readRow = document.getElementById("row-read");
+for (const n of [0.6, 0.85, 1, 1.3, 1.7, 2]) {
+  add(readRow, {
+    title: "×" + n.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""),
+    sub: n === 1 ? "<i>default</i>" : "<i>readout scale</i>",
+    frac: 0.62, seg: 10, max: 58, numScale: n,
+  });
+}
+
 const cb = document.getElementById("row-cb");
 for (const f of [1, 0.62, 0.32, 0.12]) {
   add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
@@ -835,24 +876,25 @@ function draw(now) {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     if (s.max && (s.role ?? 0) === 0) {
-      const aspect = w / h;
-      const rightPx = ((aspect - 0.40) / aspect) * w;
-      const shear = SKEW / aspect;
+      const rightPx = w - READOUT_INSET * h;
       const punch = 1 + (a ? a.punch : 0);
-      const big = h * 0.46 * punch, small = h * 0.24 * punch;
+      /* The viewer's own size setting, on top of the size the bar's height
+         gives. It scales the delta too — they are one readout. */
+      const ns = (s.numScale ?? 1) * punch;
       /* `num`, not `frac`: the fill snaps on impact and the readout counts. */
       const cur = Math.round((a ? a.num : frac) * s.max);
-      /* Colour follows the event and decays back to white; the maximum is the
-         scale the reading is measured against, so it is smaller and quieter. */
+      /* Colour follows the event and decays back to white. The maximum shares
+         it and steps back by one notch of opacity — enough to rank the two,
+         not enough to make the denominator something you go looking for. */
       const heat = a ? a.hit * 0.70 : 0;
       const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
       const rest = [0.97, 0.99, 1.0];
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
-        { text: String(cur), size: big, ink },
-        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.22, bottom: true },
-        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.30, bottom: true },
-      ], rightPx, h * 0.5, w, h, shear);
+        { text: String(cur), size: h * 0.46 * ns, ink },
+        { text: "/", size: h * 0.23 * ns, ink, opacity: 0.62, bottom: true },
+        { text: String(s.max), size: h * 0.24 * ns, ink, opacity: 0.80, bottom: true },
+      ], rightPx, h * 0.5, w, h);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
          has to be legible as a number — "the bar got shorter" is a magnitude
@@ -874,8 +916,8 @@ function draw(now) {
              stacking on one another. */
           const inT = Math.min(1, pop.t / 0.14);
           const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
-          drawRun([{ text: pop.text, size: h * 0.44 * popScale, ink: popInk, opacity: Math.max(0, alpha) }],
-            rightPx - w * (0.02 + 0.06 * e), h * (0.5 + POPUP_LIFT + POPUP_RISE * e), w, POPH, shear);
+          drawRun([{ text: pop.text, size: h * 0.44 * popScale * (s.numScale ?? 1), ink: popInk, opacity: Math.max(0, alpha) }],
+            rightPx - w * (0.02 + 0.06 * e), h * (0.5 + POPUP_LIFT + POPUP_RISE * e), w, POPH);
         }
         gl.viewport(x, y, w, h);
         gl.scissor(x, y, w, h);
