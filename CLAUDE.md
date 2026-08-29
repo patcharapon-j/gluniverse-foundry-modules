@@ -317,6 +317,33 @@ without setting `game.pf2e.settings.variants.pwol.enabled`, so the system's own
 `identificationDCs` are un-flattened in these worlds. See
 `docs/RECALL_KNOWLEDGE.md` for the tier model and the band mapping.
 
+**When touching the resource bars** (`features/resource-bars/`), re-run the
+consistency check. Everything it covers fails *silently*: a shader that will not
+compile degrades to a static fallback rather than erroring; a uniform declared
+and never written holds its initial value forever; a duration written as a
+literal ignores the user's motion tier; the OKLab ramp mirrors `gl-tokens.css`
+by hand and can drift from it; an animated behaviour missing from
+`SHED_ORDER` never degrades under load; and a numeric readout drawn outside the
+`displayBars` gate leaks a hostile's hit points while looking entirely correct:
+
+```bash
+node tools/resource-bar-check.mjs
+```
+
+Zero problems required. The subtlest pin is the last one: anything meant to read
+as a hairline must be sized in **device pixels** (`px`), never in the shader's
+geometry units — a fixed value is ~2px on a HiDPI display and sub-pixel on an
+ordinary one, where `rbDetail` deletes it, so the detail silently vanishes for
+every player without a retina monitor and no preview you run yourself will show
+you that.
+
+To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
+a page that compiles the real shader in a real WebGL2 context and drives it with
+the real animation model. **Serve it** (`node tools/preview-server.mjs`) — a
+`file://` page does not execute its module script. See
+`docs/RESOURCE_BARS.md` for the pipeline, the unit convention and the
+permission contract.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

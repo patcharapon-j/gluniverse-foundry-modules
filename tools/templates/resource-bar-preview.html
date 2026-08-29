@@ -1,0 +1,829 @@
+<title>Etched Glass Resource Bars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink0:#02070b; --ink1:#080b11; --ink2:#0b0f17; --ink3:#161d2c;
+  --text:#eef1f7; --text-dim:#98a2b6; --line:rgb(255 255 255 / .09);
+  --accent:#6b86d6; --cyan:#5eeaff; --good:#5fdb92; --hazard:#ff4a52; --signal:#ffd24a;
+  --cut:12px;
+  --sans:"Oxanium",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html{min-height:100%}
+body{
+  margin:0; min-height:100%;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #10182a 0%, var(--ink1) 55%, var(--ink0) 100%)
+    fixed;
+  color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+}
+/* Above the page, not behind it: the stage and the live panel are opaque, and
+   the canvas is transparent everywhere a bar is not drawn. */
+#gl{position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5}
+.page{position:relative; z-index:2; max-width:1180px; margin:0 auto; padding:40px 28px 90px}
+header{margin-bottom:40px; border-bottom:1px solid var(--line); padding-bottom:22px}
+h1{font-size:26px; font-weight:700; letter-spacing:.02em; margin:0 0 6px}
+h1 span{color:var(--accent)}
+.sub{color:var(--text-dim); font-size:13.5px; line-height:1.6; max-width:70ch; margin:0}
+h2{
+  font-size:11px; font-weight:700; letter-spacing:.20em; text-transform:uppercase;
+  color:var(--text-dim); margin:44px 0 4px; display:flex; align-items:center; gap:12px;
+}
+h2::after{content:""; flex:1; height:1px; background:var(--line)}
+.note{color:var(--text-dim); font-size:12.5px; line-height:1.65; margin:0 0 20px; max-width:76ch}
+.grid{display:grid; gap:20px 18px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.cell{display:flex; flex-direction:column; gap:9px}
+.slot{width:100%; height:46px}
+.cap{font-size:11px; color:var(--text-dim); letter-spacing:.04em; line-height:1.4}
+.cap b{display:block; color:var(--text); font-weight:600; font-size:12px; letter-spacing:.02em; margin-bottom:2px}
+.cap i{font-style:normal; font-family:var(--mono); font-size:10.5px; color:var(--accent)}
+
+/* Scale ladder: cells sized in real pixels, bottom-aligned. */
+.ladder{display:flex; align-items:flex-end; gap:34px; flex-wrap:wrap}
+.ladder .cell{flex:0 0 auto; align-items:flex-start}
+
+/* The token mock. */
+.stage{
+  display:flex; gap:44px; flex-wrap:wrap; align-items:flex-start;
+  padding:26px; border:1px solid var(--line); border-radius:2px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / .025), transparent 60%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / .035) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / .035) 0 1px, transparent 1px 64px),
+    #131a24;
+  clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.tok{width:128px; display:flex; flex-direction:column; gap:3px}
+.tok .art{
+  width:128px; height:128px; border-radius:50%;
+  background:
+    radial-gradient(58% 52% at 38% 30%, #7d90b8 0%, #46527a 42%, #232c45 72%, #121826 100%);
+  box-shadow:0 10px 26px rgb(0 0 0 / .55), inset 0 -14px 30px rgb(0 0 0 / .5);
+  margin-bottom:5px;
+}
+/* Slot = quad. The bar body inside it is 64% of that for a hero bar,
+   58% for a rail — the rest is the margin the bloom spills into. */
+.tok .slot.hero{height:30px}
+.tok .slot.rail{height:16px}
+.tok .name{
+  font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:center;
+  margin-top:5px; letter-spacing:.06em;
+}
+
+/* Interactive panel. */
+.play{
+  margin-top:16px; padding:24px 26px 26px; border:1px solid var(--line);
+  background:linear-gradient(180deg, rgb(255 255 255 / .04), rgb(255 255 255 / .012));
+  clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.play .slot{height:58px; margin-bottom:18px}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+button{
+  font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--text); cursor:pointer;
+  background:linear-gradient(180deg, rgb(255 255 255 / .09), rgb(255 255 255 / .03));
+  border:1px solid var(--line); padding:9px 15px; border-radius:2px;
+  transition:background .18s, border-color .18s, transform .12s;
+}
+button:hover{background:rgb(255 255 255 / .14); border-color:rgb(255 255 255 / .22)}
+button:active{transform:translateY(1px)}
+:is(button,select,input):focus-visible{outline:2px solid var(--cyan); outline-offset:2px}
+button.hot{border-color:rgb(255 74 82 / .5); color:#ffc0c6}
+button.cool{border-color:rgb(95 219 146 / .45); color:#b6ffd0}
+label.f{display:flex; align-items:center; gap:9px; font-size:11.5px; color:var(--text-dim);
+  letter-spacing:.06em; text-transform:uppercase}
+select, input[type=range]{
+  font-family:var(--mono); font-size:11.5px; color:var(--text); accent-color:var(--accent);
+  background:var(--ink2); border:1px solid var(--line); border-radius:2px; padding:6px 8px;
+}
+input[type=range]{padding:0; width:230px}
+.read{
+  font-family:var(--mono); font-size:12px; color:var(--text-dim); letter-spacing:.04em;
+  border-top:1px solid var(--line); padding-top:13px; margin-top:4px;
+}
+.read b{color:var(--cyan); font-weight:400}
+.err{
+  font-family:var(--mono); font-size:12.5px; color:#ffc0c6; background:rgb(255 74 82 / .1);
+  border:1px solid rgb(255 74 82 / .35); padding:14px 16px; white-space:pre-wrap; margin:20px 0;
+}
+</style>
+
+<canvas id="gl"></canvas>
+<div class="page">
+  <header>
+    <h1>Resource Bars — <span>visual preview</span></h1>
+    <p class="sub">Every bar below is the real fragment shader from
+      <i>scripts/features/resource-bars/shader.mjs</i>, compiled in this page's WebGL context and fed
+      by the real animation model from <i>anim.mjs</i>. Nothing here is a mockup of the effect; it is
+      the effect, with mock tokens instead of Foundry.</p>
+  </header>
+
+  <h2>Health ladder</h2>
+  <p class="note">A 4-stop ramp interpolated in OKLab, so the green→yellow half never passes
+    through olive. The bar is assembled from discrete plates with real gaps, so position reads as a second channel
+    for health. Below 25% the stroke takes on the low-health pulse, the bloom turns hazard-red and a
+    diagonal hatch fades into the fill — health encoded three ways that are not hue.</p>
+  <div class="grid" id="row-ladder"></div>
+
+  <h2>In motion</h2>
+  <p class="note">A value change is an event, not a length. The fill drops instantly and leaves a
+    pale ghost that holds for 180ms then drains over 540ms; a shockwave expands from the point on
+    the bar that moved, throwing spokes ahead of it; the whole quad takes a damped kick; the cap
+    flashes; the readout punches and settles; and the delta floats off as a number you read rather
+    than a magnitude you estimate. Healing runs the same machinery in green.</p>
+  <div class="grid" id="row-motion"></div>
+
+  <h2>PF2e layers</h2>
+  <p class="note">Temp HP is a shield plate laid over the fill — nearly full height, translucent
+    enough that the health underneath still reads, and carrying a scaled lattice that no other layer
+    has. It never extends past the bar's end, so the scale cannot shift underneath the viewer. A
+    raised shield gets its own hairline rail rather than stealing <i>bar2</i>, which a GM may
+    legitimately have bound to something else.</p>
+  <div class="grid" id="row-pf2e"></div>
+
+  <h2>Under a token</h2>
+  <p class="note">What it actually looks like in play, at true size on a 128px grid: hero bar,
+    secondary rail, and — only while a shield is up — the shield rail.</p>
+  <div class="stage" id="stage"></div>
+
+  <h2>Scale and zoom</h2>
+  <p class="note">The same 62% bar as the quad shrinks — a 128px grid down to a 44px one zoomed out.
+    Bevel, segments and hatch fade out as each stops spanning a device pixel, rather than crawling
+    between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
+    8:1 quad.</p>
+  <div class="ladder" id="row-scale"></div>
+
+  <h2>Colour-blind ramp</h2>
+  <p class="note">The opt-in client setting: blue→cyan→yellow→orange abandons the red/green axis
+    entirely and separates on lightness as well.</p>
+  <div class="grid" id="row-cb"></div>
+
+  <h2>Live</h2>
+  <p class="note">Drag the slider to scrub, or hit the buttons to feel the timing. Hovering the bar
+    arms the specular sweep — it is never on at rest, because forty of them at once is noise.</p>
+  <div class="play">
+    <div class="slot" id="live" data-live="1"></div>
+    <div class="row">
+      <button class="hot" data-dmg="0.18">Hit −18%</button>
+      <button class="hot" data-dmg="0.35">Crit −35%</button>
+      <button class="cool" data-heal="0.25">Heal +25%</button>
+      <button data-set="1">Full</button>
+    </div>
+    <div class="row">
+      <label class="f">Value <input type="range" id="scrub" min="0" max="100" value="100"></label>
+      <label class="f">Motion
+        <select id="motion"><option value="1">Full</option><option value="0.6">Reduced</option><option value="0">None</option></select>
+      </label>
+      <label class="f">Ramp
+        <select id="ramp"><option value="default">Default</option><option value="safe">Colour-blind safe</option></select>
+      </label>
+      <label class="f">Temp HP
+        <select id="temp"><option value="0">None</option><option value="0.85">85%</option></select>
+      </label>
+    </div>
+    <div class="read" id="read"></div>
+  </div>
+</div>
+
+<script type="module">
+/*__ANIM_SRC__*/
+
+const FRAG = /*__FRAG__*/;
+const VERT = /*__VERT__*/;
+const RAMPS = /*__RAMPS__*/;
+const TEMP_COL = /*__TEMP_COL__*/;
+const SHIELD_COL = /*__SHIELD_COL__*/;
+const RAIL_COL = /*__RAIL_COL__*/;
+const SKEW = /*__SKEW__*/;   /* the one shear, shared by the bar and its numerals */
+
+const canvas = document.getElementById("gl");
+
+/* WebGL2 first: it is the only way to get a *renderable* half-float target,
+   which is what lets the bar emit highlights above 1.0 for the bloom pass to
+   find. WebGL2 still accepts GLSL ES 1.00 shaders, so nothing else has to
+   change. WebGL1 with the float extensions is the fallback; failing that the
+   pipeline runs in 8 bits and the bloom is merely dimmer, not absent. */
+const ctxOpts = { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false };
+let gl = canvas.getContext("webgl2", ctxOpts);
+let HDR = null;
+if (gl) {
+  if (gl.getExtension("EXT_color_buffer_float")) HDR = { internal: gl.RGBA16F, type: gl.HALF_FLOAT };
+  else if (gl.getExtension("EXT_color_buffer_half_float")) HDR = { internal: gl.RGBA16F, type: gl.HALF_FLOAT };
+} else {
+  gl = canvas.getContext("webgl", ctxOpts);
+  if (gl && gl.getExtension("OES_texture_half_float") && gl.getExtension("EXT_color_buffer_half_float"))
+    HDR = { internal: gl.RGBA, type: gl.getExtension("OES_texture_half_float").HALF_FLOAT_OES };
+}
+
+function fail(msg) {
+  const d = document.createElement("div");
+  d.className = "err";
+  d.textContent = msg;
+  document.querySelector("header").after(d);
+  throw new Error(msg);
+}
+if (!gl) fail("No WebGL context available.");
+
+function compile(type, src, label) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(sh);
+    const lines = src.split("\n");
+    const n = /ERROR:\s*\d+:(\d+)/.exec(log);
+    const ctx = n ? lines.slice(Math.max(0, +n[1] - 3), +n[1] + 2).join("\n") : "";
+    fail(label + " failed to compile:\n" + log + "\n\n" + ctx);
+  }
+  return sh;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT, "vertex shader"));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG, "fragment shader"));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail("Program failed to link:\n" + gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1, -1, 0, 1,   1, -1, 1, 1,   -1, 1, 0, 0,
+   1, -1, 1, 1,   1,  1, 1, 0,   -1, 1, 0, 0,
+]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, "aVertexPosition");
+const aUv = gl.getAttribLocation(prog, "aUvs");
+gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
+gl.enableVertexAttribArray(aUv);  gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 16, 8);
+
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+gl.enable(gl.SCISSOR_TEST);
+
+/* Every uniform, looked up once. A name that does not resolve is reported
+   loudly here rather than silently doing nothing — the exact failure the check
+   tool exists to prevent in the shipped feature. */
+const U = {};
+for (const name of ["uTime","uTexel","uAspect","uFrac","uGhost","uBloom","uFlash","uLow",
+                    "uSweep","uTemp","uCracked","uSeg","uRole","uRamp","uTempCol","uShieldCol","uRailCol",
+                    "uHit","uHitX","uHeal"]) {
+  U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
+}
+const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
+if (dead.length) fail("Uniforms declared but not found in the linked program: " + dead.join(", ") +
+  "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
+
+
+/* ── Numerals ─────────────────────────────────────────────────────────────
+   A baked glyph atlas, not per-value rasterisation. PIXI.Text (and canvas
+   fillText) re-rasterises and re-uploads a texture every time the string
+   changes — that is one GPU upload per token per damage roll, which is exactly
+   the cost a shader was chosen to avoid. An atlas is uploaded once and every
+   number after that is a handful of textured quads.
+
+   The outline is baked in too, in its own channel: the stroke is drawn in red
+   and the glyph body in green, so the shader can tint the numeral without
+   tinting the dark outline that keeps it legible against a bright fill. */
+
+const GLYPHS = "0123456789/+-";
+const CELL_W = 72, CELL_H = 104, FONT_PX = 78;
+
+function buildAtlas() {
+  const c = document.createElement("canvas");
+  c.width = CELL_W * GLYPHS.length;
+  c.height = CELL_H;
+  const x = c.getContext("2d");
+  x.font = "700 " + FONT_PX + "px Oxanium, sans-serif";
+  x.textAlign = "center";
+  x.textBaseline = "middle";
+  x.lineJoin = "round";
+
+  const metrics = {};
+  for (let i = 0; i < GLYPHS.length; i++) {
+    const ch = GLYPHS[i];
+    const cx = i * CELL_W + CELL_W / 2;
+    x.lineWidth = 9;
+    x.strokeStyle = "rgba(255,0,0,1)";
+    x.strokeText(ch, cx, CELL_H / 2);
+    x.fillStyle = "rgba(0,255,0,1)";
+    x.fillText(ch, cx, CELL_H / 2);
+    metrics[ch] = {
+      i,
+      advance: x.measureText(ch).width / FONT_PX,   // in em
+      u0: (i * CELL_W) / c.width,
+      u1: ((i + 1) * CELL_W) / c.width,
+    };
+  }
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return { tex, metrics, cellRatio: CELL_W / CELL_H };
+}
+
+const TEXT_VERT = `
+attribute vec2 aVertexPosition;
+attribute vec2 aUvs;
+uniform vec4 uQuad;     /* centreX, centreY, halfW, halfH — clip space */
+uniform vec4 uUv;       /* u0, v0, u1, v1 */
+uniform float uShear;   /* clip-space x shift per unit clip y */
+varying vec2 vUv;
+void main(void) {
+  vUv = mix(uUv.xy, uUv.zw, aUvs);
+  vec2 pos = uQuad.xy + aVertexPosition * uQuad.zw;
+  /* Sheared about the cell's centre line, by the same amount as the bar — a
+     numeral standing upright on a leaning bar is the tell that the two were
+     drawn by different people. */
+  pos.x += pos.y * uShear;
+  gl_Position = vec4(pos, 0.0, 1.0);
+}`;
+
+const TEXT_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vUv;
+uniform sampler2D uAtlas;
+uniform vec3 uInk;      /* the numeral */
+uniform vec3 uEdge;     /* the baked outline */
+uniform float uOpacity;
+void main(void) {
+  vec4 t = texture2D(uAtlas, vUv);
+  float a = t.a * uOpacity;
+  vec3 c = mix(uEdge, uInk, t.g);
+  gl_FragColor = vec4(c * a, a);
+}`;
+
+const tprog = gl.createProgram();
+gl.attachShader(tprog, compile(gl.VERTEX_SHADER, TEXT_VERT, "text vertex shader"));
+gl.attachShader(tprog, compile(gl.FRAGMENT_SHADER, TEXT_FRAG, "text fragment shader"));
+gl.linkProgram(tprog);
+if (!gl.getProgramParameter(tprog, gl.LINK_STATUS)) fail("Text program failed to link:\n" + gl.getProgramInfoLog(tprog));
+
+const TU = {};
+for (const n of ["uQuad", "uUv", "uShear", "uAtlas", "uInk", "uEdge", "uOpacity"]) TU[n] = gl.getUniformLocation(tprog, n);
+
+const tAPos = gl.getAttribLocation(tprog, "aVertexPosition");
+const tAUv  = gl.getAttribLocation(tprog, "aUvs");
+
+/* Vertex attribute *locations* are per-program, but the pointer state they
+   configure is global. Two programs that happen to disagree on which index is
+   which would silently read UVs as positions, so each one repoints before it
+   draws rather than trusting the linker to have agreed with the other. */
+function pointAttribs(iPos, iUv) {
+  gl.enableVertexAttribArray(iPos); gl.vertexAttribPointer(iPos, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(iUv);  gl.vertexAttribPointer(iUv, 2, gl.FLOAT, false, 16, 8);
+}
+
+let atlas = null;
+
+/**
+ * Draw a right-aligned run inside the current viewport.
+ * `rightPx` / `midPx` are in cell pixels, `sizePx` is the cap height.
+ */
+function drawRun(parts, rightPx, midPx, w, h, shear) {
+  if (!atlas) return;
+  gl.useProgram(tprog);
+  pointAttribs(tAPos, tAUv);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, atlas.tex);
+  gl.uniform1i(TU.uAtlas, 0);
+  gl.uniform1f(TU.uShear, shear);
+
+  // Total width first, so the run can be right-aligned as one unit.
+  let total = 0;
+  for (const part of parts)
+    for (const ch of part.text) total += (atlas.metrics[ch]?.advance ?? 0.5) * part.size;
+
+  let penX = rightPx - total;
+  for (const part of parts) {
+    gl.uniform3fv(TU.uInk, part.ink);
+    gl.uniform3fv(TU.uEdge, [0.02, 0.03, 0.05]);
+    gl.uniform1f(TU.uOpacity, part.opacity ?? 1);
+    for (const ch of part.text) {
+      const m = atlas.metrics[ch];
+      if (!m) continue;
+      const adv = m.advance * part.size;
+      const gw = atlas.cellRatio * part.size * (CELL_H / FONT_PX);
+      const gh = part.size * (CELL_H / FONT_PX);
+      const cx = penX + adv / 2;
+      gl.uniform4f(TU.uQuad, (cx / w) * 2 - 1, (midPx / h) * 2 - 1, gw / w, gh / h);
+      gl.uniform4f(TU.uUv, m.u0, 0, m.u1, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      penX += adv;
+    }
+  }
+  gl.useProgram(prog);
+  pointAttribs(aPos, aUv);
+}
+
+document.fonts.ready.then(() => { atlas = buildAtlas(); });
+/* ── Post-processing ──────────────────────────────────────────────────────
+   The bars are not drawn to the screen. They are drawn to a half-float buffer
+   at 2× resolution, where the specular, the fill head and the impact ring are
+   allowed to exceed 1.0 — an 8-bit target would clamp them flat and leave the
+   bright-pass nothing to find, which is why the analytic glow in the shader
+   could only ever approximate this.
+
+   scene(2×, RGBA16F) → bright-pass(½) → blur H(½) → blur V(½) → composite(1×)
+
+   The 2× is not only for the bloom: it is 4× supersampling on every edge in
+   the bar, which is where the last of the crawling on thin strokes goes. */
+
+/* UVs are derived from the clip position, deliberately ignoring aUvs. The
+   vertex buffer's UVs follow the image convention (v = 0 at the top) because
+   that is what the glyph atlas needs; a texture rendered into a framebuffer
+   follows the GL convention (v = 0 at the bottom). Mixing the two flips the
+   whole scene vertically — and because the post chain samples its own output,
+   flipping in only some passes misaligns the bloom against the image instead
+   of just turning it upside down. Deriving from position makes every post pass
+   agree, without disturbing the passes that need the other convention. */
+const POST_VERT = `
+attribute vec2 aVertexPosition;
+varying vec2 vUv;
+void main(void) {
+  vUv = aVertexPosition * 0.5 + 0.5;
+  gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+}`;
+
+const POST_HEAD = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vUv;
+uniform sampler2D uTex;
+uniform vec2 uTexel2;
+`;
+
+/* Soft-knee threshold. A hard cutoff at 1.0 makes the bloom pop in and out as a
+   highlight crosses it; the knee ramps it over a range so a brightening
+   highlight blooms *progressively*, which is what the eye expects from light. */
+const BRIGHT_FRAG = POST_HEAD + `
+uniform float uThreshold;
+uniform float uKnee;
+void main(void) {
+  vec3 c = vec3(0.0);
+  c += texture2D(uTex, vUv + uTexel2 * vec2(-1.0, -1.0)).rgb;
+  c += texture2D(uTex, vUv + uTexel2 * vec2( 1.0, -1.0)).rgb;
+  c += texture2D(uTex, vUv + uTexel2 * vec2(-1.0,  1.0)).rgb;
+  c += texture2D(uTex, vUv + uTexel2 * vec2( 1.0,  1.0)).rgb;
+  c *= 0.25;
+
+  float lum = max(c.r, max(c.g, c.b));
+  float soft = clamp(lum - uThreshold + uKnee, 0.0, 2.0 * uKnee);
+  soft = soft * soft / (4.0 * uKnee + 0.0001);
+  float w = max(soft, lum - uThreshold) / max(lum, 0.0001);
+  gl_FragColor = vec4(c * w, 1.0);
+}`;
+
+/* Nine taps, separable, on linearly-filtered samples so each tap does the work
+   of two. */
+const BLUR_FRAG = POST_HEAD + `
+uniform vec2 uDir;
+void main(void) {
+  vec3 c = texture2D(uTex, vUv).rgb * 0.227027;
+  vec2 o1 = uDir * 1.3846153846;
+  vec2 o2 = uDir * 3.2307692308;
+  c += (texture2D(uTex, vUv + o1).rgb + texture2D(uTex, vUv - o1).rgb) * 0.3162162162;
+  c += (texture2D(uTex, vUv + o2).rgb + texture2D(uTex, vUv - o2).rgb) * 0.0702702703;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+/* Composite. The scene is premultiplied over transparency, so the bloom is
+   added as light and contributes only a little alpha — a bloom that carried
+   full alpha would paint a grey rectangle over the map wherever it reached. */
+const COMP_FRAG = POST_HEAD + `
+uniform sampler2D uBloom;
+uniform float uIntensity;
+void main(void) {
+  vec4 s = texture2D(uTex, vUv);
+  vec3 b = texture2D(uBloom, vUv).rgb * uIntensity;
+  vec3 c = s.rgb + b;
+  /* Roll off only what is over the knee. A plain Reinhard compresses the whole
+     range, so every fill below 1.0 — which is all of them — comes back darker
+     and less saturated than it was authored; the picture reads as washed out
+     and the fix looks like a colour problem rather than a tonemap one. Below
+     the knee this is the identity. */
+  vec3 knee = vec3(0.88);
+  vec3 over = max(c - knee, vec3(0.0));
+  c = min(c, knee) + over / (1.0 + over * 0.62);
+  float a = clamp(s.a + max(b.r, max(b.g, b.b)) * 0.30, 0.0, 1.0);
+  gl_FragColor = vec4(c, a);
+}`;
+
+function makeProgram(vsrc, fsrc, label) {
+  const pr = gl.createProgram();
+  gl.attachShader(pr, compile(gl.VERTEX_SHADER, vsrc, label + " vertex"));
+  gl.attachShader(pr, compile(gl.FRAGMENT_SHADER, fsrc, label + " fragment"));
+  gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) fail(label + " failed to link:\n" + gl.getProgramInfoLog(pr));
+  return pr;
+}
+
+const brightProg = makeProgram(POST_VERT, BRIGHT_FRAG, "bright-pass");
+const blurProg = makeProgram(POST_VERT, BLUR_FRAG, "blur");
+const compProg = makeProgram(POST_VERT, COMP_FRAG, "composite");
+
+const SS = 2;                 // supersampling factor for the scene buffer
+const BLOOM_DIV = 2;          // bloom runs at 1/2 of the display resolution
+
+function makeTarget() {
+  const fb = gl.createFramebuffer();
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return { fb, tex, w: 0, h: 0 };
+}
+const rtScene = makeTarget(), rtBright = makeTarget(), rtBlur = makeTarget();
+
+function sizeTarget(rt, w, h) {
+  if (rt.w === w && rt.h === h) return;
+  rt.w = w; rt.h = h;
+  gl.bindTexture(gl.TEXTURE_2D, rt.tex);
+  if (HDR) gl.texImage2D(gl.TEXTURE_2D, 0, HDR.internal, w, h, 0, gl.RGBA, HDR.type, null);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, rt.fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rt.tex, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
+    fail("Render target " + w + "×" + h + " is not framebuffer-complete.");
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+function fullscreenPass(pr, target, uniforms) {
+  gl.useProgram(pr);
+  const ip = gl.getAttribLocation(pr, "aVertexPosition");
+  gl.enableVertexAttribArray(ip);
+  gl.vertexAttribPointer(ip, 2, gl.FLOAT, false, 16, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+  const w = target ? target.w : canvas.width, h = target ? target.h : canvas.height;
+  gl.viewport(0, 0, w, h);
+  gl.scissor(0, 0, w, h);
+  gl.disable(gl.BLEND);
+  uniforms(pr, w, h);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.enable(gl.BLEND);
+}
+
+
+/* ── Cell definitions ─────────────────────────────────────────────────── */
+
+const pct = (n) => Math.round(n * 100) + "%";
+const cells = [];
+
+function add(host, spec) {
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  const slot = document.createElement("div");
+  slot.className = "slot";
+  if (spec.h) slot.style.height = spec.h + "px";
+  if (spec.w) slot.style.width = spec.w + "px";
+  const cap = document.createElement("div");
+  cap.className = "cap";
+  cap.innerHTML = "<b>" + spec.title + "</b>" + (spec.sub || "");
+  cell.append(slot, cap);
+  host.append(cell);
+  cells.push({ slot, spec });
+  return slot;
+}
+
+const ladder = document.getElementById("row-ladder");
+for (const f of [1, 0.78, 0.5, 0.32, 0.18, 0.06]) {
+  add(ladder, { title: pct(f), sub: "<i>uFrac " + f.toFixed(2) + "</i>", frac: f, seg: 10, max: 58 });
+}
+
+const motion = document.getElementById("row-motion");
+add(motion, { title: "Damage", sub: "chip trail mid-drain", frac: 0.45, ghost: 0.78, seg: 10, max: 58 });
+add(motion, { title: "Heal", sub: "leading-edge bloom", frac: 0.62, bloom: 1, hit: 0.5, hitX: 0.42, heal: 1, seg: 10, max: 58 });
+add(motion, { title: "Impact", sub: "shockwave + spokes", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
+add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
+
+const pf = document.getElementById("row-pf2e");
+add(pf, { title: "Shield (temp HP)", sub: "60% HP, +85% temp", frac: 0.6, temp: 0.85, seg: 10, max: 58 });
+add(pf, { title: "Shield rail", sub: "raised, intact", frac: 0.8, role: 2, h: 10, seg: 0 });
+add(pf, { title: "Shield rail", sub: "broken", frac: 0.12, role: 2, cracked: 1, h: 10, seg: 0 });
+add(pf, { title: "Secondary rail", sub: "bar2, understated", frac: 0.55, role: 1, h: 11, seg: 0 });
+
+const scale = document.getElementById("row-scale");
+for (const [w, h, label] of [[220, 26, "grid 200"], [128, 19, "grid 128"], [80, 12, "grid 80"], [44, 8, "grid 44, zoomed out"]]) {
+  add(scale, { title: label, sub: "<i>bar body " + w + "×" + h + "px</i>", frac: 0.62, seg: 10, w, h });
+}
+
+const cb = document.getElementById("row-cb");
+for (const f of [1, 0.62, 0.32, 0.12]) {
+  add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
+}
+
+/* The token stage. */
+const stage = document.getElementById("stage");
+function token(name, spec) {
+  const t = document.createElement("div");
+  t.className = "tok";
+  const art = document.createElement("div"); art.className = "art";
+  t.append(art);
+  for (const bar of spec.bars) {
+    const s = document.createElement("div");
+    s.className = "slot " + (bar.role === 0 ? "hero" : "rail");
+    t.append(s);
+    cells.push({ slot: s, spec: bar });
+  }
+  const n = document.createElement("div"); n.className = "name"; n.textContent = name;
+  t.append(n);
+  stage.append(t);
+}
+token("HEALTHY", { bars: [{ frac: 0.94, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }] });
+token("BLOODIED", { bars: [{ frac: 0.44, ghost: 0.66, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }] });
+token("SHIELDED", { bars: [{ frac: 0.68, temp: 0.4, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }, { frac: 0.75, role: 2 }] });
+token("DYING", { bars: [{ frac: 0.09, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }, { frac: 0.1, role: 2, cracked: 1 }] });
+
+/* ── The live bar ─────────────────────────────────────────────────────── */
+
+const liveSlot = document.getElementById("live");
+let motionScale = 1;
+let liveRamp = "default";
+let liveTemp = 0;
+const live = new BarAnim(1, { motionScale });
+const liveCell = { slot: liveSlot, spec: { role: 0, seg: 10, max: 120 }, anim: live };
+cells.push(liveCell);
+
+liveSlot.addEventListener("pointerenter", () => live.setHover(true));
+liveSlot.addEventListener("pointerleave", () => live.setHover(false));
+
+const scrub = document.getElementById("scrub");
+scrub.addEventListener("input", () => live.set(+scrub.value / 100, { max: 120 }));
+for (const b of document.querySelectorAll("[data-dmg]"))
+  b.addEventListener("click", () => { live.set(Math.max(0, live.target - +b.dataset.dmg), { max: 120 }); syncScrub(); });
+for (const b of document.querySelectorAll("[data-heal]"))
+  b.addEventListener("click", () => { live.set(Math.min(1, live.target + +b.dataset.heal), { max: 120 }); syncScrub(); });
+for (const b of document.querySelectorAll("[data-set]"))
+  b.addEventListener("click", () => { live.set(+b.dataset.set, { max: 120 }); syncScrub(); });
+const syncScrub = () => { scrub.value = Math.round(live.target * 100); };
+
+document.getElementById("motion").addEventListener("change", (e) => {
+  motionScale = +e.target.value; live.motionScale = motionScale;
+});
+document.getElementById("ramp").addEventListener("change", (e) => { liveRamp = e.target.value; });
+document.getElementById("temp").addEventListener("change", (e) => { liveTemp = +e.target.value; });
+
+/* ── Render ───────────────────────────────────────────────────────────── */
+
+const read = document.getElementById("read");
+let last = performance.now();
+
+function draw(now) {
+  const dt = Math.min(50, now - last);
+  last = now;
+  live.step(dt);
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+
+  sizeTarget(rtScene, W * SS, H * SS);
+  sizeTarget(rtBright, Math.max(1, Math.round(W / BLOOM_DIV)), Math.max(1, Math.round(H / BLOOM_DIV)));
+  sizeTarget(rtBlur, rtBright.w, rtBright.h);
+
+  /* ── Pass 1: the bars, into the high-range buffer ───────────────────── */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, rtScene.fb);
+  gl.useProgram(prog);
+  pointAttribs(aPos, aUv);
+  gl.enable(gl.BLEND);
+  gl.viewport(0, 0, rtScene.w, rtScene.h);
+  gl.scissor(0, 0, rtScene.w, rtScene.h);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const t = now / 1000;
+
+  for (const c of cells) {
+    const r = c.slot.getBoundingClientRect();
+    if (r.bottom < -60 || r.top > innerHeight + 60 || r.width < 2) continue;
+
+    const a = c.anim;
+    const s = c.spec;
+
+    /* The kick displaces the whole quad. A bar whose *contents* shake while its
+       frame stays put reads as a texture animating; a bar that moves reads as
+       something that was struck. */
+    const kickPx = a ? a.kick : 0;
+
+    const x = Math.round((r.left * dpr + kickPx) * SS);
+    const y = Math.round((innerHeight - r.bottom) * dpr * SS);
+    const w = Math.round(r.width * dpr * SS);
+    const h = Math.round(r.height * dpr * SS);
+    gl.viewport(x, y, w, h);
+    gl.scissor(x, y, w, h);
+
+    const frac = a ? a.frac : (s.frac ?? 1);
+    const ghost = a ? a.ghost : (s.ghost ?? frac);
+    const rampKey = a ? liveRamp : (s.ramp || "default");
+    const temp = a ? liveTemp : (s.temp ?? 0);
+
+    gl.uniform1f(U.uTime, t);
+    gl.uniform1f(U.uTexel, 1 / w);
+    gl.uniform1f(U.uAspect, w / h);
+    gl.uniform1f(U.uFrac, frac);
+    gl.uniform1f(U.uGhost, ghost);
+    gl.uniform1f(U.uBloom, a ? a.bloom : (s.bloom ?? 0));
+    gl.uniform1f(U.uFlash, a ? a.flash : (s.flash ?? 0));
+    gl.uniform1f(U.uLow, a ? a.low : Math.max(0, (0.25 - frac) / 0.25));
+    gl.uniform1f(U.uSweep, a ? a.sweep : (s.sweep ?? 0));
+    gl.uniform1f(U.uTemp, temp);
+    gl.uniform1f(U.uCracked, s.cracked ?? 0);
+    gl.uniform1f(U.uSeg, s.seg ?? 0);
+    gl.uniform1f(U.uRole, s.role ?? 0);
+    gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
+    gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));
+    gl.uniform1f(U.uHeal, a ? a.heal : (s.heal ?? 0));
+    gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
+    gl.uniform3fv(U.uTempCol, TEMP_COL);
+    gl.uniform3fv(U.uShieldCol, SHIELD_COL);
+    gl.uniform3fv(U.uRailCol, RAIL_COL);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    if (s.max && (s.role ?? 0) === 0) {
+      const aspect = w / h;
+      const rightPx = ((aspect - 0.40) / aspect) * w;
+      const shear = SKEW / aspect;
+      const punch = 1 + (a ? a.punch : 0);
+      const big = h * 0.44 * punch, small = h * 0.30 * punch;
+      const cur = Math.round(frac * s.max);
+      drawRun([
+        { text: String(cur), size: big, ink: [0.97, 0.99, 1.0] },
+        { text: "/", size: small, ink: [0.45, 0.52, 0.66] },
+        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82] },
+      ], rightPx, h * 0.5, w, h, shear);
+
+      /* Floating deltas rise out of the bar and fade. The number that changed
+         has to be legible as a number — "the bar got shorter" is a magnitude
+         you estimate, "-35" is one you read. */
+      if (a) {
+        for (const pop of a.popups) {
+          const e = 1 - Math.pow(1 - pop.t, 2.2);
+          const alpha = pop.t < 0.15 ? pop.t / 0.15 : 1 - Math.pow((pop.t - 0.15) / 0.85, 2.0);
+          const ink = pop.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
+          drawRun([{ text: pop.text, size: h * 0.40, ink, opacity: Math.max(0, alpha) }],
+            rightPx - w * 0.02, h * (0.62 + POPUP_RISE * e), w, h, shear);
+        }
+      }
+    }
+  }
+
+  /* ── Passes 2-4: extract, blur, blur ────────────────────────────────── */
+  fullscreenPass(brightProg, rtBright, (pr, w, h) => {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, rtScene.tex);
+    gl.uniform1i(gl.getUniformLocation(pr, "uTex"), 0);
+    gl.uniform2f(gl.getUniformLocation(pr, "uTexel2"), 1 / rtScene.w, 1 / rtScene.h);
+    gl.uniform1f(gl.getUniformLocation(pr, "uThreshold"), 1.05);
+    gl.uniform1f(gl.getUniformLocation(pr, "uKnee"), 0.55);
+  });
+
+  for (const [src, dst, dir] of [[rtBright, rtBlur, [1, 0]], [rtBlur, rtBright, [0, 1]]]) {
+    fullscreenPass(blurProg, dst, (pr, w, h) => {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, src.tex);
+      gl.uniform1i(gl.getUniformLocation(pr, "uTex"), 0);
+      gl.uniform2f(gl.getUniformLocation(pr, "uDir"), dir[0] / w, dir[1] / h);
+    });
+  }
+
+  /* ── Pass 5: composite to the canvas ────────────────────────────────── */
+  fullscreenPass(compProg, null, (pr) => {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, rtScene.tex);
+    gl.uniform1i(gl.getUniformLocation(pr, "uTex"), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, rtBright.tex);
+    gl.uniform1i(gl.getUniformLocation(pr, "uBloom"), 1);
+    gl.uniform1f(gl.getUniformLocation(pr, "uIntensity"), 0.80);
+  });
+  gl.activeTexture(gl.TEXTURE0);
+
+  read.innerHTML =
+    "value <b>" + pct(live.target) + "</b> &nbsp;·&nbsp; fill <b>" + live.frac.toFixed(3) +
+    "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
+    "</b> &nbsp;·&nbsp; hit <b>" + live.hit.toFixed(2) +
+    "</b> &nbsp;·&nbsp; kick <b>" + live.kick.toFixed(2) + "px</b> &nbsp;·&nbsp; hdr <b>" +
+    (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; ticker <b>" + (live.hot ? "hot" : "cold") + "</b>";
+
+  document.body.dataset.frames = String((+document.body.dataset.frames || 0) + 1);
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
