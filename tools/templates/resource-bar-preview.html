@@ -189,6 +189,16 @@ input[type=range]{padding:0; width:230px}
     than the one at the full-health end.</p>
   <div class="grid" id="row-div"></div>
 
+  <h2>Divider thickness</h2>
+  <p class="note">How wide the gap between two plates is, in <b style="color:var(--text)">device pixels</b> &mdash;
+    so it is the same width on every display and at every zoom, which is the whole reason it is not
+    specified in geometry units. Narrow reads as a bar that has been scored; wide reads as one assembled
+    from separate plates. The thinnest the setting offers is 3px because <i>rbDetail</i> fades anything
+    under 2.2px out: below that line the slider would hand you a fainter divider rather than a finer one.
+    <b style="color:var(--text)">Off</b> is the switch, not the bottom of the slider &mdash; it takes the
+    trough divisions with it and leaves colour as the only channel carrying health.</p>
+  <div class="grid" id="row-divw"></div>
+
   <h2>The readout</h2>
   <p class="note">The maximum is the scale the reading is measured against, so it steps back &mdash;
     by one step, not into furniture. At 0.22 ink it was a denominator you had to go looking for;
@@ -711,6 +721,16 @@ for (const [max, per] of [[12, null], [58, null], [12, 5], [58, 5], [200, 5], [2
   });
 }
 
+const divw = document.getElementById("row-divw");
+add(divw, { title: "Off", sub: "<i>dividers off &rarr; uSeg 0</i>", frac: 0.62, seg: 0, max: 58 });
+for (const w of [3, 6, 10, 14]) {
+  add(divw, {
+    title: w + "px",
+    sub: w === 6 ? "<i>default</i>" : "<i>uSegW " + w + "</i>",
+    frac: 0.62, seg: 10, segW: w, max: 58,
+  });
+}
+
 const readRow = document.getElementById("row-read");
 for (const n of [0.6, 0.85, 1, 1.3, 1.7, 2]) {
   add(readRow, {
@@ -861,6 +881,7 @@ function draw(now) {
     gl.uniform1f(U.uTemp, temp);
     gl.uniform1f(U.uCracked, s.cracked ?? 0);
     gl.uniform1f(U.uSeg, s.seg ?? 0);
+    gl.uniform1f(U.uSegW, s.segW ?? 6);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));
