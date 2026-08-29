@@ -22,16 +22,43 @@
  * bar. This is the entire performance story.
  */
 
+import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER, SKEW } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
-import { BarAnim, SHED_ORDER } from "./anim.mjs";
-import { LAYOUT, ROLE } from "./constants.mjs";
+import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
+import { FLAGS, LAYOUT, ROLE } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "./bloom.mjs";
 
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
+
+/**
+ * Where the bar container sorts inside `canvas.interface`.
+ *
+ * This is not cosmetic. `InterfaceCanvasGroup` sorts its children by zIndex,
+ * and Foundry's own layers all declare one — the tokens layer holds every
+ * Token object, and a Token's children are its hover/target border, its
+ * nameplate and its elevation tooltip. A container left at the default zIndex 0
+ * therefore sorts *below all of them*: the bars are above the token artwork
+ * (that lives in `canvas.primary`, an entirely different group) but the hover
+ * box is drawn straight over them, which is exactly what it looked like.
+ *
+ * 900 clears the tokens layer and the notes layer (800) and stays under the
+ * controls layer (1000), so rulers, door controls and the drag ruler keep the
+ * top of the stack — those are things you are aiming at, and a health bar must
+ * never be in front of a click target.
+ */
+const CONTAINER_Z = 900;
+
+/** The three rows, in stacking order. */
+const ROLES = ["hero", "rail", "shield"];
+
+/** Readout ink: at rest, and the two colours an impact drags it toward. */
+const REST_INK = [0.97, 0.99, 1.0];
+const HIT_INK = [1.0, 0.52, 0.48];
+const HEAL_INK = [0.62, 1.0, 0.78];
 
 /** A unit quad in local space; the mesh is scaled to the bar's pixel size. */
 function unitQuad() {
@@ -46,7 +73,7 @@ function makeBarMesh(role, opts) {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
     uTemp: 0, uCracked: 0, uSeg: opts.segments, uRole: role,
-    uHit: 0, uHitX: 1, uHeal: 0,
+    uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1, uShock: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -71,6 +98,14 @@ class BarEntry {
     this.reading = null;
     this.lastNumber = "";
     this.popupText = null;
+    /** Per-row geometry, in world pixels: { w, h, y }. Fixed by the layout. */
+    this.rows = {};
+    /** Token origin plus the configured offset, in world pixels. */
+    this.baseX = 0;
+    /* Reused rather than reallocated: the readout's tint changes every frame of
+       an impact, and PIXI compares uniform vectors element-wise, so mutating one
+       buffer in place uploads exactly when a fresh array would. */
+    this._ink = new Float32Array(REST_INK);
   }
 
   destroy() {
@@ -127,7 +162,7 @@ class BarHost {
     this.floatingDeltas = opts.floatingDeltas;
     this.ramp = rampUniform(opts.ramp);
     for (const entry of this.entries.values()) {
-      for (const role of ["hero", "rail", "shield"]) {
+      for (const role of ROLES) {
         const mesh = entry.meshes[role];
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
@@ -158,6 +193,10 @@ class BarHost {
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
     this.container.sortableChildren = false;
+    /* Set before the addChild so the parent is only marked dirty once. If the
+       parent turns out not to sort its children at all, being added last puts us
+       on top anyway — both paths land above the token furniture. */
+    this.container.zIndex = CONTAINER_Z;
     layer.addChild(this.container);
     this.applyBloom();
     this.refreshAll();
@@ -243,6 +282,32 @@ class BarHost {
    * off a tiny creature would be unreadable — while the thing the reader is
    * actually judging (can I see this at this zoom?) depends on the grid.
    */
+  /**
+   * The nudge for one token, in grid squares.
+   *
+   * A per-token flag *replaces* the world default rather than adding to it. The
+   * additive reading looks friendlier and is worse in practice: a GM who moves
+   * the world default afterwards silently drags every hand-placed token with
+   * it, and the token whose placement was the whole reason for the override is
+   * the one that moves furthest.
+   *
+   * An unset flag is `null` (the Token Config form submits an empty number
+   * field as null), which is exactly the distinction we need and the reason
+   * this tests for finiteness rather than for truthiness — 0 is a legitimate
+   * override meaning "hold still while the world default moves".
+   */
+  offsetFor(token) {
+    const pick = (flag, fallback) => {
+      let v;
+      try { v = token?.document?.getFlag(SUITE_ID, flag); } catch { v = undefined; }
+      return Number.isFinite(v) ? v : fallback;
+    };
+    return {
+      x: pick(FLAGS.offsetX, this.opts.offsetX ?? 0),
+      y: pick(FLAGS.offsetY, this.opts.offsetY ?? 0),
+    };
+  }
+
   layout(entry) {
     const token = entry.token;
     const grid = canvas.dimensions?.size ?? 100;
@@ -251,13 +316,17 @@ class BarHost {
     const heroH = clamp(grid * LAYOUT.heroH, LAYOUT.minHeroPx, LAYOUT.maxHeroPx);
     const railH = clamp(grid * LAYOUT.railH, LAYOUT.minRailPx, LAYOUT.maxRailPx);
     const gap = grid * LAYOUT.gap;
+    const off = this.offsetFor(token);
 
     const rows = [];
     if (entry.reading.hero) rows.push(["hero", ROLE.hero, heroH]);
     if (entry.reading.rail) rows.push(["rail", ROLE.rail, railH]);
     if (entry.reading.shield) rows.push(["shield", ROLE.shield, railH]);
 
-    let y = token.y + token.h - heroH * 0.42;   // the hero straddles the token's edge
+    entry.baseX = token.x + off.x * grid;
+    // The hero straddles the token's edge; the offset moves the whole stack.
+    let y = token.y + token.h - heroH * 0.42 + off.y * grid;
+    entry.rows = {};
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
       if (!mesh) {
@@ -266,13 +335,14 @@ class BarHost {
         entry.group.addChild(mesh);
       }
       mesh.visible = true;
-      mesh.position.set(token.x, y);
+      mesh.position.set(entry.baseX, y);
       mesh.scale.set(w, h);
       mesh.shader.uniforms.uAspect = w / h;
+      entry.rows[role] = { w, h, y };
       y += h + gap;
     }
-    for (const role of ["hero", "rail", "shield"]) {
-      if (!rows.some((r) => r[0] === role) && entry.meshes[role]) entry.meshes[role].visible = false;
+    for (const role of ROLES) {
+      if (!entry.rows[role] && entry.meshes[role]) entry.meshes[role].visible = false;
     }
     entry.heroH = heroH;
     entry.heroW = w;
@@ -313,7 +383,7 @@ class BarHost {
     let anyHot = false;
     for (const entry of this.entries.values()) {
       let hot = false;
-      for (const role of ["hero", "rail", "shield"]) {
+      for (const role of ROLES) {
         const a = entry.anims[role];
         if (!a) continue;
         if (a.step(dt)) hot = true;
@@ -336,12 +406,12 @@ class BarHost {
     const rows = [["hero", r.hero], ["rail", r.rail], ["shield", r.shield]];
     for (const [role, bar] of rows) {
       const mesh = entry.meshes[role];
-      if (!mesh || !bar || !mesh.visible) continue;
+      const base = entry.rows[role];
+      if (!mesh || !bar || !mesh.visible || !base) continue;
       const a = entry.anims[role];
       const u = mesh.shader.uniforms;
 
       u.uTime = time;
-      u.uTexel = this.texelFor(mesh);
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
       u.uBloom = a && this.allows("bloom") ? a.bloom : 0;
@@ -351,14 +421,21 @@ class BarHost {
       u.uHit = a && this.allows("ring") ? a.hit : 0;
       u.uHitX = a ? a.hitX : bar.frac;
       u.uHeal = a ? a.heal : 0;
+      u.uSpark = a && this.allows("sparks") ? a.hit : 0;
+      u.uChip = a && this.allows("ghost") ? a.chip : 0;
+      u.uWave = a && this.allows("wave") ? a.wave : 0;
+      u.uWaveX = a ? a.waveX : u.uFrac;
+      u.uShock = a && this.allows("shock") ? a.shock : 0;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
-      /* The kick displaces the whole quad. A bar whose contents shake inside a
-         static frame reads as a texture animating; a bar that moves reads as
-         something that was struck. */
-      const kick = a && this.allows("kick") ? a.kick : 0;
-      mesh.position.x = entry.token.x + kick;
+      /* The mesh transform is deliberately *not* animated. Everything the
+         impact does happens inside the quad — the fill plate compresses, the
+         wave runs, the ring expands — while the frame stays exactly where the
+         layout put it. A bar that shakes or scales around its own anchor reads
+         as a screen-shake bolted onto a widget, which is the one note in this
+         HUD that would announce itself as an effect. */
+      u.uTexel = this.texelFor(mesh);
     }
 
     this.writeNumbers(entry, r);
@@ -396,23 +473,38 @@ class BarHost {
     }
 
     const a = entry.anims.hero;
-    const h = entry.heroH, w = entry.heroW;
+    const hm = entry.meshes.hero;
+    const base = entry.rows.hero;
+    if (!hm || !base) return;
+
+    /* The readout is anchored to the row's resting geometry, which never moves.
+       Only its own scale and colour animate — the punch is the number
+       reacting, not the bar being thrown around. */
+    const w = base.w, h = base.h;
     const right = w * (((w / h) - 0.40) / (w / h));
     const mid = h * 0.5;
-    const kick = a && this.allows("kick") ? a.kick : 0;
-    const heroY = entry.meshes.hero.position.y;
+    const anchorX = hm.position.x + right;
+    const anchorY = hm.position.y + mid;
 
-    const value = Math.round((a ? a.frac : r.hero.frac) * r.hero.max);
+    /* `num` and not `frac`: the fill snaps to the new value on impact, but a
+       readout that snaps is a number nobody saw move. It counts instead, which
+       also means a burst of small hits reads as one continuous fall rather than
+       as a digit flickering. */
+    const value = Math.round((a ? a.num : r.hero.frac) * r.hero.max);
     const label = value + "/" + r.hero.max;
 
     if (label !== entry.lastNumber || !entry.textMesh) {
       entry.lastNumber = label;
+      /* The current value is the reading; the maximum is the scale it is read
+         against, and a scale printed at the same weight as its reading competes
+         with it. Smaller and quieter, so the eye lands on the number that
+         changes and the denominator is there when it is wanted. */
       const geo = runGeometry([
-        { text: String(value), size: h * 0.44 },
-        { text: "/", size: h * 0.30 },
-        { text: String(r.hero.max), size: h * 0.30 },
+        { text: String(value), size: h * 0.46 },
+        { text: "/", size: h * 0.23, dim: 0.34 },
+        { text: String(r.hero.max), size: h * 0.24, dim: 0.46 },
       ], { right, mid, skew: SKEW });
-      entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, [0.97, 0.99, 1.0], 1);
+      entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number
          rather than throwing it across the bar. */
       entry.textMesh?.pivot.set(right, mid);
@@ -421,7 +513,15 @@ class BarHost {
       const punch = 1 + (a && this.allows("punch") ? a.punch : 0);
       entry.textMesh.visible = true;
       entry.textMesh.scale.set(punch);
-      entry.textMesh.position.set(entry.token.x + right + kick, heroY + mid);
+      entry.textMesh.position.set(anchorX, anchorY);
+
+      /* The readout takes the colour of what just happened, and drops back to
+         white as the impact decays. Colour on the number is what makes a heal
+         and a hit distinguishable at a glance on a bar that is briefly the same
+         length either way. */
+      const heat = a && this.allows("punch") ? a.hit * 0.70 : 0;
+      const to = a?.heal ? HEAL_INK : HIT_INK;
+      for (let i = 0; i < 3; i++) entry._ink[i] = REST_INK[i] + (to[i] - REST_INK[i]) * heat;
     }
 
     /* Floating deltas. "The bar got shorter" is a magnitude you estimate;
@@ -435,17 +535,27 @@ class BarHost {
 
     if (pop.text !== entry.popupText || !entry.popupMesh) {
       entry.popupText = pop.text;
-      const geo = runGeometry([{ text: pop.text, size: h * 0.40 }], { right, mid, skew: SKEW });
+      const geo = runGeometry([{ text: pop.text, size: h * 0.44 }], { right, mid, skew: SKEW });
       entry.popupMesh = this.swapTextMesh(entry, entry.popupMesh, geo,
-        pop.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48], 1);
+        pop.heal ? HEAL_INK : HIT_INK, 1);
       entry.popupMesh?.pivot.set(right, mid);
     }
     if (entry.popupMesh) {
       const e = 1 - Math.pow(1 - pop.t, 2.2);
       const alpha = pop.t < 0.15 ? pop.t / 0.15 : 1 - Math.pow((pop.t - 0.15) / 0.85, 2);
+      /* Punched in, not faded in. The delta is the one element on screen that
+         exists purely to be read once and discarded, so it arrives at 1.35×,
+         settles, and then drifts. A number that fades up from nothing is a
+         number the eye finds after it has already started leaving. */
+      const inT = Math.min(1, pop.t / 0.14);
+      const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
       entry.popupMesh.visible = true;
       entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha);
-      entry.popupMesh.position.set(entry.token.x + right - w * 0.02 + kick, heroY + mid - h * 1.15 * e);
+      entry.popupMesh.scale.set(popScale);
+      /* It rises and drifts back along the bar, so consecutive deltas fan out
+         instead of stacking on one another. */
+      entry.popupMesh.position.set(anchorX - w * (0.02 + 0.06 * e),
+                                   anchorY - h * (POPUP_LIFT + POPUP_RISE * e));
     }
   }
 
@@ -459,10 +569,15 @@ class BarHost {
    */
   swapTextMesh(entry, mesh, geometry, ink, opacity) {
     if (!geometry) { if (mesh) mesh.visible = false; return mesh; }
+    /* A Float32Array is adopted by reference so the caller can keep writing to
+       it — PIXI compares vector uniforms element-wise against its own cache, so
+       an in-place edit uploads exactly as a fresh array would, without an
+       allocation per frame of every impact on every token. */
+    const buf = ink instanceof Float32Array ? ink : new Float32Array(ink);
     if (!mesh) {
       const shader = PIXI.Shader.from(TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, {
         uAtlas: getAtlas().texture,
-        uInk: new Float32Array(ink),
+        uInk: buf,
         uEdge: new Float32Array([0.02, 0.03, 0.05]),
         uOpacity: opacity,
       });
@@ -474,7 +589,7 @@ class BarHost {
     const old = mesh.geometry;
     mesh.geometry = geometry;
     old?.destroy();
-    mesh.shader.uniforms.uInk = new Float32Array(ink);
+    mesh.shader.uniforms.uInk = buf;
     mesh.shader.uniforms.uOpacity = opacity;
     return mesh;
   }

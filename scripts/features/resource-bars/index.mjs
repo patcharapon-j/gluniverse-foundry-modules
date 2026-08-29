@@ -1,7 +1,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
+import { FEATURE_ID, OFFSET, PREFIX, SETTINGS } from "./constants.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -62,6 +62,25 @@ function registerSettings() {
     hint: "GLRB.Settings.Bloom.Hint",
     type: Boolean,
     default: true,
+  });
+
+  /* The world default placement. Per-token overrides live on the TokenDocument
+     and are edited in Token Config; these are what every token without one
+     uses, which for most worlds is every token. */
+  world(SETTINGS.offsetX, {
+    name: "GLRB.Settings.OffsetX.Name",
+    hint: "GLRB.Settings.OffsetX.Hint",
+    type: Number,
+    range: { min: OFFSET.min, max: OFFSET.max, step: OFFSET.step },
+    default: 0,
+  });
+
+  world(SETTINGS.offsetY, {
+    name: "GLRB.Settings.OffsetY.Name",
+    hint: "GLRB.Settings.OffsetY.Hint",
+    type: Number,
+    range: { min: OFFSET.min, max: OFFSET.max, step: OFFSET.step },
+    default: 0,
   });
 
   client(SETTINGS.motionTier, {
