@@ -38,6 +38,17 @@ Bars live in **one** container, not as children of each token. Three reasons:
 2. Tokens rotate; bars must not. World space means never counter-rotating.
 3. One container is one place to hide everything.
 
+That container carries an explicit **zIndex of 900**, and it is load-bearing.
+`InterfaceCanvasGroup` sorts its children by zIndex and every Foundry layer
+declares one; a container left at the default 0 sorts *under the tokens layer*,
+which is where a Token's hover box, target reticle and nameplate live. The bars
+are above the token artwork either way — that is in `canvas.primary`, a
+different group entirely — so the symptom is narrow and easy to miss: everything
+looks right until you hover, and then the border is drawn straight over the bar.
+900 clears the notes layer (800) and stays under the controls layer (1000), so
+rulers and door controls keep the top of the stack. Never put a health bar in
+front of something you click.
+
 `bloom.mjs` runs threshold → blur H → blur V → composite. **PIXI's filter
 textures are 8-bit**, so everything the shader emits above 1.0 is clamped before
 the filter sees it; the threshold therefore sits below 1.0 and works on what
@@ -68,6 +79,95 @@ show you that. `tools/resource-bar-check.mjs` pins it.
 
 As in the prelude, `uTexel = 0` leaves every clamp inert: a missing uniform
 degrades to the unfiltered look, never to a blank quad.
+
+---
+
+## Placement
+
+Bars sit under the token by default, and the whole stack can be nudged.
+
+| | |
+|---|---|
+| **World default** | `rb.offsetX` / `rb.offsetY`, in the Control Center |
+| **Per token** | Flags `rb.offsetX` / `rb.offsetY`, edited in Token Config |
+
+Both are in **grid squares**, not pixels. Everything else about the bar is sized
+off the grid, so a pixel offset that reads correctly on a 100px-grid scene puts
+the bar somewhere else on a 70px one and every token would have to be re-nudged
+per scene.
+
+A per-token value **replaces** the world default rather than adding to it. The
+additive reading looks friendlier and is worse: a GM who later moves the world
+default silently drags every hand-placed token with it, and the token whose
+placement was the reason for the override moves furthest. An unset override is
+`null` — which is why the Token Config inputs carry `data-dtype="Number"`
+(Foundry turns an empty Number field into null rather than 0) and why
+`offsetFor` tests for *finiteness* rather than truthiness. 0 is a legitimate
+override meaning "hold still while the world default moves".
+
+---
+
+## The shape of a change
+
+A value change is a sequence, and the order is what makes it read as an event:
+
+| | |
+|---|---|
+| **0ms** | the fill snaps to the new value and everything **stops** |
+| **~55ms** | the hitstop releases; the sweep and the ring both start from a standstill |
+| **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
+| **~420ms** | the readout has finished counting |
+| **~800ms** | the wave has crossed the bar and gone |
+
+Three things about it are easy to get wrong and impossible to unsee afterwards.
+
+**Nothing about the geometry moves, and no length springs.** Not the mesh
+transform, not the fill's height, and no overshoot, recoil or settle on any
+value. Every one of those was tried and every one reads, on a bar, as jelly — an
+instrument that wobbles is an instrument you stop trusting. Lengths use a
+quintic ease-out: one long deceleration that arrives exactly once and stops. The
+whole reaction is light travelling across something rigid.
+
+**The hitstop is the load-bearing beat.** A freeze before the reaction is most
+of what separates "the number went down" from "that hurt". It holds every
+channel, including the value tweens and the popup timers.
+
+**The wave is the loudest thing here.** It crosses the *whole* bar in the
+direction the value moved — scoped to just the span that changed it is a detail
+you have to already be looking at the bar to catch, and on a one-point heal it
+is a flicker two pixels wide.
+
+Three things separate a wave from a coloured band sliding along a bar, and all
+three are here because the band was built first and that is exactly what it
+looked like:
+
+1. **The crest is bowed.** A straight vertical edge travelling sideways is a
+   wipe. A front that leads at the centre line and lags at the rim is a wave
+   seen side-on.
+2. **There is a wake.** A single monotone ramp behind the front is a gradient in
+   motion; water leaves a decaying train of crests, and that train is most of
+   the read.
+3. **The wake has a surface.** The coloured region stops at an undulating
+   boundary partway up the fill rather than filling its full height, with a lit
+   meniscus along it and a shadow just under — a line alone reads as a drawn
+   stroke, a line with darkness beneath it reads as the edge of a volume. The
+   fill's *silhouette* is never touched; this boundary lives inside it.
+
+Nothing at all is drawn ahead of the front. That asymmetry is the direction cue,
+since a symmetric band travelling along a bar is a highlight and a highlight can
+be going either way.
+
+The wake *replaces* the colour of the material it crosses and only then adds
+light on top. Written the obvious way, as pure additive light over an
+already-bright plate, the green of a heal and the red of a hit both arrive as
+the same pale smear. Its length is a fraction of the **bar**, not a fixed
+distance in shader units: a constant is a third of a stubby rail and a twelfth
+of a wide hero bar, so the effect that is meant to be loudest quietly becomes a
+local highlight on exactly the bars with room to show it.
+
+The readout has its own channel, `anim.num`, separate from the fill's `frac`:
+the fill snaps on impact but the number counts, so a burst of small hits reads
+as one continuous fall rather than as a digit flickering.
 
 ---
 
@@ -117,9 +217,29 @@ Three things sit off the ramp on purpose:
 | **Shield rail** | `cyan` | The same idea, so they read as related |
 | **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
 
-Health is encoded three ways that are not hue: segment position, the danger
-hatch below the threshold, and the low-health frame pulse. A client-scoped
-colour-blind-safe ramp (blue → orange) is offered as a fourth option.
+The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
+straight, the whole lower half of the range is orange and red only arrives in
+the last few percent, so a creature at a third of its hit points looks merely
+warm. Below the threshold the fill goes further still, into an arterial red no
+ramp stop reaches — the one place the fill is allowed to editorialise, because
+"you are about to die" is not a shade of the same information.
+
+Health is encoded two ways that are not hue: **segment position**, and the
+**low-health breath**. The breath replaced a diagonal danger hatch, and the
+trade is deliberate: the hatch was a *spatial* second channel that sat on the
+bar permanently once you dropped below the threshold, and a static stripe
+pattern on the element a player checks constantly is decoration you have to look
+past. The second channel is now *temporal* — a ~4.6s pulse, slow enough to read
+as breathing rather than as an alarm, and it lands on the **liquid** as well as
+the chrome. The fill carries a domain-warped cell texture while it lasts: two
+sine fields multiplied together give a plaid whose axes you can see, so the
+sample point is displaced by another pair of sines first, which stretches and
+folds the cells into something that reads as movement *inside* the liquid rather
+than as a texture laid over it. Four sines, no texture fetch. The trough's own
+diagonal scan pattern was removed at the same time — on a bar that is mostly
+empty, which is every bar that matters, those stripes were the largest thing on
+screen and the fill had to compete with them. A client-scoped colour-blind-safe
+ramp (blue → orange) is offered as a third option.
 
 ---
 
@@ -133,10 +253,14 @@ Zero problems required. It pins the uniform table against the GLSL *and* the JS
 that writes it, that `uTexel = 0` stays inert, that the OKLab ramp still mirrors
 `gl-tokens.css`, that no raw millisecond literal has escaped `TIMING`, that the
 glyph atlas covers every character a run can emit, that the numeric readout is
-inside the permission gate, that every animated behaviour is shed-able, that the
-shear has one home, and that every detail gate still resolves at the reference
-size. With Playwright present it also compiles the shader and checks that no
-uniform was optimised away.
+inside the permission gate, that every animated behaviour is shed-able *and*
+that no `SHED_ORDER` entry is dead, that the hitstop actually holds every
+channel and then releases, that the readout counts rather than snapping, that
+the bar container still sorts above the token furniture, that an emptied
+per-token offset still means "inherit" rather than "zero", that the readout's
+per-glyph weight is wired end to end, that the shear has one home, and that
+every detail gate still resolves at the reference size. With Playwright present
+it also compiles the shader and checks that no uniform was optimised away.
 
 ```bash
 node tools/resource-bar-preview.mjs --out=.preview/bars.html

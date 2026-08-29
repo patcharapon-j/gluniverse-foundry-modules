@@ -93,8 +93,46 @@ const tokensCss = await src("styles/gl-tokens.css");
     fail(`anim.mjs has millisecond-looking literals outside TIMING: ${[...new Set(literals)].join(", ")}. Every duration must route through TIMING so the motion tier can scale it.`);
   else ok("every duration lives in TIMING and is scaled by the motion tier");
 
-  for (const key of ["holdMs", "drainMs", "bloomMs", "flashMs", "kickMs", "fillMs", "hitMs", "punchMs", "popupMs", "hotMs"])
+  for (const key of ["stopMs", "holdMs", "drainMs", "chipMs", "bloomMs", "flashMs",
+                     "fillMs", "countMs", "waveMs", "hitMs", "punchMs",
+                     "popupMs", "hotMs"])
     if (!(key in anim.TIMING)) fail(`TIMING is missing ${key}.`);
+}
+
+/* ── 4b. The hitstop actually stops ─────────────────────────────────────── */
+{
+  /* The whole impact sequence is built on a beat of held frames. If the freeze
+     ever stops holding — a channel added below it, an early return removed —
+     nothing errors and nothing looks broken; the hit just goes back to reading
+     as a transition, which is a regression nobody can point at. */
+  const a = new anim.BarAnim(1, { motionScale: 1 });
+  a.step(16);
+  a.set(0.5);
+  const before = { frac: a.frac, ghost: a.ghost, num: a.num };
+  a.step(16);
+  const frozen = a.frac === before.frac && a.ghost === before.ghost && a.num === before.num;
+  if (!frozen) fail("The hitstop does not hold: a value moved on the first frame after a change.");
+  else if (a.flash !== 1 || a.wave !== 1)
+    fail("The hitstop holds the values but not the reaction channels; flash and the sweep must be at peak during the freeze.");
+  else ok(`hitstop holds every channel for ${anim.TIMING.stopMs}ms`);
+
+  /* And releases. A freeze that never ends is a bar that never animates.
+     Measured on `flash`, not on `frac`: on damage the fill is already at its
+     new value and — now that nothing springs — never moves again, so a value
+     that stays put is the correct behaviour rather than evidence of a freeze. */
+  let guard = 0;
+  while (a.flash >= 1 && guard++ < 40) a.step(16);
+  if (guard >= 40) fail("The hitstop never releases; every channel is still held after 640ms.");
+
+  /* The readout counts rather than snapping — the reason `num` exists at all
+     as a channel separate from `frac`. */
+  const b = new anim.BarAnim(1, { motionScale: 1 });
+  b.step(16);
+  b.set(0.2);
+  for (let i = 0; i < Math.ceil(anim.TIMING.stopMs / 16) + 1; i++) b.step(16);
+  if (!(b.num > b.target && b.num < 1))
+    fail("The readout snaps to the new value instead of counting to it (anim.num is not tweening).");
+  else ok("the readout counts to the new value rather than snapping");
 }
 
 /* ── 5. The glyph atlas covers everything a run can emit ────────────────── */
@@ -127,10 +165,67 @@ const tokensCss = await src("styles/gl-tokens.css");
   const gated = new Set([...h.matchAll(/allows\("(\w+)"\)/g)].map((m) => m[1]));
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
-  const animated = ["sweep", "ghost", "kick", "bloom", "numbers", "popups", "ring", "punch"];
+  const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
+                    "sparks", "wave"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
+  for (const e of anim.SHED_ORDER)
+    if (!gated.has(e)) fail(`SHED_ORDER lists "${e}" but nothing gates on it, so the entry is dead and the order it implies is a lie.`);
   if (!problems) ok(`shed table covers all ${gated.size} animated behaviours`);
+}
+
+/* ── 7b. The bars sort above the token furniture ────────────────────────── */
+{
+  /* `canvas.interface` sorts its children by zIndex and every Foundry layer
+     declares one. A container left at the default 0 renders *under* the tokens
+     layer — which is where a Token's hover box, target reticle and nameplate
+     live — so the bars come out correct in every respect except that the hover
+     border is drawn straight over them. Nothing errors; it just looks wrong
+     only while a token is hovered, which is when a GM is least likely to be
+     inspecting the HUD. */
+  const h = strip(hostSrc);
+  const z = h.match(/const CONTAINER_Z\s*=\s*(\d+)/)?.[1];
+  if (!z) fail("host.mjs no longer declares CONTAINER_Z; the bar container will sort under the tokens layer and the hover box will draw over it.");
+  else if (!/container\.zIndex\s*=\s*CONTAINER_Z/.test(h))
+    fail("CONTAINER_Z is declared but never assigned to the container's zIndex.");
+  else if (Number(z) <= 800 || Number(z) >= 1000)
+    fail(`CONTAINER_Z is ${z}; it must clear the notes layer (800) and stay under the controls layer (1000), which owns rulers and door controls.`);
+  else ok(`bar container sorts at zIndex ${z}, above the token furniture and below the controls layer`);
+}
+
+/* ── 7c. An unset per-token offset means "inherit", not "zero" ──────────── */
+{
+  /* The Token Config field is empty when a token has no override. Foundry turns
+     an empty Number field into null only when the input declares
+     data-dtype="Number"; without it the empty field submits "" which coerces to
+     0, and every token silently pins its bars at the origin while the world
+     default stops applying. The sheet looks completely normal. */
+  const tc = strip(await src("scripts/features/resource-bars/token-config.mjs"));
+  if (!/dataset\.dtype\s*=\s*"Number"/.test(tc))
+    fail('The Token Config offset inputs do not declare data-dtype="Number"; an emptied field will read as a deliberate 0 rather than as "inherit the world default".');
+  else ok("an emptied per-token offset falls back to the world default");
+
+  if (!/Number\.isFinite\(v\)\s*\?\s*v\s*:\s*fallback/.test(strip(hostSrc)))
+    fail("host.mjs's offsetFor no longer tests the flag for finiteness; a null or empty-string flag will coerce to 0 and override the world default.");
+
+  if (!/name:\s*`flags\.\$\{SUITE_ID\}/.test(await src("scripts/features/resource-bars/token-config.mjs")))
+    fail("The Token Config inputs are not named for the flag path; they will not be saved by the sheet's own submit.");
+}
+
+/* ── 7d. Per-glyph weight survives ──────────────────────────────────────── */
+{
+  /* The maximum is drawn quieter than the current value through a per-vertex
+     attribute rather than a second mesh. Drop either half and the run still
+     renders — at full strength, silently undoing the hierarchy. */
+  const atlasSrc = strip(await src("scripts/features/resource-bars/atlas.mjs"));
+  const declared = /attribute float aDim/.test(atlasSrc);
+  const supplied = /addAttribute\("aDim"/.test(atlasSrc);
+  const used = /vDim/.test(atlasSrc);
+  if (!declared || !supplied || !used)
+    fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength.");
+  else if (!/dim:\s*0?\.\d+/.test(strip(hostSrc)))
+    fail("Nothing in host.mjs passes a dim weight, so every part of the readout draws at the same strength.");
+  else ok("the maximum is drawn at reduced weight through the run's own attribute");
 }
 
 /* ── 8. The shear has one home ──────────────────────────────────────────── */

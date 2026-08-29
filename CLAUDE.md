@@ -330,12 +330,18 @@ by hand and can drift from it; an animated behaviour missing from
 node tools/resource-bar-check.mjs
 ```
 
-Zero problems required. The subtlest pin is the last one: anything meant to read
-as a hairline must be sized in **device pixels** (`px`), never in the shader's
-geometry units — a fixed value is ~2px on a HiDPI display and sub-pixel on an
-ordinary one, where `rbDetail` deletes it, so the detail silently vanishes for
-every player without a retina monitor and no preview you run yourself will show
-you that.
+Zero problems required. Two pins are worth knowing about before you touch this.
+
+Anything meant to read as a hairline must be sized in **device pixels** (`px`),
+never in the shader's geometry units — a fixed value is ~2px on a HiDPI display
+and sub-pixel on an ordinary one, where `rbDetail` deletes it, so the detail
+silently vanishes for every player without a retina monitor and no preview you
+run yourself will show you that.
+
+And the bar container's `zIndex` is load-bearing. `canvas.interface` sorts its
+children and every Foundry layer declares one; left at the default the bars sort
+under the tokens layer, so the hover border draws over them — correct in every
+other respect, wrong only while a token is hovered.
 
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
 a page that compiles the real shader in a real WebGL2 context and drives it with

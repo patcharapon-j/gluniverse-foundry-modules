@@ -18,6 +18,8 @@ export const SETTINGS = Object.freeze({
   floatingDeltas: PREFIX + "floatingDeltas",
   pf2eLayers: PREFIX + "pf2eLayers",       // temp-HP shield plate + shield rail
   bloom: PREFIX + "bloom",                 // the post-process pass
+  offsetX: PREFIX + "offsetX",             // world default nudge, in grid squares
+  offsetY: PREFIX + "offsetY",
 
   /* Client — these are about the viewer's eyes, so the viewer owns them. */
   motionTier: PREFIX + "motionTier",       // default | reduced | none
@@ -44,3 +46,27 @@ export const LAYOUT = Object.freeze({
 
 /** Roles, matching `uRole` in the shader. */
 export const ROLE = Object.freeze({ hero: 0, rail: 1, shield: 2 });
+
+/**
+ * Per-token flag keys, on the TokenDocument, under this package's flag scope.
+ *
+ * They share the `rb.` prefix with the settings for the same reason the
+ * settings do: one package id owns every flag every feature writes, and the
+ * prefix is the only thing keeping two features apart. A dot in a flag key
+ * nests it — `getFlag(SUITE_ID, "rb.offsetX")` resolves through the object —
+ * which is what lets the Token Config form name the field directly.
+ */
+export const FLAGS = Object.freeze({
+  offsetX: PREFIX + "offsetX",
+  offsetY: PREFIX + "offsetY",
+});
+
+/**
+ * How far a nudge may go, in grid squares.
+ *
+ * Grid squares rather than pixels because everything else about the bar is
+ * sized off the grid: an offset in pixels that reads correctly on a 100px-grid
+ * scene puts the bar somewhere else entirely on a 70px one, and the GM would
+ * have to re-nudge every token per scene.
+ */
+export const OFFSET = Object.freeze({ min: -3, max: 3, step: 0.05 });

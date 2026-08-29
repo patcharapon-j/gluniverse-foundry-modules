@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = new URL("../", import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?.split("=").slice(1).join("=");
 
-const { FRAGMENT_SHADER, PREVIEW_VERTEX_SHADER, SKEW } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
+const { FRAGMENT_SHADER, PREVIEW_VERTEX_SHADER, SKEW, UNIFORMS } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
 const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 
 const template = await readFile(new URL("tools/templates/resource-bar-preview.html", ROOT), "utf8");
@@ -34,6 +34,9 @@ const page = template
   .replace("/*__ANIM_SRC__*/", animSrc)
   .replace("/*__FRAG__*/", JSON.stringify(FRAGMENT_SHADER))
   .replace("/*__VERT__*/", JSON.stringify(PREVIEW_VERTEX_SHADER))
+  /* The harness looks up exactly the uniforms the shader declares, so a new one
+     cannot be added and then silently left unfed in the preview. */
+  .replace("/*__UNIFORM_NAMES__*/", JSON.stringify(Object.keys(UNIFORMS)))
   .replace("/*__RAMPS__*/", JSON.stringify({
     default: Array.from(rampUniform("default")),
     safe: Array.from(rampUniform("safe")),

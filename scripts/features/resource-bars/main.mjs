@@ -13,6 +13,7 @@ import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 import { SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
+import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
 
 const get = (key, fallback) => {
@@ -29,6 +30,8 @@ function currentOptions() {
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
     bloom: !!get(SETTINGS.bloom, true),
+    offsetX: Number(get(SETTINGS.offsetX, 0)) || 0,
+    offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,
     motionScale: MOTION_SCALE[tier] ?? MOTION_SCALE[MOTION_TIER_DEFAULT],
     ramp: get(SETTINGS.ramp, "default"),
     numbers: get(SETTINGS.numbers, "hover"),
@@ -117,6 +120,12 @@ export function onReady() {
      permission-shaped, so they go through the full path rather than reposition. */
   on("hoverToken", (token) => full(token));
   on("controlToken", (token) => full(token));
+
+  /* Per-token placement. Both hooks are registered because a prototype token
+     opens its own application class in v13; whichever one does not exist simply
+     never fires. */
+  on("renderTokenConfig", (app, element) => injectTokenConfig(app, element));
+  on("renderPrototypeTokenConfig", (app, element) => injectTokenConfig(app, element));
 
   if (canvas?.ready) host.attach();
 }
