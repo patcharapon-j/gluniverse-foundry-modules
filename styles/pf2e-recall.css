@@ -254,9 +254,28 @@
   font-size: var(--gl-fs-xs);
 }
 
-/* The presentation note sits directly under its picker as one control, so it
-   loses the gap the flex column would otherwise put between them. */
-.glrk-presentation-note {
+/* Preset buttons sit directly above the box they fill, as one control: the row
+   loses the gap the flex column would otherwise put between the two. They read
+   as suggestions rather than as a selected mode, because the box outranks them
+   the moment the GM types. */
+.glrk-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-2);
+}
+
+.glrk-preset {
+  padding: var(--gl-sp-1) var(--gl-sp-2);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.glrk-preset.is-active {
+  color: var(--gl-text-bright);
+  border-color: var(--gl-accent);
+}
+
+#glrk-presentation {
   margin-top: calc(var(--gl-sp-2) * -1);
   width: 100%;
   resize: vertical;

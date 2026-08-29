@@ -12,7 +12,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { FEATURE_ID, PRESENTATIONS, SUBJECT_TYPES, presentationByKey } from "./constants.mjs";
+import { FEATURE_ID, PRESENTATIONS, SUBJECT_TYPES } from "./constants.mjs";
 import { subjectBrief } from "./extract.mjs";
 import { buildPayload } from "./prompt.mjs";
 import { parseLadder } from "./parse.mjs";
@@ -94,6 +94,7 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       setTab: RecallApp.prototype._onSetTab,
       setBand: RecallApp.prototype._onSetBand,
+      usePreset: RecallApp.prototype._onUsePreset,
       copyPayload: RecallApp.prototype._onCopyPayload,
       importLadder: RecallApp.prototype._onImportLadder,
       clearLadder: RecallApp.prototype._onClearLadder,
@@ -116,20 +117,23 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const presentation = readPresentation(doc);
 
     // What the stored paragraphs were authored under, versus what the box says
-    // now. A ladder with no stamp predates presentations: unknown, not stale.
-    const authored = ladder?.presentation?.key
-      ? presentationByKey(ladder.presentation.key)
-      : null;
+    // now. The GM's own words are the honest label — a ladder with no stamp
+    // predates presentations, and reads as unknown rather than stale.
+    const authoredAs = ladder?.presentation?.text?.trim() || null;
 
     return Object.assign(context, {
-      presentations: PRESENTATIONS.map((p) => ({
+      // Presets are buttons that FILL the box, not a value the box holds. They
+      // carry their sentence in a data attribute so the click needs no lookup.
+      presets: PRESENTATIONS.map((p) => ({
         key: p.key,
         label: L(`GLRK.presentation.${p.key}`, p.label),
-        selected: p.key === presentation.key,
+        text: p.text,
+        active: p.text === presentation.text,
       })),
-      presentationNote: presentation.note,
-      authoredAs: authored ? L(`GLRK.presentation.${authored.key}`, authored.label) : null,
-      presentationStale: !!authored && authored.key !== presentation.key,
+      presentationText: presentation.text,
+      presentationKey: presentation.key,
+      authoredAs,
+      presentationStale: !!authoredAs && authoredAs !== presentation.text.trim(),
       docName: doc?.name ?? "",
       docType: doc?.documentName ?? "",
       hasLadder: !!ladder,
@@ -181,6 +185,25 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this.render();
   }
 
+  /**
+   * A preset click writes its sentence into the box and nothing else.
+   *
+   * Deliberately not a mode switch: the box stays editable, the GM can write
+   * over what lands there, and what they leave in it is what gets used. The
+   * key is remembered alongside so the payload can still offer that preset's
+   * scaffolding behind their words.
+   */
+  async _onUsePreset(event, target) {
+    const box = this.element.querySelector("[name=glrk-presentation]");
+    if (!box) return;
+    box.value = target.dataset.text ?? "";
+    await writePresentation(this.document, {
+      key: target.dataset.preset,
+      text: box.value,
+    });
+    this.render();
+  }
+
   async _onCopyPayload() {
     const doc = this.document;
     const brief = subjectBrief(doc);
@@ -193,8 +216,8 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     await writeContext(doc, contextText);
 
     const presentation = {
-      key: this.element.querySelector("[name=glrk-presentation]")?.value ?? undefined,
-      note: this.element.querySelector("[name=glrk-presentation-note]")?.value ?? "",
+      key: this.element.querySelector("[name=glrk-presentation]")?.dataset.preset,
+      text: this.element.querySelector("[name=glrk-presentation]")?.value ?? "",
     };
     await writePresentation(doc, presentation);
 
@@ -273,15 +296,15 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!proceed) return;
     }
 
-    // The picker is the truth at import time: the GM copied a payload built
-    // from it, so that is what the reply was authored under. Persisting it
-    // before the write means the stamp records the presentation actually used,
-    // even if the GM changed the box and re-copied since.
-    const picked = this.element.querySelector("[name=glrk-presentation]")?.value;
-    if (picked) {
+    // The box is the truth at import time: the GM copied a payload built from
+    // it, so that is what the reply was authored under. Persisting it before the
+    // write means the stamp records the words actually used, even if the box was
+    // edited and re-copied since.
+    const presentationBox = this.element.querySelector("[name=glrk-presentation]");
+    if (presentationBox) {
       await writePresentation(this.document, {
-        key: picked,
-        note: this.element.querySelector("[name=glrk-presentation-note]")?.value ?? "",
+        key: presentationBox.dataset.preset,
+        text: presentationBox.value,
       });
     }
     await writeLadder(this.document, { ...result, name: result.name || this.document.name });

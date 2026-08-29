@@ -63,6 +63,8 @@ import {
   DEFAULT_PRESENTATION,
   GRAMMAR_VERSION,
   presentationByKey,
+  presentationForKey,
+  presentationForText,
 } from "./constants.mjs";
 
 /**
@@ -163,31 +165,61 @@ const BAND_GUIDANCE = Object.freeze({
  * The presentation block: who is speaking, and what the knowing is made of.
  *
  * Rendered high in the payload, before the bands, because it governs how every
- * band is written. The GM's own note comes last and is explicitly allowed to
- * win, the same way their table context outranks anything generic.
+ * band is written.
+ *
+ * The GM has ONE field for this, and what they wrote is the presentation. The
+ * presets exist to fill that field in a click, so there are three cases and the
+ * precedence between them is the whole point:
+ *
+ *   1. The field still holds a preset's own sentence, untouched. The GM took the
+ *      preset as offered, so its scaffolding is exactly what they asked for and
+ *      is stated as fact.
+ *   2. The field holds a preset's sentence the GM has since written over. The
+ *      scaffolding is offered as background and explicitly ranked BELOW their
+ *      words — a preset the GM has edited away from is no longer describing what
+ *      they want, and saying otherwise would have the payload argue with itself.
+ *   3. The field holds something the GM wrote from scratch. There is no
+ *      scaffolding, so the model is asked to derive the same four things from
+ *      their description. The four questions are what make a presentation more
+ *      than a mood; they are worth asking even when nobody has answered them.
  */
-function renderPresentation(presentation, note) {
+function renderPresentation(text, backing, fallbackStyle) {
+  const written = String(text ?? "").trim();
+  // Empty box: the fallback IS the presentation, and reads as one. Untouched
+  // preset: the same, said in the preset's own words.
+  const asFact = written ? presentationForText(written) : fallbackStyle;
+  const style = asFact ?? backing;
+
   const out = [
     "## How this reaches the player",
     "",
-    `This is not a style preference; it decides who is speaking and what the knowledge is made of. **${presentation.label}.**`,
+    "This is not a style preference; it decides who is speaking and what the knowledge is made of.",
     "",
-    `- **Speaker.** ${presentation.speaker}`,
-    `- **What the knowledge is made of.** ${presentation.evidence}`,
-    `- **How it goes wrong.** At the two false bands below: ${presentation.falsehood}`,
-    `- **Who is addressed.** ${presentation.address}`,
+    `**${written || fallbackStyle.text}**`,
+    "",
   ];
-  if (presentation.numbers) {
+
+  if (style) {
+    if (!asFact) out.push("For reference, the preset I started from — where it disagrees with my own words above, my words win:", "");
     out.push(
-      "- **Numbers.** This presentation is the one exception to the no-numbers rule below: it is a readout, and a readout that refuses to print a number is not one. Give the statistics as the record would."
+      `- **Speaker.** ${style.speaker}`,
+      `- **What the knowledge is made of.** ${style.evidence}`,
+      `- **How it goes wrong.** At the two false bands below: ${style.falsehood}`,
+      `- **Who is addressed.** ${style.address}`
     );
-  }
-  if (note.trim()) {
+    if (style.numbers) {
+      out.push(
+        "- **Numbers.** This presentation is the one exception to the no-numbers rule below: it is a readout, and a readout that refuses to print a number is not one. Give the statistics as the record would."
+      );
+    }
+  } else {
     out.push(
+      "Work out from that description, and hold to it in every band:",
       "",
-      "The GM has described how this should look and sound. Prefer it over anything generic above:",
-      "",
-      note.trim()
+      "- **Speaker.** Who or what is talking, and to whom.",
+      "- **What the knowledge is made of.** Memory, physical evidence, a written record, a machine's log, an image — whatever this source would actually hold.",
+      "- **How it goes wrong.** How *this* source fails at the two false bands below. A person misremembers; a machine returns a corrupted record or a confident match against the wrong thing; a vision is true and misread. Do not fall back on a character misremembering unless a character is the one speaking.",
+      "- **Who is addressed.** Whether there is anyone to address at all. If nothing here is speaking to a person, do not say \"you\"."
     );
   }
   return out.join("\n");
@@ -254,15 +286,28 @@ function renderBrief(brief) {
  * @param {string}   opts.context  the GM's free-text steer (the highest-value field)
  * @param {string[]} opts.extras   rendered blocks of opted-in extra context
  * @param {object[]} opts.seed     existing DC-keyed RK entries offered as source material
- * @param {object}   opts.presentation  `{key, note}` — how the knowledge reaches
- *                                      the player. Falls back to the baseline.
+ * @param {object}   opts.presentation  `{key, text}` — the GM's own words for how
+ *                                      the knowledge reaches the player, and the
+ *                                      preset that filled the box, if any.
  */
 export function buildPayload(
   brief,
   { context = "", extras = [], seed = [], presentation = null } = {}
 ) {
-  const style = presentationByKey(presentation?.key ?? DEFAULT_PRESENTATION);
-  const styleNote = String(presentation?.note ?? "");
+  // An empty box is not "no presentation": it is the baseline, or whatever the
+  // world's default names. The key is only ever the fallback — the text leads.
+  const fallbackStyle = presentationByKey(presentation?.key ?? DEFAULT_PRESENTATION);
+  const presentationText = String(presentation?.text ?? "");
+  // Only a preset can license numbers, and only while its own sentence is what
+  // the box says. Once the GM has written over it, the exception goes with it:
+  // the safe half of an ambiguous case is the rule everything else obeys.
+  const resolvedStyle = presentationText.trim()
+    ? presentationForText(presentationText)
+    : fallbackStyle;
+  const permitsNumbers = !!resolvedStyle?.numbers;
+  // The preset behind the box, if one filled it. Strict: a null key means the
+  // GM wrote this themselves and there is nothing to offer behind their words.
+  const backingStyle = presentationForKey(presentation?.key);
   const kindWord =
     {
       creature: "creature",
@@ -287,7 +332,7 @@ export function buildPayload(
     "2. **Each band must add something the one below it did not have.** The carried material is shared by design, but the new layer is not: if a band adds nothing its predecessor lacked, that roll was wasted. Carry briefly, add substantially.",
     "3. **Length is a hard constraint, and it is per band.** The budget is given with each band below. One paragraph, no bullets, no headings inside it. This is spoken aloud — every ten words is about two seconds — so the carried layers must arrive as a clause each, never re-told at their original length. The newest layer always gets the most words.",
     "",
-    renderPresentation(style, styleNote),
+    renderPresentation(presentationText, backingStyle, fallbackStyle),
     "",
     "## The bands, shallowest to deepest",
     "",
@@ -315,7 +360,7 @@ export function buildPayload(
     "",
     "These hold whatever the presentation is:",
     "",
-    `1. Name weaknesses and resistances as **types, never numbers** — "fire scars it and it does not heal" rather than "weakness 10 fire". The same goes for saves: "slow to dodge" rather than "Reflex +12".${style.numbers ? " (This presentation is the stated exception: give the numbers as the record would.)" : ""}`,
+    `1. Name weaknesses and resistances as **types, never numbers** — "fire scars it and it does not heal" rather than "weakness 10 fire". The same goes for saves: "slow to dodge" rather than "Reflex +12".${permitsNumbers ? " (This presentation is the stated exception: give the numbers as the record would.)" : ""}`,
     "2. **No interiority.** Describe the world and what is known about it, never what the character feels, notices in themselves, or decides. \"Your blood runs cold\" is my line to write, not yours, and it is the fastest way to take the scene away from me.",
     "3. **No advice.** State what is true; do not tell the player what to do about it. \"Fire is the only thing that keeps a wound shut\" — not \"so you should burn it\".",
     "4. **Plain and concrete, sayable in one breath.** The immersion comes from specific images — a smell, a mark on the ground, the one detail nobody would invent — never from ornament. Write nothing I have to perform to make it land; the mood is mine to add.",

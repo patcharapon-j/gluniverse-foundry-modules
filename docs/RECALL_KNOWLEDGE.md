@@ -144,19 +144,43 @@ predates the feature and reads as unknown rather than stale — claiming it was
 authored as `recall` would put a false warning on every existing ladder in every
 world.
 
-**Stored as one flag.** `rk.presentation` holds `{key, note}` together, the way
+**One field, and the GM outranks the list.** The Generate tab has a single box
+for this. The presets are buttons that *fill* it in a click — they are not a mode
+the box is set to — and whatever the box says is what gets used. That gives three
+cases, and the precedence between them is the point:
+
+| The box holds | What the payload does |
+|---|---|
+| a preset's own sentence (or nothing, so the default's) | states that preset's speaker, evidence, falsehood and address as fact |
+| a preset's sentence the GM wrote over | leads with the GM's words, then offers the preset behind them: *"where it disagrees with my own words above, my words win"* |
+| something the GM wrote from scratch | no scaffolding — the model is asked to derive the same four things from the description |
+
+The third case matters because a model left to itself assumes a *person* is
+speaking, which is wrong for five of the six presets. The second exists because
+"the ship's medical scanner, terse and timestamped" is still a console log, and
+throwing away the console's falsehood rule — the best part of the table — to
+honour an edit would be a worse answer than keeping it, ranked.
+
+**Stored as one flag.** `rk.presentation` holds `{key, text}` together, the way
 statsblock-import keeps `{context, rung, level}`: one intent, and redoing half of
-it should not mean retyping the other half. It stays separate from `rk.context`,
-which is about what is *true* at this table rather than how it is delivered — a
-GM switches presentation while the campaign facts stay put. Two world settings
-(`rk.defaultPresentation`, `rk.defaultPresentationNote`) supply the default, so a
-campaign that is entirely ship's logs is configured once rather than per
-creature.
+it should not mean retyping the other half. `text` is the GM's words and the
+authority; `key` only remembers which preset filled the box, and is **null** when
+none did — `presentationForKey()` is strict for exactly that reason, where
+`presentationByKey()` falls back to the baseline. It stays separate from
+`rk.context`, which is about what is *true* at this table rather than how it is
+delivered. Two world settings (`rk.defaultPresentation`,
+`rk.defaultPresentationText`) supply the default, so a campaign that is entirely
+ship's logs is configured once rather than per creature; a world that types its
+own sentence there gets a null key, and the third case above.
 
 **The numbers exception.** `readout` is the single presentation permitted to
 state numbers, declared as a field rather than left to judgement, because a
-readout that refuses to print one is not a readout. `tools/recall-check.mjs`
-asserts it is the only one.
+readout that refuses to print one is not a readout. It travels with the
+preset's *sentence*, not with a key left lying behind it: once the GM has written
+over the box, the exception goes with the words that earned it, because the safe
+half of an ambiguous case is the rule everything else already obeys.
+`tools/recall-check.mjs` asserts both — that `readout` is the only one, and that
+it stops applying the moment its sentence is gone.
 
 ### The tone floor, and what the presentation owns
 
@@ -250,7 +274,7 @@ The flag is the source of truth:
   stamps the one it was authored under (absent on pre-v2.2 ladders)
 - `rk.context` — the GM's free-text steer, persisted so regenerating never means
   retyping it
-- `rk.presentation` — `{key, note}`, how the knowledge reaches the player
+- `rk.presentation` — `{key, text}`, how the knowledge reaches the player
 - `rk.mistaken` — the cached misidentification pick
 
 A **read-only mirror** renders into `system.details.privateNotes` so a GM who
