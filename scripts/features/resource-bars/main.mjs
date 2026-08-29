@@ -15,6 +15,7 @@ import { READOUT, SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
+import { breakSourceActive, tokensForCombatant } from "./break.mjs";
 
 const get = (key, fallback) => {
   try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
@@ -59,6 +60,10 @@ function currentOptions() {
     lowAt: (Number(get(SETTINGS.lowThreshold, LOW_HEALTH_AT * 100)) || 25) / 100,
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
+    /* Resolved to false whenever the tracker that owns the state is not
+       running, so the renderer never has to ask twice and a world without it
+       does not pay for a flag read per token per refresh. */
+    breakFx: !!get(SETTINGS.breakFx, true) && breakSourceActive(),
     bloom: !!get(SETTINGS.bloom, true),
     offsetX: Number(get(SETTINGS.offsetX, 0)) || 0,
     offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,
@@ -155,6 +160,24 @@ export function onReady() {
      permission-shaped, so they go through the full path rather than reposition. */
   on("hoverToken", (token) => full(token));
   on("controlToken", (token) => full(token));
+
+  /* The initiative tracker's guard break. It is a flag on the Combatant, so
+     none of the actor/token hooks above can see it move — and unlike a value
+     change it can land on a creature nothing has touched, which is exactly what
+     happens when a break gauge empties on somebody else's turn. Registered
+     whether or not the tracker is enabled: they are cheap listeners and
+     `breakFx` is already false when it is off, which is a shorter path than
+     wiring and unwiring them from a toggle that needs a reload anyway. */
+  const combatantTokens = (combatant) => {
+    for (const token of tokensForCombatant(combatant)) full(token);
+  };
+  on("updateCombatant", (combatant) => combatantTokens(combatant));
+  on("createCombatant", (combatant) => combatantTokens(combatant));
+  on("deleteCombatant", (combatant) => combatantTokens(combatant));
+  /* Starting and ending a combat move every creature in it at once, and ending
+     one leaves no combatants to walk. */
+  on("combatStart", () => host.refreshAll());
+  on("deleteCombat", () => host.refreshAll());
 
   /* Per-token placement. Both hooks are registered because a prototype token
      opens its own application class in v13; whichever one does not exist simply

@@ -56,10 +56,35 @@ export const TIMING = Object.freeze({
   punchMs: 300,    // the readout scaling up and settling back
   popupMs: 950,    // a floating delta, rise and fade
   hotMs: 2200,     // how long a bar keeps animating after a change (see COLD below)
+  breakInMs: 715,  // the guard-break fracture spreading (see BREAK_SETTLE_S)
+  breakOutMs: 320, // --gl-d-brisk   and fading again when the break is cleared
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
 export const LOW_AT = 0.25;
+
+/**
+ * Where the shared fracture stops spreading, in its own clock's units.
+ *
+ * `core/fx-glsl.mjs`'s field drives the shatter off `clamp(time * 1.4, 0, 1)`,
+ * so it saturates here and the crack is fully formed. TIMING.breakInMs is the
+ * real time this model takes to walk the clock that far, and at full motion the
+ * two agree by construction — the bar shatters in step with the same creature's
+ * token, which is the point of sharing the field at all.
+ */
+export const BREAK_SETTLE_S = 1 / 1.4;
+
+/**
+ * Where the fracture's clock wraps, so it cannot drift into float mush over a
+ * long session.
+ *
+ * Not an arbitrary big number: the two things still moving once the crack has
+ * settled are its pulse (`sin(t * 2.2)`) and the energy flowing along the seams
+ * (`sin(… - t * 3.2)`), and 10π is a whole number of cycles of *both* — 11 and
+ * 16 respectively. Wrapping anywhere else steps the fracture mid-breath, once
+ * every few minutes, on a bar nobody is watching at the time.
+ */
+export const BREAK_WRAP = Math.PI * 10;
 
 /**
  * A floating delta's travel, as a fraction of the quad height.
@@ -162,6 +187,18 @@ export class BarAnim {
     this._waveB = this.frac;
     this._waveT = 1;
 
+    /* The guard break. `broken` is how present the fracture is (the shatter is
+       its own arrival, so this goes to 1 at once and only fades on the way out);
+       `breakT` is the shared field's clock; `breakX` is where it nucleated,
+       captured once rather than followed. */
+    this.broken = 0;
+    this.breakT = 0;
+    this.breakX = this.frac;
+    /** Set by the renderer from the shed budget: freeze the fracture, keep it. */
+    this.breakFrozen = false;
+    this._breakOn = false;
+    this._breakOutT = 1;
+
     /** Floating deltas, newest last. Each is { text, heal, t } with t in 0..1. */
     this.popups = [];
   }
@@ -244,6 +281,35 @@ export class BarAnim {
     }
   }
 
+  /**
+   * Report the creature's guard-break state.
+   *
+   * `at` is the fill fraction the fracture nucleates on, captured *now* and then
+   * held: the crack belongs to the moment the guard went, so following the fill
+   * through the next three hits would make it a decal rather than damage.
+   *
+   * There is no fade *in*. The shatter is the arrival — a fracture that fades up
+   * is a fracture that was always there and only just became visible, which is
+   * the opposite of what happened. Clearing it does fade, because nothing
+   * un-shatters and a crack that vanishes between two frames reads as a glitch.
+   */
+  setBroken(on, { at = this.frac } = {}) {
+    const next = !!on;
+    if (next === this._breakOn) return;
+    this._breakOn = next;
+    if (next) {
+      this.breakX = clamp01(at);
+      this.broken = 1;
+      this._breakOutT = 1;
+      /* At motion "none" the fracture is a fact, not an animation: it arrives
+         already settled and its clock never moves again. */
+      this.breakT = this.motionScale === 0 ? BREAK_SETTLE_S : 0;
+    } else {
+      this._breakOutT = this.motionScale === 0 ? 1 : 0;
+      if (this.motionScale === 0) this.broken = 0;
+    }
+  }
+
   /** Hover / control state drives the specular sweep, and nothing else. */
   setHover(on) {
     this._hover = !!on;
@@ -263,6 +329,10 @@ export class BarAnim {
       this.hit = this.punch = this.chip = this.wave = 0;
       this.popups.length = 0;
       this.sweep = this._hover ? 1 : 0;
+      /* The fracture is state, not motion, so it survives the tier that turns
+         every animation off — it just arrives fully formed and stops. */
+      this.broken = this._breakOn ? 1 : 0;
+      this.breakT = BREAK_SETTLE_S;
       return false;
     }
 
@@ -344,6 +414,20 @@ export class BarAnim {
     for (const pop of this.popups) pop.t = Math.min(1, pop.t + dt / Math.max(1, this._ms("popupMs")));
     while (this.popups.length && this.popups[0].t >= 1) this.popups.shift();
 
+    /* The fracture's clock. One rate for the whole life of the crack: the same
+       walk that spreads it in TIMING.breakInMs then carries its pulse and its
+       flow, so at full motion both run in real seconds and match the token's. */
+    if (this._breakOn || this.broken > 0) {
+      if (!this.breakFrozen) {
+        this.breakT += (dt / Math.max(1, this._ms("breakInMs"))) * BREAK_SETTLE_S;
+        if (this.breakT > BREAK_WRAP) this.breakT -= BREAK_WRAP;
+      }
+      if (!this._breakOn) {
+        this._breakOutT = adv(this._breakOutT, "breakOutMs");
+        this.broken = 1 - this._breakOutT;
+      }
+    }
+
     // Sweep fades in on hover and out again; it is never on at rest.
     const wantSweep = this._hover ? 1 : 0;
     const sweepRate = dt / Math.max(1, this._ms(wantSweep ? "sweepInMs" : "sweepOutMs"));
@@ -372,6 +456,10 @@ export class BarAnim {
     if (this._chipT < 1 || this._waveT < 1 || this._numT < 1) return true;
     if (this._hitT < 1 || this._punchT < 1 || this.popups.length) return true;
     if (this.low > 0) return true; // the low-health pulse is continuous by design
+    /* A settled fracture is still breathing, so a broken creature's bar stays
+       hot for as long as it is broken — the same standing cost as low health,
+       and the same reason. Freezing it is the shed's job, not this one's. */
+    if (this.broken > 0 && !this.breakFrozen) return true;
     return this._now - this._changedAt < this._ms("hotMs");
   }
 }
@@ -381,7 +469,17 @@ export class BarAnim {
  * list and disables effects until it is inside budget; the check tool pins that
  * every animated behaviour appears here, so a new effect cannot be added that
  * never degrades.
+ *
+ * `breakFlow` sits second because it is one of only two standing costs in the
+ * list — everything after it is transient, paid once per change, while a broken
+ * creature's bar is hot for as long as it is broken. Giving it up freezes the
+ * fracture at its settled frame and drops that bar out of the ticker; the crack
+ * stays exactly where it was. What degrades is the motion, never the state: a
+ * shed that could hide "this creature's guard is broken" would be trading the
+ * information for the frame rate, which is not a trade this list is allowed to
+ * make.
  */
 export const SHED_ORDER = Object.freeze([
-  "sweep", "popups", "sparks", "ring", "numbers", "punch", "ghost", "wave", "bloom",
+  "sweep", "breakFlow", "popups", "sparks", "ring", "numbers", "punch", "ghost",
+  "wave", "bloom",
 ]);

@@ -95,6 +95,19 @@ function registerSettings() {
     default: true,
   });
 
+  /* The initiative tracker's guard break, carried onto the bar. World-scoped
+     because it is a fact about the creature that the whole table reads off the
+     same bar, not a preference about how much motion one person's screen shows;
+     that lever already exists and is the motion tier. Registered whether or not
+     the tracker is installed — every feature registers all of its settings
+     unconditionally so the toggles exist — and simply inert without it. */
+  world(SETTINGS.breakFx, {
+    name: "GLRB.Settings.BreakFx.Name",
+    hint: "GLRB.Settings.BreakFx.Hint",
+    type: Boolean,
+    default: true,
+  });
+
   world(SETTINGS.bloom, {
     name: "GLRB.Settings.Bloom.Name",
     hint: "GLRB.Settings.Bloom.Hint",
