@@ -13,7 +13,9 @@ export const PREFIX = "rb.";
 export const SETTINGS = Object.freeze({
   /* World — these change what the table reads, so the GM owns them. */
   enabledBars: PREFIX + "enabledBars",     // "both" | "primary"
+  segmentMode: PREFIX + "segmentMode",     // "count" | "perHp"
   segments: PREFIX + "segments",           // divisions across the fill, 0 = continuous
+  segmentSize: PREFIX + "segmentSize",     // HP per division, when mode is perHp
   lowThreshold: PREFIX + "lowThreshold",   // percent at which the low state engages
   floatingDeltas: PREFIX + "floatingDeltas",
   pf2eLayers: PREFIX + "pf2eLayers",       // temp-HP shield plate + shield rail
@@ -70,3 +72,15 @@ export const FLAGS = Object.freeze({
  * have to re-nudge every token per scene.
  */
 export const OFFSET = Object.freeze({ min: -3, max: 3, step: 0.05 });
+
+/**
+ * Division limits.
+ *
+ * `max` is a ceiling on the *computed* count, which only the per-HP mode can
+ * reach: a 900 HP creature at one block per 5 HP asks for 180 divisions across
+ * a bar that is forty pixels wide. The shader already fades a division out once
+ * its gap falls under a device pixel, so nothing breaks without the cap — but
+ * the count is also what sets the gap width, and past this many the bar is more
+ * gap than plate long before the fade takes over.
+ */
+export const SEGMENTS = Object.freeze({ max: 60, sizeMin: 1, sizeMax: 100 });

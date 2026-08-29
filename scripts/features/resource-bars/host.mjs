@@ -26,7 +26,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER, SKEW } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
-import { FLAGS, LAYOUT, ROLE } from "./constants.mjs";
+import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
@@ -175,7 +175,7 @@ class BarHost {
         const mesh = entry.meshes[role];
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
-          mesh.shader.uniforms.uSeg = role === "hero" ? opts.segments : 0;
+          mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
         }
         if (entry.anims[role]) entry.anims[role].motionScale = opts.motionScale;
       }
@@ -327,6 +327,33 @@ class BarHost {
     };
   }
 
+  /**
+   * How many divisions the primary bar carries.
+   *
+   * Two ways to ask for them, and they answer different questions. A fixed
+   * **count** keeps every bar on the table looking alike, so position along the
+   * bar means the same fraction on every creature — which is the thing that
+   * makes divisions useful to a colour-blind player in the first place. A block
+   * **per N HP** instead makes one division mean one quantity of damage
+   * everywhere, so a 12 HP goblin gets two plates and a 200 HP dragon gets
+   * forty, and "took about three blocks" is the same hit on both.
+   *
+   * Rounded *up*, so the last plate is the short one. Rounding down would put
+   * the remainder in the first plate, which is the one at the full-health end
+   * that a GM is looking at when nothing has happened yet.
+   *
+   * A creature with no maximum — some actor types genuinely have none — falls
+   * back to a continuous fill rather than to a division count derived from
+   * zero.
+   */
+  segmentsFor(bar) {
+    if (this.opts.segmentMode !== "perHp") return this.opts.segments;
+    const per = Number(this.opts.segmentSize);
+    const max = Number(bar?.max);
+    if (!(per > 0) || !Number.isFinite(max) || max <= 0) return 0;
+    return clamp(Math.ceil(max / per), 0, SEGMENTS.max);
+  }
+
   layout(entry) {
     const token = entry.token;
     const grid = canvas.dimensions?.size ?? 100;
@@ -349,7 +376,7 @@ class BarHost {
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
       if (!mesh) {
-        mesh = makeBarMesh(roleId, { segments: role === "hero" ? this.opts.segments : 0, ramp: this.ramp });
+        mesh = makeBarMesh(roleId, { segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0, ramp: this.ramp });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
       }
@@ -505,6 +532,7 @@ class BarHost {
       const a = entry.anims[role];
       const u = mesh.shader.uniforms;
 
+      u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
       u.uTime = time;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
