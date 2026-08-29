@@ -114,30 +114,39 @@ A value change is a sequence, and the order is what makes it read as an event:
 | | |
 |---|---|
 | **0ms** | the fill snaps to the new value and everything **stops** |
-| **~55ms** | the hitstop releases; the ring and the compression spring start from a standstill |
+| **~55ms** | the hitstop releases; the sweep and the ring both start from a standstill |
 | **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
-| **~380ms** | the fill's recoil has settled back onto the value |
 | **~420ms** | the readout has finished counting |
+| **~720ms** | the sweep has crossed the bar and gone |
 
 Three things about it are easy to get wrong and impossible to unsee afterwards.
 
-**The frame never moves.** No shake, no scale, no bounce around its anchor. The
-compression is applied to the *fill plate inside* the housing (`uShock` insets
-`dFillA` vertically), never to the mesh transform. A HUD element that jumps
-around its own anchor reads as a screen-shake bolted onto a widget, and it is
-the one note that would announce the whole thing as an effect rather than as a
-material.
+**Nothing about the geometry moves, and no length springs.** Not the mesh
+transform, not the fill's height, and no overshoot, recoil or settle on any
+value. Every one of those was tried and every one reads, on a bar, as jelly — an
+instrument that wobbles is an instrument you stop trusting. Lengths use a
+quintic ease-out: one long deceleration that arrives exactly once and stops. The
+whole reaction is light travelling across something rigid.
 
 **The hitstop is the load-bearing beat.** A freeze before the reaction is most
 of what separates "the number went down" from "that hurt". It holds every
 channel, including the value tweens and the popup timers.
 
-**The wave carries hue, not light.** A front travels the exact span that
-changed, in the direction it changed, with a hard leading edge and a long
-chevron-textured tail behind it — the asymmetry is the direction cue. It *tints*
-the material it passes through and then adds one hot line on top. Written the
-obvious way, as pure additive light over an already-bright plate, the green of a
-heal and the red of a hit both arrive as the same pale smear.
+**The sweep is the loudest thing here, and it carries hue rather than light.** A
+front crosses the *whole* bar in the direction the value moved — scoped to just
+the span that changed it is a detail you have to already be looking at the bar
+to catch, and on a one-point heal it is a flicker two pixels wide. It drags a
+long chevron-textured ramp behind it and nothing ahead of it; that asymmetry is
+the direction cue, since a symmetric band travelling along a bar is a highlight
+and a highlight can be going either way.
+
+The ramp *replaces* the colour of the material it crosses and only then adds a
+hot front on top. Written the obvious way, as pure additive light over an
+already-bright plate, the green of a heal and the red of a hit both arrive as
+the same pale smear. Its length is a fraction of the **bar**, not a fixed
+distance in shader units: a constant is a third of a stubby rail and a twelfth
+of a wide hero bar, so the effect that is meant to be loudest quietly becomes a
+local highlight on exactly the bars with room to show it.
 
 The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads

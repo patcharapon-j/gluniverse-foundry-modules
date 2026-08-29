@@ -73,7 +73,7 @@ function makeBarMesh(role, opts) {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
     uTemp: 0, uCracked: 0, uSeg: opts.segments, uRole: role,
-    uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1, uShock: 0,
+    uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -425,16 +425,14 @@ class BarHost {
       u.uChip = a && this.allows("ghost") ? a.chip : 0;
       u.uWave = a && this.allows("wave") ? a.wave : 0;
       u.uWaveX = a ? a.waveX : u.uFrac;
-      u.uShock = a && this.allows("shock") ? a.shock : 0;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
-      /* The mesh transform is deliberately *not* animated. Everything the
-         impact does happens inside the quad — the fill plate compresses, the
-         wave runs, the ring expands — while the frame stays exactly where the
-         layout put it. A bar that shakes or scales around its own anchor reads
-         as a screen-shake bolted onto a widget, which is the one note in this
-         HUD that would announce itself as an effect. */
+      /* Nothing about the geometry is animated — not the mesh transform, not
+         the fill's height. Every part of a change is light moving across a
+         rigid instrument: the sweep crosses it, the ring expands, the trail
+         drains. A bar that shakes, scales or wobbles is a bar you stop reading
+         as a measurement. */
       u.uTexel = this.texelFor(mesh);
     }
 

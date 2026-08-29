@@ -68,9 +68,8 @@ export const UNIFORMS = Object.freeze({
   uHeal: "float",     // 1 while the impact envelope is a heal rather than a hit
   uSpark: "float",    // debris + spoke intensity, 0 once shed under load
   uChip: "float",     // how fresh the chip trail is, 1 = just cut and white-hot
-  uWave: "float",     // change-wave amplitude, 0..1
-  uWaveX: "float",    // the wave front's position, as a fraction along the bar
-  uShock: "float",    // compression spring through the fill, signed, 0 at rest
+  uWave: "float",     // change-sweep amplitude, 0..1
+  uWaveX: "float",    // the sweep front's position, as a fraction along the bar
   uSeg: "float",      // segment count across the fill, 0 = one continuous plate
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
@@ -131,7 +130,6 @@ uniform float uSpark;
 uniform float uChip;
 uniform float uWave;
 uniform float uWaveX;
-uniform float uShock;
 uniform float uSeg;
 uniform float uRole;
 uniform vec3  uRamp[4];
@@ -255,19 +253,11 @@ void main(void) {
   float dBody   = sdBox(q, bb);
   float dTrough = dBody + sw + air;
 
-  /* ── The compression ───────────────────────────────────────────────────
-     The impact squeezes what is *inside* the frame. The frame itself — body,
-     stroke, trough, cap, pip — never moves: a bar that shakes or scales around
-     its own anchor reads as a screen-shake bolted onto a widget, and it is the
-     one note in this whole HUD that would announce itself as an effect rather
-     than as a material. The fill plate flexing inside a rigid housing says the
-     same thing and says it about the thing that actually changed.
-
-     Clamped on the low side so the spring's negative swing relaxes the plate
-     back toward its resting height without ever pushing it out through the
-     trough it sits in. */
-  float squeeze = clamp(uShock, -0.30, 1.0) * 0.150;
-  float dFillA  = max(dTrough + lip, abs(q.y) - (bb.y - sw - air - lip - squeeze));
+  /* Nothing animates the geometry. Not the frame, not the fill's height. An
+     earlier pass compressed the fill plate on impact and it read as jelly — a
+     bar whose height breathes is a bar you stop reading as a measurement. The
+     whole reaction is carried by light travelling across a rigid instrument. */
+  float dFillA  = dTrough + lip;
 
   float mBody   = rbCover(dBody);
   float mStroke = clamp(mBody - rbCover(dBody + sw), 0.0, 1.0);
@@ -315,7 +305,7 @@ void main(void) {
      what a lit surface actually does. */
   vec3 fillCol = base * (1.04 - 0.17 * smoothstep(0.35, -1.0, hb));
   fillCol += vec3(1.0) * rbBand(hb - 0.55, 0.30) * 0.10;
-  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * (1.15 + 1.30 * max(uShock, 0.0)) * hero;
+  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * 1.15 * hero;
   fillCol *= 1.0 - 0.34 * rbBand(hb + 0.92, 0.13);
 
   /* ── Low health ────────────────────────────────────────────────────────
@@ -341,19 +331,38 @@ void main(void) {
      a pattern rather than a material. Displacing the sample point by *another*
      pair of sines before evaluating it breaks the alignment: the cells stretch,
      drift and fold, and the result reads as something moving inside the liquid
-     rather than as a texture laid over it. Four sines, no texture fetch. */
-  vec2 wq = q + vec2(sin(q.y * 3.10 + uTime * 0.55) * 0.11,
-                     sin(q.x * 2.70 - uTime * 0.43) * 0.07);
-  float cell = 0.5 + 0.5 * sin(wq.x * 5.2 + uTime * 0.80) * sin(wq.y * 4.6 - uTime * 0.62);
-  float ember = pow(cell, 2.6);
+     rather than as a texture laid over it.
 
-  float lowGlow = uLow * (0.34 + 0.66 * breathe) * hero;
-  /* Dark where the cells are thin, so the liquid has depth rather than an even
-     wash of red over it. */
-  fillCol = mix(fillCol, vec3(0.80, 0.05, 0.09), lowGlow * (0.26 + 0.42 * (1.0 - cell)));
-  /* …and emitted above 1.0 where they are thick, so the bright-pass finds it:
-     at low health the fill is not a darker colour, it is a light source. */
-  fillCol += vec3(1.25, 0.22, 0.26) * lowGlow * (0.20 + 0.90 * ember);
+     Two octaves, the second warped again by the first. One octave alone is a
+     field of soft blobs, which at a glance is indistinguishable from uneven
+     lighting; the fine layer riding on the coarse one is what makes it read as
+     matter with structure. Six sines, no texture fetch. */
+  vec2 wq = q + vec2(sin(q.y * 3.10 + uTime * 0.55) * 0.13,
+                     sin(q.x * 2.70 - uTime * 0.43) * 0.09);
+  float c1 = 0.5 + 0.5 * sin(wq.x * 5.60 + uTime * 0.80) * sin(wq.y * 4.00 - uTime * 0.62);
+  vec2 wq2 = wq + vec2(sin(wq.y * 6.30 - uTime * 0.90) * 0.06,
+                       sin(wq.x * 5.10 + uTime * 0.70) * 0.05);
+  float c2 = 0.5 + 0.5 * sin(wq2.x * 11.50 - uTime * 1.15) * sin(wq2.y * 8.30 + uTime * 0.90);
+
+  /* Contrast-stretched into clots and channels. Left as a smooth field the
+     whole thing reads as a gentle sheen; the hard shoulders are what make it a
+     substance. */
+  float cell = smoothstep(0.24, 0.76, clamp(c1 * 0.70 + c2 * 0.30, 0.0, 1.0));
+  float ember = pow(cell, 2.2);
+
+  /* The texture's presence follows the health, and *only* the emission follows
+     the breath. Routing both through the pulse makes the whole surface fade to
+     flat every few seconds, which is the opposite of a substance. */
+  float lowT = uLow * hero;
+  float breathGlow = 0.30 + 0.70 * breathe;
+
+  /* Near-black in the channels, so the liquid has real depth… */
+  fillCol = mix(fillCol, vec3(0.50, 0.02, 0.05), lowT * (1.0 - cell) * 0.88);
+  /* …arterial red across the clots… */
+  fillCol = mix(fillCol, vec3(1.00, 0.10, 0.13), lowT * cell * 0.55);
+  /* …and emitted above 1.0 at their cores, so the bright-pass finds it: at low
+     health the fill is not a darker colour, it is a light source. */
+  fillCol += vec3(1.45, 0.24, 0.28) * lowT * ember * breathGlow * 1.10;
 
   /* ── Segments ──────────────────────────────────────────────────────────
      Real gaps between discrete plates, not grooves cut into one continuous
@@ -474,48 +483,60 @@ void main(void) {
   C = mix(C, ghostCol, mGhost * step(uFrac, uGhost));
   C = mix(C, fillCol, mFill);
 
-  /* ── The change wave ───────────────────────────────────────────────────
-     A front travelling the exact span the value moved, in the direction it
-     moved: outward through the new fill on a heal, backward through the trail
-     on a hit. The fill does not simply become a different length — something
-     pushes it there.
+  /* ── The sweep ─────────────────────────────────────────────────────────
+     The loudest thing this bar does, and the only one meant to be caught
+     peripherally. A front crosses the *whole* length in the direction the value
+     moved — outward on a heal, back down the bar on a hit — dragging a long
+     ramp behind it. The bar does not simply become a different length;
+     something runs through it.
 
-     The profile is deliberately asymmetric. A hard gaussian front with a long
-     exponential tail *behind* it is what encodes direction: a symmetric band
-     travelling along a bar is just a highlight, and a highlight can move either
-     way. The chevrons riding the tail are phase-locked to the front's own
-     position, so the texture travels with the wave instead of the wave sliding
-     across a stationary pattern. */
+     The profile is deliberately asymmetric: a hard front with a long ramp
+     *behind* it is what encodes direction. A symmetric band travelling along a
+     bar is a highlight, and a highlight can be going either way.
+
+     The chevrons on the ramp are phase-locked to the front's own position, so
+     the texture travels *with* the sweep rather than the sweep sliding across a
+     stationary pattern — the difference between something moving through the
+     material and a light being panned over it. */
   if (uWave > 0.001) {
-    float wx = mix(fx0, fx1, clamp(uWaveX, 0.0, 1.0));
+    float wx = mix(fx0 - 0.12, fx1 + 0.12, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
     float wd = (q.x - wx) * dir;
 
-    vec3 waveCol = mix(vec3(1.00, 0.20, 0.15), vec3(0.30, 1.00, 0.52), uHeal);
+    vec3 waveCol = mix(vec3(1.00, 0.17, 0.12), vec3(0.26, 1.00, 0.48), uHeal);
 
-    /* Behind the front, never ahead of it. The asymmetry is the direction cue:
-       a symmetric band travelling along a bar is a highlight, and a highlight
-       can be going either way. */
-    float tail = exp(min(wd, 0.0) / 0.22) * (1.0 - step(0.0, wd));
+    /* A long ramp behind the front, and nothing at all ahead of it.
 
-    /* Chevrons phase-locked to the front's own position, so the texture travels
-       *with* the wave instead of the wave sliding across a fixed pattern. */
-    float chev = smoothstep(0.34, 0.50,
-      abs(fract((q.x - q.y * 0.55 - uWaveX * 2.6) / 0.190) - 0.5));
-    float tex = 0.45 + 0.55 * chev * rbDetail(0.095);
+       Its length is a fraction of the *bar*, not a fixed distance. Written as a
+       constant in p units it is a third of the bar on a stubby rail and a
+       twelfth of it on a wide hero bar, so the effect that is supposed to be
+       the loudest thing here quietly becomes a local highlight on exactly the
+       bars that have room to show it. */
+    float rampLen = max(span * 0.40, 0.35);
+    float ramp = exp(min(wd, 0.0) / rampLen) * (1.0 - step(0.0, wd));
 
-    /* On a heal the wave runs through the fill it just created; on a hit it
-       runs back through the span being given up, which is the trail. */
-    float waveArea = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
+    float chev = smoothstep(0.30, 0.50,
+      abs(fract((q.x - q.y * 0.55 - uWaveX * 3.4) / 0.190) - 0.5));
+    float tex = 0.42 + 0.58 * chev * rbDetail(0.095);
 
-    /* Hue before light. Adding the wave's colour on top of an already-bright
-       plate just saturates to white — the green of a heal and the red of a hit
-       both arrive as the same pale smear, which is the one thing this effect
-       must not do. Tinting the material the front is passing through keeps the
-       colour, and *then* one hot line rides on top of it. */
-    C = mix(C, waveCol * (0.55 + 0.60 * tex), clamp(tail * waveArea * 0.88, 0.0, 1.0));
-    C += waveCol * rbGauss(wd, 0.055) * waveArea * 2.10;
-    C += vec3(1.0) * rbGauss(wd, 0.016) * waveArea * 0.40;
+    /* On a heal the sweep runs through the fill; on a hit it runs through the
+       fill *and* the span being given up, so it crosses the trail on its way
+       back down and the two events read as one. */
+    float area = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
+
+    /* Hue before light. Added as pure light on top of an already-bright plate
+       it just saturates: the green of a heal and the red of a hit both arrive
+       as the same pale smear, which is the one thing this must not do. So the
+       ramp *replaces* the material's colour where it passes, at nearly full
+       strength, and only then does the front add light on top. */
+    C = mix(C, waveCol * (0.70 + 0.75 * tex), clamp(ramp * area * 1.15, 0.0, 1.0));
+    C += waveCol * rbGauss(wd, 0.150) * area * 3.20;
+    C += vec3(1.0, 0.96, 0.92) * rbGauss(wd, 0.030) * area * 1.15;
+
+    /* It spills past the silhouette as well, so the sweep is visible on a bar
+       that is nearly empty — where the fill it would otherwise tint is a few
+       pixels wide and there is nothing to see. */
+    C += waveCol * rbGauss(wd, 0.110) * uWave * mTrough * 0.65;
   }
   /* The shield plate: a translucent pane over the fill, then its lattice, its
      top rim, and a hot leading edge where it ends. */

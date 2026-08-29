@@ -134,14 +134,17 @@ input[type=range]{padding:0; width:230px}
   <h2>In motion</h2>
   <p class="note">A value change is an event, not a length, and it is a <i>sequence</i>. The fill
     snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
-    reaction read as a reaction rather than as the tail of a transition. On release: a front travels
-    the exact span that changed, in the direction it changed, with a hard leading edge and a
-    chevron-textured tail; the fill plate compresses inside its frame and springs back; the chip trail
-    is cut white-hot and cools as it drains; a ring expands from the point that moved, throwing spokes
-    and debris along the bar's axis; the readout counts to the new number in the colour of what
-    happened; and the delta punches in at 1.35× before drifting off.
-    <b style="color:var(--text)">The frame itself never moves.</b> No shake, no scale, no bounce
-    around its anchor — that is the one note that would announce the whole thing as an effect.</p>
+    reaction read as a reaction rather than as the tail of a transition. On release: a
+    <b style="color:var(--text)">sweep crosses the whole bar</b> in the direction the value moved,
+    hard front, long chevron-textured ramp behind it, red down the bar on a hit and green out along
+    it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
+    point that moved, throwing spokes and debris along the bar's axis; the readout counts to the new
+    number in the colour of what happened; and the delta punches in at 1.35× before drifting off.</p>
+  <p class="note"><b style="color:var(--text)">Nothing about the geometry moves.</b> Not the frame,
+    not the fill's height. No shake, no scale, no overshoot, no spring — every length here
+    decelerates once and stops. Springs are the standard way to make a bar feel alive and on a bar
+    they read as jelly; an instrument that wobbles is an instrument you stop trusting. The whole
+    reaction is light travelling across something rigid.</p>
   <div class="grid" id="row-motion"></div>
 
   <h2>The sequence, frozen</h2>
@@ -625,10 +628,10 @@ for (const f of [1, 0.78, 0.5, 0.32, 0.18, 0.06]) {
 
 const motion = document.getElementById("row-motion");
 add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost: 0.78, chip: 0.85, seg: 10, max: 58 });
-add(motion, { title: "Damage wave", sub: "front running back through the trail", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 0.85, waveX: 0.60, seg: 10, max: 58 });
-add(motion, { title: "Heal wave", sub: "front pushing the fill outward", frac: 0.62, bloom: 1, heal: 1, wave: 0.9, waveX: 0.50, seg: 10, max: 58 });
+add(motion, { title: "Damage sweep", sub: "front running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
+add(motion, { title: "Heal sweep", sub: "front running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
 add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
-add(motion, { title: "Compression", sub: "spring at peak, frame unmoved", frac: 0.45, ghost: 0.78, shock: 0.62, chip: 1, flash: 1, seg: 10, max: 58 });
+add(motion, { title: "Sweep, late", sub: "the ramp trailing behind the front", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");
@@ -756,9 +759,9 @@ function draw(now) {
     const s = c.spec;
 
     /* The quad never moves. Every part of an impact happens inside it — the
-       fill plate compresses, the wave runs, the ring expands — while the frame
-       stays exactly where the layout put it. A bar that shakes or scales around
-       its own anchor reads as a screen-shake bolted onto a widget. */
+       sweep crosses it, the ring expands, the trail drains — while the frame
+       and the fill's height stay exactly where the layout put them. A bar that
+       shakes, scales or wobbles is a bar you stop reading as a measurement. */
     const x = Math.round(r.left * dpr * SS);
     const y = Math.round((innerHeight - r.bottom) * dpr * SS);
     const w = Math.round(r.width * dpr * SS);
@@ -791,7 +794,6 @@ function draw(now) {
     gl.uniform1f(U.uChip, a ? a.chip : (s.chip ?? 0));
     gl.uniform1f(U.uWave, a ? a.wave : (s.wave ?? 0));
     gl.uniform1f(U.uWaveX, a ? a.waveX : (s.waveX ?? frac));
-    gl.uniform1f(U.uShock, a ? a.shock : (s.shock ?? 0));
     gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
@@ -883,7 +885,6 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
     "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
     "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
-    "</b> &nbsp;·&nbsp; shock <b>" + live.shock.toFixed(2) +
     "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; ticker <b>" + (live.hot ? "hot" : "cold") + "</b>";
 

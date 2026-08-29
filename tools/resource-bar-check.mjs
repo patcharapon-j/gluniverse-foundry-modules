@@ -94,7 +94,7 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("every duration lives in TIMING and is scaled by the motion tier");
 
   for (const key of ["stopMs", "holdMs", "drainMs", "chipMs", "bloomMs", "flashMs",
-                     "shockMs", "reboundMs", "fillMs", "countMs", "waveMs", "hitMs", "punchMs",
+                     "fillMs", "countMs", "waveMs", "hitMs", "punchMs",
                      "popupMs", "hotMs"])
     if (!(key in anim.TIMING)) fail(`TIMING is missing ${key}.`);
 }
@@ -112,14 +112,17 @@ const tokensCss = await src("styles/gl-tokens.css");
   a.step(16);
   const frozen = a.frac === before.frac && a.ghost === before.ghost && a.num === before.num;
   if (!frozen) fail("The hitstop does not hold: a value moved on the first frame after a change.");
-  else if (a.flash !== 1 || a.shock === 0)
-    fail("The hitstop holds the values but not the reaction channels; flash and shock must be at peak during the freeze.");
+  else if (a.flash !== 1 || a.wave !== 1)
+    fail("The hitstop holds the values but not the reaction channels; flash and the sweep must be at peak during the freeze.");
   else ok(`hitstop holds every channel for ${anim.TIMING.stopMs}ms`);
 
-  /* And releases. A freeze that never ends is a bar that never animates. */
+  /* And releases. A freeze that never ends is a bar that never animates.
+     Measured on `flash`, not on `frac`: on damage the fill is already at its
+     new value and — now that nothing springs — never moves again, so a value
+     that stays put is the correct behaviour rather than evidence of a freeze. */
   let guard = 0;
-  while (a.frac === before.frac && guard++ < 40) a.step(16);
-  if (guard >= 40) fail("The hitstop never releases; the bar is frozen after every change.");
+  while (a.flash >= 1 && guard++ < 40) a.step(16);
+  if (guard >= 40) fail("The hitstop never releases; every channel is still held after 640ms.");
 
   /* The readout counts rather than snapping — the reason `num` exists at all
      as a channel separate from `frac`. */
@@ -163,7 +166,7 @@ const tokensCss = await src("styles/gl-tokens.css");
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "shock", "wave"];
+                    "sparks", "wave"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
