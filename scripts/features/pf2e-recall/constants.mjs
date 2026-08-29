@@ -39,8 +39,14 @@ export const TIER_KEYS = Object.freeze(["everyone", "might", "few"]);
  * v1 authored three cumulative tiers of bullets and derived eight table
  * experiences from them. That worked on paper and failed at the table: at the
  * top bands the GM was handed nine or ten bullets to read out mid-combat, which
- * is not something anyone does. v2 authors ONE self-contained paragraph per
- * band, so whatever the roll, the GM reads exactly one paragraph aloud.
+ * is not something anyone does. v2 authors ONE paragraph per band, so whatever
+ * the roll, the GM reads exactly one paragraph aloud.
+ *
+ * The paragraph is COMPLETE, not merely standalone: from Passable up, each one
+ * carries everything the rungs below it would have told the player, compressed
+ * into a clause each, before adding its own layer. v1 was right that knowledge
+ * accumulates; it was only wrong about making the GM assemble it at the table.
+ * See BAND_WORDS below for what that costs in length.
  *
  * Order mirrors COMPETENCE_BANDS in features/flatfinder/constants.js, shallowest
  * first. It is duplicated here rather than imported so this module stays free of
@@ -58,13 +64,41 @@ export const BAND_KEYS = Object.freeze([
 ]);
 
 /**
- * Word budget for one band paragraph, [min, max].
+ * Word budget per band, [min, max]. The budget CLIMBS, and it has to.
  *
- * The upper bound is the load-bearing one: this is read aloud, and roughly
- * seventy words is about fifteen seconds of speech. Past that a GM starts
- * skimming and paraphrasing, which is exactly the failure v1 had.
+ * v2.0 gave every band the same 25-70 words and told the model each paragraph
+ * had to "stand alone". It read that as "say only what this rung adds", so a
+ * Remarkable roll returned the secret with no identification, no weakness and
+ * no tactics — the GM had the payoff and none of the setup, and the only way
+ * to give the player a complete answer was to read the lower bands too. That
+ * is precisely the reading-two-paragraphs failure the band model exists to
+ * remove.
+ *
+ * v2.1 makes the true bands CUMULATIVE: each one carries everything the rungs
+ * below it would have told the player, compressed, plus its own new layer. A
+ * paragraph that carries five layers cannot also fit in fifty words, so the
+ * ceiling rises with the rung.
+ *
+ * It rises slowly, because the ceiling is still load-bearing: this is read
+ * aloud, and roughly seventy words is about fifteen seconds of speech. The
+ * lower layers are meant to arrive as a clause each, not as their own
+ * paragraph re-told — the newest layer always gets the most words. Phenomenal
+ * at 115 is about twenty-five seconds, which is affordable exactly because it
+ * is the rarest roll at the table.
+ *
+ * The bottom two bands are false answers and accumulate nothing, so they stay
+ * short: a joke and a wrong belief are both worse for being padded.
  */
-export const PARAGRAPH_WORDS = Object.freeze([25, 70]);
+export const BAND_WORDS = Object.freeze({
+  disastrous: Object.freeze([15, 40]),
+  inept: Object.freeze([25, 50]),
+  poor: Object.freeze([25, 50]),
+  passable: Object.freeze([25, 50]),
+  solid: Object.freeze([35, 65]),
+  impressive: Object.freeze([50, 85]),
+  remarkable: Object.freeze([65, 100]),
+  phenomenal: Object.freeze([75, 115]),
+});
 
 /**
  * Competence band -> how the answer is DELIVERED.

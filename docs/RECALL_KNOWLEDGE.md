@@ -13,20 +13,53 @@ their own voice. Auto-delivery turns lore into a loot drop.
 
 **One short paragraph per competence band, and the GM reads exactly one.**
 
-| Band | Total | What it knows |
-|---|---|---|
-| Disastrous | < 0 | Nothing at all. No frame of reference, played for comedy, containing no true fact. |
-| Inept | 0–4 | Confidently wrong: a folklore-shaped belief the character would act on. |
-| Poor | 5–9 | The reputation, hedged. True in outline, vague in detail. No tactics. |
-| Passable | 10–14 | Plain identification: what it is and what it is known for. |
-| Solid | 15–19 | Identification plus **one** useful thing — a damage type, a weak save, a defence. |
-| Impressive | 20–24 | How it actually fights: the signature mechanic and the vulnerability. |
-| Remarkable | 25–29 | The secret: true origin, an unexpected lever, something not in any bestiary. |
-| Phenomenal | 30+ | The secret and what it opens onto — a name, a connection, a hook. |
+| Band | Total | Carries | Adds | Words |
+|---|---|---|---|---|
+| Disastrous | < 0 | — | Nothing at all. No frame of reference, played for comedy, containing no true fact. | 15–40 |
+| Inept | 0–4 | — | Confidently wrong: a folklore-shaped belief the character would act on. | 25–50 |
+| Poor | 5–9 | — | The reputation, hedged. True in outline, vague in detail. No tactics. | 25–50 |
+| Passable | 10–14 | the reputation, unhedged | Plain identification: what it is and what it is known for. | 25–50 |
+| Solid | 15–19 | + identification | **One** useful thing — a damage type, a weak save, a defence. | 35–65 |
+| Impressive | 20–24 | + that useful fact | How it actually fights: the signature mechanic and the vulnerability. | 50–85 |
+| Remarkable | 25–29 | + how it fights | The secret: true origin, an unexpected lever, something not in any bestiary. | 65–100 |
+| Phenomenal | 30+ | + the secret | What it opens onto — a name, a connection, a hook. | 75–115 |
 
 Flatfinder already maps a PF2e skill-check total onto one of eight competence
 bands (Lore +1, natural 20 +1, natural 1 −1). This feature adds only the
 right-hand column.
+
+### Each paragraph is the whole answer, not the top slice of one
+
+The GM reads **one** paragraph, so that paragraph has to be a complete answer to
+"what do I know about this?". From Passable up, every band **carries everything
+the bands below it would have told the player** — compressed to a clause each —
+and then adds its own layer.
+
+v2.0 got this wrong. It told the model each paragraph must "stand alone",
+meaning *readable cold*; the model read it as *say only what this rung adds*,
+and the deep bands came back as a secret with no identification, no weakness and
+no tactics. That is unusable at the table: the GM is holding the payoff without
+the setup, and the only way to give the player a whole answer is to read the
+lower bands too — the exact failure the band model exists to remove. v2.1 states
+the carry explicitly, band by band, and pays for it with a word budget that
+climbs from 15–40 at Disastrous to 75–115 at Phenomenal.
+
+The budget climbs *slowly*, because the ceiling is still what a GM can say
+without skimming — roughly two seconds per ten words. Carrying is not repeating:
+the shallower layers arrive as a clause each, the newest layer takes the rest,
+and each band is written from the top rather than concatenated onto the one
+below. `BAND_WORDS` is the table, `tools/recall-check.mjs` asserts it never
+narrows as the ladder deepens, and the parser warns when a stored paragraph runs
+past half again its own band's budget.
+
+The bottom two bands are false answers and carry nothing: Disastrous holds no
+true fact at all and Inept is confidently wrong, so accumulating into them would
+be self-defeating. Poor is the floor of true knowledge.
+
+The grammar version is **unchanged at 2**. Nothing about the document's
+structure moved — a v2.0 ladder still parses and still plays — so flagging every
+existing one as a version mismatch would be noise. Regenerating a subject is
+what upgrades it.
 
 ### Why paragraphs rather than tiers of bullets
 
@@ -48,15 +81,25 @@ where it always belonged, and it is why mechanics still sit in the middle of the
 climb rather than at the top: Solid and Impressive are the common rolls and must
 be actionable, while the rare roll buys story.
 
+v1 was right that knowledge accumulates, and v2.1 keeps that (see above); what
+it does not keep is making the GM assemble the accumulation at the table.
+
 The Stonetop headings are retired, but the shape of the climb they describe still
 governs the band guidance, and the credit stands.
 
 ### Uniqueness is the load-bearing property
 
-The payload demands all eight paragraphs differ, the parser warns when two come
-back identical, and `tools/recall-check.mjs` asserts it of its own sample. Two
-bands that read the same are two rolls that play the same, which defeats the
-point of using competence checks at all.
+The payload demands each band add something the one below it did not have, the
+parser warns when two come back identical, and `tools/recall-check.mjs` asserts
+it of its own sample. Two bands that read the same are two rolls that play the
+same, which defeats the point of using competence checks at all.
+
+Since v2.1 the property is about the **new layer**, not the whole paragraph:
+material is shared up the ladder by design, so two deep bands will legitimately
+overlap in what they carry. What must differ is what each one adds. The check
+also asserts the sample's top five bands still name the subject and keep the
+weakness the middle bands establish — the cheapest observable proof that the
+example being taught is a whole answer rather than a fragment.
 
 ### Pitched to what the subject is
 
@@ -188,28 +231,28 @@ wins.
 <!-- glrk:2 -->
 
 ## Disastrous
-<one paragraph>
+<one paragraph, 15-40 words>
 
 ## Inept
-<one paragraph>
+<one paragraph, 25-50 words>
 
 ## Poor
-<one paragraph>
+<one paragraph, 25-50 words>
 
 ## Passable
-<one paragraph>
+<one paragraph, 25-50 words>
 
 ## Solid
-<one paragraph>
+<one paragraph, 35-65 words>
 
 ## Impressive
-<one paragraph>
+<one paragraph, 50-85 words>
 
 ## Remarkable
-<one paragraph>
+<one paragraph, 65-100 words>
 
 ## Phenomenal
-<one paragraph>
+<one paragraph, 75-115 words>
 ```
 
 The parser is **strict about structure, forgiving about noise**. A wrapping code

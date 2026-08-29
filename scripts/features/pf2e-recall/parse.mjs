@@ -20,7 +20,7 @@
  */
 
 import { HEADINGS } from "./prompt.mjs";
-import { BAND_KEYS, GRAMMAR_VERSION, PARAGRAPH_WORDS, TIER_KEYS } from "./constants.mjs";
+import { BAND_KEYS, BAND_WORDS, GRAMMAR_VERSION, TIER_KEYS } from "./constants.mjs";
 
 /** v1 headings, kept only so an old reply still parses into the new shape. */
 const LEGACY_HEADINGS = Object.freeze({
@@ -173,11 +173,13 @@ export function parseLadder(source) {
     else seen.set(fingerprint, key);
   }
 
-  const [, maxWords] = PARAGRAPH_WORDS;
-  // A generous multiple of the budget: a paragraph slightly over is fine read
-  // aloud, but one at twice the budget is the v1 failure returning by the back
-  // door, and the GM should know before they are mid-combat with it.
-  if (Object.values(bands).some((v) => wordCount(v) > maxWords * 1.5)) {
+  // A generous multiple of the band's own budget: a paragraph slightly over is
+  // fine read aloud, but one at twice the budget is the v1 failure returning by
+  // the back door, and the GM should know before they are mid-combat with it.
+  // The budget is per band because the deep bands carry the shallow ones and
+  // are legitimately longer; measuring them all against Disastrous would either
+  // flag every good Phenomenal or excuse every bloated Poor.
+  if (Object.entries(bands).some(([key, v]) => wordCount(v) > (BAND_WORDS[key]?.[1] ?? 70) * 1.5)) {
     warnings.push("GLRK.parse.warn.longBand");
   }
 

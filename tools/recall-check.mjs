@@ -33,7 +33,7 @@ const note = (msg) => notes.push(msg);
 
 /* ------------------------------------------------------------ imports --- */
 
-const { BAND_KEYS, BAND_REVEAL, DEFAULT_REVEAL, GRAMMAR_VERSION, PARAGRAPH_WORDS } = await import(
+const { BAND_KEYS, BAND_REVEAL, BAND_WORDS, DEFAULT_REVEAL, GRAMMAR_VERSION } = await import(
   join(FEATURE, "constants.mjs")
 );
 const { HEADINGS, VERSION_MARK, buildPayload } = await import(join(FEATURE, "prompt.mjs"));
@@ -97,10 +97,10 @@ const sample = {
     inept: "You are certain these things turn to stone in daylight, which is why nobody sees them at noon.",
     poor: "You have heard the barrow country blamed for emptied graves, though you could not swear to what does the emptying.",
     passable: "That is a barrow troll. The Hillfolk blame them for every opened grave in the uplands, and the blame is mostly earned.",
-    solid: "A barrow troll. Fire is the thing: burn it and the wounds stay shut, otherwise it simply knits itself together and comes on again.",
-    impressive: "A barrow troll, and the fight turns on fire. Cut it and it closes; burn it and it does not. It is strong but slow to see a trick coming, so misdirection lands where force will not.",
-    remarkable: "A barrow troll, and it was a person once. This one was a Hillfolk grave-warden who would not leave his post, and the barrow it guards is its own.",
-    phenomenal: "A barrow troll, and it was a grave-warden who would not leave his post. The barrow is his own, and the name cut above the door is one your patron has been looking for.",
+    solid: "That is a barrow troll, blamed for every opened grave in the uplands. Fire is the thing: burn it and the wounds stay shut, otherwise it simply knits itself together and comes on again.",
+    impressive: "That is a barrow troll, the thing the Hillfolk blame for their opened graves, and the fight turns on fire: cut it and it closes, burn it and it does not. It is enormously strong but slow to see a trick coming, so misdirection lands where force will not, and it will not leave the mound it guards.",
+    remarkable: "That is a barrow troll, blamed for the opened graves. Cut it and it closes; only fire keeps a wound shut, and it is slow to a trick though terribly strong. What nobody says is that it was a person once — a Hillfolk grave-warden who would not leave his post — and the barrow it guards is his own, which is why it will not step off the mound.",
+    phenomenal: "That is a barrow troll, and only fire will keep a wound shut on it; it is strong, slow to a trick, and will not leave its mound. It was a grave-warden once, and would not abandon his post, so the barrow it circles is his own grave. The name cut above that door is one your patron has been asking after for a year, and he never said why.",
   },
 };
 
@@ -125,16 +125,52 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
   }
 }
 
-/* The word budget is the whole point of v2: it is what a GM can say aloud
-   without skimming. A sample that breaks its own rule is a bad example to
-   assert against. */
+/* The word budget is what a GM can say aloud without skimming, and since v2.1
+   it climbs: the deep bands carry the shallow ones and are legitimately longer.
+   Two things must hold, and neither is visible in a running session. */
 {
-  const [minWords, maxWords] = PARAGRAPH_WORDS;
+  let previous = null;
   for (const key of BAND_KEYS) {
+    const budget = BAND_WORDS[key];
+    if (!budget) {
+      fail(`Band "${key}" has no BAND_WORDS budget; the payload would print "undefined-undefined words".`);
+      continue;
+    }
+    const [minWords, maxWords] = budget;
+    if (!(minWords < maxWords)) fail(`BAND_WORDS.${key} is not a range.`);
+    // Monotonic, because the payload presents the budgets as a ladder: a rung
+    // allowed FEWER words than the one below it cannot carry the one below it,
+    // and the model will resolve that contradiction by dropping the carry —
+    // which is the exact v2.0 failure this rewrite exists to remove.
+    if (previous && maxWords < previous[1]) {
+      fail(`BAND_WORDS.${key} (max ${maxWords}) is tighter than the shallower band above it (max ${previous[1]}).`);
+    }
+    previous = budget;
+
     const words = sample.bands[key].split(/\s+/).filter(Boolean).length;
-    if (words > maxWords * 1.5) fail(`Sample band "${key}" is ${words} words, far past the ${maxWords}-word budget.`);
+    if (words > maxWords * 1.5) fail(`Sample band "${key}" is ${words} words, far past its ${maxWords}-word budget.`);
   }
-  if (minWords >= maxWords) fail("PARAGRAPH_WORDS is not a range.");
+  for (const key of Object.keys(BAND_WORDS)) {
+    if (!BAND_KEYS.includes(key)) fail(`BAND_WORDS has "${key}", which is not a band.`);
+  }
+}
+
+/* Cumulative, not just distinct: from Passable up, a band must still tell the
+   player what the thing IS. The sample is the only example a reader of this
+   file gets, and an example that shows the top bands leading with the secret
+   alone teaches the failure back. Checked as "the subject is named", which is
+   the cheapest observable proxy for carrying the identification. */
+{
+  const CUMULATIVE_FROM = BAND_KEYS.indexOf("passable");
+  for (const key of BAND_KEYS.slice(CUMULATIVE_FROM)) {
+    if (!/barrow troll/i.test(sample.bands[key])) {
+      fail(`Sample band "${key}" never identifies the subject; it reads as a fragment of an answer, not a whole one.`);
+    }
+  }
+  const deep = sample.bands[BAND_KEYS[BAND_KEYS.length - 1]];
+  if (!/fire/i.test(deep)) {
+    fail("The sample's deepest band drops the weakness the middle bands established; it is not cumulative.");
+  }
 }
 
 /* Trailing chatter must not reach the last paragraph.
@@ -225,7 +261,16 @@ for (const [key, heading] of Object.entries(HEADINGS)) {
   if (!payload.includes(`## ${heading}`)) fail(`Payload never shows the "${key}" heading (${heading}).`);
 }
 // The payload must stand alone: a GM pasting into claude.ai has no skill installed.
-for (const needle of ["Output format", "types, never numbers", "Never invert"]) {
+// "carries" is the v2.1 instruction: without it the model writes each band as
+// only what that rung adds, and the top bands come back as a payoff with no
+// setup — unusable at a table that reads exactly one paragraph.
+for (const needle of [
+  "Output format",
+  "types, never numbers",
+  "Never invert",
+  "carries everything the bands below it",
+  "words) —",
+]) {
   if (!payload.includes(needle)) fail(`Payload lost a load-bearing instruction: "${needle}".`);
 }
 // And the grammar it prints must actually parse.
