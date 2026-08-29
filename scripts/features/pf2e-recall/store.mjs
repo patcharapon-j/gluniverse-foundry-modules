@@ -25,7 +25,14 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { BAND_KEYS, FLAG_CONTEXT, FLAG_LADDER } from "./constants.mjs";
+import {
+  BAND_KEYS,
+  DEFAULT_PRESENTATION,
+  FLAG_CONTEXT,
+  FLAG_LADDER,
+  FLAG_PRESENTATION,
+  presentationByKey,
+} from "./constants.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
 const escapeRegExp = (v) => String(v ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -52,6 +59,10 @@ export function readLadder(doc) {
       name: raw.name ?? doc?.name ?? "",
       bands,
       version: 2,
+      // Absent on every ladder authored before presentations existed. That is
+      // "unknown", not "recall": claiming a presentation nobody chose would put
+      // a false staleness warning on every existing ladder in the world.
+      presentation: raw.presentation?.key ? { ...raw.presentation } : null,
       generatedAt: raw.generatedAt ?? null,
     };
   }
@@ -120,6 +131,11 @@ export async function writeLadder(doc, ladder) {
   const record = {
     name: ladder.name ?? doc.name ?? "",
     bands,
+    // Stamped with the presentation these paragraphs were actually authored
+    // under. Nothing can re-voice stored prose (the module holds no runtime
+    // model access), so the honest thing is to record what was used and tell
+    // the GM when the box no longer matches.
+    presentation: readPresentation(doc),
     generatedAt: Date.now(),
   };
   await doc.setFlag(SUITE_ID, FLAG_LADDER, record);
@@ -150,6 +166,48 @@ export async function writeContext(doc, text) {
   else await doc.unsetFlag(SUITE_ID, FLAG_CONTEXT);
 }
 
+/* -------------------------------------------------- presentation -------- */
+
+/**
+ * How the knowledge reaches the player: `{key, note}`, kept in ONE flag.
+ *
+ * Both halves travel together for the reason statsblock-import keeps
+ * `{context, rung, level}` in one flag — they are a single intent, and redoing
+ * one should not mean retyping the other. It stays separate from `rk.context`,
+ * which is about what is TRUE at this table rather than how it is delivered:
+ * a GM switches presentation while the campaign facts stay put.
+ *
+ * The world settings supply the default for a subject nobody has set, so a
+ * campaign that is entirely ship's logs is configured once rather than per
+ * creature.
+ */
+export function readPresentation(doc) {
+  const stored = doc?.getFlag?.(SUITE_ID, FLAG_PRESENTATION);
+  const fallbackKey = worldSetting("rk.defaultPresentation", DEFAULT_PRESENTATION);
+  const fallbackNote = worldSetting("rk.defaultPresentationNote", "");
+  const key = typeof stored?.key === "string" ? stored.key : fallbackKey;
+  const note = typeof stored?.note === "string" ? stored.note : fallbackNote;
+  return { key: presentationByKey(key).key, note };
+}
+
+export async function writePresentation(doc, { key, note }) {
+  if (!doc) return;
+  await doc.setFlag(SUITE_ID, FLAG_PRESENTATION, {
+    key: presentationByKey(key).key,
+    note: String(note ?? "").trim(),
+  });
+}
+
+/** A world setting that may not be registered yet (feature disabled, early hook). */
+function worldSetting(key, fallback) {
+  try {
+    const value = game.settings.get(SUITE_ID, key);
+    return value ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /* -------------------------------------------------- mirror -------------- */
 
 /** True when this document has a GM-only prose field we may safely write to. */
@@ -162,7 +220,13 @@ function renderMirror(record) {
     .map((key) => `<h4>${escapeHTML(HEADINGS[key])}</h4><p>${escapeHTML(record.bands[key])}</p>`)
     .join("");
   if (!rows) return "";
-  return `<section data-glrk="ladder"><h3>${escapeHTML(mirrorHeading())}</h3>${rows}</section>`;
+  // The presentation is part of what these paragraphs ARE, so a GM reading the
+  // mirror with the feature disabled still needs to know they are looking at a
+  // console log rather than a memory.
+  const stamp = record.presentation?.key
+    ? `<p><em>${escapeHTML(presentationByKey(record.presentation.key).label)}</em></p>`
+    : "";
+  return `<section data-glrk="ladder"><h3>${escapeHTML(mirrorHeading())}</h3>${stamp}${rows}</section>`;
 }
 
 /** Replace (or remove) our section in privateNotes, leaving everything else. */

@@ -14,10 +14,41 @@
  * them mid-combat. Nobody does that; they skim, pick two, and the authored
  * depth is wasted.
  *
- * v2 authors ONE self-contained paragraph per competence band. Whatever the
- * roll, the GM reads exactly one paragraph aloud and moves on. The escalation
- * that used to live in "how many bullets you unlocked" now lives in what the
- * paragraph is ABOUT, which is where it always belonged.
+ * v2 authors ONE paragraph per competence band. Whatever the roll, the GM reads
+ * exactly one paragraph aloud and moves on. The escalation that used to live in
+ * "how many bullets you unlocked" now lives in what the paragraph is ABOUT,
+ * which is where it always belonged.
+ *
+ * ## What changed in v2.1
+ *
+ * v2.0 told the model each paragraph must "stand alone", meaning: readable
+ * cold. The model heard "say only what this rung adds", and the top bands came
+ * back carrying the secret and nothing else — no identification, no weakness,
+ * no tactics. At the table that is unusable: the GM has the payoff and none of
+ * the setup, and to give the player a complete answer they have to read the
+ * lower bands too, which is exactly the failure v2 exists to remove.
+ *
+ * v2.1 says the thing it actually meant. From Passable up, every paragraph is
+ * CUMULATIVE: it carries everything the rungs below it would have told the
+ * player, compressed to a clause each, and then adds its own layer. One
+ * paragraph is the whole answer for that roll. The word budget climbs with the
+ * rung to pay for it (BAND_WORDS).
+ *
+ * ## What changed in v2.2
+ *
+ * The eight bands say how MUCH is known. They said nothing about how the
+ * knowing reaches the player, so every ladder sounded like a person
+ * remembering — which is wrong for a party reading a ship's log, researching in
+ * an archive, or being shown a vision. v2.2 adds the presentation: a table of
+ * what changes (speaker, evidence, how falsehood arrives, who is addressed),
+ * chosen by the GM and baked in at authoring time, because nothing here can
+ * re-voice stored prose at read time.
+ *
+ * It also splits the rule list. Some rules are the presentation's to set —
+ * speaker, addressee, register — and some hold no matter what: no interiority,
+ * no advice, no contradicting the statistics. Leaving that unstated meant the
+ * model had to break one rule or the other silently, and a terminal log
+ * addressing the character as "you" is not a terminal log.
  *
  * The tier idiom this feature borrowed from Stonetop ("Everyone knows / One
  * might know / Very few know") no longer appears as headings, but it still
@@ -26,7 +57,13 @@
  * docs/RECALL_KNOWLEDGE.md.
  */
 
-import { BAND_KEYS, GRAMMAR_VERSION, PARAGRAPH_WORDS } from "./constants.mjs";
+import {
+  BAND_KEYS,
+  BAND_WORDS,
+  DEFAULT_PRESENTATION,
+  GRAMMAR_VERSION,
+  presentationByKey,
+} from "./constants.mjs";
 
 /**
  * The literal headings the parser will look for. Data, not copy.
@@ -55,63 +92,114 @@ export const VERSION_MARK = `<!-- glrk:${GRAMMAR_VERSION} -->`;
  * plain identification → one useful fact → how it actually fights → the secret
  * → what the secret opens onto. Each rung has its own job, which is what stops
  * eight paragraphs from being one paragraph written eight ways.
+ *
+ * Each entry is phrased as CARRIES / ADDS, deliberately. Describing a rung by
+ * its new material alone is what produced a Remarkable paragraph with no
+ * identification in it: the model writes what the guidance names, so the
+ * guidance has to name the carry too. The bottom two rungs carry nothing —
+ * they are false answers, and accumulating truth into them would defeat them.
  */
 const BAND_GUIDANCE = Object.freeze({
   disastrous: [
-    "Nothing. The character has no frame of reference at all, and it should be",
-    "funny rather than cruel — a blank, a wrong category, a confident guess",
-    "about something else entirely. This paragraph must contain **no true fact",
-    "whatsoever**, not even the creature's kind. It is the only rung that is",
-    "allowed to be a joke.",
+    "**Carries nothing.** No frame of reference at all — a blank, a wrong",
+    "category, a confident answer about something else entirely, arriving the",
+    "way the presentation above says falsehood arrives here. Funny rather than",
+    "cruel. This paragraph must contain **no true fact whatsoever**, not even",
+    "the creature's kind. It is the only rung allowed to be a joke.",
   ].join(" "),
   inept: [
-    "Confidently wrong. A plausible, folklore-shaped belief the character holds",
-    "and would act on. Wrong in **flavour** — a mistaken origin, a garbled",
-    "name, a rumour that inflates or deflates it, or an outright",
-    "misidentification as a different creature. Never invert a real fact: do",
+    "**Carries nothing true.** Confidently wrong, in exactly the way the",
+    "presentation above says this source goes wrong — and wrong in **flavour**:",
+    "a mistaken origin, a garbled name, a rumour or record that inflates or",
+    "deflates it, an outright misidentification. Never invert a real fact: do",
     "not claim it fears something it is immune to, or that its strongest save",
-    "is its weakest. A character who acts on this should be unlucky, not",
-    "punished.",
+    "is its weakest. Whoever acts on this should be unlucky, not punished.",
   ].join(" "),
   poor: [
-    "The reputation, hedged. What people say about it, delivered with visible",
-    "uncertainty — half-remembered, second-hand, possibly confused with",
-    "something similar. True in outline, vague in every detail. No tactics.",
+    "**The floor of true knowledge.** The reputation, hedged: what people say",
+    "about it, delivered with visible uncertainty — half-remembered,",
+    "second-hand, possibly confused with something similar. True in outline,",
+    "vague in every detail. No tactics.",
   ].join(" "),
   passable: [
-    "Plain identification. What the thing is and what it is known for, said",
-    "without hedging. This is common currency — a farmhand would know it. Still",
-    "no tactical content: knowing what it is called is not knowing how to fight",
-    "it.",
+    "**Carries the reputation, now said plainly** — no hedging, no maybe — and",
+    "**adds** the identification: what the thing is and what it is known for.",
+    "This is common currency; a farmhand would know it. Still no tactical",
+    "content: knowing what it is called is not knowing how to fight it.",
   ].join(" "),
   solid: [
-    "Identification plus **one** genuinely useful thing. Pick the single fact",
-    "that most changes what a player does next turn — the damage type that",
-    "hurts it, the save it is worst at, or the one defence worth planning",
-    "around. One only: this rung is the common success, not the jackpot.",
+    "**Carries the identification and what it is known for**, then **adds one**",
+    "genuinely useful thing. Pick the single fact that most changes what a",
+    "player does next turn — the damage type that hurts it, the save it is",
+    "worst at, or the one defence worth planning around. One only: this rung is",
+    "the common success, not the jackpot. A player who hears only this",
+    "paragraph should still know what they are looking at and have one lever.",
   ].join(" "),
   impressive: [
-    "How it actually fights. Its signature mechanic — the thing that defines",
-    "the encounter — and what that means for the party, plus the vulnerability",
-    "worth exploiting. This is the rung a prepared player is aiming for, and it",
-    "should feel like a real advantage.",
+    "**Carries the identification and that one useful fact**, then **adds** how",
+    "it actually fights: its signature mechanic — the thing that defines the",
+    "encounter — what that means for the party, and the vulnerability worth",
+    "exploiting. This is the rung a prepared player is aiming for, and read",
+    "alone it should be a complete tactical briefing.",
   ].join(" "),
   remarkable: [
-    "The secret. True origin, an unexpected lever, a weakness nobody would",
-    "guess, something that is not in any bestiary. It should still be",
-    "actionable — a secret you cannot use is trivia — but it buys story rather",
-    "than another statistic.",
+    "**Carries the identification, the useful fact and how it fights** —",
+    "compressed hard, a clause or two each — then **adds** the secret: true",
+    "origin, an unexpected lever, a weakness nobody would guess, something that",
+    "is not in any bestiary. Keep it actionable; a secret you cannot use is",
+    "trivia. The player should walk away knowing both how to fight it and what",
+    "it really is.",
   ].join(" "),
   phenomenal: [
-    "The secret, and what it opens onto. Everything Remarkable knows, plus the",
-    "thread that leads somewhere: a name, a connection, a reason this thing is",
-    "*here*, a hook the GM can pull on later. This is a specialist's reward and",
-    "should feel like one.",
+    "**Carries everything Remarkable carries** — what it is, how it fights, how",
+    "it dies, and the secret — then **adds** the thread that leads somewhere: a",
+    "name, a connection, a reason this thing is *here*, a hook the GM can pull",
+    "on later. This is a specialist's reward and should feel like one, but it",
+    "is still one paragraph the GM reads in place of every other.",
   ].join(" "),
 });
 
+/**
+ * The presentation block: who is speaking, and what the knowing is made of.
+ *
+ * Rendered high in the payload, before the bands, because it governs how every
+ * band is written. The GM's own note comes last and is explicitly allowed to
+ * win, the same way their table context outranks anything generic.
+ */
+function renderPresentation(presentation, note) {
+  const out = [
+    "## How this reaches the player",
+    "",
+    `This is not a style preference; it decides who is speaking and what the knowledge is made of. **${presentation.label}.**`,
+    "",
+    `- **Speaker.** ${presentation.speaker}`,
+    `- **What the knowledge is made of.** ${presentation.evidence}`,
+    `- **How it goes wrong.** At the two false bands below: ${presentation.falsehood}`,
+    `- **Who is addressed.** ${presentation.address}`,
+  ];
+  if (presentation.numbers) {
+    out.push(
+      "- **Numbers.** This presentation is the one exception to the no-numbers rule below: it is a readout, and a readout that refuses to print a number is not one. Give the statistics as the record would."
+    );
+  }
+  if (note.trim()) {
+    out.push(
+      "",
+      "The GM has described how this should look and sound. Prefer it over anything generic above:",
+      "",
+      note.trim()
+    );
+  }
+  return out.join("\n");
+}
+
 function renderGrammar(name) {
-  const body = BAND_KEYS.map((key) => `## ${HEADINGS[key]}\n<one paragraph>\n`).join("\n");
+  // The per-band budget is repeated inside the template as well as in the band
+  // list above: this block is the last thing the model reads before writing,
+  // and a ceiling stated once, forty lines earlier, is a ceiling that drifts.
+  const body = BAND_KEYS.map(
+    (key) => `## ${HEADINGS[key]}\n<one paragraph, ${BAND_WORDS[key][0]}-${BAND_WORDS[key][1]} words>\n`
+  ).join("\n");
   return ["```markdown", `# Recall Knowledge: ${name}`, VERSION_MARK, "", body.trimEnd(), "```"].join("\n");
 }
 
@@ -166,8 +254,15 @@ function renderBrief(brief) {
  * @param {string}   opts.context  the GM's free-text steer (the highest-value field)
  * @param {string[]} opts.extras   rendered blocks of opted-in extra context
  * @param {object[]} opts.seed     existing DC-keyed RK entries offered as source material
+ * @param {object}   opts.presentation  `{key, note}` — how the knowledge reaches
+ *                                      the player. Falls back to the baseline.
  */
-export function buildPayload(brief, { context = "", extras = [], seed = [] } = {}) {
+export function buildPayload(
+  brief,
+  { context = "", extras = [], seed = [], presentation = null } = {}
+) {
+  const style = presentationByKey(presentation?.key ?? DEFAULT_PRESENTATION);
+  const styleNote = String(presentation?.note ?? "");
   const kindWord =
     {
       creature: "creature",
@@ -176,7 +271,6 @@ export function buildPayload(brief, { context = "", extras = [], seed = [] } = {
       item: "item",
       scene: "location",
     }[brief.kind] ?? "subject";
-  const [minWords, maxWords] = PARAGRAPH_WORDS;
 
   const sections = [
     "# Task: write eight Recall Knowledge answers",
@@ -189,13 +283,24 @@ export function buildPayload(brief, { context = "", extras = [], seed = [] } = {
     "",
     "That has three consequences for what you write:",
     "",
-    `1. **Every paragraph stands alone.** It must make sense read cold, with nothing before it. A higher band may re-establish what the thing is in a clause, but it must never depend on a lower one having been read.`,
-    `2. **All eight must be different.** Not eight rewordings of one idea — eight different pieces of knowledge. If two paragraphs could be swapped without anyone noticing, one of them is wasted.`,
-    `3. **Length is a hard constraint.** ${minWords}–${maxWords} words each, one paragraph, no bullets, no headings inside it. This is spoken aloud: past about ${maxWords} words I start skimming and paraphrasing, and your work is lost.`,
+    "1. **Every paragraph is the whole answer for that roll.** Not just readable cold — *complete*. From Passable upward each band carries everything the bands below it would have told me, then adds its own new layer. If I read only the Remarkable paragraph, the player must still learn what the thing is, how it fights and how it dies, as well as the secret. A paragraph that gives me the payoff without the setup is unusable: it forces me to read a second one, which is the one thing I cannot do.",
+    "2. **Each band must add something the one below it did not have.** The carried material is shared by design, but the new layer is not: if a band adds nothing its predecessor lacked, that roll was wasted. Carry briefly, add substantially.",
+    "3. **Length is a hard constraint, and it is per band.** The budget is given with each band below. One paragraph, no bullets, no headings inside it. This is spoken aloud — every ten words is about two seconds — so the carried layers must arrive as a clause each, never re-told at their original length. The newest layer always gets the most words.",
+    "",
+    renderPresentation(style, styleNote),
     "",
     "## The bands, shallowest to deepest",
     "",
-    ...BAND_KEYS.map((key) => `- **${HEADINGS[key]}** — ${BAND_GUIDANCE[key]}`),
+    "Each band is written as **what it carries up from below** and **what it adds**, with its word budget. The bottom two are false answers and carry nothing.",
+    "",
+    ...BAND_KEYS.map(
+      (key) =>
+        `- **${HEADINGS[key]}** (${BAND_WORDS[key][0]}–${BAND_WORDS[key][1]} words) — ${BAND_GUIDANCE[key]}`
+    ),
+    "",
+    "## How to compress what you carry",
+    "",
+    "Carrying is not repeating. At Phenomenal I should not hear the Passable paragraph verbatim with three sentences bolted on — I should hear one paragraph written from the top, in which the identification is a clause, the weakness is a clause, the tactics are a sentence, and the new material is the rest. Rewrite each band from scratch with everything it knows in hand; do not concatenate the ones below it.",
     "",
     "## Pitch it to what this thing actually is",
     "",
@@ -208,11 +313,17 @@ export function buildPayload(brief, { context = "", extras = [], seed = [] } = {
     "",
     "## Rules for what you write",
     "",
-    "1. Write in the GM's narrating voice, addressing the character as \"you\". Short, concrete, sayable out loud. No stat-block formatting and no rules jargon the players would not hear.",
-    "2. Name weaknesses and resistances as **types, never numbers** — \"fire scars it and it does not heal\" rather than \"weakness 10 fire\". The same goes for saves: \"slow to dodge\" rather than \"Reflex +12\".",
-    "3. Do not contradict the statistics given below. Invent freely in the gaps, especially at the deepest bands.",
-    "4. No bullets, no bold labels, no headings inside a paragraph, no trailing commentary.",
-    "5. Do not name the band inside its own paragraph. I read the prose, not the label.",
+    "These hold whatever the presentation is:",
+    "",
+    `1. Name weaknesses and resistances as **types, never numbers** — "fire scars it and it does not heal" rather than "weakness 10 fire". The same goes for saves: "slow to dodge" rather than "Reflex +12".${style.numbers ? " (This presentation is the stated exception: give the numbers as the record would.)" : ""}`,
+    "2. **No interiority.** Describe the world and what is known about it, never what the character feels, notices in themselves, or decides. \"Your blood runs cold\" is my line to write, not yours, and it is the fastest way to take the scene away from me.",
+    "3. **No advice.** State what is true; do not tell the player what to do about it. \"Fire is the only thing that keeps a wound shut\" — not \"so you should burn it\".",
+    "4. **Plain and concrete, sayable in one breath.** The immersion comes from specific images — a smell, a mark on the ground, the one detail nobody would invent — never from ornament. Write nothing I have to perform to make it land; the mood is mine to add.",
+    "5. Do not contradict the statistics given below. Invent freely in the gaps, especially at the deepest bands.",
+    "6. No bullets, no bold labels, no headings inside a paragraph, no trailing commentary.",
+    "7. Do not name the band inside its own paragraph. I read the prose, not the label.",
+    "",
+    "The presentation above owns the rest — **who is speaking, who is addressed, and the register**. Where it disagrees with your instinct for how these usually sound, the presentation wins.",
     "",
     "## Output format",
     "",

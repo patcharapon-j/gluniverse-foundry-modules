@@ -33,7 +33,18 @@ const note = (msg) => notes.push(msg);
 
 /* ------------------------------------------------------------ imports --- */
 
-const { BAND_KEYS, BAND_REVEAL, DEFAULT_REVEAL, GRAMMAR_VERSION, PARAGRAPH_WORDS } = await import(
+const {
+  BAND_KEYS,
+  BAND_REVEAL,
+  BAND_WORDS,
+  CARRY_FROM,
+  DEFAULT_PRESENTATION,
+  DEFAULT_REVEAL,
+  GRAMMAR_VERSION,
+  OVERLONG_FACTOR,
+  PRESENTATIONS,
+  presentationByKey,
+} = await import(
   join(FEATURE, "constants.mjs")
 );
 const { HEADINGS, VERSION_MARK, buildPayload } = await import(join(FEATURE, "prompt.mjs"));
@@ -93,14 +104,22 @@ if (!DEFAULT_REVEAL.mode) fail("DEFAULT_REVEAL has no mode; a missing Flatfinder
 const sample = {
   name: "Barrow Troll",
   bands: {
-    disastrous: "You have absolutely no idea. You are fairly sure it is not a kind of bird.",
-    inept: "You are certain these things turn to stone in daylight, which is why nobody sees them at noon.",
-    poor: "You have heard the barrow country blamed for emptied graves, though you could not swear to what does the emptying.",
-    passable: "That is a barrow troll. The Hillfolk blame them for every opened grave in the uplands, and the blame is mostly earned.",
-    solid: "A barrow troll. Fire is the thing: burn it and the wounds stay shut, otherwise it simply knits itself together and comes on again.",
-    impressive: "A barrow troll, and the fight turns on fire. Cut it and it closes; burn it and it does not. It is strong but slow to see a trick coming, so misdirection lands where force will not.",
-    remarkable: "A barrow troll, and it was a person once. This one was a Hillfolk grave-warden who would not leave his post, and the barrow it guards is its own.",
-    phenomenal: "A barrow troll, and it was a grave-warden who would not leave his post. The barrow is his own, and the name cut above the door is one your patron has been looking for.",
+    disastrous:
+      "Nothing surfaces. You are reasonably confident it is some kind of very large heron — the legs, mostly — and that herons are protected in this county, so somebody is about to be fined.",
+    inept:
+      "You know this one. Daylight turns them to stone: the standing stones scattered across the uplands are all trolls who misjudged the hour, and every child up there can point out which is which. Nobody has ever seen one abroad at noon.",
+    poor:
+      "There is something in the barrow country that opens graves. You have heard it called a troll, though that word gets used for anything large and unpleasant, and the accounts do not agree — a giant, a wight, a bear that walks upright. What they agree on is the digging.",
+    passable:
+      "That is a barrow troll. The Hillfolk blame them for every opened grave in the uplands and the blame is mostly earned: they dig, they take what the dead were buried with, and they are strong enough that nobody argues about it. Big, grey, and unhurried.",
+    solid:
+      "That is a barrow troll — the thing the Hillfolk blame for their opened graves, and rightly. It digs, it takes, and it is strong enough that nobody argues. The one thing worth knowing is fire: cut it and the wound closes over while you watch, but burn it and the wound stays. Steel alone is a long night's work.",
+    impressive:
+      "That is a barrow troll, blamed across the uplands for its opened graves, and the fight turns on one thing. Cut it and the wound closes while you watch; burn it and the wound stays shut. It is enormously strong and hits like a falling tree, but it is slow to see a trick coming, so a feint lands where force will not. Nothing draws it more than a few dozen paces from the mound. It always turns back.",
+    remarkable:
+      "That is a barrow troll, the thing the Hillfolk blame for their opened graves. Cut it and the wound closes over; only fire keeps one shut. It is terribly strong, slow to see a trick coming, and it never strays more than a few dozen paces from the mound it circles. What the stories leave out is that it was a person. Grave-wardens were sworn to their barrows for life up here, and one of them kept the oath past dying. The grey thing on the mound is the warden, still at his post, and the grave he guards is his own.",
+    phenomenal:
+      "That is a barrow troll, and everything the uplands say about it is true: it opens graves, it takes what was buried, and steel does nothing lasting — a cut closes while you watch, and only fire keeps a wound shut. It is strong, slow to see a trick coming, and it never strays more than a few dozen paces from the mound. It was a man once. The grave-wardens were sworn to their barrows for life, and this one kept the oath past dying, so the grave he circles is his own. The name cut above that door is Aelric Vane, which is the name your patron has been paying for word of since before he hired you, and he has never once said why.",
   },
 };
 
@@ -125,16 +144,56 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
   }
 }
 
-/* The word budget is the whole point of v2: it is what a GM can say aloud
-   without skimming. A sample that breaks its own rule is a bad example to
-   assert against. */
+/* The word budget is what a GM can say aloud without skimming, and since v2.1
+   it climbs: the deep bands carry the shallow ones and are legitimately longer.
+   Two things must hold, and neither is visible in a running session. */
 {
-  const [minWords, maxWords] = PARAGRAPH_WORDS;
+  let previous = null;
   for (const key of BAND_KEYS) {
+    const budget = BAND_WORDS[key];
+    if (!budget) {
+      fail(`Band "${key}" has no BAND_WORDS budget; the payload would print "undefined-undefined words".`);
+      continue;
+    }
+    const [minWords, maxWords] = budget;
+    if (!(minWords < maxWords)) fail(`BAND_WORDS.${key} is not a range.`);
+    // Monotonic, because the payload presents the budgets as a ladder: a rung
+    // allowed FEWER words than the one below it cannot carry the one below it,
+    // and the model will resolve that contradiction by dropping the carry —
+    // which is the exact v2.0 failure this rewrite exists to remove.
+    if (previous && maxWords < previous[1]) {
+      fail(`BAND_WORDS.${key} (max ${maxWords}) is tighter than the shallower band above it (max ${previous[1]}).`);
+    }
+    previous = budget;
+
+    // The sample is the only worked example in this repository, so it has to
+    // obey the budget it documents — under-length teaches a fragment just as
+    // firmly as over-length teaches a monologue.
     const words = sample.bands[key].split(/\s+/).filter(Boolean).length;
-    if (words > maxWords * 1.5) fail(`Sample band "${key}" is ${words} words, far past the ${maxWords}-word budget.`);
+    if (words > maxWords) fail(`Sample band "${key}" is ${words} words, past its ${maxWords}-word budget.`);
+    if (words < minWords) fail(`Sample band "${key}" is ${words} words, under its ${minWords}-word floor.`);
   }
-  if (minWords >= maxWords) fail("PARAGRAPH_WORDS is not a range.");
+  for (const key of Object.keys(BAND_WORDS)) {
+    if (!BAND_KEYS.includes(key)) fail(`BAND_WORDS has "${key}", which is not a band.`);
+  }
+}
+
+/* Cumulative, not just distinct: from Passable up, a band must still tell the
+   player what the thing IS. The sample is the only example a reader of this
+   file gets, and an example that shows the top bands leading with the secret
+   alone teaches the failure back. Checked as "the subject is named", which is
+   the cheapest observable proxy for carrying the identification. */
+{
+  const CUMULATIVE_FROM = BAND_KEYS.indexOf("passable");
+  for (const key of BAND_KEYS.slice(CUMULATIVE_FROM)) {
+    if (!/barrow troll/i.test(sample.bands[key])) {
+      fail(`Sample band "${key}" never identifies the subject; it reads as a fragment of an answer, not a whole one.`);
+    }
+  }
+  const deep = sample.bands[BAND_KEYS[BAND_KEYS.length - 1]];
+  if (!/fire/i.test(deep)) {
+    fail("The sample's deepest band drops the weakness the middle bands established; it is not cumulative.");
+  }
 }
 
 /* Trailing chatter must not reach the last paragraph.
@@ -191,6 +250,69 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
   }
 }
 
+/* ------------------------------------ 3b. the presentations table -------- */
+
+/* Each presentation is a table of what CHANGES, and the payload prints every
+   field. A row missing one renders as "undefined" in the GM's clipboard, which
+   is both unreadable and unfixable from inside Foundry. */
+{
+  const seenKeys = new Set();
+  for (const style of PRESENTATIONS) {
+    for (const field of ["key", "label", "speaker", "evidence", "falsehood", "address"]) {
+      if (!style[field] || !String(style[field]).trim()) {
+        fail(`Presentation "${style.key ?? "?"}" has no ${field}; the payload would print undefined.`);
+      }
+    }
+    if (seenKeys.has(style.key)) fail(`Two presentations share the key "${style.key}".`);
+    seenKeys.add(style.key);
+  }
+  if (!seenKeys.has(DEFAULT_PRESENTATION)) {
+    fail(`DEFAULT_PRESENTATION "${DEFAULT_PRESENTATION}" is not in the table.`);
+  }
+  if (presentationByKey("no-such-presentation").key !== DEFAULT_PRESENTATION) {
+    fail("presentationByKey did not fall back to the default; a stale flag would throw at read time.");
+  }
+  // "types, never numbers" is a load-bearing rule, and exactly one presentation
+  // is documented as its exception. A second one arriving unnoticed would quietly
+  // turn the feature back into the stat readout it exists to replace.
+  const numeric = PRESENTATIONS.filter((style) => style.numbers).map((style) => style.key);
+  if (numeric.join() !== "readout") {
+    fail(`Presentations permitting numbers should be exactly [readout], found [${numeric.join(",")}].`);
+  }
+  if (!BAND_KEYS.includes(CARRY_FROM)) fail(`CARRY_FROM "${CARRY_FROM}" is not a band.`);
+  if (!(OVERLONG_FACTOR > 1)) fail("OVERLONG_FACTOR must leave a paragraph some slack.");
+}
+
+/* ------------------------------------ 3c. the cumulative detector -------- */
+
+/* The detector must fire on the v2.0 failure and stay silent on a good ladder.
+   Both halves matter: a detector that never fires is decoration, and one that
+   fires on healthy prose gets ignored on the day it is right. */
+{
+  const ladderFrom = (bands) => {
+    const body = BAND_KEYS.flatMap((key) => ["", `## ${HEADINGS[key]}`, bands[key]]);
+    return [`# Recall Knowledge: ${sample.name}`, VERSION_MARK, ...body].join("\n");
+  };
+
+  const good = parseLadder(ladderFrom(sample.bands));
+  if (good.warnings.includes("GLRK.parse.warn.notCumulative")) {
+    fail("The cumulative detector fired on the sample, which IS cumulative — it would cry wolf on every good ladder.");
+  }
+
+  // Each deep band written as only what that rung adds: the v2.0 shape.
+  const fragmented = {
+    ...sample.bands,
+    impressive: "Fire is the only thing that keeps a wound shut on it, and it is slow to see a trick coming, so misdirection lands where force will not.",
+    remarkable: "He was a grave-warden once, sworn to a post he would not abandon even after death took the rest of his village.",
+    phenomenal: "Ask your patron about the name cut above that door; he has been paying for word of it since before he hired you.",
+  };
+  const bad = parseLadder(ladderFrom(fragmented));
+  if (!bad.warnings.includes("GLRK.parse.warn.notCumulative")) {
+    fail("A ladder whose deep bands drop everything beneath them did not warn; the v2.0 failure would store silently.");
+  }
+  if (!bad.ok) fail("The cumulative warning must not refuse the paste; it is a heuristic, not a structural error.");
+}
+
 /* --------------------------- 4. the payload teaches the grammar it reads */
 
 const brief = {
@@ -202,6 +324,36 @@ const brief = {
   ],
 };
 const payload = buildPayload(brief, {});
+
+/* The presentation is baked into the paragraphs, so every field of the chosen
+   one has to actually reach the model. A field silently dropped here produces a
+   ladder in the wrong voice with nothing to show it went wrong. */
+for (const style of PRESENTATIONS) {
+  const styled = buildPayload(brief, {
+    presentation: { key: style.key, note: "the ship's medical scanner, terse" },
+  });
+  for (const field of ["label", "speaker", "evidence", "falsehood", "address"]) {
+    if (!styled.includes(style[field])) {
+      fail(`Payload for presentation "${style.key}" dropped its ${field}.`);
+    }
+  }
+  if (!styled.includes("the ship's medical scanner, terse")) {
+    fail(`Payload for presentation "${style.key}" dropped the GM's own note.`);
+  }
+  // The numbers exception must be stated where the rule is, not left implied.
+  const statesException = /stated exception/.test(styled);
+  if (style.numbers !== statesException) {
+    fail(`Presentation "${style.key}" and the payload disagree about the numbers exception.`);
+  }
+}
+
+/* An unknown key must still produce a usable payload: a world whose default
+   setting names a presentation this build no longer ships still has to prep. */
+if (!buildPayload(brief, { presentation: { key: "gone" } }).includes(
+  presentationByKey(DEFAULT_PRESENTATION).speaker
+)) {
+  fail("An unrecognised presentation key did not fall back to the default in the payload.");
+}
 
 /* The statblock is what the middle bands ("how it fights and how it dies") are
    written from. A section silently dropped by the renderer costs the model the
@@ -225,7 +377,21 @@ for (const [key, heading] of Object.entries(HEADINGS)) {
   if (!payload.includes(`## ${heading}`)) fail(`Payload never shows the "${key}" heading (${heading}).`);
 }
 // The payload must stand alone: a GM pasting into claude.ai has no skill installed.
-for (const needle of ["Output format", "types, never numbers", "Never invert"]) {
+// "carries" is the v2.1 instruction: without it the model writes each band as
+// only what that rung adds, and the top bands come back as a payoff with no
+// setup — unusable at a table that reads exactly one paragraph.
+for (const needle of [
+  "Output format",
+  "types, never numbers",
+  "Never invert",
+  "carries everything the bands below it",
+  "words) —",
+  // The tone floor: without these two the model narrates the character's
+  // feelings and tells the player what to do, which is the GM's job twice over.
+  "No interiority",
+  "No advice",
+  "How this reaches the player",
+]) {
   if (!payload.includes(needle)) fail(`Payload lost a load-bearing instruction: "${needle}".`);
 }
 // And the grammar it prints must actually parse.
@@ -298,6 +464,9 @@ for (const file of sources) {
 for (const rule of Object.values(BAND_REVEAL)) referenced.add(`GLRK.mode.${rule.mode}`);
 referenced.add(`GLRK.mode.${DEFAULT_REVEAL.mode}`);
 for (const key of BAND_KEYS) referenced.add(`GLRK.parse.warn.emptyBand.${key}`);
+// Presentation labels are built at runtime from the table (and from the settings
+// choices map), so nothing but this enumeration would catch a missing one.
+for (const style of PRESENTATIONS) referenced.add(`GLRK.presentation.${style.key}`);
 
 for (const key of [...referenced].sort()) {
   if (!(key in lang)) fail(`i18n key referenced but not defined: ${key}`);

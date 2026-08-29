@@ -13,20 +13,55 @@ their own voice. Auto-delivery turns lore into a loot drop.
 
 **One short paragraph per competence band, and the GM reads exactly one.**
 
-| Band | Total | What it knows |
-|---|---|---|
-| Disastrous | < 0 | Nothing at all. No frame of reference, played for comedy, containing no true fact. |
-| Inept | 0–4 | Confidently wrong: a folklore-shaped belief the character would act on. |
-| Poor | 5–9 | The reputation, hedged. True in outline, vague in detail. No tactics. |
-| Passable | 10–14 | Plain identification: what it is and what it is known for. |
-| Solid | 15–19 | Identification plus **one** useful thing — a damage type, a weak save, a defence. |
-| Impressive | 20–24 | How it actually fights: the signature mechanic and the vulnerability. |
-| Remarkable | 25–29 | The secret: true origin, an unexpected lever, something not in any bestiary. |
-| Phenomenal | 30+ | The secret and what it opens onto — a name, a connection, a hook. |
+| Band | Total | Carries | Adds | Words |
+|---|---|---|---|---|
+| Disastrous | < 0 | — | Nothing at all. No frame of reference, played for comedy, containing no true fact. | 15–45 |
+| Inept | 0–4 | — | Confidently wrong: a folklore-shaped belief the character would act on. | 30–60 |
+| Poor | 5–9 | — | The reputation, hedged. True in outline, vague in detail. No tactics. | 30–60 |
+| Passable | 10–14 | the reputation, unhedged | Plain identification: what it is and what it is known for. | 30–65 |
+| Solid | 15–19 | + identification | **One** useful thing — a damage type, a weak save, a defence. | 50–90 |
+| Impressive | 20–24 | + that useful fact | How it actually fights: the signature mechanic and the vulnerability. | 70–120 |
+| Remarkable | 25–29 | + how it fights | The secret: true origin, an unexpected lever, something not in any bestiary. | 90–150 |
+| Phenomenal | 30+ | + the secret | What it opens onto — a name, a connection, a hook. | 110–180 |
 
 Flatfinder already maps a PF2e skill-check total onto one of eight competence
 bands (Lore +1, natural 20 +1, natural 1 −1). This feature adds only the
 right-hand column.
+
+### Each paragraph is the whole answer, not the top slice of one
+
+The GM reads **one** paragraph, so that paragraph has to be a complete answer to
+"what do I know about this?". From Passable up, every band **carries everything
+the bands below it would have told the player** — compressed to a clause each —
+and then adds its own layer.
+
+v2.0 got this wrong. It told the model each paragraph must "stand alone",
+meaning *readable cold*; the model read it as *say only what this rung adds*,
+and the deep bands came back as a secret with no identification, no weakness and
+no tactics. That is unusable at the table: the GM is holding the payoff without
+the setup, and the only way to give the player a whole answer is to read the
+lower bands too — the exact failure the band model exists to remove. v2.1 states
+the carry explicitly, band by band, and pays for it with a word budget that
+climbs from 15–45 at Disastrous to 110–180 at Phenomenal.
+
+The ceiling is still what a GM can say without skimming — roughly two seconds
+per ten words — but it is not the same ceiling at every rung: the common rolls
+stay brisk and the rare ones are allowed to stop the table, which is what they
+are for. Carrying is not repeating:
+the shallower layers arrive as a clause each, the newest layer takes the rest,
+and each band is written from the top rather than concatenated onto the one
+below. `BAND_WORDS` is the table, `tools/recall-check.mjs` asserts it never
+narrows as the ladder deepens, and the parser warns when a stored paragraph runs
+past its own band's budget by more than `OVERLONG_FACTOR`.
+
+The bottom two bands are false answers and carry nothing: Disastrous holds no
+true fact at all and Inept is confidently wrong, so accumulating into them would
+be self-defeating. Poor is the floor of true knowledge.
+
+The grammar version is **unchanged at 2**. Nothing about the document's
+structure moved — a v2.0 ladder still parses and still plays — so flagging every
+existing one as a version mismatch would be noise. Regenerating a subject is
+what upgrades it.
 
 ### Why paragraphs rather than tiers of bullets
 
@@ -48,15 +83,102 @@ where it always belonged, and it is why mechanics still sit in the middle of the
 climb rather than at the top: Solid and Impressive are the common rolls and must
 be actionable, while the rare roll buys story.
 
+v1 was right that knowledge accumulates, and v2.1 keeps that (see above); what
+it does not keep is making the GM assemble the accumulation at the table.
+
 The Stonetop headings are retired, but the shape of the climb they describe still
 governs the band guidance, and the credit stands.
 
 ### Uniqueness is the load-bearing property
 
-The payload demands all eight paragraphs differ, the parser warns when two come
-back identical, and `tools/recall-check.mjs` asserts it of its own sample. Two
-bands that read the same are two rolls that play the same, which defeats the
-point of using competence checks at all.
+The payload demands each band add something the one below it did not have, the
+parser warns when two come back identical, and `tools/recall-check.mjs` asserts
+it of its own sample. Two bands that read the same are two rolls that play the
+same, which defeats the point of using competence checks at all.
+
+The parser also warns when a deeper band looks like it **dropped** the carry —
+near-zero content-word overlap with the band below it, from Passable up. It
+warns and never refuses: every other refusal in `parse.mjs` is structural (no
+headings, nothing parsed), while this one is a heuristic over prose, and a
+heuristic that blocks a GM's paste mid-prep is worse than a ladder they can see
+and regenerate. It is also deliberately blind to the presentation — a console
+log writes `SPECIMEN 4471-B` where a memory writes the creature's name, so
+anything demanding the literal name back would warn on every well-written
+science-fiction ladder, and a warning that cries wolf is ignored on the day it
+is right. It fires late and misses rather than nagging.
+
+Since v2.1 the property is about the **new layer**, not the whole paragraph:
+material is shared up the ladder by design, so two deep bands will legitimately
+overlap in what they carry. What must differ is what each one adds. The check
+also asserts the sample's top five bands still name the subject and keep the
+weakness the middle bands establish — the cheapest observable proof that the
+example being taught is a whole answer rather than a fragment.
+
+### How the knowledge reaches the player
+
+The bands say how *much* is known. `PRESENTATIONS` says how it **arrives**: the
+character's own memory (the baseline), what they work out on the spot, research
+in books or from an expert, a console or system log, a vision or augury, or a
+deliberate bestiary-style readout.
+
+This is not tone, and that is why it is a table rather than an adjective. The
+presentations disagree about *epistemology*: a character misremembers, but a
+terminal does not — it returns a corrupted record or a confident match against
+the wrong specimen. So each row carries four fields the payload prints verbatim:
+**speaker**, **evidence** (what the knowing is made of), **falsehood** (how
+Disastrous and Inept go wrong *for this source*), and **address**. The falsehood
+column is the one that earns the table; a single generic "be wrong in flavour"
+rule visibly breaks the moment the speaker stops being a person.
+
+It follows `features/statsblock-import`'s `RUNGS` deliberately, including its
+stated reason: a model cannot calibrate "make it feel like a terminal", but it
+can obey "the system is never unsure; it is wrong with total confidence".
+
+**Baked in, not overlaid.** The module holds no runtime model access — the
+payload is copied out and the reply pasted back — so stored prose cannot be
+re-voiced at read time. The presentation is therefore an authoring input, and
+`writeLadder` stamps the one actually used into the record. The Read tab reports
+that stamp, and says so when the Generate tab's picker has since moved: the
+ladder is not wrong, it was written the other way. A ladder with **no** stamp
+predates the feature and reads as unknown rather than stale — claiming it was
+authored as `recall` would put a false warning on every existing ladder in every
+world.
+
+**Stored as one flag.** `rk.presentation` holds `{key, note}` together, the way
+statsblock-import keeps `{context, rung, level}`: one intent, and redoing half of
+it should not mean retyping the other half. It stays separate from `rk.context`,
+which is about what is *true* at this table rather than how it is delivered — a
+GM switches presentation while the campaign facts stay put. Two world settings
+(`rk.defaultPresentation`, `rk.defaultPresentationNote`) supply the default, so a
+campaign that is entirely ship's logs is configured once rather than per
+creature.
+
+**The numbers exception.** `readout` is the single presentation permitted to
+state numbers, declared as a field rather than left to judgement, because a
+readout that refuses to print one is not a readout. `tools/recall-check.mjs`
+asserts it is the only one.
+
+### The tone floor, and what the presentation owns
+
+The payload's rules are split in two, because leaving the split implicit forced
+the model to break one rule or another silently — a terminal log addressing the
+character as "you" is not a terminal log.
+
+**Invariant, whatever the presentation:** types never numbers (except `readout`)
+· no interiority — the world and what is known of it, never what the character
+feels or decides · no advice — what is true, not what to do about it · plain,
+concrete, sayable in one breath · no contradicting the statistics · no band named
+inside its own paragraph · cumulative from Passable up.
+
+**The presentation's to set:** speaker, addressee, register.
+
+The first two invariants are the ones that keep the GM's voice theirs. "Your
+blood runs cold" is the GM's line to write, and "so you should burn it" is the
+player's call to make; a paragraph that takes either has stopped being
+information and started being performance. Immersion is carried by *specific
+images* instead — a smell, a mark on the ground, the detail nobody would invent —
+which is a floor rather than a style, so a presentation can set the register
+without the prose ever going purple.
 
 ### Pitched to what the subject is
 
@@ -83,6 +205,14 @@ Level, realistic skill modifiers run about +3 to +18 across levels 1–20, so th
 practical centre of mass is bands 3–5 and it drifts up roughly two bands over
 twenty levels. The bottom rung is what happens to someone entirely out of their
 depth; the top rung is a late-game specialist's reward.
+
+### The matrix previews the tail
+
+The Read tab's matrix shows every band at once, clamped to two lines. Since the
+bands became cumulative they all *open* with the same identification clause, so
+the preview shows the **end** of each paragraph instead — the layer that rung
+adds lands last, and the tail is the only part that distinguishes one row from
+the next.
 
 ## Why this feature computes no DCs
 
@@ -115,10 +245,12 @@ raw. (The suite's only correct PWoL detection currently lives in
 
 The flag is the source of truth:
 
-- `actor.getFlag(SUITE_ID, "rk.ladder")` — `{name, bands, generatedAt}`, where
-  `bands` maps each competence band key to its paragraph
+- `actor.getFlag(SUITE_ID, "rk.ladder")` — `{name, bands, presentation, generatedAt}`,
+  where `bands` maps each competence band key to its paragraph and `presentation`
+  stamps the one it was authored under (absent on pre-v2.2 ladders)
 - `rk.context` — the GM's free-text steer, persisted so regenerating never means
   retyping it
+- `rk.presentation` — `{key, note}`, how the knowledge reaches the player
 - `rk.mistaken` — the cached misidentification pick
 
 A **read-only mirror** renders into `system.details.privateNotes` so a GM who
@@ -188,28 +320,28 @@ wins.
 <!-- glrk:2 -->
 
 ## Disastrous
-<one paragraph>
+<one paragraph, 15-45 words>
 
 ## Inept
-<one paragraph>
+<one paragraph, 30-60 words>
 
 ## Poor
-<one paragraph>
+<one paragraph, 30-60 words>
 
 ## Passable
-<one paragraph>
+<one paragraph, 30-65 words>
 
 ## Solid
-<one paragraph>
+<one paragraph, 50-90 words>
 
 ## Impressive
-<one paragraph>
+<one paragraph, 70-120 words>
 
 ## Remarkable
-<one paragraph>
+<one paragraph, 90-150 words>
 
 ## Phenomenal
-<one paragraph>
+<one paragraph, 110-180 words>
 ```
 
 The parser is **strict about structure, forgiving about noise**. A wrapping code

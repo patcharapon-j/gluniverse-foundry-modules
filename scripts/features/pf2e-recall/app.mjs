@@ -12,7 +12,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { FEATURE_ID, SUBJECT_TYPES } from "./constants.mjs";
+import { FEATURE_ID, PRESENTATIONS, SUBJECT_TYPES, presentationByKey } from "./constants.mjs";
 import { subjectBrief } from "./extract.mjs";
 import { buildPayload } from "./prompt.mjs";
 import { parseLadder } from "./parse.mjs";
@@ -25,9 +25,11 @@ import {
   clearLadder,
   readContext,
   readLadder,
+  readPresentation,
   readSeed,
   writeContext,
   writeLadder,
+  writePresentation,
 } from "./store.mjs";
 import { BAND_ORDER, bandLabel, resolveReveal, revealMatrix } from "./reveal.mjs";
 
@@ -111,8 +113,23 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const doc = this.document;
     const ladder = readLadder(doc);
     const mistakenName = this._mistakenName(ladder);
+    const presentation = readPresentation(doc);
+
+    // What the stored paragraphs were authored under, versus what the box says
+    // now. A ladder with no stamp predates presentations: unknown, not stale.
+    const authored = ladder?.presentation?.key
+      ? presentationByKey(ladder.presentation.key)
+      : null;
 
     return Object.assign(context, {
+      presentations: PRESENTATIONS.map((p) => ({
+        key: p.key,
+        label: L(`GLRK.presentation.${p.key}`, p.label),
+        selected: p.key === presentation.key,
+      })),
+      presentationNote: presentation.note,
+      authoredAs: authored ? L(`GLRK.presentation.${authored.key}`, authored.label) : null,
+      presentationStale: !!authored && authored.key !== presentation.key,
       docName: doc?.name ?? "",
       docType: doc?.documentName ?? "",
       hasLadder: !!ladder,
@@ -175,6 +192,12 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const contextText = this.element.querySelector("[name=glrk-context]")?.value ?? "";
     await writeContext(doc, contextText);
 
+    const presentation = {
+      key: this.element.querySelector("[name=glrk-presentation]")?.value ?? undefined,
+      note: this.element.querySelector("[name=glrk-presentation-note]")?.value ?? "",
+    };
+    await writePresentation(doc, presentation);
+
     const extras = [];
     for (const box of this.element.querySelectorAll("[name=glrk-extra]:checked")) {
       const block = await this._renderExtra(box.value);
@@ -185,6 +208,7 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
       context: contextText,
       extras,
       seed: readSeed(doc),
+      presentation,
     });
 
     try {
@@ -249,6 +273,17 @@ export class RecallApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!proceed) return;
     }
 
+    // The picker is the truth at import time: the GM copied a payload built
+    // from it, so that is what the reply was authored under. Persisting it
+    // before the write means the stamp records the presentation actually used,
+    // even if the GM changed the box and re-copied since.
+    const picked = this.element.querySelector("[name=glrk-presentation]")?.value;
+    if (picked) {
+      await writePresentation(this.document, {
+        key: picked,
+        note: this.element.querySelector("[name=glrk-presentation-note]")?.value ?? "",
+      });
+    }
     await writeLadder(this.document, { ...result, name: result.name || this.document.name });
     for (const warning of result.warnings) ui.notifications.warn(L(warning, warning));
     if (box) box.value = "";

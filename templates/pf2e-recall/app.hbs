@@ -18,6 +18,13 @@
   {{#if isRead}}
   <section class="glrk-read gl-scroll">
 
+    {{#if authoredAs}}
+    <p class="glrk-authored{{#if presentationStale}} is-stale{{/if}}">
+      <span class="gl-tech-label">{{localize "GLRK.read.presentedAs"}}</span> {{authoredAs}}
+      {{#if presentationStale}}<small>{{localize "GLRK.read.presentationStale"}}</small>{{/if}}
+    </p>
+    {{/if}}
+
     <div class="glrk-bands">
       {{#each bands}}
       <button type="button" class="gl-btn glrk-band glrk-tier-{{key}}{{#if active}} is-active{{/if}}"
@@ -52,8 +59,8 @@
       {{#each matrix}}
       <div class="glrk-matrix-row glrk-tier-{{band}}{{#unless hasText}} is-unwritten{{/unless}}">
         <span class="gl-tech-label glrk-matrix-band">{{label}}</span>
-        {{#if text}}
-        <span class="glrk-matrix-text">{{text}}</span>
+        {{#if preview}}
+        <span class="glrk-matrix-text">{{preview}}</span>
         {{else}}
         <span class="glrk-matrix-depth">{{localize "GLRK.read.unwritten"}}</span>
         {{/if}}
@@ -74,6 +81,19 @@
   </section>
   {{else}}
   <section class="glrk-generate gl-scroll">
+
+    <label class="gl-tech-label" for="glrk-presentation">{{localize "GLRK.generate.presentationLabel"}}</label>
+    <p class="glrk-help">{{localize "GLRK.generate.presentationHint"}}</p>
+    <select class="gl-field" id="glrk-presentation" name="glrk-presentation">
+      {{#each presentations}}
+      <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+    <textarea class="gl-field glrk-presentation-note" id="glrk-presentation-note"
+              name="glrk-presentation-note" rows="2"
+              placeholder="{{localize 'GLRK.generate.presentationNotePlaceholder'}}">{{presentationNote}}</textarea>
+
+    <hr class="gl-divider">
 
     <label class="gl-tech-label" for="glrk-context">{{localize "GLRK.generate.contextLabel"}}</label>
     <p class="glrk-help">{{localize "GLRK.generate.contextHint"}}</p>

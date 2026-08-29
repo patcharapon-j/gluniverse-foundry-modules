@@ -39,8 +39,14 @@ export const TIER_KEYS = Object.freeze(["everyone", "might", "few"]);
  * v1 authored three cumulative tiers of bullets and derived eight table
  * experiences from them. That worked on paper and failed at the table: at the
  * top bands the GM was handed nine or ten bullets to read out mid-combat, which
- * is not something anyone does. v2 authors ONE self-contained paragraph per
- * band, so whatever the roll, the GM reads exactly one paragraph aloud.
+ * is not something anyone does. v2 authors ONE paragraph per band, so whatever
+ * the roll, the GM reads exactly one paragraph aloud.
+ *
+ * The paragraph is COMPLETE, not merely standalone: from Passable up, each one
+ * carries everything the rungs below it would have told the player, compressed
+ * into a clause each, before adding its own layer. v1 was right that knowledge
+ * accumulates; it was only wrong about making the GM assemble it at the table.
+ * See BAND_WORDS below for what that costs in length.
  *
  * Order mirrors COMPETENCE_BANDS in features/flatfinder/constants.js, shallowest
  * first. It is duplicated here rather than imported so this module stays free of
@@ -58,13 +64,185 @@ export const BAND_KEYS = Object.freeze([
 ]);
 
 /**
- * Word budget for one band paragraph, [min, max].
+ * Word budget per band, [min, max]. The budget CLIMBS, and it has to.
  *
- * The upper bound is the load-bearing one: this is read aloud, and roughly
- * seventy words is about fifteen seconds of speech. Past that a GM starts
- * skimming and paraphrasing, which is exactly the failure v1 had.
+ * v2.0 gave every band the same 25-70 words and told the model each paragraph
+ * had to "stand alone". It read that as "say only what this rung adds", so a
+ * Remarkable roll returned the secret with no identification, no weakness and
+ * no tactics — the GM had the payoff and none of the setup, and the only way
+ * to give the player a complete answer was to read the lower bands too. That
+ * is precisely the reading-two-paragraphs failure the band model exists to
+ * remove.
+ *
+ * v2.1 makes the true bands CUMULATIVE: each one carries everything the rungs
+ * below it would have told the player, compressed, plus its own new layer. A
+ * paragraph that carries five layers cannot also fit in fifty words, so the
+ * ceiling rises with the rung.
+ *
+ * The ceiling is still load-bearing — this is read aloud, and roughly seventy
+ * words is about fifteen seconds of speech — but it is not the same ceiling at
+ * every rung. The common rolls stay brisk; the rare ones are allowed to stop
+ * the table, because that is what they are for. Phenomenal at 180 is about
+ * thirty-five seconds, which is affordable exactly because almost nobody rolls
+ * it. The lower layers still arrive as a clause each rather than re-told at
+ * their own length, and the newest layer always gets the most words.
+ *
+ * The bottom two bands are false answers and accumulate nothing, so they stay
+ * short: a joke and a wrong belief are both worse for being padded.
  */
-export const PARAGRAPH_WORDS = Object.freeze([25, 70]);
+export const BAND_WORDS = Object.freeze({
+  disastrous: Object.freeze([15, 45]),
+  inept: Object.freeze([30, 60]),
+  poor: Object.freeze([30, 60]),
+  passable: Object.freeze([30, 65]),
+  solid: Object.freeze([50, 90]),
+  impressive: Object.freeze([70, 120]),
+  remarkable: Object.freeze([90, 150]),
+  phenomenal: Object.freeze([110, 180]),
+});
+
+/**
+ * The band the carry starts at.
+ *
+ * Below it there is nothing true to carry: Disastrous holds no true fact at
+ * all, Inept is confidently wrong, and Poor is the floor of true knowledge.
+ * Both the payload and the parser's cumulative check read this, so the ladder
+ * cannot be taught one shape and checked against another.
+ */
+export const CARRY_FROM = "passable";
+
+/**
+ * How far past its budget a stored paragraph may run before the parser says so.
+ *
+ * Slack for a good paragraph that lands a little long, not a second budget. At
+ * the old flat 70-word ceiling 1.5x meant 105 words; against Phenomenal's 180
+ * it would mean 270, which is not a warning, it is a rubber stamp.
+ */
+export const OVERLONG_FACTOR = 1.25;
+
+/**
+ * How the knowledge REACHES the player — the presentation, not the band.
+ *
+ * The eight bands say how much is known. This says who is speaking and what
+ * the knowing is made of: a character's memory, a console log, a vision. It is
+ * baked in at authoring time because the module holds no runtime model access
+ * — the payload is copied out and the reply pasted back — so a paragraph
+ * cannot be re-voiced at read time. What is stored was authored this way.
+ *
+ * Each entry is a TABLE OF WHAT CHANGES, not an adjective, for the reason
+ * statsblock-import's RUNGS states outright: a model cannot calibrate "make it
+ * feel like a terminal", but it can obey "the system is never unsure; it is
+ * wrong with total confidence". The fields are deliberately few and each one
+ * does work in the payload:
+ *
+ *   speaker   - who or what is talking, and to whom
+ *   evidence  - what the knowledge is MADE of at every true band
+ *   falsehood - how it goes wrong at Disastrous and Inept. This is the field
+ *               that earns the table: a terminal does not misremember and an
+ *               augury does not repeat gossip, so a single generic "be wrong
+ *               in flavour" rule visibly breaks the moment the presentation
+ *               stops being a person.
+ *   address   - the addressee the presentation implies, which is the one
+ *               existing rule a presentation may overrule (see prompt.mjs)
+ *   numbers   - the documented exception to "types, never numbers"
+ *
+ * NAMING: this is deliberately not called a mode or a source. BAND_REVEAL
+ * already owns `mode` (blank/wrong/hedged/clean/lead/bonus) and resolveReveal
+ * returns `wrongSource`; a second `mode` in the same feature would be misread
+ * within a month.
+ */
+export const PRESENTATIONS = Object.freeze([
+  Object.freeze({
+    key: "recall",
+    label: "What the character remembers",
+    speaker: "You, the GM, narrating to the character who rolled.",
+    evidence:
+      "The character's own memory — what they were taught, what they overheard, what they once saw and half kept.",
+    falsehood:
+      "Misremembering: a rumour repeated as fact, a name garbled in the telling, two similar creatures confused for one another.",
+    address: "Address the character directly as \"you\".",
+    numbers: false,
+  }),
+  Object.freeze({
+    key: "investigation",
+    label: "What they work out on the spot",
+    speaker:
+      "You, the GM, narrating to the character as they examine the thing in front of them.",
+    evidence:
+      "Physical evidence present in the scene: remains, tracks, droppings, damage, smell, what it did to the room and what it left behind.",
+    falsehood:
+      "A confident misreading of real evidence. The marks are genuinely there; the conclusion drawn from them is wrong.",
+    address:
+      "Address the character directly as \"you\", and anchor every band to something they can actually point at.",
+    numbers: false,
+  }),
+  Object.freeze({
+    key: "archive",
+    label: "Research: books, records, an expert",
+    speaker:
+      "The source itself — a book, a record, a scholar answering — quoted or closely paraphrased.",
+    evidence:
+      "Written or remembered scholarship: a catalogue entry, a monograph, a marginal note, a traveller's account, an expert's reply.",
+    falsehood:
+      "An outdated or superseded entry, a confident account of a different species, or the facing page mistaken for this one.",
+    address:
+      "Write about the subject in the third person. The character is the reader here, not the one being addressed.",
+    numbers: false,
+  }),
+  Object.freeze({
+    key: "terminal",
+    label: "A console, datapad or system log",
+    speaker: "The system. No narrator and no addressee — output on a screen.",
+    evidence:
+      "Records the system holds: catalogue entries, sensor returns, incident logs, maintenance notes, timestamps, whatever a machine would actually have stored.",
+    falsehood:
+      "A corrupted record, a redacted field, or a confident match against the wrong specimen. The system is never unsure; it is wrong with total confidence.",
+    address:
+      "No addressee at all. Do not say \"you\" — nothing here is speaking to anyone.",
+    numbers: false,
+  }),
+  Object.freeze({
+    key: "divination",
+    label: "A vision, augury or spirit answering",
+    speaker:
+      "You, the GM, describing what the character is shown rather than what they know.",
+    evidence:
+      "Images, impressions and answers that arrive whole and unbidden. They are true; they are not always legible.",
+    falsehood:
+      "A true image, misread. Never a false vision — the vision does not lie, the reading of it does.",
+    address:
+      "Address the character directly as \"you\", but as someone being shown a thing, not someone recalling it.",
+    numbers: false,
+  }),
+  Object.freeze({
+    key: "readout",
+    label: "A bestiary or game-style stat readout",
+    speaker:
+      "A game system's own entry, quoted deliberately — a bestiary page, a scanner panel, a codex record.",
+    evidence:
+      "Catalogued statistics and rules text, presented as a record rather than as speech.",
+    falsehood:
+      "A typo'd entry, an erratum, or a first-edition line that a later printing quietly corrected.",
+    address:
+      "No addressee. This is an entry being read, not a person being spoken to.",
+    // The one documented exception to "types, never numbers". A readout that
+    // refuses to print a number is not a readout, and a GM who picks this
+    // preset has asked for the stat block on purpose.
+    numbers: true,
+  }),
+]);
+
+/** Fallback presentation, and the world default's own default. */
+export const DEFAULT_PRESENTATION = "recall";
+
+const PRESENTATION_BY_KEY = new Map(PRESENTATIONS.map((p) => [p.key, p]));
+
+/** Look up a presentation, falling back to the baseline rather than throwing. */
+export const presentationByKey = (key) =>
+  PRESENTATION_BY_KEY.get(key) ?? PRESENTATION_BY_KEY.get(DEFAULT_PRESENTATION);
+
+/** Flag key holding `{key, note}` — the presentation and its free-text refinement. */
+export const FLAG_PRESENTATION = "rk.presentation";
 
 /**
  * Competence band -> how the answer is DELIVERED.

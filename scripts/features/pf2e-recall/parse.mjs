@@ -20,7 +20,14 @@
  */
 
 import { HEADINGS } from "./prompt.mjs";
-import { BAND_KEYS, GRAMMAR_VERSION, PARAGRAPH_WORDS, TIER_KEYS } from "./constants.mjs";
+import {
+  BAND_KEYS,
+  BAND_WORDS,
+  CARRY_FROM,
+  GRAMMAR_VERSION,
+  OVERLONG_FACTOR,
+  TIER_KEYS,
+} from "./constants.mjs";
 
 /** v1 headings, kept only so an old reply still parses into the new shape. */
 const LEGACY_HEADINGS = Object.freeze({
@@ -95,6 +102,61 @@ function foldParagraph(lines, key) {
 }
 
 const wordCount = (text) => (String(text ?? "").trim().match(/\S+/g) ?? []).length;
+
+/**
+ * Words worth comparing between two bands: long enough to be about the subject
+ * rather than about English. Deliberately crude — this feeds a warning, not a
+ * decision.
+ */
+const CARRY_STOPWORDS = new Set([
+  "that", "this", "with", "from", "they", "them", "their", "there", "then",
+  "than", "have", "been", "were", "what", "when", "which", "will", "would",
+  "your", "yours", "about", "into", "onto", "over", "under", "only", "even",
+  "some", "most", "much", "more", "very", "just", "like", "also", "still",
+  "does", "done", "make", "makes", "made", "take", "takes", "come", "comes",
+  "something", "anything", "nothing", "everything", "enough", "though",
+]);
+
+function contentWords(text) {
+  const out = new Set();
+  for (const raw of String(text ?? "").toLowerCase().match(/[a-z']+/g) ?? []) {
+    const word = raw.replace(/'s$/, "");
+    if (word.length > 3 && !CARRY_STOPWORDS.has(word)) out.add(word);
+  }
+  return out;
+}
+
+/**
+ * Did a deeper band throw away everything the shallower one established?
+ *
+ * This is the v2.0 failure, and it is invisible once stored: each paragraph
+ * reads well on its own, and only a GM comparing two of them notices that the
+ * deep one gave the secret and no longer says what the thing IS.
+ *
+ * Deliberately blunt, and deliberately blind to the presentation. A terminal
+ * log writes "SPECIMEN 4471-B" where a memory writes the creature's name, so
+ * anything that demanded the literal name back would warn on every well-written
+ * sci-fi ladder — and a warning that cries wolf gets ignored on the day it is
+ * right. Near-zero overlap in content words is the one signal that survives
+ * every presentation, so this fires late and misses rather than nags.
+ */
+function carryLooksDropped(bands) {
+  const start = BAND_KEYS.indexOf(CARRY_FROM);
+  if (start < 0) return false;
+  let previous = null;
+  for (const key of BAND_KEYS.slice(start)) {
+    const text = bands[key];
+    if (!text) continue;
+    const words = contentWords(text);
+    if (previous && previous.words.size >= 8 && words.size >= 8) {
+      let shared = 0;
+      for (const word of words) if (previous.words.has(word)) shared++;
+      if (shared <= 1) return true;
+    }
+    previous = { key, words };
+  }
+  return false;
+}
 
 /**
  * Parse a model reply into a ladder.
@@ -173,13 +235,25 @@ export function parseLadder(source) {
     else seen.set(fingerprint, key);
   }
 
-  const [, maxWords] = PARAGRAPH_WORDS;
-  // A generous multiple of the budget: a paragraph slightly over is fine read
-  // aloud, but one at twice the budget is the v1 failure returning by the back
-  // door, and the GM should know before they are mid-combat with it.
-  if (Object.values(bands).some((v) => wordCount(v) > maxWords * 1.5)) {
+  // A generous multiple of the band's own budget: a paragraph slightly over is
+  // fine read aloud, but one at twice the budget is the v1 failure returning by
+  // the back door, and the GM should know before they are mid-combat with it.
+  // The budget is per band because the deep bands carry the shallow ones and
+  // are legitimately longer; measuring them all against Disastrous would either
+  // flag every good Phenomenal or excuse every bloated Poor.
+  if (
+    Object.entries(bands).some(
+      ([key, v]) => wordCount(v) > (BAND_WORDS[key]?.[1] ?? 70) * OVERLONG_FACTOR
+    )
+  ) {
     warnings.push("GLRK.parse.warn.longBand");
   }
+
+  // Warned, never refused. Every refusal in this parser is structural — no
+  // headings, nothing parsed at all. This one is a heuristic over prose, and a
+  // heuristic that blocks a GM's paste mid-prep is worse than a ladder they can
+  // see and regenerate.
+  if (carryLooksDropped(bands)) warnings.push("GLRK.parse.warn.notCumulative");
 
   return { ok: !errors.length, name, version, bands, warnings, errors };
 }
