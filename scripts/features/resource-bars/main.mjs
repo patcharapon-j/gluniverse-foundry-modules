@@ -100,6 +100,10 @@ export function onReady() {
   on("canvasReady", () => { host.attach(); });
   on("canvasTearDown", () => host.detach());
 
+  /* Pan and zoom change which bars are on screen, and the filtered container is
+     measured from the ones that are. */
+  on("canvasPan", () => host.cull());
+
   on("drawToken", (token) => { suppressNative(token); host.refreshToken(token); });
   on("destroyToken", (token) => host.remove(token?.id));
   on("deleteToken", (doc) => host.remove(doc?.id));

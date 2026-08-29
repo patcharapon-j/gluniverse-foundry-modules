@@ -52,6 +52,15 @@ const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
  */
 const CONTAINER_Z = 900;
 
+/**
+ * How far outside the viewport a bar is still drawn, in world pixels.
+ *
+ * Wide enough to cover the bloom a bar just off the edge would have spilled
+ * back inward, so culling is invisible rather than a fringe that pops at the
+ * screen edge while panning.
+ */
+const CULL_PAD = 96;
+
 /** The three rows, in stacking order. */
 const ROLES = ["hero", "rail", "shield"];
 
@@ -178,6 +187,14 @@ class BarHost {
     if (!this.container) return;
     if (this.opts.bloom) {
       if (!this.bloom) this.bloom = createBloomFilter();
+      if (this.bloom) {
+        this.syncFilterResolution();
+        /* Nothing here has a geometric edge to antialias — every shape in the
+           bar is an SDF the fragment shader already resolves against px, and the
+           numerals are alpha-blended from an atlas. Multisampling the filter
+           target would resolve an extra buffer every frame for no difference. */
+        this.bloom.multisample = PIXI.MSAA_QUALITY?.NONE ?? 0;
+      }
       this.container.filters = this.bloom ? [this.bloom] : null;
     } else {
       this.container.filters = null;
@@ -229,6 +246,7 @@ class BarHost {
     for (const [id, entry] of this.entries) {
       if (!seen.has(id)) { entry.destroy(); this.entries.delete(id); }
     }
+    this.cull();
     this.syncTicker();
   }
 
@@ -244,6 +262,7 @@ class BarHost {
     if (!entry || !entry.reading) return;
     entry.token = token;
     this.layout(entry);
+    this.cullEntry(entry);
     this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
   }
 
@@ -346,9 +365,84 @@ class BarHost {
     }
     entry.heroH = heroH;
     entry.heroW = w;
+    /* The stack's world-space extent, for culling. Grown upward by a hero
+       height because the floating deltas rise out of the top of the bar. */
+    entry.box = { x0: entry.baseX, y0: token.y + token.h - heroH * 1.5 + off.y * grid,
+                  x1: entry.baseX + w, y1: y };
   }
 
   /* ── Per-frame ───────────────────────────────────────────────────────── */
+
+  /**
+   * Keep the bloom's render target at the renderer's own resolution.
+   *
+   * This is the blur. `PIXI.Filter` defaults its resolution to 1, *not* to the
+   * renderer's, and the filter system sizes the intermediate textures from the
+   * filter rather than from the target it is drawing into. On any HiDPI display
+   * — which is every retina Mac and most modern laptops — the renderer runs at
+   * resolution 2 and the entire bar container is therefore rendered at half the
+   * device pixels and scaled back up on composite. Nothing errors. The bars
+   * simply arrive soft, and worse the harder you zoom in, because the thing
+   * being upscaled is a fixed fraction of the real pixel count.
+   *
+   * It has to be re-read rather than set once: dragging the window to a display
+   * with a different pixel ratio changes `renderer.resolution` underneath us.
+   */
+  syncFilterResolution() {
+    const r = canvas?.app?.renderer;
+    if (!this.bloom || !r) return;
+    const res = r.resolution || 1;
+    if (this.bloom.resolution !== res) this.bloom.resolution = res;
+  }
+
+  /**
+   * Stop drawing the bars that are not on screen.
+   *
+   * Two costs, and the second is the one that hurts. Off-screen bars are draw
+   * calls that render nothing — annoying but linear. They are also *bounds*:
+   * a filtered container measures itself every frame by walking each child, and
+   * the filter's texture is allocated from that measurement, so one token
+   * parked in the far corner of a large scene sizes the bloom's intermediate
+   * buffers to the whole distance between them. In a forty-token combat spread
+   * across a battlemap that is the single largest thing this feature does, and
+   * it costs the same whether or not anything is animating.
+   *
+   * PIXI skips a non-renderable child in `calculateBounds` as well as in the
+   * render, so clearing the flag fixes both at once.
+   *
+   * Nothing visible changes: the margin is wide enough that a bar just outside
+   * the viewport still contributes the bloom it would have spilled inward.
+   */
+  cull() {
+    if (!this.container) return;
+    this.syncFilterResolution();
+    const screen = canvas?.app?.renderer?.screen;
+    if (!screen) return;
+
+    const a = this.container.toLocal({ x: screen.x, y: screen.y });
+    const b = this.container.toLocal({ x: screen.x + screen.width, y: screen.y + screen.height });
+    this._view = {
+      x0: Math.min(a.x, b.x) - CULL_PAD, x1: Math.max(a.x, b.x) + CULL_PAD,
+      y0: Math.min(a.y, b.y) - CULL_PAD, y1: Math.max(a.y, b.y) + CULL_PAD,
+    };
+    for (const entry of this.entries.values()) this.cullEntry(entry);
+  }
+
+  /**
+   * Apply the last computed view to one entry.
+   *
+   * Split out because a dragged token needs re-testing on every frame of the
+   * drag while the *view* has not moved at all, and recomputing the rectangle
+   * there would put two matrix inversions inside the drag loop.
+   */
+  cullEntry(entry) {
+    const v = this._view;
+    const box = entry.box;
+    /* No view or no box yet means nothing has been measured; leave the bar
+       visible rather than hiding one this pass has no information about. */
+    entry.group.renderable =
+      !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
+  }
 
   syncTicker() {
     const wanted = [...this.entries.values()].some((e) =>
