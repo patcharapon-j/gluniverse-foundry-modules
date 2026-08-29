@@ -190,9 +190,11 @@ input[type=range]{padding:0; width:230px}
   <div class="grid" id="row-div"></div>
 
   <h2>The readout</h2>
-  <p class="note">Value and maximum are the same white at the same opacity, and differ only in
-    size &mdash; so the run reads as one number with its scale beside it rather than as two
-    elements competing. They share a baseline measured from the baked ink, not from the glyph
+  <p class="note">The maximum is the scale the reading is measured against, so it steps back &mdash;
+    by one step, not into furniture. At 0.22 ink it was a denominator you had to go looking for;
+    at full ink it competed with the number that actually changes. 0.80 ranks the two and leaves
+    both legible at a glance, and the separator goes one further at 0.62 because it is punctuation.
+    They share a baseline measured from the baked ink, not from the glyph
     cell, which is a couple of pixels apart and reads as a mistake when it is wrong.
     <b style="color:var(--text)">Value text size</b> is a per-viewer setting: it multiplies the
     size the bar&rsquo;s own height gives, so the readout stays in proportion on every grid size
@@ -884,17 +886,17 @@ function draw(now) {
       const ns = (s.numScale ?? 1) * punch;
       /* `num`, not `frac`: the fill snaps on impact and the readout counts. */
       const cur = Math.round((a ? a.num : frac) * s.max);
-      /* Colour follows the event and decays back to white. Value and maximum
-         share it: the hierarchy between them is size and nothing else, so the
-         run reads as one number with its scale beside it. */
+      /* Colour follows the event and decays back to white. The maximum shares
+         it and steps back by one notch of opacity — enough to rank the two,
+         not enough to make the denominator something you go looking for. */
       const heat = a ? a.hit * 0.70 : 0;
       const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
       const rest = [0.97, 0.99, 1.0];
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
         { text: String(cur), size: h * 0.46 * ns, ink },
-        { text: "/", size: h * 0.23 * ns, ink, bottom: true },
-        { text: String(s.max), size: h * 0.24 * ns, ink, bottom: true },
+        { text: "/", size: h * 0.23 * ns, ink, opacity: 0.62, bottom: true },
+        { text: String(s.max), size: h * 0.24 * ns, ink, opacity: 0.80, bottom: true },
       ], rightPx, h * 0.5, w, h, shear);
 
       /* Floating deltas rise out of the bar and fade. The number that changed

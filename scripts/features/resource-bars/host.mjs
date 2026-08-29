@@ -623,16 +623,23 @@ class BarHost {
     if (stamp !== entry.lastNumber || !entry.textMesh) {
       entry.lastNumber = stamp;
       /* The current value is the reading; the maximum is the scale it is read
-         against. The hierarchy between them is carried by size alone — same
-         ink, same opacity, one smaller than the other — so the run reads as one
-         number with its scale beside it rather than as two different elements.
+         against, so it steps back — but only by one step. It was 0.22/0.30
+         once, which is furniture: a denominator you have to go looking for is
+         not serving the reading it belongs to. At full strength it competes
+         instead, because a small numeral at full ink is still high-contrast
+         against the plate. A slight step down carries the hierarchy while
+         leaving both halves legible at a glance.
+
+         The separator takes one step further than the maximum does, because it
+         is punctuation rather than information.
+
          They also sit on a shared baseline rather than each on the mid-line,
          because a run where every part is separately centred reads as three
          sizes of number instead of as one reading. */
       const geo = runGeometry([
         { text: String(value), size: h * 0.46 * numScale },
-        { text: "/", size: h * 0.23 * numScale, bottom: true },
-        { text: String(r.hero.max), size: h * 0.24 * numScale, bottom: true },
+        { text: "/", size: h * 0.23 * numScale, dim: 0.62, bottom: true },
+        { text: String(r.hero.max), size: h * 0.24 * numScale, dim: 0.80, bottom: true },
       ], { right, mid, skew: SKEW });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number

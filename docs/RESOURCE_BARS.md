@@ -215,13 +215,19 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
-The **maximum is the scale, not the reading**. It differs from the value by
-size and by nothing else: same white, same opacity, one size down, on the
-reading's baseline. That is a constraint the run's construction enforces rather
-than a choice re-made at each call site — a run is one mesh with one `uInk` and
-one `uOpacity`, so there is nowhere to put a per-part weight without adding a
-second mesh and a second geometry to keep in sync, for what is visually one
-number.
+The **maximum is the scale, not the reading**, so it steps back: one size
+down, one step of opacity down, on the reading's baseline. One step, and the
+band matters in both directions. At full strength a small numeral is still
+high-contrast against the plate and competes with the number that actually
+changes; at the 0.22/0.30 this used to carry, the denominator becomes furniture
+you have to go looking for. 0.80 ranks the two and leaves both legible at a
+glance. The separator goes one further, to 0.62, because it is punctuation
+rather than information.
+
+The weight rides on `aDim`, a per-vertex attribute, because a run is one mesh
+with one `uInk`. Anything else means a second mesh and a second geometry to keep
+in sync for what is visually one number, so the attribute is what keeps the run
+atomic — and `resource-bar-check` pins both halves of it and the band.
 
 The baseline matters because a run where every part is separately centred reads
 as three sizes of number rather than as one reading with its scale beside it.
@@ -365,7 +371,8 @@ that no `SHED_ORDER` entry is dead, that the hitstop actually holds every
 channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
 per-token offset still means "inherit" rather than "zero", that value and
-maximum still differ by size alone, that the readout's geometry cache is keyed on
+maximum still differ by one step of weight rather than by none or by a fade to
+furniture, that the readout's geometry cache is keyed on
 its size so the size setting is not silently inert, that the GM's readout
 override never reaches the permission gate and never outruns `displayBars`, that
 the shear has one home, and that every detail gate still resolves at the

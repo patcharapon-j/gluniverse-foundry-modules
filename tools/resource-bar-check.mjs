@@ -212,20 +212,32 @@ const tokensCss = await src("styles/gl-tokens.css");
     fail("The Token Config inputs are not named for the flag path; they will not be saved by the sheet's own submit.");
 }
 
-/* ── 7d. The readout differs by size and by nothing else ────────────────── */
+/* ── 7d. The maximum steps back by one step, not into furniture ─────────── */
 {
-  /* Every part of the reading is the same white at the same opacity; only its
-     size says which part is the value and which the maximum. That holds only
-     because the run is one mesh with one uInk and one uOpacity, so the way to
-     break it is to reintroduce a per-glyph weight — which renders perfectly and
-     just quietly fades the maximum again. */
+  /* The maximum is the scale the reading is measured against, so it ranks below
+     the value — by one step. Both failure modes render perfectly. At full
+     strength a small numeral is still high-contrast against the plate and
+     competes with the number that actually changes; down at the 0.22/0.30 this
+     once used, the denominator becomes furniture you have to go looking for.
+     So the weight is pinned to a band, not merely to existing, and the
+     mechanism carrying it is pinned end to end: drop either half of aDim and
+     the run still draws, at full strength, silently flattening the hierarchy. */
   const atlasSrc = strip(await src("scripts/features/resource-bars/atlas.mjs"));
   const h = strip(hostSrc);
-  if (/aDim|vDim/.test(atlasSrc) || /\bdim:/.test(h))
-    fail("A per-glyph weight is back in the readout; the maximum will draw fainter than the value it belongs to instead of the same white, one size smaller.");
-  else if (!/size:\s*h\s*\*\s*0\.46/.test(h) || !/size:\s*h\s*\*\s*0\.2\d/.test(h))
-    fail("The readout's parts no longer differ in size, which was the only thing separating the value from its maximum.");
-  else ok("value and maximum differ by size alone, at one ink and one opacity");
+  const declared = /attribute float aDim/.test(atlasSrc);
+  const supplied = /addAttribute\("aDim"/.test(atlasSrc);
+  const used = /vDim/.test(atlasSrc);
+  const weights = [...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1]));
+  const faint = weights.filter((w) => w < 0.5);
+  if (!declared || !supplied || !used)
+    fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength and compete with the value.");
+  else if (!weights.length)
+    fail("Nothing in host.mjs passes a dim weight, so the maximum draws at exactly the value's strength and the two compete.");
+  else if (faint.length)
+    fail(`The readout carries a weight of ${Math.min(...faint)}; below 0.5 the maximum stops being a quieter number and becomes furniture the reader has to go looking for.`);
+  else if (!weights.some((w) => w < 1))
+    fail("Every readout weight is 1, so there is no step between the value and the maximum at all.");
+  else ok(`the maximum steps back by one step (weights ${weights.join(", ")}), through the run's own attribute`);
 }
 
 /* ── 7d2. The readout's size setting actually takes effect ──────────────── */
