@@ -117,7 +117,7 @@ A value change is a sequence, and the order is what makes it read as an event:
 | **~55ms** | the hitstop releases; the sweep and the ring both start from a standstill |
 | **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
 | **~420ms** | the readout has finished counting |
-| **~720ms** | the sweep has crossed the bar and gone |
+| **~800ms** | the wave has crossed the bar and gone |
 
 Three things about it are easy to get wrong and impossible to unsee afterwards.
 
@@ -132,16 +132,33 @@ whole reaction is light travelling across something rigid.
 of what separates "the number went down" from "that hurt". It holds every
 channel, including the value tweens and the popup timers.
 
-**The sweep is the loudest thing here, and it carries hue rather than light.** A
-front crosses the *whole* bar in the direction the value moved — scoped to just
-the span that changed it is a detail you have to already be looking at the bar
-to catch, and on a one-point heal it is a flicker two pixels wide. It drags a
-long chevron-textured ramp behind it and nothing ahead of it; that asymmetry is
-the direction cue, since a symmetric band travelling along a bar is a highlight
-and a highlight can be going either way.
+**The wave is the loudest thing here.** It crosses the *whole* bar in the
+direction the value moved — scoped to just the span that changed it is a detail
+you have to already be looking at the bar to catch, and on a one-point heal it
+is a flicker two pixels wide.
 
-The ramp *replaces* the colour of the material it crosses and only then adds a
-hot front on top. Written the obvious way, as pure additive light over an
+Three things separate a wave from a coloured band sliding along a bar, and all
+three are here because the band was built first and that is exactly what it
+looked like:
+
+1. **The crest is bowed.** A straight vertical edge travelling sideways is a
+   wipe. A front that leads at the centre line and lags at the rim is a wave
+   seen side-on.
+2. **There is a wake.** A single monotone ramp behind the front is a gradient in
+   motion; water leaves a decaying train of crests, and that train is most of
+   the read.
+3. **The wake has a surface.** The coloured region stops at an undulating
+   boundary partway up the fill rather than filling its full height, with a lit
+   meniscus along it and a shadow just under — a line alone reads as a drawn
+   stroke, a line with darkness beneath it reads as the edge of a volume. The
+   fill's *silhouette* is never touched; this boundary lives inside it.
+
+Nothing at all is drawn ahead of the front. That asymmetry is the direction cue,
+since a symmetric band travelling along a bar is a highlight and a highlight can
+be going either way.
+
+The wake *replaces* the colour of the material it crosses and only then adds
+light on top. Written the obvious way, as pure additive light over an
 already-bright plate, the green of a heal and the red of a hit both arrive as
 the same pale smear. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth

@@ -135,9 +135,9 @@ input[type=range]{padding:0; width:230px}
   <p class="note">A value change is an event, not a length, and it is a <i>sequence</i>. The fill
     snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
     reaction read as a reaction rather than as the tail of a transition. On release: a
-    <b style="color:var(--text)">sweep crosses the whole bar</b> in the direction the value moved,
-    hard front, long chevron-textured ramp behind it, red down the bar on a hit and green out along
-    it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
+    <b style="color:var(--text)">wave crosses the whole bar</b> in the direction the value moved —
+    a bowed crest, a decaying train of crests behind it, and an undulating lit surface partway up the
+    fill, red down the bar on a hit and green out along it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
     point that moved, throwing spokes and debris along the bar's axis; the readout counts to the new
     number in the colour of what happened; and the delta punches in at 1.35× before drifting off.</p>
   <p class="note"><b style="color:var(--text)">Nothing about the geometry moves.</b> Not the frame,
@@ -628,10 +628,10 @@ for (const f of [1, 0.78, 0.5, 0.32, 0.18, 0.06]) {
 
 const motion = document.getElementById("row-motion");
 add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost: 0.78, chip: 0.85, seg: 10, max: 58 });
-add(motion, { title: "Damage sweep", sub: "front running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
-add(motion, { title: "Heal sweep", sub: "front running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
+add(motion, { title: "Damage wave", sub: "crest running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
+add(motion, { title: "Heal wave", sub: "crest running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
 add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
-add(motion, { title: "Sweep, late", sub: "the ramp trailing behind the front", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
+add(motion, { title: "The wake", sub: "crests trailing behind the front", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");

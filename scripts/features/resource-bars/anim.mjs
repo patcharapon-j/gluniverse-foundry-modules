@@ -49,7 +49,7 @@ export const TIMING = Object.freeze({
   flashMs: 70,     // --gl-d-flash   impact whiteout
   fillMs: 430,     // --gl-d-swift   the fill's own catch-up on a heal
   countMs: 420,    // the readout counting to the new number
-  waveMs: 720,     // the sweep crossing the bar
+  waveMs: 800,     // the wave crossing the bar
   sweepInMs: 420,  // --gl-d-move    gloss fading in on hover
   sweepOutMs: 540, // --gl-d-glide   and back out
   hitMs: 480,      // the impact ring + spokes, from landing to gone
