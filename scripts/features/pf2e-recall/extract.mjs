@@ -445,6 +445,40 @@ function extractJournal(entry) {
   };
 }
 
+/**
+ * One page of a journal, as its own subject.
+ *
+ * The entry it belongs to is named in the subtitle rather than folded into the
+ * prose: the page is what the ladder is about, but "Barrow Country / The
+ * Hollow Kings" tells the model that this is one entry in a set, which is the
+ * difference between writing about a place and writing about a gazetteer.
+ *
+ * A non-text page (image, PDF, video) carries no prose to extract, so what
+ * survives is its caption and what kind of thing it is. That is thin, and
+ * deliberately not padded — the GM's own "what matters at my table" box is the
+ * right place to say what an image means, and pretending otherwise would hand
+ * the model a filename to write lore from.
+ */
+function extractJournalPage(page) {
+  const sys = page.system ?? {};
+  const body =
+    page.type === "text"
+      ? htmlToText(page.text?.content)
+      : [page.image?.caption, page.video?.caption, sys?.description]
+          .filter(Boolean)
+          .map(htmlToText)
+          .join("\n\n");
+  return {
+    kind: "page",
+    name: page.name,
+    subtitle: [page.parent?.name, `${page.type} page`].filter(Boolean).join(" · "),
+    traits: [],
+    fields: { Source: page.src ?? "" },
+    sections: [],
+    prose: capText(body),
+  };
+}
+
 function extractItem(item) {
   const sys = item.system ?? {};
   return {
@@ -484,6 +518,7 @@ function extractScene(scene) {
 const EXTRACTORS = {
   Actor: extractActor,
   JournalEntry: extractJournal,
+  JournalEntryPage: extractJournalPage,
   Item: extractItem,
   Scene: extractScene,
 };

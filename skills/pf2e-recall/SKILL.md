@@ -20,7 +20,7 @@ The GM reads **exactly one** of these aloud, mid-scene, and moves on. They never
 combine them and never read two. An earlier version of this format handed the GM
 nine or ten bullets on a good roll and they skimmed, so the depth was wasted.
 
-Three consequences:
+Four consequences:
 
 1. **Every paragraph is the whole answer for that roll.** Not merely readable
    cold — *complete*. From Passable up, each band carries everything the bands
@@ -32,12 +32,19 @@ Three consequences:
 2. **Each band must add something the one below it did not have.** The carried
    material is shared by design; the new layer is not. A band that adds nothing
    its predecessor lacked wastes that roll.
-3. **The word budget climbs, because the carry costs words.** Disastrous 15–45,
-   Inept 30–60, Poor 30–60, Passable 30–65, Solid 50–90, Impressive 70–120,
-   Remarkable 90–150, Phenomenal 110–180. One paragraph, no bullets, no internal
-   headings. Carried layers arrive as a clause each, never re-told at length;
-   the newest layer always gets the most words. The common rolls stay brisk; the
-   rare ones are allowed to stop the table, which is what they are for.
+3. **The word budget climbs, but only just.** Disastrous 25–60, Inept 30–65,
+   Poor 35–70, Passable 40–75, Solid 45–80, Impressive 50–90, Remarkable 55–95,
+   Phenomenal 60–105. One paragraph, no bullets, no internal headings. Carried
+   layers arrive as a clause each, never re-told at length; the newest layer
+   always gets the most words.
+4. **Length must not give the roll away.** The budgets are narrow and they
+   overlap on purpose. The GM reads one paragraph aloud and the player hears
+   the answer, never the band it came from — so if the deep bands run long and
+   the shallow ones run short, the length alone tells the table how well
+   somebody rolled before a single fact lands, and a confidently wrong Inept
+   answer that is conspicuously the short one is not a trap but a label. Aim
+   for the middle of each range. Never pad a deep band to make it feel like a
+   reward, and never clip a shallow one to make it feel like a failure.
 
 **Carrying is not concatenating.** Write each band from the top with everything
 it knows in hand — identification as a clause, weakness as a clause, tactics as
@@ -51,28 +58,28 @@ paragraph and bolting sentences onto it.
 <!-- glrk:2 -->
 
 ## Disastrous
-<one paragraph, 15-45 words>
+<one paragraph, 25-60 words>
 
 ## Inept
-<one paragraph, 30-60 words>
-
-## Poor
-<one paragraph, 30-60 words>
-
-## Passable
 <one paragraph, 30-65 words>
 
+## Poor
+<one paragraph, 35-70 words>
+
+## Passable
+<one paragraph, 40-75 words>
+
 ## Solid
-<one paragraph, 50-90 words>
+<one paragraph, 45-80 words>
 
 ## Impressive
-<one paragraph, 70-120 words>
+<one paragraph, 50-90 words>
 
 ## Remarkable
-<one paragraph, 90-150 words>
+<one paragraph, 55-95 words>
 
 ## Phenomenal
-<one paragraph, 110-180 words>
+<one paragraph, 60-105 words>
 ```
 
 ## How the knowledge reaches the player

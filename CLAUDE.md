@@ -301,7 +301,18 @@ nothing else catches a missing key; a presentation row missing one of its fields
 renders as `undefined` in the GM's clipboard and cannot be fixed from inside
 Foundry; a second presentation quietly permitting numbers turns the feature back
 into the stat readout it exists to replace; the cumulative-carry warning either
-crying wolf on a good ladder or never firing on a fragmented one; and if the `privateNotes` mirror heading ever equals
+crying wolf on a good ladder or never firing on a fragmented one; a word budget
+whose top band runs so much longer than its bottom one that the length of what
+the GM reads aloud tells the table how well somebody rolled (and the same
+budgets restated in `skills/pf2e-recall/SKILL.md`, which nothing else reads);
+the inline-markdown renderer either leaving a marker unrendered — so the GM
+reads asterisks aloud — or letting a tag through, since the panel, the
+`privateNotes` mirror and Insight all print its output unescaped; a
+`SUBJECT_TYPES` entry with no extractor or no payload kind word behind it, which
+is a live menu item that answers "that document type cannot be summarised"; an
+Insight hand-off carrying the band, the mode or a title, each of which gives the
+player their die result in words and none of which the GM can see from their own
+side of the screen; and if the `privateNotes` mirror heading ever equals
 `statsblock-import`'s, that module's exporter scrapes this feature's paragraphs
 and round-trips them back out as DC-keyed entries — silent corruption of a
 documented format:

@@ -14,11 +14,21 @@
  * all of it is absorbed. What is NOT absorbed is an empty ladder — silently
  * storing half a ladder is worse than refusing it.
  *
+ * Two kinds of markdown, treated differently on purpose. BLOCK markers (fences,
+ * headings, bullets, blockquote arrows, ordered-list numbers) are structure:
+ * they are stripped here, because a band is one paragraph by contract. INLINE
+ * markers (`**bold**`, `*emphasis*`, `` `code` ``) are the text: they are kept
+ * as pasted, rendered by markdown.mjs wherever a human reads the paragraph, and
+ * round-tripped back out by formatLadder. Stripping them at the door would
+ * silently rewrite the GM's document; leaving them unrendered made the GM read
+ * asterisks aloud.
+ *
  * v2 reads one PARAGRAPH per competence band. A v1 reply (three tiers of
  * bullets) is still recognised and converted, so a GM with an old chat window
  * open is not stranded; see `parseLegacyLadder`.
  */
 
+import { stripInlineMarkdown } from "./markdown.mjs";
 import { HEADINGS } from "./prompt.mjs";
 import {
   BAND_KEYS,
@@ -89,7 +99,19 @@ const isBullet = (line) => /^\s*[-*+]\s+\S/.test(line);
  */
 function foldParagraph(lines, key) {
   const text = lines
-    .map((line) => line.replace(/^\s*[-*+]\s+/, "").trim())
+    .map((line) =>
+      line
+        // Block markers a model reaches for when it decides a paragraph is a
+        // quotation or a list: a blockquote arrow, a bullet, an ordered marker.
+        // All three are structure, and the band is prose by contract — but the
+        // INLINE markers (`**`, `*`, backticks) are deliberately left alone.
+        // They are part of the text now: markdown.mjs renders them wherever a
+        // human reads the paragraph, and formatLadder round-trips them back out.
+        .replace(/^\s*>+\s*/, "")
+        .replace(/^\s*[-*+]\s+/, "")
+        .replace(/^\s*\d+[.)]\s+/, "")
+        .trim()
+    )
     .filter(Boolean)
     .join(" ")
     .replace(/\s+/g, " ")
@@ -101,7 +123,15 @@ function foldParagraph(lines, key) {
   return text.replace(labelPattern, "").replace(/^\*\*([^*]+)\*\*\s*[—:-]\s*/, "$1 — ").trim();
 }
 
-const wordCount = (text) => (String(text ?? "").trim().match(/\S+/g) ?? []).length;
+/**
+ * Words as SPOKEN, so the markers do not count.
+ *
+ * The budget is read-aloud time, and nobody says "asterisk asterisk". Counting
+ * the raw string would let a heavily marked-up paragraph slip past its ceiling
+ * — and, more often, would spend a shrinking budget (see BAND_WORDS v2.3) on
+ * punctuation the GM never utters.
+ */
+const wordCount = (text) => (stripInlineMarkdown(text).trim().match(/\S+/g) ?? []).length;
 
 /**
  * Words worth comparing between two bands: long enough to be about the subject

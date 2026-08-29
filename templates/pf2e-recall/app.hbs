@@ -4,6 +4,26 @@
 --}}
 <div class="glrk-root gl-type">
 
+  {{#if scope}}
+  {{!-- Journal subjects only. A page is a subject in its own right, so the GM
+        can prep the one place they care about instead of the whole gazetteer;
+        this switches the panel between the entry and any of its pages. A dot
+        marks the ones that already carry a ladder. --}}
+  <div class="glrk-scope">
+    <label class="gl-tech-label" for="glrk-scope">{{localize "GLRK.scope.label"}}</label>
+    <select class="gl-field" id="glrk-scope" name="glrk-scope">
+      <option value="{{scope.entry.uuid}}" {{#if scope.entry.active}}selected{{/if}}>
+        {{#if scope.entry.hasLadder}}&bull; {{/if}}{{localize "GLRK.scope.wholeEntry"}} — {{scope.entry.name}}
+      </option>
+      {{#each scope.pages}}
+      <option value="{{uuid}}" {{#if active}}selected{{/if}}>
+        {{#if hasLadder}}&bull; {{/if}}{{name}}
+      </option>
+      {{/each}}
+    </select>
+  </div>
+  {{/if}}
+
   <nav class="glrk-tabs gl-tech-label">
     <button type="button" class="gl-btn glrk-tab{{#if isRead}} is-active{{/if}}"
             data-action="setTab" data-tab="read" {{#unless hasLadder}}disabled{{/unless}}>
@@ -44,13 +64,44 @@
       </div>
       {{/if}}
 
-      {{#if reveal.text}}
-      {{!-- The one paragraph the GM reads aloud. Nothing else competes with it. --}}
-      <p class="glrk-say">{{reveal.text}}</p>
+      {{#if reveal.html}}
+      {{!-- The one paragraph the GM reads aloud. Nothing else competes with it.
+            Unescaped on purpose: `reveal.html` is built by markdown.mjs, which
+            escapes the stored text BEFORE it marks any of it up, so the bold a
+            model wrote renders as bold and everything else renders as itself.
+            Never put raw stored text here. --}}
+      <p class="glrk-say">{{{reveal.html}}}</p>
       {{/if}}
 
       {{#if reveal.hint}}
       <p class="glrk-hint">{{reveal.hint}}</p>
+      {{/if}}
+
+      {{#if insight}}
+      {{!-- Hand this one band to one player, through Insight. Only what is in
+            the paragraph goes: no band name, no mode, nothing that would tell
+            them how well they rolled. --}}
+      <div class="glrk-send">
+        <label class="gl-tech-label" for="glrk-insight-target">{{localize "GLRK.insight.label"}}</label>
+        {{#if insight.empty}}
+        <p class="glrk-help">{{localize "GLRK.insight.noPlayers"}}</p>
+        {{else}}
+        <div class="glrk-send-row">
+          <select class="gl-field" id="glrk-insight-target" name="glrk-insight-target">
+            <option value="{{insight.all}}" {{#if insight.allSelected}}selected{{/if}}>
+              {{localize "GLRK.insight.allPlayers"}}
+            </option>
+            {{#each insight.users}}
+            <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+            {{/each}}
+          </select>
+          <button type="button" class="gl-btn glrk-primary" data-action="sendInsight">
+            <i class="fa-solid fa-eye"></i> {{localize "GLRK.insight.send"}}
+          </button>
+        </div>
+        <small class="glrk-help">{{localize "GLRK.insight.hint"}}</small>
+        {{/if}}
+      </div>
       {{/if}}
     </article>
     {{else}}

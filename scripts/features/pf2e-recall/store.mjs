@@ -18,9 +18,10 @@
  *
  * ## Why only Actors get a mirror
  *
- * `system.details.privateNotes` is an NPC/hazard field. A JournalEntry, Item or
- * Scene has no GM-only prose field, and writing into their public description
- * would leak the ladder to players. Those subjects are flag-only.
+ * `system.details.privateNotes` is an NPC/hazard field. A JournalEntry, one of
+ * its pages, an Item or a Scene has no GM-only prose field, and writing into
+ * their public description (or a page's own `text.content`) would leak the
+ * ladder to any player who can read the document. Those subjects are flag-only.
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
@@ -35,6 +36,7 @@ import {
   presentationForKey,
   presentationForText,
 } from "./constants.mjs";
+import { inlineMarkdownToHtml } from "./markdown.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
 const escapeRegExp = (v) => String(v ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -240,7 +242,14 @@ function mirrorable(doc) {
 
 function renderMirror(record) {
   const rows = BAND_KEYS.filter((k) => record.bands?.[k])
-    .map((key) => `<h4>${escapeHTML(HEADINGS[key])}</h4><p>${escapeHTML(record.bands[key])}</p>`)
+    .map(
+      (key) =>
+        // The band text goes through the inline-markdown renderer rather than
+        // bare escaping: it escapes first and marks up second, so the mirror is
+        // no less safe than it was and a GM reading it in the actor sheet sees
+        // bold rather than asterisks. Headings are ours and stay literal.
+        `<h4>${escapeHTML(HEADINGS[key])}</h4><p>${inlineMarkdownToHtml(record.bands[key])}</p>`
+    )
     .join("");
   if (!rows) return "";
   // The presentation is part of what these paragraphs ARE, so a GM reading the
