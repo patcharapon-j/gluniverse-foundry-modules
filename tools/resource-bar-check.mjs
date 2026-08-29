@@ -228,6 +228,69 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("the maximum is drawn at reduced weight through the run's own attribute");
 }
 
+/* ── 7e. The readout's scale sits on the reading's baseline ─────────────── */
+{
+  /* Bottom alignment is measured against the *ink*, not the glyph cell. The
+     atlas bakes with textBaseline "middle", so aligning cell bottoms lines the
+     cells up and leaves the ink a couple of pixels out — which at this size
+     reads as a mistake rather than as a style, and reads as correct in any
+     screenshot taken at 1x. */
+  const atlasSrc = strip(await src("scripts/features/resource-bars/atlas.mjs"));
+  if (!/actualBoundingBoxDescent/.test(atlasSrc))
+    fail("The atlas does not measure the ink offset, so bottom-aligned parts of a run line up by cell instead of by baseline.");
+  else if (!/inkDrop/.test(atlasSrc) || !/part\.bottom/.test(atlasSrc))
+    fail("runGeometry has no bottom-alignment path; every part of a run is centred on the mid-line.");
+  else if (!/bottom:\s*true/.test(strip(hostSrc)))
+    fail("Nothing in host.mjs asks for bottom alignment, so the maximum still floats on the mid-line.");
+  else ok("the maximum sits on the reading's baseline, measured from the baked ink");
+}
+
+/* ── 7f. The bloom renders at the display's resolution ──────────────────── */
+{
+  /* PIXI.Filter defaults its resolution to 1, not to the renderer's. On a
+     HiDPI display that halves the resolution of everything inside the filtered
+     container and scales it back up: no error, no warning, just soft bars that
+     get softer the further you zoom in. */
+  if (!/syncFilterResolution/.test(hostSrc))
+    fail("The bloom filter's resolution is never synced from the renderer; on a HiDPI display the whole bar container renders at half resolution and is upscaled.");
+  else if (!/bloom\.resolution\s*=\s*res/.test(strip(hostSrc)))
+    fail("syncFilterResolution does not actually assign the renderer's resolution to the filter.");
+  else ok("the bloom renders at the renderer's own resolution, not at PIXI's default 1");
+}
+
+/* ── 7g. Off-screen bars are not measured ───────────────────────────────── */
+{
+  /* A filtered container measures itself from its children every frame and
+     sizes the filter's textures from that measurement, so one token in the far
+     corner of a scene costs the bloom the whole distance to it — animating or
+     not. PIXI skips non-renderable children in calculateBounds as well as in
+     the render, so the flag fixes the measurement and the draw together. */
+  const h = strip(hostSrc);
+  if (!/group\.renderable\s*=/.test(h))
+    fail("Nothing clears renderable on an off-screen entry, so every bar in the scene is drawn and measured every frame.");
+  else if (!/canvasPan/.test(strip(await src("scripts/features/resource-bars/main.mjs"))))
+    fail("Culling is never re-run on pan or zoom, so it holds whatever the view was when the canvas was drawn.");
+  else if (!/CULL_PAD/.test(h))
+    fail("Culling has no margin, so the bloom a bar just off the edge would spill inward pops as you pan.");
+  else ok("off-screen bars are neither drawn nor measured, with a margin so the cull is invisible");
+}
+
+/* ── 7h. The Token Config fields land in the tab body ───────────────────── */
+{
+  /* `data-tab` is on the navigation link as well as on the body it switches
+     to, and the link comes first in document order — so the obvious selector
+     appends the fields inside the header's Resources button. The fieldset
+     renders, the inputs work, they save. It just sits in the header. */
+  const cfg = strip(await src("scripts/features/resource-bars/token-config.mjs"));
+  if (!/bar1\.attribute/.test(cfg))
+    fail("findHost does not anchor on the bar attribute pickers, so it is resolving the Resources tab by id and can land on the nav link in the header.");
+  else if (/querySelector\('\[data-tab="resources"\]'\)/.test(cfg))
+    fail("findHost still selects [data-tab=\"resources\"] without requiring .tab, which matches the header's tab button first.");
+  else if (!/closest\("nav"\)/.test(cfg))
+    fail("findHost has no guard against landing inside the tab strip.");
+  else ok("the per-token offsets are anchored to the Resources tab body, not to its nav link");
+}
+
 /* ── 8. The shear has one home ──────────────────────────────────────────── */
 {
   const glsl = shader.FRAGMENT_SHADER;
