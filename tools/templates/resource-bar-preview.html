@@ -136,8 +136,9 @@ input[type=range]{padding:0; width:230px}
     snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
     reaction read as a reaction rather than as the tail of a transition. On release: a
     <b style="color:var(--text)">wave crosses the whole bar</b> in the direction the value moved —
-    a bowed crest, a decaying train of crests behind it, and an undulating lit surface partway up the
-    fill, red down the bar on a hit and green out along it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
+    seen from directly above: a bowed crest line, a decaying train of crests behind it shaded by the
+    slope of the surface rather than its height, and a three-stop colour ramp trailing the front,
+    red down the bar on a hit and green out along it on a heal; the chip trail is cut white-hot and cools as it drains; a ring expands from the
     point that moved, throwing spokes and debris along the bar's axis; the readout counts to the new
     number in the colour of what happened; and the delta punches in at 1.35× before drifting off.</p>
   <p class="note"><b style="color:var(--text)">Nothing about the geometry moves.</b> Not the frame,
@@ -338,6 +339,13 @@ function buildAtlas() {
     };
   }
 
+  /* How far a digit"s ink sits below the cell centre. Baked, because bottom
+     alignment is measured against the ink and not against the cell: with
+     textBaseline "middle" the cells line up but the ink does not. */
+  const im = x.measureText("0");
+  const inkDrop = Number.isFinite(im.actualBoundingBoxDescent)
+    ? im.actualBoundingBoxDescent / CELL_H : 0.26;
+
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -346,7 +354,7 @@ function buildAtlas() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return { tex, metrics, cellRatio: CELL_W / CELL_H };
+  return { tex, metrics, cellRatio: CELL_W / CELL_H, inkDrop };
 }
 
 const TEXT_VERT = `
@@ -425,6 +433,13 @@ function drawRun(parts, rightPx, midPx, w, h, shear) {
   for (const part of parts)
     for (const ch of part.text) total += (atlas.metrics[ch]?.advance ?? 0.5) * part.size;
 
+  /* The line the bottom-aligned parts sit on: the ink bottom of the largest
+     part, which is the one that stays centred on mid. y is up here, so the ink
+     bottom is *below* mid. */
+  let maxSize = 0;
+  for (const part of parts) maxSize = Math.max(maxSize, part.size);
+  const inkLine = midPx - maxSize * (CELL_H / FONT_PX) * atlas.inkDrop;
+
   let penX = rightPx - total;
   for (const part of parts) {
     gl.uniform3fv(TU.uInk, part.ink);
@@ -437,7 +452,8 @@ function drawRun(parts, rightPx, midPx, w, h, shear) {
       const gw = atlas.cellRatio * part.size * (CELL_H / FONT_PX);
       const gh = part.size * (CELL_H / FONT_PX);
       const cx = penX + adv / 2;
-      gl.uniform4f(TU.uQuad, (cx / w) * 2 - 1, (midPx / h) * 2 - 1, gw / w, gh / h);
+      const cy = part.bottom ? inkLine + gh * atlas.inkDrop : midPx;
+      gl.uniform4f(TU.uQuad, (cx / w) * 2 - 1, (cy / h) * 2 - 1, gw / w, gh / h);
       gl.uniform4f(TU.uUv, m.u0, 0, m.u1, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       penX += adv;
@@ -631,7 +647,7 @@ add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost
 add(motion, { title: "Damage wave", sub: "crest running back down the bar", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58 });
 add(motion, { title: "Heal wave", sub: "crest running out along the bar", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58 });
 add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
-add(motion, { title: "The wake", sub: "crests trailing behind the front", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
+add(motion, { title: "The wake", sub: "slope-shaded crests, seen from above", frac: 0.45, ghost: 0.78, chip: 0.3, wave: 0.8, waveX: 0.16, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");
@@ -816,8 +832,8 @@ function draw(now) {
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
         { text: String(cur), size: big, ink },
-        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.34 },
-        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.46 },
+        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.22, bottom: true },
+        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.30, bottom: true },
       ], rightPx, h * 0.5, w, h, shear);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
