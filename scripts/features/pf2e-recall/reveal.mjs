@@ -24,6 +24,7 @@
 
 import { COMPETENCE_BANDS } from "../flatfinder/constants.js";
 import { BAND_KEYS, BAND_REVEAL, DEFAULT_REVEAL } from "./constants.mjs";
+import { inlineMarkdownToHtml, stripInlineMarkdown } from "./markdown.mjs";
 import { HEADINGS } from "./prompt.mjs";
 
 /** Map a raw check total onto a band key, mirroring Flatfinder's own rule. */
@@ -96,9 +97,19 @@ export function resolveReveal(ladder, bandKey, { mistakenName = null } = {}) {
     mode: rule.mode,
     modeLabel: game.i18n.localize(`GLRK.mode.${rule.mode}`),
     text,
+    // The paragraph is stored as the GM pasted it, markdown markers and all,
+    // because that is the text and it has to round-trip back out. `html` is the
+    // rendered form for the panel — escaped first, marked up second — so the GM
+    // reads prose rather than reading asterisks aloud.
+    html: text ? inlineMarkdownToHtml(text) : null,
     hasText: !!text,
     wrong,
     wrongSource,
+    // The name behind a mistaken-identity fallback, carried out separately from
+    // the GM-facing sentence built from it: anything handing this to a player
+    // (share.mjs) has to re-voice it, not forward an instruction addressed to
+    // the GM.
+    wrongName: wrongSource === "mistaken" ? mistakenName : null,
     // Precomputed for the template: the suite registers no Handlebars helpers,
     // so comparisons and key-building belong here rather than in the markup.
     isMistaken: wrongSource === "mistaken",
@@ -119,7 +130,9 @@ const PREVIEW_WORDS = 15;
  * one rung from the next.
  */
 function tailPreview(text) {
-  const words = String(text ?? "").trim().split(/\s+/).filter(Boolean);
+  // Stripped, not rendered: the row is clamped to two lines of plain text, so a
+  // surviving `**` would both show through and eat two of the fifteen words.
+  const words = stripInlineMarkdown(text).trim().split(/\s+/).filter(Boolean);
   if (words.length <= PREVIEW_WORDS) return words.join(" ");
   return `… ${words.slice(-PREVIEW_WORDS).join(" ")}`;
 }

@@ -1,13 +1,17 @@
 # Recall Knowledge — the lore ladder
 
 `features/pf2e-recall/` is a GM prep-and-play tool. It turns any Actor,
-JournalEntry, Item or Scene into **eight short read-aloud answers** authored with
-Claude through the clipboard, and reads the right slice of it back at the table
-according to the roller's Flatfinder competence band.
+JournalEntry, **one page of a journal**, Item or Scene into **eight short
+read-aloud answers** authored with Claude through the clipboard, and reads the
+right slice of it back at the table according to the roller's Flatfinder
+competence band.
 
-It is GM-facing. Nothing is posted to players, nothing is auto-rolled, and no
-statblock values are revealed — the GM reads one paragraph and narrates it in
-their own voice. Auto-delivery turns lore into a loot drop.
+It is GM-facing. Nothing is auto-rolled, no statblock values are revealed, and
+nothing is posted to chat — the GM reads one paragraph and narrates it in their
+own voice. Auto-delivery turns lore into a loot drop. The one thing that leaves
+the GM's screen is the paragraph they are already reading, pushed to one
+player's screen when the GM presses Send; see
+[Handing one band to one player](#handing-one-band-to-one-player).
 
 ## The band model
 
@@ -15,14 +19,14 @@ their own voice. Auto-delivery turns lore into a loot drop.
 
 | Band | Total | Carries | Adds | Words |
 |---|---|---|---|---|
-| Disastrous | < 0 | — | Nothing at all. No frame of reference, played for comedy, containing no true fact. | 15–45 |
-| Inept | 0–4 | — | Confidently wrong: a folklore-shaped belief the character would act on. | 30–60 |
-| Poor | 5–9 | — | The reputation, hedged. True in outline, vague in detail. No tactics. | 30–60 |
-| Passable | 10–14 | the reputation, unhedged | Plain identification: what it is and what it is known for. | 30–65 |
-| Solid | 15–19 | + identification | **One** useful thing — a damage type, a weak save, a defence. | 50–90 |
-| Impressive | 20–24 | + that useful fact | How it actually fights: the signature mechanic and the vulnerability. | 70–120 |
-| Remarkable | 25–29 | + how it fights | The secret: true origin, an unexpected lever, something not in any bestiary. | 90–150 |
-| Phenomenal | 30+ | + the secret | What it opens onto — a name, a connection, a hook. | 110–180 |
+| Disastrous | < 0 | — | Nothing at all. No frame of reference, played for comedy, containing no true fact. | 25–60 |
+| Inept | 0–4 | — | Confidently wrong: a folklore-shaped belief the character would act on. | 30–65 |
+| Poor | 5–9 | — | The reputation, hedged. True in outline, vague in detail. No tactics. | 35–70 |
+| Passable | 10–14 | the reputation, unhedged | Plain identification: what it is and what it is known for. | 40–75 |
+| Solid | 15–19 | + identification | **One** useful thing — a damage type, a weak save, a defence. | 45–80 |
+| Impressive | 20–24 | + that useful fact | How it actually fights: the signature mechanic and the vulnerability. | 50–90 |
+| Remarkable | 25–29 | + how it fights | The secret: true origin, an unexpected lever, something not in any bestiary. | 55–95 |
+| Phenomenal | 30+ | + the secret | What it opens onto — a name, a connection, a hook. | 60–105 |
 
 Flatfinder already maps a PF2e skill-check total onto one of eight competence
 bands (Lore +1, natural 20 +1, natural 1 −1). This feature adds only the
@@ -41,27 +45,62 @@ and the deep bands came back as a secret with no identification, no weakness and
 no tactics. That is unusable at the table: the GM is holding the payoff without
 the setup, and the only way to give the player a whole answer is to read the
 lower bands too — the exact failure the band model exists to remove. v2.1 states
-the carry explicitly, band by band, and pays for it with a word budget that
-climbs from 15–45 at Disastrous to 110–180 at Phenomenal.
+the carry explicitly, band by band, and paid for it with a word budget that
+climbed from 15–45 at Disastrous to 110–180 at Phenomenal.
 
-The ceiling is still what a GM can say without skimming — roughly two seconds
-per ten words — but it is not the same ceiling at every rung: the common rolls
-stay brisk and the rare ones are allowed to stop the table, which is what they
-are for. Carrying is not repeating:
-the shallower layers arrive as a clause each, the newest layer takes the rest,
-and each band is written from the top rather than concatenated onto the one
-below. `BAND_WORDS` is the table, `tools/recall-check.mjs` asserts it never
-narrows as the ladder deepens, and the parser warns when a stored paragraph runs
-past its own band's budget by more than `OVERLONG_FACTOR`.
+The ceiling is what a GM can say without skimming — roughly two seconds per ten
+words. Carrying is not repeating: the shallower layers arrive as a clause each,
+the newest layer takes the rest, and each band is written from the top rather
+than concatenated onto the one below. `BAND_WORDS` is the table,
+`tools/recall-check.mjs` asserts it never narrows as the ladder deepens, and the
+parser warns when a stored paragraph runs past its own band's budget by more
+than `OVERLONG_FACTOR`. That warning counts words as **spoken**: markers are
+stripped before counting, because nobody says "asterisk asterisk".
+
+### Length is a tell, so the budget barely climbs (v2.3)
+
+At 15–45 against 110–180, the length of what the GM reads out *is* the roll. A
+table hears four times as much prose on a Phenomenal as on a Disastrous and
+learns the scale within a session; from then on the player knows how well they
+did before a single fact lands. That flattens the two rungs that depend on not
+knowing — the hedged answer that should feel uncertain, and the confidently
+wrong one that should feel true. **An Inept paragraph is only a trap if the
+player cannot tell it is the short one.**
+
+v2.3 keeps the climb and removes the tell: the ceilings at the top are pulled in
+hard (Phenomenal 180 → 105) and the floors at the bottom raised (Disastrous
+15 → 25). Every band now overlaps its neighbours, and 60–70 words is legal at
+every true rung, so a paragraph's length no longer names the rung that wrote it.
+The deep bands still get more room, because they still carry more — but the
+difference is a clause or two rather than a paragraph against a page.
+
+The carry survives the cut because what it always needed was compression rather
+than length: at 105 words Phenomenal *cannot* re-tell the rungs below it, which
+is what the payload has been asking for since v2.1. What it loses is room to
+ornament, and the "plain and concrete" rule wanted that gone anyway.
+
+`TELL_WINDOW` states the property as a number — the true bands must share at
+least ten words of legal length — and `tools/recall-check.mjs` asserts three
+things no session would ever show you: that adjacent bands overlap, that the
+shared window is at least that wide, and that the deepest ceiling stays within
+1.75× the shallowest true one. It also asserts that `skills/pf2e-recall/SKILL.md`
+restates the same numbers, because a GM who prompts through the skill rather
+than the panel would otherwise be taught the old ladder, and the only symptom is
+prose that runs long at the top — which reads as the model ignoring
+instructions.
 
 The bottom two bands are false answers and carry nothing: Disastrous holds no
 true fact at all and Inept is confidently wrong, so accumulating into them would
-be self-defeating. Poor is the floor of true knowledge.
+be self-defeating. Poor is the floor of true knowledge. They are excluded from
+the shared-window rule for the same reason — pushing their floors up to
+Phenomenal's would mean padding a joke — but their own floors were raised, since
+a conspicuously curt answer announces itself.
 
-The grammar version is **unchanged at 2**. Nothing about the document's
-structure moved — a v2.0 ladder still parses and still plays — so flagging every
-existing one as a version mismatch would be noise. Regenerating a subject is
-what upgrades it.
+The grammar version is **unchanged at 2** through all of this. Nothing about the
+document's structure moved — a v2.0 ladder still parses and still plays — so
+flagging every existing one as a version mismatch would be noise. What a
+pre-v2.3 ladder does have is a top that runs long; regenerating the subject is
+what brings it in.
 
 ### Why paragraphs rather than tiers of bullets
 
@@ -290,9 +329,101 @@ mirror is rebuilt.
 > the same heading, that exporter would scrape them and round-trip them back out
 > as `{dc, skills, text}` entries — silent corruption of a documented format. Both keys are **data**. `tools/recall-check.mjs` asserts they differ.
 
-Only **Actors** get a mirror. A JournalEntry, Item or Scene has no GM-only prose
-field, and writing into their public description would leak the ladder to
-players. Those subjects are flag-only.
+Only **Actors** get a mirror. A JournalEntry, one of its pages, an Item or a
+Scene has no GM-only prose field, and writing into their public description (or
+a page's own `text.content`) would leak the ladder to any player who can read
+the document. Those subjects are flag-only.
+
+## Subjects, and why a journal page is one
+
+`SUBJECT_TYPES` is `Actor`, `JournalEntry`, `JournalEntryPage`, `Item`, `Scene`.
+
+A **page** is a subject in its own right, not a detail of its entry. A gazetteer
+journal is thirty places in thirty pages; one ladder written across the whole
+entry produces a brief that is mostly about the other twenty-nine, and
+`EXTRACT_CHAR_CAP` silently decides which of them the model never sees. The page
+is the unit a GM actually prepped, so it is the unit the ladder is written
+against — and because flags live on the page document, an entry and each of its
+pages can hold their own ladders at once.
+
+There are two ways in, because the menu hook is the fragile one:
+
+- **Right-click a page** in the page list of an open journal. The sidebar
+  directories settled on `get<Document>ContextOptions` in v13, but the journal
+  sheet's page list did not move with them: it builds its menu through
+  `ContextMenu.create`, whose hook name is derived from the application class
+  plus the menu's own suffix, and both halves changed across the v12/v13/v14
+  rewrites of that sheet. Guessing one name and being wrong is a silently
+  missing menu item. So `PAGE_CONTEXT_HOOKS` registers every plausible name —
+  listeners that never fire cost nothing — and the entry's own `condition`
+  decides whether it appears by resolving the clicked row to a real page. That
+  is also what keeps it out of menus it does not belong in, including the
+  sidebar's own journal menu, where the id under the cursor is the entry's and
+  matches no page.
+- **The subject picker** at the top of the panel, offered from the entry and
+  from every page in it. This one cannot break: it is a `<select>` over
+  `entry.pages`, and it is why a hook name going stale costs discoverability
+  rather than the feature. A dot marks the pages that already carry a ladder.
+
+## Markdown in the paragraphs
+
+The ladder is authored in a chat window and arrives through the clipboard, so it
+arrives as **markdown** whatever the payload asks for: a bolded creature name, an
+italicised title, a system designation in backticks. The payload cannot reliably
+forbid that and it is not worth refusing a paste over.
+
+The split is between block and inline markers:
+
+- **Block markers** (fences, headings, bullets, blockquote arrows, ordered-list
+  numbers) are *structure*. `parse.mjs` strips them, because a band is one
+  paragraph by contract.
+- **Inline markers** (`**bold**`, `*emphasis*`, `` `code` ``, `~~struck~~`,
+  `[label](url)`) are *the text*. They are stored as pasted, round-trip back out
+  through `formatLadder`, and are rendered by `markdown.mjs` at the two places a
+  human reads them: the panel's read-aloud paragraph and the `privateNotes`
+  mirror. Stripping them at the door would silently rewrite the GM's document;
+  leaving them unrendered made the GM read asterisks aloud.
+
+`markdown.mjs` is inline-only on purpose — a renderer that grew block support
+would quietly re-admit the bulleted ladder v2 exists to remove — and it
+**escapes before it marks up**, so a reply containing `<script>` or an
+`onerror=` attribute renders as text. That ordering is load-bearing: the panel
+prints the result with a triple-stache, and so does Insight. The matrix preview
+uses the stripped form instead, because a surviving `**` would both show through
+and eat two of its fifteen words.
+
+## Handing one band to one player
+
+With the **Insight** feature enabled, the Read tab grows a Send control under
+the selected band: pick a connected player (or all of them) and the paragraph
+lands on their screen as an Insight notification card.
+
+This is not the chat delivery that remains out of scope. It fires from the GM's
+own press, it sends one band and never a ladder, and it is the same thing the GM
+was already doing by hand — reading that paragraph out — with the difference
+that a private answer stays private.
+
+**What is deliberately not sent** is everything the GM's panel shows *around*
+the paragraph: the band name, the delivery mode, the subject's name, the
+provenance. Each of those hands the player their die result in words, which is
+the same tell the word budgets exist to suppress, and it is invisible from the
+GM's side of the screen — the GM sees the panel, never the card. So
+`share.mjs` builds the message as the paragraph and nothing else, under a fixed
+sense label that reads the same at every rung, and `tools/recall-check.mjs`
+asserts it: title is null, and neither the body nor the label carries the band
+key, the band heading or the mode label.
+
+The two fallbacks are **re-voiced rather than forwarded**. The panel's wording
+for them is addressed to the GM about the character ("They are fairly sure it is
+a hill giant, and will act on that") — an instruction to the GM, not a line to
+say to a player — so `GLRK.insight.mistaken` and `GLRK.insight.blank` say the
+same thing in the second person.
+
+Three gates decide whether the control renders at all, and each is the honest
+one: Insight has to be enabled (it owns the notification and the socket), a band
+has to be selected, and that band has to resolve to something a player may see.
+Insight's socket module is imported **on use**, not at module load, so a world
+with Insight switched off never pulls its queue and renderer into memory.
 
 Existing statsblock-import entries are offered to the generation prompt as **raw
 material**, never auto-assigned to a band: a `DC 20` line carries no reliable
@@ -417,6 +548,12 @@ The technique is borrowed with credit from **GlassSpiderTV's `spider-vibes`**
 Chat delivery to players · player-initiated rolls · auto-rolling Recall
 Knowledge · DC computation · statblock reveal state.
 
+"Chat delivery" still means what it said: nothing posts itself, and nothing
+reaches a player because a die was rolled. The Insight hand-off above is not an
+exception to that — it is the GM pressing Send on the paragraph already open in
+front of them, to one named player, carrying no more than they would have said
+out loud.
+
 **Retry gating is deferred, not merely disabled.** The design allows an optional
 "each further attempt needs one band higher" toggle, but v1 is GM-only viewing
 and there is no event that honestly counts as *an attempt* — clicking a band
@@ -443,3 +580,16 @@ shows the wrong depth; the two **dynamic** i18n families (`GLRK.mode.*`,
 `GLRK.parse.warn.emptyBand.*`) are built at runtime, so nothing else catches a
 missing key; and the heading collision above corrupts world data with no error
 at all.
+
+Since v2.3 it also pins the three things this document adds. **Length must not
+name the rung**: adjacent budgets overlap, the true bands share a window at
+least `TELL_WINDOW` wide, the spread stays inside 1.75×, and `SKILL.md` states
+the same numbers. **Markdown must render, not execute**: every marker resolves
+to its tag, no tag but `strong`/`em`/`del`/`code` survives a hostile paste,
+prose with no markers comes back byte-identical, and the parser still keeps
+inline markers while dropping block ones. **The Insight card must not leak the
+roll**: no title, no band key, no heading, no mode label, the two fallbacks
+re-voiced, and a hostile paragraph reaching Insight's triple-stache as escaped
+text. Plus: every `SUBJECT_TYPES` entry has an extractor behind it and a kind
+word in the payload — a type reachable from a menu with neither is a dead menu
+item that reports "that document type cannot be summarised".

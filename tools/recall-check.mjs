@@ -43,6 +43,8 @@ const {
   GRAMMAR_VERSION,
   OVERLONG_FACTOR,
   PRESENTATIONS,
+  SUBJECT_TYPES,
+  TELL_WINDOW,
   presentationByKey,
   presentationForText,
 } = await import(
@@ -50,8 +52,10 @@ const {
 );
 const { HEADINGS, VERSION_MARK, buildPayload } = await import(join(FEATURE, "prompt.mjs"));
 const { parseLadder, formatLadder } = await import(join(FEATURE, "parse.mjs"));
-const { flattenEnrichers, capText } = await import(join(FEATURE, "extract.mjs"));
+const { flattenEnrichers, capText, subjectBrief } = await import(join(FEATURE, "extract.mjs"));
 const { pickMistakenIdentity } = await import(join(FEATURE, "mistaken.mjs"));
+const { inlineMarkdownToHtml, stripInlineMarkdown } = await import(join(FEATURE, "markdown.mjs"));
+const { buildInsightMessage, playerFacingText } = await import(join(FEATURE, "share.mjs"));
 
 const lang = JSON.parse(readFileSync(join(ROOT, "lang/pf2e-recall.en.json"), "utf8"));
 const statsblockLang = JSON.parse(
@@ -118,9 +122,9 @@ const sample = {
     impressive:
       "That is a barrow troll, blamed across the uplands for its opened graves, and the fight turns on one thing. Cut it and the wound closes while you watch; burn it and the wound stays shut. It is enormously strong and hits like a falling tree, but it is slow to see a trick coming, so a feint lands where force will not. Nothing draws it more than a few dozen paces from the mound. It always turns back.",
     remarkable:
-      "That is a barrow troll, the thing the Hillfolk blame for their opened graves. Cut it and the wound closes over; only fire keeps one shut. It is terribly strong, slow to see a trick coming, and it never strays more than a few dozen paces from the mound it circles. What the stories leave out is that it was a person. Grave-wardens were sworn to their barrows for life up here, and one of them kept the oath past dying. The grey thing on the mound is the warden, still at his post, and the grave he guards is his own.",
+      "That is a barrow troll, the thing the Hillfolk blame for their opened graves. Cut it and the wound closes over; only fire keeps one shut. It is terribly strong, slow to see a trick coming, and it never strays far from the mound it circles. What the stories leave out is that it was a person: grave-wardens were sworn to their barrows for life up here, and one kept the oath past dying. The grey thing on the mound is the warden, and the grave is his own.",
     phenomenal:
-      "That is a barrow troll, and everything the uplands say about it is true: it opens graves, it takes what was buried, and steel does nothing lasting — a cut closes while you watch, and only fire keeps a wound shut. It is strong, slow to see a trick coming, and it never strays more than a few dozen paces from the mound. It was a man once. The grave-wardens were sworn to their barrows for life, and this one kept the oath past dying, so the grave he circles is his own. The name cut above that door is Aelric Vane, which is the name your patron has been paying for word of since before he hired you, and he has never once said why.",
+      "That is a barrow troll, and the uplands have it right — it opens graves, it takes what was buried, and steel does nothing lasting, since a cut closes while you watch and only fire keeps a wound shut. It is strong, slow to see a trick coming, and never strays far from the mound. It was a man once, a grave-warden who kept his oath past dying, so the grave he circles is his own. The name cut above that door is Aelric Vane, which your patron has been paying for word of since before he hired you.",
   },
 };
 
@@ -175,7 +179,76 @@ if (round.warnings.length) fail(`Round trip warned: ${round.warnings.join(", ")}
     if (words < minWords) fail(`Sample band "${key}" is ${words} words, under its ${minWords}-word floor.`);
   }
   for (const key of Object.keys(BAND_WORDS)) {
-    if (!BAND_KEYS.includes(key)) fail(`BAND_WORDS has "${key}", which is not a band.`);
+    if (!BAND_WORDS[key] || !BAND_KEYS.includes(key)) {
+      fail(`BAND_WORDS has "${key}", which is not a band.`);
+    }
+  }
+}
+
+/* --------------------------------- 3a. length must not name the rung ---- */
+
+/* The budgets are also an ANTI-TELL, and that half is invisible in a session:
+   a ladder whose deep bands run four times the length of its shallow ones
+   renders perfectly and plays perfectly, and the table still learns within a
+   session that a long answer means a good roll. From then on the player knows
+   how they did before a single fact lands, which flattens the two rungs that
+   depend on not knowing — the hedged answer and the confidently wrong one.
+
+   Three properties, none of which any other check would notice: adjacent bands
+   must share legal lengths, the true bands must share a window at least
+   TELL_WINDOW words wide, and the whole ladder must stay inside a bounded
+   spread. */
+{
+  for (let i = 1; i < BAND_KEYS.length; i++) {
+    const [lowMin, lowMax] = BAND_WORDS[BAND_KEYS[i - 1]] ?? [];
+    const [highMin, highMax] = BAND_WORDS[BAND_KEYS[i]] ?? [];
+    if (![lowMin, lowMax, highMin, highMax].every(Number.isFinite)) continue;
+    if (highMin > lowMax) {
+      fail(
+        `BAND_WORDS.${BAND_KEYS[i]} (${highMin}-${highMax}) cannot overlap ` +
+          `${BAND_KEYS[i - 1]} (${lowMin}-${lowMax}); the length alone would name the rung.`
+      );
+    }
+  }
+
+  // The true bands — Poor up. The two false ones carry nothing, so holding
+  // their floors to Phenomenal's would mean padding a joke.
+  const trueBands = BAND_KEYS.slice(BAND_KEYS.indexOf("poor"));
+  const floor = Math.max(...trueBands.map((k) => BAND_WORDS[k][0]));
+  const ceiling = Math.min(...trueBands.map((k) => BAND_WORDS[k][1]));
+  if (ceiling - floor < TELL_WINDOW) {
+    fail(
+      `The true bands share only ${Math.max(0, ceiling - floor)} words of legal length ` +
+        `(${floor}-${ceiling}); TELL_WINDOW asks for ${TELL_WINDOW}. A paragraph's length ` +
+        `should not say which rung wrote it.`
+    );
+  }
+  if (!(TELL_WINDOW > 0)) fail("TELL_WINDOW must be a real window.");
+
+  // A bounded spread, stated as a ratio so it survives a rewrite of the
+  // budgets: the deepest band may be longer than the shallowest true one, but
+  // not so much longer that the difference is audible across the table.
+  const deepest = BAND_WORDS[BAND_KEYS[BAND_KEYS.length - 1]][1];
+  const shallowestTrue = BAND_WORDS.poor[1];
+  if (deepest > shallowestTrue * 1.75) {
+    fail(
+      `Phenomenal's ceiling (${deepest}) is more than 1.75x Poor's (${shallowestTrue}). ` +
+        `That gap is audible: the table hears the roll before it hears the answer.`
+    );
+  }
+
+  // And the same numbers must reach a GM who prompts through the skill rather
+  // than the panel. skills/pf2e-recall/SKILL.md restates the budget in prose
+  // and in its own copy of the output template; a build that retunes
+  // BAND_WORDS and leaves either behind teaches the model the old ladder, and
+  // the only symptom is prose that runs long at the top — which reads as the
+  // model ignoring instructions.
+  const skill = readFileSync(join(ROOT, "skills/pf2e-recall/SKILL.md"), "utf8");
+  for (const key of BAND_KEYS) {
+    const [min, max] = BAND_WORDS[key];
+    if (!skill.includes(`${min}-${max} words`) && !skill.includes(`${min}–${max}`)) {
+      fail(`skills/pf2e-recall/SKILL.md never states ${key}'s ${min}-${max} word budget.`);
+    }
   }
 }
 
@@ -466,6 +539,226 @@ if (!fenced) fail("Payload no longer contains a fenced markdown template.");
 else {
   const skeleton = parseLadder(fenced[1]);
   if (!skeleton.ok) fail(`The template the payload prints does not parse: ${skeleton.errors.join(", ")}`);
+}
+
+/* ------------------------------------------- 4b. inline markdown -------- */
+
+/**
+ * Every `<` in a rendered string that does not open one of the four tags this
+ * renderer is allowed to produce.
+ *
+ * A regex for "looks dangerous" would pass on the interesting cases: escaped
+ * text legitimately still READS as `onerror="alert(1)"` once its angle brackets
+ * are `&lt;`, and that is safe. What matters is whether a TAG survived, so the
+ * check is on the angle bracket rather than on the words inside it.
+ */
+const ALLOWED_TAGS = /^<\/?(strong|em|del|code)>/;
+const strayTags = (html) =>
+  [...String(html).matchAll(/<[^>]*>?/g)].map((m) => m[0]).filter((tag) => !ALLOWED_TAGS.test(tag));
+
+/* The ladder arrives through a chat window, so it arrives as markdown whatever
+   the payload asks for. Every failure here is silent in its own way: an
+   unrendered marker means the GM reads "asterisk asterisk barrow troll" aloud,
+   and an unescaped one means the clipboard can put live markup into a GM's
+   panel and into an actor's privateNotes. */
+{
+  const cases = [
+    ["**bold**", "<strong>bold</strong>", "bold"],
+    ["*emphasis*", "<em>emphasis</em>", "emphasis"],
+    ["***both***", "<strong><em>both</em></strong>", "both"],
+    ["__bold__", "<strong>bold</strong>", "bold"],
+    ["~~struck~~", "<del>struck</del>", "struck"],
+    ["`SPEC-4471-B`", "<code>SPEC-4471-B</code>", "SPEC-4471-B"],
+    // A code span is literal: the markers inside it are characters.
+    ["`a*b*c`", "<code>a*b*c</code>", "a*b*c"],
+    // So is a backslash-escaped marker.
+    ["\\*not emphasis\\*", "*not emphasis*", "*not emphasis*"],
+    // Identifiers are not emphasis, however many underscores they carry.
+    ["snake_case_name", "snake_case_name", "snake_case_name"],
+    // A link's label is the readable half; the target is noise read aloud.
+    ["[the record](https://example.test/x)", "the record", "the record"],
+  ];
+  for (const [input, wantHtml, wantText] of cases) {
+    const html = inlineMarkdownToHtml(input);
+    if (!html.includes(wantHtml)) fail(`Markdown "${input}" rendered as "${html}", expected "${wantHtml}".`);
+    const text = stripInlineMarkdown(input);
+    if (text !== wantText) fail(`Markdown "${input}" stripped to "${text}", expected "${wantText}".`);
+  }
+
+  // Escaping happens BEFORE any markup is produced. This is the load-bearing
+  // one: the input is a clipboard paste, and the panel renders it unescaped.
+  for (const hostile of [
+    '<script>alert(1)</script>',
+    '<img src=x onerror="alert(1)">',
+    '<a href="javascript:alert(1)">x</a>',
+    '**<b>bold</b>**',
+  ]) {
+    const html = inlineMarkdownToHtml(hostile);
+    const stray = strayTags(html);
+    if (stray.length) {
+      fail(`Markdown rendering let a tag through: "${hostile}" -> "${stray.join(", ")}".`);
+    }
+  }
+
+  // Prose with no markers must survive both passes untouched, or every stored
+  // ladder in every existing world is quietly rewritten the first time it is
+  // read back.
+  const plain = sample.bands.passable;
+  if (stripInlineMarkdown(plain) !== plain) fail("Stripping altered a paragraph containing no markers.");
+  if (inlineMarkdownToHtml(plain) !== plain) fail("Rendering altered a paragraph containing no markers.");
+
+  // The parser keeps inline markers and drops block ones. Both halves matter:
+  // dropping the inline markers silently rewrites the GM's document, and
+  // keeping the block ones puts a bullet into a paragraph read aloud.
+  const decorated = [
+    "# Recall Knowledge: Barrow Troll",
+    VERSION_MARK,
+    ...BAND_KEYS.flatMap((key) => [
+      "",
+      `## ${HEADINGS[key]}`,
+      key === "solid" ? "> - That is a **barrow troll**, and *fire* is the lever." : `The ${key} answer.`,
+    ]),
+  ].join("\n");
+  const parsedDecorated = parseLadder(decorated);
+  if (parsedDecorated.bands.solid !== "That is a **barrow troll**, and *fire* is the lever.") {
+    fail(`Block markers survived (or inline ones did not): "${parsedDecorated.bands.solid}".`);
+  }
+
+  // The word count is what the GM SAYS, so markers must not spend the budget.
+  // With the v2.3 ceilings this is the difference between a warning and none.
+  const marked = `**${"word ".repeat(20).trim()}**`;
+  const bare = "word ".repeat(20).trim();
+  if (stripInlineMarkdown(marked).split(/\s+/).length !== bare.split(/\s+/).length) {
+    fail("Markers count as spoken words; the overlong warning would fire on formatting.");
+  }
+}
+
+/* ------------------------------------------- 4c. the Insight hand-off --- */
+
+/* One band, one player, one press of a button. What must never travel with it
+   is everything the GM's own panel shows around the paragraph: the band, the
+   delivery mode, the subject's name. Each of those tells the player how well
+   they rolled, which is the same tell the budgets above exist to suppress —
+   and it is invisible from the GM's side of the screen, because the GM sees
+   the panel and never sees the card. */
+{
+  const paragraph = sample.bands.remarkable;
+  const message = buildInsightMessage({
+    band: "remarkable",
+    mode: "clean",
+    modeLabel: "As written",
+    text: paragraph,
+    html: inlineMarkdownToHtml(paragraph),
+    hasText: true,
+    wrong: null,
+    wrongSource: null,
+    wrongName: null,
+  });
+  if (!message) fail("An authored band produced no Insight message.");
+  else {
+    if (message.title !== null) fail("The Insight card carries a title; every title here names the rung.");
+    for (const leak of ["remarkable", "Remarkable", "As written", HEADINGS.remarkable]) {
+      if (message.body.includes(leak) || String(message.sense).includes(leak)) {
+        fail(`The Insight message leaks "${leak}" — the player would be reading their own roll.`);
+      }
+    }
+    if (!message.body.includes("barrow troll")) fail("The Insight message dropped the paragraph itself.");
+  }
+
+  // Insight prints the body unescaped, so what this builds must already be safe.
+  const hostile = buildInsightMessage({ text: '<img src=x onerror="alert(1)">A **fact**.' });
+  const stray = strayTags(hostile?.body ?? "").filter((tag) => !/^<\/?p>$/.test(tag));
+  if (stray.length) {
+    fail(
+      `The Insight body forwarded raw markup (${stray.join(", ")}); Insight renders it with a triple-stache.`
+    );
+  }
+  if (!hostile?.body.includes("<strong>fact</strong>")) fail("The Insight body did not render markdown.");
+
+  // The two fallbacks are re-voiced, not forwarded. The panel's wording for
+  // them is addressed to the GM about the character ("They are fairly sure…"),
+  // which is an instruction to the GM, not a line to say to a player.
+  const mistaken = playerFacingText({
+    text: null,
+    wrong: "They are fairly sure it is Hill Giant, and will act on that.",
+    wrongSource: "mistaken",
+    wrongName: "Hill Giant",
+  });
+  if (!mistaken || !mistaken.includes("Hill Giant")) fail("The mistaken-identity hand-off lost the name.");
+  if (mistaken?.includes("They are")) fail("The mistaken-identity hand-off forwarded the GM-facing sentence.");
+  const blank = playerFacingText({ text: null, wrongSource: "none", wrong: "Nothing comes to mind. They draw a blank." });
+  if (!blank) fail("A blank band had nothing to send; the player should still be told they drew one.");
+  if (blank?.includes("They draw")) fail("The blank hand-off forwarded the GM-facing sentence.");
+
+  // Nothing written, nothing sent: the panel hides the control on this, so a
+  // message built here would be a card with an empty body.
+  if (buildInsightMessage(null) !== null) fail("A missing reveal still produced a message.");
+  if (buildInsightMessage({ text: "   ", wrongSource: null }) !== null) {
+    fail("A blank paragraph still produced a message.");
+  }
+
+  // The i18n keys share.mjs falls back on must exist for a real session, and
+  // the fallback text must match what ships — a divergence here means the
+  // check is asserting on prose no GM ever sees.
+  for (const [key, fallback] of [
+    ["GLRK.insight.sense", "Recall Knowledge"],
+    ["GLRK.insight.blank", "Nothing comes to mind."],
+    ["GLRK.insight.mistaken", "You are fairly sure it is {name}."],
+  ]) {
+    if (lang[key] !== fallback) {
+      fail(`share.mjs falls back to "${fallback}" for ${key}, but lang says "${lang[key]}".`);
+    }
+  }
+}
+
+/* ------------------------------------------- 4d. journal pages ---------- */
+
+/* A page of a journal is a subject in its own right. Without an extractor of
+   its own it fell to `subjectBrief` returning null, which the panel reports as
+   "that document type cannot be summarised" — and with one but no kind word,
+   the payload asks the model to write about a "subject", which is exactly the
+   generic ladder this feature exists to avoid. */
+{
+  if (!SUBJECT_TYPES.includes("JournalEntryPage")) {
+    fail("JournalEntryPage is not a subject type; the page right-click would refuse to open.");
+  }
+  const page = subjectBrief({
+    documentName: "JournalEntryPage",
+    uuid: "JournalEntry.abc.JournalEntryPage.def",
+    name: "The Hollow Kings",
+    type: "text",
+    parent: { name: "Barrow Country" },
+    text: { content: "<p>Nine barrows, and the ninth is <strong>empty</strong>.</p>" },
+  });
+  if (!page) fail("subjectBrief has no extractor for a journal page.");
+  else {
+    if (!page.prose?.text.includes("Nine barrows")) fail("The page extractor dropped the page's own prose.");
+    if (!page.subtitle.includes("Barrow Country")) {
+      fail("The page extractor dropped the entry it belongs to; the model cannot tell it is one of a set.");
+    }
+    const pagePayload = buildPayload(page, {});
+    if (!pagePayload.includes("place, group or topic")) {
+      fail(`A page brief (kind "${page.kind}") has no kind word; the payload says "subject".`);
+    }
+    if (!pagePayload.includes("The Hollow Kings")) fail("A page payload dropped the page's name.");
+  }
+
+  // Every subject type must have an extractor, not just this one — a type
+  // reachable from a menu with no extractor behind it is a dead menu item.
+  for (const type of SUBJECT_TYPES) {
+    const stub = {
+      Actor: { documentName: "Actor", name: "x", type: "npc", system: {}, itemTypes: {}, items: [] },
+      JournalEntry: { documentName: "JournalEntry", name: "x", pages: [] },
+      JournalEntryPage: { documentName: "JournalEntryPage", name: "x", type: "text", text: {} },
+      Item: { documentName: "Item", name: "x", type: "weapon", system: {} },
+      Scene: { documentName: "Scene", name: "x", tokens: [] },
+    }[type];
+    if (!stub) {
+      fail(`No stub for subject type "${type}"; extend this check when adding one.`);
+      continue;
+    }
+    if (!subjectBrief({ ...stub, uuid: `${type}.x` })) fail(`Subject type "${type}" has no extractor.`);
+  }
 }
 
 /* ------------------------------------------------- 5. enrichers --------- */

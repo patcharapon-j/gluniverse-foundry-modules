@@ -319,3 +319,71 @@
 .glrk-has-ladder .window-header {
   box-shadow: inset 2px 0 0 0 var(--gl-holo-b);
 }
+
+/* --------------------------------------------------------------- scope -- */
+
+/* Journal subjects only: the entry, or any one of its pages. A select rather
+   than a chip row because journals run long — thirty pages of chips would push
+   the tabs off the top of the panel. */
+.glrk-scope {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+}
+
+.glrk-scope select,
+.glrk-send-row select {
+  flex: 1;
+  min-width: 0;
+  /* .gl-field brings the surface and the border but no box; a select with no
+     padding sits a pixel taller than the button beside it and reads as broken. */
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+}
+
+/* ---------------------------------------------------------------- send -- */
+
+/* Handing one band to one player through Insight. Sits below the paragraph and
+   the hint, and is deliberately quieter than either: what the GM reads is the
+   feature, and this is one way of delivering it. */
+.glrk-send {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  padding-top: var(--gl-sp-3);
+  border-top: 1px solid var(--gl-hair);
+}
+
+.glrk-send-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+}
+
+.glrk-send-row .glrk-primary { flex: 0 0 auto; }
+
+/* ------------------------------------------------------------ markdown -- */
+
+/* Inline markdown the model wrote, rendered by markdown.mjs rather than read
+   aloud as asterisks. It has to stay legible at a glance mid-scene, so emphasis
+   is a shift in weight and colour, never a change of size or family that would
+   reflow the line the GM is holding their place in. */
+.glrk-say strong {
+  color: var(--gl-text-bright);
+  font-weight: var(--gl-weight-bold);
+}
+
+.glrk-say em { font-style: italic; }
+
+.glrk-say del {
+  color: var(--gl-text-faint);
+  text-decoration-color: var(--gl-text-faint);
+}
+
+.glrk-say code {
+  padding: 0 var(--gl-sp-1);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-raised);
+  color: var(--gl-text-bright);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+}

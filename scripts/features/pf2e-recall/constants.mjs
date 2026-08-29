@@ -64,7 +64,7 @@ export const BAND_KEYS = Object.freeze([
 ]);
 
 /**
- * Word budget per band, [min, max]. The budget CLIMBS, and it has to.
+ * Word budget per band, [min, max]. The budget climbs, but only just.
  *
  * v2.0 gave every band the same 25-70 words and told the model each paragraph
  * had to "stand alone". It read that as "say only what this rung adds", so a
@@ -74,32 +74,64 @@ export const BAND_KEYS = Object.freeze([
  * is precisely the reading-two-paragraphs failure the band model exists to
  * remove.
  *
- * v2.1 makes the true bands CUMULATIVE: each one carries everything the rungs
+ * v2.1 made the true bands CUMULATIVE: each one carries everything the rungs
  * below it would have told the player, compressed, plus its own new layer. A
  * paragraph that carries five layers cannot also fit in fifty words, so the
- * ceiling rises with the rung.
+ * ceiling rose with the rung — as far as 110-180 at Phenomenal.
  *
- * The ceiling is still load-bearing — this is read aloud, and roughly seventy
- * words is about fifteen seconds of speech — but it is not the same ceiling at
- * every rung. The common rolls stay brisk; the rare ones are allowed to stop
- * the table, because that is what they are for. Phenomenal at 180 is about
- * thirty-five seconds, which is affordable exactly because almost nobody rolls
- * it. The lower layers still arrive as a clause each rather than re-told at
- * their own length, and the newest layer always gets the most words.
+ * ## v2.3: length is a tell, and the ladder was shouting
  *
- * The bottom two bands are false answers and accumulate nothing, so they stay
- * short: a joke and a wrong belief are both worse for being padded.
+ * At 15-45 against 110-180 the length of what the GM reads out IS the roll.
+ * A table hears four times as much prose on a Phenomenal as on a Disastrous
+ * and learns the scale in one session; from then on the player knows how well
+ * they did before a single fact lands, which flattens the two rungs that
+ * matter most — the hedged answer that should feel uncertain and the wrong one
+ * that should feel true. A confidently wrong Inept paragraph is only a trap if
+ * the player cannot tell it is the short one.
+ *
+ * So the ceilings at the top are pulled in hard (Phenomenal 180 -> 105) and the
+ * floors at the bottom raised (Disastrous 15 -> 25), leaving every band a legal
+ * length that overlaps its neighbours and a window near 60-70 words that is
+ * legal at every true rung. The deep bands still get more room — they carry
+ * more and must — but the difference is now a matter of a clause or two rather
+ * than of a paragraph against a page.
+ *
+ * The carry survives the cut because compression, not length, is what it always
+ * needed: at 105 words Phenomenal cannot re-tell the rungs below it, which is
+ * what the payload has been asking for since v2.1. What it loses is room to
+ * ornament, and the "plain and concrete" rule wanted that gone anyway.
+ *
+ * The ceiling is read-aloud time — roughly two seconds per ten words, so the
+ * whole ladder now runs between five and twenty seconds. The bottom two bands
+ * are false answers and accumulate nothing, but they are no longer allowed to
+ * be conspicuously curt: a joke and a wrong belief both have to sound like a
+ * real answer, or they announce themselves.
  */
 export const BAND_WORDS = Object.freeze({
-  disastrous: Object.freeze([15, 45]),
-  inept: Object.freeze([30, 60]),
-  poor: Object.freeze([30, 60]),
-  passable: Object.freeze([30, 65]),
-  solid: Object.freeze([50, 90]),
-  impressive: Object.freeze([70, 120]),
-  remarkable: Object.freeze([90, 150]),
-  phenomenal: Object.freeze([110, 180]),
+  disastrous: Object.freeze([25, 60]),
+  inept: Object.freeze([30, 65]),
+  poor: Object.freeze([35, 70]),
+  passable: Object.freeze([40, 75]),
+  solid: Object.freeze([45, 80]),
+  impressive: Object.freeze([50, 90]),
+  remarkable: Object.freeze([55, 95]),
+  phenomenal: Object.freeze([60, 105]),
 });
+
+/**
+ * How wide the length window shared by every TRUE band must be, in words.
+ *
+ * The anti-tell property stated as a number: there has to be a span of lengths
+ * a paragraph can occupy without saying which rung it came from. One word of
+ * overlap would satisfy "the ranges touch" while leaving the ladder every bit
+ * as legible; ten is a real window, and it is where the budgets above sit
+ * (60-70 words is legal from Poor to Phenomenal).
+ *
+ * The two false bands are excluded on purpose: they carry nothing, so pushing
+ * their floors up to Phenomenal's would mean padding a joke.
+ * tools/recall-check.mjs asserts this against BAND_WORDS.
+ */
+export const TELL_WINDOW = 10;
 
 /**
  * The band the carry starts at.
@@ -330,8 +362,24 @@ export const BAND_REVEAL = Object.freeze({
 /** Fallback when Flatfinder is absent or the band is unrecognised. */
 export const DEFAULT_REVEAL = Object.freeze({ mode: "clean" });
 
-/** Document types the feature can build a ladder for. */
-export const SUBJECT_TYPES = Object.freeze(["Actor", "JournalEntry", "Item", "Scene"]);
+/**
+ * Document types the feature can build a ladder for.
+ *
+ * `JournalEntryPage` is a subject in its own right, not a detail of its entry.
+ * A gazetteer journal holds thirty places in thirty pages; asking for one
+ * ladder across the whole entry produces a brief that is mostly about the other
+ * twenty-nine, and the truncation cap (EXTRACT_CHAR_CAP) decides which of them
+ * the model never sees. A page is the unit a GM actually prepped, so it is the
+ * unit the ladder is written against — and because flags live on the page
+ * document, an entry and each of its pages can hold their own ladders at once.
+ */
+export const SUBJECT_TYPES = Object.freeze([
+  "Actor",
+  "JournalEntry",
+  "JournalEntryPage",
+  "Item",
+  "Scene",
+]);
 
 /**
  * Hard ceiling on extracted prose per subject, in characters.
