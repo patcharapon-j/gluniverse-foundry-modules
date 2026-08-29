@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = new URL("../", import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?.split("=").slice(1).join("=");
 
-const { FRAGMENT_SHADER, PREVIEW_VERTEX_SHADER, READOUT_INSET, UNIFORMS } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
+const { FRAGMENT_SHADER, PREVIEW_VERTEX_SHADER, READOUT_INSET, SHIELD_STYLES, UNIFORMS } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
 const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 
 const template = await readFile(new URL("tools/templates/resource-bar-preview.html", ROOT), "utf8");
@@ -44,7 +44,8 @@ const page = template
   .replace("/*__TEMP_COL__*/", JSON.stringify(hexToFloat3(TEMP_COLOR)))
   .replace("/*__SHIELD_COL__*/", JSON.stringify(hexToFloat3(SHIELD_COLOR)))
   .replace("/*__RAIL_COL__*/", JSON.stringify(hexToFloat3(RAIL_COLOR)))
-  .replace("/*__READOUT_INSET__*/", String(READOUT_INSET));
+  .replace("/*__READOUT_INSET__*/", String(READOUT_INSET))
+  .replace("/*__SHIELD_STYLES__*/", JSON.stringify(SHIELD_STYLES));
 
 for (const [flag, wrap] of [["out", true], ["artifact", false]]) {
   const dest = arg(flag);

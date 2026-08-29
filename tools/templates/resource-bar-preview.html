@@ -162,11 +162,19 @@ input[type=range]{padding:0; width:230px}
 
   <h2>PF2e layers</h2>
   <p class="note">Temp HP is a shield plate laid over the fill — nearly full height, translucent
-    enough that the health underneath still reads, and carrying diagonal ribs that no other layer
+    enough that the health underneath still reads, and carrying a pattern that no other layer
     has. It never extends past the bar's end, so the scale cannot shift underneath the viewer. A
     raised shield gets its own hairline rail rather than stealing <i>bar2</i>, which a GM may
     legitimately have bound to something else.</p>
   <div class="grid" id="row-pf2e"></div>
+
+  <h2>Shield patterns</h2>
+  <p class="note">Six textures for the temp-HP plate, all at the same pitch so they are compared on
+    shape rather than on density, and all bounded by the same thing: on a 128px grid the bar is 19px
+    tall, so a cell smaller than a few pixels stops being a pattern and becomes grain over the reading
+    the player came to take. The pair under each is the same style at true size &mdash; the only view
+    that actually decides this.</p>
+  <div class="grid" id="row-shield"></div>
 
   <h2>Under a token</h2>
   <p class="note">What it actually looks like in play, at true size on a 128px grid: hero bar,
@@ -261,6 +269,7 @@ const RAIL_COL = /*__RAIL_COL__*/;
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
+const SHIELD_STYLES = /*__SHIELD_STYLES__*/;
 
 const canvas = document.getElementById("gl");
 
@@ -720,6 +729,16 @@ for (const n of [0.6, 0.85, 1, 1.3, 1.7, 2]) {
   });
 }
 
+const shield = document.getElementById("row-shield");
+SHIELD_STYLES.forEach((name, i) => {
+  add(shield, { title: (i + 1) + " · " + name, sub: "60% HP, +85% temp",
+                frac: 0.6, temp: 0.85, seg: 10, max: 58, shieldStyle: i });
+});
+SHIELD_STYLES.forEach((name, i) => {
+  add(shield, { title: name, sub: "<i>at true size, 128\u00d719px</i>",
+                frac: 0.6, temp: 0.85, seg: 10, max: 58, shieldStyle: i, w: 128, h: 19 });
+});
+
 const cb = document.getElementById("row-cb");
 for (const f of [1, 0.62, 0.32, 0.12]) {
   add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
@@ -861,6 +880,7 @@ function draw(now) {
     gl.uniform1f(U.uTemp, temp);
     gl.uniform1f(U.uCracked, s.cracked ?? 0);
     gl.uniform1f(U.uSeg, s.seg ?? 0);
+    gl.uniform1f(U.uShieldStyle, s.shieldStyle ?? 0);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));

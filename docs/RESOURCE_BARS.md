@@ -17,7 +17,7 @@ every frame" cost nothing extra.
 
 The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
 layers separated by air rather than welded into one frame, a flat high-key fill
-lit by a single hard specular, and **one cut corner, top-left**. The palette is
+lit by a single hard specular, and **one cut corner, top-right**. The palette is
 entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
 exactly one place — the top of the stroke.
 
@@ -46,11 +46,20 @@ the trade worth making twice. At true size on a 128px grid the pips were two
 three-pixel marks anyway, and ornament that cannot be resolved is just a shorter
 bar.
 
-**The cut is top-left, and the side is load-bearing.** The readout is anchored to
-the bar's right end, so a corner taken out of the top-right is taken out of
-exactly the space the digits stand in: either the numbers sit on the diagonal, or
-they retreat inward and hand back the length the cut was saving. Putting the mark
-at the end nobody reads from costs nothing.
+**The cut and the readout share the bar's right end**, which sounds like a
+collision and is not. The reason is the shape of the run rather than the room
+left over: the run is right-aligned, so the part nearest the corner is the
+*maximum* — two-thirds the size of the value and sitting on the shared baseline
+rather than on the mid-line. Its ink reaches about a tenth of a bar-height above
+centre where the value reaches three tenths, so the small low part passes under
+the diagonal and the tall part is already well to its left.
+
+That is a real dependency between two decisions that look unrelated. Make the
+maximum bigger, or stop bottom-aligning it, or enlarge the cut, and the digits
+move up into the corner — and the rendered result is numerals lying across a
+diagonal, which reads as a clipped glyph rather than as a geometry error.
+`resource-bar-check` recomputes the clearance from those sizes and the atlas's
+own cell metrics rather than trusting the number.
 
 `CUT`, `BODY_INSET` and `READOUT_INSET` are exported from `shader.mjs` together,
 for the reason the shear used to be: the bar is drawn in GLSL and the numerals
@@ -375,17 +384,32 @@ Three things sit off the ramp on purpose:
 | **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
 
 Temp HP is drawn as a plate laid over the fill, and what sells it as a plate is
-the pattern rather than the colour: colour alone just makes a second fill. The
-pattern is **one family of diagonal ribs** at a 0.44 pitch, drawn as bright lines
-on top of the health rather than as filled cells that would hide it.
+the pattern rather than the colour: colour alone just makes a second fill. Six
+are available, chosen by the GM through `rb.shieldStyle` and listed in
+`SHIELD_STYLES` — ribs, chevrons, hex mesh, scales, grid and wave. All of them go
+through one function, `shieldPattern`, which returns a distance to the nearest
+line of whatever family is selected; everything downstream draws the same bright
+rib from it. Adding a pattern is a branch there and nothing else, and no family
+can quietly ship at a different weight from the rest.
 
-It used to be two crossed families at 0.185, making diamond scales. That is a
-nice idea at preview size and noise at the size it actually draws: on a 128px
-grid the bar is 19px tall, so the diamonds were about three pixels across and the
-crossing halved the feature size again. Detail below a couple of pixels stops
-being a pattern and becomes grain over the one reading the player came to take.
-One family at more than twice the pitch survives — and reads better anyway, since
-parallel ribs say *plating*, which is exactly what temporary hit points are.
+They share `SHIELD_PITCH`, and that is not tidiness. It used to be two crossed
+families at 0.185, making diamond scales — a nice idea at preview size and noise
+at the size it actually draws. On a 128px grid the bar is 19px tall, so those
+diamonds were about three pixels across and the crossing halved the feature size
+again. Detail below a couple of pixels stops being a pattern and becomes grain
+over the one reading the player came to take. One pitch for all six means the
+floor below which none of them survives is a single number, and it means the six
+are compared on their shape rather than on how dense each happens to be.
+
+Each is drawn as bright lines on top of the health rather than as filled cells,
+because a pattern that hides the health it sits on has broken the one rule the
+layer has.
+
+The choices are built at runtime from `SHIELD_STYLES`, so no literal key for them
+appears in `index.mjs` and the ordinary i18n sweep cannot see them. That is the
+dynamic-key hazard `CLAUDE.md` warns about: a style added without a string
+renders the key itself as its label, which works and ships. `resource-bar-check`
+builds the same key list and checks it.
 
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in

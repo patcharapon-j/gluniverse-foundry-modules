@@ -373,59 +373,99 @@ const tokensCss = await src("styles/gl-tokens.css");
      setting still works — which is exactly the kind of thing that ships. */
   const idx = await src("scripts/features/resource-bars/index.mjs");
   const lang = JSON.parse(await src("lang/resource-bars.en.json"));
-  const missing = [...idx.matchAll(/"(GLRB\.[A-Za-z0-9.]+)"/g)]
-    .map((m) => m[1])
-    .filter((k) => !(k in lang));
+  const literal = [...idx.matchAll(/"(GLRB\.[A-Za-z0-9.]+)"/g)].map((m) => m[1]);
+
+  /* The shield-style choices are built at runtime from the shader's own list, so
+     no literal key for them appears in index.mjs and the sweep above cannot see
+     them. That is the dynamic-key hazard CLAUDE.md warns about: add a style to
+     SHIELD_STYLES without a string here and Foundry renders the key itself as
+     the label, which works, ships, and looks like a bug nobody wrote. */
+  const built = shader.SHIELD_STYLES.map(
+    (s) => `GLRB.Settings.ShieldStyle.${s.charAt(0).toUpperCase()}${s.slice(1)}`);
+
+  const missing = [...literal, ...built].filter((k) => !(k in lang));
   if (missing.length)
-    fail(`${missing.length} i18n key(s) referenced by the settings do not exist: ${missing.join(", ")}`);
-  else ok("every GLRB string the settings reference resolves");
+    fail(`${missing.length} i18n key(s) the settings reference do not exist: ${missing.join(", ")}`);
+  else ok(`every GLRB string the settings reference resolves, including the ${built.length} built from SHIELD_STYLES`);
 }
 
-/* ── 8. The cut corner keeps out of the readout's way ───────────────────── */
+/* ── 8. The readout fits under the corner the bar cuts off itself ───────── */
 {
-  /* The bar takes a corner out of itself and the numerals are laid out in JS
-     against a bar drawn in GLSL, so the two have to agree about where the
-     numbers can stand. They agree by staying at opposite ends: the readout is
-     anchored to the right edge and the cut is taken out of the top-LEFT.
+  /* The bar takes a corner out of its own top-right and the readout is anchored
+     to that same end, which sounds like a collision. It is not, and the reason
+     is worth pinning because it is entirely about the *shape of the run*.
 
-     Move the cut back to the right and nothing errors. The digits simply land
-     on the diagonal, and the only way back out is to retreat the readout inward
-     and hand back the length the cut was there to save. So the side is pinned,
-     not just the numbers. */
+     The run is right-aligned and its last part is the maximum: smaller than the
+     value and sitting on the shared baseline rather than on the mid-line, so its
+     ink reaches only about a tenth of a bar-height above centre. The diagonal at
+     that height is still outside it. The value, which does reach three tenths,
+     is already well to the left by the width of the maximum.
+
+     So the clearance is recomputed here from the two sizes host.mjs actually
+     asks for, plus the atlas's own cell geometry. Make the maximum bigger, stop
+     bottom-aligning it, or enlarge the cut, and this fails — where the rendered
+     result would simply be numerals lying across a diagonal, which reads as a
+     clipped glyph rather than as a geometry error. */
   const glsl = shader.FRAGMENT_SHADER;
   const { CUT, BODY_INSET, READOUT_INSET } = shader;
+  const atlasSrc = await src("scripts/features/resource-bars/atlas.mjs");
+  const h = strip(hostSrc);
 
   const cutFn = /float sdCut\([\s\S]*?\n}/.exec(glsl)?.[0] ?? "";
   const heroHalf = 0.5 - Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
 
-  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(await src("scripts/features/resource-bars/atlas.mjs"))))
+  /* The readout's parts, in the order runGeometry lays them out — and only
+     those. host.mjs builds a second run for the floating delta, which is a
+     single centred part at nearly the value's size; sweeping it in here makes
+     the pin measure a glyph that rises three times as high as the maximum does
+     and lives above the bar anyway, so it fails on geometry that is fine. */
+  const run = /runGeometry\(\[([\s\S]*?)\]/.exec(h)?.[1] ?? "";
+  const parts = [...run.matchAll(/\{\s*text:[^}]*?size:\s*h\s*\*\s*(\d*\.?\d+)[^}]*?\}/g)]
+    .map((m) => ({ size: Number(m[1]), bottom: /bottom:\s*true/.test(m[0]) }));
+  const cellH = Number(/const CELL_H = (\d+)/.exec(atlasSrc)?.[1]);
+  const fontPx = Number(/const FONT_PX = (\d+)/.exec(atlasSrc)?.[1]);
+  const inkDrop = Number(/:\s*(0\.\d+);/.exec(/actualBoundingBoxDescent[\s\S]{0,160}?:\s*0\.\d+;/.exec(atlasSrc)?.[0] ?? "")?.[1]);
+
+  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(atlasSrc)))
     fail("A shear is back. The bar is meant to be axis-aligned; a lean in the GLSL or in runGeometry that the other one does not share is the exact drift this pin replaced.");
   else if (!glsl.includes(`const float CUT = ${CUT.toFixed(4)};`) ||
            !glsl.includes(`const float BODY_INSET = ${BODY_INSET.toFixed(4)};`))
     fail("The GLSL no longer takes CUT and BODY_INSET from the exported constants, so the readout is positioned against geometry the shader may not be drawing.");
-  else if (!/READOUT_INSET/.test(strip(hostSrc)))
+  else if (!/READOUT_INSET/.test(h))
     fail("host.mjs anchors the readout with something other than the exported READOUT_INSET.");
-  else if (!/-p\.x/.test(cutFn))
-    fail("sdCut no longer negates x, so the cut has moved to the top-right — the same corner the readout stands in. The numerals will sit on the diagonal.");
-  else if (CUT * heroHalf > heroHalf * 1.6)
-    fail(`The cut reaches ${(CUT * heroHalf).toFixed(3)} bar-heights along a bar ${(heroHalf * 2).toFixed(2)} tall; past this it stops being a corner and starts being a wedge taken out of the fill.`);
+  else if (/-p\.x/.test(cutFn))
+    fail("sdCut negates x, so the cut has moved away from the readout's end. That is safe, but it is not what READOUT_INSET was measured against — re-derive it or put the cut back.");
+  else if (![cellH, fontPx, inkDrop].every(Number.isFinite) || parts.length < 2)
+    fail("Could not read the atlas cell geometry or the readout's parts; the corner clearance is now unpinned and a clipped numeral will ship silently.");
   else {
     /* Between the body's edge and the fill there is a stroke, a gap of air and a
-       lip. The readout stands against the *fill*, so it has to clear all three:
-       anchored to the body it is drawn over the frame, which reads as a clipped
-       numeral rather than as a misplaced one. Derived from the GLSL so that
-       widening any of the three moves the requirement with it. */
+       lip. The readout stands against the fill, so it clears all three; anchored
+       to the body the last digit is drawn over the frame. */
     const sw  = Number(/float sw\s*=\s*max\(([\d.]+),/.exec(glsl)?.[1]);
     const air = Number(/float air\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
     const lip = Number(/float lip\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
     const inner = BODY_INSET + sw + air + lip;
+
+    /* How far the last part's ink reaches above the mid-line. Bottom-aligned
+       parts hang off the largest part's ink line; a centred one is symmetric. */
+    const R = cellH / fontPx;
+    const biggest = Math.max(...parts.map((p) => p.size));
+    const last = parts[parts.length - 1];
+    const rise = last.bottom
+      ? last.size * R * (0.5 + inkDrop) - biggest * R * inkDrop
+      : last.size * R * 0.5;
+    /* The diagonal, measured back from the quad's right edge at that height. */
+    const diagonal = BODY_INSET - heroHalf + CUT * heroHalf + rise;
+
     if (![sw, air, lip].every(Number.isFinite))
       fail("Could not read the stroke, air and lip widths out of the GLSL; the readout's clearance from the frame is now unpinned.");
     else if (READOUT_INSET < inner)
       fail(`READOUT_INSET is ${READOUT_INSET} but the fill area starts ${inner.toFixed(3)} bar-heights in; the last digit is drawn over the bar's own frame.`);
     else if (READOUT_INSET > inner + 0.12)
       fail(`READOUT_INSET floats ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill; the readout is meant to sit against the right end of it.`);
-    else ok(`the cut is top-left, the readout stands ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill's right end, and nothing is sheared`);
+    else if (READOUT_INSET < diagonal)
+      fail(`The maximum's ink rises ${rise.toFixed(3)} bar-heights, where the cut's diagonal is still ${diagonal.toFixed(3)} in from the edge and the readout stands at ${READOUT_INSET}. The last digits will lie across the corner.`);
+    else ok(`the readout stands ${(READOUT_INSET - inner).toFixed(3)} inside the fill and passes ${(READOUT_INSET - diagonal).toFixed(3)} under the cut, and nothing is sheared`);
   }
 }
 

@@ -70,7 +70,8 @@ export const UNIFORMS = Object.freeze({
   uChip: "float",     // how fresh the chip trail is, 1 = just cut and white-hot
   uWave: "float",     // change-sweep amplitude, 0..1
   uWaveX: "float",    // the sweep front's position, as a fraction along the bar
-  uSeg: "float",      // segment count across the fill, 0 = one continuous plate
+  uSeg: "float",      // divisions across the fill, 0 = one continuous plate
+  uShieldStyle: "float", // which pattern the temp-HP plate carries, 0..5
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
@@ -115,18 +116,35 @@ precision mediump float;
  * the body and the last digit is drawn over the frame, which reads as a clipped
  * numeral rather than as a misplaced one.
  *
- * What makes standing that close safe at all is that the cut is on the *left* —
- * see sdCut. Move the cut back to the right and this number is immediately
- * wrong. `tools/resource-bar-check.mjs` pins both halves of that, and derives
- * the fill area's inset from the GLSL rather than repeating it.
+ * The cut corner is at the same end. What makes that work is the shape of the
+ * run rather than the room left over — see sdCut. `tools/resource-bar-check.mjs`
+ * derives the fill area's inset from the GLSL rather than repeating it, and
+ * recomputes the corner clearance from the readout's own two sizes.
  */
 export const CUT = 0.85;
 export const BODY_INSET = 0.130;
 export const READOUT_INSET = 0.275;
 
+/**
+ * The shield pattern's cell pitch, in bar heights, and the styles that use it.
+ *
+ * One pitch for every family so they can be compared on their shape rather than
+ * on how dense each one happens to be, and so the size floor below which none of
+ * them survives is a single number. On a 128px grid the bar is 19px tall, which
+ * puts a 0.44 cell at about 8px — the smallest a repeating pattern can be and
+ * still read as one rather than as grain.
+ *
+ * The order is the setting's order; the index is what reaches the shader.
+ */
+export const SHIELD_PITCH = 0.44;
+export const SHIELD_STYLES = Object.freeze([
+  "ribs", "chevron", "hex", "scale", "grid", "wave",
+]);
+
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + CUT.toFixed(4) + `;
-const float BODY_INSET = ` + BODY_INSET.toFixed(4) + `;` + `
+const float BODY_INSET = ` + BODY_INSET.toFixed(4) + `;
+const float SHIELD_PITCH = ` + SHIELD_PITCH.toFixed(4) + `;` + `
 varying vec2 vTextureCoord;
 
 uniform float uTime;
@@ -147,6 +165,7 @@ uniform float uChip;
 uniform float uWave;
 uniform float uWaveX;
 uniform float uSeg;
+uniform float uShieldStyle;
 uniform float uRole;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
@@ -196,25 +215,29 @@ float sdBox(vec2 p, vec2 b) {
   return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
 
-/* The same box with one corner taken off, top-LEFT.
+/* The same box with one corner taken off, top-right.
 
    This is the suite mark — the corner gl-tokens.css cuts out of every panel —
    and it is what carries the family identity now that the bar is axis-aligned.
    A cut corner is a mark; the shear it replaces was a costume, and one that
    made the bar disagree with every other rectangle on the canvas.
 
-   Left and not right, and that is load-bearing rather than taste: the readout
-   is anchored to the bar's right edge, and a corner taken out of the top-right
-   is taken out of exactly the space the digits stand in. The two cannot both
-   have that corner — either the numbers sit on the diagonal, or they retreat
-   inward and give up the length the cut was supposed to be saving. Putting the
-   mark at the end nobody reads from costs nothing.
+   The corner and the readout share this end of the bar, which sounds like a
+   collision and is not, because of *what* is nearest the corner. The run is
+   right-aligned and its last part is the maximum: two-thirds the size of the
+   value and sitting on the shared baseline rather than on the mid-line, so its
+   ink reaches only about a tenth of a bar-height above centre where the value
+   reaches three tenths. The small low part passes under the diagonal, and the
+   tall part is already well to its left. That is a real dependency and not a
+   happy accident: make the maximum bigger, or stop bottom-aligning it, and the
+   digits move up into the cut. resource-bar-check computes the clearance from
+   those two sizes rather than trusting this comment.
 
-   Note the negated x, and p rather than abs(p): mirroring would cut all four
-   corners and turn an instrument with a front and a back into a lozenge. */
+   Note p and not abs(p): mirroring would cut all four corners and turn an
+   instrument with a front and a back into a lozenge. */
 float sdCut(vec2 p, vec2 b, float c) {
   float k = (b.x + b.y - c) * 0.7071068;
-  return max(sdBox(p, b), dot(vec2(-p.x, p.y), vec2(0.7071068)) - k);
+  return max(sdBox(p, b), dot(p, vec2(0.7071068)) - k);
 }
 
 /* ── OKLab → sRGB ────────────────────────────────────────────────────────
@@ -256,6 +279,60 @@ vec3 rampAt(float t) {
 /* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. */
 const vec3 INK  = vec3(0.043, 0.059, 0.090);
 const vec3 INK0 = vec3(0.008, 0.027, 0.043);
+
+/* The shield plate's pattern, as a distance to the nearest line of it.
+
+   One interface for every family: whatever comes back is drawn as the same
+   bright rib downstream, so adding a pattern is a branch here and nothing else,
+   and no family can quietly ship at a different weight from the rest.
+
+   Every one of these is bounded by the same thing, which is not taste: the bar
+   is 19px tall on a 128px grid, so a pattern whose cells are smaller than a few
+   pixels is not a pattern, it is grain laid over the one reading the player came
+   to take. That is why the pitch is shared and generous, why nothing here
+   crosses two families at full density, and why the caller fades the whole thing
+   out through rbDetail when even this cannot hold a pixel. */
+float shieldPattern(vec2 sp, float style) {
+  float sc = SHIELD_PITCH;
+
+  if (style < 0.5) {                    /* 0 · ribs — parallel diagonal plating */
+    float k = (sp.x + sp.y * 1.35) / sc;
+    return abs(fract(k) - 0.5) * sc / 1.675;
+  }
+  if (style < 1.5) {                    /* 1 · chevrons — the ribs, folded */
+    float k = (sp.x + abs(sp.y) * 1.35) / sc;
+    return abs(fract(k) - 0.5) * sc / 1.675;
+  }
+  if (style < 2.5) {                    /* 2 · hex mesh — an energy screen */
+    /* Two offset rectangular lattices; whichever centre is nearer is the hex
+       this pixel belongs to. Cheaper than any closed form and exact. */
+    vec2 hs = vec2(1.0, 1.7320508) * sc * 0.62;
+    vec2 a = mod(sp, hs) - hs * 0.5;
+    vec2 c = mod(sp - hs * 0.5, hs) - hs * 0.5;
+    vec2 g = dot(a, a) < dot(c, c) ? a : c;
+    vec2 ag = abs(g) / (sc * 0.62);
+    float d = max(dot(ag, vec2(0.5, 0.8660254)), ag.x);
+    return abs(0.5 - d) * sc * 0.62;
+  }
+  if (style < 3.5) {                    /* 3 · scales — staggered arcs */
+    float rh = sc * 0.66;
+    float row = floor(sp.y / rh);
+    float ox = mod(row, 2.0) * 0.5 * sc;
+    float cx = (floor((sp.x - ox) / sc) + 0.5) * sc + ox;
+    float cy = (row + 0.5) * rh;
+    /* Squashed on y, because a circular scale on an 8:1 bar is a dot. */
+    return abs(length(vec2(sp.x - cx, (sp.y - cy) * 1.45)) - sc * 0.44);
+  }
+  if (style < 4.5) {                    /* 4 · grid — riveted rectangular plate */
+    float ch = sc * 0.66;
+    float dx = abs(fract(sp.x / sc) - 0.5) * sc;
+    float dy = abs(fract(sp.y / ch) - 0.5) * ch;
+    return min(dx, dy);
+  }
+  /* 5 · wave — the ribs, bent. Reads as a field rather than as hardware. */
+  float k = (sp.x + sin(sp.y * 7.5) * 0.085) / sc;
+  return abs(fract(k) - 0.5) * sc;
+}
 
 void main(void) {
   vec2 uv = vTextureCoord;
@@ -421,10 +498,12 @@ void main(void) {
        the colour-blind position channel, silently disappear for every player
        without a HiDPI monitor. Previewing at dpr 2 cannot show you this.
 
-       Pinned to px, the gap is the same hairline at every size and on every
-       display; 2.4 clears GL_FADE_HI so it is never half-faded. The segW cap
-       keeps a bar with many divisions from becoming more gap than plate. */
-    float gapP = min(max(px * 2.4, 0.012), segW * 0.28);
+       Pinned to px, the gap is the same width at every size and on every
+       display; 4.0 clears GL_FADE_HI with room to spare so it is never
+       half-faded. The segW cap keeps a bar with many divisions from becoming
+       more gap than plate — and it is the cap, not the px term, that does the
+       work once a per-HP division count runs into the dozens. */
+    float gapP = min(max(px * 4.0, 0.020), segW * 0.34);
     segMask = mix(1.0, rbEdge(0.0, gapP, sx), rbDetail(gapP) * hero);
   }
 
@@ -473,14 +552,9 @@ void main(void) {
      Drawn as bright lines rather than as filled cells, so the shield adds light
      to the fill underneath instead of masking it. A pattern that hides the
      health it sits on top of has broken the one rule the layer has. */
-  float sc = 0.44;
-  float k = (p.x + p.y * 1.35) / sc;
-  /* fract() gives distance along the gradient; the ribs are perpendicular to it,
-     so divide by the gradient's length to get a real distance and keep the rib
-     the same width whatever angle it is set at. */
-  float dRib = abs(fract(k) - 0.5) * sc / 1.675;
+  float dRib = shieldPattern(p, uShieldStyle);
   float ribW = max(px * 1.1, 0.020);
-  float lattice = rbBand(dRib, ribW) * rbDetail(sc * 0.5);
+  float lattice = rbBand(dRib, ribW) * rbDetail(SHIELD_PITCH * 0.5);
 
   /* A slow shimmer travelling along it, so it reads as held rather than
      painted. */

@@ -59,6 +59,7 @@ function currentOptions() {
     lowAt: (Number(get(SETTINGS.lowThreshold, LOW_HEALTH_AT * 100)) || 25) / 100,
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
+    shieldStyle: String(get(SETTINGS.shieldStyle, "ribs")),
     bloom: !!get(SETTINGS.bloom, true),
     offsetX: Number(get(SETTINGS.offsetX, 0)) || 0,
     offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,

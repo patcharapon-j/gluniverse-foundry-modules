@@ -23,7 +23,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
+import { FRAGMENT_SHADER, READOUT_INSET, SHIELD_STYLES, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
 import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
@@ -82,6 +82,7 @@ function makeBarMesh(role, opts) {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
     uTemp: 0, uCracked: 0, uSeg: opts.segments, uRole: role,
+    uShieldStyle: opts.shieldStyle,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
@@ -170,12 +171,17 @@ class BarHost {
     this.motionScale = opts.motionScale;
     this.floatingDeltas = opts.floatingDeltas;
     this.ramp = rampUniform(opts.ramp);
+    /* Resolved to the index the shader wants once, here, rather than at every
+       write site: an unknown name has to fall back to the first style, and a
+       -1 from indexOf would reach the GLSL as a pattern nothing draws. */
+    this.shieldStyle = Math.max(0, SHIELD_STYLES.indexOf(opts.shieldStyle));
     for (const entry of this.entries.values()) {
       for (const role of ROLES) {
         const mesh = entry.meshes[role];
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
+          mesh.shader.uniforms.uShieldStyle = this.shieldStyle;
         }
         if (entry.anims[role]) entry.anims[role].motionScale = opts.motionScale;
       }
@@ -376,7 +382,11 @@ class BarHost {
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
       if (!mesh) {
-        mesh = makeBarMesh(roleId, { segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0, ramp: this.ramp });
+        mesh = makeBarMesh(roleId, {
+          segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0,
+          ramp: this.ramp,
+          shieldStyle: this.shieldStyle,
+        });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
       }
@@ -533,6 +543,7 @@ class BarHost {
       const u = mesh.shader.uniforms;
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
+      u.uShieldStyle = this.shieldStyle;
       u.uTime = time;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
