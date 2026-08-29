@@ -178,6 +178,8 @@ viewer can use this bar at all, so how many there are is not decoration.
 |---|---|
 | **Fixed count** | `rb.segmentMode` = count, `rb.segments` plates across the whole bar. 0 draws one continuous fill. |
 | **One per N HP** | `rb.segmentMode` = perHp, `rb.segmentSize` hit points per plate. |
+| **Off** | `rb.dividers` = false. One unbroken fill whatever the mode and count say. |
+| **Thickness** | `rb.dividerWidth`, the gap between two plates in device pixels. |
 
 The two answer different questions and neither is the default answer. A fixed
 count makes position along the bar mean the same *fraction* on every creature,
@@ -199,23 +201,45 @@ fades a division out once its gap falls under a device pixel, but the count is
 also what sets that gap, so past the cap the bar is more gap than plate long
 before the fade takes over.
 
-The gap itself is **six device pixels**, floored at 0.030 in geometry units and
-capped at 0.42 of a plate. Six rather than the two it started at because the gap
-is what makes the fill read as assembled plates rather than as a bar with
-scratches in it, and because it clears `GL_FADE_HI` several times over so it is
-never caught half-faded. Device pixels rather than geometry units for the reason
-in **Units** above: a fixed value is two pixels on a retina display and
-sub-pixel on an ordinary one, where `rbDetail` deletes it and the colour-blind
-position channel silently disappears for half the table. The cap is what holds
-the line at forty divisions, where the px term would otherwise win and leave
-more gap than plate.
+The gap itself is `uSegW` **device pixels** — six by default — floored at
+`0.005 * uSegW` in geometry units and capped at 0.42 of a plate. Six rather than
+the two it started at because the gap is what makes the fill read as assembled
+plates rather than as a bar with scratches in it. Device pixels rather than
+geometry units for the reason in **Units** above: a fixed value is two pixels on
+a retina display and sub-pixel on an ordinary one, where `rbDetail` deletes it
+and the colour-blind position channel silently disappears for half the table.
+The cap is what holds the line at forty divisions, where the px term would
+otherwise win and leave more gap than plate; the floor scales with the width
+rather than sitting at a fixed 0.030, or every width under it would draw
+identically on a bar tall enough for the floor to win and the setting would
+silently stop doing anything.
+
+`DIVIDER.min` is **3**, and that is a legibility floor rather than a taste.
+`rbDetail` fades anything under `GL_FADE_HI` (2.2 device pixels) out, so a
+thinner choice than that does not give the GM a *finer* divider, it gives them a
+*fainter* one — a slider whose bottom end looks like a bug. Three is the first
+whole pixel clear of the fade, so every value the setting offers draws at full
+strength. The check tool pins the range against the shader's own thresholds
+rather than against the number.
+
+**Off is a switch, not the bottom of the slider.** `rb.dividers` resolves inside
+`segmentsFor()`, which means it returns a count of zero and the divisions are
+never cut at all — including the ones whispered across the empty trough, which
+come out of the same mask, and including in the per-HP mode, which has no count
+to set to zero. A zero *width* would leave the mask in place and the trough
+divisions with it. Turning it off leaves colour as the only channel carrying
+health, which is a real cost for a colour-blind player and is what the setting's
+hint says.
 
 `uSeg` therefore depends on the *creature*, not only on the setting, and it is
 written from three places — mesh creation, `configure`, and the per-frame write.
 All three go through `segmentsFor()`. Any one of them reading `opts.segments`
 directly divides the bar one way on creation and another way on its next frame,
 which reads as a flicker on first draw and as nothing at all on a bar that never
-animates. The check tool pins it.
+animates. The check tool pins it. `uSegW` is written from the same three places
+and goes through `dividerWidth()`, which clamps it: the shader multiplies the
+gap's *floor* by it, so a negative value out of a hand-edited world inverts the
+`min()` and takes the whole fill out.
 
 ---
 

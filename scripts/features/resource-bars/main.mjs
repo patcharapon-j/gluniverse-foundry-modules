@@ -11,7 +11,7 @@
 import { SUITE_ID, log, warn } from "../../core/const.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
-import { READOUT, SETTINGS } from "./constants.mjs";
+import { DIVIDER, READOUT, SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
@@ -27,6 +27,16 @@ const clampScale = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return 1;
   return Math.min(READOUT.max, Math.max(READOUT.min, n));
+};
+
+/* Same reasoning as clampScale, and the stake is higher: the shader scales the
+   gap's floor by this, so a 0 out of a hand-edited world removes the divisions
+   entirely while the count still says there are ten of them, and a negative one
+   inverts the min() and takes the whole fill out. */
+const clampDivider = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DIVIDER.default;
+  return Math.min(DIVIDER.max, Math.max(DIVIDER.min, n));
 };
 
 /**
@@ -56,6 +66,8 @@ function currentOptions() {
     segmentMode: get(SETTINGS.segmentMode, "count") === "perHp" ? "perHp" : "count",
     segments: Number(get(SETTINGS.segments, 10)) || 0,
     segmentSize: Number(get(SETTINGS.segmentSize, 5)) || 0,
+    dividers: !!get(SETTINGS.dividers, true),
+    dividerWidth: clampDivider(get(SETTINGS.dividerWidth, DIVIDER.default)),
     lowAt: (Number(get(SETTINGS.lowThreshold, LOW_HEALTH_AT * 100)) || 25) / 100,
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
