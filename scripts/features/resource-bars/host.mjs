@@ -496,11 +496,18 @@ class BarHost {
       /* The current value is the reading; the maximum is the scale it is read
          against, and a scale printed at the same weight as its reading competes
          with it. Smaller and quieter, so the eye lands on the number that
-         changes and the denominator is there when it is wanted. */
+         changes and the denominator is there when it is wanted.
+
+         Quieter here means *fainter*, not merely smaller: a small numeral at
+         full ink is still high-contrast against the plate and still catches the
+         eye first on a bar whose value has not changed. And the two of them sit
+         on a shared baseline rather than each on the mid-line, because a run
+         where every part is separately centred reads as three sizes of number
+         rather than as one reading with its scale beside it. */
       const geo = runGeometry([
         { text: String(value), size: h * 0.46 },
-        { text: "/", size: h * 0.23, dim: 0.34 },
-        { text: String(r.hero.max), size: h * 0.24, dim: 0.46 },
+        { text: "/", size: h * 0.23, dim: 0.22, bottom: true },
+        { text: String(r.hero.max), size: h * 0.24, dim: 0.30, bottom: true },
       ], { right, mid, skew: SKEW });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number
