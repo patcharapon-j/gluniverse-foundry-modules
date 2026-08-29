@@ -381,14 +381,41 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("every GLRB string the settings reference resolves");
 }
 
-/* ── 8. The shear has one home ──────────────────────────────────────────── */
+/* ── 8. The readout clears the corner the bar cuts off itself ───────────── */
 {
+  /* The bar takes a corner out of its own top-right, and the numerals are laid
+     out in JS against a bar drawn in GLSL. If the two disagree the digits sit on
+     the diagonal — which does not read as a small error, it reads as two people
+     having drawn the same bar. So the geometry is exported and the clearance is
+     recomputed here rather than trusted.
+
+     Reading right-to-left from the quad's right edge: the body is inset by
+     BODY_INSET; the cut reaches CUT half-heights back from the corner, of which
+     everything past one half-height is outside the body already; and the digits
+     stand half their cap height above the mid-line, which is where they first
+     meet the diagonal. */
   const glsl = shader.FRAGMENT_SHADER;
-  if (!glsl.includes(`const float SKEW = ${shader.SKEW.toFixed(4)};`))
-    fail("The GLSL's SKEW does not come from the exported constant; the bar and its numerals will drift apart.");
-  else if (!/skew: SKEW/.test(strip(hostSrc)))
-    fail("host.mjs lays out numerals with something other than the exported SKEW.");
-  else ok(`shear is ${shader.SKEW} in exactly one place, shared by bar and numerals`);
+  const { CUT, BODY_INSET, READOUT_INSET } = shader;
+
+  const padY = Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
+  const capH = Number(/size:\s*h\s*\*\s*(0\.\d+)/.exec(strip(hostSrc))?.[1]);
+
+  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(await src('scripts/features/resource-bars/atlas.mjs'))))
+    fail("A shear is back. The bar is meant to be axis-aligned; a lean in the GLSL or in runGeometry that the other one does not share is the exact drift this pin replaced.");
+  else if (!glsl.includes(`const float CUT = ${CUT.toFixed(4)};`) ||
+           !glsl.includes(`const float BODY_INSET = ${BODY_INSET.toFixed(4)};`))
+    fail("The GLSL no longer takes CUT and BODY_INSET from the exported constants, so the readout is positioned against geometry the shader may not be drawing.");
+  else if (!/READOUT_INSET/.test(strip(hostSrc)))
+    fail("host.mjs anchors the readout with something other than the exported READOUT_INSET.");
+  else if (!Number.isFinite(padY) || !Number.isFinite(capH))
+    fail("Could not read padY out of the GLSL or the readout cap height out of host.mjs; the clearance below cannot be checked and is now unpinned.");
+  else {
+    const heroHalf = 0.5 - padY;
+    const needed = BODY_INSET + heroHalf * (CUT - 1) + capH / 2;
+    if (READOUT_INSET < needed)
+      fail(`READOUT_INSET is ${READOUT_INSET} but the cut corner reaches ${needed.toFixed(3)} bar-heights in; the numerals will overlap the diagonal.`);
+    else ok(`the readout clears the cut corner by ${(READOUT_INSET - needed).toFixed(3)} bar-heights, and nothing is sheared`);
+  }
 }
 
 /* ── 9. Detail survives the reference token size ────────────────────────── */

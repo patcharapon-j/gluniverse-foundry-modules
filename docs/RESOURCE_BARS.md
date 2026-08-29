@@ -15,11 +15,32 @@ gloss without redrawing geometry, which is why the stock bars look the way they
 do. One quad and a fragment shader makes all of that free, and makes "animates
 every frame" cost nothing extra.
 
-The visual language is Etched Glass materials on *Honkai: Star Rail* geometry —
-a consistent shear, layers separated by air rather than welded into one frame, a
-flat high-key fill lit by a single hard specular, and asymmetric furniture at
-the ends. The palette is entirely the suite's own; the gold is
+The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
+layers separated by air rather than welded into one frame, a flat high-key fill
+lit by a single hard specular, asymmetric furniture at the ends, and **one cut
+corner, top-right**. The palette is entirely the suite's own; the gold is
 `PALETTE.signalPale`.
+
+The bar is **axis-aligned**. It used to lean, by a shear of 0.32 shared between
+the GLSL and the numerals' layout, and the lean was doing most of the work of
+making it look like this suite rather than like a progress bar. It was also the
+only thing on the canvas at that angle, which is the problem: a token, its
+border, its nameplate and every other module's furniture are all rectangles, and
+a bar that disagrees with them reads as costume rather than as design. The cut
+corner replaces it — the same corner `gl-tokens.css` takes out of every panel in
+the suite, so the family resemblance is now to the suite's own mark rather than
+to a borrowed angle.
+
+The shear also cost length. A body leaning 0.32 per unit of height overhangs its
+own box by half that on each side, and the quad had to carry the margin; with it
+gone the body is inset 0.235 rather than 0.30, and the extra is fill.
+
+`CUT`, `BODY_INSET` and `READOUT_INSET` are exported from `shader.mjs` together,
+for the reason the shear used to be: the bar is drawn in GLSL and the numerals
+are laid out in JS, and the readout has to clear the corner the bar takes out of
+itself. `resource-bar-check` recomputes the clearance from the three of them
+rather than trusting the number, so enlarging the cut and forgetting the readout
+fails the check instead of putting the digits on the diagonal.
 
 ---
 
@@ -375,7 +396,8 @@ maximum still differ by one step of weight rather than by none or by a fade to
 furniture, that the readout's geometry cache is keyed on
 its size so the size setting is not silently inert, that the GM's readout
 override never reaches the permission gate and never outruns `displayBars`, that
-the shear has one home, and that every detail gate still resolves at the
+the readout still clears the cut corner and nothing has been sheared again, and
+that every detail gate still resolves at the
 reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 

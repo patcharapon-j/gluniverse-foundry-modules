@@ -23,7 +23,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { FRAGMENT_SHADER, VERTEX_SHADER, SKEW } from "./shader.mjs";
+import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
 import { FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
@@ -602,7 +602,9 @@ class BarHost {
        reacting, not the bar being thrown around. */
     const w = base.w, h = base.h;
     const numScale = this.opts.numberScale > 0 ? this.opts.numberScale : 1;
-    const right = w * (((w / h) - 0.40) / (w / h));
+    /* Measured in bar heights from the quad's right edge, and shared with the
+       shader, because what it has to clear is the corner the shader cuts. */
+    const right = w - READOUT_INSET * h;
     const mid = h * 0.5;
     const anchorX = hm.position.x + right;
     const anchorY = hm.position.y + mid;
@@ -640,7 +642,7 @@ class BarHost {
         { text: String(value), size: h * 0.46 * numScale },
         { text: "/", size: h * 0.23 * numScale, dim: 0.62, bottom: true },
         { text: String(r.hero.max), size: h * 0.24 * numScale, dim: 0.80, bottom: true },
-      ], { right, mid, skew: SKEW });
+      ], { right, mid });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number
          rather than throwing it across the bar. */
@@ -673,7 +675,7 @@ class BarHost {
     const popStamp = pop.text + "@" + (h * numScale).toFixed(2);
     if (popStamp !== entry.popupText || !entry.popupMesh) {
       entry.popupText = popStamp;
-      const geo = runGeometry([{ text: pop.text, size: h * 0.44 * numScale }], { right, mid, skew: SKEW });
+      const geo = runGeometry([{ text: pop.text, size: h * 0.44 * numScale }], { right, mid });
       entry.popupMesh = this.swapTextMesh(entry, entry.popupMesh, geo,
         pop.heal ? HEAL_INK : HIT_INK, 1);
       entry.popupMesh?.pivot.set(right, mid);

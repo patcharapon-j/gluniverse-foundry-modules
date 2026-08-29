@@ -258,7 +258,9 @@ const RAMPS = /*__RAMPS__*/;
 const TEMP_COL = /*__TEMP_COL__*/;
 const SHIELD_COL = /*__SHIELD_COL__*/;
 const RAIL_COL = /*__RAIL_COL__*/;
-const SKEW = /*__SKEW__*/;   /* the one shear, shared by the bar and its numerals */
+/* Shared with the shader: what the readout has to clear is the corner the
+   shader cuts out of the bar. */
+const READOUT_INSET = /*__READOUT_INSET__*/;
 
 const canvas = document.getElementById("gl");
 
@@ -403,7 +405,6 @@ attribute vec2 aVertexPosition;
 attribute vec2 aUvs;
 uniform vec4 uQuad;     /* centreX, centreY, halfW, halfH — clip space */
 uniform vec4 uUv;       /* u0, v0, u1, v1 */
-uniform float uShear;   /* clip-space x shift per unit clip y */
 varying vec2 vUv;
 void main(void) {
   vUv = mix(uUv.xy, uUv.zw, aUvs);
@@ -411,7 +412,6 @@ void main(void) {
   /* Sheared about the cell's centre line, by the same amount as the bar — a
      numeral standing upright on a leaning bar is the tell that the two were
      drawn by different people. */
-  pos.x += pos.y * uShear;
   gl_Position = vec4(pos, 0.0, 1.0);
 }`;
 
@@ -440,7 +440,7 @@ gl.linkProgram(tprog);
 if (!gl.getProgramParameter(tprog, gl.LINK_STATUS)) fail("Text program failed to link:\n" + gl.getProgramInfoLog(tprog));
 
 const TU = {};
-for (const n of ["uQuad", "uUv", "uShear", "uAtlas", "uInk", "uEdge", "uOpacity"]) TU[n] = gl.getUniformLocation(tprog, n);
+for (const n of ["uQuad", "uUv", "uAtlas", "uInk", "uEdge", "uOpacity"]) TU[n] = gl.getUniformLocation(tprog, n);
 
 const tAPos = gl.getAttribLocation(tprog, "aVertexPosition");
 const tAUv  = gl.getAttribLocation(tprog, "aUvs");
@@ -460,14 +460,13 @@ let atlas = null;
  * Draw a right-aligned run inside the current viewport.
  * `rightPx` / `midPx` are in cell pixels, `sizePx` is the cap height.
  */
-function drawRun(parts, rightPx, midPx, w, h, shear) {
+function drawRun(parts, rightPx, midPx, w, h) {
   if (!atlas) return;
   gl.useProgram(tprog);
   pointAttribs(tAPos, tAUv);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, atlas.tex);
   gl.uniform1i(TU.uAtlas, 0);
-  gl.uniform1f(TU.uShear, shear);
 
   // Total width first, so the run can be right-aligned as one unit.
   let total = 0;
@@ -877,9 +876,7 @@ function draw(now) {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     if (s.max && (s.role ?? 0) === 0) {
-      const aspect = w / h;
-      const rightPx = ((aspect - 0.40) / aspect) * w;
-      const shear = SKEW / aspect;
+      const rightPx = w - READOUT_INSET * h;
       const punch = 1 + (a ? a.punch : 0);
       /* The viewer's own size setting, on top of the size the bar's height
          gives. It scales the delta too — they are one readout. */
@@ -897,7 +894,7 @@ function draw(now) {
         { text: String(cur), size: h * 0.46 * ns, ink },
         { text: "/", size: h * 0.23 * ns, ink, opacity: 0.62, bottom: true },
         { text: String(s.max), size: h * 0.24 * ns, ink, opacity: 0.80, bottom: true },
-      ], rightPx, h * 0.5, w, h, shear);
+      ], rightPx, h * 0.5, w, h);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
          has to be legible as a number — "the bar got shorter" is a magnitude
@@ -920,7 +917,7 @@ function draw(now) {
           const inT = Math.min(1, pop.t / 0.14);
           const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
           drawRun([{ text: pop.text, size: h * 0.44 * popScale * (s.numScale ?? 1), ink: popInk, opacity: Math.max(0, alpha) }],
-            rightPx - w * (0.02 + 0.06 * e), h * (0.5 + POPUP_LIFT + POPUP_RISE * e), w, POPH, shear);
+            rightPx - w * (0.02 + 0.06 * e), h * (0.5 + POPUP_LIFT + POPUP_RISE * e), w, POPH);
         }
         gl.viewport(x, y, w, h);
         gl.scissor(x, y, w, h);

@@ -99,18 +99,26 @@ precision mediump float;
 `;
 
 /**
- * The shear, in tangent form: x is displaced by this much per unit of height.
- * ~18°.
+ * The cut corner, as a multiple of the bar's half-height, and how far inside
+ * the quad's right edge the readout is anchored, in whole bar heights.
  *
- * Exported rather than written into the GLSL as a literal because the numerals
- * have to lean by exactly the same amount, and they are laid out in JS. A bar
- * and a readout that disagree by two degrees do not look like a two-degree
- * error — they look like two people drew them.
+ * They are exported and paired for the same reason the shear used to be: the
+ * bar is drawn in GLSL and the numerals are laid out in JS, and the readout has
+ * to clear the corner the bar takes out of itself. Get them out of step and the
+ * digits sit *on* the diagonal — which does not read as a two-pixel error, it
+ * reads as two people having drawn the same bar.
+ *
+ * The inset is derived, not guessed: the cut's edge at the top of the numerals
+ * is BODY_INSET + CUT * heroHalf - capHeight/2 from the quad edge, and this is
+ * that with a little air. `tools/resource-bar-check.mjs` recomputes it.
  */
-export const SKEW = 0.32;
+export const CUT = 1.05;
+export const BODY_INSET = 0.235;
+export const READOUT_INSET = 0.54;
 
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + `
-const float SKEW = ` + SKEW.toFixed(4) + `;` + `
+const float CUT = ` + CUT.toFixed(4) + `;
+const float BODY_INSET = ` + BODY_INSET.toFixed(4) + `;` + `
 varying vec2 vTextureCoord;
 
 uniform float uTime;
@@ -180,6 +188,20 @@ float sdBox(vec2 p, vec2 b) {
   return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
 
+/* The same box with one corner taken off, top-right.
+
+   This is the suite mark — the corner gl-tokens.css cuts out of every panel —
+   and it is what carries the family identity now that the bar is axis-aligned.
+   A cut corner is a mark; the shear it replaces was a costume, and one that
+   made the bar disagree with every other rectangle on the canvas.
+
+   Note p and not abs(p): mirroring would cut all four corners and turn an
+   instrument with a front and a back into a lozenge. */
+float sdCut(vec2 p, vec2 b, float c) {
+  float k = (b.x + b.y - c) * 0.7071068;
+  return max(sdBox(p, b), dot(p, vec2(0.7071068)) - k);
+}
+
 /* ── OKLab → sRGB ────────────────────────────────────────────────────────
    The forward transform happens in JS (features/resource-bars/ramp.mjs) so the
    shader pays only for this inverse, once. */
@@ -232,16 +254,16 @@ void main(void) {
      The quad is bigger than the bar. The body is inset on every side, which
      leaves the margin the additive bloom needs — light that stops dead at the
      quad edge is the single clearest tell that something was drawn rather than
-     lit. The margin also absorbs the shear. */
-  float padY = mix(0.21, 0.18, hero);
-  vec2 bb = vec2(b.x - 0.30, b.y - padY);
+     lit.
 
-  /* The shear. Nothing in this HUD is a rectangle; one transform does more for
-     the read than any amount of shading, and it has to be *consistent* — body,
-     trough, cap, pip and segment gaps all lean by the same amount or the whole
-     thing looks like an accident. */
-  vec2 q = vec2(p.x - p.y * SKEW, p.y);
-  float hb = clamp(q.y / max(bb.y, 0.0001), -1.0, 1.0);
+     The horizontal inset used to be 0.30, and a third of that was headroom for
+     the shear: a body leaning by 0.32 per unit of height overhangs its own box
+     by half that on each side. With the bar axis-aligned that headroom is free
+     length, and length is the one dimension a resource bar is read with. */
+  float padY = mix(0.21, 0.18, hero);
+  vec2 bb = vec2(b.x - BODY_INSET, b.y - padY);
+
+  float hb = clamp(p.y / max(bb.y, 0.0001), -1.0, 1.0);
 
   /* Three separated layers, not one welded frame: stroke, air, trough, lip,
      fill. The gaps are the point — a stroke that touches its trough is a
@@ -250,7 +272,9 @@ void main(void) {
   float air = 0.058;
   float lip = 0.032;
 
-  float dBody   = sdBox(q, bb);
+  /* The cut is proportional to the bar, not absolute: a fixed one is a nick on
+     a gargantuan creature's bar and half the end of a familiar's. */
+  float dBody   = sdCut(p, bb, bb.y * CUT);
   float dTrough = dBody + sw + air;
 
   /* Nothing animates the geometry. Not the frame, not the fill's height. An
@@ -337,8 +361,8 @@ void main(void) {
      field of soft blobs, which at a glance is indistinguishable from uneven
      lighting; the fine layer riding on the coarse one is what makes it read as
      matter with structure. Six sines, no texture fetch. */
-  vec2 wq = q + vec2(sin(q.y * 3.10 + uTime * 0.55) * 0.13,
-                     sin(q.x * 2.70 - uTime * 0.43) * 0.09);
+  vec2 wq = p + vec2(sin(p.y * 3.10 + uTime * 0.55) * 0.13,
+                     sin(p.x * 2.70 - uTime * 0.43) * 0.09);
   float c1 = 0.5 + 0.5 * sin(wq.x * 5.60 + uTime * 0.80) * sin(wq.y * 4.00 - uTime * 0.62);
   vec2 wq2 = wq + vec2(sin(wq.y * 6.30 - uTime * 0.90) * 0.06,
                        sin(wq.x * 5.10 + uTime * 0.70) * 0.05);
@@ -373,7 +397,7 @@ void main(void) {
   float segMask = 1.0;
   if (uSeg > 0.5) {
     float segW = span / uSeg;
-    float sx = fract(clamp((q.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
+    float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
     /* Thin — but thin measured in *device pixels*, not in geometry units.
        A fixed 0.036 here is 2.1px on a retina display and 0.68px on an ordinary
        one, where rbDetail correctly deletes it: the divisions, and with them
@@ -390,10 +414,10 @@ void main(void) {
   /* The same divisions, whispered across the empty trough: without them the
      spent half of the bar has no scale on it, and how much room is left has to
      be estimated rather than read. */
-  float troughDiv = (1.0 - segMask) * mFillA * (1.0 - rbEdge(fillX + px, fillX - px, q.x));
+  float troughDiv = (1.0 - segMask) * mFillA * (1.0 - rbEdge(fillX + px, fillX - px, p.x));
 
-  float mFill  = mFillA * rbEdge(fillX + px, fillX - px, q.x) * segMask;
-  float mGhost = mFillA * rbEdge(ghostX + px, ghostX - px, q.x) * segMask * (1.0 - mFill);
+  float mFill  = mFillA * rbEdge(fillX + px, fillX - px, p.x) * segMask;
+  float mGhost = mFillA * rbEdge(ghostX + px, ghostX - px, p.x) * segMask * (1.0 - mFill);
 
   /* ── The chip trail ────────────────────────────────────────────────────
      The span that was just lost. It is cut white-hot and cools over its own
@@ -401,7 +425,7 @@ void main(void) {
      the instant it is cut and half a second later carries no information about
      *when* — which, in a round where three things hit the same creature, is the
      only thing that tells the three apart. */
-  float chipT = clamp((ghostX - q.x) / max(ghostX - fillX, 0.0001), 0.0, 1.0);
+  float chipT = clamp((ghostX - p.x) / max(ghostX - fillX, 0.0001), 0.0, 1.0);
   vec3 ghostCol = mix(mix(base, vec3(1.0), 0.52) * 0.62,
                       vec3(1.40, 1.02, 0.86), uChip * chipT * 0.72);
 
@@ -413,28 +437,28 @@ void main(void) {
      Pattern is what sells it: colour alone just makes a second fill. */
   float tempX = mix(fx0, fx1, clamp(uTemp, 0.0, 1.0));
   float tempOn = step(0.001, uTemp) * hero;
-  float mTempArea = mFillA * rbEdge(tempX + px, tempX - px, q.x)
+  float mTempArea = mFillA * rbEdge(tempX + px, tempX - px, p.x)
                   * rbEdge(-0.86, -0.66, hb) * rbEdge(0.88, 0.68, hb) * tempOn;
 
   /* Two crossed diagonal families make diamond scales. The lattice is drawn in
      the shield plate itself rather than over the whole bar, so it stops exactly
      where the shield does. */
   float sc = 0.185;
-  float l1 = abs(fract((q.x * 1.0 + q.y * 2.05) / sc) - 0.5);
-  float l2 = abs(fract((q.x * 1.0 - q.y * 2.05) / sc) - 0.5);
+  float l1 = abs(fract((p.x * 1.0 + p.y * 2.05) / sc) - 0.5);
+  float l2 = abs(fract((p.x * 1.0 - p.y * 2.05) / sc) - 0.5);
   float lattice = smoothstep(0.30, 0.50, max(l1, l2)) * rbDetail(sc * 0.5);
 
   /* A slow shimmer travelling along it, so it reads as held rather than
      painted. */
-  float shimmer = 0.5 + 0.5 * sin(q.x * 5.5 - uTime * 1.9);
+  float shimmer = 0.5 + 0.5 * sin(p.x * 5.5 - uTime * 1.9);
 
   /* ── The leading edge ──────────────────────────────────────────────────*/
-  float headIn = rbGauss(q.x - fillX, 0.055 + 0.11 * uBloom) * mFillA;
+  float headIn = rbGauss(p.x - fillX, 0.055 + 0.11 * uBloom) * mFillA;
   vec3 headCol = mix(base, vec3(1.0), 0.60 + 0.35 * uBloom);
 
   /* ── The specular sweep ────────────────────────────────────────────────*/
   float sweepX = mix(fx0 - 0.9, fx1 + 0.9, fract(uTime * 0.30));
-  float sweep = rbGauss(q.x - sweepX, 0.15) * mFill * uSweep;
+  float sweep = rbGauss(p.x - sweepX, 0.15) * mFill * uSweep;
 
   /* ── Stroke, cap, pip ──────────────────────────────────────────────────
      The furniture. A solid plate anchoring the left end and a detached pip past
@@ -449,9 +473,9 @@ void main(void) {
      milled out of it and a lit top edge. One inset is the whole difference
      between a part and a rectangle — a solid block of gold reads as a swatch,
      and a swatch reads as placeholder art. */
-  float capCx = -b.x + 0.185;
-  float dCapOut = sdBox(vec2(q.x - capCx, q.y), vec2(0.115, bb.y + 0.055));
-  float dCapIn  = sdBox(vec2(q.x - capCx, q.y), vec2(0.042, bb.y * 0.52));
+  float capCx = -b.x + 0.140;
+  float dCapOut = sdBox(vec2(p.x - capCx, p.y), vec2(0.098, bb.y + 0.055));
+  float dCapIn  = sdBox(vec2(p.x - capCx, p.y), vec2(0.036, bb.y * 0.52));
   float mCap = rbCover(dCapOut) * hero;
   float mCapIn = rbCover(dCapIn) * hero;
   vec3 capCol = mix(vec3(0.115, 0.135, 0.19), GOLD * 0.92, smoothstep(-0.95, 0.70, hb));
@@ -461,8 +485,8 @@ void main(void) {
 
   /* Two pips of unequal height rather than one slab. Asymmetry at the tail is
      what stops the eye reading the bar as a symmetrical widget. */
-  float mPip = rbCover(sdBox(vec2(q.x - (b.x - 0.135), q.y), vec2(0.040, bb.y * 0.62))) * hero;
-  mPip = max(mPip, rbCover(sdBox(vec2(q.x - (b.x - 0.030), q.y), vec2(0.028, bb.y * 0.30))) * hero);
+  float mPip = rbCover(sdBox(vec2(p.x - (b.x - 0.148), p.y), vec2(0.036, bb.y * 0.62))) * hero;
+  mPip = max(mPip, rbCover(sdBox(vec2(p.x - (b.x - 0.056), p.y), vec2(0.025, bb.y * 0.30))) * hero);
 
   /* Register marks stepping outside the body at the quarters — the detail that
      says this was laid out on an instrument rather than drawn as a box. They
@@ -470,7 +494,7 @@ void main(void) {
   float tickMark = 0.0;
   for (int k = 1; k < 4; k++) {
     float tx = mix(fx0, fx1, float(k) * 0.25);
-    tickMark += rbBand(q.x - tx, 0.022) * rbBand(q.y + bb.y + 0.085, 0.055);
+    tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
   tickMark *= rbDetail(0.048) * hero;
 
@@ -509,7 +533,7 @@ void main(void) {
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-    float wd = (q.x - wx) * dir;                 /* < 0 behind the front */
+    float wd = (p.x - wx) * dir;                 /* < 0 behind the front */
 
     vec3 waveCol = mix(vec3(1.00, 0.17, 0.12), vec3(0.26, 1.00, 0.48), uHeal);
     vec3 hotCol  = mix(vec3(1.00, 0.60, 0.40), vec3(0.74, 1.00, 0.82), uHeal);
@@ -556,7 +580,7 @@ void main(void) {
   C += uTempCol * rbBand(hb - 0.70, 0.07) * mTempArea * 0.85;
   C += uTempCol * rbBand(hb + 0.70, 0.06) * mTempArea * 0.35;
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
-  C += uTempCol * rbGauss(q.x - tempX, 0.045) * mFillA * tempOn * 1.9;
+  C += uTempCol * rbGauss(p.x - tempX, 0.045) * mFillA * tempOn * 1.9;
   C += headCol * headIn * (0.85 + 1.5 * uBloom);
   C += vec3(0.62, 0.74, 0.96) * sweep * 0.34;
 
@@ -570,9 +594,9 @@ void main(void) {
      only size this is ever drawn at, plus a drop in value and saturation, both
      of which survive any size at all. */
   if (uRole > 1.5 && uCracked > 0.001) {
-    float c = rbBand(q.x * 0.9 + q.y * 2.1 + 0.35, 0.055)
-            + rbBand(q.x * 0.9 - q.y * 1.7 - 0.90, 0.045)
-            + rbBand(q.x * 0.9 + q.y * 2.4 - 2.10, 0.050);
+    float c = rbBand(p.x * 0.9 + p.y * 2.1 + 0.35, 0.055)
+            + rbBand(p.x * 0.9 - p.y * 1.7 - 0.90, 0.045)
+            + rbBand(p.x * 0.9 + p.y * 2.4 - 2.10, 0.050);
     c *= mTrough * uCracked;
     C = mix(C, INK0, clamp(c, 0.0, 1.0) * 0.90);
     C = mix(C, vec3(dot(C, vec3(0.299, 0.587, 0.114))) * 0.72, uCracked * 0.65);
@@ -588,7 +612,7 @@ void main(void) {
      downstream keeps only what exceeds 1.0, so anything meant to bloom has to
      be emitted as light, not as a pale colour. */
   if (uHit > 0.001) {
-    vec2 hp = vec2(q.x - mix(fx0, fx1, uHitX), q.y * 1.55);
+    vec2 hp = vec2(p.x - mix(fx0, fx1, uHitX), p.y * 1.55);
     float r = length(hp);
     float radius = (1.0 - uHit) * 1.05;
     vec3 hitCol = mix(vec3(1.00, 0.42, 0.34), vec3(0.55, 1.00, 0.72), uHeal);
@@ -625,7 +649,7 @@ void main(void) {
      over: held through the hitstop it turns the whole bar white for 55ms, which
      buries the readout and the trail exactly when they are the two things worth
      looking at, and it says "the HUD blinked" rather than "it was hit there". */
-  C += vec3(1.0, 0.92, 0.86) * uFlash * 1.25 * rbGauss(q.x - fillX, 0.060) * mFillA;
+  C += vec3(1.0, 0.92, 0.86) * uFlash * 1.25 * rbGauss(p.x - fillX, 0.060) * mFillA;
 
   /* The chrome breathes on the same slow clock as the fill. Two red pulses at
      different rates read as two unrelated warnings rather than as one state. */
@@ -655,8 +679,8 @@ void main(void) {
      is the contact light immediately against the body, which a low-resolution
      blur cannot resolve. */
   vec3 glowCol = mix(base, vec3(1.00, 0.16, 0.20), uLow * 0.85);
-  float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, q.x) * 0.22;
-  glow += exp(-outside / 0.045) * exp(-abs(q.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
+  float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, p.x) * 0.22;
+  glow += exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
   glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
   glow *= outMask * mix(0.45, 1.0, hero);
   outC += glowCol * glow * 0.75;
