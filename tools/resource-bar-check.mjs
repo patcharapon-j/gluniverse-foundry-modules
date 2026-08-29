@@ -245,6 +245,32 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("the readout and the delta cache on their size, not only on their text");
 }
 
+/* ── 7d3. The GM override cannot widen what a player may see ────────────── */
+{
+  /* This is the one addition to this feature that could leak hit points. The
+     override picks *when* the readout is drawn; canViewNumbers decides whether
+     this client may see the bar at all, and it has to keep doing that first. An
+     override applied inside visibility.mjs, or a canViewNumbers that consulted
+     the mode before the permission, would let a forced "always" print a
+     hostile's hit points on every player's screen and look entirely correct. */
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const vis = strip(await src("scripts/features/resource-bars/visibility.mjs"));
+
+  const body = vis.slice(vis.indexOf("export function canViewNumbers"));
+
+  if (!/numbersForce/.test(mainSrc))
+    fail("Nothing resolves the numbersForce override, so the GM's setting is registered and then ignored.");
+  else if (/numbersForce/.test(vis) || /isGM/.test(body))
+    fail("The readout override has leaked into canViewNumbers; the permission gate must not know about it, or the two rules can drift apart.");
+  else {
+    const bars = body.indexOf("canViewBars");
+    const always = body.indexOf('"always"');
+    if (bars < 0 || always < 0 || bars > always)
+      fail('canViewNumbers reads the mode before it calls canViewBars, so a forced readout escapes the displayBars gate.');
+    else ok("a forced readout is still refused by displayBars before the mode is read");
+  }
+}
+
 /* ── 7e. The readout's scale sits on the reading's baseline ─────────────── */
 {
   /* Bottom alignment is measured against the *ink*, not the glyph cell. The

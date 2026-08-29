@@ -29,6 +29,25 @@ const clampScale = (v) => {
   return Math.min(READOUT.max, Math.max(READOUT.min, n));
 };
 
+/**
+ * When the numeric readout is drawn on *this* client.
+ *
+ * The world setting overrides the player's own, and the GM keeps theirs: the
+ * GM is the one who set the override, and running a table means reading many
+ * tokens at once, which is a different job from playing one character.
+ *
+ * Whatever comes back is a ceiling on *when*, never on *what* — the mode is
+ * consulted by canViewNumbers only after the token's Display Bars have already
+ * allowed this client to see the bar at all. A forced "always" therefore cannot
+ * reveal a hostile's hit points; it can only stop a player having to hover.
+ */
+function numbersMode() {
+  const own = get(SETTINGS.numbers, "hover");
+  if (game.user?.isGM) return own;
+  const forced = get(SETTINGS.numbersForce, "player");
+  return forced === "player" ? own : forced;
+}
+
 /** Everything the renderer reads, resolved from settings in one place. */
 function currentOptions() {
   const tier = get(SETTINGS.motionTier, MOTION_TIER_DEFAULT);
@@ -45,7 +64,7 @@ function currentOptions() {
     offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,
     motionScale: MOTION_SCALE[tier] ?? MOTION_SCALE[MOTION_TIER_DEFAULT],
     ramp: get(SETTINGS.ramp, "default"),
-    numbers: get(SETTINGS.numbers, "hover"),
+    numbers: numbersMode(),
     numberScale: clampScale(get(SETTINGS.numberScale, 1)),
   };
 }

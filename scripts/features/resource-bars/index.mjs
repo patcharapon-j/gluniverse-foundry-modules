@@ -54,6 +54,25 @@ function registerSettings() {
     default: 5,
   });
 
+  /* The GM's say over the readout. It overrides each player's own choice
+     rather than replacing the setting, so turning it back to "let each player
+     choose" restores whatever they had picked. It cannot widen what a player is
+     allowed to see: canViewNumbers consults the token's Display Bars first and
+     the mode second, so a forced "always" still draws nothing on a token whose
+     bars that player cannot see. */
+  world(SETTINGS.numbersForce, {
+    name: "GLRB.Settings.NumbersForce.Name",
+    hint: "GLRB.Settings.NumbersForce.Hint",
+    type: String,
+    choices: {
+      player: "GLRB.Settings.NumbersForce.Player",
+      hover: "GLRB.Settings.NumbersForce.Hover",
+      always: "GLRB.Settings.NumbersForce.Always",
+      never: "GLRB.Settings.NumbersForce.Never",
+    },
+    default: "player",
+  });
+
   world(SETTINGS.lowThreshold, {
     name: "GLRB.Settings.LowThreshold.Name",
     hint: "GLRB.Settings.LowThreshold.Hint",

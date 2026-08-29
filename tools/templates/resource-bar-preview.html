@@ -81,6 +81,11 @@ h2::after{content:""; flex:1; height:1px; background:var(--line)}
 }
 .play .slot{height:58px; margin-bottom:18px}
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+table.perm{border-collapse:collapse; margin:14px 0 0; font-size:12.5px; max-width:760px}
+table.perm th,table.perm td{border:1px solid var(--line); padding:7px 12px; text-align:left}
+table.perm th{color:var(--text); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase}
+table.perm td{color:var(--text)}
+table.perm td.no{color:var(--text-dim); font-style:italic}
 button{
   font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.06em;
   text-transform:uppercase; color:var(--text); cursor:pointer;
@@ -193,6 +198,22 @@ input[type=range]{padding:0; width:230px}
     size the bar&rsquo;s own height gives, so the readout stays in proportion on every grid size
     and zoom rather than being pinned to a pixel count that only suits one scene.</p>
   <div class="grid" id="row-read"></div>
+
+  <p class="note">When it is drawn is a separate question, and one the GM can settle for the table:
+    <b style="color:var(--text)">Force value display for players</b> overrides each player&rsquo;s own
+    choice without replacing it, so setting it back restores what they had picked. It cannot widen
+    what anyone may see. <i>canViewNumbers</i> refuses on the token&rsquo;s own Display Bars before it
+    ever looks at the mode, so the right-hand column below stays empty at every setting &mdash; which
+    is the one thing in this feature that would leak hit points while looking entirely correct.</p>
+  <table class="perm">
+    <thead><tr><th>Setting</th><th>Display Bars permits this player</th><th>Display Bars hides it</th></tr></thead>
+    <tbody>
+      <tr><td>Let each player choose</td><td>their own choice</td><td class="no">nothing</td></tr>
+      <tr><td>On hover or selection</td><td>on hover or selection</td><td class="no">nothing</td></tr>
+      <tr><td>Always</td><td>always</td><td class="no">nothing</td></tr>
+      <tr><td>Never</td><td class="no">nothing</td><td class="no">nothing</td></tr>
+    </tbody>
+  </table>
 
   <h2>Colour-blind ramp</h2>
   <p class="note">The opt-in client setting: blue→cyan→yellow→orange abandons the red/green axis

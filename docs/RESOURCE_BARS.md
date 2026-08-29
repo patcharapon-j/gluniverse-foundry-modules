@@ -225,11 +225,10 @@ number.
 
 The baseline matters because a run where every part is separately centred reads
 as three sizes of number rather than as one reading with its scale beside it.
-Alignment is measured against the **ink**, not the
-glyph cell: the atlas bakes with `textBaseline "middle"`, so lining the cells up
-leaves the ink a couple of pixels out, which at this size reads as a mistake.
-`runGeometry` takes the offset from `actualBoundingBoxDescent`, measured once
-when the atlas is built.
+Alignment is measured against the **ink**, not the glyph cell: the atlas bakes
+with `textBaseline "middle"`, so lining the cells up leaves the ink a couple of
+pixels out, which at this size reads as a mistake. `runGeometry` takes the
+offset from `actualBoundingBoxDescent`, measured once when the atlas is built.
 
 **Size is the viewer's**, as a multiplier on what the bar's own height gives
 rather than as a pixel count. Every other dimension here is derived from the
@@ -294,6 +293,16 @@ it exists, rather than reimplementing the rule, so it cannot drift from core.
 The numeric readout is gated *more* narrowly still: a number is a more precise
 disclosure than a length, so it can be turned down but never up.
 
+**The GM's override rides on top of that gate, never around it.** Players choose
+when their own readout appears; a world setting can overrule that choice for the
+table, and the GM keeps their own. It is resolved in `main.mjs`, where the rest
+of the settings are resolved, and `visibility.mjs` is deliberately kept ignorant
+of it: `canViewNumbers` refuses on `canViewBars` **before** it reads the mode, so
+a forced `"always"` still draws nothing on a token whose bars that player cannot
+see. Resolving the override inside the permission file, or reordering those two
+tests, would print a hostile's hit points on every player's screen and look
+entirely correct doing it. `resource-bar-check` pins both.
+
 Foundry's bars are suppressed with `renderable = false`, never `visible = false`
 — `visible` is the permission answer this feature reads.
 
@@ -357,8 +366,10 @@ channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
 per-token offset still means "inherit" rather than "zero", that value and
 maximum still differ by size alone, that the readout's geometry cache is keyed on
-its size so the size setting is not silently inert, that the shear has one home, and that
-every detail gate still resolves at the reference size. With Playwright present
+its size so the size setting is not silently inert, that the GM's readout
+override never reaches the permission gate and never outruns `displayBars`, that
+the shear has one home, and that every detail gate still resolves at the
+reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 
 ```bash

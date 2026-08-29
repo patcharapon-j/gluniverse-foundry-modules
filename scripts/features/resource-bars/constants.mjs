@@ -16,6 +16,7 @@ export const SETTINGS = Object.freeze({
   segmentMode: PREFIX + "segmentMode",     // "count" | "perHp"
   segments: PREFIX + "segments",           // divisions across the fill, 0 = continuous
   segmentSize: PREFIX + "segmentSize",     // HP per division, when mode is perHp
+  numbersForce: PREFIX + "numbersForce",   // player | hover | always | never
   lowThreshold: PREFIX + "lowThreshold",   // percent at which the low state engages
   floatingDeltas: PREFIX + "floatingDeltas",
   pf2eLayers: PREFIX + "pf2eLayers",       // temp-HP shield plate + shield rail
