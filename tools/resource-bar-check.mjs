@@ -228,6 +228,23 @@ const tokensCss = await src("styles/gl-tokens.css");
   else ok("value and maximum differ by size alone, at one ink and one opacity");
 }
 
+/* ── 7d2. The readout's size setting actually takes effect ──────────────── */
+{
+  /* The run's geometry is cached, and the cache key is what decides whether a
+     setting does anything. Key it on the label alone and the size slider moves,
+     nothing happens, and the new size appears minutes later when the creature
+     next takes damage — which reads as the setting being broken rather than as
+     a stale cache. The same key is what re-sizes a resized token's readout. */
+  const h = strip(hostSrc);
+  if (!/numberScale/.test(h))
+    fail("host.mjs never reads numberScale, so the readout size setting does nothing.");
+  else if (!/lastNumber\s*=\s*stamp/.test(h) || !/stamp\s*=[^;]*numScale/.test(h))
+    fail("The readout's geometry cache is not keyed on its size, so changing the size setting leaves the old geometry until the value next changes.");
+  else if (!/popupText\s*=\s*popStamp/.test(h) || !/popStamp\s*=[^;]*numScale/.test(h))
+    fail("The floating delta's cache is not keyed on its size, so it keeps whatever size it was first drawn at.");
+  else ok("the readout and the delta cache on their size, not only on their text");
+}
+
 /* ── 7e. The readout's scale sits on the reading's baseline ─────────────── */
 {
   /* Bottom alignment is measured against the *ink*, not the glyph cell. The

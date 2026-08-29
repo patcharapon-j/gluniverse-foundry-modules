@@ -30,6 +30,8 @@
   "GLRB.Settings.Ramp.Hint": "The default ramp runs green to red. The colour-blind-safe ramp runs blue to orange instead, avoiding the red/green axis entirely.",
   "GLRB.Settings.Ramp.Default": "Default (green to red)",
   "GLRB.Settings.Ramp.Safe": "Colour-blind safe (blue to orange)",
+  "GLRB.Settings.NumberScale.Name": "Value text size",
+  "GLRB.Settings.NumberScale.Hint": "Scales the numeric readout and the floating damage numbers. 1 is the size the bar's own height gives, so the readout stays in proportion on scenes with different grid sizes. Yours alone; it changes nothing for anyone else.",
   "GLRB.Settings.Numbers.Name": "Show values",
   "GLRB.Settings.Numbers.Hint": "When the numeric readout is drawn. This can never show more than the token's own Display Bars setting already permits — if the GM has hidden a token's bars from you, no number appears.",
   "GLRB.Settings.Numbers.Hover": "On hover or selection",

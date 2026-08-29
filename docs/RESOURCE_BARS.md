@@ -231,6 +231,21 @@ leaves the ink a couple of pixels out, which at this size reads as a mistake.
 `runGeometry` takes the offset from `actualBoundingBoxDescent`, measured once
 when the atlas is built.
 
+**Size is the viewer's**, as a multiplier on what the bar's own height gives
+rather than as a pixel count. Every other dimension here is derived from the
+scene's grid, so an absolute size that reads correctly on a 100px-grid scene is
+a smudge or a banner on a 70px one and the whole stack needs re-tuning per
+scene; a multiplier holds its proportion at every grid size and zoom. The
+floating delta scales with it — they are one readout.
+
+The trap is the cache. Geometry is rebuilt only when its inputs change, and the
+obvious key is the label text, which is exactly what a size setting does *not*
+change. Keyed that way the slider moves, nothing happens, and the new size
+appears minutes later when the creature next takes damage, which reads as a
+broken setting rather than as a stale cache. `writeNumbers` keys on the resolved
+size and the row width as well as on the text; the same key is what re-sizes a
+readout when its token is resized.
+
 ---
 
 ## Hot and cold
@@ -341,7 +356,8 @@ that no `SHED_ORDER` entry is dead, that the hitstop actually holds every
 channel and then releases, that the readout counts rather than snapping, that
 the bar container still sorts above the token furniture, that an emptied
 per-token offset still means "inherit" rather than "zero", that value and
-maximum still differ by size alone, that the shear has one home, and that
+maximum still differ by size alone, that the readout's geometry cache is keyed on
+its size so the size setting is not silently inert, that the shear has one home, and that
 every detail gate still resolves at the reference size. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 

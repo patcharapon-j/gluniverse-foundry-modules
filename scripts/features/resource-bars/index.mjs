@@ -1,7 +1,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { FEATURE_ID, OFFSET, PREFIX, SEGMENTS, SETTINGS } from "./constants.mjs";
+import { FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -120,6 +120,14 @@ function registerSettings() {
     type: String,
     choices: { default: "GLRB.Settings.Ramp.Default", safe: "GLRB.Settings.Ramp.Safe" },
     default: "default",
+  });
+
+  client(SETTINGS.numberScale, {
+    name: "GLRB.Settings.NumberScale.Name",
+    hint: "GLRB.Settings.NumberScale.Hint",
+    type: Number,
+    range: { min: READOUT.min, max: READOUT.max, step: READOUT.step },
+    default: 1,
   });
 
   client(SETTINGS.numbers, {

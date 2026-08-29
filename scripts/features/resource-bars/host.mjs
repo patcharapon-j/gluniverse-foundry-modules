@@ -601,6 +601,7 @@ class BarHost {
        Only its own scale and colour animate — the punch is the number
        reacting, not the bar being thrown around. */
     const w = base.w, h = base.h;
+    const numScale = this.opts.numberScale > 0 ? this.opts.numberScale : 1;
     const right = w * (((w / h) - 0.40) / (w / h));
     const mid = h * 0.5;
     const anchorX = hm.position.x + right;
@@ -613,8 +614,14 @@ class BarHost {
     const value = Math.round((a ? a.num : r.hero.frac) * r.hero.max);
     const label = value + "/" + r.hero.max;
 
-    if (label !== entry.lastNumber || !entry.textMesh) {
-      entry.lastNumber = label;
+    /* Cached against everything that shapes the run, not only its text. Size
+       comes from the bar's height and the viewer's setting, and neither of
+       those changes the label — so a key of the label alone leaves a resized
+       token, or a just-moved size slider, drawing the old geometry until the
+       creature next takes damage. It looks like the setting does nothing. */
+    const stamp = label + "@" + (h * numScale).toFixed(2) + ":" + w.toFixed(1);
+    if (stamp !== entry.lastNumber || !entry.textMesh) {
+      entry.lastNumber = stamp;
       /* The current value is the reading; the maximum is the scale it is read
          against. The hierarchy between them is carried by size alone — same
          ink, same opacity, one smaller than the other — so the run reads as one
@@ -623,9 +630,9 @@ class BarHost {
          because a run where every part is separately centred reads as three
          sizes of number instead of as one reading. */
       const geo = runGeometry([
-        { text: String(value), size: h * 0.46 },
-        { text: "/", size: h * 0.23, bottom: true },
-        { text: String(r.hero.max), size: h * 0.24, bottom: true },
+        { text: String(value), size: h * 0.46 * numScale },
+        { text: "/", size: h * 0.23 * numScale, bottom: true },
+        { text: String(r.hero.max), size: h * 0.24 * numScale, bottom: true },
       ], { right, mid, skew: SKEW });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       /* Pivot on the run's own anchor so the punch scales about the number
@@ -656,9 +663,10 @@ class BarHost {
       return;
     }
 
-    if (pop.text !== entry.popupText || !entry.popupMesh) {
-      entry.popupText = pop.text;
-      const geo = runGeometry([{ text: pop.text, size: h * 0.44 }], { right, mid, skew: SKEW });
+    const popStamp = pop.text + "@" + (h * numScale).toFixed(2);
+    if (popStamp !== entry.popupText || !entry.popupMesh) {
+      entry.popupText = popStamp;
+      const geo = runGeometry([{ text: pop.text, size: h * 0.44 * numScale }], { right, mid, skew: SKEW });
       entry.popupMesh = this.swapTextMesh(entry, entry.popupMesh, geo,
         pop.heal ? HEAL_INK : HIT_INK, 1);
       entry.popupMesh?.pivot.set(right, mid);

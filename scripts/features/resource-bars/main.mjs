@@ -11,13 +11,22 @@
 import { SUITE_ID, log, warn } from "../../core/const.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
-import { SETTINGS } from "./constants.mjs";
+import { READOUT, SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
 
 const get = (key, fallback) => {
   try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
+};
+
+/* Clamped here rather than trusted from the setting: the range is advisory in
+   Foundry's UI, and a world edited by hand or migrated from an older key can
+   hold anything. A 0 would collapse the readout to nothing with no error. */
+const clampScale = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(READOUT.max, Math.max(READOUT.min, n));
 };
 
 /** Everything the renderer reads, resolved from settings in one place. */
@@ -37,6 +46,7 @@ function currentOptions() {
     motionScale: MOTION_SCALE[tier] ?? MOTION_SCALE[MOTION_TIER_DEFAULT],
     ramp: get(SETTINGS.ramp, "default"),
     numbers: get(SETTINGS.numbers, "hover"),
+    numberScale: clampScale(get(SETTINGS.numberScale, 1)),
   };
 }
 

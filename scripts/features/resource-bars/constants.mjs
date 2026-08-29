@@ -27,6 +27,7 @@ export const SETTINGS = Object.freeze({
   motionTier: PREFIX + "motionTier",       // default | reduced | none
   ramp: PREFIX + "ramp",                   // default | safe
   numbers: PREFIX + "numbers",             // hover | always | never
+  numberScale: PREFIX + "numberScale",     // readout size, × the bar-derived default
 });
 
 /**
@@ -84,3 +85,14 @@ export const OFFSET = Object.freeze({ min: -3, max: 3, step: 0.05 });
  * gap than plate long before the fade takes over.
  */
 export const SEGMENTS = Object.freeze({ max: 60, sizeMin: 1, sizeMax: 100 });
+
+/**
+ * Readout size limits, as a multiplier on the size the bar's own height gives.
+ *
+ * A multiplier and not a pixel size: every other dimension in this feature is
+ * derived from the scene's grid, so an absolute size that reads correctly on a
+ * 100px-grid scene is either a smudge or a banner on a 70px one, and the whole
+ * stack would need re-tuning per scene. Scaling the derived size keeps the
+ * readout in proportion to the bar it belongs to at every zoom and grid size.
+ */
+export const READOUT = Object.freeze({ min: 0.6, max: 2, step: 0.05 });
