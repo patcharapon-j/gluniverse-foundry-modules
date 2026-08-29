@@ -123,18 +123,34 @@ input[type=range]{padding:0; width:230px}
 
   <h2>Health ladder</h2>
   <p class="note">A 4-stop ramp interpolated in OKLab, so the green→yellow half never passes
-    through olive. The bar is assembled from discrete plates with real gaps, so position reads as a second channel
-    for health. Below 25% the stroke takes on the low-health pulse, the bloom turns hazard-red and a
-    diagonal hatch fades into the fill — health encoded three ways that are not hue.</p>
+    through olive, sampled through a curve so red arrives while it still matters rather than in the
+    last few percent. The bar is assembled from discrete plates with real gaps, so position reads as a
+    second channel for health. Below 25% the fill goes to an arterial red no ramp stop reaches and
+    takes on a slow breath — a ~4.6s loop with a drifting mottle over it, so the low state is legible
+    without a pattern to look past. The second channel is temporal rather than spatial: the pulse is
+    what you read when you cannot read the hue.</p>
   <div class="grid" id="row-ladder"></div>
 
   <h2>In motion</h2>
-  <p class="note">A value change is an event, not a length. The fill drops instantly and leaves a
-    pale ghost that holds for 180ms then drains over 540ms; a shockwave expands from the point on
-    the bar that moved, throwing spokes ahead of it; the whole quad takes a damped kick; the cap
-    flashes; the readout punches and settles; and the delta floats off as a number you read rather
-    than a magnitude you estimate. Healing runs the same machinery in green.</p>
+  <p class="note">A value change is an event, not a length, and it is a <i>sequence</i>. The fill
+    snaps to the new value and then everything freezes for 55ms — the hitstop is what makes the
+    reaction read as a reaction rather than as the tail of a transition. On release: a front travels
+    the exact span that changed, in the direction it changed, with a hard leading edge and a
+    chevron-textured tail; the fill plate compresses inside its frame and springs back; the chip trail
+    is cut white-hot and cools as it drains; a ring expands from the point that moved, throwing spokes
+    and debris along the bar's axis; the readout counts to the new number in the colour of what
+    happened; and the delta punches in at 1.35× before drifting off.
+    <b style="color:var(--text)">The frame itself never moves.</b> No shake, no scale, no bounce
+    around its anchor — that is the one note that would announce the whole thing as an effect.</p>
   <div class="grid" id="row-motion"></div>
+
+  <h2>The sequence, frozen</h2>
+  <p class="note">The same change, sampled at six points on its own timeline. Each cell is a real
+    <i>BarAnim</i> advanced to that many milliseconds and then stopped, so the strip is the actual
+    curve rather than a drawing of it. Read left to right: the freeze, the release, the front's
+    travel, the trail's drain, the settle.</p>
+  <div class="grid" id="row-seq-hit"></div>
+  <div class="grid" id="row-seq-heal" style="margin-top:22px"></div>
 
   <h2>PF2e layers</h2>
   <p class="note">Temp HP is a shield plate laid over the fill — nearly full height, translucent
@@ -151,7 +167,7 @@ input[type=range]{padding:0; width:230px}
 
   <h2>Scale and zoom</h2>
   <p class="note">The same 62% bar as the quad shrinks — a 128px grid down to a 44px one zoomed out.
-    Bevel, segments and hatch fade out as each stops spanning a device pixel, rather than crawling
+    Bevel, segments and chevrons fade out as each stops spanning a device pixel, rather than crawling
     between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
     8:1 quad.</p>
   <div class="ladder" id="row-scale"></div>
@@ -263,13 +279,14 @@ gl.enable(gl.BLEND);
 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 gl.enable(gl.SCISSOR_TEST);
 
-/* Every uniform, looked up once. A name that does not resolve is reported
-   loudly here rather than silently doing nothing — the exact failure the check
-   tool exists to prevent in the shipped feature. */
+/* Every uniform, looked up once, from the shader module's own UNIFORMS table
+   rather than from a list kept here. A hand-maintained copy drifts the moment a
+   uniform is added: getUniformLocation returns undefined for a name nobody
+   asked for, gl.uniform1f(undefined, x) is a silent no-op, and the new effect
+   simply does not appear in the preview while looking perfectly fine in the
+   source. Which is precisely the failure this page exists to catch. */
 const U = {};
-for (const name of ["uTime","uTexel","uAspect","uFrac","uGhost","uBloom","uFlash","uLow",
-                    "uSweep","uTemp","uCracked","uSeg","uRole","uRamp","uTempCol","uShieldCol","uRailCol",
-                    "uHit","uHitX","uHeal"]) {
+for (const name of /*__UNIFORM_NAMES__*/) {
   U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
 }
 const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
@@ -607,9 +624,11 @@ for (const f of [1, 0.78, 0.5, 0.32, 0.18, 0.06]) {
 }
 
 const motion = document.getElementById("row-motion");
-add(motion, { title: "Damage", sub: "chip trail mid-drain", frac: 0.45, ghost: 0.78, seg: 10, max: 58 });
-add(motion, { title: "Heal", sub: "leading-edge bloom", frac: 0.62, bloom: 1, hit: 0.5, hitX: 0.42, heal: 1, seg: 10, max: 58 });
-add(motion, { title: "Impact", sub: "shockwave + spokes", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
+add(motion, { title: "Damage", sub: "chip trail, freshly cut", frac: 0.45, ghost: 0.78, chip: 0.85, seg: 10, max: 58 });
+add(motion, { title: "Damage wave", sub: "front running back through the trail", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 0.85, waveX: 0.60, seg: 10, max: 58 });
+add(motion, { title: "Heal wave", sub: "front pushing the fill outward", frac: 0.62, bloom: 1, heal: 1, wave: 0.9, waveX: 0.50, seg: 10, max: 58 });
+add(motion, { title: "Impact", sub: "ring, spokes and debris", frac: 0.45, ghost: 0.78, flash: 0.5, hit: 0.62, hitX: 0.45, seg: 10, max: 58 });
+add(motion, { title: "Compression", sub: "spring at peak, frame unmoved", frac: 0.45, ghost: 0.78, shock: 0.62, chip: 1, flash: 1, seg: 10, max: 58 });
 add(motion, { title: "Hover", sub: "specular sweep armed", frac: 0.72, sweep: 1, seg: 10 });
 
 const pf = document.getElementById("row-pf2e");
@@ -627,6 +646,26 @@ const cb = document.getElementById("row-cb");
 for (const f of [1, 0.62, 0.32, 0.12]) {
   add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
 }
+
+/* ── The frozen sequence ──────────────────────────────────────────────────
+   Each cell owns a BarAnim advanced to a fixed point on the timeline with the
+   real step(), then never stepped again. The render loop only advances `live`,
+   so everything here holds. Nothing is a drawing of the curve; it is the
+   curve, sampled. */
+function frozen(row, { from, to, marks, max }) {
+  for (const ms of marks) {
+    const a = new BarAnim(from, { motionScale: 1 });
+    a.step(16);
+    a.set(to, { max });
+    for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
+    const slot = add(row, { title: ms + "ms", sub: "<i>" + (to < from ? "hit" : "heal") + "</i>", seg: 10, max });
+    cells[cells.length - 1].anim = a;
+  }
+}
+frozen(document.getElementById("row-seq-hit"),
+  { from: 0.8, to: 0.45, marks: [0, 55, 140, 300, 520, 820], max: 58 });
+frozen(document.getElementById("row-seq-heal"),
+  { from: 0.35, to: 0.72, marks: [0, 55, 140, 300, 520, 820], max: 58 });
 
 /* The token stage. */
 const stage = document.getElementById("stage");
@@ -716,12 +755,11 @@ function draw(now) {
     const a = c.anim;
     const s = c.spec;
 
-    /* The kick displaces the whole quad. A bar whose *contents* shake while its
-       frame stays put reads as a texture animating; a bar that moves reads as
-       something that was struck. */
-    const kickPx = a ? a.kick : 0;
-
-    const x = Math.round((r.left * dpr + kickPx) * SS);
+    /* The quad never moves. Every part of an impact happens inside it — the
+       fill plate compresses, the wave runs, the ring expands — while the frame
+       stays exactly where the layout put it. A bar that shakes or scales around
+       its own anchor reads as a screen-shake bolted onto a widget. */
+    const x = Math.round(r.left * dpr * SS);
     const y = Math.round((innerHeight - r.bottom) * dpr * SS);
     const w = Math.round(r.width * dpr * SS);
     const h = Math.round(r.height * dpr * SS);
@@ -749,6 +787,11 @@ function draw(now) {
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));
     gl.uniform1f(U.uHeal, a ? a.heal : (s.heal ?? 0));
+    gl.uniform1f(U.uSpark, a ? a.hit : (s.hit ?? 0));
+    gl.uniform1f(U.uChip, a ? a.chip : (s.chip ?? 0));
+    gl.uniform1f(U.uWave, a ? a.wave : (s.wave ?? 0));
+    gl.uniform1f(U.uWaveX, a ? a.waveX : (s.waveX ?? frac));
+    gl.uniform1f(U.uShock, a ? a.shock : (s.shock ?? 0));
     gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
@@ -760,25 +803,46 @@ function draw(now) {
       const rightPx = ((aspect - 0.40) / aspect) * w;
       const shear = SKEW / aspect;
       const punch = 1 + (a ? a.punch : 0);
-      const big = h * 0.44 * punch, small = h * 0.30 * punch;
-      const cur = Math.round(frac * s.max);
+      const big = h * 0.46 * punch, small = h * 0.24 * punch;
+      /* `num`, not `frac`: the fill snaps on impact and the readout counts. */
+      const cur = Math.round((a ? a.num : frac) * s.max);
+      /* Colour follows the event and decays back to white; the maximum is the
+         scale the reading is measured against, so it is smaller and quieter. */
+      const heat = a ? a.hit * 0.70 : 0;
+      const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
+      const rest = [0.97, 0.99, 1.0];
+      const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
-        { text: String(cur), size: big, ink: [0.97, 0.99, 1.0] },
-        { text: "/", size: small, ink: [0.45, 0.52, 0.66] },
-        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82] },
+        { text: String(cur), size: big, ink },
+        { text: "/", size: h * 0.23 * punch, ink: [0.45, 0.52, 0.66], opacity: 0.34 },
+        { text: String(s.max), size: small, ink: [0.62, 0.69, 0.82], opacity: 0.46 },
       ], rightPx, h * 0.5, w, h, shear);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
          has to be legible as a number — "the bar got shorter" is a magnitude
          you estimate, "-35" is one you read. */
-      if (a) {
+      if (a && a.popups.length) {
+        /* Deltas travel above the quad, so they need a viewport that is not the
+           quad. In Foundry the popup is its own mesh in world space and nothing
+           clips it; here the bar's scissor would cut it off at the top edge and
+           the preview would quietly show an effect that does not exist. */
+        const POPH = Math.round(h * 2.6);
+        gl.viewport(x, y, w, POPH);
+        gl.scissor(x, y, w, POPH);
         for (const pop of a.popups) {
           const e = 1 - Math.pow(1 - pop.t, 2.2);
           const alpha = pop.t < 0.15 ? pop.t / 0.15 : 1 - Math.pow((pop.t - 0.15) / 0.85, 2.0);
-          const ink = pop.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
-          drawRun([{ text: pop.text, size: h * 0.40, ink, opacity: Math.max(0, alpha) }],
-            rightPx - w * 0.02, h * (0.62 + POPUP_RISE * e), w, h, shear);
+          const popInk = pop.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
+          /* Punched in, not faded in: it arrives at 1.35×, settles, then drifts
+             back along the bar so consecutive deltas fan out instead of
+             stacking on one another. */
+          const inT = Math.min(1, pop.t / 0.14);
+          const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
+          drawRun([{ text: pop.text, size: h * 0.44 * popScale, ink: popInk, opacity: Math.max(0, alpha) }],
+            rightPx - w * (0.02 + 0.06 * e), h * (0.5 + POPUP_LIFT + POPUP_RISE * e), w, POPH, shear);
         }
+        gl.viewport(x, y, w, h);
+        gl.scissor(x, y, w, h);
       }
     }
   }
@@ -817,8 +881,10 @@ function draw(now) {
   read.innerHTML =
     "value <b>" + pct(live.target) + "</b> &nbsp;·&nbsp; fill <b>" + live.frac.toFixed(3) +
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
-    "</b> &nbsp;·&nbsp; hit <b>" + live.hit.toFixed(2) +
-    "</b> &nbsp;·&nbsp; kick <b>" + live.kick.toFixed(2) + "px</b> &nbsp;·&nbsp; hdr <b>" +
+    "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
+    "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
+    "</b> &nbsp;·&nbsp; shock <b>" + live.shock.toFixed(2) +
+    "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; ticker <b>" + (live.hot ? "hot" : "cold") + "</b>";
 
   document.body.dataset.frames = String((+document.body.dataset.frames || 0) + 1);
