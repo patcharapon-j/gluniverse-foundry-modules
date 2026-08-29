@@ -484,121 +484,62 @@ void main(void) {
   C = mix(C, fillCol, mFill);
 
   /* ── The wave ──────────────────────────────────────────────────────────
-     The loudest thing this bar does, and the only one meant to be caught
-     peripherally. It crosses the *whole* length in the direction the value
-     moved — outward on a heal, back down the bar on a hit.
+     A glowing line crossing the bar in the direction the value moved, with a
+     colour ramp trailing behind it. Outward on a heal, back down the bar on a
+     hit.
 
-     **The bar is a channel seen from above.** Everything else here already
-     assumes that: the fill's specular runs *along* the bar, the trough is a
-     floor rather than a back wall, the shield lattice tiles a plane. A wave
-     drawn side-on — one with a water *level* in it, a lit meniscus at some
-     height with shadow underneath — contradicts every one of those in the same
-     frame, and the eye resolves the contradiction by refusing to read either as
-     a surface. Only one projection can be true of one bar.
+     Deliberately simple. An earlier pass gave this a crest train, slope
+     shading, flow streaks and a domed cross-section, and all of it fought the
+     one thing the effect is for: being read peripherally, in under half a
+     second, while you are looking at something else. Structure inside the ramp
+     is detail nobody has time to resolve, and every extra term was one more
+     thing to blow the colour out to white.
 
-     So this is a front crossing a channel, overhead:
+     Three parts, and nothing else:
 
-       1. **The crest is a line of water, bowed.** It leads at the centre and
-          drags at the rims because the walls slow the flow. Straight, it is a
-          ruler laid across the bar; bowed, it is moving liquid.
-       2. **The wake is shaded by slope, not by height.** Brightness that
-          follows the surface's *elevation* gives bands of colour, which is the
-          coloured bar sliding along again. Brightness that follows its
-          *gradient* lights the face of each crest and shadows the back of it,
-          and that light/dark pair is the only thing that says corrugated
-          rather than striped.
-       3. **The cross-section is symmetric.** Across the bar the channel is a
-          rounded trough, so it is brightest down the centre line and falls off
-          to both rims equally. Anything stratified — brighter at one rim than
-          the other, a boundary at some height — is the side view leaking back
-          in.
-
-     Ahead of the front there is nothing at all. That asymmetry is the direction
-     cue: a symmetric band travelling along a bar is a highlight, and a
-     highlight can be going either way. */
+       1. **The line.** Three widths — a coloured halo, a hot core, a white
+          filament — so it reads as light rather than as a painted stroke.
+       2. **The ramp.** One exponential decay behind the front, coloured in
+          three stops: deep at the tail, the wave's hue through the body, a hot
+          shoulder just behind the line. Three stops rather than a fade to
+          nothing, because a fade in motion is a smear.
+       3. **Nothing ahead of it.** That asymmetry is the direction cue: a
+          symmetric band travelling along a bar is a highlight, and a highlight
+          can be going either way. */
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-
-    float bow = (1.0 - hb * hb) * 0.16;
-    float wd = (q.x - (wx + bow * dir)) * dir;   /* < 0 behind the crest */
+    float wd = (q.x - wx) * dir;                 /* < 0 behind the front */
 
     vec3 waveCol = mix(vec3(1.00, 0.17, 0.12), vec3(0.26, 1.00, 0.48), uHeal);
+    vec3 hotCol  = mix(vec3(1.00, 0.60, 0.40), vec3(0.74, 1.00, 0.82), uHeal);
+    vec3 deepCol = mix(vec3(0.34, 0.03, 0.05), vec3(0.02, 0.30, 0.24), uHeal);
 
-    /* Envelope and crest train, both scaled off the bar's own length. Written
-       as constants in p units the envelope is a third of a stubby rail and a
-       twelfth of a wide hero bar, so the effect that is supposed to be the
-       loudest thing here quietly becomes a local highlight on the bars with
-       the most room to show it. */
+    /* The ramp's length is a fraction of the *bar*, not a fixed distance in
+       shader units. Written as a constant it is a third of a stubby rail and a
+       twelfth of a wide hero bar, so the effect that is meant to be the loudest
+       thing here quietly becomes a local highlight on exactly the bars with the
+       most room to show it. */
     float rampLen = max(span * 0.44, 0.35);
     float env = exp(min(wd, 0.0) / rampLen) * (1.0 - step(0.0, wd));
-    float kw = 6.2832 / max(span * 0.170, 0.22);
-    float phase = wd * kw;
 
-    /* The surface as a height field, and its slope along the travel axis. */
-    float crest = 0.5 + 0.5 * cos(phase);
-
-    /* Sharpened. A raw sine spends most of its cycle mid-way between lit and
-       shadowed, so the wake comes out as soft mottling rather than as faces.
-       The 0.62 power flattens each half toward its extreme and steepens the
-       crossing between them, which is also what a real wave profile does:
-       broad faces, quick shoulders. */
-    float sn = sin(phase);
-    float slope = -sign(sn) * pow(abs(sn), 0.62) * env;
-    float lit   = max(slope, 0.0);
-    float shade = max(-slope, 0.0);
-
-    /* The channel's cross-section, seen down onto it. */
-    float dome = 1.0 - hb * hb * 0.32;
-
-    /* Flow streaks: fine lines running *along* the travel axis, wobbling with
-       the crests. Moving water photographs streaked in the direction it moves,
-       and the streaks are what separate a shaded ramp from a shaded liquid. */
-    float streak = 0.5 + 0.5 * sin(q.y * 13.0 + sin(q.x * 2.9 - uWaveX * 7.0) * 0.8);
-    float tex = 0.86 + 0.22 * smoothstep(0.30, 0.95, streak) * rbDetail(0.24);
-
-    /* The horizontal ramp behind the crest. Three stops, not a fade to nothing:
-       deep water at the tail, the wave's own colour through the body, and a hot
-       shoulder just behind the front. A single mix toward transparent is what
-       read as a coloured bar running from one side to the other. */
     float f = clamp(env, 0.0, 1.0);
-    vec3 deepCol = mix(vec3(0.34, 0.03, 0.05), vec3(0.02, 0.30, 0.24), uHeal);
-    vec3 hotCol  = mix(vec3(1.00, 0.60, 0.40), vec3(0.74, 1.00, 0.82), uHeal);
-    vec3 rampCol = mix(deepCol, waveCol, smoothstep(0.00, 0.42, f));
-    rampCol = mix(rampCol, hotCol, smoothstep(0.58, 1.00, f));
+    vec3 rampCol = mix(deepCol, waveCol, smoothstep(0.00, 0.45, f));
+    rampCol = mix(rampCol, hotCol, smoothstep(0.62, 1.00, f));
 
     /* On a heal the wave runs through the fill; on a hit it runs through the
        fill *and* the span being given up, so it crosses the trail on its way
        back down and the two events read as one. */
     float area = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
-    /* The ramp's *opacity* is the envelope alone, deliberately smooth. Folding
-       the crest train into it as well was what kept the wake looking blurred:
-       expressed as opacity, a crest is the fill showing through more in the
-       troughs, which is a soft gradient. Every bit of crest structure belongs
-       in the shading instead, where it is light on an opaque surface. */
-    float body = env;
 
-    /* Hue before light, and *most* of the shading before light too. The obvious
-       way to shade this is to add the lit faces on top as glow, and it is the
-       reason the first two attempts came out as a pale smear: over an
-       already-bright plate the green of a heal and the red of a hit both
-       saturate to the same white. So the corrugation is a multiplier on the
-       wake's own material — the lit face is a brighter green, the shadowed face
-       a darker green — and only the steepest faces get any light added at all. */
-    float shading = 0.55 + 0.60 * slope + 0.18 * crest;
-    C = mix(C, rampCol * dome * tex * shading, clamp(body * area * 1.90, 0.0, 1.0));
+    /* Hue before light. Added as pure light on top of an already-bright plate
+       it just saturates: the green of a heal and the red of a hit both arrive
+       as the same pale smear, which is the one thing this must not do. So the
+       ramp *replaces* the material's colour where it passes, and only the line
+       itself goes on top as light. */
+    C = mix(C, rampCol, clamp(env * area * 1.90, 0.0, 1.0));
 
-    /* Light, kept to the steep faces. lit*lit narrows it to the crest
-       fronts rather than smearing it over the whole rising half. */
-    C += rampCol * lit * lit * area * dome * 0.55;
-    C += vec3(1.00, 0.97, 0.94) * pow(lit, 5.0) * area * 0.45;
-
-    /* The crest itself: a glowing coloured line with a white filament in it,
-       built in three widths. A single wide gaussian in white is a blob, and a
-       blob at the head of a coloured ramp is what makes the whole thing read as
-       a smear travelling along rather than as a front. The halo keeps the
-       wave hue so the line is still red or green at a glance. */
-    C += waveCol * rbGauss(wd, 0.100) * area * dome * 1.55;
+    C += waveCol * rbGauss(wd, 0.100) * area * 1.55;
     C += hotCol  * rbGauss(wd, 0.034) * area * 1.60;
     C += vec3(1.00, 0.97, 0.94) * rbGauss(wd, 0.014) * area * 0.85;
 

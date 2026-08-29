@@ -115,6 +115,46 @@ so walking up from it cannot land on the nav.
 
 ---
 
+## Divisions
+
+The primary bar is assembled from plates. They let a player read health by
+**position** as well as by colour, which is the whole reason a colour-blind
+viewer can use this bar at all, so how many there are is not decoration.
+
+| | |
+|---|---|
+| **Fixed count** | `rb.segmentMode` = count, `rb.segments` plates across the whole bar. 0 draws one continuous fill. |
+| **One per N HP** | `rb.segmentMode` = perHp, `rb.segmentSize` hit points per plate. |
+
+The two answer different questions and neither is the default answer. A fixed
+count makes position along the bar mean the same *fraction* on every creature,
+so half-way is half-way on a goblin and on a dragon. One plate per N HP makes a
+plate mean the same *quantity* everywhere, so "took about three blocks" is the
+same hit on both, and a 12 HP goblin honestly gets three plates while a 200 HP
+dragon gets forty.
+
+Rounded **up**, so the short plate is the last one. Rounding down puts the
+remainder in the first plate, which is the one at the full-health end that a GM
+is looking at before anything has happened.
+
+Two things this has to survive. A creature with **no maximum** — some actor
+types genuinely have none — falls back to a continuous fill rather than to a
+count derived from zero, and `segmentSize` is guarded above zero rather than
+trusted, because `ceil(max / 0)` is `Infinity` and it reaches the shader as a
+uniform. And the computed count is capped at `SEGMENTS.max`: the shader already
+fades a division out once its gap falls under a device pixel, but the count is
+also what sets that gap, so past the cap the bar is more gap than plate long
+before the fade takes over.
+
+`uSeg` therefore depends on the *creature*, not only on the setting, and it is
+written from three places — mesh creation, `configure`, and the per-frame write.
+All three go through `segmentsFor()`. Any one of them reading `opts.segments`
+directly divides the bar one way on creation and another way on its next frame,
+which reads as a flicker on first draw and as nothing at all on a bar that never
+animates. The check tool pins it.
+
+---
+
 ## The shape of a change
 
 A value change is a sequence, and the order is what makes it read as an event:
@@ -145,40 +185,26 @@ direction the value moved — scoped to just the span that changed it is a detai
 you have to already be looking at the bar to catch, and on a one-point heal it
 is a flicker two pixels wide.
 
-**The bar is a channel seen from above, and the wave has to agree with that.**
-Everything else already assumes the overhead view: the fill's specular runs
-*along* the bar, the trough is a floor rather than a back wall, the shield
-lattice tiles a plane. A wave drawn side-on — one with a water *level* in it, a
-lit meniscus at some height with shadow underneath — contradicts all of them in
-the same frame, and the eye resolves the contradiction by refusing to read
-either as a surface. Only one projection can be true of one bar. So this is a
-front crossing a channel, overhead:
+It is **deliberately simple**: a glowing line, and a colour ramp trailing it.
+An earlier pass gave it a bowed crest, a decaying crest train, slope shading, a
+domed cross-section and flow streaks, and all of it fought the one thing the
+effect is for. This is read peripherally, in under half a second, while you are
+looking at something else. Structure inside the ramp is detail nobody has time
+to resolve, and every extra term was one more thing driving the colour to white.
+Three parts, and nothing else:
 
-1. **The crest is a line of water, bowed.** It leads at the centre and drags at
-   the rims, because the walls slow the flow. Straight, it is a ruler laid
-   across the bar; bowed, it is moving liquid.
-2. **The wake is shaded by slope, not by height.** Brightness that follows the
-   surface's *elevation* gives bands of colour, which is a coloured bar sliding
-   along again. Brightness that follows its *gradient* lights the face of each
-   crest and shadows the back of it, and that light/dark pair is the only thing
-   that reads as corrugated rather than striped.
-3. **The cross-section is symmetric.** Across the bar the channel is a rounded
-   trough, brightest down the centre line and falling off to both rims equally.
-   Anything stratified — brighter at one rim than the other, a boundary at some
-   height — is the side view leaking back in.
+1. **The line.** Three widths — a coloured halo, a hot core, a white filament —
+   so it reads as light rather than as a painted stroke.
+2. **The ramp.** One exponential decay behind the front, coloured in three
+   stops: deep at the tail, the wave's hue through the body, a hot shoulder just
+   behind the line. Three stops rather than a fade to nothing, because a fade in
+   motion is a smear.
+3. **Nothing ahead of it.** That asymmetry is the direction cue, since a
+   symmetric band travelling along a bar is a highlight and a highlight can be
+   going either way.
 
-Behind the crest the colour runs a three-stop ramp: deep water at the tail, the
-wave's own hue through the body, a hot shoulder just behind the front. A single
-mix toward transparent is a fade, and a fade in motion is exactly the coloured
-bar this is not meant to be. Fine streaks run *along* the travel axis on top of
-it, because moving water photographs streaked in the direction it moves.
-
-Nothing at all is drawn ahead of the front. That asymmetry is the direction cue,
-since a symmetric band travelling along a bar is a highlight and a highlight can
-be going either way.
-
-The wake *replaces* the colour of the material it crosses and only then adds
-light on top. Written the obvious way, as pure additive light over an
+The ramp *replaces* the colour of the material it crosses; only the line goes on
+top as light. Written the obvious way, as pure additive light over an
 already-bright plate, the green of a heal and the red of a hit both arrive as
 the same pale smear. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth
