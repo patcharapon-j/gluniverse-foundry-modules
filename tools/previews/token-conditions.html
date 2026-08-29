@@ -1,0 +1,1431 @@
+<title>Token Condition Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   Etched Glass — the suite's own token pool, mirrored for this preview.
+   Values copied verbatim from styles/gl-tokens.css so what you judge here
+   is the palette the feature would actually ship with.
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  --gl-tint-light: 255 255 255;
+  --gl-tint-dark: 0 0 0;
+
+  --gl-ink-0: #02070b;
+  --gl-ink-1: #080b11;
+  --gl-ink-2: #0b0f17;
+  --gl-ink-3: #161d2c;
+
+  --gl-text: #eef1f7;
+  --gl-text-bright: #f3fbff;
+  --gl-text-dim: #98a2b6;
+
+  --gl-accent: #6b86d6;
+  --gl-signal: #ffd24a;
+  --gl-signal-pale: #ffe9b8;
+  --gl-cyan: #5eeaff;
+  --gl-hazard: #ff4a52;
+  --gl-hazard-hot: #ffc0c6;
+  --gl-peril: #d6184a;
+  --gl-good: #5fdb92;
+  --gl-warn: #ffb12d;
+  --gl-violet: #b497ff;
+  --gl-orchid: #cf85e0;
+
+  --gl-hair: rgb(var(--gl-tint-light) / 0.08);
+  --gl-edge: rgb(var(--gl-tint-light) / 0.13);
+
+  --gl-cut: 12px;
+  --gl-cut-sm: 6px;
+  --gl-cut-xs: 4px;
+
+  --gl-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --gl-ease-sharp: cubic-bezier(0.7, 0, 0.1, 1);
+  --gl-ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
+  --gl-tech: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Motion scale — the suite's own tier model, an explicit choice rather
+     than an OS preference. 1 = full, 0.5 = reduced, 0 = still. */
+  --m: 1;
+
+  --page: #05080d;
+  --panel: #0a0e15;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The page ground: a Foundry canvas at rest. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 620px at 22% -8%, rgb(107 134 214 / 0.10), transparent 62%),
+    radial-gradient(900px 560px at 88% 6%, rgb(94 234 255 / 0.05), transparent 60%);
+}
+
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 56px 28px 96px;
+}
+
+/* ── Type scale ───────────────────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--gl-tech);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.eyebrow b { color: var(--gl-signal); font-weight: 500; }
+.eyebrow span.sep { color: rgb(var(--gl-tint-light) / 0.20); }
+
+h1 {
+  font-size: clamp(34px, 5vw, 54px);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  margin: 0 0 18px;
+  text-wrap: balance;
+  color: var(--gl-text-bright);
+}
+
+.deck {
+  max-width: 64ch;
+  font-size: 16.5px;
+  line-height: 1.66;
+  color: #c3ccdb;
+  margin: 0 0 34px;
+}
+.deck strong { color: var(--gl-text-bright); font-weight: 500; }
+
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  margin: 0 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gl-hair), transparent);
+}
+
+/* ── Research strip ───────────────────────────────────────────────── */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px;
+  background: var(--gl-hair);
+  border: 1px solid var(--gl-hair);
+  margin: 0 0 48px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.fact { background: var(--panel); padding: 15px 18px; }
+.fact dt {
+  font-family: var(--gl-tech);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  margin-bottom: 6px;
+}
+.fact dd {
+  margin: 0;
+  font-family: var(--gl-tech);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gl-text-bright);
+  font-variant-numeric: tabular-nums;
+}
+.fact dd small { display: block; font-family: var(--gl-display); font-size: 11.5px; color: var(--gl-text-dim); letter-spacing: 0; margin-top: 3px; }
+
+/* ── Control rail ─────────────────────────────────────────────────── */
+.rail {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  padding: 13px 18px;
+  margin: 0 0 30px;
+  background: rgb(10 14 21 / 0.86);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--gl-hair);
+  border-top-color: rgb(var(--gl-tint-light) / 0.14);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.rail-group { display: flex; align-items: center; gap: 8px; }
+.rail-label {
+  font-family: var(--gl-tech);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.seg { display: flex; gap: 3px; }
+
+button {
+  font-family: var(--gl-display);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #b8c2d4;
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-dark) / 0.20)), var(--gl-ink-2);
+  border: 1px solid var(--gl-hair);
+  padding: 7px 13px;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+  transition: color 160ms var(--gl-ease), border-color 160ms var(--gl-ease), background 160ms var(--gl-ease);
+}
+button:hover { color: var(--gl-text-bright); border-color: var(--gl-edge); }
+button:focus-visible { outline: 2px solid var(--gl-accent); outline-offset: 2px; }
+button[aria-pressed="true"] {
+  color: var(--gl-ink-0);
+  background: linear-gradient(180deg, var(--gl-signal-pale), var(--gl-signal));
+  border-color: var(--gl-signal);
+}
+button.go {
+  color: var(--gl-ink-0);
+  background: linear-gradient(180deg, #d6e2ff, var(--gl-accent));
+  border-color: var(--gl-accent);
+  font-weight: 600;
+}
+button.go:hover { filter: brightness(1.1); }
+
+/* ── The four stages ──────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+  gap: 22px;
+  margin-bottom: 56px;
+}
+@media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--gl-hair);
+  border-top-color: rgb(var(--gl-tint-light) / 0.13);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 20px 12px;
+}
+.card-key {
+  font-family: var(--gl-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gl-signal);
+  letter-spacing: -0.02em;
+}
+.card-name {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--gl-text-bright);
+  margin: 0;
+}
+.card-thesis {
+  margin: 0 20px 0;
+  padding-bottom: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #aab4c6;
+  max-width: 52ch;
+}
+
+/* The scene: a patch of Foundry canvas. */
+.stage {
+  position: relative;
+  height: 330px;
+  background:
+    radial-gradient(120% 100% at 50% 20%, #16202e 0%, #0a1018 58%, #050810 100%);
+  border-top: 1px solid var(--gl-hair);
+  border-bottom: 1px solid var(--gl-hair);
+  overflow: hidden;
+  isolation: isolate;
+}
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background-image:
+    linear-gradient(rgb(var(--gl-tint-light) / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gl-tint-light) / 0.045) 1px, transparent 1px);
+  background-size: 66px 66px;
+  background-position: center;
+  pointer-events: none;
+}
+/* Floor pool under the token, so it sits in a scene rather than on a swatch. */
+.stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 260px;
+  height: 90px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(50% 50% at 50% 50%, rgb(var(--gl-tint-dark) / 0.55), transparent 70%);
+  pointer-events: none;
+}
+
+.stage[data-dir="rail"] .mount,
+.stage[data-dir="ledger"] .mount { transform: translate(-32%, -56%); }
+
+.mount {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 156px;
+  height: 156px;
+  transform: translate(-50%, -56%);
+}
+
+/* ── The token ────────────────────────────────────────────────────── */
+.token {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(80% 70% at 34% 22%, #55698a, #232f43 55%, #0e141f 100%);
+  box-shadow:
+    inset 0 2px 0 rgb(var(--gl-tint-light) / 0.12),
+    inset 0 -18px 30px rgb(var(--gl-tint-dark) / 0.55),
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5);
+}
+.token svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Disposition ring — Foundry's hostile red, so the chrome has something real
+   to sit against. */
+.ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid rgb(214 24 74 / 0.65);
+  box-shadow: 0 0 0 1px rgb(var(--gl-tint-dark) / 0.6), 0 0 12px rgb(214 24 74 / 0.25);
+  pointer-events: none;
+}
+
+/* ── The HP bar (the instrument the conditions must belong to) ─────── */
+.hp {
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  transform: translateX(-50%);
+  width: 168px;
+  height: 21px;
+  background: linear-gradient(180deg, #0c1119, #05080d);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.10);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+  box-shadow: 0 3px 10px rgb(var(--gl-tint-dark) / 0.6);
+  overflow: hidden;
+}
+.hp-trough { position: absolute; inset: 3px; background: #06090e; box-shadow: inset 0 1px 2px rgb(var(--gl-tint-dark) / 0.8); }
+.hp-fill {
+  position: absolute;
+  left: 4px; top: 4px; bottom: 4px;
+  width: 0;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--hpc) 88%, white), var(--hpc) 62%, color-mix(in oklab, var(--hpc) 74%, black));
+  transition: width 620ms cubic-bezier(0.22, 1, 0.28, 1);
+  --hpc: var(--gl-good);
+}
+/* Six plates, gapped — the colour-blind position channel. */
+.hp-fill::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 160px;
+  background: repeating-linear-gradient(90deg, transparent 0 24.3px, rgb(var(--gl-tint-dark) / 0.85) 24.3px 27.3px);
+}
+.hp-lip { position: absolute; left: 4px; right: 4px; top: 4px; height: 1px; background: rgb(255 233 184 / 0.55); }
+.hp-read {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--gl-tech);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.9);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.hp-read i { font-style: normal; font-size: 8px; opacity: 0.8; font-weight: 500; }
+.hp-read u { text-decoration: none; opacity: 0.62; font-weight: 500; }
+.hp.hit { animation: hpFlash calc(340ms / max(var(--m), 0.001)) var(--gl-ease); }
+@keyframes hpFlash {
+  0%, 14% { box-shadow: 0 0 0 1px rgb(255 192 198 / 0.9), 0 0 18px rgb(255 74 82 / 0.55), 0 3px 10px rgb(var(--gl-tint-dark) / 0.6); }
+  100% { box-shadow: 0 3px 10px rgb(var(--gl-tint-dark) / 0.6); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Tone — the classification the PF2e system does not ship.
+   Every direction below routes its identity through --t.
+   ══════════════════════════════════════════════════════════════════ */
+[data-tone="peril"]  { --t: #ff5f6b; --t-deep: #4a0c17; }
+[data-tone="impair"] { --t: #ff9a4a; --t-deep: #401a06; }
+[data-tone="control"]{ --t: #ffd24a; --t-deep: #3c2c04; }
+[data-tone="sense"]  { --t: #5eeaff; --t-deep: #04303a; }
+[data-tone="burden"] { --t: #9aa8c2; --t-deep: #161d2c; }
+[data-tone="boon"]   { --t: #5fdb92; --t-deep: #06331f; }
+
+/* ══════════════════════════════════════════════════════════════════
+   A · RAIL — cut-corner chips down the token's left flank.
+   ══════════════════════════════════════════════════════════════════ */
+.rail-col {
+  position: absolute;
+  right: calc(100% + 12px);
+  top: -8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.chip {
+  position: relative;
+  height: 26px;
+  width: 26px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--t) 13%, #0b0f17), #070a10);
+  border: 1px solid color-mix(in srgb, var(--t) 42%, transparent);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.18),
+    0 2px 8px rgb(var(--gl-tint-dark) / 0.6),
+    0 0 10px color-mix(in srgb, var(--t) 16%, transparent);
+  overflow: hidden;
+  transition: width 320ms var(--gl-ease);
+}
+.chip .ic { flex: 0 0 26px; width: 26px; height: 26px; padding: 5.5px; color: var(--t); }
+.chip .nm {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #dfe6f2;
+  opacity: 0;
+  transition: opacity 200ms var(--gl-ease);
+  padding-right: 4px;
+}
+.chip .vl {
+  position: absolute;
+  right: 0; bottom: 0;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  font-family: var(--gl-tech);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--gl-ink-0);
+  background: var(--t);
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%);
+}
+.stage:hover .rail-col .chip { width: var(--w); }
+.stage:hover .rail-col .chip .nm { opacity: 1; transition-delay: 90ms; }
+/* Expanded, the value leaves its corner and becomes a column — the notch is
+   for the collapsed state, where there is nowhere else for a digit to go. */
+.stage:hover .rail-col .chip .vl {
+  position: static;
+  height: auto;
+  min-width: 0;
+  padding: 0 9px 0 0;
+  background: none;
+  clip-path: none;
+  color: var(--t);
+  font-size: 11.5px;
+}
+.chip.in  { animation: chipIn  calc(400ms / max(var(--m), 0.001)) var(--gl-ease) backwards; }
+.chip.out { animation: chipOut calc(300ms / max(var(--m), 0.001)) var(--gl-ease-sharp) forwards; }
+@keyframes chipIn {
+  0%   { opacity: 0; transform: translateX(-14px) scaleX(0.55); filter: brightness(2.4); }
+  22%  { opacity: 1; transform: translateX(-14px) scaleX(0.55); filter: brightness(2.4); }  /* hitstop */
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes chipOut {
+  0%   { filter: brightness(1); }
+  26%  { filter: brightness(3.2) saturate(0.4); transform: scale(1.10); }
+  100% { opacity: 0; transform: scaleY(0.05) scaleX(1.2); filter: brightness(3.2); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   B · CROWN — a strip on the token's top edge, mirroring the HP bar.
+   ══════════════════════════════════════════════════════════════════ */
+.crown {
+  position: absolute;
+  left: 50%;
+  top: -32px;
+  transform: translateX(-50%);
+  height: 22px;
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  padding: 3px 3px 3px 8px;
+  background: linear-gradient(180deg, #0c1119, #05080d);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.10);
+  border-bottom-color: rgb(var(--gl-tint-light) / 0.04);
+  /* The cut sits top-LEFT — the HP bar's cut is top-right, so the pair
+     reads as one instrument rotated about the token. */
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+  box-shadow: 0 3px 10px rgb(var(--gl-tint-dark) / 0.6);
+  transition: height 260ms var(--gl-ease), top 260ms var(--gl-ease);
+}
+.crown-bead {
+  flex: 0 0 3px;
+  align-self: stretch;
+  background: linear-gradient(180deg, var(--gl-hazard), var(--gl-signal));
+  box-shadow: 0 0 8px rgb(255 74 82 / 0.5);
+}
+.cell {
+  position: relative;
+  flex: 0 0 auto;
+  width: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--t) 15%, #0b0f17), #06090e);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14);
+  overflow: hidden;
+  transition: width 300ms var(--gl-ease);
+}
+.cell .ic { width: 15px; height: 15px; color: var(--t); flex: 0 0 auto; transition: transform 260ms var(--gl-ease); }
+.cell .nm {
+  font-family: var(--gl-tech);
+  font-size: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #c3ccdb;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 0;
+  opacity: 0;
+  transition: height 220ms var(--gl-ease), opacity 180ms var(--gl-ease);
+}
+.cell .vl {
+  position: absolute;
+  right: 0; bottom: 0;
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 1.5px;
+  color: var(--gl-ink-0);
+  background: var(--t);
+}
+.stage:hover .crown { height: 36px; top: -46px; }
+.stage:hover .cell { width: 34px; }
+.stage:hover .cell .nm { height: 8px; opacity: 1; }
+.cell.in  { animation: cellIn  calc(380ms / max(var(--m), 0.001)) var(--gl-ease) backwards; }
+.cell.out { animation: cellOut calc(280ms / max(var(--m), 0.001)) var(--gl-ease-sharp) forwards; }
+@keyframes cellIn {
+  0%   { width: 0; opacity: 0; filter: brightness(3); }
+  30%  { width: 22px; opacity: 1; filter: brightness(3); }  /* hitstop at full width */
+  100% { width: 22px; opacity: 1; filter: none; }
+}
+@keyframes cellOut {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(3.4); }
+  100% { width: 0; opacity: 0; filter: brightness(3.4); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   C · HALO — beads seated on a ring drawn around the token.
+   ══════════════════════════════════════════════════════════════════ */
+.halo {
+  position: absolute;
+  inset: -22px;
+  pointer-events: none;
+}
+.halo-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--gl-tint-light) / 0.14);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
+}
+/* One hard specular travelling the ring — the same single-light rule the
+   HP bar's gloss follows. */
+.halo-spec {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, rgb(255 233 184 / 0.55) 16deg, transparent 40deg, transparent 360deg);
+  -webkit-mask: radial-gradient(circle, transparent calc(50% - 2px), #000 calc(50% - 2px), #000 50%, transparent 50%);
+  mask: radial-gradient(circle, transparent calc(50% - 2px), #000 calc(50% - 2px), #000 50%, transparent 50%);
+  animation: haloSpin calc(7s / max(var(--m), 0.001)) linear infinite;
+}
+@keyframes haloSpin { to { transform: rotate(360deg); } }
+.bead {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 25px;
+  height: 25px;
+  margin: -12.5px 0 0 -12.5px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(70% 70% at 34% 26%, color-mix(in srgb, var(--t) 42%, #0b0f17), #06090e 78%);
+  border: 1px solid color-mix(in srgb, var(--t) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.25),
+    0 0 12px color-mix(in srgb, var(--t) 30%, transparent),
+    0 2px 6px rgb(var(--gl-tint-dark) / 0.7);
+  transform: translate(var(--x), var(--y));
+  transition: transform 380ms var(--gl-ease);
+}
+.bead { pointer-events: auto; }
+.bead .ic { width: 14px; height: 14px; color: var(--t); }
+.bead .vl {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--gl-ink-0);
+  background: var(--t);
+  box-shadow: 0 0 0 1.5px #06090e;
+}
+.bead.in  { animation: beadIn  calc(460ms / max(var(--m), 0.001)) var(--gl-ease) backwards; }
+.bead.out { animation: beadOut calc(300ms / max(var(--m), 0.001)) var(--gl-ease-sharp) forwards; }
+@keyframes beadIn {
+  0%   { opacity: 0; transform: translate(var(--x), var(--y)) scale(0.2); filter: brightness(3); }
+  26%  { opacity: 1; transform: translate(var(--x), var(--y)) scale(1.18); filter: brightness(3); }
+  100% { opacity: 1; transform: translate(var(--x), var(--y)) scale(1); filter: none; }
+}
+@keyframes beadOut {
+  0%   { filter: brightness(1); }
+  100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(0.1); filter: brightness(3.4); }
+}
+/* The shockwave — one expanding ring per application, never a loop. */
+.shock {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 25px; height: 25px;
+  margin: -12.5px 0 0 -12.5px;
+  border-radius: 50%;
+  border: 1.5px solid var(--t);
+  transform: translate(var(--x), var(--y));
+  animation: shock calc(620ms / max(var(--m), 0.001)) var(--gl-ease) forwards;
+  pointer-events: none;
+}
+@keyframes shock {
+  0%   { opacity: 0.9; scale: 1; }
+  100% { opacity: 0; scale: 3.2; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   D · LEDGER — a named spine. Icons nobody has to learn.
+   ══════════════════════════════════════════════════════════════════ */
+.ledger {
+  position: absolute;
+  right: calc(100% + 14px);
+  top: -14px;
+  width: 128px;
+  background: linear-gradient(180deg, rgb(12 17 25 / 0.94), rgb(5 8 13 / 0.94));
+  border: 1px solid rgb(var(--gl-tint-light) / 0.10);
+  border-top-color: rgb(var(--gl-tint-light) / 0.16);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+  box-shadow: 0 6px 18px rgb(var(--gl-tint-dark) / 0.65);
+  overflow: hidden;
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 21px;
+  padding: 0 7px 0 0;
+  border-bottom: 1px solid rgb(var(--gl-tint-light) / 0.055);
+  overflow: hidden;
+}
+.row:last-child { border-bottom: 0; }
+.row::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--t);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--t) 55%, transparent);
+}
+.row .ic { flex: 0 0 13px; width: 13px; height: 13px; margin-left: 8px; color: var(--t); }
+.row .nm {
+  flex: 1;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #d3dbe8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row .vl {
+  font-family: var(--gl-tech);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--t);
+  font-variant-numeric: tabular-nums;
+}
+.row.more { justify-content: center; padding-right: 0; }
+.row.more .nm { flex: 0 0 auto; text-align: center; color: var(--gl-text-dim); font-size: 8.5px; letter-spacing: 0.14em; }
+.row.more::before { background: rgb(var(--gl-tint-light) / 0.14); box-shadow: none; }
+.row.in  { animation: rowIn  calc(420ms / max(var(--m), 0.001)) var(--gl-ease) backwards; }
+.row.out { animation: rowOut calc(300ms / max(var(--m), 0.001)) var(--gl-ease-sharp) forwards; }
+@keyframes rowIn {
+  0%   { height: 0; opacity: 0; }
+  40%  { height: 21px; opacity: 1; filter: brightness(2.6); }
+  100% { height: 21px; opacity: 1; filter: none; }
+}
+@keyframes rowOut {
+  0%   { filter: brightness(1); }
+  26%  { filter: brightness(3); }
+  100% { height: 0; opacity: 0; filter: brightness(3); }
+}
+
+/* ── Card notes ───────────────────────────────────────────────────── */
+.notes { padding: 16px 20px 20px; display: grid; gap: 9px; }
+.note {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #a6b0c2;
+}
+.note b {
+  font-family: var(--gl-tech);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  padding-top: 3px;
+}
+.note.risk b { color: var(--gl-warn); }
+.note em { color: #ccd5e3; font-style: normal; }
+
+/* ── Tone table ───────────────────────────────────────────────────── */
+.tones { display: grid; gap: 1px; background: var(--gl-hair); border: 1px solid var(--gl-hair); margin-bottom: 56px; }
+.tone-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 18px;
+  padding: 13px 18px;
+  background: var(--panel);
+  align-items: start;
+}
+@media (max-width: 640px) { .tone-row { grid-template-columns: 1fr; gap: 8px; } }
+.tone-key { display: flex; align-items: center; gap: 9px; }
+.tone-swatch { width: 11px; height: 11px; background: var(--t); box-shadow: 0 0 9px color-mix(in srgb, var(--t) 60%, transparent); flex: 0 0 auto; clip-path: polygon(0 0, calc(100% - 3px) 0, 100% 3px, 100% 100%, 0 100%); }
+.tone-name { font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--t); }
+.tone-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.tone-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--gl-tech);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: #b4bece;
+  background: rgb(var(--gl-tint-light) / 0.04);
+  border: 1px solid rgb(var(--gl-tint-light) / 0.07);
+  padding: 3px 7px 3px 5px;
+}
+.tone-tag svg { width: 12px; height: 12px; color: var(--t); }
+.tone-tag u {
+  text-decoration: none;
+  color: var(--gl-ink-0);
+  background: var(--t);
+  font-weight: 700;
+  font-size: 8.5px;
+  padding: 1px 3.5px;
+  margin-left: 1px;
+}
+.tone-foot {
+  font-size: 12px;
+  color: #8d97a9;
+  margin: -44px 0 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tone-foot b {
+  font-family: var(--gl-tech);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--gl-ink-0);
+  background: var(--gl-text-dim);
+  padding: 1px 3.5px;
+}
+
+/* ── Decision block ───────────────────────────────────────────────── */
+.axes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin-bottom: 40px; }
+.axis {
+  padding: 17px 19px;
+  background: var(--panel);
+  border: 1px solid var(--gl-hair);
+  border-left: 2px solid var(--gl-accent);
+}
+.axis h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gl-text-bright); }
+.axis p { margin: 0; font-size: 12.5px; line-height: 1.55; color: #a6b0c2; }
+.axis code { font-family: var(--gl-tech); font-size: 11px; color: var(--gl-signal); }
+
+.closing {
+  padding: 26px 28px;
+  background: linear-gradient(135deg, rgb(107 134 214 / 0.08), transparent 60%), var(--panel);
+  border: 1px solid var(--gl-hair);
+  border-top-color: rgb(var(--gl-tint-light) / 0.16);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+.closing p { margin: 0 0 12px; max-width: 68ch; font-size: 14.5px; line-height: 1.62; color: #c3ccdb; }
+.closing p:last-child { margin-bottom: 0; }
+.closing strong { color: var(--gl-text-bright); font-weight: 600; }
+
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+</style>
+
+<!-- ── Condition glyph set. Stroke-built on a 24-unit grid so every symbol
+     shares one weight, the way a real icon system does. ───────────── -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-dying" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3a7.5 7.5 0 0 0-7.5 7.5v2.6l2 2V19h11v-3.9l2-2V10.5A7.5 7.5 0 0 0 12 3z"/>
+    <circle cx="9.2" cy="11" r="1.7" fill="currentColor" stroke="none"/>
+    <circle cx="14.8" cy="11" r="1.7" fill="currentColor" stroke="none"/>
+    <path d="M10.2 15.4v2M13.8 15.4v2"/>
+  </symbol>
+  <symbol id="i-wounded" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20.5S4 15.4 4 10.4A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 8 2.4c0 5-8 10.1-8 10.1z"/>
+    <path d="M12.6 8.6l-2 3.6 3 1.3-2 3.4"/>
+  </symbol>
+  <symbol id="i-doomed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 5h17L12 20.5z"/>
+    <path d="M12 9v4"/>
+    <circle cx="12" cy="15.8" r="1" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-frightened" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.5"/>
+    <circle cx="9.2" cy="10" r="1.3" fill="currentColor" stroke="none"/>
+    <circle cx="14.8" cy="10" r="1.3" fill="currentColor" stroke="none"/>
+    <ellipse cx="12" cy="16" rx="2.6" ry="2"/>
+  </symbol>
+  <symbol id="i-clumsy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 16.5c2.6-5.6 4.6 3.4 8-2.4s4.4 1.8 6.2-2.6"/>
+    <path d="M20.5 11.5l-.6 3.2-2.9-1"/>
+    <path d="M3 20.5h18"/>
+  </symbol>
+  <symbol id="i-enfeebled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.5v11.5"/>
+    <path d="M7 10.5l5 4.5 5-4.5"/>
+    <path d="M4.5 20h15"/>
+  </symbol>
+  <symbol id="i-drained" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.2s6.2 7.1 6.2 11a6.2 6.2 0 1 1-12.4 0c0-3.9 6.2-11 6.2-11z"/>
+    <path d="M9 14.4h6"/>
+  </symbol>
+  <symbol id="i-stupefied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 12.3a1.9 1.9 0 1 1-1.7-1.9 4.4 4.4 0 1 1 4.1 4.6 6.9 6.9 0 1 1-6.6-8.5"/>
+    <path d="M18.5 4.5l2 .6-.6 2"/>
+  </symbol>
+  <symbol id="i-sickened" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.5"/>
+    <path d="M7.6 8.8l2.4 2.4M10 8.8l-2.4 2.4M14 8.8l2.4 2.4M16.4 8.8L14 11.2"/>
+    <path d="M8 16.6q2-2.2 4 0t4 0"/>
+  </symbol>
+  <symbol id="i-slowed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 3.2h12M6 20.8h12"/>
+    <path d="M7.4 3.2c0 4.9 4.6 5.9 4.6 8.8s-4.6 3.9-4.6 8.8"/>
+    <path d="M16.6 3.2c0 4.9-4.6 5.9-4.6 8.8s4.6 3.9 4.6 8.8"/>
+  </symbol>
+  <symbol id="i-stunned" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 10.5c4.5-6 11.5-6 16 0"/>
+    <circle cx="5.4" cy="15.4" r="1.5"/>
+    <circle cx="12" cy="17.6" r="1.5"/>
+    <circle cx="18.6" cy="15.4" r="1.5"/>
+  </symbol>
+  <symbol id="i-off-guard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2.8l8 3.2v6c0 5.5-4.4 8.7-8 10.2-3.6-1.5-8-4.7-8-10.2v-6z"/>
+    <path d="M12 3v4M12 10v3.5M12 17v5" stroke-dasharray="0.1 3.4"/>
+  </symbol>
+  <symbol id="i-prone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5.4" cy="12.6" r="2.3"/>
+    <path d="M8.2 14.6h9.4M8.6 11h6.6"/>
+    <path d="M2.5 19.5h19"/>
+  </symbol>
+  <symbol id="i-grabbed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 12.5V7M11 12V3.8M15 12.5V6.2"/>
+    <path d="M19 11.5v4.2a6 6 0 0 1-6 6h-1.6A6.4 6.4 0 0 1 5 15.3v-3"/>
+  </symbol>
+  <symbol id="i-blinded" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.2 12S6 5.8 12 5.8 21.8 12 21.8 12 18 18.2 12 18.2 2.2 12 2.2 12z"/>
+    <circle cx="12" cy="12" r="2.6"/>
+    <path d="M3.6 20.4L20.4 3.6"/>
+  </symbol>
+  <symbol id="i-dazzled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"/>
+  </symbol>
+  <symbol id="i-persistent-damage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2.6c3.3 4.3 5.4 5.9 5.4 9.9a5.4 5.4 0 0 1-10.8 0c0-1.9.9-3.2 2.1-4.3 0 2.1 1 3.1 2 3.1 0-3.1.5-6.1 1.3-8.7z"/>
+  </symbol>
+  <symbol id="i-quickened" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13.4 2L5 13.2h5.6L9.4 22 19 10.4h-5.8z"/>
+  </symbol>
+  <symbol id="i-fleeing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.5 12h11.5"/><path d="M10.5 7.6L14.9 12l-4.4 4.4"/>
+    <path d="M19.5 4.5v15"/>
+  </symbol>
+  <symbol id="i-immobilized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4.5" y="10" width="15" height="10.5" rx="1.6"/>
+    <path d="M8.2 10V7.2a3.8 3.8 0 0 1 7.6 0V10"/>
+  </symbol>
+  <symbol id="i-fatigued" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2z"/>
+  </symbol>
+  <symbol id="i-concealed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 18.5h10a4.2 4.2 0 0 0 .7-8.3A6.3 6.3 0 0 0 5.8 11 3.7 3.7 0 0 0 7 18.5z"/>
+  </symbol>
+  <symbol id="i-confused" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M9.4 9.4a2.7 2.7 0 1 1 3.5 3.4c-.8.3-1.1 1-1.1 1.7"/>
+    <circle cx="11.8" cy="17.2" r="1" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-encumbered" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8.5h16l-1.6 12H5.6z"/>
+    <path d="M8.6 8.5V6a3.4 3.4 0 0 1 6.8 0v2.5"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+
+  <p class="eyebrow">
+    <span>GLUniverse Suite</span><span class="sep">/</span><span>Etched Glass</span><span class="sep">/</span>
+    <b>Design decision — pick one</b>
+  </p>
+
+  <h1>Token Condition Directions</h1>
+
+  <p class="deck">
+    Four ways to draw the conditions a token is carrying, all sitting under the same
+    hostile token and the same resource bar so the comparison is honest. Every direction
+    uses the suite's own palette, chamfer and motion vocabulary — the question is not
+    <em>which is prettiest</em> but <strong>which one you can read in half a second while
+    you're looking at something else</strong>. Hover a scene to see its labelled state;
+    the controls below drive real apply and remove transitions.
+  </p>
+
+  <dl class="facts">
+    <div class="fact"><dt>Target system</dt><dd>PF2e 8.4.1<small>branch <code>v14-dev</code>, the v14 line</small></dd></div>
+    <div class="fact"><dt>Foundry compatibility</dt><dd>14.361 → 14.366<small>minimum → verified</small></dd></div>
+    <div class="fact"><dt>Conditions on the HUD</dt><dd>37<small><code>tokenHUDConditions</code>, of 44 slugs</small></dd></div>
+    <div class="fact"><dt>Valued (badged)</dt><dd>12<small>clumsy … wounded, plus a formula badge on persistent damage</small></dd></div>
+  </dl>
+
+  <div class="rail" role="group" aria-label="Preview controls">
+    <div class="rail-group">
+      <span class="rail-label">Load</span>
+      <div class="seg" id="setseg">
+        <button data-set="light" aria-pressed="false">Light · 3</button>
+        <button data-set="combat" aria-pressed="true">Combat · 6</button>
+        <button data-set="stress" aria-pressed="false">Stress · 10</button>
+      </div>
+    </div>
+    <div class="rail-group">
+      <span class="rail-label">Motion</span>
+      <div class="seg" id="motionseg">
+        <button data-m="1" aria-pressed="true">Full</button>
+        <button data-m="0.5" aria-pressed="false">Reduced</button>
+        <button data-m="0.001" aria-pressed="false">Still</button>
+      </div>
+    </div>
+    <div class="rail-group">
+      <button class="go" id="beat">Play a hit →</button>
+      <button id="clear">Clear all</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid">
+
+    <!-- ── A ─────────────────────────────────────────────────────── -->
+    <section class="card">
+      <div class="card-head"><span class="card-key">A</span><h3 class="card-name">Rail</h3></div>
+      <p class="card-thesis">
+        Cut-corner chips down the token's left flank, worst first — the resource bar's
+        materials turned on their side. Nothing touches the artwork.
+      </p>
+      <div class="stage" data-dir="rail">
+        <div class="mount">
+          <div class="token"></div><div class="ring"></div>
+          <div class="rail-col"></div>
+          <div class="hp"><div class="hp-trough"></div><div class="hp-fill"></div><div class="hp-lip"></div><div class="hp-read"></div></div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><b>Reads</b><span><em>Colour and vertical position.</em> Severity sorts top-down, so the worst thing is always at the same place on every token.</span></div>
+        <div class="note"><b>Scales</b><span>Grows downward without limit; the tail collapses to a <code>+N</code> chip past six.</span></div>
+        <div class="note risk"><b>Risk</b><span>Two tokens standing side by side put one creature's rail over its neighbour's art.</span></div>
+      </div>
+    </section>
+
+    <!-- ── B ─────────────────────────────────────────────────────── -->
+    <section class="card">
+      <div class="card-head"><span class="card-key">B</span><h3 class="card-name">Crown</h3></div>
+      <p class="card-thesis">
+        A strip on the token's top edge with the chamfer mirrored — the resource bar cuts
+        top-right, this cuts top-left, so the pair reads as one instrument.
+      </p>
+      <div class="stage" data-dir="crown">
+        <div class="mount">
+          <div class="token"></div><div class="ring"></div>
+          <div class="crown"><span class="crown-bead"></span></div>
+          <div class="hp"><div class="hp-trough"></div><div class="hp-fill"></div><div class="hp-lip"></div><div class="hp-read"></div></div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><b>Reads</b><span><em>One horizontal line.</em> Strongest family resemblance to the bar; the whole state of a creature is two stacked rails.</span></div>
+        <div class="note"><b>Scales</b><span>Badly past eight — cells shrink toward the point where the glyph stops resolving.</span></div>
+        <div class="note risk"><b>Risk</b><span>Competes with the nameplate and this suite's own turn marker for the top edge.</span></div>
+      </div>
+    </section>
+
+    <!-- ── C ─────────────────────────────────────────────────────── -->
+    <section class="card">
+      <div class="card-head"><span class="card-key">C</span><h3 class="card-name">Halo</h3></div>
+      <p class="card-thesis">
+        Beads seated on a ring around the token, worst at twelve o'clock going clockwise,
+        one hard specular travelling the rim. Every application throws a shockwave.
+      </p>
+      <div class="stage" data-dir="halo">
+        <div class="mount">
+          <div class="token"></div><div class="ring"></div>
+          <div class="halo"><div class="halo-ring"></div><div class="halo-spec"></div></div>
+          <div class="hp"><div class="hp-trough"></div><div class="hp-fill"></div><div class="hp-lip"></div><div class="hp-read"></div></div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><b>Reads</b><span><em>Clock position.</em> The most tactile of the four, and the only one that scales with the creature rather than sitting beside it.</span></div>
+        <div class="note"><b>Scales</b><span>Twelve beads before they touch; past that the arc subdivides and the glyphs go.</span></div>
+        <div class="note risk"><b>Risk</b><span>The real one. Foundry's target reticle, the disposition ring and this suite's own turn marker are already circles at that radius.</span></div>
+      </div>
+    </section>
+
+    <!-- ── D ─────────────────────────────────────────────────────── -->
+    <section class="card">
+      <div class="card-head"><span class="card-key">D</span><h3 class="card-name">Ledger</h3></div>
+      <p class="card-thesis">
+        A named spine. No icon has to be learned, no hover is required, and a valued
+        condition prints its number where a number belongs.
+      </p>
+      <div class="stage" data-dir="ledger">
+        <div class="mount">
+          <div class="token"></div><div class="ring"></div>
+          <div class="ledger"></div>
+          <div class="hp"><div class="hp-trough"></div><div class="hp-fill"></div><div class="hp-lip"></div><div class="hp-read"></div></div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><b>Reads</b><span><em>Words.</em> The only direction a new player can use on their first session without asking what a glyph means.</span></div>
+        <div class="note"><b>Scales</b><span>Six rows, then <code>+N MORE</code>. Height is honest; width is fixed.</span></div>
+        <div class="note risk"><b>Risk</b><span>Widest by far. On a crowded map it is a second nameplate per creature, and it does not shrink with zoom.</span></div>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>The tone system</h2>
+  <p class="deck" style="margin-bottom:22px">
+    PF2e ships <strong>no positive/negative flag</strong> on a condition — the system knows
+    only the slug. Every direction above therefore routes its identity through one
+    classification of our own, six tones deep, so colour carries meaning before a glyph is
+    ever resolved. This is the part worth arguing with; the geometry is easier to change later.
+  </p>
+
+  <div class="tones" id="tones"></div>
+  <p class="tone-foot"><b>N</b> carries a counter — the twelve valued conditions, plus a damage formula on persistent damage.</p>
+
+  <h2>What I need from you</h2>
+  <div class="axes">
+    <div class="axis">
+      <h3>Placement</h3>
+      <p>Flank (<code>A</code>), top edge (<code>B</code>), ring (<code>C</code>) or spine (<code>D</code>). This is the one choice that is hard to reverse — everything else is a setting.</p>
+    </div>
+    <div class="axis">
+      <h3>Labels</h3>
+      <p>Icon-only, icon-with-name-on-hover, or always named. <code>D</code> is always named; <code>A</code> and <code>B</code> expand on hover; <code>C</code> shows a name beside the hovered bead.</p>
+    </div>
+    <div class="axis">
+      <h3>Tone</h3>
+      <p>Keep the six-tone classification, collapse it to three (bad / sensory / good), or drop colour semantics and let every condition share the accent.</p>
+    </div>
+    <div class="axis">
+      <h3>Motion</h3>
+      <p>The hitstop-then-release beat is shared with the resource bar. The ambient loop — <code>C</code>'s travelling specular — is the only always-on animation, and it is optional.</p>
+    </div>
+  </div>
+
+  <div class="closing">
+    <p>
+      <strong>Say a letter and I'll build it.</strong> Mixing is fine and probably right —
+      <em>“B's placement, D's labels, A's chip”</em> is a complete brief. The shipped version
+      draws in PIXI with a fragment shader like the resource bars do, so the plates get real
+      bevels and the glow is lit rather than painted; this page is DOM, which is why the
+      edges here are a touch flatter than the result would be.
+    </p>
+    <p>
+      Behind all four: conditions read from <code>actor.conditions.active</code> on the PF2e
+      side, keyed by <code>slug</code>, with the badge value taken from
+      <code>condition.badge</code> — a counter for the twelve valued conditions, a formula for
+      persistent damage. Foundry's own icon layer gets switched off with
+      <code>renderable = false</code>, never <code>visible</code>, because <code>visible</code>
+      is the permission answer and overwriting it is how a hidden creature's state leaks.
+    </p>
+  </div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   Condition model — slug, label, tone, badge value.
+   Tones are ours; PF2e ships none.
+   ══════════════════════════════════════════════════════════════════ */
+const TONES = {
+  peril:   { name: "Peril",   note: "The death track. Nothing else may outrank it." },
+  impair:  { name: "Impair",  note: "A number gets worse. Valued, almost always." },
+  control: { name: "Control", note: "Actions are taken away." },
+  sense:   { name: "Sense",   note: "What can be seen, heard or found." },
+  burden:  { name: "Burden",  note: "True, and rarely the thing you act on." },
+  boon:    { name: "Boon",    note: "The only tone that is good news." },
+};
+
+const C = {
+  "dying":             { n: "Dying",      t: "peril"   },
+  "wounded":           { n: "Wounded",    t: "peril"   },
+  "doomed":            { n: "Doomed",     t: "peril"   },
+  "persistent-damage": { n: "Persistent", t: "peril"   },
+  "frightened":        { n: "Frightened", t: "impair"  },
+  "clumsy":            { n: "Clumsy",     t: "impair"  },
+  "enfeebled":         { n: "Enfeebled",  t: "impair"  },
+  "drained":           { n: "Drained",    t: "impair"  },
+  "stupefied":         { n: "Stupefied",  t: "impair"  },
+  "sickened":          { n: "Sickened",   t: "impair"  },
+  "slowed":            { n: "Slowed",     t: "control" },
+  "stunned":           { n: "Stunned",    t: "control" },
+  "immobilized":       { n: "Immobilized",t: "control" },
+  "grabbed":           { n: "Grabbed",    t: "control" },
+  "prone":             { n: "Prone",      t: "control" },
+  "fleeing":           { n: "Fleeing",    t: "control" },
+  "confused":          { n: "Confused",   t: "control" },
+  "blinded":           { n: "Blinded",    t: "sense"   },
+  "dazzled":           { n: "Dazzled",    t: "sense"   },
+  "concealed":         { n: "Concealed",  t: "sense"   },
+  "off-guard":         { n: "Off-Guard",  t: "burden"  },
+  "encumbered":        { n: "Encumbered", t: "burden"  },
+  "fatigued":          { n: "Fatigued",   t: "burden"  },
+  "quickened":         { n: "Quickened",  t: "boon"    },
+};
+
+/* Rank: what sorts to the top of a rail, or to twelve o'clock. */
+const RANK = { peril: 0, impair: 1, control: 2, sense: 3, burden: 4, boon: 5 };
+
+const SETS = {
+  light: [["off-guard"], ["frightened", 2], ["prone"]],
+  combat: [["off-guard"], ["frightened", 2], ["clumsy", 1], ["persistent-damage"], ["slowed", 1], ["prone"]],
+  stress: [
+    ["dying", 2], ["wounded", 1], ["persistent-damage"], ["frightened", 3], ["clumsy", 2],
+    ["enfeebled", 1], ["stunned", 2], ["blinded"], ["grabbed"], ["off-guard"],
+  ],
+};
+
+const order = (a, b) => (RANK[C[a[0]].t] - RANK[C[b[0]].t]) || C[a[0]].n.localeCompare(C[b[0]].n);
+const MAX_LEDGER = 6;
+const MAX_RAIL = 6;
+
+let current = [];
+let motion = 1;
+
+/* ── The token portrait. Drawn rather than pasted so the page ships
+      with no external art and the silhouette reads at any size. ── */
+const ART = `
+<svg viewBox="0 0 100 100" aria-hidden="true">
+  <defs>
+    <linearGradient id="hide" x1="30%" y1="4%" x2="76%" y2="98%">
+      <stop offset="0" stop-color="#a3b6d2"/><stop offset="0.42" stop-color="#5a6d8e"/><stop offset="1" stop-color="#1c2534"/>
+    </linearGradient>
+    <linearGradient id="horn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8dfc8"/><stop offset="1" stop-color="#665c4a"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="#0c111b"/>
+  <ellipse cx="50" cy="90" rx="40" ry="12" fill="#070b12"/>
+  <path fill="url(#horn)" d="M32 31c-7-7-15-11-22-11 3 9 9 16 17 20z"/>
+  <path fill="url(#horn)" d="M68 31c7-7 15-11 22-11-3 9-9 16-17 20z"/>
+  <path fill="url(#hide)" d="M50 19c-11 0-19 6-22 16-2 6-2 13-1 19 2 13 10 25 23 25s21-12 23-25c1-6 1-13-1-19-3-10-11-16-22-16z"/>
+  <path fill="#111a27" opacity="0.5" d="M35 62c4 9 9 15 15 15s11-6 15-15c-10 4-20 4-30 0z"/>
+  <path fill="#131c2a" d="M32 43l15 5-1 5-14-5zM68 43l-15 5 1 5 14-5z"/>
+  <path fill="#ffb12d" d="M40 48c2.4 0 4.2 1.8 4.2 3.8S42.4 55 40 55s-4.2-1.2-4.2-3.2S37.6 48 40 48z"/>
+  <path fill="#ffb12d" d="M60 48c-2.4 0-4.2 1.8-4.2 3.8S57.6 55 60 55s4.2-1.2 4.2-3.2S62.4 48 60 48z"/>
+  <path fill="#301c00" d="M40 49.4c1 0 1.5 1 1.5 2.4s-.5 2.1-1.5 2.1-1.5-.7-1.5-2.1.5-2.4 1.5-2.4zM60 49.4c1 0 1.5 1 1.5 2.4s-.5 2.1-1.5 2.1-1.5-.7-1.5-2.1.5-2.4 1.5-2.4z"/>
+  <path fill="#0d1521" d="M43 64h14l-2.5 4.5h-9z"/>
+  <path fill="#e8eef6" d="M45.2 64.2l1.4 3.6 1.4-3.6zM51.9 64.2l1.4 3.6 1.4-3.6z"/>
+  <path fill="none" stroke="#c3d6f2" stroke-opacity="0.45" stroke-width="1.7" stroke-linecap="round" d="M29.5 34c2-9 9.5-15 20.5-15"/>
+</svg>`;
+
+const svgIcon = (slug, cls) =>
+  `<svg class="${cls || "ic"}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${slug}"></use></svg>`;
+
+/* ══ Renderers ═════════════════════════════════════════════════════ */
+
+function renderRail(host, list) {
+  const shown = list.slice(0, MAX_RAIL);
+  host.innerHTML = shown.map(([slug, val]) => {
+    const c = C[slug];
+    const w = Math.min(26 + 7.1 * c.n.length + (val ? 32 : 16), 132);
+    return `<div class="chip" data-tone="${c.t}" data-slug="${slug}" style="--w:${w}px"
+      title="${c.n}${val ? " " + val : ""}">${svgIcon(slug)}<span class="nm">${c.n}</span>${
+      val ? `<span class="vl">${val}</span>` : ""}</div>`;
+  }).join("") + (list.length > MAX_RAIL
+    ? `<div class="chip" data-tone="burden" style="--w:60px"><span class="nm" style="opacity:1;padding-left:8px">+${list.length - MAX_RAIL}</span></div>`
+    : "");
+}
+
+function renderCrown(host, list) {
+  host.querySelectorAll(".cell").forEach(n => n.remove());
+  for (const [slug, val] of list) {
+    const c = C[slug];
+    const el = document.createElement("div");
+    el.className = "cell";
+    el.dataset.tone = c.t;
+    el.dataset.slug = slug;
+    el.title = c.n + (val ? " " + val : "");
+    el.innerHTML = svgIcon(slug) + `<span class="nm">${c.n}</span>` + (val ? `<span class="vl">${val}</span>` : "");
+    host.appendChild(el);
+  }
+}
+
+function renderHalo(host, list) {
+  host.querySelectorAll(".bead, .shock").forEach(n => n.remove());
+  const n = list.length;
+  const step = Math.min(26, 300 / Math.max(n, 1));
+  const R = 100;                                  /* ring radius, px */
+  list.forEach(([slug, val], i) => {
+    const c = C[slug];
+    const a = (-90 + (i - (n - 1) / 2) * step) * Math.PI / 180;
+    const el = document.createElement("div");
+    el.className = "bead";
+    el.dataset.tone = c.t;
+    el.dataset.slug = slug;
+    el.title = c.n + (val ? " " + val : "");
+    el.style.setProperty("--x", (Math.cos(a) * R).toFixed(1) + "px");
+    el.style.setProperty("--y", (Math.sin(a) * R).toFixed(1) + "px");
+    el.innerHTML = svgIcon(slug) + (val ? `<span class="vl">${val}</span>` : "");
+    host.appendChild(el);
+  });
+}
+
+function renderLedger(host, list) {
+  const shown = list.slice(0, MAX_LEDGER);
+  host.innerHTML = shown.map(([slug, val]) => {
+    const c = C[slug];
+    return `<div class="row" data-tone="${c.t}" data-slug="${slug}">${svgIcon(slug)}
+      <span class="nm">${c.n}</span>${val ? `<span class="vl">${val}</span>` : ""}</div>`;
+  }).join("") + (list.length > MAX_LEDGER
+    ? `<div class="row more" data-tone="burden"><span class="nm">+${list.length - MAX_LEDGER} more</span></div>`
+    : "");
+}
+
+const HOSTS = {
+  rail:   { sel: ".rail-col", render: renderRail,   unit: ".chip" },
+  crown:  { sel: ".crown",    render: renderCrown,  unit: ".cell" },
+  halo:   { sel: ".halo",     render: renderHalo,   unit: ".bead" },
+  ledger: { sel: ".ledger",   render: renderLedger, unit: ".row"  },
+};
+
+/* ══ Apply / remove, with the transitions the beat is for ══════════ */
+
+function paint(next, { animate = true } = {}) {
+  const prevSlugs = new Set(current.map(c => c[0]));
+  const nextSlugs = new Set(next.map(c => c[0]));
+  const added = next.filter(c => !prevSlugs.has(c[0])).map(c => c[0]);
+  const removedAny = current.some(c => !nextSlugs.has(c[0]));
+
+  const commit = () => {
+    current = next;
+    for (const stage of document.querySelectorAll(".stage")) {
+      const spec = HOSTS[stage.dataset.dir];
+      const host = stage.querySelector(spec.sel);
+      spec.render(host, next);
+      if (!animate) continue;
+      for (const el of host.querySelectorAll(spec.unit)) {
+        if (!added.includes(el.dataset.slug)) continue;
+        el.classList.add("in");
+        el.addEventListener("animationend", () => el.classList.remove("in"), { once: true });
+        if (stage.dataset.dir === "halo") {
+          const s = document.createElement("div");
+          s.className = "shock";
+          s.dataset.tone = el.dataset.tone;
+          s.style.cssText = el.style.cssText;
+          host.appendChild(s);
+          s.addEventListener("animationend", () => s.remove(), { once: true });
+        }
+      }
+    }
+  };
+
+  if (!animate || !removedAny) return commit();
+
+  /* Removals play out before the new state is written, so a swap reads as
+     two events rather than as a redraw. */
+  let pending = 0;
+  for (const stage of document.querySelectorAll(".stage")) {
+    const spec = HOSTS[stage.dataset.dir];
+    for (const el of stage.querySelectorAll(spec.unit)) {
+      if (el.dataset.slug && nextSlugs.has(el.dataset.slug)) continue;
+      pending++;
+      el.classList.add("out");
+      el.addEventListener("animationend", () => { if (--pending === 0) commit(); }, { once: true });
+    }
+  }
+  if (pending === 0) commit();
+  else setTimeout(() => { if (pending > 0) { pending = 0; commit(); } }, 700 / Math.max(motion, 0.001));
+}
+
+/* ══ The resource bar ══════════════════════════════════════════════ */
+let hp = 84;
+const HP_MAX = 120;
+
+function paintHp({ flash = false } = {}) {
+  const f = Math.max(0, hp) / HP_MAX;
+  /* The suite's ramp: good → signal → hazard, interpolated in OKLab. */
+  const g = x => Math.pow(Math.max(0, Math.min(1, x)), 0.55) * 100;
+  const col = f > 0.5
+    ? `color-mix(in oklab, var(--gl-good) ${g((f - 0.5) / 0.5).toFixed(0)}%, var(--gl-signal))`
+    : `color-mix(in oklab, var(--gl-signal) ${g(f / 0.5).toFixed(0)}%, var(--gl-hazard))`;
+  for (const bar of document.querySelectorAll(".hp")) {
+    const fill = bar.querySelector(".hp-fill");
+    fill.style.width = `calc((100% - 8px) * ${f.toFixed(4)})`;
+    fill.style.setProperty("--hpc", col);
+    bar.querySelector(".hp-read").innerHTML =
+      `${Math.max(0, hp)}<u> / </u><i>${HP_MAX}</i>`;
+    if (flash) {
+      bar.classList.remove("hit");
+      void bar.offsetWidth;
+      bar.classList.add("hit");
+    }
+  }
+}
+
+/* ══ Wiring ════════════════════════════════════════════════════════ */
+
+for (const stage of document.querySelectorAll(".stage")) {
+  stage.querySelector(".token").innerHTML = ART;
+}
+
+/* Tone legend, built from the same table the renderers read. */
+document.getElementById("tones").innerHTML = Object.entries(TONES).map(([key, t]) => {
+  const members = Object.entries(C).filter(([, c]) => c.t === key);
+  return `<div class="tone-row" data-tone="${key}">
+    <div>
+      <div class="tone-key"><span class="tone-swatch"></span><span class="tone-name">${t.name}</span></div>
+      <div style="font-size:11.5px;line-height:1.45;color:#8d97a9;margin-top:5px">${t.note}</div>
+    </div>
+    <div class="tone-list">${members.map(([slug, c]) =>
+      `<span class="tone-tag" data-tone="${key}">${svgIcon(slug, "")}${c.n}${
+        ["frightened","clumsy","enfeebled","drained","stupefied","sickened","slowed","stunned","dying","wounded","doomed"].includes(slug)
+          ? " <u>n</u>" : ""}</span>`).join("")}</div>
+  </div>`;
+}).join("");
+
+function setSet(name, animate = true) {
+  paint([...SETS[name]].sort(order), { animate });
+}
+
+document.getElementById("setseg").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  for (const x of e.currentTarget.children) x.setAttribute("aria-pressed", String(x === b));
+  setSet(b.dataset.set);
+});
+
+document.getElementById("motionseg").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  for (const x of e.currentTarget.children) x.setAttribute("aria-pressed", String(x === b));
+  motion = Number(b.dataset.m);
+  document.documentElement.style.setProperty("--m", String(motion));
+});
+
+document.getElementById("clear").addEventListener("click", () => {
+  for (const x of document.getElementById("setseg").children) x.setAttribute("aria-pressed", "false");
+  paint([]);
+});
+
+/* One scripted beat: the hit lands, the bar drops, a condition sticks.
+   The order is the point — impact, hitstop, then the reaction. */
+document.getElementById("beat").addEventListener("click", () => {
+  hp = hp > 30 ? hp - 23 : 84;
+  paintHp({ flash: true });
+  const pool = [["frightened", 2], ["clumsy", 1], ["persistent-damage"], ["stunned", 1], ["off-guard"], ["drained", 1], ["blinded"]];
+  const have = new Set(current.map(c => c[0]));
+  const pick = pool.find(c => !have.has(c[0]));
+  const next = pick ? [...current, pick] : current.slice(0, -1);
+  setTimeout(() => paint([...next].sort(order)), 90);
+});
+
+setSet("combat", false);
+paintHp();
+</script>
