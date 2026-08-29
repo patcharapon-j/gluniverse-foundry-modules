@@ -64,18 +64,40 @@ function numberRow({ label, hint, name, value, placeholder }) {
 /**
  * Find somewhere sensible to put the fields.
  *
- * The Resources tab is where Foundry keeps the bar attribute pickers, so a bar
- * placement control belongs beside them. Every fallback below is a real Foundry
- * layout, ending at the form itself: a sheet that has been restructured by
- * another module should still get the fields somewhere rather than silently
- * dropping the only UI for a documented setting.
+ * The bar attribute pickers live in the Resources tab, so a bar *placement*
+ * control belongs beside them.
+ *
+ * The obvious selector for that tab is `[data-tab="resources"]` and it is
+ * wrong: Foundry stamps `data-tab` on the navigation *link* as well as on the
+ * body it switches to, the link comes first in document order, and
+ * `querySelector` returns the first match — so the fields get appended inside
+ * the header's Resources button, which is where they were turning up. Nothing
+ * about that fails loudly. The fieldset renders, the inputs work, they save.
+ * It just sits in the header.
+ *
+ * So the anchor is real content instead of a tab id: `bar1.attribute` exists
+ * only inside the tab body, and walking up from it cannot land on a nav link.
+ * The fallbacks are tab *bodies* only, and the last of them is the form rather
+ * than the sheet root — a sheet restructured by another module should still get
+ * the fields somewhere sane rather than back in the header.
  */
 function findHost(root) {
-  return root.querySelector('[data-tab="resources"]')
-      ?? root.querySelector('[data-application-part="resources"]')
-      ?? root.querySelector('[data-tab="appearance"]')
-      ?? root.querySelector("form")
-      ?? root;
+  const anchor = root.querySelector('[name="bar1.attribute"], [name="bar2.attribute"]');
+  if (anchor) {
+    const body = anchor.closest(".tab, [data-application-part]");
+    if (body && body !== root) return body;
+    /* No tab wrapper (some sheets flatten it): sit beside the picker's own
+       fieldset rather than inside it. */
+    const fs = anchor.closest("fieldset");
+    if (fs?.parentElement) return fs.parentElement;
+  }
+
+  const guess = root.querySelector('[data-application-part="resources"]')
+             ?? root.querySelector('.tab[data-tab="resources"]')
+             ?? root.querySelector('.tab[data-tab="appearance"]')
+             ?? root.querySelector("form");
+  /* Never inside the tab strip, whichever way we got here. */
+  return guess && !guess.closest("nav") ? guess : null;
 }
 
 export function injectTokenConfig(app, element) {
