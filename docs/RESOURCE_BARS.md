@@ -375,6 +375,130 @@ never degrades.
 
 ---
 
+## Guard break
+
+When the **Initiative Tracker** marks a creature's guard as broken, it puts a
+golden glass fracture on that creature's token and on its initiative card. The
+bar is the third place that state lands, and arguably the one it matters most
+on: the token overlay is *behind* the creature and the card is off at the edge
+of the screen, while the bar is the thing everyone is already looking at.
+
+It is the **same fracture**, not a lookalike. `core/fx-glsl.mjs` now exports the
+crack *field* — `gluBreakField` — as well as the whole-shader `FX_FRAG_BREAK`
+that initiative and etched-chat run, and this feature composites that field
+inside its own bar shader. A bar cannot use the whole shader: it is one quad
+running one program, and its crack has to be clipped to the bar's own
+cut-corner silhouette and composited *with* the fill rather than laid over it as
+a second mesh. Three separate cracks drawn three times is how a break ends up
+meaning three slightly different things.
+
+The field takes two shape parameters, `dense` and `reach`, both **1.0 for the
+square-ish quads it was written for and both arithmetic identities there** — so
+the extraction changed nothing for the token or the card. Neither can be 1.0 on
+a bar. At `dense` 1 the shards land about a pixel across, which is
+mathematically the same fracture and visually grain; at `reach` 1 the crack
+dies a tenth of the way along an 8:1 bar. `BREAK_DENSE` puts a shard at about a
+fifth of a bar height (~4 device pixels on the 19px reference bar), and
+`BREAK_REACH` is a fraction of the bar's **length** rather than a constant — the
+same trap the wave's ramp length documents above, where a constant is most of a
+stubby rail and a tenth of a wide hero bar. It also sets the pitch of the energy
+flowing along the seams, which is measured against that distance, and a longer
+reach makes that flow *coarser* — the direction that survives a small bar.
+
+Two things the bar's fracture does differently from the way that field is drawn
+elsewhere, and both are about what it is being drawn *over*:
+
+**It cuts before it lights.** `FX_FRAG_BREAK` is pure additive gold, which is
+right over token art and wrong over a bar: laid on an already-bright plate the
+gold and the arterial red of a nearly-dead fill both arrive as the same pale
+smear — the exact failure the wave is written to avoid. So the seam darkens the
+material it crosses and the light goes *in* the seam, which is also what a
+fracture in a lit pane actually looks like.
+
+**It does not touch the reading.** No dimming, no desaturation, nothing
+following the health — unlike the shield break a few lines further down the same
+shader, which is allowed to grey out a rail whose whole subject is the thing that
+broke. A guard break says nothing about hit points, and a bar that dulls its own
+fill to announce an unrelated state has stopped being the measurement it is there
+to be.
+
+It nucleates at the **leading edge of the fill as it stood when the guard went**,
+captured once and then held. That point is the only one on a bar that means
+anything, so it is where the eye already is and where the shards are finest — and
+a fracture that slid along with the next three hits would be a decal rather than
+damage. The seed is derived from the token id, not from `Math.random()`: a
+random seed reshuffles the shards on every redraw of the placeable, so a scar
+would quietly rearrange itself mid-combat, and it would differ per client.
+
+The clock is the shared field's own. It spreads the crack over
+`clamp(time * 1.4, 0, 1)`, and `TIMING.breakInMs` is how long this model takes
+to walk that far — at full motion the two agree by construction and the bar
+shatters in step with the same creature's token. There is no fade *in*: the
+shatter is the arrival, and a crack that fades up is a crack that was always
+there. Clearing a break does fade, because nothing un-shatters and a crack that
+vanishes between two frames reads as a glitch. Past the settle the clock keeps
+running for the pulse and the flow, and wraps at **10π** — a whole number of
+cycles of *both* (11 of the pulse's 2.2 rad/s, 16 of the flow's 3.2), so the
+wrap cannot step the fracture mid-breath.
+
+A broken creature's bar is therefore **hot for as long as it is broken**, the
+same standing cost as low health and for the same reason. `breakFlow` sits
+second in `SHED_ORDER` because of it — it is one of only two standing costs in
+that list, everything after it being paid once per change. Shedding it freezes
+the fracture at its settled frame and drops the bar out of the ticker; the crack
+stays exactly where it was. **What degrades is the motion, never the state.**
+The same is true of motion tier "none", where the fracture arrives already
+settled and its clock never moves again: the crack is the state, the spread is
+only how it got there.
+
+### Reading across a feature line
+
+The break is a flag on the **Combatant**, under the suite's one flag scope with
+the initiative feature's `init.` prefix. That is a real dependency and is
+treated as one, in `break.mjs`:
+
+- The key is named once and `resource-bar-check` pins it against
+  `features/initiative/constants.mjs`'s own `FLAGS` table. A rename there would
+  otherwise leave this reading a flag nobody writes any more, and a fracture that
+  simply never appears is not a bug anyone reports.
+- Nothing is ever **written**. The tracker owns the state and the GM-only paths
+  that set it; the bars are a reader.
+- The whole thing **self-gates** on the initiative feature being enabled, so a
+  world running the bars alone pays nothing for it and cannot fracture on a stale
+  flag left behind by a feature that is off.
+- The two golds are `PALETTE.warn` and `PALETTE.signalHot` — reached through the
+  palette names they are, rather than as two float triples copied out of that
+  feature — and the check pins them against its `ACTIVE_SHADER_PALETTE`. A crack
+  that is gold on the token and a near-identical other gold on the bar is drift
+  nobody would file.
+
+Every combatant on the token is checked rather than only the first:
+PF2e-Flatfinder's solo bosses hold several combatants for one token (the prime
+turn plus its reprises) and the tracker flags the one that was struck, so
+`getCombatantByToken` would answer "intact" for a broken boss whenever a reprise
+happened to sort first.
+
+The break is read **outside the value diff**, and that is load-bearing. It is a
+different source that moves on its own, and it lands on creatures nothing has
+touched — which is exactly what happens when a break gauge empties on somebody
+else's turn. Hung off the "did the numbers change" path, a broken creature's bar
+would stay intact until the next time something hit it. It rides the **primary
+bar only**: one creature, one fracture, and the shield has its own break and its
+own look for it.
+
+There is deliberately **no visibility test** in `break.mjs`. The fracture is
+drawn on the bar, and `visibility.mjs` has already decided whether this client
+may see that bar at all — a token whose Display Bars hides it from a player has
+no bar for a crack to appear on. A second, differently-shaped rule here would be
+a second thing to keep in step with core, which is the one mistake this feature's
+permission story is built to avoid.
+
+`rb.breakFx` turns it off. World-scoped, because it is a fact about the creature
+that the whole table reads off the same bar rather than a preference about how
+much motion one screen shows; that lever already exists and is the motion tier.
+
+---
+
 ## Permission
 
 **The feature never shows more than `displayBars` already permits.** A GM who
@@ -484,7 +608,19 @@ its size so the size setting is not silently inert, that the GM's readout
 override never reaches the permission gate and never outruns `displayBars`, that
 nothing has been sheared again, and that every detail gate still resolves at
 the
-reference size. With Playwright present
+reference size.
+
+For the guard break it pins the whole cross-feature seam: that the flag key still
+matches the initiative tracker's own table, that `break.mjs` never writes that
+flag and still self-gates on the tracker being enabled, that the two golds still
+match its palette, that the fracture runs the *shared* field rather than a fork
+of it, that `FX_FRAG_BREAK` still calls that field at `dense`/`reach` 1.0 so the
+extraction stayed an identity for the token and the card, that the crack is
+clipped to the bar's silhouette and does not desaturate the fill, that
+`TIMING.breakInMs` still agrees with the field's own settle and `BREAK_WRAP` is
+a whole number of cycles of both moving terms, that the nucleation point is
+captured rather than followed, and that freezing the fracture stops its clock and
+releases the ticker **without losing the crack**. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 
 ```bash

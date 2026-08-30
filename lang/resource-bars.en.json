@@ -29,6 +29,8 @@
   "GLRB.Settings.FloatingDeltas.Hint": "Show the amount lost or gained as a number that rises off the bar. Off by default; dedicated modules cover this ground and some tables find it noisy.",
   "GLRB.Settings.Pf2eLayers.Name": "PF2e temp HP and shields",
   "GLRB.Settings.Pf2eLayers.Hint": "Draw temporary hit points as a shield plate over the bar, and a raised shield as its own rail beneath it. Ignored outside Pathfinder 2e.",
+  "GLRB.Settings.BreakFx.Name": "Guard-break fracture",
+  "GLRB.Settings.BreakFx.Hint": "When the Initiative Tracker marks a creature's guard as broken, fracture its health bar with the same golden glass crack it puts on the token and the initiative card. Needs the Initiative Tracker feature; ignored without it.",
   "GLRB.Settings.Bloom.Name": "Bloom",
   "GLRB.Settings.Bloom.Hint": "Let highlights and impacts cast light past the edge of the bar. Costs one extra render pass over all bars together. Turn it off if the canvas struggles.",
   "GLRB.Settings.MotionTier.Name": "Motion",

@@ -22,6 +22,7 @@ export const SETTINGS = Object.freeze({
   lowThreshold: PREFIX + "lowThreshold",   // percent at which the low state engages
   floatingDeltas: PREFIX + "floatingDeltas",
   pf2eLayers: PREFIX + "pf2eLayers",       // temp-HP shield plate + shield rail
+  breakFx: PREFIX + "breakFx",             // the initiative tracker's guard-break fracture
   bloom: PREFIX + "bloom",                 // the post-process pass
   offsetX: PREFIX + "offsetX",             // world default nudge, in grid squares
   offsetY: PREFIX + "offsetY",

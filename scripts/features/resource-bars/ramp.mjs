@@ -53,6 +53,24 @@ export const TEMP_COLOR = PALETTE.cyanHot;
 export const SHIELD_COLOR = PALETTE.cyan;
 export const RAIL_COLOR = PALETTE.accent;
 
+/**
+ * The two golds the guard-break fracture is drawn in.
+ *
+ * They are the initiative tracker's fracture colours, reached through the
+ * PALETTE names they are: `warn` is the #ffb12d that feature calls "breakAmber"
+ * and `signalHot` the #ffe070 it calls "breakHot". Naming them here rather than
+ * copying two float triples out of `features/initiative/constants.mjs` keeps the
+ * suite's one rule about colour in JS — route it through the palette mirror,
+ * never hardcode it — and `tools/resource-bar-check.mjs` pins the two features
+ * against each other, because a crack that is gold on the token and a slightly
+ * different gold on the bar is drift nobody would file a bug about.
+ *
+ * They are deliberately *not* ramp stops. The break is a state of the creature's
+ * guard, not of its health, so it must not be reachable by the fill.
+ */
+export const BREAK_AMBER = PALETTE.warn;
+export const BREAK_HOT = PALETTE.signalHot;
+
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────
    Björn Ottosson's transform. Kept here rather than in core/theme.mjs because
    theme.mjs's colour maths is deliberately the small set every feature needs;

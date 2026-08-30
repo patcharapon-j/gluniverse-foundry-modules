@@ -30,6 +30,7 @@
  */
 
 import { SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
+import { FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
 
 export { VERTEX_SHADER };
 
@@ -74,10 +75,18 @@ export const UNIFORMS = Object.freeze({
   uSegW: "float",     // the gap between two plates, in device pixels
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
 
+  uBreak: "float",     // guard-break fracture, 0..1 (0 = intact); hero row only
+  uBreakT: "float",    // seconds since the fracture landed — the shatter's own clock
+  uBreakX: "float",    // where it nucleated, as a fraction along the bar
+  uBreakFlow: "float", // the energy flowing along the seams, 0 once shed under load
+  uSeed: "float",      // per-token seed, so two broken creatures shatter differently
+
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
   uTempCol: "vec3",   // temp-HP overlay colour, sRGB 0..1
   uShieldCol: "vec3", // shield rail colour, sRGB 0..1
   uRailCol: "vec3",   // secondary-rail colour, sRGB 0..1 (the suite accent)
+  uBreakAmber: "vec3",// fracture seam gold, sRGB 0..1
+  uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
 });
 
 /**
@@ -137,10 +146,48 @@ export const READOUT_INSET = 0.275;
  */
 export const SHIELD_PITCH = 0.44;
 
+/**
+ * The guard-break fracture's two shape parameters, in the units
+ * `core/fx-glsl.mjs`'s field takes them: how many shards, and how far they
+ * spread. Both are 1.0 for the square-ish quads that field was written for and
+ * neither can be 1.0 here, which is the whole reason it takes them.
+ *
+ * BREAK_DENSE scales the shard count. The cells are round and this shader's
+ * space is one unit per *bar height*, so a bar height is what sets their size:
+ * 0.30 puts a cell at about a fifth of one, which is ~4 device pixels on the
+ * 19px reference bar. At the field's own 1.0 they would be a pixel across —
+ * mathematically the same fracture, and grain.
+ *
+ * BREAK_REACH is how far the crack travels from the impact, as a fraction of the
+ * bar's *length* rather than as a constant. A constant is most of a stubby rail
+ * and a tenth of a wide hero bar, so the fracture would die a tenth of the way
+ * along exactly the bars with the room to show it — the same trap the wave's
+ * ramp length documents above. It also sets the pitch of the energy flowing
+ * along the seams, which is measured against this distance: a longer reach makes
+ * that flow *coarser*, which is the direction that survives a small bar.
+ */
+export const BREAK_DENSE = 0.30;
+export const BREAK_REACH = 0.30;
+
+/**
+ * The crack line's own weight, in the field's edge units.
+ *
+ * It is not the thing that keeps the seams visible — the field floors its own
+ * antialiasing at a device pixel, and on any bar at playable size that floor is
+ * what wins. This only decides how heavy the fracture looks once you have zoomed
+ * far enough in for the floor to stop mattering. The initiative overlay uses
+ * 0.08 on a token quad and etched-chat 0.05 on a card; a bar is read at a
+ * fraction of either size, so it takes the heaviest of the three.
+ */
+export const BREAK_THICK = 0.14;
+
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + CUT.toFixed(4) + `;
 const float BODY_INSET = ` + BODY_INSET.toFixed(4) + `;
-const float SHIELD_PITCH = ` + SHIELD_PITCH.toFixed(4) + `;` + `
+const float SHIELD_PITCH = ` + SHIELD_PITCH.toFixed(4) + `;
+const float BREAK_DENSE = ` + BREAK_DENSE.toFixed(4) + `;
+const float BREAK_REACH = ` + BREAK_REACH.toFixed(4) + `;
+const float BREAK_THICK = ` + BREAK_THICK.toFixed(4) + `;` + `
 varying vec2 vTextureCoord;
 
 uniform float uTime;
@@ -163,10 +210,23 @@ uniform float uWaveX;
 uniform float uSeg;
 uniform float uSegW;
 uniform float uRole;
+uniform float uBreak;
+uniform float uBreakT;
+uniform float uBreakX;
+uniform float uBreakFlow;
+uniform float uSeed;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
 uniform vec3  uShieldCol;
 uniform vec3  uRailCol;
+uniform vec3  uBreakAmber;
+uniform vec3  uBreakHot;
+
+/* The guard-break fracture, shared verbatim with the initiative tracker's token
+   overlay and card portraits and with the etched-chat crit crack. Only the field
+   is shared; the colouring below is this shader's own, because that is the part
+   that has to answer to what it is being drawn over. uSeed must be declared
+   before either chunk — both hash against it. */` + FX_GLSL_NOISE + FX_GLSL_BREAK_FIELD + FX_GLSL_BREAK_PULSE + `
 
 /* One device pixel in p units. Set once in main(), read by the helpers below —
    GLSL ES 1.0 has no closures, so this is a global by necessity. */
@@ -645,6 +705,66 @@ void main(void) {
     c *= mTrough * uCracked;
     C = mix(C, INK0, clamp(c, 0.0, 1.0) * 0.90);
     C = mix(C, vec3(dot(C, vec3(0.299, 0.587, 0.114))) * 0.72, uCracked * 0.65);
+  }
+
+  /* ── Guard break ───────────────────────────────────────────────────────
+     The creature's guard has been shattered, so the *instrument* is shattered:
+     one fracture across the whole body — trough, fill and frame alike — clipped
+     to the silhouette by mBody so the cut corner cuts the cracks too and nothing
+     lands out in the bloom margin.
+
+     It is the same fracture the initiative tracker puts on the token and on the
+     card, from the same field in core/fx-glsl.mjs, on the same clock. Three
+     lookalikes drawn three times is how a break ends up meaning three slightly
+     different things.
+
+     Two deliberate differences from the way that field is drawn elsewhere, and
+     both are about what it is being drawn *over*.
+
+     **It cuts before it lights.** FX_FRAG_BREAK is pure additive gold, which is
+     right over token art and wrong over a bar: laid on an already-bright plate,
+     the gold and the arterial red of a nearly-dead fill both arrive as the same
+     pale smear — the exact failure the wave above is written to avoid. So the
+     seam darkens the material it crosses and the light goes *in* the seam, which
+     is also what a fracture in a lit pane actually looks like.
+
+     **It does not touch the reading.** No desaturation, no dimming, nothing
+     following the health — unlike the shield break above, which is allowed to
+     grey out a rail whose whole subject is the thing that broke. A guard break
+     says nothing about hit points, and a bar that dulls its own fill to announce
+     an unrelated state has stopped being the measurement it is there to be.
+
+     uBreak arrives 0 on the rails (the host only writes it for the hero row), so
+     this branch — the most expensive thing in the shader, and the only place it
+     evaluates a Voronoi field and two octaves of fbm — is skipped on every bar
+     that is not a broken creature's own. */
+  if (uBreak > 0.001) {
+    /* It nucleates at the leading edge of the fill as it stood when the break
+       landed, a little above the mid-line. That point is the only one on a bar
+       that means anything, so it is where the eye already is and where the
+       shards are finest — and it is captured once rather than followed, because
+       a fracture that slides along with the next hit is a decal, not damage. */
+    vec2 imp = vec2(mix(fx0, fx1, clamp(uBreakX, 0.0, 1.0)), bb.y * 0.22);
+    vec4 fld = gluBreakField(p, imp, uBreakT, BREAK_THICK, px,
+                             BREAK_DENSE, max(uAspect * BREAK_REACH, 1.6));
+    float crack = fld.x, halo = fld.y, hotCore = fld.z;
+    float glowFlow = fld.w * uBreakFlow;
+    float bpulse = gluBreakPulse(uBreakT);
+    float amt = uBreak * mBody;
+
+    /* The fissure. */
+    C = mix(C, INK0, clamp(crack * 1.15, 0.0, 1.0) * amt * 0.60);
+
+    /* Then the light in it, emitted above 1.0 like everything else here that is
+       meant to reach the bright-pass. */
+    vec3 seam = mix(uBreakAmber, uBreakHot, clamp(crack * bpulse, 0.0, 1.0));
+    seam = mix(seam, vec3(1.0), clamp(hotCore + glowFlow, 0.0, 1.0));
+    float lit = clamp(crack * 0.95 + halo + hotCore * 0.7 + glowFlow * 0.8, 0.0, 1.0);
+    C += seam * lit * amt * 0.90;
+    /* The seams cross the gap of air between the stroke and the trough, where
+       the bar has no alpha at all. Without this the crack is premultiplied to
+       nothing exactly where it would have read as one pane rather than two. */
+    A = max(A, min(lit * amt * 1.10, 1.0));
   }
 
   /* ── Impact ────────────────────────────────────────────────────────────

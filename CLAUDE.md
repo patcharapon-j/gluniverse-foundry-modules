@@ -341,7 +341,17 @@ by hand and can drift from it; an animated behaviour missing from
 node tools/resource-bar-check.mjs
 ```
 
-Zero problems required. Two pins are worth knowing about before you touch this.
+Zero problems required. It also pins the seam with the initiative tracker: the
+guard-break fracture is that feature's crack, run from the *shared* field in
+`scripts/core/fx-glsl.mjs` rather than a lookalike, and everything holding the
+two together fails silently — the flag key drifting (a fracture that never
+appears), the gold drifting (one creature cracking in two golds), the field being
+forked, or the extraction ceasing to be an identity for `FX_FRAG_BREAK`, which
+changes the token and the card while nothing in the bars is even running. If you
+touch `core/fx-glsl.mjs`, that shader is consumed by three features; the pin only
+proves the *call* is unchanged, so re-render before you trust it.
+
+Two more pins are worth knowing about before you touch this.
 
 Anything meant to read as a hairline must be sized in **device pixels** (`px`),
 never in the shader's geometry units — a fixed value is ~2px on a HiDPI display

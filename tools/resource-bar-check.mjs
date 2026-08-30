@@ -38,6 +38,10 @@ const shaderSrc = await src("scripts/features/resource-bars/shader.mjs");
 const hostSrc = await src("scripts/features/resource-bars/host.mjs");
 const animSrc = await src("scripts/features/resource-bars/anim.mjs");
 const tokensCss = await src("styles/gl-tokens.css");
+const breakSrc = await src("scripts/features/resource-bars/break.mjs");
+const fxGlsl = await import(new URL("scripts/core/fx-glsl.mjs", ROOT).href);
+const initConst = await import(new URL("scripts/features/initiative/constants.mjs", ROOT).href);
+const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs", ROOT).href);
 
 /* ── 1. The uniform table, the GLSL and the JS all agree ────────────────── */
 {
@@ -167,7 +171,7 @@ const tokensCss = await src("styles/gl-tokens.css");
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave"];
+                    "sparks", "wave", "breakFlow"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -393,6 +397,182 @@ const tokensCss = await src("styles/gl-tokens.css");
     fail("index.mjs builds an i18n key from a template literal; the sweep above only sees quoted keys, so a missing string there is invisible to this check.");
 }
 
+/* ── 7k. The guard-break fracture is the initiative tracker's, not a copy ─── */
+{
+  /* This feature draws the *same* crack the initiative tracker puts on a broken
+     creature's token and card. Every way that can quietly stop being true fails
+     silently, and each one reads to a GM as "the modules disagree" rather than
+     as a bug:
+
+       - the flag key drifting, so the bar reads a flag nobody writes any more
+         and the fracture simply never appears;
+       - the gold drifting, so the token cracks in one colour and the bar in a
+         near-identical other one;
+       - the field being forked instead of shared, after which the two look alike
+         until the first time either is touched;
+       - the extraction not being an identity for the original consumers, which
+         changes the token and the card while nothing in this feature is even
+         running. */
+  const glsl = strip(shader.FRAGMENT_SHADER);
+  const shaderMod = strip(shaderSrc);
+  const h = strip(hostSrc);
+
+  if (breakMod.GUARD_BROKEN_FLAG !== initConst.FLAGS.guardBroken)
+    fail(`break.mjs reads the flag "${breakMod.GUARD_BROKEN_FLAG}" but the initiative tracker writes "${initConst.FLAGS.guardBroken}". The bar will never fracture.`);
+  else if (breakMod.BREAK_SOURCE_FEATURE !== "initiative")
+    fail("break.mjs gates on a feature id that is not the initiative tracker's.");
+  else ok(`the guard-break flag key matches the tracker's own (${breakMod.GUARD_BROKEN_FLAG})`);
+
+  /* Read-only, and self-gating. The tracker owns this state and the GM-only
+     paths that set it; a write from here would be a second author of one flag. */
+  if (/\bsetFlag\b|\bunsetFlag\b|\bupdate\(/.test(strip(breakSrc)))
+    fail("break.mjs writes to the guard-break state. It is a reader: the initiative tracker owns that flag and the permissions around it.");
+  if (!/Suite\.enabled\(/.test(strip(breakSrc)))
+    fail("break.mjs does not gate on the initiative feature being enabled, so a world running the bars alone pays for a flag read per token and can fracture on a stale flag.");
+
+  const want = [
+    ["BREAK_AMBER", ramp.BREAK_AMBER, initConst.ACTIVE_SHADER_PALETTE.breakAmber],
+    ["BREAK_HOT", ramp.BREAK_HOT, initConst.ACTIVE_SHADER_PALETTE.breakHot],
+  ];
+  let goldDrift = 0;
+  for (const [name, hex, floats] of want) {
+    const have = ramp.hexToFloat3(hex).map((c) => Math.round(c * 1000) / 1000);
+    const theirs = floats.map((c) => Math.round(c * 1000) / 1000);
+    if (have.join(",") !== theirs.join(",")) {
+      fail(`${name} is ${hex} (${have.join(", ")}) but the initiative tracker cracks in ${theirs.join(", ")}. One creature would break in two golds.`);
+      goldDrift++;
+    }
+  }
+  if (!goldDrift) ok("the fracture's two golds match the initiative tracker's breakAmber / breakHot");
+
+  /* One field, shared — not two that look alike. */
+  if (!/gluBreakField\(/.test(glsl))
+    fail("The bar shader does not call gluBreakField; the fracture is no longer the shared one from core/fx-glsl.mjs.");
+  else if (!/FX_GLSL_BREAK_FIELD/.test(shaderMod))
+    fail("shader.mjs does not import FX_GLSL_BREAK_FIELD, so whatever gluBreakField it is calling is a local copy.");
+  else if (/float gluVoroEdge\(/.test(shaderMod.split("SCALE_PRELUDE")[1] ?? ""))
+    fail("The bar shader defines its own Voronoi edge function. The crack has been forked.");
+  else ok("the fracture runs core/fx-glsl.mjs's field, not a copy of it");
+
+  /* And the extraction left the original consumers alone. gluBreakField's two
+     shape parameters exist for the bar, which is 8:1 and needs both; at 1.0 they
+     are arithmetic identities, so FX_FRAG_BREAK must still pass exactly that. */
+  const call = /=\s*gluBreakField\([\s\S]*?\);/.exec(strip(fxGlsl.FX_FRAG_BREAK))?.[0] ?? "";
+  if (!call) fail("FX_FRAG_BREAK no longer calls the shared field at all.");
+  else if (!/1\.0,\s*1\.0\s*\)/.test(call.replace(/\s+/g, " ")))
+    fail("FX_FRAG_BREAK passes a dense/reach other than 1.0. Those are identities at 1.0 and only 1.0 leaves the token overlay and the chat crack exactly as they were.");
+  else ok("FX_FRAG_BREAK still runs the field at dense 1.0 / reach 1.0 — the extraction is an identity for it");
+
+  /* Clipped to the bar. The quad is deliberately larger than the body so the
+     bloom has somewhere to spill; a fracture that is not masked by the silhouette
+     draws gold shards floating in that margin, past the cut corner, and looks
+     like a rendering fault rather than a broken bar. */
+  const block = /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(glsl)?.[0] ?? "";
+  if (!block) fail("The guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
+  else if (!/mBody/.test(block))
+    fail("The fracture is not masked by mBody; the cracks will spill into the quad's bloom margin, outside the bar's own silhouette.");
+  else if (/0\.299/.test(block))
+    fail("The guard-break block desaturates the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
+  else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone");
+
+  /* The break is a different source from the values, and moves on its own. */
+  if (!/readBreak\(/.test(h))
+    fail("host.mjs never reads the break state.");
+  else if (/if \(!changed\) return;/.test(h))
+    fail("read() still returns early when the values have not changed, so a break landing on a creature nothing has touched never reaches the bar.");
+  else if (!/role === "hero"/.test(/[\s\S]{0,300}u\.uBreak\s*=/.exec(h)?.[0] ?? ""))
+    fail("Nothing restricts uBreak to the primary bar; one creature would carry three cracks for one state, at three times the cost.");
+  else ok("the break is read on its own, outside the value diff, and only onto the primary bar");
+
+  /* Every option the entry reads has to be one the host actually hands it.
+     `opts.breakFx` on an object that was never given a breakFx is `undefined`,
+     which is falsy, which is a setting that registers, resolves, appears in the
+     Control Center, and does nothing — with no error anywhere and nothing in the
+     source that looks wrong. This caught exactly that. */
+  const entryBody = h.slice(h.indexOf("class BarEntry"), h.indexOf("class BarHost"));
+  const wanted = new Set([...entryBody.matchAll(/\bopts\.(\w+)/g)].map((m) => m[1]));
+  const handed = /entry\.read\(\{([\s\S]*?)\}\)/.exec(h)?.[1] ?? "";
+  const dropped = [...wanted].filter((k) => !new RegExp(`\\b${k}\\b`).test(handed));
+  if (!handed) fail("Could not find the entry.read({…}) call; the option hand-off is now unpinned.");
+  else if (dropped.length)
+    fail(`BarEntry reads ${dropped.map((k) => "opts." + k).join(", ")} but host.mjs never hands ${dropped.length > 1 ? "them" : "it"} over — the setting resolves and then silently does nothing.`);
+  else ok(`every option the entry reads (${[...wanted].join(", ")}) is handed to it`);
+}
+
+/* ── 7l. The fracture shatters in step with the token, and survives motion off ── */
+{
+  /* Three things here, all of which render perfectly when wrong.
+
+     The clock: the shared field spreads the crack over clamp(time * 1.4, 0, 1),
+     so the model has to walk its clock that far in the time the field takes. Let
+     TIMING.breakInMs drift and the bar shatters visibly out of step with the
+     same creature's token, which reads as lag.
+
+     The tier: "no motion" must leave the crack fully formed and still, not
+     absent. The break is a state; the animation is how it arrives.
+
+     The shed: freezing has to actually freeze, and has to keep the crack. */
+  const secs = anim.TIMING.breakInMs / 1000;
+  if (Math.abs(secs - anim.BREAK_SETTLE_S) > 0.05)
+    fail(`TIMING.breakInMs is ${anim.TIMING.breakInMs}ms but the shared field settles at ${(anim.BREAK_SETTLE_S * 1000).toFixed(0)}ms. The bar and the token would shatter out of step.`);
+  else ok(`the fracture spreads in ${anim.TIMING.breakInMs}ms, matching the shared field's own settle`);
+
+  /* 10π is a whole number of cycles of both the pulse (2.2 rad/s) and the flow
+     (3.2 rad/s); wrapping anywhere else steps the fracture mid-breath. */
+  for (const rate of [2.2, 3.2]) {
+    const cycles = (rate * anim.BREAK_WRAP) / (Math.PI * 2);
+    if (Math.abs(cycles - Math.round(cycles)) > 1e-6)
+      fail(`BREAK_WRAP is not a whole number of cycles at ${rate} rad/s (${cycles.toFixed(4)}); the fracture will visibly step when its clock wraps.`);
+  }
+
+  const a = new anim.BarAnim(0.6, { motionScale: 1 });
+  a.step(16);
+  a.setBroken(true, { at: 0.6 });
+  if (a.broken !== 1) fail("The fracture fades in. The shatter is its arrival; a crack that fades up was always there.");
+  if (Math.abs(a.breakX - 0.6) > 1e-6) fail("setBroken did not capture where the fracture nucleated.");
+  a.step(16);
+  if (!(a.breakT > 0)) fail("The fracture's clock does not advance, so it never spreads.");
+  if (!a.hot) fail("A broken bar goes cold, so its settled fracture stops breathing.");
+
+  /* The nucleation point is captured, not followed: three more hits later it is
+     still where the guard actually broke. */
+  const held = a.breakX;
+  a.set(0.45);
+  /* Long enough for the hit itself to go cold — the point below is that what is
+     still keeping this bar in the ticker is the fracture and nothing else. The
+     value stays clear of the low-health threshold, whose pulse is hot by design
+     and would answer for it. */
+  for (let i = 0; i < Math.ceil(anim.TIMING.hotMs / 16) + 40; i++) a.step(16);
+  if (Math.abs(a.breakX - held) > 1e-6)
+    fail("The fracture slides along with the fill. It belongs to the moment the guard went, not to the current value.");
+  if (!a.hot) fail("A settled fracture stops breathing: the bar went cold while still broken.");
+
+  /* Frozen: the clock stops and the bar leaves the ticker, but the crack stays. */
+  a.breakFrozen = true;
+  const at = a.breakT;
+  for (let i = 0; i < 30; i++) a.step(16);
+  if (Math.abs(a.breakT - at) > 1e-6) fail("breakFrozen does not stop the fracture's clock, so shedding it saves nothing.");
+  if (a.broken !== 1) fail("Freezing the fracture removed it. The shed gives up motion, never the state.");
+  if (a.hot) fail("A frozen fracture still keeps its bar in the ticker, so the shed never lets go of it.");
+  a.breakFrozen = false;
+
+  /* Cleared: it fades rather than vanishing between two frames. */
+  a.setBroken(false);
+  a.step(16);
+  if (!(a.broken > 0 && a.broken < 1)) fail("Clearing a break removes the fracture instantly instead of fading it out.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.breakOutMs / 16) + 2; i++) a.step(16);
+  if (a.broken !== 0) fail("The fracture never finishes fading out.");
+
+  const still = new anim.BarAnim(0.6, { motionScale: 0 });
+  still.setBroken(true, { at: 0.6 });
+  still.step(16);
+  if (still.broken !== 1 || Math.abs(still.breakT - anim.BREAK_SETTLE_S) > 1e-6)
+    fail("At motion \"none\" the fracture is missing or half-formed. It has to arrive already settled: the crack is the state, the spread is only how it got there.");
+  else if (still.hot)
+    fail("A bar at motion \"none\" is kept hot by its fracture, which is the one tier that promises no frames at all.");
+  else ok("the fracture survives motion \"none\" fully formed, and the shed freezes it without losing it");
+}
+
 /* ── 8. The readout fits under the corner the bar cuts off itself ───────── */
 {
   /* The bar takes a corner out of its own top-right and the readout is anchored
@@ -540,9 +720,20 @@ const tokensCss = await src("styles/gl-tokens.css");
   }
 
   const pw = await import(pwPath);
-  const browser = await pw.chromium.launch();
+  /* Playwright is CommonJS, so the namespace an `import()` builds for it puts
+     everything under `default` unless the lexer happened to find named exports.
+     Reading `pw.chromium` straight off it throws, which took this whole pass
+     down before it compiled a line — the same reason the other two
+     browser-backed tools in this folder spell it out. */
+  const chromium = pw.chromium ?? pw.default?.chromium;
+  if (!chromium) {
+    fail("Playwright resolved but exposes no chromium launcher.");
+    console.log(problems ? `\n${problems} problem(s)` : "\nno problems");
+    process.exit(1);
+  }
+  const browser = await chromium.launch();
   const page = await browser.newPage();
-  const result = await page.evaluate(({ vert, frag }) => {
+  const result = await page.evaluate(({ vert, frag, names }) => {
     const c = document.createElement("canvas");
     const gl = c.getContext("webgl2") || c.getContext("webgl");
     if (!gl) return { error: "no WebGL context" };
@@ -562,10 +753,10 @@ const tokensCss = await src("styles/gl-tokens.css");
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return { error: "link: " + gl.getProgramInfoLog(prog) };
     /* A uniform the compiler optimised away is a uniform nothing reads. */
     const dead = [];
-    for (const name of Object.keys(UNIFORM_NAMES))
+    for (const name of names)
       if (gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name) === null) dead.push(name);
     return { dead };
-  }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.FRAGMENT_SHADER });
+  }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.FRAGMENT_SHADER, names: Object.keys(shader.UNIFORMS) });
 
   await browser.close();
   if (result.error) fail("The shader does not compile: " + result.error);

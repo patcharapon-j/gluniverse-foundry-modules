@@ -24,11 +24,12 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR } from "./ramp.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
+import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "./bloom.mjs";
 
@@ -69,6 +70,27 @@ const REST_INK = [0.97, 0.99, 1.0];
 const HIT_INK = [1.0, 0.52, 0.48];
 const HEAL_INK = [0.62, 1.0, 0.78];
 
+/**
+ * A stable per-token seed for the guard-break fracture, in the 0..100 range the
+ * initiative tracker seeds its own crack meshes in.
+ *
+ * Derived from the token id rather than taken from `Math.random()` for two
+ * reasons that only show up later. A random seed reshuffles the shards every
+ * time the placeable is redrawn — which happens on a scene reload, a token
+ * update, a v13 refresh — so a fracture that is supposed to be a scar would
+ * quietly rearrange itself mid-combat. And it is the same on every client, so
+ * two players describing the same broken bar are describing the same picture.
+ */
+function seedFor(id) {
+  const text = String(id ?? "");
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 10000) / 100;
+}
+
 /** A unit quad in local space; the mesh is scaled to the bar's pixel size. */
 function unitQuad() {
   return new PIXI.Geometry()
@@ -81,12 +103,16 @@ function makeBarMesh(role, opts) {
   const uniforms = {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
-    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default, uRole: role,
+    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default,
+    uRole: role,
+    uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
     uRailCol: new Float32Array(hexToFloat3(RAIL_COLOR)),
+    uBreakAmber: new Float32Array(hexToFloat3(BREAK_AMBER)),
+    uBreakHot: new Float32Array(hexToFloat3(BREAK_HOT)),
   };
   const shader = PIXI.Shader.from(VERTEX_SHADER, FRAGMENT_SHADER, uniforms);
   const mesh = new PIXI.Mesh(unitQuad(), shader);
@@ -98,6 +124,7 @@ class BarEntry {
   constructor(token, host) {
     this.token = token;
     this.host = host;
+    this.seed = seedFor(token?.id);
     this.group = new PIXI.Container();
     this.group.eventMode = "none";
     this.meshes = { hero: null, rail: null, shield: null };
@@ -136,18 +163,40 @@ class BarEntry {
     const first = !this.reading;
     const changed = !sameReading(this.reading, next);
     this.reading = next;
-    if (!changed) return;
 
-    const set = (role, bar, max) => {
-      if (!bar) return;
-      const a = this.animFor(role, bar.frac);
-      a.motionScale = this.host.motionScale;
-      if (first) a.set(bar.frac, { silent: true });
-      else a.set(bar.frac, { max: this.host.floatingDeltas ? max : 0 });
-    };
-    set("hero", next.hero, next.hero?.max ?? 0);
-    set("rail", next.rail, 0);
-    set("shield", next.shield, 0);
+    if (changed) {
+      const set = (role, bar, max) => {
+        if (!bar) return;
+        const a = this.animFor(role, bar.frac);
+        a.motionScale = this.host.motionScale;
+        if (first) a.set(bar.frac, { silent: true });
+        else a.set(bar.frac, { max: this.host.floatingDeltas ? max : 0 });
+      };
+      set("hero", next.hero, next.hero?.max ?? 0);
+      set("rail", next.rail, 0);
+      set("shield", next.shield, 0);
+    }
+
+    /* Outside the value diff, deliberately. The guard break is a different
+       source — a flag on the combatant, not a number on the actor — so it moves
+       on its own, and hanging it off `changed` would leave a creature's bar
+       intact until the next time something hit it. */
+    this.readBreak(opts);
+  }
+
+  /**
+   * The guard break, onto the primary bar only.
+   *
+   * One creature, one fracture: repeating it on the secondary rail and the
+   * shield would draw three cracks for one state, at three times the cost, and
+   * say something false about the shield — which has its own break, and its own
+   * look for it, a few lines further down the shader.
+   */
+  readBreak(opts) {
+    const bar = this.reading?.hero;
+    if (!bar) return;
+    const a = this.animFor("hero", bar.frac);
+    a.setBroken(!!opts.breakFx && isBroken(this.token), { at: a.frac });
   }
 }
 
@@ -286,7 +335,11 @@ class BarHost {
       this.container.addChild(entry.group);
     }
     entry.token = token;                       // survives a redraw of the placeable
-    entry.read({ bothBars: this.opts.bothBars, pf2eLayers: this.opts.pf2eLayers });
+    entry.read({
+      bothBars: this.opts.bothBars,
+      pf2eLayers: this.opts.pf2eLayers,
+      breakFx: this.opts.breakFx,
+    });
     if (!entry.reading) { this.remove(token.id); return; }
 
     this.layout(entry);
@@ -398,6 +451,7 @@ class BarHost {
           segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0,
           dividerWidth: this.dividerWidth(),
           ramp: this.ramp,
+          seed: entry.seed,
         });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
@@ -572,6 +626,20 @@ class BarHost {
       u.uWaveX = a ? a.waveX : u.uFrac;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
+
+      /* The fracture rides the primary bar and nothing else, so the rails get a
+         hard 0 and the shader skips its most expensive branch on them. Shedding
+         freezes the crack rather than removing it: the model stops advancing its
+         clock (which also drops the bar out of the ticker) and the flow along the
+         seams goes out, while the shards stay exactly where they were. Losing
+         the motion costs nobody the information. */
+      const brk = role === "hero" ? a : null;
+      const flowing = this.allows("breakFlow");
+      if (brk) brk.breakFrozen = !flowing;
+      u.uBreak = brk ? brk.broken : 0;
+      u.uBreakT = brk ? brk.breakT : 0;
+      u.uBreakX = brk ? brk.breakX : 0;
+      u.uBreakFlow = brk && flowing ? 1 : 0;
 
       /* Nothing about the geometry is animated — not the mesh transform, not
          the fill's height. Every part of a change is light moving across a
