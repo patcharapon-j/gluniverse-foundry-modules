@@ -168,6 +168,15 @@ input[type=range]{padding:0; width:230px}
     legitimately have bound to something else.</p>
   <div class="grid" id="row-pf2e"></div>
 
+  <h2>Guard break</h2>
+  <p class="note">The initiative tracker's golden glass fracture, from the same field in
+    <i>core/fx-glsl.mjs</i> that cracks the creature's token and its initiative card. It nucleates
+    at the leading edge of the fill as it stood when the guard went, spreads over ~715ms and then
+    settles, breathing. Two things it deliberately does not do: it does not follow the fill
+    afterwards, and it does not touch the reading — no dimming, no desaturation. A broken guard
+    says nothing about hit points.</p>
+  <div class="grid" id="row-break"></div>
+
   <h2>Under a token</h2>
   <p class="note">What it actually looks like in play, at true size on a 128px grid: hero bar,
     secondary rail, and — only while a shield is up — the shield rail.</p>
@@ -177,7 +186,9 @@ input[type=range]{padding:0; width:230px}
   <p class="note">The same 62% bar as the quad shrinks — a 128px grid down to a 44px one zoomed out.
     Bevel, segments, ribs and register marks fade out as each stops spanning a device pixel, rather than crawling
     between pixel centres. This is the <i>uTexel</i> contract from core/glsl.mjs, restated for an
-    8:1 quad.</p>
+    8:1 quad. The second row is the guard-break fracture at the same four sizes: the shared field
+    floors its own seams at a device pixel, so what survives at grid 44 is a gold smudge rather
+    than nothing.</p>
   <div class="ladder" id="row-scale"></div>
 
   <h2>Divisions</h2>
@@ -188,6 +199,16 @@ input[type=range]{padding:0; width:230px}
     is the same hit on a goblin and on a dragon. Rounded up, so the short plate is the last one rather
     than the one at the full-health end.</p>
   <div class="grid" id="row-div"></div>
+
+  <h2>Divider thickness</h2>
+  <p class="note">How wide the gap between two plates is, in <b style="color:var(--text)">device pixels</b> &mdash;
+    so it is the same width on every display and at every zoom, which is the whole reason it is not
+    specified in geometry units. Narrow reads as a bar that has been scored; wide reads as one assembled
+    from separate plates. The thinnest the setting offers is 3px because <i>rbDetail</i> fades anything
+    under 2.2px out: below that line the slider would hand you a fainter divider rather than a finer one.
+    <b style="color:var(--text)">Off</b> is the switch, not the bottom of the slider &mdash; it takes the
+    trough divisions with it and leaves colour as the only channel carrying health.</p>
+  <div class="grid" id="row-divw"></div>
 
   <h2>The readout</h2>
   <p class="note">The maximum is the scale the reading is measured against, so it steps back &mdash;
@@ -244,6 +265,9 @@ input[type=range]{padding:0; width:230px}
       <label class="f">Temp HP
         <select id="temp"><option value="0">None</option><option value="0.85">85%</option></select>
       </label>
+      <label class="f">Guard
+        <select id="brk"><option value="0">Intact</option><option value="1">Broken</option></select>
+      </label>
     </div>
     <div class="read" id="read"></div>
   </div>
@@ -258,6 +282,8 @@ const RAMPS = /*__RAMPS__*/;
 const TEMP_COL = /*__TEMP_COL__*/;
 const SHIELD_COL = /*__SHIELD_COL__*/;
 const RAIL_COL = /*__RAIL_COL__*/;
+const BREAK_AMBER = /*__BREAK_AMBER__*/;
+const BREAK_HOT = /*__BREAK_HOT__*/;
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
@@ -696,9 +722,26 @@ add(pf, { title: "Shield rail", sub: "raised, intact", frac: 0.8, role: 2, h: 10
 add(pf, { title: "Shield rail", sub: "broken", frac: 0.12, role: 2, cracked: 1, h: 10, seg: 0 });
 add(pf, { title: "Secondary rail", sub: "bar2, understated", frac: 0.55, role: 1, h: 11, seg: 0 });
 
+/* The fracture's clock is the shared field's own, so a frozen cell is just a
+   moment on it: 0.15s is the front still travelling, 0.72s the shatter landing,
+   and anything past ~1.3s the settled crack the bar carries for the rest of the
+   fight. */
+const brk = document.getElementById("row-break");
+add(brk, { title: "Spreading", sub: "<i>0.15s</i> — the front, still travelling", frac: 0.62, seg: 10, max: 58, brk: 1, brkT: 0.15, brkX: 0.62 });
+add(brk, { title: "Shattered", sub: "<i>0.72s</i> — fully formed", frac: 0.62, seg: 10, max: 58, brk: 1, brkT: 0.72, brkX: 0.62 });
+add(brk, { title: "Settled", sub: "energy flowing along the seams", frac: 0.62, seg: 10, max: 58, brk: 1, brkT: 2.4, brkX: 0.62 });
+add(brk, { title: "Broken and bloodied", sub: "the fracture leaves the reading alone", frac: 0.14, seg: 10, max: 58, brk: 1, brkT: 2.4, brkX: 0.55 });
+add(brk, { title: "Broken, then hit", sub: "the crack stays where the guard went", frac: 0.3, ghost: 0.62, chip: 0.8, seg: 10, max: 58, brk: 1, brkT: 2.4, brkX: 0.62 });
+add(brk, { title: "Shed", sub: "frozen, no flow — the state survives", frac: 0.62, seg: 10, max: 58, brk: 1, brkT: 1.3, brkX: 0.62, brkFlow: 0 });
+
 const scale = document.getElementById("row-scale");
 for (const [w, h, label] of [[220, 26, "grid 200"], [128, 19, "grid 128"], [80, 12, "grid 80"], [44, 8, "grid 44, zoomed out"]]) {
   add(scale, { title: label, sub: "<i>bar body " + w + "×" + h + "px</i>", frac: 0.62, seg: 10, w, h });
+}
+
+for (const [w, h, label] of [[220, 26, "grid 200"], [128, 19, "grid 128"], [80, 12, "grid 80"], [44, 8, "grid 44, zoomed out"]]) {
+  add(scale, { title: label + " · broken", sub: "<i>the fracture at the same four sizes</i>",
+    frac: 0.62, seg: 10, w, h, brk: 1, brkT: 2.4, brkX: 0.62 });
 }
 
 const div = document.getElementById("row-div");
@@ -708,6 +751,16 @@ for (const [max, per] of [[12, null], [58, null], [12, 5], [58, 5], [200, 5], [2
     title: per ? max + " HP, one per " + per : max + " HP, fixed 10",
     sub: "<i>uSeg " + seg + "</i>",
     frac: 0.62, seg, max,
+  });
+}
+
+const divw = document.getElementById("row-divw");
+add(divw, { title: "Off", sub: "<i>dividers off &rarr; uSeg 0</i>", frac: 0.62, seg: 0, max: 58 });
+for (const w of [3, 6, 10, 14]) {
+  add(divw, {
+    title: w + "px",
+    sub: w === 6 ? "<i>default</i>" : "<i>uSegW " + w + "</i>",
+    frac: 0.62, seg: 10, segW: w, max: 58,
   });
 }
 
@@ -766,6 +819,10 @@ token("HEALTHY", { bars: [{ frac: 0.94, seg: 10, role: 0, max: 58 }, { frac: 0.7
 token("BLOODIED", { bars: [{ frac: 0.44, ghost: 0.66, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }] });
 token("SHIELDED", { bars: [{ frac: 0.68, temp: 0.4, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }, { frac: 0.75, role: 2 }] });
 token("DYING", { bars: [{ frac: 0.09, seg: 10, role: 0, max: 58 }, { frac: 0.7, role: 1 }, { frac: 0.1, role: 2, cracked: 1 }] });
+/* The size the fracture is actually played at. Everything above it is a
+   magnified diagram; this is the only place on the page where the question
+   "can you still read the health" is being asked honestly. */
+token("BROKEN", { bars: [{ frac: 0.52, seg: 10, role: 0, max: 58, brk: 1, brkT: 2.4, brkX: 0.52 }, { frac: 0.7, role: 1 }] });
 
 /* ── The live bar ─────────────────────────────────────────────────────── */
 
@@ -795,6 +852,9 @@ document.getElementById("motion").addEventListener("change", (e) => {
 });
 document.getElementById("ramp").addEventListener("change", (e) => { liveRamp = e.target.value; });
 document.getElementById("temp").addEventListener("change", (e) => { liveTemp = +e.target.value; });
+document.getElementById("brk").addEventListener("change", (e) => {
+  live.setBroken(e.target.value === "1", { at: live.frac });
+});
 
 /* ── Render ───────────────────────────────────────────────────────────── */
 
@@ -860,7 +920,18 @@ function draw(now) {
     gl.uniform1f(U.uSweep, a ? a.sweep : (s.sweep ?? 0));
     gl.uniform1f(U.uTemp, temp);
     gl.uniform1f(U.uCracked, s.cracked ?? 0);
+    /* The guard break rides the primary bar only, exactly as host.mjs writes it:
+       a hard 0 on the rails, so the shader skips its one expensive branch. */
+    const isHero = (s.role ?? 0) === 0;
+    gl.uniform1f(U.uBreak, isHero ? (a ? a.broken : (s.brk ?? 0)) : 0);
+    gl.uniform1f(U.uBreakT, isHero ? (a ? a.breakT : (s.brkT ?? 0)) : 0);
+    gl.uniform1f(U.uBreakX, isHero ? (a ? a.breakX : (s.brkX ?? frac)) : 0);
+    gl.uniform1f(U.uBreakFlow, isHero ? (s.brkFlow ?? 1) : 0);
+    /* Stable per bar, as the token id makes it in play — a fracture that
+       reshuffles its shards every frame is confetti. */
+    gl.uniform1f(U.uSeed, c.seed ?? (c.seed = Math.random() * 100));
     gl.uniform1f(U.uSeg, s.seg ?? 0);
+    gl.uniform1f(U.uSegW, s.segW ?? 6);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));
@@ -873,6 +944,8 @@ function draw(now) {
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
     gl.uniform3fv(U.uRailCol, RAIL_COL);
+    gl.uniform3fv(U.uBreakAmber, BREAK_AMBER);
+    gl.uniform3fv(U.uBreakHot, BREAK_HOT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     if (s.max && (s.role ?? 0) === 0) {
@@ -961,6 +1034,7 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
     "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
     "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
+    "</b> &nbsp;·&nbsp; break <b>" + live.broken.toFixed(2) + "@" + live.breakT.toFixed(2) + "s" +
     "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; ticker <b>" + (live.hot ? "hot" : "cold") + "</b>";
 

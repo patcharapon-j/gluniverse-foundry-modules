@@ -11,10 +11,11 @@
 import { SUITE_ID, log, warn } from "../../core/const.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
-import { READOUT, SETTINGS } from "./constants.mjs";
+import { DIVIDER, READOUT, SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
+import { breakSourceActive, tokensForCombatant } from "./break.mjs";
 
 const get = (key, fallback) => {
   try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
@@ -27,6 +28,16 @@ const clampScale = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return 1;
   return Math.min(READOUT.max, Math.max(READOUT.min, n));
+};
+
+/* Same reasoning as clampScale, and the stake is higher: the shader scales the
+   gap's floor by this, so a 0 out of a hand-edited world removes the divisions
+   entirely while the count still says there are ten of them, and a negative one
+   inverts the min() and takes the whole fill out. */
+const clampDivider = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DIVIDER.default;
+  return Math.min(DIVIDER.max, Math.max(DIVIDER.min, n));
 };
 
 /**
@@ -56,9 +67,15 @@ function currentOptions() {
     segmentMode: get(SETTINGS.segmentMode, "count") === "perHp" ? "perHp" : "count",
     segments: Number(get(SETTINGS.segments, 10)) || 0,
     segmentSize: Number(get(SETTINGS.segmentSize, 5)) || 0,
+    dividers: !!get(SETTINGS.dividers, true),
+    dividerWidth: clampDivider(get(SETTINGS.dividerWidth, DIVIDER.default)),
     lowAt: (Number(get(SETTINGS.lowThreshold, LOW_HEALTH_AT * 100)) || 25) / 100,
     floatingDeltas: !!get(SETTINGS.floatingDeltas, false),
     pf2eLayers: !!get(SETTINGS.pf2eLayers, true),
+    /* Resolved to false whenever the tracker that owns the state is not
+       running, so the renderer never has to ask twice and a world without it
+       does not pay for a flag read per token per refresh. */
+    breakFx: !!get(SETTINGS.breakFx, true) && breakSourceActive(),
     bloom: !!get(SETTINGS.bloom, true),
     offsetX: Number(get(SETTINGS.offsetX, 0)) || 0,
     offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,
@@ -155,6 +172,24 @@ export function onReady() {
      permission-shaped, so they go through the full path rather than reposition. */
   on("hoverToken", (token) => full(token));
   on("controlToken", (token) => full(token));
+
+  /* The initiative tracker's guard break. It is a flag on the Combatant, so
+     none of the actor/token hooks above can see it move — and unlike a value
+     change it can land on a creature nothing has touched, which is exactly what
+     happens when a break gauge empties on somebody else's turn. Registered
+     whether or not the tracker is enabled: they are cheap listeners and
+     `breakFx` is already false when it is off, which is a shorter path than
+     wiring and unwiring them from a toggle that needs a reload anyway. */
+  const combatantTokens = (combatant) => {
+    for (const token of tokensForCombatant(combatant)) full(token);
+  };
+  on("updateCombatant", (combatant) => combatantTokens(combatant));
+  on("createCombatant", (combatant) => combatantTokens(combatant));
+  on("deleteCombatant", (combatant) => combatantTokens(combatant));
+  /* Starting and ending a combat move every creature in it at once, and ending
+     one leaves no combatants to walk. */
+  on("combatStart", () => host.refreshAll());
+  on("deleteCombat", () => host.refreshAll());
 
   /* Per-token placement. Both hooks are registered because a prototype token
      opens its own application class in v13; whichever one does not exist simply

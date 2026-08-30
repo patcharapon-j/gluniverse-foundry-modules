@@ -1,7 +1,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
+import { DIVIDER, FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -25,6 +25,19 @@ function registerSettings() {
     type: String,
     choices: { both: "GLRB.Settings.EnabledBars.Both", primary: "GLRB.Settings.EnabledBars.Primary" },
     default: "both",
+  });
+
+  /* Whether the plates are separated at all. A switch rather than a "0 width",
+     because a zero-width gap and no gap are not the same thing to the shader —
+     the trough divisions are cut from the same mask — and because turning the
+     divisions off is a decision about the bar, not a value on a slider. It
+     resolves through segmentsFor(), so it holds in the per-HP mode too, where
+     there is no count to set to zero. */
+  world(SETTINGS.dividers, {
+    name: "GLRB.Settings.Dividers.Name",
+    hint: "GLRB.Settings.Dividers.Hint",
+    type: Boolean,
+    default: true,
   });
 
   world(SETTINGS.segmentMode, {
@@ -52,6 +65,14 @@ function registerSettings() {
     type: Number,
     range: { min: SEGMENTS.sizeMin, max: SEGMENTS.sizeMax, step: 1 },
     default: 5,
+  });
+
+  world(SETTINGS.dividerWidth, {
+    name: "GLRB.Settings.DividerWidth.Name",
+    hint: "GLRB.Settings.DividerWidth.Hint",
+    type: Number,
+    range: { min: DIVIDER.min, max: DIVIDER.max, step: DIVIDER.step },
+    default: DIVIDER.default,
   });
 
   /* The GM's say over the readout. It overrides each player's own choice
@@ -91,6 +112,19 @@ function registerSettings() {
   world(SETTINGS.pf2eLayers, {
     name: "GLRB.Settings.Pf2eLayers.Name",
     hint: "GLRB.Settings.Pf2eLayers.Hint",
+    type: Boolean,
+    default: true,
+  });
+
+  /* The initiative tracker's guard break, carried onto the bar. World-scoped
+     because it is a fact about the creature that the whole table reads off the
+     same bar, not a preference about how much motion one person's screen shows;
+     that lever already exists and is the motion tier. Registered whether or not
+     the tracker is installed — every feature registers all of its settings
+     unconditionally so the toggles exist — and simply inert without it. */
+  world(SETTINGS.breakFx, {
+    name: "GLRB.Settings.BreakFx.Name",
+    hint: "GLRB.Settings.BreakFx.Hint",
     type: Boolean,
     default: true,
   });
