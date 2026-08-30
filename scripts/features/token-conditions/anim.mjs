@@ -31,6 +31,11 @@ export const TIMING = Object.freeze({
   holdOut: 40,     // shorter going away: a removal is news, not an event
   printOut: 190,
   flashOut: 210,
+  /* The hover unfold, end to end. It is a *response to the cursor*, so it is
+     held to the budget every hover interface is held to rather than to the
+     pace of the print: past about 200ms a hover stops feeling like the thing
+     answering you and starts feeling like the thing thinking about it. */
+  unfold: 150,
 });
 
 /** A quintic ease-out: one long deceleration that arrives exactly once. */

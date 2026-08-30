@@ -71,8 +71,19 @@ export const FLAGS = Object.freeze({
  */
 export const LAYOUT = Object.freeze({
   plate: 0.185,       // plate edge, × grid size
-  gap: 0.022,         // between plates in the packed block
-  groupGap: 0.105,    // between the condition group and the effect group
+  gap: 0.022,         // between plates *down* a column
+  /* …and between the columns themselves, which is deliberately tighter. A
+     column is the reading direction — you go down one, then to the next — so
+     the rows want air between them and the columns want to read as one object.
+     Matching the two also costs the token real estate for nothing: every pixel
+     between columns is a pixel further the block reaches across the artwork,
+     and there is no third plate over there for it to separate. */
+  colGap: 0.014,
+  groupGap: 0.105,    // between the condition group and the effect group, down a column
+  /* The same seam measured *across* columns, where it buys far less and costs
+     far more: a wide gap here shoves the effect column past the token's midline
+     while separating two things the column break has already separated. */
+  groupColGap: 0.038,
   margin: 0.035,      // inset from the token's edge to the block
   /* Room left unused at the token's foot. Foundry draws its own resource bars
      and nameplate across the bottom of a token, and the suite's bar feature

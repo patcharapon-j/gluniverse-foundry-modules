@@ -17,7 +17,7 @@
 import { warn } from "../../core/const.mjs";
 import { createBloomFilter } from "../../core/bloom.mjs";
 import { hexToRgbFloat } from "../../core/theme.mjs";
-import { PlateAnim, SHED_AT, SHED_ORDER, UNSHED_AT } from "./anim.mjs";
+import { PlateAnim, SHED_AT, SHED_ORDER, TIMING, UNSHED_AT } from "./anim.mjs";
 import {
   blankTexture, getIconTexture, getTextAtlas, resetIcons, resetTextAtlas,
   runsGeometry, runWidth, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
@@ -103,7 +103,14 @@ class RailEntry {
     this.tailAnim = null;
     this.textMesh = null;
     this.textKey = "";
-    /** Eased 0..1 toward whether this token's labels are showing. */
+    /**
+     * The unfold. `selT` is the raw 0..1 progress and `sel` is the eased value
+     * everything else reads; keeping them apart is what lets the tween run at a
+     * fixed rate and *arrive*, rather than asymptote toward the target the way a
+     * per-frame smoothing does. The ease is symmetric, so folding back up is the
+     * unfold reversed rather than a second curve.
+     */
+    this.selT = 0;
     this.sel = 0;
     this.selTarget = 0;
     this.reading = null;
@@ -118,7 +125,7 @@ class RailEntry {
 
   /** Whether any part of this rail still needs frames. */
   get hot() {
-    if (Math.abs(this.sel - this.selTarget) > 0.004) return true;
+    if (this.selT !== this.selTarget) return true;
     if (this.tailAnim?.hot) return true;
     for (const plate of this.plates.values()) {
       if (plate.anim.hot) return true;
@@ -342,7 +349,7 @@ class RailHost {
     if (entry.tailAnim) entry.tailAnim.retarget(hidden > 0 ? 1 : 0);
 
     entry.selTarget = canViewLabels(token, this.opts.labels) ? 1 : 0;
-    if (this.motionScale <= 0) entry.sel = entry.selTarget;
+    if (this.motionScale <= 0) entry.selT = entry.sel = entry.selTarget;
 
     this.layout(entry);
     this.cullEntry(entry);
@@ -380,10 +387,16 @@ class RailHost {
     /* +gap on both, because n plates span n*pitch - gap: the last one needs no
        gap after it, and rounding without that term loses a whole row on a token
        that fits exactly. */
+    /* Two pitches, because the two axes are not the same problem: down a column
+       the gap is separating plates you read in sequence, across columns it is
+       separating a column from the wrap that continues it — and every pixel
+       spent there is a pixel further the block reaches over the artwork. */
+    const colGap = LAYOUT.colGap * grid * scale;
+    const colPitch = size + colGap;
     const rows = clamp(Math.floor((th - margin - foot + gap) / pitch), 1, LAYOUT.rowsMax);
     const cols = Math.max(1, Math.min(LAYOUT.colsMax,
-      Math.floor((tw - margin * 2 + gap) / pitch)));
-    return { grid, scale, size, gap, margin, foot, tw, th, pitch, rows, cols };
+      Math.floor((tw - margin * 2 + colGap) / colPitch)));
+    return { grid, scale, size, gap, colGap, margin, foot, tw, th, pitch, colPitch, rows, cols };
   }
 
   /**
@@ -426,7 +439,7 @@ class RailHost {
     const doc = token?.document;
     if (!doc) return;
 
-    const { grid, scale, size, gap, margin, tw, pitch, rows, cols } = this.metrics(token);
+    const { grid, scale, size, gap, colGap, margin, tw, pitch, colPitch, rows, cols } = this.metrics(token);
     const sel = entry.sel;
     const left = this.opts.side !== "right";
 
@@ -470,7 +483,7 @@ class RailHost {
     const broke = wantBreak && n + pad <= rows * cols;
     const gapSlots = broke ? pad : 0;
     const splitCol = broke ? Math.ceil(splitIdx / rows) : -1;
-    const groupGapX = (LAYOUT.groupGap - LAYOUT.gap) * grid * scale;
+    const groupGapX = (LAYOUT.groupColGap - LAYOUT.colGap) * grid * scale;
 
     /* Packed: column-first. Deliberately not clamped to `cols` — capacity is
        enforced where the reading is flattened, and a column too many is a plate
@@ -480,7 +493,7 @@ class RailHost {
       const slot = i + (i >= splitIdx ? gapSlots : 0);
       const col = Math.floor(slot / rows);
       const row = slot - col * rows;
-      const cx = margin + col * pitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0);
+      const cx = margin + col * colPitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0);
       return { x: left ? cx : tw - cx - pw, y: margin + row * pitch };
     };
 
@@ -771,8 +784,24 @@ class RailHost {
     let anyHot = false;
 
     for (const entry of this.entries.values()) {
-      entry.sel += (entry.selTarget - entry.sel) * Math.min(1, dt / 130);
-      let layoutDirty = Math.abs(entry.sel - entry.selTarget) > 0.004;
+      /* Fixed rate toward the target, then eased. Smoothstep rather than the
+         print's quintic: this one has to read the same run backwards, and an
+         ease-out reversed is an ease-in, which reads as the rail being reluctant
+         to let go of the cursor. */
+      const span = TIMING.unfold * this.motionScale;
+      const wasT = entry.selT;
+      if (span <= 0) entry.selT = entry.selTarget;
+      else if (entry.selT !== entry.selTarget) {
+        const step = dt / span;
+        entry.selT = entry.selTarget > entry.selT
+          ? Math.min(entry.selTarget, entry.selT + step)
+          : Math.max(entry.selTarget, entry.selT - step);
+      }
+      entry.sel = entry.selT * entry.selT * (3 - 2 * entry.selT);
+      /* Whether it *moved*, not whether it has further to go: the frame the
+         tween lands is the one frame that must not be skipped, and it is exactly
+         the frame on which "still travelling" turns false. */
+      let layoutDirty = entry.selT !== wasT;
 
       for (const [key, plate] of entry.plates) {
         plate.anim.step(dt);

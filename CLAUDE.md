@@ -406,7 +406,13 @@ stays inside the token's square on purpose — a column that outgrows its token
 grows over the creatures standing next to it — while the hover one is free to
 overlap, because it exists only while the cursor is on the token. `capacityFor`
 floors the GM's plate cap at what the square can actually hold; without it the
-setting is a number that means "and then draw the rest on somebody else".
+setting is a number that means "and then draw the rest on somebody else". The
+two axes are spaced by different constants on purpose (`gap` down a column,
+the tighter `colGap` across them, and the same split for the group seam) —
+every pixel between two columns is a pixel further the block reaches over the
+artwork. The unfold is a fixed-duration tween off `TIMING.unfold`, not a
+per-frame smoothing: a smoothing never arrives, and its invisible tail is most
+of what makes a hover feel slow.
 
 To see it, `node tools/token-conditions-preview.mjs --out=.preview/conditions.html`
 writes a page that compiles **both** shipped shaders in one WebGL2 context and

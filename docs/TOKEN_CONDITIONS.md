@@ -210,6 +210,18 @@ describing has stopped being a readout. Packing makes density cost *area* rather
 than *trespass*, and the area it spends is the one square that is unambiguously
 this creature's business.
 
+The two axes are spaced differently, and deliberately: `LAYOUT.gap` separates
+plates *down* a column and `LAYOUT.colGap` separates the columns themselves,
+tighter. A column is the reading direction — you go down one, then to the next —
+so the rows want air and the columns want to read as one object. Matching them
+also buys nothing and costs real estate: every pixel between two columns is a
+pixel further the block reaches across the artwork, and there is no third plate
+over there for it to separate. The seam between conditions and effects has the
+same two forms, `groupGap` down a column and the much smaller `groupColGap`
+across them — measured across columns it shoves the effect column past the
+token's midline while separating two things the column break has already
+separated.
+
 The block reserves `LAYOUT.foot` at the token's bottom edge. Foundry draws its
 own bars and nameplate across there, and the suite's resource bar straddles the
 same edge; the reservation is unconditional rather than conditional on another
@@ -224,6 +236,17 @@ density, so a name is read at the size it was drawn for.
 
 Names appear only past `LAYOUT.nameAt`: a label laid out against the expanded
 width while the plate is still nearly square hangs off the end of it.
+
+The travel is `TIMING.unfold`, and it is a **duration rather than a smoothing
+constant**: `selT` runs toward its target at a fixed rate and `sel` is a
+smoothstep of it, so the tween arrives once instead of asymptoting toward the
+target the way a per-frame `+= (target - current) * k` does — that shape spends
+its last third travelling a distance nobody can see, which is most of what makes
+a hover feel slow. It is held to a hover's budget rather than the print's:
+past about 200ms a hover stops feeling like the thing answering you and starts
+feeling like the thing thinking about it. The ease is symmetric because the
+same run has to read backwards; an ease-out reversed is an ease-in, which reads
+as the rail being reluctant to let go of the cursor.
 
 Everything is derived from the scene's **grid** and the token's **square**, never
 from its artwork: a creature whose art is scaled to 1.4 is still standing in one

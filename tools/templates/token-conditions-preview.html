@@ -669,7 +669,7 @@ for (const el of document.querySelectorAll(".stage")) {
   bar.style.height = (grid * 0.30) + "px";
   bar.style.bottom = (-grid * 0.30 - grid * 0.06) + "px";
   const st = {
-    el, mount, bar, grid, hover: false, sel: 0,
+    el, mount, bar, grid, hover: false, sel: 0, selT: 0,
     plates: new Map(), tail: null, tailAnim: null, quads: [],
     anim: new BarAnim(0.72, { motionScale: 1 }),
   };
@@ -719,12 +719,14 @@ function layout(st) {
   const grid = st.grid;
   const size = Math.min(LAYOUT.maxPx, Math.max(LAYOUT.minPx, LAYOUT.plate * grid));
   const gap = LAYOUT.gap * grid;
+  const colGap = LAYOUT.colGap * grid;
   const margin = LAYOUT.margin * grid;
   const foot = LAYOUT.foot * grid;
   const pitch = size + gap;
+  const colPitch = size + colGap;
   const tw = grid, th = grid;
   const rows = Math.min(LAYOUT.rowsMax, Math.max(1, Math.floor((th - margin - foot + gap) / pitch)));
-  const cols = Math.max(1, Math.min(LAYOUT.colsMax, Math.floor((tw - margin * 2 + gap) / pitch)));
+  const cols = Math.max(1, Math.min(LAYOUT.colsMax, Math.floor((tw - margin * 2 + colGap) / colPitch)));
 
   const sel = st.sel;
   const selSize = size * LAYOUT.selScale;
@@ -746,14 +748,14 @@ function layout(st) {
   const broke = wantBreak && n + pad <= rows * cols;
   const gapSlots = broke ? pad : 0;
   const splitCol = broke ? Math.ceil(split / rows) : -1;
-  const groupGapX = (LAYOUT.groupGap - LAYOUT.gap) * grid;
+  const groupGapX = (LAYOUT.groupColGap - LAYOUT.colGap) * grid;
 
   const packed = (i) => {
     const slot = i + (i >= split ? gapSlots : 0);
     const col = Math.floor(slot / rows);
     const row = slot - col * rows;
     return {
-      x: margin + col * pitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0),
+      x: margin + col * colPitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0),
       y: margin + row * pitch,
     };
   };
@@ -897,7 +899,16 @@ function draw(now) {
   sizeTarget(rtBlur, rtBright.w, rtBright.h);
 
   for (const st of stages) {
-    st.sel += ((st.hover ? 1 : 0) - st.sel) * Math.min(1, dt / 130);
+    /* The module's own unfold: fixed rate toward the target, then smoothstep.
+       A per-frame smoothing would asymptote and never arrive. */
+    const target = st.hover ? 1 : 0;
+    const span = PLATE_TIMING.unfold * motion;
+    if (span <= 0) st.selT = target;
+    else if (st.selT !== target) {
+      const step = dt / span;
+      st.selT = target > st.selT ? Math.min(target, st.selT + step) : Math.max(target, st.selT - step);
+    }
+    st.sel = st.selT * st.selT * (3 - 2 * st.selT);
     st.anim.step(dt);
     for (const [key, plate] of st.plates) {
       plate.anim.step(dt);

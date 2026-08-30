@@ -156,6 +156,19 @@ const lang = JSON.parse(langSrc);
   for (const m of body.matchAll(/\b(\d{2,4})\s*\*\s*scale/g)) {
     fail("timing", `PlateAnim multiplies a literal ${m[1]} by the motion scale; every duration belongs in TIMING`);
   }
+  /* The unfold is a duration like every other one here. Written as a per-frame
+     smoothing constant in host.mjs it is neither tunable nor tier-scaled — and
+     a smoothing asymptotes, so it never actually arrives and the last stretch
+     of the travel is a long tail nobody asked for. */
+  if (!/unfold:/.test(animSrc)) {
+    fail("timing", "TIMING has no unfold — the hover tween's duration lives somewhere it cannot be tuned");
+  }
+  if (!/TIMING\.unfold \* this\.motionScale/.test(hostSrc)) {
+    fail("timing", "the unfold is not scaled by the motion tier");
+  }
+  for (const m of hostSrc.matchAll(/dt \/ (\d{2,4})\b/g)) {
+    fail("timing", `host.mjs divides dt by a literal ${m[1]}; every duration belongs in TIMING`);
+  }
   if (!/this\.motionScale <= 0/.test(animSrc)) {
     fail("timing", "PlateAnim has no still path — at motion 0 a plate would hold mid-print rather than simply being there");
   }
@@ -290,8 +303,8 @@ const lang = JSON.parse(langSrc);
     return m ? Number(m[1]) : NaN;
   };
   const L = Object.fromEntries(
-    ["plate", "gap", "margin", "foot", "minPx", "maxPx", "rowsMax", "colsMax", "selScale", "nameAt"]
-      .map((k) => [k, num(k)]),
+    ["plate", "gap", "colGap", "groupColGap", "margin", "foot", "minPx", "maxPx",
+     "rowsMax", "colsMax", "selScale", "nameAt"].map((k) => [k, num(k)]),
   );
   const missing = Object.entries(L).filter(([, v]) => !Number.isFinite(v)).map(([k]) => k);
   if (missing.length) {
@@ -324,17 +337,24 @@ const lang = JSON.parse(langSrc);
     for (const grid of [64, 70, 80, 100, 128, 150, 200]) {
       const size = clamp(L.plate * grid, L.minPx, L.maxPx);
       const gap = L.gap * grid;
+      const colGap = L.colGap * grid;
       const margin = L.margin * grid;
       const foot = L.foot * grid;
       const pitch = size + gap;
+      const colPitch = size + colGap;
+      /* The seam between the groups, across columns. Counted into the width
+         because it is real estate the block spends on the token exactly like a
+         column is, and leaving it out of the measurement is how a widened seam
+         reaches past the token's midline while the ceiling still reads as met. */
+      const groupGapX = (L.groupColGap - L.colGap) * grid;
       const tw = grid, th = grid;   // the tightest case: a Medium creature
       const rows = clamp(Math.floor((th - margin - foot + gap) / pitch), 1, L.rowsMax);
-      const cols = clamp(Math.floor((tw - margin * 2 + gap) / pitch), 1, L.colsMax);
+      const cols = clamp(Math.floor((tw - margin * 2 + colGap) / colPitch), 1, L.colsMax);
 
       if (rows * cols < MIN_CAPACITY) {
         fail("packing", `grid ${grid}: a Medium token holds ${rows * cols} plates (${rows}×${cols}), below the default cap of ${MIN_CAPACITY}`);
       }
-      const wide = (margin + cols * pitch - gap) / tw;
+      const wide = (margin + cols * colPitch - colGap + groupGapX) / tw;
       const tall = (margin + rows * pitch - gap) / th;
       if (wide > MAX_WIDE) {
         fail("packing", `grid ${grid}: ${cols} columns cover ${(wide * 100) | 0}% of the token's width (ceiling ${(MAX_WIDE * 100) | 0}%)`);
