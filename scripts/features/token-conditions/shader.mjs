@@ -402,11 +402,15 @@ void main(void) {
   C = mix(C, uToneHot, mStroke * uPulse * (0.22 + 0.46 * breathe));
   C += gaugeCol * railLine * filled * uPulse * breathe * 0.9;
 
-  /* Expanded: a specular crossing the face on the same 0.30 Hz as the bar's own
-     sweep, so a hovered token reads as one gesture rather than as two widgets
-     that both happened to notice the cursor. */
-  float sweepX = mix(-bb.x - 0.6, bb.x + 0.6, fract(uTime * 0.30 + uSeed * 0.11));
-  C += vec3(0.62, 0.74, 0.96) * cGauss(p.x - sweepX, 0.16) * mFace * uSel * 0.20;
+  /* Expansion deliberately adds no *moving* light. A travelling specular reads
+     as ornament on a bar you glance at; on a plate you are hovering in order to
+     read a word off, it is motion under the one thing the gesture exists to
+     show. What expansion does add is static: the stroke lifts toward the tone
+     (above) and the contact glow widens (below).
+
+     A moving highlight in this shader would also be strictly worse than the
+     bar's, which crosses a shape eight times as wide: the same 0.30 Hz across a
+     plate is a flicker rather than a sweep. */
 
   vec3 outC = C * A;
   float outA = A;

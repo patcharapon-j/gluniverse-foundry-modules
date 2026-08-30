@@ -274,6 +274,95 @@ const lang = JSON.parse(langSrc);
   }
 }
 
+/* ══ 12. The packed block stays on the token's own square ══════════════════
+   The whole reason the resting layout is a block rather than a column: a rail
+   that outgrows the token grows over the creatures standing next to it, and
+   that failure is invisible in a diff and invisible on a token with three
+   conditions. It only appears in the sixth round of a fight, on somebody else's
+   screen, and it reads as the module being broken rather than as a constant
+   being a tenth too large.
+
+   Re-derives the layout's own arithmetic across the grid sizes real worlds use
+   and asserts that a token filled to `capacityFor` still fits inside itself. */
+{
+  const num = (key) => {
+    const m = constSrc.match(new RegExp(`^\\s*${key}:\\s*([0-9.]+)`, "m"));
+    return m ? Number(m[1]) : NaN;
+  };
+  const L = Object.fromEntries(
+    ["plate", "gap", "margin", "foot", "minPx", "maxPx", "rowsMax", "colsMax", "selScale", "nameAt"]
+      .map((k) => [k, num(k)]),
+  );
+  const missing = Object.entries(L).filter(([, v]) => !Number.isFinite(v)).map(([k]) => k);
+  if (missing.length) {
+    fail("packing", `LAYOUT is missing ${missing.join(", ")} — the block's geometry cannot be checked`);
+  } else {
+    const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
+    /* Asserting that the derived block "fits" would prove nothing: rows and
+       columns are computed *from* the fit, so they shrink to satisfy it and the
+       assertion is a tautology. The two things that are genuinely choices, and
+       genuinely break in silence, are the ones below.
+
+         **Capacity** — the block must still hold the cap the setting defaults
+         to. A plate a third larger looks better in isolation and quietly takes
+         a Medium token from twelve slots to four, at which point half a real
+         round's worth of conditions is a "+7" and the feature has regressed to
+         the single number it replaced.
+
+         **Coverage** — the block must leave a creature under it. Nothing in the
+         layout stops columns from tiling the whole square; a raised ceiling or
+         a smaller gap buries the artwork, and it buries it on somebody else's
+         screen in the sixth round rather than on yours while you tune it.
+
+       Grids below 64 are deliberately outside the sweep: the minPx floor exists
+       because a plate below it cannot be read at all, and on a 50px token that
+       floor is a quarter of the square. There the density is the honest answer
+       and the coverage ceiling would be asking for an unreadable one. */
+    const MIN_CAPACITY = 8;   // the default `tc.maxPlates`
+    const MAX_WIDE = 0.76;    // of the token's width, at full columns
+    const MAX_TALL = 0.88;    // of its height, at full rows
+    for (const grid of [64, 70, 80, 100, 128, 150, 200]) {
+      const size = clamp(L.plate * grid, L.minPx, L.maxPx);
+      const gap = L.gap * grid;
+      const margin = L.margin * grid;
+      const foot = L.foot * grid;
+      const pitch = size + gap;
+      const tw = grid, th = grid;   // the tightest case: a Medium creature
+      const rows = clamp(Math.floor((th - margin - foot + gap) / pitch), 1, L.rowsMax);
+      const cols = clamp(Math.floor((tw - margin * 2 + gap) / pitch), 1, L.colsMax);
+
+      if (rows * cols < MIN_CAPACITY) {
+        fail("packing", `grid ${grid}: a Medium token holds ${rows * cols} plates (${rows}×${cols}), below the default cap of ${MIN_CAPACITY}`);
+      }
+      const wide = (margin + cols * pitch - gap) / tw;
+      const tall = (margin + rows * pitch - gap) / th;
+      if (wide > MAX_WIDE) {
+        fail("packing", `grid ${grid}: ${cols} columns cover ${(wide * 100) | 0}% of the token's width (ceiling ${(MAX_WIDE * 100) | 0}%)`);
+      }
+      if (tall > MAX_TALL) {
+        fail("packing", `grid ${grid}: ${rows} rows cover ${(tall * 100) | 0}% of the token's height (ceiling ${(MAX_TALL * 100) | 0}%)`);
+      }
+    }
+    if (!/capacityFor\(token\)/.test(hostSrc) || !/Math\.min\(this\.opts\.maxPlates, this\.capacityFor/.test(hostSrc)) {
+      fail("packing", "the plate cap is not floored by capacityFor — the GM's number would draw plates onto the next square");
+    }
+    if (!/LAYOUT\.rowsMax/.test(hostSrc) || !/LAYOUT\.colsMax/.test(hostSrc)) {
+      fail("packing", "the block's row/column ceilings are not applied in host.mjs");
+    }
+    /* Two arrangements, interpolated. An easing applied to one of them instead
+       would send every plate past the second column to the wrong place. */
+    if (!/lerp\(a\.x, b\.x, sel\)/.test(hostSrc) || !/lerp\(a\.y, b\.y, sel\)/.test(hostSrc)) {
+      fail("packing", "layout() does not interpolate between the packed and expanded positions");
+    }
+    if (!(L.selScale > 1)) {
+      fail("packing", "selScale must be >1 — expanding has to give back the size the block traded for density");
+    }
+    if (!(L.nameAt > 0 && L.nameAt < 1) || !/sel >= LAYOUT\.nameAt/.test(hostSrc)) {
+      fail("packing", "names are not gated on LAYOUT.nameAt — a label drawn while the plate is still square hangs off the end of it");
+    }
+  }
+}
+
 /* ══ Report ════════════════════════════════════════════════════════════════ */
 if (problems.length) {
   console.error(`token-conditions: ${problems.length} problem${problems.length === 1 ? "" : "s"}\n`);

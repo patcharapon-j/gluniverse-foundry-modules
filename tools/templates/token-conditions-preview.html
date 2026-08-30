@@ -142,6 +142,14 @@ button.go:hover{filter:brightness(1.1)}
     <em>features/token-conditions/shader.mjs</em>, compiled in this page's WebGL context, sharing one
     HDR buffer and one bright-pass. Hover a scene to expand the plates.
   </p>
+  <p class="deck">
+    At rest the plates are a <strong>packed block inside the token's own square</strong> — as many rows
+    as the square has room for, wrapping into a second and third column. A creature in the sixth round
+    of a real fight carries more than a single column can hold, and a column answers by growing down
+    through the squares below it, over whatever is standing there. On hover the block
+    <strong>unfolds</strong> into one labelled list hung off the flank, which is free to overlap its
+    neighbours because it only exists while the cursor is on the token.
+  </p>
 
   <dl class="facts">
     <div class="fact"><dt>Conditions</dt><dd>from <code>conditions.active</code><small>PF2e's own override resolution, so “unconscious hides paralyzed” is free</small></dd></div>
@@ -177,13 +185,15 @@ button.go:hover{filter:brightness(1.1)}
   <div class="scenes">
     <section class="card">
       <div class="card-head"><h3 class="card-name">Grid 128</h3><span class="card-sub">a medium creature, close in</span></div>
-      <p class="card-thesis">Conditions above, effects below, one wider gap between them. Position carries
-        <em>what kind of thing</em>; tone carries <em>how bad</em>. Neither has to carry both.</p>
+      <p class="card-thesis">Conditions first, effects after, one wider gap between them — a column break in
+        the packed block, a wider gap in the unfolded list. Position carries <em>what kind of thing</em>;
+        tone carries <em>how bad</em>. Neither has to carry both.</p>
       <div class="stage big" data-stage="big" style="--grid:128px"></div>
     </section>
     <section class="card">
       <div class="card-head"><h3 class="card-name">Grid 64</h3><span class="card-sub">zoomed out over a large map</span></div>
-      <p class="card-thesis">The same rail at half the grid. Everything is derived from the grid, so the
+      <p class="card-thesis">The same rail at half the grid — the block is denser because a 64px square is
+        denser, not because anything was re-tuned for it. Everything is derived from the grid, so the
         proportions hold and the detail that can no longer resolve leaves rather than turning to grain.</p>
       <div class="stage small" data-stage="small" style="--grid:64px"></div>
     </section>
@@ -617,9 +627,8 @@ const SETS = {
 
 let motion = 1;
 let current = [];
-/* The module defaults to six. The page shows eight so the effect group is
-   visible beside the conditions rather than behind the tail — the cap is what
-   this preview is least about. */
+/* The module's own default. Eight is what a Medium token's block holds in
+   three columns; the ninth would be a +N. */
 const MAX_PLATES = 8;
 const EXPIRY_WARN = 1;
 
@@ -698,44 +707,92 @@ function ensure(st, plates) {
   }
 }
 
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/* The module's own two arrangements, cross-faded by `sel`: a packed block
+   inside the token's square at rest, one column hung outside the flank on
+   hover. Kept in step with `host.mjs#layout` by hand — this page exists to show
+   what ships, so a divergence here is the page lying rather than a bug. */
 function layout(st) {
   const { plates, hidden, split } = flatten(current);
   st.hidden = hidden;
   const grid = st.grid;
-  const size = Math.min(46, Math.max(16, LAYOUT.plate * grid));
+  const size = Math.min(LAYOUT.maxPx, Math.max(LAYOUT.minPx, LAYOUT.plate * grid));
   const gap = LAYOUT.gap * grid;
-  const groupGap = LAYOUT.groupGap * grid;
   const margin = LAYOUT.margin * grid;
-  const bleed = INSET * size;
+  const foot = LAYOUT.foot * grid;
+  const pitch = size + gap;
+  const tw = grid, th = grid;
+  const rows = Math.min(LAYOUT.rowsMax, Math.max(1, Math.floor((th - margin - foot + gap) / pitch)));
+  const cols = Math.max(1, Math.min(LAYOUT.colsMax, Math.floor((tw - margin * 2 + gap) / pitch)));
+
+  const sel = st.sel;
+  const selSize = size * LAYOUT.selScale;
+  const selGap = gap * LAYOUT.selScale;
+  const selGroupGap = LAYOUT.groupGap * grid * LAYOUT.selScale;
 
   let longest = 0;
-  const nameSize = size * PLATE.nameOfPlate;
+  const nameSize = selSize * PLATE.nameOfPlate;
   for (const s of plates) if (s.name) longest = Math.max(longest, runWidth([{ text: s.name.toUpperCase(), size: nameSize, track: nameSize * 0.09 }]));
-  const wide = Math.min(LAYOUT.wideMax, longest > 0 ? (size + longest + size * LAYOUT.tabRoom) / size : 1) * size;
-  const w = size + (wide - size) * st.sel;
+  const wide = Math.min(LAYOUT.wideMax, longest > 0 ? (selSize + longest + selSize * LAYOUT.tabRoom) / selSize : 1) * selSize;
+
+  const w = size + (wide - size) * sel;
+  const h = size + (selSize - size) * sel;
+  const bleed = INSET * h;
+
+  const n = plates.length + (hidden > 0 ? 1 : 0);
+  const wantBreak = split > 0 && split < n;
+  const pad = wantBreak ? (rows - (split % rows)) % rows : 0;
+  const broke = wantBreak && n + pad <= rows * cols;
+  const gapSlots = broke ? pad : 0;
+  const splitCol = broke ? Math.ceil(split / rows) : -1;
+  const groupGapX = (LAYOUT.groupGap - LAYOUT.gap) * grid;
+
+  const packed = (i) => {
+    const slot = i + (i >= split ? gapSlots : 0);
+    const col = Math.floor(slot / rows);
+    const row = slot - col * rows;
+    return {
+      x: margin + col * pitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0),
+      y: margin + row * pitch,
+    };
+  };
+
+  const ys = [];
+  let ey = 0;
+  for (let i = 0; i < n; i++) {
+    if (i === split && i > 0) ey += selGroupGap - selGap;
+    ys.push(ey);
+    ey += selSize + selGap;
+  }
 
   st.quads = [];
-  let y = 0, index = 0;
-  const place = (el, plate, state, width) => {
-    const qw = width + bleed * 2, qh = size + bleed * 2;
-    el.style.left = (-margin - width - bleed) + "px";
-    el.style.top = (y - bleed) + "px";
+  const place = (el, plate, state, pw, i) => {
+    const a = packed(i);
+    const bx = -(margin + pw);
+    const by = ys[i] ?? ey;
+    const px = lerp(a.x, bx, sel);
+    const py = lerp(a.y, by, sel);
+    const qw = pw + bleed * 2, qh = h + bleed * 2;
+    el.style.left = (px - bleed) + "px";
+    el.style.top = (py - bleed) + "px";
     el.style.width = qw + "px";
     el.style.height = qh + "px";
     const aspect = qw / qh;
     const bbX = aspect / 2 - INSET, bbY = 0.5 - INSET;
     const ih = Math.min(PLATE.iconHalf, bbY * PLATE.iconOfBody);
-    st.quads.push({ el, plate, state, aspect, bbX, bbY, ih, icx: -bbX + ih + PLATE.iconPad, size, width });
-    y += size + gap;
+    st.quads.push({ el, plate, state, aspect, bbX, bbY, ih, icx: -bbX + ih + PLATE.iconPad, size: h, width: pw });
   };
-  for (const state of plates) {
-    const plate = st.plates.get(state.key);
-    if (!plate) continue;
-    if (index === split && index > 0) y += groupGap - gap;
-    place(plate.el, plate, state, w);
-    index++;
-  }
+
+  /* Retire every quad that dropped out of the reading before placing this
+     frame's, or an entry that left the visible set keeps its last rectangle and
+     the shader keeps drawing into it. */
   for (const [key, plate] of st.plates) if (!plates.some((p) => p.key === key)) plate.el.style.width = "0px";
+
+  for (let i = 0; i < plates.length; i++) {
+    const plate = st.plates.get(plates[i].key);
+    if (plate) place(plate.el, plate, plates[i], w, i);
+  }
 
   if (hidden > 0) {
     if (!st.tail) {
@@ -745,7 +802,7 @@ function layout(st) {
       st.tailAnim = new PlateAnim({ motionScale: motion });
     }
     st.tailAnim.retarget(1);
-    place(st.tail, { anim: st.tailAnim, seed: 0 }, { tail: true, hidden }, size);
+    place(st.tail, { anim: st.tailAnim, seed: 0 }, { tail: true, hidden }, h, plates.length);
   } else if (st.tail) {
     st.tailAnim?.retarget(0);
     if (st.tailAnim?.enter <= 0.001) st.tail.style.width = "0px";
@@ -994,7 +1051,7 @@ function drawPlate(st, q, t, dpr) {
     const c = pxOf([q.bbX - nbx, -q.bbY + PLATE.tabHalfY], v, q.aspect);
     drawRun([{ text: s.badgeText, size: v.h * PLATE.tabOfPlate, ink: [0.02, 0.03, 0.05] }], c[0], c[1], v.w, v.h, "center");
   }
-  if (st.sel > 0.3 && s.name) {
+  if (st.sel >= LAYOUT.nameAt && s.name) {
     const c = pxOf([q.icx + q.ih + PLATE.iconPad, 0], v, q.aspect);
     const size = v.h * PLATE.nameOfPlate;
     drawRun([{ text: s.name.toUpperCase(), size, ink: [0.90, 0.93, 0.98], track: size * 0.09 }],

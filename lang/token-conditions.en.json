@@ -6,13 +6,13 @@
   "GLTC.Settings.ShowEffects.Hint": "Draw the effects feats, items, spells and afflictions apply, below the conditions and separated from them by a gap. Each shows its remaining duration as a depleting gauge, and a sustained one draws that gauge in gold. Off leaves only PF2e's conditions on the rail.",
 
   "GLTC.Settings.MaxPlates.Name": "Plates Per Token",
-  "GLTC.Settings.MaxPlates.Hint": "How many plates a rail may show before the rest collapse into a single count. Conditions are kept first. The count itself takes one of the slots, so a limit of six with eight things to show gives five plates and a +3.",
+  "GLTC.Settings.MaxPlates.Hint": "How many plates a rail may show before the rest collapse into a single count. Conditions are kept first. The count itself takes one of the slots, so a limit of eight with ten things to show gives seven plates and a +3. This is a ceiling, not a promise: the plates stay inside the token\u2019s own square, so a small creature on a small grid shows fewer than the number here and puts the remainder in the count.",
 
   "GLTC.Settings.ExpiryWarn.Name": "Expiry Warning",
   "GLTC.Settings.ExpiryWarn.Hint": "How many rounds before an effect ends that its plate starts to breathe, on the same slow clock the resource bar's low-health state uses. 0 turns the warning off.",
 
   "GLTC.Settings.Side.Name": "Rail Side",
-  "GLTC.Settings.Side.Hint": "Which flank of the token the rail hangs on. It always grows downward from the token's top edge, so the worst thing a creature has is at the same place on every token.",
+  "GLTC.Settings.Side.Hint": "Which flank of the token the plates start from. They always fill downward from the token's top edge before wrapping into a second column, so the worst thing a creature has is at the same place on every token \u2014 and on hover the block unfolds out past this side.",
   "GLTC.Settings.Side.Left": "Left of the token",
   "GLTC.Settings.Side.Right": "Right of the token",
 

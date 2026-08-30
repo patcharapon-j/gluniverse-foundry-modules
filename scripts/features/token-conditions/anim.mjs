@@ -109,11 +109,15 @@ export class PlateAnim {
  * Every animated behaviour in this feature must appear here, and
  * `tools/token-conditions-check.mjs` enforces it — an effect that is not in the
  * list is one that never degrades, so a forty-token encounter pays for it
- * whatever the frame time. The order is deliberate: the sweep is decoration, the
- * breath is a warning, and the print is the event itself, so the event is the
- * last thing to go.
+ * whatever the frame time. The order is deliberate: the breath is a warning, the
+ * flash is the punctuation on an event, and the print is the event itself, so
+ * the event is the last thing to go.
+ *
+ * The expansion is not in the list and must not be: it only runs on the one
+ * token under the cursor, it is what the viewer just asked for, and a hover that
+ * stops answering under load is a broken control rather than a degraded effect.
  */
-export const SHED_ORDER = Object.freeze(["sweep", "breath", "flash", "print"]);
+export const SHED_ORDER = Object.freeze(["breath", "flash", "print"]);
 
 /** Frame time, in ms, above which the next effect in SHED_ORDER is given up. */
 export const SHED_AT = 22;

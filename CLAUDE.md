@@ -381,8 +381,13 @@ redacted effect whose name is populated before the redaction is checked leaks it
 the moment somebody draws one more thing; dropping any of PF2e's own three gates
 (`isExpired`, `system.tokenIcon.show`, `isIdentified`) takes a control away from
 every GM who already knows where it is; a missing `updateWorldTime` hook freezes
-every duration gauge where it stood; and a `null` life collapsed into `0` draws a
-full countdown bar under every effect that has no duration at all:
+every duration gauge where it stood; a `null` life collapsed into `0` draws a
+full countdown bar under every effect that has no duration at all; and the
+resting layout — a block of plates packed inside the token's own square — can be
+retuned into either of its two failures without a diff showing it, since a plate
+a third larger silently takes a Medium token from twelve slots to four, and a
+raised column ceiling tiles the creature's artwork instead of sitting beside it,
+neither of which appears until the sixth round of somebody else's fight:
 
 ```bash
 node tools/token-conditions-check.mjs
@@ -392,6 +397,16 @@ Zero problems required. Note that the plate deliberately reuses the resource
 bar's material and its `uTime * 1.35` breath clock — a dying creature's bar and
 its DYING plate are one alarm, not two — and that gold appears in exactly one
 place here, a sustained effect's duration gauge.
+
+The layout has **two arrangements**, and `layout()` computes both in full and
+interpolates position *and* size between them. They are different shapes, not one
+shape at two scales: easing the resting layout into the expanded one instead
+would send every plate past the first column to the wrong place. The resting one
+stays inside the token's square on purpose — a column that outgrows its token
+grows over the creatures standing next to it — while the hover one is free to
+overlap, because it exists only while the cursor is on the token. `capacityFor`
+floors the GM's plate cap at what the square can actually hold; without it the
+setting is a number that means "and then draw the rest on somebody else".
 
 To see it, `node tools/token-conditions-preview.mjs --out=.preview/conditions.html`
 writes a page that compiles **both** shipped shaders in one WebGL2 context and

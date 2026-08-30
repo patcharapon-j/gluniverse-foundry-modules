@@ -29,6 +29,7 @@ import { TONES, DEFAULT_TONE } from "./tone.mjs";
 import { canViewLabels, canViewPlates } from "./visibility.mjs";
 
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
+const lerp = (a, b, t) => a + (b - a) * t;
 
 /**
  * `canvas.interface` sorts its children and every Foundry layer declares a
@@ -286,7 +287,12 @@ class RailHost {
     }
     entry.token = token;
 
-    const { plates, hidden, split } = flatten(reading, this.opts.maxPlates);
+    /* The GM's cap, floored by what this token's square can actually hold. The
+       tail already exists to say "and N more"; letting it absorb the overflow is
+       how the block stays on its own square without the setting having to know
+       anything about grid sizes or creature sizes. */
+    const cap = Math.min(this.opts.maxPlates, this.capacityFor(token));
+    const { plates, hidden, split } = flatten(reading, cap);
     entry.reading = plates;
     entry.hidden = hidden;
     entry.split = split;
@@ -352,56 +358,150 @@ class RailHost {
   }
 
   /**
+   * The packed block's dimensions for one token, in world pixels.
+   *
+   * Shared by the layout and by `capacityFor`, because the number of plates a
+   * token can hold and the places they go are the same arithmetic asked twice.
+   * Derived from the *grid* and the token's square, never from its artwork: a
+   * creature scaled to 1.4 is still standing in one square, and a block sized
+   * off the art would be a different size on every token.
+   */
+  metrics(token) {
+    const doc = token?.document;
+    const grid = this.grid;
+    const scale = this.opts.scale;
+    const size = clamp(LAYOUT.plate * grid * scale, LAYOUT.minPx, LAYOUT.maxPx);
+    const gap = LAYOUT.gap * grid * scale;
+    const margin = LAYOUT.margin * grid * scale;
+    const foot = LAYOUT.foot * grid * scale;
+    const tw = (doc?.width ?? 1) * grid;
+    const th = (doc?.height ?? 1) * grid;
+    const pitch = size + gap;
+    /* +gap on both, because n plates span n*pitch - gap: the last one needs no
+       gap after it, and rounding without that term loses a whole row on a token
+       that fits exactly. */
+    const rows = clamp(Math.floor((th - margin - foot + gap) / pitch), 1, LAYOUT.rowsMax);
+    const cols = Math.max(1, Math.min(LAYOUT.colsMax,
+      Math.floor((tw - margin * 2 + gap) / pitch)));
+    return { grid, scale, size, gap, margin, foot, tw, th, pitch, rows, cols };
+  }
+
+  /**
+   * How many plates this token's square can actually hold.
+   *
+   * The cap the GM set is a ceiling, not a promise: a Tiny familiar on a 64px
+   * grid has room for six plates however high the setting goes, and drawing
+   * twelve would put half of them on the creature standing next to it. Taking
+   * the smaller of the two is what keeps "the rail stays on its own square"
+   * true at every token size rather than only at the one it was tuned on.
+   */
+  capacityFor(token) {
+    const m = this.metrics(token);
+    return Math.max(1, m.rows * m.cols);
+  }
+
+  /**
    * Place every quad in this entry, in world pixels.
    *
-   * Everything is derived from the *grid*, never from the token's artwork: a
-   * creature whose art is scaled to 1.4 is still standing in one square, and a
-   * rail that followed the art would sit at a different distance on every token.
+   * Two arrangements, cross-faded by `entry.sel`:
+   *
+   *   **Packed** (sel 0) — a block of small plates inside the token's own
+   *   square, filling column-first from the chosen flank so that "the worst
+   *   thing is first" is still read top-down. This is the resting state, and it
+   *   never leaves the token's footprint.
+   *
+   *   **Expanded** (sel 1) — one column of larger plates hung outside the
+   *   flank, each showing its name. This one is free to overflow onto the
+   *   squares around it, because it only exists while the cursor is on the
+   *   token and it goes away the moment the cursor leaves.
+   *
+   * Both endpoints are computed in full and interpolated — position *and* size —
+   * rather than the block being eased into place from the packed layout alone.
+   * The two arrangements are different shapes, not one shape at two scales, and
+   * lerping between two complete answers is the only way each plate arrives
+   * where it belongs from wherever it happened to be.
    */
   layout(entry) {
     const token = entry.token;
     const doc = token?.document;
     if (!doc) return;
 
-    const grid = this.grid;
-    const scale = this.opts.scale;
-    const size = clamp(LAYOUT.plate * grid * scale, LAYOUT.minPx, LAYOUT.maxPx);
-    const gap = LAYOUT.gap * grid * scale;
-    const groupGap = LAYOUT.groupGap * grid * scale;
-    const margin = LAYOUT.margin * grid * scale;
-    /* The quad is bigger than the plate it contains, by the bloom margin the
-       shader insets on every side. Every placement below is of the *plate*, so
-       the bleed is added back at the end — otherwise the rail sits a couple of
-       pixels further out than the number says and the gap between two plates is
-       not the gap that was asked for. */
-    const bleed = INSET * size;
+    const { grid, scale, size, gap, margin, tw, pitch, rows, cols } = this.metrics(token);
+    const sel = entry.sel;
+    const left = this.opts.side !== "right";
 
-    const tw = (doc.width ?? 1) * grid;
-    const th = (doc.height ?? 1) * grid;
     const ox = offsetFor(token, FLAGS.offsetX, this.opts.offsetX) * grid;
     const oy = offsetFor(token, FLAGS.offsetY, this.opts.offsetY) * grid;
 
-    const left = this.opts.side !== "right";
-    const wide = size * this.wideFactor(entry, size);
+    /* The group's origin is the token's top-left corner, so the two flanks are
+       one layout mirrored through `tw` rather than two sets of arithmetic. */
+    entry.group.position.set((doc.x ?? token.x ?? 0) + ox, (doc.y ?? token.y ?? 0) + oy);
 
-    /* The rail hangs from the token's top edge and grows down, which is what
-       makes "the worst thing is at the top" true at the same screen position on
-       every creature regardless of how many plates it has. */
-    const originY = (doc.y ?? token.y ?? 0) + oy;
-    const anchorX = left
-      ? (doc.x ?? token.x ?? 0) + ox - margin
-      : (doc.x ?? token.x ?? 0) + tw + ox + margin;
+    /* The expanded endpoint's own metrics. The block trades size for density;
+       expanding gives the size back, so a name is read at the size it was drawn
+       for rather than at the size a nine-plate creature could spare. */
+    const selSize = size * LAYOUT.selScale;
+    const selGap = gap * LAYOUT.selScale;
+    const selGroupGap = LAYOUT.groupGap * grid * scale * LAYOUT.selScale;
+    const wide = selSize * this.wideFactor(entry, selSize);
 
-    entry.group.position.set(anchorX, originY);
+    /* The plate as it is *this* frame. Everything below anchors to these, so a
+       flank edge stays glued to the flank for the whole of the unfold. */
+    const w = size + (wide - size) * sel;
+    const h = size + (selSize - size) * sel;
+    const bleed = INSET * h;
+
+    const list = entry.reading ?? [];
+    const hasTail = !!(entry.tail && entry.hidden > 0);
+    const n = list.length + (hasTail ? 1 : 0);
+
+    /* Where conditions end and effects begin. In the expanded column that seam
+       is a wider gap; in the packed block it is a column break, so the two kinds
+       never share a column and position still carries "these are different
+       kinds of thing" — the property the whole two-group split exists for.
+
+       The break costs the blank slots that finish the condition column, so it is
+       only taken when the result still fits the block. On a token crowded enough
+       that it does not, the groups run together: at that density the room is
+       better spent on the plates themselves than on the seam between them. */
+    const splitIdx = entry.split;
+    const wantBreak = splitIdx > 0 && splitIdx < n;
+    const pad = wantBreak ? (rows - (splitIdx % rows)) % rows : 0;
+    const broke = wantBreak && n + pad <= rows * cols;
+    const gapSlots = broke ? pad : 0;
+    const splitCol = broke ? Math.ceil(splitIdx / rows) : -1;
+    const groupGapX = (LAYOUT.groupGap - LAYOUT.gap) * grid * scale;
+
+    /* Packed: column-first. Deliberately not clamped to `cols` — capacity is
+       enforced where the reading is flattened, and a column too many is a plate
+       sitting just off the token, where a clamp would put two plates in exactly
+       the same place and one of them would simply never be seen. */
+    const packed = (i, pw) => {
+      const slot = i + (i >= splitIdx ? gapSlots : 0);
+      const col = Math.floor(slot / rows);
+      const row = slot - col * rows;
+      const cx = margin + col * pitch + (splitCol >= 0 && col >= splitCol ? groupGapX : 0);
+      return { x: left ? cx : tw - cx - pw, y: margin + row * pitch };
+    };
+
+    /* Expanded: one column, hung off the flank, top-aligned with the token. */
+    const ys = [];
+    let ey = 0;
+    for (let i = 0; i < n; i++) {
+      if (i === splitIdx && i > 0) ey += selGroupGap - selGap;
+      ys.push(ey);
+      ey += selSize + selGap;
+    }
+    const expanded = (i, pw) => ({
+      x: left ? -(margin + pw) : tw + margin,
+      y: ys[i] ?? ey,
+    });
+
     entry.plateSize = size;
     entry.wide = wide;
-    entry.left = left;
-    entry.tokenH = th;
-
-    const plateW = size + (wide - size) * entry.sel;
-
-    let y = 0;
-    let index = 0;
+    entry.tokenW = tw;
+    /* The expanded column's measured height, for the cull. */
+    entry.stack = ey;
 
     /**
      * Seat one quad and hand back the box every later anchor is measured in.
@@ -413,14 +513,11 @@ class RailHost {
      * how a digit ends up half off its own badge. Everything below converts
      * through `box`.
      */
-    const place = (mesh, w) => {
-      /* Local coordinates: the group's origin is the plate column's near edge,
-         so a right-hand rail is the same layout mirrored rather than a second
-         set of arithmetic. */
-      const qw = w + bleed * 2;
-      const qh = size + bleed * 2;
-      const x = left ? -(w + bleed) : -bleed;
-      const yTop = y - bleed;
+    const place = (mesh, px, py, pw, ph) => {
+      const qw = pw + bleed * 2;
+      const qh = ph + bleed * 2;
+      const x = px - bleed;
+      const yTop = py - bleed;
       const aspect = qw / qh;
 
       mesh.position.set(x, yTop);
@@ -443,28 +540,31 @@ class RailHost {
       u.uIconBox[2] = ih;
       u.uIconBox[3] = ih;
 
-      y += size + gap;
       return { x, y: yTop, qw, qh, aspect, bbX, bbY, ih, icx };
     };
 
-    for (const state of entry.reading ?? []) {
-      const plate = entry.plates.get(state.key);
+    /* Plates on their way out are no longer in the reading; they hold their last
+       position rather than collapsing the block under them. */
+    for (let i = 0; i < list.length; i++) {
+      const plate = entry.plates.get(list[i].key);
       if (!plate) continue;
-      /* The one place the two groups differ geometrically: a wider gap where
-         conditions end and effects begin. Position is what carries "these are
-         different kinds of thing", so the seam has to be visible without being
-         a line — a rule drawn between them would be one more piece of furniture
-         on the most crowded part of the screen. */
-      if (index === entry.split && index > 0) y += groupGap - gap;
-      plate.box = place(plate.mesh, plateW);
-      index++;
+      const a = packed(i, w);
+      const b = expanded(i, w);
+      plate.box = place(plate.mesh, lerp(a.x, b.x, sel), lerp(a.y, b.y, sel), w, h);
     }
-    /* Plates on their way out keep their last position rather than collapsing
-       the stack under them; the ones below have already moved up. */
-    if (entry.tail && entry.hidden > 0) entry.tailBox = place(entry.tail, size);
-    else entry.tailBox = null;
 
-    this.writeText(entry, size);
+    if (hasTail) {
+      /* Square in both arrangements: it is a count, not a name, so there is
+         nothing for the extra width to hold. */
+      const i = list.length;
+      const a = packed(i, h);
+      const b = expanded(i, h);
+      entry.tailBox = place(entry.tail, lerp(a.x, b.x, sel), lerp(a.y, b.y, sel), h, h);
+    } else {
+      entry.tailBox = null;
+    }
+
+    this.writeText(entry, h, sel);
   }
 
   /** p-space → the group's local pixels, where y runs downward. */
@@ -476,7 +576,7 @@ class RailHost {
   }
 
   /**
-   * How wide an expanded plate gets, as a multiple of its collapsed edge.
+   * How wide an expanded plate gets, as a multiple of its expanded edge.
    *
    * Measured from the longest name actually on this token rather than fixed, so
    * a rail of short names does not reserve room for "UNCONSCIOUS", and capped so
@@ -485,14 +585,14 @@ class RailHost {
   wideFactor(entry, size) {
     if (!entry.reading?.length) return 1;
     let longest = 0;
-    const nameSize = size * 0.30;
+    const nameSize = size * NAME_OF_PLATE;
     for (const state of entry.reading) {
       if (!state.name) continue;
       longest = Math.max(longest, runWidth([{ text: state.name.toUpperCase(), size: nameSize, track: nameSize * 0.09 }]));
     }
     if (longest <= 0) return 1;
     /* size covers the sigil and its two pads; tabRoom keeps the counter clear of
-       the last letter. Both are measured against the plate's edge so a rail of
+       the last letter. Both are measured against the plate's edge so a block of
        16px plates and one of 46px plates expand by the same proportion. */
     return clamp((size + longest + size * LAYOUT.tabRoom) / size, 1, LAYOUT.wideMax);
   }
@@ -508,8 +608,11 @@ class RailHost {
    * condition change, which reads as a broken setting rather than as a stale
    * cache.
    */
-  writeText(entry, size) {
-    const showNames = entry.sel > 0.02;
+  writeText(entry, size, sel) {
+    /* Not `sel > 0`: a name laid out against the expanded width while the plate
+       is still nearly square hangs off the end of it. Below the threshold the
+       plate is opening and carries its sigil alone. */
+    const showNames = sel >= LAYOUT.nameAt;
     const runs = [];
     const parts = [];
     const nameSize = size * NAME_OF_PLATE;
@@ -555,7 +658,7 @@ class RailHost {
       parts.push("+" + entry.hidden);
     }
 
-    const key = parts.join("\u0000") + "|" + size.toFixed(2) + "|" + entry.sel.toFixed(2) + "|" + (showNames ? 1 : 0);
+    const key = parts.join("\u0000") + "|" + size.toFixed(2) + "|" + sel.toFixed(2) + "|" + (showNames ? 1 : 0);
     if (key === entry.textKey && entry.textMesh) return;
     entry.textKey = key;
 
@@ -619,8 +722,13 @@ class RailHost {
     const s = stage.scale?.x ?? 1;
     const sx = p.x * s + (stage.position?.x ?? 0);
     const sy = p.y * s + (stage.position?.y ?? 0);
-    const reach = (entry.wide ?? 64) * s + CULL_PAD;
-    const drop = ((entry.plateSize ?? 32) * ((entry.reading?.length ?? 0) + 1) * 1.6) * s + CULL_PAD;
+    /* The origin is the token's top-left, and an expanded plate hangs a full
+       plate width past whichever flank it is on — so the reach has to carry the
+       token's own width too, or a right-hand rail on a Huge creature pops. */
+    const reach = ((entry.wide ?? 64) + (entry.tokenW ?? 0)) * s + CULL_PAD;
+    /* The expanded column is the tall arrangement, and `stack` is its measured
+       height; the packed block is always shorter than the token. */
+    const drop = ((entry.stack ?? 0) + (entry.plateSize ?? 32)) * s + CULL_PAD;
     entry.group.renderable =
       sx > -reach && sx < view.width + reach && sy > -drop && sy < view.height + drop;
   }
@@ -692,7 +800,6 @@ class RailHost {
 
   writeUniforms(entry, time) {
     const breath = this.allows("breath") ? 1 : 0;
-    const sweep = this.allows("sweep") ? 1 : 0;
     const flashOn = this.allows("flash") ? 1 : 0;
 
     for (const state of entry.reading ?? []) {
@@ -703,7 +810,7 @@ class RailHost {
       u.uTime = time;
       u.uEnter = plate.anim.enter;
       u.uFlash = plate.anim.flash * flashOn;
-      u.uSel = entry.sel * sweep;
+      u.uSel = entry.sel;
       u.uSeed = plate.seed;
       u.uTone = tone.body;
       u.uToneHot = tone.hot;

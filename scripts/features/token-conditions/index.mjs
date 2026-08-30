@@ -31,7 +31,10 @@ function registerSettings() {
     hint: "GLTC.Settings.MaxPlates.Hint",
     type: Number,
     range: { min: LIMITS.platesMin, max: LIMITS.platesMax, step: 1 },
-    default: 6,
+    /* Eight fills a Medium token's block three columns wide, which is as far as
+       the packed layout will go before the tail absorbs the rest. Six was the
+       old single-column figure and it hid a round of a real fight. */
+    default: 8,
   });
 
   world(SETTINGS.expiryWarn, {

@@ -1,6 +1,6 @@
 # Token Conditions
 
-Replaces Foundry's grid of effect icons with a shader-drawn rail down the token's
+Replaces Foundry's grid of effect icons with a shader-drawn block on the token's
 flank: PF2e's conditions with their counters, and the effects feats, items and
 spells apply with their durations counting down.
 
@@ -67,21 +67,28 @@ somebody's explicit decision rather than ours:
 | `system.tokenIcon.show` | The system's own per-effect "show this on the token" switch. Every PF2e user knows where it is; a module that ignores it has taken a control away from them. |
 | `isIdentified` | An unidentified effect is one the GM deliberately hid. |
 
-The two groups are drawn **stacked, conditions above effects, with one wider
-gap** between them. The split is positional rather than chromatic and that is the
-load-bearing decision in the feature: tone already carries *how bad*, and asking
-it to carry *what kind of thing* as well would need twelve colours — which at
-16px is no colours. Position is free, exact, and survives a colour-blind viewer,
-the same argument the resource bar's plates make for reading health by position
-as well as by hue.
+The two groups are drawn **conditions first, effects after, with one wider gap**
+between them — a column break in the packed block, a wider gap in the unfolded
+list. The split is positional rather than chromatic and that is the load-bearing
+decision in the feature: tone already carries *how bad*, and asking it to carry
+*what kind of thing* as well would need twelve colours — which at 14px is no
+colours. Position is free, exact, and survives a colour-blind viewer, the same
+argument the resource bar's plates make for reading health by position as well as
+by hue.
 
 The cap applies to the **whole** rail rather than per group, because the cap
-exists to stop the rail reaching off the bottom of the screen and the screen does
-not care which group a plate was in. Conditions are taken first: a condition
-changes what a creature can do this turn, and an effect is usually a modifier
-already baked into a number somebody else is rolling. The tail spends one of the
-slots, so a cap of six with eight things shows five and `+3` — the alternative
-silently drops one more than the number says.
+exists to stop the rail outgrowing the token's square and the square does not
+care which group a plate was in. Conditions are taken first: a condition changes
+what a creature can do this turn, and an effect is usually a modifier already
+baked into a number somebody else is rolling. The tail spends one of the slots,
+so a cap of eight with ten things shows seven and `+3` — the alternative silently
+drops one more than the number says.
+
+The GM's cap is a ceiling rather than a promise: `RailHost#capacityFor` floors it
+at what the token's own square can hold, so a Tiny familiar on a 64px grid shows
+six and a `+N` however high the setting goes. Without that floor the setting
+would be a number that means "and then draw the rest on the creature standing
+next to it".
 
 ---
 
@@ -184,14 +191,44 @@ channel off.
 
 ## Placement
 
-The rail hangs from the token's **top edge** and grows down, on the flank chosen
-by `tc.side`. Hanging it from the top is what makes "the worst thing is at the
-top" true at the same screen position on every creature regardless of how many
-plates it has.
+There are **two arrangements**, and `layout()` computes both in full and
+interpolates position *and* size between them by `entry.sel`. They are different
+shapes rather than one shape at two scales, so easing the resting layout into the
+expanded one would send plates to the wrong places; lerping between two complete
+answers sends each plate where it belongs from wherever it happened to be.
 
-Everything is derived from the scene's **grid**, never from the token's artwork:
-a creature whose art is scaled to 1.4 is still standing in one square, and a rail
-that followed the art would sit at a different distance on every token. The
+**Packed** (`sel` 0) — the resting state. A block of small plates **inside the
+token's own square**, filling column-first from the flank chosen by `tc.side`,
+with as many rows as the square has room for and wrapping into a second and third
+column.
+
+A single column is legible at three plates and a liability at eight. A creature
+in the sixth round of a real fight carries more conditions than a column can
+hold, and the column answers by growing down through the two squares below it —
+over whatever is standing there. A status readout that obscures the board it is
+describing has stopped being a readout. Packing makes density cost *area* rather
+than *trespass*, and the area it spends is the one square that is unambiguously
+this creature's business.
+
+The block reserves `LAYOUT.foot` at the token's bottom edge. Foundry draws its
+own bars and nameplate across there, and the suite's resource bar straddles the
+same edge; the reservation is unconditional rather than conditional on another
+feature being enabled, because `constants.mjs` must not know that feature exists.
+
+**Expanded** (`sel` 1) — one column of larger plates hung *outside* the flank,
+each showing its name, and free to overlap the squares around it. That is not a
+lapse in the rule above: it exists only while the cursor is on the token and it
+goes away the moment the cursor leaves, so it can never be what somebody is
+looking *past*. `LAYOUT.selScale` gives back the size the packed block traded for
+density, so a name is read at the size it was drawn for.
+
+Names appear only past `LAYOUT.nameAt`: a label laid out against the expanded
+width while the plate is still nearly square hangs off the end of it.
+
+Everything is derived from the scene's **grid** and the token's **square**, never
+from its artwork: a creature whose art is scaled to 1.4 is still standing in one
+square, and a block that followed the art would be a different size on every
+token. The
 per-token offsets (`tc.offsetX` / `tc.offsetY` flags) are in grid squares for the
 same reason, and a per-token value **replaces** the world default rather than
 adding to it — the additive reading looks friendlier and silently drags every
@@ -227,10 +264,20 @@ damage on the same alarm, and three things pulsing at once is three things
 nothing is urgent about.
 
 Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
-rolling frame time is back inside budget: sweep, then breath, then flash, then
-the print. The event is the last thing to go. Every animated behaviour must
-appear in that list and the check tool enforces it, so a new effect cannot be
-added that never degrades.
+rolling frame time is back inside budget: breath, then flash, then the print. The
+event is the last thing to go. Every animated behaviour must appear in that list
+and the check tool enforces it, so a new effect cannot be added that never
+degrades.
+
+The **unfold is deliberately not in that list**. It runs on the one token under
+the cursor, it is what the viewer just asked for, and a hover that stops
+answering under load is a broken control rather than a degraded effect.
+
+Expansion also adds **no moving light**. An earlier version crossed the face with
+a travelling specular on the bar's own 0.30 Hz; on a bar eight times as wide that
+reads as a sweep, but on a plate it is a flicker — and it is a flicker underneath
+the one word the whole gesture exists to let you read. What expansion adds is
+static: the stroke lifts toward the tone and the contact glow widens.
 
 ---
 
