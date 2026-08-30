@@ -16,7 +16,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = new URL("../", import.meta.url);
 const rel = (p) => fileURLToPath(new URL(p, ROOT));
@@ -521,7 +521,17 @@ const tokensCss = await src("styles/gl-tokens.css");
     process.exit(problems ? 1 : 0);
   }
 
-  const pw = await import(pwPath);
+  /* require.resolve hands back a CommonJS entry path, and importing a CJS file
+     puts its exports under `default` — so `pw.chromium` is undefined whenever
+     Playwright is installed locally rather than resolved as ESM, and the tool
+     dies at the one step it exists for. Accept either shape. */
+  const pwMod = await import(pathToFileURL(pwPath).href);
+  const pw = pwMod.chromium ? pwMod : (pwMod.default ?? pwMod);
+  if (!pw?.chromium) {
+    console.log("SKIP  playwright resolved but exposes no chromium build");
+    console.log(problems ? `\n${problems} problem(s)` : "\nno problems");
+    process.exit(problems ? 1 : 0);
+  }
   const browser = await pw.chromium.launch();
   const page = await browser.newPage();
   const result = await page.evaluate(({ vert, frag }) => {

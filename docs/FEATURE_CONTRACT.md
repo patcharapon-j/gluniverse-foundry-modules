@@ -217,6 +217,9 @@ rather than at the end.
 | mobile             | mob.                         | null              | —               | off     |
 | pf2e-damage-dice   | dmg.                         | pf2e              | dice-so-nice    | off     |
 | locations          | loc.                         | null              | —               | off     |
+| pf2e-recall        | rk.                          | pf2e              | —               | off     |
+| resource-bars      | rb.                          | null              | —               | off     |
+| token-conditions   | tc.                          | pf2e              | —               | off     |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

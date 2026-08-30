@@ -31,3 +31,4 @@ import "./pf2e-damage-dice/index.mjs";
 import "./locations/index.mjs";
 import "./pf2e-recall/index.mjs";
 import "./resource-bars/index.mjs";
+import "./token-conditions/index.mjs";

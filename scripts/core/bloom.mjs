@@ -1,5 +1,12 @@
 /**
- * GLUniverse Suite — resource bars: the bloom pass.
+ * GLUniverse Suite — the shared bloom pass.
+ *
+ * Written for the resource bars and now used by the token condition rail as
+ * well, which is why it sits in core/ rather than inside either of them: every
+ * feature here is independently toggleable, so one feature importing another
+ * one's internals breaks the moment somebody turns that other one off. Two
+ * copies of a four-pass filter would have been the alternative, and a filter
+ * chain duplicated is a filter chain that drifts.
  *
  * The bars emit their specular, their fill head and their impact ring *above*
  * 1.0. This filter is what turns that into light: threshold what exceeds the
@@ -20,13 +27,13 @@
  * future Foundry gives us a float filter target, raising the threshold past 1.0
  * is the only change needed.
  *
- * One filter for the whole bar container, never one per token — a per-token
+ * One filter for the whole container, never one per token — a per-token
  * filter allocates a render texture per token per frame, which in a forty-token
  * combat is the single most expensive thing this feature could possibly do.
  */
 
-import { PRECISION } from "./shader.mjs";
-import { warn } from "../../core/const.mjs";
+import { PRECISION } from "./glsl.mjs";
+import { warn } from "./const.mjs";
 
 export const DEFAULT_THRESHOLD = 0.82;
 export const DEFAULT_INTENSITY = 0.85;

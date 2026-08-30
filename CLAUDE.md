@@ -369,6 +369,36 @@ the real animation model. **Serve it** (`node tools/preview-server.mjs`) — a
 `docs/RESOURCE_BARS.md` for the pipeline, the unit convention and the
 permission contract.
 
+**When touching the token condition rail** (`features/token-conditions/`), re-run
+its consistency check. Everything it covers fails *silently*: a shader that will
+not compile degrades to nothing rather than erroring; a uniform declared and
+never written holds its initial value forever; the plate's geometry is described
+by the GLSL, by `constants.mjs` and by the host, so a counter drifts half off
+its own tab the moment two of them disagree; a hairline sized in geometry units
+instead of device pixels vanishes for every player without a HiDPI monitor; an
+animated behaviour missing from `SHED_ORDER` never degrades under load; a
+redacted effect whose name is populated before the redaction is checked leaks it
+the moment somebody draws one more thing; dropping any of PF2e's own three gates
+(`isExpired`, `system.tokenIcon.show`, `isIdentified`) takes a control away from
+every GM who already knows where it is; a missing `updateWorldTime` hook freezes
+every duration gauge where it stood; and a `null` life collapsed into `0` draws a
+full countdown bar under every effect that has no duration at all:
+
+```bash
+node tools/token-conditions-check.mjs
+```
+
+Zero problems required. Note that the plate deliberately reuses the resource
+bar's material and its `uTime * 1.35` breath clock — a dying creature's bar and
+its DYING plate are one alarm, not two — and that gold appears in exactly one
+place here, a sustained effect's duration gauge.
+
+To see it, `node tools/token-conditions-preview.mjs --out=.preview/conditions.html`
+writes a page that compiles **both** shipped shaders in one WebGL2 context and
+puts them through one bright-pass. **Serve it** (`node tools/preview-server.mjs`).
+See `docs/TOKEN_CONDITIONS.md` for the tone system, the two data models and the
+permission contract.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
