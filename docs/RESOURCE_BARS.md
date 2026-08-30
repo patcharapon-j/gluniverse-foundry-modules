@@ -102,7 +102,7 @@ looks right until you hover, and then the border is drawn straight over the bar.
 rulers and door controls keep the top of the stack. Never put a health bar in
 front of something you click.
 
-`bloom.mjs` runs threshold → blur H → blur V → composite. **PIXI's filter
+`core/bloom.mjs` (shared with the token condition rail) runs threshold → blur H → blur V → composite. **PIXI's filter
 textures are 8-bit**, so everything the shader emits above 1.0 is clamped before
 the filter sees it; the threshold therefore sits below 1.0 and works on what
 survived. The preview harness renders to RGBA16F and can threshold above 1.0,

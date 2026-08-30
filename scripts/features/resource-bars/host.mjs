@@ -31,7 +31,7 @@ import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
-import { createBloomFilter } from "./bloom.mjs";
+import { createBloomFilter } from "../../core/bloom.mjs";
 
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
 

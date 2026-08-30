@@ -10,6 +10,27 @@
  * Dependency-free and side-effect-free, like the rest of `core/`.
  */
 
+/**
+ * The precision qualifier every fragment shader in the suite declares for itself.
+ *
+ * PIXI prepends one to any shader that does not — and it prepends `mediump`.
+ * That matters twice over: a bare WebGL context (a preview harness, a check
+ * tool) prepends nothing at all, so the same source fails to compile there; and
+ * letting PIXI supply it means the harness validates a *different program* than
+ * the one Foundry runs. Declaring it pins both.
+ *
+ * `highp` is what an OKLab inverse and an exponential falloff want — at mediump
+ * a colour ramp visibly bands — with the standard guard for hardware that cannot
+ * offer it.
+ */
+export const PRECISION = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+`;
+
 export const VERTEX_SHADER = `
 attribute vec2 aVertexPosition;
 attribute vec2 aUvs;

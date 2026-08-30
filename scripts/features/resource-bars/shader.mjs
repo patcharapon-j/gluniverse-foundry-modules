@@ -29,10 +29,12 @@
  * degrades to the unfiltered look rather than to a blank quad.
  */
 
-import { SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
+import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
 import { FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
 
-export { VERTEX_SHADER };
+/* Re-exported so this module stays the single import site for everything the
+   feature compiles, as it was when it owned the constant. */
+export { VERTEX_SHADER, PRECISION };
 
 
 /** A standalone vertex shader for the preview harness (no PIXI matrices). */
@@ -88,25 +90,6 @@ export const UNIFORMS = Object.freeze({
   uBreakAmber: "vec3",// fracture seam gold, sRGB 0..1
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
 });
-
-/**
- * PIXI prepends a precision qualifier to any fragment shader that does not
- * declare one — and it prepends `mediump`. That matters twice over. A bare
- * WebGL context (the preview harness, the check tool) prepends nothing at all,
- * so the same source fails to compile there; and if we let PIXI supply it, the
- * harness would be validating a *different program* than the one Foundry runs.
- *
- * Declaring it here pins both. `highp` is what the OKLab inverse and the
- * exponential falloffs want — at mediump the ramp visibly bands across the
- * fill — with the standard guard for hardware that cannot offer it.
- */
-export const PRECISION = `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-`;
 
 /**
  * The cut corner, as a multiple of the bar's half-height; how far the body is
