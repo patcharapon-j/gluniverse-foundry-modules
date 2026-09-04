@@ -2,6 +2,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { FLAGS } from "./constants.mjs";
+import { compactPresentation } from "./schema.mjs";
 
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
@@ -12,14 +13,15 @@ function colorHex(value) {
     : null;
 }
 
-function styleFor(renderer) {
+function presentationFor(renderer) {
   const color = colorHex(renderer.appearance?.highlight?.color)
     ?? colorHex(renderer.appearance?.border?.color);
-  return {
-    colorOverride: Boolean(color),
-    color,
-    label: "",
-  };
+  return compactPresentation({
+    schema: 2,
+    mode: "auto",
+    overrides: color ? { appearance: { palette: { body: color } } } : {},
+    label: renderer.name ? { mode: "inherit" } : { mode: "hidden" },
+  });
 }
 
 /** Convert one live PF2e AuraRenderer into the Region-shaped host contract. */
@@ -50,7 +52,7 @@ export function auraRegionFor(renderer) {
     width: base.width + radius * 2,
     height: base.height + radius * 2,
   };
-  const style = styleFor(renderer);
+  const presentation = presentationFor(renderer);
   const document = {
     documentName: "Region",
     name: renderer.slug,
@@ -69,8 +71,11 @@ export function auraRegionFor(renderer) {
     bounds,
     attachment: { token: token.id },
     elevation: { bottom: finite(token.document?.elevation) },
-    flags: { pf2e: { areaShape: "emanation", origin: { traits: [...(renderer.traits ?? [])] } } },
-    getFlag: (namespace, key) => namespace === SUITE_ID && key === FLAGS.style ? style : null,
+    flags: {
+      pf2e: { areaShape: "emanation", origin: { name: renderer.name, type: "aura", slug: renderer.slug, traits: [...(renderer.traits ?? [])] } },
+      [SUITE_ID]: { [FLAGS.presentation]: presentation },
+    },
+    getFlag: (namespace, key) => namespace === SUITE_ID && key === FLAGS.presentation ? presentation : null,
     testPoint: ({ x, y }) => {
       const dx = Math.max(base.x - x, 0, x - (base.x + base.width));
       const dy = Math.max(base.y - y, 0, y - (base.y + base.height));

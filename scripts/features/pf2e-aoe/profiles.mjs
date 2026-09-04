@@ -105,14 +105,17 @@ function mergeAppearance(base, overrides) {
 
 /** Resolve native > overrides > profile > snapshot > live evidence > neutral. */
 export function resolveProfile(source, options = {}) {
-  const rawPresentation = options.presentation
-    ?? source?.presentation
-    ?? source?.document?.flags?.[options.suiteId]?.["aoe.presentation"]
-    ?? source?.flags?.[options.suiteId]?.["aoe.presentation"];
+  let stored = null;
+  const document = source?.document ?? source;
+  try { stored = options.suiteId ? document?.getFlag?.(options.suiteId, "aoe.presentation") : null; } catch { /* inaccessible */ }
+  const namespace = document?.flags?.[options.suiteId];
+  const rawPresentation = options.presentation ?? source?.presentation ?? stored
+    ?? namespace?.aoe?.presentation ?? namespace?.["aoe.presentation"];
   const presentation = normalizePresentation(rawPresentation);
   if (presentation.mode === "native") return Object.freeze({ native: true, presentation, reason: "region-opt-out" });
 
-  const selected = presentation.profileId ? profileById(presentation.profileId, options.worldProfiles) : null;
+  const selected = presentation.mode === "profile" && presentation.profileId
+    ? profileById(presentation.profileId, options.worldProfiles) : null;
   const live = classify(source, options.classification ?? {});
   let baseSemantics;
   let baseAppearance = normalizeAppearance();

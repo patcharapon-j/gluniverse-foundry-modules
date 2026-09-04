@@ -1,10 +1,9 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
-import { DEFAULT_STYLE_COLORS } from "./data.mjs";
 import { FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
 import { api, onInit, onReady, reconfigure } from "./main.mjs";
-import { AoeStyleDefaultsApp } from "./style-app.mjs";
+import { AoeProfilesApp } from "./profile-app.mjs";
 
 function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.motionTier, {
@@ -39,7 +38,38 @@ function registerSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: { ...DEFAULT_STYLE_COLORS },
+    default: {},
+    onChange: reconfigure,
+  });
+
+  game.settings.register(SUITE_ID, SETTINGS.intensity, {
+    name: "GLAOE.Settings.Intensity.Name",
+    hint: "GLAOE.Settings.Intensity.Hint",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: {
+      subtle: "GLAOE.Intensity.subtle",
+      balanced: "GLAOE.Intensity.balanced",
+      cinematic: "GLAOE.Intensity.cinematic",
+    },
+    default: "balanced",
+    onChange: reconfigure,
+  });
+
+  game.settings.register(SUITE_ID, SETTINGS.quality, {
+    name: "GLAOE.Settings.Quality.Name",
+    hint: "GLAOE.Settings.Quality.Hint",
+    scope: "client",
+    config: true,
+    type: String,
+    choices: {
+      auto: "GLAOE.Quality.auto",
+      low: "GLAOE.Quality.low",
+      medium: "GLAOE.Quality.medium",
+      high: "GLAOE.Quality.high",
+    },
+    default: "auto",
     onChange: reconfigure,
   });
 
@@ -58,22 +88,15 @@ function registerSettings() {
     config: false,
     type: Object,
     default: { schema: 1, profiles: [] },
-  });
-
-  game.settings.register(SUITE_ID, SETTINGS.devRenderer, {
-    scope: "world",
-    config: false,
-    type: Boolean,
-    default: false,
     onChange: reconfigure,
   });
 
-  game.settings.registerMenu(SUITE_ID, `${PREFIX}styleDefaultsMenu`, {
-    name: "GLAOE.Settings.StyleDefaults.Name",
-    label: "GLAOE.Settings.StyleDefaults.Label",
-    hint: "GLAOE.Settings.StyleDefaults.Hint",
-    icon: "fa-solid fa-palette",
-    type: AoeStyleDefaultsApp,
+  game.settings.registerMenu(SUITE_ID, `${PREFIX}profilesMenu`, {
+    name: "GLAOE.Settings.Profiles.Name",
+    label: "GLAOE.Settings.Profiles.Label",
+    hint: "GLAOE.Settings.Profiles.Hint",
+    icon: "fa-solid fa-sparkles",
+    type: AoeProfilesApp,
     restricted: true,
   });
 }

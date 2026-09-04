@@ -3,13 +3,15 @@
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { escapeAttr, escapeHTML } from "../../core/util.mjs";
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
-import { ARCHETYPES, FLAGS } from "./constants.mjs";
-import { normalizeColor, normalizeLabel, styleDefaults } from "./data.mjs";
+import { FLAGS } from "./constants.mjs";
+import { normalizeColor, normalizeLabel } from "./data.mjs";
+import { BUILTIN_PROFILES } from "./profiles.mjs";
+import { compactPresentation } from "./schema.mjs";
 
 const TOOL = "pf2e-aoe-create";
 const SHAPES = Object.freeze(["burst", "cone", "line", "square", "emanation"]);
 const SHAPE_SET = new Set(SHAPES);
-const ARCHETYPE_SET = new Set(ARCHETYPES);
+const PROFILE_SET = new Set(BUILTIN_PROFILES.map((entry) => entry.id));
 
 let busy = false;
 let draft = {
@@ -18,7 +20,7 @@ let draft = {
   shape: "burst",
   size: 20,
   width: 5,
-  archetype: "generic",
+  profileId: "builtin:etched-neutral",
   colorOverride: false,
   color: null,
 };
@@ -52,15 +54,14 @@ function shapeData({ shape, size, width }) {
 }
 
 function creatorContent() {
-  const defaults = styleDefaults();
-  const archetype = ARCHETYPE_SET.has(draft.archetype) ? draft.archetype : "generic";
-  const color = normalizeColor(draft.color, defaults[archetype]);
+  const profileId = PROFILE_SET.has(draft.profileId) ? draft.profileId : "builtin:etched-neutral";
+  const color = normalizeColor(draft.color, "#759dff");
   const unit = sceneUnit();
   const shapeOptions = SHAPES.map((id) =>
     `<option value="${id}"${draft.shape === id ? " selected" : ""}>${escapeHTML(t(`GLAOE.Creator.Shape.${id}`))}</option>`
   ).join("");
-  const archetypeOptions = ARCHETYPES.map((id) =>
-    `<option value="${id}"${archetype === id ? " selected" : ""} data-color="${escapeAttr(defaults[id])}">${escapeHTML(t(`GLAOE.Archetype.${id}`))}</option>`
+  const profileOptions = BUILTIN_PROFILES.map((entry) =>
+    `<option value="${entry.id}"${profileId === entry.id ? " selected" : ""}>${escapeHTML(t(entry.nameKey))}</option>`
   ).join("");
 
   return `
@@ -91,8 +92,8 @@ function creatorContent() {
       </div>
       <div class="gl-aoe-create-grid">
         <div class="form-group">
-          <label>${escapeHTML(t("GLAOE.RegionStyle.Archetype"))}</label>
-          <div class="form-fields"><select name="archetype">${archetypeOptions}</select></div>
+          <label>${escapeHTML(t("GLAOE.RegionStyle.Profile"))}</label>
+          <div class="form-fields"><select name="profileId">${profileOptions}</select></div>
         </div>
         <div class="form-group gl-aoe-create-color">
           <label>${escapeHTML(t("GLAOE.RegionStyle.Color"))}</label>
@@ -111,17 +112,11 @@ function bindCreatorDialog(_event, dialog) {
   const form = dialog.element?.querySelector("form.gl-aoe-create-form");
   if (!form) return;
   const shape = form.elements.shape;
-  const archetype = form.elements.archetype;
   const color = form.elements.color;
   const colorOverride = form.elements.colorOverride;
   const output = form.querySelector(".gl-aoe-create-color output");
   const width = form.querySelector(".gl-aoe-create-width");
   shape?.addEventListener("change", () => width?.toggleAttribute("hidden", shape.value !== "line"));
-  archetype?.addEventListener("change", () => {
-    const selected = archetype.selectedOptions?.[0];
-    if (selected?.dataset?.color && color) color.value = selected.dataset.color;
-    if (output && color) output.value = color.value;
-  });
   color?.addEventListener("input", () => { if (output) output.value = color.value; });
   colorOverride?.addEventListener("change", () => { if (color) color.disabled = !colorOverride.checked; });
 }
@@ -129,17 +124,16 @@ function bindCreatorDialog(_event, dialog) {
 function readCreator(button) {
   const elements = button.form?.elements ?? {};
   const shape = SHAPE_SET.has(elements.shape?.value) ? elements.shape.value : "burst";
-  const archetype = ARCHETYPE_SET.has(elements.archetype?.value) ? elements.archetype.value : "generic";
-  const defaults = styleDefaults();
+  const profileId = PROFILE_SET.has(elements.profileId?.value) ? elements.profileId.value : "builtin:etched-neutral";
   return {
     name: String(elements.name?.value ?? "").trim().slice(0, 80),
     label: normalizeLabel(elements.label?.value),
     shape,
     size: Math.max(1, Math.min(1000, Number(elements.size?.value) || 20)),
     width: Math.max(1, Math.min(100, Number(elements.width?.value) || 5)),
-    archetype,
+    profileId,
     colorOverride: Boolean(elements.colorOverride?.checked),
-    color: normalizeColor(elements.color?.value, defaults[archetype]),
+    color: normalizeColor(elements.color?.value, "#759dff"),
   };
 }
 
@@ -177,12 +171,13 @@ async function chooseArea() {
 
 function baseRegionData(config) {
   const suiteFlags = {};
-  foundry.utils.setProperty(suiteFlags, FLAGS.style, {
-    archetype: config.archetype,
-    colorOverride: config.colorOverride,
-    color: config.color,
-    label: config.label,
-  });
+  foundry.utils.setProperty(suiteFlags, FLAGS.presentation, compactPresentation({
+    schema: 2,
+    mode: "profile",
+    profileId: config.profileId,
+    overrides: config.colorOverride ? { appearance: { palette: { body: config.color } } } : {},
+    label: config.label ? { mode: "custom", value: config.label } : { mode: "inherit", value: "" },
+  }));
   return {
     name: config.name || config.label || t("GLAOE.Creator.DefaultName"),
     color: config.color,

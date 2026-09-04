@@ -113,15 +113,19 @@ export function normalizePresentation(value = {}) {
   const mode = PRESENTATION_MODES.includes(raw.mode) ? raw.mode : "auto";
   const semantics = plain(raw.overrides?.semantics) ? raw.overrides.semantics : {};
   const normalizedSemantics = normalizeSemantics(semantics);
-  const sparseSemantics = Object.fromEntries(Object.keys(semantics)
-    .filter((key) => key in normalizedSemantics)
-    .map((key) => [key, normalizedSemantics[key]]));
+  const sparseSemantics = {};
+  for (const key of Object.keys(semantics)) {
+    const axis = key === "secondaryFunction" ? "function" : key === "accent" ? "material" : key;
+    if (["function", "material", "behavior", "audience", "source", "geometry"].includes(axis)
+      && SETS[axis].has(semantics[key])) sparseSemantics[key] = normalizedSemantics[key];
+    if (key === "senses" && Array.isArray(semantics.senses)) sparseSemantics.senses = normalizedSemantics.senses;
+  }
   const appearance = normalizeAppearance(raw.overrides?.appearance);
   const sparseAppearance = Object.fromEntries(Object.entries(appearance).filter(([, entry]) => entry != null));
   return Object.freeze({
     schema: PRESENTATION_SCHEMA,
     mode,
-    profileId: isProfileId(raw.profileId) ? raw.profileId : null,
+    profileId: mode === "profile" && isProfileId(raw.profileId) ? raw.profileId : null,
     snapshot: normalizeSnapshot(raw.snapshot),
     overrides: Object.freeze({
       semantics: Object.freeze(sparseSemantics),
@@ -129,6 +133,25 @@ export function normalizePresentation(value = {}) {
     }),
     label: normalizeLabel(raw.label),
   });
+}
+
+/** Compact normalized presentation data for storage. */
+export function compactPresentation(value = {}) {
+  const normalized = normalizePresentation(value);
+  const out = { schema: PRESENTATION_SCHEMA, mode: normalized.mode };
+  if (normalized.mode === "profile" && normalized.profileId) out.profileId = normalized.profileId;
+  if (normalized.snapshot) out.snapshot = normalized.snapshot;
+  const semantics = Object.fromEntries(Object.entries(normalized.overrides.semantics)
+    .filter(([, entry]) => entry != null && (!Array.isArray(entry) || entry.length)));
+  const appearance = Object.fromEntries(Object.entries(normalized.overrides.appearance)
+    .filter(([, entry]) => entry != null));
+  if (Object.keys(semantics).length || Object.keys(appearance).length) {
+    out.overrides = {};
+    if (Object.keys(semantics).length) out.overrides.semantics = semantics;
+    if (Object.keys(appearance).length) out.overrides.appearance = appearance;
+  }
+  if (normalized.label.mode !== "inherit" || normalized.label.value) out.label = normalized.label;
+  return out;
 }
 
 export function validatePresentation(value) {

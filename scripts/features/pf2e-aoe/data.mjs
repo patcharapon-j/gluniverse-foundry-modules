@@ -1,33 +1,9 @@
-/** PF2e AoE — Region interpretation, rules coverage, and authored style. */
+/** PF2e AoE — Region source identity and authoritative rules coverage. */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { hexToRgbFloat, lighten } from "../../core/theme.mjs";
-import {
-  ARCHETYPES,
-  ARCHETYPE_PALETTE,
-  CELL,
-  DAMAGE_ARCHETYPE,
-  FLAGS,
-  LAYOUT,
-  SETTINGS,
-  SHAPE,
-  TRAIT_ARCHETYPE,
-} from "./constants.mjs";
+import { CELL, FLAGS, LAYOUT, SHAPE } from "./constants.mjs";
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const ARCH_SET = new Set(ARCHETYPES);
-const DAMAGE_SET = new Set(Object.keys(DAMAGE_ARCHETYPE));
-
-const byte = (n) => Math.round(Math.max(0, Math.min(1, n)) * 255)
-  .toString(16).padStart(2, "0");
-
-export const DEFAULT_STYLE_COLORS = Object.freeze(Object.fromEntries(
-  ARCHETYPES.map((id) => [id, `#${ARCHETYPE_PALETTE[id].tint.map(byte).join("")}`])
-));
-
-const get = (key, fallback) => {
-  try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
-};
 
 export function normalizeColor(value, fallback = "#759dff") {
   const color = String(value ?? "").trim();
@@ -46,21 +22,6 @@ export function inferredLabel(document) {
   return normalizeLabel(origin.name ?? item?.name ?? document?.name);
 }
 
-export function styleDefaults() {
-  const raw = get(SETTINGS.styleDefaults, {});
-  return Object.fromEntries(ARCHETYPES.map((id) => [
-    id,
-    normalizeColor(raw?.[id], DEFAULT_STYLE_COLORS[id]),
-  ]));
-}
-
-function asTraits(value) {
-  if (value instanceof Set) return [...value];
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === "object") return Object.keys(value).filter((key) => value[key]);
-  return [];
-}
-
 function originItem(origin) {
   const uuid = origin?.uuid ?? origin?.itemUuid ?? null;
   if (!uuid || typeof fromUuidSync !== "function") return null;
@@ -70,76 +31,14 @@ function originItem(origin) {
   } catch { return null; }
 }
 
-function collectDamageTypes(value, out = new Set(), depth = 0) {
-  if (depth > 7 || value == null) return out;
-  if (typeof value === "string") {
-    if (DAMAGE_SET.has(value)) out.add(value);
-    return out;
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) collectDamageTypes(entry, out, depth + 1);
-    return out;
-  }
-  if (typeof value !== "object") return out;
-  for (const [key, child] of Object.entries(value)) {
-    if (["type", "damageType", "damage-type"].includes(key) && typeof child === "string" && DAMAGE_SET.has(child)) {
-      out.add(child);
-    } else if (["damage", "damages", "formula", "instances", "persistent"].includes(key) || depth < 2) {
-      collectDamageTypes(child, out, depth + 1);
-    }
-  }
-  return out;
-}
-
-/** Trait override -> first explicit damage type -> arcane. */
-export function inferredArchetype(document) {
-  const origin = document?.flags?.pf2e?.origin ?? {};
-  const item = originItem(origin);
-  const traits = new Set([
-    ...asTraits(origin.traits),
-    ...asTraits(item?.system?.traits?.value),
-  ]);
-  for (const [trait, archetype] of TRAIT_ARCHETYPE) {
-    if (traits.has(trait)) return archetype;
-  }
-
-  const damage = collectDamageTypes(item?.system?.damage ?? origin.damage);
-  for (const type of damage) return DAMAGE_ARCHETYPE[type] ?? "arcane";
-  return "arcane";
-}
-
-export function authoredStyle(document) {
-  let raw = null;
-  try { raw = document?.getFlag?.(SUITE_ID, FLAGS.style) ?? null; } catch { /* no flag */ }
-  if (!raw || typeof raw !== "object") raw = {};
-  const explicit = ARCH_SET.has(raw.archetype) ? raw.archetype : null;
-  const archetype = explicit ?? inferredArchetype(document);
-  const defaults = styleDefaults();
-  /* Older Spellglass Regions predate the toggle and always stored a color.
-     Treat those as opted in, while new Regions persist the explicit boolean. */
-  const colorOverride = raw.colorOverride ?? Boolean(raw.color);
-  const color = colorOverride
-    ? normalizeColor(raw.color, defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype])
-    : defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype];
-  const hot = archetype === "generic" ? color : lighten(color, 0.58);
-  const hasExplicitLabel = Object.prototype.hasOwnProperty.call(raw, "label");
-  return {
-    archetype,
-    archetypeIndex: ARCHETYPES.indexOf(archetype),
-    color,
-    tint: new Float32Array(hexToRgbFloat(color)),
-    hot: new Float32Array(hexToRgbFloat(hot)),
-    label: hasExplicitLabel ? normalizeLabel(raw.label) : inferredLabel(document),
-    explicit: Boolean(explicit),
-    colorOverride: Boolean(colorOverride),
-  };
-}
-
 export function isEffectRegion(document) {
   if (!document) return false;
   if (document.flags?.pf2e?.areaShape) return true;
   if (document.flags?.core?.MeasuredTemplate) return true;
-  try { return Boolean(document.getFlag?.(SUITE_ID, FLAGS.style)); } catch { return false; }
+  try {
+    return Boolean(document.getFlag?.(SUITE_ID, FLAGS.presentation)
+      || document.getFlag?.(SUITE_ID, FLAGS.style));
+  } catch { return false; }
 }
 
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -195,6 +94,7 @@ export function regionGeometry(region) {
   } else if (shape.type === "line" || areaShape === "line") {
     shapeId = SHAPE.line;
     radius = finite(shape.length, finite(shape.radius, grid)) / grid;
+    base = [Math.max(0.01, finite(shape.width, grid) / grid), 0];
   } else if (shape.type === "emanation" || areaShape === "emanation") {
     shapeId = SHAPE.emanation;
     const token = shape.base ?? shape.token ?? {};

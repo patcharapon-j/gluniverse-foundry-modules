@@ -13,12 +13,14 @@ import { SHED_ORDER, TIMING } from "../scripts/features/pf2e-aoe/anim.mjs";
 import { aggregateEvidence, classify } from "../scripts/features/pf2e-aoe/classifier.mjs";
 import { collectEvidence } from "../scripts/features/pf2e-aoe/evidence.mjs";
 import { convertLegacyStyle, migrationPreflight } from "../scripts/features/pf2e-aoe/migration.mjs";
+import { measurementSummary } from "../scripts/features/pf2e-aoe/measurement.mjs";
+import { materialDescriptor } from "../scripts/features/pf2e-aoe/presentation.mjs";
 import {
   BUILTIN_PROFILES, detachProfile, normalizeWorldProfiles, registerProfile,
   resolveProfile, unregisterProfiles,
 } from "../scripts/features/pf2e-aoe/profiles.mjs";
 import {
-  AUDIENCES, BEHAVIORS, FUNCTIONS, GEOMETRIES, MATERIALS, PRESENTATION_SCHEMA,
+  AUDIENCES, BEHAVIORS, FUNCTIONS, GEOMETRIES, MATERIALS, PRESENTATION_SCHEMA, compactPresentation,
   SENSES, SOURCES, normalizePresentation, presentationLabel, validatePresentation,
 } from "../scripts/features/pf2e-aoe/schema.mjs";
 import { FRAGMENT_SHADER, UNIFORMS, VERTEX_SHADER } from "../scripts/features/pf2e-aoe/shader.mjs";
@@ -70,8 +72,11 @@ const badPresentation = {
 };
 ok(!validatePresentation(badPresentation).valid, "unknown schema IDs must be rejected");
 const normalizedPresentation = normalizePresentation(badPresentation);
-ok(normalizedPresentation.overrides.semantics.function === "neutral",
-  "normalization must contain an unknown function as neutral");
+ok(!("function" in normalizedPresentation.overrides.semantics),
+  "normalization must discard an unknown function override");
+const compact = compactPresentation({ schema: 2, mode: "auto", overrides: { semantics: { function: "", material: "fire" } }, label: { mode: "inherit" } });
+ok(compact.overrides?.semantics?.material === "fire" && !("function" in compact.overrides.semantics) && !compact.label,
+  "persisted presentation must be sparse and discard blank overrides");
 ok(presentationLabel({ label: { mode: "inherit" } }, "Fireball") === "Fireball", "inherited label failed");
 ok(presentationLabel({ label: { mode: "custom", value: "  Silence  " } }, "Fireball") === "Silence", "custom label failed");
 ok(presentationLabel({ label: { mode: "hidden", value: "Fireball" } }, "Fireball") === "", "hidden label must not fall back");
@@ -108,6 +113,12 @@ ok(BUILTIN_PROFILES.length === 24, `expected 24 built-in profiles, found ${BUILT
 ok(new Set(BUILTIN_PROFILES.map((entry) => entry.id)).size === BUILTIN_PROFILES.length,
   "built-in profile ids must be unique");
 for (const value of FUNCTIONS) ok(BUILTIN_PROFILES.some((entry) => entry.semantics.function === value), `no built-in profile covers ${value}`);
+for (const value of MATERIALS) ok(materialDescriptor(value).id === value, `material ${value} lacks a procedural descriptor`);
+const atlas = await readFile(new URL("assets/pf2e-aoe/material-atlas.png", ROOT));
+ok(atlas.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+  "material atlas is not a valid PNG payload");
+ok(atlas.readUInt32BE(16) === 256 && atlas.readUInt32BE(20) === 256,
+  "material atlas must retain its 256 × 256 channel-packed layout");
 const worldProfiles = normalizeWorldProfiles({ schema: 1, profiles: [{
   id: "world:silence-field", name: "Silence Field",
   semantics: { function: "conceal", material: "sonic", behavior: "contain" },
@@ -156,6 +167,10 @@ ok(preflight.counts.affected === 4 && preflight.counts.warnings === 3,
   "migration preflight counts or validation warnings changed");
 ok(preflight.entries[0].uuid === "Scene.A.Region.1" && preflight.entries.at(-1).presentation.mode === "native",
   "migration preflight must be stable and preserve native opt-outs");
+ok(measurementSummary({ shapes: [{ type: "line", length: 1200, width: 100 }], flags: { pf2e: { areaShape: "line" } } },
+  { gridSize: 100, gridDistance: 5, units: "ft" }) === "60 × 5 ft • LINE", "line measurement summary is inaccurate");
+ok(measurementSummary({ shapes: [{ type: "cone", radius: 400, angle: 90 }], flags: { pf2e: { areaShape: "cone" } } },
+  { gridSize: 100, gridDistance: 5, units: "ft" }) === "20 ft • CONE • 90°", "cone measurement summary is inaccurate");
 
 ok(ARCHETYPES.length === 14, `expected 14 archetypes, found ${ARCHETYPES.length}`);
 ok(new Set(ARCHETYPES).size === ARCHETYPES.length, "archetype ids must be unique");
@@ -228,8 +243,57 @@ ok(controls.includes("colorOverride"), "creator must expose the per-Region color
 ok(/if\s*\(\s*!host\.reposition\(region\)\s*\)\s*host\.refresh\(region\)/.test(mainSource),
   "attached Region refresh must fall back when lightweight repositioning is unsafe");
 const regionConfig = await text("scripts/features/pf2e-aoe/region-config.mjs");
-ok(regionConfig.includes("colorOverride") && regionConfig.includes('color.disabled = !colorOverride.checked'),
-  "Region configuration must persist and visibly gate its color override");
+ok(regionConfig.includes("FLAGS.presentation") && regionConfig.includes("PRESENTATION_MODES")
+  && regionConfig.includes("compactPresentation"),
+  "Region configuration must persist normalized schema-v2 presentation data");
+ok(/semanticTopology/.test(FRAGMENT_SHADER) && /uFunction/.test(FRAGMENT_SHADER) && /uBehavior/.test(FRAGMENT_SHADER),
+  "compositional function topology and behavior rhythm are missing");
+
+/* Foundry merges dotted flag updates. Verify that clearing one sparse control
+   emits nested deletion markers instead of leaving an old palette or modifier
+   invisibly attached to the Region. */
+const getProperty = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
+const setProperty = (object, path, value) => {
+  const keys = path.split("."); let target = object;
+  for (const key of keys.slice(0, -1)) target = target[key] ??= {};
+  target[keys.at(-1)] = value; return object;
+};
+const mergeObject = (target, source) => {
+  for (const [key, value] of Object.entries(source ?? {})) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      target[key] = mergeObject(target[key] && typeof target[key] === "object" ? target[key] : {}, value);
+    } else target[key] = value;
+  }
+  return target;
+};
+globalThis.foundry = { utils: {
+  getProperty, setProperty, deepClone: (value) => structuredClone(value),
+  mergeObject: (target, source) => mergeObject(target, source),
+} };
+const { normalizeRegionPresentationUpdate } = await import("../scripts/features/pf2e-aoe/region-config.mjs");
+const storedPresentation = {
+  schema: 2, mode: "custom",
+  overrides: {
+    semantics: { function: "harm", material: "fire" },
+    appearance: { palette: { body: "#ff5522" }, intensity: "cinematic" },
+  },
+};
+const presentationChanges = {};
+setProperty(presentationChanges, "flags.gluniverse-foundry-modules.aoe.presentation", {
+  schema: 2, mode: "custom", _paletteEnabled: "false",
+  overrides: {
+    semantics: { function: "harm", material: "" },
+    appearance: { intensity: "", treatment: "" },
+  },
+});
+normalizeRegionPresentationUpdate({ getFlag: () => storedPresentation }, presentationChanges);
+const normalizedChanges = getProperty(presentationChanges, "flags.gluniverse-foundry-modules.aoe.presentation");
+ok(normalizedChanges.overrides?.semantics?.function === "harm"
+  && normalizedChanges.overrides?.semantics?.["-=material"] === null,
+"clearing one semantic override must preserve siblings and delete the stale value");
+ok(normalizedChanges.overrides?.appearance?.["-=palette"] === null
+  && normalizedChanges.overrides?.appearance?.["-=intensity"] === null,
+"disabling appearance overrides must emit nested deletion markers");
 
 /* Half-grid cone/line origins are where a visually plausible lattice used to
    shift. Exercise the pure Region adapter with a midpoint origin and assert the
@@ -251,7 +315,7 @@ globalThis.CONFIG = {
     },
   },
 };
-const { authoredStyle, cellStateAt, pf2eCoverage, regionCells, regionGeometry } = await import("../scripts/features/pf2e-aoe/data.mjs");
+const { cellStateAt, inferredLabel, pf2eCoverage, regionCells, regionGeometry } = await import("../scripts/features/pf2e-aoe/data.mjs");
 const { canRenderEffectRegion, host: aoeHost } = await import("../scripts/features/pf2e-aoe/host.mjs");
 const { auraRegionFor } = await import("../scripts/features/pf2e-aoe/aura.mjs");
 const gridlessRegion = {
@@ -260,7 +324,7 @@ const gridlessRegion = {
 };
 canvas.grid.isSquare = false;
 canvas.grid.isGridless = true;
-ok(canRenderEffectRegion(gridlessRegion), "gridless Scenes must not discard Spellglass Regions before mesh creation");
+ok(!canRenderEffectRegion(gridlessRegion), "unsupported gridless geometry must remain native");
 const gridlessDocument = {
   shapes: [{ type: "circle", x: 150, y: 150, radius: 100 }],
   bounds: { x: 50, y: 50, width: 200, height: 200 },
@@ -327,6 +391,11 @@ ok(emanationGeometry.origin.x === 400 && emanationGeometry.origin.y === 550,
   "token emanation origin must be the base center for non-Medium creatures");
 ok(emanationGeometry.base[0] === 1 && emanationGeometry.base[1] === 1.5,
   "token emanation footprint must retain its grid-space dimensions");
+const wideLine = regionGeometry({
+  shapes: [{ type: "line", x: 100, y: 100, length: 600, width: 200 }],
+  flags: { pf2e: { areaShape: "line" } }, bounds: { x: 100, y: 0, width: 700, height: 300 },
+});
+ok(wideLine.base[0] === 2, "actual line width must reach the analytic shader backend");
 
 /* Emanations measure outward from every edge of the creature's space. The
    first diagonal is 5 feet and the second is 10, so the outer corners disappear
@@ -367,10 +436,10 @@ ok(auraRegion?.document?.shapes?.[0]?.base?.width === 2,
   "PF2e aura adapter must preserve a Large token's two-square base");
 ok(auraRegion?._getCoveredGridSpaceOffsets().length === 1,
   "PF2e aura adapter must use only the system's active aura squares");
-ok(auraRegion?.document?.getFlag("gluniverse-foundry-modules", "aoe.style")?.color === "#7a45cc",
+ok(auraRegion?.document?.getFlag("gluniverse-foundry-modules", "aoe.presentation")?.overrides?.appearance?.palette?.body === "#7a45cc",
   "PF2e aura adapter must preserve the Aura rule's resolved highlight color");
-ok(authoredStyle(auraRegion.document).archetype === "resonance",
-  "PF2e aura traits must resolve through the shared Spellglass archetype map");
+ok(classify(auraRegion, { aura: auraRenderer }).candidate.material === "mental",
+  "PF2e aura traits must resolve through the schema-v2 evidence classifier");
 
 /* A moving token-attached effect reuses its mask during animation. The mask's
    local grid phase must move rigidly with the mesh, and the source token's
@@ -385,7 +454,7 @@ const movingDocument = {
   shapes: [movingShape(500)],
   flags: { pf2e: { areaShape: "emanation" } },
 };
-ok(authoredStyle({ name: "Silence Field", flags: {} }).label === "Silence Field",
+ok(inferredLabel({ name: "Silence Field", flags: {} }) === "Silence Field",
   "inherited labels must fall back to a Region name when no source exists");
 const restingRegion = {
   id: "MOVING-REGION",
@@ -446,37 +515,12 @@ ok(edgeSprite.position.x === movingToken.center.x && edgeSprite.position.y === m
   "attached Token edge light must follow the live Token position");
 aoeHost.entries.delete(restingRegion.id);
 
-const automaticColor = authoredStyle({
-  flags: { pf2e: {} },
-  getFlag: () => ({ archetype: "arcane", colorOverride: false, color: "#ff0000" }),
-});
-ok(automaticColor.color !== "#ff0000" && !automaticColor.colorOverride,
-  "disabled per-Region color override must resolve the archetype's world default");
-
-const itemTemplate = authoredStyle({
-  name: "Fireball",
-  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
-});
-ok(itemTemplate.label === "Fireball",
+ok(inferredLabel({ name: "Fireball", flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } } }) === "Fireball",
   "an item-created template must inherit its PF2e origin name as the label");
-const customTemplateLabel = authoredStyle({
-  name: "Fireball",
-  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
-  getFlag: () => ({ label: "Delayed Blast" }),
-});
-ok(customTemplateLabel.label === "Delayed Blast",
-  "an explicit Region label must override the inherited item name");
-const hiddenTemplateLabel = authoredStyle({
-  name: "Fireball",
-  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
-  getFlag: () => ({ label: "" }),
-});
-ok(hiddenTemplateLabel.label === "",
-  "an explicitly empty Region label must suppress the inherited item name");
 
 if (errors.length) {
   for (const error of errors) console.error(`FAIL ${error}`);
   process.exit(1);
 }
 
-console.log(`PF2e AoE checks passed: ${ARCHETYPES.length} archetypes, ${Object.keys(UNIFORMS).length} uniforms, ${Object.keys(DAMAGE_ARCHETYPE).length} damage types.`);
+console.log(`PF2e AoE checks passed: ${BUILTIN_PROFILES.length} profiles, ${FUNCTIONS.length} functions, ${MATERIALS.length} materials, ${Object.keys(UNIFORMS).length} uniforms.`);

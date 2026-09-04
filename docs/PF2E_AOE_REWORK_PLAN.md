@@ -1,6 +1,6 @@
 # PF2e Spellglass visual-system rework
 
-Status: implementation started; schema/classification/profile foundation in progress
+Status: implemented; schema-v2 public cutover complete
 Scope: `scripts/features/pf2e-aoe/`, its settings, assets, localization,
 documentation, preview tooling, and validation tooling
 Target: Foundry VTT v14 and PF2e 8.x

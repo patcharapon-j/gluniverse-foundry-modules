@@ -1,18 +1,33 @@
 /** PF2e AoE — layered PIXI host for Region effects. */
 
 import { createBloomFilter } from "../../core/bloom.mjs";
+import { SUITE_ID, warn } from "../../core/const.mjs";
 import { PRECISION } from "../../core/glsl.mjs";
-import { lighten } from "../../core/theme.mjs";
 import { TREATMENTS } from "./constants.mjs";
 import { AoeAnim, SHED_AT, SHED_ORDER, UNSHED_AT } from "./anim.mjs";
 import { auraNativeNodes, auraRegionFor, auraRegions } from "./aura.mjs";
-import { cellStateAt, regionCells, regionGeometry, seedFor, authoredStyle, isEffectRegion } from "./data.mjs";
+import { cellStateAt, regionCells, regionGeometry, seedFor, isEffectRegion } from "./data.mjs";
+import { presentationStyle } from "./presentation.mjs";
+import { createMeasurementPresenter, layoutPresenters } from "./measurement.mjs";
+import { sceneUsesNativePresentation } from "./scene-config.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shader.mjs";
 
 const FINISH = 0.88; // settled Spellglass review value
 const ENTER_MODE = 2; // ignite: extent readable on frame one
 const ROOT_Z = 650; // over tokens, under walls/controls
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+function priority(region) {
+  let score = 0;
+  if (region?.controlled || region?.hover) score += 1000;
+  if (region?.document?.attachment?.token) score += 500;
+  if (region?.glAoeAuraRenderer) score += 300;
+  const bounds = region?.bounds ?? region?.document?.bounds;
+  const screen = canvas?.dimensions?.sceneRect;
+  if (bounds && screen && bounds.x < screen.x + screen.width && bounds.x + bounds.width > screen.x
+    && bounds.y < screen.y + screen.height && bounds.y + bounds.height > screen.y) score += 100;
+  return score;
+}
 
 const EDGE_FRAGMENT = PRECISION + `
 varying vec2 vTextureCoord;
@@ -49,6 +64,14 @@ function cellsTexture(cells) {
   return texture;
 }
 
+let sharedAtlas = null;
+function materialAtlas() {
+  if (sharedAtlas && !sharedAtlas.destroyed) return sharedAtlas;
+  try { sharedAtlas = PIXI.Texture.from(`modules/${SUITE_ID}/assets/pf2e-aoe/material-atlas.png`); }
+  catch { sharedAtlas = PIXI.Texture.WHITE; }
+  return sharedAtlas;
+}
+
 function meshFor(plane, geometry, cells, style, anim, seed) {
   const treatment = TREATMENTS[0];
   const uniforms = {
@@ -62,13 +85,25 @@ function meshFor(plane, geometry, cells, style, anim, seed) {
     uDirection: geometry.direction,
     uAngle: geometry.angle,
     uBase: new Float32Array(geometry.base),
-    uArch: style.archetypeIndex,
-    uEnterMode: ENTER_MODE,
+    uArch: style.materialIndex,
+    uFunction: style.functionIndex,
+    uSecondary: style.secondaryFunctionIndex,
+    uBehavior: style.behaviorIndex,
+    uEnterMode: style.enterMode ?? ENTER_MODE,
     uGridless: geometry.gridless ? 1 : 0,
     uTint: style.tint,
     uTintHot: style.hot,
-    uMix: new Float32Array([treatment.ground, treatment.air, treatment.skirt]),
-    uChar: new Float32Array([treatment.scorch, treatment.motes, treatment.rim, treatment.turb]),
+    uAccent: style.accent,
+    uAtlas: materialAtlas(),
+    uAtlasRect: new Float32Array([
+      (style.canonicalMaterialIndex % 8) / 8,
+      Math.floor(style.canonicalMaterialIndex / 8) / 4,
+      1 / 8,
+      1 / 4,
+    ]),
+    uAtlasReady: sharedAtlas?.baseTexture?.valid && sharedAtlas !== PIXI.Texture.WHITE ? 1 : 0,
+    uMix: style.mix ?? new Float32Array([treatment.ground, treatment.air, treatment.skirt]),
+    uChar: style.character ?? new Float32Array([treatment.scorch, treatment.motes, treatment.rim, treatment.turb]),
     uPhase: new Float32Array([anim.enter, anim.leave, anim.shock, anim.eased]),
     uFx: new Float32Array([1, 1, 1, 1]),
     uAlpha: FINISH,
@@ -109,47 +144,6 @@ function destroyNode(node) {
   }
   if (node.parent) node.parent.removeChild(node);
   try { node.destroy({ children: true }); } catch { /* noop */ }
-}
-
-function labelFor(style, geometry) {
-  if (!style.label) return null;
-  const root = new PIXI.Container();
-  root.eventMode = "none";
-  root.position.set(geometry.labelAt.x, geometry.labelAt.y);
-  root.glAoeBaseScale = 1;
-
-  const color = Number.parseInt(lighten(style.color, 0.48).slice(1), 16);
-  const fontSize = clamp(Math.round(geometry.grid * 0.24), 14, 30);
-  const text = new PIXI.Text(style.label.toUpperCase(), {
-    fontFamily: "Oxanium, Rajdhani, sans-serif",
-    fontSize,
-    fontWeight: "650",
-    letterSpacing: Math.max(1, Math.round(fontSize * 0.12)),
-    fill: color,
-    align: "center",
-    stroke: 0x030509,
-    strokeThickness: Math.max(2, Math.round(fontSize * 0.11)),
-    dropShadow: true,
-    dropShadowColor: color,
-    dropShadowAlpha: 0.56,
-    dropShadowBlur: Math.max(3, fontSize * 0.28),
-    dropShadowDistance: 0,
-  });
-  text.anchor.set(0.5);
-  text.resolution = Math.max(2, globalThis.devicePixelRatio || 2);
-
-  const maxWidth = Math.max(geometry.grid * 1.6, geometry.bounds.width * 0.72);
-  if (text.width > maxWidth) text.scale.set(maxWidth / text.width);
-  const width = Math.min(maxWidth, text.width) + fontSize * 1.8;
-  const backing = new PIXI.Graphics();
-  backing.lineStyle({ width: 1, color, alpha: 0.62 });
-  backing.moveTo(-width / 2, -fontSize * 0.72);
-  backing.lineTo(width / 2, -fontSize * 0.72);
-  backing.lineStyle({ width: 1, color, alpha: 0.38 });
-  backing.moveTo(-width / 2, fontSize * 0.72);
-  backing.lineTo(width / 2, fontSize * 0.72);
-  root.addChild(backing, text);
-  return root;
 }
 
 function tokenEdgeFilter(style, geometry, token) {
@@ -257,25 +251,37 @@ function suppressNativeHighlights(region) {
 
 /** Whether the current canvas can host a Spellglass mesh for this Region. */
 export function canRenderEffectRegion(region) {
+  if (sceneUsesNativePresentation()) return false;
   const grid = canvas.grid;
+  const document = region?.document;
+  const shapes = region?.animationState?.shapes ?? document?.shapes;
+  const list = shapes?.contents ?? shapes ?? [];
+  const shape = list?.[0] ?? list?.at?.(0);
+  const exactGridless = ["circle", "cone", "line", "emanation", "rectangle"].includes(shape?.type)
+    && !(shape?.type === "rectangle" && Number(shape.rotation ?? 0) !== 0);
   return Boolean((grid?.isSquare || grid?.isGridless)
-    && isEffectRegion(region?.document) && region?.visible !== false);
+    && (!grid?.isGridless || (list.length === 1 && exactGridless))
+    && isEffectRegion(document) && region?.visible !== false);
 }
 
 class AoeHost {
   constructor() {
     this.entries = new Map();
-    this.options = { motionScale: 1, maxConcurrent: 24 };
+    this.options = { motionScale: 1, maxConcurrent: 24, quality: "auto" };
     this.shed = 0;
     this.frameAvg = 16;
     this.coolFrames = 0;
     this.auraNative = new Map();
+    this.errors = new Set();
+    this.minShed = 0;
     this._last = 0;
     this._tick = this.tick.bind(this);
   }
 
   configure(options = {}) {
     this.options = { ...this.options, ...options };
+    this.minShed = { high: 0, medium: 2, low: 4 }[this.options.quality] ?? 0;
+    this.shed = Math.max(this.shed, this.minShed);
     for (const entry of this.entries.values()) entry.anim.motionScale = this.options.motionScale;
   }
 
@@ -324,15 +330,29 @@ class AoeHost {
 
   refreshAll() {
     if (!this.ground || !this.spectacle) return;
-    const regions = [
+    if (sceneUsesNativePresentation()) {
+      for (const id of [...this.entries.keys()]) this.remove(id);
+      this.syncAuraNative();
+      return;
+    }
+    const candidates = [
       ...(canvas.regions?.placeables ?? [])
         .filter((region) => isEffectRegion(region.document) && region.visible !== false),
       ...auraRegions(),
-    ]
-      .slice(0, this.options.maxConcurrent);
+    ];
+    const regions = candidates.map((region, order) => ({ region, order, priority: priority(region) }))
+      .sort((a, b) => b.priority - a.priority || a.order - b.order)
+      .slice(0, this.options.maxConcurrent).map((entry) => entry.region);
     const keep = new Set(regions.map((region) => region.id));
     for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.remove(id);
-    for (const region of regions) this.refresh(region);
+    for (const region of regions) {
+      try { this.refresh(region); }
+      catch (error) {
+        const key = `${region?.id}:${error?.message ?? error}`;
+        if (!this.errors.has(key)) { this.errors.add(key); warn("pf2e-aoe | Region restored to native after render failure", region?.id, error); }
+        this.remove(region?.id);
+      }
+    }
     this.syncAuraNative();
   }
 
@@ -346,29 +366,48 @@ class AoeHost {
     if (!canRenderEffectRegion(region)) return;
     const geometry = regionGeometry(region);
     if (!geometry) return;
+    const style = presentationStyle(region);
+    if (!style) return;
     const cells = regionCells(region, geometry);
     if (!cells) return;
-    cells.texture = cellsTexture(cells);
-    const style = authoredStyle(region.document);
     const anim = previousAnim ?? new AoeAnim({ motionScale: this.options.motionScale });
     anim.motionScale = this.options.motionScale;
     const seed = seedFor(region.id);
-    const meshes = [3, 0, 1, 2].map((plane) => meshFor(plane, geometry, cells, style, anim, seed));
-    const [shade, ground, air, boundary] = meshes;
-    shade.zIndex = 0; ground.zIndex = 1; air.zIndex = 1; boundary.zIndex = 2;
-    this.ground.addChild(shade, ground);
-    this.spectacle.addChild(air, boundary);
+    const entry = {
+      region, geometry, cells, style, anim,
+      meshes: [], label: null, edges: null, suppressedHighlights: [],
+    };
+    try {
+      cells.texture = cellsTexture(cells);
+      entry.meshes = [3, 0, 1, 2].map((plane) => meshFor(plane, geometry, cells, style, anim, seed));
+      const [shade, ground, air, boundary] = entry.meshes;
+      shade.zIndex = 0; ground.zIndex = 1; air.zIndex = 1; boundary.zIndex = 2;
+      this.ground.addChild(shade, ground);
+      this.spectacle.addChild(air, boundary);
 
-    const suppressedHighlights = region.glAoeAuraRenderer ? [] : suppressNativeHighlights(region);
-    const entry = { region, geometry, cells, style, anim, meshes, label: null, edges: null, suppressedHighlights };
-    entry.edges = tokenEdges(entry);
-    if (entry.edges.children.length) this.spectacle.addChild(entry.edges);
-    else entry.edges.destroy({ children: true });
-    entry.label = labelFor(style, geometry);
-    if (entry.label) { entry.label.zIndex = 3; this.spectacle.addChild(entry.label); }
-    this.entries.set(region.id, entry);
-    this.write(entry);
-    this.syncAuraNative();
+      /* Register the partially constructed entry before native suppression.
+         Every later failure can then use the ordinary teardown path, which
+         restores native nodes and frees all GPU resources transactionally. */
+      this.entries.set(region.id, entry);
+      entry.suppressedHighlights = region.glAoeAuraRenderer ? [] : suppressNativeHighlights(region);
+      entry.edges = tokenEdges(entry);
+      if (entry.edges.children.length) this.spectacle.addChild(entry.edges);
+      else { entry.edges.destroy({ children: true }); entry.edges = null; }
+      entry.label = createMeasurementPresenter(region, style, geometry);
+      if (entry.label) { entry.label.zIndex = 3; this.spectacle.addChild(entry.label); }
+      layoutPresenters(this.entries.values());
+      this.write(entry);
+      this.syncAuraNative();
+    } catch (error) {
+      const registered = this.entries.has(region.id);
+      if (registered) this.remove(region.id);
+      else {
+        /* Texture creation can fail before the entry is registered. */
+        for (const mesh of entry.meshes) destroyMesh(mesh);
+        try { cells.texture?.destroy?.(true); } catch { /* noop */ }
+      }
+      throw error;
+    }
   }
 
   /** Translate an attached effect without rebuilding its four meshes or mask. */
@@ -398,6 +437,7 @@ class AoeHost {
        Keep the entire mask rigid and rebuild it once the move is committed. */
     repositionTokenEdges(entry);
     entry.label?.position?.set(geometry.labelAt.x, geometry.labelAt.y);
+    if (entry.label) entry.label.glAoeBaseY = geometry.labelAt.y;
     return true;
   }
 
@@ -459,6 +499,7 @@ class AoeHost {
       const u = mesh.shader?.uniforms;
       if (!u) continue;
       u.uTime = entry.anim.time;
+      u.uAtlasReady = sharedAtlas?.baseTexture?.valid && sharedAtlas !== PIXI.Texture.WHITE ? 1 : 0;
       u.uPhase[0] = entry.anim.enter;
       u.uPhase[1] = entry.anim.leave;
       u.uPhase[2] = entry.anim.shock;
@@ -476,6 +517,7 @@ class AoeHost {
       const zoom = Math.abs(canvas.stage?.scale?.x ?? 1) || 1;
       const scale = clamp(1 / zoom, 0.78, 1.35);
       entry.label.scale.set(scale);
+      entry.label.setInspected?.(Boolean(entry.region?.hover || entry.region?.controlled));
     }
   }
 
@@ -486,7 +528,7 @@ class AoeHost {
     this.frameAvg = this.frameAvg * 0.94 + dt * 0.06;
     if (this.frameAvg > SHED_AT && this.shed < SHED_ORDER.length) {
       this.shed += 1; this.coolFrames = 0;
-    } else if (this.frameAvg < UNSHED_AT && this.shed > 0) {
+    } else if (this.frameAvg < UNSHED_AT && this.shed > this.minShed) {
       if (++this.coolFrames > 120) { this.shed -= 1; this.coolFrames = 0; }
     } else this.coolFrames = 0;
 

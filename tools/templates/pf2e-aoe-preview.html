@@ -119,7 +119,7 @@ const SHAPES = [
   { id: "burst",     label: "20-ft burst",          shape: SHAPE.burst,     radius: 4, dir: 0,       base: [0, 0], span: 11, at: [0, 0] },
   { id: "cone",      label: "30-ft cone",           shape: SHAPE.cone,      radius: 6, dir: -0.7854, base: [0, 0], span: 11, at: [2.4, -2.4] },
   { id: "emanation", label: "10-ft emanation · Lg", shape: SHAPE.emanation, radius: 2, dir: 0,       base: [1, 1], span: 9,  at: [0, 0] },
-  { id: "line",      label: "30-ft line",           shape: SHAPE.line,      radius: 6, dir: -0.7854, base: [0, 0], span: 11, at: [2.4, -2.4] },
+  { id: "line",      label: "30-ft line",           shape: SHAPE.line,      radius: 6, dir: -0.7854, base: [1, 0], span: 11, at: [2.4, -2.4] },
 ];
 
 /* Entrances. None is an overshoot: a shape that flies past its size and comes
@@ -127,25 +127,8 @@ const SHAPES = [
 /* The three under review. Settled: treatment grounded, entrance ignite — both
    are still switchable above so a regression in either is visible, but they are
    no longer the axis. The axis is now the archetype, down the page. */
-const REVIEW_ARCHES = ARCHETYPES.map((id, index) => ({
-  id, index, label: id,
-  note: {
-    ember:     "fire — continuous, rising, boiling",
-    frost:     "cold — still, dendritic, creeping",
-    arc:       "electricity — intermittent, striking",
-    caustic:   "acid, poison — bubbles that swell and pop",
-    resonance: "sonic, mental — rings travelling outward",
-    radiance:  "vitality — rays from a bright core, breathing",
-    umbra:     "void — occluding, mostly subtraction",
-    spirit:    "spirit — slow lateral wisps, no edges",
-    force:     "force — a constructed hex lattice, not grown",
-    kinetic:   "b/p/s, bleed — grit that settles and stops",
-    verdant:   "grease, web, terrain — matte fibre, no core",
-    arcane:    "untyped, and every area that deals none",
-    generic:   "GM-authored ad-hoc area — flat color, no material motion",
-    warning:   "boss telegraph — one red pulse, rotating scanner, closing ring",
-  }[id] || "",
-}));
+const REVIEW_ARCHES = /*__PROFILE_CATALOG__*/;
+const MATERIAL_ATLAS_URL = /*__MATERIAL_ATLAS__*/;
 
 const byteHex = (n) => Math.round(Math.max(0, Math.min(1, n)) * 255)
   .toString(16).padStart(2, "0");
@@ -155,8 +138,8 @@ const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) /
 /* Mirrors the future per-region `aoe.style` flag in the review harness. A
    built-in palette is unchanged until the GM actually overrides its colour. */
 const styleState = new Map(REVIEW_ARCHES.map(({ id }) => [id, {
-  color: rgbHex(ARCHETYPE_PALETTE[id].tint),
-  label: id === "generic" ? "Ad-hoc Zone" : id === "warning" ? "Warning Zone" : "",
+  color: rgbHex(REVIEW_ARCHES.find((entry) => entry.id === id).tint),
+  label: id === "etched-neutral" ? "Ad-hoc Zone" : id === "armed-hazard" ? "Warning Zone" : "",
   colorOverridden: false,
 }]));
 const styleViews = new Map();
@@ -419,7 +402,7 @@ REVIEW_ARCHES.forEach((ar) => {
   const o = document.createElement("option");
   o.value = ar.id;
   o.textContent = ar.label;
-  if (ar.id === "warning") o.selected = true;
+  if (ar.id === "armed-hazard") o.selected = true;
   styleSel.appendChild(o);
 });
 
@@ -461,6 +444,30 @@ for (const ar of REVIEW_ARCHES) {
   }
   rows.appendChild(g);
 }
+
+/* The gallery exercises the same local channel-packed atlas as Foundry. A
+   one-pixel neutral texture keeps the complete procedural fallback live until
+   the embedded PNG has decoded, and remains the safe path if decoding fails. */
+const atlasTexture = gl.createTexture();
+let atlasReady = 0;
+gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+  new Uint8Array([128, 128, 0, 0]));
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const atlasImage = new Image();
+atlasImage.addEventListener("load", () => {
+  gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlasImage);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  atlasReady = 1;
+  window.__aoeAtlasReady = true;
+}, { once: true });
+atlasImage.addEventListener("error", () => { window.__aoeAtlasReady = false; }, { once: true });
+atlasImage.src = MATERIAL_ATLAS_URL;
 
 /* ---- Render targets ----------------------------------------------------- */
 function makeRT(w, h) {
@@ -579,17 +586,15 @@ syncStyleControls();
    scene, and it is the first thing to reach for if anything like it returns. */
 const BLOOM = 0.5;
 
-/* Straight out of ARCHETYPE_PALETTE — the harness must not carry a second
-   copy of a colour, or it will demonstrate a palette the module does not
-   ship. */
 const paletteFor = (id) => {
-  const base = ARCHETYPE_PALETTE[id];
+  const profile = REVIEW_ARCHES.find((entry) => entry.id === id);
+  const base = { tint: profile.tint, hot: profile.hot };
   const state = styleState.get(id);
   if (!state?.colorOverridden) return base;
   const tint = hexRgb(state.color);
   /* Generic is literally one colour. Animated archetypes retain a restrained hot stop
      derived from the GM's chosen hue so their material motion still has depth. */
-  const hot = id === "generic" ? tint : tint.map((c) => c + (1 - c) * 0.58);
+  const hot = id === "etched-neutral" ? tint : tint.map((c) => c + (1 - c) * 0.58);
   return { tint, hot };
 };
 
@@ -670,6 +675,13 @@ function frame(now) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, stress ? s.texWall : s.texPlain);
       gl.uniform1i(U.uCells, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+      gl.uniform1i(U.uAtlas, 1);
+      gl.uniform4f(U.uAtlasRect, (s.arch.materialIndex % 8) / 8,
+        Math.floor(s.arch.materialIndex / 8) / 4, 1 / 8, 1 / 4);
+      gl.uniform1f(U.uAtlasReady, atlasReady);
+      gl.activeTexture(gl.TEXTURE0);
       /* Without these the lookup divides by zero, every square reads as
          outside, and the whole effect renders as nothing at all — while the
          uniforms still link, so the harness's null check passes. */
@@ -689,8 +701,12 @@ function frame(now) {
       const tr = currentTreatment();
       const pal = paletteFor(s.arch.id);
       gl.uniform1f(U.uArch, s.arch.index);
+      gl.uniform1f(U.uFunction, s.arch.functionIndex);
+      gl.uniform1f(U.uSecondary, -1);
+      gl.uniform1f(U.uBehavior, s.arch.behaviorIndex);
       gl.uniform3fv(U.uTint, pal.tint);
       gl.uniform3fv(U.uTintHot, pal.hot);
+      gl.uniform3fv(U.uAccent, pal.hot);
       gl.uniform3f(U.uMix, tr.ground, tr.air, tr.skirt * g.skirt);
       gl.uniform4f(U.uChar, tr.scorch, tr.motes, tr.rim, tr.turb);
       gl.uniform4f(U.uPhase, s.anim.enter, s.anim.leave, s.anim.shock, s.anim.eased);

@@ -7,11 +7,14 @@ import { FEATURE_ID, SETTINGS } from "./constants.mjs";
 import { classify as classifySource } from "./classifier.mjs";
 import { addSpellglassSceneControl, bindSpellglassSceneControl } from "./controls.mjs";
 import { inferredLabel } from "./data.mjs";
+import { migrateLegacyPresentations } from "./migration-runtime.mjs";
+import { compactPresentation } from "./schema.mjs";
 import { host } from "./host.mjs";
 import {
   registerProfile, resolveProfile as resolveSourceProfile, unregisterProfiles,
 } from "./profiles.mjs";
-import { injectRegionStyle } from "./region-config.mjs";
+import { injectRegionStyle, normalizeRegionPresentationUpdate } from "./region-config.mjs";
+import { injectScenePresentation } from "./scene-config.mjs";
 
 const H = [];
 const on = (event, fn) => H.push([event, Hooks.on(event, fn)]);
@@ -28,6 +31,7 @@ function options() {
   return {
     motionScale: MOTION_SCALE[tier] ?? MOTION_SCALE[MOTION_TIER_DEFAULT],
     maxConcurrent: Number.isFinite(max) ? Math.min(64, Math.max(1, Math.round(max))) : 24,
+    quality: get(SETTINGS.quality, "auto"),
   };
 }
 
@@ -94,6 +98,22 @@ function resolveProfile(source, options = {}) {
   });
 }
 
+async function freezePlacement(document) {
+  if (!game.user?.isGM || document?.documentName !== "Region") return;
+  let current = null;
+  try { current = document.getFlag(SUITE_ID, "aoe.presentation"); } catch { return; }
+  if (current?.snapshot || ["profile", "custom", "native"].includes(current?.mode)) return;
+  const result = classify(document);
+  if (result.needsClassification) return;
+  const presentation = compactPresentation({
+    schema: 2, mode: "auto",
+    snapshot: { semantics: result.semantics, confidence: result.confidence, evidenceVersion: result.evidenceVersion },
+    label: { mode: "inherit" },
+  });
+  try { await document.setFlag(SUITE_ID, "aoe.presentation", presentation); }
+  catch { /* Region may have been deleted before the hook settled */ }
+}
+
 export function onInit() {
   /* Register controls during init so they are present the first time Foundry
      prepares the left scene-control bar. Disabled features never reach here. */
@@ -101,7 +121,8 @@ export function onInit() {
   on("renderSceneControls", (_app, html) => bindSpellglassSceneControl(html));
 }
 
-export function onReady() {
+export async function onReady() {
+  await migrateLegacyPresentations();
   host.configure(options());
   onSocket(FEATURE_ID, (payload) => {
     if (payload.type === "pulse") host.pulse(payload.regionId);
@@ -122,7 +143,7 @@ export function onReady() {
     host.refresh(region);
   });
   on("destroyRegion", (region) => host.remove(region?.id));
-  on("createRegion", refreshSoon);
+  on("createRegion", (document) => { void freezePlacement(document); refreshSoon(); });
   on("updateRegion", refreshSoon);
   on("deleteRegion", (document) => host.remove(document?.id, { release: true }));
   on("updateScene", refreshSoon);
@@ -149,6 +170,8 @@ export function onReady() {
   on("updateActor", refreshSoon);
 
   on("renderApplicationV2", (app, element) => injectRegionStyle(app, element));
+  on("renderApplicationV2", (app, element) => injectScenePresentation(app, element));
+  on("preUpdateRegion", normalizeRegionPresentationUpdate);
   on("pf2e.damageRoll", pulseForDamage);
   untheme = onThemeChange(() => host.refreshAll());
 

@@ -59,10 +59,17 @@ export const UNIFORMS = Object.freeze({
   uAngle: "float",       // radians, full cone angle (PF2e: always 90 degrees)
   uBase: "vec2",         // emanation: the token footprint half-extent
   uArch: "float",        // archetype index into ARCHETYPES
+  uFunction: "float",    // canonical primary function index
+  uSecondary: "float",   // optional secondary function index, -1 when absent
+  uBehavior: "float",    // canonical behavior index
   uEnterMode: "float",   // 0 trace | 1 inscribe | 2 ignite
   uGridless: "float",    // 1 uses continuous Region geometry without a rules lattice
   uTint: "vec3",         // the archetype's lit body colour
   uTintHot: "vec3",      // its emissive core
+  uAccent: "vec3",       // function-owned semantic accent
+  uAtlas: "sampler2D",   // local channel-packed material atlas
+  uAtlasRect: "vec4",    // normalized atlas tile x, y, width, height
+  uAtlasReady: "float",  // 0 keeps the complete procedural fallback
   uMix: "vec3",          // treatment balance: ground, air, skirt
   uChar: "vec4",         // treatment character: scorch, motes, rim, turbulence
   uPhase: "vec4",        // enter, leave, shock, eased-enter
@@ -111,12 +118,14 @@ void main(void) {
 }`;
 
 const BODY = `
-uniform float uTime, uSeed, uPlane, uShape, uRadius, uDirection, uAngle, uArch, uAlpha, uEnterMode, uGridless;
+uniform float uTime, uSeed, uPlane, uShape, uRadius, uDirection, uAngle, uArch, uFunction, uSecondary, uBehavior, uAlpha, uEnterMode, uGridless, uAtlasReady;
 uniform vec2 uBase, uCellOrigin, uCellSize, uGridOffset;
-uniform vec3 uTint, uTintHot;
+uniform vec3 uTint, uTintHot, uAccent;
+uniform vec4 uAtlasRect;
 uniform vec4 uPhase, uFx, uChar;
 uniform vec3 uMix;
 uniform sampler2D uCells;
+uniform sampler2D uAtlas;
 
 varying vec2 vGrid;
 varying vec2 vScreen;
@@ -164,7 +173,7 @@ float areaSdf(vec2 p) {
   if (uShape < 0.5) return sdBurst(p, uRadius);
   if (uShape < 1.5) return sdCone(p, uRadius, uDirection, uAngle);
   if (uShape < 2.5) return sdEmanation(p, uBase, uRadius);
-  return sdLine(p, uRadius, 1.0, uDirection);
+  return sdLine(p, uRadius, max(uBase.x, 0.01), uDirection);
 }
 
 /* Where a point sits along the OUTER BOUNDARY, 0 to 1, going round once. Only
@@ -879,6 +888,8 @@ void main(void) {
 
   float presence = uPhase.y;      /* the EXIT only; the entrance is the ink above */
   float shock = uPhase.z;
+  float topology = semanticTopology(p, sdf, t) * covered * inkFill
+                 * (1.0 + step(0.0, uSecondary) * 0.08);
 
   /* Treatment character. The grounded treatment passes all ones, so it is
      bit-identical with this in place. */
@@ -893,6 +904,15 @@ void main(void) {
      a lit slab. One fill evaluation is enough, avoids plastic normal-map relief,
      and halves the worst-case cost of frost. */
   float fill = archFill(p, t);
+  /* Stay half a texel inside the selected tile so linear filtering never
+     leaks a neighboring material into seams at the atlas boundary. */
+  vec2 atlasInset = vec2(0.5 / 256.0);
+  vec2 atlasUv = uAtlasRect.xy + atlasInset
+               + fract(p * 0.18) * (uAtlasRect.zw - atlasInset * 2.0);
+  vec4 atlasSample = texture2D(uAtlas, atlasUv);
+  float packedSurface = fill * (0.72 + atlasSample.r * 0.42)
+                      + atlasSample.b * 0.20 - atlasSample.g * 0.10;
+  fill = mix(fill, packedSurface, clamp(uAtlasReady, 0.0, 1.0) * 0.56);
   float turb = mix(0.46, fill * chTurb, uFx.w);
   float detail = smoothstep(0.48, 1.05, fill);
   float body = covered * inkFill * (0.16 + turb * 0.34);
@@ -922,7 +942,7 @@ void main(void) {
      darkens a pixel—the multiply shade pass already handles contrast. */
   float sheen = detail * detail * covered * inkFill * 0.30;
 
-  float ground = clamp(body + skirt * 0.46 + scorch + sheen, 0.0, 1.0) * uMix.x;
+  float ground = clamp(body + skirt * 0.46 + scorch + sheen + topology * 0.18, 0.0, 1.0) * uMix.x;
 
   /* ---- atmosphere ------------------------------------------------------
      The air plane is the SPECTACLE read: soft, volumetric, organic, and
@@ -984,6 +1004,7 @@ void main(void) {
 
   float boundary = rimTrue * 0.80 + rimGrid * 0.60 + ring * 1.4
                  + nib * 0.85 + edgeNib * 1.15 + lip * 0.42;
+  if (uFunction > 2.5 && uFunction < 3.5) boundary += topology * 0.34;
   /* Warning's boundary breathes on the exact same clock as its scanner and
      countdown ring. It never vanishes: the minimum remains a readable rule
      edge even at the quiet point of the pulse. */
@@ -1030,7 +1051,7 @@ void main(void) {
      translucent veil while its sparse crests and boundary run hot. */
   float temp = clamp(amount * 0.58 + sheen * 0.78 + shock * 0.18
                    + step(1.5, uPlane) * 0.28, 0.0, 1.0);
-  vec3 col = archRamp(temp);
+  vec3 col = mix(archRamp(temp), uAccent, topology * 0.34);
 
   /* Each plane has a different optical job: the ground preserves the map, the
      atmosphere is barely there, and the boundary stays crisp. Three equally
@@ -1056,8 +1077,36 @@ void main(void) {
  * Concatenating in the obvious order fails to compile, and a shader that fails
  * to compile degrades silently rather than erroring.
  */
+const TOPOLOGY_GLSL = `
+float semanticTopology(vec2 p, float sdf, float t) {
+  float r = length(p), a = atan(p.y, p.x), clock = t;
+  if (uBehavior < 0.5) clock *= 1.8;
+  else if (uBehavior < 1.5) clock *= 1.15;
+  else if (uBehavior < 2.5) clock *= 0.45;
+  else if (uBehavior < 3.5) clock *= 0.32;
+  else if (uBehavior < 4.5) clock *= 0.18;
+  else if (uBehavior < 5.5) clock *= 0.72;
+  else if (uBehavior < 8.5) clock *= 0.24;
+  else clock = 0.0;
+  float mark = 0.0;
+  if (uFunction < 0.5) mark = smoothstep(0.88, 0.99, abs(sin(a * 7.0 + r * 1.8 - clock * 2.2))) * smoothstep(0.2, 1.3, r);
+  else if (uFunction < 1.5) mark = smoothstep(0.82, 0.98, sin(r * 5.4 - clock * 1.4) * 0.5 + 0.5);
+  else if (uFunction < 2.5) { vec2 q = abs(fract(p * 0.72) - 0.5); mark = smoothstep(0.14, 0.02, length(q)) + smoothstep(0.045, 0.0, min(q.x, q.y)); }
+  else if (uFunction < 3.5) mark = smoothstep(0.07, 0.0, abs(abs(sdf) - 0.28)) + smoothstep(0.92, 0.99, abs(sin(a * 4.0))) * smoothstep(0.7, 0.0, abs(sdf));
+  else if (uFunction < 4.5) mark = smoothstep(0.82, 0.98, sin((p.x + p.y) * 5.0) * sin((p.x - p.y) * 2.5));
+  else if (uFunction < 5.5) mark = smoothstep(0.88, 0.99, cos(r * 4.0)) * (0.55 + 0.45 * smoothstep(0.75, 0.98, abs(cos(a * 4.0))));
+  else if (uFunction < 6.5) mark = smoothstep(0.58, 0.82, gluFbm(p * 1.2 + vec2(clock * 0.08, 0.0))) * smoothstep(-1.2, 0.0, sdf);
+  else if (uFunction < 7.5) mark = smoothstep(0.87, 0.98, sin((p.x + gluFbm(p * 0.45) * 1.2) * 4.2) * 0.5 + 0.5);
+  else if (uFunction < 8.5) mark = 1.0 - smoothstep(0.0, 0.16, abs(sin(a - clock * 0.9))) + smoothstep(0.08, 0.0, abs(fract(r * 0.55) - 0.5));
+  else if (uFunction < 9.5) mark = smoothstep(0.90, 0.99, abs(cos(a * 3.0))) * smoothstep(0.08, 0.0, abs(fract(r * 0.48 - clock * 0.08) - 0.5));
+  else if (uFunction < 10.5) { float c = abs(fract((p.x + abs(p.y)) * 1.4 - clock * 0.35) - 0.5); mark = smoothstep(0.10, 0.02, c) * (0.7 + 0.3 * sin(clock * 4.0)); }
+  else { vec2 q = abs(fract(p * 0.5) - 0.5); mark = smoothstep(0.025, 0.0, min(q.x, q.y)); }
+  return clamp(mark, 0.0, 1.0);
+}
+`;
+
 const DECL_END = BODY.indexOf("const float SEAM_PX");
 const DECLS = BODY.slice(0, DECL_END);
-const REST = BODY.slice(DECL_END);
+const REST = BODY.slice(DECL_END).replace("\nvoid main(void) {", `${TOPOLOGY_GLSL}\nvoid main(void) {`);
 
 export const FRAGMENT_SHADER = PRECISION + SCALE_PRELUDE + DECLS + FX_GLSL_NOISE + REST;

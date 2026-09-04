@@ -195,7 +195,6 @@ export const SETTINGS = Object.freeze({
   profiles: `${PREFIX}profiles`,
   intensity: `${PREFIX}intensity`,
   quality: `${PREFIX}quality`,
-  devRenderer: `${PREFIX}devRenderer`,
 });
 
 /** Flags we stamp, scoped to SUITE_ID and prefixed. */
@@ -208,4 +207,5 @@ export const FLAGS = Object.freeze({
   style: `${PREFIX}style`,
   suppress: `${PREFIX}suppress`, // opt one region out of our rendering
   presentation: `${PREFIX}presentation`,
+  sceneNative: `${PREFIX}nativePresentation`,
 });

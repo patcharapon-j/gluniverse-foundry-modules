@@ -31,9 +31,25 @@ const flag = (name) => {
 
 const { FRAGMENT_SHADER, PREVIEW_VERTEX_SHADER, UNIFORMS } =
   await import(new URL("scripts/features/pf2e-aoe/shader.mjs", ROOT).href);
+const { BUILTIN_PROFILES } = await import(new URL("scripts/features/pf2e-aoe/profiles.mjs", ROOT).href);
+const { materialDescriptor } = await import(new URL("scripts/features/pf2e-aoe/presentation.mjs", ROOT).href);
+const { BEHAVIORS, FUNCTIONS, MATERIALS } = await import(new URL("scripts/features/pf2e-aoe/schema.mjs", ROOT).href);
+const rgb = (hex) => [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
+const profileCatalog = BUILTIN_PROFILES.map((profile) => {
+  const material = materialDescriptor(profile.semantics.material);
+  return {
+    id: profile.id.slice(8), label: profile.id.slice(8).replaceAll("-", " "),
+    index: material.proceduralFamily, functionIndex: FUNCTIONS.indexOf(profile.semantics.function),
+    behaviorIndex: BEHAVIORS.indexOf(profile.semantics.behavior),
+    materialIndex: MATERIALS.indexOf(profile.semantics.material),
+    tint: rgb(material.body), hot: rgb(material.hot),
+    note: `${profile.semantics.function} · ${profile.semantics.material} · ${profile.semantics.behavior}`,
+  };
+});
 
 const constSrc = await readFile(new URL("scripts/features/pf2e-aoe/constants.mjs", ROOT), "utf8");
 const animSrc = await readFile(new URL("scripts/features/pf2e-aoe/anim.mjs", ROOT), "utf8");
+const atlasSrc = await readFile(new URL("assets/pf2e-aoe/material-atlas.png", ROOT));
 const template = await readFile(new URL("tools/templates/pf2e-aoe-preview.html", ROOT), "utf8");
 
 /* Both modules are dependency-free and side-effect-free by design, so they
@@ -51,7 +67,9 @@ const page = template
   .replace("/*__ANIM_SRC__*/", animSrc)
   .replace("/*__FRAG__*/", JSON.stringify(FRAGMENT_SHADER))
   .replace("/*__VERT__*/", JSON.stringify(PREVIEW_VERTEX_SHADER))
-  .replace("/*__UNIFORM_NAMES__*/", JSON.stringify(Object.keys(UNIFORMS)));
+  .replace("/*__UNIFORM_NAMES__*/", JSON.stringify(Object.keys(UNIFORMS)))
+  .replace("/*__PROFILE_CATALOG__*/", JSON.stringify(profileCatalog))
+  .replace("/*__MATERIAL_ATLAS__*/", JSON.stringify(`data:image/png;base64,${atlasSrc.toString("base64")}`));
 
 const unfilled = page.match(/\/\*__[A-Z_]+__\*\//g);
 if (unfilled) {
