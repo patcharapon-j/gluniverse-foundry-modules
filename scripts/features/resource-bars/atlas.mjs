@@ -17,14 +17,12 @@
  */
 
 import { PRECISION } from "./shader.mjs";
+import { cssVar } from "../../core/theme.mjs";
 
-const GLYPHS = "0123456789/+-";
+const GLYPHS = "0123456789/+- ";
 const CELL_W = 72;
 const CELL_H = 104;
 const FONT_PX = 78;
-
-/** The suite's numeral face, with the fallbacks Foundry can be counted on for. */
-const FACE = '700 ' + FONT_PX + 'px Oxanium, "Google Sans Code", sans-serif';
 
 let cached = null;
 
@@ -36,7 +34,7 @@ export function getAtlas() {
   canvas.width = CELL_W * GLYPHS.length;
   canvas.height = CELL_H;
   const ctx = canvas.getContext("2d");
-  ctx.font = FACE;
+  ctx.font = "700 " + FONT_PX + "px " + cssVar("--gl-tech", "monospace");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
@@ -45,7 +43,7 @@ export function getAtlas() {
   for (let i = 0; i < GLYPHS.length; i++) {
     const ch = GLYPHS[i];
     const cx = i * CELL_W + CELL_W / 2;
-    ctx.lineWidth = 9;
+    ctx.lineWidth = 6;
     ctx.strokeStyle = "rgba(255,0,0,1)";
     ctx.strokeText(ch, cx, CELL_H / 2);
     ctx.fillStyle = "rgba(0,255,0,1)";
@@ -137,7 +135,7 @@ void main(void) {
  * @param {{right: number, mid: number}} at
  * @returns {PIXI.Geometry|null}
  */
-export function runGeometry(parts, { right, mid }) {
+export function runGeometry(parts, { right, mid, center = false, maxWidth = Infinity, maxHeight = Infinity }) {
   const atlas = getAtlas();
   const pos = [];
   const uvs = [];
@@ -154,7 +152,18 @@ export function runGeometry(parts, { right, mid }) {
   for (const part of parts) maxSize = Math.max(maxSize, part.size);
   const inkLine = mid + maxSize * (atlas.cellH / atlas.fontPx) * atlas.inkDrop;
 
-  let penX = right - total;
+  // Fit the complete glyph quads, including the atlas outline padding. This
+  // keeps long values and the largest text-size setting inside small tokens.
+  const pad = maxSize * (atlas.cellH / atlas.fontPx) * atlas.cellRatio;
+  const fit = Math.min(1, maxWidth / Math.max(1, total + pad),
+    maxHeight / Math.max(1, maxSize * (atlas.cellH / atlas.fontPx)));
+  const transformX = (x) => right + (x - right) * fit;
+  const transformY = (y) => mid + (y - mid) * fit;
+  // Anchor the last glyph quad, rather than reserving half the largest cell.
+  const last = parts.filter(part => part.text.length).at(-1);
+  const lastAdvance = last ? (atlas.metrics[last.text.at(-1)]?.advance ?? 0.5) : 0;
+  const endPad = last ? Math.max(0, last.size * ((atlas.cellH / atlas.fontPx) * atlas.cellRatio - lastAdvance) * 0.5) : 0;
+  let penX = right - total * (center ? 0.5 : 1) - (center ? 0 : endPad);
   let n = 0;
   for (const part of parts) {
     const weight = Number.isFinite(part.dim) ? part.dim : 1;
@@ -168,7 +177,8 @@ export function runGeometry(parts, { right, mid }) {
       const x0 = cx - gw / 2, x1 = cx + gw / 2;
       const cy = part.bottom ? inkLine - gh * atlas.inkDrop : mid;
       const y0 = cy - gh / 2, y1 = cy + gh / 2;
-      pos.push(x0, y0, x1, y0, x1, y1, x0, y1);
+      pos.push(transformX(x0), transformY(y0), transformX(x1), transformY(y0),
+               transformX(x1), transformY(y1), transformX(x0), transformY(y1));
       uvs.push(m.u0, 0, m.u1, 0, m.u1, 1, m.u0, 1);
       dim.push(weight, weight, weight, weight);
       idx.push(n, n + 1, n + 2, n, n + 2, n + 3);

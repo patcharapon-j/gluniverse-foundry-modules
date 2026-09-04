@@ -41,6 +41,8 @@
  * exactly as `--gl-motion-scale` does for CSS.
  */
 export const TIMING = Object.freeze({
+  idleLoopMs: 64000, // four refraction cycles; exact wrap for every idle channel
+  clockMs: 1000,   // shader clock, milliseconds per second
   stopMs: 55,      // the hitstop: every channel holds its first frame
   holdMs: 180,     // --gl-d-quick   the beat before the chip trail starts draining
   drainMs: 540,    // --gl-d-glide   the trail's drain
@@ -98,7 +100,7 @@ export const POPUP_LIFT = 0.62;
 export const POPUP_RISE = 1.00;
 
 /** Peak scale of the readout punch. */
-export const PUNCH = 0.55;
+export const PUNCH = 0.08;
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
@@ -164,6 +166,8 @@ export class BarAnim {
     this._chipT = 1;
     this._hover = false;
     this._now = 0;
+    this.time = 0;
+    this.idleFrozen = false;
 
     /* Impact state. `hitX` is where the value *was* when it changed, so the
        ring emanates from the point on the bar that moved rather than from its
@@ -221,6 +225,12 @@ export class BarAnim {
     const next = clamp01(frac);
     if (next === this.target) return;
 
+    // Cancel the previous length tween before changing direction. A damage
+    // event during a heal must not keep interpolating from the old heal origin.
+    this._fillT = 1;
+    this._bloomT = 1;
+    this._flashT = 1;
+    this._chipT = 1;
     const damaged = next < this.target;
     const delta = next - this.target;
     const from = this.target;
@@ -229,6 +239,11 @@ export class BarAnim {
     if (silent || this.motionScale === 0) {
       this.frac = this.ghost = this.num = next;
       this.waveX = next;
+      this._stop = this._hold = 0;
+      this._drain = this._fillT = this._numT = 1;
+      this._hitT = this._punchT = this._waveT = 1;
+      this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = 0;
+      this.popups.length = 0;
       return;
     }
 
@@ -351,6 +366,9 @@ export class BarAnim {
       return true;
     }
 
+    if (!this.idleFrozen) this.time = (this.time + dt / (TIMING.clockMs * s))
+      % (TIMING.idleLoopMs / TIMING.clockMs);
+
     /* Both of the value tweens below interpolate from a captured *start*
        value, never from the current one. Easing from the current value each
        frame compounds the curve: a 540ms drain lands in about 190ms and reads
@@ -428,8 +446,8 @@ export class BarAnim {
       }
     }
 
-    // Sweep fades in on hover and out again; it is never on at rest.
-    const wantSweep = this._hover ? 1 : 0;
+    // A quiet idle glint strengthens on hover.
+    const wantSweep = this._hover ? 1 : 0.22;
     const sweepRate = dt / Math.max(1, this._ms(wantSweep ? "sweepInMs" : "sweepOutMs"));
     this.sweep += (wantSweep - this.sweep) * clamp01(sweepRate * 2.2);
     if (Math.abs(wantSweep - this.sweep) < 0.004) this.sweep = wantSweep;
@@ -450,7 +468,7 @@ export class BarAnim {
   get hot() {
     if (this.motionScale === 0) return false;
     if (this._stop > 0) return true;
-    if (this._hover || this.sweep > 0) return true;
+    if (this._hover || this.sweep > 0.23) return true;
     if (this.ghost !== this.frac || this._fillT < 1) return true;
     if (this._bloomT < 1 || this._flashT < 1) return true;
     if (this._chipT < 1 || this._waveT < 1 || this._numT < 1) return true;
