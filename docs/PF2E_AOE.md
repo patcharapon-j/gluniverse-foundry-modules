@@ -167,6 +167,13 @@ paused non-GMs.
 `RegionLayer#templateMode` (`regions.mjs:159-172`) defaults to `!game.user.isGM`
 — **players are already in a template-flavoured Regions UI by default.**
 
+The shipped feature also adds a GM-only **Create Spellglass Area** button to the
+GLUniverse scene-control group. Its creator captures a PF2e shape, exact scene-unit
+size, visual archetype, color, Region name, and centered label before calling
+`canvas.regions.placeRegion(data)`. The new Region is stamped with both
+`flags.pf2e.areaShape` and the suite's `aoe.style` flag, so it is never confused
+with a generic freehand Region and is picked up by the renderer immediately.
+
 ### Token attachment
 
 `attachment.token` is a document field (`common/documents/region.mjs:70-72`).

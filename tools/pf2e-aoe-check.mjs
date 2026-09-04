@@ -45,8 +45,9 @@ for (const [name, duration] of Object.entries(TIMING)) {
   ok(Number.isFinite(duration) && duration >= 0, `invalid animation duration ${name}`);
 }
 
-const [host, moduleJsonText, featureIndex, langText] = await Promise.all([
+const [host, controls, moduleJsonText, featureIndex, langText] = await Promise.all([
   text("scripts/features/pf2e-aoe/host.mjs"),
+  text("scripts/features/pf2e-aoe/controls.mjs"),
   text("module.json"),
   text("scripts/features/index.mjs"),
   text("lang/pf2e-aoe.en.json"),
@@ -62,6 +63,14 @@ ok(/minimumGeneration:\s*14\b/.test(featureAdapter), "PF2e AoE must be individua
 const lang = JSON.parse(langText);
 for (const id of ARCHETYPES) ok(Boolean(lang[`GLAOE.Archetype.${id}`]), `missing archetype localization ${id}`);
 for (const key of Object.values(SETTINGS)) ok(key.startsWith("aoe."), `setting is not aoe-prefixed: ${key}`);
+ok(controls.includes("ensureSuiteGroup") && controls.includes("bindSuiteToolClicks"),
+  "Spellglass creator must use the shared suite scene-control group");
+ok(/canvas\.regions\.placeRegion\(regionData\(config\)\)/.test(controls),
+  "Spellglass creator must place a flagged Region through RegionLayer");
+for (const shape of ["burst", "cone", "line", "square"]) {
+  ok(Boolean(lang[`GLAOE.Creator.Shape.${shape}`]), `missing creator shape localization ${shape}`);
+  ok(controls.includes(`\"${shape}\"`), `creator does not offer ${shape}`);
+}
 
 /* Half-grid cone/line origins are where a visually plausible lattice used to
    shift. Exercise the pure Region adapter with a midpoint origin and assert the

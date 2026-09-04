@@ -4,6 +4,7 @@ import { SUITE_ID, log } from "../../core/const.mjs";
 import { emitSocket, onSocket } from "../../core/socket.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT, onThemeChange } from "../../core/theme.mjs";
 import { FEATURE_ID, SETTINGS } from "./constants.mjs";
+import { addSpellglassSceneControl, bindSpellglassSceneControl } from "./controls.mjs";
 import { host } from "./host.mjs";
 import { injectRegionStyle } from "./region-config.mjs";
 
@@ -69,8 +70,10 @@ function pulse(regionId, { broadcast = true } = {}) {
 }
 
 export function onInit() {
-  /* All hooks are ready/canvas concerns. Keeping init empty makes the feature
-     completely inert when its suite toggle is off. */
+  /* Register controls during init so they are present the first time Foundry
+     prepares the left scene-control bar. Disabled features never reach here. */
+  on("getSceneControlButtons", addSpellglassSceneControl);
+  on("renderSceneControls", (_app, html) => bindSpellglassSceneControl(html));
 }
 
 export function onReady() {
