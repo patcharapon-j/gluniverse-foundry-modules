@@ -16,7 +16,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = new URL("../", import.meta.url);
 const rel = (p) => fileURLToPath(new URL(p, ROOT));
@@ -689,6 +689,21 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail("The segment gap's floor does not scale with uSegW, so every width below it draws the same on a bar tall enough for the floor to win — the thickness setting silently stops doing anything.");
   else ok(`every divider width ${DIVIDER.min}–${DIVIDER.max}px clears the ${GL_FADE_HI}px fade, and the floor scales with it`);
 
+  /* The material's hairlines — the frame's bevel, the cut's catch-light, the
+     plates' bevelled edges — are the detail that makes the bar read as glass
+     and chrome rather than as a flat swatch, and every one of them is meant to
+     be a hairline on *every* display. Sized in geometry units they are a band
+     on a retina monitor and gone on an ordinary one, so each width has to be
+     derived from px. A literal creeping back in here is the same bug as the
+     segment gap's, on a detail nobody would think to look for. */
+  for (const name of ["hairW", "bevelW"]) {
+    const decl = new RegExp(`float ${name}\\s*=\\s*max\\(px \\* [0-9.]+, [0-9.]+\\);`);
+    if (!decl.test(glsl))
+      fail(`${name} is not derived as max(px * k, floor); the material's hairlines will be a band on a HiDPI display and vanish on an ordinary one.`);
+  }
+  if (/float hairW\s*=/.test(glsl) && /float bevelW\s*=/.test(glsl))
+    ok("the bevel and rim hairlines are sized in device pixels");
+
   const gated = [...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)]
     .map((m) => ({ raw: m[0], value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) }));
 
@@ -719,7 +734,9 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     process.exit(problems ? 1 : 0);
   }
 
-  const pw = await import(pwPath);
+  /* A file URL, not the bare path: on Windows an absolute path starts with a
+     drive letter, which the ESM loader reads as a URL scheme and refuses. */
+  const pw = await import(pathToFileURL(pwPath).href);
   /* Playwright is CommonJS, so the namespace an `import()` builds for it puts
      everything under `default` unless the lexer happened to find named exports.
      Reading `pw.chromium` straight off it throws, which took this whole pass

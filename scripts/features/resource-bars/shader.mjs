@@ -1,11 +1,13 @@
 /**
  * GLUniverse Suite — resource bars: the fragment shader.
  *
- * One quad per bar, everything computed per-pixel: the recessed well, the
- * health fill and its cylindrical shading, the chip trail, the temp-HP overlay,
- * the segment ticks, the low-health breath, the change wave, the impact and its
- * debris, the specular sweep, and the chamfered Etched Glass frame with its
- * bevel. Doing it in a shader rather than in PIXI.Graphics is what makes
+ * One quad per bar, everything computed per-pixel: the recessed well with its
+ * occlusion and meniscus, the health fill as bevelled glass plates, the chip
+ * trail, the temp-HP overlay, the segment ticks, the low-health breath, the
+ * change wave, the impact and its debris, the slanted specular glint, the
+ * chamfered Etched Glass frame with its bevel and the catch-light on its cut,
+ * and the contact shadow that seats it on the map. One lamp, top-left, lights
+ * all of it. Doing it in a shader rather than in PIXI.Graphics is what makes
  * "shading" and "animates every frame" cheap instead of a per-token
  * retessellation.
  *
@@ -367,6 +369,21 @@ void main(void) {
   float mTrough = rbCover(dTrough);
   float mFillA  = rbCover(dFillA);
 
+  /* The cut's own diagonal, isolated from the rest of the silhouette. Near
+     the corner sdCut's max() is the diagonal term, so this is where the body's
+     edge *is* the chamfer — the one edge on the bar that faces the light
+     squarely, and the one the suite mark is made of. It gets a catch-light of
+     its own below. */
+  float dDiag = dot(p, vec2(0.7071068)) - (bb.x + bb.y - bb.y * CUT) * 0.7071068;
+  float onDiag = step(sdBox(p, bb), dDiag);
+
+  /* Light comes from the top-left. Everything below that describes a lit
+     surface — the rim, the bevel, the plates' edges — takes its side from this
+     one vector, so the bar reads as a single object under one lamp rather than
+     as a stack of separately highlighted layers. */
+  float litY = smoothstep(-0.75, 0.92, hb);
+  float litX = 0.86 + 0.14 * smoothstep(bb.x, -bb.x, p.x);
+
   float fx0 = -bb.x + sw + air + lip;
   float fx1 =  bb.x - sw - air - lip;
   float span = max(fx1 - fx0, 0.0001);
@@ -401,6 +418,19 @@ void main(void) {
   vec3 troughCol = mix(INK0, INK, 0.24 + 0.62 * smoothstep(1.0, -0.85, hb));
   troughCol *= 1.0 - 0.38 * rbBand(hb - 0.92, 0.14);
 
+  /* A well has walls, and walls cast. The occlusion is deepest under the top
+     lip and along the closed left end, both on the side the light comes from,
+     so the trough reads as recessed *into* the frame rather than as a dark
+     rectangle painted inside it. The bottom lip catches a little bounce back —
+     a cool hairline that is the only thing separating "recessed" from "black". */
+  troughCol *= 1.0 - 0.42 * exp(-max(p.x - fx0, 0.0) / 0.30);
+  troughCol *= 1.0 - 0.30 * exp(-max(1.0 - hb, 0.0) / 0.22);
+  troughCol += vec3(0.11, 0.14, 0.20) * rbBand(hb + 0.95, max(px * 0.8, 0.028)) * 0.55;
+  /* And the fill casts into it: a meniscus of shadow just past the leading
+     edge, which is what seats the plate in the well instead of laying it on
+     top. It follows the fill, not the ghost — the trail is light, not glass. */
+  troughCol *= 1.0 - 0.36 * exp(-max(p.x - fillX, 0.0) / 0.16) * step(fillX, p.x);
+
   /* ── The fill ──────────────────────────────────────────────────────────
      Flat and high-key, with the light carried by one hot hairline rather than
      a broad gradient. A soft gaussian down the middle is the gloss every CSS
@@ -408,8 +438,24 @@ void main(void) {
      what a lit surface actually does. */
   vec3 fillCol = base * (1.04 - 0.17 * smoothstep(0.35, -1.0, hb));
   fillCol += vec3(1.0) * rbBand(hb - 0.55, 0.30) * 0.10;
-  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * 1.15 * hero;
+  /* Thickness. A pane of coloured glass is brighter where it is thin — a broad
+     lift through the upper third — and gathers its colour where it is thick,
+     so the lower quarter goes deeper and more saturated rather than merely
+     darker. Two soft profiles, and the plate stops being a swatch. */
+  fillCol += base * smoothstep(0.05, 0.75, hb) * 0.10;
+  fillCol = mix(fillCol, base * base * 1.35, smoothstep(-0.30, -1.0, hb) * 0.42);
+  /* The hard specular under the top edge. It is what the light *does* on a
+     lit surface; the rails get a quieter one so they are the same material at
+     a lower key rather than a different, matte one. */
+  fillCol += vec3(1.0) * rbBand(hb - 0.80, 0.070) * mix(0.55, 1.15, hero);
+  /* The lip above it casts: a whisper of shadow between the specular and the
+     frame is what seats the plate *inside* the well. Without it the highlight
+     is a stripe drawn on a rectangle. */
+  fillCol *= 1.0 - 0.24 * rbBand(hb - 0.98, 0.09);
   fillCol *= 1.0 - 0.34 * rbBand(hb + 0.92, 0.13);
+  /* And the bottom edge picks up a cool reflection from the well's lit lip —
+     faint, so the plate has a bottom face rather than just ending. */
+  fillCol += vec3(0.62, 0.74, 0.96) * rbBand(hb + 0.86, max(px * 0.9, 0.045)) * 0.16;
 
   /* ── Low health ────────────────────────────────────────────────────────
      A slow red breath through the fill, not a hatch.
@@ -474,6 +520,8 @@ void main(void) {
      The gap closes back up once it can no longer hold a pixel, so a shrinking
      bar loses its divisions instead of dissolving into stripes. */
   float segMask = 1.0;
+  float plateLit = 0.0;
+  float plateDark = 0.0;
   if (uSeg > 0.5) {
     float segW = span / uSeg;
     float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
@@ -493,7 +541,21 @@ void main(void) {
        becoming more gap than plate — and it is the cap, not the px term, that
        does the work once a per-HP division count runs into the dozens. */
     float gapP = min(max(px * uSegW, 0.005 * uSegW), segW * 0.42);
-    segMask = mix(1.0, rbEdge(0.0, gapP, sx), rbDetail(gapP) * hero);
+    float segOn = rbDetail(gapP) * hero;
+    segMask = mix(1.0, rbEdge(0.0, gapP, sx), segOn);
+
+    /* Each plate has edges, and edges catch light. The face nearest the lamp
+       (the left, top-left lit) gets a bright bevel a pixel wide; the far face
+       falls into a pixel of shadow. Sized in device pixels for the reason the
+       gap is — a bevel in geometry units is either a smear on a large bar or
+       gone on a small one — and faded with the gap, so plates that have merged
+       do not keep phantom edges. This is most of what separates "tiles" from
+       "a bar with gaps cut in it". */
+    float bevelW = max(px * 1.1, 0.012);
+    float dLeft  = sx - gapP;
+    float dRight = segW - sx;
+    plateLit  = rbBand(dLeft,  bevelW) * segOn;
+    plateDark = rbBand(dRight, bevelW * 1.3) * segOn;
   }
 
   /* The same divisions, whispered across the empty trough: without them the
@@ -559,8 +621,18 @@ void main(void) {
   vec3 headCol = mix(base, vec3(1.0), 0.60 + 0.35 * uBloom);
 
   /* ── The specular sweep ────────────────────────────────────────────────*/
+  /* A glint, not a glow. The old sweep was a soft column of brightness, which
+     is what a highlight looks like on a matte surface. On glass it is slanted
+     — the reflection of a light that is not straight overhead — and it has
+     structure: a sharp filament with a broad soft halo, and a fainter second
+     line trailing it, the way a pane's two surfaces each throw one. */
   float sweepX = mix(fx0 - 0.9, fx1 + 0.9, fract(uTime * 0.30));
-  float sweep = rbGauss(p.x - sweepX, 0.15) * mFill * uSweep;
+  float gx = p.x + p.y * 0.62 - sweepX;
+  float sweep = (rbGauss(gx, 0.16) * 0.55
+               + rbGauss(gx, 0.035) * 1.20
+               + rbGauss(gx + 0.24, 0.018) * 0.45) * mFill * uSweep;
+  /* It crosses the frame too — glass and chrome reflect the same lamp. */
+  float sweepRim = rbGauss(gx, 0.09) * mStroke * uSweep * litY;
 
   /* ── Stroke ────────────────────────────────────────────────────────────
      There used to be end furniture here: a milled gold bracket anchoring the
@@ -576,16 +648,32 @@ void main(void) {
   vec3 GOLD  = vec3(1.000, 0.914, 0.722);
   vec3 STEEL = vec3(0.55, 0.62, 0.78);
   vec3 strokeCol = mix(vec3(0.085, 0.100, 0.140),
-                       mix(STEEL, GOLD, 0.60), smoothstep(-0.75, 0.92, hb));
+                       mix(STEEL, GOLD, 0.78), litY) * litX;
 
+  /* The stroke is a bevel, not a line: a chamfered edge has an outer face and
+     an inner one, and under a lamp from the top-left they do not match. The
+     outer edge along the top carries a hot hairline — the one place the gold is
+     allowed to go above 1.0 and reach the bloom — and the inner edge along the
+     bottom carries a cool one, the bounce off the well's lip. Both are sized in
+     device pixels so they are a hairline on every display rather than a band on
+     one and nothing on another. */
+  float hairW = max(px * 0.7, 0.014);
+  float rimTop = rbBand(dBody, hairW) * mBody * smoothstep(-0.10, 0.85, hb);
+  float rimBot = rbBand(dBody + sw, hairW) * mBody * smoothstep(-0.20, -0.95, hb);
+  /* The cut. It is the suite's mark, and a chamfer is exactly the kind of edge
+     that catches a lamp: a full-strength gold along the diagonal, whatever the
+     height, so the corner reads as *cut* rather than merely missing. */
+  float rimCut = rbBand(dDiag, hairW * 1.1) * onDiag * mBody;
 
   /* Register marks stepping outside the body at the quarters — the detail that
      says this was laid out on an instrument rather than drawn as a box. They
-     leave once they no longer span a pixel. */
+     leave once they no longer span a pixel; their width is pinned to the pixel
+     for the reason everything else here is, so they stay a crisp mark at every
+     size they survive at instead of a smear at large ones. */
   float tickMark = 0.0;
   for (int k = 1; k < 4; k++) {
     float tx = mix(fx0, fx1, float(k) * 0.25);
-    tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
+    tickMark += rbBand(p.x - tx, max(px * 0.7, 0.022)) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
   tickMark *= rbDetail(0.048) * hero;
 
@@ -597,6 +685,14 @@ void main(void) {
   C += vec3(0.16, 0.19, 0.26) * troughDiv * 0.55;
   C = mix(C, ghostCol, mGhost * step(uFrac, uGhost));
   C = mix(C, fillCol, mFill);
+
+  /* The plates' edges. Lit face bright, far face shadowed, and the closed left
+     end of the fill takes the same bevel as any plate's — it is a plate. The
+     bright edge is tinted rather than pure white so it stays the fill's colour
+     at a higher key instead of a grey scratch across it. */
+  float endLit = rbBand(p.x - fx0, max(px * 1.1, 0.012)) * hero;
+  C += mix(base, vec3(1.0), 0.55) * (plateLit + endLit) * mFill * 0.42 * litX;
+  C *= 1.0 - plateDark * mFill * 0.26;
 
   /* ── The wave ──────────────────────────────────────────────────────────
      A glowing line crossing the bar in the direction the value moved, with a
@@ -673,9 +769,18 @@ void main(void) {
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
   C += uTempCol * rbGauss(p.x - tempX, 0.045) * mFillA * tempOn * 1.9;
   C += headCol * headIn * (0.85 + 1.5 * uBloom);
-  C += vec3(0.62, 0.74, 0.96) * sweep * 0.34;
+  /* The glint is white light, not the fill's colour — a reflection of the lamp
+     — and its filament is pushed past 1.0 so the bloom pass catches it. */
+  C += vec3(0.86, 0.92, 1.00) * sweep * 0.62;
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
+  /* The bevel's two hairlines, and the chamfer's. Gold on top and on the cut,
+     both emitted above 1.0 so the frame's edge blooms the way the fill's
+     specular does; cool bounce along the bottom, kept below it. */
+  C += GOLD * vec3(1.0, 0.86, 0.62) * (rimTop * 0.55 + rimCut * 0.95) * mix(0.55, 1.0, hero);
+  C += STEEL * rimBot * 0.45;
+  C += vec3(0.92, 0.95, 1.00) * sweepRim * 0.55;
+  A = max(A, min((rimTop + rimCut) * 1.2, 1.0));
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));
 
   /* Shield break: fractures wide enough to survive the 12px rail that is the
@@ -806,6 +911,20 @@ void main(void) {
 
   vec3 outC = C * A * mix(0.80, 1.0, hero);
   float outA = A * mix(0.80, 1.0, hero);
+
+  /* ── Contact shadow ────────────────────────────────────────────────────
+     The bar sits on a battlemap, and a battlemap is any colour at all — a
+     bright plaza, a snowfield, a parchment overland. Light alone cannot carry
+     the silhouette across all of them; every HUD in this idiom seats its
+     furniture on a soft dark halo, and the absence of one is most of why a bar
+     looks pasted on rather than placed. It is pure alpha, no colour, added
+     after the premultiply so it darkens whatever is under it. Biased downward
+     — a drop, not an outline — and kept off the cut so the corner stays cut.
+     It stops where the glow starts below, which is inside the same margin. */
+  float dShadow = sdCut(p - vec2(0.0, -0.09), bb, bb.y * CUT);
+  float shadow = exp(-max(dShadow, 0.0) / 0.13) * (1.0 - mBody);
+  shadow *= 0.50 * mix(0.55, 1.0, hero);
+  outA += shadow * (1.0 - outA);
 
   /* ── Bloom ─────────────────────────────────────────────────────────────
      Added after the premultiply, so it is light spilling past the body rather

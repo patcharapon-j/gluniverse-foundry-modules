@@ -16,7 +16,8 @@ const TYPES = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/ja
 
 createServer(async (req, res) => {
   const rel = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
-  const path = join(ROOT, rel === "/" ? ".preview/bars.html" : rel);
+  /* normalize() hands back a backslash for "/" on Windows, so test both. */
+  const path = join(ROOT, rel === "/" || rel === "\\" ? ".preview/bars.html" : rel);
   try {
     const body = await readFile(path);
     res.writeHead(200, { "content-type": TYPES[extname(path)] || "application/octet-stream", "cache-control": "no-store" });

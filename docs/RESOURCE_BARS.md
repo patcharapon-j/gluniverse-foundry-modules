@@ -111,6 +111,39 @@ offers a float filter target, raising the threshold is the only change needed.
 
 ---
 
+## The material
+
+Everything on the bar is lit by **one lamp, from the top-left**. `litY` and
+`litX` in the shader are that vector, and every surface that describes itself
+as lit — the rim, the bevel, the plates' edges, the glint — takes its bright
+side from them. That is the whole reason the bar reads as one object rather
+than as a stack of separately highlighted layers, and it is the first thing to
+keep when adding a surface: a new highlight that picks its own side is a second
+lamp.
+
+Five layers carry the depth, from the outside in:
+
+| | |
+|---|---|
+| **Contact shadow** | A soft dark halo outside the body, biased downward, pure alpha. A battlemap is any colour at all, and light alone cannot hold the silhouette on a parchment overland or a snowfield. It is what makes the bar look *placed* rather than pasted. |
+| **The bevel** | The stroke is a chamfer, not a line. A hot gold hairline along its outer top edge — emitted above 1.0 so it blooms like the fill's specular — and a cool steel hairline along its inner bottom edge, the bounce off the well's lip. The **cut** gets a full-strength catch-light of its own along the diagonal: it is the suite's mark, and a chamfer is exactly the edge a lamp catches. |
+| **The well** | Occluded under the top lip and along the closed left end, both on the lamp's side, so it reads as recessed *into* the frame. A cool hairline along the bottom lip is the only thing separating "recessed" from "black". The fill casts a meniscus of shadow just past its leading edge, which is what seats the plate *in* the well. |
+| **The plates** | A pane of coloured glass is brighter where it is thin and gathers colour where it is thick: a broad lift through the upper third, a deeper and more saturated lower quarter, the hard specular under the top edge, and a whisper of shadow between that specular and the lip above it. Each plate has edges: a bright bevel on the lamp's side, a pixel of shadow on the far side, and the fill's closed left end takes the same bevel as any plate's. |
+| **The glint** | On hover only. Slanted, the reflection of a lamp that is not straight overhead, with a sharp filament inside a soft halo and a fainter second line trailing it — a pane's two surfaces each throw one. It crosses the frame too, because glass and chrome reflect the same lamp. |
+
+The rails are the **same material at a lower key** — a quieter specular, a
+dimmer rim — rather than a matte one, so a token with three rows reads as three
+sizes of one instrument.
+
+Every hairline here is sized in **device pixels** (`hairW`, `bevelW`), for the
+reason the segment gap is: a bevel in geometry units is a band on a HiDPI
+display and gone on an ordinary one. `resource-bar-check` pins that. None of it
+is animated, none of it needs a uniform, and none of it touches the reading:
+the health is still carried by hue, by position and by the breath, and the
+material is what those are drawn on.
+
+---
+
 ## Units, and the one subtle thing
 
 `core/glsl.mjs`'s prelude measures everything against `uTexel` — one device
