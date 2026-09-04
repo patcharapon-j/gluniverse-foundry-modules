@@ -42,8 +42,9 @@ export const SETTINGS = Object.freeze({
  * visible bar is roughly 64% of them for the hero and 58% for a rail.
  */
 export const LAYOUT = Object.freeze({
-  heroH: 0.30,        // quad height, × grid size
-  railH: 0.17,
+  tokenGap: 0.035,   // space below the token before the bar stack
+  heroH: 0.24,        // quad height, × grid size
+  railH: 0.10,
   gap: 0.015,         // between stacked bars
   minHeroPx: 16,      // floors, in world pixels — a bar smaller than this is
   minRailPx: 9,       // unreadable no matter how big the token is

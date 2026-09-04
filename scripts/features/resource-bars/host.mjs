@@ -14,12 +14,9 @@
  *   3. One container is one place to hide everything when the feature is
  *      switched off mid-session.
  *
- * ── Hot and cold ──
- *
- * A bar that is not changing is not ticked at all: it keeps the frame it last
- * drew. The ticker is only attached while at least one bar is hot, so a quiet
- * scene costs nothing, and a scene where one creature is being hit costs one
- * bar. This is the entire performance story.
+ * Visible bars run a quiet idle material loop. Value transitions advance even
+ * off screen so they return in the correct state. Off-screen material clocks
+ * are frozen, and the shared shed budget removes glints before impact cues.
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
@@ -102,7 +99,7 @@ function unitQuad() {
 function makeBarMesh(role, opts) {
   const uniforms = {
     uTime: 0, uTexel: 0, uAspect: 6,
-    uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0, uSweep: 0,
+    uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0,
     uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default,
     uRole: role,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
@@ -227,7 +224,10 @@ class BarHost {
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
           mesh.shader.uniforms.uSegW = this.dividerWidth();
         }
-        if (entry.anims[role]) entry.anims[role].motionScale = opts.motionScale;
+        if (entry.anims[role]) {
+          entry.anims[role].motionScale = opts.motionScale;
+          if (opts.motionScale === 0) entry.anims[role].step(0);
+        }
       }
     }
     this.applyBloom();
@@ -441,8 +441,8 @@ class BarHost {
     if (entry.reading.shield) rows.push(["shield", ROLE.shield, railH]);
 
     entry.baseX = token.x + off.x * grid;
-    // The hero straddles the token's edge; the offset moves the whole stack.
-    let y = token.y + token.h - heroH * 0.42 + off.y * grid;
+    // The default stack begins below the token; explicit offsets still apply.
+    let y = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
     entry.rows = {};
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
@@ -529,6 +529,7 @@ class BarHost {
       y0: Math.min(a.y, b.y) - CULL_PAD, y1: Math.max(a.y, b.y) + CULL_PAD,
     };
     for (const entry of this.entries.values()) this.cullEntry(entry);
+    this.syncTicker();
   }
 
   /**
@@ -549,7 +550,7 @@ class BarHost {
 
   syncTicker() {
     const wanted = [...this.entries.values()].some((e) =>
-      Object.values(e.anims).some((a) => a?.hot));
+      (e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot));
     if (wanted && !this.ticking) {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
@@ -583,9 +584,13 @@ class BarHost {
       for (const role of ROLES) {
         const a = entry.anims[role];
         if (!a) continue;
-        if (a.step(dt)) hot = true;
+        a.idleFrozen = !entry.group.renderable || !this.allows("sweep");
+        const wasHot = a.hot;
+        if (a.step(dt) || wasHot) hot = true;
       }
-      if (hot) { this.writeUniforms(entry, now / 1000); anyHot = true; }
+      const idle = entry.group.renderable && this.motionScale > 0;
+      if (hot || idle) this.writeUniforms(entry, now / 1000);
+      if (hot || idle) anyHot = true;
     }
     if (!anyHot) this.stopTicker();
   }
@@ -610,13 +615,12 @@ class BarHost {
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
       u.uSegW = this.dividerWidth();
-      u.uTime = time;
+      u.uTime = a ? a.time + entry.seed : 0;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
       u.uBloom = a && this.allows("bloom") ? a.bloom : 0;
       u.uFlash = a ? a.flash : 0;
       u.uLow = role === "hero" ? (a ? a.low : Math.max(0, (this.opts.lowAt - bar.frac) / this.opts.lowAt)) : 0;
-      u.uSweep = this.allows("sweep") && (entry.token.hover || entry.token.controlled) ? (a?.sweep ?? 0) : 0;
       u.uHit = a && this.allows("ring") ? a.hit : 0;
       u.uHitX = a ? a.hitX : bar.frac;
       u.uHeal = a ? a.heal : 0;
@@ -688,9 +692,7 @@ class BarHost {
     const base = entry.rows.hero;
     if (!hm || !base) return;
 
-    /* The readout is anchored to the row's resting geometry, which never moves.
-       Only its own scale and colour animate — the punch is the number
-       reacting, not the bar being thrown around. */
+    // Keep the reading right-aligned on fixed geometry throughout every impact.
     const w = base.w, h = base.h;
     const numScale = this.opts.numberScale > 0 ? this.opts.numberScale : 1;
     /* Measured in bar heights from the quad's right edge, and shared with the
@@ -715,32 +717,18 @@ class BarHost {
     const stamp = label + "@" + (h * numScale).toFixed(2) + ":" + w.toFixed(1);
     if (stamp !== entry.lastNumber || !entry.textMesh) {
       entry.lastNumber = stamp;
-      /* The current value is the reading; the maximum is the scale it is read
-         against, so it steps back — but only by one step. It was 0.22/0.30
-         once, which is furniture: a denominator you have to go looking for is
-         not serving the reading it belongs to. At full strength it competes
-         instead, because a small numeral at full ink is still high-contrast
-         against the plate. A slight step down carries the hierarchy while
-         leaving both halves legible at a glance.
-
-         The separator takes one step further than the maximum does, because it
-         is punctuation rather than information.
-
-         They also sit on a shared baseline rather than each on the mid-line,
-         because a run where every part is separately centred reads as three
-         sizes of number instead of as one reading. */
+      // Both values share a baseline; fit the whole run inside the fill.
       const geo = runGeometry([
-        { text: String(value), size: h * 0.46 * numScale },
-        { text: "/", size: h * 0.23 * numScale, dim: 0.62, bottom: true },
-        { text: String(r.hero.max), size: h * 0.24 * numScale, dim: 0.80, bottom: true },
-      ], { right, mid });
+        { text: String(value), size: h * 0.48 * numScale },
+        { text: "/", size: h * 0.25 * numScale, dim: 0.52, bottom: true },
+        { text: String(r.hero.max), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
+      ], { right, mid, center: false, maxWidth: Math.max(1, w - READOUT_INSET * h * 2), maxHeight: h * 0.70 });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
-      /* Pivot on the run's own anchor so the punch scales about the number
-         rather than throwing it across the bar. */
+      // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);
     }
     if (entry.textMesh) {
-      const punch = 1 + (a && this.allows("punch") ? a.punch : 0);
+      const punch = 1;
       entry.textMesh.visible = true;
       entry.textMesh.scale.set(punch);
       entry.textMesh.position.set(anchorX, anchorY);
@@ -749,7 +737,7 @@ class BarHost {
          white as the impact decays. Colour on the number is what makes a heal
          and a hit distinguishable at a glance on a bar that is briefly the same
          length either way. */
-      const heat = a && this.allows("punch") ? a.hit * 0.70 : 0;
+      const heat = a && this.allows("punch") ? a.hit * 0.18 : 0;
       const to = a?.heal ? HEAL_INK : HIT_INK;
       for (let i = 0; i < 3; i++) entry._ink[i] = REST_INK[i] + (to[i] - REST_INK[i]) * heat;
     }

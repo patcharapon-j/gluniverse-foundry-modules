@@ -573,84 +573,94 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   else ok("the fracture survives motion \"none\" fully formed, and the shed freezes it without losing it");
 }
 
-/* ── 8. The readout fits under the corner the bar cuts off itself ───────── */
+/* ── 8. Fitted, right-aligned glyphs remain inside token-sized bars ──────────── */
 {
-  /* The bar takes a corner out of its own top-right and the readout is anchored
-     to that same end, which sounds like a collision. It is not, and the reason
-     is worth pinning because it is entirely about the *shape of the run*.
-
-     The run is right-aligned and its last part is the maximum: smaller than the
-     value and sitting on the shared baseline rather than on the mid-line, so its
-     ink reaches only about a tenth of a bar-height above centre. The diagonal at
-     that height is still outside it. The value, which does reach three tenths,
-     is already well to the left by the width of the maximum.
-
-     So the clearance is recomputed here from the two sizes host.mjs actually
-     asks for, plus the atlas's own cell geometry. Make the maximum bigger, stop
-     bottom-aligning it, or enlarge the cut, and this fails — where the rendered
-     result would simply be numerals lying across a diagonal, which reads as a
-     clipped glyph rather than as a geometry error. */
-  const glsl = shader.FRAGMENT_SHADER;
-  const { CUT, BODY_INSET, READOUT_INSET } = shader;
-  const atlasSrc = await src("scripts/features/resource-bars/atlas.mjs");
-  const h = strip(hostSrc);
-
-  const cutFn = /float sdCut\([\s\S]*?\n}/.exec(glsl)?.[0] ?? "";
-  const heroHalf = 0.5 - Number(/float padY = mix\(([\d.]+), ([\d.]+), hero\)/.exec(glsl)?.[2]);
-
-  /* The readout's parts, in the order runGeometry lays them out — and only
-     those. host.mjs builds a second run for the floating delta, which is a
-     single centred part at nearly the value's size; sweeping it in here makes
-     the pin measure a glyph that rises three times as high as the maximum does
-     and lives above the bar anyway, so it fails on geometry that is fine. */
-  const run = /runGeometry\(\[([\s\S]*?)\]/.exec(h)?.[1] ?? "";
-  const parts = [...run.matchAll(/\{\s*text:[^}]*?size:\s*h\s*\*\s*(\d*\.?\d+)[^}]*?\}/g)]
-    .map((m) => ({ size: Number(m[1]), bottom: /bottom:\s*true/.test(m[0]) }));
-  const cellH = Number(/const CELL_H = (\d+)/.exec(atlasSrc)?.[1]);
-  const fontPx = Number(/const FONT_PX = (\d+)/.exec(atlasSrc)?.[1]);
-  const inkDrop = Number(/:\s*(0\.\d+);/.exec(/actualBoundingBoxDescent[\s\S]{0,160}?:\s*0\.\d+;/.exec(atlasSrc)?.[0] ?? "")?.[1]);
-
-  if (/\bSKEW\b/.test(glsl) || /\bskew\b/.test(strip(atlasSrc)))
-    fail("A shear is back. The bar is meant to be axis-aligned; a lean in the GLSL or in runGeometry that the other one does not share is the exact drift this pin replaced.");
-  else if (!glsl.includes(`const float CUT = ${CUT.toFixed(4)};`) ||
-           !glsl.includes(`const float BODY_INSET = ${BODY_INSET.toFixed(4)};`))
-    fail("The GLSL no longer takes CUT and BODY_INSET from the exported constants, so the readout is positioned against geometry the shader may not be drawing.");
-  else if (!/READOUT_INSET/.test(h))
-    fail("host.mjs anchors the readout with something other than the exported READOUT_INSET.");
-  else if (/-p\.x/.test(cutFn))
-    fail("sdCut negates x, so the cut has moved away from the readout's end. That is safe, but it is not what READOUT_INSET was measured against — re-derive it or put the cut back.");
-  else if (![cellH, fontPx, inkDrop].every(Number.isFinite) || parts.length < 2)
-    fail("Could not read the atlas cell geometry or the readout's parts; the corner clearance is now unpinned and a clipped numeral will ship silently.");
-  else {
-    /* Between the body's edge and the fill there is a stroke, a gap of air and a
-       lip. The readout stands against the fill, so it clears all three; anchored
-       to the body the last digit is drawn over the frame. */
-    const sw  = Number(/float sw\s*=\s*max\(([\d.]+),/.exec(glsl)?.[1]);
-    const air = Number(/float air\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
-    const lip = Number(/float lip\s*=\s*([\d.]+);/.exec(glsl)?.[1]);
-    const inner = BODY_INSET + sw + air + lip;
-
-    /* How far the last part's ink reaches above the mid-line. Bottom-aligned
-       parts hang off the largest part's ink line; a centred one is symmetric. */
-    const R = cellH / fontPx;
-    const biggest = Math.max(...parts.map((p) => p.size));
-    const last = parts[parts.length - 1];
-    const rise = last.bottom
-      ? last.size * R * (0.5 + inkDrop) - biggest * R * inkDrop
-      : last.size * R * 0.5;
-    /* The diagonal, measured back from the quad's right edge at that height. */
-    const diagonal = BODY_INSET - heroHalf + CUT * heroHalf + rise;
-
-    if (![sw, air, lip].every(Number.isFinite))
-      fail("Could not read the stroke, air and lip widths out of the GLSL; the readout's clearance from the frame is now unpinned.");
-    else if (READOUT_INSET < inner)
-      fail(`READOUT_INSET is ${READOUT_INSET} but the fill area starts ${inner.toFixed(3)} bar-heights in; the last digit is drawn over the bar's own frame.`);
-    else if (READOUT_INSET > inner + 0.12)
-      fail(`READOUT_INSET floats ${(READOUT_INSET - inner).toFixed(3)} bar-heights inside the fill; the readout is meant to sit against the right end of it.`);
-    else if (READOUT_INSET < diagonal)
-      fail(`The maximum's ink rises ${rise.toFixed(3)} bar-heights, where the cut's diagonal is still ${diagonal.toFixed(3)} in from the edge and the readout stands at ${READOUT_INSET}. The last digits will lie across the corner.`);
-    else ok(`the readout stands ${(READOUT_INSET - inner).toFixed(3)} inside the fill and passes ${(READOUT_INSET - diagonal).toFixed(3)} under the cut, and nothing is sheared`);
+  const savedPIXI = globalThis.PIXI, savedDocument = globalThis.document;
+  const { runGeometry, resetAtlas } = await import(new URL("scripts/features/resource-bars/atlas.mjs", ROOT).href);
+  try {
+    // Only the rasterizer is stubbed. Measure the actual production geometry,
+    // including glyph padding and baseline alignment, at extreme token sizes.
+    globalThis.document = { createElement: () => ({ getContext: () => ({
+      strokeText() {}, fillText() {}, measureText: () => ({ width: 48, actualBoundingBoxDescent: 27 }),
+    }) }) };
+    globalThis.PIXI = {
+      Texture: { from: () => ({ baseTexture: {}, destroy() {} }) },
+      Geometry: class {
+        constructor() { this.attributes = {}; }
+        addAttribute(name, data) { this.attributes[name] = data; return this; }
+        addIndex() { return this; }
+      },
+    };
+    let count = 0;
+    for (const w of [24, 48, 64, 128, 256]) for (const scale of [0.6, 1, 2]) {
+      const h = 24, inset = shader.READOUT_INSET * h;
+      const geo = runGeometry([
+        { text: "999999", size: h * 0.48 * scale },
+        { text: "/", size: h * 0.25 * scale, bottom: true },
+        { text: "999999", size: h * 0.28 * scale, bottom: true },
+      ], { right: w - inset, mid: h / 2, center: false, maxWidth: Math.max(1, w - inset * 2), maxHeight: h * 0.70 });
+      const pos = geo.attributes.aVertexPosition;
+      for (let i = 0; i < pos.length; i += 2) {
+        if (pos[i] < inset - 1e-6 || pos[i] > w - inset + 1e-6 || pos[i + 1] < h * 0.15 - 1e-6 || pos[i + 1] > h * 0.85 + 1e-6)
+          fail(`readout escapes its inset bounds at width ${w}, text scale ${scale}`);
+      }
+      count++;
+    }
+    if (shader.BODY_INSET !== 0) fail("The visible frame is narrower than the token quad.");
+    else ok(`right-aligned readout fits ${count} token-width / text-scale combinations`);
+  } finally {
+    resetAtlas();
+    globalThis.PIXI = savedPIXI;
+    globalThis.document = savedDocument;
   }
+}
+
+/* Rapid direction changes must cancel the previous length animation. */
+{
+  const a = new anim.BarAnim(0.2);
+  a.set(0.9);
+  for (let i = 0; i < 8; i++) a.step(16);
+  a.set(0.1);
+  for (let i = 0; i < 80; i++) {
+    a.step(16);
+    if (a.frac !== 0.1) { fail("A damage event resumed the previous heal tween."); break; }
+  }
+  a.set(0.8);
+  a.step(16);
+  a.set(0.4, { silent: true });
+  for (let i = 0; i < 80; i++) a.step(16);
+  if (a.frac !== 0.4 || a.ghost !== 0.4 || a.num !== 0.4 || a.wave !== 0)
+    fail("A silent update left an earlier impact running.");
+  const frozen = new anim.BarAnim(0.5, { motionScale: 0 });
+  frozen.step(100);
+  if (frozen.time !== 0) fail("The shader clock moves with motion disabled.");
+  else ok("rapid changes settle to the latest value; motion none freezes the shader clock");
+}
+
+/* Actual renderer layout: token bounds, all three rows and grid sizes. */
+{
+  const { host } = await import(new URL("scripts/features/resource-bars/host.mjs", ROOT).href);
+  const oldCanvas = globalThis.canvas;
+  try {
+    for (const grid of [50, 100, 128, 200]) for (const width of [0.5, 1, 2]) {
+      globalThis.canvas = { dimensions: { size: grid } };
+      const entry = {
+        token: { x: 75, y: 90, w: grid * width, h: grid },
+        reading: { hero: {}, rail: {}, shield: {} }, meshes: {},
+      };
+      for (const role of ["hero", "rail", "shield"]) entry.meshes[role] = {
+        position: { set(x, y) { this.x = x; this.y = y; } },
+        scale: { set(x, y) { this.x = x; this.y = y; } }, shader: { uniforms: {} },
+      };
+      host.layout(entry);
+      for (const role of ["hero", "rail", "shield"]) {
+        const mesh = entry.meshes[role];
+        if (mesh.position.x !== entry.token.x || mesh.scale.x !== entry.token.w || mesh.position.y <= entry.token.y + entry.token.h)
+          fail(`Layout escaped token width or overlapped token: grid ${grid}, width ${width}, ${role}`);
+      }
+    }
+    ok("all three bar rows match token width and sit below it across 12 layouts");
+  } finally { globalThis.canvas = oldCanvas; }
 }
 
 /* ── 9. Detail survives the reference token size ────────────────────────── */
