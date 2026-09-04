@@ -107,7 +107,12 @@ export function authoredStyle(document) {
   const explicit = ARCH_SET.has(raw.archetype) ? raw.archetype : null;
   const archetype = explicit ?? inferredArchetype(document);
   const defaults = styleDefaults();
-  const color = normalizeColor(raw.color, defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype]);
+  /* Older Spellglass Regions predate the toggle and always stored a color.
+     Treat those as opted in, while new Regions persist the explicit boolean. */
+  const colorOverride = raw.colorOverride ?? Boolean(raw.color);
+  const color = colorOverride
+    ? normalizeColor(raw.color, defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype])
+    : defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype];
   const hot = archetype === "generic" ? color : lighten(color, 0.58);
   return {
     archetype,
@@ -117,6 +122,7 @@ export function authoredStyle(document) {
     hot: new Float32Array(hexToRgbFloat(hot)),
     label: normalizeLabel(raw.label),
     explicit: Boolean(explicit),
+    colorOverride: Boolean(colorOverride),
   };
 }
 
@@ -131,7 +137,7 @@ const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const radians = (degrees) => finite(degrees) * Math.PI / 180;
 
 function firstShape(document) {
-  const shapes = document?.shapes;
+  const shapes = document?.shapes ?? document;
   return shapes?.contents?.[0] ?? shapes?.[0] ?? shapes?.at?.(0) ?? null;
 }
 
@@ -158,7 +164,10 @@ function fallbackBounds(shape, origin, grid, radius, base) {
  */
 export function regionGeometry(region) {
   const document = region?.document ?? region;
-  const shape = firstShape(document);
+  /* A token-attached Region exposes transient animated shapes on its placeable
+     while the Token is moving. Prefer those so the overlay follows the Token
+     without rebuilding its coverage texture every animation frame. */
+  const shape = firstShape(region?.animationState?.shapes ?? document) ?? firstShape(document);
   if (!shape) return null;
   const grid = finite(canvas?.dimensions?.size, 100) || 100;
   const areaShape = document.flags?.pf2e?.areaShape ?? shape.type;
@@ -181,11 +190,20 @@ export function regionGeometry(region) {
     shapeId = SHAPE.emanation;
     const token = shape.base ?? shape.token ?? {};
     const tokenUnits = token.type === "token";
-    const width = finite(token.width, finite(token.w, tokenUnits ? 1 : grid)) * (tokenUnits ? grid : 1);
-    const height = finite(token.height, finite(token.h, tokenUnits ? 1 : grid)) * (tokenUnits ? grid : 1);
+    const rawWidth = finite(token.width, finite(token.w, tokenUnits ? 1 : grid)) * (tokenUnits ? grid : 1);
+    const rawHeight = finite(token.height, finite(token.h, tokenUnits ? 1 : grid)) * (tokenUnits ? grid : 1);
+    /* PF2e treats Medium and smaller creatures as the grid square containing
+       their centre. Gridless Scenes retain the token's continuous footprint. */
+    const squareBase = tokenUnits && canvas?.grid?.isSquare;
+    const width = squareBase ? Math.max(grid, rawWidth) : rawWidth;
+    const height = squareBase ? Math.max(grid, rawHeight) : rawHeight;
+    const rawCenter = {
+      x: finite(token.x) + rawWidth / 2,
+      y: finite(token.y) + rawHeight / 2,
+    };
     origin = tokenUnits ? {
-      x: finite(token.x) + width / 2,
-      y: finite(token.y) + height / 2,
+      x: squareBase && rawWidth < grid ? Math.floor(rawCenter.x / grid) * grid + grid / 2 : rawCenter.x,
+      y: squareBase && rawHeight < grid ? Math.floor(rawCenter.y / grid) * grid + grid / 2 : rawCenter.y,
     } : {
       x: finite(token.center?.x, finite(token.origin?.x, finite(token.x, origin.x))),
       y: finite(token.center?.y, finite(token.origin?.y, finite(token.y, origin.y))),
@@ -195,8 +213,8 @@ export function regionGeometry(region) {
     shapeId = SHAPE.emanation;
     const width = finite(shape.width, grid), height = finite(shape.height, grid);
     origin = {
-      x: finite(shape.center?.x, origin.x),
-      y: finite(shape.center?.y, origin.y),
+      x: finite(shape.center?.x, finite(shape.x) + width / 2),
+      y: finite(shape.center?.y, finite(shape.y) + height / 2),
     };
     base = [width / grid / 2, height / grid / 2];
     radius = 0;
@@ -205,7 +223,7 @@ export function regionGeometry(region) {
     radius = finite(shape.radius, grid) / grid;
   }
 
-  const bounds = rectFrom(document?.bounds) ?? rectFrom(region?.bounds)
+  const bounds = rectFrom(region?.bounds) ?? rectFrom(document?.bounds)
     ?? fallbackBounds(shape, origin, grid, radius, base);
   const pad = Math.max(LAYOUT.skirtRise, LAYOUT.scorchSpread) + 0.65;
   const x0 = (bounds.x - origin.x) / grid - pad;
@@ -216,6 +234,7 @@ export function regionGeometry(region) {
   return {
     areaShape,
     shapeId,
+    gridless: Boolean(canvas?.grid?.isGridless),
     radius: Math.max(0, radius),
     direction,
     angle,
@@ -319,6 +338,36 @@ function areaCoverage(shape) {
     };
   }
 
+  if (shape.type === "emanation" && shape.base?.type === "token") {
+    const base = shape.base;
+    const rawWidth = finite(base.width, 1) * size;
+    const rawHeight = finite(base.height, 1) * size;
+    const width = Math.max(size, rawWidth);
+    const height = Math.max(size, rawHeight);
+    const x = rawWidth < size
+      ? Math.floor((finite(base.x) + rawWidth / 2) / size) * size
+      : finite(base.x);
+    const y = rawHeight < size
+      ? Math.floor((finite(base.y) + rawHeight / 2) / size) * size
+      : finite(base.y);
+    const radius = finite(shape.radius) / size * distance;
+    const minCenter = { x: x + size / 2, y: y + size / 2 };
+    const maxCenter = { x: x + width - size / 2, y: y + height - size / 2 };
+    const origin = { x: x + width / 2, y: y + height / 2 };
+    return {
+      origin,
+      searchCenter: origin,
+      reach: finite(shape.radius) / size + Math.max(width, height) / size / 2,
+      contains: (destination) => {
+        const nearest = {
+          x: Math.min(maxCenter.x, Math.max(minCenter.x, destination.x)),
+          y: Math.min(maxCenter.y, Math.max(minCenter.y, destination.y)),
+        };
+        return measurePf2eDistance(destination, nearest) <= radius;
+      },
+    };
+  }
+
   const direction = radians(shape.rotation ?? shape.direction);
   const along = { x: Math.cos(direction), y: Math.sin(direction) };
   const perpendicular = { x: -along.y, y: along.x };
@@ -349,15 +398,17 @@ function areaCoverage(shape) {
 }
 
 /**
- * PF2e rules coverage for the three template Region shapes. This mirrors the
+ * PF2e rules coverage for the template Region shapes. This mirrors the
  * system's square-grid resolver and remains local for PF2e releases that still
  * delegate Region coverage to Foundry core.
  */
 export function pf2eCoverage(region) {
   const document = region?.document ?? region;
   const shape = firstShape(document);
-  if (!canvas?.grid?.isSquare || shapeCount(document) !== 1
-    || !["circle", "cone", "line"].includes(shape?.type)) return null;
+  /* Live auras already expose PF2e's authoritative active squares, including
+     five-point wall testing. Let regionCells consume those offsets directly. */
+  if (region?.glAoeAuraRenderer || !canvas?.grid?.isSquare || shapeCount(document) !== 1
+    || !["circle", "cone", "line", "emanation"].includes(shape?.type)) return null;
 
   const area = areaCoverage(shape);
   const size = finite(canvas?.dimensions?.size, 100) || 100;

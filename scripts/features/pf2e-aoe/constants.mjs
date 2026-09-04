@@ -107,6 +107,19 @@ export const TRAIT_ARCHETYPE = Object.freeze([
   ["unholy", "umbra"],
   ["darkness", "umbra"],
   ["death", "umbra"],
+  ["fire", "ember"],
+  ["cold", "frost"],
+  ["electricity", "arc"],
+  ["acid", "caustic"],
+  ["poison", "caustic"],
+  ["sonic", "resonance"],
+  ["mental", "resonance"],
+  ["vitality", "radiance"],
+  ["void", "umbra"],
+  ["spirit", "spirit"],
+  ["force", "force"],
+  ["plant", "verdant"],
+  ["fungus", "verdant"],
 ]);
 
 /**
@@ -176,7 +189,6 @@ export const TREATMENTS = Object.freeze([
 /** Settings keys, all prefixed (the catalog warns on any that are not). */
 export const SETTINGS = Object.freeze({
   motionTier: `${PREFIX}motionTier`,
-  replaceAuraRender: `${PREFIX}replaceAuraRender`,
   maxConcurrent: `${PREFIX}maxConcurrent`,
   styleDefaults: `${PREFIX}styleDefaults`, // world: archetype -> #RRGGBB
 });
@@ -184,7 +196,8 @@ export const SETTINGS = Object.freeze({
 /** Flags we stamp, scoped to SUITE_ID and prefixed. */
 export const FLAGS = Object.freeze({
   /* Per-region GM-authored presentation:
-     { archetype: ARCHETYPES[number], color: "#RRGGBB", label: string }.
+     { archetype: ARCHETYPES[number], colorOverride: boolean,
+       color: "#RRGGBB", label: string }.
      `color` overrides both built-in and generic defaults; the host derives the
      restrained hot stop from it. `label` is display text, never an i18n key. */
   style: `${PREFIX}style`,

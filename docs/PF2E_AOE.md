@@ -1,8 +1,9 @@
 # PF2e AoE — design and API reference
 
 The suite's area-of-effect renderer for PF2e on Foundry **v14**. Draws animated
-WebGL fills for placed Region templates, keyed to the effect's damage type and
-traits. PF2e's separate token-aura renderer remains unchanged.
+WebGL fills for placed Region templates, attached token emanations, and PF2e
+auras, keyed to the effect's damage type and traits. Aura membership and effect
+application remain entirely owned by PF2e; Spellglass replaces presentation only.
 
 This document is the durable record of the design session and of the four source
 reads behind it (Foundry v14 build 365 local source, the Foundry v14 API site, a
@@ -173,6 +174,10 @@ size, visual archetype, color, Region name, and centered label before calling
 `canvas.regions.placeRegion(data)`. The new Region is stamped with both
 `flags.pf2e.areaShape` and the suite's `aoe.style` flag, so it is never confused
 with a generic freehand Region and is picked up by the renderer immediately.
+Choosing **Emanation from selected token** instead calls
+`RegionDocument.createTokenEmanation` with `gridBased` enabled on square Scenes.
+The resulting Region carries Foundry's real `attachment.token` relationship and
+moves with the Token in both persisted updates and client-side movement animation.
 
 ### Token attachment
 
@@ -328,10 +333,11 @@ then the distance test. Angle is 90°, set in `shapeDataFromEffectArea` and in
 **Line** (:113-134) — origin stepped back to the grid corner on whichever axes
 sit mid-cell; coverage is a projection/offset test.
 
-**Emanation coverage is core's, not PF2e's** — it is not in the
-circle/cone/line whitelist. ⚠️ **Unverified: how core counts squares for a
-Gargantuan emanation has not been checked against the rules. Needs a live
-session.**
+Spellglass resolves emanations from every edge of the token footprint with the
+same alternating 5/10/5 distance used by PF2e. Regression cases pin the Medium,
+smaller, and Large 5-foot and 10-foot diagrams in the supplied `Rules354.png`:
+the token's full space is the base, the first diagonal costs 5 feet, and the
+second diagonal removes the outer corner at 10 feet.
 
 `#drawBlockedHighlight()` (:182-199) paints blocked squares into
 `layer._highlights` as a black 50% fill plus a diagonal slash, refreshed on
@@ -378,11 +384,13 @@ during an active encounter.
 **Nothing in the effect pipeline calls into `AuraRenderer`** — rendering and
 membership are cleanly split.
 
-**Our seam: patch `AuraRenderer.prototype`.** `draw`, `highlight`,
-`repositionTexture`, `destroy` are the only four entry points `AuraRenderers`
-uses, and all four are public. `#drawBorder`/`#drawTexture` are `#`-private.
-There is **no** `CONFIG.PF2E.auraRendererClass` — `AuraRenderers` hard-constructs
-at `map.ts:34`, and `TokenPF2e` hard-constructs `AuraRenderers` at `object.ts:18`.
+**Our seam is the live `token.auras` map, not PF2e's mechanics.** Each
+`AuraRenderer` is adapted to an ephemeral emanation-shaped source for the shared
+Spellglass host. Its `squares` getter remains the authority for square coverage
+and wall blocking, so PF2e's five-point sight/sound/move collision test is not
+reimplemented. The native border, texture, and shared highlight layer are hidden
+only while the replacement mesh exists and are restored on teardown or when the
+client's concurrent-area cap is reached. No Aura document or Actor data is created.
 
 Constraints on any replacement:
 - `AuraRenderer implements TokenAuraData` (`renderer.ts:11`) — keep `radius`,
@@ -433,8 +441,10 @@ inner edge is faded to fake it; say so rather than promise depth.
 with PF2e's square-grid algorithm and expressed in the effect's language instead
 of PF2e's black crosshatch. The resolver is kept locally as a compatibility
 bridge for PF2e 8.4.0, which still delegates Region coverage to Foundry core;
-it mirrors PF2e's newer resolver for circle, cone, and line shapes. The rules
-read lives on the ground plane; the organic true
+it mirrors PF2e's newer resolver for circle, cone, and line shapes. Gridless
+Scenes render the Region's continuous geometry without lattice seams; hex
+Scenes retain Foundry's native Region mesh until true hex coverage is supported.
+The rules read lives on the ground plane; the organic true
 geometry lives in the atmosphere. Shedding thins the atmosphere first — the
 lattice and rim are never shed.
 
@@ -466,16 +476,18 @@ registered in `onReady`, `__claimedSender` treated as routing metadata only).
 from `core/theme.mjs`. Adaptive `SHED_ORDER` with hysteresis handles load; no
 second fidelity knob. `aoe.styleDefaults` is a GM-only world map of archetype
 id to `#RRGGBB`, covering every built-in, `generic`, and `warning`. The
-`aoe.replaceAuraRender` key remains reserved for the separate aura-compatibility
-pass and is not exposed as an inert user setting by the Region renderer.
+Aura replacement is part of the feature itself; there is no inert second toggle.
 
 Each region may override those defaults with the suite flag `aoe.style`:
 
 ```js
-{ archetype: "generic", color: "#759dff", label: "Silence Field" }
+{ archetype: "generic", colorOverride: true, color: "#759dff", label: "Silence Field" }
 ```
 
-The editor is GM-only; the result replicates and renders for everyone. Validate
+`colorOverride: false` keeps the chosen visual type but resolves its current
+world-default color. Legacy Regions that stored a color before this toggle are
+treated as opted in until the GM turns the override off. The editor is GM-only;
+the result replicates and renders for everyone. Validate
 `archetype` against `ARCHETYPES`, color as six-digit hex, and trim `label` to 80
 characters. An empty label renders nothing. Labels are PIXI text, never HTML.
 

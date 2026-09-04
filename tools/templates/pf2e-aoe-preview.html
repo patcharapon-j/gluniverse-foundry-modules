@@ -695,6 +695,7 @@ function frame(now) {
       gl.uniform4f(U.uChar, tr.scorch, tr.motes, tr.rim, tr.turb);
       gl.uniform4f(U.uPhase, s.anim.enter, s.anim.leave, s.anim.shock, s.anim.eased);
       gl.uniform1f(U.uEnterMode, parseFloat(ui.entrance.value));
+      gl.uniform1f(U.uGridless, 0);
       gl.uniform4f(U.uFx, g.motes, g.scorch, g.skirt, g.turbulence);
       gl.uniform1f(U.uAlpha, parseFloat(ui.finish.value));
     });

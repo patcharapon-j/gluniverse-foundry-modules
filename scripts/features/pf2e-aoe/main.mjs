@@ -90,7 +90,10 @@ export function onReady() {
        frame. Rebuilding four meshes and a coverage texture there is the exact
        hot path core itself warns about; the committed Token/Region update that
        follows refreshes us once at the final position. */
-    if (region?.document?.attachment?.token && (flags.refreshGeometry || flags.refreshShapes)) return;
+    if (region?.document?.attachment?.token && (flags.refreshGeometry || flags.refreshShapes)) {
+      host.reposition(region);
+      return;
+    }
     host.refresh(region);
   });
   on("destroyRegion", (region) => host.remove(region?.id));
@@ -106,11 +109,19 @@ export function onReady() {
   const refreshTokenEdges = () => {
     if (tokenEdgesQueued) return;
     tokenEdgesQueued = true;
-    queueMicrotask(() => { tokenEdgesQueued = false; host.refreshTokenEdges(); });
+    queueMicrotask(() => {
+      tokenEdgesQueued = false;
+      host.refreshAll();
+      host.refreshTokenEdges();
+    });
   };
   on("drawToken", refreshTokenEdges);
+  on("refreshToken", (_token, flags = {}) => {
+    if (flags.refreshEffects || flags.refreshVisibility) refreshTokenEdges();
+  });
   on("updateToken", refreshTokenEdges);
   on("destroyToken", refreshTokenEdges);
+  on("updateActor", refreshSoon);
 
   on("renderApplicationV2", (app, element) => injectRegionStyle(app, element));
   on("pf2e.damageRoll", pulseForDamage);

@@ -5,6 +5,7 @@ import { PRECISION } from "../../core/glsl.mjs";
 import { lighten } from "../../core/theme.mjs";
 import { TREATMENTS } from "./constants.mjs";
 import { AoeAnim, SHED_AT, SHED_ORDER, UNSHED_AT } from "./anim.mjs";
+import { auraNativeNodes, auraRegionFor, auraRegions } from "./aura.mjs";
 import { cellStateAt, regionCells, regionGeometry, seedFor, authoredStyle, isEffectRegion } from "./data.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shader.mjs";
 
@@ -63,6 +64,7 @@ function meshFor(plane, geometry, cells, style, anim, seed) {
     uBase: new Float32Array(geometry.base),
     uArch: style.archetypeIndex,
     uEnterMode: ENTER_MODE,
+    uGridless: geometry.gridless ? 1 : 0,
     uTint: style.tint,
     uTintHot: style.hot,
     uMix: new Float32Array([treatment.ground, treatment.air, treatment.skirt]),
@@ -176,7 +178,17 @@ function tokenEdges(entry) {
     if (!token?.visible || !token.mesh?.texture) continue;
     const cx = token.center?.x ?? token.x + token.w / 2;
     const cy = token.center?.y ?? token.y + token.h / 2;
-    if (cellStateAt(entry.cells, cx, cy, entry.geometry.grid) < 0.75) continue;
+    let covered = cellStateAt(entry.cells, cx, cy, entry.geometry.grid) >= 0.75;
+    if (entry.geometry.gridless) {
+      try {
+        covered = Boolean(entry.region.document?.testPoint?.({
+          x: cx,
+          y: cy,
+          elevation: entry.region.document?.elevation?.bottom ?? 0,
+        }));
+      } catch { covered = false; }
+    }
+    if (!covered) continue;
     const sprite = new PIXI.Sprite(token.mesh.texture);
     sprite.anchor.set(0.5);
     sprite.position.set(cx, cy);
@@ -209,6 +221,13 @@ function suppressNativeHighlights(region) {
   return suppressed;
 }
 
+/** Whether the current canvas can host a Spellglass mesh for this Region. */
+export function canRenderEffectRegion(region) {
+  const grid = canvas.grid;
+  return Boolean((grid?.isSquare || grid?.isGridless)
+    && isEffectRegion(region?.document) && region?.visible !== false);
+}
+
 class AoeHost {
   constructor() {
     this.entries = new Map();
@@ -216,6 +235,7 @@ class AoeHost {
     this.shed = 0;
     this.frameAvg = 16;
     this.coolFrames = 0;
+    this.auraNative = new Map();
     this._last = 0;
     this._tick = this.tick.bind(this);
   }
@@ -265,25 +285,31 @@ class AoeHost {
     this.spectacle = null;
     try { this.bloom?.destroy?.(); } catch { /* noop */ }
     this.bloom = null;
+    this.restoreAuraNative();
   }
 
   refreshAll() {
     if (!this.ground || !this.spectacle) return;
-    const regions = (canvas.regions?.placeables ?? [])
-      .filter((region) => isEffectRegion(region.document) && region.visible !== false)
+    const regions = [
+      ...(canvas.regions?.placeables ?? [])
+        .filter((region) => isEffectRegion(region.document) && region.visible !== false),
+      ...auraRegions(),
+    ]
       .slice(0, this.options.maxConcurrent);
     const keep = new Set(regions.map((region) => region.id));
     for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.remove(id);
     for (const region of regions) this.refresh(region);
+    this.syncAuraNative();
   }
 
   refresh(region) {
     if (!region?.id || !this.ground || !this.spectacle) return;
     const previousAnim = this.entries.get(region.id)?.anim ?? null;
     this.remove(region.id);
-    /* The approved lattice is square. A hex scene keeps Foundry/PF2e's native
-       Region mesh rather than pretending square texels are hex coverage. */
-    if (!canvas.grid?.isSquare || !isEffectRegion(region.document) || region.visible === false) return;
+    /* Square grids use PF2e's rules lattice. Gridless Scenes use the Region's
+       continuous shader geometry. Hex Scenes keep the native mesh rather than
+       pretending square texels are hexes. */
+    if (!canRenderEffectRegion(region)) return;
     const geometry = regionGeometry(region);
     if (!geometry) return;
     const cells = regionCells(region, geometry);
@@ -299,7 +325,7 @@ class AoeHost {
     this.ground.addChild(shade, ground);
     this.spectacle.addChild(air, boundary);
 
-    const suppressedHighlights = suppressNativeHighlights(region);
+    const suppressedHighlights = region.glAoeAuraRenderer ? [] : suppressNativeHighlights(region);
     const entry = { region, geometry, cells, style, anim, meshes, label: null, edges: null, suppressedHighlights };
     entry.edges = tokenEdges(entry);
     if (entry.edges.children.length) this.spectacle.addChild(entry.edges);
@@ -308,6 +334,48 @@ class AoeHost {
     if (entry.label) { entry.label.zIndex = 3; this.spectacle.addChild(entry.label); }
     this.entries.set(region.id, entry);
     this.write(entry);
+    this.syncAuraNative();
+  }
+
+  /** Translate an attached effect without rebuilding its four meshes or mask. */
+  reposition(region, replacement = region) {
+    const entry = this.entries.get(region?.id);
+    if (!entry) return false;
+    const geometry = regionGeometry(replacement);
+    if (!geometry || geometry.shapeId !== entry.geometry.shapeId
+      || Math.abs(geometry.quad.width - entry.geometry.quad.width) > 0.01
+      || Math.abs(geometry.quad.height - entry.geometry.quad.height) > 0.01) return false;
+    entry.region = replacement;
+    entry.geometry = geometry;
+    for (const mesh of entry.meshes) {
+      mesh.position.set(geometry.quad.x, geometry.quad.y);
+      mesh.shader?.uniforms?.uGridOffset?.set(geometry.gridOffset);
+    }
+    entry.label?.position?.set(geometry.labelAt.x, geometry.labelAt.y);
+    return true;
+  }
+
+  restoreAuraNative() {
+    for (const [node, renderable] of this.auraNative) {
+      if (!node.destroyed) node.renderable = renderable;
+    }
+    this.auraNative.clear();
+  }
+
+  syncAuraNative() {
+    const desired = new Set();
+    for (const entry of this.entries.values()) {
+      for (const node of auraNativeNodes(entry.region)) desired.add(node);
+    }
+    for (const [node, renderable] of [...this.auraNative]) {
+      if (desired.has(node)) continue;
+      if (!node.destroyed) node.renderable = renderable;
+      this.auraNative.delete(node);
+    }
+    for (const node of desired) {
+      if (!this.auraNative.has(node)) this.auraNative.set(node, node.renderable);
+      node.renderable = false;
+    }
   }
 
   remove(id, { release = false } = {}) {
@@ -377,10 +445,15 @@ class AoeHost {
     } else this.coolFrames = 0;
 
     for (const [id, entry] of this.entries) {
+      if (entry.region.glAoeAuraRenderer) {
+        const replacement = auraRegionFor(entry.region.glAoeAuraRenderer);
+        if (replacement) this.reposition(entry.region, replacement);
+      }
       entry.anim.step(dt);
       if (entry.anim.dead) { this.remove(id); continue; }
       this.write(entry);
     }
+    this.syncAuraNative();
   }
 }
 

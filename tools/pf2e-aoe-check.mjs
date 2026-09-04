@@ -32,6 +32,7 @@ for (const [name, type] of Object.entries(UNIFORMS)) {
 ok(/varying\s+vec2\s+vGrid/.test(VERTEX_SHADER), "shipped vertex must write vGrid");
 ok(/varying\s+vec2\s+vScreen/.test(VERTEX_SHADER), "shipped vertex must write vScreen");
 ok(/uGridOffset/.test(FRAGMENT_SHADER), "half-grid phase uniform is missing");
+ok(/uGridless/.test(FRAGMENT_SHADER), "gridless continuous-geometry uniform is missing");
 ok(/warningFill/.test(FRAGMENT_SHADER) && /warningBeat/.test(FRAGMENT_SHADER), "Warning Zone branch is missing");
 
 ok(!SHED_ORDER.includes("lattice") && !SHED_ORDER.includes("boundary"),
@@ -67,10 +68,16 @@ ok(controls.includes("ensureSuiteGroup") && controls.includes("bindSuiteToolClic
   "Spellglass creator must use the shared suite scene-control group");
 ok(/canvas\.regions\.placeRegion\(regionData\(config\)\)/.test(controls),
   "Spellglass creator must place a flagged Region through RegionLayer");
-for (const shape of ["burst", "cone", "line", "square"]) {
+for (const shape of ["burst", "cone", "line", "square", "emanation"]) {
   ok(Boolean(lang[`GLAOE.Creator.Shape.${shape}`]), `missing creator shape localization ${shape}`);
   ok(controls.includes(`\"${shape}\"`), `creator does not offer ${shape}`);
 }
+ok(controls.includes("createTokenEmanation") && controls.includes("gridBased: Boolean(canvas.grid?.isSquare)"),
+  "creator emanations must use Foundry's token-attached Region API");
+ok(controls.includes("colorOverride"), "creator must expose the per-Region color override toggle");
+const regionConfig = await text("scripts/features/pf2e-aoe/region-config.mjs");
+ok(regionConfig.includes("colorOverride") && regionConfig.includes('color.disabled = !colorOverride.checked'),
+  "Region configuration must persist and visibly gate its color override");
 
 /* Half-grid cone/line origins are where a visually plausible lattice used to
    shift. Exercise the pure Region adapter with a midpoint origin and assert the
@@ -92,7 +99,30 @@ globalThis.CONFIG = {
     },
   },
 };
-const { cellStateAt, pf2eCoverage, regionCells, regionGeometry } = await import("../scripts/features/pf2e-aoe/data.mjs");
+const { authoredStyle, cellStateAt, pf2eCoverage, regionCells, regionGeometry } = await import("../scripts/features/pf2e-aoe/data.mjs");
+const { canRenderEffectRegion } = await import("../scripts/features/pf2e-aoe/host.mjs");
+const { auraRegionFor } = await import("../scripts/features/pf2e-aoe/aura.mjs");
+const gridlessRegion = {
+  visible: true,
+  document: { flags: { pf2e: { areaShape: "burst" } } },
+};
+canvas.grid.isSquare = false;
+canvas.grid.isGridless = true;
+ok(canRenderEffectRegion(gridlessRegion), "gridless Scenes must not discard Spellglass Regions before mesh creation");
+const gridlessDocument = {
+  shapes: [{ type: "circle", x: 150, y: 150, radius: 100 }],
+  bounds: { x: 50, y: 50, width: 200, height: 200 },
+  flags: { pf2e: { areaShape: "burst" } },
+  elevation: { bottom: 0 },
+  testPoint: ({ x, y }) => Math.hypot(x - 150, y - 150) <= 100,
+};
+const gridlessGeometry = regionGeometry(gridlessDocument);
+const gridlessCells = regionCells({ document: gridlessDocument }, gridlessGeometry);
+ok(gridlessGeometry.gridless, "gridless Region geometry must select the continuous shader path");
+ok(cellStateAt(gridlessCells, 150, 150, 100) >= 0.75,
+  "gridless Region geometry must produce a covered shader-mask sample");
+canvas.grid.isSquare = true;
+canvas.grid.isGridless = false;
 const mockDocument = {
   shapes: [{ type: "cone", x: 50, y: 50, radius: 400, angle: 90, rotation: 45 }],
   bounds: { x: 0, y: 0, width: 500, height: 500 },
@@ -145,6 +175,57 @@ ok(emanationGeometry.origin.x === 400 && emanationGeometry.origin.y === 550,
   "token emanation origin must be the base center for non-Medium creatures");
 ok(emanationGeometry.base[0] === 1 && emanationGeometry.base[1] === 1.5,
   "token emanation footprint must retain its grid-space dimensions");
+
+/* Emanations measure outward from every edge of the creature's space. The
+   first diagonal is 5 feet and the second is 10, so the outer corners disappear
+   at 10 feet exactly as in the supplied Rules354.png reference. */
+const emanationCount = (width, height, feet) => pf2eCoverage({
+  shapes: [{
+    type: "emanation",
+    base: { type: "token", x: 500, y: 500, width, height },
+    radius: feet / 5 * 100,
+  }],
+  flags: { pf2e: { areaShape: "emanation" } },
+})?.covered.length;
+ok(emanationCount(1, 1, 5) === 9, "5-foot Medium emanation must cover its 3x3 space");
+ok(emanationCount(0.5, 0.5, 5) === 9, "5-foot Small-or-smaller emanation must use the Medium 3x3 space");
+ok(emanationCount(1, 1, 10) === 21, "10-foot Medium emanation must omit the four 15-foot corners");
+ok(emanationCount(2, 2, 5) === 16, "5-foot Large emanation must cover its 4x4 space");
+ok(emanationCount(2, 2, 10) === 32, "10-foot Large emanation must omit the four 15-foot corners");
+
+const auraRenderer = {
+  slug: "frightful-presence",
+  radius: 10,
+  traits: ["emotion", "mental"],
+  appearance: { highlight: { color: 0x7a45cc } },
+  token: {
+    id: "TOKEN1",
+    visible: true,
+    mechanicalBounds: { x: 500, y: 500, width: 200, height: 200 },
+    document: { hidden: false, elevation: 0 },
+  },
+  squares: [
+    { x: 500, y: 500, active: true },
+    { x: 700, y: 700, active: false },
+  ],
+};
+const auraRegion = auraRegionFor(auraRenderer);
+ok(auraRegion?.id === "aura:TOKEN1:frightful-presence", "PF2e aura adapter id must be stable per token and slug");
+ok(auraRegion?.document?.shapes?.[0]?.base?.width === 2,
+  "PF2e aura adapter must preserve a Large token's two-square base");
+ok(auraRegion?._getCoveredGridSpaceOffsets().length === 1,
+  "PF2e aura adapter must use only the system's active aura squares");
+ok(auraRegion?.document?.getFlag("gluniverse-foundry-modules", "aoe.style")?.color === "#7a45cc",
+  "PF2e aura adapter must preserve the Aura rule's resolved highlight color");
+ok(authoredStyle(auraRegion.document).archetype === "resonance",
+  "PF2e aura traits must resolve through the shared Spellglass archetype map");
+
+const automaticColor = authoredStyle({
+  flags: { pf2e: {} },
+  getFlag: () => ({ archetype: "arcane", colorOverride: false, color: "#ff0000" }),
+});
+ok(automaticColor.color !== "#ff0000" && !automaticColor.colorOverride,
+  "disabled per-Region color override must resolve the archetype's world default");
 
 if (errors.length) {
   for (const error of errors) console.error(`FAIL ${error}`);

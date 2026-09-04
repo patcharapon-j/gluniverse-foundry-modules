@@ -63,7 +63,19 @@ export function injectRegionStyle(app, element) {
   color.type = "color";
   color.name = `${prefix}.color`;
   color.value = raw.color ?? resolved.color;
-  section.appendChild(field(t("GLAOE.RegionStyle.Color"), color, t("GLAOE.RegionStyle.ColorHint")));
+  const colorOverride = globalThis.document.createElement("input");
+  colorOverride.type = "checkbox";
+  colorOverride.name = `${prefix}.colorOverride`;
+  colorOverride.checked = raw.colorOverride ?? Boolean(raw.color);
+  color.disabled = !colorOverride.checked;
+  colorOverride.addEventListener("change", () => { color.disabled = !colorOverride.checked; });
+  const colorFields = globalThis.document.createElement("div");
+  colorFields.className = "gl-aoe-color-override";
+  const toggleLabel = globalThis.document.createElement("label");
+  toggleLabel.className = "checkbox";
+  toggleLabel.append(colorOverride, ` ${t("GLAOE.RegionStyle.ColorOverride")}`);
+  colorFields.append(toggleLabel, color);
+  section.appendChild(field(t("GLAOE.RegionStyle.Color"), colorFields, t("GLAOE.RegionStyle.ColorHint")));
 
   const label = globalThis.document.createElement("input");
   label.type = "text";

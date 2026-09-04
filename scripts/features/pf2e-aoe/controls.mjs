@@ -7,7 +7,7 @@ import { ARCHETYPES, FLAGS } from "./constants.mjs";
 import { normalizeColor, normalizeLabel, styleDefaults } from "./data.mjs";
 
 const TOOL = "pf2e-aoe-create";
-const SHAPES = Object.freeze(["burst", "cone", "line", "square"]);
+const SHAPES = Object.freeze(["burst", "cone", "line", "square", "emanation"]);
 const SHAPE_SET = new Set(SHAPES);
 const ARCHETYPE_SET = new Set(ARCHETYPES);
 
@@ -19,6 +19,7 @@ let draft = {
   size: 20,
   width: 5,
   archetype: "generic",
+  colorOverride: false,
   color: null,
 };
 
@@ -95,7 +96,11 @@ function creatorContent() {
         </div>
         <div class="form-group gl-aoe-create-color">
           <label>${escapeHTML(t("GLAOE.RegionStyle.Color"))}</label>
-          <div class="form-fields"><input type="color" name="color" value="${escapeAttr(color)}"><output>${escapeHTML(color)}</output></div>
+          <div class="form-fields">
+            <label class="checkbox"><input type="checkbox" name="colorOverride"${draft.colorOverride ? " checked" : ""}> ${escapeHTML(t("GLAOE.RegionStyle.ColorOverride"))}</label>
+            <input type="color" name="color" value="${escapeAttr(color)}"${draft.colorOverride ? "" : " disabled"}>
+            <output>${escapeHTML(color)}</output>
+          </div>
         </div>
       </div>
       <p class="hint">${escapeHTML(t("GLAOE.Creator.PlacementHint"))}</p>
@@ -108,6 +113,7 @@ function bindCreatorDialog(_event, dialog) {
   const shape = form.elements.shape;
   const archetype = form.elements.archetype;
   const color = form.elements.color;
+  const colorOverride = form.elements.colorOverride;
   const output = form.querySelector(".gl-aoe-create-color output");
   const width = form.querySelector(".gl-aoe-create-width");
   shape?.addEventListener("change", () => width?.toggleAttribute("hidden", shape.value !== "line"));
@@ -117,6 +123,7 @@ function bindCreatorDialog(_event, dialog) {
     if (output && color) output.value = color.value;
   });
   color?.addEventListener("input", () => { if (output) output.value = color.value; });
+  colorOverride?.addEventListener("change", () => { if (color) color.disabled = !colorOverride.checked; });
 }
 
 function readCreator(button) {
@@ -131,6 +138,7 @@ function readCreator(button) {
     size: Math.max(1, Math.min(1000, Number(elements.size?.value) || 20)),
     width: Math.max(1, Math.min(100, Number(elements.width?.value) || 5)),
     archetype,
+    colorOverride: Boolean(elements.colorOverride?.checked),
     color: normalizeColor(elements.color?.value, defaults[archetype]),
   };
 }
@@ -167,16 +175,16 @@ async function chooseArea() {
   });
 }
 
-function regionData(config) {
+function baseRegionData(config) {
   const suiteFlags = {};
   foundry.utils.setProperty(suiteFlags, FLAGS.style, {
     archetype: config.archetype,
+    colorOverride: config.colorOverride,
     color: config.color,
     label: config.label,
   });
   return {
     name: config.name || config.label || t("GLAOE.Creator.DefaultName"),
-    shapes: [shapeData(config)],
     color: config.color,
     highlightMode: "coverage",
     displayMeasurements: true,
@@ -187,6 +195,27 @@ function regionData(config) {
       [SUITE_ID]: suiteFlags,
     },
   };
+}
+
+function regionData(config) {
+  return { ...baseRegionData(config), shapes: [shapeData(config)] };
+}
+
+async function createTokenEmanation(config) {
+  const selected = canvas.tokens?.controlled ?? [];
+  if (selected.length !== 1) {
+    ui.notifications?.warn?.(t("GLAOE.Creator.SelectOneToken"));
+    return false;
+  }
+  const create = CONFIG.Region?.documentClass?.createTokenEmanation;
+  if (typeof create !== "function") {
+    ui.notifications?.error?.(t("GLAOE.Creator.EmanationUnavailable"));
+    return false;
+  }
+  await create.call(CONFIG.Region.documentClass, selected[0].document, config.size, baseRegionData(config), {
+    gridBased: Boolean(canvas.grid?.isSquare),
+  });
+  return true;
 }
 
 export async function openSpellglassCreator() {
@@ -204,6 +233,10 @@ export async function openSpellglassCreator() {
     const config = await chooseArea();
     if (!config) return;
     draft = { ...config };
+    if (config.shape === "emanation") {
+      await createTokenEmanation(config);
+      return;
+    }
     ui.notifications?.info?.(t("GLAOE.Creator.ClickToPlace"));
     await canvas.regions.placeRegion(regionData(config));
   } catch (error) {

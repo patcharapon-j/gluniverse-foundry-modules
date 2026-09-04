@@ -60,6 +60,7 @@ export const UNIFORMS = Object.freeze({
   uBase: "vec2",         // emanation: the token footprint half-extent
   uArch: "float",        // archetype index into ARCHETYPES
   uEnterMode: "float",   // 0 trace | 1 inscribe | 2 ignite
+  uGridless: "float",    // 1 uses continuous Region geometry without a rules lattice
   uTint: "vec3",         // the archetype's lit body colour
   uTintHot: "vec3",      // its emissive core
   uMix: "vec3",          // treatment balance: ground, air, skirt
@@ -110,7 +111,7 @@ void main(void) {
 }`;
 
 const BODY = `
-uniform float uTime, uSeed, uPlane, uShape, uRadius, uDirection, uAngle, uArch, uAlpha, uEnterMode;
+uniform float uTime, uSeed, uPlane, uShape, uRadius, uDirection, uAngle, uArch, uAlpha, uEnterMode, uGridless;
 uniform vec2 uBase, uCellOrigin, uCellSize, uGridOffset;
 uniform vec3 uTint, uTintHot;
 uniform vec4 uPhase, uFx, uChar;
@@ -764,6 +765,16 @@ void main(void) {
   float covered = step(0.75, state);
   float blocked = step(0.25, state) * (1.0 - covered);
 
+  /* Gridless Scenes have no rules lattice to communicate. Use the Region's
+     continuous shape instead, and suppress all square-cell structure. The
+     small floor keeps the edge antialiased in diagnostic renders where
+     uTexel intentionally defaults to zero. */
+  float shapeEdge = max(uTexel, 0.002);
+  float shapeCovered = 1.0 - glEdge(-shapeEdge, shapeEdge, sdf);
+  covered = mix(covered, shapeCovered, uGridless);
+  blocked *= 1.0 - uGridless;
+  diff *= 1.0 - uGridless;
+
   /* ---- the entrance: the template is DRAWN, never scaled and never faded --
      A template is a rules object sitting on a lattice. Scaling it means that
      for the length of the entrance it covers squares it does not cover, and
@@ -803,6 +814,7 @@ void main(void) {
      pixel a long way out has a correspondingly large ordinal and is never
      within a gaussian width of anything. */
   float ordFrag = max((uRadius + sdf) / max(uRadius, 0.5), 0.0);
+  ordRadial = mix(ordRadial, clamp(ordFrag, 0.0, 1.0), uGridless);
 
   /* And a mask, because the unclamped ordinal alone still lets the front sweep
      through the band just outside the boundary as it lands. The nib is a pen
@@ -810,7 +822,7 @@ void main(void) {
   float nibRegion = 1.0 - glEdge(0.0, 0.5, sdf);
 
   float ordAngle = perimeterOrd(p);
-  float ordAngleCell = perimeterOrd(cell + 0.5);
+  float ordAngleCell = mix(perimeterOrd(cell + 0.5), ordAngle, uGridless);
 
   float pen = eased;
   float inkFill = 1.0;   /* how much of this square's FILL has been laid */
@@ -894,7 +906,7 @@ void main(void) {
   body += blocked * inkFill * (0.12 + turb * 0.20) * blockShade;
 
   float seam = hairline(dEdge, SEAM_PX) * (0.16 + 0.62 * diff)
-             * (covered + blocked * 0.7) * inkSeam;
+             * (covered + blocked * 0.7) * inkSeam * (1.0 - uGridless);
   float scorch = uFx.y * chScorch * covered * inkFill * 0.16
                * (1.0 - glEdge(0.0, SCORCH_SPREAD, abs(sdf)));
 
