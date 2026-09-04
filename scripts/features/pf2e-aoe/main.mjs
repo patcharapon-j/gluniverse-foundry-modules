@@ -4,8 +4,13 @@ import { SUITE_ID, log } from "../../core/const.mjs";
 import { emitSocket, onSocket } from "../../core/socket.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT, onThemeChange } from "../../core/theme.mjs";
 import { FEATURE_ID, SETTINGS } from "./constants.mjs";
+import { classify as classifySource } from "./classifier.mjs";
 import { addSpellglassSceneControl, bindSpellglassSceneControl } from "./controls.mjs";
+import { inferredLabel } from "./data.mjs";
 import { host } from "./host.mjs";
+import {
+  registerProfile, resolveProfile as resolveSourceProfile, unregisterProfiles,
+} from "./profiles.mjs";
 import { injectRegionStyle } from "./region-config.mjs";
 
 const H = [];
@@ -67,6 +72,26 @@ function pulse(regionId, { broadcast = true } = {}) {
   const ok = host.pulse(String(regionId ?? ""));
   if (ok && broadcast) emitSocket(FEATURE_ID, { type: "pulse", regionId: String(regionId) });
   return ok;
+}
+
+function resolveUuid(uuid) {
+  try { return typeof fromUuidSync === "function" ? fromUuidSync(uuid) : null; }
+  catch { return null; }
+}
+
+function classify(source, options = {}) {
+  return classifySource(source, { resolveUuid, ...options });
+}
+
+function resolveProfile(source, options = {}) {
+  const document = source?.document ?? source;
+  return resolveSourceProfile(source, {
+    suiteId: SUITE_ID,
+    worldProfiles: get(SETTINGS.profiles, { schema: 1, profiles: [] }),
+    inheritedLabel: inferredLabel(document),
+    classification: { resolveUuid },
+    ...options,
+  });
 }
 
 export function onInit() {
@@ -138,8 +163,12 @@ export function teardown() {
 }
 
 export const api = {
+  classify,
   pulse,
+  registerProfile,
   reconfigure,
+  resolveProfile,
   teardown,
+  unregisterProfiles,
   get host() { return host; },
 };

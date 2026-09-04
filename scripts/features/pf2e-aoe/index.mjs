@@ -43,6 +43,31 @@ function registerSettings() {
     onChange: reconfigure,
   });
 
+  /* Schema-v2 development data is registered before the renderer cutover so
+     worlds can exercise pure classification/migration tooling without changing
+     what players see on the canvas. */
+  game.settings.register(SUITE_ID, SETTINGS.schemaVersion, {
+    scope: "world",
+    config: false,
+    type: Number,
+    default: 0,
+  });
+
+  game.settings.register(SUITE_ID, SETTINGS.profiles, {
+    scope: "world",
+    config: false,
+    type: Object,
+    default: { schema: 1, profiles: [] },
+  });
+
+  game.settings.register(SUITE_ID, SETTINGS.devRenderer, {
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false,
+    onChange: reconfigure,
+  });
+
   game.settings.registerMenu(SUITE_ID, `${PREFIX}styleDefaultsMenu`, {
     name: "GLAOE.Settings.StyleDefaults.Name",
     label: "GLAOE.Settings.StyleDefaults.Label",

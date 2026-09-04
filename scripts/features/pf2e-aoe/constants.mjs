@@ -191,6 +191,11 @@ export const SETTINGS = Object.freeze({
   motionTier: `${PREFIX}motionTier`,
   maxConcurrent: `${PREFIX}maxConcurrent`,
   styleDefaults: `${PREFIX}styleDefaults`, // world: archetype -> #RRGGBB
+  schemaVersion: `${PREFIX}schemaVersion`,
+  profiles: `${PREFIX}profiles`,
+  intensity: `${PREFIX}intensity`,
+  quality: `${PREFIX}quality`,
+  devRenderer: `${PREFIX}devRenderer`,
 });
 
 /** Flags we stamp, scoped to SUITE_ID and prefixed. */
@@ -202,4 +207,5 @@ export const FLAGS = Object.freeze({
      restrained hot stop from it. `label` is display text, never an i18n key. */
   style: `${PREFIX}style`,
   suppress: `${PREFIX}suppress`, // opt one region out of our rendering
+  presentation: `${PREFIX}presentation`,
 });

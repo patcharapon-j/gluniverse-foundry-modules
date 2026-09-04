@@ -81,7 +81,7 @@ export function injectRegionStyle(app, element) {
   label.type = "text";
   label.name = `${prefix}.label`;
   label.maxLength = 80;
-  label.value = raw.label ?? "";
+  label.value = resolved.label;
   label.placeholder = t("GLAOE.RegionStyle.LabelPlaceholder");
   section.appendChild(field(t("GLAOE.RegionStyle.Label"), label, t("GLAOE.RegionStyle.LabelHint")));
 

@@ -489,7 +489,9 @@ world-default color. Legacy Regions that stored a color before this toggle are
 treated as opted in until the GM turns the override off. The editor is GM-only;
 the result replicates and renders for everyone. Validate
 `archetype` against `ARCHETYPES`, color as six-digit hex, and trim `label` to 80
-characters. An empty label renders nothing. Labels are PIXI text, never HTML.
+characters. When the style flag has no `label` property, a PF2e item template
+inherits `flags.pf2e.origin.name` (for example, `Fireball`). An explicitly empty
+label renders nothing. Labels are PIXI text, never HTML.
 
 Canvas features must register a repaint with `onThemeChange()` from
 `core/theme.mjs` — neither `resource-bars` nor `token-conditions` does. Do it
@@ -752,9 +754,10 @@ ad-hoc areas that should not claim to be fire, frost, force or arcane energy.
 
 GM styling has two layers. `aoe.styleDefaults` sets the world color for every
 archetype, including `generic`; a region's `aoe.style` flag may override
-`archetype`, `color`, and an optional player-visible `label`. The label follows
-the attached Region, remains readable at canvas zoom, and is escaped/truncated
-rather than interpreted as markup.
+`archetype`, `color`, and an optional player-visible `label`. Item-created
+templates inherit their PF2e origin name until the GM explicitly overrides or
+clears the label. The label follows the attached Region, remains readable at
+canvas zoom, and is escaped/truncated rather than interpreted as markup.
 
 ## 12. Visual review 5 — integrated labels and Warning Zone
 

@@ -38,6 +38,14 @@ export function normalizeLabel(value) {
   return String(value ?? "").trim().slice(0, 80);
 }
 
+/** Default player-facing label for a Region placed from a PF2e item. */
+export function inferredLabel(document) {
+  const origin = document?.flags?.pf2e?.origin;
+  if (!origin || typeof origin !== "object") return normalizeLabel(document?.name);
+  const item = originItem(origin);
+  return normalizeLabel(origin.name ?? item?.name ?? document?.name);
+}
+
 export function styleDefaults() {
   const raw = get(SETTINGS.styleDefaults, {});
   return Object.fromEntries(ARCHETYPES.map((id) => [
@@ -114,13 +122,14 @@ export function authoredStyle(document) {
     ? normalizeColor(raw.color, defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype])
     : defaults[archetype] ?? DEFAULT_STYLE_COLORS[archetype];
   const hot = archetype === "generic" ? color : lighten(color, 0.58);
+  const hasExplicitLabel = Object.prototype.hasOwnProperty.call(raw, "label");
   return {
     archetype,
     archetypeIndex: ARCHETYPES.indexOf(archetype),
     color,
     tint: new Float32Array(hexToRgbFloat(color)),
     hot: new Float32Array(hexToRgbFloat(hot)),
-    label: normalizeLabel(raw.label),
+    label: hasExplicitLabel ? normalizeLabel(raw.label) : inferredLabel(document),
     explicit: Boolean(explicit),
     colorOverride: Boolean(colorOverride),
   };

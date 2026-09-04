@@ -10,12 +10,152 @@ import {
   SETTINGS,
 } from "../scripts/features/pf2e-aoe/constants.mjs";
 import { SHED_ORDER, TIMING } from "../scripts/features/pf2e-aoe/anim.mjs";
+import { aggregateEvidence, classify } from "../scripts/features/pf2e-aoe/classifier.mjs";
+import { collectEvidence } from "../scripts/features/pf2e-aoe/evidence.mjs";
+import { convertLegacyStyle, migrationPreflight } from "../scripts/features/pf2e-aoe/migration.mjs";
+import {
+  BUILTIN_PROFILES, detachProfile, normalizeWorldProfiles, registerProfile,
+  resolveProfile, unregisterProfiles,
+} from "../scripts/features/pf2e-aoe/profiles.mjs";
+import {
+  AUDIENCES, BEHAVIORS, FUNCTIONS, GEOMETRIES, MATERIALS, PRESENTATION_SCHEMA,
+  SENSES, SOURCES, normalizePresentation, presentationLabel, validatePresentation,
+} from "../scripts/features/pf2e-aoe/schema.mjs";
 import { FRAGMENT_SHADER, UNIFORMS, VERTEX_SHADER } from "../scripts/features/pf2e-aoe/shader.mjs";
+import { itemFixtures, legacyFixtures, sourceFixtures } from "./fixtures/pf2e-aoe.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const errors = [];
 const ok = (condition, message) => { if (!condition) errors.push(message); };
 const text = async (path) => readFile(new URL(path, ROOT), "utf8");
+
+/* Schema-v2 is a closed vocabulary. Test each value through the same explicit
+   evidence contract integrations use instead of only counting enum entries. */
+ok(FUNCTIONS.length === 12, "schema must expose all 12 canonical functions");
+ok(MATERIALS.length === 26, "schema must expose all 26 canonical materials");
+ok(BEHAVIORS.length === 10, "schema must expose all 10 canonical behaviors");
+for (const value of FUNCTIONS) {
+  const result = classify({}, { explicitSemantics: { function: value, material: "neutral", behavior: "static" } });
+  ok(result.candidate.function === value && result.axisConfidence.function === "high", `function ${value} did not classify`);
+}
+for (const value of MATERIALS) {
+  const result = classify({}, { explicitSemantics: { function: "neutral", material: value, behavior: "static" } });
+  ok(result.candidate.material === value && result.axisConfidence.material === "high", `material ${value} did not classify`);
+}
+for (const value of BEHAVIORS) {
+  const result = classify({}, { explicitSemantics: { function: "neutral", material: "neutral", behavior: value } });
+  ok(result.candidate.behavior === value && result.axisConfidence.behavior === "high", `behavior ${value} did not classify`);
+}
+for (const [axis, values, fallback] of [
+  ["audience", AUDIENCES, "unknown"], ["source", SOURCES, "unknown"],
+  ["geometry", GEOMETRIES, "unknown"], ["sense", SENSES, null],
+]) {
+  for (const value of values) {
+    const records = [
+      { axis: "function", value: "neutral", weight: 100, source: "explicit", reason: "test" },
+      { axis: "material", value: "neutral", weight: 100, source: "explicit", reason: "test" },
+      { axis, value, weight: 100, source: "structure", reason: "modifier test" },
+    ];
+    const semantics = aggregateEvidence(records).candidate;
+    const actual = axis === "sense" ? semantics.senses[0] ?? fallback : semantics[axis];
+    ok(actual === value, `${axis} ${value} did not classify`);
+  }
+}
+
+const badPresentation = {
+  schema: PRESENTATION_SCHEMA,
+  mode: "custom",
+  overrides: { semantics: { function: "explode", material: "remote-texture" } },
+  label: { mode: "inherit", value: "" },
+};
+ok(!validatePresentation(badPresentation).valid, "unknown schema IDs must be rejected");
+const normalizedPresentation = normalizePresentation(badPresentation);
+ok(normalizedPresentation.overrides.semantics.function === "neutral",
+  "normalization must contain an unknown function as neutral");
+ok(presentationLabel({ label: { mode: "inherit" } }, "Fireball") === "Fireball", "inherited label failed");
+ok(presentationLabel({ label: { mode: "custom", value: "  Silence  " } }, "Fireball") === "Silence", "custom label failed");
+ok(presentationLabel({ label: { mode: "hidden", value: "Fireball" } }, "Fireball") === "", "hidden label must not fall back");
+
+const fireball = classify(sourceFixtures.fireball, { item: itemFixtures.fireball });
+ok(fireball.semantics.function === "harm" && fireball.semantics.material === "fire",
+  "Fireball must resolve as fire harm");
+ok(fireball.semantics.source === "spell" && fireball.semantics.geometry === "burst",
+  "Fireball source and geometry modifiers were lost");
+const renewal = classify(sourceFixtures.healingField, { item: itemFixtures.healingField });
+ok(renewal.semantics.function === "restore" && renewal.semantics.material === "vitality",
+  "healing vitality must resolve as restore rather than vitality harm");
+const terrain = classify(sourceFixtures.difficultTerrain);
+ok(terrain.semantics.function === "terrain" && terrain.semantics.behavior === "linger",
+  "recognized movement behavior must resolve conservatively as terrain");
+const unknown = classify(sourceFixtures.unknown);
+ok(unknown.needsClassification && unknown.semantics.function === "neutral" && unknown.semantics.material === "neutral",
+  "unknown structured data must use the neutral fallback");
+
+const tieRecords = [
+  { axis: "function", value: "harm", weight: 60, source: "trait", reason: "z" },
+  { axis: "function", value: "restore", weight: 60, source: "trait", reason: "a" },
+  { axis: "material", value: "fire", weight: 60, source: "trait", reason: "material" },
+];
+const tieA = aggregateEvidence(tieRecords);
+const tieB = aggregateEvidence([...tieRecords].reverse());
+ok(JSON.stringify(tieA.scores) === JSON.stringify(tieB.scores), "evidence results must not depend on input order");
+ok(tieA.candidate.function === "harm" && tieA.needsClassification,
+  "canonical tie must be deterministic and remain uncertain");
+ok(collectEvidence(sourceFixtures.fireball, { item: itemFixtures.fireball })
+  .every((entry) => !/description/i.test(entry.source)), "description prose must never become evidence");
+
+ok(BUILTIN_PROFILES.length === 24, `expected 24 built-in profiles, found ${BUILTIN_PROFILES.length}`);
+ok(new Set(BUILTIN_PROFILES.map((entry) => entry.id)).size === BUILTIN_PROFILES.length,
+  "built-in profile ids must be unique");
+for (const value of FUNCTIONS) ok(BUILTIN_PROFILES.some((entry) => entry.semantics.function === value), `no built-in profile covers ${value}`);
+const worldProfiles = normalizeWorldProfiles({ schema: 1, profiles: [{
+  id: "world:silence-field", name: "Silence Field",
+  semantics: { function: "conceal", material: "sonic", behavior: "contain" },
+}] });
+const profiled = resolveProfile(sourceFixtures.unknown, {
+  presentation: { schema: 2, mode: "profile", profileId: "world:silence-field", overrides: {}, label: { mode: "inherit" } },
+  worldProfiles,
+  inheritedLabel: "Silence",
+});
+ok(profiled.origin === "profile" && profiled.semantics.function === "conceal" && profiled.label === "Silence",
+  "world profile and inherited label resolution failed");
+const overridden = resolveProfile(sourceFixtures.unknown, {
+  presentation: { schema: 2, mode: "profile", profileId: "world:silence-field", overrides: { semantics: { function: "protect" } } },
+  worldProfiles,
+});
+ok(overridden.semantics.function === "protect" && overridden.semantics.material === "sonic",
+  "sparse Region override must win without erasing the profile");
+const native = resolveProfile(sourceFixtures.fireball, { presentation: { schema: 2, mode: "native" } });
+ok(native.native && native.reason === "region-opt-out", "Region native mode must have highest precedence");
+const detached = detachProfile(sourceFixtures.unknown, {
+  presentation: { schema: 2, mode: "profile", profileId: "world:silence-field" }, worldProfiles,
+});
+ok(detached.mode === "custom" && detached.profileId === null && detached.overrides.semantics.function === "conceal",
+  "detaching must materialize a profile into Region overrides");
+registerProfile("test-suite", {
+  id: "test-suite:moon-field", name: "Moon Field",
+  semantics: { function: "support", material: "light", behavior: "pulse" },
+});
+ok(resolveProfile({}, { presentation: { schema: 2, mode: "profile", profileId: "test-suite:moon-field" } }).profileId === "test-suite:moon-field",
+  "namespaced extension profile did not resolve");
+ok(unregisterProfiles("test-suite") === 1, "extension profile cleanup failed");
+
+const migratedFire = convertLegacyStyle(legacyFixtures[0].style);
+ok(migratedFire.snapshot.semantics.function === "harm" && migratedFire.snapshot.semantics.material === "fire",
+  "legacy Ember conversion failed");
+ok(migratedFire.label.mode === "custom" && migratedFire.overrides.appearance.palette.body === "#ff5500",
+  "legacy label/color intent was not preserved");
+ok(convertLegacyStyle(legacyFixtures[1].style).label.mode === "hidden", "legacy explicit blank label must remain hidden");
+ok(JSON.stringify(convertLegacyStyle(migratedFire)) === JSON.stringify(migratedFire),
+  "schema-v2 migration conversion must be idempotent");
+const preflight = migrationPreflight(legacyFixtures, {
+  moduleVersion: "test", systemVersion: "test", generatedAt: "2026-01-01T00:00:00.000Z",
+  legacySettings: { ember: "#ff5500" },
+});
+ok(preflight.counts.affected === 4 && preflight.counts.warnings === 3,
+  "migration preflight counts or validation warnings changed");
+ok(preflight.entries[0].uuid === "Scene.A.Region.1" && preflight.entries.at(-1).presentation.mode === "native",
+  "migration preflight must be stable and preserve native opt-outs");
 
 ok(ARCHETYPES.length === 14, `expected 14 archetypes, found ${ARCHETYPES.length}`);
 ok(new Set(ARCHETYPES).size === ARCHETYPES.length, "archetype ids must be unique");
@@ -66,6 +206,13 @@ const featureAdapter = await text("scripts/features/pf2e-aoe/index.mjs");
 ok(/minimumGeneration:\s*14\b/.test(featureAdapter), "PF2e AoE must be individually gated to Foundry 14+");
 const lang = JSON.parse(langText);
 for (const id of ARCHETYPES) ok(Boolean(lang[`GLAOE.Archetype.${id}`]), `missing archetype localization ${id}`);
+for (const entry of BUILTIN_PROFILES) ok(Boolean(lang[entry.nameKey]), `missing profile localization ${entry.id}`);
+for (const [namespace, values] of [
+  ["Function", FUNCTIONS], ["Material", MATERIALS], ["Behavior", BEHAVIORS],
+  ["Audience", AUDIENCES], ["Source", SOURCES], ["Geometry", GEOMETRIES], ["Sense", SENSES],
+]) {
+  for (const value of values) ok(Boolean(lang[`GLAOE.${namespace}.${value}`]), `missing ${namespace} localization ${value}`);
+}
 for (const key of Object.values(SETTINGS)) ok(key.startsWith("aoe."), `setting is not aoe-prefixed: ${key}`);
 ok(controls.includes("ensureSuiteGroup") && controls.includes("bindSuiteToolClicks"),
   "Spellglass creator must use the shared suite scene-control group");
@@ -238,6 +385,8 @@ const movingDocument = {
   shapes: [movingShape(500)],
   flags: { pf2e: { areaShape: "emanation" } },
 };
+ok(authoredStyle({ name: "Silence Field", flags: {} }).label === "Silence Field",
+  "inherited labels must fall back to a Region name when no source exists");
 const restingRegion = {
   id: "MOVING-REGION",
   document: movingDocument,
@@ -303,6 +452,27 @@ const automaticColor = authoredStyle({
 });
 ok(automaticColor.color !== "#ff0000" && !automaticColor.colorOverride,
   "disabled per-Region color override must resolve the archetype's world default");
+
+const itemTemplate = authoredStyle({
+  name: "Fireball",
+  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
+});
+ok(itemTemplate.label === "Fireball",
+  "an item-created template must inherit its PF2e origin name as the label");
+const customTemplateLabel = authoredStyle({
+  name: "Fireball",
+  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
+  getFlag: () => ({ label: "Delayed Blast" }),
+});
+ok(customTemplateLabel.label === "Delayed Blast",
+  "an explicit Region label must override the inherited item name");
+const hiddenTemplateLabel = authoredStyle({
+  name: "Fireball",
+  flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
+  getFlag: () => ({ label: "" }),
+});
+ok(hiddenTemplateLabel.label === "",
+  "an explicitly empty Region label must suppress the inherited item name");
 
 if (errors.length) {
   for (const error of errors) console.error(`FAIL ${error}`);
