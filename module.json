@@ -52,7 +52,8 @@
     "styles/pf2e-ultimates.css",
     "styles/mobile.css",
     "styles/locations.css",
-    "styles/pf2e-recall.css"
+    "styles/pf2e-recall.css",
+    "styles/pf2e-aoe.css"
   ],
   "languages": [
     {
@@ -184,6 +185,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/token-conditions.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-aoe.en.json"
     }
   ],
   "packs": [

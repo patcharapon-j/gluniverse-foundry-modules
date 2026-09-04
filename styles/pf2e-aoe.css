@@ -1,0 +1,64 @@
+.gl-aoe-style-app {
+  --gl-accent: var(--gl-hazard);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+}
+
+.gl-aoe-style-body { padding: 16px; }
+.gl-aoe-style-intro { color: var(--gl-text-dim); line-height: 1.55; margin: 0 0 16px; }
+.gl-aoe-style-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gl-aoe-style-row {
+  display: grid; grid-template-columns: minmax(7rem, 1fr) 1.25rem 2.5rem 4.5rem;
+  align-items: center; gap: 8px; padding: 8px;
+  border: 1px solid var(--gl-hair); background: var(--gl-surface);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
+}
+.gl-aoe-style-name { font-family: var(--gl-display); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.gl-aoe-style-swatch { width: 1rem; height: 1rem; border-radius: 50%; background: var(--gl-aoe-row-color); box-shadow: 0 0 .55rem var(--gl-aoe-row-color); }
+.gl-aoe-style-row input[type="color"] { width: 2.5rem; min-width: 2.5rem; height: 1.75rem; padding: 1px; border: 1px solid var(--gl-edge); background: var(--gl-surface-inset); }
+.gl-aoe-style-row code { color: var(--gl-text-dim); font-family: var(--gl-tech); font-size: .72rem; }
+.gl-aoe-style-body .form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.gl-aoe-region-style { border-color: var(--gl-edge); background: rgb(var(--gl-tint-light) / .035); }
+.gl-aoe-region-style legend { color: var(--gl-accent); font-family: var(--gl-display); letter-spacing: .06em; text-transform: uppercase; }
+.gl-aoe-classification { margin:.25rem 0 .75rem; padding:.45rem .65rem; color:var(--gl-text-dim); border-left:2px solid var(--gl-accent); background:var(--gl-surface-inset); }
+.gl-aoe-classification.is-uncertain { border-left-color:var(--gl-warning); color:var(--gl-warning); }
+.gl-aoe-advanced { margin:.5rem 0; padding:.45rem .65rem; border:1px solid var(--gl-hair); background:var(--gl-surface); }
+.gl-aoe-advanced > summary { cursor:pointer; color:var(--gl-accent); font-family:var(--gl-display); text-transform:uppercase; letter-spacing:.05em; }
+.gl-aoe-profile-toolbar { display:flex; gap:.5rem; margin-bottom:.75rem; }
+.gl-aoe-profile-list { display:grid; gap:.5rem; max-height:520px; overflow:auto; }
+.gl-aoe-profile-card { display:grid; grid-template-columns:minmax(10rem,1.4fr) repeat(4,minmax(6.5rem,1fr)) 2.5rem repeat(2,minmax(6.5rem,1fr)) auto auto; gap:.4rem; padding:.55rem; border:1px solid var(--gl-hair); background:var(--gl-surface); }
+.gl-aoe-color-override { display: flex; align-items: center; gap: 10px; width: 100%; }
+.gl-aoe-color-override .checkbox { flex: 1; }
+.gl-aoe-color-override input[type="color"]:disabled,
+.gl-aoe-create-color input[type="color"]:disabled { opacity: .35; filter: grayscale(1); }
+
+.gl-aoe-create-dialog {
+  --gl-accent: var(--gl-hazard);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+}
+.gl-aoe-create-form { display: grid; gap: 10px; padding: 4px 2px; }
+.gl-aoe-create-intro { margin: 0 0 4px; color: var(--gl-text-dim); line-height: 1.5; }
+.gl-aoe-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gl-aoe-create-form .form-group { margin: 0; }
+.gl-aoe-create-form .form-group > label {
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: .78rem;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.gl-aoe-create-form input,
+.gl-aoe-create-form select { border-color: var(--gl-edge); background: var(--gl-surface-inset); color: var(--gl-text); }
+.gl-aoe-create-form input[type="color"] { min-width: 3.25rem; height: 2rem; padding: 2px; }
+.gl-aoe-create-color .form-fields { flex-wrap: wrap; }
+.gl-aoe-create-color .checkbox { flex: 1 0 100%; }
+.gl-aoe-create-color output { align-self: center; color: var(--gl-text-dim); font-family: var(--gl-tech); font-size: .75rem; }
+.gl-aoe-create-form .hint { margin: 3px 0 0; color: var(--gl-text-dim); line-height: 1.4; }
+.gl-aoe-create-width[hidden] { display: none; }
+
+@media (max-width: 560px) {
+  .gl-aoe-style-grid,
+  .gl-aoe-create-grid { grid-template-columns: 1fr; }
+}

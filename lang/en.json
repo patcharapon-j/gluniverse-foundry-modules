@@ -10,6 +10,7 @@
   "GLS.config.reloadNote": "Settings apply instantly. Enabling or disabling a feature applies after a reload.",
   "GLS.config.saveReload": "Save & Reload",
   "GLS.config.lock.unknown": "Unknown feature",
+  "GLS.config.lock.generation": "Requires Foundry VTT v{generation} or newer",
   "GLS.config.lock.system": "Requires system: {systems}",
   "GLS.config.lock.module": "Requires module: {module}",
   "GLS.config.lock.feature": "Requires feature: {feature}",

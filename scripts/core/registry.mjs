@@ -14,6 +14,7 @@
  *                                  hide it from Foundry's native sheet, so a
  *                                  feature's config is always attributed to it.
  *     system:    null | string | string[]   required game system id(s)
+ *     minimumGeneration?: number   required Foundry generation
  *     requires:  string[]          required *other* active module ids
  *     core:      boolean           true → cannot be disabled (base experience)
  *     defaultEnabled: boolean
@@ -82,6 +83,10 @@ export const Suite = {
     }
     _availabilityStack.add(def.id);
     try {
+      if (def.minimumGeneration) {
+        const generation = Number(game.release?.generation ?? 0);
+        if (generation < def.minimumGeneration) return false;
+      }
       if (def.system) {
         const need = this._list(def.system);
         if (!need.includes(game.system?.id)) return false;
@@ -102,6 +107,12 @@ export const Suite = {
   unavailableReason(def) {
     if (typeof def === "string") def = this.get(def);
     if (!def) return game.i18n.localize("GLS.config.lock.unknown");
+    if (def.minimumGeneration) {
+      const generation = Number(game.release?.generation ?? 0);
+      if (generation < def.minimumGeneration) {
+        return game.i18n.format("GLS.config.lock.generation", { generation: def.minimumGeneration });
+      }
+    }
     if (def.system) {
       const need = this._list(def.system);
       if (!need.includes(game.system?.id)) return game.i18n.format("GLS.config.lock.system", { systems: need.join(" / ") });
