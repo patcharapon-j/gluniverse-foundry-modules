@@ -1,0 +1,980 @@
+<title>PF2e AoE — visual review 5</title>
+<link rel="stylesheet" href="../styles/gl-fonts.css">
+<link rel="stylesheet" href="../styles/gl-tokens.css">
+<style>
+  :root {
+    --ink0:#0a0c10; --ink1:#12161d; --ink2:#1b212b; --line:#2a323f;
+    --text:#c9d3e0; --dim:#7c8899; --accent:#7fd4ff;
+    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  }
+  body { margin:0; background:var(--ink0); color:var(--text); font-size:12px; }
+  header {
+    position:sticky; top:0; z-index:20; background:rgba(10,12,16,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:10px 16px; display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+  }
+  h1 { font-size:13px; margin:0 12px 0 0; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); }
+  label { display:flex; gap:6px; align-items:center; color:var(--dim); }
+  select, input[type=range], input[type=color] { accent-color:var(--accent); }
+  select, input[type=text] { background:var(--ink2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:3px 6px; font:inherit; }
+  input[type=color] { width:30px; height:24px; padding:1px; border:1px solid var(--line); border-radius:4px; background:var(--ink2); }
+  input[type=text] { width:128px; }
+  button { background:var(--ink2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:4px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  main { padding:16px; }
+  .row-label { color:var(--dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; margin:18px 0 8px; }
+  .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+  .cell { position:relative; }
+  .slot { aspect-ratio:1/1; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#000; }
+  .area-name {
+    --area-color:#759dff;
+    position:absolute; left:50%; top:50%; z-index:6; width:min(72%, 26ch);
+    transform:translate(-50%, -50%); padding:.34em 1.25em; box-sizing:border-box;
+    color:color-mix(in srgb, var(--area-color) 42%, white);
+    background:
+      linear-gradient(90deg, transparent, rgba(4,7,12,.20) 18%, rgba(4,7,12,.42) 50%, rgba(4,7,12,.20) 82%, transparent),
+      linear-gradient(90deg, transparent 8%, color-mix(in srgb, var(--area-color) 64%, transparent) 50%, transparent 92%) top / 100% 1px no-repeat,
+      linear-gradient(90deg, transparent 8%, color-mix(in srgb, var(--area-color) 44%, transparent) 50%, transparent 92%) bottom / 100% 1px no-repeat;
+    font-family:var(--gl-display, "Oxanium"), "Rajdhani", sans-serif;
+    font-size:clamp(11px, 1.35vw, 19px); font-weight:650; line-height:1.15;
+    letter-spacing:.14em; text-align:center; text-transform:uppercase;
+    text-shadow:0 1px 2px #020305, 0 0 8px color-mix(in srgb, var(--area-color) 70%, transparent),
+                0 0 20px color-mix(in srgb, var(--area-color) 36%, transparent);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    pointer-events:none; mix-blend-mode:screen;
+  }
+  .area-name[hidden] { display:none; }
+  .cap { display:flex; justify-content:space-between; padding:5px 2px 0; color:var(--dim); font-size:11px; }
+  .cap b { color:var(--text); font-weight:500; }
+  #gl { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
+  .err { white-space:pre-wrap; background:#2a1214; border:1px solid #6b2430; color:#ffb4b4;
+         padding:12px; border-radius:6px; margin:16px; font-size:11px; line-height:1.5; }
+  .note { color:var(--dim); max-width:70ch; line-height:1.6; margin:6px 0 0; }
+</style>
+
+<header>
+  <h1>PF2e AoE · review 5</h1>
+  <label>treatment
+    <select id="treatment"></select>
+  </label>
+  <label>finish
+    <select id="finish">
+      <option value="0.72">A · veil</option>
+      <option value="0.88" selected>B · spellglass</option>
+      <option value="1.08">C · cinematic</option>
+    </select>
+  </label>
+  <label>style
+    <select id="styleTarget"></select>
+  </label>
+  <label>color <input id="styleColor" type="color"></label>
+  <label>label <input id="styleLabel" type="text" maxlength="80" placeholder="optional area name"></label>
+  <label>backdrop
+    <select id="backdrop">
+      <option value="0">neutral</option>
+      <option value="1" selected>realistic</option>
+      <option value="2">stress</option>
+    </select>
+  </label>
+  <label>entrance
+    <select id="entrance">
+      <option value="0">trace</option>
+      <option value="1">inscribe</option>
+      <option value="2" selected>ignite</option>
+    </select>
+  </label>
+  <label>shed <input id="shed" type="range" min="0" max="5" step="1" value="0"><span id="shedv">0</span></label>
+  <label>motion <input id="motion" type="range" min="0" max="1.4" step="0.1" value="1"><span id="motionv">1.0</span></label>
+  <label>shade <input id="shade" type="checkbox" checked></label>
+  <button id="pulse">trigger beat</button>
+  <button id="replay">replay entrance</button>
+  <button id="pause">pause</button>
+</header>
+
+<main>
+  <p class="note"><b>Spellglass is selected.</b> The style controls preview the GM-authored color and
+  optional centered label on any archetype. <b>Generic</b> is a flat color field for ad-hoc use;
+  <b>Warning</b> is a pulsing boss-attack telegraph. Token artwork is never displaced; only a restrained,
+  alpha-masked edge light is allowed. All fourteen archetypes
+  use treatment <b>grounded</b>, entrance
+  <b>ignite</b>, one of four particulate classes, a palette and a
+  <b>shade</b>: what it does to the floor, multiplied under everything else. The shade is what makes any
+  of this legible on a bright map, where compositing over pale stone alone reads as a wash; toggle it above.
+  The lattice is three-valued: covered, <b>blocked</b> (in the area, out of line of effect), and outside.
+  Coverage here is a preview stand-in; the shipped feature mirrors PF2e's rules resolver.</p>
+  <div id="rows"></div>
+</main>
+
+<canvas id="gl"></canvas>
+
+<script type="module">
+/*__CONST_SRC__*/
+/*__ANIM_SRC__*/
+
+const FRAG = /*__FRAG__*/;
+const VERT = /*__VERT__*/;
+const UNIFORM_NAMES = /*__UNIFORM_NAMES__*/;
+
+const SHAPES = [
+  { id: "burst",     label: "20-ft burst",          shape: SHAPE.burst,     radius: 4, dir: 0,       base: [0, 0], span: 11, at: [0, 0] },
+  { id: "cone",      label: "30-ft cone",           shape: SHAPE.cone,      radius: 6, dir: -0.7854, base: [0, 0], span: 11, at: [2.4, -2.4] },
+  { id: "emanation", label: "10-ft emanation · Lg", shape: SHAPE.emanation, radius: 2, dir: 0,       base: [1, 1], span: 9,  at: [0, 0] },
+  { id: "line",      label: "30-ft line",           shape: SHAPE.line,      radius: 6, dir: -0.7854, base: [0, 0], span: 11, at: [2.4, -2.4] },
+];
+
+/* Entrances. None is an overshoot: a shape that flies past its size and comes
+   back reads as a wobble, not an arrival. */
+/* The three under review. Settled: treatment grounded, entrance ignite — both
+   are still switchable above so a regression in either is visible, but they are
+   no longer the axis. The axis is now the archetype, down the page. */
+const REVIEW_ARCHES = ARCHETYPES.map((id, index) => ({
+  id, index, label: id,
+  note: {
+    ember:     "fire — continuous, rising, boiling",
+    frost:     "cold — still, dendritic, creeping",
+    arc:       "electricity — intermittent, striking",
+    caustic:   "acid, poison — bubbles that swell and pop",
+    resonance: "sonic, mental — rings travelling outward",
+    radiance:  "vitality — rays from a bright core, breathing",
+    umbra:     "void — occluding, mostly subtraction",
+    spirit:    "spirit — slow lateral wisps, no edges",
+    force:     "force — a constructed hex lattice, not grown",
+    kinetic:   "b/p/s, bleed — grit that settles and stops",
+    verdant:   "grease, web, terrain — matte fibre, no core",
+    arcane:    "untyped, and every area that deals none",
+    generic:   "GM-authored ad-hoc area — flat color, no material motion",
+    warning:   "boss telegraph — one red pulse, rotating scanner, closing ring",
+  }[id] || "",
+}));
+
+const byteHex = (n) => Math.round(Math.max(0, Math.min(1, n)) * 255)
+  .toString(16).padStart(2, "0");
+const rgbHex = (rgb) => "#" + rgb.map(byteHex).join("");
+const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+
+/* Mirrors the future per-region `aoe.style` flag in the review harness. A
+   built-in palette is unchanged until the GM actually overrides its colour. */
+const styleState = new Map(REVIEW_ARCHES.map(({ id }) => [id, {
+  color: rgbHex(ARCHETYPE_PALETTE[id].tint),
+  label: id === "generic" ? "Ad-hoc Zone" : id === "warning" ? "Warning Zone" : "",
+  colorOverridden: false,
+}]));
+const styleViews = new Map();
+
+const ENTRANCES = [
+  { id: 0, label: "trace",    hint: "a nib runs the perimeter, ink lands behind it" },
+  { id: 1, label: "inscribe", hint: "written outward square by square, seams first" },
+  { id: 2, label: "ignite",   hint: "the wireframe strikes whole, then floods" },
+];
+
+function fail(msg) {
+  const d = document.createElement("div");
+  d.className = "err";
+  d.textContent = msg;
+  document.body.appendChild(d);
+  throw new Error(msg);
+}
+
+/* ---- WebGL2 first: the only way to get a renderable half-float target, which
+   is what lets the preview threshold bloom at 1.05 where the shipped 8-bit
+   PIXI filter must threshold at 0.82. ------------------------------------- */
+const canvas = document.getElementById("gl");
+const ctxOpts = { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false };
+let gl = canvas.getContext("webgl2", ctxOpts);
+let HDR = null;
+if (gl) {
+  if (gl.getExtension("EXT_color_buffer_float")) HDR = { internal: gl.RGBA16F, type: gl.HALF_FLOAT };
+  else if (gl.getExtension("EXT_color_buffer_half_float")) HDR = { internal: gl.RGBA16F, type: gl.HALF_FLOAT };
+} else {
+  gl = canvas.getContext("webgl", ctxOpts);
+  if (!gl) fail("WebGL is unavailable in this browser.");
+}
+
+function compile(type, src, label) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return sh;
+  const log = gl.getShaderInfoLog(sh) || "";
+  const m = log.match(/ERROR:\s*\d+:(\d+)/);
+  let ctx = "";
+  if (m) {
+    const n = parseInt(m[1], 10);
+    const lines = src.split("\n");
+    for (let i = Math.max(0, n - 4); i < Math.min(lines.length, n + 3); i++) {
+      ctx += String(i + 1).padStart(4) + (i + 1 === n ? " > " : "   ") + lines[i] + "\n";
+    }
+  }
+  fail(label + " failed to compile:\n" + log + "\n" + ctx);
+}
+
+function program(vs, fs, label) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs, label + " vertex"));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs, label + " fragment"));
+  gl.bindAttribLocation(p, 0, "aVertexPosition");
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) fail(label + " failed to link:\n" + gl.getProgramInfoLog(p));
+  return p;
+}
+
+function lookup(prog, names, label) {
+  const U = {};
+  for (const n of names) U[n] = gl.getUniformLocation(prog, n);
+  const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
+  if (dead.length) {
+    fail("Uniforms declared but not found in the linked " + label + " program: " + dead.join(", ") +
+      "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
+  }
+  return U;
+}
+
+const QUAD_VS = `
+attribute vec2 aVertexPosition;
+varying vec2 vUv;
+void main(){ vUv = aVertexPosition * 0.5 + 0.5; gl_Position = vec4(aVertexPosition, 0.0, 1.0); }`;
+
+const BACKDROP_FS = `
+precision highp float;
+varying vec2 vUv;
+uniform float uMode;
+uniform vec4 uView;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+float fbm(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<5;i++){ s+=a*vn(p); p*=2.03; a*=0.5; } return s; }
+void main(){
+  vec2 g = uView.xy + vUv * uView.zw;
+  vec3 col;
+  if (uMode < 0.5) {
+    col = vec3(0.035, 0.042, 0.055);
+  } else {
+    float stone = fbm(g * 1.7) * 0.5 + fbm(g * 6.1) * 0.28;
+    float grout = smoothstep(0.02, 0.10, min(min(fract(g.x), 1.0-fract(g.x)), min(fract(g.y), 1.0-fract(g.y))));
+    vec3 warm = mix(vec3(0.20,0.18,0.16), vec3(0.42,0.39,0.35), stone);
+    vec3 bright = mix(vec3(0.46,0.44,0.40), vec3(0.72,0.70,0.64), stone);
+    col = mix(warm, bright, step(1.5, uMode));
+    col *= mix(0.62, 1.0, grout);
+    col += vec3(0.05,0.03,0.01) * step(1.5, uMode) * fbm(g * 12.0);
+  }
+  /* faint grid so the lattice has something to agree or disagree with */
+  vec2 f = fract(g);
+  float line = 1.0 - smoothstep(0.0, 0.035, min(min(f.x,1.0-f.x), min(f.y,1.0-f.y)));
+  col = mix(col, col + vec3(0.05), line * 0.5);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const TOKEN_FS = `
+precision highp float;
+varying vec2 vUv;
+uniform vec4 uView;
+uniform vec4 uTokens[8];   /* xy centre in grid, z radius, w tint */
+uniform float uTokenLit[8];
+uniform float uTokenCount;
+uniform vec2 uLightOrigin;
+uniform vec3 uAoeTint;
+uniform float uEdgeLight;
+void main(){
+  vec2 g = uView.xy + vUv * uView.zw;
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 8; i++) {
+    if (float(i) >= uTokenCount) break;
+    vec4 tk = uTokens[i];
+    float d = length(g - tk.xy) - tk.z;
+    float body = 1.0 - smoothstep(-0.02, 0.01, d);
+    float ring = exp(-abs(d) * 90.0);
+    vec3 c = mix(vec3(0.16,0.20,0.30), vec3(0.55,0.22,0.20), tk.w);
+    vec3 col = c * (0.75 + 0.45 * (1.0 - smoothstep(-tk.z, 0.0, d))) + vec3(0.7,0.75,0.85) * ring * 0.8;
+    /* Edge light only: the token's samples never move. The source bearing
+       limits the light to one side of the silhouette so this reads as light
+       wrapping around the figure, not as a coloured outline sticker. */
+    vec2 normal = normalize(g - tk.xy + vec2(0.0001));
+    vec2 toLight = normalize(uLightOrigin - tk.xy + vec2(0.0001));
+    float facing = pow(max(dot(normal, toLight) * 0.5 + 0.5, 0.0), 2.4);
+    float edge = ring * (0.18 + 0.82 * facing) * uTokenLit[i] * uEdgeLight;
+    col += mix(uAoeTint, vec3(1.0), 0.24) * edge * 0.58;
+    float a = clamp(body + ring * 0.9, 0.0, 1.0);
+    acc = vec4(mix(acc.rgb, col, a), max(acc.a, a));
+  }
+  gl_FragColor = vec4(acc.rgb * acc.a, acc.a);
+}`;
+
+const BRIGHT_FS = `precision highp float; varying vec2 vUv; uniform sampler2D uTex; uniform float uThresh;
+void main(){ vec4 c = texture2D(uTex, vUv); float l = max(max(c.r,c.g),c.b);
+  gl_FragColor = c * smoothstep(uThresh, uThresh + 0.45, l); }`;
+const BLUR_FS = `precision highp float; varying vec2 vUv; uniform sampler2D uTex; uniform vec2 uDir;
+void main(){ vec4 s = texture2D(uTex, vUv) * 0.2270270270;
+  s += (texture2D(uTex, vUv + uDir*1.3846153846) + texture2D(uTex, vUv - uDir*1.3846153846)) * 0.3162162162;
+  s += (texture2D(uTex, vUv + uDir*3.2307692308) + texture2D(uTex, vUv - uDir*3.2307692308)) * 0.0702702703;
+  gl_FragColor = s; }`;
+const COMP_FS = `precision highp float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uBloom; uniform float uAmt;
+void main(){ vec4 s = texture2D(uScene, vUv); vec4 b = texture2D(uBloom, vUv);
+  gl_FragColor = clamp(s + b * uAmt, 0.0, 1.0); }`;
+
+const P_MAIN = program(VERT, FRAG, "AoE");
+const P_BACK = program(QUAD_VS, BACKDROP_FS, "backdrop");
+const P_TOKEN = program(QUAD_VS, TOKEN_FS, "token");
+const P_BRIGHT = program(QUAD_VS, BRIGHT_FS, "bright");
+const P_BLUR = program(QUAD_VS, BLUR_FS, "blur");
+const P_COMP = program(QUAD_VS, COMP_FS, "composite");
+
+const U = lookup(P_MAIN, UNIFORM_NAMES.concat(["uView"]), "AoE");
+const UB = lookup(P_BACK, ["uMode", "uView"], "backdrop");
+const UT = lookup(P_TOKEN, ["uView", "uTokenCount", "uLightOrigin", "uAoeTint", "uEdgeLight"], "token");
+UT.uTokens = gl.getUniformLocation(P_TOKEN, "uTokens[0]");
+UT.uTokenLit = gl.getUniformLocation(P_TOKEN, "uTokenLit[0]");
+const UBR = lookup(P_BRIGHT, ["uTex", "uThresh"], "bright");
+const UBL = lookup(P_BLUR, ["uTex", "uDir"], "blur");
+const UC = lookup(P_COMP, ["uScene", "uBloom", "uAmt"], "composite");
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+/* ---- Coverage: a PREVIEW STAND-IN for PF2e's own table -------------------
+   The shipped feature reads RegionPF2e#_getCoveredGridSpaceOffsets and never
+   derives this. Reproduced here only so the preview has something honest to
+   shade, using PF2e's 1.5x/1.75x diagonal counting. ----------------------- */
+function gridSteps(dx, dy) {
+  const diag = Math.min(dx, dy);
+  const straight = Math.max(dx, dy) - diag;
+  return Math.floor(diag * 1.5 + straight);
+}
+
+const WALL = { x: 2.0, y0: -1.0, y1: 3.0 };   /* the stress backdrop's pillar */
+
+function segmentsCross(ax, ay, bx, by, cx, cy, dx2, dy2) {
+  const s = (px, py, qx, qy, rx, ry) => Math.sign((qx-px)*(ry-py) - (qy-py)*(rx-px));
+  return s(ax,ay,bx,by,cx,cy) !== s(ax,ay,bx,by,dx2,dy2)
+      && s(cx,cy,dx2,dy2,ax,ay) !== s(cx,cy,dx2,dy2,bx,by);
+}
+
+function buildCells(def, radius, withWall) {
+  const R = Math.ceil(radius) + 3;
+  const w = R * 2 + 1, h = R * 2 + 1;
+  const data = new Uint8Array(w * h);
+  const halfAngle = Math.PI / 4;   /* PF2e cones are 90 degrees, always */
+  for (let jj = 0; jj < h; jj++) {
+    for (let ii = 0; ii < w; ii++) {
+      const i = ii - R, j = jj - R;
+      const cx = i + 0.5, cy = j + 0.5;
+      let inside = false;
+      if (def.shape === SHAPE.burst) {
+        const dx = i >= 0 ? i + 1 : -i;
+        const dy = j >= 0 ? j + 1 : -j;
+        inside = gridSteps(dx, dy) <= radius;
+      } else if (def.shape === SHAPE.cone) {
+        const dx = i >= 0 ? i + 1 : -i;
+        const dy = j >= 0 ? j + 1 : -j;
+        let a = Math.atan2(cy, cx) - def.dir;
+        a = Math.atan2(Math.sin(a), Math.cos(a));
+        inside = Math.abs(a) <= halfAngle + 1e-6 && gridSteps(dx, dy) <= radius;
+      } else if (def.shape === SHAPE.emanation) {
+        const bx = def.base[0], by = def.base[1];
+        const dx = Math.max(0, Math.abs(cx) - bx - 0.5) + (Math.abs(cx) > bx + 0.5 ? 0.5 : 0);
+        const dy = Math.max(0, Math.abs(cy) - by - 0.5) + (Math.abs(cy) > by + 0.5 ? 0.5 : 0);
+        inside = gridSteps(Math.round(dx), Math.round(dy)) <= radius;
+      } else {
+        const along = [Math.cos(def.dir), Math.sin(def.dir)];
+        const projection = cx * along[0] + cy * along[1];
+        const offset = cx * -along[1] + cy * along[0];
+        inside = projection >= 0 && projection <= radius && Math.abs(offset) <= 0.5;
+      }
+      let v = inside ? CELL.covered : CELL.outside;
+      if (inside && withWall && segmentsCross(0, 0, cx, cy, WALL.x, WALL.y0, WALL.x, WALL.y1)) {
+        v = CELL.blocked;
+      }
+      data[jj * w + ii] = Math.round(v * 255);
+    }
+  }
+  return { data, w, h, originX: -R, originY: -R };
+}
+
+function makeCellTexture(cells) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  const fmt = gl.LUMINANCE;
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt, cells.w, cells.h, 0, fmt, gl.UNSIGNED_BYTE, cells.data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
+}
+
+/* ---- Slots -------------------------------------------------------------- */
+const rows = document.getElementById("rows");
+const treatSel = document.getElementById("treatment");
+const styleSel = document.getElementById("styleTarget");
+TREATMENTS.forEach((t, i) => {
+  const o = document.createElement("option");
+  o.value = String(i); o.textContent = t.label;
+  if (t.id === "grounded") o.selected = true;
+  treatSel.appendChild(o);
+});
+REVIEW_ARCHES.forEach((ar) => {
+  const o = document.createElement("option");
+  o.value = ar.id;
+  o.textContent = ar.label;
+  if (ar.id === "warning") o.selected = true;
+  styleSel.appendChild(o);
+});
+
+const slots = [];
+for (const ar of REVIEW_ARCHES) {
+  const h = document.createElement("div");
+  h.className = "row-label";
+  h.textContent = ar.label + " — " + ar.note;
+  rows.appendChild(h);
+  const view = { header: h, caps: [], arch: ar };
+  styleViews.set(ar.id, view);
+  const g = document.createElement("div");
+  g.className = "grid";
+  for (const sh of SHAPES) {
+    const cellEl = document.createElement("div");
+    cellEl.className = "cell";
+    const s = document.createElement("div");
+    s.className = "slot";
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = "<b>" + sh.label + "</b><span>" + ar.id + "</span>";
+    const areaName = document.createElement("div");
+    areaName.className = "area-name";
+    areaName.hidden = true;
+    view.caps.push({ element: cap, areaName, shape: sh });
+    cellEl.appendChild(s);
+    cellEl.appendChild(areaName);
+    cellEl.appendChild(cap);
+    g.appendChild(cellEl);
+    const cells = buildCells(sh, sh.radius, false);
+    const cellsWall = buildCells(sh, sh.radius, true);
+    slots.push({
+      el: s, arch: ar, def: sh,
+      texPlain: makeCellTexture(cells), texWall: makeCellTexture(cellsWall),
+      meta: cells,
+      anim: new AoeAnim({ motionScale: 1 }),
+      seed: Math.random() * 100,
+    });
+  }
+  rows.appendChild(g);
+}
+
+/* ---- Render targets ----------------------------------------------------- */
+function makeRT(w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  if (HDR) gl.texImage2D(gl.TEXTURE_2D, 0, HDR.internal, w, h, 0, gl.RGBA, HDR.type, null);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h };
+}
+
+/* When set, the page renders a fixed-size contact sheet into an offscreen
+   target instead of tracking the DOM. A hidden pane has no layout viewport at
+   all (innerWidth is 0), so this is the only way to see the shader without a
+   human looking at the tab. */
+let SHEET = null;
+
+let rtScene = null, rtA = null, rtB = null, W = 0, H = 0;
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize() {
+  /* Floor at 1: a hidden or zero-size pane must not leave the render targets
+     null, which turns the first frame into a crash rather than a blank page.
+     The rtScene guard is what makes the very first call build them. */
+  const w = SHEET ? SHEET.width : Math.max(1, Math.floor(window.innerWidth * DPR));
+  const h = SHEET ? SHEET.height : Math.max(1, Math.floor(window.innerHeight * DPR));
+  if (rtScene && w === W && h === H) return;
+  W = w; H = h;
+  canvas.width = W; canvas.height = H;
+  rtScene = makeRT(W, H);
+  rtA = makeRT(Math.max(1, W >> 1), Math.max(1, H >> 1));
+  rtB = makeRT(Math.max(1, W >> 1), Math.max(1, H >> 1));
+}
+
+function pass(prog, target, setup) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+  gl.viewport(0, 0, target ? target.w : W, target ? target.h : H);
+  gl.useProgram(prog);
+  setup();
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ---- Controls ----------------------------------------------------------- */
+const ui = {
+  backdrop: document.getElementById("backdrop"),
+  finish: document.getElementById("finish"),
+  styleColor: document.getElementById("styleColor"),
+  styleLabel: document.getElementById("styleLabel"),
+  shed: document.getElementById("shed"),
+  entrance: document.getElementById("entrance"),
+  motion: document.getElementById("motion"),
+  shade: document.getElementById("shade"),
+};
+let paused = false;
+document.getElementById("pause").onclick = (e) => { paused = !paused; e.target.textContent = paused ? "play" : "pause"; };
+document.getElementById("pulse").onclick = () => slots.forEach((s) => s.anim.pulse());
+document.getElementById("replay").onclick = () => slots.forEach((s) => {
+  s.anim = new AoeAnim({ motionScale: parseFloat(ui.motion.value) });
+});
+ui.shed.oninput = () => { document.getElementById("shedv").textContent = ui.shed.value; };
+treatSel.onchange = () => slots.forEach((sl) => {
+  sl.anim = new AoeAnim({ motionScale: parseFloat(ui.motion.value) });
+});
+ui.entrance.onchange = () => slots.forEach((sl) => { sl.anim = new AoeAnim({ motionScale: parseFloat(ui.motion.value) }); });
+ui.motion.oninput = () => {
+  document.getElementById("motionv").textContent = parseFloat(ui.motion.value).toFixed(1);
+  slots.forEach((s) => { s.anim.motionScale = parseFloat(ui.motion.value); });
+};
+
+function renderStyleMeta(id) {
+  const state = styleState.get(id);
+  const view = styleViews.get(id);
+  if (!state || !view) return;
+  const shown = state.label.trim() || id;
+  view.header.textContent = view.arch.label
+    + (state.label.trim() ? " · " + state.label.trim() : "")
+    + " — " + view.arch.note;
+  for (const cap of view.caps) {
+    cap.element.querySelector("span").textContent = shown;
+    cap.areaName.textContent = state.label.trim();
+    cap.areaName.style.setProperty("--area-color", state.color);
+    cap.areaName.hidden = !state.label.trim();
+  }
+}
+
+function syncStyleControls() {
+  const state = styleState.get(styleSel.value);
+  ui.styleColor.value = state.color;
+  ui.styleLabel.value = state.label;
+  renderStyleMeta(styleSel.value);
+}
+
+styleSel.onchange = syncStyleControls;
+ui.styleColor.oninput = () => {
+  const state = styleState.get(styleSel.value);
+  state.color = ui.styleColor.value;
+  state.colorOverridden = true;
+  renderStyleMeta(styleSel.value);
+};
+ui.styleLabel.oninput = () => {
+  const state = styleState.get(styleSel.value);
+  state.label = ui.styleLabel.value;
+  renderStyleMeta(styleSel.value);
+};
+syncStyleControls();
+
+/* Kept as a named constant rather than a literal at the call site: it is the
+   dial that told us the orange wash was in the bloom chain and not in the
+   scene, and it is the first thing to reach for if anything like it returns. */
+const BLOOM = 0.5;
+
+/* Straight out of ARCHETYPE_PALETTE — the harness must not carry a second
+   copy of a colour, or it will demonstrate a palette the module does not
+   ship. */
+const paletteFor = (id) => {
+  const base = ARCHETYPE_PALETTE[id];
+  const state = styleState.get(id);
+  if (!state?.colorOverridden) return base;
+  const tint = hexRgb(state.color);
+  /* Generic is literally one colour. Animated archetypes retain a restrained hot stop
+     derived from the GM's chosen hue so their material motion still has depth. */
+  const hot = id === "generic" ? tint : tint.map((c) => c + (1 - c) * 0.58);
+  return { tint, hot };
+};
+
+const currentTreatment = () => TREATMENTS[parseInt(treatSel.value, 10) || 0];
+
+function fxGates(shed) {
+  const g = { tokenEdgeLight: 1, motes: 1, scorch: 1, skirt: 1, turbulence: 1 };
+  for (let i = 0; i < shed && i < SHED_ORDER.length; i++) g[SHED_ORDER[i]] = 0;
+  return g;
+}
+
+function tokenIsCovered(slot, x, y) {
+  const ix = Math.floor(x - slot.meta.originX);
+  const iy = Math.floor(y - slot.meta.originY);
+  if (ix < 0 || iy < 0 || ix >= slot.meta.w || iy >= slot.meta.h) return 0;
+  return slot.meta.data[iy * slot.meta.w + ix] > 191 ? 1 : 0;
+}
+
+let last = performance.now();
+
+function frame(now) {
+  resize();
+  const dt = Math.min(50, now - last);
+  last = now;
+  const mode = parseFloat(ui.backdrop.value);
+  const shed = parseInt(ui.shed.value, 10);
+  const g = fxGates(shed);
+  const stress = mode > 1.5;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, rtScene.fb);
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.SCISSOR_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  for (const s of slots) {
+    if (!paused) s.anim.step(dt);
+    const rect = SHEET ? SHEET.rects[slots.indexOf(s)] : (() => {
+      const r = s.el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) return null;
+      return { x: Math.floor(r.left * DPR),
+               y: Math.floor((window.innerHeight - r.bottom) * DPR),
+               w: Math.floor(r.width * DPR),
+               h: Math.floor(r.height * DPR) };
+    })();
+    if (!rect) continue;
+    const vx = rect.x, vy = rect.y, vw = rect.w, vh = rect.h;
+    if (vw <= 0 || vh <= 0) continue;
+
+    /* A slot half off the top or bottom of the window has a rect that leaves
+       the framebuffer. The VIEWPORT must keep the full, unclamped rect — it is
+       what maps grid space onto the slot, and clamping it would squash the
+       shape as it scrolls. The SCISSOR takes the clipped intersection. */
+    const cx0 = Math.max(0, vx), cy0 = Math.max(0, vy);
+    const cx1 = Math.min(W, vx + vw), cy1 = Math.min(H, vy + vh);
+    const cw = cx1 - cx0, ch = cy1 - cy0;
+    if (cw <= 0 || ch <= 0) continue;
+
+    gl.viewport(vx, vy, vw, vh);
+    gl.scissor(cx0, cy0, cw, ch);
+
+    const span = s.def.span;
+    const view = [s.def.at[0] - span / 2, s.def.at[1] - span / 2, span, span];
+    const texelGrid = span / vw;   /* one device pixel, in grid units */
+
+    /* backdrop */
+    pass(P_BACK, rtScene, () => {
+      gl.viewport(vx, vy, vw, vh);
+      gl.uniform1f(UB.uMode, mode);
+      gl.uniform4fv(UB.uView, view);
+    });
+
+    /* ground plane — under the tokens, so creatures stand IN it */
+    const drawAoe = (plane) => pass(P_MAIN, rtScene, () => {
+      gl.viewport(vx, vy, vw, vh);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, stress ? s.texWall : s.texPlain);
+      gl.uniform1i(U.uCells, 0);
+      /* Without these the lookup divides by zero, every square reads as
+         outside, and the whole effect renders as nothing at all — while the
+         uniforms still link, so the harness's null check passes. */
+      gl.uniform2f(U.uCellOrigin, s.meta.originX, s.meta.originY);
+      gl.uniform2f(U.uCellSize, s.meta.w, s.meta.h);
+      gl.uniform2f(U.uGridOffset, 0, 0);
+      gl.uniform4fv(U.uView, view);
+      gl.uniform1f(U.uTime, s.anim.time);
+      gl.uniform1f(U.uTexel, texelGrid);
+      gl.uniform1f(U.uSeed, s.seed);
+      gl.uniform1f(U.uPlane, plane);
+      gl.uniform1f(U.uShape, s.def.shape);
+      gl.uniform1f(U.uRadius, s.def.radius);
+      gl.uniform1f(U.uDirection, s.def.dir);
+      gl.uniform1f(U.uAngle, Math.PI / 2);
+      gl.uniform2f(U.uBase, s.def.base[0], s.def.base[1]);
+      const tr = currentTreatment();
+      const pal = paletteFor(s.arch.id);
+      gl.uniform1f(U.uArch, s.arch.index);
+      gl.uniform3fv(U.uTint, pal.tint);
+      gl.uniform3fv(U.uTintHot, pal.hot);
+      gl.uniform3f(U.uMix, tr.ground, tr.air, tr.skirt * g.skirt);
+      gl.uniform4f(U.uChar, tr.scorch, tr.motes, tr.rim, tr.turb);
+      gl.uniform4f(U.uPhase, s.anim.enter, s.anim.leave, s.anim.shock, s.anim.eased);
+      gl.uniform1f(U.uEnterMode, parseFloat(ui.entrance.value));
+      gl.uniform4f(U.uFx, g.motes, g.scorch, g.skirt, g.turbulence);
+      gl.uniform1f(U.uAlpha, parseFloat(ui.finish.value));
+    });
+
+    /* THE SHADE PASS, first and under everything, with a MULTIPLY blend.
+       This is the only pass that does not composite over, and getting the
+       blend wrong does not error — it lays a dark patch on the map. See the
+       uPlane 3 note in shader.mjs. */
+    if (ui.shade.checked) {
+      gl.blendFunc(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA);
+      drawAoe(3);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    }
+
+    drawAoe(0);
+
+    /* tokens between the planes — this is the whole point of the split */
+    pass(P_TOKEN, rtScene, () => {
+      gl.viewport(vx, vy, vw, vh);
+      gl.uniform4fv(UT.uView, view);
+      const tk = [0.5, 0.5, 0.45, 1,  2.5, -1.5, 0.45, 0,  -2.5, 1.5, 0.45, 0];
+      const extra = stress ? [3.5, 2.5, 0.45, 1, -1.5, -2.5, 0.45, 0, 4.5, -0.5, 0.9, 1] : [];
+      const all = tk.concat(extra);
+      const arr = new Float32Array(32);
+      arr.set(all.slice(0, 32));
+      gl.uniform4fv(UT.uTokens, arr);
+      gl.uniform1f(UT.uTokenCount, all.length / 4);
+      const lit = new Float32Array(8);
+      for (let i = 0; i < all.length / 4; i++) {
+        lit[i] = tokenIsCovered(s, all[i * 4], all[i * 4 + 1]);
+      }
+      gl.uniform1fv(UT.uTokenLit, lit);
+      gl.uniform2f(UT.uLightOrigin, 0, 0);
+      gl.uniform3fv(UT.uAoeTint, paletteFor(s.arch.id).tint);
+      gl.uniform1f(UT.uEdgeLight, g.tokenEdgeLight * parseFloat(ui.finish.value));
+    });
+
+    drawAoe(1);   /* atmosphere, over the tokens */
+    drawAoe(2);   /* boundary, over everything */
+  }
+
+  gl.disable(gl.SCISSOR_TEST);
+
+  /* BLEND OFF BEFORE THE BLOOM CHAIN, and this is not housekeeping.
+     rtA and rtB are ping-pong targets that are never cleared, and the slot loop
+     above leaves blending set to premultiplied-over (ONE, ONE_MINUS_SRC_ALPHA).
+     Left enabled, each bloom pass composites OVER whatever the target held
+     rather than replacing it, so dst' = dst wherever src.a is 0 — every texel
+     the bright pass has ever lit keeps its value forever. Scrolling sweeps the
+     slots across the target and the trail sticks, which is why the whole page
+     washed orange on scroll while rtScene itself stayed perfectly clean and
+     every uniform, viewport and scissor rect was correct.
+     Verified by measurement: outside every slot, 100% of sampled pixels lit at
+     scroll 1400 with bloom on, 0% with the bloom amount at zero. */
+  gl.disable(gl.BLEND);
+
+  /* bloom */
+  pass(P_BRIGHT, rtA, () => {
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, rtScene.tex);
+    gl.uniform1i(UBR.uTex, 0); gl.uniform1f(UBR.uThresh, HDR ? 1.15 : 0.88);
+  });
+  pass(P_BLUR, rtB, () => {
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, rtA.tex);
+    gl.uniform1i(UBL.uTex, 0); gl.uniform2f(UBL.uDir, 1.4 / rtA.w, 0);
+  });
+  pass(P_BLUR, rtA, () => {
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, rtB.tex);
+    gl.uniform1i(UBL.uTex, 0); gl.uniform2f(UBL.uDir, 0, 1.4 / rtA.h);
+  });
+  pass(P_COMP, null, () => {
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, rtScene.tex);
+    gl.uniform1i(UC.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, rtA.tex);
+    gl.uniform1i(UC.uBloom, 1);
+    gl.uniform1f(UC.uAmt, BLOOM);
+  });
+
+  document.body.dataset.frames = String((parseInt(document.body.dataset.frames || "0", 10) + 1));
+}
+
+/* The rAF driver is separate from the frame itself so automation can step this
+   deterministically. A hidden or backgrounded pane throttles rAF to nothing,
+   which is exactly the condition a headless check runs under — without this
+   hook the harness looks broken when it is merely not being painted. */
+window.__aoeFrame = (nowMs, dtMs) => {
+  if (typeof dtMs === "number") last = nowMs - dtMs;
+  frame(nowMs);
+  gl.finish();
+  return { frames: document.body.dataset.frames, size: [canvas.width, canvas.height], glError: gl.getError() };
+};
+window.__aoeReady = true;
+
+/**
+ * Render every slot into one image at a fixed size and hand back a PNG data
+ * URL. `opts.backdrop` 0 neutral | 1 realistic | 2 stress, `opts.shed` how many
+ * behaviours to drop, `opts.frames` how far to advance the animation first.
+ */
+window.__aoeSheet = (opts = {}) => {
+  const cellPx = opts.cellPx || 300;
+  const pad = 14, labelBand = 26;
+  const cols = SHAPES.length, rowsN = TREATMENTS.length;
+  const width = pad + cols * (cellPx + pad);
+  const height = labelBand + rowsN * (cellPx + pad + labelBand);
+  const rects = slots.map((_, i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    const x = pad + c * (cellPx + pad);
+    const yTop = labelBand + r * (cellPx + pad + labelBand) + labelBand;
+    return { x, y: height - yTop - cellPx, w: cellPx, h: cellPx };
+  });
+  SHEET = { width, height, rects };
+  if (typeof opts.backdrop === "number") ui.backdrop.value = String(opts.backdrop);
+  if (typeof opts.shed === "number") ui.shed.value = String(opts.shed);
+  if (typeof opts.entrance === "number") ui.entrance.value = String(opts.entrance);
+  if (typeof opts.shade === "boolean") ui.shade.checked = opts.shade;
+  if (typeof opts.shed === "number") ui.shed.value = String(opts.shed);
+  for (const sl of slots) sl.anim = new AoeAnim({ motionScale: 1 });
+  resize();
+  const n = opts.frames || 90;
+  for (let i = 1; i <= n; i++) { last = i * 16.7 - 16.7; frame(i * 16.7); }
+  if (opts.pulse) { for (const sl of slots) sl.anim.pulse();
+    for (let i = 1; i <= 8; i++) { last = (n + i) * 16.7 - 16.7; frame((n + i) * 16.7); } }
+  gl.finish();
+
+  /* Label the sheet on a 2D canvas so the image stands alone. */
+  const out = document.createElement("canvas");
+  out.width = width; out.height = height;
+  const cx = out.getContext("2d");
+  cx.fillStyle = "#0a0c10"; cx.fillRect(0, 0, width, height);
+  cx.drawImage(canvas, 0, 0);
+  cx.font = "13px ui-monospace, Menlo, monospace";
+  cx.textBaseline = "middle";
+  slots.forEach((sl, i) => {
+    const r = rects[i];
+    const yTop = height - r.y - r.h;
+    cx.fillStyle = "#7fd4ff"; cx.fillText(sl.arch.label, r.x, yTop - 13);
+    cx.fillStyle = "#7c8899";
+    const w = cx.measureText(sl.arch.label).width;
+    cx.fillText("  ·  " + sl.def.label, r.x + w, yTop - 13);
+  });
+  cx.fillStyle = "#7c8899";
+  const modes = ["neutral", "realistic", "stress"];
+  cx.fillText("PF2e AoE · " + currentTreatment().label.toLowerCase() +
+              " · backdrop " + modes[parseInt(ui.backdrop.value, 10)] +
+              " · entrance " + ENTRANCES[parseInt(ui.entrance.value, 10)].label +
+              " · shed " + ui.shed.value + (ui.shade.checked ? "" : " · SHADE OFF") +
+              (opts.pulse ? " · trigger beat" : ""), pad, 13);
+
+  const url = out.toDataURL("image/png");
+  SHEET = null; resize();
+  return url;
+};
+
+/**
+ * A sheet whose ROWS ARE TIME, pinned to one treatment.
+ *
+ * The other sheet varies treatment down the page, which is the right axis for
+ * choosing a look and the wrong one for judging an entrance: it shows one
+ * instant of a 520ms stroke three times over. This renders each row into its
+ * own pass and composites them, because rtScene is cleared per frame and a
+ * single pass cannot hold four different moments at once.
+ */
+window.__aoeTimeSheet = (opts = {}) => {
+  const archRow = opts.arch || 0;
+  const times = opts.times || [5, 12, 22, 40];
+  const cellPx = opts.cellPx || 300;
+  const pad = 14, labelBand = 26;
+  const cols = SHAPES.length;
+  const width = pad + cols * (cellPx + pad);
+  const rowH = cellPx + pad + labelBand;
+  const height = labelBand + times.length * rowH;
+
+  if (typeof opts.backdrop === "number") ui.backdrop.value = String(opts.backdrop);
+  if (typeof opts.entrance === "number") ui.entrance.value = String(opts.entrance);
+  if (typeof opts.shade === "boolean") ui.shade.checked = opts.shade;
+  if (typeof opts.shed === "number") ui.shed.value = String(opts.shed);
+
+  const out = document.createElement("canvas");
+  out.width = width; out.height = height;
+  const cx = out.getContext("2d");
+  cx.fillStyle = "#0a0c10"; cx.fillRect(0, 0, width, height);
+  cx.font = "13px ui-monospace, Menlo, monospace";
+  cx.textBaseline = "middle";
+
+  const base = archRow * cols;
+  for (let r = 0; r < times.length; r++) {
+    const rects = slots.map(() => null);
+    for (let c = 0; c < cols; c++) {
+      rects[base + c] = { x: pad + c * (cellPx + pad), y: 0, w: cellPx, h: cellPx };
+    }
+    SHEET = { width, height: cellPx, rects };
+    for (const sl of slots) sl.anim = new AoeAnim({ motionScale: 1 });
+    resize();
+    const n = times[r];
+    for (let i = 1; i <= n; i++) { last = i * 16.7 - 16.7; frame(i * 16.7); }
+    gl.finish();
+    const yTop = labelBand + r * rowH + labelBand;
+    cx.drawImage(canvas, 0, yTop);
+    const ms = Math.round(n * 16.7);
+    cx.fillStyle = "#7fd4ff";
+    cx.fillText("t = " + ms + " ms", pad, yTop - 13);
+    cx.fillStyle = "#7c8899";
+    cx.fillText("   ·   " + Math.round(100 * Math.min(1, ms / 520)) + "% through the stroke",
+                pad + cx.measureText("t = " + ms + " ms").width, yTop - 13);
+  }
+  cx.fillStyle = "#7c8899";
+  const modes = ["neutral", "realistic", "stress"];
+  cx.fillText("PF2e AoE · " + REVIEW_ARCHES[archRow].label +
+              " · " + currentTreatment().label.toLowerCase() +
+              " · entrance " + ENTRANCES[parseInt(ui.entrance.value, 10)].label +
+              " · " + modes[parseInt(ui.backdrop.value, 10)] +
+              "   —   " + SHAPES.map((x) => x.label).join("  |  "), pad, 13);
+
+  const url = out.toDataURL("image/png");
+  SHEET = null; resize();
+  return url;
+};
+
+/**
+ * All fourteen archetypes at once, one shape, laid out 4 wide. Fourteen rows of
+ * three shapes is an image nobody can look at; the shape axis is already
+ * settled and what is being judged here is whether the materials stay distinct
+ * while Generic remains deliberately plain.
+ */
+window.__aoeArchSheet = (opts = {}) => {
+  const shape = opts.shape || 0;
+  const frames = opts.frames || 240;
+  const cellPx = opts.cellPx || 260;
+  const cols = 4, rowsN = Math.ceil(REVIEW_ARCHES.length / cols);
+  const pad = 12, labelBand = 24;
+  const width = pad + cols * (cellPx + pad);
+  const rowH = cellPx + pad + labelBand;
+  const height = labelBand + rowsN * rowH;
+
+  if (typeof opts.backdrop === "number") ui.backdrop.value = String(opts.backdrop);
+  if (typeof opts.entrance === "number") ui.entrance.value = String(opts.entrance);
+  if (typeof opts.shade === "boolean") ui.shade.checked = opts.shade;
+  if (typeof opts.shed === "number") ui.shed.value = String(opts.shed);
+
+  const out = document.createElement("canvas");
+  out.width = width; out.height = height;
+  const cx = out.getContext("2d");
+  cx.fillStyle = "#0a0c10"; cx.fillRect(0, 0, width, height);
+  cx.font = "12px ui-monospace, Menlo, monospace";
+  cx.textBaseline = "middle";
+
+  for (let r = 0; r < rowsN; r++) {
+    const rects = slots.map(() => null);
+    for (let c = 0; c < cols; c++) {
+      const ai = r * cols + c;
+      if (ai >= REVIEW_ARCHES.length) break;
+      rects[ai * SHAPES.length + shape] =
+        { x: pad + c * (cellPx + pad), y: 0, w: cellPx, h: cellPx };
+    }
+    SHEET = { width, height: cellPx, rects };
+    for (const sl of slots) sl.anim = new AoeAnim({ motionScale: 1 });
+    resize();
+    for (let i = 1; i <= frames; i++) { last = i * 16.7 - 16.7; frame(i * 16.7); }
+    gl.finish();
+    const yTop = labelBand + r * rowH + labelBand;
+    cx.drawImage(canvas, 0, yTop);
+    for (let c = 0; c < cols; c++) {
+      const ai = r * cols + c;
+      if (ai >= REVIEW_ARCHES.length) break;
+      cx.fillStyle = "#7fd4ff";
+      cx.fillText(REVIEW_ARCHES[ai].label, pad + c * (cellPx + pad), yTop - 12);
+    }
+  }
+  cx.fillStyle = "#7c8899";
+  const modes = ["neutral", "realistic", "stress"];
+  cx.fillText("PF2e AoE · all fourteen archetypes · " + SHAPES[shape].label +
+              " · " + currentTreatment().label.toLowerCase() +
+              " · entrance " + ENTRANCES[parseInt(ui.entrance.value, 10)].label +
+              " · " + modes[parseInt(ui.backdrop.value, 10)] +
+              (ui.shade.checked ? "" : " · SHADE OFF"), pad, 12);
+
+  const url = out.toDataURL("image/png");
+  SHEET = null; resize();
+  return url;
+};
+
+function loop(now) { frame(now); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+</script>

@@ -89,6 +89,7 @@ Suite.register({
                            //   this feature owns. Routes its config into the
                            //   Control Center and hides it from the native sheet.
   system: null,            // null | "pf2e" | "dnd5e" | ["pf2e","dnd5e"]
+  minimumGeneration: null, // optional Foundry generation gate for this feature
   requires: [],            // other active module ids required, e.g. ["tidy5e-sheet"]
   requiresFeature: null,   // string | string[]: sibling suite feature(s) that must
                            //   be ENABLED for this one to be available. Used by
@@ -220,9 +221,13 @@ rather than at the end.
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
 | token-conditions   | tc.                          | pf2e              | —               | off     |
+| pf2e-aoe            | aoe.                         | pf2e              | —               | off     |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.
+
+`pf2e-aoe` additionally declares `minimumGeneration: 14`; generation gates
+apply to one feature and must not raise the suite-wide `module.json` minimum.
 
 This table is hand-maintained and has drifted before. The authority is always the
 `Suite.register(...)` call in each adapter; `settingPrefix` is what the catalog
