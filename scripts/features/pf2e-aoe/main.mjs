@@ -91,7 +91,7 @@ export function onReady() {
        hot path core itself warns about; the committed Token/Region update that
        follows refreshes us once at the final position. */
     if (region?.document?.attachment?.token && (flags.refreshGeometry || flags.refreshShapes)) {
-      host.reposition(region);
+      if (!host.reposition(region)) host.refresh(region);
       return;
     }
     host.refresh(region);

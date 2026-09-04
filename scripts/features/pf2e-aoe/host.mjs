@@ -170,6 +170,39 @@ function tokenEdgeFilter(style, geometry, token) {
   return filter;
 }
 
+function tokenFor(id) {
+  try {
+    return canvas?.tokens?.get?.(id)
+      ?? canvas?.tokens?.placeables?.find?.((token) => token?.id === id)
+      ?? null;
+  } catch { return null; }
+}
+
+function repositionTokenEdges(entry) {
+  for (const sprite of entry.edges?.children ?? []) {
+    const token = tokenFor(sprite.glAoeTokenId);
+    if (!token?.visible || !token.mesh?.texture) continue;
+    const cx = token.center?.x ?? token.x + token.w / 2;
+    const cy = token.center?.y ?? token.y + token.h / 2;
+    sprite.position.set(cx, cy);
+    sprite.width = token.w;
+    sprite.height = token.h;
+    sprite.angle = token.document?.rotation ?? 0;
+    sprite.alpha = token.mesh.alpha ?? 1;
+
+    const uniforms = sprite.filters?.[0]?.uniforms;
+    if (!uniforms) continue;
+    const texture = token.mesh.texture;
+    const width = Math.max(1, texture.width ?? token.w);
+    const height = Math.max(1, texture.height ?? token.h);
+    uniforms.uStep?.set?.([1 / width, 1 / height]);
+    const dx = entry.geometry.origin.x - cx;
+    const dy = entry.geometry.origin.y - cy;
+    const length = Math.hypot(dx, dy) || 1;
+    uniforms.uLightDir?.set?.([dx / length, dy / length]);
+  }
+}
+
 function tokenEdges(entry) {
   const edges = new PIXI.Container();
   edges.eventMode = "none";
@@ -190,6 +223,7 @@ function tokenEdges(entry) {
     }
     if (!covered) continue;
     const sprite = new PIXI.Sprite(token.mesh.texture);
+    sprite.glAoeTokenId = token.id;
     sprite.anchor.set(0.5);
     sprite.position.set(cx, cy);
     sprite.width = token.w;
@@ -342,15 +376,27 @@ class AoeHost {
     const entry = this.entries.get(region?.id);
     if (!entry) return false;
     const geometry = regionGeometry(replacement);
+    const changed = (a, b) => Math.abs(a - b) > 0.01;
+    const vectorChanged = (a, b) => a.length !== b.length || a.some((value, i) => changed(value, b[i]));
     if (!geometry || geometry.shapeId !== entry.geometry.shapeId
+      || geometry.gridless !== entry.geometry.gridless
+      || changed(geometry.radius, entry.geometry.radius)
+      || changed(geometry.direction, entry.geometry.direction)
+      || changed(geometry.angle, entry.geometry.angle)
+      || vectorChanged(geometry.base, entry.geometry.base)
+      || vectorChanged(geometry.view, entry.geometry.view)
       || Math.abs(geometry.quad.width - entry.geometry.quad.width) > 0.01
       || Math.abs(geometry.quad.height - entry.geometry.quad.height) > 0.01) return false;
     entry.region = replacement;
     entry.geometry = geometry;
     for (const mesh of entry.meshes) {
       mesh.position.set(geometry.quad.x, geometry.quad.y);
-      mesh.shader?.uniforms?.uGridOffset?.set(geometry.gridOffset);
     }
+    /* The coverage texture is intentionally reused during a translation. Its
+       cell origin and grid phase are both local to the old quad; changing only
+       uGridOffset duplicates or drops an edge column during fractional moves.
+       Keep the entire mask rigid and rebuild it once the move is committed. */
+    repositionTokenEdges(entry);
     entry.label?.position?.set(geometry.labelAt.x, geometry.labelAt.y);
     return true;
   }

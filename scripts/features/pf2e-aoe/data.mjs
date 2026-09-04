@@ -258,7 +258,7 @@ function pointXY(point) {
 }
 
 function shapeCount(document) {
-  const shapes = document?.shapes;
+  const shapes = document?.shapes ?? document;
   return Number.isInteger(shapes?.length) ? shapes.length
     : Number.isInteger(shapes?.size) ? shapes.size
       : shapes?.contents?.length ?? 0;
@@ -404,10 +404,11 @@ function areaCoverage(shape) {
  */
 export function pf2eCoverage(region) {
   const document = region?.document ?? region;
-  const shape = firstShape(document);
+  const shapes = region?.animationState?.shapes ?? document;
+  const shape = firstShape(shapes);
   /* Live auras already expose PF2e's authoritative active squares, including
      five-point wall testing. Let regionCells consume those offsets directly. */
-  if (region?.glAoeAuraRenderer || !canvas?.grid?.isSquare || shapeCount(document) !== 1
+  if (region?.glAoeAuraRenderer || !canvas?.grid?.isSquare || shapeCount(shapes) !== 1
     || !["circle", "cone", "line", "emanation"].includes(shape?.type)) return null;
 
   const area = areaCoverage(shape);

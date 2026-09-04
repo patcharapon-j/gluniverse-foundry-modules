@@ -46,14 +46,17 @@ for (const [name, duration] of Object.entries(TIMING)) {
   ok(Number.isFinite(duration) && duration >= 0, `invalid animation duration ${name}`);
 }
 
-const [host, controls, moduleJsonText, featureIndex, langText] = await Promise.all([
+const [host, controls, moduleJsonText, featureIndex, langText, mainSource] = await Promise.all([
   text("scripts/features/pf2e-aoe/host.mjs"),
   text("scripts/features/pf2e-aoe/controls.mjs"),
   text("module.json"),
   text("scripts/features/index.mjs"),
   text("lang/pf2e-aoe.en.json"),
+  text("scripts/features/pf2e-aoe/main.mjs"),
 ]);
 for (const name of Object.keys(UNIFORMS)) ok(host.includes(name), `host never writes ${name}`);
+ok(host.includes("sprite.glAoeTokenId = token.id"),
+  "token edge sprites must retain their Token id for animation tracking");
 const moduleJson = JSON.parse(moduleJsonText);
 ok(Number(moduleJson.compatibility?.minimum) <= 13, "PF2e AoE must not drop suite-level Foundry 13 compatibility");
 ok(moduleJson.styles.includes("styles/pf2e-aoe.css"), "module.json does not load pf2e-aoe.css");
@@ -75,6 +78,8 @@ for (const shape of ["burst", "cone", "line", "square", "emanation"]) {
 ok(controls.includes("createTokenEmanation") && controls.includes("gridBased: Boolean(canvas.grid?.isSquare)"),
   "creator emanations must use Foundry's token-attached Region API");
 ok(controls.includes("colorOverride"), "creator must expose the per-Region color override toggle");
+ok(/if\s*\(\s*!host\.reposition\(region\)\s*\)\s*host\.refresh\(region\)/.test(mainSource),
+  "attached Region refresh must fall back when lightweight repositioning is unsafe");
 const regionConfig = await text("scripts/features/pf2e-aoe/region-config.mjs");
 ok(regionConfig.includes("colorOverride") && regionConfig.includes('color.disabled = !colorOverride.checked'),
   "Region configuration must persist and visibly gate its color override");
@@ -100,7 +105,7 @@ globalThis.CONFIG = {
   },
 };
 const { authoredStyle, cellStateAt, pf2eCoverage, regionCells, regionGeometry } = await import("../scripts/features/pf2e-aoe/data.mjs");
-const { canRenderEffectRegion } = await import("../scripts/features/pf2e-aoe/host.mjs");
+const { canRenderEffectRegion, host: aoeHost } = await import("../scripts/features/pf2e-aoe/host.mjs");
 const { auraRegionFor } = await import("../scripts/features/pf2e-aoe/aura.mjs");
 const gridlessRegion = {
   visible: true,
@@ -219,6 +224,78 @@ ok(auraRegion?.document?.getFlag("gluniverse-foundry-modules", "aoe.style")?.col
   "PF2e aura adapter must preserve the Aura rule's resolved highlight color");
 ok(authoredStyle(auraRegion.document).archetype === "resonance",
   "PF2e aura traits must resolve through the shared Spellglass archetype map");
+
+/* A moving token-attached effect reuses its mask during animation. The mask's
+   local grid phase must move rigidly with the mesh, and the source token's
+   cloned edge light must follow the live Token rather than remain behind. */
+const movingShape = (x) => ({
+  type: "emanation",
+  radius: 100,
+  base: { type: "token", x, y: 500, width: 1, height: 1 },
+});
+const movingDocument = {
+  attachment: { token: "MOVING" },
+  shapes: [movingShape(500)],
+  flags: { pf2e: { areaShape: "emanation" } },
+};
+const restingRegion = {
+  id: "MOVING-REGION",
+  document: movingDocument,
+  bounds: { x: 400, y: 400, width: 300, height: 300 },
+};
+const animatedRegion = {
+  id: restingRegion.id,
+  document: movingDocument,
+  animationState: { shapes: [movingShape(550)] },
+  bounds: { x: 450, y: 400, width: 300, height: 300 },
+};
+const restingGeometry = regionGeometry(restingRegion);
+const position = (x, y) => ({ x, y, set(nx, ny) { this.x = nx; this.y = ny; } });
+const movingMesh = () => ({
+  position: position(restingGeometry.quad.x, restingGeometry.quad.y),
+  shader: { uniforms: { uGridOffset: new Float32Array(restingGeometry.gridOffset) } },
+});
+const edgeSprite = {
+  glAoeTokenId: "MOVING",
+  position: position(550, 550),
+  width: 100,
+  height: 100,
+  angle: 0,
+  alpha: 1,
+};
+const movingToken = {
+  id: "MOVING",
+  visible: true,
+  center: { x: 600, y: 550 },
+  x: 550,
+  y: 500,
+  w: 100,
+  h: 100,
+  mesh: { texture: { width: 100, height: 100 }, alpha: 1 },
+  document: { rotation: 0 },
+};
+canvas.tokens = {
+  placeables: [movingToken],
+  get: (id) => id === movingToken.id ? movingToken : null,
+};
+const movingEntry = {
+  region: restingRegion,
+  geometry: restingGeometry,
+  meshes: [movingMesh(), movingMesh(), movingMesh(), movingMesh()],
+  edges: { children: [edgeSprite] },
+  label: { position: position(restingGeometry.labelAt.x, restingGeometry.labelAt.y) },
+};
+aoeHost.entries.set(restingRegion.id, movingEntry);
+ok(pf2eCoverage(animatedRegion)?.origin.x === 600,
+  "attached Region fallback coverage must use the transient animated shape");
+ok(aoeHost.reposition(animatedRegion), "compatible attached geometry must use lightweight repositioning");
+ok(movingEntry.meshes[0].position.x === restingGeometry.quad.x + 50,
+  "attached effect mesh must follow fractional Token movement");
+ok(movingEntry.meshes[0].shader.uniforms.uGridOffset[0] === restingGeometry.gridOffset[0],
+  "reused coverage mask must retain its local grid phase during Token movement");
+ok(edgeSprite.position.x === movingToken.center.x && edgeSprite.position.y === movingToken.center.y,
+  "attached Token edge light must follow the live Token position");
+aoeHost.entries.delete(restingRegion.id);
 
 const automaticColor = authoredStyle({
   flags: { pf2e: {} },
