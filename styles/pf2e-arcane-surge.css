@@ -1,0 +1,696 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Arcane Surge
+   ════════════════════════════════════════════════════════════════════════
+   Identity is routed entirely through --gl-accent on scoped selectors, so the
+   four stability levels are one rule with four accent remaps rather than four
+   sets of hardcoded colours. Teal is "held"; the accent walks toward cyan and
+   then violet as the world comes apart.
+
+   Feature-local custom properties are prefixed --glas-* because custom
+   properties are global: a bare --chaos set here would repaint every feature
+   loaded after this sheet.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glas-banner,
+.glas-severity,
+.glas-stability,
+.glas-picker,
+.glas-config {
+  --gl-accent: var(--gl-teal);
+  --glas-seam: rgb(var(--gl-tint-light) / 0.08);
+}
+
+/* Level identity. One remap each; everything derived follows. */
+.glas-level-stable      { --gl-accent: var(--gl-teal); }
+.glas-level-fraying     { --gl-accent: var(--gl-cyan); }
+.glas-level-unbound     { --gl-accent: var(--gl-holo-b); }
+.glas-level-unraveling  { --gl-accent: var(--gl-violet); }
+
+/* Severity identity, on the card only. */
+.glas-tier-minor        { --gl-accent: var(--gl-cyan); }
+.glas-tier-major        { --gl-accent: var(--gl-warn); }
+.glas-tier-catastrophic { --gl-accent: var(--gl-warn-deep); }
+.glas-tier-breach       { --gl-accent: var(--gl-hazard); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   The full-screen layers
+   ══════════════════════════════════════════════════════════════════════
+   Two very different z-bands on purpose. The ambient veil runs for a whole
+   session, so it sits ABOVE the board and BELOW every piece of Foundry chrome —
+   a haze over the sidebar and hotbar for three hours would make the interface
+   unusable. The burst lasts two seconds and is allowed to dominate. */
+
+.glas-ambient {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: var(--gl-z-sticky);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.glas-burst {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: var(--gl-z-splash);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity var(--gl-d-quick) var(--gl-exit);
+}
+
+.glas-burst.glas-visible {
+  opacity: 1;
+  transition: opacity var(--gl-d-flash) var(--gl-enter);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The banner on the spell's card
+   ══════════════════════════════════════════════════════════════════════
+   A deliberate sibling of destiny-dice's fate strip: the table should read the
+   two as one family without this one borrowing that one's namespace. */
+
+.glas-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  border-left: 2px solid var(--gl-accent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+  color: var(--gl-text);
+}
+
+.glas-banner .glas-cut {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--gl-cut-sm);
+  height: var(--gl-cut-sm);
+  background: var(--gl-accent);
+  opacity: 0.55;
+}
+
+.glas-banner-glyph {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--gl-accent);
+  filter: drop-shadow(0 0 6px var(--gl-glow));
+}
+
+.glas-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.glas-banner-kicker {
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glas-banner-title {
+  font-family: var(--gl-display);
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--gl-text-bright);
+}
+
+/* A surge is loud; a held check is quiet. The difference is deliberate — the
+   pass has to read as a pass at a glance or the banner becomes noise. */
+.glas-banner.glas-surge {
+  background: linear-gradient(100deg, var(--gl-accent-faint), var(--gl-surface-inset) 62%);
+  box-shadow: var(--gl-etch-soft), 0 0 18px var(--gl-bloom);
+}
+
+.glas-banner.glas-surge .glas-banner-title {
+  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
+}
+
+.glas-banner.glas-held {
+  opacity: 0.86;
+}
+
+.glas-banner.glas-held .glas-banner-glyph {
+  color: var(--gl-text-dim);
+  filter: none;
+}
+
+.glas-banner.glas-voided {
+  opacity: 0.5;
+}
+
+.glas-banner.glas-voided .glas-banner-title {
+  text-decoration: line-through;
+  animation: none;
+}
+
+/* A held NPC surge, on the GM's screen only, reads as unfinished business. */
+.glas-banner.glas-pending {
+  border-left-style: dashed;
+}
+
+.glas-banner.glas-reveal {
+  animation: gl-rise-in var(--gl-d-reveal) var(--gl-enter) both;
+}
+
+.glas-banner-controls {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.glas-banner-controls button,
+.glas-severity button {
+  font-family: var(--gl-tech);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  color: var(--gl-text);
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-edge);
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  cursor: pointer;
+  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-banner-controls button:hover,
+.glas-severity button:hover {
+  color: var(--gl-text-bright);
+  border-color: var(--gl-accent);
+  background: var(--gl-accent-faint);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The severity card
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-severity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  border-top: 2px solid var(--gl-accent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%);
+  color: var(--gl-text);
+}
+
+.glas-severity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--gl-tech);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.glas-severity-kicker { color: var(--gl-accent); }
+.glas-severity-row    { color: var(--gl-text-dim); }
+
+/* The unrolled state is the tension: a button sitting in chat that everybody
+   can see and nobody has pressed yet. */
+.glas-severity.glas-unrolled .glas-severity-roll {
+  width: 100%;
+  padding: 8px;
+  font-size: 0.78rem;
+  animation: gl-breathe var(--gl-dread) ease-in-out infinite;
+}
+
+.glas-severity-wait {
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-faint);
+  text-align: center;
+}
+
+.glas-severity-body {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.glas-severity-value {
+  font-family: var(--gl-tech);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 14px var(--gl-glow);
+}
+
+.glas-severity-tier {
+  font-family: var(--gl-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--gl-accent);
+}
+
+/* The band is printed beside the roll so the table can read the system rather
+   than only receive verdicts from it. */
+.glas-severity-band {
+  margin-left: auto;
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-faint);
+}
+
+.glas-severity-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--gl-text-dim);
+}
+
+.glas-severity-rerolled {
+  margin: 0;
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-warn);
+}
+
+.glas-severity.glas-reveal .glas-severity-body {
+  animation: gl-pop-in var(--gl-d-reveal) var(--gl-enter) both;
+}
+
+.glas-severity.glas-tier-breach.glas-reveal {
+  animation: gl-shake var(--gl-d-swift) var(--gl-enter) both;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The stability chip and the arm control
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-stability {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glas-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+  color: var(--gl-text);
+  cursor: default;
+  transition: border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-chip-mark {
+  width: 8px;
+  height: 8px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 8px var(--gl-glow);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
+}
+
+/* Stable is at rest: the mark stops moving entirely. Motion here is meaning. */
+.glas-level-stable .glas-chip-mark,
+.glas-chip.glas-level-stable .glas-chip-mark {
+  animation: none;
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.glas-chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.glas-chip-kicker {
+  font-family: var(--gl-tech);
+  font-size: 0.56rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+}
+
+.glas-chip-level {
+  font-family: var(--gl-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--gl-text-bright);
+}
+
+.glas-chip-conceal {
+  color: var(--gl-warn);
+  font-size: 0.7rem;
+}
+
+/* The level changed. One flash, no chat line — the party notices rather than
+   being told. */
+.glas-chip.glas-flash {
+  animation: gl-flash var(--gl-d-slow) var(--gl-enter) both;
+}
+
+.glas-arm {
+  display: flex;
+  gap: 3px;
+}
+
+.glas-arm-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font-family: var(--gl-tech);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  background: transparent;
+  border: 1px solid var(--gl-hair);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  cursor: pointer;
+  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-arm-btn .glas-arm-label {
+  display: none;
+}
+
+.glas-arm-btn:hover {
+  color: var(--gl-text-bright);
+  border-color: var(--gl-accent);
+}
+
+.glas-arm-btn:hover .glas-arm-label,
+.glas-arm-btn.is-armed .glas-arm-label {
+  display: inline;
+}
+
+/* An armed choice must be impossible to forget about — it applies to exactly
+   one casting and then lapses. */
+.glas-arm-btn.is-armed {
+  color: var(--gl-ink-0);
+  background: var(--gl-accent);
+  border-color: var(--gl-accent);
+  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
+}
+
+/* Standalone panel, used only when the time-tracker HUD is not running. */
+.glas-standalone {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--gl-z-hud);
+  padding: 4px 6px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-elev-2);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+}
+
+.glas-standalone:empty {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The GM's level picker
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-picker {
+  position: fixed;
+  z-index: var(--gl-z-overlay);
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  padding: 4px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-elev-3);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%);
+  animation: gl-drop-in var(--gl-d-brisk) var(--gl-enter) both;
+}
+
+.glas-picker-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--gl-text);
+  cursor: pointer;
+  transition: background var(--gl-d-quick);
+}
+
+.glas-picker-row:hover {
+  background: var(--gl-accent-faint);
+}
+
+.glas-picker-row.is-current {
+  background: var(--gl-surface-raised);
+}
+
+.glas-picker-mark {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  background: var(--gl-accent);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.glas-picker-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glas-picker-name {
+  font-family: var(--gl-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gl-text-bright);
+}
+
+.glas-picker-hint {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--gl-text-dim);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The odds editor
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--gl-text);
+}
+
+.glas-config-intro,
+.glas-config-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-section h3 {
+  margin: 0;
+  font-family: var(--gl-display);
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gl-accent);
+}
+
+.glas-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 0;
+  border-top: 1px solid var(--glas-seam);
+}
+
+.glas-config-rowhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.glas-config-rowname {
+  font-family: var(--gl-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--gl-text-bright);
+}
+
+.glas-config-threshold,
+.glas-config-rank {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-threshold input,
+.glas-config-band input,
+.glas-config-rank input {
+  width: 62px;
+  font-family: var(--gl-tech);
+  text-align: center;
+}
+
+.glas-config-bands {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.glas-config-band {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  padding: 5px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-bandname {
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-window {
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  color: var(--gl-text-faint);
+}
+
+/* A tier with no window will never once come up. That has to be visible while
+   it is being created, not discovered three sessions later. */
+.glas-config-band.is-unreachable {
+  border-color: color-mix(in srgb, var(--gl-warn) 45%, transparent);
+}
+
+.glas-config-band.is-unreachable .glas-config-window {
+  color: var(--gl-warn);
+}
+
+.glas-config-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.glas-config-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 8px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-checktext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glas-config-checkname {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gl-text-bright);
+}
+
+.glas-config-checkhint {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.glas-config-actions button {
+  font-family: var(--gl-tech);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  color: var(--gl-text);
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-edge);
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick), color var(--gl-d-quick);
+}
+
+.glas-config-actions button[type="submit"] {
+  color: var(--gl-ink-0);
+  background: var(--gl-accent);
+  border-color: var(--gl-accent);
+}
+
+.glas-config-actions button:hover {
+  border-color: var(--gl-accent);
+  color: var(--gl-text-bright);
+}
+
+.glas-config-actions button[type="submit"]:hover {
+  color: var(--gl-ink-0);
+}
+
+/* The slot the time-tracker HUD offers. It is a hole, not a dependency: when
+   this feature is off the slot collapses and the bar closes over it. */
+#glct-hud .cell.glas-slot:empty {
+  display: none;
+}
+
+#glct-hud .cell.glas-slot {
+  padding: 0 2px;
+}

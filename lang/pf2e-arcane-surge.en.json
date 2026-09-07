@@ -1,0 +1,129 @@
+{
+  "GLS.feature.pf2e-arcane-surge.title": "PF2e Arcane Surge",
+  "GLS.feature.pf2e-arcane-surge.hint": "Eligible spells roll a bespoke d20 against the area's stability. A surge banners the spell's card, tears the screen, and posts a severity card for the GM or the caster to roll.",
+  "GLAS": {
+    "level": {
+      "stable": "Stable",
+      "fraying": "Fraying",
+      "unbound": "Unbound",
+      "unraveling": "Unraveling"
+    },
+    "levelHint": {
+      "stable": "Land held securely by stabilizing divine power. Magic behaves.",
+      "fraying": "Near the Sea of Stars, or an island whose divine stabilization has weakened.",
+      "unbound": "Sailing the Sea, an island without stabilizing power, or a bleed zone.",
+      "unraveling": "Particularly unstable ocean, a severe bleed zone, or instability deliberately intensified."
+    },
+    "row": {
+      "fraying": "Fraying",
+      "unbound": "Unbound",
+      "unraveling": "Unraveling",
+      "invitedUnraveling": "Invited in Unraveling"
+    },
+    "tier": {
+      "minor": "Minor",
+      "major": "Major",
+      "catastrophic": "Catastrophic",
+      "breach": "Reality Breach"
+    },
+    "tierHint": {
+      "minor": "The spell resolves normally against its intended targets. One consequential addition, burden, exposure or local hazard — never merely cosmetic.",
+      "major": "The spell's recognizable purpose survives. Delivery, targets, reach, duration and collateral effects can change substantially.",
+      "catastrophic": "Reality misreads the intention. A meaningful magical event related to the spell, but the intended benefit is not guaranteed.",
+      "breach": "The Sea overwhelms the casting. An event capable of changing a journey, an island, or the campaign."
+    },
+    "mode": {
+      "none": "Ordinary",
+      "steadied": "Steadied",
+      "invited": "Invited"
+    },
+    "die": {
+      "surge": "Surge",
+      "blank": "Held"
+    },
+    "banner": {
+      "surge": "Arcane Surge",
+      "held": "The weave held",
+      "voided": "Check voided",
+      "void": "Void",
+      "unvoid": "Restore",
+      "release": "Release"
+    },
+    "severity": {
+      "kicker": "Severity",
+      "roll": "Roll severity",
+      "waiting": "Awaiting the roll",
+      "reroll": "Re-roll",
+      "rerolled": "This severity was re-rolled."
+    },
+    "hud": {
+      "kicker": "Stability",
+      "gmHint": "Click to set the area's stability.",
+      "concealed": "Concealed from players.",
+      "armLabel": "Next casting",
+      "arm": {
+        "steadied": "Steady the Spell — one extra action, one step safer for this casting.",
+        "invited": "Invite the Surge — no extra action, a guaranteed surge on a worse row."
+      }
+    },
+    "settings": {
+      "conceal": {
+        "name": "Conceal stability from players",
+        "hint": "Hides the chip and the ambient overlay from players. The mechanics keep running — a surge still fires and still animates."
+      },
+      "ambient": {
+        "name": "Ambient instability overlay",
+        "hint": "The full-screen veil that thickens as stability worsens. Turn it off to save frames; the chip stays either way."
+      },
+      "dieVisibility": {
+        "name": "Show the surge die",
+        "hint": "When the 3D surge die is thrown for your own eligible castings.",
+        "always": "Every eligible casting",
+        "surge": "Only when it surges",
+        "never": "Never"
+      },
+      "motionTier": {
+        "name": "Motion",
+        "hint": "How much ceremony the banner, burst and overlay play.",
+        "default": "Default",
+        "reduced": "Reduced",
+        "cinematic": "Cinematic"
+      }
+    },
+    "config": {
+      "title": "Arcane Surge — Odds & Eligibility",
+      "menuName": "Arcane Surge odds",
+      "menuLabel": "Configure",
+      "menuHint": "Surge thresholds, severity bands, and which castings are eligible.",
+      "intro": "The four stability levels are fixed; every number below is yours. A level's surge threshold is also the number of glyph faces on its die, so raising it makes the die visibly more dangerous.",
+      "odds": "Surge odds",
+      "threshold": "d20 surges on",
+      "thresholdHint": "A casting surges when the d20 rolls at or under this number. Stable never rolls.",
+      "bands": "Severity bands",
+      "bandsHint": "Cumulative upper bounds on a d100. A tier sharing a bound with the one above it has no window and never comes up — which is how Fraying reaches Major but never Catastrophic.",
+      "unreachable": "never",
+      "eligibilityTitle": "Eligible castings",
+      "eligibility": {
+        "cantrips": "Cantrips",
+        "focus": "Focus spells",
+        "innate": "Innate spells",
+        "fromItems": "Spells cast from items",
+        "rituals": "Rituals",
+        "npcCasters": "NPC and enemy casters"
+      },
+      "eligibilityHint": {
+        "cantrips": "Off by default — a cantrip is excluded even when it is a focus cantrip or comes from an item.",
+        "focus": "Focus spells above cantrip rank.",
+        "innate": "Innate spells from ancestry, items or effects.",
+        "fromItems": "Scrolls, wands and staves — spells actually cast, not activated abilities.",
+        "rituals": "Off by default — the draft leaves rituals to separate GM adjudication.",
+        "npcCasters": "On by default. NPC surges roll privately to the GM and wait to be released."
+      },
+      "minRank": "Minimum spell rank",
+      "minRankHint": "Castings below this rank are never checked.",
+      "save": "Save",
+      "reset": "Restore defaults",
+      "saved": "Arcane Surge odds saved."
+    }
+  }
+}

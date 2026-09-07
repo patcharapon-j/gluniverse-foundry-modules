@@ -430,6 +430,52 @@ puts them through one bright-pass. **Serve it** (`node tools/preview-server.mjs`
 See `docs/TOKEN_CONDITIONS.md` for the tone system, the two data models and the
 permission contract.
 
+**When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
+`styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it
+covers fails *silently*. The load-bearing one: a level's surge threshold is
+simultaneously the d20 result that surges, the number of glyph faces baked onto
+that level's die, and what the baker asserts coverage for. Those live in three
+files, and a disagreement renders perfectly while making the die a **lie about
+its own odds** — the one thing that die exists to tell the truth about. It also
+pins band monotonicity and the tier windows the draft's tone rests on (Fraying
+reaches Major but never Catastrophic; inviting in Unraveling must actually be
+more dangerous than not inviting, or the temptation the whole mechanic is built
+on is false); the three-way uniform agreement across all *three* shader
+programs, since playback is a separate program from the bake and a uniform
+missing there leaves every frame drawn at whatever opacity the driver happened
+to start with; `SHED_ORDER` completeness; the runtime-built `GLAS.level.*`,
+`GLAS.tier.*` and `GLAS.mode.*` key families, which nothing else checks; the
+die's defensive claim on the global `CONFIG.Dice.terms` letter, where a
+collision silently breaks another module's die; and the two guards a double-fire
+would destroy — one casting one check, one card one roll:
+
+```bash
+node tools/arcane-surge-check.mjs
+```
+
+Zero problems required. Two things it cannot do. It cannot compile a line of
+GLSL — and a shader that fails to compile degrades to *no overlay* rather than
+erroring — and it cannot prove the ambient veil is actually inert at Stable, only
+that its alpha is shaped so that it should be. Both need the browser-backed
+harness:
+
+```bash
+node tools/arcane-surge-preview.mjs --out=.preview/surge.html
+```
+
+**Serve it** (`node tools/preview-server.mjs`) — a `file://` page does not
+execute its module script, so the shaders never compile and you get an empty box
+rather than a failure. The die faces are generated, not drawn; re-bake and
+confirm coverage after any recipe change, and remember the groove is a *bump*
+feature that is invisible in the albedo:
+
+```bash
+node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
+```
+
+See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
+different transport channels, and why the burst is baked rather than live.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

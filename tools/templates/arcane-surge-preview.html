@@ -1,0 +1,288 @@
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Arcane Surge — shader preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    background: #06090f;
+    color: #eef1f7;
+    font: 13px/1.5 "Bahnschrift", Consolas, monospace;
+  }
+  header { padding: 14px 18px; border-bottom: 1px solid rgb(255 255 255 / 0.08); }
+  h1 { margin: 0 0 4px; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: #4ad9c0; }
+  p { margin: 0; color: #98a2b6; max-width: 78ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; padding: 18px; }
+  .cell { border: 1px solid rgb(255 255 255 / 0.1); background: #0b0f17; }
+  .cell h2 {
+    margin: 0; padding: 7px 10px; font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #98a2b6; border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  }
+  /* The map stand-in. The overlay is a veil over artwork, and judging it over a
+     flat black field flatters it in a way a real session never will. */
+  .stage {
+    position: relative; aspect-ratio: 16 / 10;
+    background:
+      repeating-linear-gradient(58deg, #1b2436 0 22px, #141c2b 22px 44px),
+      radial-gradient(circle at 32% 38%, #2b3a54, #0d1420 70%);
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .readout {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 6px 10px; font-size: 11px; color: #98a2b6;
+    border-top: 1px solid rgb(255 255 255 / 0.06);
+  }
+  .bad { color: #ff4a52; }
+  .controls { padding: 0 18px 18px; }
+  button {
+    font: inherit; padding: 6px 14px; margin-right: 8px; cursor: pointer;
+    color: #06090f; background: #4ad9c0; border: 0;
+  }
+  #errors { padding: 0 18px 18px; color: #ff4a52; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Arcane Surge — shader preview</h1>
+  <p>The real shaders, compiled in a real WebGL context, driven by the real animation model.
+     The ambient row runs continuously at each stability level — watch the frame times, that
+     one runs for hours. The burst row is baked-then-blitted exactly as it ships.</p>
+</header>
+
+<div class="grid" id="ambient"></div>
+
+<div class="controls">
+  <button id="fire">Fire every burst</button>
+</div>
+
+<div class="grid" id="bursts"></div>
+
+<pre id="errors"></pre>
+
+<script>
+/*__ANIM_SRC__*/
+
+const VERT = /*__VERT__*/;
+const AMBIENT_FRAG = /*__AMBIENT_FRAG__*/;
+const BURST_FRAG = /*__BURST_FRAG__*/;
+const BLIT_FRAG = /*__BLIT_FRAG__*/;
+const AMBIENT_UNIFORMS = /*__AMBIENT_UNIFORMS__*/;
+const BURST_UNIFORMS = /*__BURST_UNIFORMS__*/;
+const BLIT_UNIFORMS = /*__BLIT_UNIFORMS__*/;
+const BURST_FRAMES = /*__BURST_FRAMES__*/;
+const BURST_FRAME_SIZE = /*__BURST_FRAME_SIZE__*/;
+const BURST_MS = /*__BURST_MS__*/;
+const LEVELS = /*__LEVELS__*/;
+
+const errors = document.getElementById("errors");
+const fail = (msg) => { errors.textContent += msg + "\n"; };
+
+function build(gl, vsrc, fsrc, label) {
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      fail(label + " compile: " + gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  };
+  const vs = compile(gl.VERTEX_SHADER, vsrc);
+  const fs = compile(gl.FRAGMENT_SHADER, fsrc);
+  if (!vs || !fs) return null;
+  const p = gl.createProgram();
+  gl.attachShader(p, vs);
+  gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    fail(label + " link: " + gl.getProgramInfoLog(p));
+    return null;
+  }
+  return p;
+}
+
+/* Every declared uniform is looked up by name from the shader module's own
+   table, so a uniform added to the GLSL and forgotten in the host cannot be
+   silently fed here either — it shows up as a missing location. */
+function locations(gl, program, names, label) {
+  const out = {};
+  for (const name of names) {
+    out[name] = gl.getUniformLocation(program, name);
+    if (out[name] === null) fail(label + ": uniform " + name + " has no location (unused or misspelled)");
+  }
+  return out;
+}
+
+function quad(gl, program) {
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(program, "aPos");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+function makeCell(host, title) {
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  cell.innerHTML =
+    "<h2>" + title + "</h2>" +
+    "<div class='stage'><canvas></canvas></div>" +
+    "<div class='readout'><span class='ms'>—</span><span class='shed'>—</span></div>";
+  host.appendChild(cell);
+  return {
+    canvas: cell.querySelector("canvas"),
+    ms: cell.querySelector(".ms"),
+    shed: cell.querySelector(".shed"),
+  };
+}
+
+const chaosFor = (level) => {
+  const i = LEVELS.indexOf(level);
+  return i <= 0 ? 0 : i / (LEVELS.length - 1);
+};
+
+/* ── Ambient: one continuous context per level ─────────────────────── */
+
+for (const level of LEVELS) {
+  const cell = makeCell(document.getElementById("ambient"), "ambient · " + level);
+  const gl = cell.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true });
+  if (!gl) { fail("no webgl for " + level); continue; }
+
+  const program = build(gl, VERT, AMBIENT_FRAG, "ambient(" + level + ")");
+  if (!program) continue;
+  gl.useProgram(program);
+  quad(gl, program);
+  const u = locations(gl, program, AMBIENT_UNIFORMS, "ambient");
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform3fv(u.uDeep, RAMP.deep);
+  gl.uniform3fv(u.uMid, RAMP.mid);
+  gl.uniform3fv(u.uHot, RAMP.hot);
+
+  const budget = new FrameBudget();
+  const start = performance.now();
+  let last = start;
+
+  (function frame() {
+    const now = performance.now();
+    budget.sample(now - last);
+    last = now;
+
+    const w = cell.canvas.clientWidth, h = cell.canvas.clientHeight;
+    if (cell.canvas.width !== w || cell.canvas.height !== h) {
+      cell.canvas.width = w; cell.canvas.height = h;
+    }
+    gl.viewport(0, 0, cell.canvas.width, cell.canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(u.uTime, (now - start) / 1000);
+    gl.uniform2f(u.uRes, cell.canvas.width, cell.canvas.height);
+    gl.uniform1f(u.uChaos, chaosFor(level));
+    gl.uniform1f(u.uDrift, budget.allows("drift") ? 1 : 0);
+    gl.uniform1f(u.uFade, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    cell.ms.textContent = budget.frameMs.toFixed(1) + " ms";
+    cell.ms.className = "ms" + (budget.frameMs > SHED_AT ? " bad" : "");
+    cell.shed.textContent = budget.shed ? "shed: " + SHED_ORDER.slice(0, budget.shed).join(", ") : "shed: none";
+    requestAnimationFrame(frame);
+  })();
+}
+
+/* ── Burst: bake once, blit back ───────────────────────────────────── */
+
+const bursts = [];
+
+for (const level of LEVELS.slice(1)) {
+  const cell = makeCell(document.getElementById("bursts"), "burst · " + level);
+  const gl = cell.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true });
+  if (!gl) { fail("no webgl for burst " + level); continue; }
+
+  const bake = build(gl, VERT, BURST_FRAG, "burst(" + level + ")");
+  const blit = build(gl, VERT, BLIT_FRAG, "blit");
+  if (!bake || !blit) continue;
+
+  gl.useProgram(bake);
+  quad(gl, bake);
+  gl.useProgram(blit);
+  quad(gl, blit);
+
+  const ub = locations(gl, bake, BURST_UNIFORMS, "burst");
+  const ul = locations(gl, blit, BLIT_UNIFORMS, "blit");
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  // Bake.
+  const frames = [];
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, BURST_FRAME_SIZE, BURST_FRAME_SIZE);
+  gl.useProgram(bake);
+  gl.uniform2f(ub.uRes, BURST_FRAME_SIZE, BURST_FRAME_SIZE);
+  gl.uniform1f(ub.uSeed, 0.42);
+  gl.uniform1f(ub.uChaos, chaosFor(level));
+  gl.uniform3fv(ub.uDeep, RAMP.deep);
+  gl.uniform3fv(ub.uMid, RAMP.mid);
+  gl.uniform3fv(ub.uHot, RAMP.hot);
+
+  const bakeStart = performance.now();
+  for (let i = 0; i < BURST_FRAMES; i++) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, BURST_FRAME_SIZE, BURST_FRAME_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      fail("burst(" + level + "): framebuffer incomplete");
+      break;
+    }
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(ub.uTime, i / (BURST_FRAMES - 1));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    frames.push(tex);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const bakeMs = performance.now() - bakeStart;
+  cell.shed.textContent = "bake " + bakeMs.toFixed(0) + " ms · " + frames.length + " frames";
+
+  bursts.push(() => {
+    const start = performance.now();
+    (function frame() {
+      const t = Math.min(1, (performance.now() - start) / BURST_MS);
+      const tex = frames[Math.min(frames.length - 1, Math.floor(t * frames.length))];
+      const w = cell.canvas.clientWidth, h = cell.canvas.clientHeight;
+      if (cell.canvas.width !== w || cell.canvas.height !== h) {
+        cell.canvas.width = w; cell.canvas.height = h;
+      }
+      gl.viewport(0, 0, cell.canvas.width, cell.canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(blit);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.uniform1i(ul.uFrame, 0);
+      const envelope = t < 0.12 ? easeOut(t / 0.12) : 1 - easeOut((t - 0.12) / 0.88);
+      gl.uniform1f(ul.uOpacity, envelope);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      cell.ms.textContent = (t * BURST_MS).toFixed(0) + " / " + BURST_MS + " ms";
+      if (t < 1) requestAnimationFrame(frame);
+    })();
+  });
+}
+
+document.getElementById("fire").addEventListener("click", () => bursts.forEach((play) => play()));
+bursts.forEach((play) => play());
+</script>
+
+</body>
+</html>

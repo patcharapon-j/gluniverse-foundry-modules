@@ -33,3 +33,4 @@ import "./pf2e-recall/index.mjs";
 import "./resource-bars/index.mjs";
 import "./token-conditions/index.mjs";
 import "./pf2e-aoe/index.mjs";
+import "./pf2e-arcane-surge/index.mjs";
