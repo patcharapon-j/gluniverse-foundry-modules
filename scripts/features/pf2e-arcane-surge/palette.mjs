@@ -88,3 +88,36 @@ export function levelFloats(level) {
     hot: hexToRgbFloat(PALETTE[`${key}Hot`] ?? PALETTE[key]),
   };
 }
+
+/**
+ * The 3D dice: the glass, and the mark burning inside it.
+ *
+ * ONE STATEMENT, IN ONE PLACE, BECAUSE THESE TWO ARE ONLY MEANINGFUL AGAINST
+ * EACH OTHER. The body is the colour of the casting; the glyph is the answer
+ * the die exists to give. They are written in two entirely different files —
+ * the body reaches Dice So Nice as a colorset field, the glyph is baked into an
+ * emissive PNG by `tools/gen-surge-textures.mjs` — and the first version of
+ * this had both landing on the suite's teal. A teal mark inside a teal die is
+ * a die that answers nothing, and both halves looked perfectly correct in their
+ * own file.
+ *
+ * So they are keys here, the check tool measures the angle between them, and
+ * neither file states a colour of its own.
+ *
+ * `apex` is the suite's deep arcane violet: dark enough that a lit mark reads
+ * against it, saturated enough to be a glass and not a smoke, and — unlike the
+ * near-blacks — bright enough to be a body at all on a transmissive material.
+ * The glyph stays in the COOL arcane family rather than going hot, because the
+ * severity tiers own amber and red (`TIER_KEYS`) and a surge glyph in warn
+ * would announce a Major before the severity has been rolled.
+ */
+export const DIE_KEYS = Object.freeze({
+  body: "apex",
+  edge: "violetHot",
+  glyph: "cyan",
+});
+
+/** The surge glyph's emission, as a float triple. */
+export function glyphFloats() {
+  return hexToRgbFloat(PALETTE[DIE_KEYS.glyph]);
+}

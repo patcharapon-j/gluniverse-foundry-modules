@@ -52,10 +52,15 @@ import { fileURLToPath } from "node:url";
 
 import { LEVELS } from "../scripts/features/pf2e-arcane-surge/constants.mjs";
 import { glyphFaces, resolveConfig, rollingLevels } from "../scripts/features/pf2e-arcane-surge/levels.mjs";
+import { glyphFloats } from "../scripts/features/pf2e-arcane-surge/palette.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "assets", "pf2e-arcane-surge", "dice");
 const SIZE = 256;
+
+/* The surge glyph's hue, from the suite palette by way of DIE_KEYS — never
+   written out here. See the emission block in bakeFace() for why that matters. */
+const GLYPH_RGB = glyphFloats();
 
 /**
  * Exactly what ships, in the order the contact sheet prints it.
@@ -354,14 +359,27 @@ function bakeFace(face) {
       bump[i] = Math.round(clamp01(height) * 255);
 
       /* Emission — the glyph only, and hottest at its core, so the surge face
-         looks lit from inside its own wound. This is now the ONLY thing that
+         looks lit from inside its own wound. This is the ONLY thing that
          separates a surge face from a blank one at a glance, which is why it
          reaches full brightness rather than sitting at the tint it did when the
-         albedo was also darkening the mark. */
-      const glow = face === "surge" ? Math.pow(mark, 1.2) : 0;
-      emissive[i * 3] = Math.round(clamp01(glow * 0.42) * 255);
-      emissive[i * 3 + 1] = Math.round(clamp01(glow * 1.0) * 255);
-      emissive[i * 3 + 2] = Math.round(clamp01(glow * 0.94) * 255);
+         albedo was also darkening the mark.
+
+         THE HUE IS NOT WRITTEN HERE. It comes from DIE_KEYS.glyph, the same
+         statement that gives the colorset in `dsn.mjs` the body this burns
+         inside. Written out separately, the two drifted onto the same colour
+         immediately — the die was the suite's teal and so was the whirlpool,
+         and each half looked perfectly correct in its own file while the die
+         answered nothing. The check tool measures the angle between them.
+
+         Toward the eye it blows to white, so the mark has a value range of its
+         own rather than being one flat wash: across a table the centre is what
+         you catch first and the arms are what tell you what it was. */
+      const rc = Math.hypot((x - 0.5) * 2, (y - 0.5) * 2);
+      const heat = 1 - smoothstep(0.05, 0.32, rc);
+      const glow = face === "surge" ? Math.pow(mark, 1.15) : 0;
+      for (let c = 0; c < 3; c++) {
+        emissive[i * 3 + c] = Math.round(clamp01(mix(GLYPH_RGB[c], 1, heat * 0.8) * glow) * 255);
+      }
     }
   }
 

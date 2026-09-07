@@ -745,6 +745,12 @@ for (const [label, frag, uniforms, hostRel] of [
     }
   }
 
+  /* Read the colorset's own body, comment-stripped: every field below is a
+     common English word, and the prose around them must not be able to satisfy
+     an assertion about the code. */
+  const colorsetSrc = stripComments(dsnSrc).match(/function colorset\(\)[\s\S]*?\n}/)?.[0] ?? "";
+  if (!colorsetSrc) fail("dsn.mjs", "no colorset() to check — the 3D theme is built somewhere this tool cannot see");
+
   /* THE TRANSPARENT LABEL IS LOAD-BEARING. Dice So Nice draws a face's
      bumpMaps and emissiveMaps only in the branch it takes when that face's
      label resolves to an image; a text label (including "") goes down a path
@@ -792,14 +798,66 @@ for (const [label, frag, uniforms, hostRel] of [
     fail("gen-surge-textures.mjs", "says nothing about transmission, so the next person to retune the bump will take the die's glass away without knowing");
   }
 
-  /* A transmissive body carries its tint through the whole casting instead of
-     painting it on, so a near-black background is not a dark glass die — it is
-     a void. `ink0`..`ink2` are the suite's near-blacks and none of them can be
-     the body of something you are meant to see through. */
-  const body = dsnSrc.match(/background:\s*PALETTE\.(\w+)/)?.[1];
-  if (!body) fail("dsn.mjs", "the colorset sets no background from the palette");
-  else if (/^ink\d$/.test(body)) {
-    fail("dsn.mjs", `the die's body is PALETTE.${body}, a near-black; on a transmissive material that renders as a void rather than as dark glass`);
+  /* THE DIE'S BODY AND THE MARK BURNING INSIDE IT ARE ONLY MEANINGFUL AGAINST
+     EACH OTHER, and they are written in two entirely different files — the body
+     reaches DSN as a colorset field, the glyph is baked into an emissive PNG by
+     the texture tool. Stated separately they drifted onto the same colour
+     immediately: the die was the feature's teal and so was the whirlpool, so
+     the one thing the die exists to say was invisible, and each half looked
+     perfectly correct in its own file.
+
+     Both now come from DIE_KEYS, and this measures the angle between them.
+     Two further things the body has to be: not a near-black, because a
+     transmissive material carries its tint through the whole casting and a
+     near-black body is a void rather than dark glass; and darker than the
+     glyph, since the glyph is a light source burning inside it. */
+  {
+    const { DIE_KEYS } = await import(`../${FEATURE}/palette.mjs`);
+    const { PALETTE } = await import("../scripts/core/theme.mjs");
+    const hueOf = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+      if (!d) return 0;
+      const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    const lumOf = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.2126 * (((n >> 16) & 255) / 255) + 0.7152 * (((n >> 8) & 255) / 255) + 0.0722 * ((n & 255) / 255);
+    };
+
+    for (const role of ["body", "edge", "glyph"]) {
+      if (!DIE_KEYS?.[role]) fail("palette.mjs", `DIE_KEYS has no "${role}"`);
+      else if (!PALETTE[DIE_KEYS[role]]) fail("palette.mjs", `DIE_KEYS.${role} names "${DIE_KEYS[role]}", which is not a colour in PALETTE`);
+    }
+    const bodyHex = PALETTE[DIE_KEYS?.body];
+    const glyphHex = PALETTE[DIE_KEYS?.glyph];
+    if (bodyHex && glyphHex) {
+      let apart = Math.abs(hueOf(bodyHex) - hueOf(glyphHex));
+      if (apart > 180) apart = 360 - apart;
+      if (apart < 45) {
+        fail("palette.mjs", `the die's body (${DIE_KEYS.body}) and its surge glyph (${DIE_KEYS.glyph}) are ${apart.toFixed(0)}° apart in hue — the mark does not read against the glass it burns in`);
+      }
+      if (lumOf(glyphHex) <= lumOf(bodyHex)) {
+        fail("palette.mjs", `the surge glyph (${DIE_KEYS.glyph}) is no brighter than the body (${DIE_KEYS.body}); it is a light source inside the die and has to out-value it`);
+      }
+      if (/^ink\d$/.test(DIE_KEYS.body)) {
+        fail("palette.mjs", `the die's body is ${DIE_KEYS.body}, a near-black; on a transmissive material that renders as a void rather than as dark glass`);
+      }
+    }
+    // And neither file may state a colour of its own any more.
+    if (/background:\s*PALETTE\.\w/.test(colorsetSrc)) {
+      fail("dsn.mjs", "the colorset names a palette colour directly instead of going through DIE_KEYS, which is how the body and the glyph drifted onto the same hue");
+    }
+    /* The baker must USE the shared hue, not merely import it. Matching the
+       import alone passes on a file that imports it and then writes literals
+       anyway, which is exactly the state this is here to prevent. */
+    const emission = stripComments(bakerSrc).match(/emissive\[i \* 3[^\]]*\]\s*=[^;]+;/g) ?? [];
+    if (!emission.length) fail("gen-surge-textures.mjs", "no emissive write found — this tool can no longer see how the glyph is lit");
+    else if (!emission.every((line) => /GLYPH_RGB/.test(line))) {
+      fail("gen-surge-textures.mjs", "the emissive map writes a literal colour instead of DIE_KEYS' hue, so the glyph can drift onto the body's colour again");
+    }
   }
 
   /* A COLORSET WITHOUT ITS THREE IDENTITY FIELDS BREAKS SOMEBODY ELSE'S UI.
@@ -812,12 +870,6 @@ for (const [label, frag, uniforms, hostRel] of [
      description reaches `.localeCompare` and throws, which does not break these
      dice, it breaks THAT DIALOG for every user in the world. This shipped once
      and did both at the same time. */
-  /* Read the colorset's own body, comment-stripped: every field below is a
-     common English word, and the prose around them must not be able to satisfy
-     an assertion about the code. */
-  const colorsetSrc = stripComments(dsnSrc).match(/function colorset\(\)[\s\S]*?\n}/)?.[0] ?? "";
-  if (!colorsetSrc) fail("dsn.mjs", "no colorset() to check — the 3D theme is built somewhere this tool cannot see");
-
   for (const field of ["name", "description", "category"]) {
     if (!new RegExp(`\\b${field}:\\s*\\S`).test(colorsetSrc)) {
       fail("dsn.mjs", `the colorset has no \`${field}\` — DSN needs all three, and without them the theme never resolves and its settings dialog throws`);

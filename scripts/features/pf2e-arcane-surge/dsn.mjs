@@ -56,6 +56,7 @@ import { featurePath, log, warn } from "../../core/const.mjs";
 import { PALETTE } from "../../core/theme.mjs";
 import { DSN_COLORSET, DSN_NAMESPACE, FACE_ASSETS, SURGE_DIE_DENOMINATION } from "./constants.mjs";
 import { hasSurgeDie } from "./die.mjs";
+import { DIE_KEYS } from "./palette.mjs";
 import { glyphFaces, rollingLevels } from "./levels.mjs";
 import { levelConfig } from "./settings.mjs";
 
@@ -158,15 +159,20 @@ function colorset() {
     // White numerals, because they read at the same weight through any thickness
     // of tinted glass and a second hue would be a second thing to decode.
     foreground: PALETTE.textBright,
-    /* THE BODY OF THE DIE, and it has to be a colour with light in it.
-       A transmissive material carries its tint through the whole casting rather
-       than painting it on the surface, so a near-black background — this was
-       `ink2` — is not a dark glass die, it is a void with an opaque figure
-       floating in it. The suite's teal is this feature's own `--gl-accent`, so
-       the die, the banner and the HUD chip are one object. */
-    background: PALETTE.teal,
+    /* THE BODY OF THE DIE, and it is only meaningful against the mark burning
+       inside it — so both are one statement in `palette.mjs` and neither file
+       names a colour of its own. See DIE_KEYS there for why it is this one.
+
+       Two things it has to be at once. It needs light in it: a transmissive
+       material carries its tint through the whole casting rather than painting
+       it on the surface, so a near-black body (this was `ink2`) is not dark
+       glass, it is a void with a figure floating in it. And it has to be far
+       enough from the glyph's hue to be a background for it — the version
+       after that was the suite's teal, which is the feature's own accent and
+       was also, exactly, the colour of the glyph. */
+    background: PALETTE[DIE_KEYS.body],
     outline: PALETTE.ink0,
-    edge: PALETTE.tealHot,
+    edge: PALETTE[DIE_KEYS.edge],
     // "glass" is DSN's transmissive material, and it is the point: nothing here
     // paints over it. The frost is relief only, carried by the texture's bump.
     material: "glass",

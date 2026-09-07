@@ -513,7 +513,14 @@ opaque smear repeated across the table.
 Two smaller ones in the same family. The die's body colour has to have light in
 it — a transmissive material carries its tint through the whole casting instead
 of painting it on, so a near-black background renders as a void rather than as
-dark glass, and the check refuses an `ink*` token there. And bump and emissive
+dark glass, and the check refuses an `ink*` token there. It must also be far
+enough from the *glyph's* hue to be a background for it: those two are produced
+in completely different places (the body is a colorset field in `dsn.mjs`, the
+glyph is baked into an emissive PNG by the texture tool) and, stated separately,
+they landed on the same teal within one commit — so the one thing the die exists
+to say was invisible while each half looked correct in its own file. Both now
+come from `DIE_KEYS` in `palette.mjs`, and the check measures the angle between
+them (≥ 45°) and requires the glyph to out-value the body. And bump and emissive
 maps *both* live behind DSN's "realistic lighting", which Foundry's own Low
 performance mode turns off; a die carrying nothing else is twenty identical
 faces there, so `registerDiceSoNice` checks and stands down to DSN's internal

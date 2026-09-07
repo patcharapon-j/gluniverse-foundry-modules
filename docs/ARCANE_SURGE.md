@@ -373,8 +373,7 @@ Two smaller consequences of the same material:
 - **The body colour has to have light in it.** A transmissive material carries
   its tint through the whole casting rather than painting it on the surface, so
   a near-black background is not a dark glass die, it is a void with an opaque
-  figure floating in it. The body is the feature's own `--gl-accent` teal, and
-  `arcane-surge-check.mjs` refuses an `ink*` token there.
+  figure floating in it. `arcane-surge-check.mjs` refuses an `ink*` token there.
 - **Bump and emissive maps both live behind DSN's "realistic lighting"**, which
   Foundry's own Low performance mode turns off. There is no normal map and no
   emissive map at all in that branch, and a die carrying nothing else is twenty
@@ -392,6 +391,30 @@ emissive *map* slot; that belongs to a preset), so its one channel is
 `emissiveLabels: true`, which lights DSN's own numeral canvas. Without it that
 die is the only surface in the feature wearing relief and no light, and a number
 cut into unlit glass is a number you have to hunt for.
+
+### The glass and the mark are one statement
+
+`DIE_KEYS` in `palette.mjs` names three palette keys — `body`, `edge`, `glyph` —
+and neither of the two files that render the die states a colour of its own.
+
+That is not tidiness. **The body and the glyph are only meaningful against each
+other, and they are produced in completely different places**: the body reaches
+Dice So Nice as a colorset field in `dsn.mjs`, while the glyph is baked into an
+emissive PNG by `tools/gen-surge-textures.mjs` and does not exist at runtime at
+all. Written separately, they landed on the same colour within one commit — the
+die was the feature's `--gl-accent` teal and so was the whirlpool, so the single
+thing the die exists to say was invisible, and each half looked entirely correct
+in its own file.
+
+The check tool measures the angle between them and requires ≥ 45°; the shipped
+pair is 86° apart (`apex` #b14bff at hue 274, `cyan` #5eeaff at hue 188). It
+also requires the glyph to out-value the body, since the glyph is a light source
+burning inside it, and refuses an `ink*` body for the reason above.
+
+The glyph deliberately stays in the **cool** arcane family rather than going hot.
+The severity tiers own amber and red (`TIER_KEYS`: cyan, warn, warnDeep,
+hazard), so a surge glyph in `warn` would announce a Major before the severity
+has been rolled.
 
 ```bash
 node tools/arcane-surge-preview.mjs --out=.preview/surge.html
