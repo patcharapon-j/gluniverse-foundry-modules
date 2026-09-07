@@ -300,6 +300,42 @@ for (const [label, frag, uniforms, hostRel] of [
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   5e. Nothing in a shader is computed and thrown away
+   ══════════════════════════════════════════════════════════════════════
+   A GLSL local that is assigned and never sampled compiles clean, costs
+   nothing, and silently deletes whatever it was supposed to contribute. The
+   burst shipped for a while with its entire swirl in one: a `vec2 sp =
+   glasSwirl(...)` under a comment reading "everything is dragged around the
+   centre", never read again — so the one term that made the surge rotate was
+   doing nothing at all, and what played was a detailed still image being faded
+   out. No compiler warns, no uniform check catches it (the uniforms were all
+   there and all written), and it looks plausible in a diff.
+
+   These shaders are small and their declarations are uniform in shape, so a
+   count of each local's occurrences is enough. */
+
+{
+  const bodies = {
+    CRACK_FRAG: shader.CRACK_FRAG,
+    BURST_FRAG: shader.BURST_FRAG,
+    SEVERITY_FRAG: shader.SEVERITY_FRAG,
+    BLIT_FRAG: shader.BLIT_FRAG,
+  };
+  for (const [name, glsl] of Object.entries(bodies)) {
+    // Comment-stripped: a local named in prose must not count as a use of it.
+    const code = stripComments(glsl);
+    const declared = [...code.matchAll(/^\s*(?:float|vec[234]|int|bool|mat[234])\s+(\w+)\s*=/gm)];
+    for (const [, local] of declared) {
+      const uses = code.match(new RegExp(`\\b${local}\\b`, "g"))?.length ?? 0;
+      // One occurrence is the declaration itself and nothing else.
+      if (uses < 2) {
+        fail("shader.mjs", `${name} computes "${local}" and never reads it — whatever that term was meant to contribute is silently absent`);
+      }
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    5d. The level's colour is one statement, not two
    ══════════════════════════════════════════════════════════════════════
    The chip's marker is coloured by CSS and the cracks growing out of it by a
@@ -764,6 +800,31 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!body) fail("dsn.mjs", "the colorset sets no background from the palette");
   else if (/^ink\d$/.test(body)) {
     fail("dsn.mjs", `the die's body is PALETTE.${body}, a near-black; on a transmissive material that renders as a void rather than as dark glass`);
+  }
+
+  /* A COLORSET WITHOUT ITS THREE IDENTITY FIELDS BREAKS SOMEBODY ELSE'S UI.
+     `addColorset` supplies defaults for the appearance keys but NOT for these,
+     then does `COLORSETS[colorset.name] = colorset` — so a missing `name`
+     registers the theme under the literal key "undefined" and every die quietly
+     falls back to the player's own colorset, frosted glass and all. Worse,
+     `Utils.prepareColorsetList` localizes `description` and `category` to build
+     the 3D-dice settings dialog and then sorts on the result: an undefined
+     description reaches `.localeCompare` and throws, which does not break these
+     dice, it breaks THAT DIALOG for every user in the world. This shipped once
+     and did both at the same time. */
+  /* Read the colorset's own body, comment-stripped: every field below is a
+     common English word, and the prose around them must not be able to satisfy
+     an assertion about the code. */
+  const colorsetSrc = stripComments(dsnSrc).match(/function colorset\(\)[\s\S]*?\n}/)?.[0] ?? "";
+  if (!colorsetSrc) fail("dsn.mjs", "no colorset() to check — the 3D theme is built somewhere this tool cannot see");
+
+  for (const field of ["name", "description", "category"]) {
+    if (!new RegExp(`\\b${field}:\\s*\\S`).test(colorsetSrc)) {
+      fail("dsn.mjs", `the colorset has no \`${field}\` — DSN needs all three, and without them the theme never resolves and its settings dialog throws`);
+    }
+  }
+  if (!/name:\s*DSN_COLORSET/.test(colorsetSrc)) {
+    fail("dsn.mjs", "the colorset's name is not DSN_COLORSET, so the name tagRoll asks for is not the name it registered under");
   }
 
   /* The severity d100 was asked for emission too, and a colorset has no

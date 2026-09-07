@@ -133,6 +133,28 @@ async function ensureFontLoaded() {
 /** Frosted glass, shared by the surge die and the severity roll. */
 function colorset() {
   return {
+    /* THESE THREE ARE NOT DECORATION, and leaving them out breaks two things
+       at once — which is exactly what happened when this object was last
+       rewritten.
+
+       `addColorset` merges the argument over its own defaults and then does
+       `COLORSETS[colorset.name] = colorset`, and `name` is not one of those
+       defaults. Without it the theme registers under the literal key
+       "undefined", so `tagRoll` naming DSN_COLORSET matches nothing and every
+       die silently falls back to whatever the player picked for themselves —
+       the frosted glass simply never arrives, and no part of the pipeline says
+       so.
+
+       `description` and `category` are read by `prepareColorsetList`, which
+       builds the 3D-dice settings dialog: it localizes both and then sorts on
+       the result. An undefined description reaches `.localeCompare` and throws,
+       which does not break OUR dice — it breaks the DICE SO NICE SETTINGS
+       DIALOG, for every user in the world, whether or not they ever touch this
+       feature. Registering a malformed theme is a way to take somebody else's
+       UI down. */
+    name: DSN_COLORSET,
+    description: "GLUniverse Arcane Surge",
+    category: "GLUniverse",
     // White numerals, because they read at the same weight through any thickness
     // of tinted glass and a second hue would be a second thing to decode.
     foreground: PALETTE.textBright,

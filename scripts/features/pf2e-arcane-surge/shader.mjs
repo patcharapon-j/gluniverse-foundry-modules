@@ -75,16 +75,15 @@ float glasRidge(vec2 p) {
 float glasRidge2(vec2 p) {
   return 0.65 * glasRidge(p) + 0.35 * glasRidge(p * 2.11);
 }
-
-// Rotate by an angle that grows toward the centre: a whirlpool, not a spin.
-vec2 glasSwirl(vec2 p, float amount) {
-  float r = length(p);
-  float a = amount / (r + 0.28);
-  float s = sin(a);
-  float c = cos(a);
-  return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-}
 `;
+
+/* There was a `glasSwirl(p, amount)` here that rotated a point by an angle
+   growing toward the centre. It is gone, and not because the idea was wrong —
+   it is exactly right, and the burst now does it inline as `shear`. It is gone
+   because the burst was the only caller, it assigned the result to a local it
+   then never sampled, and a helper whose one call site discards its return
+   value is a helper that has quietly stopped existing. Doing it inline puts the
+   shear next to the angles it shears. */
 
 /* ══════════════════════════════════════════════════════════════════════
    Crack — the standing state, around the label that names it
@@ -217,46 +216,96 @@ void main() {
   float a = atan(p.y, p.x);
   float t = uProgress;
 
-  /* The beat: a hard snap in, then a long decay. The punch term is what makes
-     it feel struck rather than faded up — it is at full height within the first
-     6% of the duration. */
-  float punch = smoothstep(0.0, 0.06, t);
-  float decay = pow(1.0 - t, 1.7);
-  float env = punch * decay;
+  /* The beat: a hard snap in — full height inside the first 5% — then a long
+     decay with a second flare partway down it. The re-flare is there because a
+     single envelope means the whole back half of the beat is one picture
+     dimming, and a picture dimming is what "static" actually looks like however
+     much detail is in it. Two events read as something happening. */
+  float punch = smoothstep(0.0, 0.05, t);
+  float decay = pow(1.0 - t, 1.55);
+  float reflare = exp(-pow((t - 0.34) * 6.0, 2.0)) * 0.45;
+  float env = punch * decay * (1.0 + reflare);
 
-  // Everything is dragged around the centre, harder early on.
-  vec2 sp = glasSwirl(p, (2.6 + 1.4 * uChaos) * mix(1.0, 0.25, t));
+  /* DIFFERENTIAL ROTATION, which is the whole of why this turns now.
 
-  /* Spiral arms. The angle is offset by log(r) so the arms curve instead of
-     radiating — that curve is what separates a whirlpool from a starburst. */
-  float spiral = sin(a * 5.0 + log(r + 0.09) * 6.5 - uTime * 5.0 + uSeed * 6.28);
-  spiral = pow(max(spiral, 0.0), 2.6);
+     A vortex is not a picture on a turntable. Its inner radii come round far
+     faster than its outer ones, and that SHEAR is the thing the eye reads as
+     rotation — a field rotating rigidly at one rate is nearly indistinguishable
+     from a still one, because there is no relative motion anywhere in it to
+     see. This shader used to have neither: its one swirl was computed into a
+     local and then never sampled, so the only motion in the whole pass was the
+     arm phase drifting at about a radian a second.
 
-  // Radial filaments whipping outward, thin and bright.
-  float fil = glasRidge2(vec2(a * 2.4 + uSeed * 9.0, r * 5.5 - uTime * 2.2));
-  fil = pow(fil, 3.2);
+     The falloff is Rankine-ish — near solid-body inside the eye, ~1/r² outside
+     it — and the +0.14 is what keeps the centre finite rather than infinite. */
+  float spin = uTime * (2.4 + 1.6 * uChaos);
+  float shear = spin / (r * r + 0.14);
+  float aIn = a + shear * 0.26;
+  /* And the outer sheet turns the OTHER way, slowly. Two bodies moving against
+     each other is what stops the far field reading as one flat spiral pinned to
+     the screen, out where the shear above has almost nothing left to give. */
+  float aOut = a - spin * 0.22;
 
-  /* The collapsing ring — a shock that races outward then thins. It reads as
-     the moment of the surge, so it leads the whole effect. */
-  float ringR = 0.10 + 1.35 * pow(t, 0.55);
+  /* Spiral arms, two octaves. The angle carries log(r) so they curve instead of
+     radiating — that curve is what separates a whirlpool from a starburst — and
+     the second octave winds the opposite way and at its own rate, so the
+     pattern shears against itself rather than repeating. */
+  float arm1 = sin(aIn * 5.0 + log(r + 0.09) * 6.5 + uSeed * 6.28);
+  float arm2 = sin(aIn * 8.0 - log(r + 0.05) * 9.5 - spin * 0.40 + uSeed * 2.4);
+  float spiral = pow(max(arm1, 0.0), 2.4) * 0.62 + pow(max(arm2, 0.0), 3.6) * 0.38;
+
+  // Filaments, advected outward AND carried round, so material visibly travels
+  // rather than flickering in place.
+  float fil = glasRidge2(vec2(aIn * 2.4 + uSeed * 9.0, r * 5.5 - uTime * 2.6));
+  fil = pow(fil, 3.0);
+
+  /* Debris riding the counter-turning sheet: fine, hard-edged and quick. It is
+     the only term here that reads as a THING being carried rather than as a
+     field evolving, which is what sells the rotation at the outer radii, where
+     the shear above has almost nothing left to give.
+
+     Cut with a smoothstep on the ridge CREST rather than raised to a power. A
+     ridged field is already a fold, so pow() keeps a broad plateau either side
+     of the crest and the result is fat cells — foam, not debris. The narrow
+     smoothstep takes the crest alone, which is what makes these shards. The
+     frequencies are high for the same reason: this is the finest thing in the
+     pass and the supersampler above exists to carry exactly this. */
+  float grit = glasRidge2(vec2(aOut * 13.0, r * 19.0 - uTime * 1.6));
+  grit = smoothstep(0.80, 0.99, grit) * smoothstep(0.10, 0.45, r) * (1.0 - smoothstep(0.95, 1.5, r));
+
+  /* The shock ring — a front that races outward then thins, and the thing that
+     reads as the moment of the surge. Lobed, and the lobes turn: a perfect
+     circle is rotation-invariant, so it can spin at any speed and look
+     identical, which quietly exempted the single largest shape on screen from
+     everything above. */
+  float lobe = 0.030 * sin(a * 3.0 - spin * 0.70 + uSeed * 6.28)
+             + 0.014 * sin(a * 7.0 + spin * 1.10);
+  float ringR = 0.10 + 1.35 * pow(t, 0.55) + lobe * (1.0 - t);
   float ring = smoothstep(0.13, 0.0, abs(r - ringR)) * (1.0 - smoothstep(0.55, 1.0, t));
 
-  // The eye of it: a hot core that flares and shrinks.
+  // The eye: a hot core that flares and shrinks, with a knot orbiting inside it
+  // — an off-centre bright that the core alone, being radially symmetric, could
+  // never provide.
   float core = smoothstep(0.30 * (1.0 + 2.2 * t), 0.0, r);
+  float knot = smoothstep(0.085, 0.0, length(p - 0.11 * vec2(cos(spin * 1.1), sin(spin * 1.1))));
 
   // Torn darkness just inside the ring, so the bright parts have a void behind
   // them rather than sitting on the map.
   float tear = smoothstep(0.0, 0.35, ringR - r) * (1.0 - smoothstep(0.7, 1.0, t));
 
-  float energy = clamp(spiral * 0.55 + fil * 0.5, 0.0, 1.0);
+  float energy = clamp(spiral * 0.55 + fil * 0.46 + grit * 0.50, 0.0, 1.0);
   energy *= smoothstep(1.5, 0.15, r);
 
   vec3 col = mix(uDeep, uMid, clamp(energy * 1.3 + ring * 0.8, 0.0, 1.0));
-  col = mix(col, uHot, clamp(ring * 1.1 + core * 1.4 + energy * energy * 0.7, 0.0, 1.0));
-  // The brightest parts blow toward white so the burst reads on any backdrop.
-  col = mix(col, vec3(1.0), clamp(core * 1.2 + ring * ring * 0.9, 0.0, 1.0));
+  col = mix(col, uHot, clamp(ring * 1.1 + core * 1.4 + knot * 1.0 + energy * energy * 0.7, 0.0, 1.0));
+  /* The brightest parts blow toward white so the burst reads on any backdrop —
+     but only just. Pushed harder, the core and the knot merge into one white
+     disc that swallows the arms turning inside it, and the effect gets brighter
+     and less legible at the same time. The white is a highlight on the vortex,
+     not the vortex. */
+  col = mix(col, vec3(1.0), clamp(core * 0.95 + knot * 0.6 + ring * ring * 0.9, 0.0, 1.0));
 
-  float alpha = clamp(energy * 0.72 + ring * 0.95 + core * 0.9 + tear * 0.42, 0.0, 1.0);
+  float alpha = clamp(energy * 0.72 + ring * 0.95 + core * 0.9 + knot * 0.55 + tear * 0.42, 0.0, 1.0);
   alpha *= env * (0.72 + 0.28 * uChaos);
   gl_FragColor = vec4(col * alpha, alpha);
 }
