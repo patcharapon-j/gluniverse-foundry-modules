@@ -573,6 +573,64 @@ different transport channels, why the standing instability is drawn in the HUD
 chip rather than over the board, and why every pass runs live off a warmed
 context rather than from baked frames.
 
+**When touching Insight** (`features/insight/`, `styles/insight.css`,
+`templates/insight/`), re-run its consistency check. An Insight arrival is a
+sequence of classes applied to elements by a clock, over CSS that is almost
+entirely one-shot keyframes — so nothing here throws when it breaks, a beat of
+the reveal just never happens, on a player's screen, once, while the GM's own
+screen looks correct. It pins every element the renderer reaches for against
+the template (a rename makes `querySelector` return null, which drops a beat
+silently and throws outright on the two that are not optional); the *reverse*
+direction too, because most of the arrival — the flash, the scan, the four
+corner marks, the frame — is nodes JS never touches and CSS alone animates, so
+a rename on either side simply deletes that beat; the stage clock in
+`tools/insight-preview.mjs` against the one in `notification.mjs`, since the
+preview is where this feature is judged and a preview on its own timings
+flatters a reveal nobody ships; that every setting the renderer reads is
+registered (`game.settings.get` on an unregistered key throws *inside* the
+render, losing the whole notification rather than degrading it); that every
+edge-intensity tier names a class the CSS defines, since a tier that resolves
+to nothing renders as "full" — the one outcome a player who turned the edge
+down did not consent to; that every sound profile carries all three stages,
+because a missing one is a designed no-op and a profile that lost its `impact`
+is a silent alert on the exact beat the alert exists for; and that a preset
+only ever remaps `--gl-accent` plus this feature's own `--insight-*` tokens,
+because presets are **not** themes and one that repaints a surface forks
+Etched Glass while looking perfectly fine in its own file:
+
+```bash
+node tools/insight-check.mjs
+```
+
+Zero problems required. Two of its rules are there because this feature got
+both wrong on the way in.
+
+`--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` are
+declared at `:root` **against the `:root` accent**, so they do not follow a
+scoped `--gl-accent` remap — a custom property's `var()` is substituted where
+it is declared, and descendants inherit the already-resolved value. Reading one
+inside a violet card paints the suite's default blue, and only on the elements
+that happen to use it. Every accent-derived value in `styles/insight.css` is
+struck inline with `color-mix()` for that reason; the check refuses the four.
+
+And **an accent that covers a whole viewport has to be corrected per hue.**
+The edge bands blend with `screen` over a cool canvas, where amber carries far
+further than a luminance-matched violet would predict: on the shared burn the
+Fantasy preset washed the entire frame yellow instead of lighting its edges,
+and looked deliberate in every file involved. That is why a preset may set
+`--insight-burn` and `--insight-reach-*` at all — the edge is the one place a
+preset's hue is spread across the whole screen, so it is the one place the
+preset carries its own correction.
+
+It cannot show you how any of this looks, and a still cannot either — the
+arrival *is* the feature. For that, `node tools/insight-preview.mjs` writes a
+page that drives the real stylesheets and the real template through the real
+stage order across four simulated 1200×675 desktops, plus the card at 1:1.
+**Serve it** (`node tools/preview-server.mjs`) — a `file://` page loads the CSS
+but not the module script, so you get a card frozen at its pre-entry values and
+conclude, wrongly, that the reveal is broken. Add `--artifact=<path>` for a
+self-contained copy that opens anywhere.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

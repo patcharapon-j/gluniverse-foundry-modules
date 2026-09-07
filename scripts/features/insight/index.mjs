@@ -32,6 +32,7 @@ Suite.register({
       soundVolume: "insight.soundVolume",
       soundFile: "insight.soundFile",
       animationSpeed: "insight.animationSpeed",
+      edgeIntensity: "insight.edgeIntensity",
     },
   },
 
