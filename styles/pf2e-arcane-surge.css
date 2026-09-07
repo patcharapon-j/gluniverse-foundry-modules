@@ -20,11 +20,21 @@
   --glas-seam: rgb(var(--gl-tint-light) / 0.08);
 }
 
-/* Level identity. One remap each; everything derived follows. */
+/* Level identity. One remap each; everything derived follows.
+
+   These four must stay in step with `palette.mjs`'s LEVEL_KEYS: the chip's
+   marker is coloured here and the cracks growing out of it by the shader, and
+   the two sit two pixels apart. The check tool holds them together.
+
+   `unbound` used --gl-holo-b, which gl-tokens.css aliases to --gl-violet, so
+   the ladder's two most dangerous rungs rendered in exactly the same colour —
+   the one place on it where telling them apart matters. Orchid is the token
+   file's documented "dying / unstable" hue and is deliberately distinct from
+   violet. */
 .glas-level-stable      { --gl-accent: var(--gl-teal); }
 .glas-level-fraying     { --gl-accent: var(--gl-cyan); }
-.glas-level-unbound     { --gl-accent: var(--gl-holo-b); }
-.glas-level-unraveling  { --gl-accent: var(--gl-violet); }
+.glas-level-unbound     { --gl-accent: var(--gl-violet); }
+.glas-level-unraveling  { --gl-accent: var(--gl-orchid); }
 
 /* Severity identity, on the card only. */
 .glas-tier-minor        { --gl-accent: var(--gl-cyan); }
@@ -33,22 +43,29 @@
 .glas-tier-breach       { --gl-accent: var(--gl-hazard); }
 
 /* ══════════════════════════════════════════════════════════════════════
-   The full-screen layers
+   The crack layer
    ══════════════════════════════════════════════════════════════════════
-   Two very different z-bands on purpose. The ambient veil runs for a whole
-   session, so it sits ABOVE the board and BELOW every piece of Foundry chrome —
-   a haze over the sidebar and hotbar for three hours would make the interface
-   unusable. The burst lasts two seconds and is allowed to dominate. */
+   The standing instability, drawn INSIDE the stability chip rather than over
+   the board. A session-long full-screen veil competes with the map for exactly
+   the space the play happens in; this never leaves the HUD.
 
-.glas-ambient {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: var(--gl-z-sticky);
+   `inset`, `width` and `height` are written from JS, because the canvas has to
+   overhang its own container by a fixed number of CSS pixels — that overhang is
+   what lets the fracture break OUT of the label instead of being clipped to
+   four straight lines. It is behind the chip's own content (z-index 0 against
+   the chip's 1), so the level's name stays readable at Unraveling. */
+
+.glas-cracks {
+  position: absolute;
+  z-index: 0;
   pointer-events: none;
   mix-blend-mode: screen;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   The full-screen layer
+   ══════════════════════════════════════════════════════════════════════
+   The burst lasts two seconds and is allowed to dominate everything. */
 
 .glas-burst {
   position: fixed;
@@ -328,23 +345,32 @@
 /* ══════════════════════════════════════════════════════════════════════
    The stability chip
    ══════════════════════════════════════════════════════════════════════
-   Sits under the weather chip in the HUD's date cell, so it is sized against
-   that chip rather than against the bar: one line, small caps, no kicker. The
-   weather chip already says which cluster this belongs to. */
+   Its own cell in the HUD bar: one line, one marker, one word. It is the whole
+   readout, so it is sized against the bar rather than tucked under the weather
+   chip — which is also what gives the cracks a box of their own to break out of.
+
+   The chip itself is deliberately UNFILLED. A panel background would sit on top
+   of the fracture and leave only the ten-pixel bleed showing; with nothing but a
+   hairline the glass reads as breaking through the label rather than behind a
+   card. `position: relative` is load-bearing twice over: it is the crack
+   canvas's containing block, and it is what puts the text above it. */
 
 .glas-stability {
+  position: relative;
   display: flex;
   align-items: center;
-  margin-top: 2px;
+  /* Never clip the canvas: the whole point of the bleed is to escape this box. */
+  overflow: visible;
 }
 
 .glas-chip {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  padding: 2px 6px;
-  background: var(--gl-surface-inset);
+  padding: 3px 8px;
+  background: transparent;
   border: 1px solid var(--gl-hair);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
   color: var(--gl-text);
@@ -398,14 +424,16 @@
   animation: gl-flash var(--gl-d-slow) var(--gl-enter) both;
 }
 
-/* Standalone panel, used only when the time-tracker HUD is not running. */
+/* Standalone panel, used only when the time-tracker HUD is not running.
+   Padded generously on purpose: its `clip-path` clips descendants, so the
+   crack bleed needs room INSIDE the panel or the fracture is cut off square. */
 .glas-standalone {
   position: fixed;
   top: 8px;
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--gl-z-hud);
-  padding: 4px 6px;
+  padding: 12px 14px;
   background: var(--gl-surface);
   border: 1px solid var(--gl-edge);
   box-shadow: var(--gl-elev-2);
@@ -420,49 +448,25 @@
    Steady / Invite, on the character sheet
    ══════════════════════════════════════════════════════════════════════
    Injected above the spellcasting tab's entry list, where a caster already is
-   when they pick a spell. An armed choice has to be impossible to miss — it
-   applies to exactly one casting and then lapses. */
+   when they pick a spell. Two buttons, no panel around them: this sits at the
+   top of a list somebody is scrolling, and a bordered card with a header and a
+   paragraph of prose was five pieces of chrome wrapped around two toggles.
+   Everything that panel said is on the tooltips now.
+
+   An armed choice still has to be impossible to miss — it applies to exactly
+   one casting and then lapses — which is what `.is-armed` is for. */
 
 .glas-arm-bar {
   display: flex;
-  flex-direction: column;
   gap: 6px;
-  margin: 0 0 8px;
-  padding: 8px 10px;
-  background: var(--gl-surface-inset);
-  border: 1px solid var(--gl-edge);
-  border-left: 2px solid var(--gl-accent);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-  color: var(--gl-text);
-}
-
-.glas-arm-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-family: var(--gl-tech);
-  font-size: 0.64rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.glas-arm-kicker { color: var(--gl-text-dim); }
-.glas-arm-level  { color: var(--gl-accent); font-weight: 700; }
-
-.glas-arm-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  margin: 0 0 6px;
 }
 
 .glas-arm-btn {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
+  display: flex;
   align-items: center;
-  gap: 1px 7px;
-  padding: 6px 9px;
+  gap: 6px;
+  padding: 4px 10px;
   background: var(--gl-surface-raised);
   border: 1px solid var(--gl-hair);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
@@ -472,25 +476,15 @@
 }
 
 .glas-arm-btn > i {
-  grid-row: 1 / span 2;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   color: var(--gl-accent);
 }
 
 .glas-arm-name {
   font-family: var(--gl-display);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   color: var(--gl-text-bright);
-}
-
-/* What the choice actually buys, resolved through the real rules. A player
-   should not have to hold the ladder in their head to use this. */
-.glas-arm-detail {
-  font-family: var(--gl-tech);
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
-  color: var(--gl-text-faint);
 }
 
 .glas-arm-btn:hover {
@@ -504,17 +498,6 @@
   animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
 }
 
-.glas-arm-btn.is-armed .glas-arm-detail {
-  color: var(--gl-text-dim);
-}
-
-.glas-arm-note {
-  margin: 0;
-  font-size: 0.66rem;
-  line-height: 1.35;
-  color: var(--gl-text-faint);
-}
-
 /* ══════════════════════════════════════════════════════════════════════
    The GM's level picker
    ══════════════════════════════════════════════════════════════════════ */
@@ -525,7 +508,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 300px;
+  /* Four names wide, not four paragraphs. The 300px version was taller than the
+     HUD it hangs off and covered the clock it sits beside. */
+  min-width: 150px;
   max-width: calc(100vw - 16px);
   padding: 4px;
   background: var(--gl-surface);
@@ -535,17 +520,16 @@
   animation: gl-drop-in var(--gl-d-brisk) var(--gl-enter) both;
 }
 
-/* Grid rather than flex: the mark and the text column then share one baseline
-   grid across every row, so the names line up no matter how long a hint wraps.
-   The previous flex version let each row size itself, which is why they came out
-   staggered. */
+/* Grid rather than flex: the mark and the name share one baseline grid across
+   every row, so the names line up exactly. The original flex version let each
+   row size itself, which is why they came out staggered. */
 .glas-picker-row {
   display: grid;
   grid-template-columns: 10px 1fr;
-  align-items: start;
+  align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 9px;
+  padding: 5px 9px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--gl-text);
@@ -565,16 +549,8 @@
 .glas-picker-mark {
   width: 8px;
   height: 8px;
-  margin-top: 5px;
   background: var(--gl-accent);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
-}
-
-.glas-picker-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
 }
 
 .glas-picker-name {
@@ -582,16 +558,7 @@
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--gl-text-bright);
-}
-
-.glas-picker-hint {
-  font-size: 0.7rem;
-  line-height: 1.35;
-  color: var(--gl-text-dim);
-  /* The hints are full sentences; without this they clip mid-word instead of
-     wrapping, which is the other half of what looked broken. */
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -784,8 +751,11 @@
   display: none;
 }
 
+/* The bleed has to be allowed out of the cell, or the cracks are clipped by the
+   HUD's own layout box the moment they leave the chip. */
 #glct-hud .cell.glas-slot {
-  padding: 0 2px;
+  padding: 0 10px;
+  overflow: visible;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

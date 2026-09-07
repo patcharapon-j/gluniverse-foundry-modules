@@ -11,6 +11,13 @@
  * user who owns that actor, while the world is actually unstable. At Stable
  * there is nothing to steady and nothing to invite, and an always-present pair
  * of dead buttons would train people to ignore them.
+ *
+ * It is TWO BUTTONS and nothing else. The first version carried a header, the
+ * current level, the effective level a steadied cast would resolve at, the row
+ * an invited one would be read against, and a line of explanatory prose — five
+ * pieces of chrome around two toggles, wedged into the top of a spell list
+ * somebody is scrolling. All of that survives on the tooltips, where it costs
+ * nothing until it is wanted.
  */
 
 import { escapeHTML } from "../../core/util.mjs";
@@ -62,38 +69,35 @@ function render(actor) {
   const level = currentLevel();
   const config = levelConfig();
 
-  /* Show what each choice actually buys, resolved through the real rules rather
-     than described in prose: the effective level a steadied cast would use, and
-     the row an invited one would be read against. A player choosing between them
-     should not have to hold the ladder in their head. */
+  /* What each choice actually buys, resolved through the real rules rather than
+     described in prose: the effective level a steadied cast would use, and the
+     row an invited one would be read against. It goes on the TOOLTIP — a player
+     choosing between them should not have to hold the ladder in their head, and
+     should not have to read it every time they open the tab either. */
   const steadied = resolveExposure(level, "steadied", config);
   const invited = resolveExposure(level, "invited", config);
-
-  const button = (id, icon, detail) => {
-    const on = mode === id;
-    return `<button type="button" class="glas-arm-btn ${on ? "is-armed" : ""}" data-glas-arm="${id}"
-              aria-pressed="${on}" title="${escapeHTML(game.i18n.localize(`GLAS.hud.arm.${id}`))}">
-      <i class="fa-solid ${icon}" aria-hidden="true"></i>
-      <span class="glas-arm-name">${escapeHTML(modeLabel(id))}</span>
-      <span class="glas-arm-detail">${escapeHTML(detail)}</span>
-    </button>`;
-  };
 
   const steadyDetail = steadied.rollsDie
     ? game.i18n.format("GLAS.sheet.steadyTo", { level: levelLabel(steadied.effective), threshold: steadied.threshold })
     : game.i18n.localize("GLAS.sheet.steadyToStable");
+  const inviteDetail = game.i18n.format("GLAS.sheet.inviteTo", {
+    row: game.i18n.localize(`GLAS.row.${invited.row}`),
+  });
 
-  return `<section class="glas-arm-bar gl-type glas-level-${level}">
-    <header class="glas-arm-head">
-      <span class="glas-arm-kicker">${escapeHTML(game.i18n.localize("GLAS.hud.armLabel"))}</span>
-      <span class="glas-arm-level">${escapeHTML(levelLabel(level))}</span>
-    </header>
-    <div class="glas-arm-row">
-      ${button("steadied", "fa-hand-holding-magic", steadyDetail)}
-      ${button("invited", "fa-bolt", game.i18n.format("GLAS.sheet.inviteTo", { row: escapeHTML(game.i18n.localize(`GLAS.row.${invited.row}`)) }))}
-    </div>
-    <p class="glas-arm-note">${escapeHTML(game.i18n.localize("GLAS.sheet.note"))}</p>
-  </section>`;
+  const button = (id, icon, detail) => {
+    const on = mode === id;
+    const hint = `${game.i18n.localize(`GLAS.hud.arm.${id}`)} — ${detail}`;
+    return `<button type="button" class="glas-arm-btn ${on ? "is-armed" : ""}" data-glas-arm="${id}"
+              aria-pressed="${on}" title="${escapeHTML(hint)}">
+      <i class="fa-solid ${icon}" aria-hidden="true"></i>
+      <span class="glas-arm-name">${escapeHTML(modeLabel(id))}</span>
+    </button>`;
+  };
+
+  return `<div class="glas-arm-bar gl-type glas-level-${level}">
+    ${button("steadied", "fa-hand-holding-magic", steadyDetail)}
+    ${button("invited", "fa-bolt", inviteDetail)}
+  </div>`;
 }
 
 function wire(root, actor) {

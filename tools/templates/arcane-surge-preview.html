@@ -21,6 +21,36 @@
       radial-gradient(circle at 32% 38%, #2b3a54, #0d1420 70%);
   }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* The crack row is drawn at SHIPPING SIZE. A strip in a HUD bar, with the
+     level's own name sitting on it, because the only question that matters here
+     is whether the fracture reads at twenty-odd pixels tall without eating the
+     word underneath it. A 16:10 stage would flatter it into meaninglessness. */
+  .strips { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .strips .stage {
+    aspect-ratio: auto; height: 54px; display: grid; place-items: center;
+    background: linear-gradient(180deg, #141a26, #0d121c);
+  }
+  /* The canvas overhangs the CHIP, exactly as it does in the HUD — that bleed
+     is what lets the fracture leave the label's box instead of being clipped
+     to four straight lines. */
+  .strips .chipwrap { position: relative; }
+  .strips .chip {
+    position: relative; z-index: 1; padding: 3px 8px;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    font: 700 11px/1.2 "Bahnschrift", Consolas, monospace;
+    letter-spacing: 0.04em; text-transform: capitalize; color: #eef1f7;
+  }
+  .strips canvas {
+    inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px);
+    z-index: 0; mix-blend-mode: screen;
+  }
+  /* The same canvas, at the same device resolution, blown up with no filtering.
+     Every question this row answers — does a hairline survive, does a shard
+     land on a pixel centre, does the word stay readable through it — is a
+     question about individual pixels, and none of them can be seen at 1×. */
+  .zoomed .stage { height: 190px; }
+  .zoomed .chipwrap { transform: scale(4); transform-origin: center; }
+  .zoomed canvas { image-rendering: pixelated; }
   .readout { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; font-size: 11px; color: #98a2b6; border-top: 1px solid rgb(255 255 255 / 0.06); }
   .bad { color: #ff4a52; }
   .controls { padding: 0 18px 18px; }
@@ -33,14 +63,19 @@
 <header>
   <h1>Arcane Surge — shader preview</h1>
   <p>The real shaders, compiled in a real WebGL context, driven by the real animation model.
-     Everything here runs LIVE — nothing is baked. The ambient row is the standing cost: it hugs
-     the screen edges and runs for hours, so watch its frame times. The beats are one-shots;
-     they render supersampled and average down, which is what keeps the rings and filaments
-     from crawling.</p>
+     Everything here runs LIVE — nothing is baked. The crack row is the standing cost, and it is
+     drawn at the size it actually ships at: a strip in the time-tracker HUD, not a full screen.
+     That size is the whole test — the shared fracture's shards are the finest detail in the
+     suite and this is the smallest place any of them has been asked to land. The beats are
+     one-shots; they render supersampled and average down, which is what keeps the rings and
+     filaments from crawling.</p>
 </header>
 
-<h2 class="sec">Ambient · runs for hours · edge-hugging</h2>
-<div class="grid" id="ambient"></div>
+<h2 class="sec">Cracks · runs for hours · at HUD size</h2>
+<div class="grid strips" id="cracks"></div>
+
+<h2 class="sec">Cracks · the same pixels at 4× · nearest-neighbour</h2>
+<div class="grid strips zoomed" id="cracksZoom"></div>
 
 <h2 class="sec">Beats · live one-shots</h2>
 <div class="controls">
@@ -55,11 +90,11 @@
 /*__ANIM_SRC__*/
 
 const VERT = /*__VERT__*/;
-const AMBIENT_FRAG = /*__AMBIENT_FRAG__*/;
+const CRACK_FRAG = /*__CRACK_FRAG__*/;
 const BURST_FRAG = /*__BURST_FRAG__*/;
 const SEVERITY_FRAG = /*__SEVERITY_FRAG__*/;
 const BLIT_FRAG = /*__BLIT_FRAG__*/;
-const AMBIENT_UNIFORMS = /*__AMBIENT_UNIFORMS__*/;
+const CRACK_UNIFORMS = /*__CRACK_UNIFORMS__*/;
 const BURST_UNIFORMS = /*__BURST_UNIFORMS__*/;
 const SEVERITY_UNIFORMS = /*__SEVERITY_UNIFORMS__*/;
 const BLIT_UNIFORMS = /*__BLIT_UNIFORMS__*/;
@@ -68,14 +103,11 @@ const TIERS = /*__TIERS__*/;
 const BURST_SECONDS = /*__BURST_SECONDS__*/;
 const SEVERITY_SECONDS = /*__SEVERITY_SECONDS__*/;
 
-// Mirrors palette.mjs TIER_KEYS -> PALETTE. Kept literal here for the same
-// reason anim.mjs keeps RAMP literal: this page has no module resolution.
-const TIER_RGB = {
-  minor: [0.369, 0.918, 1.0],
-  major: [1.0, 0.694, 0.176],
-  catastrophic: [1.0, 0.435, 0.102],
-  breach: [1.0, 0.290, 0.322]
-};
+/* Injected from palette.mjs at generation time rather than restated here. The
+   earlier version was a hand-copied literal, which is a drift risk this page
+   does not need to carry: the generator can resolve the module, so it does. */
+const TIER_RGB = /*__TIER_RGB__*/;
+const LEVEL_RGB = /*__LEVEL_RGB__*/;
 
 const errors = document.getElementById("errors");
 const fail = (msg) => { errors.textContent += msg + "\n"; };
@@ -138,34 +170,88 @@ function fit(canvas) {
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 }
 
-/* ── Ambient ───────────────────────────────────────────────────────── */
+/* The crack strip is the one thing here whose whole question is per-pixel, so
+   it is sized in DEVICE pixels the way the shipped host sizes it. At dpr 1 a
+   crawl that every retina user sees is simply invisible. */
+function fitDpr(canvas) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
 
-for (const level of LEVELS) {
-  const cell = makeCell(document.getElementById("ambient"), "ambient · " + level);
+/* ── Cracks ────────────────────────────────────────────────────────── */
+
+/* A chip-shaped cell: the canvas overhangs a real label at a real size, on a
+   real device-pixel ratio, which is the only configuration in which the
+   question "do the shards crawl?" has a meaningful answer. */
+function makeStrip(host, level) {
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  cell.innerHTML = "<h3>cracks · " + level + "</h3>" +
+    "<div class='stage'><div class='chipwrap'><canvas></canvas>" +
+    "<span class='chip'>" + level + "</span></div></div>" +
+    "<div class='readout'><span class='ms'>—</span><span class='note'>—</span></div>";
+  host.appendChild(cell);
+  return { canvas: cell.querySelector("canvas"), ms: cell.querySelector(".ms"), note: cell.querySelector(".note") };
+}
+
+/* The magnified row is a 2D MIRROR of the 1x one, not a second renderer.
+   Browsers cap simultaneous WebGL contexts at about sixteen; a second context
+   per level took this page over the line, and what you got was every panel on
+   it — the beats included — dropping to 120ms frames and reporting a load
+   problem that only the preview had. Copying the drawn buffer costs one
+   drawImage and shows exactly the same pixels, which is the point. */
+function runCrack(hostId, level, mirrorId) {
+  const cell = makeStrip(document.getElementById(hostId), level);
+  const mirror = mirrorId ? makeStrip(document.getElementById(mirrorId), level) : null;
+  const mirrorCtx = mirror ? mirror.canvas.getContext("2d") : null;
   const gl = cell.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true });
-  if (!gl) { fail("no webgl for " + level); continue; }
+  if (!gl) { fail("no webgl for " + level); return; }
 
-  const program = build(gl, VERT, AMBIENT_FRAG, "ambient(" + level + ")");
-  if (!program) continue;
+  const program = build(gl, VERT, CRACK_FRAG, "cracks(" + level + ")");
+  if (!program) return;
   quad(gl, program);
-  const u = locations(gl, program, AMBIENT_UNIFORMS, "ambient");
+  const u = locations(gl, program, CRACK_UNIFORMS, "cracks");
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(program);
+  // The LEVEL's own hue, not the fixed ramp: the cracks and the chip's marker
+  // are two statements of one colour, so the preview has to show which one.
+  const ramp = LEVEL_RGB[level];
   gl.uniform3fv(u.uDeep, RAMP.deep);
-  gl.uniform3fv(u.uMid, RAMP.mid);
+  gl.uniform3fv(u.uMid, ramp);
   gl.uniform3fv(u.uHot, RAMP.hot);
 
   const budget = new FrameBudget();
   const start = performance.now();
+  const seed = Math.random() * 100;
   let last = start;
+  let frames = 0;
+  let drawMs = null;
+
+  /* THE COST OF ONE DRAW, measured directly.
+     The rAF delta is not a usable number for this row: a page with a dozen
+     canvases on it, or a tab the browser has throttled, reports hundreds of
+     milliseconds while the shader itself is doing nothing at all — which reads
+     as a performance problem in the feature and is not one. This times the draw
+     the feature actually issues, which is the question a layer that runs for
+     hours has to answer. */
+  const timeDraw = () => {
+    const N = 120;
+    gl.finish();
+    const t0 = performance.now();
+    for (let i = 0; i < N; i++) { gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+    gl.finish();
+    return (performance.now() - t0) / N;
+  };
 
   (function frame() {
     const now = performance.now();
     budget.sample(now - last);
     last = now;
-    fit(cell.canvas);
+    fitDpr(cell.canvas);
     gl.viewport(0, 0, cell.canvas.width, cell.canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -175,14 +261,30 @@ for (const level of LEVELS) {
     gl.uniform1f(u.uChaos, chaosFor(level));
     gl.uniform1f(u.uDrift, budget.allows("drift") ? 1 : 0);
     gl.uniform1f(u.uFade, 1);
+    gl.uniform1f(u.uSeed, seed);
+    gl.uniform1f(u.uTexel, 1 / Math.max(1, cell.canvas.height));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    cell.ms.textContent = budget.frameMs.toFixed(1) + " ms";
-    cell.ms.className = "ms" + (budget.frameMs > SHED_AT ? " bad" : "");
-    cell.note.textContent = budget.shed ? "shed: " + SHED_ORDER.slice(0, budget.shed).join(", ") : "shed: none";
+    /* Copied in the SAME frame callback: a WebGL canvas is cleared when the
+       compositor takes it, so a mirror pulled a tick later is always blank. */
+    if (mirrorCtx) {
+      fitDpr(mirror.canvas);
+      mirrorCtx.clearRect(0, 0, mirror.canvas.width, mirror.canvas.height);
+      mirrorCtx.imageSmoothingEnabled = false;
+      mirrorCtx.drawImage(cell.canvas, 0, 0, mirror.canvas.width, mirror.canvas.height);
+      mirror.ms.textContent = "mirror of the 1× buffer";
+      mirror.note.textContent = cell.canvas.width + "×" + cell.canvas.height + " device px";
+    }
+
+    if (frames++ % 180 === 0) drawMs = timeDraw();
+    cell.ms.textContent = (drawMs === null ? "—" : drawMs.toFixed(3) + " ms/draw");
+    cell.note.textContent = (budget.shed ? "shed: " + SHED_ORDER.slice(0, budget.shed).join(", ") : "shed: none")
+      + " · " + budget.frameMs.toFixed(0) + " ms/frame";
     requestAnimationFrame(frame);
   })();
 }
+
+for (const level of LEVELS) runCrack("cracks", level, "cracksZoom");
 
 /* ── Beats ─────────────────────────────────────────────────────────── */
 

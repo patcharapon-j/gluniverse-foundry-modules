@@ -36,16 +36,23 @@ export function webglSupported() {
 }
 
 /**
- * Create a full-viewport canvas on `<body>` and its context.
+ * Create a canvas and its context.
  *
  * Returns `{ canvas, gl }`, or `null` when the context could not be had — in
  * which case the canvas is removed again rather than left as an invisible
  * element that does nothing.
+ *
+ * `parent` is `<body>` for the full-screen beats. The stability cracks pass
+ * `null` and attach it themselves: they live inside a HUD that rebuilds its own
+ * DOM on every clock tick, so the canvas is created ONCE and re-parented into
+ * each fresh chip. Re-parenting keeps the context; recreating it would compile
+ * the program again every minute, which is the whole cost warming exists to pay
+ * once.
  */
-export function mountCanvas(className) {
+export function mountCanvas(className, parent = document.body) {
   const canvas = document.createElement("canvas");
   canvas.className = className;
-  document.body.appendChild(canvas);
+  parent?.appendChild(canvas);
 
   const gl = canvas.getContext("webgl", { alpha: true, antialias: false, premultipliedAlpha: true })
     || canvas.getContext("experimental-webgl");
@@ -53,6 +60,7 @@ export function mountCanvas(className) {
     canvas.remove();
     return null;
   }
+  canvas.setAttribute("aria-hidden", "true");
 
   // Both layers composite premultiplied output over whatever is beneath them.
   gl.enable(gl.BLEND);
@@ -262,4 +270,41 @@ export function sizeToViewport(canvas, gl, scale = 1) {
   }
   gl?.viewport(0, 0, w, h);
   return { w, h };
+}
+
+/**
+ * Size a canvas to an element's box, plus a CSS-pixel `bleed` on every side.
+ *
+ * The bleed is what makes the cracks read as being AROUND the label rather than
+ * as a texture inside a box: the fracture has to be allowed to leave the chip's
+ * own rectangle, or its outermost shards are all clipped to the same four
+ * straight lines and the whole thing reads as a filled panel.
+ *
+ * Returns `null` while the element has no layout — a HUD that is collapsed, on
+ * a hidden tab, or not yet in the document. Drawing into a zero-sized canvas
+ * costs a GL error per frame and shows nothing.
+ */
+export function sizeToElement(canvas, gl, element, bleed = 0) {
+  const box = element?.getBoundingClientRect();
+  if (!box || box.width <= 0 || box.height <= 0) return null;
+
+  const cssW = box.width + bleed * 2;
+  const cssH = box.height + bleed * 2;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
+
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  /* A canvas is a REPLACED element: with `inset` alone and an auto width the
+     browser uses the intrinsic size from the width/height attributes — which
+     are device pixels — and the strip renders at twice its box on any HiDPI
+     display. The CSS size has to be stated. */
+  canvas.style.inset = `${-bleed}px`;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  gl?.viewport(0, 0, w, h);
+  return { w, h, cssW, cssH };
 }

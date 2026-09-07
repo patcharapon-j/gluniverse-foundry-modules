@@ -12,7 +12,7 @@
 
 import { log } from "../../core/const.mjs";
 import { onSocket } from "../../core/socket.mjs";
-import { destroyAmbient, syncAmbient, warmAmbient } from "./ambient.mjs";
+import { destroyCracks, syncCracks, warmCracks } from "./cracks.mjs";
 import { registerBanner } from "./banner.mjs";
 import { destroyBurst, playBurst, warmBurst } from "./burst.mjs";
 import { registerCheck } from "./check.mjs";
@@ -59,12 +59,12 @@ export async function onReady() {
     validate: (payload) => payload?.type === "surge" && isLevel(payload.level),
   });
 
+  // paint() attaches the crack canvas to the chip it just drew and syncs it.
   paint();
-  syncAmbient();
 
   /* Warm every shader at load, off-screen.
    *
-   * All three full-screen passes run LIVE now, and a GL program is not really
+   * Every pass runs LIVE now, and a GL program is not really
    * compiled when `linkProgram` returns — drivers specialize on first draw. Left
    * cold, the first surge of a session pays for that mid-animation, which is the
    * one moment a stutter is unmissable. This is deferred past the ready frame so
@@ -73,7 +73,7 @@ export async function onReady() {
    */
   const warmAll = () => {
     warmBurst();
-    warmAmbient();
+    warmCracks();
   };
   if (typeof requestIdleCallback === "function") requestIdleCallback(warmAll, { timeout: 4000 });
   else setTimeout(warmAll, 1200);
@@ -90,9 +90,9 @@ export async function onReady() {
 
 /** Torn down when the feature is disabled live from the Control Center. */
 export function teardown() {
-  destroyAmbient();
+  destroyCracks();
   destroyBurst();
   destroyHud();
 }
 
-export const api = { paint, syncAmbient, playBurst, teardown };
+export const api = { paint, syncCracks, playBurst, teardown };

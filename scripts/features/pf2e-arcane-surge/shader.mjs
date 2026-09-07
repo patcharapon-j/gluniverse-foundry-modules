@@ -3,11 +3,13 @@
  *
  * Three programs, three budgets:
  *
- *   AMBIENT runs for HOURS. It hugs the edges of the screen and leaves the
- *   middle of the board alone. It is the mood of an unstable region — arcane
- *   instability, not weather — so it is built from a whirlpool warp and RIDGED
- *   noise, which produces thin bright filaments instead of the soft cloud a
- *   plain fbm gives you. Two noise octaves, one warp; the ridge is free.
+ *   CRACK runs for HOURS, but only inside the stability chip — a strip a couple
+ *   of dozen pixels tall in the time-tracker HUD. It is the suite's OWN glass
+ *   fracture, imported from `core/fx-glsl.mjs` rather than reimplemented, so
+ *   the instability creeping around the label and the guard-break tearing a
+ *   token apart are visibly one crack in two colours. What rises with the
+ *   stability level is how far the web REACHES around the label and how hard it
+ *   glows — not how fine the shards are, because at this size finer is mush.
  *
  *   BURST fires on a surge, live and full-screen. It is deliberately nothing
  *   like the suite's golden glass fracture: no Voronoi, no crack lines. This is
@@ -28,6 +30,8 @@
  * declared and never written holds its initial value for the life of the
  * context, so the effect renders, just wrong, and nothing reports it.
  */
+
+import { FX_GLSL_BREAK_FIELD, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
 
 /** Shared by every program: a full-screen triangle, no index buffer. */
 export const VERT = `
@@ -61,12 +65,6 @@ float glasNoise(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Two octaves. A third costs another full noise evaluation per pixel per frame
-// for detail nobody reads through a low-alpha veil.
-float glasFbm2(vec2 p) {
-  return 0.62 * glasNoise(p) + 0.31 * glasNoise(p * 2.07);
-}
-
 // Ridged: the fold at 0.5 turns smooth blobs into thin bright FILAMENTS. This
 // one line is most of the difference between "arcane" and "haze", and it costs
 // an abs and a subtract.
@@ -89,10 +87,23 @@ vec2 glasSwirl(vec2 p, float amount) {
 `;
 
 /* ══════════════════════════════════════════════════════════════════════
-   Ambient — the standing cost, and the edges of the world
-   ══════════════════════════════════════════════════════════════════════ */
+   Crack — the standing state, around the label that names it
+   ══════════════════════════════════════════════════════════════════════
+   This used to be a full-screen veil hugging the edges of the viewport. It is
+   not any more, and the reason is worth keeping: a session-long layer over the
+   board competes with the map for exactly the space the play happens in, and
+   the only way to make it read as a threat was to make it loud enough to be in
+   the way. The state belongs where the state is NAMED — a few pixels of glass
+   splintering around the word "Unraveling" says the same thing, costs a
+   thousandth of the fill rate, and never once sits between a GM and a token.
 
-export const AMBIENT_FRAG = `
+   The fracture itself is the suite's, imported as a FIELD from
+   `core/fx-glsl.mjs` rather than written again here. Four features now carry
+   one crack: a broken creature's token, its initiative card, its health bar,
+   and this. A lookalike would have drifted from all three the first time any
+   of them was touched. */
+
+export const CRACK_FRAG = `
 precision mediump float;
 varying vec2 vUv;
 
@@ -100,73 +111,85 @@ uniform float uTime;
 uniform vec2  uRes;
 uniform float uChaos;   // 0 at Stable, 1 at Unraveling
 uniform float uDrift;   // 1 = animating, 0 = shed (frozen at the settled frame)
-uniform float uFade;    // mount/unmount envelope, 0..1
+uniform float uFade;    // level cross-fade envelope, 0..1
+uniform float uSeed;    // required by the shared field's hashes
+uniform float uTexel;   // one device pixel in field units — the shard de-aliaser
 uniform vec3  uDeep;
-uniform vec3  uMid;
+uniform vec3  uMid;     // the LEVEL's own hue, matching the chip's marker
 uniform vec3  uHot;
 
-${NOISE}
+${FX_GLSL_NOISE}
+${FX_GLSL_BREAK_FIELD}
 
 void main() {
-  vec2 centred = (vUv - 0.5) * vec2(uRes.x / max(uRes.y, 1.0), 1.0);
+  /* Field space: isotropic, one unit = the strip's height. The shared field's
+     cells are round, so anything else stretches them into ovals. */
+  float aspect = uRes.x / max(uRes.y, 1.0);
+  vec2 q = vec2(vUv.x * aspect, vUv.y);
 
-  // When drift is shed the clock stops rather than the field vanishing: what
+  // When drift is shed the clock stops rather than the cracks vanishing: what
   // degrades under load is the motion, never the state.
   float t = uTime * uDrift;
 
-  /* THE EDGE MASK.
-     Distance to the nearest screen edge, not radial distance — a radial
-     falloff leaves the corners heavy and the middle of the long edges thin,
-     which reads as a vignette rather than as something coming in from outside.
-     This hugs all four edges evenly.
+  /* The fracture is a STATE, not an event. gluBreakField opens over its first
+     ~0.7 seconds and then settles, so it is fed a clock that always starts past
+     that; only the energy flowing along the seams still moves. Passing it a
+     time from zero would replay the guard-break's shatter every time the HUD
+     repainted, which it does on every clock tick. */
+  float ftime = 6.0 + t;
 
-     The band has to stay NARROW. Widened past about a quarter of the short axis
-     the four edges meet in the middle and the whole thing becomes a full-screen
-     tint — which is a wash, not an encroachment, and it fights the map for the
-     centre of the board where the play actually is. */
-  vec2 fromEdge = min(vUv, 1.0 - vUv);
-  float edge = min(fromEdge.x, fromEdge.y);
-  float band = 1.0 - smoothstep(0.0, mix(0.11, 0.20, uChaos), edge);
-  // Squared falloff: dense right at the frame, gone well before the centre.
-  band = pow(band, 2.1);
+  /* THE IMPACT IS THE MIDDLE OF THE LABEL. An earlier pass put it near the left
+     edge, on the level marker, on the theory that the cracks should come out of
+     the dot. What that actually produced was a splat over one end of the word
+     and a dark tail at the other, because the field's coverage falls off with
+     distance from the impact and one end of a wide strip is much further from a
+     corner than the other. Centred, the same fracture wraps the word evenly and
+     grows outward in every direction, which is what "around the label" means. */
+  vec2 impact = vec2(0.5 * aspect, 0.5);
 
-  // Whirlpool: the field spirals around the screen's centre, so the filaments
-  // at the edges are visibly being dragged around something.
-  vec2 p = glasSwirl(centred, (0.35 + 0.95 * uChaos) * (0.6 + 0.4 * sin(t * 0.11)));
-  p *= 1.5 + 1.3 * uChaos;
-  p += (0.14 + 0.40 * uChaos) * vec2(
-    glasFbm2(p + vec2(t * 0.09, -t * 0.06)),
-    glasFbm2(p * 1.13 - vec2(t * 0.07, t * 0.10))
-  );
+  /* Chaos is spent on SPREAD, not on shard size. The strip is a couple of dozen
+     pixels tall: halving the cell size there buys mush, while growing how far
+     the web reaches around the label is legible at a glance and across the
+     table. Density moves a little so the worst rungs are busier, not finer.
 
-  // Filaments rather than cloud. Chaos sharpens them as well as raising them.
-  float fil = glasRidge2(p + vec2(0.0, t * 0.06));
-  fil = pow(clamp(fil, 0.0, 1.0), mix(3.4, 1.5, uChaos));
+     Reach is measured against HALF THE STRIP's long axis, so the ladder means
+     the same thing on a chip that says "Fraying" and one that says
+     "Unraveling" — which are visibly different widths. */
+  float span = 0.5 * aspect;
+  float reach = mix(0.34, 1.15, uChaos) * span;
+  float dense = mix(0.22, 0.30, uChaos);
 
-  // A slower, softer bed underneath so the filaments have something to sit in.
-  float bed = glasFbm2(p * 0.55 - vec2(t * 0.03, 0.0));
+  vec4 f = gluBreakField(q, impact, ftime, 0.010, uTexel, dense, reach);
+  float crack = f.x;
+  float halo  = f.y;
+  float flow  = f.w;
+  /* f.z — the shared field's white-hot impact core — is deliberately unused.
+     It is scaled by 1/reach like everything else, so at the reach this needs to
+     cover a whole chip it stops being a point and floods the strip. */
 
-  float field = clamp(fil * 1.15 + bed * 0.35, 0.0, 1.0);
+  vec3 col = mix(uDeep, uMid, clamp(crack * 1.20 + halo * 0.75, 0.0, 1.0));
+  col = mix(col, uHot, clamp(flow * 1.40, 0.0, 1.0));
+  col = mix(col, vec3(1.0), clamp(flow * flow * 0.65, 0.0, 1.0));
 
-  vec3 col = mix(uDeep, uMid, smoothstep(0.10, 0.62, field));
-  col = mix(col, uHot, smoothstep(0.55, 0.95, field) * (0.35 + 0.65 * uChaos));
+  float body = clamp(crack * 1.30 + halo * 1.00 + flow * 0.65, 0.0, 1.0);
 
-  /* A slow breath so the edges never sit perfectly still — the world is not
-     stable, and something that holds a fixed shape reads as decoration. */
-  float breath = 0.88 + 0.12 * sin(t * 0.55);
+  /* Multiplied by chaos, not offset by it, so Stable is exactly inert. The host
+     also stops drawing there, but an invariant that only holds because the code
+     avoids the case is not an invariant — and every level change cross-fades
+     straight through chaos 0.
 
-  /* Multiplied by chaos, not offset by it, so Stable is exactly inert — the host
-     also tears the overlay down there, but an invariant that only holds because
-     of the code avoiding it is not an invariant, and a cross-fade passes through
-     chaos 0. The ceiling is deliberately high enough to read as a threat
-     through a bright map, and concentrated into a narrow band so it can be. */
-  float alpha = uChaos * (0.16 + 0.30 * uChaos) * band * breath * uFade;
+     The coefficient is deliberately above 1 at the top of the ladder: the first
+     rung has to be VISIBLE on a bright HUD, and a scale that reaches Unraveling
+     at a comfortable opacity leaves Fraying as a rumour. Clamped after, because
+     the output is premultiplied and an alpha over 1 is not a colour. */
+  float alpha = uChaos * (1.10 + 0.25 * uChaos) * uFade * body;
+  alpha = min(alpha, 1.0);
   gl_FragColor = vec4(col * alpha, alpha);
 }
 `;
 
-export const AMBIENT_UNIFORMS = Object.freeze([
-  "uTime", "uRes", "uChaos", "uDrift", "uFade", "uDeep", "uMid", "uHot",
+export const CRACK_UNIFORMS = Object.freeze([
+  "uTime", "uRes", "uChaos", "uDrift", "uFade", "uSeed", "uTexel", "uDeep", "uMid", "uHot",
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════

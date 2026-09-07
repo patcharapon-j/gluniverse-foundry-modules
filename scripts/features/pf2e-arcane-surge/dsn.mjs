@@ -1,24 +1,31 @@
 /**
  * GLUniverse Suite — Dice So Nice registration.
  *
- * Two different kinds of die, needing two different treatments, and conflating
- * them is what made the severity roll look wrong:
+ * NOTHING HERE PAINTS A DIE. Both rolls wear Dice So Nice's own frosted-glass
+ * material, cut by bump maps and lit by emissive maps and given no albedo art at
+ * all, so what the table sees is the material rather than a picture of it.
  *
- *   THE SURGE d20 is read by its GLYPH. Every face is a whole image — blank, or
- *   the whirlpool — so it gets per-face `labels`, `bumpMaps` and `emissiveMaps`.
- *   DSN keys presets by die TYPE, and we need three different face layouts for
- *   the same `du` type (one per stability level), so each level gets its own DSN
- *   *system* carrying its own preset, selected per roll through
- *   `die.options.appearance.system`. That is the same trick pf2e-damage-dice
- *   uses to get several appearances out of one shape.
+ * That constraint runs into two undocumented DSN behaviours, and both look like
+ * bugs in this file until you know them:
  *
- *   THE SEVERITY d100 is read by its NUMBER. DSN builds it from two d10s, and
- *   those are ordinary numbered shapes: they need a frosted SURFACE under the
- *   numerals, not twenty pictures. That is a `texture` plus a colorset, and it
- *   covers every shape DSN might use without enumerating them.
+ *   A FACE'S bumpMaps AND emissiveMaps ARE DRAWN ONLY WHEN ITS LABEL IS AN
+ *   IMAGE. DSN branches on whether the label resolves to an `HTMLImageElement`;
+ *   the text branch writes glyphs into all three canvases and never reads those
+ *   maps. So every face is labelled with `clear.png` — one fully transparent
+ *   image, shared by all twenty — which buys the relief without painting
+ *   anything. Replacing it with `""` silently removes the whirlpool.
  *
- * Both wear the same frosted glass and the same numerals, so the two rolls read
- * as one procedure rather than as two features.
+ *   A TEXTURE'S bump IS DRAWN ONLY INSIDE THE BLOCK THAT DRAWS ITS SOURCE. So
+ *   the frost on the numbered dice cannot be a bump with no albedo; it is a bump
+ *   with a PURE WHITE albedo composited `multiply`, which is the identity.
+ *
+ * Otherwise the split is the same as it was. The surge d20 is read by its GLYPH,
+ * so it needs per-face maps, and DSN keys presets by die TYPE — three different
+ * face layouts for one `du` type means three DSN *systems*, selected per roll
+ * through `die.options.appearance.system`. That is the same trick
+ * pf2e-damage-dice uses to get several appearances out of one shape. The
+ * severity d100 is read by its NUMBER: DSN builds it from two d10s, and those
+ * are ordinary numbered shapes needing one frosted surface, not twenty pictures.
  *
  * The face layout is derived from `glyphFaces()`, never written out beside the
  * threshold — if the two could drift, the die would show the wrong odds while
@@ -52,9 +59,17 @@ const DSN_TEXTURE = "gluniverse-arcane-surge-frost";
 
 const facePath = (base, suffix = "") => featurePath("pf2e-arcane-surge", `assets/dice/${base}${suffix}.png`);
 
-/** The three maps DSN wants for one face. */
+/**
+ * The transparent image every face is labelled with.
+ *
+ * Not a placeholder. See the header: an image label is what makes DSN read a
+ * face's bump and emissive maps at all, and this is the one that paints nothing
+ * while doing it.
+ */
+const CLEAR_LABEL = facePath("clear");
+
+/** The two maps a face actually carries now that none of them carry colour. */
 const faceMaps = (base) => ({
-  image: facePath(base),
   bump: facePath(base, "-bump"),
   emissive: facePath(base, "-emissive"),
 });
@@ -110,8 +125,8 @@ function colorset() {
     background: PALETTE.ink2,
     outline: PALETTE.ink0,
     edge: PALETTE.teal,
-    // "glass" is DSN's transmissive material; the frost comes from the texture's
-    // bump, which is where a frosted surface actually lives.
+    // "glass" is DSN's transmissive material, and it is the point: nothing here
+    // paints over it. The frost is relief only, carried by the texture's bump.
     material: "glass",
     texture: DSN_TEXTURE,
     font: DICE_FONT,
@@ -133,11 +148,15 @@ export async function registerDiceSoNice(dice3d) {
   registered = true;
   await ensureFontLoaded();
 
-  /* The frosted surface. `multiply` composites it over the colorset background,
-     and the bump is what DSN's Sobel pass turns into the frost's normals — the
-     albedo is deliberately bright and nearly flat, because frost is a surface
-     property, not a colour. This is what dresses the severity d100 and the d10s
-     DSN builds it from, without having to enumerate a preset per shape. */
+  /* The frost on the numbered dice: relief, and nothing else.
+
+     `source` is a PURE WHITE image and `composite` is `multiply`, which makes
+     the albedo the identity — the die keeps the glass material's own colour
+     while DSN's Sobel pass turns the bump into the frost's normals. The white
+     source is not decoration and not a placeholder: DSN draws a texture's bump
+     only inside the block that draws its source, so removing it removes the
+     frost. This dresses the severity d100 and the d10s DSN builds it from
+     without enumerating a preset per shape. */
   await dice3d
     .addTexture(DSN_TEXTURE, {
       name: "Arcane Frost",
@@ -160,19 +179,22 @@ export async function registerDiceSoNice(dice3d) {
     const faces = facesFor(level, config);
     dice3d.addDicePreset({
       type: `d${SURGE_DIE_DENOMINATION}`,
-      labels: faces.map((f) => f.image),
+      // One transparent image, twenty times. It paints nothing; it is what makes
+      // DSN read the two maps below. See the header before "simplifying" it.
+      labels: faces.map(() => CLEAR_LABEL),
       bumpMaps: faces.map((f) => f.bump),
       // The emissive maps carry their own colour already, so the tint is white
-      // and only the intensity is ours to choose.
+      // and only the intensity is ours to choose. With no albedo this is the
+      // only thing separating a surge face from a blank one, so it runs hot.
       emissiveMaps: faces.map((f) => f.emissive),
       emissive: 0xffffff,
-      emissiveIntensity: 0.9,
+      emissiveIntensity: 1.15,
       colorset: DSN_COLORSET,
       system,
     });
   }
 
-  log(`Arcane Surge | Dice So Nice registered (frosted glass, ${DICE_FONT} numerals, ${levels.length} level presets for d${SURGE_DIE_DENOMINATION})`);
+  log(`Arcane Surge | Dice So Nice registered (bare frosted glass, ${DICE_FONT} numerals, ${levels.length} level presets for d${SURGE_DIE_DENOMINATION})`);
   return true;
 }
 

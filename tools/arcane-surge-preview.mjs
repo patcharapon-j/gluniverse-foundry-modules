@@ -14,10 +14,12 @@
  * so a uniform added to the GLSL and forgotten in the host cannot be quietly
  * fed here either.
  *
- * What it is for: the ambient overlay has a frame budget it must live inside for
- * hours, and the burst's bake-then-blit path has a look that no diff can show
- * you. Both are here side by side, with the ambient's four levels and the
- * burst's three, and a frame-time readout.
+ * What it is for: the crack strip has a frame budget it must live inside for
+ * hours AND a per-pixel question no diff can answer — it runs the suite's
+ * shared fracture at twenty-odd device pixels tall, which is far and away the
+ * smallest place those shards have been asked to land. It is therefore drawn
+ * here at SHIPPING SIZE, over a real label, at the real device-pixel ratio.
+ * The beats are here at full size beside it, with a frame-time readout.
  *
  * What it cannot tell you: how any of it reads over real map art, at a real
  * table, on somebody else's monitor. That needs a session.
@@ -33,6 +35,11 @@ const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
 const FEATURE = "scripts/features/pf2e-arcane-surge";
 const shader = await import(`../${FEATURE}/shader.mjs`);
 const constants = await import(`../${FEATURE}/constants.mjs`);
+/* Colours are RESOLVED here rather than restated in the page. `anim.mjs` keeps a
+   literal ramp because it is inlined as source with no module resolution, but
+   this generator is a Node process that can just import the real thing — so the
+   tier and level hues arrive from `palette.mjs` and cannot drift from it. */
+const palette = await import(`../${FEATURE}/palette.mjs`);
 
 /* `anim.mjs` is dependency-free by contract precisely so it can be inlined here
    as source. The export keywords are stripped so it can live inside a plain
@@ -43,21 +50,34 @@ const animSource = read(`${FEATURE}/anim.mjs`)
 
 const template = read("tools/templates/arcane-surge-preview.html");
 
+const tierRgb = Object.fromEntries(constants.TIERS.map((tier) => [tier, palette.tierFloats(tier)]));
+const levelRgb = Object.fromEntries(constants.LEVELS.map((level) => [level, palette.levelFloats(level).mid]));
+
 const page = template
   .replace("/*__VERT__*/", JSON.stringify(shader.VERT))
-  .replace("/*__AMBIENT_FRAG__*/", JSON.stringify(shader.AMBIENT_FRAG))
+  .replace("/*__CRACK_FRAG__*/", JSON.stringify(shader.CRACK_FRAG))
   .replace("/*__BURST_FRAG__*/", JSON.stringify(shader.BURST_FRAG))
   .replace("/*__SEVERITY_FRAG__*/", JSON.stringify(shader.SEVERITY_FRAG))
   .replace("/*__SEVERITY_UNIFORMS__*/", JSON.stringify(shader.SEVERITY_UNIFORMS))
   .replace("/*__TIERS__*/", JSON.stringify(constants.TIERS))
+  .replace("/*__TIER_RGB__*/", JSON.stringify(tierRgb))
+  .replace("/*__LEVEL_RGB__*/", JSON.stringify(levelRgb))
   .replace("/*__BURST_SECONDS__*/", String(shader.BURST_SECONDS))
   .replace("/*__SEVERITY_SECONDS__*/", String(shader.SEVERITY_SECONDS))
   .replace("/*__BLIT_FRAG__*/", JSON.stringify(shader.BLIT_FRAG))
-  .replace("/*__AMBIENT_UNIFORMS__*/", JSON.stringify(shader.AMBIENT_UNIFORMS))
+  .replace("/*__CRACK_UNIFORMS__*/", JSON.stringify(shader.CRACK_UNIFORMS))
   .replace("/*__BURST_UNIFORMS__*/", JSON.stringify(shader.BURST_UNIFORMS))
   .replace("/*__BLIT_UNIFORMS__*/", JSON.stringify(shader.BLIT_UNIFORMS))
   .replace("/*__LEVELS__*/", JSON.stringify(constants.LEVELS))
   .replace("/*__ANIM_SRC__*/", animSource);
+
+// A placeholder left unsubstituted is a syntax error in the page, which shows up
+// as a blank box rather than as a failure. Catch it here instead.
+const leftover = page.match(/\/\*__[A-Z_]+__\*\//g);
+if (leftover) {
+  console.error(`arcane-surge-preview: unsubstituted placeholder(s): ${[...new Set(leftover)].join(", ")}`);
+  process.exit(1);
+}
 
 const outArg = process.argv.slice(2).find((a) => a.startsWith("--out="));
 if (!outArg) {

@@ -440,24 +440,32 @@ its own odds** — the one thing that die exists to tell the truth about. It als
 pins band monotonicity and the tier windows the draft's tone rests on (Fraying
 reaches Major but never Catastrophic; inviting in Unraveling must actually be
 more dangerous than not inviting, or the temptation the whole mechanic is built
-on is false); the three-way uniform agreement across all *three* shader
-programs, since playback is a separate program from the bake and a uniform
-missing there leaves every frame drawn at whatever opacity the driver happened
-to start with; `SHED_ORDER` completeness; the runtime-built `GLAS.level.*`,
-`GLAS.tier.*` and `GLAS.mode.*` key families, which nothing else checks; the
-die's defensive claim on the global `CONFIG.Dice.terms` letter, where a
-collision silently breaks another module's die; and the two guards a double-fire
-would destroy — one casting one check, one card one roll:
+on is false); the three-way uniform agreement across all *four* shader programs,
+where a uniform missing from one leaves every frame drawn at whatever value the
+driver happened to start with; `SHED_ORDER` completeness; the runtime-built
+`GLAS.level.*`, `GLAS.tier.*` and `GLAS.mode.*` key families, which nothing else
+checks; the die's defensive claim on the global `CONFIG.Dice.terms` letter,
+where a collision silently breaks another module's die; and the two guards a
+double-fire would destroy — one casting one check, one card one roll.
+
+Two more it pins because this feature got both wrong on the way in. The
+stability cracks in the HUD must run the **shared** fracture from
+`core/fx-glsl.mjs`, not a lookalike — four features carry that one crack now.
+And each level's hue must be a single statement: `palette.mjs`'s `LEVEL_KEYS`
+and the `.glas-level-*` accent remaps naming the same token, with no two levels
+naming the same one. `unbound` was on `--gl-holo-b`, which `gl-tokens.css`
+aliases to `--gl-violet`, so the ladder's two most dangerous rungs rendered in
+exactly the same colour and nothing said so:
 
 ```bash
 node tools/arcane-surge-check.mjs
 ```
 
 Zero problems required. Two things it cannot do. It cannot compile a line of
-GLSL — and a shader that fails to compile degrades to *no overlay* rather than
-erroring — and it cannot prove the ambient veil is actually inert at Stable, only
-that its alpha is shaped so that it should be. Both need the browser-backed
-harness:
+GLSL — and a shader that fails to compile degrades to *nothing drawn* rather
+than erroring — and it cannot prove the cracks are actually inert at Stable,
+only that their alpha is shaped so that they should be. Both need the
+browser-backed harness:
 
 ```bash
 node tools/arcane-surge-preview.mjs --out=.preview/surge.html
@@ -465,17 +473,34 @@ node tools/arcane-surge-preview.mjs --out=.preview/surge.html
 
 **Serve it** (`node tools/preview-server.mjs`) — a `file://` page does not
 execute its module script, so the shaders never compile and you get an empty box
-rather than a failure. The die faces are generated, not drawn; re-bake and
-confirm coverage after any recipe change, and remember the groove is a *bump*
-feature that is invisible in the albedo:
+rather than a failure. The crack row there is drawn at **shipping size** — a
+strip in a HUD bar — with a nearest-neighbour 4× mirror beside it, because the
+shared fracture's shards are the finest detail in the suite and this is the
+smallest place any of them has been asked to land. Ignore that page's
+`ms/frame` readout: a dozen canvases and a throttled tab put it in the hundreds
+while the shader is doing nothing. The `ms/draw` figure beside it is the one
+that means something.
+
+The die faces are generated, not drawn; re-bake and confirm coverage after any
+recipe change:
 
 ```bash
 node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
 ```
 
+**Nothing on these dice is painted** — every face is relief and light over Dice
+So Nice's own frosted glass. Two of the shipped files exist only to make that
+possible and both read as mistakes: `clear.png` is fully transparent and is what
+makes DSN read a face's bump and emissive maps at all (a text label, `""`
+included, takes a branch that ignores them), and `surface.png` is pure white
+because DSN draws a texture's bump only inside the block that draws its source.
+Replace either with the "obvious" thing and the dice go blank while nothing
+errors.
+
 See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
-different transport channels, and why every full-screen pass runs live off a
-warmed context rather than from baked frames.
+different transport channels, why the standing instability is drawn in the HUD
+chip rather than over the board, and why every pass runs live off a warmed
+context rather than from baked frames.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

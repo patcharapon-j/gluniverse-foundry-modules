@@ -61,7 +61,6 @@
       "kicker": "Stability",
       "gmHint": "Click to set the area's stability.",
       "concealed": "Concealed from players.",
-      "armLabel": "Next casting",
       "arm": {
         "steadied": "Steady the Spell — one extra action, one step safer for this casting.",
         "invited": "Invite the Surge — no extra action, a guaranteed surge on a worse row."
@@ -70,11 +69,11 @@
     "settings": {
       "conceal": {
         "name": "Conceal stability from players",
-        "hint": "Hides the chip and the ambient overlay from players. The mechanics keep running — a surge still fires and still animates."
+        "hint": "Hides the chip and its cracks from players. The mechanics keep running — a surge still fires and still animates."
       },
       "ambient": {
-        "name": "Ambient instability overlay",
-        "hint": "The full-screen veil that thickens as stability worsens. Turn it off to save frames; the chip stays either way."
+        "name": "Show the instability cracks",
+        "hint": "Glass splintering out of the stability label as the level worsens. Turn it off to save frames; the chip itself stays either way."
       },
       "dieVisibility": {
         "name": "Show the surge die",
@@ -126,10 +125,9 @@
       "surge": "Apply Arcane Surge"
     },
     "sheet": {
-      "steadyTo": "→ {level} · surges on {threshold}",
-      "steadyToStable": "→ Stable · no check at all",
-      "inviteTo": "→ {row} · surge guaranteed",
-      "note": "Applies to this character’s next eligible casting, then lapses. Steadying costs one extra action; inviting costs none."
+      "steadyTo": "resolves at {level}, surging on {threshold}.",
+      "steadyToStable": "resolves at Stable, with no check at all.",
+      "inviteTo": "read against the {row} row, surge guaranteed."
     }
   }
 }

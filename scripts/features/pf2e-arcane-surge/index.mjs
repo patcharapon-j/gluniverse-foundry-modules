@@ -15,7 +15,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
-import { syncAmbient } from "./ambient.mjs";
+import { syncCracks } from "./cracks.mjs";
 import { ArcaneSurgeConfigApp } from "./config-app.mjs";
 import { DEFAULT_ELIGIBILITY, FEATURE_ID, LEVELS, PREFIX, SETTINGS } from "./constants.mjs";
 import { onLevelChanged, paint } from "./hud.mjs";
@@ -62,10 +62,8 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: false,
-    onChange: () => {
-      paint();
-      syncAmbient();
-    },
+    // paint() re-syncs the cracks, so concealing closes them on every screen.
+    onChange: () => paint(),
   });
 
   /* ── Client preferences ────────────────────────────────────────────
@@ -78,7 +76,7 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: true,
-    onChange: syncAmbient,
+    onChange: () => syncCracks(),
   });
 
   game.settings.register(SUITE_ID, SETTINGS.dieVisibility, {

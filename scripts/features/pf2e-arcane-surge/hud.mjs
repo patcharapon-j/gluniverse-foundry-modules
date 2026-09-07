@@ -1,27 +1,35 @@
 /**
  * GLUniverse Suite — the stability chip.
  *
- * Renders into a `[data-stability]` slot in the time-tracker HUD's date cell,
- * stacked directly under the weather chip so the two read as one cluster, and
- * into its own small floating panel when that HUD is not running. The feature
+ * Renders into the `[data-stability]` cell the time-tracker HUD offers, and into
+ * its own small floating panel when that HUD is not running. The feature
  * deliberately does NOT declare `requiresFeature: "clocks-tracker"`: a PF2e
  * spellcasting subsystem that stops working because somebody turned off the
  * calendar would be a surprising way to lose it.
+ *
+ * The chip is also where the instability itself is DRAWN — glass cracking out
+ * of the label that names it, spreading further the worse the level gets. See
+ * `cracks.mjs` for why that is here rather than over the board.
  *
  * The chip is a readout, not a control panel. Steady the Spell and Invite the
  * Surge live on the character sheet's spellcasting tab, where a player is
  * already looking when they choose a spell — see `sheet.mjs`.
  *
- * A GM clicking the chip gets a level picker. Changing the level says nothing in
- * chat: the overlay cross-fades and the chip flashes, and the party notices the
- * world getting worse rather than being told. A line reading
- * "Stability: Unraveling" is a stat readout, which is the opposite of the point.
+ * A GM clicking the chip gets a level picker: four names, nothing else. The
+ * descriptions that used to sit under them made the popover taller than the HUD
+ * and told a GM what they already know — this is a switch that gets thrown mid
+ * -sentence, not documentation. The prose still exists, on the chip's tooltip.
+ *
+ * Changing the level says nothing in chat: the cracks spread and the chip
+ * flashes, and the party notices the world getting worse rather than being told.
+ * A line reading "Stability: Unraveling" is a stat readout, which is the
+ * opposite of the point.
  */
 
 import { escapeHTML } from "../../core/util.mjs";
 import { LEVELS } from "./constants.mjs";
 import { currentLevel, isConcealed, levelHint, levelLabel, setLevel, visibleLevel } from "./settings.mjs";
-import { syncAmbient } from "./ambient.mjs";
+import { syncCracks } from "./cracks.mjs";
 
 const SLOT_SELECTOR = "[data-stability]";
 const STANDALONE_ID = "glas-standalone";
@@ -63,6 +71,9 @@ export function paint() {
   if (isConcealed() && !game.user.isGM) {
     host.innerHTML = "";
     lastPainted = null;
+    // Still synced, not skipped: this is the path a GM takes when they conceal
+    // the level mid-session, and the cracks have to close on every screen.
+    syncCracks();
     return;
   }
 
@@ -70,6 +81,11 @@ export function paint() {
   host.innerHTML = render(level, changed);
   wire(host);
   lastPainted = level;
+
+  /* The HUD rebuilds its own DOM on every clock tick, so the crack canvas is
+     re-parented into the chip that was just painted rather than recreated. The
+     context — and the program compiled into it at load — survives that. */
+  syncCracks(host.querySelector(".glas-stability"));
 }
 
 function render(level, flash) {
@@ -106,13 +122,14 @@ function openPicker(anchor) {
 
   const picker = document.createElement("div");
   picker.className = "glas-picker gl-type";
+  /* Name and marker only. The description belongs on the hover, not in the
+     list: four paragraphs made the popover taller than the HUD it hangs off,
+     and a GM throwing this switch mid-sentence is not reading them. */
   picker.innerHTML = LEVELS.map((level) => `
-    <button type="button" class="glas-picker-row ${level === currentLevel() ? "is-current" : ""}" data-level="${level}">
+    <button type="button" class="glas-picker-row ${level === currentLevel() ? "is-current" : ""}"
+            data-level="${level}" title="${escapeHTML(levelHint(level))}">
       <span class="glas-picker-mark glas-level-${level}" aria-hidden="true"></span>
-      <span class="glas-picker-text">
-        <span class="glas-picker-name">${escapeHTML(levelLabel(level))}</span>
-        <span class="glas-picker-hint">${escapeHTML(levelHint(level))}</span>
-      </span>
+      <span class="glas-picker-name">${escapeHTML(levelLabel(level))}</span>
     </button>`).join("");
 
   document.body.appendChild(picker);
@@ -170,8 +187,9 @@ function position(picker, anchor) {
 
 /** Called from the level setting's onChange, on every client. */
 export function onLevelChanged() {
+  // `paint()` re-attaches and re-syncs the cracks, so the level's new colour
+  // and reach arrive with the label that names it rather than a frame later.
   paint();
-  syncAmbient();
 }
 
 export function destroyHud() {

@@ -216,7 +216,7 @@ for (const row of ROWS) {
    context — the effect renders, just frozen, and nothing reports it. */
 
 for (const [label, frag, uniforms, hostRel] of [
-  ["ambient", shader.AMBIENT_FRAG, shader.AMBIENT_UNIFORMS, `${FEATURE}/ambient.mjs`],
+  ["cracks", shader.CRACK_FRAG, shader.CRACK_UNIFORMS, `${FEATURE}/cracks.mjs`],
   ["burst", shader.BURST_FRAG, shader.BURST_UNIFORMS, `${FEATURE}/burst.mjs`],
   // The verdict is an entirely separate program from the surge, and shares no
   // uniform block with it.
@@ -247,7 +247,7 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!/COMPILE_STATUS/.test(glHost) || !/LINK_STATUS/.test(glHost)) {
     fail("gl-host.mjs", "does not check both compile and link status — a broken shader would fail silently");
   }
-  for (const rel of [`${FEATURE}/ambient.mjs`, `${FEATURE}/burst.mjs`]) {
+  for (const rel of [`${FEATURE}/cracks.mjs`, `${FEATURE}/burst.mjs`]) {
     if (!/buildProgram\s*\(/.test(read(rel))) {
       fail(rel, "does not build through gl-host.mjs, so it may not be checking compile/link status");
     }
@@ -257,19 +257,83 @@ for (const [label, frag, uniforms, hostRel] of [
 /* ══════════════════════════════════════════════════════════════════════
    5b. Stable is inert in the SHADER, not only in the host
    ══════════════════════════════════════════════════════════════════════
-   `chaosFor("stable")` is 0 and the host tears the overlay down there, so a
-   shader that still paints at chaos 0 would never be seen in a session — until
-   a cross-fade passes through it, or somebody reuses the shader somewhere that
-   does not tear down. This is a source-shape proxy for a render the pure-Node
-   tool cannot perform: the alpha must be MULTIPLIED by uChaos, not offset by it.
+   `chaosFor("stable")` is 0 and the host stops drawing there, so a shader that
+   still painted at chaos 0 would never be seen in a session — until a
+   cross-fade passes through it, or somebody reuses the shader somewhere that
+   does not stop. This is a source-shape proxy for a render the pure-Node tool
+   cannot perform: the alpha must be MULTIPLIED by uChaos, not offset by it.
    `tools/arcane-surge-preview.mjs` is where it can actually be measured. */
 
 {
-  if (levels.chaosFor("stable") !== 0) fail("ambient", "chaosFor('stable') is not 0");
-  const alphaLine = shader.AMBIENT_FRAG.match(/float\s+alpha\s*=\s*([^;]+);/);
-  if (!alphaLine) fail("ambient shader", "no alpha expression found");
+  if (levels.chaosFor("stable") !== 0) fail("cracks", "chaosFor('stable') is not 0");
+  const alphaLine = shader.CRACK_FRAG.match(/float\s+alpha\s*=\s*([^;]+);/);
+  if (!alphaLine) fail("crack shader", "no alpha expression found");
   else if (!/\buChaos\s*\*/.test(alphaLine[1])) {
-    fail("ambient shader", "alpha is not scaled by uChaos — the veil is still painted at Stable");
+    fail("crack shader", "alpha is not scaled by uChaos — the cracks are still drawn at Stable");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5c. The cracks are the SUITE's crack, not a lookalike
+   ══════════════════════════════════════════════════════════════════════
+   A broken creature's token, its initiative card, its health bar and this all
+   run the same fracture out of `core/fx-glsl.mjs`. Reimplementing it here would
+   render perfectly and then drift from the other three the first time any of
+   them was touched — which is the exact failure sharing the field exists to
+   prevent, and the reason that module says so at the top. */
+
+{
+  const src = read(`${FEATURE}/shader.mjs`);
+  if (!/from\s+"\.\.\/\.\.\/core\/fx-glsl\.mjs"/.test(src)) {
+    fail("shader.mjs", "does not import the shared fracture — the HUD cracks would be a lookalike");
+  }
+  if (!shader.CRACK_FRAG.includes("gluBreakField")) {
+    fail("crack shader", "does not call gluBreakField() — it is not running the suite's fracture");
+  }
+  /* The shared field needs both of these in scope, and neither failure is a
+     compile error you would see from Node: uSeed missing makes every hash
+     collapse, and the texel clamp is the only thing standing between the
+     shards and a crawling mess on a strip this small. */
+  for (const name of ["uSeed", "uTexel"]) {
+    if (!shader.CRACK_UNIFORMS.includes(name)) fail("crack shader", `the shared fracture needs "${name}"`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5d. The level's colour is one statement, not two
+   ══════════════════════════════════════════════════════════════════════
+   The chip's marker is coloured by CSS and the cracks growing out of it by a
+   uniform, and the two sit two pixels apart. They must name the same token, and
+   no two rungs of the ladder may name the SAME one — the first version had
+   `unbound` on --gl-holo-b, which gl-tokens.css aliases to --gl-violet, so the
+   two most dangerous levels rendered identically. */
+
+{
+  const palette = await import(`../${FEATURE}/palette.mjs`);
+  const css = read("styles/pf2e-arcane-surge.css");
+  const theme = read("scripts/core/theme.mjs");
+  const seen = new Map();
+
+  for (const level of LEVELS) {
+    const key = palette.LEVEL_KEYS[level];
+    if (!key) {
+      fail("palette.mjs", `LEVEL_KEYS has no entry for level "${level}"`);
+      continue;
+    }
+    if (!new RegExp(`\\b${key}:\\s*"#[0-9a-fA-F]{6}"`).test(theme)) {
+      fail("palette.mjs", `LEVEL_KEYS names "${key}", which is not a colour in theme.mjs's PALETTE`);
+    }
+    const token = `--gl-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`;
+    const rule = css.match(new RegExp(`\\.glas-level-${level}\\s*\\{([^}]*)\\}`));
+    if (!rule) fail("css", `no .glas-level-${level} accent remap`);
+    else if (!rule[1].includes(token)) {
+      fail("css", `.glas-level-${level} does not use ${token} — the chip's marker and its cracks would disagree`);
+    }
+    if (seen.has(key)) fail("palette.mjs", `"${level}" and "${seen.get(key)}" share the colour "${key}" — the two levels are indistinguishable`);
+    seen.set(key, level);
+  }
+  for (const level of Object.keys(palette.LEVEL_KEYS)) {
+    if (!LEVELS.includes(level)) fail("palette.mjs", `LEVEL_KEYS has a dead entry "${level}"`);
   }
 }
 
@@ -280,7 +344,7 @@ for (const [label, frag, uniforms, hostRel] of [
 {
   const order = anim.SHED_ORDER;
   if (!Array.isArray(order) || !order.length) fail("anim.mjs", "SHED_ORDER is empty");
-  const hosts = [read(`${FEATURE}/ambient.mjs`), read(`${FEATURE}/burst.mjs`)].join("\n");
+  const hosts = [read(`${FEATURE}/cracks.mjs`), read(`${FEATURE}/burst.mjs`)].join("\n");
   const gated = new Set([...hosts.matchAll(/allows\(\s*["'](\w+)["']\s*\)/g)].map((m) => m[1]));
   for (const name of gated) {
     if (!order.includes(name)) fail("anim.mjs", `"${name}" is gated on but missing from SHED_ORDER — it never degrades`);
@@ -321,15 +385,26 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!/@keyframes\s+glas-strike/.test(css)) fail("css", "the struck word has no glas-strike keyframes");
   // A bare `gl-` keyframe name would silently override another feature's.
   if (/@keyframes\s+gl-(?!as-)/.test(css)) fail("css", "declares an unprefixed gl- keyframe, which is a global name");
-  // The overlay must sit below Foundry's chrome; the burst above it. A session
-  // -long overlay over the sidebar would make the UI unusable for hours.
-  if (!/\.glas-ambient\b[^}]*z-index:\s*var\(--gl-z-sticky\)/s.test(css)) {
-    fail("css", ".glas-ambient must use --gl-z-sticky so the sidebar stays usable");
+  /* The cracks are a LOCAL layer now: absolute, inside the chip, and under the
+     chip's own content so the level's name stays readable at Unraveling. If
+     this ever goes back to `position: fixed` it is a full-screen veil again,
+     which is the thing it was replaced for being. */
+  {
+    const block = css.match(/\.glas-cracks\b[^{]*\{([^}]*)\}/s);
+    if (!block) fail("css", "no .glas-cracks rule — the crack canvas would be unpositioned");
+    else {
+      if (!/position:\s*absolute/.test(block[1])) fail("css", ".glas-cracks must be absolute inside the chip, not fixed to the viewport");
+      if (!/z-index:\s*0/.test(block[1])) fail("css", ".glas-cracks must sit under the chip's text");
+    }
+    // The bleed is only a bleed if nothing clips it.
+    if (!/#glct-hud \.cell\.glas-slot\b[^}]*overflow:\s*visible/s.test(css)) {
+      fail("css", "the HUD's stability cell clips its contents — the cracks would be cut off at the chip's edge");
+    }
   }
   if (!/\.glas-burst\b[^}]*z-index:\s*var\(--gl-z-splash\)/s.test(css)) {
     fail("css", ".glas-burst must use --gl-z-splash");
   }
-  for (const cls of ["glas-ambient", "glas-burst"]) {
+  for (const cls of ["glas-cracks", "glas-burst"]) {
     const block = css.match(new RegExp(`\\.${cls}\\b[^{]*\\{([^}]*)\\}`, "s"));
     if (!block || !/pointer-events:\s*none/.test(block[1])) {
       fail("css", `.${cls} must set pointer-events: none or it will eat clicks`);
@@ -450,7 +525,7 @@ for (const [label, frag, uniforms, hostRel] of [
   }
 
   // No feature file may restate a suite colour as a hex of its own.
-  for (const rel of ["ambient.mjs", "burst.mjs", "shader.mjs", "anim.mjs"]) {
+  for (const rel of ["cracks.mjs", "burst.mjs", "shader.mjs", "anim.mjs"]) {
     const src = read(`${FEATURE}/${rel}`);
     const hexes = [...src.matchAll(/#[0-9a-fA-F]{6}\b/g)].map((m) => m[0]);
     // Hexes inside comments are documentation of where a value came from.
@@ -545,15 +620,15 @@ for (const [label, frag, uniforms, hostRel] of [
 
 {
   const burstSrc = read(`${FEATURE}/burst.mjs`);
-  const ambientSrc = read(`${FEATURE}/ambient.mjs`);
+  const cracksSrc = read(`${FEATURE}/cracks.mjs`);
   const mainSrc = stripComments(read(`${FEATURE}/main.mjs`));
 
-  for (const [label, src] of [["burst.mjs", burstSrc], ["ambient.mjs", ambientSrc]]) {
+  for (const [label, src] of [["burst.mjs", burstSrc], ["cracks.mjs", cracksSrc]]) {
     if (!/\bwarm\s*\(\s*\)\s*\{/.test(src)) fail(label, "has no warm() — its shader compiles on first use, mid-animation");
     // A warm-up that never reaches the GPU is not a warm-up.
     if (!/gl\.finish\s*\(/.test(src)) fail(label, "warm() does not gl.finish(), so the work stays queued behind the first real frame");
   }
-  for (const fn of ["warmBurst", "warmAmbient"]) {
+  for (const fn of ["warmBurst", "warmCracks"]) {
     if (!mainSrc.includes(fn)) fail("main.mjs", `never calls ${fn}() — that layer compiles on first use`);
   }
 
@@ -608,20 +683,56 @@ for (const [label, frag, uniforms, hostRel] of [
 /* ══════════════════════════════════════════════════════════════════════
    19. Dice surfaces cover both kinds of die
    ══════════════════════════════════════════════════════════════════════
-   The surge d20 is read by its glyph and needs per-face art; the severity d100
-   is read by its number and needs a tiling surface under the numerals. Missing
-   the second is what makes the severity roll look like a default die. */
+   The surge d20 is read by its glyph and needs per-face relief; the severity
+   d100 is read by its number and needs a tiling surface under the numerals.
+   Missing the second is what makes the severity roll look like a default die.
+
+   Neither carries any painted colour: the point is to see Dice So Nice's own
+   frosted glass. Two of these files exist only to make that possible, and both
+   look like mistakes — see the headers of `dsn.mjs` and the baker. */
 
 {
   const { existsSync } = await import("node:fs");
-  for (const face of ["blank", "surge", "surface"]) {
-    for (const map of ["", "-bump", "-emissive"]) {
-      const rel = `assets/pf2e-arcane-surge/dice/${face}${map}.png`;
-      if (!existsSync(join(ROOT, rel))) fail("dice", `missing ${rel} — run tools/gen-surge-textures.mjs`);
+  const shipped = [
+    "clear", "blank-bump", "blank-emissive", "surge-bump", "surge-emissive", "surface", "surface-bump",
+  ];
+  for (const file of shipped) {
+    const rel = `assets/pf2e-arcane-surge/dice/${file}.png`;
+    if (!existsSync(join(ROOT, rel))) fail("dice", `missing ${rel} — run tools/gen-surge-textures.mjs`);
+  }
+  /* The albedo maps are gone on purpose. If they come back, either somebody has
+     painted the dice again or the baker has quietly reverted to a faces × maps
+     cross product, and the material stops being what the table sees. */
+  for (const file of ["blank", "surge"]) {
+    if (existsSync(join(ROOT, `assets/pf2e-arcane-surge/dice/${file}.png`))) {
+      fail("dice", `${file}.png is back — the face art is meant to be relief and light only`);
     }
   }
+
+  /* THE TRANSPARENT LABEL IS LOAD-BEARING. Dice So Nice draws a face's
+     bumpMaps and emissiveMaps only in the branch it takes when that face's
+     label resolves to an image; a text label (including "") goes down a path
+     that never reads them. Swapping clear.png for "" therefore removes the
+     whirlpool from every die while looking like a simplification, and nothing
+     errors. */
+  if (!/clear/.test(dsnSrc)) {
+    fail("dsn.mjs", "no transparent label carrier — DSN would silently ignore every bumpMap and emissiveMap");
+  }
+  if (!/labels:\s*faces\.map\(/.test(dsnSrc)) {
+    fail("dsn.mjs", "the preset passes no per-face labels array, which is what DSN keys the face maps off");
+  }
+  for (const map of ["bumpMaps", "emissiveMaps"]) {
+    if (!dsnSrc.includes(map)) fail("dsn.mjs", `the preset has no ${map} — with no albedo, that face carries nothing at all`);
+  }
+
   if (!/addTexture\s*\(/.test(dsnSrc)) {
     fail("dsn.mjs", "registers no texture, so numbered dice (the severity d100 and its d10s) get no frosted surface");
+  }
+  /* And the same trap on the texture side: DSN draws a texture's `bump` only
+     inside the block that draws its `source`, so the frost on the numbered dice
+     needs a white source under `multiply` — the identity — rather than none. */
+  if (!/composite:\s*["']multiply["']/.test(dsnSrc)) {
+    fail("dsn.mjs", "the frost texture is not composited multiply, so its white source would paint over the glass instead of leaving it alone");
   }
   if (!/material:\s*["']glass["']/.test(dsnSrc)) fail("dsn.mjs", "the colorset is not frosted glass");
   if (!/tagSeverityRoll/.test(read(`${FEATURE}/severity.mjs`))) {

@@ -57,12 +57,12 @@ about its own probability.
 die whose result is predetermined would misrepresent the odds the die exists to
 show. The banner reads INVITED and goes straight to the burst.
 
-**Stable produces nothing at all** — no die, no banner, no card, no overlay. The
+**Stable produces nothing at all** — no die, no banner, no card, no cracks. The
 die's *appearance* is therefore itself the sign that the party is somewhere
-unstable, which is step one of the draft's procedure for free. The ambient
-shader is inert at chaos 0 in the GLSL, not merely torn down by the host: an
-invariant that holds only because of the code that avoids exercising it is not
-an invariant, and a cross-fade passes through chaos 0.
+unstable, which is step one of the draft's procedure for free. The crack shader
+is inert at chaos 0 in the GLSL, not merely skipped by the host: an invariant
+that holds only because of the code that avoids exercising it is not an
+invariant, and every level change cross-fades straight through chaos 0.
 
 **One casting, one check.** A PF2e spell can post a cast card, an attack roll and
 a damage roll, and every one of them reaches `createChatMessage` on every
@@ -101,20 +101,28 @@ receiving verdicts from it.
 
 ## Where the controls live
 
-The **stability chip** is a readout, stacked directly under the weather chip in
-the time-tracker HUD’s date cell so the two read as one cluster. A GM clicking
-it gets a level picker, positioned after mount and flipped when it would open
-off-screen — the HUD is draggable, so a popover pinned unconditionally below its
-anchor runs off the edge as soon as the bar is not near the top-left.
+The **stability chip** is a readout in its own cell of the time-tracker HUD, and
+it is also where the instability is *drawn* — see the crack layer below. A GM
+clicking it gets a level picker: four names and four markers, nothing else.
+Descriptions under them made the popover taller than the HUD it hangs off and
+told a GM what they already know; the prose lives on the hover instead. The
+picker is positioned after mount and flipped when it would open off-screen — the
+HUD is draggable, so a popover pinned unconditionally below its anchor runs off
+the edge as soon as the bar is not near the top-left.
 
 **Steady the Spell** and **Invite the Surge** live on the character sheet’s
 spellcasting tab, because that is where a caster already is when they choose a
 spell — a control anywhere else is one the table stops using by session four.
-Each button shows what the choice actually buys, resolved through the real
-rules: the effective level a steadied cast would use, and the row an invited one
-would be read against. The armed state is scoped to **that actor**, not just to
-the user, so a player running two characters cannot steady one and silently
-steady the other’s next spell.
+They are **two buttons**. An earlier version wrapped them in a bordered panel
+with a header, the current level, the effective level a steadied cast would
+resolve at, the row an invited one would be read against, and a line of
+explanatory prose — five pieces of chrome around two toggles, wedged into the
+top of a spell list somebody is scrolling. All of it survives on the tooltips,
+resolved through the real rules, where it costs nothing until it is wanted.
+
+The armed state is scoped to **that actor**, not just to the user, so a player
+running two characters cannot steady one and silently steady the other’s next
+spell.
 
 A **GM right-click entry** on any chat card forces a surge onto it. The
 automatic check can only see what PF2e tells it; this covers macros, spell-like
@@ -134,19 +142,42 @@ so the table can tell a ruling from a roll.
 
 They have very different budgets and that difference is the whole design.
 
-**Ambient** runs for hours. Two octaves of value noise, one whirlpool warp, and a
-RIDGED fold — that one line is most of the difference between "arcane" and
-"haze", because ridging turns smooth blobs into thin bright filaments for the
-cost of an `abs`. It hugs the four screen EDGES in a deliberately narrow band and
-leaves the middle of the board alone; widened much past a fifth of the short axis
-the four edges meet in the middle and it stops being an encroachment and becomes
-a tint. Full device resolution — those filaments are exactly the kind of thin
-high-contrast detail that crawls when undersampled. Pauses on `document.hidden`.
-Sits at `--gl-z-sticky`,
-above the board and **below every piece of Foundry chrome**, because a haze over
-the sidebar and hotbar for three hours would make the interface unusable. Under
-load it sheds `drift`, which stops the clock and leaves the veil — what degrades
-must be the motion, never the state.
+**Cracks** run for hours, inside the stability chip. Glass splintering out of
+the label that names the level, spreading further around it and glowing harder
+as the level worsens. It is the **suite's own fracture**, imported as a field
+from `core/fx-glsl.mjs` rather than written again — a broken creature's token,
+its initiative card, its health bar and this are one crack in different colours,
+and a lookalike would have drifted from all three the first time any of them was
+touched. Pauses on `document.hidden`. Under load it sheds `drift`, which stops
+the clock and leaves the cracks — what degrades must be the motion, never the
+state. Measured cost at chip size: **0.001 ms per draw**.
+
+Three things about it are load-bearing and none are obvious:
+
+- **The impact is the middle of the label.** Putting it on the level marker, at
+  the left, seemed righter — the cracks should come *out of* the dot. What it
+  produced was a splat over one end of the word and a dark tail at the other,
+  because coverage falls off with distance from the impact and one end of a wide
+  strip is much further away than the other.
+- **Chaos is spent on spread, not on shard size.** The strip is a couple of
+  dozen pixels tall; halving the cell size there buys mush.
+- **The clock never starts at zero.** `gluBreakField` opens over its first ~0.7
+  seconds and then settles, so it is fed a time that is always past that. From
+  zero it would replay the guard-break's shatter every time the HUD repainted —
+  which it does on every clock tick.
+
+### Why this is not a full-screen veil any more
+
+It was one, and the version before this hugged the four screen edges. The
+problem with a session-long layer over the board is not cost, it is *place*: it
+competes with the map for exactly the space the play happens in. Quiet enough to
+live with for three hours, it read as haze; loud enough to read as a threat, it
+was something a GM had to look through all evening. Neither is a setting you can
+tune your way out of.
+
+The state belongs where the state is **named**. The chip already says
+"Unraveling"; cracking the glass around that word says the same thing, is never
+between a GM and a token, and costs about a thousandth of the fill rate.
 
 **Surge** runs for 1.8 seconds, **live**, at full device resolution, composed at
 2× and box-averaged down. A vortex tearing open: spiral arms curved by a `log(r)`
@@ -177,10 +208,19 @@ its warm-up or starts baking again. On top of that the supersampler steps its
 quality down only after this machine has actually missed two frames in a row —
 full fidelity by default, degraded on evidence rather than on assumption.
 
-Measured in the preview harness. Ambient alpha, outer 10% of the screen vs the
-middle 40%: Stable 0/0 (exactly inert), Fraying 11.5/0, Unbound 37.4/0,
-Unraveling 80.1/0 out of 255 — the centre is untouched at every level. Warm cost
-1–8 ms per program; worst live frame ~9 ms at 2× supersampling.
+Measured in the preview harness at real chip size (143×60 device px), mean alpha
+out of 255 across the whole strip, and at the two ends versus the centre:
+
+| Level | mean | centre | ends | lit |
+|---|---|---|---|---|
+| Stable | 0 | 0 | 0 / 0 | 0% |
+| Fraying | 3.0 | 5.8 | 0.2 / 0 | 5% |
+| Unbound | 14.8 | 25.7 | 4.0 / 3.5 | 16% |
+| Unraveling | 29.4 | 39.4 | 21.9 / 16.9 | 22% |
+
+Stable is *exactly* zero, and the two ends stay within a few points of each
+other at every level — that symmetry is what centring the impact bought. Warm
+cost 1–8 ms per program; worst live beat frame ~9 ms at 2× supersampling.
 
 ## Chat surfaces
 
@@ -249,19 +289,45 @@ Zero problems required. It pins the odds↔glyph-count↔bands agreement, band
 monotonicity and the tier windows the draft's tone depends on (Fraying reaches
 Major but never Catastrophic; inviting in Unraveling must actually be more
 dangerous than not inviting), the exposure rules, hostile-config repair, the
-three-way uniform agreement for all three shader programs, `SHED_ORDER`
+three-way uniform agreement across all four shader programs, `SHED_ORDER`
 bidirectional completeness, the JS↔CSS duration mirrors, the z-band and
-pointer-events of both full-screen layers, every runtime-built i18n key, the
-die's defensive registration, and the one-casting-one-check / one-card-one-roll
-guards.
+pointer-events of both drawn layers, every runtime-built i18n key, the die's
+defensive registration, and the one-casting-one-check / one-card-one-roll
+guards. Two of its sections exist for things this pass got wrong on the way in:
+the cracks must run the *shared* fracture rather than a lookalike, and each
+stability level's hue must be one statement — `LEVEL_KEYS` and the
+`.glas-level-*` accent remaps naming the same token, with no two levels naming
+the same one. The first draft had `unbound` on `--gl-holo-b`, which
+`gl-tokens.css` aliases to `--gl-violet`, so the ladder's two most dangerous
+rungs rendered in exactly the same colour.
 
 ```bash
 node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
 ```
 
 The die faces are generated, not drawn. `--sheet=/tmp/surge.png` renders a
-contact sheet of all six maps; the groove is a **bump** feature, so review it
-there rather than in the albedo.
+contact sheet of everything that ships, over a checkerboard so the two carriers
+below are visible for what they are.
+
+**There is no painted colour on these dice.** Every face carries relief and
+light and nothing else, so what the table sees is Dice So Nice's own frosted
+glass being cut and lit rather than a picture of glass laid over it. Two files
+exist purely to make that possible, and both look like mistakes:
+
+- **`clear.png`** — fully transparent, used as the `labels` entry for all twenty
+  faces. DSN draws a face's `bumpMaps` and `emissiveMaps` *only* inside the
+  branch it takes when that face's label resolves to an image; a text label
+  (including `""`) goes down a path that writes glyphs into all three canvases
+  and never reads those maps. An image label is the price of per-face relief,
+  and a transparent one is how you pay it without painting anything. Replacing
+  it with `""` silently removes the whirlpool from every die.
+- **`surface.png`** — pure white, the colorset texture's albedo, composited
+  `multiply`, which is the identity. DSN draws a texture's `bump` only inside
+  the same block that draws its `source`, so a bump-only texture has to be a
+  white texture.
+
+Both are asserted by `--check` and by `arcane-surge-check.mjs`, because both
+would render perfectly while being wrong.
 
 ```bash
 node tools/arcane-surge-preview.mjs --out=.preview/surge.html
