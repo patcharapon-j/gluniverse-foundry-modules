@@ -1,0 +1,73 @@
+{{!-- Arcane Surge — odds and eligibility.
+      Bands are cumulative upper bounds on a d100, exactly as the draft's table
+      reads. The computed window beside each field is the only thing that tells
+      a GM they have just made a tier unreachable. --}}
+<div class="glas-config">
+
+  <p class="glas-config-intro">{{intro}}</p>
+
+  <section class="glas-config-section">
+    <h3>{{labels.odds}}</h3>
+    <p class="glas-config-hint">{{labels.thresholdHint}}</p>
+
+    {{#each rows}}
+    <div class="glas-config-row" data-row="{{this.id}}">
+      <header class="glas-config-rowhead">
+        <span class="glas-config-rowname">{{this.label}}</span>
+        {{#if this.showThreshold}}
+        <label class="glas-config-threshold">
+          <span>{{../labels.threshold}}</span>
+          <input type="number" name="rows.{{this.id}}.threshold" value="{{this.threshold}}"
+                 min="0" max="{{../maxThreshold}}" step="1" />
+        </label>
+        {{/if}}
+      </header>
+
+      <div class="glas-config-bands">
+        {{#each this.tiers}}
+        <label class="glas-config-band {{#if this.unreachable}}is-unreachable{{/if}}">
+          <span class="glas-config-bandname">{{this.label}}</span>
+          <input type="number" name="rows.{{../this.id}}.bands.{{this.id}}" value="{{this.bound}}"
+                 min="0" max="100" step="1" />
+          <span class="glas-config-window">{{this.window}}</span>
+        </label>
+        {{/each}}
+      </div>
+    </div>
+    {{/each}}
+
+    <p class="glas-config-hint">{{labels.bandsHint}}</p>
+  </section>
+
+  <section class="glas-config-section">
+    <h3>{{labels.eligibility}}</h3>
+
+    <div class="glas-config-checks">
+      {{#each eligibility}}
+      <label class="glas-config-check">
+        <input type="checkbox" name="eligibility.{{this.id}}" {{checked this.on}} />
+        <span class="glas-config-checktext">
+          <span class="glas-config-checkname">{{this.label}}</span>
+          <span class="glas-config-checkhint">{{this.hint}}</span>
+        </span>
+      </label>
+      {{/each}}
+    </div>
+
+    <label class="glas-config-rank">
+      <span>{{labels.minRank}}</span>
+      <input type="number" name="minRank" value="{{minRank}}" min="0" max="10" step="1" />
+      <span class="glas-config-hint">{{labels.minRankHint}}</span>
+    </label>
+  </section>
+
+  <footer class="glas-config-actions">
+    <button type="button" data-action="reset">
+      <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> {{labels.reset}}
+    </button>
+    <button type="submit">
+      <i class="fa-solid fa-check" aria-hidden="true"></i> {{labels.save}}
+    </button>
+  </footer>
+
+</div>

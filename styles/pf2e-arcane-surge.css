@@ -1,0 +1,833 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Arcane Surge
+   ════════════════════════════════════════════════════════════════════════
+   Identity is routed entirely through --gl-accent on scoped selectors, so the
+   four stability levels are one rule with four accent remaps rather than four
+   sets of hardcoded colours. Teal is "held"; the accent walks toward cyan and
+   then violet as the world comes apart.
+
+   Feature-local custom properties are prefixed --glas-* because custom
+   properties are global: a bare --chaos set here would repaint every feature
+   loaded after this sheet.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glas-banner,
+.glas-severity,
+.glas-stability,
+.glas-picker,
+.glas-config {
+  --gl-accent: var(--gl-teal);
+  --glas-seam: rgb(var(--gl-tint-light) / 0.08);
+}
+
+/* Level identity. One remap each; everything derived follows.
+
+   These four must stay in step with `palette.mjs`'s LEVEL_KEYS: the chip's
+   marker is coloured here and the cracks growing out of it by the shader, and
+   the two sit two pixels apart. The check tool holds them together.
+
+   `unbound` used --gl-holo-b, which gl-tokens.css aliases to --gl-violet, so
+   the ladder's two most dangerous rungs rendered in exactly the same colour —
+   the one place on it where telling them apart matters. Orchid is the token
+   file's documented "dying / unstable" hue and is deliberately distinct from
+   violet. */
+.glas-level-stable      { --gl-accent: var(--gl-teal); }
+.glas-level-fraying     { --gl-accent: var(--gl-cyan); }
+.glas-level-unbound     { --gl-accent: var(--gl-violet); }
+.glas-level-unraveling  { --gl-accent: var(--gl-orchid); }
+
+/* Severity identity, on the card only. */
+.glas-tier-minor        { --gl-accent: var(--gl-cyan); }
+.glas-tier-major        { --gl-accent: var(--gl-warn); }
+.glas-tier-catastrophic { --gl-accent: var(--gl-warn-deep); }
+.glas-tier-breach       { --gl-accent: var(--gl-hazard); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   The crack layer
+   ══════════════════════════════════════════════════════════════════════
+   The standing instability, drawn INSIDE the stability chip rather than over
+   the board. A session-long full-screen veil competes with the map for exactly
+   the space the play happens in; this never leaves the HUD.
+
+   `inset`, `width` and `height` are written from JS, because the canvas has to
+   overhang its own container by a fixed number of CSS pixels — that overhang is
+   what lets the fracture break OUT of the label instead of being clipped to
+   four straight lines. It is behind the chip's own content (z-index 0 against
+   the chip's 1), so the level's name stays readable at Unraveling. */
+
+.glas-cracks {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The full-screen layer
+   ══════════════════════════════════════════════════════════════════════
+   The burst lasts two seconds and is allowed to dominate everything. */
+
+.glas-burst {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: var(--gl-z-splash);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity var(--gl-d-quick) var(--gl-exit);
+}
+
+.glas-burst.glas-visible {
+  opacity: 1;
+  transition: opacity var(--gl-d-flash) var(--gl-enter);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The banner on the spell's card
+   ══════════════════════════════════════════════════════════════════════
+   A deliberate sibling of destiny-dice's fate strip: the table should read the
+   two as one family without this one borrowing that one's namespace. */
+
+.glas-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  border-left: 2px solid var(--gl-accent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+  color: var(--gl-text);
+}
+
+.glas-banner .glas-cut {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--gl-cut-sm);
+  height: var(--gl-cut-sm);
+  background: var(--gl-accent);
+  opacity: 0.55;
+}
+
+.glas-banner-glyph {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--gl-accent);
+  filter: drop-shadow(0 0 6px var(--gl-glow));
+}
+
+.glas-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.glas-banner-kicker {
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glas-banner-title {
+  font-family: var(--gl-display);
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--gl-text-bright);
+}
+
+/* A surge is loud; a held check is quiet. The difference is deliberate — the
+   pass has to read as a pass at a glance or the banner becomes noise. */
+.glas-banner.glas-surge {
+  background: linear-gradient(100deg, var(--gl-accent-faint), var(--gl-surface-inset) 62%);
+  box-shadow: var(--gl-etch-soft), 0 0 18px var(--gl-bloom);
+}
+
+.glas-banner.glas-surge .glas-banner-title {
+  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
+}
+
+.glas-banner.glas-held {
+  opacity: 0.86;
+}
+
+.glas-banner.glas-held .glas-banner-glyph {
+  color: var(--gl-text-dim);
+  filter: none;
+}
+
+.glas-banner.glas-voided {
+  opacity: 0.5;
+}
+
+.glas-banner.glas-voided .glas-banner-title {
+  text-decoration: line-through;
+  animation: none;
+}
+
+/* A held NPC surge, on the GM's screen only, reads as unfinished business. */
+.glas-banner.glas-pending {
+  border-left-style: dashed;
+}
+
+.glas-banner.glas-reveal {
+  animation: gl-rise-in var(--gl-d-reveal) var(--gl-enter) both;
+}
+
+.glas-banner-controls {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.glas-banner-controls button,
+.glas-severity button {
+  font-family: var(--gl-tech);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  color: var(--gl-text);
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-edge);
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  cursor: pointer;
+  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-banner-controls button:hover,
+.glas-severity button:hover {
+  color: var(--gl-text-bright);
+  border-color: var(--gl-accent);
+  background: var(--gl-accent-faint);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The severity card
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-severity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  border-top: 2px solid var(--gl-accent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%);
+  color: var(--gl-text);
+}
+
+.glas-severity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--gl-tech);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.glas-severity-kicker { color: var(--gl-accent); }
+.glas-severity-row    { color: var(--gl-text-dim); }
+
+/* The unrolled state is the tension: a button sitting in chat that everybody
+   can see and nobody has pressed yet. */
+.glas-severity.glas-unrolled .glas-severity-roll {
+  width: 100%;
+  padding: 8px;
+  font-size: 0.78rem;
+  animation: gl-breathe var(--gl-dread) ease-in-out infinite;
+}
+
+.glas-severity-wait {
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-faint);
+  text-align: center;
+}
+
+.glas-severity-body {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.glas-severity-value {
+  font-family: var(--gl-tech);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 14px var(--gl-glow);
+}
+
+.glas-severity-tier {
+  font-family: var(--gl-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--gl-accent);
+}
+
+/* The band is printed beside the roll so the table can read the system rather
+   than only receive verdicts from it. */
+.glas-severity-band {
+  margin-left: auto;
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-faint);
+}
+
+.glas-severity-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--gl-text-dim);
+}
+
+.glas-severity-rerolled {
+  margin: 0;
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-warn);
+}
+
+.glas-severity.glas-reveal .glas-severity-body {
+  animation: gl-pop-in var(--gl-d-reveal) var(--gl-enter) both;
+}
+
+.glas-severity.glas-tier-breach.glas-reveal {
+  animation: gl-shake var(--gl-d-swift) var(--gl-enter) both;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Foundry's element-level button rules
+   ══════════════════════════════════════════════════════════════════════
+   Every control this feature injects is a <button>, and Foundry styles
+   `button` at ELEMENT level — width, margin, padding, background, border,
+   line-height, text-align. An element-level rule beats an inherited value but
+   loses to a class, so each of these needs its own reset rather than relying on
+   the parent. Skipping it is what made the GM's level picker render as a stack
+   of staggered, differently-indented rows: the rows were fine, Foundry's
+   `button { width: … ; margin: … }` was moving them.
+
+   `.gl-type` covers the FONT half of the same problem; this covers the box. */
+
+.glas-chip,
+.glas-picker-row,
+.glas-arm-btn,
+.glas-banner-controls button,
+.glas-severity button {
+  width: auto;
+  margin: 0;
+  line-height: normal;
+  text-align: left;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The stability chip
+   ══════════════════════════════════════════════════════════════════════
+   Its own cell in the HUD bar: one line, one marker, one word. It is the whole
+   readout, so it is sized against the bar rather than tucked under the weather
+   chip — which is also what gives the cracks a box of their own to break out of.
+
+   The chip itself is deliberately UNFILLED. A panel background would sit on top
+   of the fracture and leave only the ten-pixel bleed showing; with nothing but a
+   hairline the glass reads as breaking through the label rather than behind a
+   card. `position: relative` is load-bearing twice over: it is the crack
+   canvas's containing block, and it is what puts the text above it. */
+
+.glas-stability {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Never clip the canvas: the whole point of the bleed is to escape this box. */
+  overflow: visible;
+}
+
+.glas-chip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--gl-hair);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  color: var(--gl-text);
+  cursor: default;
+  transition: border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-chip.glas-clickable {
+  cursor: pointer;
+}
+
+.glas-chip.glas-clickable:hover {
+  border-color: var(--gl-accent);
+  background: var(--gl-accent-faint);
+}
+
+.glas-chip-mark {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 7px var(--gl-glow);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
+}
+
+/* Stable is at rest: the mark stops moving entirely. Motion here is meaning. */
+.glas-chip.glas-level-stable .glas-chip-mark {
+  animation: none;
+  box-shadow: none;
+  opacity: 0.55;
+}
+
+.glas-chip-level {
+  font-family: var(--gl-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--gl-text-bright);
+}
+
+.glas-chip-conceal {
+  margin-left: auto;
+  color: var(--gl-warn);
+  font-size: 0.66rem;
+}
+
+/* The level changed. One flash, no chat line — the party notices rather than
+   being told. */
+.glas-chip.glas-flash {
+  animation: gl-flash var(--gl-d-slow) var(--gl-enter) both;
+}
+
+/* Standalone panel, used only when the time-tracker HUD is not running.
+   Padded generously on purpose: its `clip-path` clips descendants, so the
+   crack bleed needs room INSIDE the panel or the fracture is cut off square. */
+.glas-standalone {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--gl-z-hud);
+  padding: 12px 14px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-elev-2);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+}
+
+.glas-standalone:empty {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Steady / Invite, on the character sheet
+   ══════════════════════════════════════════════════════════════════════
+   Injected above the spellcasting tab's entry list, where a caster already is
+   when they pick a spell. Two buttons, no panel around them: this sits at the
+   top of a list somebody is scrolling, and a bordered card with a header and a
+   paragraph of prose was five pieces of chrome wrapped around two toggles.
+   Everything that panel said is on the tooltips now.
+
+   An armed choice still has to be impossible to miss — it applies to exactly
+   one casting and then lapses — which is what `.is-armed` is for. */
+
+.glas-arm-bar {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.glas-arm-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-arm-btn > i {
+  font-size: 0.82rem;
+  color: var(--gl-accent);
+}
+
+.glas-arm-name {
+  font-family: var(--gl-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--gl-text-bright);
+}
+
+.glas-arm-btn:hover {
+  border-color: var(--gl-accent);
+  color: var(--gl-text-bright);
+}
+
+.glas-arm-btn.is-armed {
+  background: var(--gl-accent-faint);
+  border-color: var(--gl-accent);
+  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The GM's level picker
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-picker {
+  position: fixed;
+  z-index: var(--gl-z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Four names wide, not four paragraphs. The 300px version was taller than the
+     HUD it hangs off and covered the clock it sits beside. */
+  min-width: 150px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-elev-3);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%);
+  animation: gl-drop-in var(--gl-d-brisk) var(--gl-enter) both;
+}
+
+/* Grid rather than flex: the mark and the name share one baseline grid across
+   every row, so the names line up exactly. The original flex version let each
+   row size itself, which is why they came out staggered. */
+.glas-picker-row {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--gl-text);
+  cursor: pointer;
+  transition: background var(--gl-d-quick), border-color var(--gl-d-quick);
+}
+
+.glas-picker-row:hover {
+  background: var(--gl-accent-faint);
+  border-color: var(--gl-accent);
+}
+
+.glas-picker-row.is-current {
+  background: var(--gl-surface-raised);
+}
+
+.glas-picker-mark {
+  width: 8px;
+  height: 8px;
+  background: var(--gl-accent);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.glas-picker-name {
+  font-family: var(--gl-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gl-text-bright);
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The odds editor
+   ══════════════════════════════════════════════════════════════════════ */
+
+.glas-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--gl-text);
+}
+
+.glas-config-intro,
+.glas-config-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-section h3 {
+  margin: 0;
+  font-family: var(--gl-display);
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gl-accent);
+}
+
+.glas-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 0;
+  border-top: 1px solid var(--glas-seam);
+}
+
+.glas-config-rowhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.glas-config-rowname {
+  font-family: var(--gl-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--gl-text-bright);
+}
+
+.glas-config-threshold,
+.glas-config-rank {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--gl-tech);
+  font-size: 0.7rem;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-threshold input,
+.glas-config-band input,
+.glas-config-rank input {
+  width: 62px;
+  font-family: var(--gl-tech);
+  text-align: center;
+}
+
+.glas-config-bands {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.glas-config-band {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  padding: 5px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-bandname {
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-window {
+  font-family: var(--gl-tech);
+  font-size: 0.66rem;
+  color: var(--gl-text-faint);
+}
+
+/* A tier with no window will never once come up. That has to be visible while
+   it is being created, not discovered three sessions later. */
+.glas-config-band.is-unreachable {
+  border-color: color-mix(in srgb, var(--gl-warn) 45%, transparent);
+}
+
+.glas-config-band.is-unreachable .glas-config-window {
+  color: var(--gl-warn);
+}
+
+.glas-config-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.glas-config-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 8px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+}
+
+.glas-config-checktext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glas-config-checkname {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gl-text-bright);
+}
+
+.glas-config-checkhint {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gl-text-dim);
+}
+
+.glas-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.glas-config-actions button {
+  font-family: var(--gl-tech);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  color: var(--gl-text);
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-edge);
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick), color var(--gl-d-quick);
+}
+
+.glas-config-actions button[type="submit"] {
+  color: var(--gl-ink-0);
+  background: var(--gl-accent);
+  border-color: var(--gl-accent);
+}
+
+.glas-config-actions button:hover {
+  border-color: var(--gl-accent);
+  color: var(--gl-text-bright);
+}
+
+.glas-config-actions button[type="submit"]:hover {
+  color: var(--gl-ink-0);
+}
+
+/* The slot the time-tracker HUD offers. It is a hole, not a dependency: when
+   this feature is off the slot collapses and the bar closes over it. */
+#glct-hud .cell.glas-slot:empty {
+  display: none;
+}
+
+/* The bleed has to be allowed out of the cell, or the cracks are clipped by the
+   HUD's own layout box the moment they leave the chip. */
+#glct-hud .cell.glas-slot {
+  padding: 0 10px;
+  overflow: visible;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The struck word
+   ══════════════════════════════════════════════════════════════════════
+   DOM rather than GLSL: text in a fragment shader is a bitmap-font problem
+   with no upside, and as an element it gets the suite's display face and the
+   motion tokens for free.
+
+   The timing is the whole point. It arrives BEFORE the shader's own peak —
+   overshooting in under a tenth of a second, then settling — so the word reads
+   as the cause of the tear rather than a caption on it. */
+
+.glas-word {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gl-z-splash) + 1);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.glas-word-text {
+  font-family: var(--gl-display);
+  font-weight: 800;
+  font-size: clamp(3rem, 11vw, 9rem);
+  letter-spacing: 0.16em;
+  /* The trailing letter-space would otherwise push the word off centre. */
+  text-indent: 0.16em;
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow:
+    0 0 8px var(--gl-glow),
+    0 0 42px var(--gl-glow),
+    0 0 90px var(--gl-bloom);
+  opacity: 0;
+  transform: scale(1.5);
+  will-change: transform, opacity, filter;
+}
+
+.glas-word-in .glas-word-text {
+  animation: glas-strike var(--gl-d-cinematic) var(--gl-exit) both;
+}
+
+/* Overshoot, snap, settle, leave. The 8% keyframe is where it lands — anything
+   slower than that reads as a fade-in and stops feeling struck. */
+@keyframes glas-strike {
+  0%   { opacity: 0; transform: scale(1.55); filter: blur(14px); }
+  8%   { opacity: 1; transform: scale(0.965); filter: blur(0); }
+  16%  { transform: scale(1.005); }
+  24%  { transform: scale(0.99); }
+  62%  { opacity: 1; transform: scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.06); filter: blur(6px); }
+}
+
+/* The verdict word is smaller and lands harder: it is a label on a result, not
+   the result itself, and it competes with a card the table is already reading. */
+.glas-word.glas-tier-minor .glas-word-text,
+.glas-word.glas-tier-major .glas-word-text,
+.glas-word.glas-tier-catastrophic .glas-word-text,
+.glas-word.glas-tier-breach .glas-word-text {
+  font-size: clamp(2rem, 7vw, 5.5rem);
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
+  color: var(--gl-accent);
+  text-shadow:
+    0 0 6px var(--gl-glow),
+    0 0 34px var(--gl-glow);
+}
+
+.glas-word.glas-tier-breach .glas-word-text {
+  color: var(--gl-text-bright);
+  animation: glas-strike var(--gl-d-cinematic) var(--gl-exit) both,
+             gl-shake var(--gl-d-swift) var(--gl-enter) both;
+}

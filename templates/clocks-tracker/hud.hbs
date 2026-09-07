@@ -61,6 +61,13 @@
         </button>
       </div>
 
+      {{!-- Stability readout: its own cell, beside the date rather than inside
+            it. Filled by the PF2e Arcane Surge feature when it runs, collapsed
+            to nothing when it does not — a hole, not a dependency; neither
+            feature requires the other. It also hosts that feature's crack
+            effect, which needs a box of its own to break out of. --}}
+      <div class="cell glas-slot" data-stability></div>
+
       <div class="cell shift-hero" data-shifthero>
         <span class="sdial" data-dial></span>
         <span class="sinfo">
