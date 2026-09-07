@@ -474,7 +474,8 @@ node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
 ```
 
 See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
-different transport channels, and why the burst is baked rather than live.
+different transport channels, and why every full-screen pass runs live off a
+warmed context rather than from baked frames.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

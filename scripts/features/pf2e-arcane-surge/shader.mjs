@@ -1,32 +1,35 @@
 /**
  * GLUniverse Suite — Arcane Surge GLSL.
  *
- * Two very different budgets share this file, and the difference is the whole
- * design:
+ * Three programs, three budgets:
  *
- *   AMBIENT runs for HOURS. It is deliberately cheap — two octaves of value
- *   noise and one domain warp, no Voronoi, no five-octave fbm. It is the mood of
- *   an unstable region, not an event, and it must cost almost nothing to be one.
+ *   AMBIENT runs for HOURS. It hugs the edges of the screen and leaves the
+ *   middle of the board alone. It is the mood of an unstable region — arcane
+ *   instability, not weather — so it is built from a whirlpool warp and RIDGED
+ *   noise, which produces thin bright filaments instead of the soft cloud a
+ *   plain fbm gives you. Two noise octaves, one warp; the ridge is free.
  *
- *   BURST runs for 2.4 seconds and is expensive: a fracture field with a
- *   travelling shatter front. It is never run live. `burst.mjs` bakes it to a
- *   frame set once and blits the frames back, because `initiative`'s break
- *   splash already paid to learn that a full-screen procedural fracture per
- *   frame produces a visible hiccup — at exactly the moment you least want one.
+ *   BURST fires on a surge, live and full-screen. It is deliberately nothing
+ *   like the suite's golden glass fracture: no Voronoi, no crack lines. This is
+ *   a vortex tearing open — spiral arms, a collapsing ring, radial filaments
+ *   whipping outward — in teal and blue. The word itself is DOM, not GLSL,
+ *   because text in a fragment shader is a bitmap font problem nobody needs.
  *
- * The uniform tables below are the contract `tools/arcane-surge-check.mjs`
- * enforces: every name must be declared in the GLSL AND written from the host.
- * A uniform that is declared and never written holds its initial value for the
- * life of the context, so the effect renders, just frozen, and nothing reports
- * it.
+ *   SEVERITY fires when the card resolves, and is different again: a verdict
+ *   rather than an event. Concentric shock rings collapsing INWARD onto the
+ *   centre, with the tier driving how many arrive and how hard they land.
  *
- * Colour never appears here as a literal. The three ramp colours arrive as
- * uniforms, derived by `palette.mjs` from `theme.mjs`'s palette mirror, because
- * WebGL cannot read a CSS custom property and a hardcoded hue here would
- * silently diverge from the design system the rest of the feature follows.
+ * Colour never appears here as a literal. The ramp arrives as uniforms, derived
+ * by `palette.mjs` from `theme.mjs`'s palette mirror, because WebGL cannot read
+ * a CSS custom property.
+ *
+ * The uniform tables are the contract `tools/arcane-surge-check.mjs` enforces:
+ * every name must be declared in the GLSL AND written from the host. A uniform
+ * declared and never written holds its initial value for the life of the
+ * context, so the effect renders, just wrong, and nothing reports it.
  */
 
-/** Shared by both programs: a full-screen triangle, no index buffer. */
+/** Shared by every program: a full-screen triangle, no index buffer. */
 export const VERT = `
 attribute vec2 aPos;
 varying vec2 vUv;
@@ -37,7 +40,7 @@ void main() {
 `;
 
 /* ══════════════════════════════════════════════════════════════════════
-   Shared noise — two octaves, and that is the point
+   Shared field helpers
    ══════════════════════════════════════════════════════════════════════ */
 
 const NOISE = `
@@ -59,14 +62,34 @@ float glasNoise(vec2 p) {
 }
 
 // Two octaves. A third costs another full noise evaluation per pixel per frame
-// for detail nobody reads through a 6% alpha veil.
+// for detail nobody reads through a low-alpha veil.
 float glasFbm2(vec2 p) {
   return 0.62 * glasNoise(p) + 0.31 * glasNoise(p * 2.07);
+}
+
+// Ridged: the fold at 0.5 turns smooth blobs into thin bright FILAMENTS. This
+// one line is most of the difference between "arcane" and "haze", and it costs
+// an abs and a subtract.
+float glasRidge(vec2 p) {
+  return 1.0 - abs(glasNoise(p) * 2.0 - 1.0);
+}
+
+float glasRidge2(vec2 p) {
+  return 0.65 * glasRidge(p) + 0.35 * glasRidge(p * 2.11);
+}
+
+// Rotate by an angle that grows toward the centre: a whirlpool, not a spin.
+vec2 glasSwirl(vec2 p, float amount) {
+  float r = length(p);
+  float a = amount / (r + 0.28);
+  float s = sin(a);
+  float c = cos(a);
+  return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 `;
 
 /* ══════════════════════════════════════════════════════════════════════
-   Ambient — the standing cost
+   Ambient — the standing cost, and the edges of the world
    ══════════════════════════════════════════════════════════════════════ */
 
 export const AMBIENT_FRAG = `
@@ -85,40 +108,59 @@ uniform vec3  uHot;
 ${NOISE}
 
 void main() {
-  // Aspect-corrected so the field does not stretch on ultrawide displays.
-  vec2 p = (vUv - 0.5) * vec2(uRes.x / max(uRes.y, 1.0), 1.0);
+  vec2 centred = (vUv - 0.5) * vec2(uRes.x / max(uRes.y, 1.0), 1.0);
 
   // When drift is shed the clock stops rather than the field vanishing: what
   // degrades under load is the motion, never the state.
   float t = uTime * uDrift;
 
-  // One domain warp. The warp is what makes a cheap field read as "wrong"
-  // rather than as "cloudy" — instability, not weather.
-  vec2 q = p * (1.6 + 1.4 * uChaos);
-  q += (0.18 + 0.42 * uChaos) * vec2(
-    glasFbm2(q + vec2(t * 0.07, -t * 0.05)),
-    glasFbm2(q * 1.13 - vec2(t * 0.06, t * 0.08))
+  /* THE EDGE MASK.
+     Distance to the nearest screen edge, not radial distance — a radial
+     falloff leaves the corners heavy and the middle of the long edges thin,
+     which reads as a vignette rather than as something coming in from outside.
+     This hugs all four edges evenly.
+
+     The band has to stay NARROW. Widened past about a quarter of the short axis
+     the four edges meet in the middle and the whole thing becomes a full-screen
+     tint — which is a wash, not an encroachment, and it fights the map for the
+     centre of the board where the play actually is. */
+  vec2 fromEdge = min(vUv, 1.0 - vUv);
+  float edge = min(fromEdge.x, fromEdge.y);
+  float band = 1.0 - smoothstep(0.0, mix(0.11, 0.20, uChaos), edge);
+  // Squared falloff: dense right at the frame, gone well before the centre.
+  band = pow(band, 2.1);
+
+  // Whirlpool: the field spirals around the screen's centre, so the filaments
+  // at the edges are visibly being dragged around something.
+  vec2 p = glasSwirl(centred, (0.35 + 0.95 * uChaos) * (0.6 + 0.4 * sin(t * 0.11)));
+  p *= 1.5 + 1.3 * uChaos;
+  p += (0.14 + 0.40 * uChaos) * vec2(
+    glasFbm2(p + vec2(t * 0.09, -t * 0.06)),
+    glasFbm2(p * 1.13 - vec2(t * 0.07, t * 0.10))
   );
 
-  float field = glasFbm2(q + vec2(0.0, t * 0.04));
+  // Filaments rather than cloud. Chaos sharpens them as well as raising them.
+  float fil = glasRidge2(p + vec2(0.0, t * 0.06));
+  fil = pow(clamp(fil, 0.0, 1.0), mix(3.4, 1.5, uChaos));
 
-  // Chaos sharpens the field's contrast as well as raising it: Fraying is a
-  // haze, Unraveling has structure moving inside it.
-  field = pow(clamp(field, 0.0, 1.0), mix(1.5, 0.75, uChaos));
+  // A slower, softer bed underneath so the filaments have something to sit in.
+  float bed = glasFbm2(p * 0.55 - vec2(t * 0.03, 0.0));
 
-  vec3 col = mix(uDeep, uMid, smoothstep(0.25, 0.72, field));
-  col = mix(col, uHot, smoothstep(0.70, 0.98, field) * (0.25 + 0.75 * uChaos));
+  float field = clamp(fil * 1.15 + bed * 0.35, 0.0, 1.0);
 
-  // Pull the veil to the edges of the screen. The centre is where the play is;
-  // a wash over the middle of the board fights the map for attention.
-  float edge = length((vUv - 0.5) * vec2(1.15, 1.0));
-  float vignette = smoothstep(0.28, 0.78, edge);
+  vec3 col = mix(uDeep, uMid, smoothstep(0.10, 0.62, field));
+  col = mix(col, uHot, smoothstep(0.55, 0.95, field) * (0.35 + 0.65 * uChaos));
 
-  // Scaled BY uChaos, not merely offset by it: at Stable the shader must be
-  // exactly inert, not faintly on. The host does tear the overlay down at
-  // Stable, but an invariant that only holds because of the code that avoids
-  // calling it is not an invariant — and a cross-fade passes through chaos 0.
-  float alpha = uChaos * (0.10 + 0.10 * uChaos) * vignette * uFade;
+  /* A slow breath so the edges never sit perfectly still — the world is not
+     stable, and something that holds a fixed shape reads as decoration. */
+  float breath = 0.88 + 0.12 * sin(t * 0.55);
+
+  /* Multiplied by chaos, not offset by it, so Stable is exactly inert — the host
+     also tears the overlay down there, but an invariant that only holds because
+     of the code avoiding it is not an invariant, and a cross-fade passes through
+     chaos 0. The ceiling is deliberately high enough to read as a threat
+     through a bright map, and concentrated into a narrow band so it can be. */
+  float alpha = uChaos * (0.16 + 0.30 * uChaos) * band * breath * uFade;
   gl_FragColor = vec4(col * alpha, alpha);
 }
 `;
@@ -128,110 +170,182 @@ export const AMBIENT_UNIFORMS = Object.freeze([
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════
-   Burst — baked, never live
+   Burst — the surge itself, live
    ══════════════════════════════════════════════════════════════════════ */
 
 export const BURST_FRAG = `
 precision highp float;
 varying vec2 vUv;
 
-uniform float uTime;     // 0..1 across the baked frame set
+uniform float uTime;     // seconds since the burst began
+uniform float uProgress; // 0..1 across the whole beat
 uniform vec2  uRes;
 uniform float uSeed;
-uniform float uChaos;    // stability level, NOT severity — severity is rolled later
+uniform float uChaos;    // stability level, NOT severity
 uniform vec3  uDeep;
 uniform vec3  uMid;
 uniform vec3  uHot;
 
 ${NOISE}
 
-// F2 - F1 cellular edge. This is the expensive term and the reason the whole
-// effect is baked rather than run live.
-float glasVoroEdge(vec2 p) {
-  vec2 n = floor(p);
-  vec2 f = fract(p);
-  float f1 = 8.0;
-  float f2 = 8.0;
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      vec2 g = vec2(float(i), float(j));
-      vec2 o = vec2(glasHash(n + g), glasHash(n + g + 41.7));
-      float d = length(g + o - f);
-      if (d < f1) { f2 = f1; f1 = d; }
-      else if (d < f2) { f2 = d; }
-    }
-  }
-  return f2 - f1;
-}
-
 void main() {
   vec2 p = (vUv - 0.5) * vec2(uRes.x / max(uRes.y, 1.0), 1.0);
-  float dist = length(p);
-  float t = clamp(uTime, 0.0, 1.0);
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float t = uProgress;
 
-  // The shatter front sweeps outward and the whole thing decays behind it.
-  float front = clamp(t * 1.7, 0.0, 1.0);
-  float decay = smoothstep(1.0, 0.45, t);
+  /* The beat: a hard snap in, then a long decay. The punch term is what makes
+     it feel struck rather than faded up — it is at full height within the first
+     6% of the duration. */
+  float punch = smoothstep(0.0, 0.06, t);
+  float decay = pow(1.0 - t, 1.7);
+  float env = punch * decay;
 
-  // Warp the radial coordinate before cracking it, so the fracture wanders
-  // instead of radiating like a starburst.
-  vec2 w = p * 3.2;
-  w += 0.35 * vec2(glasFbm2(w + uSeed), glasFbm2(w * 1.21 - uSeed));
+  // Everything is dragged around the centre, harder early on.
+  vec2 sp = glasSwirl(p, (2.6 + 1.4 * uChaos) * mix(1.0, 0.25, t));
 
-  // Finer cells near the impact, coarser toward the edge.
-  float cells = mix(17.0, 6.5, smoothstep(0.0, 1.0, dist));
-  float edge = glasVoroEdge(w * cells * (0.6 + 0.4 * uChaos));
+  /* Spiral arms. The angle is offset by log(r) so the arms curve instead of
+     radiating — that curve is what separates a whirlpool from a starburst. */
+  float spiral = sin(a * 5.0 + log(r + 0.09) * 6.5 - uTime * 5.0 + uSeed * 6.28);
+  spiral = pow(max(spiral, 0.0), 2.6);
 
-  // The crack line itself: a thin bright seam where two cells meet.
-  float crack = 1.0 - smoothstep(0.0, 0.055 + 0.03 * (1.0 - uChaos), edge);
-  // Only cracks the front has reached exist yet.
-  crack *= smoothstep(front + 0.06, front - 0.20, dist);
+  // Radial filaments whipping outward, thin and bright.
+  float fil = glasRidge2(vec2(a * 2.4 + uSeed * 9.0, r * 5.5 - uTime * 2.2));
+  fil = pow(fil, 3.2);
 
-  // A halo bleeding out of the seams, and a hot core at the impact.
-  float halo = smoothstep(0.30, 0.0, edge) * 0.30;
-  float core = smoothstep(0.42, 0.0, dist) * (0.35 + 0.45 * uChaos);
+  /* The collapsing ring — a shock that races outward then thins. It reads as
+     the moment of the surge, so it leads the whole effect. */
+  float ringR = 0.10 + 1.35 * pow(t, 0.55);
+  float ring = smoothstep(0.13, 0.0, abs(r - ringR)) * (1.0 - smoothstep(0.55, 1.0, t));
 
-  vec3 col = mix(uDeep, uMid, halo * 2.2);
-  col = mix(col, uHot, clamp(crack * 1.25 + core, 0.0, 1.0));
-  // The brightest seams blow toward white so the fracture reads on any backdrop.
-  col = mix(col, vec3(1.0), clamp(crack * crack * 0.85, 0.0, 1.0));
+  // The eye of it: a hot core that flares and shrinks.
+  float core = smoothstep(0.30 * (1.0 + 2.2 * t), 0.0, r);
 
-  float alpha = clamp(crack * 0.95 + halo * 0.55 + core * 0.5, 0.0, 1.0) * decay;
-  alpha *= 0.55 + 0.45 * uChaos;
+  // Torn darkness just inside the ring, so the bright parts have a void behind
+  // them rather than sitting on the map.
+  float tear = smoothstep(0.0, 0.35, ringR - r) * (1.0 - smoothstep(0.7, 1.0, t));
+
+  float energy = clamp(spiral * 0.55 + fil * 0.5, 0.0, 1.0);
+  energy *= smoothstep(1.5, 0.15, r);
+
+  vec3 col = mix(uDeep, uMid, clamp(energy * 1.3 + ring * 0.8, 0.0, 1.0));
+  col = mix(col, uHot, clamp(ring * 1.1 + core * 1.4 + energy * energy * 0.7, 0.0, 1.0));
+  // The brightest parts blow toward white so the burst reads on any backdrop.
+  col = mix(col, vec3(1.0), clamp(core * 1.2 + ring * ring * 0.9, 0.0, 1.0));
+
+  float alpha = clamp(energy * 0.72 + ring * 0.95 + core * 0.9 + tear * 0.42, 0.0, 1.0);
+  alpha *= env * (0.72 + 0.28 * uChaos);
   gl_FragColor = vec4(col * alpha, alpha);
 }
 `;
 
 export const BURST_UNIFORMS = Object.freeze([
-  "uTime", "uRes", "uSeed", "uChaos", "uDeep", "uMid", "uHot",
+  "uTime", "uProgress", "uRes", "uSeed", "uChaos", "uDeep", "uMid", "uHot",
 ]);
 
 /* ══════════════════════════════════════════════════════════════════════
-   Blit — what actually runs during the burst
+   Severity — the verdict
    ══════════════════════════════════════════════════════════════════════
-   Playback is one textured triangle per frame. That is the entire per-frame
-   cost of the burst, which is the point of baking it. */
+   Deliberately the opposite motion to the burst. The burst throws energy
+   OUTWARD from a vortex; this collapses INWARD onto the centre in rings, so
+   the two never read as the same effect played twice. */
 
+export const SEVERITY_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform float uTime;
+uniform float uProgress;
+uniform vec2  uRes;
+uniform float uTier;     // 0 minor … 3 breach
+uniform vec3  uDeep;
+uniform vec3  uMid;
+uniform vec3  uHot;
+uniform vec3  uVerdict;  // the tier's own hue, from the CSS tier tokens
+
+${NOISE}
+
+void main() {
+  vec2 p = (vUv - 0.5) * vec2(uRes.x / max(uRes.y, 1.0), 1.0);
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float t = uProgress;
+
+  float punch = smoothstep(0.0, 0.05, t);
+  float decay = pow(1.0 - t, 1.5);
+  float env = punch * decay;
+
+  // One ring per tier step, arriving in sequence and collapsing inward.
+  float rings = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    if (fi > uTier) break;
+    float delay = fi * 0.11;
+    float rt = clamp((t - delay) / max(0.55 - fi * 0.06, 0.12), 0.0, 1.0);
+    // Starts wide, closes on the centre.
+    float rad = mix(1.5, 0.0, pow(rt, 0.75));
+    rings += smoothstep(0.075, 0.0, abs(r - rad)) * (1.0 - rt);
+  }
+
+  // A rough edge on the rings so they read as force, not as UI.
+  float grain = glasRidge2(vec2(a * 3.0, r * 6.0 - uTime * 1.4));
+  rings *= 0.65 + 0.55 * grain;
+
+  // The impact at the centre once the rings have arrived.
+  float land = smoothstep(0.42, 0.0, r) * smoothstep(0.3, 0.62, t) * (1.0 - smoothstep(0.62, 1.0, t));
+
+  // Higher tiers crack the whole frame with radial spikes.
+  float spikes = pow(max(sin(a * (6.0 + uTier * 5.0)), 0.0), 9.0)
+               * smoothstep(0.1, 1.1, r) * (uTier / 3.0);
+
+  float energy = clamp(rings * 1.1 + land * 1.2 + spikes * 0.75, 0.0, 1.0);
+
+  /* The bed is the arcane teal, not the tier's colour: the verdict is still the
+     Sea doing this, and a ring made purely of the tier hue reads as a UI state
+     rather than as the same magic that tore the screen a moment ago. The tier
+     asserts itself in the body of the rings and at the impact. */
+  vec3 col = mix(uDeep, uMid, clamp(energy * 0.9, 0.0, 1.0));
+  col = mix(col, uVerdict, clamp(energy * 1.25 - 0.08, 0.0, 1.0));
+  col = mix(col, uHot, clamp(land * 0.5, 0.0, 1.0));
+  col = mix(col, vec3(1.0), clamp(land * land * 1.1 + rings * rings * 0.55, 0.0, 1.0));
+
+  float alpha = clamp(energy, 0.0, 1.0) * env * mix(0.55, 1.0, uTier / 3.0);
+  gl_FragColor = vec4(col * alpha, alpha);
+}
+`;
+
+export const SEVERITY_UNIFORMS = Object.freeze([
+  "uTime", "uProgress", "uRes", "uTier", "uDeep", "uMid", "uHot", "uVerdict",
+]);
+
+/* ══════════════════════════════════════════════════════════════════════
+   Timing
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Downsample blit.
+ *
+ * Sampling a supersampled texture at final resolution with LINEAR filtering
+ * lands exactly between four texels, which is a true box average. That is what
+ * keeps the ring edges and the filaments from crawling — these fields are full
+ * of thin high-contrast detail, which is the worst case for aliasing and the
+ * reason both live passes render supersampled rather than direct.
+ */
 export const BLIT_FRAG = `
 precision mediump float;
 varying vec2 vUv;
-
 uniform sampler2D uFrame;
 uniform float uOpacity;
 
 void main() {
-  vec4 texel = texture2D(uFrame, vUv);
-  // The frames are stored premultiplied, so opacity scales the whole texel.
-  gl_FragColor = texel * uOpacity;
+  // Stored premultiplied, so opacity scales the whole texel.
+  gl_FragColor = texture2D(uFrame, vUv) * uOpacity;
 }
 `;
 
 export const BLIT_UNIFORMS = Object.freeze(["uFrame", "uOpacity"]);
 
-/** How many frames the burst bakes. 24 over 2.4s is a 10fps fracture, which
- *  reads as deliberate stop-motion rather than as a dropped frame rate. */
-export const BURST_FRAMES = 24;
-
-/** Baked frames are square and modest — they are stretched over the viewport,
- *  and a fracture is forgiving of that in a way a photograph would not be. */
-export const BURST_FRAME_SIZE = 512;
+/** The burst is snappy on purpose: struck, held, gone. */
+export const BURST_SECONDS = 1.8;
+/** The verdict is shorter still — the GM is about to speak over it. */
+export const SEVERITY_SECONDS = 1.2;

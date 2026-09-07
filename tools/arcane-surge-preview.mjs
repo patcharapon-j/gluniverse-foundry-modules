@@ -47,13 +47,15 @@ const page = template
   .replace("/*__VERT__*/", JSON.stringify(shader.VERT))
   .replace("/*__AMBIENT_FRAG__*/", JSON.stringify(shader.AMBIENT_FRAG))
   .replace("/*__BURST_FRAG__*/", JSON.stringify(shader.BURST_FRAG))
+  .replace("/*__SEVERITY_FRAG__*/", JSON.stringify(shader.SEVERITY_FRAG))
+  .replace("/*__SEVERITY_UNIFORMS__*/", JSON.stringify(shader.SEVERITY_UNIFORMS))
+  .replace("/*__TIERS__*/", JSON.stringify(constants.TIERS))
+  .replace("/*__BURST_SECONDS__*/", String(shader.BURST_SECONDS))
+  .replace("/*__SEVERITY_SECONDS__*/", String(shader.SEVERITY_SECONDS))
   .replace("/*__BLIT_FRAG__*/", JSON.stringify(shader.BLIT_FRAG))
   .replace("/*__AMBIENT_UNIFORMS__*/", JSON.stringify(shader.AMBIENT_UNIFORMS))
   .replace("/*__BURST_UNIFORMS__*/", JSON.stringify(shader.BURST_UNIFORMS))
   .replace("/*__BLIT_UNIFORMS__*/", JSON.stringify(shader.BLIT_UNIFORMS))
-  .replace("/*__BURST_FRAMES__*/", String(shader.BURST_FRAMES))
-  .replace("/*__BURST_FRAME_SIZE__*/", String(shader.BURST_FRAME_SIZE))
-  .replace("/*__BURST_MS__*/", String(constants.BURST_MS))
   .replace("/*__LEVELS__*/", JSON.stringify(constants.LEVELS))
   .replace("/*__ANIM_SRC__*/", animSource);
 

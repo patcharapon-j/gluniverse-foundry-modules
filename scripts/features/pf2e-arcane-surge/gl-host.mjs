@@ -117,6 +117,134 @@ export function uniformLocations(gl, program, names) {
 }
 
 /**
+ * A supersampled full-screen pass with an adaptive quality ladder.
+ *
+ * The live beats are full of thin, high-contrast detail — ring edges, spiral
+ * arms, filaments — which is the worst case for aliasing. Rendering them
+ * straight to the canvas crawls; rendering them larger and box-averaging down
+ * does not. That is the same trick the initiative break splash uses, and it is
+ * why both of these render through a scratch texture rather than direct.
+ *
+ * The ladder opens at 2× and steps down only when this machine has actually
+ * missed two frames in a row, so a capable GPU never loses quality and a
+ * struggling one recovers within a few frames of a beat that only lasts one or
+ * two seconds. Full fidelity by default; degraded on evidence, never on
+ * assumption.
+ */
+export const SS_LADDER = Object.freeze([2, 1.5, 1]);
+/** Beyond this the scratch allocation stops being reasonable on mid-tier GPUs. */
+const SS_MAX_EDGE = 2560;
+/** A frame slower than this twice running costs one rung. */
+const SS_SLOW_MS = 26;
+
+export class SuperSampler {
+  constructor(gl, blitProgram, blitUniforms) {
+    this.gl = gl;
+    this.blitProgram = blitProgram;
+    this.blitUniforms = blitUniforms;
+    this.texture = null;
+    this.size = [0, 0];
+    this.fbo = gl.createFramebuffer();
+    this.rung = 0;
+    this.slowFrames = 0;
+  }
+
+  /** Composition size before supersampling, clamped on the long edge. */
+  baseSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = Math.max(1, Math.round(window.innerWidth * dpr));
+    let h = Math.max(1, Math.round(window.innerHeight * dpr));
+    const longest = Math.max(w, h);
+    if (longest > SS_MAX_EDGE) {
+      const k = SS_MAX_EDGE / longest;
+      w = Math.max(1, Math.round(w * k));
+      h = Math.max(1, Math.round(h * k));
+    }
+    return [w, h];
+  }
+
+  /** Re-allocated only when the viewport or the rung actually changes. */
+  ensure() {
+    const gl = this.gl;
+    const ss = SS_LADDER[this.rung];
+    const [bw, bh] = this.baseSize();
+    const w = Math.max(1, Math.round(bw * ss));
+    const h = Math.max(1, Math.round(bh * ss));
+    if (this.texture && this.size[0] === w && this.size[1] === h) return;
+
+    if (this.texture) { try { gl.deleteTexture(this.texture); } catch { /* best-effort */ } }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // LINEAR is load-bearing: it is what makes the downsample an honest average
+    // rather than a nearest-texel pick, which would alias exactly as badly as
+    // rendering direct.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.texture = tex;
+    this.size = [w, h];
+  }
+
+  /** Bind the scratch as the render target. Returns false if it is incomplete. */
+  bind() {
+    const gl = this.gl;
+    this.ensure();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.texture, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return false;
+    }
+    gl.viewport(0, 0, this.size[0], this.size[1]);
+    // The field writes premultiplied colour verbatim; blending belongs to the
+    // blit, not to the render into the scratch.
+    gl.disable(gl.BLEND);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    return true;
+  }
+
+  /** Average the scratch down onto the canvas. */
+  blit(canvas, opacity = 1) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(this.blitProgram);
+    gl.enable(gl.BLEND);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.uniform1i(this.blitUniforms.uFrame, 0);
+    gl.uniform1f(this.blitUniforms.uOpacity, opacity);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /** Feed the frame time back in; two slow frames costs a rung. */
+  sample(frameMs) {
+    if (frameMs > SS_SLOW_MS) {
+      if (++this.slowFrames >= 2 && this.rung < SS_LADDER.length - 1) {
+        this.rung++;
+        this.slowFrames = 0;
+        this.ensure();
+      }
+    } else {
+      this.slowFrames = 0;
+    }
+  }
+
+  destroy() {
+    const gl = this.gl;
+    try { if (this.texture) gl.deleteTexture(this.texture); } catch { /* best-effort */ }
+    try { if (this.fbo) gl.deleteFramebuffer(this.fbo); } catch { /* best-effort */ }
+    this.texture = null;
+    this.fbo = null;
+  }
+}
+
+/**
  * Size a canvas to the viewport.
  *
  * `scale` below 1 renders at a fraction of device pixels — the ambient veil is

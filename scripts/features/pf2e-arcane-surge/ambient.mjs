@@ -5,15 +5,17 @@
  * somewhere unstable, which can be a whole session. Everything about it is
  * shaped by that. The shader is two octaves and one warp. It sits at
  * `--gl-z-sticky`, above the board but BELOW every piece of Foundry chrome, so a
- * session-long veil never lands on the sidebar or the hotbar. It renders at half
- * device pixels. It pauses itself when the tab is hidden. It freezes rather than
- * disappears when the frame budget is exceeded, because what degrades under load
- * must be the motion and never the state — a player on a struggling machine
+ * session-long veil never lands on the sidebar or the hotbar. It hugs the four
+ * EDGES of the screen and leaves the middle of the board alone, because that is
+ * where the play is. It pauses itself when the tab is hidden. It freezes rather
+ * than disappears when the frame budget is exceeded, because what degrades under
+ * load must be the motion and never the state — a player on a struggling machine
  * should not stop being able to see that the world is coming apart.
  *
  * Stable renders NOTHING. Not a very faint something: the shader's alpha is
- * scaled by chaos so it is exactly inert at Stable, AND the host tears the
- * overlay down there, so the common case costs nothing at all.
+ * scaled by chaos so it is exactly inert at Stable. The compiled context is
+ * nonetheless KEPT once warmed, so moving off Stable mid-session costs no
+ * stutter.
  *
  * The lifecycle discipline is borrowed from clocks-tracker's `EffectField` — own
  * context, no autostart, pause on hidden, resize-aware — but not the class
@@ -32,9 +34,16 @@ import { ambientEnabled, isConcealed, visibleLevel } from "./settings.mjs";
  *  A cut would announce the change; a cross-fade lets people notice it. */
 const FADE_MS = 1400;
 
-/** The veil has no hard edge in it, so half device pixels reads identically and
- *  costs half as much for every frame of a whole session. */
-const RESOLUTION_SCALE = 0.5;
+/**
+ * Full device resolution.
+ *
+ * An earlier pass rendered this at half and argued the veil was too soft to
+ * show it. That was true of the soft cloud it used to be; it is not true of the
+ * ridged filaments it is now, which are thin, high-contrast and the first thing
+ * to crawl when they are undersampled. The field is two octaves and one warp —
+ * cheap enough to afford honestly.
+ */
+const RESOLUTION_SCALE = 1;
 
 class AmbientHost {
   constructor() {
@@ -46,6 +55,7 @@ class AmbientHost {
     this.chaos = 0;
     this.fade = 0;
     this.target = 0;
+    this.warmed = false;
     this._raf = null;
     this._start = 0;
     this._last = 0;
@@ -111,6 +121,34 @@ class AmbientHost {
     this._pushRamp();
   }
 
+  /**
+   * Compile and draw once at load, invisibly.
+   *
+   * The overlay is torn down at Stable, so without this the first time the GM
+   * moves the world off Stable the veil's program compiles mid-fade — a stutter
+   * at the exact moment the party is supposed to notice something changed. One
+   * off-screen draw at zero opacity costs a frame now and none later.
+   */
+  warm() {
+    if (this.warmed) return false;
+    if (!webglSupported() || !this._ensureContext()) return false;
+    this.warmed = true;
+
+    const gl = this.gl;
+    gl.useProgram(this.program);
+    gl.uniform1f(this.uniforms.uTime, 0);
+    gl.uniform2f(this.uniforms.uRes, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uniforms.uChaos, 1);
+    gl.uniform1f(this.uniforms.uDrift, 1);
+    // Zero fade: the shader runs in full, the compositor shows nothing.
+    gl.uniform1f(this.uniforms.uFade, 0);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.finish();
+    return true;
+  }
+
   _ensureLoop() {
     if (this._raf || !this.gl) return;
     this._start = performance.now();
@@ -161,8 +199,13 @@ class AmbientHost {
     }
   }
 
+  /* A warmed context is deliberately KEPT at Stable. Tearing it down would
+     discard the compiled program and hand the stutter back to the moment the
+     GM next moves the world off Stable, which is the whole thing warming
+     exists to prevent. Only the render loop stops. */
   _teardownIfIdle() {
     if (this.target > 0 || this.fade > 0) return;
+    if (this.warmed) return;
     this.destroy();
   }
 
@@ -179,6 +222,7 @@ class AmbientHost {
     this.program = null;
     this.fade = 0;
     this.target = 0;
+    this.warmed = false;
     this.budget.reset();
   }
 }
@@ -193,6 +237,11 @@ export function syncAmbient() {
   // pushed to the uniforms by hand or the veil keeps the old palette forever.
   untheme ??= onThemeChange(() => host?.retheme());
   host.sync();
+}
+
+export function warmAmbient() {
+  host ??= new AmbientHost();
+  host.warm();
 }
 
 export function destroyAmbient() {

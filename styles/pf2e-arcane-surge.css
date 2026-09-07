@@ -299,121 +299,103 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   The stability chip and the arm control
-   ══════════════════════════════════════════════════════════════════════ */
+   Foundry's element-level button rules
+   ══════════════════════════════════════════════════════════════════════
+   Every control this feature injects is a <button>, and Foundry styles
+   `button` at ELEMENT level — width, margin, padding, background, border,
+   line-height, text-align. An element-level rule beats an inherited value but
+   loses to a class, so each of these needs its own reset rather than relying on
+   the parent. Skipping it is what made the GM's level picker render as a stack
+   of staggered, differently-indented rows: the rows were fine, Foundry's
+   `button { width: … ; margin: … }` was moving them.
+
+   `.gl-type` covers the FONT half of the same problem; this covers the box. */
+
+.glas-chip,
+.glas-picker-row,
+.glas-arm-btn,
+.glas-banner-controls button,
+.glas-severity button {
+  width: auto;
+  margin: 0;
+  line-height: normal;
+  text-align: left;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The stability chip
+   ══════════════════════════════════════════════════════════════════════
+   Sits under the weather chip in the HUD's date cell, so it is sized against
+   that chip rather than against the bar: one line, small caps, no kicker. The
+   weather chip already says which cluster this belongs to. */
 
 .glas-stability {
   display: flex;
   align-items: center;
-  gap: 6px;
+  margin-top: 2px;
 }
 
 .glas-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 9px;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 6px;
   background: var(--gl-surface-inset);
-  border: 1px solid var(--gl-edge);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+  border: 1px solid var(--gl-hair);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
   color: var(--gl-text);
   cursor: default;
   transition: border-color var(--gl-d-quick), background var(--gl-d-quick);
 }
 
+.glas-chip.glas-clickable {
+  cursor: pointer;
+}
+
+.glas-chip.glas-clickable:hover {
+  border-color: var(--gl-accent);
+  background: var(--gl-accent-faint);
+}
+
 .glas-chip-mark {
-  width: 8px;
-  height: 8px;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
   background: var(--gl-accent);
-  box-shadow: 0 0 8px var(--gl-glow);
+  box-shadow: 0 0 7px var(--gl-glow);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   animation: gl-breathe var(--gl-breathe) ease-in-out infinite;
 }
 
 /* Stable is at rest: the mark stops moving entirely. Motion here is meaning. */
-.glas-level-stable .glas-chip-mark,
 .glas-chip.glas-level-stable .glas-chip-mark {
   animation: none;
   box-shadow: none;
-  opacity: 0.6;
-}
-
-.glas-chip-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-
-.glas-chip-kicker {
-  font-family: var(--gl-tech);
-  font-size: 0.56rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--gl-text-faint);
+  opacity: 0.55;
 }
 
 .glas-chip-level {
   font-family: var(--gl-display);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   color: var(--gl-text-bright);
 }
 
 .glas-chip-conceal {
+  margin-left: auto;
   color: var(--gl-warn);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
 }
 
 /* The level changed. One flash, no chat line — the party notices rather than
    being told. */
 .glas-chip.glas-flash {
   animation: gl-flash var(--gl-d-slow) var(--gl-enter) both;
-}
-
-.glas-arm {
-  display: flex;
-  gap: 3px;
-}
-
-.glas-arm-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
-  font-family: var(--gl-tech);
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--gl-text-dim);
-  background: transparent;
-  border: 1px solid var(--gl-hair);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
-  cursor: pointer;
-  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
-}
-
-.glas-arm-btn .glas-arm-label {
-  display: none;
-}
-
-.glas-arm-btn:hover {
-  color: var(--gl-text-bright);
-  border-color: var(--gl-accent);
-}
-
-.glas-arm-btn:hover .glas-arm-label,
-.glas-arm-btn.is-armed .glas-arm-label {
-  display: inline;
-}
-
-/* An armed choice must be impossible to forget about — it applies to exactly
-   one casting and then lapses. */
-.glas-arm-btn.is-armed {
-  color: var(--gl-ink-0);
-  background: var(--gl-accent);
-  border-color: var(--gl-accent);
-  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
 }
 
 /* Standalone panel, used only when the time-tracker HUD is not running. */
@@ -435,6 +417,105 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   Steady / Invite, on the character sheet
+   ══════════════════════════════════════════════════════════════════════
+   Injected above the spellcasting tab's entry list, where a caster already is
+   when they pick a spell. An armed choice has to be impossible to miss — it
+   applies to exactly one casting and then lapses. */
+
+.glas-arm-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  border-left: 2px solid var(--gl-accent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
+  color: var(--gl-text);
+}
+
+.glas-arm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--gl-tech);
+  font-size: 0.64rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.glas-arm-kicker { color: var(--gl-text-dim); }
+.glas-arm-level  { color: var(--gl-accent); font-weight: 700; }
+
+.glas-arm-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.glas-arm-btn {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 1px 7px;
+  padding: 6px 9px;
+  background: var(--gl-surface-raised);
+  border: 1px solid var(--gl-hair);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  transition: color var(--gl-d-quick), border-color var(--gl-d-quick), background var(--gl-d-quick);
+}
+
+.glas-arm-btn > i {
+  grid-row: 1 / span 2;
+  font-size: 0.9rem;
+  color: var(--gl-accent);
+}
+
+.glas-arm-name {
+  font-family: var(--gl-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--gl-text-bright);
+}
+
+/* What the choice actually buys, resolved through the real rules. A player
+   should not have to hold the ladder in their head to use this. */
+.glas-arm-detail {
+  font-family: var(--gl-tech);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--gl-text-faint);
+}
+
+.glas-arm-btn:hover {
+  border-color: var(--gl-accent);
+  color: var(--gl-text-bright);
+}
+
+.glas-arm-btn.is-armed {
+  background: var(--gl-accent-faint);
+  border-color: var(--gl-accent);
+  animation: gl-glow-pulse var(--gl-breathe) ease-in-out infinite;
+}
+
+.glas-arm-btn.is-armed .glas-arm-detail {
+  color: var(--gl-text-dim);
+}
+
+.glas-arm-note {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--gl-text-faint);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    The GM's level picker
    ══════════════════════════════════════════════════════════════════════ */
 
@@ -443,7 +524,9 @@
   z-index: var(--gl-z-overlay);
   display: flex;
   flex-direction: column;
-  min-width: 260px;
+  gap: 2px;
+  width: 300px;
+  max-width: calc(100vw - 16px);
   padding: 4px;
   background: var(--gl-surface);
   border: 1px solid var(--gl-edge);
@@ -452,21 +535,27 @@
   animation: gl-drop-in var(--gl-d-brisk) var(--gl-enter) both;
 }
 
+/* Grid rather than flex: the mark and the text column then share one baseline
+   grid across every row, so the names line up no matter how long a hint wraps.
+   The previous flex version let each row size itself, which is why they came out
+   staggered. */
 .glas-picker-row {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  align-items: start;
   gap: 8px;
+  width: 100%;
   padding: 7px 9px;
-  text-align: left;
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
   color: var(--gl-text);
   cursor: pointer;
-  transition: background var(--gl-d-quick);
+  transition: background var(--gl-d-quick), border-color var(--gl-d-quick);
 }
 
 .glas-picker-row:hover {
   background: var(--gl-accent-faint);
+  border-color: var(--gl-accent);
 }
 
 .glas-picker-row.is-current {
@@ -474,10 +563,9 @@
 }
 
 .glas-picker-mark {
-  flex: 0 0 auto;
   width: 8px;
   height: 8px;
-  margin-top: 4px;
+  margin-top: 5px;
   background: var(--gl-accent);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
@@ -486,6 +574,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .glas-picker-name {
@@ -499,6 +588,10 @@
   font-size: 0.7rem;
   line-height: 1.35;
   color: var(--gl-text-dim);
+  /* The hints are full sentences; without this they clip mid-word instead of
+     wrapping, which is the other half of what looked broken. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -693,4 +786,78 @@
 
 #glct-hud .cell.glas-slot {
   padding: 0 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The struck word
+   ══════════════════════════════════════════════════════════════════════
+   DOM rather than GLSL: text in a fragment shader is a bitmap-font problem
+   with no upside, and as an element it gets the suite's display face and the
+   motion tokens for free.
+
+   The timing is the whole point. It arrives BEFORE the shader's own peak —
+   overshooting in under a tenth of a second, then settling — so the word reads
+   as the cause of the tear rather than a caption on it. */
+
+.glas-word {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gl-z-splash) + 1);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.glas-word-text {
+  font-family: var(--gl-display);
+  font-weight: 800;
+  font-size: clamp(3rem, 11vw, 9rem);
+  letter-spacing: 0.16em;
+  /* The trailing letter-space would otherwise push the word off centre. */
+  text-indent: 0.16em;
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow:
+    0 0 8px var(--gl-glow),
+    0 0 42px var(--gl-glow),
+    0 0 90px var(--gl-bloom);
+  opacity: 0;
+  transform: scale(1.5);
+  will-change: transform, opacity, filter;
+}
+
+.glas-word-in .glas-word-text {
+  animation: glas-strike var(--gl-d-cinematic) var(--gl-exit) both;
+}
+
+/* Overshoot, snap, settle, leave. The 8% keyframe is where it lands — anything
+   slower than that reads as a fade-in and stops feeling struck. */
+@keyframes glas-strike {
+  0%   { opacity: 0; transform: scale(1.55); filter: blur(14px); }
+  8%   { opacity: 1; transform: scale(0.965); filter: blur(0); }
+  16%  { transform: scale(1.005); }
+  24%  { transform: scale(0.99); }
+  62%  { opacity: 1; transform: scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.06); filter: blur(6px); }
+}
+
+/* The verdict word is smaller and lands harder: it is a label on a result, not
+   the result itself, and it competes with a card the table is already reading. */
+.glas-word.glas-tier-minor .glas-word-text,
+.glas-word.glas-tier-major .glas-word-text,
+.glas-word.glas-tier-catastrophic .glas-word-text,
+.glas-word.glas-tier-breach .glas-word-text {
+  font-size: clamp(2rem, 7vw, 5.5rem);
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
+  color: var(--gl-accent);
+  text-shadow:
+    0 0 6px var(--gl-glow),
+    0 0 34px var(--gl-glow);
+}
+
+.glas-word.glas-tier-breach .glas-word-text {
+  color: var(--gl-text-bright);
+  animation: glas-strike var(--gl-d-cinematic) var(--gl-exit) both,
+             gl-shake var(--gl-d-swift) var(--gl-enter) both;
 }

@@ -56,8 +56,6 @@ const {
   ROW_INVITED_UNRAVELING,
   TIERS,
   MAX_THRESHOLD,
-  BURST_MS,
-  FLOURISH_MS,
   SURGE_DIE_DENOMINATION,
 } = constants;
 
@@ -220,10 +218,13 @@ for (const row of ROWS) {
 for (const [label, frag, uniforms, hostRel] of [
   ["ambient", shader.AMBIENT_FRAG, shader.AMBIENT_UNIFORMS, `${FEATURE}/ambient.mjs`],
   ["burst", shader.BURST_FRAG, shader.BURST_UNIFORMS, `${FEATURE}/burst.mjs`],
-  // Playback runs an entirely separate program. A uniform missing here would
-  // leave every baked frame drawn at whatever opacity the driver happened to
-  // start with — which is usually zero, i.e. an invisible burst.
-  ["blit", shader.BLIT_FRAG, shader.BLIT_UNIFORMS, `${FEATURE}/burst.mjs`],
+  // The verdict is an entirely separate program from the surge, and shares no
+  // uniform block with it.
+  ["severity", shader.SEVERITY_FRAG, shader.SEVERITY_UNIFORMS, `${FEATURE}/burst.mjs`],
+  // The downsample runs a third. A uniform missing here would leave every frame
+  // drawn at whatever opacity the driver happened to start with — usually zero,
+  // i.e. an invisible beat.
+  ["blit", shader.BLIT_FRAG, shader.BLIT_UNIFORMS, `${FEATURE}/gl-host.mjs`],
 ]) {
   const hostSrc = read(hostRel);
   const declared = new Set([...frag.matchAll(/uniform\s+\w+\s+(\w+)\s*;/g)].map((m) => m[1]));
@@ -300,16 +301,26 @@ for (const [label, frag, uniforms, hostRel] of [
     const m = tokens.match(new RegExp(`--gl-d-${name}:\\s*calc\\((\\d+)ms`));
     return m ? Number(m[1]) : null;
   };
-  // The burst runs for a deliberate multiple of the cinematic token; the
-  // flourish is exactly the splash token. Both must stay tied to the token.
+
+  /* The struck word is a CSS animation riding a beat timed in JS. If the word
+     outlives its canvas it hangs on screen after the effect behind it has gone;
+     if the beat outlives the word by too much, the tail plays with nothing in
+     the middle of it. Neither errors. */
   const cinematic = tokenMs("cinematic");
-  const splash = tokenMs("splash");
-  if (cinematic && BURST_MS % cinematic !== 0) {
-    fail("timing", `BURST_MS (${BURST_MS}) is not a multiple of --gl-d-cinematic (${cinematic}ms)`);
+  if (!cinematic) fail("timing", "--gl-d-cinematic not found in gl-tokens.css");
+  else {
+    const burstMs = shader.BURST_SECONDS * 1000;
+    const verdictMs = shader.SEVERITY_SECONDS * 1000;
+    if (cinematic > burstMs) fail("timing", `the word animation (${cinematic}ms) outlives the surge beat (${burstMs}ms)`);
+    if (cinematic > verdictMs) fail("timing", `the word animation (${cinematic}ms) outlives the verdict beat (${verdictMs}ms)`);
   }
-  if (splash && FLOURISH_MS !== splash) {
-    fail("timing", `FLOURISH_MS (${FLOURISH_MS}) does not equal --gl-d-splash (${splash}ms)`);
+  // The verdict must be the shorter of the two: the GM is about to speak over it.
+  if (shader.SEVERITY_SECONDS >= shader.BURST_SECONDS) {
+    fail("timing", "the verdict beat is not shorter than the surge beat");
   }
+  if (!/@keyframes\s+glas-strike/.test(css)) fail("css", "the struck word has no glas-strike keyframes");
+  // A bare `gl-` keyframe name would silently override another feature's.
+  if (/@keyframes\s+gl-(?!as-)/.test(css)) fail("css", "declares an unprefixed gl- keyframe, which is a global name");
   // The overlay must sit below Foundry's chrome; the burst above it. A session
   // -long overlay over the sidebar would make the UI unusable for hours.
   if (!/\.glas-ambient\b[^}]*z-index:\s*var\(--gl-z-sticky\)/s.test(css)) {
@@ -505,24 +516,6 @@ for (const [label, frag, uniforms, hostRel] of [
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15. Every tier has a flourish weight
-   ══════════════════════════════════════════════════════════════════════
-   A missing entry used to fall back to another tier's weight, which misreports
-   how bad the result was in the loudest channel the feature has. */
-
-{
-  for (const tier of TIERS) {
-    const shape = constants.TIER_FLOURISH[tier];
-    if (!shape) fail("constants.mjs", `TIER_FLOURISH has no entry for tier "${tier}"`);
-    else if (!levels.isLevel(shape.level)) fail("constants.mjs", `TIER_FLOURISH.${tier}.level is not a stability level`);
-    else if (!(shape.peak > 0 && shape.peak <= 1)) fail("constants.mjs", `TIER_FLOURISH.${tier}.peak is outside (0, 1]`);
-  }
-  for (const tier of Object.keys(constants.TIER_FLOURISH)) {
-    if (!TIERS.includes(tier)) fail("constants.mjs", `TIER_FLOURISH has a dead entry "${tier}"`);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
    16. This feature does not own the suite-global motion scale
    ══════════════════════════════════════════════════════════════════════
    `applyMotionTier()` writes `--gl-motion-scale` for the whole suite, so a
@@ -538,6 +531,107 @@ for (const [label, frag, uniforms, hostRel] of [
     if (/applyMotionTier\s*\(/.test(src)) {
       fail(rel, "calls applyMotionTier() — that writes the suite-global motion scale and would retime other features");
     }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   17. Everything is live, and everything is warm
+   ══════════════════════════════════════════════════════════════════════
+   The beats run live rather than from baked frames, which is only affordable
+   because the programs are compiled at load. A GL program is not really
+   compiled when linkProgram returns — drivers specialize on first draw. Lose
+   the warm-up and the very first surge of a session stutters, which is the one
+   moment it must not, and nothing anywhere reports why. */
+
+{
+  const burstSrc = read(`${FEATURE}/burst.mjs`);
+  const ambientSrc = read(`${FEATURE}/ambient.mjs`);
+  const mainSrc = stripComments(read(`${FEATURE}/main.mjs`));
+
+  for (const [label, src] of [["burst.mjs", burstSrc], ["ambient.mjs", ambientSrc]]) {
+    if (!/\bwarm\s*\(\s*\)\s*\{/.test(src)) fail(label, "has no warm() — its shader compiles on first use, mid-animation");
+    // A warm-up that never reaches the GPU is not a warm-up.
+    if (!/gl\.finish\s*\(/.test(src)) fail(label, "warm() does not gl.finish(), so the work stays queued behind the first real frame");
+  }
+  for (const fn of ["warmBurst", "warmAmbient"]) {
+    if (!mainSrc.includes(fn)) fail("main.mjs", `never calls ${fn}() — that layer compiles on first use`);
+  }
+
+  // Baking is gone on purpose; a reintroduced frame set would silently make the
+  // effect a filmstrip again.
+  if (/BURST_FRAMES|_bake\s*\(|bakedKey/.test(burstSrc)) {
+    fail("burst.mjs", "still references baked frames — the beats are meant to run live");
+  }
+
+  /* The same reversal was applied to the initiative guard-break splash, which
+     this feature deliberately does not share code with but does share a
+     rationale. If that one silently goes back to baking, the two overlays stop
+     behaving alike and CLAUDE.md's note about it becomes wrong. */
+  const splashSrc = read("scripts/features/initiative/gluniverse-initiative.mjs");
+  if (/SPLASH_BAKE_FRAMES/.test(splashSrc)) {
+    fail("initiative", "the break splash is baking frames again");
+  }
+  if (!/\bwarm\s*\(\s*\)\s*\{/.test(splashSrc)) {
+    fail("initiative", "the break splash has no warm() — its first play of a session would stutter");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   18. The tier hues agree between the card and the full-screen verdict
+   ══════════════════════════════════════════════════════════════════════
+   The severity card and the verdict beat fire together. Two different reds
+   would read as two different results. */
+
+{
+  const palette = await import(`../${FEATURE}/palette.mjs`);
+  const css = read("styles/pf2e-arcane-surge.css");
+
+  for (const tier of TIERS) {
+    const key = palette.TIER_KEYS[tier];
+    if (!key) {
+      fail("palette.mjs", `TIER_KEYS has no entry for tier "${tier}"`);
+      continue;
+    }
+    // The CSS remaps --gl-accent per tier; the shader takes the same hue as a
+    // uniform. Both must name the same token.
+    const rule = css.match(new RegExp(`\\.glas-tier-${tier}\\s*\\{([^}]*)\\}`));
+    if (!rule) fail("css", `no .glas-tier-${tier} accent remap`);
+    else if (!rule[1].includes(`--gl-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`)) {
+      fail("css", `.glas-tier-${tier} does not use --gl-${key} — the card and the verdict beat would disagree`);
+    }
+  }
+  for (const tier of Object.keys(palette.TIER_KEYS)) {
+    if (!TIERS.includes(tier)) fail("palette.mjs", `TIER_KEYS has a dead entry "${tier}"`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   19. Dice surfaces cover both kinds of die
+   ══════════════════════════════════════════════════════════════════════
+   The surge d20 is read by its glyph and needs per-face art; the severity d100
+   is read by its number and needs a tiling surface under the numerals. Missing
+   the second is what makes the severity roll look like a default die. */
+
+{
+  const { existsSync } = await import("node:fs");
+  for (const face of ["blank", "surge", "surface"]) {
+    for (const map of ["", "-bump", "-emissive"]) {
+      const rel = `assets/pf2e-arcane-surge/dice/${face}${map}.png`;
+      if (!existsSync(join(ROOT, rel))) fail("dice", `missing ${rel} — run tools/gen-surge-textures.mjs`);
+    }
+  }
+  if (!/addTexture\s*\(/.test(dsnSrc)) {
+    fail("dsn.mjs", "registers no texture, so numbered dice (the severity d100 and its d10s) get no frosted surface");
+  }
+  if (!/material:\s*["']glass["']/.test(dsnSrc)) fail("dsn.mjs", "the colorset is not frosted glass");
+  if (!/tagSeverityRoll/.test(read(`${FEATURE}/severity.mjs`))) {
+    fail("severity.mjs", "does not dress its roll, so the d100 would not match the surge die");
+  }
+  // The numerals must be the HUD's face, or the die and the clock above it read
+  // as two different objects.
+  if (!/Oxanium/.test(dsnSrc)) fail("dsn.mjs", "the dice font is not the suite display face");
+  if (!/fontDefinitions/.test(dsnSrc)) {
+    fail("dsn.mjs", "does not declare the font to Foundry — Dice So Nice would fetch it from a CDN");
   }
 }
 

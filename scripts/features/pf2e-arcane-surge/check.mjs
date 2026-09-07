@@ -191,7 +191,7 @@ async function onCreateChatMessage(message) {
 
     inFlight.add(message.id);
     try {
-      await rollCheck(message, { playerCast });
+      await rollCheck(message, { playerCast, actor });
     } finally {
       inFlight.delete(message.id);
     }
@@ -200,9 +200,11 @@ async function onCreateChatMessage(message) {
   }
 }
 
-async function rollCheck(message, { playerCast }) {
+async function rollCheck(message, { playerCast, actor }) {
   const config = levelConfig();
-  const mode = armedMode();
+  // Scoped to this actor: a player running two characters must not steady one
+  // and silently steady the other’s next spell.
+  const mode = armedMode(actor?.id ?? null);
   const exposure = resolveExposure(currentLevel(), mode, config);
 
   // Stable: no check happens at all. No die, no banner, no card. The die's

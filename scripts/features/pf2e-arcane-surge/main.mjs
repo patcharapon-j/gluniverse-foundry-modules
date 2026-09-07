@@ -12,24 +12,29 @@
 
 import { log } from "../../core/const.mjs";
 import { onSocket } from "../../core/socket.mjs";
-import { destroyAmbient, syncAmbient } from "./ambient.mjs";
+import { destroyAmbient, syncAmbient, warmAmbient } from "./ambient.mjs";
 import { registerBanner } from "./banner.mjs";
-import { destroyBurst, playBurst } from "./burst.mjs";
+import { destroyBurst, playBurst, warmBurst } from "./burst.mjs";
 import { registerCheck } from "./check.mjs";
+import { registerContextMenu } from "./context-menu.mjs";
 import { FEATURE_ID } from "./constants.mjs";
 import { registerSurgeDie } from "./die.mjs";
-import { registerDiceSoNice } from "./dsn.mjs";
+import { registerDiceSoNice, registerFontDefinition } from "./dsn.mjs";
 import { destroyHud, paint, registerHud } from "./hud.mjs";
 import { isLevel } from "./levels.mjs";
 import { registerSeverityRendering } from "./severity.mjs";
+import { registerSheet } from "./sheet.mjs";
 import { armedMode, clearArmedMode } from "./settings.mjs";
 
 export function onInit() {
+  registerFontDefinition();
   registerSurgeDie();
   registerCheck();
   registerBanner();
   registerSeverityRendering();
   registerHud();
+  registerSheet();
+  registerContextMenu();
 }
 
 export async function onReady() {
@@ -56,6 +61,22 @@ export async function onReady() {
 
   paint();
   syncAmbient();
+
+  /* Warm every shader at load, off-screen.
+   *
+   * All three full-screen passes run LIVE now, and a GL program is not really
+   * compiled when `linkProgram` returns — drivers specialize on first draw. Left
+   * cold, the first surge of a session pays for that mid-animation, which is the
+   * one moment a stutter is unmissable. This is deferred past the ready frame so
+   * it never lengthens world load itself; `requestIdleCallback` where it exists,
+   * a short timeout where it does not (Safari).
+   */
+  const warmAll = () => {
+    warmBurst();
+    warmAmbient();
+  };
+  if (typeof requestIdleCallback === "function") requestIdleCallback(warmAll, { timeout: 4000 });
+  else setTimeout(warmAll, 1200);
 
   // An armed choice must not survive a scene change: a "next cast" a player set
   // an hour ago in a different room is a trap, not a declaration.

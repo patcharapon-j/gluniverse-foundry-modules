@@ -1,46 +1,74 @@
 /**
- * GLUniverse Suite — the surge burst.
+ * GLUniverse Suite — the full-screen beats.
  *
- * A fullscreen fracture that fires the instant a surge happens. It is BAKED,
- * never run live: `initiative`'s break splash already paid to learn that a
- * full-screen procedural Voronoi field costs a visible hiccup per frame, and
- * the one moment this effect exists for is the one moment a hitch is least
- * forgivable. So the shader runs once into a set of frame textures, and playback
- * is one textured triangle per frame.
+ * Two of them, deliberately opposite motions so they can never read as the same
+ * effect played twice:
  *
- * It is scaled by STABILITY LEVEL, not by severity. Severity is rolled later on
- * its own card — by then the burst is over — so the thing the burst can honestly
- * express is the state of the world, which the module already knows. The tier
- * gets its own shorter second beat when the card resolves (`playFlourish`).
+ *   SURGE throws energy OUTWARD from a vortex — spiral arms, a shock racing
+ *   away, filaments whipping off it — with the word struck across the middle.
+ *   Scaled by stability level, because severity has not been rolled yet.
  *
- * Modelled on `stream-pacer/PerilWebGL`: raw WebGL, its own canvas on `<body>`,
- * its own RAF loop, its own resize listener, and a clean no-op when WebGL is
- * unavailable. No PIXI — a two-second cosmetic beat has no business being able
- * to disturb the renderer the scene draw depends on.
+ *   VERDICT collapses INWARD in rings that land on the centre, one ring per
+ *   tier step, in the tier's own colour.
+ *
+ * Both run LIVE, at full device resolution, composed supersampled and averaged
+ * down. That is a deliberate reversal of this feature's first design, which
+ * pre-baked frames: baking buys a flat per-frame cost but freezes the effect
+ * into a filmstrip, and a surge that plays the identical 24 frames every time
+ * stops landing by the third session.
+ *
+ * What makes live affordable is not a cheaper shader — it is `warm()`. A GL
+ * program is not really compiled when `linkProgram` returns; drivers specialize
+ * on first draw, and that first draw was the bulk of the hitch baking was
+ * introduced to hide. Paying it once at load, off-screen, is the whole trick.
+ * Beyond that the supersampler adapts on measured evidence rather than on
+ * assumption, so a capable GPU never loses quality.
+ *
+ * The word is DOM, not GLSL. Text in a fragment shader is a bitmap-font problem
+ * with no upside here, and as an element it gets the suite's display face and
+ * its motion tokens for free.
+ *
+ * Modelled on `stream-pacer/PerilWebGL`: raw WebGL, own canvas on `<body>`, own
+ * RAF loop, own resize listener, clean no-op without WebGL. No PIXI — a
+ * two-second cosmetic beat has no business being able to disturb the renderer
+ * the scene draw depends on.
  */
 
-import { warn } from "../../core/const.mjs";
 import { onThemeChange } from "../../core/theme.mjs";
-import { FrameBudget, easeOut } from "./anim.mjs";
-import { BURST_MS, FLOURISH_MS, TIER_FLOURISH } from "./constants.mjs";
-import { bindFullscreenTriangle, buildProgram, mountCanvas, sizeToViewport, uniformLocations, webglSupported } from "./gl-host.mjs";
+import { escapeHTML } from "../../core/util.mjs";
+import { FrameBudget } from "./anim.mjs";
+import { SuperSampler, bindFullscreenTriangle, buildProgram, mountCanvas, sizeToViewport, uniformLocations, webglSupported } from "./gl-host.mjs";
+import { TIERS } from "./constants.mjs";
 import { chaosFor } from "./levels.mjs";
-import { rampFloats } from "./palette.mjs";
-import { BLIT_FRAG, BLIT_UNIFORMS, BURST_FRAMES, BURST_FRAME_SIZE, BURST_FRAG, BURST_UNIFORMS, VERT } from "./shader.mjs";
+import { rampFloats, tierFloats } from "./palette.mjs";
+import {
+  BLIT_FRAG,
+  BLIT_UNIFORMS,
+  BURST_FRAG,
+  BURST_SECONDS,
+  BURST_UNIFORMS,
+  SEVERITY_FRAG,
+  SEVERITY_SECONDS,
+  SEVERITY_UNIFORMS,
+  VERT,
+} from "./shader.mjs";
 
-class BurstHost {
+class BeatHost {
   constructor() {
     this.canvas = null;
     this.gl = null;
-    this.bakeProgram = null;
-    this.blitProgram = null;
-    this.bakeUniforms = {};
+    this.surge = null;
+    this.verdict = null;
+    this.blit = null;
+    this.surgeUniforms = {};
+    this.verdictUniforms = {};
     this.blitUniforms = {};
-    this.frames = [];
-    this.bakedKey = null;
+    this.sampler = null;
+    this.word = null;
+    this.warmed = false;
     this.budget = new FrameBudget();
     this._raf = null;
-    this._onResize = () => sizeToViewport(this.canvas, this.gl);
+    this._onResize = () => this._resize();
   }
 
   _ensureContext() {
@@ -51,105 +79,117 @@ class BurstHost {
     this.canvas = mounted.canvas;
     this.gl = mounted.gl;
 
-    this.bakeProgram = buildProgram(this.gl, VERT, BURST_FRAG, "burst");
-    this.blitProgram = buildProgram(this.gl, VERT, BLIT_FRAG, "blit");
-    if (!this.bakeProgram || !this.blitProgram) {
+    this.surge = buildProgram(this.gl, VERT, BURST_FRAG, "surge");
+    this.verdict = buildProgram(this.gl, VERT, SEVERITY_FRAG, "verdict");
+    this.blit = buildProgram(this.gl, VERT, BLIT_FRAG, "blit");
+    if (!this.surge || !this.verdict || !this.blit) {
       this.destroy();
       return false;
     }
 
-    bindFullscreenTriangle(this.gl, this.bakeProgram, this.blitProgram);
-    this.bakeUniforms = uniformLocations(this.gl, this.bakeProgram, BURST_UNIFORMS);
-    this.blitUniforms = uniformLocations(this.gl, this.blitProgram, BLIT_UNIFORMS);
+    bindFullscreenTriangle(this.gl, this.surge, this.verdict, this.blit);
+    this.surgeUniforms = uniformLocations(this.gl, this.surge, BURST_UNIFORMS);
+    this.verdictUniforms = uniformLocations(this.gl, this.verdict, SEVERITY_UNIFORMS);
+    this.blitUniforms = uniformLocations(this.gl, this.blit, BLIT_UNIFORMS);
+    this.sampler = new SuperSampler(this.gl, this.blit, this.blitUniforms);
 
-    sizeToViewport(this.canvas, this.gl);
+    this._resize();
     window.addEventListener("resize", this._onResize);
     return true;
   }
 
-  /* ── Baking ──────────────────────────────────────────────────────── */
+  /** The canvas itself is full device resolution; the supersampler decides how
+   *  much larger the field is composed before being averaged onto it. */
+  _resize() {
+    sizeToViewport(this.canvas, this.gl, 1);
+    this.sampler?.ensure();
+  }
 
   /**
-   * Render the fracture into `BURST_FRAMES` textures once per stability level.
+   * Pay the driver's deferred compile cost once, at load, off-screen.
    *
-   * Baking is the expensive moment, so it happens on the first surge at a given
-   * level and is then reused for the rest of the session. The seed is derived
-   * from the level rather than randomised, so a re-bake produces the same
-   * fracture and a player does not see the "same" surge look different.
+   * `linkProgram` returning does not mean a program is compiled — drivers
+   * specialize on first draw. Without this the first surge of a session pays for
+   * three programs mid-animation, at exactly the moment a stutter is most
+   * visible. One real draw of each, at the size they will actually run at, makes
+   * the first frame cost the same as every later one.
+   *
+   * The canvas is not visible during this: it carries no `glas-visible` class,
+   * so the compositor never shows the warm frames.
    */
-  _bake(level) {
-    const chaos = chaosFor(level);
-    const key = `${level}:${chaos.toFixed(3)}`;
-    if (this.bakedKey === key && this.frames.length === BURST_FRAMES) return true;
+  warm() {
+    if (this.warmed) return false;
+    if (!webglSupported() || !this._ensureContext()) return false;
+    this.warmed = true;
 
     const gl = this.gl;
-    this._disposeFrames();
-
-    const size = BURST_FRAME_SIZE;
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, size, size);
-    gl.useProgram(this.bakeProgram);
-
-    const u = this.bakeUniforms;
     const ramp = rampFloats();
-    gl.uniform2f(u.uRes, size, size);
-    gl.uniform1f(u.uSeed, seedFor(level));
-    gl.uniform1f(u.uChaos, chaos);
-    gl.uniform3fv(u.uDeep, ramp.deep);
-    gl.uniform3fv(u.uMid, ramp.mid);
-    gl.uniform3fv(u.uHot, ramp.hot);
 
-    for (let i = 0; i < BURST_FRAMES; i++) {
-      const texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-        warn("Arcane Surge | burst framebuffer incomplete; the burst will not play");
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.deleteFramebuffer(fbo);
-        this._disposeFrames();
-        return false;
-      }
-
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.uniform1f(u.uTime, i / (BURST_FRAMES - 1));
+    if (this.sampler.bind()) {
+      gl.useProgram(this.surge);
+      gl.uniform1f(this.surgeUniforms.uTime, 0);
+      gl.uniform1f(this.surgeUniforms.uProgress, 0);
+      gl.uniform2f(this.surgeUniforms.uRes, this.sampler.size[0], this.sampler.size[1]);
+      gl.uniform1f(this.surgeUniforms.uSeed, 0);
+      gl.uniform1f(this.surgeUniforms.uChaos, 1);
+      gl.uniform3fv(this.surgeUniforms.uDeep, ramp.deep);
+      gl.uniform3fv(this.surgeUniforms.uMid, ramp.mid);
+      gl.uniform3fv(this.surgeUniforms.uHot, ramp.hot);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      this.frames.push(texture);
+      this.sampler.blit(this.canvas, 0);
     }
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.deleteFramebuffer(fbo);
-    this.bakedKey = key;
+    if (this.sampler.bind()) {
+      gl.useProgram(this.verdict);
+      gl.uniform1f(this.verdictUniforms.uTime, 0);
+      gl.uniform1f(this.verdictUniforms.uProgress, 0);
+      gl.uniform2f(this.verdictUniforms.uRes, this.sampler.size[0], this.sampler.size[1]);
+      gl.uniform1f(this.verdictUniforms.uTier, TIERS.length - 1);
+      gl.uniform3fv(this.verdictUniforms.uDeep, ramp.deep);
+      gl.uniform3fv(this.verdictUniforms.uMid, ramp.mid);
+      gl.uniform3fv(this.verdictUniforms.uHot, ramp.hot);
+      gl.uniform3fv(this.verdictUniforms.uVerdict, tierFloats(TIERS[TIERS.length - 1]));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.sampler.blit(this.canvas, 0);
+    }
+
+    // Force execution rather than leaving the work queued behind the first
+    // real frame, which would defeat the point.
+    gl.finish();
     return true;
   }
 
-  _disposeFrames() {
-    if (this.gl) for (const texture of this.frames) this.gl.deleteTexture(texture);
-    this.frames = [];
-    this.bakedKey = null;
+  /* ── The word ────────────────────────────────────────────────────── */
+
+  /**
+   * Struck across the middle, in the suite's display face.
+   *
+   * Mounted per playback and removed with the beat, so nothing of it survives
+   * into a session where the feature is disabled.
+   */
+  _strike(text, tier = null) {
+    this.word?.remove();
+    const el = document.createElement("div");
+    el.className = `glas-word gl-type${tier ? ` glas-tier-${tier}` : ""}`;
+    el.innerHTML = `<span class="glas-word-text">${escapeHTML(text)}</span>`;
+    document.body.appendChild(el);
+    this.word = el;
+    // Force a reflow so the entrance animation runs from its start state even
+    // when a second beat lands immediately after the first.
+    void el.offsetWidth;
+    el.classList.add("glas-word-in");
   }
 
-  /** A retheme invalidates every baked frame — the palette is burned into them. */
-  retheme() {
-    this._disposeFrames();
+  _clearWord() {
+    this.word?.remove();
+    this.word = null;
   }
 
   /* ── Playback ────────────────────────────────────────────────────── */
 
-  play(level, { durationMs = BURST_MS, peak = 1 } = {}) {
-    if (!webglSupported() || !this._ensureContext()) return;
-    if (!this._bake(level)) return;
-
+  _run(program, uniforms, seconds, write) {
     this._stopLoop();
-    sizeToViewport(this.canvas, this.gl);
+    this._resize();
     this.canvas.classList.add("glas-visible");
 
     const gl = this.gl;
@@ -158,27 +198,29 @@ class BurstHost {
 
     const step = () => {
       const now = performance.now();
-      this.budget.sample(now - last);
+      const frameMs = now - last;
+      this.budget.sample(frameMs);
+      this.sampler.sample(frameMs);
       last = now;
 
-      const t = Math.min(1, (now - start) / durationMs);
-      const frame = this.frames[Math.min(this.frames.length - 1, Math.floor(t * this.frames.length))];
+      const elapsed = (now - start) / 1000;
+      const progress = Math.min(1, elapsed / seconds);
 
-      // In hard then out soft: the fracture should arrive faster than it leaves.
-      const envelope = t < 0.12 ? easeOut(t / 0.12) : 1 - easeOut((t - 0.12) / 0.88);
+      // Compose supersampled, then average down onto the canvas. Both fields are
+      // thin high-contrast detail, which crawls badly when rendered direct.
+      if (this.sampler.bind()) {
+        gl.useProgram(program);
+        gl.uniform1f(uniforms.uTime, elapsed);
+        gl.uniform1f(uniforms.uProgress, progress);
+        gl.uniform2f(uniforms.uRes, this.sampler.size[0], this.sampler.size[1]);
+        write(uniforms);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        this.sampler.blit(this.canvas, 1);
+      }
 
-      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(this.blitProgram);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, frame);
-      gl.uniform1i(this.blitUniforms.uFrame, 0);
-      gl.uniform1f(this.blitUniforms.uOpacity, envelope * peak);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      if (t >= 1) {
+      if (progress >= 1) {
         this.canvas.classList.remove("glas-visible");
+        this._clearWord();
         this._raf = null;
         return;
       }
@@ -187,26 +229,71 @@ class BurstHost {
     this._raf = requestAnimationFrame(step);
   }
 
+  playSurge(level, { label = null } = {}) {
+    if (!webglSupported() || !this._ensureContext()) return;
+    const gl = this.gl;
+    const ramp = rampFloats();
+    const chaos = chaosFor(level);
+    const seed = seedFor(level);
+
+    this._strike(label ?? game.i18n.localize("GLAS.burst.word"));
+    this._run(this.surge, this.surgeUniforms, BURST_SECONDS, (u) => {
+      gl.uniform1f(u.uSeed, seed);
+      gl.uniform1f(u.uChaos, chaos);
+      gl.uniform3fv(u.uDeep, ramp.deep);
+      gl.uniform3fv(u.uMid, ramp.mid);
+      gl.uniform3fv(u.uHot, ramp.hot);
+    });
+  }
+
+  playVerdict(tier) {
+    if (!webglSupported() || !this._ensureContext()) return;
+    const index = TIERS.indexOf(tier);
+    if (index < 0) return;
+
+    const gl = this.gl;
+    const ramp = rampFloats();
+    const verdictColour = tierFloats(tier);
+
+    this._strike(game.i18n.localize(`GLAS.tier.${tier}`), tier);
+    this._run(this.verdict, this.verdictUniforms, SEVERITY_SECONDS, (u) => {
+      gl.uniform1f(u.uTier, index);
+      gl.uniform3fv(u.uDeep, ramp.deep);
+      gl.uniform3fv(u.uMid, ramp.mid);
+      gl.uniform3fv(u.uHot, ramp.hot);
+      gl.uniform3fv(u.uVerdict, verdictColour);
+    });
+  }
+
   _stopLoop() {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
   }
 
+  /** Nothing is cached across a retheme any more — both passes read the ramp
+   *  fresh every frame — so this only has to drop a beat already in flight. */
+  retheme() {}
+
   destroy() {
     this._stopLoop();
+    this._clearWord();
     window.removeEventListener("resize", this._onResize);
-    this._disposeFrames();
     if (this.canvas) {
       this.canvas.remove();
       this.canvas = null;
     }
+    this.sampler?.destroy();
+    this.sampler = null;
     this.gl = null;
-    this.bakeProgram = null;
-    this.blitProgram = null;
+    this.surge = null;
+    this.verdict = null;
+    this.blit = null;
+    this.warmed = false;
   }
 }
 
-/** A level's fracture is stable across a session rather than random per surge. */
+/** A level's vortex is stable across a session rather than random per surge, so
+ *  the same danger looks like itself twice. */
 function seedFor(level) {
   let hash = 0;
   for (let i = 0; i < level.length; i++) hash = (hash * 31 + level.charCodeAt(i)) % 9973;
@@ -217,32 +304,31 @@ let host = null;
 let untheme = null;
 
 function ensureHost() {
-  host ??= new BurstHost();
-  // The palette is baked INTO the frames, so a retheme has to throw them away.
+  host ??= new BeatHost();
   untheme ??= onThemeChange(() => host?.retheme());
   return host;
 }
 
-/** The full beat, scaled by the world's state. */
+/** The surge itself, scaled by the world's state. */
 export function playBurst(level) {
-  ensureHost().play(level, { durationMs: BURST_MS, peak: 1 });
+  ensureHost().playSurge(level);
 }
 
 /**
- * The shorter second beat, when the severity card resolves.
+ * The verdict, when the severity card resolves.
  *
- * This is the most ornamental thing the feature draws, so it is the first thing
- * shed when the frame budget is under pressure — the tier is already legible on
- * the card, and a struggling machine should spend its frames on the game.
+ * First thing shed when the frame budget is under pressure: the tier is already
+ * legible on the card, and a struggling machine should spend its frames on the
+ * game rather than on a second cinematic in four seconds.
  */
 export function playFlourish(tier) {
   const current = ensureHost();
   if (!current.budget.allows("flourish")) return;
-  const shape = TIER_FLOURISH[tier];
-  // An unknown tier draws nothing rather than silently borrowing another tier's
-  // weight — a wrong intensity here misreports how bad the result was.
-  if (!shape) return;
-  current.play(shape.level, { durationMs: FLOURISH_MS, peak: shape.peak });
+  current.playVerdict(tier);
+}
+
+export function warmBurst() {
+  ensureHost().warm();
 }
 
 export function destroyBurst() {

@@ -118,6 +118,18 @@
       "save": "Save",
       "reset": "Restore defaults",
       "saved": "Arcane Surge odds saved."
+    },
+    "burst": {
+      "word": "SURGE"
+    },
+    "context": {
+      "surge": "Apply Arcane Surge"
+    },
+    "sheet": {
+      "steadyTo": "→ {level} · surges on {threshold}",
+      "steadyToStable": "→ Stable · no check at all",
+      "inviteTo": "→ {row} · surge guaranteed",
+      "note": "Applies to this character’s next eligible casting, then lapses. Steadying costs one extra action; inviting costs none."
     }
   }
 }

@@ -1,34 +1,37 @@
 #!/usr/bin/env node
 /**
- * GLUniverse Suite — bake the Arcane Surge die faces.
+ * GLUniverse Suite — bake the Arcane Surge dice surfaces.
  *
  *   node tools/gen-surge-textures.mjs              # write the set
  *   node tools/gen-surge-textures.mjs --check      # verify the set is complete
  *   node tools/gen-surge-textures.mjs --sheet=/tmp/surge.png   # contact sheet
  *
- * Two faces, three maps each, into `assets/pf2e-arcane-surge/dice/`:
+ * Two different kinds of die need two different kinds of art, and conflating
+ * them is why the first pass looked wrong on the severity roll:
  *
- *   blank.png / surge.png            albedo   — multiplied over the colorset
- *                                              background, so it is a near
- *                                              neutral luminance map, not a
- *                                              colour.
- *   *-bump.png                       height   — greyscale, white proud, black
- *                                              sunken. Dice So Nice runs a
- *                                              Sobel pass over this to build a
- *                                              normal map, so contrast here IS
- *                                              relief depth. The groove around
- *                                              every face lives here.
- *   *-emissive.png                   emission — drawn on black and handed to
- *                                              THREE as an emissiveMap. The
- *                                              blank face's is deliberately
- *                                              almost entirely black: a blank
- *                                              face is nothing happening.
+ *   FACE ART — `blank` and `surge`. Whole-face images handed to Dice So Nice as
+ *   `labels`, one per face of the surge d20. The die is read by its GLYPH, not
+ *   by a number, so the face IS the art.
  *
- * The die's odds are not baked in: the FACE LAYOUT (how many faces carry the
- * glyph) is derived at runtime from each level's threshold. This tool only
- * produces the two face designs and asserts that every rolling level's demand
- * can be met by them — the cross-check that the layout matches the threshold is
- * `tools/arcane-surge-check.mjs`.
+ *   SURFACE ART — `surface`. A tiling material handed to DSN as a `texture`,
+ *   under numerals it draws itself. The severity d100 (and the d10s DSN builds
+ *   it from) are ordinary numbered shapes; they need a frosted surface to sit
+ *   under the numbers, not twenty pictures.
+ *
+ * Three maps each:
+ *
+ *   <id>.png           albedo   — multiplied over the colorset background, so it
+ *                                 is authored as a near-neutral luminance map.
+ *                                 Frosted glass is BRIGHT and low-contrast; the
+ *                                 depth comes from the bump, not from painting
+ *                                 shadows into the colour.
+ *   <id>-bump.png      height   — greyscale, white proud, black sunken. DSN runs
+ *                                 a Sobel pass over this to build its normal map,
+ *                                 so contrast here IS relief depth. Every groove
+ *                                 in this die lives in this map and nowhere else.
+ *   <id>-emissive.png  emission — drawn on black, handed to THREE as an
+ *                                 emissiveMap. Only the surge glyph emits; a
+ *                                 blank face is nothing happening.
  *
  * There is no image library on the dev box and the repo has no package.json, so
  * this carries its own PNG encoder over `node:zlib`. Output is deterministic —
@@ -46,7 +49,7 @@ import { glyphFaces, resolveConfig, rollingLevels } from "../scripts/features/pf
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "assets", "pf2e-arcane-surge", "dice");
 const SIZE = 256;
-const FACES = ["blank", "surge"];
+const FACES = ["blank", "surge", "surface"];
 const MAPS = ["", "-bump", "-emissive"];
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -118,7 +121,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
 const smoothstep = (a, b, x) => (a === b ? (x < a ? 0 : 1) : smooth(clamp01((x - a) / (b - a))));
 const mix = (a, b, t) => a + (b - a) * t;
 
-/** Wrapped value noise, so a face never shows a tile seam. */
+/** Wrapped value noise, so a tiling surface never shows a seam. */
 function hash2(ix, iy, seed) {
   let h = ix * 374761393 + iy * 668265263 + seed * 2246822519;
   h = (h ^ (h >>> 13)) * 1274126177;
@@ -151,42 +154,95 @@ const fbm = (x, y, period, octaves, seed) => {
 };
 
 /**
- * The groove: a channel cut just inside the face's edge.
+ * Frosted glass, as a height field.
  *
- * This is the "groove" the die is asked for, and it is a BUMP feature, not a
- * painted line — carving it into the height map is what makes it catch the
- * light as the die tumbles instead of looking like a sticker.
+ * Two scales on purpose: a fine grain that catches the light as the die tumbles,
+ * and a much broader swell that reads as the thickness of the glass rather than
+ * as dirt on it. Frost is a SURFACE property — it belongs almost entirely in the
+ * bump map, which is why the albedo stays bright and nearly flat.
  */
-function groove(x, y) {
-  // Distance to the nearest edge of the unit square.
-  const edge = Math.min(x, y, 1 - x, 1 - y);
-  const channel = smoothstep(0.055, 0.085, edge) * (1 - smoothstep(0.105, 0.135, edge));
-  return channel;
+function frost(x, y, seed) {
+  const fine = fbm(x * 26, y * 26, 26, 2, seed);
+  const swell = fbm(x * 5, y * 5, 5, 2, seed + 11);
+  return clamp01(0.55 + (fine - 0.5) * 0.55 + (swell - 0.5) * 0.45);
 }
 
 /**
- * The surge glyph: a six-armed rift, thin and sharp.
+ * The bevelled grooves around the glyph — CONCENTRIC RINGS, not a border.
  *
- * Deliberately not a rune or a letter — it has to read at the size of a die face
- * tumbling past, which means one silhouette and no interior detail.
+ * A d20's faces are triangles. Dice So Nice maps this square image onto a
+ * triangular face, so anything drawn near the square's edge is clipped, and the
+ * corners are never seen at all: a rectangular border groove would come out as
+ * four disconnected stubs. Rings are the shape that survives being mapped onto
+ * any face polygon, and they suit a whirlpool besides — the glyph looks like it
+ * is turning inside them.
+ *
+ * Everything therefore stays inside GLYPH_SAFE, comfortably within the triangle
+ * inscribed in this square.
+ *
+ * Cut deliberately deep and narrow: on a tumbling die a shallow wide channel
+ * reads as a smudge, and it is the hard shoulder either side of a narrow one
+ * that actually catches a highlight.
+ */
+const GLYPH_SAFE = 0.62;
+
+function groove(x, y) {
+  const dx = (x - 0.5) * 2;
+  const dy = (y - 0.5) * 2;
+  const r = Math.hypot(dx, dy);
+  const ring = (at, halfWidth) =>
+    (1 - smoothstep(halfWidth * 0.55, halfWidth, Math.abs(r - at)));
+  // A firm outer ring that frames the glyph, and a finer inner one just off it.
+  return clamp01(ring(GLYPH_SAFE, 0.030) + ring(GLYPH_SAFE - 0.075, 0.014) * 0.55);
+}
+
+/**
+ * The surge glyph: a whirlpool.
+ *
+ * Built in polar space so it is centred by construction — the previous version
+ * offset its arms by an angle that pushed the visual mass off-centre, which is
+ * exactly the kind of thing that only shows up on a die that rotates.
+ *
+ * Four logarithmic-spiral arms drawn as a signed distance to the spiral curve,
+ * so the edges are sharp at any resolution rather than being a soft blob with a
+ * threshold. The arms taper into a clean eye at the middle and fade before they
+ * reach the groove.
  */
 function glyph(x, y) {
   const dx = (x - 0.5) * 2;
   const dy = (y - 0.5) * 2;
-  const r = Math.hypot(dx, dy);
+  /* Scaled into the safe radius, INSIDE the inner groove. A d20 face is a
+     triangle; art drawn out toward the square's edge is simply not on the die. */
+  const scale = 1 / (GLYPH_SAFE - 0.11);
+  const r = Math.hypot(dx, dy) * scale;
+  if (r > 0.86) return 0;
+
   const a = Math.atan2(dy, dx);
+  const ARMS = 4;
+  const TIGHTNESS = 2.35;
 
-  // Six arms whose length pulses with angle, tapering to nothing at the tips.
-  const arms = Math.abs(Math.cos(a * 3));
-  const reach = mix(0.24, 0.62, Math.pow(arms, 2.4));
-  const body = 1 - smoothstep(reach * 0.72, reach, r);
+  /* Distance to the nearest arm of a log spiral: the phase of a spiral through
+     this point is (angle - tightness*log(r)); its fractional distance to the
+     nearest arm is the glyph's body. */
+  const phase = (a - Math.log(Math.max(r, 0.02)) * TIGHTNESS) * (ARMS / (Math.PI * 2));
+  let d = Math.abs(phase - Math.round(phase)) / (ARMS / (Math.PI * 2));
+  // Convert the angular distance into a roughly uniform width in real space, so
+  // the arms do not fatten toward the rim.
+  d *= Math.max(r, 0.08);
 
-  // A hairline crack running through the middle of each arm keeps it reading as
-  // a tear rather than as a star.
-  const seam = 1 - smoothstep(0.0, 0.045, Math.abs(Math.sin(a * 3)) * r);
+  /* Arms taper: widest in the middle band, closing to nothing at both ends.
+     The width is set for the size this is actually SEEN at — one face of a
+     tumbling d20, a couple of hundred pixels at most. A hairline that looks
+     elegant in the contact sheet disappears entirely there. */
+  const taper = smoothstep(0.05, 0.26, r) * (1 - smoothstep(0.58, 0.84, r));
+  const width = 0.082 * taper;
+  const arm = width <= 0 ? 0 : 1 - smoothstep(width * 0.55, width, d);
 
-  const core = 1 - smoothstep(0.0, 0.14, r);
-  return clamp01(Math.max(body * 0.85, core) - seam * 0.35 * smoothstep(0.14, 0.5, r));
+  // The eye: a solid centre the arms spin out of, with a small void inside it so
+  // it reads as a vortex rather than a dot.
+  const eye = (1 - smoothstep(0.055, 0.105, r)) * smoothstep(0.012, 0.042, r);
+
+  return clamp01(Math.max(arm * taper, eye));
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -197,7 +253,8 @@ function bakeFace(face) {
   const albedo = Buffer.alloc(SIZE * SIZE * 3);
   const bump = Buffer.alloc(SIZE * SIZE);
   const emissive = Buffer.alloc(SIZE * SIZE * 3);
-  const seed = face === "surge" ? 77 : 13;
+  const seed = face === "surge" ? 77 : face === "surface" ? 41 : 13;
+  const isSurface = face === "surface";
 
   for (let py = 0; py < SIZE; py++) {
     const y = (py + 0.5) / SIZE;
@@ -205,36 +262,37 @@ function bakeFace(face) {
       const x = (px + 0.5) / SIZE;
       const i = py * SIZE + px;
 
-      // A quiet mineral grain over the whole face. Stylised, not photoreal:
-      // low amplitude, two octaves, no pores or speckle.
-      const grain = fbm(x * 6, y * 6, 6, 2, seed);
-      const g = groove(x, y);
+      const ice = frost(x, y, seed);
+      // The surface material tiles under numerals, so it carries no groove and
+      // no glyph — an edge channel would repeat across every face of a d10.
+      const g = isSurface ? 0 : groove(x, y);
       const mark = face === "surge" ? glyph(x, y) : 0;
 
-      /* Albedo — multiplied over the colorset, so it stays near-neutral and
-         bright. Mean around 0.75 keeps the die from going muddy. */
-      let value = 0.78 + (grain - 0.5) * 0.10;
-      value -= g * 0.22;             // the groove reads darker
-      value -= mark * 0.30;          // the glyph is cut into the face
+      /* Albedo — frosted glass is bright and nearly flat. Multiplied over the
+         colorset background, so mean luminance stays high or the die goes
+         muddy; all the character is in the bump. */
+      let value = 0.86 + (ice - 0.55) * 0.14;
+      value -= g * 0.10;
+      value -= mark * 0.16;
       const lum = clamp01(value);
-      // A faint teal push in the cut areas so the etch is not pure grey.
-      albedo[i * 3] = Math.round(clamp01(lum - (g + mark) * 0.05) * 255);
+      // A whisper of teal in the cuts so the etch is not flat grey.
+      albedo[i * 3] = Math.round(clamp01(lum - (g + mark) * 0.045) * 255);
       albedo[i * 3 + 1] = Math.round(lum * 255);
-      albedo[i * 3 + 2] = Math.round(clamp01(lum + (g + mark) * 0.04) * 255);
+      albedo[i * 3 + 2] = Math.round(clamp01(lum + (g + mark) * 0.035) * 255);
 
-      /* Bump — the relief. White proud, black sunken. Both the groove and the
-         glyph are CUT, so both go dark. */
-      let height = 0.62 + (grain - 0.5) * 0.16;
-      height -= g * 0.42;
-      height -= mark * 0.5;
+      /* Bump — everything that should catch light. Frost grain, the groove, and
+         the glyph, all cut INTO the face. */
+      let height = 0.60 + (ice - 0.55) * 0.34;
+      height -= g * 0.52;
+      height -= mark * 0.62;
       bump[i] = Math.round(clamp01(height) * 255);
 
-      /* Emission — the glyph only, and only inside the cut, so the surge face
-         looks lit from within its own wound. The blank face emits nothing. */
-      const glow = face === "surge" ? Math.pow(mark, 1.5) : 0;
-      emissive[i * 3] = Math.round(clamp01(glow * 0.36) * 255);
-      emissive[i * 3 + 1] = Math.round(clamp01(glow * 0.92) * 255);
-      emissive[i * 3 + 2] = Math.round(clamp01(glow * 0.86) * 255);
+      /* Emission — the glyph only, and hottest at its core, so the surge face
+         looks lit from inside its own wound. */
+      const glow = face === "surge" ? Math.pow(mark, 1.35) : 0;
+      emissive[i * 3] = Math.round(clamp01(glow * 0.34) * 255);
+      emissive[i * 3 + 1] = Math.round(clamp01(glow * 0.94) * 255);
+      emissive[i * 3 + 2] = Math.round(clamp01(glow * 0.88) * 255);
     }
   }
 
@@ -264,8 +322,8 @@ function check() {
   }
 
   // Every level that rolls needs between 1 and 20 glyph faces, and each of those
-  // faces is one of the two designs above. A level demanding more than 20 would
-  // silently render a die with fewer glyphs than its odds.
+  // faces is one of the two face designs above. A level demanding more than 20
+  // would silently render a die with fewer glyphs than its own odds.
   const config = resolveConfig();
   for (const level of rollingLevels(config)) {
     const needed = glyphFaces(level, config);
@@ -275,19 +333,46 @@ function check() {
     if (level === "stable" && glyphFaces(level, config) !== 0) problems.push("Stable must have no glyph faces");
   }
 
+  // The glyph has to be centred, or it wobbles as the die turns. Measured, not
+  // asserted: the centre of mass of the drawn mark must sit on the face centre.
+  const centre = glyphCentroid();
+  if (centre.mass <= 0) problems.push("the surge glyph is empty");
+  else {
+    const off = Math.hypot(centre.x - 0.5, centre.y - 0.5);
+    if (off > 0.01) problems.push(`the surge glyph is off-centre by ${(off * 100).toFixed(1)}% of the face`);
+  }
+
   if (problems.length) {
     console.error(`gen-surge-textures --check: ${problems.length} problem(s)`);
     for (const line of problems) console.error(`  • ${line}`);
     process.exitCode = 1;
   } else {
     const summary = rollingLevels(config).map((l) => `${l}:${glyphFaces(l, config)}`).join(" ");
-    console.log(`gen-surge-textures --check: complete (${summary})`);
+    console.log(`gen-surge-textures --check: complete (${summary}, glyph centred to ${(Math.hypot(centre.x - 0.5, centre.y - 0.5) * 1000).toFixed(2)}‰)`);
   }
+}
+
+/** Centre of mass of the glyph, in face coordinates. */
+function glyphCentroid() {
+  let mass = 0;
+  let sx = 0;
+  let sy = 0;
+  for (let py = 0; py < SIZE; py++) {
+    const y = (py + 0.5) / SIZE;
+    for (let px = 0; px < SIZE; px++) {
+      const x = (px + 0.5) / SIZE;
+      const v = glyph(x, y);
+      mass += v;
+      sx += v * x;
+      sy += v * y;
+    }
+  }
+  return mass > 0 ? { x: sx / mass, y: sy / mass, mass } : { x: 0.5, y: 0.5, mass: 0 };
 }
 
 /** Side-by-side of every map, so a recipe change can be reviewed without Foundry. */
 function contactSheet(target) {
-  const cell = 128;
+  const cell = 160;
   const cols = MAPS.length;
   const rows = FACES.length;
   const w = cell * cols;
@@ -334,5 +419,5 @@ if (args.includes("--check")) {
 } else {
   let written = 0;
   for (const face of FACES) written += write(face);
-  console.log(`gen-surge-textures: wrote ${written} maps for ${FACES.length} faces into assets/pf2e-arcane-surge/dice/`);
+  console.log(`gen-surge-textures: wrote ${written} maps for ${FACES.length} surfaces into assets/pf2e-arcane-surge/dice/`);
 }

@@ -31,3 +31,24 @@ export function rampFloats() {
 /** The palette keys the ramp is built from, so the check tool can verify the
  *  literal copy in `anim.mjs` against the same source this uses. */
 export const RAMP_KEYS = Object.freeze({ deep: "ink2", mid: "teal", hot: "cyan" });
+
+/**
+ * Each severity tier's hue, as palette keys.
+ *
+ * These MUST match the `.glas-tier-*` accent remaps in
+ * `styles/pf2e-arcane-surge.css` — the card and the full-screen verdict fire
+ * together, and two different reds would read as two different results. The
+ * check tool asserts the two lists agree.
+ */
+export const TIER_KEYS = Object.freeze({
+  minor: "cyan",
+  major: "warn",
+  catastrophic: "warnDeep",
+  breach: "hazard",
+});
+
+/** One tier's verdict colour as a GLSL float triple. */
+export function tierFloats(tier) {
+  const key = TIER_KEYS[tier] ?? TIER_KEYS.minor;
+  return hexToRgbFloat(PALETTE[key]);
+}

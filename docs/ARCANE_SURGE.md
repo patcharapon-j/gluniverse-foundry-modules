@@ -2,8 +2,8 @@
 
 The Sea of Stars makes magic unreliable. An eligible casting in an unstable area
 rolls one d20 against the area's stability; rolling at or under the threshold
-surges. The surge banners the spell's own card, tears the screen for two
-seconds, and posts a severity card the GM *or* the caster can roll.
+surges. The surge banners the spell's own card, tears the screen, and posts a
+severity card the GM *or* the caster can roll.
 
 This feature deliberately implements the **procedure** and none of the
 **content**. The four d100 theme collections live outside the module; the
@@ -99,6 +99,29 @@ card a player is allowed to press cannot hide its own result, and a table that
 can see "94 on the Unbound row" understands the system rather than only
 receiving verdicts from it.
 
+## Where the controls live
+
+The **stability chip** is a readout, stacked directly under the weather chip in
+the time-tracker HUD’s date cell so the two read as one cluster. A GM clicking
+it gets a level picker, positioned after mount and flipped when it would open
+off-screen — the HUD is draggable, so a popover pinned unconditionally below its
+anchor runs off the edge as soon as the bar is not near the top-left.
+
+**Steady the Spell** and **Invite the Surge** live on the character sheet’s
+spellcasting tab, because that is where a caster already is when they choose a
+spell — a control anywhere else is one the table stops using by session four.
+Each button shows what the choice actually buys, resolved through the real
+rules: the effective level a steadied cast would use, and the row an invited one
+would be read against. The armed state is scoped to **that actor**, not just to
+the user, so a player running two characters cannot steady one and silently
+steady the other’s next spell.
+
+A **GM right-click entry** on any chat card forces a surge onto it. The
+automatic check can only see what PF2e tells it; this covers macros, spell-like
+abilities, rituals, and anything the GM decides should count. It rolls no d20 —
+the GM has already decided — and the banner records that it was applied by hand,
+so the table can tell a ruling from a roll.
+
 ## Transport — three channels, on purpose
 
 | What | How | Why not a socket |
@@ -107,30 +130,57 @@ receiving verdicts from it.
 | A player-cast surge | the chat message flag | Every client renders the card, sees a fresh flag, and plays. Free and self-healing. |
 | A GM releasing a held NPC surge | `emitSocket` | The message is old by then, its freshness window has expired everywhere, and a flag update alone would play nothing. **This is the only job the socket has.** |
 
-## The two visual layers
+## The three visual layers
 
 They have very different budgets and that difference is the whole design.
 
-**Ambient** runs for hours. Two octaves of value noise and one domain warp — no
-Voronoi, no five-octave fbm. Half device resolution (it is a soft low-alpha veil
-with no hard edge in it). Pauses on `document.hidden`. Sits at `--gl-z-sticky`,
+**Ambient** runs for hours. Two octaves of value noise, one whirlpool warp, and a
+RIDGED fold — that one line is most of the difference between "arcane" and
+"haze", because ridging turns smooth blobs into thin bright filaments for the
+cost of an `abs`. It hugs the four screen EDGES in a deliberately narrow band and
+leaves the middle of the board alone; widened much past a fifth of the short axis
+the four edges meet in the middle and it stops being an encroachment and becomes
+a tint. Full device resolution — those filaments are exactly the kind of thin
+high-contrast detail that crawls when undersampled. Pauses on `document.hidden`.
+Sits at `--gl-z-sticky`,
 above the board and **below every piece of Foundry chrome**, because a haze over
 the sidebar and hotbar for three hours would make the interface unusable. Under
 load it sheds `drift`, which stops the clock and leaves the veil — what degrades
 must be the motion, never the state.
 
-**Burst** runs for 2.4 seconds and is **baked, never live**. `initiative`'s break
-splash already paid to learn that a full-screen procedural fracture costs a
-visible hiccup per frame, and this fires at the one moment a hitch is least
-forgivable. The shader renders 24 frames into textures once per level; playback
-is one textured triangle per frame. Sits at `--gl-z-splash`. Scaled by
-**stability level, not severity** — severity is rolled later, by which time the
-burst is over, so what the burst can honestly express is the state of the world.
-The tier gets its own shorter second beat when the card resolves.
+**Surge** runs for 1.8 seconds, **live**, at full device resolution, composed at
+2× and box-averaged down. A vortex tearing open: spiral arms curved by a `log(r)`
+angle offset, a shock racing outward, filaments whipping off it, with the word
+struck across the middle. Deliberately nothing like the suite's golden glass
+fracture — no Voronoi, no crack lines. Sits at `--gl-z-splash`. Scaled by
+**stability level, not severity**, because severity has not been rolled yet, so
+what it can honestly express is the state of the world.
 
-Measured in the preview harness, ambient mean alpha by level: Stable 0 (exactly),
-Fraying 3.2, Unbound 8.0, Unraveling 14.4 out of 255. Bake cost: 4–7 ms for 24
-frames.
+**Verdict** runs for 1.2 seconds when the severity card resolves, and is the
+OPPOSITE motion: concentric rings collapsing *inward* onto the centre, one per
+tier step, in the tier's own hue over the arcane bed. The two can never read as
+the same effect played twice.
+
+### Why live, when it used to be baked
+
+The first version pre-baked 24 frames, following `initiative`'s break splash,
+whose comment blamed a visible hiccup on the per-frame cost of a full-screen
+procedural field. That diagnosis was incomplete. The dominant cost was the
+**first use** of the program — drivers defer real compilation and specialization
+until a draw needs it — not the steady per-frame cost. Baking hid that by paying
+it at load, but it also froze each effect into a filmstrip that visibly repeats,
+pinned the source to a fixed resolution, and held the frames in VRAM.
+
+`warm()` pays the same cost at load, off-screen, without any of that. Both
+features now do it, and `arcane-surge-check.mjs` fails the build if either loses
+its warm-up or starts baking again. On top of that the supersampler steps its
+quality down only after this machine has actually missed two frames in a row —
+full fidelity by default, degraded on evidence rather than on assumption.
+
+Measured in the preview harness. Ambient alpha, outer 10% of the screen vs the
+middle 40%: Stable 0/0 (exactly inert), Fraying 11.5/0, Unbound 37.4/0,
+Unraveling 80.1/0 out of 255 — the centre is untouched at every level. Warm cost
+1–8 ms per program; worst live frame ~9 ms at 2× supersampling.
 
 ## Chat surfaces
 
@@ -173,8 +223,8 @@ appearances out of one die type.
 WebGL cannot read a CSS custom property, so the ramp is derived from the palette
 mirror in `core/theme.mjs` by `palette.mjs` — never written out as hexes here.
 Both hosts re-read it through `onThemeChange()`, and the burst additionally
-throws its baked frames away on a retheme, because the palette is burned into
-them.
+re-reads it every frame, so a retheme lands on the next frame with nothing to
+invalidate.
 
 `anim.mjs` carries a literal copy of those floats, and that is deliberate: the
 preview page inlines that file as source with no module resolution available to

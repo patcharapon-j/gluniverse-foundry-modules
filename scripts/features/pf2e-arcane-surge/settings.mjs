@@ -91,23 +91,39 @@ export const ARM_MODES = Object.freeze(["none", "steadied", "invited"]);
 /**
  * Steady the Spell / Invite the Surge are player declarations made BEFORE the
  * cast, so nothing in a chat message can tell us about them. The player arms one
- * from the HUD and it applies to their next eligible casting only.
+ * on their character sheet's spellcasting tab and it applies to that actor's
+ * next eligible casting only.
  *
- * Client-scoped: it is that player's declaration about their own casting, and it
- * must not survive into anyone else's.
+ * Stored as `{ actor, mode }`, client-scoped. Both halves matter:
+ *
+ *   - Client, because it is that player's declaration about their own casting
+ *     and must never leak into anybody else's.
+ *   - Actor, because the control lives on a specific sheet. A player running two
+ *     characters who steadies one would otherwise silently steady the other's
+ *     next spell, which is a rules error the table would never spot.
  */
-export function armedMode() {
-  const stored = get(SETTINGS.armed, "none");
-  const mode = ARM_MODES.includes(stored) ? stored : "none";
-  // Inviting requires actual instability. If the GM steadied the world since the
-  // player armed it, the choice quietly lapses rather than misfiring.
-  if (mode === "invited" && currentLevel() === "stable") return "none";
-  return mode;
+export function armedState() {
+  const stored = get(SETTINGS.armed, null);
+  const mode = ARM_MODES.includes(stored?.mode) ? stored.mode : "none";
+  const actor = typeof stored?.actor === "string" ? stored.actor : null;
+  if (mode === "none" || !actor) return { actor: null, mode: "none" };
+  // Inviting requires actual instability. If the GM stabilised the world after
+  // the player armed it, the choice quietly lapses rather than misfiring.
+  if (mode === "invited" && currentLevel() === "stable") return { actor: null, mode: "none" };
+  return { actor, mode };
 }
 
-export async function setArmedMode(mode) {
+/** The mode that applies to a given actor's casting — "none" for any other. */
+export function armedMode(actorId = null) {
+  const state = armedState();
+  if (!state.actor) return "none";
+  if (actorId && state.actor !== actorId) return "none";
+  return state.mode;
+}
+
+export async function setArmedMode(mode, actorId = null) {
   const next = ARM_MODES.includes(mode) ? mode : "none";
-  await game.settings.set(SUITE_ID, SETTINGS.armed, next);
+  await game.settings.set(SUITE_ID, SETTINGS.armed, next === "none" ? null : { actor: actorId, mode: next });
 }
 
 /** Called after one eligible casting consumes the choice, and on scene change:

@@ -62,9 +62,12 @@ export function onReady() {
   overlay.maybeRedealCards();
   tokenOverlays = new TokenOverlayManager();
   refreshNativeTurnMarkerSuppression();
-  // Pre-compile the guard-break splash shader at idle so the first break in play
-  // doesn't stall the main thread on synchronous shader compilation.
-  getBreakSplashRenderer();
+  // Build the guard-break splash renderer AND warm it: the fracture now runs
+  // live every frame rather than from a baked filmstrip, and a GL program is not
+  // really compiled when linkProgram returns — drivers specialize on first draw.
+  // One off-screen draw of each program here is what keeps the first break of a
+  // session as smooth as the tenth.
+  getBreakSplashRenderer()?.warm?.();
 
   // Route the feature's socket messages through the suite's shared dispatcher.
   onSocket(FEATURE_ID, data => overlay?.handleSocket(data));
@@ -513,25 +516,34 @@ varying vec2 v_uv;
 uniform sampler2D u_src;
 void main() { gl_FragColor = texture2D(u_src, v_uv); }`;
 
-// Bake resolution / step count for the pre-rendered fracture. The splash is a
-// full-screen burst, so it needs a decent baked resolution or it looks blurry and
-// aliased once cover-fit to the viewport; 1024² is sharp at 1080p and crisp to
-// ~1440p, and it's rendered at SS× then averaged down so the cracks don't alias.
-// Frames are cross-faded at playback (see frame()), so a modest count stays smooth.
-// Memory is ~16 * 1024² * 4 ≈ 67MB of GPU textures (down from ~118MB) — a meaningful
-// VRAM saving on mid-tier GPUs, and the SS scratch (transient) drops from 2560² to
-// 2048², which also shortens the one-time startup bake.
-const SPLASH_BAKE_SIZE = 1024;
-const SPLASH_BAKE_FRAMES = 16;
-const SPLASH_BAKE_SS = 2;
+// Live fracture rendering. The splash used to pre-bake 16 frames of this shader
+// at load and cross-fade between them at playback; it now runs the real field
+// every frame, at the viewport's true aspect, supersampled and averaged down.
+//
+// Baking was originally introduced because running the full-screen procedural
+// field per frame produced a visible hiccup. That diagnosis was incomplete: the
+// dominant cost was the FIRST use of the program — drivers defer the real
+// compile and specialization until a draw actually needs it — not the steady
+// per-frame cost. `warm()` pays that once at load, off-screen, so the first
+// guard break of the session is as smooth as the tenth. What baking bought was
+// a flat cost; what it cost was a 16-step filmstrip that visibly repeats, a
+// fixed 1024² source stretched to any viewport, and ~67MB of resident VRAM.
+// Live rendering gives continuous time, native resolution, and one transient
+// scratch texture.
+//
+// Supersampling is adaptive rather than fixed: it opens at 2× (matching the old
+// bake's anti-aliasing) and steps down only if this machine actually misses
+// frames. Full fidelity by default; degraded only on evidence.
+const SPLASH_SS_LADDER = [2, 1.5, 1];
+// Above this the scratch texture gets impractical on mid-tier GPUs regardless of
+// the ladder, so the long edge is clamped before supersampling is applied.
+const SPLASH_MAX_EDGE = 2048;
+// A frame slower than this twice running drops one rung of the ladder.
+const SPLASH_SLOW_MS = 26;
 
-// One persistent renderer is reused across every guard break. The (fairly heavy)
-// Voronoi/fbm fracture shader is compiled AND fully evaluated exactly once at
-// load: every animation step is rendered into its own texture, then the live
-// splash just blits the matching pre-baked frame each tick. Running that
-// full-screen procedural field every frame on every break is what caused the
-// performance hiccup; baking removes the per-frame shader cost entirely.
-// Self-contained — if a GL context can't be created the splash works from CSS alone.
+// One persistent renderer is reused across every guard break. It owns its
+// canvas, its own RAF loop, and one scratch texture; if a GL context cannot be
+// created the splash falls back to the CSS-only presentation.
 class BreakSplashGL {
   constructor() {
     this.canvas = document.createElement("canvas");
@@ -542,33 +554,37 @@ class BreakSplashGL {
     this.start = 0;
     this.host = null;
     this.gl = null;
-    this.playProgram = null;
-    this.frames = [];          // one baked WebGL texture per animation step
-    this.uniforms = {};
-    this.cover = [1, 1];
+    this.fieldProgram = null;
+    this.blitProgram = null;
+    this.fieldUniforms = {};
+    this.blitUniforms = {};
+    this.scratch = null;
+    this.scratchSize = [0, 0];
+    this.fbo = null;
+    this.buffer = null;
+    this.seed = Math.random() * 100;
+    this.ssIndex = 0;
+    this.slowFrames = 0;
+    this.warmed = false;
     this.onResize = () => this.resize();
 
     this.colors = {
       break: [...ACTIVE_SHADER_PALETTE.splashHot],
       hot:   [...ACTIVE_SHADER_PALETTE.splashGlow]
     };
-    this._bakeBuffer = null;
 
     this.init();
   }
 
-  // Re-render the baked fracture frames using the current ACTIVE_SHADER_PALETTE.
-  // Cheap — costs the one-time bake (~tens of ms) per theme switch.
+  // Palette changes are now free: the field is evaluated live, so the new colours
+  // are simply used by the next frame. Kept under the old name because the theme
+  // system calls it.
   rebake() {
-    const gl = this.gl;
-    if (!gl || !this._bakeBuffer) return false;
-    for (const t of this.frames) { try { gl.deleteTexture(t); } catch {} }
-    this.frames = [];
     this.colors = {
       break: [...ACTIVE_SHADER_PALETTE.splashHot],
       hot:   [...ACTIVE_SHADER_PALETTE.splashGlow]
     };
-    return this.bake(gl, this._bakeBuffer);
+    return !!this.gl;
   }
 
   init() {
@@ -580,39 +596,44 @@ class BreakSplashGL {
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    this._bakeBuffer = buffer;
+    this.buffer = buffer;
 
-    // Pay the heavy shader's full cost once, here at load: render every animation
-    // step into its own texture. After this the fracture shader is never run again.
-    if (!this.bake(gl, buffer)) {
+    const field = this.buildProgram(gl, BREAK_GL_VERT, BREAK_GL_FRAG);
+    const blit = this.buildProgram(gl, BREAK_GL_VERT, BREAK_GL_DOWNSAMPLE_FRAG);
+    if (!field || !blit) {
       this.gl = null;
       return false;
     }
+    this.fieldProgram = field;
+    this.blitProgram = blit;
 
-    // Lightweight playback program used per-frame at play time.
-    const play = this.buildProgram(gl, BREAK_GL_VERT, BREAK_GL_PLAY_FRAG);
-    if (!play) {
-      this.gl = null;
-      return false;
+    for (const program of [field, blit]) {
+      gl.useProgram(program);
+      const loc = gl.getAttribLocation(program, "a_pos");
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     }
-    this.playProgram = play;
-    gl.useProgram(play);
-    const loc = gl.getAttribLocation(play, "a_pos");
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    this.uniforms = {
-      tex: gl.getUniformLocation(play, "u_tex"),
-      texB: gl.getUniformLocation(play, "u_texB"),
-      mix: gl.getUniformLocation(play, "u_mix"),
-      cover: gl.getUniformLocation(play, "u_cover")
+
+    const fu = name => gl.getUniformLocation(field, name);
+    this.fieldUniforms = {
+      res: fu("u_res"),
+      time: fu("u_time"),
+      progress: fu("u_progress"),
+      seed: fu("u_seed"),
+      intensity: fu("u_intensity"),
+      break: fu("u_break"),
+      hot: fu("u_hot")
     };
-    gl.uniform1i(this.uniforms.tex, 0);
-    gl.uniform1i(this.uniforms.texB, 1);
+    this.blitUniforms = { src: gl.getUniformLocation(blit, "u_src") };
+    gl.useProgram(blit);
+    gl.uniform1i(this.blitUniforms.src, 0);
+
+    this.fbo = gl.createFramebuffer();
 
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    // Premultiplied source-over (baked frames store col*a, a); CSS screen-blends
+    // Premultiplied source-over (the field writes col*a, a); CSS screen-blends
     // the canvas so the bright shards glow over the amber deck.
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -621,93 +642,36 @@ class BreakSplashGL {
     return true;
   }
 
-  // Render SPLASH_BAKE_FRAMES steps of the heavy fracture shader into individual
-  // textures through an off-screen framebuffer. Each step is rendered at SS× into a
-  // scratch texture and box-averaged down into the stored frame, so the procedural
-  // cracks come out anti-aliased. Square (aspect 1) so playback can cover-fit any
-  // viewport. Blending is disabled so the premultiplied fragment (col*a, a) is
-  // written verbatim for later blitting.
-  bake(gl, buffer) {
-    const bakeProgram = this.buildProgram(gl, BREAK_GL_VERT, BREAK_GL_FRAG);
-    const downProgram = this.buildProgram(gl, BREAK_GL_VERT, BREAK_GL_DOWNSAMPLE_FRAG);
-    if (!bakeProgram || !downProgram) return false;
-
-    const S = SPLASH_BAKE_SIZE;
-    const hiRes = S * SPLASH_BAKE_SS;
-    const bakeLoc = gl.getAttribLocation(bakeProgram, "a_pos");
-    const downLoc = gl.getAttribLocation(downProgram, "a_pos");
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-
-    gl.useProgram(bakeProgram);
-    const u = name => gl.getUniformLocation(bakeProgram, name);
-    gl.uniform2f(u("u_res"), hiRes, hiRes);
-    gl.uniform1f(u("u_seed"), Math.random() * 100);
-    // Bake the fuller cinematic field; the calmer tiers read fine from the same frames.
-    gl.uniform1f(u("u_intensity"), 1.0);
-    gl.uniform3fv(u("u_break"), this.colors.break);
-    gl.uniform3fv(u("u_hot"), this.colors.hot);
-    const uProgress = u("u_progress"), uTime = u("u_time");
-
-    gl.useProgram(downProgram);
-    gl.uniform1i(gl.getUniformLocation(downProgram, "u_src"), 0);
-
-    // Scratch hi-res target the fracture is rendered into before averaging down.
-    const temp = this.makeTexture(gl, hiRes);
-    const fbo = gl.createFramebuffer();
-    gl.disable(gl.BLEND);
-
-    const refLifeSec = 1.05;   // reference GL life the flowing-glow term is baked against
-    let ok = true;
-    for (let i = 0; i < SPLASH_BAKE_FRAMES; i++) {
-      const tex = this.makeTexture(gl, S);
-      const progress = (i / (SPLASH_BAKE_FRAMES - 1)) * 1.05;
-
-      // 1) heavy fracture -> hi-res scratch
-      gl.useProgram(bakeProgram);
-      gl.enableVertexAttribArray(bakeLoc);
-      gl.vertexAttribPointer(bakeLoc, 2, gl.FLOAT, false, 0, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, temp, 0);
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) { ok = false; gl.deleteTexture(tex); break; }
-      gl.viewport(0, 0, hiRes, hiRes);
-      gl.uniform1f(uProgress, progress);
-      gl.uniform1f(uTime, progress * refLifeSec);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      // 2) box-average scratch -> stored frame
-      gl.useProgram(downProgram);
-      gl.enableVertexAttribArray(downLoc);
-      gl.vertexAttribPointer(downLoc, 2, gl.FLOAT, false, 0, 0);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-      gl.viewport(0, 0, S, S);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, temp);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      this.frames.push(tex);
-    }
+  /**
+   * Pay the driver's deferred compile cost once, at load, off-screen.
+   *
+   * A GL program is not truly compiled when `linkProgram` returns — most drivers
+   * specialize on first draw. Without this the first guard break of a session
+   * pays for both programs mid-animation, which is the hitch the old bake was
+   * built to avoid. One real draw of each program, at the size they will
+   * actually run at, is enough to make the first live frame the same cost as
+   * every later one.
+   */
+  warm() {
+    const gl = this.gl;
+    if (!gl || this.warmed) return false;
+    this.warmed = true;
+    this.ensureScratch();
+    // Render one frame of the real field, then one real downsample blit. The
+    // canvas is detached, so nothing of this reaches the screen.
+    this.renderField(0, 0);
+    this.blit();
+    // Force the pipeline to actually execute rather than sitting in the queue.
     gl.finish();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(temp);
-    gl.deleteProgram(bakeProgram);
-    gl.deleteProgram(downProgram);
-
-    if (!ok) {
-      for (const t of this.frames) gl.deleteTexture(t);
-      this.frames = [];
-      return false;
-    }
     return true;
   }
 
-  // Allocate an empty RGBA texture with edge clamping + linear filtering.
-  makeTexture(gl, size) {
+  // Allocate an empty RGBA texture with edge clamping + linear filtering. The
+  // linear filter is what makes the downsample an honest box average.
+  makeTexture(gl, w, h) {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -715,13 +679,98 @@ class BreakSplashGL {
     return tex;
   }
 
-  get available() {
-    return !!this.gl && this.frames.length > 0;
+  // The supersampled target the field is rendered into before averaging down.
+  // Re-allocated only when the viewport or the SS rung actually changes.
+  ensureScratch() {
+    const gl = this.gl;
+    if (!gl) return false;
+    const ss = SPLASH_SS_LADDER[this.ssIndex];
+    const [vw, vh] = this.viewportSize();
+    const w = Math.max(1, Math.round(vw * ss));
+    const h = Math.max(1, Math.round(vh * ss));
+    if (this.scratch && this.scratchSize[0] === w && this.scratchSize[1] === h) return true;
+    if (this.scratch) { try { gl.deleteTexture(this.scratch); } catch { /* best-effort */ } }
+    this.scratch = this.makeTexture(gl, w, h);
+    this.scratchSize = [w, h];
+    return true;
   }
 
-  // Attach the persistent canvas to a splash element and play back the baked
-  // frames. A second guard break that lands mid-cycle steals the canvas from the
-  // previous splash (whose CSS text/deck keep animating without the GL layer).
+  // The size the field is composed at, before supersampling. Clamped on the long
+  // edge so an ultrawide or 4K display does not allocate an unreasonable scratch.
+  viewportSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = Math.max(1, Math.round(window.innerWidth * dpr));
+    let h = Math.max(1, Math.round(window.innerHeight * dpr));
+    const longest = Math.max(w, h);
+    if (longest > SPLASH_MAX_EDGE) {
+      const k = SPLASH_MAX_EDGE / longest;
+      w = Math.max(1, Math.round(w * k));
+      h = Math.max(1, Math.round(h * k));
+    }
+    return [w, h];
+  }
+
+  // One live evaluation of the fracture into the scratch texture.
+  renderField(progressValue, timeValue) {
+    const gl = this.gl;
+    const [w, h] = this.scratchSize;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratch, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return false;
+    }
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(this.fieldProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    const loc = gl.getAttribLocation(this.fieldProgram, "a_pos");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    // The field aspect-corrects from u_res, so handing it the true viewport
+    // shape frames the impact correctly at any aspect — the square bake had to
+    // be centre-cropped to achieve the same thing, and lost pixels doing it.
+    gl.uniform2f(this.fieldUniforms.res, w, h);
+    gl.uniform1f(this.fieldUniforms.progress, progressValue);
+    gl.uniform1f(this.fieldUniforms.time, timeValue);
+    gl.uniform1f(this.fieldUniforms.seed, this.seed);
+    gl.uniform1f(this.fieldUniforms.intensity, 1.0);
+    gl.uniform3fv(this.fieldUniforms.break, this.colors.break);
+    gl.uniform3fv(this.fieldUniforms.hot, this.colors.hot);
+    gl.disable(gl.BLEND);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return true;
+  }
+
+  // Average the supersampled scratch down onto the canvas. Sampling a 2× texture
+  // at 1× with LINEAR filtering lands exactly between four texels, which is a
+  // true 2×2 box average — this is what keeps the cracks from aliasing.
+  blit() {
+    const gl = this.gl;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.useProgram(this.blitProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    const loc = gl.getAttribLocation(this.blitProgram, "a_pos");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.scratch);
+    gl.uniform1i(this.blitUniforms.src, 0);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  get available() {
+    return !!this.gl && !!this.fieldProgram && !!this.blitProgram;
+  }
+
+  // Attach the persistent canvas to a splash element and play the fracture live.
+  // A second guard break that lands mid-cycle steals the canvas from the previous
+  // splash (whose CSS text/deck keep animating without the GL layer).
   play(host, { lifeMs = 1050 } = {}) {
     if (!this.available || !host) return false;
     if (this.raf) window.cancelAnimationFrame(this.raf);
@@ -729,6 +778,10 @@ class BreakSplashGL {
 
     this.host = host;
     this.lifeMs = Math.max(400, lifeMs);
+    // A fresh seed per break: the fracture is live now, so no two guard breaks
+    // have to look identical the way a shared filmstrip forced them to.
+    this.seed = Math.random() * 100;
+    this.slowFrames = 0;
 
     // Insert just after the burst so stacking matches the old inline canvas.
     const burst = host.querySelector(".gluni-break-splash-burst");
@@ -737,6 +790,7 @@ class BreakSplashGL {
 
     this.resize();
     this.start = performance.now();
+    this.lastFrameAt = this.start;
     this.raf = window.requestAnimationFrame(() => this.frame());
     return true;
   }
@@ -746,7 +800,7 @@ class BreakSplashGL {
     this.host = null;
   }
 
-  // Stop the current cycle but keep the context/baked frames alive for reuse.
+  // Stop the current cycle but keep the context and programs alive for reuse.
   // Only honours the request if `host` still owns the canvas (guards against a
   // newer splash that has already taken it over).
   stop(host = null) {
@@ -793,31 +847,42 @@ class BreakSplashGL {
       this.canvas.height = h;
     }
     gl.viewport(0, 0, w, h);
-    // Centre-crop the square baked frame to cover the viewport (keeps the impact
-    // circle circular at any aspect ratio).
-    const m = Math.max(w, h);
-    this.cover = [w / m, h / m];
+    this.ensureScratch();
+  }
+
+  // Drop one rung of the supersampling ladder. Called only when this machine has
+  // actually missed frames twice running, so a capable GPU never loses quality
+  // and a struggling one recovers within a few frames of a one-second beat.
+  degrade() {
+    if (this.ssIndex >= SPLASH_SS_LADDER.length - 1) return false;
+    this.ssIndex++;
+    this.slowFrames = 0;
+    this.ensureScratch();
+    return true;
   }
 
   frame() {
     const gl = this.gl;
     if (!gl) return;
-    const elapsed = performance.now() - this.start;
+    const now = performance.now();
+    const frameMs = now - this.lastFrameAt;
+    this.lastFrameAt = now;
+
+    const elapsed = now - this.start;
     const progress = elapsed / this.lifeMs;
-    const last = this.frames.length - 1;
-    const fpos = Math.max(0, Math.min(last, (progress / 1.05) * last));
-    const i = Math.min(last, Math.floor(fpos));
-    const j = Math.min(last, i + 1);
-    gl.useProgram(this.playProgram);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.frames[i]);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.frames[j]);
-    gl.uniform1f(this.uniforms.mix, fpos - i);
-    gl.uniform2f(this.uniforms.cover, this.cover[0], this.cover[1]);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    if (this.renderField(Math.min(progress, 1.05), elapsed / 1000)) this.blit();
+
+    // Adaptive quality: two slow frames in a row and the ladder steps down. The
+    // first frame after a resize or attach is always slow, so a single spike is
+    // deliberately not enough.
+    if (frameMs > SPLASH_SLOW_MS) {
+      this.slowFrames++;
+      if (this.slowFrames >= 2) this.degrade();
+    } else {
+      this.slowFrames = 0;
+    }
+
     if (progress >= 1.05) {
       this.stop();
       return;
@@ -833,10 +898,10 @@ class BreakSplashGL {
     const gl = this.gl;
     this.gl = null;
     if (gl) {
-      for (const t of this.frames) {
-        try { gl.deleteTexture(t); } catch { /* best-effort cleanup */ }
-      }
-      this.frames = [];
+      try { if (this.scratch) gl.deleteTexture(this.scratch); } catch { /* best-effort cleanup */ }
+      try { if (this.fbo) gl.deleteFramebuffer(this.fbo); } catch { /* best-effort cleanup */ }
+      this.scratch = null;
+      this.fbo = null;
       try {
         gl.getExtension("WEBGL_lose_context")?.loseContext();
       } catch {

@@ -63,6 +63,9 @@ function maybePlay(message, check) {
   // who released it. Letting the render path fire too would play it twice for
   // anyone whose re-render lands inside the freshness window.
   if (check.releasedAt) return;
+  // A manual surge is played by the GM who applied it and broadcast to everyone
+  // else; letting the flag render fire it too would double it for the GM.
+  if (check.manual) return;
   const fresh = Number.isFinite(check.appliedAt) && Date.now() - check.appliedAt < REVEAL_WINDOW_MS;
   if (!fresh) return;
   played.add(message.id);
