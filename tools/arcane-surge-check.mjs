@@ -798,6 +798,22 @@ for (const [label, frag, uniforms, hostRel] of [
     fail("gen-surge-textures.mjs", "says nothing about transmission, so the next person to retune the bump will take the die's glass away without knowing");
   }
 
+  /* AND WHERE THE FACE IS. The square the baker draws is a texture TILE; what
+     samples it is a triangle whose centroid sits at y = 0.576, not 0.5, and
+     whose largest inscribed circle is 0.575 of the half-tile. Art composed on
+     the SQUARE is therefore both off-centre and clipped by the die's own edges,
+     and it looks perfectly correct in the contact sheet, which prints squares.
+     That is how the rings shipped: struck at 0.62 about the square's centre, so
+     every one of them ran off two of its three edges, twenty times per die. The
+     pixels are measured in the baker's own --check; here we only hold it to
+     naming the geometry, because a recipe that has stopped stating it is a
+     recipe that has stopped thinking about it. */
+  for (const name of ["FACE_TRIANGLE", "FACE_INRADIUS"]) {
+    if (!bakerSrc.includes(name)) {
+      fail("gen-surge-textures.mjs", `does not define ${name} — a d20 face is a triangle that is not concentric with its texture tile, and art centred on the tile is clipped by the die's own edges`);
+    }
+  }
+
   /* THE DIE'S BODY AND THE MARK BURNING INSIDE IT ARE ONLY MEANINGFUL AGAINST
      EACH OTHER, and they are written in two entirely different files — the body
      reaches DSN as a colorset field, the glyph is baked into an emissive PNG by
@@ -806,11 +822,18 @@ for (const [label, frag, uniforms, hostRel] of [
      the one thing the die exists to say was invisible, and each half looked
      perfectly correct in its own file.
 
-     Both now come from DIE_KEYS, and this measures the angle between them.
-     Two further things the body has to be: not a near-black, because a
-     transmissive material carries its tint through the whole casting and a
-     near-black body is a void rather than dark glass; and darker than the
-     glyph, since the glyph is a light source burning inside it. */
+     Both now come from DIE_KEYS, and this measures the distance between them —
+     on EITHER of the two axes a mark can be seen by. Hue is the obvious one and
+     was the only one measured at first, which was wrong: the die is black glass
+     now, and at that value a hue is not a colour anybody can see. So a hue
+     separation OR a value separation satisfies it, and one of them must.
+
+     Two more, both of which black glass is what made necessary. The glyph has
+     to out-value the body, because it is a light source burning inside it. And
+     the EDGE has to out-value the body too: DSN paints the bevels between the
+     faces with it, and on a dark die that is the only thing giving the shape a
+     silhouette against the table. */
+  let dieBodyLum = null;
   {
     const { DIE_KEYS } = await import(`../${FEATURE}/palette.mjs`);
     const { PALETTE } = await import("../scripts/core/theme.mjs");
@@ -833,17 +856,23 @@ for (const [label, frag, uniforms, hostRel] of [
     }
     const bodyHex = PALETTE[DIE_KEYS?.body];
     const glyphHex = PALETTE[DIE_KEYS?.glyph];
+    const edgeHex = PALETTE[DIE_KEYS?.edge];
+    if (bodyHex) dieBodyLum = lumOf(bodyHex);
     if (bodyHex && glyphHex) {
       let apart = Math.abs(hueOf(bodyHex) - hueOf(glyphHex));
       if (apart > 180) apart = 360 - apart;
-      if (apart < 45) {
-        fail("palette.mjs", `the die's body (${DIE_KEYS.body}) and its surge glyph (${DIE_KEYS.glyph}) are ${apart.toFixed(0)}° apart in hue — the mark does not read against the glass it burns in`);
+      const value = lumOf(glyphHex) - lumOf(bodyHex);
+      if (apart < 45 && value < 0.35) {
+        fail("palette.mjs", `the die's body (${DIE_KEYS.body}) and its surge glyph (${DIE_KEYS.glyph}) are ${apart.toFixed(0)}° apart in hue and ${value.toFixed(2)} apart in value — the mark reads against the glass it burns in on neither axis`);
       }
-      if (lumOf(glyphHex) <= lumOf(bodyHex)) {
+      if (value <= 0) {
         fail("palette.mjs", `the surge glyph (${DIE_KEYS.glyph}) is no brighter than the body (${DIE_KEYS.body}); it is a light source inside the die and has to out-value it`);
       }
-      if (/^ink\d$/.test(DIE_KEYS.body)) {
-        fail("palette.mjs", `the die's body is ${DIE_KEYS.body}, a near-black; on a transmissive material that renders as a void rather than as dark glass`);
+    }
+    if (bodyHex && edgeHex) {
+      const rim = lumOf(edgeHex) - lumOf(bodyHex);
+      if (rim < 0.2) {
+        fail("palette.mjs", `the die's bevels (${DIE_KEYS.edge}) are only ${rim.toFixed(2)} brighter than its body (${DIE_KEYS.body}); the edge is the whole silhouette of a dark die`);
       }
     }
     // And neither file may state a colour of its own any more.
@@ -879,11 +908,31 @@ for (const [label, frag, uniforms, hostRel] of [
     fail("dsn.mjs", "the colorset's name is not DSN_COLORSET, so the name tagRoll asks for is not the name it registered under");
   }
 
-  /* The severity d100 was asked for emission too, and a colorset has no
-     emissive MAP slot — `emissiveLabels` is the only channel it has. Without it
-     that die is the one surface in the feature wearing relief and no light. */
-  if (!/emissiveLabels:\s*true/.test(dsnSrc)) {
-    fail("dsn.mjs", "the colorset does not set emissiveLabels, so the severity roll's numerals are cut into unlit glass");
+  /* THE NUMBERED DICE'S NUMERALS HAVE TO READ, and there are exactly two ways
+     to get there. `emissiveLabels` lights DSN's own numeral canvas — a colorset
+     has no emissive MAP slot, so it is the only emission channel one has. Or
+     the body is dark enough that a white numeral with an `ink0` outline carries
+     itself.
+
+     Which is not a free choice. Emission on ANY die switches DSN's whole scene
+     onto its bloom path for the length of the throw — a second full render plus
+     ten blur passes, and on a transmissive material a second full-viewport 4×
+     MSAA transmission pass with it. So the second route is the cheap one, and
+     it is only open while the glass stays black. Lighten the body again and
+     this asks for the glow back. */
+  if (!/emissiveLabels:\s*true/.test(dsnSrc) && !(dieBodyLum !== null && dieBodyLum < 0.15)) {
+    fail("dsn.mjs", "the colorset neither lights its labels nor sits on glass dark enough to carry an unlit numeral, so the severity roll's numbers are cut into glass nothing separates them from");
+  }
+
+  /* AND THE PRESETS HAVE TO BE WARMED. DSN loads a preset's images lazily,
+     inside `create()` at the first throw, with one await per face — sixty
+     serial round-trips for a preset like this one, times the three level
+     systems, in the middle of an animation. 6.2.9 added
+     `preloadPresets(systemId)` precisely for presets a user never selects in
+     their own appearance settings, which is all three of ours, and says in its
+     own source that without it they "cause visible lag". */
+  if (!/preloadPresets/.test(stripComments(dsnSrc))) {
+    fail("dsn.mjs", "does not warm its presets — DSN fetches a preset's twenty labels, twenty bumps and twenty emissive maps one await at a time inside the first roll");
   }
 
   /* Bump and emissive maps both live behind DSN's "realistic lighting", which

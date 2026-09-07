@@ -386,11 +386,92 @@ Two smaller consequences of the same material:
   entry for a type rather than sitting beside it — so this has to be a decision
   made before registration, not at roll time.
 
+### Emission is not a local cost
+
 The severity d100 has no per-face maps to carry emission (a colorset has no
-emissive *map* slot; that belongs to a preset), so its one channel is
-`emissiveLabels: true`, which lights DSN's own numeral canvas. Without it that
-die is the only surface in the feature wearing relief and no light, and a number
-cut into unlit glass is a number you have to hunt for.
+emissive *map* slot; that belongs to a preset), so its one channel would be
+`emissiveLabels: true`, lighting DSN's own numeral canvas. It used to have it.
+It does not any more, and the reason is measured rather than aesthetic.
+
+**Any** non-black `emissive` on **any** material in the dice scene switches the
+whole canvas onto DSN's bloom path for the length of the throw.
+`DiceScene.compositorRender` walks the scene each frame looking for one, and on
+finding it renders the scene a *second* time through `bloomComposer` and puts
+that through `UnrealBloomPass` — five downsample blurs and five upsample blurs
+— before compositing. And because these dice are transmissive, each of those
+scene renders drags a `renderTransmissionPass` with it: three.js sizes that
+target to the **full viewport**, forces at least **4× MSAA** on it, and
+regenerates its **entire mipmap chain**, every frame. So one glowing numeral
+roughly doubles the per-frame cost of every die on the table.
+
+The surge d20 pays it, because a glyph that does not glow is not a glyph — and
+its preset sets `emissive` directly, which takes precedence over the colorset
+anyway. The severity d100 does not need to: its numerals are white, outlined in
+`ink0`, on black glass. The check tool holds the *invariant* rather than the
+implementation — the colorset must either light its labels **or** sit on a body
+below 0.15 relative luminance. Lighten the glass again and it asks for the glow
+back.
+
+### The presets have to be warmed
+
+A DSN preset loads nothing when it is registered. Its images are fetched inside
+`DiceFactory.create()`, at the first throw, and `loadTextureType` walks the list
+with one `await` per entry — for a preset like this one that is sixty serial
+round-trips (twenty labels, twenty bumps, twenty emissive maps), times three
+level systems, in the middle of an animation.
+
+DSN 6.2.9 added `dice3d.preloadPresets(systemId)` for exactly this case and says
+so in its own source: presets a user never selects in their appearance settings
+"load lazily on the first roll and cause visible lag". All three of ours are
+presets nobody selects. **Not calling it was the lag**, and the check tool now
+refuses a registration that does not.
+
+It does not cover everything, and the remainder is worth knowing about.
+`createMaterial` still bakes each material's normal map out of the finished
+bump atlas the first time it is used, and that is a 2048² Sobel run in
+JavaScript on the main thread — **measured at 370–520 ms per material** — once
+per level system. That one is DSN's own, shared by every die in the world with
+realistic lighting on, and there is no public seam to warm it through. The only
+lever on it is registering fewer systems, and the per-level face counts are what
+make three of them necessary.
+
+For scale, on the same machine the feature's own full-screen shaders measure
+**0.89 ms** (surge) and **0.37 ms** (verdict) per frame at their worst shipping
+size — 5120×2880, the supersampler's top rung — and the HUD crack strip 0.010 ms.
+The live beats are not where the time goes.
+
+### A d20 face is not centred in its texture tile
+
+DSN lays its faces out as 256px tiles in one atlas and draws a label image
+across a whole tile, 1:1. So the square the baker draws **is** a tile — but the
+geometry sampling it is a triangle, and the triangle is not concentric with the
+square. Read off the `uv` attribute of DSN's own d20 model (`DICE_MODELS.d20`
+in `engine/DiceModels.js`), all twenty faces land in their tile identically:
+
+| | |
+|---|---|
+| apex | (0.5006, 0.0010) |
+| base | y = 0.8635, x 0.003 → 0.999 |
+| centroid | **(0.5006, 0.5760)** |
+| incircle | **r = 0.2875** of the tile |
+
+Apex *up*, because the label texture is bound with `flipY = false`, so v runs
+down the canvas the same way a canvas y does.
+
+Two things follow, and the first pass here had both wrong. **The centre of the
+face is at y = 0.576, not 0.5** — a triangle's centroid sits a third of its
+height up from the base — so art centred on the square is struck an eighth of a
+tile toward the apex. And **the largest circle that fits is the incircle**,
+0.575 in the ±1 face coordinates the baker works in; anything wider runs off two
+of the three edges. The concentric grooves were struck at 0.62 about the
+square's centre, which is outside the incircle *and* off the face's own centre,
+so every ring on the die was clipped by two of its own edges, twenty times over.
+
+None of this shows in the contact sheet, which prints squares. `--check` scans
+the face instead: any pixel carrying a mark must fall inside `FACE_TRIANGLE`.
+That is a stronger test than a radius would be — an off-centre mark *within* the
+incircle still fails it, which is exactly the half of this defect a radius check
+would have missed.
 
 ### The glass and the mark are one statement
 
@@ -406,10 +487,28 @@ die was the feature's `--gl-accent` teal and so was the whirlpool, so the single
 thing the die exists to say was invisible, and each half looked entirely correct
 in its own file.
 
-The check tool measures the angle between them and requires ≥ 45°; the shipped
-pair is 86° apart (`apex` #b14bff at hue 274, `cyan` #5eeaff at hue 188). It
-also requires the glyph to out-value the body, since the glyph is a light source
-burning inside it, and refuses an `ink*` body for the reason above.
+**The body is black glass** (`ink1` #080b11). On a transmissive material the
+tint is carried through the whole casting rather than painted on the surface, so
+this does not render as a black *surface* — it renders as smoked glass, the
+frost still catching light and everything behind the die dimmed rather than
+coloured. An earlier pass used `apex`, a lit violet, on the reasoning that a
+near-black body would come out as a void. That reasoning held only while the die
+had nothing else in it; with the glyph emitting and the frost lit, black is the
+material the die wanted.
+
+What it costs is the hue axis, and that is the thing to hold on to: **at this
+value a hue is not a colour anybody can see**, so the mark can no longer read
+against the body by *being* a different hue. It reads by **value** instead —
+0.77 of relative luminance between them, blowing to white at the eye. So the
+check measures both axes and requires one of them: ≥ 45° of hue **or** ≥ 0.35 of
+value. It also requires the glyph to out-value the body, since the glyph is a
+light source burning inside it.
+
+And it requires the **edge** to out-value the body by ≥ 0.2. That one is what
+black glass made necessary: DSN paints the bevels between the faces with
+`DIE_KEYS.edge`, and on a dark die that is the only thing giving the shape a
+silhouette against the table. `violet` rather than `violetHot` — on black the
+pale one was the loudest thing on the die.
 
 The glyph deliberately stays in the **cool** arcane family rather than going hot.
 The severity tiers own amber and red (`TIER_KEYS`: cyan, warn, warnDeep,

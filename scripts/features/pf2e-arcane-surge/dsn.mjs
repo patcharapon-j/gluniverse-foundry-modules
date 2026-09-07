@@ -163,28 +163,45 @@ function colorset() {
        inside it — so both are one statement in `palette.mjs` and neither file
        names a colour of its own. See DIE_KEYS there for why it is this one.
 
-       Two things it has to be at once. It needs light in it: a transmissive
-       material carries its tint through the whole casting rather than painting
-       it on the surface, so a near-black body (this was `ink2`) is not dark
-       glass, it is a void with a figure floating in it. And it has to be far
-       enough from the glyph's hue to be a background for it — the version
-       after that was the suite's teal, which is the feature's own accent and
-       was also, exactly, the colour of the glyph. */
+       It is BLACK GLASS. On a transmissive material the tint is carried through
+       the whole casting rather than painted on the surface, so this does not
+       come out as a black surface — it comes out as smoked glass, with the
+       frost still catching light and everything behind the die dimmed rather
+       than coloured. What that costs is the hue axis: at this value a hue is
+       not something anybody can see, so the mark cannot read against the body
+       by being a different hue and has to read by VALUE instead. It does, by
+       0.77 of relative luminance. */
     background: PALETTE[DIE_KEYS.body],
     outline: PALETTE.ink0,
+    /* THE BEVELS, and on a black die they are the silhouette. DSN paints the
+       chamfers between the faces with this rather than with the body colour,
+       so it is the only thing separating the die from the table behind it. */
     edge: PALETTE[DIE_KEYS.edge],
     // "glass" is DSN's transmissive material, and it is the point: nothing here
     // paints over it. The frost is relief only, carried by the texture's bump.
     material: "glass",
     texture: DSN_TEXTURE,
     font: DICE_FONT,
-    /* The severity d100's only emission channel.
-       A colorset has no emissive MAP slot — that belongs to a preset — so the
-       one thing it can ask for is this, which lights DSN's own numeral canvas.
-       Without it the severity roll is the one die in the feature wearing relief
-       and no light, and a number cut into unlit glass is a number you hunt for.
-       The surge die overrides it with real per-face maps below. */
-    emissiveLabels: true,
+    /* NO `emissiveLabels`, AND THAT IS A PERFORMANCE DECISION RATHER THAN A
+       LOOK ONE.
+
+       It used to be here, to light DSN's own numeral canvas on the severity
+       d100. But emission on a DSN die is not a local cost. `DiceScene`'s
+       compositor walks the whole scene every frame and, the moment ANY material
+       has a non-black `emissive`, switches the entire dice canvas onto its
+       bloom path: a second full render of the scene, then UnrealBloomPass's ten
+       blur passes, then the composite. And because these dice are transmissive,
+       that second render drags a second `renderTransmissionPass` with it —
+       three.js sizes that target to the full viewport, forces at least 4×
+       MSAA on it and regenerates its whole mipmap chain, every frame. So one
+       glowing numeral roughly doubles the per-frame cost of every die on the
+       table for as long as the throw lasts.
+
+       The surge d20 pays it, because a glyph that does not glow is not a glyph
+       — its preset sets `emissive` directly, which takes precedence over this
+       anyway. The severity d100 does not need to: its numerals are white, with
+       an `ink0` outline, on black glass. That is as much contrast as a numeral
+       can have, and it costs nothing. */
   };
 }
 
@@ -293,7 +310,32 @@ export async function registerDiceSoNice(dice3d) {
     });
   }
 
-  log(`Arcane Surge | Dice So Nice registered (bare frosted glass, ${DICE_FONT} numerals, ${levels.length} level presets for d${SURGE_DIE_DENOMINATION})`);
+  /* WARM THEM NOW, BECAUSE OTHERWISE THE FIRST ROLL PAYS FOR ALL OF IT.
+
+     A DSN preset loads nothing when it is registered. Its images are fetched
+     inside `create()`, at the first throw — and `loadTextureType` walks the
+     list with one `await` per entry, so a preset like ours is sixty serial
+     round-trips (twenty labels, twenty bumps, twenty emissive maps), three
+     times over, in the middle of an animation. DSN 6.2.9 added
+     `preloadPresets(systemId)` for exactly this case and says so in its own
+     source: presets a user never selects in their appearance settings "load
+     lazily on the first roll and cause visible lag". We register three systems
+     nobody selects. Not calling it was the lag.
+
+     It does not cover everything. DSN still bakes each material's normal map
+     from the finished bump atlas on first use, and that is a 2048² Sobel run in
+     JS on the main thread — measured at 370–520 ms per material here, once per
+     level system. That one is DSN's own and shared by every die with realistic
+     lighting on; there is no public seam to warm it through. Registering fewer
+     systems is the only lever we have on it, and the face counts are what make
+     three necessary. */
+  if (typeof dice3d.preloadPresets === "function") {
+    await Promise.all(levels.map((level) =>
+      dice3d.preloadPresets(systemFor(level))
+        .catch((e) => warn(`Arcane Surge | could not warm the ${level} preset:`, e))));
+  }
+
+  log(`Arcane Surge | Dice So Nice registered (black frosted glass, ${DICE_FONT} numerals, ${levels.length} level presets for d${SURGE_DIE_DENOMINATION})`);
   return true;
 }
 

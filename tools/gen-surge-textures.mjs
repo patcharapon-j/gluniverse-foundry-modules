@@ -197,6 +197,69 @@ function frost(x, y, seed) {
   return clamp01(0.55 + (fine - 0.5) * 0.55 + (swell - 0.5) * 0.45);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   Where the face actually is inside this square
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * A D20 FACE IS NOT CENTRED IN ITS TEXTURE TILE, and every field below is drawn
+ * around where it really is.
+ *
+ * Dice So Nice lays its faces out as 256px tiles in one atlas and draws a label
+ * image across a whole tile, 1:1 — so this square IS a tile. But the geometry
+ * sampling it is a triangle, and the triangle is not concentric with the square.
+ * Read off the `uv` attribute of DSN's own d20 model (`DICE_MODELS.d20` in
+ * `engine/DiceModels.js`), all twenty faces land in their tile identically:
+ *
+ *     apex     (0.5006, 0.0010)           apex UP — the label texture is bound
+ *     base     y = 0.8635, x 0.003→0.999  with `flipY = false`, so v runs DOWN
+ *     centroid (0.5006, 0.5760)           the canvas the same way y does
+ *
+ * Two numbers fall out of that, and the first pass here had both wrong:
+ *
+ *   THE CENTRE OF THE FACE IS AT y = 0.576, NOT 0.5. A triangle's centroid sits
+ *   a third of its height up from the base, so art centred on the SQUARE is
+ *   struck an eighth of a tile toward the apex — off-centre on a die that turns,
+ *   and lopsidedly clipped besides.
+ *
+ *   THE LARGEST CIRCLE THAT FITS IS THE INCIRCLE, r = 0.2875 of the tile, which
+ *   is 0.575 in the ±1 coordinates below. Anything wider runs off two of the
+ *   three edges — and the rings were struck at 0.62 about the SQUARE's centre,
+ *   so every one of them did, on every face of the die.
+ *
+ * None of this shows in the contact sheet, which prints squares. It is measured
+ * in `--check` instead.
+ */
+const FACE_CX = 0.5;
+const FACE_CY = 0.576;
+/** The face's three corners, in tile coordinates. */
+const FACE_TRIANGLE = Object.freeze([[0.0026, 0.8635], [0.9985, 0.8635], [0.5006, 0.0010]]);
+/** Radius of the inscribed circle, in face units (1.0 = half a tile). */
+const FACE_INRADIUS = 0.575;
+
+/** Face-centred coordinates: ±1 across a tile, origin on the triangle's centre. */
+function facePoint(x, y) {
+  return [(x - FACE_CX) * 2, (y - FACE_CY) * 2];
+}
+
+/** Signed distance from (x, y) to the line pq, positive on `opposite`'s side. */
+function edgeDistance(x, y, p, q, opposite) {
+  const nx = q[1] - p[1];
+  const ny = p[0] - q[0];
+  const len = Math.hypot(nx, ny) || 1;
+  const here = ((x - p[0]) * nx + (y - p[1]) * ny) / len;
+  const there = ((opposite[0] - p[0]) * nx + (opposite[1] - p[1]) * ny) / len;
+  return there >= 0 ? here : -here;
+}
+
+/** Whether a tile coordinate is on the die at all, with `inset` to spare. */
+function insideFace(x, y, inset = 0) {
+  const [a, b, c] = FACE_TRIANGLE;
+  return edgeDistance(x, y, a, b, c) >= inset
+    && edgeDistance(x, y, b, c, a) >= inset
+    && edgeDistance(x, y, c, a, b) >= inset;
+}
+
 /**
  * The bevelled grooves around the glyph — CONCENTRIC RINGS, not a border.
  *
@@ -207,18 +270,20 @@ function frost(x, y, seed) {
  * any face polygon, and they suit a whirlpool besides — the glyph looks like it
  * is turning inside them.
  *
- * Everything therefore stays inside GLYPH_SAFE, comfortably within the triangle
- * inscribed in this square.
+ * Everything therefore stays inside GLYPH_SAFE, which sits below the face's
+ * INCIRCLE — the largest circle the triangle admits — with the outer ring's own
+ * half-width to spare. See FACE_INRADIUS above; the previous value was outside
+ * it, about the wrong centre, and every ring on the die was clipped by two of
+ * its own edges.
  *
  * Cut deliberately deep and narrow: on a tumbling die a shallow wide channel
  * reads as a smudge, and it is the hard shoulder either side of a narrow one
  * that actually catches a highlight.
  */
-const GLYPH_SAFE = 0.62;
+const GLYPH_SAFE = 0.5;
 
 function groove(x, y) {
-  const dx = (x - 0.5) * 2;
-  const dy = (y - 0.5) * 2;
+  const [dx, dy] = facePoint(x, y);
   const r = Math.hypot(dx, dy);
   const ring = (at, halfWidth) =>
     (1 - smoothstep(halfWidth * 0.55, halfWidth, Math.abs(r - at)));
@@ -239,8 +304,7 @@ function groove(x, y) {
  * reach the groove.
  */
 function glyph(x, y) {
-  const dx = (x - 0.5) * 2;
-  const dy = (y - 0.5) * 2;
+  const [dx, dy] = facePoint(x, y);
   /* Scaled into the safe radius, INSIDE the inner groove. A d20 face is a
      triangle; art drawn out toward the square's edge is simply not on the die. */
   const scale = 1 / (GLYPH_SAFE - 0.11);
@@ -374,7 +438,7 @@ function bakeFace(face) {
          Toward the eye it blows to white, so the mark has a value range of its
          own rather than being one flat wash: across a table the centre is what
          you catch first and the arms are what tell you what it was. */
-      const rc = Math.hypot((x - 0.5) * 2, (y - 0.5) * 2);
+      const rc = Math.hypot(...facePoint(x, y));
       const heat = 1 - smoothstep(0.05, 0.32, rc);
       const glow = face === "surge" ? Math.pow(mark, 1.15) : 0;
       for (let c = 0; c < 3; c++) {
@@ -496,12 +560,44 @@ function check() {
     if (level === "stable" && glyphFaces(level, config) !== 0) problems.push("Stable must have no glyph faces");
   }
 
-  // The glyph has to be centred, or it wobbles as the die turns. Measured, not
-  // asserted: the centre of mass of the drawn mark must sit on the face centre.
+  /* AND EVERY MARK HAS TO BE ON THE DIE. The square this bakes is a texture
+     TILE; what samples it is a triangle, and not a concentric one — see
+     FACE_TRIANGLE. So art can be perfectly composed here and still be cut by
+     the die's own edges, and the contact sheet cannot show you that, because it
+     prints squares. It shipped that way: the rings were struck at 0.62 about
+     the SQUARE's centre, which is both outside the incircle and 0.076 off the
+     face's own centre, so each ring ran off two of its three edges on all
+     twenty faces.
+
+     Scanned rather than inferred from the radii, so a mark that is not radially
+     symmetric is held to the same rule. */
+  const MARK_FLOOR = 0.02;
+  for (const face of ["blank", "surge"]) {
+    let worst = 0;
+    for (let py = 0; py < SIZE; py++) {
+      const y = (py + 0.5) / SIZE;
+      for (let px = 0; px < SIZE; px++) {
+        const x = (px + 0.5) / SIZE;
+        const mark = groove(x, y) + (face === "surge" ? glyph(x, y) : 0);
+        if (mark <= MARK_FLOOR || insideFace(x, y)) continue;
+        worst = Math.max(worst, Math.hypot(...facePoint(x, y)));
+      }
+    }
+    if (worst > 0) {
+      problems.push(
+        `${face}-bump.png draws out to ${worst.toFixed(3)} of the face, past the triangle ` +
+        `the die samples (its incircle is ${FACE_INRADIUS}); that art is clipped by the die's own edges`
+      );
+    }
+  }
+
+  // The glyph has to be centred, or it wobbles as the die turns — and centred on
+  // the FACE, which is not the centre of this square. Measured, not asserted:
+  // the centre of mass of the drawn mark must sit on the triangle's centroid.
   const centre = glyphCentroid();
   if (centre.mass <= 0) problems.push("the surge glyph is empty");
   else {
-    const off = Math.hypot(centre.x - 0.5, centre.y - 0.5);
+    const off = Math.hypot(centre.x - FACE_CX, centre.y - FACE_CY);
     if (off > 0.01) problems.push(`the surge glyph is off-centre by ${(off * 100).toFixed(1)}% of the face`);
   }
 
@@ -511,7 +607,7 @@ function check() {
     process.exitCode = 1;
   } else {
     const summary = rollingLevels(config).map((l) => `${l}:${glyphFaces(l, config)}`).join(" ");
-    console.log(`gen-surge-textures --check: complete (${summary}, glyph centred to ${(Math.hypot(centre.x - 0.5, centre.y - 0.5) * 1000).toFixed(2)}‰)`);
+    console.log(`gen-surge-textures --check: complete (${summary}, glyph centred to ${(Math.hypot(centre.x - FACE_CX, centre.y - FACE_CY) * 1000).toFixed(2)}‰)`);
   }
 }
 
@@ -530,7 +626,7 @@ function glyphCentroid() {
       sy += v * y;
     }
   }
-  return mass > 0 ? { x: sx / mass, y: sy / mass, mass } : { x: 0.5, y: 0.5, mass: 0 };
+  return mass > 0 ? { x: sx / mass, y: sy / mass, mass } : { x: FACE_CX, y: FACE_CY, mass: 0 };
 }
 
 /**

@@ -510,21 +510,63 @@ both faces now, and separately requires the *tiling* surface to stay wholly
 inside it, since one dark pixel in a map drawn under every face is a permanent
 opaque smear repeated across the table.
 
-Two smaller ones in the same family. The die's body colour has to have light in
-it — a transmissive material carries its tint through the whole casting instead
-of painting it on, so a near-black background renders as a void rather than as
-dark glass, and the check refuses an `ink*` token there. It must also be far
-enough from the *glyph's* hue to be a background for it: those two are produced
-in completely different places (the body is a colorset field in `dsn.mjs`, the
-glyph is baked into an emissive PNG by the texture tool) and, stated separately,
-they landed on the same teal within one commit — so the one thing the die exists
-to say was invisible while each half looked correct in its own file. Both now
-come from `DIE_KEYS` in `palette.mjs`, and the check measures the angle between
-them (≥ 45°) and requires the glyph to out-value the body. And bump and emissive
-maps *both* live behind DSN's "realistic lighting", which Foundry's own Low
-performance mode turns off; a die carrying nothing else is twenty identical
-faces there, so `registerDiceSoNice` checks and stands down to DSN's internal
-word-labelled preset rather than registering blanks over it.
+Three smaller ones in the same family, all of which shipped wrong once.
+
+**A d20 face is not centred in its texture tile.** DSN draws a label image
+across a whole 256px tile, 1:1, but what samples it is a triangle that is not
+concentric with the square: read off the `uv` attribute of DSN's own
+`DICE_MODELS.d20`, every face has its centroid at **y = 0.576**, not 0.5, and
+its largest inscribed circle is **0.575** of the half-tile. So art composed on
+the square is both off-centre and clipped by the die's own edges — and the
+contact sheet cannot show you, because it prints squares. The concentric grooves
+were struck at 0.62 about the square's centre, outside the incircle *and* off
+the face's centre, so every ring on the die was cut by two of its own edges,
+twenty times over. `--check` scans for it now: any pixel carrying a mark must
+fall inside `FACE_TRIANGLE`. That is stronger than a radius test, which would
+have caught only half of it.
+
+**The die's body and the mark burning in it are one statement.** They are
+produced in completely different places (the body is a colorset field in
+`dsn.mjs`, the glyph is baked into an emissive PNG by the texture tool) and,
+stated separately, they landed on the same teal within one commit — so the one
+thing the die exists to say was invisible while each half looked correct in its
+own file. Both come from `DIE_KEYS` in `palette.mjs`. The body is **black
+glass** now (`ink1`): a transmissive material carries its tint through the whole
+casting instead of painting it on, so that reads as smoked glass rather than as
+a black surface. What it costs is the hue axis — at that value a hue is not a
+colour anybody can see — so the check measures **either** ≥ 45° of hue **or**
+≥ 0.35 of relative luminance, and requires one of them; the glyph must out-value
+the body, and the *edge* must out-value it by ≥ 0.2, because DSN paints the
+bevels with it and that is the entire silhouette of a dark die.
+
+**Emission is not a local cost.** Any non-black `emissive` on any material in
+the dice scene switches the whole canvas onto DSN's bloom path for the length of
+the throw — a second full scene render plus ten `UnrealBloomPass` blurs — and on
+a transmissive material each of those renders drags a `renderTransmissionPass`
+with it, which three.js sizes to the **full viewport**, forces 4× MSAA on, and
+re-mipmaps every frame. So one glowing numeral roughly doubles the per-frame
+cost of every die on the table. The surge d20 pays it (a glyph that does not
+glow is not a glyph); the severity d100 does not, and the check holds the
+invariant rather than the implementation — the colorset must either set
+`emissiveLabels` **or** sit on a body below 0.15 luminance, where a white
+outlined numeral carries itself.
+
+And **warm the presets**. DSN loads a preset's images lazily inside
+`create()` at the first throw, one `await` per face — sixty serial round-trips
+per system, times three systems, mid-animation. 6.2.9 added
+`dice3d.preloadPresets(systemId)` for exactly this and says in its own source
+that without it such presets "cause visible lag". Not calling it *was* the lag.
+It does not cover DSN's own 2048² Sobel normal-map bake, which is JavaScript on
+the main thread at **370–520 ms per material**, once per level system; there is
+no public seam to warm that, and registering fewer systems is the only lever.
+For scale, the feature's own full-screen shaders measure 0.89 ms (surge) and
+0.37 ms (verdict) per frame at their worst shipping size — the live beats are
+not where the time goes.
+
+Bump and emissive maps *both* live behind DSN's "realistic lighting", which
+Foundry's own Low performance mode turns off; a die carrying nothing else is
+twenty identical faces there, so `registerDiceSoNice` checks and stands down to
+DSN's internal word-labelled preset rather than registering blanks over it.
 
 See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
 different transport channels, why the standing instability is drawn in the HUD

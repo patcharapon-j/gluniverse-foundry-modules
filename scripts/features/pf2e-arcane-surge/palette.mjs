@@ -104,16 +104,34 @@ export function levelFloats(level) {
  * So they are keys here, the check tool measures the angle between them, and
  * neither file states a colour of its own.
  *
- * `apex` is the suite's deep arcane violet: dark enough that a lit mark reads
- * against it, saturated enough to be a glass and not a smoke, and — unlike the
- * near-blacks — bright enough to be a body at all on a transmissive material.
+ * THE BODY IS BLACK GLASS. A transmissive material carries its tint through the
+ * whole casting instead of painting it on, so `ink1` does not render as a black
+ * SURFACE — it renders as smoked glass: the frost still catches light, the
+ * bevels still take the edge colour, and what passes through the die is dimmed
+ * rather than coloured. An earlier pass here used `apex`, a lit violet, on the
+ * reasoning that a near-black body would come out as a void. That reasoning was
+ * sound only while the die had nothing else in it; with the glyph emitting and
+ * the frost lit, black is the material the die wanted all along.
+ *
+ * It costs the hue axis, though, and that is the thing to hold on to: at this
+ * value a hue is not a colour anybody can see, so the mark can no longer read
+ * against the body by BEING a different hue. It reads by VALUE instead — 0.77
+ * of relative luminance between them, and blowing to white at the eye. That is
+ * why the check measures either axis and insists on one of them.
+ *
+ * `edge` is doing real work now rather than trimming. It is the only thing that
+ * gives a black die a silhouette: DSN paints the bevels between the faces with
+ * it, and without a lit edge the die is a hole in the table that happens to have
+ * numbers on it. `violet` rather than `violetHot` because on black the pale one
+ * was the loudest thing on the die.
+ *
  * The glyph stays in the COOL arcane family rather than going hot, because the
  * severity tiers own amber and red (`TIER_KEYS`) and a surge glyph in warn
  * would announce a Major before the severity has been rolled.
  */
 export const DIE_KEYS = Object.freeze({
-  body: "apex",
-  edge: "violetHot",
+  body: "ink1",
+  edge: "violet",
   glyph: "cyan",
 });
 
