@@ -30,10 +30,18 @@ export class ArcaneSurgeDie extends foundry.dice.terms.Die {
 
   static DENOMINATION = SURGE_DIE_DENOMINATION;
 
-  /** Chat and tooltips read the face, not the number: a blank face is nothing
-   *  happening, and the number it happens to bear is noise. */
+  /**
+   * Chat and tooltips read the face, not the number: a blank face is nothing
+   * happening, and the number it happens to bear is noise.
+   *
+   * The level must be stamped onto the term by `stampLevel()` before this can
+   * answer honestly — the same face is a surge at Unraveling and a blank at
+   * Fraying. An unstamped term falls back to Stable, where nothing surges, so a
+   * missing stamp under-claims rather than announcing a surge that did not
+   * happen.
+   */
   getResultLabel(result) {
-    const threshold = glyphFaces(this.options?.glasLevel ?? "unraveling", levelConfig());
+    const threshold = glyphFaces(this.options?.glasLevel ?? "stable", levelConfig());
     const surged = Number.isInteger(result?.result) && threshold > 0 && result.result <= threshold;
     return game.i18n.localize(surged ? "GLAS.die.surge" : "GLAS.die.blank");
   }
@@ -66,6 +74,23 @@ export const hasSurgeDie = () => registered;
 
 /** The notation to roll: the custom die, or a plain d20 if the letter was taken. */
 export const surgeNotation = () => (registered ? SURGE_DIE_NOTATION : SURGE_DIE_FALLBACK_NOTATION);
+
+/**
+ * Record which level's odds this roll was made against, on the term itself.
+ *
+ * Without this the die cannot label its own face: `getResultLabel` has only the
+ * number, and the number means different things at different levels. The
+ * stamp must happen for EVERY evaluated surge roll, not only the ones Dice So
+ * Nice will animate, because the label is what appears in the roll tooltip
+ * whether or not a 3D die was thrown.
+ */
+export function stampLevel(roll, level) {
+  for (const die of roll?.dice ?? []) {
+    die.options ??= {};
+    die.options.glasLevel = level;
+  }
+  return roll;
+}
 
 /** Pull the active d20 face out of an evaluated roll. */
 export function readDieResult(roll) {

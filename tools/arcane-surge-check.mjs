@@ -37,6 +37,11 @@ const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
 const problems = [];
 const fail = (where, msg) => problems.push(`${where}: ${msg}`);
 
+/** Drop comments so a source-shape assertion cannot be satisfied — or tripped —
+ *  by prose. Crude but sufficient: no regex literal in this feature contains a
+ *  comment marker. */
+const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
 const FEATURE = "scripts/features/pf2e-arcane-surge";
 
 const constants = await import(`../${FEATURE}/constants.mjs`);
@@ -230,10 +235,21 @@ for (const [label, frag, uniforms, hostRel] of [
   for (const name of declared) {
     if (!uniforms.includes(name)) fail(`${label} shader`, `"${name}" is declared in the GLSL but missing from the uniform table`);
   }
-  // A shader that fails to compile degrades to nothing, so the host must say so
-  // rather than assuming success.
-  if (!/COMPILE_STATUS/.test(hostSrc) || !/LINK_STATUS/.test(hostSrc)) {
-    fail(`${label} shader`, `${hostRel} does not check compile and link status — a broken shader would fail silently`);
+}
+
+// A shader that fails to compile degrades to nothing, so SOMETHING must check.
+// Both hosts build through the shared scaffolding, which is where the two
+// statuses are read; if that ever stops being true, a broken shader goes
+// completely silent on both layers at once.
+{
+  const glHost = read(`${FEATURE}/gl-host.mjs`);
+  if (!/COMPILE_STATUS/.test(glHost) || !/LINK_STATUS/.test(glHost)) {
+    fail("gl-host.mjs", "does not check both compile and link status — a broken shader would fail silently");
+  }
+  for (const rel of [`${FEATURE}/ambient.mjs`, `${FEATURE}/burst.mjs`]) {
+    if (!/buildProgram\s*\(/.test(read(rel))) {
+      fail(rel, "does not build through gl-host.mjs, so it may not be checking compile/link status");
+    }
   }
 }
 
@@ -390,6 +406,138 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!/getFlag|flags/.test(sevSrc)) fail("severity.mjs", "does not read its result back from a flag");
   if (!/inFlight|_pending|lock/i.test(sevSrc)) {
     fail("severity.mjs", "has no in-flight guard — two simultaneous presses would both roll");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   11. Colour comes from the palette, and its one literal copy agrees
+   ══════════════════════════════════════════════════════════════════════
+   WebGL cannot read a CSS custom property, so the ramp is derived from
+   `core/theme.mjs`. `anim.mjs` carries a literal copy purely because the
+   preview page inlines it with no module resolution — two statements of one
+   colour, which is exactly the drift this asserts away. */
+
+{
+  const theme = await import("../scripts/core/theme.mjs");
+  const palette = await import(`../${FEATURE}/palette.mjs`);
+  const ramp = palette.rampFloats();
+
+  for (const [slot, key] of Object.entries(palette.RAMP_KEYS)) {
+    const expected = theme.hexToRgbFloat(theme.PALETTE[key]);
+    if (theme.PALETTE[key] === undefined) fail("palette", `PALETTE has no "${key}" for ramp slot "${slot}"`);
+    for (let i = 0; i < 3; i++) {
+      if (Math.abs(ramp[slot][i] - expected[i]) > 1e-9) {
+        fail("palette", `rampFloats().${slot} does not equal hexToRgbFloat(PALETTE.${key})`);
+        break;
+      }
+      // The preview's inlined copy must agree to the precision it is written at.
+      if (Math.abs(anim.RAMP[slot][i] - expected[i]) > 5e-4) {
+        fail("anim.mjs", `RAMP.${slot} has drifted from PALETTE.${key} — the preview would show the wrong colour`);
+        break;
+      }
+    }
+  }
+
+  // No feature file may restate a suite colour as a hex of its own.
+  for (const rel of ["ambient.mjs", "burst.mjs", "shader.mjs", "anim.mjs"]) {
+    const src = read(`${FEATURE}/${rel}`);
+    const hexes = [...src.matchAll(/#[0-9a-fA-F]{6}\b/g)].map((m) => m[0]);
+    // Hexes inside comments are documentation of where a value came from.
+    const live = hexes.filter((hex) => !new RegExp(`(?:\\*|//)[^\\n]*${hex}`).test(src));
+    if (live.length) fail(rel, `hardcodes suite colour(s) ${live.join(", ")} — derive them from PALETTE instead`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   12. The die can label its own face
+   ══════════════════════════════════════════════════════════════════════
+   The same number is a surge at Unraveling and a blank at Fraying, so the die
+   term has to carry the level it was rolled against. A read with no write means
+   every face is labelled at the fallback level's threshold — the tooltip and
+   the banner then disagree about the same roll, and neither errors. */
+
+{
+  const dieSrc = read(`${FEATURE}/die.mjs`);
+  const checkSrc = read(`${FEATURE}/check.mjs`);
+  const reads = /options\??\.\s*glasLevel/.test(dieSrc);
+  const writes = /options\.glasLevel\s*=/.test(dieSrc);
+  if (reads && !writes) fail("die.mjs", "reads options.glasLevel but nothing ever writes it");
+  if (writes && !/stampLevel\s*\(/.test(checkSrc)) {
+    fail("check.mjs", "never stamps the level onto the roll, so the die cannot label its own face");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   13. Privacy: an NPC's check is the GM's alone
+   ══════════════════════════════════════════════════════════════════════
+   Gating only on `held` leaks a "the weave held" banner — naming the stability
+   level — to every player on every enemy spell, which also defeats conceal. */
+
+{
+  const bannerSrc = read(`${FEATURE}/banner.mjs`);
+  if (!/!check\.playerCast\s*&&\s*!game\.user\.isGM/.test(bannerSrc)) {
+    fail("banner.mjs", "does not hide NPC-cast banners from players — a passed NPC check would be public");
+  }
+  if (!/isConcealed\s*\(/.test(bannerSrc)) {
+    fail("banner.mjs", "does not redact the level while concealed — the banner would print it on the first player cast");
+  }
+  // A released surge must play from exactly one path, or it plays twice.
+  if (!/releasedAt/.test(bannerSrc)) {
+    fail("banner.mjs", "does not stand down for a released surge — the socket and the re-render would both play it");
+  }
+  if (!/playBurst\s*\(/.test(read(`${FEATURE}/check.mjs`))) {
+    fail("check.mjs", "does not play the burst locally on release — Foundry does not echo a socket to its sender");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   14. A refused denomination means no DSN preset either
+   ══════════════════════════════════════════════════════════════════════
+   If another module holds the letter, `du` is THEIR die. Registering a preset
+   for it repaints their dice with our faces — worse than having no 3D die, and
+   it looks like a bug in their module. */
+
+{
+  const dsnSrc = read(`${FEATURE}/dsn.mjs`);
+  if (!/hasSurgeDie\s*\(\s*\)/.test(dsnSrc)) {
+    fail("dsn.mjs", "registers presets without checking hasSurgeDie() — it would repaint another module's die");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   15. Every tier has a flourish weight
+   ══════════════════════════════════════════════════════════════════════
+   A missing entry used to fall back to another tier's weight, which misreports
+   how bad the result was in the loudest channel the feature has. */
+
+{
+  for (const tier of TIERS) {
+    const shape = constants.TIER_FLOURISH[tier];
+    if (!shape) fail("constants.mjs", `TIER_FLOURISH has no entry for tier "${tier}"`);
+    else if (!levels.isLevel(shape.level)) fail("constants.mjs", `TIER_FLOURISH.${tier}.level is not a stability level`);
+    else if (!(shape.peak > 0 && shape.peak <= 1)) fail("constants.mjs", `TIER_FLOURISH.${tier}.peak is outside (0, 1]`);
+  }
+  for (const tier of Object.keys(constants.TIER_FLOURISH)) {
+    if (!TIERS.includes(tier)) fail("constants.mjs", `TIER_FLOURISH has a dead entry "${tier}"`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   16. This feature does not own the suite-global motion scale
+   ══════════════════════════════════════════════════════════════════════
+   `applyMotionTier()` writes `--gl-motion-scale` for the whole suite, so a
+   second feature applying its own preference silently retimes the three
+   features that legitimately own that control. */
+
+{
+  for (const rel of ["index.mjs", "main.mjs"]) {
+    // Comments stripped first: main.mjs explains in prose why it does NOT do
+    // this, and an assertion that cannot tell explanation from code would flag
+    // the documentation of its own rule.
+    const src = stripComments(read(`${FEATURE}/${rel}`));
+    if (/applyMotionTier\s*\(/.test(src)) {
+      fail(rel, "calls applyMotionTier() — that writes the suite-global motion scale and would retime other features");
+    }
   }
 }
 

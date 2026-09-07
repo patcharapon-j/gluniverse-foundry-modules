@@ -15,7 +15,6 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
-import { MOTION_TIER_DEFAULT, applyMotionTier } from "../../core/theme.mjs";
 import { syncAmbient } from "./ambient.mjs";
 import { ArcaneSurgeConfigApp } from "./config-app.mjs";
 import { DEFAULT_ELIGIBILITY, FEATURE_ID, LEVELS, PREFIX, SETTINGS } from "./constants.mjs";
@@ -94,21 +93,6 @@ function registerSettings() {
       never: "GLAS.settings.dieVisibility.never",
     },
     default: "always",
-  });
-
-  game.settings.register(SUITE_ID, SETTINGS.motionTier, {
-    name: "GLAS.settings.motionTier.name",
-    hint: "GLAS.settings.motionTier.hint",
-    scope: "client",
-    config: true,
-    type: String,
-    choices: {
-      default: "GLAS.settings.motionTier.default",
-      reduced: "GLAS.settings.motionTier.reduced",
-      cinematic: "GLAS.settings.motionTier.cinematic",
-    },
-    default: MOTION_TIER_DEFAULT,
-    onChange: (tier) => applyMotionTier(tier),
   });
 
   /* The player's own declaration about their own next casting. Client-scoped so

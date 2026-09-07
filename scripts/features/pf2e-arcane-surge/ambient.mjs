@@ -5,29 +5,36 @@
  * somewhere unstable, which can be a whole session. Everything about it is
  * shaped by that. The shader is two octaves and one warp. It sits at
  * `--gl-z-sticky`, above the board but BELOW every piece of Foundry chrome, so a
- * session-long veil never lands on the sidebar or the hotbar. It pauses itself
- * when the tab is hidden. It freezes rather than disappears when the frame
- * budget is exceeded, because what degrades under load must be the motion and
- * never the state — a player on a struggling machine should not stop being able
- * to see that the world is coming apart.
+ * session-long veil never lands on the sidebar or the hotbar. It renders at half
+ * device pixels. It pauses itself when the tab is hidden. It freezes rather than
+ * disappears when the frame budget is exceeded, because what degrades under load
+ * must be the motion and never the state — a player on a struggling machine
+ * should not stop being able to see that the world is coming apart.
  *
- * Stable renders NOTHING. Not a very faint something: the overlay is torn down
- * entirely, so the common case costs nothing at all.
+ * Stable renders NOTHING. Not a very faint something: the shader's alpha is
+ * scaled by chaos so it is exactly inert at Stable, AND the host tears the
+ * overlay down there, so the common case costs nothing at all.
  *
  * The lifecycle discipline is borrowed from clocks-tracker's `EffectField` — own
  * context, no autostart, pause on hidden, resize-aware — but not the class
  * itself, which is a particle system. Instability is not precipitation.
  */
 
-import { warn } from "../../core/const.mjs";
-import { FrameBudget, RAMP } from "./anim.mjs";
+import { onThemeChange } from "../../core/theme.mjs";
+import { FrameBudget } from "./anim.mjs";
+import { bindFullscreenTriangle, buildProgram, mountCanvas, sizeToViewport, uniformLocations, webglSupported } from "./gl-host.mjs";
 import { chaosFor } from "./levels.mjs";
-import { AMBIENT_FRAG, VERT } from "./shader.mjs";
+import { rampFloats } from "./palette.mjs";
+import { AMBIENT_FRAG, AMBIENT_UNIFORMS, VERT } from "./shader.mjs";
 import { ambientEnabled, isConcealed, visibleLevel } from "./settings.mjs";
 
 /** How long the veil takes to arrive or leave when the GM changes the level.
  *  A cut would announce the change; a cross-fade lets people notice it. */
 const FADE_MS = 1400;
+
+/** The veil has no hard edge in it, so half device pixels reads identically and
+ *  costs half as much for every frame of a whole session. */
+const RESOLUTION_SCALE = 0.5;
 
 class AmbientHost {
   constructor() {
@@ -42,118 +49,43 @@ class AmbientHost {
     this._raf = null;
     this._start = 0;
     this._last = 0;
-    this._supported = null;
-    this._onResize = () => this._resize();
+    this._onResize = () => sizeToViewport(this.canvas, this.gl, RESOLUTION_SCALE);
     this._onVisibility = () => this._syncPause();
-  }
-
-  isSupported() {
-    if (this._supported !== null) return this._supported;
-    try {
-      const probe = document.createElement("canvas");
-      this._supported = !!(probe.getContext("webgl") || probe.getContext("experimental-webgl"));
-    } catch {
-      this._supported = false;
-    }
-    return this._supported;
   }
 
   _ensureContext() {
     if (this.gl) return true;
 
-    const canvas = document.createElement("canvas");
-    canvas.className = "glas-ambient";
-    document.body.appendChild(canvas);
-    this.canvas = canvas;
+    const mounted = mountCanvas("glas-ambient");
+    if (!mounted) return false;
+    this.canvas = mounted.canvas;
+    this.gl = mounted.gl;
 
-    const gl = canvas.getContext("webgl", { alpha: true, antialias: false, premultipliedAlpha: true })
-      || canvas.getContext("experimental-webgl");
-    if (!gl) {
-      canvas.remove();
-      this.canvas = null;
-      return false;
-    }
-    this.gl = gl;
-
-    this.program = this._build(VERT, AMBIENT_FRAG);
+    this.program = buildProgram(this.gl, VERT, AMBIENT_FRAG, "ambient");
     if (!this.program) {
       this.destroy();
       return false;
     }
-    gl.useProgram(this.program);
 
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(this.program, "aPos");
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    bindFullscreenTriangle(this.gl, this.program);
+    this.uniforms = uniformLocations(this.gl, this.program, AMBIENT_UNIFORMS);
+    this._pushRamp();
 
-    this.uniforms = {
-      uTime: gl.getUniformLocation(this.program, "uTime"),
-      uRes: gl.getUniformLocation(this.program, "uRes"),
-      uChaos: gl.getUniformLocation(this.program, "uChaos"),
-      uDrift: gl.getUniformLocation(this.program, "uDrift"),
-      uFade: gl.getUniformLocation(this.program, "uFade"),
-      uDeep: gl.getUniformLocation(this.program, "uDeep"),
-      uMid: gl.getUniformLocation(this.program, "uMid"),
-      uHot: gl.getUniformLocation(this.program, "uHot"),
-    };
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.uniform3fv(this.uniforms.uDeep, RAMP.deep);
-    gl.uniform3fv(this.uniforms.uMid, RAMP.mid);
-    gl.uniform3fv(this.uniforms.uHot, RAMP.hot);
-
-    this._resize();
+    sizeToViewport(this.canvas, this.gl, RESOLUTION_SCALE);
     window.addEventListener("resize", this._onResize);
     document.addEventListener("visibilitychange", this._onVisibility);
     return true;
   }
 
-  /** Both statuses are checked because a failure here is silent: no overlay
-   *  ever appears and nothing anywhere reports why. */
-  _build(vertexSource, fragmentSource) {
-    const gl = this.gl;
-    const compile = (type, source) => {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        warn("Arcane Surge | ambient shader compile failed:", gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    };
-    const vs = compile(gl.VERTEX_SHADER, vertexSource);
-    const fs = compile(gl.FRAGMENT_SHADER, fragmentSource);
-    if (!vs || !fs) return null;
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      warn("Arcane Surge | ambient program link failed:", gl.getProgramInfoLog(program));
-      return null;
-    }
-    return program;
-  }
-
-  _resize() {
-    if (!this.gl || !this.canvas) return;
-    // Half resolution: this is a soft, low-alpha veil with no hard edge in it,
-    // and it runs all session. Full device pixels here would be paid for every
-    // frame and read identically.
-    const dpr = Math.min(window.devicePixelRatio || 1, 2) * 0.5;
-    const w = Math.max(1, Math.floor(window.innerWidth * dpr));
-    const h = Math.max(1, Math.floor(window.innerHeight * dpr));
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
-    this.gl.viewport(0, 0, w, h);
+  /** The three ramp colours, re-read from the palette rather than remembered,
+   *  so a retheme reaches the veil on the next repaint. */
+  _pushRamp() {
+    if (!this.gl || !this.program) return;
+    const ramp = rampFloats();
+    this.gl.useProgram(this.program);
+    this.gl.uniform3fv(this.uniforms.uDeep, ramp.deep);
+    this.gl.uniform3fv(this.uniforms.uMid, ramp.mid);
+    this.gl.uniform3fv(this.uniforms.uHot, ramp.hot);
   }
 
   /** Re-read the world's state and cross-fade toward it. */
@@ -168,10 +100,15 @@ class AmbientHost {
       else this._ensureLoop();
       return;
     }
-    if (!this.isSupported() || !this._ensureContext()) return;
+    if (!webglSupported() || !this._ensureContext()) return;
     this.chaos = wanted;
     this.target = 1;
     this._ensureLoop();
+  }
+
+  /** Repaint after a theme change, without disturbing the fade. */
+  retheme() {
+    this._pushRamp();
   }
 
   _ensureLoop() {
@@ -247,14 +184,20 @@ class AmbientHost {
 }
 
 let host = null;
+let untheme = null;
 
 /** Bring the overlay into line with the current level, settings and permissions. */
 export function syncAmbient() {
   host ??= new AmbientHost();
+  // Canvas and WebGL cannot read a CSS custom property, so a retheme has to be
+  // pushed to the uniforms by hand or the veil keeps the old palette forever.
+  untheme ??= onThemeChange(() => host?.retheme());
   host.sync();
 }
 
 export function destroyAmbient() {
+  untheme?.();
+  untheme = null;
   host?.destroy();
   host = null;
 }

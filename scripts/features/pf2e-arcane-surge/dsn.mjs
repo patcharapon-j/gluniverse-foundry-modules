@@ -17,9 +17,10 @@
  * tumbling die is ceremony.
  */
 
-import { featurePath, log } from "../../core/const.mjs";
+import { featurePath, log, warn } from "../../core/const.mjs";
 import { PALETTE } from "../../core/theme.mjs";
 import { DSN_COLORSET, DSN_NAMESPACE, FACE_ASSETS, SURGE_DIE_DENOMINATION } from "./constants.mjs";
+import { hasSurgeDie } from "./die.mjs";
 import { glyphFaces, rollingLevels } from "./levels.mjs";
 import { levelConfig } from "./settings.mjs";
 
@@ -52,6 +53,17 @@ export function facesFor(level, config = levelConfig()) {
 
 export function registerDiceSoNice(dice3d) {
   if (registered || !dice3d) return false;
+
+  /* If another module already held the denomination, `du` is THEIR die now.
+     Registering a preset for it would repaint their dice with our blank and
+     surge faces — a far worse outcome than having no 3D die of our own, and one
+     that would look like a bug in their module rather than in this one. The
+     check still runs; it just rolls an ordinary d20. */
+  if (!hasSurgeDie()) {
+    warn("Arcane Surge | denomination unavailable; skipping Dice So Nice registration so another module's die is left alone");
+    return false;
+  }
+
   registered = true;
 
   dice3d.addColorset({

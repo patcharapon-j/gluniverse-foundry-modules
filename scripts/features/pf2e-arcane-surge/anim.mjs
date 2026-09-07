@@ -61,19 +61,25 @@ export class FrameBudget {
 }
 
 /**
- * The teal→blue arcane ramp, as float triples for GLSL.
+ * The teal→cyan arcane ramp, as float triples for GLSL.
  *
- * Mirrors the palette in `core/theme.mjs`; the hosts pass these straight to
- * `uniform3fv`. Kept here rather than imported so the preview page can run this
- * file on its own, and cross-checked against the palette by the check tool.
+ * THE SHIPPED HOSTS DO NOT USE THIS. They call `palette.mjs`, which derives the
+ * ramp from `core/theme.mjs` so a retheme reaches the shaders. This literal copy
+ * exists solely for the preview page, which inlines this file as source with no
+ * module resolution available to it.
+ *
+ * That makes it a genuine drift risk — two statements of one colour — so
+ * `tools/arcane-surge-check.mjs` asserts these floats still equal
+ * `hexToRgbFloat(PALETTE[…])` for the keys `palette.mjs` names. Do not edit one
+ * without the other.
  */
 export const RAMP = Object.freeze({
   /* PALETTE.ink2 — the near-black the veil sits over */
-  deep: Object.freeze([0.043, 0.059, 0.090]),
-  /* PALETTE.teal #4ad9c0 */
-  mid: Object.freeze([0.290, 0.851, 0.753]),
-  /* PALETTE.cyan #5eeaff */
-  hot: Object.freeze([0.369, 0.918, 1.000]),
+  deep: Object.freeze([0.043137254901960784, 0.058823529411764705, 0.09019607843137255]),
+  /* PALETTE.teal #4ad9c0 — "held", the suite's stabilised hue */
+  mid: Object.freeze([0.2901960784313726, 0.8509803921568627, 0.7529411764705882]),
+  /* PALETTE.cyan #5eeaff — what it tears toward */
+  hot: Object.freeze([0.3686274509803922, 0.9176470588235294, 1]),
 });
 
 /** Ease used by both the ambient's fade and the burst's envelope. */

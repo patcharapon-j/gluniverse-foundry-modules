@@ -21,9 +21,9 @@
  * it.
  *
  * Colour never appears here as a literal. The three ramp colours arrive as
- * uniforms from `theme.mjs`'s palette mirror, because WebGL cannot read a CSS
- * custom property and a hardcoded hue here would silently diverge from the
- * design system the rest of the feature follows.
+ * uniforms, derived by `palette.mjs` from `theme.mjs`'s palette mirror, because
+ * WebGL cannot read a CSS custom property and a hardcoded hue here would
+ * silently diverge from the design system the rest of the feature follows.
  */
 
 /** Shared by both programs: a full-screen triangle, no index buffer. */

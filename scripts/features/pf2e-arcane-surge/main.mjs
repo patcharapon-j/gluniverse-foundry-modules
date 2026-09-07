@@ -3,21 +3,26 @@
  *
  * Nothing here runs at import time: the adapter is imported unconditionally so
  * its settings exist, but a disabled feature must stay completely inert.
+ *
+ * This feature deliberately owns NO motion-tier setting. `applyMotionTier()`
+ * writes the suite-global `--gl-motion-scale`, so a second feature setting it
+ * from its own preference would silently retime Loot Gen, Destiny Dice and
+ * Statsblock Import — the three the design system says own that control.
  */
 
 import { log } from "../../core/const.mjs";
-import { applyMotionTier } from "../../core/theme.mjs";
 import { onSocket } from "../../core/socket.mjs";
 import { destroyAmbient, syncAmbient } from "./ambient.mjs";
 import { registerBanner } from "./banner.mjs";
 import { destroyBurst, playBurst } from "./burst.mjs";
 import { registerCheck } from "./check.mjs";
-import { FEATURE_ID, SETTINGS } from "./constants.mjs";
+import { FEATURE_ID } from "./constants.mjs";
 import { registerSurgeDie } from "./die.mjs";
 import { registerDiceSoNice } from "./dsn.mjs";
 import { destroyHud, paint, registerHud } from "./hud.mjs";
 import { isLevel } from "./levels.mjs";
 import { registerSeverityRendering } from "./severity.mjs";
+import { armedMode, clearArmedMode } from "./settings.mjs";
 
 export function onInit() {
   registerSurgeDie();
@@ -28,8 +33,6 @@ export function onInit() {
 }
 
 export async function onReady() {
-  applyMotionTier(readMotionTier());
-
   // Dice So Nice assigns `game.dice3d` after the suite's init phase, so it is
   // read lazily here and through its own ready hook — never at import.
   if (game.dice3d) registerDiceSoNice(game.dice3d);
@@ -42,7 +45,8 @@ export async function onReady() {
    * player-cast surge rides the chat message flag. Neither works for a GM
    * releasing a held NPC surge: by then the message is old, its freshness
    * window has expired on every client, and a flag update alone would play
-   * nothing anywhere.
+   * nothing anywhere. The releasing GM plays it locally, because Foundry does
+   * not echo a socket back to its sender.
    */
   onSocket(FEATURE_ID, (payload) => {
     if (payload.type === "surge") playBurst(payload.level);
@@ -56,7 +60,6 @@ export async function onReady() {
   // An armed choice must not survive a scene change: a "next cast" a player set
   // an hour ago in a different room is a trap, not a declaration.
   Hooks.on("canvasReady", async () => {
-    const { armedMode, clearArmedMode } = await import("./settings.mjs");
     if (armedMode() !== "none") await clearArmedMode();
     paint();
   });
@@ -69,14 +72,6 @@ export function teardown() {
   destroyAmbient();
   destroyBurst();
   destroyHud();
-}
-
-function readMotionTier() {
-  try {
-    return game.settings.get("gluniverse-foundry-modules", SETTINGS.motionTier);
-  } catch {
-    return "default";
-  }
 }
 
 export const api = { paint, syncAmbient, playBurst, teardown };

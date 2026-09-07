@@ -91,6 +91,13 @@ export async function rollSeverity(message, { reroll = false } = {}) {
     tagSeverityRoll(roll);
     if (game.dice3d) await game.dice3d.showForRoll(roll, game.user, true).catch(() => {});
 
+    // Re-read after the roll. `inFlight` only guards this client; the GM and the
+    // caster can both press inside the same instant, and without this the second
+    // write would overwrite the first and the table would watch the verdict
+    // change under them. The first write wins.
+    const settled = message.getFlag(SUITE_ID, FLAGS.severity);
+    if (settled?.value != null && !reroll) return settled.tier;
+
     const value = Number(roll.total);
     const bands = levelConfig()[state.row]?.bands ?? null;
     const tier = severityTier(value, bands);
@@ -149,6 +156,7 @@ function renderCard(message, state) {
   const fresh = rolled && Number.isFinite(state.rolledAt) && Date.now() - state.rolledAt < REVEAL_WINDOW_MS;
   const classes = [
     "glas-severity",
+    "gl-type",
     rolled ? `glas-tier-${state.tier}` : "glas-unrolled",
     fresh ? "glas-reveal" : "",
   ].filter(Boolean).join(" ");

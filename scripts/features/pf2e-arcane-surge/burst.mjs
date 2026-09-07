@@ -15,21 +15,18 @@
  *
  * Modelled on `stream-pacer/PerilWebGL`: raw WebGL, its own canvas on `<body>`,
  * its own RAF loop, its own resize listener, and a clean no-op when WebGL is
- * unavailable. No PIXI — a three-second cosmetic beat has no business being able
+ * unavailable. No PIXI — a two-second cosmetic beat has no business being able
  * to disturb the renderer the scene draw depends on.
  */
 
 import { warn } from "../../core/const.mjs";
-import { FrameBudget, RAMP, easeOut } from "./anim.mjs";
-import { BURST_MS, FLOURISH_MS } from "./constants.mjs";
+import { onThemeChange } from "../../core/theme.mjs";
+import { FrameBudget, easeOut } from "./anim.mjs";
+import { BURST_MS, FLOURISH_MS, TIER_FLOURISH } from "./constants.mjs";
+import { bindFullscreenTriangle, buildProgram, mountCanvas, sizeToViewport, uniformLocations, webglSupported } from "./gl-host.mjs";
 import { chaosFor } from "./levels.mjs";
-import {
-  BLIT_FRAG,
-  BURST_FRAMES,
-  BURST_FRAME_SIZE,
-  BURST_FRAG,
-  VERT,
-} from "./shader.mjs";
+import { rampFloats } from "./palette.mjs";
+import { BLIT_FRAG, BLIT_UNIFORMS, BURST_FRAMES, BURST_FRAME_SIZE, BURST_FRAG, BURST_UNIFORMS, VERT } from "./shader.mjs";
 
 class BurstHost {
   constructor() {
@@ -37,122 +34,37 @@ class BurstHost {
     this.gl = null;
     this.bakeProgram = null;
     this.blitProgram = null;
+    this.bakeUniforms = {};
     this.blitUniforms = {};
     this.frames = [];
     this.bakedKey = null;
     this.budget = new FrameBudget();
     this._raf = null;
-    this._supported = null;
-    this._onResize = () => this._resize();
+    this._onResize = () => sizeToViewport(this.canvas, this.gl);
   }
-
-  isSupported() {
-    if (this._supported !== null) return this._supported;
-    try {
-      const probe = document.createElement("canvas");
-      this._supported = !!(probe.getContext("webgl") || probe.getContext("experimental-webgl"));
-    } catch {
-      this._supported = false;
-    }
-    return this._supported;
-  }
-
-  /* ── Context ─────────────────────────────────────────────────────── */
 
   _ensureContext() {
     if (this.gl) return true;
 
-    const canvas = document.createElement("canvas");
-    canvas.className = "glas-burst";
-    document.body.appendChild(canvas);
-    this.canvas = canvas;
+    const mounted = mountCanvas("glas-burst");
+    if (!mounted) return false;
+    this.canvas = mounted.canvas;
+    this.gl = mounted.gl;
 
-    const gl = canvas.getContext("webgl", { alpha: true, antialias: false, premultipliedAlpha: true })
-      || canvas.getContext("experimental-webgl");
-    if (!gl) {
-      canvas.remove();
-      this.canvas = null;
-      return false;
-    }
-    this.gl = gl;
-
-    this.bakeProgram = this._program(VERT, BURST_FRAG);
-    this.blitProgram = this._program(VERT, BLIT_FRAG);
+    this.bakeProgram = buildProgram(this.gl, VERT, BURST_FRAG, "burst");
+    this.blitProgram = buildProgram(this.gl, VERT, BLIT_FRAG, "blit");
     if (!this.bakeProgram || !this.blitProgram) {
       this.destroy();
       return false;
     }
 
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    for (const program of [this.bakeProgram, this.blitProgram]) {
-      const loc = gl.getAttribLocation(program, "aPos");
-      gl.useProgram(program);
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    }
+    bindFullscreenTriangle(this.gl, this.bakeProgram, this.blitProgram);
+    this.bakeUniforms = uniformLocations(this.gl, this.bakeProgram, BURST_UNIFORMS);
+    this.blitUniforms = uniformLocations(this.gl, this.blitProgram, BLIT_UNIFORMS);
 
-    this.blitUniforms = {
-      uFrame: gl.getUniformLocation(this.blitProgram, "uFrame"),
-      uOpacity: gl.getUniformLocation(this.blitProgram, "uOpacity"),
-    };
-
-    gl.enable(gl.BLEND);
-    // Frames are stored premultiplied, so this is the correct blend for them.
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-
-    this._resize();
+    sizeToViewport(this.canvas, this.gl);
     window.addEventListener("resize", this._onResize);
     return true;
-  }
-
-  /**
-   * Compile and link, reporting either failure.
-   *
-   * A shader that will not compile degrades to NOTHING here rather than
-   * throwing — the burst simply never appears and the feature looks merely
-   * disappointing instead of broken. That is exactly why both statuses are
-   * checked and logged.
-   */
-  _program(vertexSource, fragmentSource) {
-    const gl = this.gl;
-    const compile = (type, source) => {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        warn("Arcane Surge | burst shader compile failed:", gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = compile(gl.VERTEX_SHADER, vertexSource);
-    const fs = compile(gl.FRAGMENT_SHADER, fragmentSource);
-    if (!vs || !fs) return null;
-
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      warn("Arcane Surge | burst program link failed:", gl.getProgramInfoLog(program));
-      return null;
-    }
-    return program;
-  }
-
-  _resize() {
-    if (!this.gl || !this.canvas) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.floor(window.innerWidth * dpr);
-    const h = Math.floor(window.innerHeight * dpr);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
   }
 
   /* ── Baking ──────────────────────────────────────────────────────── */
@@ -179,21 +91,14 @@ class BurstHost {
     gl.viewport(0, 0, size, size);
     gl.useProgram(this.bakeProgram);
 
-    const u = {
-      uTime: gl.getUniformLocation(this.bakeProgram, "uTime"),
-      uRes: gl.getUniformLocation(this.bakeProgram, "uRes"),
-      uSeed: gl.getUniformLocation(this.bakeProgram, "uSeed"),
-      uChaos: gl.getUniformLocation(this.bakeProgram, "uChaos"),
-      uDeep: gl.getUniformLocation(this.bakeProgram, "uDeep"),
-      uMid: gl.getUniformLocation(this.bakeProgram, "uMid"),
-      uHot: gl.getUniformLocation(this.bakeProgram, "uHot"),
-    };
+    const u = this.bakeUniforms;
+    const ramp = rampFloats();
     gl.uniform2f(u.uRes, size, size);
     gl.uniform1f(u.uSeed, seedFor(level));
     gl.uniform1f(u.uChaos, chaos);
-    gl.uniform3fv(u.uDeep, RAMP.deep);
-    gl.uniform3fv(u.uMid, RAMP.mid);
-    gl.uniform3fv(u.uHot, RAMP.hot);
+    gl.uniform3fv(u.uDeep, ramp.deep);
+    gl.uniform3fv(u.uMid, ramp.mid);
+    gl.uniform3fv(u.uHot, ramp.hot);
 
     for (let i = 0; i < BURST_FRAMES; i++) {
       const texture = gl.createTexture();
@@ -232,14 +137,19 @@ class BurstHost {
     this.bakedKey = null;
   }
 
+  /** A retheme invalidates every baked frame — the palette is burned into them. */
+  retheme() {
+    this._disposeFrames();
+  }
+
   /* ── Playback ────────────────────────────────────────────────────── */
 
   play(level, { durationMs = BURST_MS, peak = 1 } = {}) {
-    if (!this.isSupported() || !this._ensureContext()) return;
+    if (!webglSupported() || !this._ensureContext()) return;
     if (!this._bake(level)) return;
 
     this._stopLoop();
-    this._resize();
+    sizeToViewport(this.canvas, this.gl);
     this.canvas.classList.add("glas-visible");
 
     const gl = this.gl;
@@ -304,7 +214,14 @@ function seedFor(level) {
 }
 
 let host = null;
-const ensureHost = () => (host ??= new BurstHost());
+let untheme = null;
+
+function ensureHost() {
+  host ??= new BurstHost();
+  // The palette is baked INTO the frames, so a retheme has to throw them away.
+  untheme ??= onThemeChange(() => host?.retheme());
+  return host;
+}
 
 /** The full beat, scaled by the world's state. */
 export function playBurst(level) {
@@ -321,12 +238,16 @@ export function playBurst(level) {
 export function playFlourish(tier) {
   const current = ensureHost();
   if (!current.budget.allows("flourish")) return;
-  const peak = { minor: 0.35, major: 0.55, catastrophic: 0.8, breach: 1 }[tier] ?? 0.4;
-  const level = { minor: "fraying", major: "unbound", catastrophic: "unraveling", breach: "unraveling" }[tier] ?? "fraying";
-  current.play(level, { durationMs: FLOURISH_MS, peak });
+  const shape = TIER_FLOURISH[tier];
+  // An unknown tier draws nothing rather than silently borrowing another tier's
+  // weight — a wrong intensity here misreports how bad the result was.
+  if (!shape) return;
+  current.play(shape.level, { durationMs: FLOURISH_MS, peak: shape.peak });
 }
 
 export function destroyBurst() {
+  untheme?.();
+  untheme = null;
   host?.destroy();
   host = null;
 }

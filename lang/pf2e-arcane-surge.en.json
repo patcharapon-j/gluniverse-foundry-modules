@@ -47,7 +47,8 @@
       "voided": "Check voided",
       "void": "Void",
       "unvoid": "Restore",
-      "release": "Release"
+      "release": "Release",
+      "unknownLevel": "Something answered"
     },
     "severity": {
       "kicker": "Severity",
@@ -81,13 +82,6 @@
         "always": "Every eligible casting",
         "surge": "Only when it surges",
         "never": "Never"
-      },
-      "motionTier": {
-        "name": "Motion",
-        "hint": "How much ceremony the banner, burst and overlay play.",
-        "default": "Default",
-        "reduced": "Reduced",
-        "cinematic": "Cinematic"
       }
     },
     "config": {

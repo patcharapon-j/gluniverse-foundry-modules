@@ -22,7 +22,6 @@ export const SETTINGS = Object.freeze({
   conceal: `${PREFIX}conceal`,
   ambient: `${PREFIX}ambient`,
   dieVisibility: `${PREFIX}dieVisibility`,
-  motionTier: `${PREFIX}motionTier`,
   armed: `${PREFIX}armed`,
 });
 
@@ -47,6 +46,21 @@ export const ROWS = Object.freeze(["fraying", "unbound", "unraveling", ROW_INVIT
 
 /** Severity tiers, ordered mildest→worst. Index is the escalation order. */
 export const TIERS = Object.freeze(["minor", "major", "catastrophic", "breach"]);
+
+/**
+ * How loudly each tier's second beat plays when the severity card resolves.
+ *
+ * Kept beside `TIERS` rather than inline in the burst, so adding a tier without
+ * giving it a weight is a missing entry the check tool can see — not a silent
+ * fallback that reports the wrong severity in the loudest channel the feature
+ * has. `level` selects which baked frame set to reuse; `peak` is its opacity.
+ */
+export const TIER_FLOURISH = Object.freeze({
+  minor: Object.freeze({ level: "fraying", peak: 0.35 }),
+  major: Object.freeze({ level: "unbound", peak: 0.55 }),
+  catastrophic: Object.freeze({ level: "unraveling", peak: 0.8 }),
+  breach: Object.freeze({ level: "unraveling", peak: 1 }),
+});
 
 /**
  * Default per-level configuration.

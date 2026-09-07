@@ -75,9 +75,24 @@ has — it doubles the drama and the GM cannot tell which one was real.
 (so Dice So Nice launches the throw from their seat), otherwise the lowest-id
 active GM. Every client computes the same election and all but one bail out.
 
-**NPC surges are held.** A surge on a GM-authored casting rolls privately,
-banners GM-only and animates nothing until the GM presses Release. Otherwise the
-animation announces something the GM has not decided yet.
+**Every NPC check is the GM's alone — including the ones that pass.** A surge on
+an NPC casting rolls privately, banners GM-only, and animates nothing until the
+GM presses Release. But the *passed* checks are private too: a public "the weave
+held" on an enemy's spell announces that the GM's monsters are being checked at
+all, and prints the level it was checked against, which is exactly what conceal
+exists to prevent. The gate is `playerCast`, not `held`.
+
+**Conceal redacts the banner, not just the chip.** While stability is concealed,
+a player's own banner omits the level name and the die face. A surge they
+experience is the intended way to find out; a label reading "Unraveling" on their
+own spell card is not.
+
+**Releasing a held surge plays from exactly one path.** Foundry does not echo a
+socket to its sender, so the releasing GM would otherwise be the only person at
+the table not to see the burst — it is played locally as well, the way
+`locations` runs its own travel payload after emitting it. The flag is marked
+`releasedAt` so the render path stands down permanently; without that, a release
+inside the freshness window plays twice on every player.
 
 **Severity is public, including the number and the band it was read against.** A
 card a player is allowed to press cannot hide its own result, and a table that
@@ -135,13 +150,44 @@ tension, and it means the roll cannot be forgotten.
 other module in the world, and a collision is silent — the later registration
 overwrites the earlier and both modules keep running, one of them now rolling
 somebody else's die. This takes `u` (`1du`) only after reading whether `u` is
-free, and otherwise falls back to a plain `1d20` read identically. Dice So Nice
-is a **soft** dependency: without it there is no tumbling die, and the banner,
-the burst and the severity card all still work.
+free, and otherwise falls back to a plain `1d20` read identically. **The DSN half
+of that fallback matters as much as the roll half**: if the letter was refused,
+`du` is another module's die, and registering a preset for it would repaint
+*their* dice with our blank and surge faces — which looks like a bug in their
+module, not ours. Registration is skipped entirely in that case.
+
+The die also carries the level it was rolled against, stamped onto the term by
+`stampLevel()`. Without it the die cannot label its own face: the same number is
+a surge at Unraveling and a blank at Fraying, so an unstamped die would print a
+verdict in the roll tooltip that disagrees with the banner beside it.
+
+Dice So Nice is a **soft** dependency: without it there is no tumbling die, and
+the banner, the burst and the severity card all still work.
 
 Three DSN *systems*, one per rolling level, each carrying a `du` preset with that
 level's face layout — the same trick `pf2e-damage-dice` uses to get several
 appearances out of one die type.
+
+## Colour, and the one place it is stated twice
+
+WebGL cannot read a CSS custom property, so the ramp is derived from the palette
+mirror in `core/theme.mjs` by `palette.mjs` — never written out as hexes here.
+Both hosts re-read it through `onThemeChange()`, and the burst additionally
+throws its baked frames away on a retheme, because the palette is burned into
+them.
+
+`anim.mjs` carries a literal copy of those floats, and that is deliberate: the
+preview page inlines that file as source with no module resolution available to
+it. It is genuine drift risk — two statements of one colour — so the check tool
+asserts the copy still equals `hexToRgbFloat(PALETTE[…])`, and separately that no
+feature file restates a suite colour as a live hex.
+
+## This feature owns no motion tier
+
+`applyMotionTier()` writes the suite-global `--gl-motion-scale`. A second feature
+applying its own preference would silently retime Loot Gen, Destiny Dice and
+Statsblock Import — the three the design system says own that control. The check
+tool fails the build if this feature ever calls it.
 
 ## Validation
 

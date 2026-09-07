@@ -20,8 +20,10 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
+import { emitSocket } from "../../core/socket.mjs";
+import { playBurst } from "./burst.mjs";
 import { DEDUP_WINDOW_MS, FEATURE_ID, FLAGS } from "./constants.mjs";
-import { readDieResult, surgeNotation } from "./die.mjs";
+import { readDieResult, stampLevel, surgeNotation } from "./die.mjs";
 import { tagRoll } from "./dsn.mjs";
 import { isSurge, resolveExposure } from "./levels.mjs";
 import { armedMode, clearArmedMode, currentLevel, dieVisibility, eligibility, levelConfig } from "./settings.mjs";
@@ -119,15 +121,31 @@ export function isPlayerCast(actor) {
 /**
  * The one client that rolls. Every client computes this and only the match acts.
  *
- * The caster's own client is preferred so Dice So Nice launches the throw from
- * their seat; NPC casts fall to the lowest-id active GM, which also keeps them
- * off the players' screens.
+ * Preference order, and every step of it is deterministic so that all clients
+ * reach the same answer from the same state:
+ *
+ *   1. The message's author, if they are a player who owns the actor. The
+ *      caster's own client should throw the die so Dice So Nice launches it
+ *      from their seat.
+ *   2. Failing that, the lowest-id ACTIVE PLAYER who owns the actor. This is
+ *      the GM-casting-from-a-PC's-sheet case: it is still a player casting
+ *      (the spec makes that public), and putting the roll on that player's
+ *      client is also what lets them press their own severity card, since the
+ *      card is authored by whoever rolled.
+ *   3. Failing that, the lowest-id active GM — every NPC casting, and any
+ *      player casting whose owner is not connected.
  */
 function electRoller(message, actor) {
   const author = message?.author;
   if (author && !author.isGM && actor?.testUserPermission?.(author, "OWNER")) return author.id;
-  const gms = game.users.filter((u) => u.isGM && u.active).sort((a, b) => a.id.localeCompare(b.id));
-  return gms[0]?.id ?? null;
+
+  const byId = (a, b) => a.id.localeCompare(b.id);
+  const owners = game.users
+    .filter((u) => !u.isGM && u.active && actor?.testUserPermission?.(u, "OWNER"))
+    .sort(byId);
+  if (owners.length) return owners[0].id;
+
+  return game.users.filter((u) => u.isGM && u.active).sort(byId)[0]?.id ?? null;
 }
 
 /** A stable key for "this casting", used only for the dedup backstop. */
@@ -199,6 +217,10 @@ async function rollCheck(message, { playerCast }) {
 
   if (exposure.rollsDie) {
     const roll = await new Roll(surgeNotation()).evaluate();
+    // Stamp BEFORE tagging: the level decides what the die's own face label
+    // says, and that label appears in the roll tooltip whether or not Dice So
+    // Nice ever animates the throw.
+    stampLevel(roll, exposure.effective);
     tagRoll(roll, exposure.effective);
     dieResult = readDieResult(roll);
     rollData = roll.toJSON();
@@ -255,14 +277,24 @@ function shouldShowDie(surged) {
  * The message is old by now, so its freshness window has expired on every
  * client and a flag update alone would not play anything. This is the one job
  * the socket exists for.
+ *
+ * Two things this has to get right, both of which were wrong before:
+ *
+ *   - Foundry does NOT echo a socket message back to its sender, so the GM who
+ *     pressed Release would be the only person at the table not to see the
+ *     burst. It is played locally as well, the same way `locations` runs its own
+ *     travel payload after emitting it.
+ *   - `releasedAt` marks the flag so the render path stands down permanently for
+ *     this message. Without it, a release inside the freshness window plays
+ *     twice on every player — once from the socket, once from the re-render.
  */
 export async function releaseHeldSurge(message) {
   if (!game.user.isGM) return;
   const check = message?.getFlag?.(SUITE_ID, FLAGS.check);
   if (!check?.held) return;
   await message.setFlag(SUITE_ID, FLAGS.check, { ...check, held: false, releasedAt: Date.now() });
-  const { emitSocket } = await import("../../core/socket.mjs");
   emitSocket(FEATURE_ID, { type: "surge", level: check.effective });
+  playBurst(check.effective);
 }
 
 /** GM void of a check whose casting was disrupted before it completed. */
