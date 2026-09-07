@@ -3,11 +3,57 @@
 import { SUITE_ID } from "../../../core/const.mjs";
 
 /**
- * Sound profiles per theme. Each has a `line` and `reveal` function
+ * Sound profiles per theme. Each has an `impact`, `line` and `reveal` function
  * that create and play a short procedural sound.
  */
 const PROFILES = {
   dreadlight: {
+    /** Stage 0: the edge takes the light — a sub thump under a filtered rush. */
+    impact(ctx, gain) {
+      const sub = ctx.createOscillator();
+      const env = ctx.createGain();
+
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(96, ctx.currentTime);
+      sub.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.55);
+
+      env.gain.setValueAtTime(0, ctx.currentTime);
+      env.gain.linearRampToValueAtTime(gain * 0.55, ctx.currentTime + 0.02);
+      env.gain.exponentialRampToValueAtTime(gain * 0.06, ctx.currentTime + 0.45);
+      env.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.7);
+
+      sub.connect(env);
+      env.connect(ctx.destination);
+      sub.start(ctx.currentTime);
+      sub.stop(ctx.currentTime + 0.8);
+
+      // The rush — noise sweeping down as the four bands close in.
+      const dur = 0.7;
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+      const chan = buffer.getChannelData(0);
+      for (let i = 0; i < chan.length; i++) chan[i] = Math.random() * 2 - 1;
+
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const band = ctx.createBiquadFilter();
+      band.type = "bandpass";
+      band.Q.setValueAtTime(1.1, ctx.currentTime);
+      band.frequency.setValueAtTime(2400, ctx.currentTime);
+      band.frequency.exponentialRampToValueAtTime(240, ctx.currentTime + dur);
+
+      const nEnv = ctx.createGain();
+      nEnv.gain.setValueAtTime(0, ctx.currentTime);
+      nEnv.gain.linearRampToValueAtTime(gain * 0.22, ctx.currentTime + 0.04);
+      nEnv.gain.exponentialRampToValueAtTime(gain * 0.01, ctx.currentTime + dur);
+
+      noise.connect(band);
+      band.connect(nEnv);
+      nEnv.connect(ctx.destination);
+      noise.start(ctx.currentTime);
+      noise.stop(ctx.currentTime + dur);
+    },
+
     /** Stage 1: Low eerie tone with slight detuning */
     line(ctx, gain) {
       const osc = ctx.createOscillator();
@@ -83,6 +129,26 @@ const PROFILES = {
   },
 
   fantasy: {
+    /** Stage 0: the edge takes the light — a struck bowl, low and open. */
+    impact(ctx, gain) {
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, ctx.currentTime);
+      env.gain.linearRampToValueAtTime(gain * 0.42, ctx.currentTime + 0.015);
+      env.gain.exponentialRampToValueAtTime(gain * 0.05, ctx.currentTime + 0.8);
+      env.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
+
+      for (const freq of [110, 164.81, 220]) {
+        const osc = ctx.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.connect(env);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 1.3);
+      }
+
+      env.connect(ctx.destination);
+    },
+
     /** Stage 1: Soft mystical chime */
     line(ctx, gain) {
       const osc = ctx.createOscillator();
@@ -151,7 +217,7 @@ function getContext() {
 
 /**
  * Play a notification sound.
- * @param {"line"|"reveal"} stage - Which stage sound to play
+ * @param {"impact"|"line"|"reveal"} stage - Which stage sound to play
  * @param {string} [themeId] - Theme ID. Defaults to the module setting.
  */
 export function playSound(stage, themeId) {

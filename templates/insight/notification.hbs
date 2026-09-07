@@ -1,33 +1,68 @@
-<div class="insight-notification" data-id="{{id}}">
-  <span class="gl-crop gl-crop-tl"></span>
-  <span class="gl-crop gl-crop-tr"></span>
-  <span class="gl-crop gl-crop-bl"></span>
-  <span class="gl-crop gl-crop-br"></span>
-  <div class="insight-fracture-line"></div>
-  <div class="insight-fracture-card">
-    <div class="insight-fracture-bg-back"></div>
-    <div class="insight-fracture-bg-front">
-      <span class="insight-bracket"></span>
-      <div class="insight-sheen"></div>
-      <div class="insight-fracture-inner">
-        <div class="insight-label-row">
-          <div class="insight-icon">&#x25B2;</div>
-          {{#if sense}}<div class="insight-sense">{{sense}}</div>{{/if}}
-          <div class="insight-serial">GLU&middot;INSIGHT // {{serial}}</div>
+{{!-- The arrival "stage": a full-viewport, click-through layer that carries the
+      screen-edge glow, and above it the card itself (the only part that takes
+      the pointer). --}}
+<div class="insight-stage" data-id="{{id}}">
+
+  {{!-- §4.4 SCREEN EDGE — the alert. Four accent bands bleeding in from the
+        viewport edges, a hairline frame, corner registration marks, and a
+        one-shot scan. All of it click-through. --}}
+  <div class="insight-edge" aria-hidden="true">
+    <div class="insight-edge-flash"></div>
+    <div class="insight-edge-veil"></div>
+    <div class="insight-edge-band insight-edge-t"></div>
+    <div class="insight-edge-band insight-edge-b"></div>
+    <div class="insight-edge-band insight-edge-l"></div>
+    <div class="insight-edge-band insight-edge-r"></div>
+    <div class="insight-edge-frame"></div>
+    <span class="insight-mark insight-mark-tl"></span>
+    <span class="insight-mark insight-mark-tr"></span>
+    <span class="insight-mark insight-mark-bl"></span>
+    <span class="insight-mark insight-mark-br"></span>
+    <div class="insight-edge-scan"></div>
+  </div>
+
+  <div class="insight-notification">
+    <span class="gl-crop gl-crop-tl"></span>
+    <span class="gl-crop gl-crop-tr"></span>
+    <span class="gl-crop gl-crop-bl"></span>
+    <span class="gl-crop gl-crop-br"></span>
+
+    {{!-- §4.3 the cut — a rule of light wider than the card it opens --}}
+    <div class="insight-fracture-line"></div>
+
+    <div class="insight-fracture-card">
+      <div class="insight-fracture-bg-back"></div>
+      <div class="insight-fracture-bg-front">
+        <span class="insight-bracket"></span>
+        <div class="insight-sheen"></div>
+        <div class="insight-fracture-inner">
+
+          <div class="insight-label-row">
+            <div class="insight-icon"><span class="insight-icon-glyph">&#x25B2;</span></div>
+            <div class="insight-label-stack">
+              <div class="insight-sense">{{#if sense}}{{sense}}{{else}}{{localize "INSIGHT.SenseDefault"}}{{/if}}</div>
+              <div class="insight-serial">GLU&middot;INSIGHT // {{serial}}</div>
+            </div>
+            <div class="insight-pip"></div>
+          </div>
+
+          {{#if title}}
+          <div class="insight-title">{{title}}</div>
+          {{/if}}
+          <div class="insight-divider"></div>
+
+          {{#if image}}
+          <img class="insight-image" src="{{image}}" alt="">
+          {{/if}}
+
+          <div class="insight-body">{{{body}}}</div>
+          <div class="insight-datastrip"></div>
         </div>
-        {{#if title}}
-        <div class="insight-title">{{title}}</div>
-        <div class="insight-divider"></div>
-        {{/if}}
-        {{#if image}}
-        <img class="insight-image" src="{{image}}" alt="">
-        {{/if}}
-        <div class="insight-body">{{{body}}}</div>
-        <div class="insight-datastrip"></div>
+
+        <button class="insight-dismiss" data-action="dismiss">
+          <span class="insight-dismiss-label">{{localize "INSIGHT.Dismiss"}}</span>
+        </button>
       </div>
-      <button class="insight-dismiss" data-action="dismiss">
-        &#x2715; {{localize "INSIGHT.Dismiss"}}
-      </button>
     </div>
   </div>
 </div>

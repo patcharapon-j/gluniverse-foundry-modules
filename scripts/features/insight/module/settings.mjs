@@ -46,6 +46,20 @@ export function registerSettings() {
     filePicker: "audio",
   });
 
+  game.settings.register(SUITE_ID, "insight.edgeIntensity", {
+    name: "INSIGHT.SettingEdgeIntensity",
+    hint: "INSIGHT.SettingEdgeIntensityHint",
+    scope: "client",
+    config: true,
+    type: String,
+    default: "full",
+    choices: {
+      full: "INSIGHT.EdgeFull",
+      subtle: "INSIGHT.EdgeSubtle",
+      off: "INSIGHT.EdgeOff",
+    },
+  });
+
   game.settings.register(SUITE_ID, "insight.animationSpeed", {
     name: "INSIGHT.SettingAnimationSpeed",
     hint: "INSIGHT.SettingAnimationSpeedHint",
