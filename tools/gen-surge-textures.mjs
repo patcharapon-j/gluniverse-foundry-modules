@@ -271,6 +271,43 @@ function glyph(x, y) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   The transmission band
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * THE BUMP MAP IS ALSO THE TRANSMISSION MASK, and that governs every level
+ * chosen below.
+ *
+ * For `glass` — and for `frosted` and `resin`, the other two transmissive
+ * materials — Dice So Nice binds the very same bump canvas a second time as the
+ * material's `transmissionMap` (`usesTransmissionMask` in `DiceFactory`), then
+ * reads it through one line of its own patched shader chunk:
+ *
+ *     material.transmission *= smoothstep(0.6, 0.9, texture(transmissionMap).r)
+ *
+ * So this map does not only say how deep the surface is. It says what is glass
+ * and what is solid, on a hard curve with nothing in the middle:
+ *
+ *     ≥ 0.9 (230)  fully transmissive — the body of the die
+ *     ≤ 0.6 (153)  fully opaque — the figure you are meant to read
+ *
+ * DSN's own numerals are drawn at `#555555` on a `#FFFFFF` field, which is that
+ * contract stated in the module's source. Ours has to agree with it.
+ *
+ * THESE DICE ONCE SHIPPED WITH A FIELD AT 141. That is a legible height map and
+ * a perfectly ordinary-looking contact sheet, and it put 94% of every face
+ * below the bottom of the curve — so `transmission` was zero everywhere, the
+ * glass was not glass, and what the table got was an opaque near-black solid
+ * with no albedo on it. Nothing errored. Only the two numbers below stand
+ * between that and a die, so `--check` measures them rather than trusting them.
+ */
+const GLASS_TOP = 0.9;
+const SOLID_FLOOR = 0.6;
+
+/** Where the frost field sits: inside the glass band, with room to grain. */
+const FIELD = 0.975;
+
+/* ══════════════════════════════════════════════════════════════════════
    Bake
    ══════════════════════════════════════════════════════════════════════ */
 
@@ -302,12 +339,18 @@ function bakeFace(face) {
       albedo[i * 3 + 1] = 255;
       albedo[i * 3 + 2] = 255;
 
-      /* Bump — the whole form. With no albedo this map is the only thing that
-         distinguishes one face from another by shape, so the cuts are deeper
-         than they were when colour was carrying half the read. */
-      let height = 0.60 + (ice - 0.55) * 0.34;
-      height -= g * 0.66;
-      height -= mark * 0.78;
+      /* Bump — the whole form, AND the transmission mask. See the band above.
+         The field rides high so the body of the die is glass; the frost grains
+         it without ever leaving the band. The cuts go the whole way through the
+         curve in one step, because a groove that stops halfway is not a
+         shallower groove — it is a smear of partial transmission, which is the
+         one thing this material renders badly.
+
+         The glyph is cut deeper than the rings that frame it, so on a face that
+         has both, the whirlpool is the figure and the rings are the setting. */
+      let height = FIELD + (ice - 0.425) * 0.14;
+      height -= g * 0.50;
+      height -= mark * 0.72;
       bump[i] = Math.round(clamp01(height) * 255);
 
       /* Emission — the glyph only, and hottest at its core, so the surge face
@@ -379,6 +422,49 @@ function check() {
   if (Buffer.compare(blank.bump, surge.bump) === 0) problems.push("the surge and blank bump maps are identical — the glyph has no relief");
   if (!surge.emissive.some((byte) => byte > 0)) problems.push("the surge emissive map is black — nothing marks a surge face");
   if (blank.emissive.some((byte) => byte > 0)) problems.push("the blank emissive map glows — every face would read as a surge");
+
+  /* And the band. Every bump here is also a transmission mask, so these are the
+     numbers that decide whether the die is made of glass — see the block above
+     `bakeFace`. They are measured because the failure is silent and total: the
+     set once shipped with its field at 141/255 and the dice came out opaque.
+     `--sheet` would not have shown it and neither would a diff. */
+  const glass = Math.round(GLASS_TOP * 255);
+  const solid = Math.round(SOLID_FLOOR * 255);
+  const surface = bakeFace("surface");
+
+  for (const [name, maps] of [["blank", blank], ["surge", surge], ["surface", surface]]) {
+    const sorted = Uint8Array.from(maps.bump).sort();
+    const median = sorted[sorted.length >> 1];
+    if (median < glass) {
+      problems.push(
+        `${name}-bump.png sits at ${median}/255 across most of the face; below ${glass} Dice So Nice ` +
+        `reads it as a transmission mask of zero and the die stops being glass`
+      );
+    }
+  }
+
+  /* The tiling surface is different in kind: it is drawn under EVERY face of
+     every die that wears the colorset, including the severity d10s, and DSN
+     then draws its own numerals into the same canvas at #555. So the numerals
+     are the only thing on it allowed to be solid. A single dark pixel in this
+     field is a permanent opaque smear repeated across every face on the table. */
+  const surfaceFloor = surface.bump.reduce((lowest, byte) => Math.min(lowest, byte), 255);
+  if (surfaceFloor < glass) {
+    problems.push(
+      `surface-bump.png reaches ${surfaceFloor}/255; it tiles under every face and must stay ` +
+      `wholly above ${glass}, leaving the numerals DSN draws at 85 as the only solid marks`
+    );
+  }
+
+  // And the marks have to clear the bottom of the curve, or they are neither
+  // glass nor solid but a band of partial transmission, which reads as fog.
+  for (const [name, maps] of [["blank", blank], ["surge", surge]]) {
+    const floor = maps.bump.reduce((lowest, byte) => Math.min(lowest, byte), 255);
+    if (floor > solid) problems.push(`${name}-bump.png only cuts to ${floor}/255; a mark must reach ${solid} to read as solid`);
+  }
+  const surgeFloor = surge.bump.reduce((lowest, byte) => Math.min(lowest, byte), 255);
+  const blankFloor = blank.bump.reduce((lowest, byte) => Math.min(lowest, byte), 255);
+  if (surgeFloor >= blankFloor) problems.push("the glyph is not cut deeper than the rings that frame it");
 
   // Every level that rolls needs between 1 and 20 glyph faces, and each of those
   // faces is one of the two face designs above. A level demanding more than 20

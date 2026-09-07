@@ -735,6 +735,50 @@ for (const [label, frag, uniforms, hostRel] of [
     fail("dsn.mjs", "the frost texture is not composited multiply, so its white source would paint over the glass instead of leaving it alone");
   }
   if (!/material:\s*["']glass["']/.test(dsnSrc)) fail("dsn.mjs", "the colorset is not frosted glass");
+
+  /* And the third trap, which is the one that actually shipped broken. On a
+     transmissive material DSN binds the finished bump canvas a SECOND time as
+     the material's transmissionMap and reads it through smoothstep(0.6, 0.9).
+     So the height field is also the glass/solid decision, and a flat level
+     under 0.9 makes the die opaque — which is what happened: a field at
+     141/255 put 94% of every face below the curve, the glass rendered as a
+     black solid with no albedo on it, and nothing anywhere errored.
+
+     The band is asserted where the pixels are, in the baker's own --check.
+     Here we only hold the baker to declaring it, because a recipe that stops
+     naming these is a recipe that has stopped thinking about them. */
+  for (const name of ["GLASS_TOP", "SOLID_FLOOR"]) {
+    if (!bakerSrc.includes(name)) {
+      fail("gen-surge-textures.mjs", `does not define ${name} — the bump is also the transmission mask and its band has to be stated somewhere`);
+    }
+  }
+  if (!/transmission/i.test(bakerSrc)) {
+    fail("gen-surge-textures.mjs", "says nothing about transmission, so the next person to retune the bump will take the die's glass away without knowing");
+  }
+
+  /* A transmissive body carries its tint through the whole casting instead of
+     painting it on, so a near-black background is not a dark glass die — it is
+     a void. `ink0`..`ink2` are the suite's near-blacks and none of them can be
+     the body of something you are meant to see through. */
+  const body = dsnSrc.match(/background:\s*PALETTE\.(\w+)/)?.[1];
+  if (!body) fail("dsn.mjs", "the colorset sets no background from the palette");
+  else if (/^ink\d$/.test(body)) {
+    fail("dsn.mjs", `the die's body is PALETTE.${body}, a near-black; on a transmissive material that renders as a void rather than as dark glass`);
+  }
+
+  /* The severity d100 was asked for emission too, and a colorset has no
+     emissive MAP slot — `emissiveLabels` is the only channel it has. Without it
+     that die is the one surface in the feature wearing relief and no light. */
+  if (!/emissiveLabels:\s*true/.test(dsnSrc)) {
+    fail("dsn.mjs", "the colorset does not set emissiveLabels, so the severity roll's numerals are cut into unlit glass");
+  }
+
+  /* Bump and emissive maps both live behind DSN's "realistic lighting", which
+     Foundry's Low performance mode turns off. A die carrying nothing else is
+     twenty identical faces there, so the registration has to notice. */
+  if (!/bumpMapping/.test(dsnSrc)) {
+    fail("dsn.mjs", "does not check DSN's realistic-lighting setting; with it off these dice have no relief, no glow and no albedo — twenty blank faces");
+  }
   if (!/tagSeverityRoll/.test(read(`${FEATURE}/severity.mjs`))) {
     fail("severity.mjs", "does not dress its roll, so the d100 would not match the surge die");
   }

@@ -497,6 +497,28 @@ because DSN draws a texture's bump only inside the block that draws its source.
 Replace either with the "obvious" thing and the dice go blank while nothing
 errors.
 
+And **the bump map is also the transmission mask.** On any transmissive material
+DSN binds the finished bump canvas a second time as `transmissionMap` and reads
+it through `smoothstep(0.6, 0.9, r)`, so the height field is what decides which
+parts of the die are glass (≥ 230) and which are solid (≤ 153) — DSN draws its
+own numerals at `#555` on a `#FFFFFF` field, which is that contract stated in
+its source. A flat level below the top of that curve makes the whole die opaque
+while remaining a perfectly ordinary-looking height map, and that is how these
+dice first shipped: a field at 141/255 put 94% of every face under the curve and
+the table got a black solid with no albedo on it. `--check` measures the band on
+both faces now, and separately requires the *tiling* surface to stay wholly
+inside it, since one dark pixel in a map drawn under every face is a permanent
+opaque smear repeated across the table.
+
+Two smaller ones in the same family. The die's body colour has to have light in
+it — a transmissive material carries its tint through the whole casting instead
+of painting it on, so a near-black background renders as a void rather than as
+dark glass, and the check refuses an `ink*` token there. And bump and emissive
+maps *both* live behind DSN's "realistic lighting", which Foundry's own Low
+performance mode turns off; a die carrying nothing else is twenty identical
+faces there, so `registerDiceSoNice` checks and stands down to DSN's internal
+word-labelled preset rather than registering blanks over it.
+
 See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
 different transport channels, why the standing instability is drawn in the HUD
 chip rather than over the board, and why every pass runs live off a warmed

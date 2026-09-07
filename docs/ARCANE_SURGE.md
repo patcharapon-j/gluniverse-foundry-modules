@@ -329,6 +329,70 @@ exist purely to make that possible, and both look like mistakes:
 Both are asserted by `--check` and by `arcane-surge-check.mjs`, because both
 would render perfectly while being wrong.
 
+### The bump map is also the transmission mask
+
+This is the one that actually shipped broken, and it is the reason every level
+in the baker is where it is.
+
+For `glass` — and for `frosted` and `resin`, the other two transmissive
+materials — DSN binds the *finished bump canvas* a second time as the material's
+`transmissionMap` (`usesTransmissionMask` in `DiceFactory`) and reads it through
+one line of its own patched shader chunk:
+
+```glsl
+material.transmission *= smoothstep(0.6, 0.9, texture(transmissionMap, uv).r)
+```
+
+So the height field is not only depth. It is the glass/solid decision, on a hard
+curve with nothing usable in the middle:
+
+| bump level | what it renders as |
+|---|---|
+| ≥ 0.9 (230) | fully transmissive — the body of the die |
+| 0.6 – 0.9 | partial transmission, which reads as fog |
+| ≤ 0.6 (153) | fully opaque — the figure you are meant to read |
+
+DSN's own numerals are drawn at `#555555` on a `#FFFFFF` field, which is that
+contract stated in the module's source. Ours agrees with it: the frost field
+rides at ~248 and grains without leaving the band, the rings cut to ~120 and the
+whirlpool to ~65, so a surge face is an opaque figure suspended in clear glass
+rather than a shallow dent in it.
+
+**The first version put its field at 141.** That is a legible height map, a
+perfectly ordinary contact sheet, and 94% of every face below the bottom of the
+curve — `transmission` was zero everywhere, the glass was not glass, and what
+the table got was an opaque near-black solid with no albedo on it. Nothing
+errored. `--check` now measures the median of every bump against the top of the
+band and the floor against the bottom, and separately requires `surface-bump` —
+which tiles under *every* face of every die wearing the colorset, including the
+severity d10s — to stay wholly inside the band, because one dark pixel there is
+a permanent opaque smear repeated across the whole table.
+
+Two smaller consequences of the same material:
+
+- **The body colour has to have light in it.** A transmissive material carries
+  its tint through the whole casting rather than painting it on the surface, so
+  a near-black background is not a dark glass die, it is a void with an opaque
+  figure floating in it. The body is the feature's own `--gl-accent` teal, and
+  `arcane-surge-check.mjs` refuses an `ink*` token there.
+- **Bump and emissive maps both live behind DSN's "realistic lighting"**, which
+  Foundry's own Low performance mode turns off. There is no normal map and no
+  emissive map at all in that branch, and a die carrying nothing else is twenty
+  identical faces — silently. `registerDiceSoNice` reads the merged DSN config
+  and, with lighting off, registers the colorset and the frost but *not* the
+  face presets, leaving DSN's own internally-generated `du` preset standing:
+  that one labels each face from `getResultLabel`, so the die says which faces
+  surge in words. Worse-looking than relief, better than blank. Registering ours
+  would replace it — `DiceFactory.register` overwrites the standard system's
+  entry for a type rather than sitting beside it — so this has to be a decision
+  made before registration, not at roll time.
+
+The severity d100 has no per-face maps to carry emission (a colorset has no
+emissive *map* slot; that belongs to a preset), so its one channel is
+`emissiveLabels: true`, which lights DSN's own numeral canvas. Without it that
+die is the only surface in the feature wearing relief and no light, and a number
+cut into unlit glass is a number you have to hunt for.
+
 ```bash
 node tools/arcane-surge-preview.mjs --out=.preview/surge.html
 node tools/preview-server.mjs
