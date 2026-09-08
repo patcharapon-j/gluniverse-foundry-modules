@@ -4,7 +4,7 @@ The Markdown grammar `statsblock-import` parses, and the contract between that
 feature and `pf2e-ultimates`.
 
 **The field-by-field reference lives in
-[`skills/pf2e-statblock/references/grammar.md`](../skills/pf2e-statblock/references/grammar.md).**
+[`STATBLOCK_GRAMMAR.md`](STATBLOCK_GRAMMAR.md).**
 It is versioned in this repository precisely so it cannot drift away from
 `scripts/features/statsblock-import/importer.js`. Do not duplicate it here — fix
 it there.
@@ -104,16 +104,3 @@ Two asymmetries are intentional and worth knowing about:
   that key as data, not as free-form copy.
 - A phase's `Trigger:` is folded into the item description on import and peeled
   back off on export, using the `GLSBI.label.trigger` string. Same caveat.
-
-## The authoring skill
-
-`skills/pf2e-statblock/` is a Claude skill that writes this format. It lives in
-this repository so its grammar reference is versioned alongside the parser it
-documents. Install it by junction so the two can never diverge:
-
-```bash
-cmd //c mklink //J "%USERPROFILE%\.claude\skills\pf2e-statblock" "%CD%\skills\pf2e-statblock"
-```
-
-The skill is not loaded by Foundry and is absent from `module.json`; it ships
-with the repository as developer/GM tooling.

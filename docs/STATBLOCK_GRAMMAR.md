@@ -348,7 +348,7 @@ direction, toward her.*
 ```
 
 The ordinal is what makes the map linear: entries run in file order, and the
-grammar has no way to express a back-edge. See `references/postures.md`.
+grammar has no way to express a back-edge.
 
 **Nothing activates a Posture.** The importer has no state-machine concept — the
 entry is inert documentation. The GM changes Posture by hand and mirrors it as a
@@ -381,7 +381,7 @@ Anything outside those five must be written as raw `RuleElements:` JSON.
 **The importer validates that a rule element's `key` exists. It does not
 validate the shape.** A rule element with a valid key and a wrong field name
 imports silently and then does nothing at the table. This is why you may only
-emit rule elements that appear in `references/rule-elements.md` with a real
+emit rule elements that appear in `PF2E_RULE_ELEMENTS.md` with a real
 compendium precedent. When in doubt, write the mechanic as prose in
 `Description:` — a GM reading clear text beats an ability that looks automated
 and is not.
