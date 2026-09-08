@@ -17,8 +17,6 @@ import { TrackerSheet } from "./apps/tracker-sheet.js";
 import { WeatherHud } from "./apps/weather-hud.js";
 import { WeatherEngine } from "./weather/engine.js";
 import { WeatherStore } from "./weather/weather-store.js";
-import { SupportHud } from "./apps/support-hud.js";
-import { SupportStore } from "./support/support-store.js";
 import { DelvingStore } from "./delving/delving-store.js";
 import { DiceSlot } from "./delving/dice-slot.js";
 
@@ -43,7 +41,6 @@ function ensureFeatureStyle(file) {
 
 function ensureHudStyles() { ensureFeatureStyle("hud"); }
 function ensureWeatherStyles() { ensureFeatureStyle("weather"); }
-function ensureSupportStyles() { ensureFeatureStyle("support"); }
 function ensureDelvingStyles() { ensureFeatureStyle("delving"); }
 function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
 
@@ -57,7 +54,6 @@ function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
 export function onInit() {
   ensureHudStyles();
   ensureWeatherStyles();
-  ensureSupportStyles();
   ensureDelvingStyles();
   ensureSheetTrackerStyles();
   // PF2e per-PC private trackers: wire the character-sheet tab (no-op off-PF2e).
@@ -85,17 +81,11 @@ export async function onReady() {
   if (game.user.isGM) await WeatherEngine.evaluate();
   // Note: the Hex Flower window is NOT auto-opened on launch — open it manually
   // from the scene controls / macro when you want it.
-
-  // Mission Support: wire GM-side action persistence, then open the Comms-Coin
-  // when the feature is on and not hidden on this client (the HUD self-hides for
-  // players who shouldn't see it / when no support is active).
-  SupportStore.registerHandlers();
-  if (SupportStore.enabled && !setting(SETTINGS.supportHudHidden, false)) await SupportHud.open();
 }
 
 /** The public API object exposed via the suite (game.modules…api.features[id]). */
 export function getApi() {
-  return { TimeEngine, GlctHud, TrackerHud, TrackerStore, TrackerSheet, WeatherEngine, WeatherStore, WeatherHud, SupportHud, SupportStore, DelvingStore, HOOKS };
+  return { TimeEngine, GlctHud, TrackerHud, TrackerStore, TrackerSheet, WeatherEngine, WeatherStore, WeatherHud, DelvingStore, HOOKS };
 }
 
 /**
@@ -119,18 +109,6 @@ function registerRuntimeHooks() {
     Hooks.on(hook, () => GlctHud.refreshState());
   }
 
-  // Support actions share a 1/round lock that only applies IN combat. Clear the
-  // "used" flag when the round advances or combat starts/ends — NOT on every turn,
-  // or it would degrade to 1/turn (GM-authoritative; no-op otherwise).
-  for (const hook of ["combatRound", "combatStart", "deleteCombat"]) {
-    Hooks.on(hook, () => { if (game.user.isGM && SupportStore.enabled) SupportStore.resetRadio(); });
-  }
-  // Repaint the HUD on every client for any combat state change so the used badges
-  // and the GM clear button appear/disappear exactly as combat begins/ends.
-  for (const hook of ["combatStart", "deleteCombat", "combatRound", "combatTurn"]) {
-    Hooks.on(hook, () => { if (SupportStore.enabled) SupportHud.refresh(); });
-  }
-
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
 }
 
@@ -142,7 +120,6 @@ function tagPoolMessage(message, html) {
   const flags = message?.flags?.[MODULE_ID]?.ct;
   if (flags?.poolRoll) el.classList.add("glct-pool-msg");
   if (flags?.weatherCard) el.classList.add("glct-weather-msg");
-  if (flags?.supportCard) el.classList.add("glct-support-msg");
   if (flags?.delvingCard) { el.classList.add("glct-delve-msg"); mountDelveTumble(message, el); }
 }
 
@@ -211,15 +188,6 @@ function onGetSceneControlButtons(controls) {
       onChange: () => WeatherHud.toggle()
     };
   }
-  if (SupportStore.enabled) {
-    ensureSuiteGroup(controls).tools["glct-support-toggle"] = {
-      name: "glct-support-toggle",
-      title: "GLCT.keybindings.toggleSupport",
-      icon: "fa-solid fa-user-shield",
-      button: true,
-      onChange: () => toggleSupportHud()
-    };
-  }
   if (DelvingStore.enabled && game.user.isGM) {
     ensureSuiteGroup(controls).tools["glct-delving-toggle"] = {
       name: "glct-delving-toggle",
@@ -267,13 +235,6 @@ function registerKeybindings() {
     restricted: false
   });
 
-  game.keybindings.register(MODULE_ID, "ct.toggleSupport", {
-    name: "GLCT.keybindings.toggleSupport",
-    editable: [{ key: "KeyM", modifiers: ["Alt"] }],
-    onDown: () => { if (SupportStore.enabled) toggleSupportHud(); return true; },
-    restricted: false
-  });
-
   game.keybindings.register(MODULE_ID, "ct.toggleDelving", {
     name: "GLCT.keybindings.toggleDelving",
     editable: [{ key: "KeyG", modifiers: ["Alt"] }],
@@ -299,11 +260,6 @@ async function toggleTrackerHud() {
   if (!open) { await TrackerHud.open(); }
   else { await TrackerHud.instance.close(); }
   try { await game.settings.set(MODULE_ID, SETTINGS.trackerHudHidden, !!open); } catch { /* ignore */ }
-}
-
-async function toggleSupportHud() {
-  if (SupportHud.instance?.rendered) return SupportHud.instance._close();
-  return SupportHud.open();
 }
 
 /** Subtle full-board tint matching the current watch (opt-in). */

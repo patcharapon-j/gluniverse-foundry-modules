@@ -386,18 +386,14 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
      • #gls-control-center — the panel that hosts the slider; zooming it would
        make it resize under the cursor while dragging.
    ════════════════════════════════════════════════════════════════════════ */
-#glmm-studio,
-#glmm-viewer,
 #glct-hud,
 #glct-tracker-hud,
 #glct-weather-hud,
-#glct-support-hud,
 #glct-calendar,
 #glct-calendar-editor,
 #glct-weather-editor,
 #glct-delving-editor,
 #glct-events,
-#glct-support-editor,
 #glct-module-config,
 #glct-shift-names-editor,
 #gluniverse-foundry-modules-critical-gm-config,
@@ -420,8 +416,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .stream-pacer-peril-stage,
 .stream-pacer-peril-indicator-wrap,
 .stream-pacer-campfire-bar-wrap,
-.insight-notification,
-.glucargo-minimap {
+.insight-notification {
   zoom: var(--gl-ui-scale, 1);
 }
 
@@ -458,9 +453,8 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
    A feature sheet declaring its own `::before` on a .gl-glass element replaces
    this (same specificity, later sheet). That is a supported opt-out, not an
-   accident, and there is exactly one: .glmm-viewer, which draws a livelier
-   chamfer glint of its own. Check for it before adding a ::before to anything
-   carrying .gl-glass. */
+   accident — check for one before adding a ::before to anything carrying
+   .gl-glass. */
 .gl-glass::before {
   content: "";
   position: absolute;
@@ -670,22 +664,22 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
    .gl-btn is excluded because it already presses; doubling would over-sink it. */
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) button:not(.gl-btn) {
   transition: scale var(--gl-d-tap) var(--gl-ease);
 }
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) button:not(.gl-btn):active:not(:disabled) {
   scale: var(--gl-press-scale);
 }
@@ -704,12 +698,12 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
    :focus-visible, not :focus — a mouse click should not leave a ring behind. */
 .gl-focusable:focus-visible,
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
   outline: var(--gl-focus-outline);
   outline-offset: 2px;

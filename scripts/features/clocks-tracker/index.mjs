@@ -4,7 +4,7 @@
  * The base / core feature of the suite (always enabled, system-agnostic). It
  * keeps its own internal feature-toggle tree (see ./features.js, backed by the
  * `ct.moduleConfig` world setting and the Module Configuration editor) which
- * governs its sub-features (timeHud / trackers / weather / support / delving).
+ * governs its sub-features (timeHud / trackers / weather / delving).
  * That internal system is intact; this adapter only wires the suite lifecycle.
  *
  * The ported entry module (./module.js) exposes:
@@ -54,12 +54,6 @@ const LEGACY_SETTINGS = {
   weatherCardVisibility: "ct.weatherCardVisibility",
   weatherHudPosition: "ct.weatherHudPosition",
   weatherHudHidden: "ct.weatherHudHidden",
-  supportEnabled: "ct.supportEnabled",
-  supports: "ct.supports",
-  supportHudVisibleToPlayers: "ct.supportHudVisibleToPlayers",
-  supportHudPosition: "ct.supportHudPosition",
-  supportHudHidden: "ct.supportHudHidden",
-  supportPassiveTokenIcon: "ct.supportPassiveTokenIcon",
   delvingEnabled: "ct.delvingEnabled",
   delving: "ct.delving",
 };
@@ -70,7 +64,7 @@ Suite.register({
   hint: "GLS.feature.clocks-tracker.hint",
   icon: "fa-solid fa-hourglass-half",
   // Engine catch-all prefix; the promoted sub-features below declare the more
-  // specific ct.weather/ct.support/ct.delving/ct.tracker prefixes and claim
+  // specific ct.weather/ct.delving/ct.tracker prefixes and claim
   // those keys first (catalog routing resolves longest prefix first).
   settingPrefix: "ct.",
   system: null,

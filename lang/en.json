@@ -31,8 +31,6 @@
   "GLS.feature.clocks-trackers.hint": "GM-managed clocks, points, pools and hazard trackers shown in a dockable HUD.",
   "GLS.feature.clocks-weather.title": "Weather",
   "GLS.feature.clocks-weather.hint": "Hex Flower weather engine with a calendar-driven forecast and announcement cards.",
-  "GLS.feature.clocks-support.title": "Mission Support",
-  "GLS.feature.clocks-support.hint": "Support-NPC roster and the Comms-Coin HUD with passive token effects.",
   "GLS.feature.clocks-delving.title": "Delving Mode",
   "GLS.feature.clocks-delving.hint": "Turn-driven dungeon delve: a turn counter and a degrading delving-resource HUD.",
   "GLS.feature.initiative.title": "Initiative",
@@ -51,8 +49,6 @@
   "GLS.feature.statsblock-import.hint": "Import PF2e NPCs and hazards from pasted stat-block text.",
   "GLS.feature.loot-gen.title": "Loot Generator",
   "GLS.feature.loot-gen.hint": "System-aware loot generation and audited treasure proposals.",
-  "GLS.feature.cargo-grid.title": "Cargo Grid",
-  "GLS.feature.cargo-grid.hint": "Polyomino cargo-packing board for ships, caravans and inventories.",
   "GLS.feature.tidy5e-slots.title": "Tidy 5e Inventory Slots",
   "GLS.feature.tidy5e-slots.hint": "Slot-based encumbrance and wear-and-tear for the Tidy 5e sheet.",
   "GLS.feature.pf2e-flatten.title": "Flatten Proficiency (PF2e)",
@@ -147,7 +143,5 @@
     }
   },
   "GLS.feature.critical.title": "Critical",
-  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations.",
-  "GLS.feature.etched-chat.title": "Etched-Glass Chat Theme (PF2e)",
-  "GLS.feature.etched-chat.hint": "Restyle PF2e chat cards in the suite's Etched Glass aesthetic, with a disposition-colored glass fracture on critical rolls. Overrides Dorako UI's chat theme."
+  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations."
 }

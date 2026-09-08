@@ -1,7 +1,8 @@
 /**
  * PF2e "Building Creatures" benchmark tables (Gamemastery Guide), embedded so a
- * support's ability numbers can be computed from a single GM-entered level + a
- * proficiency tier — no linked actor required.
+ * creature's numbers can be computed from a single level + a proficiency tier —
+ * no linked actor required. Reflavor prints these rows beside the statistics it
+ * asks the model to reason about (see reflavor-prompt.js).
  *
  * Source: Archives of Nethys, "Building Creatures" statistics tables. Rows run
  * from creature level −1 to 24. Perception and Saving Throws share one scale.
@@ -11,7 +12,8 @@
  * DC (damage is unaffected). On non-PF2e systems the variant simply reads false.
  */
 
-import { SUPPORT_TIERS } from "../const.js";
+/** PF2e creature-building proficiency tiers, strongest → weakest. */
+const TIERS = ["extreme", "high", "moderate", "low", "terrible"];
 
 const LEVEL_MIN = -1;
 const LEVEL_MAX = 24;
@@ -105,7 +107,7 @@ const clampLevel = (lvl) => Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.trunc(N
 function columnFor(spec, tier) {
   if (spec.cols.includes(tier)) return spec.cols.indexOf(tier);
   // Walk the global tier order from the requested tier toward an available one.
-  const order = SUPPORT_TIERS;
+  const order = TIERS;
   const start = Math.max(0, order.indexOf(tier));
   for (let d = 0; d < order.length; d++) {
     const lo = order[start - d], hi = order[start + d];

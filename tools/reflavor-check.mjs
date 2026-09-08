@@ -110,7 +110,7 @@ if (/Benchmarks\.(resolve|modifier)\b/.test(promptSrc)) {
 if (!/Benchmarks\.rawRow\b/.test(promptSrc)) {
   fail("reflavor-prompt.js never calls Benchmarks.rawRow() — the benchmark block has no source");
 }
-if (!readFileSync(join(ROOT, "scripts/features/clocks-tracker/support/benchmarks.js"), "utf8").includes("static rawRow(")) {
+if (!readFileSync(join(ROOT, "scripts/features/statsblock-import/benchmarks.js"), "utf8").includes("static rawRow(")) {
   fail("Benchmarks.rawRow() is gone from benchmarks.js; the benchmark block cannot be built un-flattened");
 }
 

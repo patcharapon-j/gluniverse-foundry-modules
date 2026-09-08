@@ -301,7 +301,7 @@ the table should see.
 If a reference DC is ever surfaced in the UI, it must be labelled as the
 system's own unadjusted number or corrected for that offset. Do not display it
 raw. (The suite's only correct PWoL detection currently lives in
-`clocks-tracker/support/benchmarks.js`; a third copy should move to
+`statsblock-import/benchmarks.js`; a third copy should move to
 `core/util.mjs` rather than being pasted again.)
 
 ## Storage, and the heading that must not collide

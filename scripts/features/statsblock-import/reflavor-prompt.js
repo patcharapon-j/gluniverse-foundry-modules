@@ -16,7 +16,7 @@
  * Kept free of Foundry globals so `tools/reflavor-check.mjs` can import it.
  */
 
-import { Benchmarks } from "../clocks-tracker/support/benchmarks.js";
+import { Benchmarks } from "./benchmarks.js";
 
 /** Bumped when the rung rules or the output contract change meaning. */
 export const REFLAVOR_GRAMMAR_VERSION = 1;

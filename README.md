@@ -21,7 +21,6 @@ flat native list — the Control Center is the single place to configure everyth
 | **Clocks & Tracker** *(core, always on)* | any | Core engine: in-game calendar & time HUD. |
 | **Resource Trackers** | any (needs Clocks & Tracker) | GM-managed clocks, points, pools and hazard trackers in a dockable HUD. |
 | **Weather** | any (needs Clocks & Tracker) | Hex Flower weather engine with a calendar-driven forecast. |
-| **Mission Support** | any (needs Clocks & Tracker) | Support-NPC roster and the Comms-Coin HUD. |
 | **Delving Mode** | any (needs Clocks & Tracker) | Turn-driven dungeon delve with a degrading resource HUD. |
 | **Initiative** | any | Cinematic initiative overlay with condition badges, turn/start markers, guard-break gauges. |
 | **Flatfinder** | PF2e | Off-guard / competence surfacing, incapacitation, encounter XP budget. Ships a Flatfinder compendium. |
@@ -31,7 +30,6 @@ flat native list — the Control Center is the single place to configure everyth
 | **Stream Pacer** | any | Pacing HUD: countdowns, spotlight, hand-raise, peril cues. |
 | **PF2e Stat Block Importer** | PF2e | Import NPCs & hazards from pasted stat-block text. |
 | **Loot Generator** | PF2e / D&D 5e | System-aware loot generation with audited treasure proposals. |
-| **Cargo Grid** | any | Polyomino cargo-packing board. |
 | **Tidy 5e Inventory Slots** | D&D 5e + `tidy5e-sheet` | Slot encumbrance and wear-and-tear for the Tidy 5e sheet. |
 | **Flatten Proficiency** | PF2e | Proficiency Without Level variant automation. |
 | **Critical** | PF2e / D&D 5e | JRPG-style cinematic critical-hit / critical-success animations, from an image or a video clip. |

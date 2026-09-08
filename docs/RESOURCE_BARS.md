@@ -385,7 +385,7 @@ of the screen, while the bar is the thing everyone is already looking at.
 
 It is the **same fracture**, not a lookalike. `core/fx-glsl.mjs` now exports the
 crack *field* — `gluBreakField` — as well as the whole-shader `FX_FRAG_BREAK`
-that initiative and etched-chat run, and this feature composites that field
+that initiative runs, and this feature composites that field
 inside its own bar shader. A bar cannot use the whole shader: it is one quad
 running one program, and its crack has to be clipped to the bar's own
 cut-corner silhouette and composited *with* the fill rather than laid over it as
