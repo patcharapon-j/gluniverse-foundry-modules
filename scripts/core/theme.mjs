@@ -63,12 +63,6 @@ export const PALETTE = Object.freeze({
   tealHot: "#b6fff2",
   mission: "#37d99a",
   holoC: "#ff66b3",
-
-  /* Apex — solo-boss eclipse violet */
-  apex: "#b14bff",
-  apexDeep: "#3c0a6b",
-  apexHot: "#ff7bd6",
-  apexInk: "#140422",
 });
 
 /* ══════════════════════════════════════════════════════════════════════

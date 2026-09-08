@@ -69,31 +69,3 @@ export const ENCOUNTER_BUDGET = {
   extreme: { base: 160, perPc: 40 },
 };
 
-/**
- * Apex (solo boss) template — Flatfinder v3 §8 "The Apex (Solo Boss) template".
- * A creature flagged as Apex takes extra full turns each round: its Prime turn at
- * its rolled initiative, then an additional turn at (result − 10), a third at
- * (result − 20), and so on. `turns` is the total number of turns per round.
- */
-export const APEX_FLAG = "ff.apex";
-export const APEX_PRIME_FLAG = "ff.apexPrime";
-export const APEX_EXTRA_FLAG = "ff.apexExtra";
-export const APEX_PHASES_FLAG = "ff.apexPhasesFired";
-export const APEX_DEFAULTS = Object.freeze({ enabled: false, turns: 2 });
-export const APEX_TURNS_LIMITS = Object.freeze({ min: 2, max: 4 });
-/** Initiative gap between consecutive Apex turns (Flatfinder: −10 per extra turn). */
-export const APEX_INITIATIVE_STEP = 10;
-/** HP fractions that trigger an Apex phase beat (Flatfinder §8: 66% and 33%). */
-export const APEX_PHASE_THRESHOLDS = Object.freeze([0.66, 0.33]);
-
-/** The sibling suite feature whose Card initiative mode owns multi-turn bosses. */
-export const GLUNI_MODULE_ID = "gluniverse-foundry-modules";
-/** Initiative's (prefixed) setting key within the suite namespace. */
-export const GLUNI_INIT_MODE_KEY = "init.initiativeMode";
-
-export const DEGREE_LABELS = [
-  "PF2E-FLATFINDER.Degree.CriticalFailure",
-  "PF2E-FLATFINDER.Degree.Failure",
-  "PF2E-FLATFINDER.Degree.Success",
-  "PF2E-FLATFINDER.Degree.CriticalSuccess",
-];

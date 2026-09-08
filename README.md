@@ -23,7 +23,7 @@ flat native list — the Control Center is the single place to configure everyth
 | **Weather** | any (needs Clocks & Tracker) | Hex Flower weather engine with a calendar-driven forecast. |
 | **Delving Mode** | any (needs Clocks & Tracker) | Turn-driven dungeon delve with a degrading resource HUD. |
 | **Initiative** | any | Cinematic initiative overlay with condition badges, turn/start markers, guard-break gauges. |
-| **Flatfinder** | PF2e | Off-guard / competence surfacing, incapacitation, Apex boss support. Ships a Flatfinder compendium. |
+| **Flatfinder** | PF2e | Off-guard / competence surfacing, incapacitation, encounter XP budget. Ships a Flatfinder compendium. |
 | **Destiny Dice** | PF2e | Cinematic Destiny/Fate die for checks & rerolls (Dice So Nice optional). |
 | **Insight** | any | Passive, broadcastable on-screen notifications. |
 | **Stage** | any | Visual-novel presenter: portraits, dialogue, comms overlays. |

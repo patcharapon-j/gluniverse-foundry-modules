@@ -210,7 +210,6 @@ rather than at the end.
 | timer              | timer.                       | null              | —               | off     |
 | mythic-gme         | mythic.                      | null              | —               | off     |
 | oracles            | oracle.                      | null              | —               | off     |
-| pf2e-ultimates     | ult.                         | pf2e              | —               | off     |
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
 | pf2e-aoe            | aoe.                         | pf2e              | —               | off     |

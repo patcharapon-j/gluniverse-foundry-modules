@@ -100,10 +100,9 @@ flavour is the only part of a stat block that tells the GM how to *narrate* the
 ability, so make it worth reading aloud. Evocative beats terse here.
 
 Do **not** open with a role label — `**Primary Signature.**`, `**Engine —**`,
-`**Ultimate.**`. The `Function:` field already records the role and the
-Ultimates sheet displays it; repeating it costs a line and tells the GM nothing
-they cannot see. A stock one-liner (`Razor Strides twice.`) needs no flavour
-line at all.
+`**Finisher.**`. The sheet already shows the ability's name and cost; a label
+restating its job in the kit costs a line and tells the GM nothing they cannot
+see. A stock one-liner (`Razor Strides twice.`) needs no flavour line at all.
 
 **The mechanics are where you cut.** Below the flavour, every clause should
 change what happens at the table. Delete any sentence that only restates the
@@ -251,71 +250,7 @@ Aliases: `## Auras`, `## Automation`. Fields: `Traits`, `Radius` (or `Range`),
 `Duration`, `Badge`, `Level`, `Description`, plus rule elements. A block with a
 `Radius` automatically gets an `Aura` rule element.
 
-## Combat-engine grammar
-
-These four additions drive the **PF2e Ultimates** feature. All are optional;
-omit them entirely for an ordinary creature and nothing changes.
-
-### `## Engine`
-
-Actor-level metadata. Becomes the `ult.state` flag the Ultimates sheet reads.
-
-| Field | Accepts | Aliases |
-|---|---|---|
-| `Resource` | The resource's name, e.g. `Verdict` | `Resource Name` |
-| `Tier` | `background`, `standard`, `elite`, `boss` | `Complexity` |
-| `Allegiance` | `enemy`, `ally`, `neutral` | `Side` |
-| `Charges` | 1–12, default 3 | `Max` |
-| `Ready` | `full`, `atLeast`, `exactly` | `Ready Mode` |
-| `Threshold` | charges needed when `Ready` is not `full` | `Ready Threshold` |
-| `Icon` | Font Awesome classes, e.g. `fa-solid fa-scale-balanced` | |
-| `Color` | hex colour | `Colour` |
-| `Promise` | the combat promise, one sentence | `Combat Promise` |
-| `Gain` | exactly how the resource is earned | `Gain Rule` |
-| `Cash Out` | what spending it does — usually the Ultimate's name | `Payoff` |
-| `Tell` | the observable telegraph | `Telegraph` |
-| `Threat` | what it does to the party if ignored | |
-| `Counterplay` | how the party interferes | |
-
-`Promise`, `Gain`, `Cash Out`, `Tell` and `Threat` are stored capped at 280
-characters; `Counterplay` at 560. Write tight.
-
-### `Function:` on an ability
-
-Tags which kit slot an ability fills. Valid on `## Attacks`, `## Actions` and
-`## Phases` blocks only — anywhere else it warns and is dropped, because those
-are the item types the Ultimates feature can tag.
-
-```
-Function: signature
-Function: ultimate
-Function: talent, engine
-```
-
-Six roles exist in the data model:
-
-| Role | Slot |
-|---|---|
-| `signature` | the Signature. A second Signature uses the same tag. |
-| `combo` | the Combo — the reaction pointed at another creature. |
-| `talent` | either Talent. |
-| `ultimate` | the Ultimate. |
-| `engine` | whichever ability carries the resource rule. Usually a Talent, so `Function: talent, engine`. |
-| `trigger` | **legacy.** v1's name for what is now `combo`. Still parses, and still satisfies the Combo slot in validation, so v1 sheets keep importing. Do not emit it in new work. |
-
-An optional utility accent takes **no** tag — it is an accent, not a slot.
-
-`Function: Combo Trigger` resolves to `combo`, not `trigger`; matching is by
-substring and `combo` is tested first.
-
-An ability tagged `ultimate` also sets `ult.isUltimate`, which is what lights up
-the token overlay and the charge counter.
-
-At `elite` and `boss` the validator warns for any of `signature`, `combo`,
-`talent` and `ultimate` that no ability claims — and for `engine` too when
-`## Engine` names a `Resource`.
-
-### `## Recall Knowledge`
+## `## Recall Knowledge`
 
 GM-facing ladder. Rendered into the actor's private notes, above the imported
 source. One rung per line, in any of these forms:
@@ -326,7 +261,7 @@ DC 32: Each detached halo ring is a stored Verdict.
 Religion DC 35: At half health it splits its halo.
 ```
 
-### `## Phases` — where Postures live
+## `## Phases` — where Postures live
 
 Postures and boss phase changes share this section. Each entry becomes a passive
 action item in the `interaction` category, flagged with its ordinal and its
@@ -348,7 +283,7 @@ direction, toward her.*
 ```
 
 The ordinal is what makes the map linear: entries run in file order, and the
-grammar has no way to express a back-edge. See `references/postures.md`.
+grammar has no way to express a back-edge.
 
 **Nothing activates a Posture.** The importer has no state-machine concept — the
 entry is inert documentation. The GM changes Posture by hand and mirrors it as a
@@ -381,7 +316,7 @@ Anything outside those five must be written as raw `RuleElements:` JSON.
 **The importer validates that a rule element's `key` exists. It does not
 validate the shape.** A rule element with a valid key and a wrong field name
 imports silently and then does nothing at the table. This is why you may only
-emit rule elements that appear in `references/rule-elements.md` with a real
+emit rule elements that appear in `PF2E_RULE_ELEMENTS.md` with a real
 compendium precedent. When in doubt, write the mechanic as prose in
 `Description:` — a GM reading clear text beats an ability that looks automated
 and is not.

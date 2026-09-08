@@ -105,7 +105,7 @@ hazard whatever the campaign colour is.
 · `--gl-peril` (escalation beyond hazard) · `--gl-good` (success) · `--gl-info`
 (deferred) · `--gl-warn` (strain) · `--gl-violet` (secret) · `--gl-orchid`
 (dying) · `--gl-jade` (conditions) · `--gl-teal` (stabilised) · `--gl-mission`
-(objective) · `--gl-apex*` (solo boss)
+(objective)
 
 Most have a `-hot` variant for glow and peak states.
 

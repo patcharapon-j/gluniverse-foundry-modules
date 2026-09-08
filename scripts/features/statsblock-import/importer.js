@@ -20,12 +20,6 @@ const FLAG_PHASE = `${PREFIX}phase`;
 // description: stripHtml() collapses whitespace, so a trigger and the prose
 // after it are indistinguishable once rendered.
 const FLAG_PHASE_TRIGGER = `${PREFIX}phaseTrigger`;
-// Cross-feature flags owned by pf2e-ultimates ("ult." prefix). We only WRITE
-// them; that feature owns their meaning. See scripts/features/pf2e-ultimates.
-const FLAG_ULT_STATE = "ult.state";
-const FLAG_ULT_FUNCTIONS = "ult.functions";
-const FLAG_ULT_IS_ULTIMATE = "ult.isUltimate";
-
 // Build a `flags` payload for the suite scope from prefixed (dotted) flag keys,
 // expanding "sbi.foo" into the nested shape that `getFlag(MODULE_ID, "sbi.foo")`
 // reads back. Keeps document flags consistent with the suite flag scope rules.
@@ -200,7 +194,7 @@ export const api = {
   exportActor: exportActorToMarkdown,
   // The two Load Sample payloads, exposed so tools/parse-check.mjs can verify
   // the format's own documentation still parses.
-  samples: { basic: sampleStatBlock, engine: sampleEngineStatBlock },
+  samples: { basic: sampleStatBlock, phases: samplePhaseStatBlock },
   // The description renderer and its inverse, exposed so the round trip can be
   // asserted headlessly — formatting that survives import but not export is the
   // failure mode this pair exists to prevent.
@@ -262,8 +256,8 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
       this.#source = sampleStatBlock();
       this.#parseAndRender();
     });
-    root.querySelector("button[data-action='engineSample']")?.addEventListener("click", () => {
-      this.#source = sampleEngineStatBlock();
+    root.querySelector("button[data-action='phaseSample']")?.addEventListener("click", () => {
+      this.#source = samplePhaseStatBlock();
       this.#parseAndRender();
     });
     root.querySelector("button[data-action='create']")?.addEventListener("click", () => this.#createActor());
@@ -310,7 +304,7 @@ class PF2EStatBlockImporter extends foundry.applications.api.ApplicationV2 {
           <div class="gluni-actions">
             <button class="gluni-primary" type="button" data-action="parse"><i class="fa-solid fa-magnifying-glass-chart"></i> ${t("GLSBI.dialog.parsePreview")}</button>
             <button type="button" data-action="sample"><i class="fa-solid fa-wand-magic-sparkles"></i> ${t("GLSBI.dialog.loadSample")}</button>
-            <button type="button" data-action="engineSample"><i class="fa-solid fa-gears"></i> ${t("GLSBI.dialog.loadEngineSample")}</button>
+            <button type="button" data-action="phaseSample"><i class="fa-solid fa-layer-group"></i> ${t("GLSBI.dialog.loadPhaseSample")}</button>
           </div>
 
           <label class="gluni-field">
@@ -577,78 +571,9 @@ function createEmptyNpc() {
     inventory: [],
     effects: [],
     notes: [],
-    // Combat-engine metadata for the PF2e Ultimates feature. `engine` stays null
-    // until an "## Engine" section appears, so plain creatures import unchanged.
-    engine: null,
     recallKnowledge: [],
     phases: []
   };
-}
-
-// Actor-level engine metadata, mirroring the shape pf2e-ultimates stores under
-// its `ult.state` flag. Kept as a plain object here; normalizeUltimateState on
-// the Ultimates side clamps and validates it when the flag is read back.
-function createEmptyEngine(npc) {
-  return {
-    resourceName: "",
-    tier: "elite",
-    allegiance: "enemy",
-    max: 3,
-    readyMode: "full",
-    readyThreshold: null,
-    color: "",
-    icon: "",
-    combatPromise: "",
-    gainRule: "",
-    cashOut: "",
-    tell: "",
-    threat: "",
-    counterplay: "",
-    level: npc?.level ?? 1
-  };
-}
-
-const ENGINE_TIERS = ["background", "standard", "elite", "boss"];
-const ENGINE_ALLEGIANCES = ["enemy", "ally", "neutral"];
-const ENGINE_READY_MODES = ["full", "atLeast", "exactly"];
-
-function parseEngineField(slug, value, npc, warnings) {
-  npc.engine ??= createEmptyEngine(npc);
-  const engine = npc.engine;
-  const text = String(value ?? "").trim();
-  switch (slug) {
-    case "resource": case "resourcename": case "resource-name": engine.resourceName = text; break;
-    case "tier": case "complexity": {
-      const tier = slugify(text);
-      if (ENGINE_TIERS.includes(tier)) engine.tier = tier;
-      else warnings.push(game.i18n.format("GLSBI.parse.badEngineValue", { field: "Tier", value: text, allowed: ENGINE_TIERS.join(", ") }));
-      break;
-    }
-    case "allegiance": case "side": {
-      const allegiance = slugify(text);
-      if (ENGINE_ALLEGIANCES.includes(allegiance)) engine.allegiance = allegiance;
-      else warnings.push(game.i18n.format("GLSBI.parse.badEngineValue", { field: "Allegiance", value: text, allowed: ENGINE_ALLEGIANCES.join(", ") }));
-      break;
-    }
-    case "charges": case "max": case "maxcharges": case "max-charges": engine.max = Math.max(1, parseSignedInt(text) || 3); break;
-    case "ready": case "readymode": case "ready-mode": {
-      const mode = ENGINE_READY_MODES.find((m) => m.toLowerCase() === slugify(text).replace("-", ""));
-      if (mode) engine.readyMode = mode;
-      else warnings.push(game.i18n.format("GLSBI.parse.badEngineValue", { field: "Ready", value: text, allowed: ENGINE_READY_MODES.join(", ") }));
-      break;
-    }
-    case "threshold": case "readythreshold": case "ready-threshold": engine.readyThreshold = Math.max(1, parseSignedInt(text) || 1); break;
-    case "color": case "colour": engine.color = text; break;
-    case "icon": engine.icon = text; break;
-    case "promise": case "combatpromise": case "combat-promise": engine.combatPromise = text; break;
-    case "gain": case "gainrule": case "gain-rule": engine.gainRule = text; break;
-    case "cashout": case "cash-out": case "payoff": engine.cashOut = text; break;
-    case "tell": case "telegraph": engine.tell = text; break;
-    case "threat": engine.threat = text; break;
-    case "counterplay": case "counter-play": engine.counterplay = text; break;
-    default:
-      warnings.push(game.i18n.format("GLSBI.parse.ignoredField", { field: slug, section: "Engine" }));
-  }
 }
 
 const RECALL_SECTIONS = ["recall-knowledge", "recallknowledge", "knowledge", "lore"];
@@ -681,10 +606,6 @@ function parseTopLevelField(section, key, value, npc, warnings) {
   }
   if (target === "skills") {
     parseSkills(value ? `${key}: ${value}` : key, npc);
-    return;
-  }
-  if (["engine", "combat-engine", "ultimate", "ultimates"].includes(target)) {
-    parseEngineField(slug, value, npc, warnings);
     return;
   }
   if (["defense", "defenses"].includes(target)) {
@@ -752,60 +673,16 @@ function parseDefenseField(slug, value, npc) {
   else parseCompoundStats(`${slug}: ${value}`, npc);
 }
 
-// Which kit slot this ability fills. Only meaningful on items pf2e-ultimates
-// can tag (action / melee / spell), so a Function on any other block warns
-// rather than silently vanishing.
-//
-// `combo` and `talent` are the v2 kit slots. `trigger` is v1's name for what is
-// now `combo` and stays legal so existing sheets keep importing; `engine` is
-// still the tag for whichever ability carries the resource rule.
-const ENGINE_FUNCTIONS = ["signature", "combo", "trigger", "engine", "talent", "ultimate"];
-
-// What an elite/boss sheet owes under the v2 contract. `trigger` is absent
-// because `combo` replaced it, and `engine` is conditional — a kit with no
-// resource has nothing to tag.
-const REQUIRED_TIER_FUNCTIONS = ["signature", "combo", "talent", "ultimate"];
-const FUNCTION_ELIGIBLE_SECTIONS = [
-  "phases", "phase", "boss-phases",
-  "attacks", "strikes", "melee-attacks", "ranged-attacks",
-  "actions", "abilities", "reactions", "free-actions", "passives"
-];
-
-function parseFunctions(value, blockName, warnings) {
-  const raw = splitList(value).map(slugify).filter(Boolean);
-  const functions = [];
-  for (const entry of raw) {
-    // "Primary Signature" / "Pivot Signature" / "Signature Utility" all map to
-    // the single `signature` role the Ultimates data model stores.
-    //
-    // `combo` is tested before `trigger` so that "Combo Trigger" — the spelling
-    // the skill emitted before this tag existed — resolves to `combo`, not to
-    // the legacy role it was smuggled through.
-    const role = entry.includes("signature") ? "signature"
-      : entry.includes("combo") ? "combo"
-        : entry.includes("trigger") ? "trigger"
-          : entry.includes("engine") ? "engine"
-            : entry.includes("talent") ? "talent"
-              : entry.includes("ultimate") ? "ultimate"
-                : null;
-    if (role) { if (!functions.includes(role)) functions.push(role); }
-    else warnings.push(game.i18n.format("GLSBI.parse.badFunction", { name: blockName, value: entry, allowed: ENGINE_FUNCTIONS.join(", ") }));
-  }
-  return ENGINE_FUNCTIONS.filter((role) => functions.includes(role));
-}
-
 function normalizeBlock(block, npc, warnings) {
   const fields = block.fields;
   const description = block.description.join("\n").trim();
   const rules = [...parseRuleElements(block.rulesText, warnings), ...parseRuleHelpers(block.ruleHelpersText, warnings)];
   const section = block.section;
-  const functions = fields.function || fields.functions
-    ? parseFunctions(fields.function || fields.functions, block.name, warnings)
-    : [];
-  // pf2e-ultimates only tags action / melee / spell items; a Function anywhere
-  // else would be dropped on import, so say so instead of losing it quietly.
-  if (functions.length && !FUNCTION_ELIGIBLE_SECTIONS.includes(section)) {
-    warnings.push(game.i18n.format("GLSBI.parse.functionIgnored", { name: block.name, section }));
+  // "Function:" was a documented field until the combat-engine grammar was
+  // removed. Unknown block fields are dropped without comment, so say this one
+  // out loud rather than letting an old sheet lose a line in silence.
+  if (fields.function || fields.functions) {
+    warnings.push(game.i18n.format("GLSBI.parse.functionRetired", { name: block.name }));
   }
   if (["phases", "phase", "boss-phases"].includes(section)) {
     npc.phases.push({
@@ -813,7 +690,6 @@ function normalizeBlock(block, npc, warnings) {
       order: npc.phases.length + 1,
       trigger: fields.trigger || fields.when || "",
       traits: splitList(fields.traits).map(slugify).filter(Boolean),
-      functions,
       description,
       rules
     });
@@ -832,7 +708,6 @@ function normalizeBlock(block, npc, warnings) {
       range: parseDistance(fields.range),
       area: parseArea(fields.area),
       action: slugify(fields.action || "strike"),
-      functions,
       description,
       rules
     });
@@ -846,7 +721,6 @@ function normalizeBlock(block, npc, warnings) {
       category: slugify(fields.category || "offensive") || "offensive",
       traits: splitList(fields.traits).map(slugify).filter(Boolean),
       frequency: fields.frequency || "",
-      functions,
       description,
       rules
     });
@@ -918,40 +792,6 @@ function validateNpc(npc, errors, warnings) {
   } else if (!npc.attacks.length && !npc.actions.length && !npc.spellcasting.length) {
     warnings.push(game.i18n.localize("GLSBI.parse.noAutomation"));
   }
-  validateEngine(npc, warnings);
-}
-
-// Consistency checks between the "## Engine" section and the Function tags.
-// All advisory: an inconsistent engine still imports, it just won't behave the
-// way the six-function contract expects.
-function validateEngine(npc, warnings) {
-  const tagged = [...npc.attacks, ...npc.actions, ...npc.phases].filter((entry) => entry.functions?.length);
-  const roles = new Set(tagged.flatMap((entry) => entry.functions));
-  if (!npc.engine) {
-    if (roles.size) warnings.push(game.i18n.localize("GLSBI.validation.functionsWithoutEngine"));
-    return;
-  }
-  if (npc.kind === "hazard") {
-    warnings.push(game.i18n.localize("GLSBI.validation.engineOnHazard"));
-    return;
-  }
-  if (roles.has("ultimate") && !npc.engine.gainRule) warnings.push(game.i18n.localize("GLSBI.validation.ultimateWithoutGain"));
-  if (["elite", "boss"].includes(npc.engine.tier)) {
-    // `combo` satisfies the slot even when a v1 sheet still spells it `trigger`.
-    const filled = new Set(roles);
-    if (filled.has("trigger")) filled.add("combo");
-    for (const role of REQUIRED_TIER_FUNCTIONS) {
-      if (!filled.has(role)) warnings.push(game.i18n.format("GLSBI.validation.tierMissingFunction", { tier: npc.engine.tier, role }));
-    }
-    // A named resource needs an ability that owns the rule for gaining it.
-    if (npc.engine.resourceName && !filled.has("engine")) {
-      warnings.push(game.i18n.format("GLSBI.validation.tierMissingFunction", { tier: npc.engine.tier, role: "engine" }));
-    }
-  }
-  if (npc.engine.tier === "background" && roles.has("ultimate")) warnings.push(game.i18n.localize("GLSBI.validation.backgroundUltimate"));
-  if (npc.engine.readyThreshold && npc.engine.readyThreshold > npc.engine.max) {
-    warnings.push(game.i18n.format("GLSBI.validation.thresholdAboveMax", { threshold: npc.engine.readyThreshold, max: npc.engine.max }));
-  }
 }
 
 async function buildActorSource(npc, source) {
@@ -962,37 +802,8 @@ async function buildActorSource(npc, source) {
   base.img = img;
   base.prototypeToken = buildPrototypeToken(npc, actorType, art);
   const flagEntries = { [FLAG_SOURCE]: source, [FLAG_PARSED]: npc };
-  // Hand the combat-engine metadata to pf2e-ultimates. Writing the flag is safe
-  // whether or not that feature is enabled: it is inert data until Ultimates
-  // reads it, and normalizeUltimateState() clamps every field on read.
-  if (npc.engine && actorType === "npc") flagEntries[FLAG_ULT_STATE] = buildUltimateState(npc);
   base.flags = suiteFlags(flagEntries);
   return base;
-}
-
-// Mirror of pf2e-ultimates' `ult.state` shape. Only fields the statblock can
-// express are written; the Ultimates side supplies defaults for the rest.
-function buildUltimateState(npc) {
-  const engine = npc.engine ?? {};
-  const max = Math.max(1, Math.min(12, engine.max || 3));
-  const state = {
-    value: 0,
-    max,
-    readyMode: engine.readyMode || "full",
-    readyThreshold: Math.max(1, Math.min(max, engine.readyThreshold || max)),
-    tier: engine.tier || "elite",
-    allegiance: engine.allegiance || "enemy",
-    resourceName: engine.resourceName || "",
-    combatPromise: engine.combatPromise || "",
-    gainRule: engine.gainRule || "",
-    cashOut: engine.cashOut || "",
-    tell: engine.tell || "",
-    threat: engine.threat || "",
-    counterplay: engine.counterplay || ""
-  };
-  if (engine.color) state.color = engine.color;
-  if (engine.icon) state.icon = engine.icon;
-  return state;
 }
 
 // GM-facing Recall Knowledge ladder, rendered above the source dump so the GM
@@ -1220,7 +1031,7 @@ function buildMeleeItem(attack) {
     area: attack.area,
     subjectToMAP: true
   };
-  return importedItem({ name: attack.name, type: "melee", img: attack.type === "ranged" ? "systems/pf2e/icons/default-icons/ranged.svg" : "systems/pf2e/icons/default-icons/melee.svg", system }, ultimateFlags(attack.functions));
+  return importedItem({ name: attack.name, type: "melee", img: attack.type === "ranged" ? "systems/pf2e/icons/default-icons/ranged.svg" : "systems/pf2e/icons/default-icons/melee.svg", system });
 }
 
 function buildActionItem(action) {
@@ -1234,7 +1045,7 @@ function buildActionItem(action) {
     category: action.category || "offensive"
   };
   if (action.frequency) system.frequency = parseFrequency(action.frequency);
-  return importedItem({ name: action.name, type: "action", img: actionIcon(action.actionType, action.actions), system }, ultimateFlags(action.functions));
+  return importedItem({ name: action.name, type: "action", img: actionIcon(action.actionType, action.actions), system });
 }
 
 // A boss phase is an ordinary action item in the "interaction" category, so it
@@ -1256,7 +1067,7 @@ function buildPhaseItem(phase) {
   };
   return importedItem(
     { name: phase.name, type: "action", img: "systems/pf2e/icons/default-icons/action.svg", system },
-    { ...ultimateFlags(phase.functions), [FLAG_PHASE]: phase.order, [FLAG_PHASE_TRIGGER]: phase.trigger || "" }
+    { [FLAG_PHASE]: phase.order, [FLAG_PHASE_TRIGGER]: phase.trigger || "" }
   );
 }
 
@@ -1308,17 +1119,6 @@ function buildEffectItem(effect) {
 
 function importedItem(source, extraFlags = {}) {
   return foundry.utils.mergeObject(source, { flags: suiteFlags({ [FLAG_IMPORTED]: true, ...extraFlags }) }, { inplace: false });
-}
-
-// Translate a block's parsed `functions` into the flags pf2e-ultimates reads.
-// Returns an empty object when the block declared none, so untagged items keep
-// exactly the flag payload they had before this feature existed.
-function ultimateFlags(functions) {
-  if (!functions?.length) return {};
-  return {
-    [FLAG_ULT_FUNCTIONS]: functions,
-    [FLAG_ULT_IS_ULTIMATE]: functions.includes("ultimate")
-  };
 }
 
 function buildSpellcastingEntryItem(entry) {
@@ -2132,8 +1932,6 @@ export function exportActorToMarkdown(actor) {
     `Description: ${stripHtml(system.details?.publicNotes ?? "")}`
   ].filter(Boolean);
 
-  const engine = exportEngine(actor);
-  if (engine.length) lines.push("", "## Engine", ...engine);
   const recall = exportRecallKnowledge(actor);
   if (recall.length) lines.push("", "## Recall Knowledge", ...recall);
 
@@ -2198,7 +1996,6 @@ function exportAttack(item) {
     system.area ? `Area: ${system.area.value}-foot ${system.area.type}` : "",
     `Traits: ${(system.traits?.value ?? []).join(", ")}`,
     (system.attackEffects?.value ?? []).length ? `Effects: ${system.attackEffects.value.join(", ")}` : "",
-    exportFunctions(item),
     `Description: ${htmlToSource(system.description?.value ?? "")}`,
     formatRules(system.rules)
   ].filter(Boolean);
@@ -2206,19 +2003,13 @@ function exportAttack(item) {
 
 function exportAction(item) {
   const system = item.system;
-  return ["", `### ${item.name}`, `Type: ${system.actionType?.value ?? "action"}`, `Actions: ${system.actions?.value ?? 1}`, `Category: ${system.category ?? "offensive"}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${htmlToSource(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
+  return ["", `### ${item.name}`, `Type: ${system.actionType?.value ?? "action"}`, `Actions: ${system.actions?.value ?? 1}`, `Category: ${system.category ?? "offensive"}`, `Traits: ${(system.traits?.value ?? []).join(", ")}`, `Description: ${htmlToSource(system.description?.value ?? "")}`, formatRules(system.rules)].filter(Boolean);
 }
 
-// --- Engine / Recall Knowledge / Phases -------------------------------------
-// Emitters for the combat-engine grammar. Each returns [] when the actor has
-// nothing to say, so plain creatures export exactly as they did before.
-
-function exportFunctions(item) {
-  const functions = item.getFlag(MODULE_ID, FLAG_ULT_FUNCTIONS);
-  const list = Array.isArray(functions) ? functions.filter((role) => ENGINE_FUNCTIONS.includes(role)) : [];
-  if (!list.length && item.getFlag(MODULE_ID, FLAG_ULT_IS_ULTIMATE) === true) list.push("ultimate");
-  return list.length ? `Function: ${list.join(", ")}` : "";
-}
+// --- Recall Knowledge / Phases ----------------------------------------------
+// Emitters for the boss-phase and Recall Knowledge grammar. Each returns []
+// when the actor has nothing to say, so plain creatures export exactly as they
+// did before.
 
 function exportPhase(item) {
   const system = item.system;
@@ -2246,29 +2037,7 @@ function exportPhase(item) {
       description = stop > 0 ? rest.slice(stop + 1).trim() : "";
     }
   }
-  return ["", `### ${item.name}`, trigger ? `Trigger: ${trigger}` : "", `Traits: ${(system.traits?.value ?? []).join(", ")}`, exportFunctions(item), `Description: ${description}`, formatRules(system.rules)].filter(Boolean);
-}
-
-function exportEngine(actor) {
-  const state = actor.getFlag(MODULE_ID, FLAG_ULT_STATE);
-  if (!state || typeof state !== "object") return [];
-  const line = (label, value) => (value || value === 0 ? `${label}: ${value}` : "");
-  return [
-    line("Resource", state.resourceName),
-    line("Tier", state.tier),
-    line("Allegiance", state.allegiance),
-    line("Charges", state.max),
-    line("Ready", state.readyMode),
-    state.readyThreshold && state.readyThreshold !== state.max ? `Threshold: ${state.readyThreshold}` : "",
-    line("Icon", state.icon),
-    line("Color", state.color),
-    line("Promise", state.combatPromise),
-    line("Gain", state.gainRule),
-    line("Cash Out", state.cashOut),
-    line("Tell", state.tell),
-    line("Threat", state.threat),
-    line("Counterplay", state.counterplay)
-  ].filter(Boolean);
+  return ["", `### ${item.name}`, trigger ? `Trigger: ${trigger}` : "", `Traits: ${(system.traits?.value ?? []).join(", ")}`, `Description: ${description}`, formatRules(system.rules)].filter(Boolean);
 }
 
 function exportRecallKnowledge(actor) {
@@ -2761,12 +2530,11 @@ RuleElements:
 `;
 }
 
-// The second sample exercises the combat-engine grammar end to end: an "##
-// Engine" section that becomes the pf2e-ultimates `ult.state` flag, per-ability
-// Function tags, a Recall Knowledge ladder, and a boss phase. Numbers are
-// band-locked to the level 12 creature benchmarks (AC high, HP moderate, Will
-// extreme paid for with a low Reflex).
-function sampleEngineStatBlock() {
+// The second sample exercises the grammar the first one leaves out: a Recall
+// Knowledge ladder, a boss phase, an aura, and a self-describing resource the
+// GM tracks in prose. Numbers are band-locked to the level 12 creature
+// benchmarks (AC high, HP moderate, Will extreme paid for with a low Reflex).
+function samplePhaseStatBlock() {
   return `# Solar Arbiter
 Level: 12
 Rarity: rare
@@ -2786,20 +2554,6 @@ Weaknesses: cold 15
 Speed: 25 feet, fly 40 feet
 Description: A judge of the sun's court, sealed into a ring of burning glass. It does not chase; it decides where the guilty must not stand.
 
-## Engine
-Resource: Verdict
-Tier: boss
-Allegiance: enemy
-Charges: 3
-Ready: full
-Icon: fa-solid fa-scale-balanced
-Promise: Punishes creatures that hold ground, then burns the ground they held.
-Gain: +1 Verdict the first time each round a marked creature ends its turn within a pyre ring.
-Cash Out: Sunfall Verdict
-Tell: One ring of its halo detaches and settles over the battlefield for each Verdict.
-Threat: Escalating area denial; the arena shrinks every round it is left alone.
-Counterplay: Dousing or dispelling a settled ring strips one Verdict. Moving a marked ally out of the ring before their turn ends denies the gain entirely.
-
 ## Recall Knowledge
 DC 30 (Religion): It judges stillness, not malice. Standing your ground is what feeds it.
 DC 32 (Religion): Each detached halo ring is a stored Verdict, and each can be put out.
@@ -2811,7 +2565,6 @@ Type: melee
 Bonus: +26
 Damage: 3d8+14 slashing plus 1d6 fire
 Traits: fire, magical, reach-15
-Function: signature
 Description: On a critical hit, the target is marked (see Verdict Mark).
 
 ### Solar Lance
@@ -2827,7 +2580,6 @@ Type: action
 Actions: 1
 Category: offensive
 Traits: concentrate, divine, visual
-Function: signature
 Description: The arbiter names one creature it can see within 60 feet. The target is marked until the end of the encounter or until the arbiter marks a different creature. While marked, the target takes 1d6 persistent fire damage the first time each round it ends its turn without having moved.
 
 ### Pyre Ring
@@ -2835,7 +2587,6 @@ Type: action
 Actions: 2
 Category: offensive
 Traits: divine, fire, manipulate
-Function: signature
 Description: A @Template[burst|distance:10] of burning glass settles on the ground within 60 feet, lasting until the end of the encounter.
 
 A creature that enters or ends its turn in the ring takes @Damage[4d6[fire]] damage with a @Check[reflex|dc:32|basic] save.
@@ -2846,14 +2597,12 @@ A creature can spend 2 actions to douse one ring; doing so strips 1 Verdict from
 Type: passive
 Category: interaction
 Traits: divine
-Function: engine
 Description: The first time each round a marked creature ends its turn inside a pyre ring, the arbiter gains 1 Verdict, to a maximum of 3. The arbiter may spend 1 Verdict as a free action to extend one pyre ring to a 15-foot burst until the end of its next turn.
 
 ### Halo Split
 Type: reaction
 Category: defensive
 Traits: divine, visual
-Function: trigger
 Frequency: once per round
 Description: Trigger A marked creature leaves a pyre ring.
 
@@ -2872,7 +2621,6 @@ Type: action
 Actions: 2
 Category: offensive
 Traits: divine, fire, incapacitation
-Function: ultimate
 Description: Requirements The arbiter has 3 Verdict, which are all spent.
 
 Effect Every pyre ring erupts at once.
