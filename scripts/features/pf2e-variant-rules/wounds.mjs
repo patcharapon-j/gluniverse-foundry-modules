@@ -17,7 +17,10 @@
  *                     final damage is negative. No effect item, no rule element.
  *
  *   Medicine penalty  a wrapper on `game.pf2e.Check.roll`, following the
- *                     precedent flatfinder already sets on the same target.
+ *                     precedent flatfinder already sets on the same target. The
+ *                     modifier is pushed onto the *check*, since that is what
+ *                     `Check.roll` sums; the context's own `modifiers` array is
+ *                     metadata about the roller and is never added to anything.
  *
  *   rest              a wrapper on `game.pf2e.actions.restForTheNight`.
  *
@@ -147,11 +150,21 @@ export function isMedicineCheck(context) {
 
 /**
  * Push the circumstance penalty onto a Medicine check aimed at a wounded
- * creature. Mutates the context PF2e is about to roll with, which is the same
- * thing flatfinder does on this target.
+ * creature.
+ *
+ * The modifier has to go on the **check**, not on the context. `Check.roll`
+ * reads `check.modifiers` — the context's own `modifiers` array is only copied
+ * into `context.origin` as metadata about the roller and is never summed — so a
+ * penalty written there is recorded, displayed nowhere, and changes no result.
+ * That is the shape this first shipped in, and it is invisible from the outside:
+ * the card renders perfectly, with the wrong total.
+ *
+ * `StatisticModifier#push` dedupes by slug and recalculates, so a reroll cannot
+ * stack a second copy.
  */
-export function applyMedicinePenalty(context) {
+export function applyMedicinePenalty(check, context) {
   if (!woundsOn() || !get(SETTINGS.woundsMedicine, true)) return;
+  if (typeof check?.push !== "function") return;
   if (!isMedicineCheck(context)) return;
 
   const patient = resolvePatient(context);
@@ -163,15 +176,14 @@ export function applyMedicinePenalty(context) {
   const Modifier = game.pf2e?.Modifier;
   if (!Modifier) return;
 
-  context.modifiers = [
-    ...(context.modifiers ?? []),
+  check.push(
     new Modifier({
       label: game.i18n.localize("GLVR.wounds.medicineModifier"),
       slug: MODIFIER_SLUG,
       modifier: medicine,
       type: "circumstance",
-    }),
-  ];
+    })
+  );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -279,7 +291,7 @@ export function readyWounds() {
       "game.pf2e.Check.roll",
       function (wrapped, check, context = {}, ...args) {
         try {
-          applyMedicinePenalty(context);
+          applyMedicinePenalty(check, context);
         } catch (error) {
           warn("pf2e-variant-rules | Medicine penalty error", error);
         }

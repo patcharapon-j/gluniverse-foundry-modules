@@ -135,6 +135,38 @@ if (dentsRepaired("success") !== 1) fail("dents: a successful Repair removes 1 d
 if (dentsRepaired("failure") !== 0) fail("dents: a failed Repair removes none");
 if (dentsRepaired("criticalFailure") !== 0) fail("dents: a critically failed Repair removes none");
 
+/* ── 2b. Dents, as the player sees them ──────────────────────────────────── */
+
+const dentsSrc = readFileSync(join(FEATURE, "dents.mjs"), "utf8");
+
+// A dent is the state of a player's own gear, so reading it and writing it are
+// different questions. Gate the *readout* on `isGM` and it looks perfectly
+// correct on the GM's screen while being absent on every other one, which is the
+// one failure nobody at the table is in a position to report. The two sheet
+// passes must therefore reach `game.user.isGM` only through `canEdit()`.
+const bodyOf = (name) => {
+  const start = dentsSrc.indexOf(`function ${name}(`);
+  if (start < 0) return null;
+  const end = dentsSrc.indexOf("\n}", start);
+  return end < 0 ? null : dentsSrc.slice(start, end);
+};
+for (const name of ["onRenderItemSheet", "onRenderActorSheet"]) {
+  const body = bodyOf(name);
+  if (body === null) {
+    fail(`dents: ${name} is missing — the player-visible readout has no entry point`);
+  } else if (/isGM/.test(body)) {
+    fail(`dents: ${name} tests isGM directly; a readout behind it is invisible to every player`);
+  }
+}
+if (!/renderActorSheetPF2e/.test(dentsSrc)) {
+  fail("dents: nothing renders the count on the actor sheet, which is the only inventory a player reads");
+}
+// The override writes an absolute value; routing it through `addDents` would
+// make typing 3 mean "add 3" and the box would climb every time it was used.
+if (!/setDents\(item, event/.test(dentsSrc)) {
+  fail("dents: the GM's override must set an absolute value, not add one");
+}
+
 /* ── 3. Careful Consumption ──────────────────────────────────────────────── */
 
 const elixir = { type: "consumable", actionCost: 1, formula: "1d6+6", kind: "healing" };
@@ -202,6 +234,25 @@ if (/actionCostOf[\s\S]{0,400}?uses\?\.\s*value/.test(carefulSrc)) {
 // part-used elixir at the first sip.
 if (!/"system\.uses\.value"/.test(carefulSrc)) {
   fail("careful: spending a use must decrement system.uses.value, mirroring ConsumablePF2e#consume");
+}
+
+/* ── 4c. Lasting Wounds, at the seam with Check.roll ─────────────────────── */
+
+const woundsSrc = readFileSync(join(FEATURE, "wounds.mjs"), "utf8");
+
+// `Check.roll(check, context)` sums `check.modifiers`. The context's own
+// `modifiers` array is copied into `context.origin` as metadata about the roller
+// and is never added to anything, so a penalty written there is recorded,
+// displayed nowhere, and changes no result: the card renders perfectly with the
+// wrong total, on the one check this rule exists for.
+if (/context\.modifiers\s*=/.test(woundsSrc)) {
+  fail("wounds: the Medicine penalty must go on the check; Check.roll never sums context.modifiers");
+}
+if (!/applyMedicinePenalty\(check, context\)/.test(woundsSrc)) {
+  fail("wounds: the Check.roll wrapper must hand the check itself to applyMedicinePenalty");
+}
+if (!/check\.push\(/.test(woundsSrc)) {
+  fail("wounds: the penalty must be pushed onto the check, which is what recalculates the total");
 }
 
 /* ── 5. Prefix routing ───────────────────────────────────────────────────── */

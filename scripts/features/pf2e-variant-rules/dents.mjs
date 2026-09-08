@@ -67,11 +67,22 @@ export async function setDents(item, count) {
 
 export const addDents = (item, delta) => setDents(item, getDents(item) + delta);
 
+/**
+ * May this client change a dent count?
+ *
+ * Reading and writing are deliberately separate questions. A dent is the state
+ * of a player's own gear and they have to be able to see it — a readout behind
+ * `isGM` looks perfectly correct on the GM's screen and is simply absent on
+ * every other, which is the one failure nobody at the table can report. Writing
+ * stays with the GM, who owns the fiction that put the dent there.
+ */
+const canEdit = () => !!game.user?.isGM;
+
 /* ══════════════════════════════════════════════════════════════════════════
    ITEM SHEET — the primary surface
    ══════════════════════════════════════════════════════════════════════════ */
 
-function renderTrack(item) {
+function renderTrack(item, editable) {
   const dents = getDents(item);
   const opts = optionsFor(item);
   const { broken, destroyed } = dentThresholds(opts);
@@ -83,6 +94,17 @@ function renderTrack(item) {
     return `<span class="${cls}">${n}</span>`;
   }).join("");
 
+  // The GM gets the two nudges and a box to type an exact value into; a player
+  // gets the same track and the same figure, without the controls.
+  const controls = editable
+    ? `<button type="button" class="gl-btn ${CLASS}-less" ${dents <= 0 ? "disabled" : ""}>&minus;</button>
+       <input type="number" class="${CLASS}-set" value="${dents}" min="0" max="${destroyed}" step="1"
+              aria-label="${escapeHtml(game.i18n.localize("GLVR.dents.override"))}"
+              title="${escapeHtml(game.i18n.localize("GLVR.dents.override"))}">
+       <span class="${CLASS}-of">/ ${destroyed}</span>
+       <button type="button" class="gl-btn ${CLASS}-more" ${dents >= destroyed ? "disabled" : ""}>+</button>`
+    : `<span class="${CLASS}-count">${dents} / ${destroyed}</span>`;
+
   return `<section class="${CLASS}-panel" data-state="${state}">
     <header class="${CLASS}-head">
       <span class="${CLASS}-title">${escapeHtml(game.i18n.localize("GLVR.dents.title"))}</span>
@@ -90,9 +112,7 @@ function renderTrack(item) {
     </header>
     <div class="${CLASS}-track">${cells}</div>
     <footer class="${CLASS}-foot">
-      <button type="button" class="gl-btn ${CLASS}-less" ${dents <= 0 ? "disabled" : ""}>&minus;</button>
-      <span class="${CLASS}-count">${dents} / ${destroyed}</span>
-      <button type="button" class="gl-btn ${CLASS}-more" ${dents >= destroyed ? "disabled" : ""}>+</button>
+      ${controls}
       <span class="${CLASS}-scale">${escapeHtml(
         game.i18n.format("GLVR.dents.scale", { broken: String(broken), destroyed: String(destroyed) })
       )}</span>
@@ -116,17 +136,83 @@ function onRenderItemSheet(app, html) {
 
     root.querySelectorAll(`.${CLASS}-panel`).forEach((node) => node.remove());
 
-    if (!dentsOn() || !game.user.isGM) return;
+    if (!dentsOn()) return;
     if (!item?.isOwner || !tracksDents(item)) return;
 
     const host = SHEET_ANCHORS.map((sel) => root.querySelector(sel)).find(Boolean);
     if (!host) return;
 
-    host.insertAdjacentHTML("beforeend", renderTrack(item));
+    const editable = canEdit();
+    host.insertAdjacentHTML("beforeend", renderTrack(item, editable));
+    if (!editable) return;
 
     const panel = root.querySelector(`.${CLASS}-panel`);
     panel?.querySelector(`.${CLASS}-more`)?.addEventListener("click", () => addDents(item, 1));
     panel?.querySelector(`.${CLASS}-less`)?.addEventListener("click", () => addDents(item, -1));
+    panel?.querySelector(`.${CLASS}-set`)?.addEventListener("change", (event) => {
+      // An override is an absolute value, not a nudge; `setDents` clamps it to
+      // the item's own destroyed threshold, which a sturdy shield doubles.
+      setDents(item, event.currentTarget.value);
+    });
+  } catch {
+    // A sheet that changed shape must never take the sheet down with it.
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ACTOR SHEET — the count, in line, on the row the player already reads
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Where the badge goes inside an inventory row, in falling order of preference.
+ *
+ * `.item-name` is the block holding the item's `<h4>` and its uses counter, so
+ * the badge lands beside the name rather than in the price or bulk columns.
+ */
+const ROW_ANCHORS = [".item-name", ".data", ":scope"];
+
+/** An intact item says nothing; a dented one says how badly, in one glance. */
+function renderBadge(item) {
+  const dents = getDents(item);
+  const opts = optionsFor(item);
+  const { destroyed } = dentThresholds(opts);
+  const state = dentState(dents, opts);
+  const label = game.i18n.format("GLVR.dents.badge", {
+    dents: String(dents),
+    destroyed: String(destroyed),
+    state: game.i18n.localize(`GLVR.dents.state.${state}`),
+  });
+
+  return `<span class="${CLASS}-chip" data-state="${state}" title="${escapeHtml(label)}" aria-label="${escapeHtml(
+    label
+  )}"><i class="fa-solid fa-shield-halved"></i>${dents}<span class="${CLASS}-chip-of">/${destroyed}</span></span>`;
+}
+
+/** Resolve the item a row stands for. Subitems carry a different attribute. */
+function rowItem(actor, row) {
+  const id = row.dataset.itemId ?? row.dataset.subitemId ?? null;
+  const direct = id ? actor?.items?.get?.(id) : null;
+  if (direct) return direct;
+  const uuid = row.dataset.uuid ?? null;
+  return uuid ? fromUuidSync(uuid) : null;
+}
+
+function onRenderActorSheet(app, html) {
+  try {
+    const root = normalizeHtml(html);
+    const actor = app?.actor ?? app?.document ?? null;
+    if (!root || !actor) return;
+
+    root.querySelectorAll(`.${CLASS}-chip`).forEach((node) => node.remove());
+    if (!dentsOn()) return;
+
+    for (const row of root.querySelectorAll("li[data-item-id], li[data-subitem-id]")) {
+      const item = rowItem(actor, row);
+      if (!item || !tracksDents(item) || getDents(item) <= 0) continue;
+
+      const host = ROW_ANCHORS.map((sel) => (sel === ":scope" ? row : row.querySelector(sel))).find(Boolean);
+      host?.insertAdjacentHTML("beforeend", renderBadge(item));
+    }
   } catch {
     // A sheet that changed shape must never take the sheet down with it.
   }
@@ -207,6 +293,11 @@ function escapeHtml(value) {
 export function registerDents() {
   Hooks.on("renderItemSheet", onRenderItemSheet);
   Hooks.on("renderItemSheetPF2e", onRenderItemSheet);
+  // One name is enough here: Foundry's AppV1 fires the render hook for every
+  // class in the sheet's inheritance chain, and `ActorSheetPF2e` is in all of
+  // them. Registering the core name as well would just do the same pass twice
+  // over an inventory that can run to fifty rows.
+  Hooks.on("renderActorSheetPF2e", onRenderActorSheet);
   Hooks.on("renderChatMessageHTML", onRenderChat);
 }
 

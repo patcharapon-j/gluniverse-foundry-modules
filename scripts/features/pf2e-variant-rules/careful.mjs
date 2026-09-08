@@ -162,56 +162,85 @@ async function spendOne(item) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ITEM SHEET — the rules-accurate entry point (decide before you roll)
-   ══════════════════════════════════════════════════════════════════════════ */
+   CHARACTER SHEET — the rules-accurate entry point (decide before you roll)
+   ══════════════════════════════════════════════════════════════════════════
 
-const SHEET_ANCHORS = [
-  ".tab[data-tab='details'] .form-group:last-of-type",
-  ".tab[data-tab='details']",
-  ".sheet-body .tab.active",
-  ".sheet-body",
-];
+   The button belongs beside PF2e's own "Use", inside the summary a player opens
+   from an inventory row: that is where they are standing when they decide to
+   drink something, and it is the only surface of the three a player reaches
+   without opening anything else.
 
-function onRenderItemSheet(app, html) {
+   There is no hook for it. `ItemSummaryRenderer#toggleSummary` renders the
+   summary template straight into the row on expand and fires nothing, so the
+   sheet is watched instead. The observer is cheap because it does nothing until
+   a node appears, and re-entrant only once: our own insertion wakes it, the
+   second pass finds the button already there and stops. */
+
+/** The button, as it sits next to Use. Shift carries the Chirurgeon clause. */
+function summaryButton() {
+  const label = escapeHtml(game.i18n.localize("GLVR.careful.action"));
+  const hint = escapeHtml(
+    `${game.i18n.localize("GLVR.careful.hint")} ${game.i18n.localize("GLVR.careful.shiftHint")}`
+  );
+  return `<button type="button" class="${CLASS}-go" title="${hint}" aria-label="${label}">
+    <i class="fa-solid fa-flask-vial"></i> ${label}
+  </button>`;
+}
+
+/** Put a button in every open summary that wants one; leave the rest alone. */
+function decorateSummaries(root, actor) {
+  for (const summary of root.querySelectorAll(".item-summary")) {
+    const row = summary.closest("li[data-item-id], li[data-subitem-id]");
+    const id = row?.dataset.itemId ?? row?.dataset.subitemId ?? null;
+    const item = id ? actor?.items?.get?.(id) : null;
+
+    const existing = summary.querySelector(`.${CLASS}-go`);
+    if (!item || !qualifies(item)) {
+      existing?.remove();
+      continue;
+    }
+    if (existing) continue;
+
+    // PF2e's own Use button is the anchor; without it the summary is a
+    // description with no controls, and a lone button there reads as an error.
+    const use = summary.querySelector('[data-action="consume-item"]');
+    if (!use) continue;
+
+    use.insertAdjacentHTML("afterend", summaryButton());
+    summary.querySelector(`.${CLASS}-go`)?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await consumeCarefully(item, { chirurgeon: event.shiftKey });
+    });
+  }
+}
+
+/** One observer per open sheet, replaced on re-render so none is left running. */
+const watchers = new WeakMap();
+
+function onRenderActorSheet(app, html) {
   try {
     const root = normalizeHtml(html);
-    const item = app?.item ?? app?.document ?? null;
-    if (!root) return;
+    const actor = app?.actor ?? app?.document ?? null;
+    if (!root || !actor) return;
 
-    root.querySelectorAll(`.${CLASS}-panel`).forEach((node) => node.remove());
-    if (!carefulOn() || !item?.isOwner || !qualifies(item)) return;
+    watchers.get(app)?.disconnect();
+    if (!carefulOn()) return;
 
-    const host = SHEET_ANCHORS.map((sel) => root.querySelector(sel)).find(Boolean);
-    if (!host) return;
+    const observer = new MutationObserver(() => decorateSummaries(root, actor));
+    observer.observe(root, { childList: true, subtree: true });
+    watchers.set(app, observer);
 
-    host.insertAdjacentHTML(
-      "beforeend",
-      `<section class="${CLASS}-panel">
-        <header class="${CLASS}-head"><span class="${CLASS}-title">${escapeHtml(
-          game.i18n.localize("GLVR.careful.title")
-        )}</span><span class="${CLASS}-cost">${escapeHtml(
-        game.i18n.localize("GLVR.careful.cost")
-      )}</span></header>
-        <p class="${CLASS}-line">${escapeHtml(game.i18n.localize("GLVR.careful.hint"))}</p>
-        <div class="${CLASS}-acts">
-          <button type="button" class="gl-btn gl-btn-accent ${CLASS}-go">${escapeHtml(
-            game.i18n.localize("GLVR.careful.action")
-          )}</button>
-          <label class="${CLASS}-chirurgeon"><input type="checkbox" class="${CLASS}-chir"> ${escapeHtml(
-            game.i18n.localize("GLVR.careful.chirurgeon")
-          )}</label>
-        </div>
-      </section>`
-    );
-
-    const panel = root.querySelector(`.${CLASS}-panel`);
-    panel?.querySelector(`.${CLASS}-go`)?.addEventListener("click", async () => {
-      const chirurgeon = !!panel.querySelector(`.${CLASS}-chir`)?.checked;
-      await consumeCarefully(item, { chirurgeon });
-    });
+    // A sheet re-rendered with a summary already open gets its button now.
+    decorateSummaries(root, actor);
   } catch {
     // A sheet that changed shape must never take the sheet down with it.
   }
+}
+
+function onCloseActorSheet(app) {
+  watchers.get(app)?.disconnect();
+  watchers.delete(app);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -253,15 +282,39 @@ function onRenderChat(message, html) {
   if (!content) return;
 
   content.querySelectorAll(`.${CLASS}-post`).forEach((node) => node.remove());
-  if (!carefulOn() || !get(SETTINGS.carefulPostRoll, true)) return;
+  if (!carefulOn()) return;
   if (alreadyMaximized(message)) return;
   if (!message?.isAuthor && !game.user.isGM) return;
 
-  const roll = (message?.rolls ?? [])[0];
-  if (!roll) return;
-
   const item = message?.item ?? null;
   if (!item || item.type !== "consumable") return;
+
+  const roll = (message?.rolls ?? [])[0];
+
+  // A card with no roll is the item posted to chat before anything happened, so
+  // the decision is still ahead of the player: this is the rule as written, and
+  // the same offer the inventory summary makes.
+  if (!roll) {
+    if (!item.isOwner || !qualifies(item)) return;
+    content.insertAdjacentHTML(
+      "beforeend",
+      `<div class="${CLASS}-post">
+        <button type="button" class="gl-btn gl-btn-accent ${CLASS}-go" title="${escapeHtml(
+          game.i18n.localize("GLVR.careful.shiftHint")
+        )}"><i class="fa-solid fa-flask-vial"></i> ${escapeHtml(
+        game.i18n.localize("GLVR.careful.action")
+      )}</button>
+        <span class="${CLASS}-cost">${escapeHtml(game.i18n.localize("GLVR.careful.cost"))}</span>
+      </div>`
+    );
+    content.querySelector(`.${CLASS}-go`)?.addEventListener("click", async (event) => {
+      await consumeCarefully(item, { chirurgeon: event.shiftKey });
+    });
+    return;
+  }
+
+  // Everything past here is the permissive reading, and has its own setting.
+  if (!get(SETTINGS.carefulPostRoll, true)) return;
 
   const max = maximumOf(roll);
   if (max === null || roll.total >= max) return;
@@ -300,7 +353,9 @@ function escapeHtml(value) {
 }
 
 export function registerCareful() {
-  Hooks.on("renderItemSheet", onRenderItemSheet);
-  Hooks.on("renderItemSheetPF2e", onRenderItemSheet);
+  // One name is enough: AppV1 fires the render hook for every class in the
+  // sheet's inheritance chain, and `ActorSheetPF2e` is in all of PF2e's.
+  Hooks.on("renderActorSheetPF2e", onRenderActorSheet);
+  Hooks.on("closeActorSheetPF2e", onCloseActorSheet);
   Hooks.on("renderChatMessageHTML", onRenderChat);
 }

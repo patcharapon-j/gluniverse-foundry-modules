@@ -52,6 +52,7 @@
   "GLVR.careful.hint": "Take the maximum from this item instead of rolling.",
   "GLVR.careful.action": "Consume carefully",
   "GLVR.careful.chirurgeon": "Chirurgeon item",
+  "GLVR.careful.shiftHint": "Shift-click for an item made by a Chirurgeon with greater field discovery: it rolls its Hit Points and adds them to the maximum.",
   "GLVR.careful.tag": "Careful Consumption",
   "GLVR.careful.flavor": "{name}, consumed carefully for its maximum.",
   "GLVR.careful.flavorChirurgeon": "{name}, consumed carefully: maximum plus {bonus} rolled, for {total}.",
@@ -64,6 +65,8 @@
   "GLVR.dents.state.dented": "Dented",
   "GLVR.dents.state.broken": "Broken",
   "GLVR.dents.state.destroyed": "Destroyed",
+  "GLVR.dents.override": "Set the dent count",
+  "GLVR.dents.badge": "Dents: {dents} of {destroyed} \u00b7 {state}",
   "GLVR.dents.repairTitle": "Repair",
   "GLVR.dents.repairBody": "This result removes {count} dent(s). Choose the item repaired.",
 

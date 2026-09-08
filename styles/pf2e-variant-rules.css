@@ -17,7 +17,6 @@
 /* ── Shared card chrome ─────────────────────────────────────────────────── */
 .glvr-chip,
 .glvr-dent-repair,
-.glvr-careful-panel,
 .glvr-dent-panel,
 .glvr-rest {
   position: relative;
@@ -29,8 +28,7 @@
   font-family: var(--gl-display);
 }
 
-.glvr-dent-head,
-.glvr-careful-head {
+.glvr-dent-head {
   display: flex;
   align-items: center;
   gap: var(--gl-sp-4);
@@ -38,8 +36,7 @@
   border-bottom: 1px solid var(--gl-hair);
 }
 
-.glvr-dent-title,
-.glvr-careful-title {
+.glvr-dent-title {
   color: var(--gl-accent);
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-2xs);
@@ -58,20 +55,17 @@
   text-transform: uppercase;
 }
 
-.glvr-careful-panel,
 .glvr-dent-panel {
   padding: var(--gl-sp-6);
 }
 
-.glvr-dent-line,
-.glvr-careful-line {
+.glvr-dent-line {
   margin: 0;
   color: var(--gl-text-dim);
   font-size: var(--gl-fs-sm);
   line-height: var(--gl-lh-normal);
 }
 
-.glvr-careful-acts,
 .glvr-dent-fixes {
   display: flex;
   flex-wrap: wrap;
@@ -209,19 +203,6 @@
 .glvr-chip.is-resolved .glvr-chip-what { color: var(--gl-text-faint); font-style: italic; }
 
 /* ── Careful Consumption ────────────────────────────────────────────────── */
-.glvr-careful-panel { --gl-accent: var(--gl-good); }
-
-.glvr-careful-chirurgeon {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gl-sp-3);
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-normal);
-  text-transform: uppercase;
-}
-
 .glvr-careful-flavor { --gl-accent: var(--gl-good); }
 .glvr-careful-tag {
   display: inline-block;
@@ -237,7 +218,36 @@
   text-transform: uppercase;
 }
 
-.glvr-careful-post { margin-top: var(--gl-sp-5); }
+
+/* The button beside PF2e's own Use, inside an expanded inventory row. It
+   borrows the sheet's button metrics rather than the suite's, so it reads as one
+   of the row's controls instead of as a panel dropped into it. */
+.glvr-careful-go {
+  --gl-accent: var(--gl-good);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  background: color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 38%, transparent);
+  color: var(--gl-accent);
+  cursor: pointer;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  transition:
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease);
+}
+.glvr-careful-go:hover { background: color-mix(in srgb, var(--gl-accent) 20%, var(--gl-ink-2)); }
+
+.glvr-careful-post {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  margin-top: var(--gl-sp-5);
+}
+.glvr-careful-post .glvr-careful-cost { margin-left: 0; }
 
 /* ── Dents ──────────────────────────────────────────────────────────────── */
 .glvr-dent-panel { --gl-accent: var(--gl-warn); }
@@ -271,7 +281,7 @@
   color: var(--gl-hazard);
 }
 
-.glvr-dent-foot { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.glvr-dent-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gl-sp-4); }
 .glvr-dent-count {
   color: var(--gl-text);
   font-family: var(--gl-tech);
@@ -280,12 +290,60 @@
 }
 .glvr-dent-scale {
   margin-left: auto;
+  white-space: nowrap;
   color: var(--gl-text-faint);
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-3xs);
   letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
 }
+/* The GM's override box. Sized to its content so the footer keeps reading as one
+   line rather than as a form. */
+.glvr-dent-set {
+  width: 3.4em;
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.glvr-dent-set:focus-visible { border-color: var(--gl-accent); outline: none; }
+.glvr-dent-of {
+  color: var(--gl-text-faint);
+  white-space: nowrap;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The inline badge on an inventory row ───────────────────────────────────
+   Players read their gear on the actor sheet, not on an item sheet, so the count
+   has to be legible there. Only a dented item draws one: a badge on every intact
+   row is a column of noise that says nothing. */
+.glvr-dent-chip {
+  --gl-accent: var(--gl-warn);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  margin-left: var(--gl-sp-3);
+  padding: 0 var(--gl-sp-3);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 34%, transparent);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.glvr-dent-chip[data-state="broken"],
+.glvr-dent-chip[data-state="destroyed"] { --gl-accent: var(--gl-hazard); }
+.glvr-dent-chip-of { opacity: 0.62; }
+
 .glvr-dent-panel[data-state="destroyed"] { --gl-accent: var(--gl-hazard); }
 .glvr-dent-panel[data-state="broken"] { --gl-accent: var(--gl-hazard); }
 

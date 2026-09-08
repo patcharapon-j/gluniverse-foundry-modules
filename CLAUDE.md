@@ -631,6 +631,22 @@ also different counters, so spending a use decrements `system.uses.value` exactl
 as `ConsumablePF2e#consume` does; spending quantity first destroys a part-used
 elixir at the first sip. The check pins all four.
 
+**Three more seams, all of which shipped wrong once.** `Check.roll(check, context)`
+sums `check.modifiers`; the context's own `modifiers` array is copied into
+`context.origin` as metadata about the roller and is never added to anything, so
+the Medicine penalty written there was recorded, displayed nowhere and changed no
+result. It goes on the check now, through `StatisticModifier#push`, which dedupes
+by slug so a reroll cannot stack a second copy. Second, a dent readout gated on
+`isGM` looks perfectly correct on the GM's screen and is simply absent on every
+other one, which is the failure nobody at the table can report: reading and
+writing are separate questions here, and the two sheet passes reach
+`game.user.isGM` only through `canEdit()`. Third, the Careful Consumption button
+lives where a player is standing when they decide to drink something, which is
+PF2e's inventory summary and the item's own chat card, not the item sheet's
+Details tab. `ItemSummaryRenderer#toggleSummary` fires no hook, so the sheet is
+watched with a MutationObserver that is re-entrant exactly once. The check pins
+all of it.
+
 A fifth rule from the same book section, **Belts**, deliberately ships no code —
 a PF2e container with `system.stowing = false` already holds four items at full
 Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
