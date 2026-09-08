@@ -1,7 +1,7 @@
 /**
  * PF2e Variant Rules — suite adapter.
  *
- * Four optional rules from *Adventures+* pp. 45–47, each a promoted sub-feature
+ * Five optional rules from *Adventures+* pp. 45–55, each a promoted sub-feature
  * with its own Control Center toggle, gated on this parent via
  * `requiresFeature`. The parent owns all the wiring; the children own nothing
  * but their enable state, which every handler re-reads at call time so flipping
@@ -22,6 +22,7 @@ import { registerChip } from "./chip.mjs";
 import { registerDents } from "./dents.mjs";
 import { registerCareful } from "./careful.mjs";
 import { registerWounds, readyWounds, syncActor } from "./wounds.mjs";
+import { registerBoss, readyBoss } from "./boss/index.mjs";
 
 /** Back a sub-feature's toggle on the world setting the rule itself reads. */
 function settingBacked(key) {
@@ -42,11 +43,13 @@ function onInit() {
   registerDents();
   registerCareful();
   registerWounds();
+  registerBoss();
 }
 
 async function onReady() {
   if (!pf2eReady()) return;
   readyWounds();
+  await readyBoss();
 
   // Bring existing actors in line once at startup: a world that enabled the rule
   // between sessions has wounded creatures carrying no healing modifier yet.
@@ -78,7 +81,7 @@ Suite.register({
 });
 
 /*
- * The four rules, registered after the parent so they group beneath it in the
+ * The five rules, registered after the parent so they group beneath it in the
  * Control Center. Each claims a prefix strictly longer than the parent's `vr.`
  * catch-all — the catalog sorts routing rules longest-first, so a child takes
  * its own keys before the parent's prefix can swallow them.
@@ -118,6 +121,18 @@ Suite.register({
   requiresFeature: FEATURE_ID,
   defaultEnabled: false,
   ...settingBacked(SETTINGS.dentsEnabled),
+});
+
+Suite.register({
+  id: RULES.boss.id,
+  title: "GLS.feature.vr-boss-creatures.title",
+  hint: "GLS.feature.vr-boss-creatures.hint",
+  icon: RULES.boss.icon,
+  settingPrefix: RULES.boss.prefix,
+  system: "pf2e",
+  requiresFeature: FEATURE_ID,
+  defaultEnabled: false,
+  ...settingBacked(SETTINGS.bossEnabled),
 });
 
 Suite.register({

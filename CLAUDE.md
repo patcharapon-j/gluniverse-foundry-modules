@@ -647,6 +647,58 @@ Details tab. `ItemSummaryRenderer#toggleSummary` fires no hook, so the sheet is
 watched with a MutationObserver that is re-entrant exactly once. The check pins
 all of it.
 
+**Boss Creatures adds a sixth rule and three new seams**, all of which fail
+silently. The load-bearing one is that a boss's level bump (+2 Greater, +4
+Supreme) must **never** be written to `system.details.level.value`. pf2e-flatten
+implements Proficiency-without-Level by adding a custom modifier equal to minus
+the actor's stored level and re-flattening whenever that level changes, so
+storing the bump makes it subtract that much a second time from every check and
+DC the boss makes: a Supreme boss comes out four points *worse* than the creature
+it was built from, in PWoL worlds only, with every number on its sheet looking
+ordinary. That is the same trap Flatfinder's own `adjustments.js` is written to
+avoid for Elite/Weak. The level lives in a flag and is read back out for
+incapacitation only.
+
+Second, the Boss DC is a **static** number computed from the level table, so
+nothing in pf2e-flatten can reach it. In a PWoL world the PCs' saves are
+flattened by their own level and this DC would not be, leaving every save against
+the boss about a level too hard while each number involved looks right on its
+own; `bossDc()` takes the actor's own flattening offset for that reason. Third,
+the level bump and the XP multiplier must reach Flatfinder by *different* routes:
+`threatXp` already derives XP from the level difference, so a boss level fed into
+that lookup on top of the ×2/×3 factor counts the boss twice.
+
+Two more. The book's turn rotations ("the boss's second turn typically occurs
+after 2 members of the party have acted") are stated **for a party of four**;
+stored literally they place two boss turns back to back at a table of five, which
+the same page forbids outright, so `turnOffsets()` re-derives them as fractions of
+the real party and `planTurns()` clamps an overflowing offset to the bottom of the
+round rather than letting it wrap above the boss's own initiative. And the two
+Downfall locks are **different locks** — one Downfall per boss *turn*, and a
+specific trigger spent until the boss's next *initial* turn — which matters
+because a Supreme boss takes three turns between initial turns, so collapsing them
+lets one critical hit disrupt it twice in a round.
+
+Multi-turn initiative has two completely separate implementations and they must
+never both run. Card mode already models it through the per-actor
+`init.cardConfig` `{cards, turns}` flag; standard mode has nothing (nothing in the
+suite wraps `Combat#setupTurns`, subclasses `Combatant`, or mutates
+`combat.turns`), so a boss there gets N−1 extra real Combatant documents flagged
+as its Nth turn. A boss carrying both would be dealt nine turns a round.
+
+Two PF2e data-model facts this feature depends on. An NPC has **no DataModel**
+(`CONFIG.Actor.dataModels` covers army/familiar/hazard/loot/party/vehicle only),
+so `system.attributes.hp.max` is an unvalidated `_source` field and an
+`actor.update()` on it persists — but `CreaturePF2e#_preUpdate` clamps an incoming
+`hp.value` against the maximum the actor has *at that moment*, so max and value
+must be written in two updates or the boss gains its Hit Points and immediately
+sits at half of them. And PF2e's trait field is a tagify widget built with
+`enforceWhitelist`, so a trait the system has no entry for survives an
+`update()` and is then dropped the first time a GM touches the traits on that
+item; the book's own new traits (`boss`, `telegraph`) therefore live in
+`bookTraits` and are printed in the description instead of becoming trait chips.
+See `docs/BOSS_RULES.md`.
+
 A fifth rule from the same book section, **Belts**, deliberately ships no code —
 a PF2e container with `system.stowing = false` already holds four items at full
 Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not

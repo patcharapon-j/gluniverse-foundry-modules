@@ -1,13 +1,14 @@
 /**
  * PF2e Variant Rules — shared constants.
  *
- * Four optional rules from *Adventures+* (pp. 45–47), each a promoted
+ * Five optional rules from *Adventures+* (pp. 45–55), each a promoted
  * sub-feature with its own Control Center toggle:
  *
  *   Careful Consumption  a 2-action Activate that takes the maximum instead of rolling
  *   Chip Damage          a damaging effect that deals no damage still deals a little
  *   Dents                item durability as a dent count rather than a broken threshold
  *   Lasting Wounds       the wounded condition survives a night's rest and bites harder
+ *   Boss Creatures       an NPC promoted to a multi-turn solo threat with Downfalls
  *
  * A fifth rule from the same section, Belts, ships no code: a PF2e container
  * with `system.stowing = false` already holds four items at full Bulk, and the
@@ -50,6 +51,11 @@ export const RULES = Object.freeze({
     prefix: "vr.wound",
     icon: "fa-solid fa-heart-crack",
   }),
+  boss: Object.freeze({
+    id: "vr-boss-creatures",
+    prefix: "vr.boss",
+    icon: "fa-solid fa-crown",
+  }),
 });
 
 /** Setting keys. Every one begins with a sub-feature prefix or the parent's. */
@@ -60,6 +66,7 @@ export const SETTINGS = Object.freeze({
   chipEnabled: "vr.chip.enabled",
   dentsEnabled: "vr.dent.enabled",
   woundsEnabled: "vr.wound.enabled",
+  bossEnabled: "vr.boss.enabled",
 
   // Careful Consumption
   carefulHealingOnly: "vr.careful.healingOnly",
@@ -76,6 +83,11 @@ export const SETTINGS = Object.freeze({
   woundsBlockRest: "vr.wound.blockRest",
   woundsMedicine: "vr.wound.medicinePenalty",
   woundsHealing: "vr.wound.healingPenalty",
+
+  // Boss Creatures
+  bossXp: "vr.boss.xpBudget",
+  bossIncapacitation: "vr.boss.incapacitation",
+  bossExtraTurns: "vr.boss.extraTurns",
 });
 
 /** Flag keys, scope SUITE_ID. */

@@ -48,7 +48,8 @@
     "styles/pf2e-recall.css",
     "styles/pf2e-aoe.css",
     "styles/pf2e-arcane-surge.css",
-    "styles/pf2e-variant-rules.css"
+    "styles/pf2e-variant-rules.css",
+    "styles/pf2e-variant-rules-boss.css"
   ],
   "languages": [
     {

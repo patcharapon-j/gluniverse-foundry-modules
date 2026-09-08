@@ -52,6 +52,7 @@ export function registerSettings() {
     SETTINGS.chipEnabled,
     SETTINGS.dentsEnabled,
     SETTINGS.woundsEnabled,
+    SETTINGS.bossEnabled,
   ]) {
     game.settings.register(SUITE_ID, key, {
       scope: "world",
@@ -88,6 +89,24 @@ export function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.woundsBlockRest, bool(SETTINGS.woundsBlockRest, true));
   game.settings.register(SUITE_ID, SETTINGS.woundsMedicine, bool(SETTINGS.woundsMedicine, true));
   game.settings.register(SUITE_ID, SETTINGS.woundsHealing, bool(SETTINGS.woundsHealing, true));
+
+  // ── Boss Creatures ──────────────────────────────────────────────────────
+  // The three things a boss does *outside* its own sheet, each separable
+  // because each lands on a different table's toes.
+  //
+  // The XP multiplier changes what the encounter-budget badge says, which a GM
+  // who builds encounters by feel may not want moving under them.
+  //
+  // The incapacitation bump is the one part of the boss level that reaches a
+  // roll, so a table that reads the +2/+4 as pure bookkeeping can switch it off
+  // without giving up the rest of the rule.
+  //
+  // Extra turns write real Combatant documents into the encounter. That is the
+  // only part of this feature another module can see, so it gets its own switch
+  // for tables running a different initiative tracker.
+  game.settings.register(SUITE_ID, SETTINGS.bossXp, bool(SETTINGS.bossXp, true));
+  game.settings.register(SUITE_ID, SETTINGS.bossIncapacitation, bool(SETTINGS.bossIncapacitation, true));
+  game.settings.register(SUITE_ID, SETTINGS.bossExtraTurns, bool(SETTINGS.bossExtraTurns, true));
 }
 
 /* ── Sub-feature enable state ─────────────────────────────────────────────
@@ -98,3 +117,4 @@ export const carefulOn = () => !!get(SETTINGS.carefulEnabled, false);
 export const chipOn = () => !!get(SETTINGS.chipEnabled, false);
 export const dentsOn = () => !!get(SETTINGS.dentsEnabled, false);
 export const woundsOn = () => !!get(SETTINGS.woundsEnabled, false);
+export const bossOnSetting = () => !!get(SETTINGS.bossEnabled, false);

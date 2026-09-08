@@ -15,6 +15,7 @@ import {
 } from "./constants.js";
 import { asElement, getSetting } from "./settings.js";
 import { flatfinderEffectiveLevel } from "./adjustments.js";
+import { bossXpFactor } from "../pf2e-variant-rules/boss/profile.mjs";
 
 function actorLevel(actor) {
   const lvl = actor?.level ?? actor?.system?.details?.level?.value;
@@ -33,7 +34,13 @@ function threatXp(actor, partyLevel) {
   if (actor?.type === "hazard" && actor?.system?.details?.isComplex === false) {
     xp = Math.round(xp * 0.2);
   }
-  return xp;
+  // A Boss Creature (Adventures+) is worth twice its base creature as a Greater
+  // boss and three times as a Supreme one. Deliberately a multiplier on top of
+  // the *base* level's XP, never a shift of the level fed to the table above:
+  // that level already carries the boss's +2/+4 for incapacitation, and letting
+  // it into this lookup would multiply the boss's XP a second time. Returns 1
+  // for every ordinary creature and in every non-PF2e world.
+  return xp * bossXpFactor(actor);
 }
 
 /**

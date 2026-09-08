@@ -40,6 +40,7 @@
   --gluni-stable:           var(--gl-teal);
   --gluni-stable-hot:       var(--gl-teal-hot);
   --gluni-violet:      var(--gl-violet);
+  --gluni-peril:       var(--gl-peril);   /* escalation beyond hazard — Supreme bosses */
   --gluni-ink:         var(--gl-ink-0);
   --gluni-line:        rgb(var(--gl-tint-light) / 0.10);
   --gluni-line-strong: var(--gl-line-strong);
@@ -1133,6 +1134,7 @@
 
 .gluni-active-tag,
 .gluni-adhoc-tag,
+.gluni-boss-tag,
 .gluni-delayed-tag,
 .gluni-guard-break-tag,
 .gluni-dying-tag {
@@ -1797,6 +1799,64 @@
 
 .gluni-card--dying {
   --gluni-accent: var(--gluni-dying);
+}
+
+/*
+ * Boss Creatures (PF2e variant rules).
+ *
+ * A boss overrides its disposition accent on purpose. Hostile red is what every
+ * other enemy on the rail already carries, so leaving a boss on it would make
+ * the one creature at the table that acts three times a round look exactly like
+ * the four that act once.
+ *
+ * Greater takes the suite's ceremony amber and Supreme its peril crimson, whose
+ * token is defined as "escalation beyond hazard" and is therefore the one hue in
+ * the pool that already means what a Supreme boss means. Orchid is deliberately
+ * NOT used here despite reading well at this size: it is the dying accent, so a
+ * Supreme boss at full Hit Points would be exactly the colour the rail uses for
+ * a downed party member.
+ *
+ * The accent is all that changes: --gluni-holo-a, -b and -c and the break blend
+ * derive from it, so the whole card follows without a second declaration, and a
+ * dying or guard-broken boss still yields to those states as it should — those
+ * rules come later in the cascade and own the card's field when they apply.
+ */
+.gluni-card--boss {
+  --gluni-accent: var(--gluni-signal);
+}
+
+.gluni-card--boss-supreme {
+  --gluni-accent: var(--gluni-peril);
+}
+
+/*
+ * The boss's frame. A 1px inset ring on the surface rather than a border on the
+ * card: the card itself is the element the FLIP animation transforms between
+ * rail and active size, and a border there would be scaled with it.
+ */
+.gluni-card--boss .gluni-card-surface {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 52%, transparent);
+}
+
+/* An extra turn is the same creature, and reads as a lighter echo of it. */
+.gluni-card--boss-extra .gluni-card-portrait {
+  filter: saturate(0.82) brightness(0.9);
+}
+
+.gluni-card--boss-extra .gluni-card-surface {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 28%, transparent);
+}
+
+.gluni-boss-tag {
+  color: var(--gluni-ink);
+  background: var(--gluni-accent, var(--gluni-signal));
+}
+
+/* The "turn 2 of 3" chip is a readout, not an alarm: outline, not fill. */
+.gluni-boss-tag--turn {
+  color: var(--gluni-accent, var(--gluni-signal));
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-signal)) 62%, transparent);
 }
 
 .gluni-card--dying .gluni-card-surface {

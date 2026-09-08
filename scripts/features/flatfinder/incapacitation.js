@@ -21,6 +21,7 @@
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { flatfinderEffectiveLevel } from "./adjustments.js";
+import { bossIncapacitationLevel } from "../pf2e-variant-rules/boss/profile.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
 /** Does this save context carry the incapacitation trait? */
@@ -94,6 +95,23 @@ function addFlatfinderModifier(check, bonus) {
   return true;
 }
 
+/**
+ * The creature level to use for one side of an incapacitation comparison.
+ *
+ * A Boss Creature (Adventures+) counts as 2 levels higher as a Greater boss and
+ * 4 as a Supreme one, and the book names incapacitation as the reason that level
+ * exists at all. It applies to *both* sides and for opposite reasons: a boss
+ * resisting the party's incapacitation spell is the case the book describes, and
+ * a boss casting one is the same rule read from the other end. Handling only the
+ * first would make the rule work in exactly the half of cases the GM notices.
+ *
+ * Returns the ordinary Flatfinder level for every non-boss and in every world
+ * where the rule is off, so nothing changes for anyone not using it.
+ */
+function creatureLevel(actor) {
+  return bossIncapacitationLevel(actor) ?? flatfinderEffectiveLevel(actor);
+}
+
 /** Core logic, mutating check/context in place when the Flatfinder rule applies. */
 function applyFlatfinderIncapacitation(check, context) {
   if (!getSetting("incapacitation")) return;
@@ -101,8 +119,12 @@ function applyFlatfinderIncapacitation(check, context) {
   if (!isIncapacitation(context)) return;
 
   const targetActor = context.actor ?? context.self?.actor;
-  const targetLevel = flatfinderEffectiveLevel(targetActor);
-  const sourceLevel = getSourceLevel(context);
+  const targetLevel = creatureLevel(targetActor);
+  // A boss's own level wins over the level its effect item carries: an NPC
+  // ability item has no level of its own, so an incapacitation effect from a
+  // boss would otherwise fall through to the base creature's.
+  const originActor = getOriginItem(context)?.actor ?? context?.origin?.actor ?? null;
+  const sourceLevel = bossIncapacitationLevel(originActor) ?? getSourceLevel(context);
   if (typeof targetLevel !== "number" || typeof sourceLevel !== "number") return;
 
   const diff = targetLevel - sourceLevel;

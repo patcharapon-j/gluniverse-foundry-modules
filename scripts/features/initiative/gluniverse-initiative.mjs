@@ -35,6 +35,17 @@ import {
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
 import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./token-overlay.mjs";
+/**
+ * Boss Creatures reads, from the PF2e variant rules feature.
+ *
+ * A deliberate cross-feature import rather than two agreeing string constants:
+ * the flag shape and the tier names then have exactly one definition and this
+ * file cannot drift from it. Both functions are pure, read their enable setting
+ * at call time, and return null when the rule is off or the world is not PF2e,
+ * so an ordinary encounter is unaffected and nothing runs at import time.
+ */
+import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
+import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
 import { getPF2eDyingState, getDnd5eDeathState, getDyingState, getActorAttributeValue, getConditionValue, hasActorItem, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getActorItems, getItemSlug, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
 
 
@@ -1814,6 +1825,10 @@ export class GLUniverseInitiativeOverlay {
       breakGauge: mystery || adhoc ? null : getBreakGaugeState(combatant),
       dying,
       conditions,
+      // A mystery card must not leak that this creature is a boss: the tier is
+      // exactly the kind of thing the party has not learned about it yet.
+      boss: mystery || adhoc ? null : bossBadge(combatant.actor),
+      bossTurn: mystery || adhoc ? null : turnMarker(combatant),
       name: mystery ? localize("GLUNI.Unknown") : adhoc?.name ?? combatant.name,
       initiative: combatant.initiative,
       portrait,
@@ -1925,6 +1940,9 @@ export class GLUniverseInitiativeOverlay {
       card.delayed ? "gluni-card--delayed" : "",
       card.adhoc ? "gluni-card--adhoc" : "",
       card.adhoc ? `gluni-card--adhoc-${card.adhoc.type}` : "",
+      card.boss ? "gluni-card--boss" : "",
+      card.boss ? `gluni-card--boss-${card.boss.tier}` : "",
+      card.bossTurn ? "gluni-card--boss-extra" : "",
       card.guardBroken ? "gluni-card--guard-broken" : "",
       card.conditions ? "gluni-card--conditioned" : "",
       card.dying ? "gluni-card--dying" : "",
@@ -2022,6 +2040,8 @@ export class GLUniverseInitiativeOverlay {
               : `<span class="gluni-dying-tag">${localize("GLUNI.Dying.Label").toUpperCase()} ${card.dying.value}</span>`) : ""}
             ${card.adhoc ? `<span class="gluni-adhoc-tag">${escapeHTML(card.adhoc.label).toUpperCase()}</span>` : ""}
             ${card.adhoc?.oneShot ? `<span class="gluni-adhoc-tag gluni-adhoc-tag--oneshot">${localize("GLUNI.AdHoc.OneShot").toUpperCase()} ${formatRound(card.adhoc.round)}</span>` : ""}
+            ${card.boss ? `<span class="gluni-boss-tag">${localize("GLVR.boss.cardTag")}</span>` : ""}
+            ${card.boss && card.bossTurn ? `<span class="gluni-boss-tag gluni-boss-tag--turn">${formatLocalized("GLVR.boss.turnBadge", { index: card.bossTurn.index, total: card.bossTurn.of })}</span>` : ""}
             ${card.delayed ? `<span class="gluni-delayed-tag">${localize("GLUNI.Delayed").toUpperCase()}</span>` : ""}
           </div>
           <h3>${escapeHTML(card.name)}</h3>
