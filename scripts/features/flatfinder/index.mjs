@@ -8,7 +8,6 @@
 
 import { Suite } from "../../core/registry.mjs";
 import { registerSettings, onInit, onReady } from "./flatfinder.js";
-import { apexApi } from "./apex.js";
 
 Suite.register({
   id: "flatfinder",
@@ -40,12 +39,7 @@ Suite.register({
       incapacitation: "ff.incapacitation",
       flattenDc: "ff.flattenDc",
       eliteWeakLevel: "ff.eliteWeakLevel",
-      apexTurns: "ff.apexTurns",
-      apexPerTurnGuard: "ff.apexPerTurnGuard",
-      apexPhases: "ff.apexPhases",
       encounterBudget: "ff.encounterBudget",
     },
   },
-
-  api: apexApi,
 });
