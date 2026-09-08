@@ -145,7 +145,6 @@ lone lieutenant is an ability that never fires.
 ### Riptide Answer
 Type: reaction
 Traits: water
-Function: Combo Trigger
 Description: *The water she is standing in leaves without her, and arrives
 somewhere else first.*
 
@@ -154,9 +153,6 @@ somewhere else first.*
 **Effect** Flow Steps up to 10 feet toward the triggering creature and makes a
 Cutlass Strike against it. On a hit, she gains 1 Tide.
 ```
-
-`Function: Combo Trigger` substring-matches the importer's `trigger` role, so it
-records correctly without a code change. See `grammar.md`.
 
 ## Checklist
 

@@ -10,7 +10,7 @@ no exit.
 
 > **The Posture you are standing in is the tell.**
 > That one sentence is why this mechanism exists. It collapses "how do I
-> telegraph the Ultimate?" and "how do I explain the engine without a lecture?"
+> telegraph the Finisher?" and "how do I explain the engine without a lecture?"
 > into a single object that is already on the screen.
 
 ## Why not a flat priority list
@@ -58,8 +58,8 @@ Three parts, all required:
 - A rung may not contain a sub-condition. If you need three outcomes, that is a
   second Posture, not a longer rung.
 
-A `boss` may take **three** rungs in the Posture that contains its Ultimate, so
-that `resource is full → Ultimate` can sit at the top. That rung *is* the
+A `boss` may take **three** rungs in the Posture that contains its Finisher, so
+that `resource is full → Finisher` can sit at the top. That rung *is* the
 telegraph — the players can read it off the table.
 
 ### Entry triggers
@@ -68,7 +68,7 @@ Same discipline as the Combo menu: prefer observable, prefer conditions.
 
 Good: *reduced to half HP · a creature within 30 ft is off-guard · it has taken
 fire damage this round · the Break bar empties · an ally within 30 ft drops to
-0 HP · it has spent its Ultimate · a destructible part is destroyed.*
+0 HP · it has spent its Finisher · a destructible part is destroyed.*
 
 Bad: *at the start of round 3* (a round count is not a fiction) · *when the GM
 decides* (not observable) · *when two of the following are true* (a compound
@@ -165,7 +165,7 @@ progression, and because the Break clock refilling is the thing that gates it.
 
 Until the importer gains a real `## Nodes` section, Postures ride in
 `## Phases` — which already stores an ordinal (`sbi.phase`) and a verbatim
-trigger (`sbi.phaseTrigger`) per entry, and accepts `Function:` tags.
+trigger (`sbi.phaseTrigger`) per entry.
 
 ```markdown
 ## Phases
@@ -187,11 +187,11 @@ do not skip it because it is manual.
 ## Checklist
 
 - Does every tier have at least its minimum Posture count?
-- Does every ladder have exactly two rungs (three only for a boss's Ultimate
+- Does every ladder have exactly two rungs (three only for a boss's Finisher
   Posture), with the last unconditional?
 - Is every entry trigger a single observable event?
 - Is every name outside `CONDITION_WORDS`, and not "Stance"?
 - Is a Posture with no exit still playable for the rest of the fight?
-- For a boss: does the Ultimate sit on a visible rung, so the telegraph is
+- For a boss: does the Finisher sit on a visible rung, so the telegraph is
   readable off the table?
 - Is the current Posture mirrored as a token effect the players can see?

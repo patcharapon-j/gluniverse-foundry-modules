@@ -399,7 +399,7 @@ Possessives appear 21 times; "X of Y" 39 times.
 | Bare imperative verb | a stance or mode toggle | Uncoil, Flatten, Discorporate, Disanimate, Curl, Refract, Juxtapose, Expunge |
 | Verb + object | an activated action | Steal Eye, Gouge Eyes, Deny Shield, Eat Curse, Drink Water, Crank the Heat, Consume Fear, Reforge Hammer, Tidy Up |
 | Adjective + noun | a passive, aura, or damage rider | Malicious Tears, Crushing Vertigo, Cacophonous Fury, Grisly Trophies, Booming Voice, Cranium Shell |
-| Possessive / X-of-Y | the dramatic ultimate | Sorrow's Howl, Killer's Possession, Tyrant's Command, Curse of Lonely Death, Glimpse of the Future, Autumn's Abscission |
+| Possessive / X-of-Y | the dramatic finisher | Sorrow's Howl, Killer's Possession, Tyrant's Command, Curse of Lonely Death, Glimpse of the Future, Autumn's Abscission |
 | "X Vulnerability" / "Weakness to X" / "X Dependent" | **a player-facing signpost that a lever exists** | Axe Vulnerability, Water Vulnerability, Vulnerable to Grease, Prone Vulnerability, Foot Vulnerability, Bite Vulnerability, Fear Vulnerability, Sobriety Vulnerability, Time Magic Vulnerability, Mountain Dependent, Domain Dependent, Waterbound, Stormbound, Grounded |
 | Spoken dialogue | a trickster, fey, or construct with a personality | Don't You Dare!, Fair Trade?, What Else Do I Got?, Put That Away!, Not That One!, Mine Now, Get Them!, Amp it Up!, Fire the Omnicannon!, Listen to my Song!, Now You Know How I Feel |
 | Domain jargon lifted whole | instant legibility for a themed creature | Crescendo, Accelerando, Ritenuto, Fortissimo, Dissonance, Encore, Woodwinds/Brass/Strings/Percussion |

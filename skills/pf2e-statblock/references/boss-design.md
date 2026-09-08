@@ -118,7 +118,7 @@ listing what it loses. On top of that, take at least one of these:
 | Shape | What it does |
 |---|---|
 | **Part-break** | Weak points are destructible **objects**, targetable only during Break. Destroying one changes what the creature *does*. |
-| **Interrupt** | Break **zeroes the creature's own resource**, so its Ultimate is cancelled rather than endured. The stickiest loop of the three. |
+| **Interrupt** | Break **zeroes the creature's own resource**, so its Finisher is cancelled rather than endured. The stickiest loop of the three. |
 | **Kill window** | Regeneration or resistance switches off only during Break. |
 
 ### Destructible parts
@@ -161,7 +161,7 @@ kinder shape reaches the same place:
 | ≤1 | — | — |
 
 Grinding raw HP through the top row is arithmetically hopeless against the
-Ultimate clock, so the mechanic is still how you win — but nothing is *forbidden*,
+Finisher clock, so the mechanic is still how you win — but nothing is *forbidden*,
 the damage dealers watch their numbers matter more every round, and destroying
 the final part can still drop it to 0 outright as a clean cinematic kill.
 
@@ -177,8 +177,8 @@ A phase change should also *invert* the tactical problem, not amplify it — a
 mobile hunter that anchors into a stationary artillery platform gives the party a
 different fight, which is what a second act is for.
 
-**Put the Ultimate on a visible rung.** A boss's Ultimate Posture may take three
-ladder rungs so that `resource is full → Ultimate` sits at the top. That rung is
+**Put the Finisher on a visible rung.** A boss's Finisher Posture may take three
+ladder rungs so that `resource is full → Finisher` sits at the top. That rung is
 the telegraph: the players can read it off the table without you saying a word,
 which is the whole reason Postures exist.
 
@@ -186,7 +186,7 @@ which is the whole reason Postures exist.
 
 | Piece | Where it lives |
 |---|---|
-| Boss's own resource | `## Engine` — renders on the token overlay via PF2e Ultimates |
+| Boss's own resource | Prose in the ability that spends it, plus a `clock` in the clocks-tracker feature if the party should see it |
 | Party-facing Break bar | A passive ability, plus a `clock` in the clocks-tracker feature (6 slices, `bad` flag) |
 | Weak points | Prose in a passive. Do **not** invent rule elements for them |
 | Postures, incl. Break and phases | `## Phases` with a prose `Trigger:` |
@@ -206,14 +206,14 @@ mirrors it as a token effect. That mirroring is the part that does the work — 
 is what makes the state public — so do not skip it because it is manual.
 
 Two tracks, each dumb, beat one clever track. A single bar both sides push reads
-elegantly on paper, but its Ultimate trigger becomes a nested conditional and it
+elegantly on paper, but its Finisher trigger becomes a nested conditional and it
 cannot use the token counter the suite already provides.
 
 ## 8. Boss checklist
 
 - Both tracks visible to the players from round 1 — neither is a secret.
 - The current Posture is mirrored as a token effect the players can see.
-- The Ultimate sits on a visible ladder rung, so the telegraph reads off the table.
+- The Finisher sits on a visible ladder rung, so the telegraph reads off the table.
 - Break is written as a Posture with its own ladder, not as a list of penalties.
 - Break does at least one of: part-break, interrupt, kill window.
 - Each destructible part switches off a *different* ability.

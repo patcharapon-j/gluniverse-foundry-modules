@@ -48,14 +48,14 @@ Skip the questions entirely when the user already told you, or when the tier is
 
 Follow `references/kit-design.md`. What each tier owes:
 
-| Tier | Kit slots | Postures | Combo | Ultimate | Resource | Explanation cap |
+| Tier | Kit slots | Postures | Combo | Finisher | Resource | Explanation cap |
 |---|---|---|---|---|---|---|
 | `background` | 1 | 1 | no | no | none | **1 sentence** |
 | `standard` | 2 | 2 | yes | yes — once/encounter, no resource | none, or 0–1 | **3** |
 | `elite` | 4 + 2 talents | 3 | yes | yes | 0–2 | **5** |
 | `boss` | 4 + 2 talents | 3–4 per phase | yes | yes | full pool + Break | **8** |
 
-The five slots are **Signature · Combo · Ultimate · Talent ×2**. Nothing adds a
+The five slots are **Signature · Combo · Finisher · Talent ×2**. Nothing adds a
 sixth. Level growth goes into the **Chassis** — stock PF2e spells, gear and
 abilities — never into new bespoke slots.
 
@@ -112,7 +112,7 @@ names, traits and conventions.
   `Frightful Presence`, real spells, real gear.
 - It is `Reactive Strike`, not `Attack of Opportunity`. That rename is
   Remaster-era and the old name appears on zero official creatures.
-- Invent only the Signature, Combo, Ultimate, Talents and Postures.
+- Invent only the Signature, Combo, Finisher, Talents and Postures.
 - Ability names: two words, Title Case, `<Adjective> <Noun>` — that is 73% of
   official bespoke names. Verb-first is only 7%; do not default to it.
 
@@ -148,9 +148,9 @@ table:
 - **Evocative flavour first, tight mechanics second.** Open with one or two
   italic sentences of concrete sensory fiction — the flavour is the only part
   that tells the GM how to narrate the ability, so spend words there. Never open
-  with a role label (`**Signature.**`, `**Ultimate.**`) — `Function:` already
-  records it. Then cut hard in the *rules* text: delete any sentence that only
-  restates the fiction.
+  with a role label (`**Signature.**`, `**Finisher.**`) — the sheet already
+  shows the ability's name and cost. Then cut hard in the *rules* text: delete
+  any sentence that only restates the fiction.
 - **Never restate a number the actor already owns.** "up to its Speed", not "up
   to 35 feet"; "a Bladed Iron Whip Strike", not "+15 for 2d6+7". The suite runs
   Proficiency Without Level, so a statistic copied into prose silently stops
@@ -184,8 +184,7 @@ Keep it short. State:
 ## Hazards
 
 The importer builds hazards too. Set `Type: hazard` and use `Stealth`,
-`Hardness`, `Complexity`, `Disable`, `Routine`, `Reset`. Hazards take no
-`## Engine` section and no kit. A complex hazard is often the right chassis for a
+`Hardness`, `Complexity`, `Disable`, `Routine`, `Reset`. Hazards take no kit. A complex hazard is often the right chassis for a
 battlefield object network or an evolving zone — reach for it before inventing a
 creature that pretends to be one. An **escort or protect target is a hazard**,
 not a combatant.
@@ -224,7 +223,7 @@ not a combatant.
 
 **The kit**
 
-- Five slots: Signature, Combo, Ultimate, Talent ×2. Never a sixth.
+- Five slots: Signature, Combo, Finisher, Talent ×2. Never a sixth.
 - Level growth goes in the Chassis, never into new bespoke slots.
 - At least one Talent must work outside combat.
 - **Exactly one gain branch**, and the gain condition must be PC-caused or
@@ -232,7 +231,7 @@ not a combatant.
 - **The Signature may not be the gain condition.** If pressing the button fills
   the bar, the bar is a round counter in costume.
 - Only `boss` may exceed a 0–2 resource.
-- An Ultimate can never generate the resource that paid for it.
+- A Finisher can never generate the resource that paid for it.
 - **Do not force a minor conversion.** Binary, threshold, placed-object and
   bloodied engines are exempt. A conversion is correct only for a deep pool.
 - Exactly **one** engine-bearing creature per side per encounter.
@@ -253,7 +252,7 @@ not a combatant.
 
 **Postures**
 
-- Two ladder rungs, the last unconditional. Three only for a boss's Ultimate
+- Two ladder rungs, the last unconditional. Three only for a boss's Finisher
   Posture.
 - Linear only — no back-edges, except Break returning to the Posture it left.
 - Never name a Posture after a real PF2e condition; check `CONDITION_WORDS` in

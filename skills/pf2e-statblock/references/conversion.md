@@ -98,7 +98,6 @@ Do not silently correct it. The user asked for a conversion.
 After a faithful conversion, if the creature is clearly a set-piece — a named
 boss, a recurring villain, a lieutenant — you may offer **one line**:
 
-> Want me to give this an `## Engine` section and tag its six functions so the
-> Ultimates counter works?
+> Want me to build this out as a full kit, with Postures and a resource?
 
 Do not do it unasked, and do not make the offer for rank-and-file creatures.

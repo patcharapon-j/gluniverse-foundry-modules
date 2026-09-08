@@ -41,7 +41,7 @@ open it is worse: stray lines are appended to that ability's prose.
 Reproduce every line you are not changing exactly as written, including
 sections you were told to leave alone. The importer builds the creature from
 this text alone; a line you drop is a line the creature loses. That especially
-covers `## Engine`, `## Phases` and `## Recall Knowledge`, which carry
+covers `## Phases` and `## Recall Knowledge`, which carry
 automation.
 
 ## Procedure
@@ -68,7 +68,7 @@ automation.
 
 ## What not to do
 
-- Do not add an `## Engine` to a creature that has none. The engine is a boss
+- Do not give a resource to a creature that has none. A resource is a boss
   contract, and inventing one is a design decision the user did not ask for.
 - Do not "fix" numbers you think are wrong at Reskin or Retheme. Say so in the
   report instead.
