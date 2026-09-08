@@ -3432,3 +3432,9 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
+
+/* Anime.js owns finite title/handoff motion; ambient hazard motifs remain CSS. */
+.stream-pacer-peril-stage.anime-motion,
+.stream-pacer-peril-indicator-wrap.anime-motion,
+.stream-pacer-peril-indicator-wrap.anime-motion .stream-pacer-peril-indicator { transition: none; }
+.stream-pacer-peril-stage.anime-motion .pk-line .pk-l { animation: none; }

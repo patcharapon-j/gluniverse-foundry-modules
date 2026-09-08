@@ -1,6 +1,7 @@
 import { MODULE_ID, FEATURE_ID } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { PerilWebGL } from './PerilWebGL.js';
+import { animate, createTimeline, stagger, createMotionOwner, motionDuration } from '../../core/motion.mjs';
 import { featurePath } from '../../core/const.mjs';
 
 const STAGE_TEMPLATE = featurePath(FEATURE_ID, 'templates/peril-stage.hbs');
@@ -38,8 +39,8 @@ export class PerilOverlay {
   constructor() {
     this._stageEl = null;
     this._indicatorEl = null;
-    this._stageTimer = null;
-    this._indicatorTimer = null;
+    this._stageMotion = createMotionOwner();
+    this._indicatorMotion = createMotionOwner();
     this._unsubscribe = null;
     this._webgl = new PerilWebGL();
     // Incremented whenever peril becomes inactive; in-flight async renders
@@ -101,7 +102,9 @@ export class PerilOverlay {
 
   async _playStageAndShowIndicator() {
     const token = ++this._activationToken;
-    if (this._webglEnabled()) this._webgl.play(STAGE_DURATION_MS);
+    this._stageMotion.clear();
+    this._indicatorMotion.clear();
+    if (this._webglEnabled()) this._webgl.play(motionDuration(STAGE_DURATION_MS));
     await this._renderStage(token);
     if (token !== this._activationToken) return;
     this._scheduleHandoff(token);
@@ -147,32 +150,48 @@ export class PerilOverlay {
 
     const html = await renderHbs(STAGE_TEMPLATE, context);
     if (token !== this._activationToken) return;
+    this._stageEl.classList.add('anime-motion');
     this._stageEl.innerHTML = html;
     void this._stageEl.offsetWidth;
     this._stageEl.classList.add('playing');
   }
 
   _scheduleHandoff(token) {
-    clearTimeout(this._indicatorTimer);
-    clearTimeout(this._stageTimer);
-
-    this._indicatorTimer = setTimeout(() => {
+    this._stageMotion.clear();
+    const stage = this._stageEl;
+    const ms = value => motionDuration(value, stage);
+    const timeline = this._stageMotion.add(createTimeline({ autoplay: false }));
+    // Keep the shader, scanlines, marquee and impact motifs; give the title a
+    // single authored rhythm independent of localized character counts.
+    for (const [selector, start, axis, offset] of [
+      ['.pk-line-1 .pk-l', 820, 'y', -18],
+      ['.pk-line-2 .pk-l', 1220, 'x', 18]
+    ]) {
+      const letters = stage.querySelectorAll(selector);
+      if (letters.length) timeline.add(letters, {
+        opacity: [0, 1], [axis]: [offset, 0], filter: ['blur(5px)', 'blur(0px)'],
+        delay: stagger(ms(Math.min(45, 420 / letters.length))),
+        duration: ms(380), ease: 'outExpo'
+      }, ms(start));
+    }
+    timeline.call(() => {
+      if (token === this._activationToken) this._renderIndicator();
+    }, ms(STAGE_DURATION_MS - INDICATOR_LEAD_MS));
+    timeline.add(stage, { opacity: [1, 0], duration: ms(300), ease: 'inOutSine' }, ms(STAGE_DURATION_MS - 300));
+    timeline.call(() => {
       if (token !== this._activationToken) return;
-      this._renderIndicator();
-    }, STAGE_DURATION_MS - INDICATOR_LEAD_MS);
-
-    this._stageTimer = setTimeout(() => {
-      if (token !== this._activationToken) return;
-      this._unmountStage();
-    }, STAGE_DURATION_MS);
+      stage.classList.remove('playing');
+      stage.innerHTML = '';
+      this._stageMotion.clear();
+    }, ms(STAGE_DURATION_MS));
+    timeline.play();
   }
 
   _unmountStage() {
+    this._stageMotion.clear();
     if (!this._stageEl) return;
     this._stageEl.classList.remove('playing');
-    setTimeout(() => {
-      if (this._stageEl) this._stageEl.innerHTML = '';
-    }, 300);
+    this._stageEl.innerHTML = '';
   }
 
   async _renderIndicator() {
@@ -190,6 +209,8 @@ export class PerilOverlay {
 
     const html = await renderHbs(INDICATOR_TEMPLATE, context);
     if (token !== this._activationToken) return;
+    this._indicatorMotion.clear();
+    this._indicatorEl.classList.add('anime-motion');
     this._indicatorEl.innerHTML = html;
 
     const dismissBtn = this._indicatorEl.querySelector('[data-action="dismiss-peril"]');
@@ -201,24 +222,26 @@ export class PerilOverlay {
 
     void this._indicatorEl.offsetWidth;
     this._indicatorEl.classList.add('visible');
+    this._indicatorMotion.add(animate(this._indicatorEl, {
+      opacity: [0, 1], y: [12, 0], duration: motionDuration(460, this._indicatorEl), ease: 'outQuart'
+    }));
   }
 
   _hideIndicator() {
     this._activationToken++;
-    clearTimeout(this._indicatorTimer);
-    clearTimeout(this._stageTimer);
+    this._indicatorMotion.clear();
     this._webgl.stop();
     this._unmountStage();
     if (!this._indicatorEl) return;
     this._indicatorEl.classList.remove('visible');
-    setTimeout(() => {
-      if (this._indicatorEl) this._indicatorEl.innerHTML = '';
-    }, 400);
+    // Dismissal is immediate: safety controls never wait on presentation.
+    this._indicatorEl.innerHTML = '';
   }
 
   destroy() {
-    clearTimeout(this._stageTimer);
-    clearTimeout(this._indicatorTimer);
+    ++this._activationToken;
+    this._stageMotion.clear();
+    this._indicatorMotion.clear();
     if (this._webgl) {
       this._webgl.destroy();
       this._webgl = null;

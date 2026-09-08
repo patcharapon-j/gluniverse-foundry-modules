@@ -1,8 +1,14 @@
 // module/notification.mjs — Notification renderer and animation lifecycle
 
 import { SUITE_ID, featurePath } from "../../../core/const.mjs";
+import { animate, createTimeline, stagger, motionDuration, createMotionOwner } from "../../../core/motion.mjs";
 import { applyTheme } from "./themes.mjs";
 import { playSound, playCustomSound } from "./sound.mjs";
+
+const notificationDisposers = new WeakMap();
+
+/** Dispose a replaced host immediately and release its queue slot exactly once. */
+export function disposeNotification(el) { notificationDisposers.get(el)?.(); }
 
 /**
  * Timing presets for animation stages (milliseconds), as delays from the start.
@@ -126,66 +132,67 @@ export async function renderNotification(data, onDismiss) {
   // Check for custom sound file in settings
   const customSound = setting("insight.soundFile", "");
 
-  const timers = [];
-  const at = (delay, fn) => timers.push(setTimeout(fn, delay));
-
-  // Stage 0: the screen edge takes the light. This is the alert.
-  at(timing.edge, () => {
-    edge.classList.add("insight-visible");
-    if (customSound) playCustomSound(customSound);
-    else playSound("impact", data.theme);
-  });
-
-  // Stage 1: the cut opens across the view
-  at(timing.line, () => {
-    notification.classList.add("insight-visible");
-    line.classList.add("insight-visible");
-    if (!customSound) playSound("line", data.theme);
-  });
-
-  // Stage 2: Card expands + back panel begins its drift
-  at(timing.card, () => {
-    card.classList.add("insight-visible");
-    bgBack.classList.add("insight-glitch");
-    if (!customSound) playSound("reveal", data.theme);
-  });
-
-  // Stage 3: Content fades in with stagger
-  contentEls.forEach((contentEl, i) => {
-    at(timing.contentStart + (i * timing.contentStagger), () => {
-      contentEl.classList.add("insight-fade-in");
-    });
-  });
-
-  // Dismiss handler
-  const dismissBtn = el.querySelector(".insight-dismiss");
-  dismissBtn.addEventListener("click", () => {
-    for (const t of timers) clearTimeout(t);
-    dismissNotification(el, onDismiss);
-  });
-
-  return el;
-}
-
-/**
- * Dismiss a notification with exit animation, then remove from DOM.
- * @param {HTMLElement} el - The stage element
- * @param {Function} onDismiss - Callback after removal
- */
-function dismissNotification(el, onDismiss) {
-  let done = false;
+  // One clock owns the ceremony and its audio cues. Pausing it on dismissal
+  // prevents a late reveal (or sound) from racing the exit.
+  el.classList.add("insight-anime");
+  const owner = createMotionOwner();
+  const duration = ms => speed === "instant" ? 0 : motionDuration(ms, el);
+  const position = ms => speed === "instant" ? 0 : motionDuration(ms, el);
+  let ambient = null;
+  let dismissed = false;
+  let finished = false;
   const finish = () => {
-    if (done) return;
-    done = true;
+    if (finished) return;
+    finished = true;
+    owner.clear();
+    notificationDisposers.delete(el);
     el.remove();
     onDismiss?.();
   };
+  notificationDisposers.set(el, finish);
+  const reveal = owner.add(createTimeline({ autoplay: false, onComplete: () => {
+    if (duration(2600) > 0 && !dismissed && !finished) ambient = owner.add(animate(edge, {
+      opacity: [1, .78], duration: duration(2600), alternate: true, loop: true, ease: "inOutSine",
+    }));
+  } }));
+  reveal.call(() => {
+    edge.classList.add("insight-visible");
+    if (customSound) playCustomSound(customSound);
+    else playSound("impact", data.theme);
+  }, 0);
+  reveal.add(edge, { opacity: [0, 1], duration: duration(320), ease: "outCubic" }, 0);
+  reveal.call(() => {
+    notification.classList.add("insight-visible");
+    line.classList.add("insight-visible");
+    if (!customSound) playSound("line", data.theme);
+  }, position(timing.line));
+  reveal.add(notification, {
+    opacity: [0, 1],
+    transform: ["translate(-50%, -50%) translateY(16px) scale(.965)", "translate(-50%, -50%) translateY(0px) scale(1)"],
+    duration: duration(500), ease: "outCubic",
+  }, position(timing.line));
+  reveal.add(line, { scaleX: [0, 1], duration: duration(480), ease: "outExpo" }, position(timing.line));
+  reveal.call(() => {
+    card.classList.add("insight-visible");
+    bgBack.classList.add("insight-glitch");
+    if (!customSound) playSound("reveal", data.theme);
+  }, position(timing.card));
+  reveal.add(card, { opacity: [0, 1], clipPath: ["inset(50% 0 50% 0)", "inset(0% 0 0% 0)"], duration: duration(620), ease: "outExpo", onComplete: () => card.style.removeProperty("clip-path") }, position(timing.card));
+  reveal.add(contentEls, { opacity: [0, 1], translate: ["0 9px", "0 0px"], duration: duration(420), delay: stagger(position(timing.contentStagger)), ease: "outCubic" }, position(timing.contentStart));
 
-  el.classList.add("insight-dismissing");
-  // The card and the edge fade on different curves; wait for the last one.
-  el.querySelector(".insight-edge")?.addEventListener("transitionend", finish, { once: true });
-
-  // Safety fallback — the edge may be display:none under the "off" intensity,
-  // in which case no transition ever fires.
-  setTimeout(finish, 900);
+  const dismissBtn = el.querySelector(".insight-dismiss");
+  dismissBtn.addEventListener("click", () => {
+    if (dismissed) return;
+    dismissed = true;
+    dismissBtn.disabled = true;
+    reveal.pause();
+    ambient?.pause();
+    // Keep current interpolated values for an uninterrupted early dismissal.
+    const exit = owner.add(createTimeline({ autoplay: false, onComplete: finish }));
+    exit.add(notification, { opacity: 0, transform: [notification.style.transform || "translate(-50%, -50%) translateY(0px) scale(1)", "translate(-50%, -50%) translateY(-18px) scale(1)"], duration: duration(320), ease: "inCubic" }, 0);
+    exit.add(edge, { opacity: 0, duration: duration(560), ease: "inOutCubic" }, 0);
+    exit.play();
+  });
+  reveal.play();
+  return el;
 }

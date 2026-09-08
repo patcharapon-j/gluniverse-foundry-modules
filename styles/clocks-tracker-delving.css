@@ -339,3 +339,8 @@
 .glct-delveditor .dx-ed-omin{ display:inline-flex; align-items:center; gap:3px; }
 .glct-delveditor .dx-ed-addstage{ margin-top:6px; font-size:12px; }
 .glct-delveditor .dx-ed-foot{ display:flex; align-items:center; gap:8px; }
+
+/* Timeline owns reel geometry and the overlay handoff; strike/filter stay CSS. */
+.glct-slot.anime-motion { transition: none; }
+.glct-slot.anime-motion .reel { transition-property: filter; }
+.glct-slot.anime-motion .reel.drop { transform: none; }

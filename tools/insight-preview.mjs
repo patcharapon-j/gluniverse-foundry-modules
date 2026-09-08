@@ -212,7 +212,7 @@ const page = `<!doctype html>
 <header>
   <span class="muted">insight</span>
   <button id="replay">Replay all ⏎</button>
-  <button id="freeze">Freeze at flare</button>
+  <button id="freeze">Hold settled</button>
   <select id="speed">
     <option value="normal">Normal</option>
     <option value="fast">Fast</option>
@@ -240,18 +240,17 @@ ${rows
 </div>
 
 <script type="module">
-/* The runtime's own stage clock, restated so the preview cannot drift silently
-   from notification.mjs. Keep the two in step. */
-const TIMINGS = {
-  normal:  { edge: 0, line: 280, card: 760, contentStart: 1060, contentStagger: 110 },
-  fast:    { edge: 0, line: 140, card: 380, contentStart: 530,  contentStagger: 60 },
-  instant: { edge: 0, line: 0,   card: 0,   contentStart: 0,    contentStagger: 0 },
-};
-const INTENSITY_CLASS = { full: null, subtle: "insight-intensity-subtle", off: "insight-intensity-off" };
-const PRESETS = ${JSON.stringify(PRESETS)};
-
+import { renderNotification, disposeNotification } from "/scripts/features/insight/module/notification.mjs";
 const boxes = [...document.querySelectorAll("[data-screen]")];
-let timers = [];
+let currentBox;
+let generation = 0;
+globalThis.game = { settings: { get: (_id, key) => ({
+  "insight.animationSpeed": document.getElementById("speed").value,
+  "insight.edgeIntensity": currentBox?.dataset.intensity,
+  "insight.soundEnabled": false,
+  "insight.theme": currentBox?.dataset.preset,
+})[key] } };
+globalThis.foundry = { applications: { handlebars: { renderTemplate: async () => currentBox.querySelector("template").innerHTML } } };
 
 /* Scale each simulated desktop to the page width and reserve its scaled
    height, so the whole 16:9 frame is in one shot however wide the pane is. */
@@ -265,61 +264,26 @@ function fitScreens() {
   document.getElementById("fit").textContent = "screen 1200×675 @ " + z.toFixed(2) + "×";
 }
 
-function play() {
-  timers.forEach(clearTimeout);
-  timers = [];
-  const speed = document.getElementById("speed").value;
-  const t = TIMINGS[speed];
-
+async function play() {
+  const run = ++generation;
   for (const box of boxes) {
-    box.querySelector(".insight-stage")?.remove();
-    const el = box.querySelector("template").content.firstElementChild.cloneNode(true);
-
-    if (speed !== "normal") el.classList.add("insight-speed-" + speed);
-    const ic = INTENSITY_CLASS[box.dataset.intensity];
-    if (ic) el.classList.add(ic);
-    for (const [k, v] of Object.entries(PRESETS[box.dataset.preset])) el.style.setProperty(k, v);
+    const previous = box.querySelector(".insight-stage");
+    if (previous) disposeNotification(previous);
+    currentBox = box;
+    const el = await renderNotification({ id: box.dataset.screen, theme: box.dataset.preset });
+    if (run !== generation) { disposeNotification(el); return; }
     box.appendChild(el);
-
-    const at = (d, fn) => timers.push(setTimeout(fn, d));
-    const q = (s) => el.querySelector(s);
-    const content = [
-      ".insight-icon", ".insight-sense", ".insight-serial", ".insight-title",
-      ".insight-divider", ".insight-image", ".insight-body", ".insight-datastrip",
-      ".insight-dismiss",
-    ].map(q).filter(Boolean);
-
-    at(t.edge, () => q(".insight-edge").classList.add("insight-visible"));
-    at(t.line, () => {
-      q(".insight-notification").classList.add("insight-visible");
-      q(".insight-fracture-line").classList.add("insight-visible");
-    });
-    at(t.card, () => {
-      q(".insight-fracture-card").classList.add("insight-visible");
-      q(".insight-fracture-bg-back").classList.add("insight-glitch");
-    });
-    content.forEach((c, i) => at(t.contentStart + i * t.contentStagger, () => c.classList.add("insight-fade-in")));
-
-    q(".insight-dismiss").addEventListener("click", () => {
-      el.classList.add("insight-dismissing");
-      setTimeout(() => el.remove(), 900);
-    });
   }
 }
 
-/* Hold every animation at its brightest frame, so a still shows the flare
-   rather than whichever moment the shutter happened to land on. */
-function freeze() {
-  play();
+/* Freeze the ambient CSS decorations after the real timeline has settled. */
+async function freeze() {
+  await play();
   setTimeout(() => {
     for (const a of document.getAnimations()) {
-      const target = a.effect?.target;
-      if (!target || !target.closest?.(".insight-stage")) continue;
-      a.pause();
-      const active = a.effect.getComputedTiming().activeDuration;
-      a.currentTime = (Number.isFinite(active) ? active : 600) * 0.34;
+      if (a.effect?.target?.closest?.(".insight-stage")) a.pause();
     }
-  }, 60);
+  }, 2500);
 }
 
 document.getElementById("replay").addEventListener("click", play);
@@ -341,7 +305,7 @@ console.log("serve it:  node tools/preview-server.mjs");
 console.log("then open: http://localhost:8931/" + rel);
 
 /* ────────────────────────────────────────────────────────────────────────
-   --artifact=<path> — the same page, self-contained.
+   --artifact=<path> — a portable, settled-state design reference.
    The served preview links the stylesheets off the repo, which only works
    behind preview-server. For a page that has to open anywhere (a review link,
    a phone), inline the very same three files and swap the bundled font layer
@@ -360,7 +324,30 @@ if (artifactArg) {
 
   // The artifact host supplies the document skeleton, and the bundled faces
   // are not reachable from a published page.
+  const settledScript = `<script>
+const presets = ${JSON.stringify(PRESETS)};
+for (const box of document.querySelectorAll("[data-screen]")) {
+  const stage = box.querySelector("template").content.firstElementChild.cloneNode(true);
+  stage.classList.add("insight-speed-instant");
+  if (box.dataset.intensity !== "full") stage.classList.add("insight-intensity-" + box.dataset.intensity);
+  for (const [key, value] of Object.entries(presets[box.dataset.preset])) stage.style.setProperty(key, value);
+  stage.querySelectorAll(".insight-edge, .insight-notification, .insight-fracture-line, .insight-fracture-card").forEach(el => el.classList.add("insight-visible"));
+  stage.querySelectorAll(".insight-icon, .insight-sense, .insight-serial, .insight-title, .insight-divider, .insight-image, .insight-body, .insight-datastrip, .insight-dismiss").forEach(el => el.classList.add("insight-fade-in"));
+  stage.querySelector(".insight-dismiss").disabled = true;
+  box.appendChild(stage);
+}
+function fit() {
+  const z = Math.min(1, document.querySelector(".fit").clientWidth / 1200);
+  for (const screen of document.querySelectorAll(".screen")) {
+    screen.style.transform = "scale(" + z + ")";
+    screen.parentElement.style.height = Math.round(675 * z) + "px";
+  }
+}
+addEventListener("resize", fit); fit();
+</script>`;
   const body = page
+    .replace(/<script type="module">[\s\S]*?<\/script>/, settledScript)
+    .replace(/<header>[\s\S]*?<\/header>/, '<header>Insight &middot; static settled-state reference</header>')
     .replace(/^<!doctype html>\n<meta charset="utf-8">\n<title>[^<]*<\/title>\n/, "")
     .replace(/<link rel="stylesheet" href="\/styles\/[^"]*">\n/g, "");
 
@@ -440,10 +427,8 @@ if (artifactArg) {
     "  stage, 640&nbsp;px wide with the body set at 17&nbsp;px. The edge keeps",
     "  breathing until the message is acknowledged.</p>",
     "  <p>Nothing on the stage takes the pointer except the card, so the canvas",
-    "  stays playable underneath. The frames below are live, not screenshots",
-    "  &mdash; press <em>Replay all</em> to watch the arrival, or drop the speed",
-    "  to Fast to see how it plays for someone who has read a hundred of",
-    "  these.</p>",
+    "  stays playable underneath. These frames show the <em>static settled state</em>.",
+    "  Run the repository preview to review the production Anime.js arrival and dismissal.</p>",
     '  <ul class="beats">',
     "    <li><b>0 ms</b><span>Impact. The edge flares, the four bands rush in, the sub thump lands.</span></li>",
     "    <li><b>120 ms</b><span>The frame strikes, the corner marks register in sequence, one scan crosses the view.</span></li>",
@@ -458,5 +443,5 @@ if (artifactArg) {
 
   await mkdir(dirname(ART), { recursive: true });
   await writeFile(ART, head + "\n" + intro + body, "utf8");
-  console.log("wrote " + ART + "  (self-contained)");
+  console.log("wrote " + ART + "  (portable static reference)");
 }

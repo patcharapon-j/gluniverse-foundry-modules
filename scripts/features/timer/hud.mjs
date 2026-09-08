@@ -17,6 +17,7 @@ import {
   URGENT_MS, CRITICAL_MS, CHECKPOINT_MS,
 } from "./state.mjs";
 import * as Audio from "./audio.mjs";
+import { TimerMotion } from "./motion.mjs";
 import { TimerPanel } from "./panel.mjs";
 
 /** Split a remaining-ms into the large main field and the small fractional tail. */
@@ -46,7 +47,6 @@ class TimerHUDClass {
     this._raf = null;
     this._state = null;
     this._lastRem = null;       // last computed remaining (held while frozen)
-    this._prevActive = false;
     this._lastMain = null;
     this._lastFrac = null;
     this._lastTier = null;
@@ -69,18 +69,19 @@ class TimerHUDClass {
     el.style.display = "none";
     el.innerHTML = `
       <div class="gltimer-rim" aria-hidden="true"></div>
-      <div class="gltimer-sheen" aria-hidden="true"></div>
+      <div class="gltimer-sheen" aria-hidden="true"><span class="gltimer-sheen-light"></span></div>
+      <div class="gltimer-impact" aria-hidden="true"></div>
       <div class="gltimer-face">
         <span class="gltimer-main">0:00</span><span class="gltimer-frac"></span>
       </div>
       ${gm ? this._stripHTML() : ""}`;
     document.body.appendChild(el);
     this.el = el;
+    this._motion = new TimerMotion(el);
     this._mainEl = el.querySelector(".gltimer-main");
     this._fracEl = el.querySelector(".gltimer-frac");
     if (gm) this._wireStrip();
     this._state = getState();
-    this._prevActive = !!this._state.active;
     this._lastRem = null;
     this._loop();
   }
@@ -119,17 +120,11 @@ class TimerHUDClass {
   /** Receive a fresh authoritative state (from the setting's onChange). */
   onState(state) {
     const next = { ...state };
-    const became = next.active && !this._prevActive;
-    this._prevActive = !!next.active;
     this._state = next;
     this._lastRem = null;            // force re-anchor on the next frame
     if (!next.expired) { this._firedExpire = false; this._gmExpiredSent = false; }
     if (isLive(next)) this._lastCheckpoint = Date.now();
-    if (became && this.el) {
-      this.el.classList.remove("is-sheen");
-      void this.el.offsetWidth;      // restart the entrance sheen
-      this.el.classList.add("is-sheen");
-    }
+    if (!next.active) this._motion?.clear();
   }
 
   _loop() {
@@ -141,14 +136,19 @@ class TimerHUDClass {
     if (!s.active) {
       if (el.style.display !== "none") {
         el.style.display = "none";
-        el.classList.remove("is-burst", "is-sheen", "is-paused");
+        el.classList.remove("is-paused");
         this._lastMain = this._lastFrac = this._lastTier = null;
         this._lastWholeSec = null;
+        this._lastPaused = this._lastShowPause = null;
+        this._motion?.clear();
         this._firedExpire = false;
       }
       return;
     }
-    if (el.style.display === "none") el.style.display = "";
+    if (el.style.display === "none") {
+      el.style.display = "";
+      this._motion?.reveal();
+    }
 
     const now = Date.now();
     // Local game.paused is layered on for an instant freeze; the GM also
@@ -184,6 +184,7 @@ class TimerHUDClass {
     const tier = tierOf(rem, s.expired);
     if (tier !== this._lastTier) {
       el.setAttribute("data-tier", tier);
+      if (this._lastTier != null && tier !== "expired") this._motion?.emphasize();
       // Leaving the urgent ramp → drop the per-frame heat override so the
       // tier's stylesheet accent applies again.
       if (this._lastTier === "urgent") el.style.removeProperty("--gl-accent");
@@ -228,13 +229,13 @@ class TimerHUDClass {
     if (rem <= 0 && (s.expired || live) && !this._firedExpire) {
       this._firedExpire = true;
       Audio.playAlarm();
-      this.el.classList.remove("is-burst");
-      void this.el.offsetWidth;
-      this.el.classList.add("is-burst");
+      this._motion?.emphasize(true);
     }
   }
 
   destroy() {
+    this._motion?.clear();
+    this._motion = null;
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
     this.el?.remove();

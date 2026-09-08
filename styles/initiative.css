@@ -6497,3 +6497,14 @@
 .gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(1),
 .gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(2) { display: none; }
 
+
+/* Anime owns these nodes only while a rail movement or splash is alive.
+   Static glass, pseudo-element glints and WebGL remain in their own layers. */
+.gluni-anime-motion {
+  animation: none !important;
+  transition: none !important;
+  will-change: transform, opacity;
+}
+.gluni-anime-splash .gluni-anime-motion {
+  filter: none;
+}

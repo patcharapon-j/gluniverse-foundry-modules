@@ -1,6 +1,6 @@
 /**
  * DiceSlot — a slot-machine reveal for a delving pool roll, played INSIDE the
- * chat card. No WebGL, no physics, no external libraries: each die is a vertical
+ * chat card. No WebGL or physics: each die is a vertical
  * reel of numbers that spins up to speed and decelerates onto its rolled value,
  * the reels landing left-to-right in a satisfying cascade.
  *
@@ -27,7 +27,7 @@ const REVEAL_DELAY = 300;  // pause after the last reel lands, before discards s
 const DISCARD_HOLD = 640;  // how long the revealed discards are held
 const FADE = 360;          // overlay fade-out (ms), revealing the static spans
 
-import { randRange as rand } from "../../../core/util.mjs";
+import { createTimeline, createMotionOwner, motionDuration } from "../../../core/motion.mjs";
 
 // Like hex6 but tolerates a missing leading '#' and supplies a delving-orange default.
 const hexCss = s => (/^#?[0-9a-f]{6}$/i.test(String(s ?? "")) ? (String(s)[0] === "#" ? s : "#" + s) : "#ff9a3c");
@@ -53,7 +53,7 @@ export class DiceSlot {
     this.host = host;
     this.onSettle = onSettle;
     this._settled = false;
-    this._timers = [];
+    this._motion = createMotionOwner();
     host.classList.add("dx-tumbling");          // grows the host + hides static spans
     // Hide this row's outcome (the "N left" / stage-shift badge) until the reels
     // resolve, so the card never spoils the result before the animation lands.
@@ -67,7 +67,7 @@ export class DiceSlot {
     const cell = Math.max(16, Math.min(40, Math.floor((w - gap * (n + 1)) / n), h - 8));
 
     const wrap = document.createElement("div");
-    wrap.className = "glct-slot";
+    wrap.className = "glct-slot anime-motion";
     wrap.style.setProperty("--slot-tint", hexCss(tint));
     wrap.style.gap = `${gap}px`;
 
@@ -107,46 +107,42 @@ export class DiceSlot {
     this.wrap = wrap;
 
     // kick the spin next frame so the initial transform commits first
-    requestAnimationFrame(() => this._spin());
+    this._frame = requestAnimationFrame(() => this._spin());
   }
 
   _spin() {
     if (this._settled) return;
-    let maxDur = 0;
+    const ms = value => motionDuration(value, this.host);
+    const timeline = this._motion.add(createTimeline({ autoplay: false }));
+    let landing = 0;
     this.reels.forEach((r, i) => {
-      const dur = BASE + i * STEP;
-      maxDur = Math.max(maxDur, dur);
-      const dist = (r.total - 1) * r.cell;     // land on the final cell (the result)
-      r.strip.style.transition = `transform ${dur}ms cubic-bezier(.13,.62,.16,1)`;
-      r.strip.style.transform = `translateY(-${dist}px)`;
-      // drop the motion blur a touch before the reel fully stops
-      this._after(dur - 90, () => r.reel.classList.remove("spinning"));
+      const duration = ms(BASE + i * STEP);
+      landing = Math.max(landing, duration);
+      timeline.add(r.strip, { y: [0, -(r.total - 1) * r.cell], duration, ease: "outQuart" }, 0);
+      timeline.call(() => r.reel.classList.remove("spinning"), Math.max(0, duration - ms(90)));
+      // A restrained mechanical compression makes each stop readable without
+      // overshooting into the adjacent (incorrect) face of the reel.
+      timeline.add(r.reel, { scale: [0.96, 1], duration: ms(160), ease: "outCubic" }, duration);
     });
-    // once every reel has landed, reveal discards, hold, then fade to the result
-    this._after(maxDur + REVEAL_DELAY, () => this._revealDiscards());
+    const reveal = landing + ms(REVEAL_DELAY);
+    timeline.call(() => {
+      for (const r of this.reels) if (r.dropped) r.reel.classList.add("drop");
+      this.row?.classList.remove("dx-rolling");
+    }, reveal);
+    for (const r of this.reels) if (r.dropped) {
+      timeline.add(r.reel, { opacity: [1, 0.5], y: [0, 2], scale: [1, 0.9],
+        duration: ms(260), ease: "outCubic" }, reveal);
+    }
+    timeline.add(this.wrap, { opacity: [1, 0], duration: ms(FADE), ease: "inOutSine" }, reveal + ms(DISCARD_HOLD));
+    timeline.call(() => this.destroy(), reveal + ms(DISCARD_HOLD + FADE));
+    timeline.play();
   }
-
-  _revealDiscards() {
-    if (this._settled) return;
-    for (const r of this.reels) if (r.dropped) r.reel.classList.add("drop");
-    // the dice have landed — now it's safe to reveal the row's outcome text
-    this.row?.classList.remove("dx-rolling");
-    this._after(DISCARD_HOLD, () => this._fade());
-  }
-
-  _fade() {
-    if (this._settled) return;
-    this.wrap?.classList.add("fade");
-    this._after(FADE, () => this.destroy());
-  }
-
-  _after(ms, fn) { this._timers.push(setTimeout(fn, ms)); }
 
   destroy() {
     if (this._settled) return;
     this._settled = true;
-    for (const t of this._timers) clearTimeout(t);
-    this._timers = [];
+    cancelAnimationFrame(this._frame);
+    this._motion.clear();
     this.row?.classList.remove("dx-rolling");   // ensure the outcome is shown
     this.wrap?.remove();
     this.wrap = null;
