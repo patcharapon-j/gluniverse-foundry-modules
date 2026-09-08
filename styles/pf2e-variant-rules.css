@@ -1,0 +1,268 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PF2e Variant Rules — Etched Glass surfaces
+   ══════════════════════════════════════════════════════════════════════════
+
+   Four rules, four hues, every one an existing semantic token routed through
+   `--gl-accent` on a scoped selector:
+
+     Chip Damage          --gl-hazard  danger
+     Careful Consumption  --gl-good    success
+     Dents                --gl-warn    "strain, breaking point"
+     Repair               --gl-teal    "stabilised, at rest"
+
+   Nothing here redeclares a foundation token, writes a raw duration or easing,
+   or strikes a veil from anything but a tint channel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared card chrome ─────────────────────────────────────────────────── */
+.glvr-chip,
+.glvr-dent-repair,
+.glvr-careful-panel,
+.glvr-dent-panel,
+.glvr-rest {
+  position: relative;
+  margin-top: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 42%), var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-etch-soft);
+  font-family: var(--gl-display);
+}
+
+.glvr-chip-head,
+.glvr-dent-head,
+.glvr-careful-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-4) var(--gl-sp-6);
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.glvr-chip-title,
+.glvr-dent-title,
+.glvr-careful-title {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+
+.glvr-dent-state,
+.glvr-careful-cost {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glvr-chip-body,
+.glvr-careful-panel,
+.glvr-dent-panel {
+  padding: var(--gl-sp-6);
+}
+.glvr-chip-body { padding: var(--gl-sp-6); }
+
+.glvr-chip-line,
+.glvr-dent-line,
+.glvr-careful-line {
+  margin: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-normal);
+}
+
+.glvr-chip-acts,
+.glvr-careful-acts,
+.glvr-dent-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-4);
+  margin-top: var(--gl-sp-5);
+}
+.glvr-chip-acts > .gl-btn { flex: 1 1 auto; }
+
+/* ── Chip Damage ────────────────────────────────────────────────────────── */
+.glvr-chip { --gl-accent: var(--gl-hazard); }
+
+.glvr-chip-hero {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gl-sp-4);
+  margin: var(--gl-sp-5) 0 0;
+  padding: var(--gl-sp-5) var(--gl-sp-6);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
+  background: color-mix(in srgb, var(--gl-accent) 9%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 30%, transparent);
+}
+.glvr-chip-num {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xl);
+  font-weight: var(--gl-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--gl-lh-tight);
+}
+.glvr-chip-unit {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glvr-chip-src {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-normal);
+  text-align: right;
+}
+
+.glvr-chip-types { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3); margin-top: var(--gl-sp-5); }
+.glvr-chip-type {
+  padding: var(--gl-sp-2) var(--gl-sp-5);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease);
+}
+.glvr-chip-type:hover { color: var(--gl-text-bright); border-color: var(--gl-accent-soft); }
+
+/* A resisted type negates the chip damage outright, so the chosen state reads as
+   a *good* outcome for the defender rather than as the hazard hue beside it. */
+.glvr-chip-type[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--gl-good) 14%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-good) 55%, transparent);
+  color: var(--gl-good);
+}
+.glvr-chip-why {
+  display: block;
+  margin-top: var(--gl-sp-1);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-normal);
+  opacity: 0.78;
+  text-transform: none;
+}
+
+.glvr-chip.is-resolved { opacity: 0.72; }
+.glvr-chip.is-resolved .glvr-chip-line { color: var(--gl-text-faint); font-style: italic; }
+
+/* ── Careful Consumption ────────────────────────────────────────────────── */
+.glvr-careful-panel { --gl-accent: var(--gl-good); }
+
+.glvr-careful-chirurgeon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+}
+
+.glvr-careful-flavor { --gl-accent: var(--gl-good); }
+.glvr-careful-tag {
+  display: inline-block;
+  margin-right: var(--gl-sp-3);
+  padding: 2px var(--gl-sp-4);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 40%, transparent);
+  border-radius: var(--gl-r-pill);
+  background: var(--gl-accent-faint);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glvr-careful-post { margin-top: var(--gl-sp-5); }
+
+/* ── Dents ──────────────────────────────────────────────────────────────── */
+.glvr-dent-panel { --gl-accent: var(--gl-warn); }
+.glvr-dent-repair { --gl-accent: var(--gl-teal); padding: var(--gl-sp-6); }
+
+.glvr-dent-track { display: flex; gap: var(--gl-sp-3); margin: var(--gl-sp-5) 0; }
+.glvr-dent-cell {
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  height: var(--gl-sp-10);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-variant-numeric: tabular-nums;
+  transition: background var(--gl-d-brisk) var(--gl-ease), border-color var(--gl-d-brisk) var(--gl-ease);
+}
+.glvr-dent-cell.is-hit {
+  background: color-mix(in srgb, var(--gl-warn) 20%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-warn) 55%, transparent);
+  color: var(--gl-warn);
+}
+/* Past the broken rung the item is mechanically impaired, which is a different
+   statement from "damaged" and gets the hazard hue to say so. */
+.glvr-dent-cell.is-broken {
+  background: color-mix(in srgb, var(--gl-hazard) 20%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-hazard) 55%, transparent);
+  color: var(--gl-hazard);
+}
+
+.glvr-dent-foot { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.glvr-dent-count {
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.glvr-dent-scale {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glvr-dent-panel[data-state="destroyed"] { --gl-accent: var(--gl-hazard); }
+.glvr-dent-panel[data-state="broken"] { --gl-accent: var(--gl-hazard); }
+
+.glvr-dent-fix-n {
+  margin-left: var(--gl-sp-3);
+  color: var(--gl-warn);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Lasting Wounds — the rest notice ───────────────────────────────────── */
+.glvr-rest { --gl-accent: var(--gl-orchid); padding: var(--gl-sp-6); }
+.glvr-rest-head {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+.glvr-rest-line { margin: var(--gl-sp-4) 0 0; color: var(--gl-text-dim); font-size: var(--gl-fs-sm); }
+.glvr-rest-list {
+  margin: var(--gl-sp-4) 0 0;
+  padding-left: var(--gl-sp-9);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+}

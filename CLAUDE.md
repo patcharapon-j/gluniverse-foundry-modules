@@ -557,6 +557,71 @@ but not the module script, so you get a card frozen at its pre-entry values and
 conclude, wrongly, that the reveal is broken. Add `--artifact=<path>` for a
 self-contained copy that opens anywhere.
 
+**When touching the PF2e variant rules** (`features/pf2e-variant-rules/`), re-run
+its consistency check. Everything it covers fails *silently*.
+
+The load-bearing one is the dent → item-HP reflection. Dents live in a flag, but
+PF2e derives `isBroken` / `isDestroyed` straight off HP (`hp.value === 0` is
+destroyed, `hp.value <= floor(max / 2)` is broken) and shields read those getters
+to decide whether they still grant an AC bonus — so the reflection is the only
+thing making "broken" mean anything. It **must** round down: on an item with odd
+max HP, rounding 15 × 0.5 up to 8 leaves a two-dent item one point above PF2e's
+threshold of 7 and it never reads as broken. Even-HP items are fine, which is
+exactly how that survives a play session.
+
+It also pins that chip damage fires on a miss but **not** on a critical miss (the
+book excludes every degree past the first that deals no damage, so getting this
+wrong doubles the rule's frequency); that an applicable resistance *negates* chip
+damage rather than reducing it; that a spell's rank beats its level and a level-0
+effect clamps to 1 rather than chipping for nothing; that the healing penalty
+stays negative, since a positive value would silently *increase* healing; that
+every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
+or the catalog's longest-first sort hands the child's keys to the parent and its
+settings group renders empty; and the two runtime-built i18n families
+(`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
+key), which nothing else checks:
+
+```bash
+node tools/pf2e-variant-rules-check.mjs
+```
+
+Zero problems required. Three things about this feature are worth knowing before
+you change it.
+
+**Chip Damage and Dents run in assist mode on purpose.** PF2e exposes no hook on
+damage application and nothing else in this suite has ever written into that
+pipeline; the GM presses a button and the module never silently changes a number.
+`applyFlatDamage` in `apply.mjs` is the single place damage is written, and it
+passes `damage` as a bare **number** with `final: true` — the number branch skips
+`applyIWR` entirely and `final` additionally zeroes hardness and the shield-block
+prompt, so the actor loses exactly what the card promised. `applyDamage` consumes
+its `token` argument unguarded, so an actor with no token on the active scene has
+to be refused up front rather than allowed to throw.
+
+**Careful Consumption never calls PF2e's `consume()`.** That function takes only a
+quantity, fires no hook, and builds a bare `DamageRoll(...).toMessage()` that
+bypasses every synthetic in the system — there is nothing to hook. Because the
+path is thin we simply do not use it: the same `(formula)[type,kind]` string is
+rebuilt, evaluated with `maximize: true`, and posted, so PF2e's own apply buttons
+still work and nothing was patched.
+
+**Lasting Wounds has two limits that are PF2e's, not ours.** `applyDamage` skips
+every modifier when called with `final: true`, which is what dragging a token's
+HP bar does — so bar-dragged healing ignores the penalty while chat-card healing
+honours it. And Treat Wounds rolls against a plain numeric DC, so
+`StatisticCheck#roll` takes its un-targeted branch and the message carries **no**
+`context.target` and no `target:*` roll options; the patient is resolved from the
+user's own target or selection instead. The healing penalty itself is a custom
+modifier on the `healing-received` selector — `prepareSynthetics` pushes every
+key of `system.customModifiers` into `synthetics.modifiers` with no allow-list,
+so that works without an effect item or a rule element. `addCustomModifier`
+refuses a duplicate *label*, so changing the value means remove-then-add.
+
+A fifth rule from the same book section, **Belts**, deliberately ships no code —
+a PF2e container with `system.stowing = false` already holds four items at full
+Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
+quietly reversed.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
