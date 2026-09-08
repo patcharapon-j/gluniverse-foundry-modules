@@ -151,6 +151,24 @@ export const LAYOUT = Object.freeze({
   scorchSpread: 0.35,    // grid squares the scorch decal bleeds past the edge
   moteDensity: 2.4,      // motes per grid square at full fidelity
   moteRise: 1.6,         // grid squares a mote climbs over its life
+
+  /* The frame — see "the tactical frame" in shader.mjs. Anything that has to
+     read as a line is in device px; anything that is a reach is in squares. */
+  rulePx: 1.0,           // device px: the finer inset rule inside the boundary
+  ruleInset: 0.16,       // grid squares the inset rule sits inside the edge
+  orbitPx: 1.25,         // device px: the dashed orbit ring on the true geometry
+  orbitOut: 0.17,        // grid squares the orbit ring sits OUTSIDE the true edge
+  orbitSegments: 28,     // dashes around the perimeter
+  fresnelReach: 0.95,    // grid squares the inner fresnel band falls away over
+  glowReach: 0.28,       // grid squares the outer glow reaches (e-fold)
+  tickIn: 0.10,          // grid squares: a corner bracket is full inside this…
+  tickOut: 0.34,         // …and gone past this
+  dotPx: 1.7,            // device px: the cell-centre mark's radius
+  scanPeriod: 3.4,       // seconds per scan pulse at pace 1
+  landReach: 0.24,       // grid squares the landing ring travels past the edge
+  atlasInset: 0.5 / 1024, // half a texel of the 1024-wide atlas, in UV
+  atlasScaleA: 0.42,     // atlas repeats per grid square, first layer
+  atlasScaleB: 0.19,     // …second layer, rotated 30°
 });
 
 /**

@@ -22,6 +22,65 @@ The invariant tactical layer—coverage lattice, blocked cells, and boundary—i
 never removed by quality or motion settings. Spectacle sheds in this order:
 token edge light, motes, scorch, vertical skirt, then turbulence.
 
+### The frame
+
+Every area is drawn as a **tactical frame** first and a material second. The
+frame is what makes a placed area read as a precise instrument rather than a
+tinted disc, and all of it lives in `shader.mjs` under "the tactical frame":
+
+- **One rule on the rules edge.** On a square grid that is PF2e's staircase of
+  covered squares; gridless it is the true shape. The old renderer drew both
+  the staircase and the smooth geometry at similar weight, and two edges
+  disagreeing is most of what read as fuzzy. The rule is a device-pixel
+  hairline (`LAYOUT.rimWidthPx`) drawn against `latticeSdf`, a signed
+  distance to the covered set computed from the 3×3 squares around the
+  fragment, so every band below follows the squares exactly.
+- **Corner brackets** on every convex corner of the staircase, where the rule
+  brightens and widens for `LAYOUT.tickOut` squares.
+- **An inset rule**, finer and dimmer, `LAYOUT.ruleInset` squares inside.
+- **A fresnel band** inside the edge falling away over `LAYOUT.fresnelReach`
+  squares, and **a soft glow** outside reaching `LAYOUT.glowReach`. Both are
+  on the ground plane, under tokens, so no token is ever veiled by them; the
+  boundary plane over tokens carries only hairlines.
+- **Blocked squares** — inside the area, out of line of effect — carry no lit
+  face; they take a 45° hatch in the tint instead, and a seam against the
+  covered squares beside them.
+- **The orbit ring**: a dashed ring on the true geometry, `LAYOUT.orbitOut`
+  squares outside it, turning at the behaviour's pace. It is the intent the
+  squares were cut from, drawn as a reticle so it cannot be mistaken for a
+  second edge.
+- **Direction chevrons** on cones and lines, one per square along the axis,
+  drifting outward at the behaviour's pace.
+- **A scan pulse** from origin to edge every `LAYOUT.scanPeriod` seconds at
+  pace 1; static behaviour never pulses.
+- **The landing.** When the cast-in edge pen closes its lap the frame flares
+  once and a single ring leaves the boundary outward. Both are gone by the
+  time the entrance completes.
+
+`behaviourPace()` in the shader is the one clock all idle frame motion reads,
+so the rhythm a profile declares is visible in the frame as well as in the
+material.
+
+### The material
+
+The archetype fills remain procedural, but the ones that have to read as
+matter (ember, spirit, umbra, the atmosphere column) run on gradient noise
+rather than the shared value noise, whose lattice-aligned blobs are the "cloud
+filter" look. Over the fill, the channel-packed atlas at
+`assets/pf2e-aoe/material-atlas.png` is sampled as a **detail texture** at two
+rotated scales (`LAYOUT.atlasScaleA/B`) so the repeat never lines up with the
+lattice. It is 1024 × 512, one seamless 128px tile per canonical material in
+`MATERIALS` order, baked deterministically by `tools/gen-pf2e-aoe-atlas.mjs`
+(`--check` verifies the shipped bytes). R is body variation, G the family's
+structure mask (cracks, dendrites, filaments, bubbles, waves, fibres, plates,
+wisps, grain), B the emissive crests, A a particulate mask. The host loads it
+with mipmaps **off**: the shader tiles with `fract()`, and a mip seam at the
+repeat draws a dark hairline grid across the area.
+
+The colour ramp has three stops: a deep stop (the tint squared) for the body,
+the tint, and the hot stop for the rule and brackets. A ramp that starts at the
+tint has nowhere to go but paler.
+
 ## Classification
 
 Automatic classification consumes structured PF2e/Foundry evidence only:

@@ -70,9 +70,21 @@ export function createMeasurementPresenter(region, style, geometry) {
   const maxWidth = Math.max(geometry.grid * 1.6, geometry.bounds.width * 0.72);
   if (title.width > maxWidth) title.scale.set(maxWidth / title.width);
   const width = Math.max(Math.min(maxWidth, title.width), detail.width) + fontSize * 1.8;
+  /* The plate: a dark scrim so the name survives a bright floor, two rules,
+     and bracket ticks at the corners — the same corner language the frame
+     draws on the area itself, so the label reads as part of the instrument
+     rather than as a caption laid over it. */
   const backing = new PIXI.Graphics();
-  backing.lineStyle({ width: 1, color, alpha: 0.62 }); backing.moveTo(-width / 2, -fontSize * 0.72); backing.lineTo(width / 2, -fontSize * 0.72);
-  backing.lineStyle({ width: 1, color, alpha: 0.38 }); backing.moveTo(-width / 2, fontSize * 1.45); backing.lineTo(width / 2, fontSize * 1.45);
+  const top = -fontSize * 0.72, bottom = fontSize * 1.45, half = width / 2;
+  const tick = Math.max(4, Math.round(fontSize * 0.34));
+  backing.beginFill(0x030509, 0.34); backing.drawRect(-half, top, width, bottom - top); backing.endFill();
+  backing.lineStyle({ width: 1, color, alpha: 0.62 }); backing.moveTo(-half + tick, top); backing.lineTo(half - tick, top);
+  backing.lineStyle({ width: 1, color, alpha: 0.38 }); backing.moveTo(-half + tick, bottom); backing.lineTo(half - tick, bottom);
+  backing.lineStyle({ width: 1.5, color, alpha: 0.9 });
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const x = sx * half, y = sy < 0 ? top : bottom;
+    backing.moveTo(x, y + sy * -tick); backing.lineTo(x, y); backing.lineTo(x - sx * tick, y);
+  }
   root.addChild(backing, title, detail);
   root.glAoeDetail = detail;
   root.glAoeSummary = summary;
