@@ -6,7 +6,6 @@
  *  - The Flatfinder Incapacitation save adjustment annotation.
  *  - Flattening of static item/inline DCs (subtracting the source item's level).
  *  - The Flatfinder Elite/Weak (+/-2 level) template correction.
- *  - The Flatfinder Apex (solo boss) extra-turn template.
  *  - The Flatfinder encounter XP/difficulty badge in the combat tracker.
  *
  * The suite registry owns the Foundry lifecycle: this module registers NOTHING
@@ -20,7 +19,6 @@ import { renderCompetenceBadge } from "./competence.js";
 import { registerIncapacitation } from "./incapacitation.js";
 import { registerFlattenDc } from "./flatten.js";
 import { renderEncounterBudget } from "./encounter.js";
-import { registerApex, decorateApexTracker } from "./apex.js";
 
 /** Always-run settings registration (delegated from the adapter). */
 export function registerSettings() {
@@ -36,17 +34,12 @@ function onRenderChatMessage(message, html) {
   }
 }
 
-/** Combat-tracker handler (encounter budget + Apex decoration). */
+/** Combat-tracker handler (encounter budget). */
 function onRenderCombatTracker(app, html) {
   try {
     renderEncounterBudget(app, html);
   } catch (err) {
     console.error(`${MODULE_ID} | Encounter budget error`, err);
-  }
-  try {
-    decorateApexTracker(app, html);
-  } catch (err) {
-    console.error(`${MODULE_ID} | Apex tracker decoration error`, err);
   }
 }
 
@@ -65,6 +58,5 @@ export function onReady() {
   }
   registerIncapacitation();
   registerFlattenDc();
-  registerApex();
   console.log(`${MODULE_ID} | Flatfinder automation ready.`);
 }

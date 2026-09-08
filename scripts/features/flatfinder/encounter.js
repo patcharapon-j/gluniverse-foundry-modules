@@ -15,7 +15,6 @@ import {
 } from "./constants.js";
 import { asElement, getSetting } from "./settings.js";
 import { flatfinderEffectiveLevel } from "./adjustments.js";
-import { getApexConfig, isApexActor, isApexExtraCombatant } from "./apex.js";
 
 function actorLevel(actor) {
   const lvl = actor?.level ?? actor?.system?.details?.level?.value;
@@ -33,13 +32,6 @@ function threatXp(actor, partyLevel) {
   // use the full creature value.
   if (actor?.type === "hazard" && actor?.system?.details?.isComplex === false) {
     xp = Math.round(xp * 0.2);
-  }
-  // An Apex (solo boss) takes multiple full turns each round, fighting like that
-  // many creatures of its level (Flatfinder §8). Count its XP per turn so the
-  // budget reflects its true threat — a 3-turn same-level boss is ~3× a single
-  // creature, i.e. a severe encounter rather than a trivial one.
-  if (getSetting("apexTurns") && isApexActor(actor)) {
-    xp *= getApexConfig(actor).turns;
   }
   return xp;
 }
@@ -61,11 +53,6 @@ export function computeEncounter(combat) {
       continue;
     }
     if (actor.type !== "npc" && actor.type !== "hazard") continue;
-    // An Apex boss's extra-turn combatants point at the same actor as its prime;
-    // they're additional turns, not additional threats. Skip them so the boss is
-    // counted once (threatXp applies the turn multiplier) and the budget doesn't
-    // jump the moment initiative is rolled.
-    if (isApexExtraCombatant(combatant)) continue;
     const disposition = combatant.token?.disposition;
     // Treat hostiles (and disposition-less entries) as threats; skip friendly/neutral NPCs.
     if (disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY) continue;
