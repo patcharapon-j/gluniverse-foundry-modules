@@ -3,9 +3,9 @@
  *
  * Every suite feature that draws on the canvas works in a quad's UV space, so
  * how big a feature lands on screen depends on the scene's grid size and the
- * canvas zoom. The prelude below is the suite's shared answer to that; it was
- * written for the PF2e Ultimates token overlay and is consumed by the resource
- * bars too, so it lives here rather than inside either feature.
+ * canvas zoom. The prelude below is the suite's shared answer to that, used by
+ * every feature that draws a hairline or a rim in UV space (the resource bars,
+ * the token condition rail), so it lives here rather than inside any one of them.
  *
  * Dependency-free and side-effect-free, like the rest of `core/`.
  */
@@ -67,7 +67,7 @@ export const SCALE_PRELUDE = `
 uniform float uTexel;
 
 /* The three thresholds the rest of this is tuned on, all in device pixels, all
-   calibrated against a box-filtered ground truth (tools/ultimate-overlay-check.mjs):
+   calibrated against a box-filtered ground truth:
    push them up and the effect turns to mush before it needs to; push them down
    and the buzzing comes back. */
 const float GL_BAND = 0.85;      // thinnest a falloff's half-width may get

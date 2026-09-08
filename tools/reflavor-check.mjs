@@ -217,10 +217,6 @@ for (const rung of RUNGS) {
   // The grammar shown must be exactly the sections this stat block uses.
   const used = sectionsUsed(npcMarkdown, { kind: "npc" });
   if (!used.includes("spellcasting")) fail("sectionsUsed() missed ## Spellcasting");
-  if (used.includes("engine")) fail("sectionsUsed() invented ## Engine on a stat block without one");
-  if (payload.includes("Resource: <name>")) {
-    fail(`rung "${rung.key}": engine grammar shipped for a creature with no ## Engine section`);
-  }
   if (!payload.includes("Tradition: arcane | divine | occult | primal")) {
     fail(`rung "${rung.key}": spellcasting grammar missing though the stat block has that section`);
   }

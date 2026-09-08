@@ -49,7 +49,6 @@
     "styles/timer.css",
     "styles/mythic-gme.css",
     "styles/oracles.css",
-    "styles/pf2e-ultimates.css",
     "styles/mobile.css",
     "styles/locations.css",
     "styles/pf2e-recall.css",
@@ -151,11 +150,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/oracles.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/pf2e-ultimates.en.json"
     },
     {
       "lang": "en",

@@ -20,7 +20,7 @@ this file traces back to one of them.
 | Failure | Cause | Fix |
 |---|---|---|
 | **Volume** | four NPCs each running a private engine | one engine-bearing creature per side |
-| **Payoff mismatch** | Ultimates arriving after the fight was decided | Ultimates arrive from a Posture, not a round count |
+| **Payoff mismatch** | Finishers arriving after the fight was decided | Finishers arrive from a Posture, not a round count |
 | **Explanation overhead** | the cost of *teaching* an engine to players | the explanation-cost budget, and Postures as self-announcing state |
 
 Tracking was never the problem — Foundry counts correctly. **Explaining** was.
@@ -84,12 +84,12 @@ structural boundary: **the Chassis is the 70%.**
 
 One printed ability may fill two slots. Nothing may add a sixth.
 
-| Slot | Axis it owns | `Function:` tag |
-|---|---|---|
-| **Signature** | offense **or** control — the frequent action expressing its pressure | `signature` |
-| **Combo** | team-facing. **This is the Reaction slot.** | `Combo Trigger` |
-| **Ultimate** | must combine **two** payoff axes | `ultimate` |
-| **Talent** ×2 | defense and utility. **One must have an out-of-combat use.** | none, or `engine` on whichever carries the resource |
+| Slot | Axis it owns |
+|---|---|
+| **Signature** | offense **or** control — the frequent action expressing its pressure |
+| **Combo** | team-facing. **This is the Reaction slot.** |
+| **Finisher** | must combine **two** payoff axes |
+| **Talent** ×2 | defense and utility. **One must have an out-of-combat use.** |
 
 Slot-typing is what enforces the offense/defense/control/utility mix. You cannot
 ship an all-damage kit, because the Talent slots are typed.
@@ -155,7 +155,7 @@ ability yet.
 
 ## Tier matrix
 
-| Tier | Kit slots | Postures | Combo | Ultimate | Resource | Explanation cap |
+| Tier | Kit slots | Postures | Combo | Finisher | Resource | Explanation cap |
 |---|---|---|---|---|---|---|
 | `background` | 1 | 1 | no | no | none | **1 sentence** |
 | `standard` | 2 | 2 | yes | yes — once per encounter, **no resource** | none, or binary 0–1 | **3** |
@@ -165,9 +165,9 @@ ability yet.
 **Only `boss` may exceed a 0–2 resource.** A 0–5 pool on a creature that dies in
 three rounds was the original sin.
 
-A `standard` Ultimate with no resource is not a downgrade. Endfield's cheapest
-Ultimates cost 80 energy and hit for 1000% — cost buys **frequency**, and
-frequency is a personality trait. A once-per-fight Ultimate fired from a Posture
+A `standard` Finisher with no resource is not a downgrade. Endfield's cheapest
+Finishers cost 80 energy and hit for 1000% — cost buys **frequency**, and
+frequency is a personality trait. A once-per-fight Finisher fired from a Posture
 is what lets a two-slot NPC still feel like a character.
 
 ## Budgets
@@ -226,13 +226,13 @@ Foundry shows the badge — but a *timer inside* a Posture does.
 > This NPC **[verb]** so that **[battlefield result]**, and reaches their climax
 > when **[earned trigger]**.
 
-Becomes `Promise:` in `## Engine`. One sentence, under 280 characters. Every
-sheet gets one, resource or not — it is what makes the sheet skimmable in six
-months.
+Goes at the top of the creature's `Description`. One sentence, under 280
+characters. Every sheet gets one, resource or not — it is what makes the sheet
+skimmable in six months.
 
 ### 2. Choose role and pressure
 
-| Role | Frequent output | Ultimate output |
+| Role | Frequent output | Finisher output |
 |---|---|---|
 | Striker | Focused damage, pursuit, execute setup | Burst, transformation, chained attack |
 | Defender | Interception, shield, body-blocking, punishment | Team rescue, fortress state, redirected catastrophe |
@@ -259,7 +259,7 @@ Prophecy, Debt, Rhythm, Hunger, Static, Verdict. That name goes in `Resource:`.
 
 **Choose the shape before the cap. A cap of 3 is not a default.**
 
-| Shape | Size | Best for | Ultimate relationship |
+| Shape | Size | Best for | Finisher relationship |
 |---|---|---|---|
 | No resource | — | `background`, `standard`, all standard allies | Once per encounter, fired from a Posture |
 | Binary readiness | 0–1 | Ignition, guard, loaded shot | Require and consume it |
@@ -283,7 +283,7 @@ Rules that bite:
   the Combo or through a PC action.
 - Resources unlock **options and state changes**. They do not stack repeated
   bonuses to attack, AC, saves and damage.
-- **An Ultimate can never generate the resource that paid for it.**
+- **A Finisher can never generate the resource that paid for it.**
 
 **Placed objects are the cheapest resource shape there is** — Endfield leans on
 them heavily (thrown lances that get recalled, whirlpools that get consumed) and
@@ -304,7 +304,7 @@ play, because spending dropped the creature below a threshold its own riders
 required. Build-versus-convert was fake four times out of four.
 
 A minor conversion is correct only for a **deep pool** (`boss` only), where
-points have somewhere else to go. When present, it may delay the Ultimate by no
+points have somewhere else to go. When present, it may delay the Finisher by no
 more than one round.
 
 ### 4. Build the Signature
@@ -350,9 +350,7 @@ already works in exploration and downtime without inventing a mode switch. This
 replaces v1's "does the identity have a use outside combat?" checklist item with
 something structural.
 
-Whichever Talent carries the resource rule takes `Function: engine`.
-
-### 7. Build the Ultimate
+### 7. Build the Finisher
 
 Categorically stronger than the Signature — it seizes the scene for a moment,
 not "the normal action but +2".
@@ -368,16 +366,16 @@ not "the normal action but +2".
 Defaults: **two actions**; once per encounter; earned by visible thematic events,
 never by round count; combines **two payoff axes** (damage + control, movement +
 protection, transformation + action compression, healing + cleansing); leaves an
-encounter-level change behind. Three-action Ultimates are reserved for vulnerable
-channels. Reactive Ultimates are rare.
+encounter-level change behind. Three-action Finishers are reserved for vulnerable
+channels. Reactive Finishers are rare.
 
 **Availability test.** Estimate opening resource `S`, expected gain through round
-2 `G`, and likely routine spending `M`. The Ultimate is credible when `S + G − M`
+2 `G`, and likely routine spending `M`. The Finisher is credible when `S + G − M`
 meets its cost by round 2 or 3. Then replay one realistic turn where the NPC
-takes its most attractive alternative line: if that pushes the Ultimate past
+takes its most attractive alternative line: if that pushes the Finisher past
 round 4, lower the cost or raise the gain.
 
-One shipped sheet's Ultimate arrived "often never". Run the test.
+One shipped sheet's Finisher arrived "often never". Run the test.
 
 ### 8. Build the Postures
 
@@ -388,16 +386,17 @@ explain.
 
 ### 9. Telegraph and counterplay (enemies)
 
-Every enemy Ultimate needs all four, mapping onto `## Engine` fields:
+Every enemy Finisher needs all four, written into the prose of the ability that
+carries the resource:
 
-1. **Tell** → `Tell:` — usually just *the Posture it is standing in*.
-2. **Threat** → `Threat:` — what happens if the players ignore it.
-3. **At least two responses** → `Counterplay:` — interrupt, move, cleanse a mark,
-   destroy an object, protect a target, force early activation, redirect.
+1. **Tell** — usually just *the Posture it is standing in*.
+2. **Threat** — what happens if the players ignore it.
+3. **At least two responses** — interrupt, move, cleanse a mark, destroy an
+   object, protect a target, force early activation, redirect.
 4. **Changed result** — successful counterplay cancels, weakens, narrows, delays
    or redirects it.
 
-Boss Ultimates may be inevitable; their outcome must stay influenceable.
+Boss Finishers may be inevitable; their outcome must stay influenceable.
 
 ### 10. PF2e-native math
 
@@ -439,7 +438,7 @@ See `benchmarks.md`. The rules that bite:
 |---|---|---|
 | Purpose | Create options, participate in any role | Create a problem the PCs can read and solve |
 | Combo | The triggering **PC decides** whether it fires | Fires automatically when triggered |
-| Ultimate | **A PC spends it**, free action. The GM never does. | Telegraphed; PCs can cancel, weaken, redirect, endure |
+| Finisher | **A PC spends it**, free action. The GM never does. | Telegraphed; PCs can cancel, weaken, redirect, endure |
 | Information | Resource and Postures simply visible | Posture visible; the *map* is learned by Recall Knowledge |
 | Turn length | ~5 seconds (`standard`) to ~30 (`elite`) | Standard fast; bosses may take longer |
 
@@ -456,7 +455,7 @@ simply visible.
 |---|---|---|
 | Default routine | **Stride / Strike only.** Zero decisions. | 3-rung Posture ladder |
 | Resource | **none** | 0–2, fed by PC actions |
-| Ultimate | once per encounter, PC-triggered | earned, PC-triggered |
+| Finisher | once per encounter, PC-triggered | earned, PC-triggered |
 | Encounter budget | **half a body** | **full body** |
 
 An elite ally keeps a ladder because **the ladder is its characterisation** — a
@@ -477,14 +476,14 @@ counts as **zero bodies**.
 3. **Budget by expected net contribution**, and re-budget at the flip. The worst
    case must never push the encounter more than one threat tier above intended.
 4. **A rival party runs one shared resource.** `standard` individual sheets, and
-   an Ultimate that is an *exit or objective seizure* — never a TPK tool.
+   a Finisher that is an *exit or objective seizure* — never a TPK tool.
 
 ## Recurring NPCs: how a rival grows
 
 A rival who returns three levels later gets **two** changes, authored up front:
 
 1. **Rank riders** — printed on the sheet as `Rank 2:` / `Rank 3:` lines that
-   switch on when they return. Endfield's own model: *"Ultimate improved: …"*.
+   switch on when they return. Endfield's own model: *"Finisher improved: …"*.
    This is what makes their numbers different.
 2. **A new Posture** — this is what makes them *feel* different. The party
    learned the old map, and now it is wrong. One new Posture communicates growth
@@ -529,7 +528,7 @@ Every "no" needs a fix or a stated reason.
 **The kit**
 - Does the Signature own offense or control, the Talents defense and utility?
 - Does at least one Talent work outside combat?
-- Does the Ultimate combine two payoff axes — a state, choice or opportunity, not
+- Does the Finisher combine two payoff axes — a state, choice or opportunity, not
   only extra damage?
 - Is there an optional utility accent, and does it pass the deletion test?
 
@@ -539,11 +538,11 @@ Every "no" needs a fix or a stated reason.
 - Is the Signature *not* the gain condition?
 - Does the resource shape fit the fiction, with a deliberately chosen cap?
 - Is the cap 0–2 or smaller, unless this is a `boss`?
-- Does the Ultimate's payment model fit the shape?
+- Does the Finisher's payment model fit the shape?
 - Is the kit **exempt** from minor conversion — and if a conversion is present, is
   this a deep pool where it makes sense?
-- After one realistic alternative line, can the Ultimate still arrive by round 3–4?
-- Does the Ultimate avoid generating the resource that paid for it?
+- After one realistic alternative line, can the Finisher still arrive by round 3–4?
+- Does the Finisher avoid generating the resource that paid for it?
 
 **The Combo**
 - Does it point at something *another creature* does?
