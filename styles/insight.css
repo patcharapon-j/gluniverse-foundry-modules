@@ -922,3 +922,11 @@
   40%  { opacity: 1; }
   100% { transform: translateX(100%); opacity: 0; }
 }
+
+/* The owned timeline coordinates the panel; CSS keeps the ambient edge motifs. */
+.insight-anime .insight-notification,
+.insight-anime .insight-fracture-line,
+.insight-anime .insight-fracture-card,
+.insight-anime .insight-edge { transition: none; }
+.insight-anime .insight-edge { animation: none; }
+.insight-anime .insight-fracture-card { max-height: min(78vh, 760px); }

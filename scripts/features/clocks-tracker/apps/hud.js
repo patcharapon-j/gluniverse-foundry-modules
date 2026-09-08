@@ -9,6 +9,7 @@
  */
 
 import { MODULE_ID, SETTINGS, FALLBACK_TINTS, GLITCH_PALETTE } from "../const.js";
+import { animate, createMotionOwner, motionDuration } from "../../../core/motion.mjs";
 import { Features } from "../features.js";
 import { TimeEngine } from "../engine.js";
 import {
@@ -126,7 +127,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _dialPies = [];
   _dialPtr = null;
   _dialRot = 0;
-  _barT = null;         // pending bar-width-tween cleanup timeout
+  _barMotion = createMotionOwner();
   _wx = null;           // WeatherEffect (chip Pixi diorama), lazily created
   _dx = null;           // delving featured-stage diorama (Pixi), lazily created
   _prevTurn = null;     // last painted turns-elapsed (for the tick animation)
@@ -177,7 +178,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async _onRender(context, options) {
     await super._onRender(context, options);
     // a fresh DOM drops any in-flight value-flash (peek) state
-    clearTimeout(this._peekEndT); clearTimeout(this._barT); clearTimeout(this._peekTransT);
+    clearTimeout(this._peekEndT); this._barMotion.clear(); clearTimeout(this._peekShowT); clearTimeout(this._peekTransT);
     this._peeking = false; this._peekStyle = null;
     this._wx?.destroy(); this._wx = null;   // the chip host is recreated on re-render
     this._dx?.destroy(); this._dx = null;   // delving diorama host is recreated too
@@ -227,7 +228,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _onClose(options) {
-    clearTimeout(this._peekEndT); clearTimeout(this._barT); clearTimeout(this._peekTransT); clearTimeout(this._clampT);
+    clearTimeout(this._peekEndT); this._barMotion.clear(); clearTimeout(this._peekShowT); clearTimeout(this._peekTransT); clearTimeout(this._clampT);
     clearTimeout(this._rollSafety); this._rollSafety = null;
     clearInterval(this._glitchT); this._glitchT = null;
     this._peeking = false;
@@ -395,12 +396,12 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // slot animation can run, so a real card settle always releases the hold first;
     // the safety only fires when no card animates on this client at all.
     const lr = data.lastRoll;
-    const freshRoll = lr && (Date.now() - (lr.at || 0) < 9000);
+    const freshRoll = lr && (Date.now() - (lr.at || 0) < Math.max(9000, motionDuration(9000)));
     if (freshRoll && this._seenRollSeq !== lr.seq) {
       if (this._rollSafetySeq !== lr.seq) {
         clearTimeout(this._rollSafety);
         this._rollSafetySeq = lr.seq;
-        this._rollSafety = setTimeout(() => GlctHud.settleDelveRoll(lr.seq), 6500);
+        this._rollSafety = setTimeout(() => GlctHud.settleDelveRoll(lr.seq), Math.max(6500, motionDuration(6500)));
       }
       return;
     }
@@ -814,6 +815,30 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /* ------------------------------ value flash ------------------------------ */
 
+  /** Own the measured auto-width handoff and restore styles on interruption. */
+  _tweenBar(bar, from, to, duration, onComplete) {
+    this._barMotion.clear();
+    const transition = bar.style.transition;
+    bar.style.transition = "none";
+    const tween = animate(bar, {
+      width: [`${from}px`, `${to}px`], duration: motionDuration(duration, bar),
+      ease: "inOutCubic", autoplay: false,
+      onComplete: () => {
+        tween.revert();
+        this._barMotion.forget(tween);
+        bar.style.width = "";
+        bar.style.transition = transition;
+        onComplete?.();
+      }
+    });
+    // Revert also restores the CSS transition when interrupted by a re-render,
+    // close, manual collapse or a second width change.
+    const revert = tween.revert.bind(tween);
+    tween.revert = () => { revert(); bar.style.transition = transition; };
+    this._barMotion.add(tween);
+    tween.play();
+  }
+
   /**
    * Compact value-flash: expand the collapsed bar so the changed values animate
    * in, then re-collapse. The `collapsed` *setting* is never touched — only the
@@ -861,13 +886,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     bar.classList.add("peeking");
     const w1 = bar.getBoundingClientRect().width;   // forces layout → commits old reels
     this._clampPeek();                              // keep the wider bar on-screen
-    bar.style.transition = "none";
-    bar.style.width = `${w0}px`;
-    void bar.offsetWidth;
-    bar.style.transition = "";
-    bar.style.width = `${w1}px`;
-    clearTimeout(this._barT);
-    this._barT = setTimeout(() => { bar.style.width = ""; this._wx?.resize(); }, PEEK_OPEN);
+    this._tweenBar(bar, w0, w1, PEEK_OPEN, () => this._wx?.resize());
     this._paintWeather();   // wake + resize the diorama for the expanded width
 
     // Beats 2–3 — wait for the open to finish, hold a beat, THEN ease the
@@ -877,7 +896,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this._peekShown = true;
       this._paint(TimeEngine.getStateAt(TimeEngine.worldTime));
       this._scheduleEndPeek();
-    }, PEEK_OPEN + PEEK_PAUSE);
+    }, motionDuration(PEEK_OPEN + PEEK_PAUSE, bar));
   }
 
   /**
@@ -887,7 +906,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   _scheduleEndPeek() {
     clearTimeout(this._peekEndT);
-    this._peekEndT = setTimeout(() => this._endPeek(), PEEK_VALUE + PEEK_PAUSE);
+    this._peekEndT = setTimeout(() => this._endPeek(), motionDuration(PEEK_VALUE + PEEK_PAUSE, this.element));
   }
 
   /**
@@ -917,18 +936,11 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     bar.classList.add("collapsed"); root.classList.add("is-collapsed");
     const w0 = bar.getBoundingClientRect().width;     // collapsed (pill) width
     bar.classList.remove("collapsed"); root.classList.remove("is-collapsed");
-    bar.style.transition = "none";
-    bar.style.width = `${w1}px`;
-    void bar.offsetWidth;
-    bar.style.transition = "";
-    bar.style.width = `${w0}px`;
-    clearTimeout(this._barT);
-    this._barT = setTimeout(() => {
+    this._tweenBar(bar, w1, w0, PEEK_OPEN, () => {
       bar.classList.add("collapsed"); root.classList.add("is-collapsed");
       bar.classList.remove("peeking");
-      bar.style.width = "";
-      this._paintWeather();   // freeze the compact diorama again
-    }, PEEK_OPEN);
+      this._paintWeather();
+    });
   }
 
   /**
@@ -1327,7 +1339,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // A manual toggle wins over any in-flight value flash: cancel the peek and
     // drop its temporary classes/offset before applying the new collapsed state.
     clearTimeout(this._peekEndT); this._peekEndT = null;
-    clearTimeout(this._barT); this._barT = null;
+    this._barMotion.clear(); clearTimeout(this._peekShowT); this._peekShowT = null;
     const wasPeeking = this._peeking;
     this._peeking = false;
     const bar = this.element.querySelector("[data-bar]");
@@ -1487,13 +1499,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (bar) {
       bar.style.width = "auto";
       const w1 = bar.getBoundingClientRect().width;
-      bar.style.transition = "none";
-      bar.style.width = `${w0}px`;
-      void bar.offsetWidth;            // commit the start width with no transition
-      bar.style.transition = "";       // restore the stylesheet's width easing
-      bar.style.width = `${w1}px`;
-      clearTimeout(this._barT);
-      this._barT = setTimeout(() => { bar.style.width = ""; this._clampToViewport(); }, 420);
+      this._tweenBar(bar, w0, w1, 420, () => this._clampToViewport());
     }
 
     if (bar) { bar.classList.remove("swept"); void bar.offsetWidth; bar.classList.add("swept"); }

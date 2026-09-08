@@ -1,3 +1,4 @@
+import { animate, createTimeline, stagger, createMotionOwner, motionDuration } from "../../core/motion.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { onThemeChange, scaledMs } from "../../core/theme.mjs";
 
@@ -1095,9 +1096,13 @@ function getCombatantSceneId(combatant) {
   return combatant?.scene?.id ?? combatant?.sceneId ?? combatant?.token?.parent?.id ?? combatant?.token?.scene?.id ?? null;
 }
 
-class GLUniverseInitiativeOverlay {
+export class GLUniverseInitiativeOverlay {
   constructor() {
     this.root = null;
+    this._railMotion = createMotionOwner();
+    this._collectMotion = createMotionOwner();
+    this._collectLayers = new Set();
+    this._splashes = new Map();
     this.drag = null;
     this.renderTimer = null;
     this.lastRound = game.combat?.round ?? null;
@@ -1383,6 +1388,7 @@ class GLUniverseInitiativeOverlay {
     const hasActiveCombat = hasCombatants && (Boolean(combat?.started) || game.user.isGM);
 
     if (!this.enabled || !hasActiveCombat) {
+      this.clearPresentationMotion();
       this.finishCardDrag();
       this.closeInitiativeContextMenu();
       closeBreakGaugeEditor();
@@ -1443,6 +1449,7 @@ class GLUniverseInitiativeOverlay {
     this.applyPosition(settings.edge);
 
     if (markupChanged) {
+      this._railMotion.clear();
       this.closeInitiativeContextMenu();
       this.root.innerHTML = markup;
       this.lastMarkup = markup;
@@ -2204,10 +2211,10 @@ class GLUniverseInitiativeOverlay {
 
   animateTurnChange(oldRects, options = {}) {
     const items = Array.from(this.root.querySelectorAll("[data-gluni-key]"));
-    const previousActiveKey = options.previousActiveKey ?? null;
     const roundDelta = Number(options.roundDelta) || 0;
-    const enterItems = [];   // no continuity rect -> CSS enter animation
+    const enterItems = [];   // no continuity rect -> staggered entrance
     const flipItems = [];     // { item, dx, dy, scaleX, scaleY }
+    const uiScale = this.root.offsetWidth ? this.root.getBoundingClientRect().width / this.root.offsetWidth : 1;
 
     // Read pass: measure every moved item's new rect up front. Interleaving these
     // getBoundingClientRect() reads with the preflip class/style writes below
@@ -2230,47 +2237,31 @@ class GLUniverseInitiativeOverlay {
       const moved = Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5;
       const resized = Math.abs(scaleX - 1) >= 0.01 || Math.abs(scaleY - 1) >= 0.01;
 
-      if (moved || resized) flipItems.push({ item, dx, dy, scaleX, scaleY });
+      if (moved || resized) flipItems.push({ item, dx: dx / (uiScale || 1), dy: dy / (uiScale || 1), scaleX, scaleY });
     }
 
-    // Write pass: apply enter classes + preflip transforms only (no reads here, so
-    // nothing forces a reflow mid-loop).
-    for (const { item, isActive } of enterItems) {
-      item.classList.add("gluni-item--entering");
-      if (!isActive) item.classList.add("gluni-item--entering-bottom");
-      if (isActive && item.dataset.gluniKey !== previousActiveKey) item.classList.add("gluni-card--active-entering");
-      window.setTimeout(() => item.classList.remove("gluni-item--entering", "gluni-item--entering-bottom", "gluni-card--active-entering"), animMs(680));
-    }
-
-    for (const { item, dx, dy, scaleX, scaleY } of flipItems) {
-      item.classList.add("gluni-item--preflip");
-      item.style.setProperty("--gluni-flip-x", `${Math.round(dx)}px`);
-      item.style.setProperty("--gluni-flip-y", `${Math.round(dy)}px`);
-      item.style.setProperty("--gluni-flip-scale-x", scaleX.toFixed(4));
-      item.style.setProperty("--gluni-flip-scale-y", scaleY.toFixed(4));
-    }
-
-    if (flipItems.length) {
-      this.root.getBoundingClientRect();   // single reflow to commit the preflip offsets
-
-      for (const { item } of flipItems) {
-        item.classList.remove("gluni-item--preflip");
-        item.classList.add("gluni-item--flipping");
-
-        window.requestAnimationFrame(() => {
-          item.style.setProperty("--gluni-flip-x", "0px");
-          item.style.setProperty("--gluni-flip-y", "0px");
-          item.style.setProperty("--gluni-flip-scale-x", "1");
-          item.style.setProperty("--gluni-flip-scale-y", "1");
-        });
-
-        window.setTimeout(() => item.classList.remove("gluni-item--flipping"), animMs(680));
-      }
-    }
-
-    // ---- Magic-move hand-off: the card morphs from its small rail size into the active
-    // size purely via the FLIP transform above. No slam, shake, shockwave, swipe, or badge
-    // count-up — the initiative number simply snaps to its new value to match the move. ----
+    // Animate only the FLIP variables, preserving hover, drag and UI-scale transforms.
+    const play = (item, properties, delay = 0) => {
+      item.classList.add("gluni-anime-motion");
+      const animation = animate(item, {
+        autoplay: false, ...properties, duration: motionDuration(620, this.root), delay,
+        ease: "outQuint", onComplete: () => {
+          animation.revert();
+          item.classList.remove("gluni-anime-motion");
+          this._railMotion.forget(animation);
+        }
+      });
+      this._railMotion.add(animation);
+      animation.play();
+    };
+    enterItems.forEach(({ item, isActive }, index) => play(item, {
+      opacity: [0, 1], "--gluni-flip-y": [isActive ? "-18px" : "24px", "0px"],
+      "--gluni-flip-scale-x": [0.96, 1], "--gluni-flip-scale-y": [0.96, 1]
+    }, motionDuration(Math.min(index, 6) * 35, this.root)));
+    for (const { item, dx, dy, scaleX, scaleY } of flipItems) play(item, {
+      "--gluni-flip-x": [`${dx}px`, "0px"], "--gluni-flip-y": [`${dy}px`, "0px"],
+      "--gluni-flip-scale-x": [scaleX, 1], "--gluni-flip-scale-y": [scaleY, 1]
+    });
   }
 
   // ---- Card-mode collect / deal / reshuffle motion --------------------------
@@ -2335,37 +2326,90 @@ class GLUniverseInitiativeOverlay {
 
     const stubCx = stubRect.left + stubRect.width / 2;
     const stubCy = stubRect.top + stubRect.height / 2;
-    let alive = items.length;
-    const finish = () => { if (--alive <= 0) layer.remove(); };
-
+    this._collectLayers.add(layer);
+    const timeline = createTimeline({ autoplay: false, onComplete: () => {
+      timeline.revert();
+      this._collectMotion.forget(timeline);
+      this._collectLayers.delete(layer);
+      layer.remove();
+    }});
+    this._collectMotion.add(timeline);
     items.forEach((item, index) => {
       const ghost = document.createElement("div");
       ghost.className = "gluni-card-ghost gluni-card-ghost--collect";
+      ghost.setAttribute("aria-hidden", "true");
       ghost.innerHTML = item.html;
+      // Clones are decorative: never duplicate identifiers or actionable controls.
+      ghost.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
+      ghost.inert = true;
       ghost.style.left = `${item.rect.left}px`;
       ghost.style.top = `${item.rect.top}px`;
       ghost.style.width = `${item.rect.width}px`;
       ghost.style.height = `${item.rect.height}px`;
       layer.appendChild(ghost);
-
       const dx = stubCx - (item.rect.left + item.rect.width / 2);
       const dy = stubCy - (item.rect.top + item.rect.height / 2);
-      const delay = stagger ? index * 55 : 0;
-      // Keep the tilt under 90° so the cloned face never mirrors into a backwards
-      // card on its way into the deck; the stub's card-back carries the "now
-      // face-down in the deck" read.
-      const anim = ghost.animate([
-        { transform: "translate(0px, 0px) scale(1) rotateY(0deg)", opacity: 1, offset: 0 },
-        { transform: `translate(${dx * 0.4}px, ${dy * 0.4}px) scale(0.82) rotateY(34deg)`, opacity: 0.9, offset: 0.55 },
-        { transform: `translate(${dx}px, ${dy}px) scale(0.14) rotateY(58deg)`, opacity: 0, offset: 1 }
-      ], { duration: 440, delay, easing: "cubic-bezier(0.55, 0, 0.36, 1)", fill: "forwards" });
-      anim.onfinish = finish;
-      anim.oncancel = finish;
+      timeline.add(ghost, {
+        x: [0, dx], y: [0, dy], scale: [1, 0.14], rotateY: [0, 58],
+        opacity: [1, 0], duration: motionDuration(480, this.root), ease: "inOutCubic"
+      }, motionDuration(stagger ? index * 45 : 0, this.root));
     });
+    timeline.play();
+  }
 
-    // Safety net: if WAAPI events never fire (e.g. the tab was hidden), make sure
-    // the throwaway layer is still cleaned up.
-    window.setTimeout(() => layer.isConnected && layer.remove(), 440 + items.length * 55 + 400);
+  clearPresentationMotion() {
+    this._railMotion.clear();
+    this.root?.querySelectorAll(".gluni-anime-motion").forEach(node => node.classList.remove("gluni-anime-motion"));
+    this._collectMotion.clear();
+    for (const layer of this._collectLayers) layer.remove();
+    this._collectLayers.clear();
+    for (const entry of this._splashes.values()) entry.dispose();
+    this._splashes.clear();
+  }
+
+  playSplashMotion(splash, kind, cleanup = () => {}) {
+    this._splashes.get(kind)?.dispose();
+    const isBreak = kind === "break";
+    const prefix = isBreak ? "gluni-break-splash" : "gluni-round";
+    const inner = splash.querySelector(`.${isBreak ? prefix : "gluni-round-splash"}-inner`);
+    const digits = splash.querySelectorAll(".d");
+    const label = splash.querySelector(`.${prefix}-label span:last-child`);
+    const subtitle = splash.querySelector(`.${isBreak ? prefix + "-name" : prefix + "-sub"} span`);
+    const tick = splash.querySelector(".tick");
+    const rule = splash.querySelector(`.${prefix}-rule`);
+    if (rule) rule.style.transform = "translate(-50%, -50%)";
+    // The shader and rule glints retain their specialized renderers. The text,
+    // deck and shell have one timeline so translated titles always finish entering.
+    splash.classList.add("gluni-anime-splash", `gluni-${kind}-splash--show`);
+    for (const node of [inner, ...digits, label, subtitle, tick, rule]) {
+      if (node) node.classList.add("gluni-anime-motion");
+    }
+    const ms = value => motionDuration(value, splash);
+    const hold = ms((isBreak ? this.getBreakSplashHold() : this.getRoundSplashHold())
+      + Math.max(0, digits.length - 10) * 20);
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      timeline.revert();
+      cleanup();
+      splash.remove();
+      if (this._splashes.get(kind)?.dispose === dispose) this._splashes.delete(kind);
+    };
+    const timeline = createTimeline({ autoplay: false, onComplete: dispose });
+    this._splashes.set(kind, { dispose });
+    timeline.add(splash, { opacity: [0, 1], duration: ms(100), ease: "outQuad" }, 0);
+    timeline.add(inner, { opacity: [0, 1], y: [12, 0], scale: [0.975, 1], duration: ms(420), ease: "outQuint" }, ms(45));
+    timeline.add(rule, { opacity: [0, 1], scaleX: [0, 1], duration: ms(420), ease: "outExpo" }, 0);
+    timeline.add(tick, { width: [0, 44], duration: ms(280), ease: "outCubic" }, ms(150));
+    timeline.add(label, { opacity: [0, 1], y: [4, 0], duration: ms(260), ease: "outCubic" }, ms(140));
+    timeline.add(digits, { opacity: [0, 1], y: [isBreak ? 20 : 12, 0], scaleY: [1.08, 1],
+      delay: stagger(ms(24)), duration: ms(460), ease: "outQuint" }, ms(180));
+    timeline.add(subtitle, { opacity: [0, 1], y: [5, 0], duration: ms(300), ease: "outCubic" }, ms(340));
+    timeline.add(inner, { opacity: [1, 0], y: [0, -9], duration: ms(320), ease: "inCubic" }, hold);
+    timeline.add(rule, { opacity: [1, 0], scaleX: [1, 0.6], duration: ms(300), ease: "inCubic" }, hold);
+    timeline.add(splash, { opacity: [1, 0], duration: ms(220), ease: "inQuad" }, hold + ms(160));
+    timeline.play();
   }
 
   getContinuityRect(oldRects, key, roundDelta = 0) {
@@ -3418,21 +3462,11 @@ class GLUniverseInitiativeOverlay {
     // deck. Uses the shared pre-compiled renderer, so no per-break shader compilation.
     let breakGL = null;
     const renderer = getBreakSplashRenderer();
-    if (renderer?.play(splash, { lifeMs: this.getBreakGLLife() })) {
+    if (renderer?.play(splash, { lifeMs: motionDuration(this.getBreakGLLife(), splash) })) {
       breakGL = renderer;
     }
 
-    window.requestAnimationFrame(() => splash.classList.add("gluni-break-splash--show"));
-    // Short screen-shake on impact.
-    window.requestAnimationFrame(() => {
-      splash.classList.add("gluni-break-splash--shake");
-      window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), animMs(520));
-    });
-    window.setTimeout(() => splash.classList.add("gluni-break-splash--leave"), this.getBreakSplashHold());
-    window.setTimeout(() => {
-      breakGL?.stop(splash);
-      splash.remove();
-    }, this.getBreakSplashDuration());
+    this.playSplashMotion(splash, "break", () => breakGL?.stop(splash));
   }
 
   getBreakSplashHold() {
@@ -4079,9 +4113,7 @@ class GLUniverseInitiativeOverlay {
     `;
     document.body.appendChild(splash);
 
-    window.requestAnimationFrame(() => splash.classList.add("gluni-round-splash--show"));
-    window.setTimeout(() => splash.classList.add("gluni-round-splash--leave"), this.getRoundSplashHold());
-    window.setTimeout(() => splash.remove(), this.getRoundSplashDuration());
+    this.playSplashMotion(splash, "round");
   }
 
   getRoundSplashHold() {

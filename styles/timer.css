@@ -74,8 +74,7 @@
   pointer-events: none;
   border-radius: inherit;
 }
-.gltimer-sheen::before {
-  content: "";
+.gltimer-sheen-light {
   position: absolute;
   inset: 0;
   transform: translateX(-130%);
@@ -87,12 +86,15 @@
     transparent 62%
   );
 }
-#gltimer-hud.is-sheen .gltimer-sheen::before {
-  animation: gltimer-sweep var(--gl-d-reveal) var(--gl-ease);
+.gltimer-impact {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  border: 1px solid var(--gl-signal-hot);
+  box-shadow: inset 0 0 26px var(--gl-signal), 0 0 34px var(--gl-glow);
 }
-
-/* Expire fracture flash (gold → red). */
-#gltimer-hud.is-burst { animation: gltimer-burst var(--gl-d-splash) var(--gl-exit); }
 
 /* ── Digits ──────────────────────────────────────────────────────────────── */
 .gltimer-face {
@@ -186,32 +188,4 @@
   25% { transform: translateX(-50%) translate(1.5px, -1px); }
   50% { transform: translateX(-50%) translate(-1.5px, 1px); }
   75% { transform: translateX(-50%) translate(1px, 1.5px); }
-}
-@keyframes gltimer-sweep {
-  0% { transform: translateX(-130%); opacity: 0; }
-  18% { opacity: 1; }
-  100% { transform: translateX(130%); opacity: 0; }
-}
-@keyframes gltimer-burst {
-  0% {
-    filter: brightness(2);
-    box-shadow:
-      inset 0 0 0 2px var(--gl-signal-hot),
-      inset 0 0 30px var(--gl-signal),
-      0 0 60px 12px color-mix(in srgb, var(--gl-signal-hot) 70%, transparent);
-  }
-  45% {
-    filter: brightness(1.25);
-    box-shadow:
-      inset 0 0 0 1px var(--gl-hazard),
-      inset 0 0 24px var(--gl-hazard),
-      0 0 44px 6px color-mix(in srgb, var(--gl-hazard) 60%, transparent);
-  }
-  100% {
-    filter: brightness(1);
-    box-shadow:
-      inset 0 0 0 1px var(--gl-line-strong),
-      inset 0 0 18px color-mix(in srgb, var(--gl-hazard) 30%, transparent),
-      0 0 22px var(--gl-glow);
-  }
 }

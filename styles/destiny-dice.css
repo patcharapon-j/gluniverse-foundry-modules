@@ -788,3 +788,9 @@ body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
     opacity: 1;
   }
 }
+
+/* The live reveal reserves the settled strip's geometry throughout. */
+.glddf-fate-strip.glddf-anime-reveal::after {
+  opacity: var(--glddf-reveal-rule, 0);
+  transform: scaleX(var(--glddf-reveal-rule, 0));
+}

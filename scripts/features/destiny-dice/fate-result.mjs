@@ -1,7 +1,10 @@
+import { createTimeline, stagger, motionDuration, createMotionOwner } from "../../core/motion.mjs";
 import { FATE_DIE_DENOMINATION, FATE_DIE_NOTATION, FLAGS, KIND_OPPORTUNITY, MODULE_ID } from "./constants.mjs";
 import { getFaceImagePaths, getFateFace, getKindLabel, normalizeKind } from "./settings.mjs";
 
 const inFlightFateRolls = new Set();
+const revealedFates = new Map();
+const stripMotions = new WeakMap();
 const FATE_STRIP_PATTERN = /<(footer|section)\b[^>]*class="[^"]*glddf-fate-(?:strip|result)[^"]*"[^>]*>[\s\S]*?<\/\1>\s*/gi;
 
 export function isPcCheckMessage(message) {
@@ -78,11 +81,51 @@ function attachFateStrip(message, html) {
   const content = root.querySelector?.(".message-content");
   if (!content) return;
 
-  content.querySelectorAll(".glddf-fate-strip, .glddf-fate-result").forEach((node) => node.remove());
+  content.querySelectorAll(".glddf-fate-strip, .glddf-fate-result").forEach((node) => {
+    stripMotions.get(node)?.clear();
+    node.remove();
+  });
 
   const fate = message?.getFlag?.(MODULE_ID, FLAGS.fate);
   if (!fate) return;
   content.insertAdjacentHTML("beforeend", renderFateBar(fate));
+  const strip = content.querySelector(".glddf-fate-strip");
+  const age = Date.now() - fate.appliedAt;
+  const identity = `${message.id}:${fate.appliedAt}:${fate.face}`;
+  // Rendering is independent of rolling: DSN has already completed before the
+  // flag is persisted. Repeated renders and historical chat stay fully readable.
+  for (const [key, expires] of revealedFates) if (expires <= Date.now()) revealedFates.delete(key);
+  if (!strip || !Number.isFinite(fate.appliedAt) || age < 0 || age >= FATE_REVEAL_WINDOW_MS || fate.accepted === false || revealedFates.has(identity)) return;
+  revealedFates.set(identity, fate.appliedAt + FATE_REVEAL_WINDOW_MS);
+  revealFateStrip(strip);
+}
+
+function revealFateStrip(strip) {
+  const owner = createMotionOwner();
+  stripMotions.set(strip, owner);
+  const reduced = document.body.classList.contains("glddf-motion-reduced");
+  const motionRoot = strip.isConnected ? strip : document.body;
+  const localScale = Number.parseFloat(getComputedStyle(motionRoot).getPropertyValue("--glddf-motion-scale"));
+  const duration = ms => motionDuration(ms, motionRoot) * (Number.isFinite(localScale) && localScale >= 0 ? localScale : 1);
+  // Animate a custom property for the precision-rule pseudo-element, keeping
+  // the result's layout reserved and avoiding chat-scroll jumps.
+  strip.classList.add("glddf-anime-reveal");
+  const timeline = owner.add(createTimeline({ autoplay: false, onComplete: () => {
+    owner.clear();
+    strip.classList.remove("glddf-anime-reveal");
+    stripMotions.delete(strip);
+  } }));
+  timeline.add(strip, { opacity: [0, 1], duration: duration(reduced ? 180 : 400), ease: "outCubic" }, 0);
+  if (!reduced) {
+    timeline.add(strip, { "--glddf-reveal-rule": [0, 1], duration: duration(650), ease: "outExpo" }, 0);
+    timeline.add(strip.querySelectorAll(".glddf-fate-face, .glddf-fate-glyph"), {
+      opacity: [0, 1], scale: [.8, 1], rotate: [-8, 0], duration: duration(520), ease: "outBack",
+    }, duration(80));
+    timeline.add(strip.querySelectorAll(".glddf-fate-kicker, .glddf-fate-name, .glddf-fate-bonus"), {
+      opacity: [0, 1], translateY: [6, 0], duration: duration(400), delay: stagger(duration(85)), ease: "outCubic",
+    }, duration(140));
+  }
+  timeline.play();
 }
 
 function getFaceResult(roll) {
@@ -175,12 +218,10 @@ const FATE_REVEAL_WINDOW_MS = 4000;
 function renderFateBar(fate) {
   const kind = normalizeKind(fate.kind);
   const kindLabel = getKindLabel(kind);
-  const isFresh = Number.isFinite(fate.appliedAt) && Date.now() - fate.appliedAt < FATE_REVEAL_WINDOW_MS;
   const classes = [
     "glddf-fate-strip",
     `glddf-${kind}`,
     fate.accepted === false ? "glddf-refused" : "",
-    isFresh && fate.accepted !== false ? "glddf-reveal" : "",
   ].filter(Boolean).join(" ");
 
   const showBonus = kind !== KIND_OPPORTUNITY && fate.bonus !== 0;
