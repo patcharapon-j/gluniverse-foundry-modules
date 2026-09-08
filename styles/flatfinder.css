@@ -24,8 +24,7 @@
    accent edge bar on the left, faint outer bloom.
    =========================================================================== */
 .flatfinder-competence,
-.flatfinder-incapacitation,
-.flatfinder-apex-badge {
+.flatfinder-incapacitation {
   --ff-accent: var(--gl-text-dim);
   position: relative;
   display: flex;
@@ -58,8 +57,7 @@
 
 /* Accent edge bar (left) — the "3px accent" idle marker of §7.1. */
 .flatfinder-competence::before,
-.flatfinder-incapacitation::before,
-.flatfinder-apex-badge::before {
+.flatfinder-incapacitation::before {
   content: "";
   position: absolute;
   left: 0;
@@ -72,8 +70,7 @@
 
 /* Precision rule of light along the bottom edge (§4.3, static at low alpha). */
 .flatfinder-competence::after,
-.flatfinder-incapacitation::after,
-.flatfinder-apex-badge::after {
+.flatfinder-incapacitation::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -88,8 +85,7 @@
 
 /* Etched micro-label (technical voice, uppercase, tracked). */
 .flatfinder-competence .ff-caption,
-.flatfinder-incapacitation .ff-caption,
-.flatfinder-apex-badge .ff-caption {
+.flatfinder-incapacitation .ff-caption {
   font-family: var(--gl-tech);
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -100,8 +96,7 @@
 
 /* Hero result word (display voice). */
 .flatfinder-competence .ff-label,
-.flatfinder-incapacitation .ff-label,
-.flatfinder-apex-badge .ff-label {
+.flatfinder-incapacitation .ff-label {
   margin-left: auto;
   text-align: right;
   font-weight: var(--gl-weight-bold);
@@ -205,331 +200,3 @@
 .flatfinder-encounter-budget[data-severity="moderate"]  { --ff-accent: var(--gl-signal); }
 .flatfinder-encounter-budget[data-severity="severe"]    { --ff-accent: #ff8a4a; }
 .flatfinder-encounter-budget[data-severity="extreme"]   { --ff-accent: var(--gl-hazard); }
-
-/* ===========================================================================
-   Apex (solo boss) — combat-tracker turn markers.
-   Prime turn reads in signal amber; extra turns dim to violet "echo" cards.
-   =========================================================================== */
-.flatfinder-apex-badge {
-  gap: 0.5em;
-  margin: 0;
-  padding: 0.12em 0.5em;
-  font-size: 0.66rem;
-  border-radius: 7px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
-}
-.flatfinder-apex-badge .ff-caption { font-size: 0.56rem; }
-.flatfinder-apex-badge .ff-label { font-size: 0.74rem; font-weight: var(--gl-weight-heavy); }
-
-.flatfinder-apex-badge[data-prime="true"]  { --ff-accent: var(--gl-signal); }
-.flatfinder-apex-badge[data-prime="false"] { --ff-accent: var(--gl-violet); opacity: 0.92; }
-
-/* Inline row marker for combatants in the default tracker. */
-.combatant .flatfinder-apex-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  margin-left: 0.35em;
-  padding: 0 0.4em;
-  height: 1.35em;
-  border-radius: 5px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
-  font-family: var(--gl-tech, monospace);
-  font-size: 0.6rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--gl-ink-0, var(--gl-ink-0));
-  background: var(--ff-accent, var(--gl-signal));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--ff-accent, var(--gl-signal)) 60%, transparent);
-}
-.combatant .flatfinder-apex-tag[data-prime="true"]  { --ff-accent: var(--gl-signal); }
-.combatant .flatfinder-apex-tag[data-prime="false"] {
-  --ff-accent: var(--gl-violet);
-  color: var(--gl-text-bright, var(--gl-text-bright));
-  background: color-mix(in srgb, var(--gl-violet) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gl-violet) 55%, transparent);
-}
-
-/* Counteract action button on the prime row. */
-.combatant .flatfinder-apex-counteract-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 0.3em;
-  width: 1.5em;
-  height: 1.5em;
-  color: var(--gl-signal, var(--gl-signal));
-  cursor: pointer;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gl-signal, var(--gl-signal)) 55%, transparent));
-}
-.combatant .flatfinder-apex-counteract-btn:hover { color: var(--gl-signal-hot, var(--gl-signal-hot)); }
-
-/* ===========================================================================
-   Apex (solo boss) — the NPC sheet itself reads as Apex.
-   We deliberately do NOT bloom the window: an outer box-shadow glow on the sheet
-   spills past the window and tints the PF2e token HUD that overlays it. Instead
-   the Apex state reads from the etched "APEX" emblem banner inside the sheet body
-   (below) plus a contained amber accent on the crown control. Purely additive: it
-   prepends one banner and tints one control, never touching the system layout.
-   =========================================================================== */
-.flatfinder-apex-sheet {
-  --ff-apex: var(--gl-signal);
-}
-
-/* The crown control in the titlebar tints amber so the Apex state is obvious.
-   No drop-shadow glow — a filter bloom here bleeds onto adjacent UI. */
-.flatfinder-apex-sheet .flatfinder-apex-config {
-  color: var(--ff-apex);
-}
-
-/* Etched "APEX" emblem banner — GL Universe glass slab, signal-amber accent. */
-.flatfinder-apex-emblem {
-  --ff-apex: var(--gl-signal);
-
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.55em;
-  margin: 0 0 0.4em;
-  padding: 0.34em 0.7em 0.34em 0.85em;
-  color: var(--gl-text-bright);
-  font-family: var(--gl-display);
-  isolation: isolate;
-
-  border: 1px solid var(--gl-edge);
-  border-radius: 8px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), rgb(var(--gl-tint-light) / 0) 36%),
-    linear-gradient(98deg,
-      color-mix(in srgb, var(--ff-apex) 20%, var(--gl-ink-1)),
-      var(--gl-ink-1) 66%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
-    0 4px 14px rgb(var(--gl-tint-dark) / 0.4),
-    0 0 22px color-mix(in srgb, var(--ff-apex) 18%, transparent);
-}
-/* Accent edge bar (left) — matches the badge family's idle marker. */
-.flatfinder-apex-emblem::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--ff-apex);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--ff-apex) 70%, transparent);
-}
-.flatfinder-apex-emblem > i {
-  color: var(--ff-apex);
-  font-size: 0.95em;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ff-apex) 60%, transparent));
-}
-.flatfinder-apex-emblem .ff-apex-emblem-label {
-  font-family: var(--gl-tech);
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-weight: var(--gl-weight-heavy);
-  font-size: 0.74rem;
-  color: var(--gl-text-bright);
-  text-shadow: 0 0 12px color-mix(in srgb, var(--ff-apex) 55%, transparent);
-}
-.flatfinder-apex-emblem .ff-apex-emblem-turns {
-  margin-left: auto;
-  font-family: var(--gl-tech);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: var(--gl-weight-bold);
-  font-size: 0.6rem;
-  color: var(--gl-text-dim);
-}
-
-/* Counteract action on the emblem — roll the boss's once-per-turn condition
-   counteract straight from the sheet, not only from the combat tracker. */
-.flatfinder-apex-emblem .flatfinder-apex-emblem-counteract {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4em;
-  margin: 0;
-  padding: 0.2em 0.6em;
-  flex: 0 0 auto;
-  cursor: pointer;
-  font-family: var(--gl-tech);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: var(--gl-weight-bold);
-  font-size: 0.6rem;
-  line-height: 1;
-  color: var(--gl-text-bright);
-  background: color-mix(in srgb, var(--ff-apex) 14%, var(--gl-ink-1));
-  border: 1px solid color-mix(in srgb, var(--ff-apex) 45%, transparent);
-  border-radius: 5px;
-  transition: background var(--gl-d-quick) ease, border-color var(--gl-d-quick) ease;
-}
-.flatfinder-apex-emblem .flatfinder-apex-emblem-counteract > i {
-  color: var(--ff-apex);
-  font-size: 0.85em;
-}
-.flatfinder-apex-emblem .flatfinder-apex-emblem-counteract:hover {
-  background: color-mix(in srgb, var(--ff-apex) 26%, var(--gl-ink-1));
-  border-color: color-mix(in srgb, var(--ff-apex) 70%, transparent);
-}
-
-/* ===========================================================================
-   Apex chat cards (phase break + counteract) — etched glass, on chat.
-   =========================================================================== */
-.flatfinder-apex-phase {
-  --ff-accent: var(--gl-violet);
-  position: relative;
-  margin: 0.2em 0;
-  padding: 0.5em 0.7em 0.5em 0.85em;
-  color: var(--gl-text, var(--gl-text));
-  font-family: var(--gl-display);
-  border: 1px solid var(--gl-edge, rgb(var(--gl-tint-light) / 0.13));
-  border-radius: 9px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.07), rgb(var(--gl-tint-light) / 0) 36%),
-    linear-gradient(98deg, color-mix(in srgb, var(--ff-accent) 20%, var(--gl-ink-1, var(--gl-ink-1))),
-      var(--gl-ink-1, var(--gl-ink-1)) 68%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.13),
-    0 6px 16px rgb(var(--gl-tint-dark) / 0.45),
-    0 0 24px color-mix(in srgb, var(--ff-accent) 16%, transparent);
-}
-.flatfinder-apex-phase::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--ff-accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--ff-accent) 70%, transparent);
-}
-.flatfinder-apex-phase .ff-ap-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.45em;
-}
-.flatfinder-apex-phase .ff-ap-kicker {
-  font-family: var(--gl-tech, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-weight: var(--gl-weight-bold);
-  font-size: 0.6rem;
-  color: var(--ff-accent);
-}
-.flatfinder-apex-phase .ff-ap-name { font-weight: var(--gl-weight-heavy); color: var(--gl-text-bright, var(--gl-text-bright)); }
-.flatfinder-apex-phase .ff-ap-hp {
-  margin-left: auto;
-  font-family: var(--gl-tech, monospace);
-  font-size: 0.66rem;
-  color: var(--gl-text-dim, var(--gl-text-dim));
-}
-.flatfinder-apex-phase .ff-ap-beats {
-  margin: 0.4em 0 0;
-  padding-left: 1.1em;
-  list-style: none;
-  font-size: 0.82rem;
-}
-.flatfinder-apex-phase .ff-ap-beats li { position: relative; margin: 0.12em 0; }
-.flatfinder-apex-phase .ff-ap-beats li::before {
-  content: "▶";
-  position: absolute;
-  left: -1.1em;
-  color: var(--ff-accent);
-  font-size: 0.7em;
-  top: 0.18em;
-}
-
-.flatfinder-apex-counteract {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12em;
-}
-.flatfinder-apex-counteract .ff-ac-kicker {
-  font-family: var(--gl-tech, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-weight: var(--gl-weight-bold);
-  font-size: 0.62rem;
-  color: var(--gl-signal, var(--gl-signal));
-}
-.flatfinder-apex-counteract .ff-ac-note { font-size: 0.78rem; opacity: 0.88; }
-
-/* Per-tier counteract reference table (Player Core counteract rules). */
-.flatfinder-apex-counteract .ff-ac-table {
-  width: 100%;
-  margin: 0.45em 0 0.3em;
-  border-collapse: collapse;
-  font-size: 0.74rem;
-  background: none;
-}
-.flatfinder-apex-counteract .ff-ac-table thead th {
-  font-family: var(--gl-tech, monospace);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.56rem;
-  font-weight: var(--gl-weight-bold);
-  text-align: left;
-  color: var(--gl-text-dim, var(--gl-text-dim));
-  padding: 0 0.5em 0.2em;
-  border-bottom: 1px solid var(--gl-edge, rgb(var(--gl-tint-light) / 0.13));
-}
-.flatfinder-apex-counteract .ff-ac-table thead th:last-child { text-align: right; }
-.flatfinder-apex-counteract .ff-ac-table tbody th {
-  font-family: var(--gl-display);
-  font-weight: var(--gl-weight-bold);
-  text-align: left;
-  white-space: nowrap;
-  color: var(--gl-text-bright, var(--gl-text-bright));
-  padding: 0.16em 0.5em;
-  background: none;
-  border: 0;
-}
-.flatfinder-apex-counteract .ff-ac-table tbody td {
-  text-align: right;
-  padding: 0.16em 0.5em;
-  border: 0;
-}
-.flatfinder-apex-counteract .ff-ac-table tbody tr + tr th,
-.flatfinder-apex-counteract .ff-ac-table tbody tr + tr td {
-  border-top: 1px solid rgb(var(--gl-tint-light) / 0.05);
-}
-/* Accent each tier on its left rail to match the badge family's degree colours. */
-.flatfinder-apex-counteract .ff-ac-table tbody th {
-  border-left: 3px solid var(--ff-tier, var(--gl-text-dim, var(--gl-text-dim)));
-  padding-left: 0.55em;
-}
-.flatfinder-apex-counteract tr[data-degree="critical-success"] { --ff-tier: var(--gl-cyan); }
-.flatfinder-apex-counteract tr[data-degree="success"]          { --ff-tier: var(--gl-good); }
-.flatfinder-apex-counteract tr[data-degree="failure"]          { --ff-tier: #ffc24a; }
-.flatfinder-apex-counteract tr[data-degree="critical-failure"] { --ff-tier: var(--gl-hazard); }
-.flatfinder-apex-counteract tr[data-degree] th { color: var(--gl-text-bright, var(--gl-text-bright)); }
-
-.flatfinder-apex-counteract .ff-ac-rank {
-  font-family: var(--gl-tech, monospace);
-  font-weight: var(--gl-weight-heavy);
-  color: var(--gl-text-bright, var(--gl-text-bright));
-}
-.flatfinder-apex-counteract .ff-ac-band {
-  margin-left: 0.45em;
-  font-family: var(--gl-tech, monospace);
-  font-size: 0.64rem;
-  color: var(--gl-text-dim, var(--gl-text-dim));
-}
-.flatfinder-apex-counteract .ff-ac-fail {
-  font-weight: var(--gl-weight-bold);
-  color: var(--gl-text-dim, var(--gl-text-dim));
-}
-.flatfinder-apex-counteract .ff-ac-foot {
-  display: block;
-  margin-top: 0.3em;
-  font-size: 0.64rem;
-  line-height: 1.3;
-  opacity: 0.7;
-}

@@ -204,19 +204,6 @@ export const SECTION_GRAMMAR = Object.freeze({
     "Duration: <n> <unit> | unlimited",
     "Description: <prose>",
   ],
-  engine: [
-    "Resource: <name>",
-    "Tier: <tier>",
-    "Allegiance: <allegiance>",
-    "Charges: <integer>",
-    "Ready: <mode>",
-    "Threshold: <integer>",
-    "Gain: <prose>",
-    "Cash Out: <prose>",
-    "Tell: <prose>",
-    "Threat: <prose>",
-    "Counterplay: <prose>",
-  ],
   recallKnowledge: ["DC <n> (<skills>): <text>"],
 });
 
@@ -228,12 +215,11 @@ export const SECTION_HEADINGS = Object.freeze({
   spellcasting: "spellcasting",
   inventory: "inventory",
   effects: "effects",
-  engine: "engine",
   "recall knowledge": "recallKnowledge",
 });
 
 /** Titles as the exporter writes them, for the locked-section rules. */
-const LOCKED_SECTIONS = ["## Engine", "## Phases", "## Recall Knowledge"];
+const LOCKED_SECTIONS = ["## Phases", "## Recall Knowledge"];
 
 /**
  * Which sections this stat block actually uses.

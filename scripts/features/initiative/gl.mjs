@@ -95,52 +95,6 @@ void main(void){
   gl_FragColor=vec4(col*clamp(a,0.0,1.0), clamp(a,0.0,1.0));
 }`;
 
-// Apex (PF2e-Flatfinder solo boss). A menacing heat layer over the portrait:
-// rising embers (drifting bright sparks, densest at the bottom), a soft corona
-// vignette breathing around the face, and a low heat-shimmer. uPhase (1..3) is
-// the HP phase — it scales both the ember speed and the overall intensity so the
-// card visibly escalates as the boss is bloodied (composed → enraged → desperate).
-// Kept cheap (a handful of hash/value-noise lookups, 3 ember layers) since at most
-// a few apex cards exist at once; uClipCircle masks the field to a disc for round
-// token overlays (0 for rectangular card portraits).
-export const FX_FRAG_APEX = `
-varying vec2 vTextureCoord;
-uniform sampler2D uSampler;
-uniform float uTime, uSeed, uAspect, uClipCircle, uPhase;
-uniform vec3 uApexBase, uApexHot;
-float gluHAx(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7))+uSeed)*43758.5453); }
-float gluVNAx(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
-  return mix(mix(gluHAx(i),gluHAx(i+vec2(1.0,0.0)),f.x),
-             mix(gluHAx(i+vec2(0.0,1.0)),gluHAx(i+vec2(1.0,1.0)),f.x), f.y); }
-void main(void){
-  vec2 uv=vTextureCoord;
-  float phase=clamp(uPhase,1.0,3.0);
-  float t01=(phase-1.0)/2.0;
-  float intensity=mix(0.55,1.25,t01);
-  float speed=mix(0.55,1.35,t01);
-  // Rising embers: three drifting cell layers of sparse bright points.
-  float embers=0.0;
-  for(int i=0;i<3;i++){
-    float fi=float(i);
-    vec2 g=vec2(uv.x*mix(11.0,17.0,fi*0.5), uv.y*6.0 + uTime*(0.6+0.55*speed) + fi*4.3);
-    vec2 cell=floor(g); vec2 f=fract(g);
-    float h=gluHAx(cell+fi*13.0);
-    float pt=length(f-vec2(0.5+0.32*(h-0.5),0.5));
-    embers+=smoothstep(0.18,0.0,pt)*step(0.85,h);
-  }
-  embers*=smoothstep(1.0,0.22,uv.y);                 // brightest low, burning upward
-  // Breathing corona concentrated low-centre (behind the face's lower half).
-  float vig=smoothstep(0.18,0.66,length((uv-vec2(0.5,0.64))*vec2(1.0,1.15)));
-  float corona=vig*(0.16+0.10*sin(uTime*1.8));
-  // Low heat-shimmer drifting up.
-  float heat=gluVNAx(vec2(uv.x*5.0, uv.y*5.0 - uTime*1.1*speed));
-  float shimmer=smoothstep(0.62,1.0,heat)*smoothstep(1.0,0.35,uv.y)*0.22;
-  vec3 col=mix(uApexBase,uApexHot,clamp(embers*1.2+shimmer,0.0,1.0));
-  float a=clamp((embers*0.95 + corona + shimmer)*intensity, 0.0, 1.0);
-  if(uClipCircle>0.5){ vec2 cc=uv-vec2(0.5); cc.x*=uAspect; a*=smoothstep(0.5,0.47,length(cc)); }
-  gl_FragColor=vec4(col*a, a);
-}`;
-
 // Ground turn-indicator. A cinematic energy disc drawn BENEATH the token, larger
 // than the token footprint so it reads as a glowing pedestal rather than a status
 // frame on the art. Procedural and disposition-coloured (uColor / uColorHi):
