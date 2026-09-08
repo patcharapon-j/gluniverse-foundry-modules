@@ -137,6 +137,22 @@ const float SKIRT_FADE = ${LAYOUT.skirtFadeIn.toFixed(3)};
 const float SCORCH_SPREAD = ${LAYOUT.scorchSpread.toFixed(3)};
 const float MOTE_DENSITY = ${LAYOUT.moteDensity.toFixed(3)};
 const float MOTE_RISE = ${LAYOUT.moteRise.toFixed(3)};
+/* The frame. Hairlines in DEVICE PIXELS (px), reaches in grid squares. */
+const float RULE_PX = ${LAYOUT.rulePx.toFixed(3)};
+const float RULE_IN = ${LAYOUT.ruleInset.toFixed(3)};
+const float ORBIT_PX = ${LAYOUT.orbitPx.toFixed(3)};
+const float ORBIT_OUT = ${LAYOUT.orbitOut.toFixed(3)};
+const float ORBIT_SEGMENTS = ${LAYOUT.orbitSegments.toFixed(1)};
+const float FRES_REACH = ${LAYOUT.fresnelReach.toFixed(3)};
+const float GLOW_REACH = ${LAYOUT.glowReach.toFixed(3)};
+const float TICK_IN = ${LAYOUT.tickIn.toFixed(3)};
+const float TICK_OUT = ${LAYOUT.tickOut.toFixed(3)};
+const float DOT_PX = ${LAYOUT.dotPx.toFixed(3)};
+const float SCAN_PERIOD = ${LAYOUT.scanPeriod.toFixed(3)};
+const float LAND_REACH = ${LAYOUT.landReach.toFixed(3)};
+const float ATLAS_INSET = ${LAYOUT.atlasInset.toFixed(5)};
+const float ATLAS_SCALE_A = ${LAYOUT.atlasScaleA.toFixed(3)};
+const float ATLAS_SCALE_B = ${LAYOUT.atlasScaleB.toFixed(3)};
 const float GL_PI = 3.14159265;
 const float GL_TAU = 6.28318531;
 
@@ -236,19 +252,51 @@ float perimeterOrd(vec2 p) {
    The warp is ADVECTED, not evolved: the field translates and its structure
    persists. Evolving the noise in place is what makes an effect look like a
    lava lamp, because nothing keeps its identity from one second to the next. */
+/* ---- gradient noise ------------------------------------------------------
+   The shared pool's value noise interpolates HEIGHTS at lattice points, and
+   its blobs sit on that lattice — which is the "cloud filter" look, and the
+   single strongest cheap signal in the old fill. Gradient noise interpolates
+   SLOPES: its features fall between lattice points, at every scale, and it
+   is what every material here that has to read as matter is built on now. */
+vec2 aoeGrad(vec2 i) {
+  float a = gluHash1(i) * GL_TAU;
+  return vec2(cos(a), sin(a));
+}
+float aoeGnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = dot(aoeGrad(i), f);
+  float b = dot(aoeGrad(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+  float c = dot(aoeGrad(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+  float d = dot(aoeGrad(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+  return clamp(0.5 + 0.72 * mix(mix(a, b, u.x), mix(c, d, u.x), u.y), 0.0, 1.0);
+}
+float aoeFbm(vec2 p) {
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { s += a * aoeGnoise(p); p = p * 2.03 + 7.1; a *= 0.5; }
+  return s / 0.9375;
+}
+
 vec2 gluWarp(vec2 p, vec2 flow, float amp) {
-  float a = gluFbm(p * 0.75 + flow);
-  float b = gluFbm(p * 0.75 + flow.yx + 5.23);
+  float a = aoeFbm(p * 0.75 + flow);
+  float b = aoeFbm(p * 0.75 + flow.yx + 5.23);
   return p + vec2(a - 0.5, b - 0.5) * amp;
 }
 
 /* The scene remains the shadow stop. Only genuinely energetic detail moves
    from the archetype tint through its hot colour toward white. This keeps the
    overlay transparent without flattening every material into one colour. */
+/* Three stops, not two. The bottom of the ramp is a DEEP stop — the tint
+   squared, which is darker and more saturated — so the body of an area sits
+   in a rich version of its own hue and the boundary rises out of it through
+   the tint to the hot stop. A ramp that starts at the tint has nowhere to go
+   but brighter, and everything in it drifts toward one pale wash. */
 vec3 archRamp(float x) {
   x = clamp(x, 0.0, 1.0);
-  vec3 c = mix(uTint, uTintHot, smoothstep(0.52, 0.96, x));
-  return mix(c, vec3(1.0), smoothstep(0.97, 1.0, x) * 0.24);
+  vec3 deep = mix(uTint * uTint, uTint, 0.35);
+  vec3 c = mix(deep, uTint, smoothstep(0.0, 0.40, x));
+  c = mix(c, uTintHot, smoothstep(0.48, 0.90, x));
+  return mix(c, vec3(1.0), smoothstep(0.93, 1.0, x) * 0.30);
 }
 
 /* An ordered-ish dither, one 255th of a unit. Every gradient here is a long
@@ -292,8 +340,8 @@ float cellAt(vec2 cell) {
 
 float emberFill(vec2 p, float t) {
   float rise = t * 0.62;
-  float n1 = gluFbm(p * 0.85 + vec2(0.0, -rise));
-  float n2 = gluFbm(p * 2.05 + vec2(rise * 0.28, -rise * 1.7));
+  float n1 = aoeFbm(p * 0.85 + vec2(0.0, -rise));
+  float n2 = aoeFbm(p * 2.05 + vec2(rise * 0.28, -rise * 1.7));
   float cell = 1.0 / 0.85;
   float ridge = glRidge(n1, cell * 0.35, cell);
   float churn = mix(ridge, n2, 0.35);
@@ -495,8 +543,8 @@ float umbraFill(vec2 p, float t) {
      ridge is inverted: what is bright here is the gaps between the tendrils.
      Its emissive contribution is low on purpose and most of its presence comes
      from the shade pass — this is the one archetype that is mostly subtraction. */
-  float n = gluFbm(p * 0.9 + vec2(t * 0.10, -t * 0.16));
-  float n2 = gluFbm(p * 2.2 - vec2(t * 0.20, t * 0.05));
+  float n = aoeFbm(p * 0.9 + vec2(t * 0.10, -t * 0.16));
+  float n2 = aoeFbm(p * 2.2 - vec2(t * 0.20, t * 0.05));
   float tendril = 1.0 - glRidge(n, 0.40, 1.1);
   /* Raised from a near-black field: void is meant to be the darkest archetype,
      not an unlit one. Its darkness is the shade pass's job (0.86, the highest
@@ -514,8 +562,8 @@ float spiritFill(vec2 p, float t) {
      and different drifts give it something to be, while the flat veil under
      them drops to almost nothing. */
   float drift = t * 0.16;
-  float n  = gluFbm(p * 0.70 + vec2(sin(t * 0.25) * 0.40, -drift));
-  float n2 = gluFbm(p * 1.55 + vec2(-drift * 0.70, -drift * 1.50) + 19.0);
+  float n  = aoeFbm(p * 0.70 + vec2(sin(t * 0.25) * 0.40, -drift));
+  float n2 = aoeFbm(p * 1.55 + vec2(-drift * 0.70, -drift * 1.50) + 19.0);
   float wisp = glRidge(n, 0.50, 1.40);
   float fine = glRidge(n2, 0.22, 0.65) * 0.55;
   float veil = 0.09 + 0.10 * gluFbm(p * 2.2 + vec2(drift * 0.3, -drift));
@@ -742,10 +790,103 @@ float archMotes(vec2 p, float t) {
        * alive * mix(0.40, 1.0, mh3);
 }
 
+/* ---- the tactical frame ---------------------------------------------------
+   Everything below is what turned this from a coloured disc into a projected
+   instrument: a boundary drawn as a FRAME (one crisp rule on the rules edge,
+   corner brackets on its convex corners, a finer inset rule, a wide soft glow
+   outside and a fresnel band falling away inside), a dashed orbit ring on the
+   true geometry that turns at the behaviour's own pace, direction chevrons on
+   cones and lines, and a scan pulse that runs from the origin to the edge. It
+   is the language of a targeting overlay — Endfield's grid decals, Star Rail's
+   attack indicators — and it does what a translucent tint never can: it says
+   "this is a precise thing that has been placed" before it says what it is
+   made of. */
+
+float sdBox(vec2 p, float b) {
+  vec2 d = abs(p) - b;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+/* Signed distance to the AREA — the covered-plus-blocked set of squares — from
+   the 3×3 squares around p. Negative inside. Exact within a square, which is
+   all the frame's bands reach, and clamped at 2 beyond. This is what lets a
+   band be drawn AGAINST THE STAIRCASE PF2e actually uses rather than against
+   the smooth ghost: a glow that follows the circle while the rule follows the
+   squares reads as two shapes disagreeing, and on a rules lattice that is a
+   bug, not a style. */
+float latticeSdf(vec2 p, vec2 cell, float inside) {
+  float dIn = 2.0, dOut = 2.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 c = cell + vec2(float(i), float(j));
+      float s = step(0.25, cellAt(c));
+      float d = sdBox(p - (c + 0.5), 0.5);
+      dOut = min(dOut, mix(2.0, d, s));
+      dIn  = min(dIn,  mix(d, 2.0, s));
+    }
+  }
+  return mix(dOut, -dIn, inside);
+}
+
+/* 1 near a CONVEX corner of the area: the square is inside and both of the
+   squares across that corner's two edges are not. Bracket marks live there. */
+float cornerTick(vec2 p, vec2 cell, float inside) {
+  vec2 f = fract(p + uGridOffset);
+  vec2 side = step(0.5, f) * 2.0 - 1.0;
+  vec2 corner = cell + step(0.5, f);
+  float nx = step(0.25, cellAt(cell + vec2(side.x, 0.0)));
+  float ny = step(0.25, cellAt(cell + vec2(0.0, side.y)));
+  float convex = inside * (1.0 - nx) * (1.0 - ny);
+  return convex * (1.0 - glEdge(TICK_IN, TICK_OUT, length(p - corner)));
+}
+
+/* Behaviour sets the pace of every idle motion in the frame, so the rhythm a
+   profile declares is visible in the frame as well as in the material. */
+float behaviourPace() {
+  if (uBehavior < 0.5) return 1.20;   /* impact  */
+  if (uBehavior < 1.5) return 1.00;   /* pulse   */
+  if (uBehavior < 2.5) return 0.85;   /* flow    */
+  if (uBehavior < 3.5) return 0.55;   /* grow    */
+  if (uBehavior < 4.5) return 0.35;   /* contain */
+  if (uBehavior < 5.5) return 1.60;   /* sweep   */
+  if (uBehavior < 6.5) return 0.45;   /* linger  */
+  if (uBehavior < 7.5) return 0.40;   /* sustain */
+  if (uBehavior < 8.5) return 1.30;   /* trigger */
+  return 0.0;                         /* static  */
+}
+
+/* The dashed ring on the true geometry, a little outside it, turning. 60% duty
+   so it reads as a segmented reticle rather than a dotted line. */
+float orbitRing(vec2 p, float sdf, float t) {
+  float pace = behaviourPace();
+  float seg = fract(perimeterOrd(p) * ORBIT_SEGMENTS - t * pace * 0.045);
+  float on = glEdge(0.0, 0.07, seg) * (1.0 - glEdge(0.56, 0.63, seg));
+  return hairline(sdf - ORBIT_OUT, ORBIT_PX) * on;
+}
+
+/* Direction chevrons for cones and lines: one per square along the axis, the
+   arms trailing the tip, drifting outward at the behaviour's pace. */
+float chevrons(vec2 p, float t) {
+  if (uShape < 0.5 || (uShape > 1.5 && uShape < 2.5)) return 0.0;
+  vec2 d = vec2(cos(uDirection), sin(uDirection));
+  vec2 q = vec2(dot(p, d), dot(p, vec2(-d.y, d.x)));
+  float halfW = uShape > 2.5 ? min(0.42, max(uBase.x, 0.2) * 0.45) : 0.42;
+  float k = q.x - t * behaviourPace() * 0.35;
+  float m = abs(fract(k + abs(q.y) * 0.8 + 0.5) - 0.5);
+  float mark = 1.0 - glEdge(0.0, 0.05, m);
+  float gate = (1.0 - glEdge(halfW - 0.06, halfW, abs(q.y))) * glEdge(0.7, 1.1, q.x);
+  return mark * gate;
+}
+
 void main(void) {
   float eased = uPhase.w;      /* the nib's position along its stroke, 0 -> 1 */
+  float enter = uPhase.x;      /* the same entrance, linear */
   vec2 p = vGrid;
   float t = uTime;
+  bool onGround = uPlane < 0.5;
+  bool onAir = uPlane > 0.5 && uPlane < 1.5;
+  bool onEdge = uPlane > 1.5 && uPlane < 2.5;
+  bool onShade = uPlane > 2.5;
 
   float sdf = areaSdf(p);
   /* PF2e cone and line origins may sit on edge midpoints. The global grid
@@ -765,14 +906,19 @@ void main(void) {
   vec2 f = fract(vGrid + uGridOffset);
   float dEdge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
 
+  /* Interior seams only: a covered square meeting a blocked one. The seam
+     against the outside is the frame's job now, and drawing it twice was
+     most of what made the old edge read as fuzzy. */
   float diff = 0.0;
   diff = max(diff, abs(nL - state) * (1.0 - smoothstep(0.0, 0.5, f.x)));
   diff = max(diff, abs(nR - state) * (1.0 - smoothstep(0.0, 0.5, 1.0 - f.x)));
   diff = max(diff, abs(nD - state) * (1.0 - smoothstep(0.0, 0.5, f.y)));
   diff = max(diff, abs(nU - state) * (1.0 - smoothstep(0.0, 0.5, 1.0 - f.y)));
+  float diffIn = step(0.25, diff) * (1.0 - step(0.75, diff));
 
   float covered = step(0.75, state);
   float blocked = step(0.25, state) * (1.0 - covered);
+  float inside = covered + blocked;
 
   /* Gridless Scenes have no rules lattice to communicate. Use the Region's
      continuous shape instead, and suppress all square-cell structure. The
@@ -781,8 +927,13 @@ void main(void) {
   float shapeEdge = max(uTexel, 0.002);
   float shapeCovered = 1.0 - glEdge(-shapeEdge, shapeEdge, sdf);
   covered = mix(covered, shapeCovered, uGridless);
+  inside = mix(inside, shapeCovered, uGridless);
   blocked *= 1.0 - uGridless;
-  diff *= 1.0 - uGridless;
+  diffIn *= 1.0 - uGridless;
+
+  /* The frame's own distance: against the staircase on a grid, against the
+     true shape when there is no grid. */
+  float sdL = mix(latticeSdf(p, cell, step(0.25, state)), sdf, uGridless);
 
   /* ---- the entrance: the template is DRAWN, never scaled and never faded --
      A template is a rules object sitting on a lattice. Scaling it means that
@@ -886,180 +1037,209 @@ void main(void) {
      the stroke lands, or they read as permanent hot rings. */
   nib *= (1.0 - pen * pen);
 
+  /* The LANDING. When the edge pen closes its lap the frame flares once and a
+     single ring leaves the boundary outward — the one beat that says the
+     placement is now final. Both are gone by the time enter reaches 1, so
+     a settled area carries neither. */
+  float flare = exp(-pow((enter - 0.84) * 14.0, 2.0)) * step(enter, 0.999);
+  float landR = max(enter - 0.80, 0.0) * LAND_REACH * 5.0;
+  float landRing = hairline(sdf - landR, RIM_PX * 2.0) * step(0.80, enter)
+                 * (1.0 - smoothstep(0.84, 1.0, enter)) * step(enter, 0.999);
+
   float presence = uPhase.y;      /* the EXIT only; the entrance is the ink above */
   float shock = uPhase.z;
-  float topology = semanticTopology(p, sdf, t) * covered * inkFill
-                 * (1.0 + step(0.0, uSecondary) * 0.08);
+  float pace = behaviourPace();
 
   /* Treatment character. The grounded treatment passes all ones, so it is
      bit-identical with this in place. */
   float chScorch = uChar.x, chMotes = uChar.y, chRim = uChar.z, chTurb = uChar.w;
 
+  /* ---- the material, only where a plane reads it ------------------------
+     The fill is the expensive thing here — frost runs two 3×3 dendrite
+     searches — and only the ground and the shade use it. Three of four passes
+     used to pay for it and throw it away. */
+  float fill = 0.46, turb = 0.46, detail = 0.0, sheen = 0.0;
+  if (onGround || onShade) {
+    fill = archFill(p, t);
+    /* The atlas is a DETAIL texture: it tiles at two rotated scales so the
+       repeat never lines up with the lattice, and its channels are read for
+       what they are — a body variation, a structure mask and the crests. Half
+       a texel inside the tile so linear filtering never leaks a neighbour. */
+    vec2 inset = vec2(ATLAS_INSET);
+    vec2 span = uAtlasRect.zw - inset * 2.0;
+    vec2 uvA = uAtlasRect.xy + inset + fract(p * ATLAS_SCALE_A + vec2(uSeed * 0.13, 0.0)) * span;
+    vec2 pr = vec2(p.x * 0.866 - p.y * 0.5, p.x * 0.5 + p.y * 0.866);
+    vec2 uvB = uAtlasRect.xy + inset + fract(pr * ATLAS_SCALE_B + vec2(0.0, uSeed * 0.07)) * span;
+    vec4 tA = texture2D(uAtlas, uvA);
+    vec4 tB = texture2D(uAtlas, uvB);
+    float bodyVar = mix(tA.r, tB.r, 0.5);
+    float structure = max(tA.g, tB.g * 0.8);
+    float crest = max(tA.b, tB.b * 0.7);
+    float surfaced = fill * (0.74 + bodyVar * 0.34) + structure * 0.26 + crest * 0.36;
+    fill = mix(fill, surfaced, clamp(uAtlasReady, 0.0, 1.0) * 0.62);
+    turb = mix(0.46, fill * chTurb, uFx.w);
+    detail = smoothstep(0.52, 1.10, fill);
+    sheen = detail * detail * covered * inkFill * 0.34;
+  }
+
+  float topology = 0.0;
+  if (onGround || (onEdge && abs(uFunction - 3.0) < 0.5)) {
+    topology = semanticTopology(p, sdf, t) * covered * inkFill
+             * (1.0 + step(0.0, uSecondary) * 0.08);
+  }
+
   /* ---- ground ---------------------------------------------------------
-     The ground plane is the RULES read: crisp, tiled, unambiguous. Its
-     turbulence is deliberately lower-contrast than the atmosphere's so the
-     floor stays legible as a floor. */
-  /* The map is the low-frequency body of the material. The shader adds a thin
-     veil plus selective emissive structure; it does not replace the scene with
-     a lit slab. One fill evaluation is enough, avoids plastic normal-map relief,
-     and halves the worst-case cost of frost. */
-  float fill = archFill(p, t);
-  /* Stay half a texel inside the selected tile so linear filtering never
-     leaks a neighboring material into seams at the atlas boundary. */
-  vec2 atlasInset = vec2(0.5 / 256.0);
-  vec2 atlasUv = uAtlasRect.xy + atlasInset
-               + fract(p * 0.18) * (uAtlasRect.zw - atlasInset * 2.0);
-  vec4 atlasSample = texture2D(uAtlas, atlasUv);
-  float packedSurface = fill * (0.72 + atlasSample.r * 0.42)
-                      + atlasSample.b * 0.20 - atlasSample.g * 0.10;
-  fill = mix(fill, packedSurface, clamp(uAtlasReady, 0.0, 1.0) * 0.56);
-  float turb = mix(0.46, fill * chTurb, uFx.w);
-  float detail = smoothstep(0.48, 1.05, fill);
-  float body = covered * inkFill * (0.16 + turb * 0.34);
+     The ground plane is the RULES read: a thin veil, a fresnel band lifting
+     toward the edge, the lattice's own marks. The floor stays a floor; the
+     material shows through as structure, not as a slab. */
+  float ground = 0.0, seam = 0.0;
+  if (onGround) {
+    float body = covered * inkFill * (0.04 + turb * 0.17);
+    /* A blocked square is INSIDE the area but out of line of effect. It has to
+       read as a third state, not as absence: dim, cool, and gradient-shadowed
+       away from the boundary it lost the line to. */
+    float blockShade = 0.30 + 0.34 * (1.0 - glEdge(0.0, 1.6, abs(sdf)));
+    body += blocked * inkFill * (0.10 + turb * 0.16) * blockShade;
 
-  /* A blocked square is INSIDE the area but out of line of effect. It has to
-     read as a third state, not as absence: dim, cool, and gradient-shadowed
-     away from the boundary it lost the line to. At 0.16 of the fill it was
-     invisible and looked exactly like "outside", which defeats the whole
-     reason for expressing this in the effect's own language. */
-  float blockShade = 0.30 + 0.34 * (1.0 - glEdge(0.0, 1.6, abs(sdf)));
-  body += blocked * inkFill * (0.12 + turb * 0.20) * blockShade;
+    /* The fresnel: bright at the edge, falling away over most of a square.
+       This one term is most of the difference between a lit plate and a
+       coloured wash — it gives the area an inside face. */
+    float fres = pow(1.0 - clamp(-sdL / FRES_REACH, 0.0, 1.0), 2.6) * covered * inkEdge * chRim;
+    /* A blocked square has no lit face; it carries a 45° hatch instead — the
+       oldest "no line of effect" mark there is, in the material's own tint. */
+    float hatch = (1.0 - glEdge(0.0, 0.05, abs(fract((p.x + p.y) * 2.0) - 0.5))) * blocked * inkFill;
+    /* The glow outside, in the body colour, reaching a third of a square. */
+    float glow = exp(-max(sdL, 0.0) / GLOW_REACH) * (1.0 - inside) * inkEdge * chRim;
+    /* Cell centre marks: the lattice as an instrument rather than a fence. */
+    float dots = glSpot(length(f - 0.5), 1.0 / max(uTexel * DOT_PX, 0.004))
+               * covered * inkFill * (1.0 - uGridless);
+    /* The scan pulse: origin to edge, at the behaviour's cadence. */
+    float ph = fract(t * pace / SCAN_PERIOD);
+    float scan = glGauss((ordFrag - ph) * max(uRadius, 1.0), 3.2) * (1.0 - ph * ph)
+               * covered * inkFill * step(0.01, pace);
+    float chev = chevrons(p, t) * covered * inkFill;
 
-  float seam = hairline(dEdge, SEAM_PX) * (0.16 + 0.62 * diff)
-             * (covered + blocked * 0.7) * inkSeam * (1.0 - uGridless);
-  float scorch = uFx.y * chScorch * covered * inkFill * 0.16
-               * (1.0 - glEdge(0.0, SCORCH_SPREAD, abs(sdf)));
+    seam = hairline(dEdge, SEAM_PX) * (0.10 + 0.55 * diffIn)
+         * (covered + blocked * 0.7) * inkSeam * (1.0 - uGridless);
+    float scorch = uFx.y * chScorch * covered * inkFill * 0.14
+                 * (1.0 - glEdge(0.0, SCORCH_SPREAD, abs(sdf)));
 
-  /* The skirt fakes vertical by brightening toward the boundary and fading
-     inward. True occlusion (flame in front of the legs, behind the head) is
-     not achievable in Foundry's 2D sort, and this does not pretend otherwise. */
-  float toEdge = clamp(1.0 + sdf / max(SKIRT_RISE, 0.001), 0.0, 1.0);
-  float skirt = uFx.z * uMix.z * covered * inkFill * pow(toEdge, 2.2) * mix(1.0, turb, 0.6)
-              * (1.0 - SKIRT_FADE * (1.0 - toEdge));
+    /* The skirt fakes vertical by brightening toward the boundary and fading
+       inward. True occlusion (flame in front of the legs, behind the head) is
+       not achievable in Foundry's 2D sort, and this does not pretend otherwise. */
+    float toEdge = clamp(1.0 + sdf / max(SKIRT_RISE, 0.001), 0.0, 1.0);
+    float skirt = uFx.z * uMix.z * covered * inkFill * pow(toEdge, 2.2) * mix(1.0, turb, 0.6)
+                * (1.0 - SKIRT_FADE * (1.0 - toEdge));
 
-  /* A sparse hot-detail layer supplies fidelity without increasing the opacity
-     of the entire area. It follows each archetype's own structure and never
-     darkens a pixel—the multiply shade pass already handles contrast. */
-  float sheen = detail * detail * covered * inkFill * 0.30;
-
-  float ground = clamp(body + skirt * 0.46 + scorch + sheen + topology * 0.18, 0.0, 1.0) * uMix.x;
+    ground = clamp(body + fres * 0.62 + hatch * 0.30 + glow * 0.50 + dots * 0.30 + scan * 0.22 + chev * 0.26
+                 + skirt * 0.30 + scorch + sheen + topology * 0.14, 0.0, 1.0) * uMix.x;
+  }
 
   /* ---- atmosphere ------------------------------------------------------
      The air plane is the SPECTACLE read: soft, volumetric, organic, and
      deliberately NOT tiled. It has to differ from the ground in character and
      not merely in brightness, or the ground-versus-air treatment axis is just
      an opacity slider wearing a hat. */
-  float mote = archMotes(p, t) * covered * inkFill * uFx.x * chMotes * 1.15;
-  mote *= glDetail(MOTE_RISE / MOTE_DENSITY);
+  float air = 0.0, mote = 0.0;
+  if (onAir) {
+    mote = archMotes(p, t) * covered * inkFill * uFx.x * chMotes * 1.15;
+    mote *= glDetail(MOTE_RISE / MOTE_DENSITY);
 
-  /* A soft column standing off the plate: unstructured, drifting upward, with
-     none of the ground plane's grid discipline.
+    /* A soft column standing off the plate: unstructured, drifting upward, with
+       none of the ground plane's grid discipline. Two generations through a
+       warped domain: the warp gives it eddies and folds. */
+    vec2 wq = gluWarp(p * 0.62, vec2(0.0, -t * 0.24), 0.85);
+    float colA = aoeFbm(wq + vec2(0.0, -t * 0.30));
+    float colB = aoeFbm(wq * 2.15 + vec2(t * 0.10, -t * 0.55));
+    float colN = colA * (0.55 + 0.65 * colB);
 
-     Two generations through a warped domain rather than a product of two plain
-     fbms. The warp gives it eddies and folds; the plain product gave it the
-     even lumpiness that is the visual signature of "somebody multiplied two
-     noise fields", which is most of what made the atmosphere read as cheap. */
-  vec2 wq = gluWarp(p * 0.62, vec2(0.0, -t * 0.24), 0.85);
-  float colA = gluFbm(wq + vec2(0.0, -t * 0.30));
-  float colB = gluFbm(wq * 2.15 + vec2(t * 0.10, -t * 0.55));
-  float colN = colA * (0.55 + 0.65 * colB);
+    /* Concentrated toward the boundary rather than spread evenly over the
+       plate: that is what makes the air read as a column standing on the area
+       instead of a second, brighter copy of the ground. */
+    float lift = pow(clamp(1.0 + sdf / 2.2, 0.0, 1.0), 1.7);
+    float haze = covered * inkFill * (0.08 + colN * 0.58) * lift * 0.34;
 
-  /* Concentrated toward the boundary rather than spread evenly over the plate:
-     that is what makes the air read as a column standing on the area instead of
-     a second, brighter copy of the ground. Spread evenly it merely raises the
-     exposure of the whole square, which is how the treatments ended up
-     differing in blow-out speed rather than in character. */
-  float lift = pow(clamp(1.0 + sdf / 2.2, 0.0, 1.0), 1.7);
-  float haze = covered * inkFill * (0.10 + colN * 0.62) * lift * 0.42;
+    /* A wide, dim inner glow pooled well inside the boundary — the volume's
+       core, so the area has a middle instead of being uniform out to the edge. */
+    float pool = covered * inkFill * pow(clamp(-sdf / max(uRadius, 0.5), 0.0, 1.0), 0.7) * 0.22;
 
-  /* A wide, dim inner glow pooled well inside the boundary. It carries almost
-     no detail on purpose — its whole job is to give the volume a core to be
-     brightest at, so the area has a middle instead of being uniform out to a
-     hot edge. */
-  float pool = covered * inkFill * pow(clamp(-sdf / max(uRadius, 0.5), 0.0, 1.0), 0.7) * 0.30;
+    air = (mote * 0.8 + haze + pool) * uMix.y;
+  }
 
-  float air = (mote * 0.8 + haze + pool) * uMix.y;
+  /* ---- boundary: the frame -------------------------------------------- */
+  float boundary = 0.0, core = 0.0;
+  if (onEdge) {
+    /* ONE rule on the rules edge. On a grid that is the staircase; gridless it
+       is the shape. Brighter and a little wider at every convex corner, which
+       is what makes the squares read as bracketed rather than fenced. */
+    float tick = cornerTick(p, cell, step(0.25, state)) * (1.0 - uGridless);
+    /* The rule never drops below half weight whatever the treatment says: the
+       frame is the area's identity now, and an airborne cloud with no edge is
+       a cloud nobody can measure. */
+    float ruleWeight = 0.55 + 0.45 * chRim;
+    core = hairline(sdL, RIM_PX) * inkEdge * ruleWeight;
+    float bracket = hairline(sdL, RIM_PX * 2.4) * tick * inkEdge * ruleWeight;
+    /* The inset rule: finer, dimmer, a fixed distance inside the first. Two
+       parallel rules are the oldest trick in technical drawing and still the
+       cheapest way to say "engineered". */
+    float rule = hairline(sdL + RULE_IN, RULE_PX) * inside * inkEdge * chRim;
+    /* The orbit ring, on the TRUE geometry — the intent the squares were cut
+       from — dashed and turning so it reads as a reticle rather than as a
+       second edge disagreeing with the first. */
+    float orbit = orbitRing(p, sdf, t) * inkEdge * chRim * step(0.01, pace + uGridless);
+    float ring = shock * hairline(sdf + shock * uRadius * 0.9, RIM_PX * 2.2);
 
-  /* ---- boundary -------------------------------------------------------- */
-  /* Both of these ARE the outer edge — one as true geometry, one as the
-     staircase of squares PF2e actually uses — so both trace in behind the edge
-     pen rather than behind the interior's own schedule. */
-  float rimTrue = hairline(sdf, RIM_PX) * inkEdge * chRim;
-  float rimGrid = hairline(dEdge, RIM_PX) * diff * inkEdge * chRim;
-  float ring = shock * hairline(sdf + shock * uRadius * 0.9, RIM_PX * 2.2);
-  /* The nib is NOT multiplied by chRim: a treatment may draw a soft boundary
-     and still be written by a bright pen, and an airborne area whose entrance
-     is invisible has no entrance. */
-  /* The nib is weighted so it reads as a moving front, not as a tube: wide
-     enough to bloom, narrow enough that the ink already laid behind it stays
-     visible. At half this width and twice this weight it hid its own work. */
-  /* edgeNib is NOT scaled by chRim: a treatment may draw a soft boundary and
-     still be written by a bright pen, and an entrance nobody can see is not an
-     entrance. */
-  /* An inner lip: a soft band of light just inside the true edge, falling away
-     over about a third of a square. A hairline rim alone reads as a drawn
-     outline; the lip under it is what makes the boundary read as the lit face
-     of something with thickness. */
-  float lip = pow(clamp(1.0 + sdf / 0.55, 0.0, 1.0), 3.0) * covered * inkEdge * chRim;
-
-  float boundary = rimTrue * 0.80 + rimGrid * 0.60 + ring * 1.4
-                 + nib * 0.85 + edgeNib * 1.15 + lip * 0.42;
-  if (uFunction > 2.5 && uFunction < 3.5) boundary += topology * 0.34;
-  /* Warning's boundary breathes on the exact same clock as its scanner and
-     countdown ring. It never vanishes: the minimum remains a readable rule
-     edge even at the quiet point of the pulse. */
-  if (uArch > 12.5) boundary *= 0.82 + warningBeat(t) * 0.46;
+    boundary = core * 1.00 + bracket * 0.85 + rule * 0.34 + orbit * 0.48 + ring * 1.4
+             + nib * 0.85 + edgeNib * 1.15 + landRing * 0.8;
+    boundary *= 1.0 + flare * 1.0;
+    if (abs(uFunction - 3.0) < 0.5) boundary += topology * 0.34;
+    /* Warning's boundary breathes on the exact same clock as its scanner and
+       countdown ring. It never vanishes: the minimum remains a readable rule
+       edge even at the quiet point of the pulse. */
+    if (uArch > 12.5) boundary *= 0.82 + warningBeat(t) * 0.46;
+  }
 
   /* ---- the shade pass, and nothing else on this plane ------------------- */
-  if (uPlane > 2.5) {
+  if (onShade) {
     vec4 sh = archShade(p, t);
     /* Modulated by the fill so the darkening follows the material rather than
        being a flat disc, and gated by the ink so it draws on with everything
-       else. */
-    float s = sh.a * covered * inkFill * (0.55 + 0.45 * clamp(turb, 0.0, 1.2));
+       else. Deeper toward the edge, where the fresnel needs something dark to
+       stand against. */
+    float edgeDeep = 0.7 + 0.5 * pow(1.0 - clamp(-sdL / FRES_REACH, 0.0, 1.0), 2.0);
+    float s = sh.a * inside * inkFill * (0.74 + 0.26 * clamp(turb, 0.0, 1.2)) * edgeDeep;
     /* Scaled by the treatment's scorch character, but NEVER to zero: an
        airborne treatment marks no floor by design, and that is a look, whereas
        being illegible on a lit map is a bug. It also deliberately ignores the
        uFx.y shed gate for the same reason — this is readability, not
        decoration, and readability is not a quality tier. */
     s *= 0.42 + 0.58 * chScorch;
-    /* This is a contact shadow, not an opaque decal. Its archetype strength is
-       intentionally compressed so bright maps gain contrast without dark maps
-       turning muddy. Umbra remains the strongest because subtraction is its
-       visual identity. */
-    s = clamp(s, 0.0, 1.0) * 0.38 * presence * uAlpha;
+    s = clamp(s, 0.0, 1.0) * 0.36 * presence * uAlpha;
     gl_FragColor = vec4(sh.rgb * s, s);
     return;
   }
 
   /* ---- composite ------------------------------------------------------- */
-  float amount =
-      step(uPlane, 0.5) * (ground + seam)
-    + step(0.5, uPlane) * step(uPlane, 1.5) * air
-    + step(1.5, uPlane) * boundary;
+  float amount = (onGround ? ground + seam : 0.0) + (onAir ? air : 0.0) + (onEdge ? boundary : 0.0);
 
-  /* The trigger beat contributed three times over — here, in the colour mix,
-     and again through bloom — and the three compounded into a white blob. It
-     gets ONE contribution now, and the ring above carries the rest. */
-  amount += shock * covered * 0.16 * step(uPlane, 0.5);
+  /* The trigger beat contributes ONCE here; the ring above carries the rest. */
+  amount += shock * covered * 0.16 * float(onGround);
   /* The nib bleeds a little onto the floor it is writing on, so the stroke has
      contact rather than floating over the plate. */
-  amount += (nib + edgeNib) * 0.20 * step(uPlane, 0.5);
+  amount += (nib + edgeNib) * 0.20 * float(onGround);
   amount *= presence;
 
   /* Alpha and energy are deliberately separate. The interior can remain a
-     translucent veil while its sparse crests and boundary run hot. */
-  float temp = clamp(amount * 0.58 + sheen * 0.78 + shock * 0.18
-                   + step(1.5, uPlane) * 0.28, 0.0, 1.0);
+     translucent veil while its sparse crests and boundary run hot: the rule
+     and the brackets sit at the top of the ramp, the fresnel a step below,
+     and the body stays in the tint. */
+  float temp = clamp(amount * 0.50 + sheen * 0.75 + shock * 0.18
+                   + float(onEdge) * (0.42 + core * 0.45 + flare * 0.3), 0.0, 1.0);
   vec3 col = mix(archRamp(temp), uAccent, topology * 0.34);
 
   /* Each plane has a different optical job: the ground preserves the map, the
-     atmosphere is barely there, and the boundary stays crisp. Three equally
-     opaque passes were the source of the lava-slab failure. */
-  float planeAlpha =
-      step(uPlane, 0.5) * 0.48
-    + step(0.5, uPlane) * step(uPlane, 1.5) * 0.24
-    + step(1.5, uPlane) * 0.86;
+     atmosphere is barely there, and the boundary stays crisp. */
+  float planeAlpha = onGround ? 0.54 : (onAir ? 0.24 : 0.96);
   float a = clamp(amount, 0.0, 1.0) * planeAlpha * uAlpha;
   /* Sub-quantum dither. Every gradient here runs over many pixels, which is
      exactly where 8-bit banding shows, and it costs one hash. */
