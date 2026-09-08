@@ -48,7 +48,7 @@ const read = (p) => readFileSync(join(ROOT, p), "utf8");
 /* ── 1. Pure rule logic ──────────────────────────────────────────────────── */
 
 const rules = await import(join(FEATURE, "rules.mjs"));
-const { chipTriggers, chipAmount, resolveChip, dentsFromDamage, dentThresholds, dentState, hpForDents, dentsRepaired, carefulQualifies, woundPenalties } = rules;
+const { chipTriggers, chipAmount, chipBasis, resolveChip, dentsFromDamage, dentThresholds, dentState, hpForDents, dentsRepaired, carefulQualifies, woundPenalties } = rules;
 
 // Chip fires on the highest no-damage degree and nowhere else.
 if (!chipTriggers("attack-roll", "failure")) fail("chip: a missed Strike must trigger chip damage");
@@ -150,6 +150,26 @@ if (carefulQualifies({ ...elixir, kind: "damage" }, { healingOnly: true })) {
 }
 if (!carefulQualifies(elixir, { healingOnly: true })) fail("careful: healingOnly must still permit healing consumables");
 
+// The card prints the sum under the figure, so the sum has to come from the same
+// place the figure does. A basis that disagrees with the amount is a card that
+// says 6 and applies 5, and nothing anywhere reports it.
+for (const source of [{ spellRank: 3 }, { level: 7 }, { level: 0 }, { level: -4 }, { spellRank: 1, level: 20 }]) {
+  const basis = chipBasis(source);
+  if (basis.amount !== chipAmount(source)) {
+    fail(`chip: the printed basis disagrees with the applied amount for ${JSON.stringify(source)}`);
+  }
+  if (basis.source === "spell" && basis.rank === null) fail("chip: a spell basis must carry the rank it printed");
+  if (basis.source === "level" && basis.level === null) fail("chip: a level basis must carry the level it printed");
+}
+if (!chipBasis({ level: 0 }).clamped) {
+  fail("chip: a clamped figure must say so, or the card prints a sum that is not the number applied");
+}
+if (chipBasis({ level: 6 }).clamped) fail("chip: an unclamped figure must not claim the minimum was applied");
+if (chipBasis({ spellRank: 3 }).source !== "spell") fail("chip: a spell must be attributed to its rank, not its level");
+if (!resolveChip({ kind: "attack-roll", outcome: "failure", level: 4, damageTypes: ["slashing"] }).basis) {
+  fail("chip: an applicable outcome must carry the basis the card prints");
+}
+
 /* ── 4. Lasting Wounds ───────────────────────────────────────────────────── */
 
 const w2 = woundPenalties(2);
@@ -157,6 +177,32 @@ if (w2.medicine !== -2) fail("wounds: the Medicine penalty equals the wounded va
 if (w2.healing !== -4) fail("wounds: the healing penalty is TWICE the wounded value, as a penalty");
 if (woundPenalties(0).healing !== 0) fail("wounds: an unwounded creature takes no penalty");
 if (woundPenalties(3).healing >= 0) fail("wounds: the healing penalty must be negative — a positive value would INCREASE healing");
+
+/* ── 4b. Careful Consumption, at the seams with PF2e ─────────────────────── */
+
+const carefulSrc = readFileSync(join(FEATURE, "careful.mjs"), "utf8");
+
+// There is no Roll#maximumValue in Foundry — the property appears nowhere in
+// core. Reading one yields undefined, the guard in front of it always trips, and
+// the chat-card button silently never appears, which is how this first shipped.
+if (/maximumValue/.test(carefulSrc)) {
+  fail("careful: Roll#maximumValue does not exist in Foundry; the button it gates would never render");
+}
+if (!/evaluateSync\(/.test(carefulSrc)) {
+  fail("careful: the maximum must be produced by evaluating the formula, not read off a property");
+}
+
+// `system.uses.value` is the dose count, not an action cost. Read as one, every
+// multi-dose consumable is disqualified for having doses left in the bottle.
+if (/actionCostOf[\s\S]{0,400}?uses\?\.\s*value/.test(carefulSrc)) {
+  fail("careful: system.uses.value is a dose count and must not be read as an action cost");
+}
+
+// Doses and quantity are different counters; spending quantity first destroys a
+// part-used elixir at the first sip.
+if (!/"system\.uses\.value"/.test(carefulSrc)) {
+  fail("careful: spending a use must decrement system.uses.value, mirroring ConsumablePF2e#consume");
+}
 
 /* ── 5. Prefix routing ───────────────────────────────────────────────────── */
 

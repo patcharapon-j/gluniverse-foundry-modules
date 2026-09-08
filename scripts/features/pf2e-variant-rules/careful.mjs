@@ -19,15 +19,21 @@
  * apply-healing buttons appear on the card because it is a genuine DamageRoll,
  * and no part of the system was patched to get there.
  *
- * The permissive variant — a button on an already-rolled card that rewrites the
- * result upward — is a separate, off-by-default setting. It is strictly better
- * than the rule, because a player only ever presses it after seeing a bad roll,
- * which deletes the "is this potion worth a third action when I don't know what
- * I'd have rolled" decision the activity exists to create.
+ * ── Two entry points ────────────────────────────────────────────────────────
+ *
+ * The item sheet carries the rules-accurate one: you decide before you roll, and
+ * the maximum is what gets posted. The chat card carries the permissive one — a
+ * button on an already-rolled consumable that re-posts it at maximum. That
+ * second reading is strictly better than the rule, because a player only ever
+ * presses it after seeing a bad roll, which deletes the "is this potion worth a
+ * third action when I don't know what I'd have rolled" decision the activity
+ * exists to create. It is on by default anyway, because it is the surface a
+ * player can actually reach mid-turn, and a table that wants the strict reading
+ * turns it off.
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { SETTINGS } from "./constants.mjs";
+import { SETTINGS, FLAGS } from "./constants.mjs";
 import { carefulQualifies } from "./rules.mjs";
 import { carefulOn, get } from "./settings.mjs";
 import { normalizeHtml } from "./pf2e.mjs";
@@ -46,20 +52,33 @@ export function describe(item) {
   };
 }
 
-/** PF2e stores an activation cost under `system.uses`/`system.activation`; both shapes appear. */
+/**
+ * A consumable's activation cost, or null when it declares none.
+ *
+ * PF2e models no action cost on a consumable at all — Activating one is a table
+ * convention, not a field. `system.uses.value` is the *charge count* and must
+ * never be read as one: a four-dose elixir would report a cost of 4 and be
+ * refused by the "1 action or less" gate for having doses left in the bottle.
+ * Null is the honest answer, and `carefulQualifies` treats it as "no action
+ * declared", which is inside the gate.
+ */
 function actionCostOf(item) {
-  const raw =
-    item?.system?.activation?.value ??
-    item?.system?.uses?.value ??
-    item?.system?.actionType?.value ??
-    item?.system?.actions?.value ??
-    null;
+  const raw = item?.system?.activation?.value ?? null;
   if (raw === null || raw === undefined) return null;
   return typeof raw === "number" ? raw : String(raw);
 }
 
 export const qualifies = (item) =>
   carefulQualifies(describe(item), { healingOnly: get(SETTINGS.carefulHealingOnly, false) });
+
+/**
+ * Flag payload for a card this feature posts.
+ *
+ * `FLAGS.careful` is a dotted path. `setFlag`/`getFlag` walk such a path, but a
+ * dot inside a *create* payload stays a literal key — so it is expanded here and
+ * both routes end up reading the same place.
+ */
+const carefulFlag = (value) => ({ [SUITE_ID]: foundry.utils.expandObject({ [FLAGS.careful]: value }) });
 
 /** PF2e's DamageRoll class, which is registered on CONFIG rather than exported. */
 function damageRollClass() {
@@ -101,7 +120,7 @@ export async function consumeCarefully(item, { chirurgeon = false } = {}) {
     await roll.toMessage({
       speaker: ChatMessage.getSpeaker({ actor: item.actor }),
       flavor: flavorFor(item, total, bonus),
-      flags: { [SUITE_ID]: { careful: { maximized: true, chirurgeon, total } } },
+      flags: carefulFlag({ maximized: true, chirurgeon, total }),
     });
 
     await spendOne(item);
@@ -123,13 +142,23 @@ function flavorFor(item, total, bonus) {
 }
 
 /**
- * Spend one charge, mirroring what PF2e's own consume does: decrement quantity
- * and remove the item once none is left.
+ * Spend one use, mirroring `ConsumablePF2e#consume` exactly.
+ *
+ * A consumable has two counters and they are not interchangeable: `uses` are
+ * doses inside one item, `quantity` is how many of the item you carry. Spending
+ * quantity first would delete a four-dose elixir after one sip.
  */
 async function spendOne(item) {
-  const quantity = Number(item?.system?.quantity ?? 0) || 0;
-  if (quantity > 1) return item.update({ "system.quantity": quantity - 1 });
-  return item.delete();
+  const uses = item?.system?.uses ?? {};
+  const value = Number(uses.value ?? 1) || 0;
+  const max = Number(uses.max ?? 1) || 1;
+
+  if (!uses.autoDestroy || value > 1) {
+    return item.update({ "system.uses.value": Math.max(value - 1, 0) });
+  }
+
+  const left = Math.max((Number(item?.system?.quantity ?? 0) || 0) - 1, 0);
+  return left <= 0 ? item.delete() : item.update({ "system.quantity": left, "system.uses.value": max });
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -189,45 +218,77 @@ function onRenderItemSheet(app, html) {
    POST-ROLL VARIANT — off by default; the permissive reading
    ══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * The largest total a roll could have produced.
+ *
+ * Foundry exposes no "largest possible total" property on a Roll — this once
+ * read one that does not exist anywhere in core, so it was always `undefined`,
+ * the guard in front of it always tripped, and the button it gated never
+ * appeared. The figure has to be produced by evaluating a fresh copy of the same
+ * formula with `maximize`, which is what the pre-roll path does too, so the two
+ * routes agree by construction.
+ *
+ * `strict: false` keeps a formula with a non-deterministic term from throwing;
+ * a null return simply means no button.
+ */
+function maximumOf(roll) {
+  try {
+    const formula = roll?._formula ?? roll?.formula ?? null;
+    if (!formula) return null;
+    const copy = new roll.constructor(formula, roll.data ?? {});
+    copy.evaluateSync({ maximize: true, strict: false });
+    return Number.isFinite(copy.total) ? copy.total : null;
+  } catch (error) {
+    warn("pf2e-variant-rules | could not maximize a consumable roll", error);
+    return null;
+  }
+}
+
+/** Has this card already been maximized? Flagged so a re-render never re-offers. */
+const alreadyMaximized = (message) => !!message?.getFlag?.(SUITE_ID, FLAGS.careful)?.maximized;
+
 function onRenderChat(message, html) {
   const root = normalizeHtml(html);
   const content = root?.querySelector?.(".message-content");
   if (!content) return;
 
   content.querySelectorAll(`.${CLASS}-post`).forEach((node) => node.remove());
-  if (!carefulOn() || !get(SETTINGS.carefulPostRoll, false)) return;
-  if (message?.getFlag?.(SUITE_ID, "vr.careful")) return;
+  if (!carefulOn() || !get(SETTINGS.carefulPostRoll, true)) return;
+  if (alreadyMaximized(message)) return;
   if (!message?.isAuthor && !game.user.isGM) return;
 
   const roll = (message?.rolls ?? [])[0];
-  if (!roll || typeof roll.maximumValue !== "number") return;
-  if (roll.total >= roll.maximumValue) return;
+  if (!roll) return;
 
   const item = message?.item ?? null;
   if (!item || item.type !== "consumable") return;
 
+  const max = maximumOf(roll);
+  if (max === null || roll.total >= max) return;
+
   content.insertAdjacentHTML(
     "beforeend",
     `<div class="${CLASS}-post">
-      <button type="button" class="gl-btn ${CLASS}-max">${escapeHtml(
-        game.i18n.format("GLVR.careful.maximize", { total: String(roll.maximumValue) })
+      <button type="button" class="gl-btn gl-btn-accent ${CLASS}-max">${escapeHtml(
+        game.i18n.format("GLVR.careful.maximize", { total: String(max) })
       )}</button>
     </div>`
   );
 
   content.querySelector(`.${CLASS}-max`)?.addEventListener("click", async () => {
     try {
-      await ChatMessage.create({
+      // Post a genuine maximized DamageRoll rather than a sentence about one, so
+      // PF2e's own apply-damage and apply-healing buttons land on the new card.
+      const formula = roll._formula ?? roll.formula;
+      const maxed = new roll.constructor(formula, roll.data ?? {});
+      await maxed.evaluate({ maximize: true });
+      await maxed.toMessage({
         speaker: message.speaker,
-        content: `<div class="${CLASS}-flavor">${escapeHtml(
-          game.i18n.format("GLVR.careful.maximized", {
-            name: item.name,
-            from: String(roll.total),
-            to: String(roll.maximumValue),
-          })
-        )}</div>`,
-        flags: { [SUITE_ID]: { "vr.careful": { maximized: true } } },
+        flavor: flavorFor(item, maxed.total, null),
+        flags: carefulFlag({ maximized: true, from: roll.total }),
       });
+      // Flagging the original is what retires its button on every client.
+      await message.setFlag(SUITE_ID, FLAGS.careful, { maximized: true, to: maxed.total });
     } catch (error) {
       warn("pf2e-variant-rules | could not post the maximized result", error);
     }

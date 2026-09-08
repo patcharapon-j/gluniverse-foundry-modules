@@ -57,8 +57,9 @@ export function offerFor(message) {
 
   // A Strike's chip damage is the *attacker's* level; a spell's is twice its
   // rank, and rank is unaffected by anything a variant world does to levels.
-  let level = effectLevel(attacker);
-  if (get(SETTINGS.chipUseFlattened, false)) level -= flattenReduction(attacker);
+  const trueLevel = effectLevel(attacker);
+  const reduction = get(SETTINGS.chipUseFlattened, false) ? flattenReduction(attacker) : 0;
+  const level = trueLevel - reduction;
 
   const result = resolveChip({
     kind,
@@ -74,10 +75,42 @@ export function offerFor(message) {
 
   return {
     ...result,
+    trueLevel,
+    reduction,
     defenderUuid: defender?.uuid ?? null,
     defenderName: defender?.name ?? null,
     itemName: item?.name ?? null,
   };
+}
+
+/**
+ * The one small line under the figure: where the number came from.
+ *
+ * Built from the basis `resolveChip` returned rather than recomputed here, so
+ * the sum on screen and the damage the button applies cannot drift apart.
+ */
+function calcLine(offer) {
+  const { basis, reduction } = offer;
+  if (!basis) return "";
+
+  let text;
+  if (basis.source === "spell") {
+    text = game.i18n.format("GLVR.chip.calcSpell", { rank: String(basis.rank) });
+  } else if (reduction > 0) {
+    text = game.i18n.format("GLVR.chip.calcFlattened", {
+      level: String(offer.trueLevel),
+      reduction: String(reduction),
+    });
+  } else {
+    text = game.i18n.format("GLVR.chip.calcLevel", { level: String(basis.level) });
+  }
+
+  // A level-0 effect in a flattened world would chip for nothing; the clamp is
+  // the reason the figure disagrees with the sum, so it has to be said.
+  if (basis.clamped) {
+    text = game.i18n.format("GLVR.chip.calcMinimum", { basis: text, min: String(basis.amount) });
+  }
+  return text;
 }
 
 /** Has this offer already been taken? Stored on the message so it survives reload. */
@@ -91,13 +124,28 @@ async function markApplied(message, chosen, amount) {
   }
 }
 
-function render(offer) {
-  const { amount, types, chosen, negated, defenderName, itemName } = offer;
-  const target = defenderName ? escapeHtml(defenderName) : game.i18n.localize("GLVR.chip.theTarget");
+/** " · " — the card's only separator, so the strip reads as one line. */
+const DOT = " · ";
 
-  const head = negated
-    ? game.i18n.format("GLVR.chip.negated", { target, type: localizeType(chosen) })
-    : game.i18n.format("GLVR.chip.body", { target, amount: String(amount) });
+const iconButton = (cls, icon, labelKey) => {
+  const label = escapeHtml(game.i18n.localize(labelKey));
+  return `<button type="button" class="gl-btn ${cls}" title="${label}" aria-label="${label}"><i class="${icon}"></i></button>`;
+};
+
+/**
+ * The offer, as one strip.
+ *
+ * This card lands under a roll everybody at the table has just read, so it does
+ * not restate the rule: the figure, one line saying where the figure came from,
+ * and the two things the GM can do about it.
+ */
+function render(offer) {
+  const { amount, types, chosen, negated, defenderName } = offer;
+  const targetRaw = defenderName ?? game.i18n.localize("GLVR.chip.theTarget");
+
+  const meta = negated
+    ? escapeHtml(game.i18n.format("GLVR.chip.negated", { target: targetRaw, type: localizeType(chosen) }))
+    : `${escapeHtml(localizeType(chosen))}${DOT}${escapeHtml(targetRaw)}`;
 
   const picker =
     types.length > 1
@@ -106,44 +154,28 @@ function render(offer) {
             (t) =>
               `<button type="button" class="${CLASS}-type" data-type="${escapeHtml(t)}" aria-pressed="${
                 t === chosen ? "true" : "false"
-              }">${escapeHtml(localizeType(t))}${
-                t === chosen && negated
-                  ? `<span class="${CLASS}-why">${escapeHtml(game.i18n.localize("GLVR.chip.resists"))}</span>`
-                  : ""
-              }</button>`
+              }">${escapeHtml(localizeType(t))}</button>`
           )
           .join("")}</div>`
       : "";
 
-  const hero = negated
-    ? ""
-    : `<div class="${CLASS}-hero"><span class="${CLASS}-num">${amount}</span><span class="${CLASS}-unit">${escapeHtml(
-        game.i18n.localize("GLVR.chip.unit")
-      )}</span>${
-        itemName ? `<span class="${CLASS}-src">${escapeHtml(itemName)}</span>` : ""
-      }</div>`;
-
   const actions = negated
-    ? `<button type="button" class="gl-btn ${CLASS}-dismiss">${escapeHtml(
-        game.i18n.localize("GLVR.chip.dismiss")
-      )}</button>`
+    ? iconButton(`${CLASS}-dismiss`, "fa-solid fa-xmark", "GLVR.chip.dismiss")
     : `<button type="button" class="gl-btn gl-btn-accent ${CLASS}-apply">${escapeHtml(
         game.i18n.localize("GLVR.chip.apply")
-      )}</button>
-       <button type="button" class="gl-btn ${CLASS}-dismiss">${escapeHtml(
-         game.i18n.localize("GLVR.chip.skip")
-       )}</button>`;
+      )}</button>${iconButton(`${CLASS}-dismiss`, "fa-solid fa-xmark", "GLVR.chip.skip")}`;
 
-  return `<section class="${CLASS}">
-    <header class="${CLASS}-head">
-      <span class="${CLASS}-title">${escapeHtml(game.i18n.localize("GLVR.chip.title"))}</span>
-    </header>
-    <div class="${CLASS}-body">
-      <p class="${CLASS}-line">${head}</p>
-      ${hero}
-      ${picker}
-      <div class="${CLASS}-acts">${actions}</div>
+  return `<section class="${CLASS}${negated ? " is-negated" : ""}">
+    <div class="${CLASS}-row">
+      <span class="${CLASS}-tag">${escapeHtml(game.i18n.localize("GLVR.chip.title"))}</span>
+      <span class="${CLASS}-num">${negated ? 0 : amount}</span>
+      <span class="${CLASS}-meta">
+        <span class="${CLASS}-what" title="${meta}">${meta}</span>
+        <span class="${CLASS}-calc">${escapeHtml(calcLine(offer))}</span>
+      </span>
+      <span class="${CLASS}-acts">${actions}</span>
     </div>
+    ${picker}
   </section>`;
 }
 
@@ -152,7 +184,10 @@ function renderResolved(flag) {
     ? game.i18n.format("GLVR.chip.applied", { amount: String(flag.amount), type: localizeType(flag.chosen) })
     : game.i18n.localize("GLVR.chip.appliedNone");
   return `<section class="${CLASS} is-resolved">
-    <div class="${CLASS}-body"><p class="${CLASS}-line">${escapeHtml(text)}</p></div>
+    <div class="${CLASS}-row">
+      <span class="${CLASS}-tag">${escapeHtml(game.i18n.localize("GLVR.chip.title"))}</span>
+      <span class="${CLASS}-what">${escapeHtml(text)}</span>
+    </div>
   </section>`;
 }
 
@@ -168,6 +203,20 @@ function wire(root, message, offer) {
       negated = resistedTypesOf(defender).includes(chosen);
       for (const other of root.querySelectorAll(`.${CLASS}-type`)) {
         other.setAttribute("aria-pressed", other === button ? "true" : "false");
+      }
+      // The strip is the whole card now, so re-deciding the type has to move the
+      // figure and the line with it, not just grey a button out.
+      const card = root.querySelector(`.${CLASS}`);
+      card?.classList.toggle("is-negated", negated);
+      const num = root.querySelector(`.${CLASS}-num`);
+      if (num) num.textContent = String(negated ? 0 : offer.amount);
+      const what = root.querySelector(`.${CLASS}-what`);
+      if (what) {
+        const targetRaw = offer.defenderName ?? game.i18n.localize("GLVR.chip.theTarget");
+        what.textContent = negated
+          ? game.i18n.format("GLVR.chip.negated", { target: targetRaw, type: localizeType(chosen) })
+          : `${localizeType(chosen)}${DOT}${targetRaw}`;
+        what.title = what.textContent;
       }
       const apply = root.querySelector(`.${CLASS}-apply`);
       if (apply) apply.disabled = negated;

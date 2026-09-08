@@ -29,7 +29,6 @@
   font-family: var(--gl-display);
 }
 
-.glvr-chip-head,
 .glvr-dent-head,
 .glvr-careful-head {
   display: flex;
@@ -39,7 +38,6 @@
   border-bottom: 1px solid var(--gl-hair);
 }
 
-.glvr-chip-title,
 .glvr-dent-title,
 .glvr-careful-title {
   color: var(--gl-accent);
@@ -60,14 +58,11 @@
   text-transform: uppercase;
 }
 
-.glvr-chip-body,
 .glvr-careful-panel,
 .glvr-dent-panel {
   padding: var(--gl-sp-6);
 }
-.glvr-chip-body { padding: var(--gl-sp-6); }
 
-.glvr-chip-line,
 .glvr-dent-line,
 .glvr-careful-line {
   margin: 0;
@@ -76,7 +71,6 @@
   line-height: var(--gl-lh-normal);
 }
 
-.glvr-chip-acts,
 .glvr-careful-acts,
 .glvr-dent-fixes {
   display: flex;
@@ -84,48 +78,109 @@
   gap: var(--gl-sp-4);
   margin-top: var(--gl-sp-5);
 }
-.glvr-chip-acts > .gl-btn { flex: 1 1 auto; }
 
 /* ── Chip Damage ────────────────────────────────────────────────────────── */
-.glvr-chip { --gl-accent: var(--gl-hazard); }
-
-.glvr-chip-hero {
-  display: flex;
-  align-items: baseline;
-  gap: var(--gl-sp-4);
-  margin: var(--gl-sp-5) 0 0;
-  padding: var(--gl-sp-5) var(--gl-sp-6);
-  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
-  background: color-mix(in srgb, var(--gl-accent) 9%, var(--gl-ink-2));
-  border: 1px solid color-mix(in srgb, var(--gl-accent) 30%, transparent);
+/* One strip: tag, figure, provenance, controls. The card sits under a roll the
+   table has just read, so it carries no explanation of its own. */
+.glvr-chip {
+  --gl-accent: var(--gl-hazard);
+  padding: var(--gl-sp-4) var(--gl-sp-5);
 }
-.glvr-chip-num {
+
+.glvr-chip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+}
+
+.glvr-chip-tag {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-right: var(--gl-sp-4);
+  border-right: 1px solid var(--gl-hair);
   color: var(--gl-accent);
   font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xl);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  writing-mode: horizontal-tb;
+}
+
+/* The figure is pressed into the plate rather than sitting on a panel of its
+   own: one inset well is the whole of the card’s depth. */
+.glvr-chip-num {
+  flex: none;
+  min-width: 1.8em;
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 32%, transparent);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xl);
   font-weight: var(--gl-weight-bold);
   font-variant-numeric: tabular-nums;
   line-height: var(--gl-lh-tight);
+  text-align: center;
 }
-.glvr-chip-unit {
+
+.glvr-chip-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+.glvr-chip-what {
+  overflow: hidden;
   color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.glvr-chip-src {
-  margin-left: auto;
+/* The sum, kept deliberately quieter than the figure it explains. */
+.glvr-chip-calc {
+  overflow: hidden;
   color: var(--gl-text-faint);
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-3xs);
   letter-spacing: var(--gl-track-normal);
-  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.glvr-chip-types { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3); margin-top: var(--gl-sp-5); }
+.glvr-chip-acts {
+  display: flex;
+  flex: none;
+  gap: var(--gl-sp-3);
+  margin: 0;
+}
+.glvr-chip-acts > .gl-btn { flex: none; }
+.glvr-chip-dismiss { padding-inline: var(--gl-sp-4); }
+
+/* Negated: the figure reads as a nullity rather than as damage nobody applied. */
+.glvr-chip.is-negated .glvr-chip-num {
+  background: var(--gl-surface-inset);
+  border-color: var(--gl-hair);
+  color: var(--gl-text-faint);
+  text-decoration: line-through;
+}
+
+.glvr-chip-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-3);
+  margin-top: var(--gl-sp-4);
+  padding-top: var(--gl-sp-4);
+  border-top: 1px solid var(--gl-hair);
+}
 .glvr-chip-type {
-  padding: var(--gl-sp-2) var(--gl-sp-5);
+  padding: var(--gl-sp-1) var(--gl-sp-4);
   clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
   background: var(--gl-surface-inset);
   border: 1px solid var(--gl-hair);
@@ -149,17 +204,9 @@
   border-color: color-mix(in srgb, var(--gl-good) 55%, transparent);
   color: var(--gl-good);
 }
-.glvr-chip-why {
-  display: block;
-  margin-top: var(--gl-sp-1);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-normal);
-  opacity: 0.78;
-  text-transform: none;
-}
 
 .glvr-chip.is-resolved { opacity: 0.72; }
-.glvr-chip.is-resolved .glvr-chip-line { color: var(--gl-text-faint); font-style: italic; }
+.glvr-chip.is-resolved .glvr-chip-what { color: var(--gl-text-faint); font-style: italic; }
 
 /* ── Careful Consumption ────────────────────────────────────────────────── */
 .glvr-careful-panel { --gl-accent: var(--gl-good); }

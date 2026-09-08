@@ -64,12 +64,13 @@ export function registerSettings() {
   // ── Careful Consumption ─────────────────────────────────────────────────
   game.settings.register(SUITE_ID, SETTINGS.carefulHealingOnly, bool(SETTINGS.carefulHealingOnly, false));
 
-  // The permissive variant: a button on an already-rolled card that rewrites the
-  // result to maximum. It is strictly better than the rule — a player only ever
+  // The permissive variant: a button on an already-rolled card that re-posts the
+  // result at maximum. It is strictly better than the rule — a player only ever
   // presses it on a bad roll, which deletes the "is this worth a third action
   // when I don't know what I'd have rolled" decision the rule exists to create.
-  // Off by default, and labelled as the permissive reading.
-  game.settings.register(SUITE_ID, SETTINGS.carefulPostRoll, bool(SETTINGS.carefulPostRoll, false));
+  // On regardless, because the chat card is the only surface a player reaches
+  // mid-turn; the label says plainly that it is the permissive reading.
+  game.settings.register(SUITE_ID, SETTINGS.carefulPostRoll, bool(SETTINGS.carefulPostRoll, true));
 
   // ── Chip Damage ─────────────────────────────────────────────────────────
   game.settings.register(SUITE_ID, SETTINGS.chipAutoApply, bool(SETTINGS.chipAutoApply, false));

@@ -84,6 +84,8 @@ export const FLAGS = Object.freeze({
   dents: "vr.dents",
   /** Chip-damage offer state on a chat message, so a re-render regenerates it. */
   chip: "vr.chip",
+  /** Careful Consumption: set on a card once its result has been maximized. */
+  careful: "vr.careful",
 });
 
 /**

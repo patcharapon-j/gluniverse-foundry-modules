@@ -37,19 +37,39 @@ export function chipTriggers(kind, outcome) {
 }
 
 /**
- * How much chip damage an effect deals.
+ * How much chip damage an effect deals, and *why* it came to that.
  *
  * "damage equal to the level of the effect that produced it or twice its rank if
  * the effect was a spell". Clamped at CHIP_MINIMUM: a level-0 or negative-level
  * effect would otherwise chip for nothing, which reads at the table as a broken
  * button rather than as a rules edge case.
  *
+ * The card prints the derivation under the figure, so the shape of the sum is
+ * returned rather than only its result. Keeping it here — instead of
+ * reconstructing it beside the markup — is what stops the printed sum and the
+ * applied number from ever disagreeing.
+ *
  * @param {{ spellRank?: number|null, level?: number|null }} source
- * @returns {number}
+ * @returns {{source: "spell"|"level", rank: number|null, level: number|null,
+ *            raw: number, amount: number, clamped: boolean}}
  */
-export function chipAmount({ spellRank = null, level = null } = {}) {
-  const raw = Number.isInteger(spellRank) && spellRank > 0 ? spellRank * 2 : Number(level) || 0;
-  return Math.max(CHIP_MINIMUM, Math.trunc(raw));
+export function chipBasis({ spellRank = null, level = null } = {}) {
+  const isSpell = Number.isInteger(spellRank) && spellRank > 0;
+  const raw = Math.trunc(isSpell ? spellRank * 2 : Number(level) || 0);
+  const amount = Math.max(CHIP_MINIMUM, raw);
+  return {
+    source: isSpell ? "spell" : "level",
+    rank: isSpell ? spellRank : null,
+    level: isSpell ? null : Math.trunc(Number(level) || 0),
+    raw,
+    amount,
+    clamped: amount !== raw,
+  };
+}
+
+/** The figure alone. */
+export function chipAmount(source) {
+  return chipBasis(source).amount;
 }
 
 /**
@@ -70,7 +90,7 @@ export function chipAmount({ spellRank = null, level = null } = {}) {
  * @param {string[]} [input.resistedTypes] types the defender resists
  * @param {boolean} [input.persistentOnly] the effect deals only persistent damage
  * @returns {{applies: boolean, amount: number, types: string[], chosen: string|null,
- *            negated: boolean, reason: string}}
+ *            negated: boolean, reason: string, basis: object|null}}
  */
 export function resolveChip({
   kind,
@@ -81,7 +101,15 @@ export function resolveChip({
   resistedTypes = [],
   persistentOnly = false,
 } = {}) {
-  const none = (reason) => ({ applies: false, amount: 0, types: [], chosen: null, negated: false, reason });
+  const none = (reason) => ({
+    applies: false,
+    amount: 0,
+    types: [],
+    chosen: null,
+    negated: false,
+    reason,
+    basis: null,
+  });
 
   if (!chipTriggers(kind, outcome)) return none("outcome");
   // Persistent damage does not chip. `bleed` is persistent whether or not the
@@ -89,21 +117,22 @@ export function resolveChip({
   if (persistentOnly) return none("persistent");
 
   const types = damageTypes.filter(Boolean);
-  const amount = chipAmount({ spellRank, level });
+  const basis = chipBasis({ spellRank, level });
 
   // A resisted type negates the whole thing, so it is always the right choice.
   const resisted = types.find((t) => resistedTypes.includes(t)) ?? null;
   if (resisted) {
-    return { applies: true, amount: 0, types, chosen: resisted, negated: true, reason: "resisted" };
+    return { applies: true, amount: 0, types, chosen: resisted, negated: true, reason: "resisted", basis };
   }
 
   return {
     applies: true,
-    amount,
+    amount: basis.amount,
     types,
     chosen: types[0] ?? "untyped",
     negated: false,
     reason: "chip",
+    basis,
   };
 }
 

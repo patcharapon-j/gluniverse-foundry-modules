@@ -617,6 +617,20 @@ key of `system.customModifiers` into `synthetics.modifiers` with no allow-list,
 so that works without an effect item or a rule element. `addCustomModifier`
 refuses a duplicate *label*, so changing the value means remove-then-add.
 
+**Two seams with PF2e that this feature got wrong on the way in.** There is no
+"largest possible total" property on a Foundry `Roll` — the one the chat-card
+button originally read exists nowhere in core, so it was always `undefined`, the
+guard in front of it always tripped, and the button never rendered on any card
+while every other part of the feature looked correct. The maximum is produced by
+`evaluateSync({ maximize: true })` on a fresh copy of the same formula now, which
+is the same operation the pre-roll path performs, so the two routes agree by
+construction. And a consumable carries **no action cost at all** in PF2e:
+`system.uses.value` is the dose count, and reading it as one disqualified every
+multi-dose elixir for the crime of having doses left. Doses and `quantity` are
+also different counters, so spending a use decrements `system.uses.value` exactly
+as `ConsumablePF2e#consume` does; spending quantity first destroys a part-used
+elixir at the first sip. The check pins all four.
+
 A fifth rule from the same book section, **Belts**, deliberately ships no code —
 a PF2e container with `system.stowing = false` already holds four items at full
 Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
