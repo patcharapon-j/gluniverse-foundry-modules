@@ -255,8 +255,7 @@ Dice So Nice is a **soft** dependency: without it there is no tumbling die, and
 the banner, the burst and the severity card all still work.
 
 Three DSN *systems*, one per rolling level, each carrying a `du` preset with that
-level's face layout — the same trick `pf2e-damage-dice` uses to get several
-appearances out of one die type.
+level's face layout — one die type wearing several appearances.
 
 ## Colour, and the one place it is stated twice
 

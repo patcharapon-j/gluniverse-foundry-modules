@@ -67,7 +67,7 @@ Foundry only lets a package register settings/flags/sockets under *its own* id.
 So every former per-module namespace collapses onto `SUITE_ID`, and isolation is
 achieved by **key-prefixing** (settings + flags) and **payload-tagging**
 (sockets). Per-feature prefixes: `ct.`, `init.`, `ff.`, `dd.`, `stage.`, `lg.`,
-`cargo.`, etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
+etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
 
 ## Conventions (read before editing)
 
@@ -75,8 +75,8 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
   adapter must NOT register Hooks or open UI at import time; only inside
   `onInit`/`onReady` so disabled features stay inert.
 - **Localization** — all UI strings go through `game.i18n.localize/format`. Keep
-  each module's existing key namespace (`GLCT.*`, `GLS.*`, `GLLG.*`, `GLUCARGO.*`,
-  `GLSBI.*`, `GLUNI.*`, etc.) — they don't collide. **Watch dynamic keys**: code
+  each module's existing key namespace (`GLCT.*`, `GLS.*`, `GLLG.*`, `GLSBI.*`,
+  `GLUNI.*`, etc.) — they don't collide. **Watch dynamic keys**: code
   that builds a key at runtime (e.g. `` `GLCT.weather.arch.${a}` ``) breaks
   silently when a value's key is missing. When you add to an enum/archetype set,
   add the matching lang keys. Do NOT localize stored data values or
@@ -198,39 +198,6 @@ and that it changes nothing at sizes with room for the detail. Needs Playwright;
 skips cleanly with exit 0 without it. `--sheet=/tmp/ult.png` writes a
 before/after/truth contact sheet — the only way to see what any of it looks
 like short of a session.
-
-**When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
-texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
-hand-drawn. Re-bake it after any change to a recipe or to the damage-type table,
-and confirm the set is complete:
-
-```bash
-node tools/gen-damage-textures.mjs && node tools/gen-damage-textures.mjs --check
-```
-
-The tool fails if `damage-types.mjs` declares a glow a type's baked emission map
-does not have (or vice versa). To review a recipe change without launching
-Foundry, render a contact sheet — a tiling seam or a blown-out glow is obvious
-there and invisible in a diff:
-
-```bash
-node tools/gen-damage-textures.mjs --sheet=/tmp/damage-dice.png
-```
-
-**When touching Locations** (`features/locations/`, `styles/locations.css`),
-re-run its consistency check. Everything it covers fails *silently* — a duration
-that disagrees between the CSS token and the `ms` mirror, a `url(#…)` naming a
-filter that does not exist, an `animation:` with no `@keyframes`, a style with no
-i18n key, a `feComposite` that blacks out the plate:
-
-```bash
-node tools/locations-check.mjs
-```
-
-Zero problems required. It cannot check how any of it *looks* — for that,
-`--sheet=/tmp/locations.html` writes a page with every style frozen
-mid-transition; open it. See `docs/LOCATIONS.md` for the one-phase curtain model
-and the v13/v14 background split.
 
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.
@@ -377,57 +344,6 @@ a page that compiles the real shader in a real WebGL2 context and drives it with
 the real animation model. **Serve it** (`node tools/preview-server.mjs`) — a
 `file://` page does not execute its module script. See
 `docs/RESOURCE_BARS.md` for the pipeline, the unit convention and the
-permission contract.
-
-**When touching the token condition rail** (`features/token-conditions/`), re-run
-its consistency check. Everything it covers fails *silently*: a shader that will
-not compile degrades to nothing rather than erroring; a uniform declared and
-never written holds its initial value forever; the plate's geometry is described
-by the GLSL, by `constants.mjs` and by the host, so a counter drifts half off
-its own tab the moment two of them disagree; a hairline sized in geometry units
-instead of device pixels vanishes for every player without a HiDPI monitor; an
-animated behaviour missing from `SHED_ORDER` never degrades under load; a
-redacted effect whose name is populated before the redaction is checked leaks it
-the moment somebody draws one more thing; dropping any of PF2e's own three gates
-(`isExpired`, `system.tokenIcon.show`, `isIdentified`) takes a control away from
-every GM who already knows where it is; a missing `updateWorldTime` hook freezes
-every duration gauge where it stood; a `null` life collapsed into `0` draws a
-full countdown bar under every effect that has no duration at all; and the
-resting layout — a block of plates packed inside the token's own square — can be
-retuned into either of its two failures without a diff showing it, since a plate
-a third larger silently takes a Medium token from twelve slots to four, and a
-raised column ceiling tiles the creature's artwork instead of sitting beside it,
-neither of which appears until the sixth round of somebody else's fight:
-
-```bash
-node tools/token-conditions-check.mjs
-```
-
-Zero problems required. Note that the plate deliberately reuses the resource
-bar's material and its `uTime * 1.35` breath clock — a dying creature's bar and
-its DYING plate are one alarm, not two — and that gold appears in exactly one
-place here, a sustained effect's duration gauge.
-
-The layout has **two arrangements**, and `layout()` computes both in full and
-interpolates position *and* size between them. They are different shapes, not one
-shape at two scales: easing the resting layout into the expanded one instead
-would send every plate past the first column to the wrong place. The resting one
-stays inside the token's square on purpose — a column that outgrows its token
-grows over the creatures standing next to it — while the hover one is free to
-overlap, because it exists only while the cursor is on the token. `capacityFor`
-floors the GM's plate cap at what the square can actually hold; without it the
-setting is a number that means "and then draw the rest on somebody else". The
-two axes are spaced by different constants on purpose (`gap` down a column,
-the tighter `colGap` across them, and the same split for the group seam) —
-every pixel between two columns is a pixel further the block reaches over the
-artwork. The unfold is a fixed-duration tween off `TIMING.unfold`, not a
-per-frame smoothing: a smoothing never arrives, and its invisible tail is most
-of what makes a hover feel slow.
-
-To see it, `node tools/token-conditions-preview.mjs --out=.preview/conditions.html`
-writes a page that compiles **both** shipped shaders in one WebGL2 context and
-puts them through one bright-pass. **Serve it** (`node tools/preview-server.mjs`).
-See `docs/TOKEN_CONDITIONS.md` for the tone system, the two data models and the
 permission contract.
 
 **When touching Arcane Surge** (`features/pf2e-arcane-surge/`,

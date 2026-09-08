@@ -76,7 +76,7 @@ there is no module scope. If a feature needs its own value, give it its own name
 :root { --gl-cut: 14px; }
 
 /* right */
-:root { --glucargo-cut: 14px; }
+:root { --glo-cut: 14px; }
 ```
 
 The one sanctioned exception is remapping the accent channel on a **scoped**
@@ -243,11 +243,12 @@ level, which beats an inherited `font-family`. Any feature root that sets a font
 must also carry `.gl-type` (or replicate its reset), or those controls silently
 render in Foundry's Signika.
 
-There is one face with no token: **Google Sans Code**, the numerals engraved on
-3D dice by `pf2e-damage-dice`. It is declared in `gl-fonts.css` like the others,
-but nothing in CSS consumes it — Dice So Nice reads it by family *name* into a
-`<canvas>`, so a custom property would never reach it. Two consequences worth
-knowing before touching it:
+There is one face with no token: **Google Sans Code**, bundled for numerals
+engraved on 3D dice. It is declared in `gl-fonts.css` like the others, but
+nothing in CSS consumes it — Dice So Nice reads such a face by family *name*
+into a `<canvas>`, so a custom property would never reach it. The feature that
+used it has been removed; the face stays declared for any future canvas
+consumer. Two consequences worth knowing before touching it:
 
 - Its `@font-face` pins `font-weight: 700` on the sole face of the family. The
   canvas shorthand DSN builds (`"<size>pt <family>"`) carries no weight, so this
@@ -359,7 +360,7 @@ mask's geometry. Anything scripted over the stylesheets has to skip declarations
 whose property matches `mask`.
 
 
-**The game system may also use a `--gl-*` prefix.** `styles/mobile.css` reads
+**The game system may also use a `--gl-*` prefix.** A feature sheet may read
 `--gl-parch`, `--gl-blood`, `--gl-serif` and friends *from the game system's*
 stylesheet to match its chat cards. Those are not ours. They are always read
 with a literal fallback (`var(--gl-parch, #f6f1e6)`) so they degrade safely — but
