@@ -62,8 +62,25 @@ const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;backgro
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { getNormalMap } from "/scripts/features/stage/postfx/normal-map.mjs";
-import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS, RIM_SHADER_STRENGTHS }
+import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS, RIM_SHADER_STRENGTHS,
+         KIT_DEFAULTS, HALATION_DEFAULT, MATCH_DEFAULTS, gradeParams }
   from "/scripts/features/stage/postfx/index.mjs";
+import { matchGrade, tallyPixels, NEUTRAL_STATS } from "/scripts/features/stage/postfx/tally.mjs";
+
+// The grade and light-kit half of the draw params, at the values a world gets
+// with the match inert. Every existing assertion below is written against the
+// picture the model produced before the grade existed, so the baseline they all
+// stand on has to be the identity — and it has to come from the real matchGrade
+// rather than from five literals, or it stops being the identity the moment one
+// of them moves.
+const GRADE_INERT = {
+  ...gradeParams(matchGrade(NEUTRAL_STATS, NEUTRAL_STATS, MATCH_DEFAULTS)),
+  skin: 0.75,
+  halation: KIT_DEFAULTS.halation,
+  glowRadius: KIT_DEFAULTS.glowRadius,
+  glowSense: KIT_DEFAULTS.glowSense,
+  halationColor: HALATION_DEFAULT,
+};
 
 // ── A synthetic character ──
 // Not art, but it carries the three things the shader reads: an alpha
@@ -168,6 +185,10 @@ window.run = async () => {
       // The GM dial's default, so this is the picture a world actually gets.
       shadowColor: [0.06, 0.08, 0.14], intensity: 0.6,
       ...SHADER_STRENGTHS,
+      ...GRADE_INERT,
+      // Production feeds these per slot: the wrap carries the background
+      // directly behind the character, and the backlight is the key from behind.
+      wrapColor: room.ambient, backColor: room.key,
       exposure: Math.pow(1 - room.darkness * 0.65, 2.2),
       night: room.darkness * room.darkness * 0.55, shadow: 0, lift: 0,
     };
@@ -226,7 +247,8 @@ window.run = async () => {
   // ── Assertions ──
   const BASE = {
     ambient: [0.12, 0.11, 0.14], bounce: [0.1, 0.12, 0.18], key: [1.0, 0.95, 0.88],
-    shadowColor: [0.06, 0.08, 0.14], ...SHADER_STRENGTHS,
+    shadowColor: [0.06, 0.08, 0.14], ...SHADER_STRENGTHS, ...GRADE_INERT,
+    wrapColor: [0.12, 0.11, 0.14], backColor: [1.0, 0.95, 0.88],
     exposure: 0.5, night: 0, shadow: 0, lift: 0,
   };
   const shoot = (centroid, intensity, target = prepared, style = SHADER_STRENGTHS) => {
@@ -547,9 +569,95 @@ window.run = async () => {
   const cleanEdge = edgePeak(fromLeft, "left");
   const rindEdge = edgePeak(shoot([0.02, 0.5], 0.6, rindPrepared).data, "left");
 
+  // ── The skin guard ──
+  // Its own two-patch swatch rather than the figure above, for two reasons: the
+  // figure has no skin tone in it (its face is a pale off-white, which is
+  // deliberate — it is there to be a tonal step for the contour term), and
+  // giving it one would move every whole-figure mean the assertions above are
+  // written against. So this is a flat card: a mid skin tone beside a grey of
+  // matched luminance, graded hard toward blue.
+  //
+  // Matched luminance is the point. The claim is not "skin changes less", which
+  // a darker patch would satisfy for free; it is that skin resists the *hue*
+  // while taking the level. Two patches at the same luma isolate exactly that.
+  const skinCard = (() => {
+    const c = document.createElement("canvas");
+    c.width = 128; c.height = 64;
+    const g = c.getContext("2d");
+    g.fillStyle = "#c68642"; g.fillRect(0, 0, 64, 64);   // mid skin
+    g.fillStyle = "#8d8d8d"; g.fillRect(64, 0, 64, 64);  // grey, ~same luma
+    return c.toDataURL("image/png");
+  })();
+  const skinNormal = await getNormalMap(skinCard);
+  const skinPrepared = skinNormal ? await gl.prepare(skinCard, skinNormal) : null;
+  if (!skinPrepared) return { error: "prepare() returned null for the skin card" };
+
+  // A deliberately violent blue cast — far past anything a real room asks for,
+  // so the difference between guarded and unguarded is unmistakable rather than
+  // a fraction of an 8-bit step.
+  const BLUE = { mCast: [0.75, 0.95, 1.35], mGain: 1, mPivot: 0.5, mBright: 1, mSat: 1 };
+  const flatLight = {
+    ...BASE, ...SHADER_STRENGTHS, ...GRADE_INERT, ...BLUE,
+    wrapColor: [0.12, 0.11, 0.14], backColor: [1.0, 0.95, 0.88],
+    ...lightPlacement([0.5, 0.5], 0.5, skinNormal.figure,
+                      skinNormal.width / skinNormal.height, 16 / 9),
+    intensity: 1,
+  };
+  const shotSkin = (skin) => {
+    const out = gl.draw(skinPrepared, { ...flatLight, skin });
+    const c = document.createElement("canvas");
+    c.width = out.width; c.height = out.height;
+    c.getContext("2d").drawImage(out, 0, 0);
+    return c.getContext("2d").getImageData(0, 0, out.width, out.height).data;
+  };
+  // Sampled well inside each patch: the edge terms all fire at the boundary and
+  // at the card's own outline, and none of them are what is being measured.
+  const patchHue = (px, w, h, x0, x1) => {
+    let r = 0, g2 = 0, b = 0, n = 0;
+    for (let y = (h * 0.3) | 0; y < h * 0.7; y++) {
+      for (let x = (w * x0) | 0; x < w * x1; x++) {
+        const p = (y * w + x) * 4;
+        if (px[p + 3] < 250) continue;
+        r += px[p]; g2 += px[p + 1]; b += px[p + 2]; n++;
+      }
+    }
+    if (!n) return null;
+    // Blue minus red, over the total — a scalar that moves with a blue cast and
+    // is invariant to how bright the patch is.
+    const sum = Math.max(r + g2 + b, 1);
+    return { bias: (b - r) / sum, luma: (0.2126 * r + 0.7152 * g2 + 0.0722 * b) / n / 255, n };
+  };
+  const W2 = skinPrepared.art.width, H2 = skinPrepared.art.height;
+  // Three shots, not two. A skin tone is red-dominant to begin with, so its
+  // absolute blue bias is negative whatever the cast does — the quantity that
+  // means anything is how far each patch *moved*, which needs the same render
+  // with the cast at identity to measure against. Comparing the two patches'
+  // absolute bias instead would score the swatch's own paint.
+  const uncast = gl.draw(skinPrepared, { ...flatLight, ...GRADE_INERT, skin: 0 });
+  const grab = (out) => {
+    const c = document.createElement("canvas");
+    c.width = out.width; c.height = out.height;
+    c.getContext("2d").drawImage(out, 0, 0);
+    return c.getContext("2d").getImageData(0, 0, out.width, out.height).data;
+  };
+  const basePx = grab(uncast);
+  const guarded = shotSkin(0.75);
+  const unguarded = shotSkin(0);
+  const shift = (px, x0, x1, ref) => {
+    const a = patchHue(px, W2, H2, x0, x1);
+    return a ? { ...a, shift: a.bias - ref.bias } : null;
+  };
+  const skinBase = patchHue(basePx, W2, H2, 0.08, 0.36);
+  const greyBase = patchHue(basePx, W2, H2, 0.64, 0.92);
+  const skinGuarded = shift(guarded, 0.08, 0.36, skinBase);
+  const greyGuarded = shift(guarded, 0.64, 0.92, greyBase);
+  const skinOff = shift(unguarded, 0.08, 0.36, skinBase);
+  const greyOff = shift(unguarded, 0.64, 0.92, greyBase);
+
   return {
     png: strip.toDataURL("image/png"),
     spillPixels, spillPeak, insidePixels, cleanEdge, rindEdge, ...rim, ...banding,
+    skin: { skinGuarded, greyGuarded, skinOff, greyOff },
   };
 };
 </script></body>`;
@@ -571,7 +679,21 @@ server.on("request", async (req, res) => {
 // happens to live (local install, or the global root) rather than pinning one.
 const { createRequire } = await import("node:module");
 const require_ = createRequire(import.meta.url);
-const GLOBAL_ROOTS = ["/opt/node22/lib/node_modules", "/usr/lib/node_modules", "/usr/local/lib/node_modules"];
+const { dirname: _dirname, join: _join } = await import("node:path");
+// Hard-coded POSIX prefixes only found it on Linux, which meant this tool
+// printed SKIP and exited 0 on the Windows box most of this repo is written on —
+// a check that proves nothing while reporting success, which is worse than one
+// that fails. The node-relative and %APPDATA% entries are where npm actually
+// puts a global install on Windows and under nvm.
+const _nodeDir = _dirname(process.execPath);
+const GLOBAL_ROOTS = [
+  "/opt/node22/lib/node_modules",
+  "/usr/lib/node_modules",
+  "/usr/local/lib/node_modules",
+  _join(_nodeDir, "node_modules"),
+  _join(_nodeDir, "..", "lib", "node_modules"),
+  ...(process.env.APPDATA ? [_join(process.env.APPDATA, "npm", "node_modules")] : []),
+].filter(Boolean);
 let playwrightPath;
 try {
   playwrightPath = require_.resolve("playwright", { paths: [ROOT, ...GLOBAL_ROOTS] });
@@ -582,7 +704,10 @@ try {
   process.exit(0);
 }
 // CommonJS package — the named export lands on `default` through the ESM shim.
-const pw = await import(playwrightPath);
+// Via a file:// URL: a bare absolute path is a valid specifier on POSIX and is
+// read as the scheme "c:" on Windows, where it throws.
+const { pathToFileURL: _toFileURL } = await import("node:url");
+const pw = await import(_toFileURL(playwrightPath).href);
 const chromium = pw.chromium ?? pw.default?.chromium;
 const browser = await chromium.launch({
   args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu-sandbox"],
@@ -746,6 +871,58 @@ ok(
   "rim-only: …and at the same exposure — the key becomes a level, not nothing",
   `mean ${f(result.rimMean)} vs ${f(result.realisticMean)} semi-realistic`
 );
+
+// ── The skin guard ──
+// The one property that stops the reference match ruining every face on the
+// stage, and the only place it can be measured is a real GL context — it lives
+// entirely inside the fragment shader. `postfx-check` can prove the guard is
+// *wired* to the chromatic terms and not to the achromatic ones; only this can
+// prove it does anything.
+const skin = result.skin ?? {};
+ok(
+  skin.skinOff && skin.greyOff && skin.skinGuarded && skin.greyGuarded,
+  "the skin card renders",
+  skin.skinOff ? `${skin.skinOff.n} px per patch` : "missing"
+);
+if (skin.skinOff && skin.greyGuarded) {
+  // With the guard off, a violent blue cast has to move both patches. If it
+  // does not, the rest of this proves nothing — the cast would be inert and
+  // every comparison below would pass on a shader that did nothing at all.
+  ok(
+    skin.skinOff.shift > 0.015 && skin.greyOff.shift > 0.015,
+    "unguarded, the blue cast reaches both patches",
+    `skin +${f(skin.skinOff.shift)}, grey +${f(skin.greyOff.shift)}`
+  );
+  const skinShift = skin.skinGuarded.shift;
+  const greyShift = skin.greyGuarded.shift;
+  ok(
+    skinShift < skin.skinOff.shift * 0.6,
+    "guarded, skin resists most of the cast it otherwise takes",
+    `+${f(skinShift)} vs +${f(skin.skinOff.shift)} with the guard off`
+  );
+  ok(
+    skinShift < greyShift * 0.7,
+    "…and shifts far less than the grey standing beside it",
+    `skin +${f(skinShift)} vs grey +${f(greyShift)}`
+  );
+  // The other half of the claim, and the half that is easy to lose: skin is
+  // supposed to take level and contrast in full. A guard that also held back
+  // brightness would leave every face floating at its original exposure in a
+  // dark room — lit from nowhere, and far more obviously wrong than a blue one.
+  ok(
+    Math.abs(skin.skinGuarded.luma - skin.skinOff.luma) < 0.03,
+    "…while its brightness is untouched by the guard, as it must be",
+    `luma ${f(skin.skinGuarded.luma)} vs ${f(skin.skinOff.luma)}`
+  );
+  // And the guard must not leak onto things that merely sit near skin in
+  // chroma. If grey moves, the ellipse is too generous and the match is being
+  // held back everywhere — which reads as the feature simply not working.
+  ok(
+    Math.abs(greyShift - skin.greyOff.shift) < 0.01,
+    "…and does not spill onto the neutral patch next to it",
+    `grey +${f(greyShift)} guarded vs +${f(skin.greyOff.shift)} unguarded`
+  );
+}
 
 console.log(`\nwrote ${OUT}`);
 process.exit(failed ? 1 : 0);

@@ -134,6 +134,7 @@ const {
 } = await import(mod("index.mjs"));
 const { StageGL } = await import(mod("gl.mjs"));
 const { analyse, columnAt, NEUTRAL_SAMPLE } = await import(mod("scene-sample.mjs"));
+const { tallyPixels, matchGrade, luma, NEUTRAL_STATS } = await import(mod("tally.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
   mod("asset.mjs")
 );
@@ -808,6 +809,390 @@ section("slot ownership (one shared render target, N slots)");
     !wrapA.classList.contains("glstage-pp-on"),
     "…and unhides the plain <img> until the new render lands"
   );
+
+  fx.destroy();
+}
+
+
+// ═══ 8. The reference match ═══
+//
+// Everything here fails silently. A grade that is subtly wrong looks exactly
+// like art that was subtly wrong to begin with, and the GM's only signal is a
+// vague sense that the feature "isn't very good" — so none of it can be left to
+// a screenshot.
+section("measurement and the reference match");
+{
+  /** Build an RGBA buffer from a per-pixel function. */
+  const buf = (n, fn) => {
+    const d = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      const [r, g, b, a] = fn(i);
+      d[i * 4] = r * 255;
+      d[i * 4 + 1] = g * 255;
+      d[i * 4 + 2] = b * 255;
+      d[i * 4 + 3] = a === undefined ? 255 : a * 255;
+    }
+    return d;
+  };
+
+  // ── tallyPixels ──
+  const flat = tallyPixels(buf(400, () => [0.5, 0.5, 0.5, 1]));
+  ok(flat.ok, "a flat field measures");
+  ok(near(flat.luma, 0.5, 0.02), "…at the level it was painted", flat.luma.toFixed(3));
+  ok(flat.sat < 0.02, "…with no chroma in it", flat.sat.toFixed(3));
+  ok(
+    near(luma(flat.black), luma(flat.white), 0.03),
+    "…and no tonal range, because a flat field has none"
+  );
+
+  const ramp = tallyPixels(buf(400, (i) => { const v = i / 399; return [v, v, v, 1]; }));
+  ok(
+    luma(ramp.black) < luma(ramp.mid) && luma(ramp.mid) < luma(ramp.white),
+    "a ramp measures black < mid < white",
+    [luma(ramp.black), luma(ramp.mid), luma(ramp.white)].map((v) => v.toFixed(2)).join(" < ")
+  );
+
+  // The percentiles are the whole reason this is a histogram and not a min/max.
+  // One specular ping, one anti-aliased corner of a signature, and a min/max
+  // white point is 1.0 for the entire figure — after which the contrast match is
+  // reading a single pixel and swinging the whole cast with it.
+  const speck = tallyPixels(buf(1000, (i) => (i < 4 ? [1, 1, 1, 1] : [0.2, 0.2, 0.2, 1])));
+  ok(
+    luma(speck.white) < 0.4,
+    "four blown pixels in a thousand do not become the white point",
+    luma(speck.white).toFixed(3)
+  );
+
+  // The antialiased fringe of a cut-out carries whatever the art was lifted off,
+  // which is very often black. Measuring it would put the subject's black point
+  // on the *background* it came from and then correct the character for it.
+  const fringed = tallyPixels(buf(400, (i) => (i < 200 ? [0.6, 0.5, 0.4, 1] : [0, 0, 0, 0])));
+  ok(
+    near(luma(fringed.mean), luma([0.6, 0.5, 0.4]), 0.03),
+    "transparent pixels are not measured, whatever colour they carry"
+  );
+  ok(!tallyPixels(buf(16, () => [1, 1, 1, 0])).ok, "a fully transparent buffer measures nothing");
+
+  // ── The match is inert until asked ──
+  const subject = tallyPixels(
+    buf(400, (i) => { const v = i / 399; return [v * 0.9, v * 0.7, v * 0.5, 1]; })
+  );
+  const scene = tallyPixels(
+    buf(400, (i) => { const v = 0.15 + (i / 399) * 0.5; return [v * 0.5, v * 0.7, v, 1]; })
+  );
+
+  const id = (m) =>
+    near(m.gain, 1, 1e-9) && near(m.bright, 1, 1e-9) && near(m.sat, 1, 1e-9) &&
+    m.cast.every((c) => near(c, 1, 1e-9));
+
+  ok(
+    id(matchGrade(subject, scene, { cast: 0, sat: 0, bright: 0, tone: 0 })),
+    "every dial at zero is the exact identity",
+    "…so a world that never opts in gets the picture it had"
+  );
+  ok(
+    id(matchGrade(NEUTRAL_STATS, scene, { cast: 1, sat: 1, bright: 1, tone: 1 })),
+    "unmeasurable art makes the match inert, not wrong"
+  );
+  ok(
+    id(matchGrade(subject, NEUTRAL_STATS, { cast: 1, sat: 1, bright: 1, tone: 1 })),
+    "…and so does an unmeasurable room",
+    "a degraded scene falls back to the ambient tint it always had"
+  );
+
+  // ── Separability ──
+  // The four dials are the design. A GM who dislikes the result has to be able
+  // to find *which part* they dislike, and that is only true if moving one dial
+  // moves one property. Fold two together — which a single per-channel affine
+  // does for free, and which is the obvious simplification here — and both dials
+  // become two ways of asking the same question, so neither one answers it.
+  const only = (key) => matchGrade(subject, scene, { cast: 0, sat: 0, bright: 0, tone: 0, [key]: 1 });
+
+  const mb = only("bright");
+  ok(
+    !near(mb.bright, 1, 1e-6) && near(mb.gain, 1, 1e-9) && near(mb.sat, 1, 1e-9) &&
+      mb.cast.every((c) => near(c, 1, 1e-9)),
+    "brightness moves the level and nothing else",
+    mb.bright.toFixed(3)
+  );
+
+  const mt = only("tone");
+  ok(
+    !near(mt.gain, 1, 1e-6) && near(mt.bright, 1, 1e-9) && near(mt.sat, 1, 1e-9) &&
+      mt.cast.every((c) => near(c, 1, 1e-9)),
+    "tonal range moves the contrast and nothing else",
+    mt.gain.toFixed(3)
+  );
+
+  const mc = only("cast");
+  ok(
+    !mc.cast.every((v) => near(v, 1, 1e-6)) && near(mc.gain, 1, 1e-9) &&
+      near(mc.bright, 1, 1e-9) && near(mc.sat, 1, 1e-9),
+    "light colour moves the hue and nothing else",
+    mc.cast.map((v) => v.toFixed(3)).join(", ")
+  );
+  // The load-bearing half of that claim. The cast is a per-channel multiplier,
+  // and a per-channel multiplier re-exposes the picture unless its own luma is
+  // exactly 1 — at which point brightness and cast would both move the level,
+  // and a GM chasing an over-bright figure would have two sliders that each
+  // half-work and no way to tell which one is at fault.
+  ok(
+    near(luma(mc.cast), 1, 1e-4),
+    "…because the cast is luma-normalised, so it re-tints without re-exposing",
+    luma(mc.cast).toFixed(6)
+  );
+
+  const ms = only("sat");
+  ok(
+    !near(ms.sat, 1, 1e-6) && near(ms.gain, 1, 1e-9) && near(ms.bright, 1, 1e-9) &&
+      ms.cast.every((v) => near(v, 1, 1e-9)),
+    "saturation moves the chroma and nothing else",
+    ms.sat.toFixed(3)
+  );
+
+  // Contrast pivots about the subject's own mean, which is what keeps it from
+  // moving the level as a side effect. A pivot of 0 would make gain a brightness
+  // dial wearing a contrast dial's name.
+  ok(
+    near(mt.pivot, subject.luma, 1e-6),
+    "contrast pivots on the subject's own mean, so it cannot also move it",
+    mt.pivot.toFixed(4)
+  );
+
+  // ── The clamps ──
+  // The measurement can legitimately ask for an enormous correction, and obeying
+  // it does not put the character in the room — it destroys the character.
+  const black = tallyPixels(buf(400, () => [0.02, 0.02, 0.02, 1]));
+  const snow = tallyPixels(buf(400, () => [0.97, 0.97, 0.97, 1]));
+  const extreme = matchGrade(black, snow, { cast: 1, sat: 1, bright: 1, tone: 1 });
+  ok(
+    extreme.bright <= 1.7 + 1e-6 && extreme.bright > 1,
+    "a near-black figure against snow is clamped, not obeyed",
+    extreme.bright.toFixed(3)
+  );
+  ok(
+    extreme.cast.every((v) => v > 0.5 && v < 2),
+    "…and so is every channel of the cast",
+    extreme.cast.map((v) => v.toFixed(3)).join(", ")
+  );
+  ok(
+    Number.isFinite(extreme.gain) && Number.isFinite(extreme.sat),
+    "…with nothing coming back NaN from a zero-span subject"
+  );
+}
+
+// ═══ 9. The new shader terms, by shape ═══
+//
+// Three properties stated in the shader's own comments as the reason each term
+// works, and that a diff would show as one word added or removed.
+section("grade and light-kit shader shape");
+{
+  const src = await (await import("node:fs/promises")).readFile(
+    new URL("scripts/features/stage/postfx/gl.mjs", ROOT),
+    "utf8"
+  );
+
+  // Skin resists the *chromatic* half of the match and takes the achromatic half
+  // in full. That asymmetry is the entire feature: a face in a blue room has to
+  // get darker without going blue. Let `keep` reach the level or contrast lines
+  // and skin stops being dimmed by the scene at all — every face in the cast
+  // then floats at its original exposure, lit from nowhere, in a dark room.
+  const gradeBody = src.slice(src.indexOf("vec3 gradeMatch("), src.indexOf("nearAlpha"));
+  const achromatic = gradeBody.split(";").filter((l) => /u_mGain|u_mBright|u_mPivot/.test(l));
+  ok(achromatic.length >= 2, "the achromatic half of the grade reaches gradeMatch()");
+  ok(
+    achromatic.every((l) => !/\bkeep\b/.test(l)),
+    "…and the skin guard cannot reach it — skin dims with the room",
+    achromatic.find((l) => /\bkeep\b/.test(l))?.trim() ?? "level and contrast are ungated"
+  );
+  const chromatic = gradeBody.split(";").filter((l) => /u_mCast|u_mSat/.test(l));
+  ok(
+    chromatic.length >= 2 && chromatic.every((l) => /\bkeep\b/.test(l)),
+    "…while both chromatic terms are gated by it"
+  );
+
+  // The wrap is the room, not a lamp. Every other edge term here rides `facing`
+  // so it sweeps only the part of the outline turned toward the key; the wrap
+  // arrives from the whole background at once. Gate it and the room becomes a
+  // second key light — which is the exact reading it exists to break, and which
+  // would still look perfectly plausible on screen.
+  const wrapLine = (src.split(";").find((l) => /lit \+= toLinear\(u_wrapColor\)/.test(l)) ?? "")
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  ok(!!wrapLine, "the light wrap reaches main()");
+  ok(
+    !!wrapLine && !/\bfacing\b/.test(wrapLine),
+    "…and takes no facing term — it is the whole room, not one lamp",
+    wrapLine
+  );
+
+  // The backlight reads the *unrescaled* field. That single difference is what
+  // separates it from the rim: `edge` is normalised against the inside half of
+  // its ramp so it can resolve a line, and transmission must not be, or it turns
+  // into a third rim on an edge that already has two.
+  ok(
+    /lit \+= toLinear\(u_backColor\)/.test(src),
+    "the backlight reaches main()"
+  );
+  // Comments stripped before the test: these statements are preceded by prose
+  // explaining what they must *not* do, and matching on that prose would mean
+  // the check passes or fails on how the comment happens to be worded.
+  const code = (statement) =>
+    (statement ?? "").replace(/\/\/[^\n]*/g, "").replace(/\s+/g, " ").trim();
+  const backShape = code(src.split(";").find((l) => /float backShape/.test(l)));
+  ok(!!backShape, "…and is shaped by its own statement");
+  ok(
+    /1\.0 - thick/.test(backShape) && !/\bedge\b/.test(backShape),
+    "…off the unrescaled field, so it stays a wash and not a third rim",
+    backShape
+  );
+}
+
+// ═══ 10. Every uniform is actually written ═══
+//
+// Section 5 proves each uniform has a *location*. That is only half of it: a
+// location that is never written holds whatever the driver initialised it to,
+// for the life of the context. There is no error, no warning, and no way to see
+// it except as a term that does nothing — or, worse, one that does something
+// constant on every character on the stage.
+section("uniform writes");
+{
+  const src = await (await import("node:fs/promises")).readFile(
+    new URL("scripts/features/stage/postfx/gl.mjs", ROOT),
+    "utf8"
+  );
+  const block = src.slice(
+    src.indexOf("this.uniforms = {"),
+    src.indexOf("gl.uniform1i(this.uniforms.art")
+  );
+  const keys = [...block.matchAll(/^\s{6}(\w+):/gm)].map((m) => m[1]);
+  ok(keys.length > 25, "the uniform table parses", `${keys.length} uniforms`);
+
+  // `_dropTextures()` is *called* long before it is declared, so the end anchor
+  // has to be searched for from the start of draw() rather than from the top of
+  // the file — otherwise the slice runs backwards and comes back empty, and an
+  // empty body makes every uniform look unwritten at once.
+  const drawStart = src.indexOf("  draw(prepared, params) {");
+  ok(drawStart > 0, "draw() is locatable");
+  const drawBody = src.slice(drawStart, src.indexOf("  _dropTextures() {", drawStart));
+  const written = new Set([...drawBody.matchAll(/gl\.uniform\w+\(u\.(\w+)/g)].map((m) => m[1]));
+  // The two samplers are bound once at setup rather than per draw, which is
+  // correct — their texture units never change.
+  const bound = new Set(["art", "nrm"]);
+  const missing = keys.filter((key) => !written.has(key) && !bound.has(key));
+  ok(
+    missing.length === 0,
+    "every uniform is written on every draw",
+    missing.length ? `never written: ${missing.join(", ")}` : "no stale uniforms"
+  );
+
+  // …and every one of those writes has to find a value on the params object, for
+  // the same reason in reverse: gl.uniform1f(loc, undefined) sets NaN, and a NaN
+  // multiplied into a colour turns the fragment black rather than erroring.
+  // Two legitimate sources: the caller's params, and `prepared`, which carries
+  // the values that belong to the uploaded art rather than to the grade.
+  const unsourced = [...drawBody.matchAll(/gl\.uniform\w+\(u\.(\w+),([^;]*)\)/g)]
+    .filter(([, , args]) => !/\b(?:params|prepared)\./.test(args))
+    .map(([, key]) => key);
+  ok(
+    unsourced.length === 0,
+    "…each from params or prepared, never off the end of the object",
+    unsourced.join(", ") || "every write reads a real field"
+  );
+
+  // And every params.* the draw reads has to be something a caller actually
+  // sends. The style tables are spread in wholesale, so a term added to the
+  // shader and to draw() but forgotten in all three tables arrives as undefined
+  // — which is NaN in the uniform, and a black fragment rather than an error.
+  const styleKeys = new Set(Object.keys(shaderStrengths("realistic")));
+  const fromParams = new Set([...drawBody.matchAll(/params\.(\w+)/g)].map((m) => m[1]));
+  const strengthLike = [...fromParams].filter((key) => styleKeys.has(key));
+  ok(
+    strengthLike.length >= 8,
+    "the style tables supply the strengths draw() reads",
+    `${strengthLike.length} of ${fromParams.size} params come from the style table`
+  );
+}
+
+// ═══ 11. The settings → setConfig contract ═══
+//
+// `StageOverlay` reads thirteen settings and hands them over as a nested object.
+// Every one of those keys is matched by name, so a typo on either side is a dial
+// that silently does nothing — the GM moves it, the render re-runs, and the
+// picture does not change. There is no error to see and no obvious place to look.
+section("settings → setConfig");
+{
+  const fx = new StagePostFX();
+
+  // The exact shape StageOverlay.updatePostFXConfig sends.
+  fx.setConfig({
+    match: { cast: 0.1, sat: 0.2, bright: 0.3, tone: 0.4 },
+    skin: 0.5,
+    kit: {
+      wrap: 1.5, backlight: 0.5, halation: 0.25,
+      glowRadius: 1.75, glowSense: 0.4,
+      backColor: "#112233", fillColor: "", halationColor: "#ff6b38",
+    },
+  });
+
+  ok(
+    fx._match.cast === 0.1 && fx._match.sat === 0.2 &&
+      fx._match.bright === 0.3 && fx._match.tone === 0.4,
+    "all four match dials arrive",
+    JSON.stringify(fx._match)
+  );
+  ok(fx._skin === 0.5, "the skin guard arrives", String(fx._skin));
+  ok(
+    fx._kit.wrap === 1.5 && fx._kit.backlight === 0.5 && fx._kit.halation === 0.25 &&
+      fx._kit.glowRadius === 1.75 && fx._kit.glowSense === 0.4,
+    "every light-kit dial arrives",
+    JSON.stringify(fx._kit, (k, v) => (Array.isArray(v) ? v.join("/") : v))
+  );
+  ok(
+    Array.isArray(fx._kit.backColor) && Math.abs(fx._kit.backColor[0] - 0x11 / 255) < 1e-6,
+    "a hex colour override parses",
+    String(fx._kit.backColor)
+  );
+  ok(
+    fx._kit.fillColor === null,
+    "…and a blank one stays null, meaning 'derive it from the room'"
+  );
+
+  // A partial update must move only what it names. The settings sheet fires one
+  // onChange per setting, and the live intensity preview sends `intensity`
+  // alone — if either reset a sibling to a default, dragging the strength slider
+  // would quietly throw away the GM's whole grade.
+  fx.setConfig({ intensity: 0.4 });
+  ok(
+    fx._match.cast === 0.1 && fx._skin === 0.5 && fx._kit.wrap === 1.5,
+    "a partial update leaves every dial it does not name alone",
+    "…so the live intensity preview cannot reset the grade"
+  );
+  fx.setConfig({ match: { cast: 0.9 } });
+  ok(
+    fx._match.cast === 0.9 && fx._match.sat === 0.2 && fx._match.tone === 0.4,
+    "…and a partial match update moves one dial, not four"
+  );
+
+  // Garbage must not become NaN: every one of these values is multiplied into a
+  // colour, and a NaN uniform turns the whole fragment black rather than erroring.
+  fx.setConfig({
+    match: { cast: NaN, sat: "x", bright: undefined, tone: -5 },
+    skin: "nope",
+    kit: { wrap: -3, glowRadius: 0, glowSense: 99, halation: NaN, backColor: "not a colour" },
+  });
+  const finite = [
+    ...Object.values(fx._match), fx._skin,
+    fx._kit.wrap, fx._kit.backlight, fx._kit.halation, fx._kit.glowRadius, fx._kit.glowSense,
+  ];
+  ok(finite.every(Number.isFinite), "nonsense input never becomes NaN", JSON.stringify(finite));
+  ok(
+    fx._kit.glowRadius >= 0.25,
+    "…and the glow radius is floored above zero, since the shader divides by it",
+    String(fx._kit.glowRadius)
+  );
+  ok(fx._kit.backColor === null, "…and an unparseable colour falls back to derived");
 
   fx.destroy();
 }

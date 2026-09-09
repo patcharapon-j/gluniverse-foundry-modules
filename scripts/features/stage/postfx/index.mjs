@@ -12,8 +12,9 @@
  *   off    — disabled, opted out, or nothing samplable; renders exactly as before
  */
 
-import { clamp01 } from "../../../core/util.mjs";
+import { clamp01, hex6 } from "../../../core/util.mjs";
 import { scaledMs } from "../../../core/theme.mjs";
+import { matchGrade, NEUTRAL_STATS } from "./tally.mjs";
 import { sampleScene, columnAt, NEUTRAL_SAMPLE, invalidateSceneSamples } from "./scene-sample.mjs";
 import { getNormalMap, invalidateNormalMap } from "./normal-map.mjs";
 import { assetReason } from "./asset.mjs";
@@ -77,6 +78,18 @@ export const SHADER_STRENGTHS = Object.freeze({
   contour: 0.4,
   spec: 0.33,
   sheen: 0.12,
+  /** The room's own colour arriving inward over the edge. Small, and it has to
+   *  be: this is a wash the eye should never locate as a light. Past roughly
+   *  0.6 it stops reading as the background touching the figure and starts
+   *  reading as a coloured rim, which is a different effect that this model
+   *  already has two better terms for. */
+  wrap: 0.35,
+  /** Transmission through thin regions. Lands almost entirely in hair and
+   *  fabric hems, because those are the only places the field is thin. */
+  backlight: 0.3,
+  /** How far the shadow side travels toward the bounce hue. Was a literal in
+   *  the shader; the value is unchanged, so this term starts where it was. */
+  fill: 0.7,
   /** Style blend. 0 is this model exactly; see the cel set below. */
   cel: 0,
   /** Ditto: 0 lets the key shade the body, which is what this model is. */
@@ -111,6 +124,15 @@ export const CEL_SHADER_STRENGTHS = Object.freeze({
   /** Up in absolute terms, down against the area it now covers — this is the
    *  hard band across hair, which cel art always has and realism rarely does. */
   sheen: 0.2,
+  /** Down, and for the usual reason: banded, this is a flat band of the room's
+   *  colour rather than a falloff, so the same number delivers far more of it.
+   *  Cel art also wants less of this in principle — a drawn style states its
+   *  edges, and a wash creeping over one argues with the line that is there. */
+  wrap: 0.24,
+  /** Down: transmission is a soft phenomenon and cel does not draw soft ones.
+   *  What survives is the band of light through hair, which the style does. */
+  backlight: 0.2,
+  fill: 0.7,
   cel: 1,
   rimOnly: 0,
 });
@@ -147,9 +169,95 @@ export const RIM_SHADER_STRENGTHS = Object.freeze({
   contour: 0,
   spec: 0,
   sheen: 0,
+  /** Up, and this is the one term this mode gains most from. Art that is
+   *  already lit still has to *belong* to the room, and the wrap is the only
+   *  thing left that says so without shading anything — it is the room's colour
+   *  landing on the figure, not the lamp's light modelling it. Everything else
+   *  this mode switches off, it switches off for putting a gradient on the
+   *  body; the wrap puts one on the edge, which is where this mode lives. */
+  wrap: 0.5,
+  /** Up: transmission happens at the outline and through thin art, so it
+   *  survives the mode's one rule intact. */
+  backlight: 0.38,
+  fill: 0.7,
   cel: 0,
   rimOnly: 1,
 });
+
+/**
+ * Halation's colour when the GM has not chosen one.
+ *
+ * Red-orange, and not adjustable by accident: halation is light that entered the
+ * emulsion or the sensor stack, scattered, and came back out around a highlight.
+ * Long wavelengths scatter furthest and are absorbed least, so the residue is
+ * always warm. A blue halation is not a stylistic variant of this, it is a
+ * different effect wearing its name — which is exactly why the colour is a
+ * setting rather than derived from the room like the others.
+ */
+export const HALATION_DEFAULT = Object.freeze([1, 0.42, 0.22]);
+
+/**
+ * The reference-match weights, as shipped.
+ *
+ * Cast leads because it is the component that answers the question people
+ * actually ask of this feature — "why does this character look pasted on" is
+ * nearly always a colour-temperature complaint. Brightness and tone are lower
+ * because they move the art's own drawing: a portrait's contrast is a decision
+ * the artist made, and overriding it wholesale is how a grade starts destroying
+ * the thing it is meant to seat.
+ */
+export const MATCH_DEFAULTS = Object.freeze({ cast: 0.7, sat: 0.6, bright: 0.5, tone: 0.5 });
+
+/**
+ * The light kit's dials as shipped, before a GM touches them.
+ *
+ * Exported for the same reason the strength tables are: the contact sheet has to
+ * render the picture a world actually gets, and a second copy of these numbers
+ * living in the harness is a second chance for it to be reassuring about a build
+ * nobody is running.
+ *
+ * The first two are multipliers over the chosen style's own balance; the rest
+ * are absolute, because no style carries a value for them to multiply.
+ */
+export const KIT_DEFAULTS = Object.freeze({
+  wrap: 1,
+  backlight: 1,
+  halation: 0,
+  glowRadius: 1,
+  glowSense: 0,
+});
+
+/**
+ * Rename a `matchGrade` result onto the uniform names the shader takes.
+ *
+ * One function rather than five inline properties at each call site, because the
+ * mapping is arbitrary — `cast` becomes `mCast`, `gain` becomes `mGain` — and an
+ * arbitrary mapping written twice is one that will eventually be written two
+ * different ways. Getting a pair the wrong way round does not throw: it feeds the
+ * contrast correction into the brightness uniform and grades every character on
+ * every stage slightly wrongly, permanently, with nothing to see but a result
+ * that is a bit off.
+ */
+export function gradeParams(match) {
+  return {
+    mCast: match.cast,
+    mGain: match.gain,
+    mPivot: match.pivot,
+    mBright: match.bright,
+    mSat: match.sat,
+  };
+}
+
+/** Parse a `#rrggbb` setting into a 0..1 triplet, or null for "derive it". */
+export function parseOverride(value) {
+  const hex = hex6(String(value ?? ""), null);
+  if (!hex) return null;
+  return [
+    parseInt(hex.slice(1, 3), 16) / 255,
+    parseInt(hex.slice(3, 5), 16) / 255,
+    parseInt(hex.slice(5, 7), 16) / 255,
+  ];
+}
 
 /** The strength set for a style id, falling back to the semi-realistic one. */
 export function shaderStrengths(style) {
@@ -392,6 +500,17 @@ export class StagePostFX {
     this._intensity = 0.6;
     this._quality = "auto";
     this._style = "realistic";
+    this._match = { ...MATCH_DEFAULTS };
+    this._skin = 0.75;
+    // Multipliers over the style table, plus the two dials and three colours
+    // that have no sensible style-level default. `null` colour means "derive it
+    // from the room", which is what every one of them does until told otherwise.
+    this._kit = {
+      ...KIT_DEFAULTS,
+      backColor: null,
+      fillColor: null,
+      halationColor: null,
+    };
     this._destroyed = false;
   }
 
@@ -406,6 +525,31 @@ export class StagePostFX {
     // world that has never seen this setting gets.
     if ("style" in config) {
       this._style = Object.hasOwn(STYLE_CLASS, config.style) ? config.style : "realistic";
+    }
+    // The four match weights, each independent — a partial object moves only the
+    // dials it names, so a caller that knows about three of them cannot silently
+    // reset the fourth to a default it has never heard of.
+    if (config.match) {
+      for (const k of ["cast", "sat", "bright", "tone"]) {
+        if (k in config.match) this._match[k] = clamp01(Number(config.match[k]) || 0);
+      }
+    }
+    if ("skin" in config) this._skin = clamp01(Number(config.skin) || 0);
+    if (config.kit) {
+      const kit = config.kit;
+      for (const k of ["wrap", "backlight"]) {
+        // Multipliers over the style table, so 1 is "whatever this style says".
+        if (k in kit) this._kit[k] = Math.max(0, Number(kit[k]) || 0);
+      }
+      // Absolute — see the note on the field.
+      if ("halation" in kit) this._kit.halation = clamp01(Number(kit.halation) || 0);
+      // Floored well above zero: the shader divides the spill exponent by this,
+      // and a radius of 0 would raise the falloff to an infinite power.
+      if ("glowRadius" in kit) this._kit.glowRadius = Math.max(0.25, Number(kit.glowRadius) || 1);
+      if ("glowSense" in kit) this._kit.glowSense = clamp01(Number(kit.glowSense) || 0);
+      for (const k of ["backColor", "fillColor", "halationColor"]) {
+        if (k in kit) this._kit[k] = parseOverride(kit[k]);
+      }
     }
     this._scheduleRender();
   }
@@ -573,7 +717,29 @@ export class StagePostFX {
     // The shadow side gets the room's colour rather than the lamp's. Only the
     // shader consumes this — the CSS fallback has one gradient per direction and
     // no normal to aim a third one with.
-    return { ambient, key, keyDir, bounce: bounceLight(ambient, key) };
+    // The shadow side's hue, or the GM's own choice of it.
+    const bounce = this._kit.fillColor ?? bounceLight(ambient, key);
+
+    // What the light wrap carries: the background *directly behind this slot*,
+    // undiluted. Every other colour in this function is pulled toward white or
+    // toward the room average to keep it usable as a light; this one must not
+    // be, because the wrap's whole claim is that it is the background's own
+    // colour touching the figure. Wash it out and it becomes a grey haze on the
+    // outline, which is the failure it exists to be the opposite of.
+    const wrapColor = local;
+
+    // A backlight is the same lamp seen from behind, so it defaults to the key.
+    const backColor = this._kit.backColor ?? key;
+
+    return {
+      ambient,
+      key,
+      keyDir,
+      bounce,
+      wrapColor,
+      backColor,
+      halationColor: this._kit.halationColor ?? HALATION_DEFAULT,
+    };
   }
 
   async _renderSlot(wrap) {
@@ -630,6 +796,20 @@ export class StagePostFX {
       this._sample.aspect || 16 / 9
     );
 
+    const strengths = shaderStrengths(this._style);
+
+    // Both halves of the match, resolved here rather than cached on the slot:
+    // the subject stats belong to the art and the scene stats to the room, and
+    // either can be replaced under a slot that never re-registered. Computing it
+    // per render is a few dozen flops against a shader pass, and it removes the
+    // one bug this could plausibly have — a character carrying the grade for a
+    // scene the table left twenty minutes ago.
+    const match = matchGrade(
+      normal.stats ?? NEUTRAL_STATS,
+      this._sample.stats ?? NEUTRAL_STATS,
+      this._match
+    );
+
     // ── Nothing below this line may await. ──
     const canvas = this._gl.draw(prepared, {
       ...placement,
@@ -638,10 +818,23 @@ export class StagePostFX {
       key: lighting.key,
       shadowColor: this._params.shadowColor,
       intensity: this._intensity,
-      // Carries `cel` as well as the six term strengths — the style is one
-      // frozen table, so a strength and the banding it was balanced against can
-      // never arrive from different places.
-      ...shaderStrengths(this._style),
+      // Carries `cel` as well as the term strengths — the style is one frozen
+      // table, so a strength and the banding it was balanced against can never
+      // arrive from different places.
+      ...strengths,
+      // The kit's two multipliers ride *over* the style's own balance rather
+      // than replacing it, so a GM who turns the wrap up on a cel stage still
+      // gets cel proportions rather than the realistic ones.
+      wrap: strengths.wrap * this._kit.wrap,
+      backlight: strengths.backlight * this._kit.backlight,
+      halation: this._kit.halation,
+      glowRadius: this._kit.glowRadius,
+      glowSense: this._kit.glowSense,
+      wrapColor: lighting.wrapColor,
+      backColor: lighting.backColor,
+      halationColor: lighting.halationColor,
+      ...gradeParams(match),
+      skin: this._skin,
       // The model works in linear light; `exposure` is stored perceptually for
       // the CSS fallback's `brightness()` filter, so convert it here.
       exposure: Math.pow(this._params.exposure, 2.2),

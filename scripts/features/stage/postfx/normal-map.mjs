@@ -29,6 +29,7 @@
 
 import { clamp, clamp01 } from "../../../core/util.mjs";
 import { loadPixelImage, markTainted, invalidateAsset } from "./asset.mjs";
+import { tallyPixels } from "./tally.mjs";
 
 /** Prepass resolution. The normal field is low-frequency; 256 is plenty and
  *  keeps the blur passes cheap even for a 4k portrait. */
@@ -189,7 +190,7 @@ export function describeFigure(box, width, height) {
 
 /**
  * Build the normal/thickness buffer for one decoded art source.
- * @returns {{width:number,height:number,data:Uint8ClampedArray,figure:object}}
+ * @returns {{width:number,height:number,data:Uint8ClampedArray,figure:object,stats:object}}
  */
 function buildNormals(source, width, height) {
   const canvas = document.createElement("canvas");
@@ -254,7 +255,17 @@ function buildNormals(source, width, height) {
     }
   }
 
-  return { width, height, data, figure: describeFigure(box, width, height) };
+  return {
+    width,
+    height,
+    data,
+    figure: describeFigure(box, width, height),
+    // Measured off the straight-alpha pixels `getImageData` just handed back,
+    // and gated on the same alpha the bounding box used — the antialiased fringe
+    // carries whatever the art was cut out from, which is exactly the thing the
+    // subject's own black point must not be measured from.
+    stats: tallyPixels(pixels, FIGURE_ALPHA),
+  };
 }
 
 /**

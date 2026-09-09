@@ -85,11 +85,31 @@ export class StageOverlay {
     /** Read the current settings into the effect and re-sample the scene. */
     updatePostFXConfig() {
         if (!this._postfx) return;
+        const pct = (key) => (Number(getSetting(key)) || 0) / 100;
         this._postfx.setConfig({
             enabled: getSetting('ppEnabled') !== false,
             intensity: (Number(getSetting('ppIntensity')) || 0) / 100,
             quality: getSetting('ppQuality') || 'auto',
-            style: getSetting('ppStyle') || 'realistic'
+            style: getSetting('ppStyle') || 'realistic',
+            // The four match dials arrive as one object so a partial update
+            // cannot silently reset a sibling — see `setConfig`.
+            match: {
+                cast: pct('ppMatchCast'),
+                sat: pct('ppMatchSat'),
+                bright: pct('ppMatchBright'),
+                tone: pct('ppMatchTone')
+            },
+            skin: pct('ppSkinGuard'),
+            kit: {
+                wrap: pct('ppWrap'),
+                backlight: pct('ppBacklight'),
+                halation: pct('ppHalation'),
+                glowRadius: pct('ppGlowRadius'),
+                glowSense: pct('ppGlowSense'),
+                backColor: getSetting('ppBacklightColor') || '',
+                fillColor: getSetting('ppFillColor') || '',
+                halationColor: getSetting('ppHalationColor') || ''
+            }
         });
         this.refreshPostFXScene();
     }

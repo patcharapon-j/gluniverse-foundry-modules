@@ -25,6 +25,58 @@
                 "cel": "Cel / Anime",
                 "rim": "Rim Light Only"
             },
+            "ppMatchCast": {
+                "name": "Match — Light Colour (%)",
+                "hint": "How much of the room's colour cast is carried onto the character. This is the dial that answers 'why does this portrait look pasted on' — a figure painted under neutral studio light standing in a firelit hall is wrong about its colour before it is wrong about anything else. Skin resists this; see Skin Protection."
+            },
+            "ppMatchSat": {
+                "name": "Match — Saturation (%)",
+                "hint": "How much the character's chroma is pulled toward the background's. Raise it when vivid art sits in a muted, hazy or rain-washed scene; lower it if the cast starts looking drained. Skin resists this too."
+            },
+            "ppMatchBright": {
+                "name": "Match — Brightness (%)",
+                "hint": "How much the character's overall level is pulled toward the room's. Moves brightness only — contrast, hue and chroma each have their own dial, so if the result is too dark this is the one to move and nothing else changes."
+            },
+            "ppMatchTone": {
+                "name": "Match — Tonal Range (%)",
+                "hint": "How much the character's contrast is pulled toward the room's — how far apart its blacks and whites sit. Raise it for flat art in a scene with deep shadows; lower it if figures start looking crushed or washed out. Pivots about the art's own mid-tone, so it changes contrast without also changing brightness."
+            },
+            "ppSkinGuard": {
+                "name": "Skin Protection (%)",
+                "hint": "How hard skin resists the Light Colour and Saturation dials. At the default a face in a blue night scene gets darker and loses contrast along with everything else, but does not turn blue — which is what people notice. Lower it for a cast that is not meant to read as human."
+            },
+            "ppWrap": {
+                "name": "Light Wrap (%)",
+                "hint": "The background's own colour bleeding inward over the character's outline, as it does around any real subject photographed in front of something. The cheapest thing there is for stopping art looking cut out. 100% is the chosen style's own balance."
+            },
+            "ppBacklight": {
+                "name": "Backlight (%)",
+                "hint": "Light coming through the figure rather than around it — hair, a cloak's hem, a sleeve seen edge on. Lands only where the art is genuinely thin, so on a solid figure it is nearly absent. 100% is the chosen style's own balance."
+            },
+            "ppBacklightColor": {
+                "name": "Backlight Colour",
+                "hint": "Leave blank to take the scene's own key light colour, which is usually right — a backlight is that same lamp seen from behind. Set a hex colour (#88bbff) to override it."
+            },
+            "ppFillColor": {
+                "name": "Shadow Fill Colour",
+                "hint": "The colour the character's shadow side leans toward. Blank derives it from the room, biased cool the way skylight and painted interiors actually fill. Set a hex colour (#3a4a6b) to override it."
+            },
+            "ppGlowRadius": {
+                "name": "Glow Radius (%)",
+                "hint": "How far light spills past the outline into the air. 100% is the reach this effect has always had; raise it for a soft atmospheric bloom, lower it to keep the glow tight against the silhouette."
+            },
+            "ppGlowSense": {
+                "name": "Glow Threshold (%)",
+                "hint": "How bright the art must be just inside the outline before it throws any light. At 0 everything but true black glows. Raise it to confine the spill to the parts of a character that are actually lit, instead of the whole perimeter."
+            },
+            "ppHalation": {
+                "name": "Halation (%)",
+                "hint": "Warm bleed in the outer edge of the glow — the red scatter real film and camera sensors produce around a bright edge. Off by default, because it is a statement about a lens rather than about the light in the room. A little of it reads as 'photographed'; a lot reads as a dream sequence."
+            },
+            "ppHalationColor": {
+                "name": "Halation Colour",
+                "hint": "Leave blank for the warm red-orange real halation always is — long wavelengths scatter furthest, which is why the effect has a colour at all. Set a hex colour (#ff6b38) to override it."
+            },
             "ppQuality": {
                 "name": "Character Lighting Quality",
                 "hint": "Your own setting only — it does not change what anyone else sees. Turn this off if the stage costs you performance.",
