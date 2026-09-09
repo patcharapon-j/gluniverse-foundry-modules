@@ -266,6 +266,46 @@
   cursor: default;
 }
 
+/*
+ * Reclaiming the row from PF2e's own sheet styles.
+ *
+ * PF2e sets `button { width: 100% }` inside its actor sheets. In a flex row that
+ * is not a cosmetic difference: the button takes the entire line and every
+ * sibling collapses to zero, so an ability's action cost disappears and a
+ * Downfall's note field becomes a 14px box that cannot be typed into. Both look
+ * like missing features rather than a layout bug, and neither shows up outside
+ * a real PF2e sheet — a standalone preview has no system stylesheet to fight.
+ *
+ * These selectors are scoped to the panel and carry one extra class so they beat
+ * the system's element rules without reaching for !important. Module styles load
+ * after system styles, so equal specificity would already win; the extra class
+ * is insurance against PF2e tightening its own selectors later.
+ */
+.glvr-boss-panel button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+/* Rows wrap rather than squeeze: the panel can land in a narrow sidebar. */
+.glvr-boss-panel .glvr-boss-row {
+  flex-wrap: wrap;
+}
+
+.glvr-boss-panel .glvr-boss-row-cost {
+  flex: 0 0 auto;
+}
+
+.glvr-boss-panel .glvr-boss-row-note {
+  flex: 1 1 60px;
+}
+
+.glvr-boss-panel .glvr-boss-row input[type="text"],
+.glvr-boss-panel .glvr-boss-add input[type="text"],
+.glvr-boss-panel .glvr-boss-add select {
+  flex: 1 1 100px;
+  width: auto;
+}
+
 /* ── Chat cards ──────────────────────────────────────────────────────────── */
 
 .glvr-boss-card {
