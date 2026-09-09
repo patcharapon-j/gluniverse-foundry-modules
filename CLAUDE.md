@@ -596,6 +596,32 @@ threshold invariant across every combination the sheet can produce: a destroyed
 rung at or below the broken one deletes the broken state entirely, so an item
 goes from working to gone in one hit and every number involved still renders.
 
+**Hardness is the whole input to the rule, and PF2e supplies none.** Damage at
+or below Hardness does nothing, above it is one dent, above twice it is two — so
+an item at Hardness 0 takes the *maximum* two dents from every hit that lands and
+is destroyed in two blows. `ShieldPF2e#prepareBaseData` is the only place in the
+entire system that ever writes a real Hardness; every other physical item ships
+from `template.json` at 0 and stays there. A resolver that simply reads
+`system.hardness` is therefore one where a solid adamantine greatsword shatters
+as fast as a wooden spoon, and nothing reports it. `hardness.mjs` is the ladder
+down: the GM's per-item override, then `system.hardness` where PF2e or a rule
+element actually set one (which keeps a shield's reinforcing runes and grade
+improvements — recomputing from the material alone would silently throw them
+away), then the material's own Hardness at its grade from **PF2e's own table**,
+then the table's per-type default, which ships at 0. The panel prints where the
+number came from, because a GM looking at a 10 otherwise has no way to tell
+adamantine from a default they set months ago except by changing it.
+
+**TABLE: OBJECT DENTS is keyed on possession, not on size.** The same paragraph
+(p. 48) that gives Tiny 1/2 through Gargantuan 16/32 for objects pins anything
+"carried, held, or wielded" at 2/4 *however large it is*. So implementing
+"infer dents from size" by reading `system.size` — the obvious reading — quietly
+makes every Large weapon in the world four times as durable, which renders
+perfectly and is not the rule. `optionsFor` derives `carried` from the owning
+actor's type (a creature is carrying it; a loot actor standing in for a chest or
+a door, or no actor at all, is scenery) and the check tool asserts both
+directions of that table.
+
 `dent-config.mjs` builds its ApplicationV2 subclass in a **memoised factory**,
 not at module scope. `settings.mjs` is imported transitively by pure modules the
 check tools load under plain Node, where `foundry` does not exist, so a
@@ -621,9 +647,14 @@ every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
 or the catalog's longest-first sort hands the child's keys to the parent and its
 settings group renders empty; and the two runtime-built i18n families
 (`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
-key), which nothing else checks; and that the dent nudge controls carry a size of
-their own rather than the panel's, since a `+` and a `-` left at the surface
-default come out several times the height of the rung they adjust:
+key, plus `GLVR.dents.source.*`, `GLVR.dents.hardnessFrom.*` and
+`GLVR.dents.size.*`), which nothing else checks; that the material table has not
+drifted from PF2e's own numbers, since a wrong value there is a silent lie about
+the system's data; that a blank field in the per-item override *clears* rather
+than storing a zero, which would make an item arrive already destroyed; and that
+the dent nudge controls carry a size of their own rather than the panel's, since
+a `+` and a `-` left at the surface default come out several times the height of
+the rung they adjust:
 
 ```bash
 node tools/pf2e-variant-rules-check.mjs

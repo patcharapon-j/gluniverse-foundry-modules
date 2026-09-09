@@ -83,6 +83,8 @@ export function readDentConfig() {
     types: { ...DEFAULT_DENT_CONFIG.types, ...(stored.types ?? {}) },
     grades: { ...DEFAULT_DENT_CONFIG.grades, ...(stored.grades ?? {}) },
     materials: { ...(stored.materials ?? {}) },
+    hardness: { ...DEFAULT_DENT_CONFIG.hardness, ...(stored.hardness ?? {}) },
+    sizeAware: stored.sizeAware !== false,
   };
 }
 
@@ -120,6 +122,8 @@ export function DentConfigApp() {
         types: DENT_TYPES.map((key) => ({ key, label: typeLabel(key), on: !!cfg.types[key] })),
         grades: DENT_GRADES.map((key) => ({ key, label: gradeLabel(key), value: int(cfg.grades[key]) })),
         materials: DENT_MATERIALS.map((key) => ({ key, label: materialLabel(key), value: int(cfg.materials[key]) })),
+        sizeAware: cfg.sizeAware !== false,
+        hardness: DENT_TYPES.map((key) => ({ key, label: typeLabel(key), value: int(cfg.hardness?.[key]) })),
       };
     }
 
@@ -142,6 +146,11 @@ export function DentConfigApp() {
         materials: Object.fromEntries(
           DENT_MATERIALS.map((k) => [k, int(data.materials?.[k])]).filter(([, v]) => v !== 0)
         ),
+        sizeAware: !!data.sizeAware,
+        // Same sparseness rule as the rows above: a zero is "no opinion", and
+        // storing nine of them is noise the next PF2e item type has to migrate
+        // past. It reads back identically through `?? 0`.
+        hardness: Object.fromEntries(DENT_TYPES.map((k) => [k, int(data.hardness?.[k])]).filter(([, v]) => v !== 0)),
       };
 
       // The broken rung has to stay strictly below the destroyed one. Equal or

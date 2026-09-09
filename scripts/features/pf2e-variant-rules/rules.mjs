@@ -9,7 +9,7 @@
  * Source: *Adventures+* pp. 45–46.
  */
 
-import { DEFAULT_DENT_CONFIG, OUTCOME, CHIP_MINIMUM } from "./constants.mjs";
+import { DEFAULT_DENT_CONFIG, OBJECT_DENTS, OUTCOME, CHIP_MINIMUM } from "./constants.mjs";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CHIP DAMAGE
@@ -184,14 +184,39 @@ const int = (value, fallback) => {
  * and a broken rung at or above the destroyed one deletes the broken state
  * altogether — both render perfectly and neither reports anything.
  */
-export function dentThresholds({ sturdy = false, grade = null, material = null } = {}, config = null) {
+export function dentThresholds(
+  { sturdy = false, grade = null, material = null, size = null, carried = true, override = null } = {},
+  config = null
+) {
   const cfg = config ?? DEFAULT_DENT_CONFIG;
+
+  /* The GM's per-item override short-circuits everything, including the
+     multiplier and the bonuses. A partial override is honoured a rung at a
+     time, because "this door is tougher than its size says" and "this door
+     breaks the moment it is dented" are different rulings and a GM should not
+     have to state both to make one. */
+  const forcedBroken = Number.isFinite(Number(override?.broken)) ? Math.max(1, int(override.broken, 1)) : null;
+  const forcedDestroyed = Number.isFinite(Number(override?.destroyed)) ? Math.max(2, int(override.destroyed, 2)) : null;
+
+  /* An item nobody is carrying is an OBJECT, and objects scale with size:
+
+       "Objects, such as doors or walls, typically require more dents than
+        items, depending on their size, to be destroyed or repaired."
+
+     while the same paragraph pins gear at the flat 2/4 however big it is. So
+     possession decides which rule applies, not size — keying on size alone
+     would make every Large weapon in the world four times as durable, which
+     renders perfectly and is not what the book says. */
+  const table = !carried && cfg.sizeAware !== false ? (OBJECT_DENTS[size] ?? null) : null;
+  const baseBroken = table ? table.broken : int(cfg.broken, DEFAULT_DENT_CONFIG.broken);
+  const baseDestroyed = table ? table.destroyed : int(cfg.destroyed, DEFAULT_DENT_CONFIG.destroyed);
+
   const scale = sturdy ? Math.max(1, int(cfg.sturdyMultiplier, DEFAULT_DENT_CONFIG.sturdyMultiplier)) : 1;
   const bonus =
     int(cfg.grades?.[grade], 0) + int(cfg.materials?.[material], 0);
 
-  const destroyed = int(cfg.destroyed, DEFAULT_DENT_CONFIG.destroyed) * scale + bonus;
-  const broken = int(cfg.broken, DEFAULT_DENT_CONFIG.broken) * scale + Math.floor(bonus / 2);
+  const destroyed = forcedDestroyed ?? baseDestroyed * scale + bonus;
+  const broken = forcedBroken ?? baseBroken * scale + Math.floor(bonus / 2);
 
   const safeDestroyed = Math.max(2, destroyed);
   return { broken: Math.min(Math.max(1, broken), safeDestroyed - 1), destroyed: safeDestroyed };

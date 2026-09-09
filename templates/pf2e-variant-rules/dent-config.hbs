@@ -25,6 +25,10 @@
         <input type="number" name="sturdyMultiplier" value="{{sturdyMultiplier}}" min="1" step="1">
       </label>
     </div>
+      <label class="glvr-cfg-check glvr-cfg-wide">
+        <input type="checkbox" name="sizeAware" {{#if sizeAware}}checked{{/if}}>
+        <span>{{localize "GLVR.dentConfig.sizeAware"}}</span>
+      </label>
     <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.thresholdsNote"}}</p>
   </fieldset>
 
@@ -39,6 +43,19 @@
       {{/each}}
     </div>
     <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.categoriesNote"}}</p>
+  </fieldset>
+
+  <fieldset class="glvr-cfg-block">
+    <legend>{{localize "GLVR.dentConfig.hardness"}}</legend>
+    <div class="glvr-cfg-grid">
+      {{#each hardness}}
+        <div class="glvr-cfg-field">
+          <label for="glvr-hard-{{key}}">{{label}}</label>
+          <input id="glvr-hard-{{key}}" type="number" name="hardness.{{key}}" value="{{value}}" min="0" step="1">
+        </div>
+      {{/each}}
+    </div>
+    <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.hardnessNote"}}</p>
   </fieldset>
 
   <fieldset class="glvr-cfg-block">
@@ -75,3 +92,4 @@
     </button>
   </footer>
 </div>
+

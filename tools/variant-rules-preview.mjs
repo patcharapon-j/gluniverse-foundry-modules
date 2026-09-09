@@ -27,7 +27,7 @@ const OUT = resolve(ROOT, outArg ? outArg.slice("--out=".length) : ".preview/var
 
 const cell = (n, state) => `<span class="glvr-dent-cell${state ? ` ${state}` : ""}">${n}</span>`;
 
-const dentPanel = (state, dents, destroyed, editable) => {
+const dentPanel = (state, dents, destroyed, editable, facts = null) => {
   const cells = Array.from({ length: destroyed }, (_, i) => {
     const n = i + 1;
     if (n > dents) return cell(n, "");
@@ -51,6 +51,11 @@ const dentPanel = (state, dents, destroyed, editable) => {
       ${controls}
       <span class="glvr-dent-scale">${Math.ceil(destroyed / 2)} broken · ${destroyed} destroyed</span>
     </footer>
+    <div class="glvr-dent-facts">
+      <span class="glvr-dent-fact">Hardness ${facts?.hardness ?? 0}<em class="glvr-dent-src">${facts?.source ?? "table default"}</em></span>
+      ${facts?.object ? `<span class="glvr-dent-fact">Counted as a ${facts.object} object, not as carried gear.</span>` : ""}
+      ${editable ? `<button type="button" class="gl-btn glvr-dent-cfg">Override</button>` : ""}
+    </div>
   </section>`;
 };
 
@@ -182,9 +187,30 @@ const html = `<!doctype html>
 </style></head><body>
 
 <div style="display:flex;flex-direction:column;gap:24px">
-  ${frame("Item sheet — Details tab (16px host)", "16px", dentPanel("dented", 1, 4, true), 420)}
-  ${frame("Item sheet — a sturdy shield, 8 rungs", "16px", dentPanel("broken", 5, 8, true), 420)}
-  ${frame("Item sheet — a player's read-only view", "16px", dentPanel("destroyed", 4, 4, false), 420)}
+  ${frame(
+    "Item sheet — an adamantine weapon, hardness from its material",
+    "16px",
+    dentPanel("dented", 1, 4, true, { hardness: 10, source: "from its material" }),
+    420
+  )}
+  ${frame(
+    "Item sheet — a sturdy shield, 8 rungs, hardness PF2e computed",
+    "16px",
+    dentPanel("broken", 5, 8, true, { hardness: 13, source: "from PF2e" }),
+    420
+  )}
+  ${frame(
+    "Item sheet — a Large door: an object, so the size table applies",
+    "16px",
+    dentPanel("dented", 3, 8, true, { hardness: 5, source: "table default", object: "Large" }),
+    420
+  )}
+  ${frame(
+    "Item sheet — a player's read-only view",
+    "16px",
+    dentPanel("destroyed", 4, 4, false, { hardness: 0, source: "table default" }),
+    420
+  )}
 </div>
 
 <div style="display:flex;flex-direction:column;gap:24px">

@@ -500,3 +500,44 @@
   line-height: var(--gl-lh-tight);
   padding: 0.6em 1.1em;
 }
+
+/* ── Dents: where the numbers came from ───────────────────────────────────── */
+
+/* Hardness is the whole input to the rule and PF2e leaves it at 0 on everything
+   but a shield, so the panel states the value AND its provenance. A GM looking
+   at a 10 needs to know whether that is adamantine, a shield PF2e computed, or
+   a default they set months ago — otherwise the only way to find out is to
+   change it and watch what moves. */
+.glvr-dent-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-3) var(--gl-sp-4);
+  margin-top: var(--gl-sp-3);
+  padding-top: var(--gl-sp-3);
+  border-top: 1px solid var(--gl-edge-faint, var(--gl-edge));
+}
+.glvr-dent-fact {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glvr-dent-src {
+  margin-left: var(--gl-sp-2);
+  color: var(--gl-text-faint);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.glvr-dent-cfg {
+  margin-left: auto;
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.4em 0.8em;
+}
+
+/* The per-item override rides in a DialogV2, which supplies no width of its
+   own; without this the three fields stack into a column one input wide. */
+.glvr-cfg-item .glvr-cfg-grid { min-width: 22em; }

@@ -28,10 +28,11 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { DEFAULT_DENT_CONFIG, DENT_TYPES, FLAGS, SETTINGS } from "./constants.mjs";
+import { CARRIER_TYPES, DEFAULT_DENT_CONFIG, DENT_TYPES, FLAGS, SETTINGS } from "./constants.mjs";
 import { dentState, dentThresholds, hpForDents, dentsRepaired } from "./rules.mjs";
 import { dentsOn, get } from "./settings.mjs";
 import { normalizeHtml, itemDurability, isSturdyShield, isConstruct, contextType, outcomeOf } from "./pf2e.mjs";
+import { HARDNESS_SOURCE, hardnessOf } from "./hardness.mjs";
 
 const CLASS = "glvr-dent";
 
@@ -88,7 +89,40 @@ export const optionsFor = (item) => ({
   sturdy: isSturdyShield(item),
   material: item?.system?.material?.type ?? null,
   grade: item?.system?.material?.grade ?? null,
+  size: item?.system?.size ?? null,
+  // Possession, not size, decides whether the object table applies. An item on
+  // a creature is gear at a flat 2/4 however large it is; anything else — a
+  // loot actor standing in for a chest or a door, or no actor at all — is
+  // scenery, which is what that table is written for.
+  carried: CARRIER_TYPES.includes(item?.actor?.type ?? ""),
+  override: dentOverride(item),
 });
+
+/** The GM's per-item ruling, or null. */
+export const dentOverride = (item) => item?.getFlag?.(SUITE_ID, FLAGS.dentOverride) ?? null;
+
+/**
+ * Write or clear one item's override.
+ *
+ * A field left blank clears rather than storing zero: "no opinion" and "this
+ * breaks at zero dents" are different rulings and the second one would make an
+ * item arrive already destroyed.
+ */
+export async function setDentOverride(item, { broken, destroyed, hardness } = {}) {
+  const clean = {};
+  for (const [key, value] of Object.entries({ broken, destroyed, hardness })) {
+    const n = Math.trunc(Number(value));
+    if (value !== "" && value != null && Number.isFinite(n)) clean[key] = Math.max(0, n);
+  }
+  try {
+    if (!Object.keys(clean).length) await item.unsetFlag(SUITE_ID, FLAGS.dentOverride);
+    else await item.setFlag(SUITE_ID, FLAGS.dentOverride, clean);
+    return true;
+  } catch (error) {
+    warn("pf2e-variant-rules | could not write a dent override", error);
+    return false;
+  }
+}
 
 /**
  * Set an item's dent count and reflect it into HP.
@@ -143,6 +177,7 @@ function renderTrack(item, editable) {
   const opts = optionsFor(item);
   const { broken, destroyed } = dentThresholds(opts, config);
   const state = dentState(dents, opts, config);
+  const hardness = hardnessOf(item, config);
 
   const cells = Array.from({ length: destroyed }, (_, i) => {
     const n = i + 1;
@@ -173,6 +208,22 @@ function renderTrack(item, editable) {
         game.i18n.format("GLVR.dents.scale", { broken: String(broken), destroyed: String(destroyed) })
       )}</span>
     </footer>
+    <div class="${CLASS}-facts">
+      <span class="${CLASS}-fact" title="${escapeHtml(game.i18n.localize(`GLVR.dents.hardnessFrom.${hardness.source}`))}">
+        ${escapeHtml(game.i18n.format("GLVR.dents.hardness", { value: String(hardness.value) }))}
+        <em class="${CLASS}-src">${escapeHtml(game.i18n.localize(`GLVR.dents.source.${hardness.source}`))}</em>
+      </span>
+      ${
+        opts.carried
+          ? ""
+          : `<span class="${CLASS}-fact">${escapeHtml(
+              game.i18n.format("GLVR.dents.asObject", {
+                size: game.i18n.localize(`GLVR.dents.size.${opts.size ?? "med"}`),
+              })
+            )}</span>`
+      }
+      ${editable ? `<button type="button" class="gl-btn ${CLASS}-cfg">${escapeHtml(game.i18n.localize("GLVR.dents.perItem"))}</button>` : ""}
+    </div>
   </section>`;
 }
 
@@ -213,6 +264,7 @@ function onRenderItemSheet(app, html) {
     const panel = root.querySelector(`.${CLASS}-panel`);
     panel?.querySelector(`.${CLASS}-more`)?.addEventListener("click", () => addDents(item, 1));
     panel?.querySelector(`.${CLASS}-less`)?.addEventListener("click", () => addDents(item, -1));
+    panel?.querySelector(`.${CLASS}-cfg`)?.addEventListener("click", () => openOverride(item));
     panel?.querySelector(`.${CLASS}-set`)?.addEventListener("change", (event) => {
       // An override is an absolute value, not a nudge; `setDents` clamps it to
       // the item's own destroyed threshold, which a sturdy shield doubles.
@@ -221,6 +273,52 @@ function onRenderItemSheet(app, html) {
   } catch {
     // A sheet that changed shape must never take the sheet down with it.
   }
+}
+
+/**
+ * The GM's per-item ruling, as three optional numbers.
+ *
+ * Every field is blank-means-inherit, and the placeholder shows what it would
+ * inherit — so a GM can see the number they are about to replace without
+ * having to clear the field to find out. That is the difference between an
+ * override that is usable mid-session and one that is a guess.
+ */
+async function openOverride(item) {
+  const config = dentConfig();
+  const opts = optionsFor(item);
+  const { broken, destroyed } = dentThresholds({ ...opts, override: null }, config);
+  // A plain shape rather than a spread of the document: spreading a Foundry
+  // Document does not reliably carry what `hardnessOf` reads, and the point here
+  // is precisely to ask what the item WOULD resolve to with no override on it.
+  const inherited = hardnessOf({ type: item.type, system: item.system, flags: {} }, config);
+  const current = dentOverride(item) ?? {};
+  const L = (key, data) => (data ? game.i18n.format(key, data) : game.i18n.localize(key));
+
+  const field = (name, label, placeholder) => `
+    <div class="glvr-cfg-field">
+      <label for="glvr-ov-${name}">${escapeHtml(L(label))}</label>
+      <input id="glvr-ov-${name}" type="number" name="${name}" step="1" min="0"
+             value="${current[name] ?? ""}" placeholder="${escapeHtml(String(placeholder))}">
+    </div>`;
+
+  const content = `<div class="glvr-cfg-block glvr-cfg-item">
+    <p class="glvr-cfg-note">${escapeHtml(L("GLVR.dents.perItemHint"))}</p>
+    <div class="glvr-cfg-grid">
+      ${field("broken", "GLVR.dentConfig.broken", broken)}
+      ${field("destroyed", "GLVR.dentConfig.destroyed", destroyed)}
+      ${field("hardness", "GLVR.dents.hardnessLabel", inherited.value)}
+    </div>
+  </div>`;
+
+  const result = await foundry.applications.api.DialogV2.prompt({
+    window: { title: L("GLVR.dents.perItem"), icon: "fa-solid fa-sliders" },
+    classes: ["glvr-cfg-root"],
+    content,
+    ok: { label: L("GLVR.dentConfig.save"), callback: (_e, button) => new FormDataExtended(button.form).object },
+    rejectClose: false,
+  }).catch(() => null);
+  if (!result) return;
+  await setDentOverride(item, result);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
