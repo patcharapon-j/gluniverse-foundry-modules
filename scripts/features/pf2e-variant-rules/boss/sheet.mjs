@@ -1,8 +1,8 @@
 /**
- * Boss Creatures — the NPC sheet panel.
+ * Boss Creatures — the NPC sheet tab.
  *
- * One panel on the NPC's main tab: mark the creature, read what that did to it,
- * and manage its Boss Abilities and Downfalls.
+ * One tab on the NPC sheet, after Notes: mark the creature, read what that did
+ * to it, and manage its Boss Abilities and Downfalls.
  *
  * GM-only, and unlike the dent readout that is the right call here rather than a
  * mistake: a boss's Downfalls are the thing the party is trying to *discover*
@@ -28,7 +28,11 @@ const L = (key, data) => (data ? game.i18n.format(key, data) : game.i18n.localiz
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Where the panel goes, in falling order of preference — PF2e markup drifts. */
+/**
+ * Where the panel goes when the sheet has no tab strip to hang a tab on, in
+ * falling order of preference — PF2e markup drifts. The simple NPC sheet is the
+ * live case: one body, no nav.
+ */
 const SHEET_ANCHORS = [
   ".tab[data-tab='main'] .sidebar",
   ".tab[data-tab='main']",
@@ -53,6 +57,103 @@ function findCombatant(actor) {
     return combatant;
   }
   return null;
+}
+
+/* ── The tab ─────────────────────────────────────────────────────────────── */
+
+/** The tab this feature owns on the NPC sheet's own tab strip. */
+const TAB = "glvr-boss";
+
+/**
+ * Which sheets are currently showing the boss tab.
+ *
+ * AppV1 binds its `Tabs` inside `activateListeners`, which runs *before* the
+ * render hook — so a nav link injected from here is invisible to it and this
+ * feature has to drive its own tab. That means remembering, across the
+ * re-renders the panel triggers itself after every mutation, that the GM was
+ * looking at it. Weakly keyed on the application, so closing the sheet forgets.
+ */
+const showing = new WeakMap();
+
+/** The sheet's tab pages: direct children of the body, never a nested tab. */
+const tabPages = (body) => [...body.children].filter((el) => el.classList?.contains("tab"));
+
+/** Deactivate every tab on the sheet, ours included. */
+function clearTabs(nav, body) {
+  for (const item of nav.querySelectorAll("[data-tab]")) item.classList.remove("active");
+  for (const page of tabPages(body)) page.classList.remove("active");
+}
+
+/**
+ * Add the Boss tab after Notes.
+ *
+ * Returns false when this sheet has no tab strip to add it to, which is the
+ * caller's signal to fall back to appending the panel inline.
+ */
+function mountTab(root, app, markup, marked) {
+  const nav =
+    root.querySelector("nav.sheet-tabs[data-group='primary']") ??
+    root.querySelector("nav.sheet-tabs") ??
+    root.querySelector("nav.tabs");
+  const body = root.querySelector("section.sheet-body") ?? root.querySelector(".sheet-body");
+  if (!nav || !body || !nav.querySelector("[data-tab]")) return false;
+
+  const group = nav.dataset.group ?? "primary";
+
+  const link = document.createElement("a");
+  // `empty` is PF2e's own class for a tab with nothing behind it yet, which is
+  // exactly what this is on a creature nobody has marked.
+  link.className = `item ${CLASS}-tab${marked ? "" : " empty"}`;
+  link.dataset.tab = TAB;
+  link.dataset.group = group;
+  link.innerHTML = `<i class="fa-solid fa-crown"></i>${esc(L("GLVR.boss.tab"))}`;
+
+  const notes = nav.querySelector("[data-tab='notes']");
+  if (notes) notes.insertAdjacentElement("afterend", link);
+  else nav.append(link);
+
+  const page = document.createElement("section");
+  page.className = `tab ${CLASS}-tabpage`;
+  page.dataset.tab = TAB;
+  page.dataset.group = group;
+  page.innerHTML = markup;
+  body.append(page);
+
+  const open = () => {
+    clearTabs(nav, body);
+    link.classList.add("active");
+    page.classList.add("active");
+    showing.set(app, true);
+  };
+
+  if (showing.get(app)) open();
+
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    // Foundry's Tabs must never be handed a tab name it cannot resolve: its own
+    // `active` has to keep naming one of the sheet's real tabs, or the next
+    // render restores nothing and the body comes back blank.
+    event.stopPropagation();
+    open();
+  });
+
+  nav.addEventListener("click", (event) => {
+    const item = event.target?.closest?.("[data-tab]");
+    if (!item || item === link || !showing.get(app)) return;
+    // Leaving this tab is the one move Foundry cannot make on its own: it still
+    // believes the tab being clicked is the active one, so its handler no-ops
+    // and the sheet would simply stay here. Its state is set alongside, so a
+    // later re-render restores the tab the GM actually left on.
+    const name = item.dataset.tab;
+    showing.set(app, false);
+    clearTabs(nav, body);
+    item.classList.add("active");
+    tabPages(body).find((el) => el.dataset.tab === name)?.classList.add("active");
+    const tabs = app?._tabs?.[0];
+    if (tabs) tabs.active = name;
+  });
+
+  return true;
 }
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
@@ -403,19 +504,26 @@ function onRenderSheet(app, html) {
     const actor = app?.actor ?? app?.document ?? null;
     if (!root || !actor) return;
 
-    root.querySelectorAll(`.${CLASS}-panel`).forEach((node) => node.remove());
+    // A re-render hands back fresh markup but the same application, and this
+    // hook fires for every class in the sheet's chain: clear before deciding.
+    root
+      .querySelectorAll(`.${CLASS}-panel, .${CLASS}-tab, .${CLASS}-tabpage`)
+      .forEach((node) => node.remove());
 
     if (!bossOn()) return;
-    // Downfalls are what the party is meant to discover; the panel that lists
-    // them is a GM tool, not a readout.
+    // Downfalls are what the party is meant to discover; the tab that lists them
+    // is a GM tool, not a readout.
     if (!game.user?.isGM) return;
     if (actor.type !== "npc") return;
 
-    const host = SHEET_ANCHORS.map((sel) => root.querySelector(sel)).find(Boolean);
-    if (!host) return;
-
     const profile = storedProfile(actor);
-    host.insertAdjacentHTML("beforeend", profile ? renderMarked(actor, profile) : renderUnmarked());
+    const markup = profile ? renderMarked(actor, profile) : renderUnmarked();
+
+    if (!mountTab(root, app, markup, !!profile)) {
+      const host = SHEET_ANCHORS.map((sel) => root.querySelector(sel)).find(Boolean);
+      if (!host) return;
+      host.insertAdjacentHTML("beforeend", markup);
+    }
     wire(root, actor);
   } catch (error) {
     // A sheet that changed shape must never take the sheet down with it.
@@ -433,5 +541,6 @@ export function registerBossSheet() {
 
 /** Exported for the check tool: the panel must never gate a *write* on nothing. */
 export const SHEET_HOST_ANCHORS = SHEET_ANCHORS;
+export const SHEET_TAB = TAB;
 export const ALL_ABILITY_IDS = ABILITIES.map((entry) => entry.id);
 export const ALL_TIERS = Object.keys(TIERS);

@@ -354,3 +354,38 @@
   font-size: var(--gl-fs-3xs);
   color: var(--gl-text-dim);
 }
+
+/* ── The sheet tab ───────────────────────────────────────────────────────── */
+
+/*
+ * The tab strip and the page injected into it.
+ *
+ * The panel used to be appended to the main tab, where it sat under a creature's
+ * own statistics in the narrowest column on the sheet. On its own page it gets
+ * the full body width, so the stat grid can breathe and a Downfall note is a
+ * field rather than a slot.
+ *
+ * This page is created after the sheet was built, so it inherits the system's
+ * `.tab` rules but none of the per-tab ones PF2e writes for its own five. What
+ * it needs from us is the show/hide pair and its own scroll — a boss with three
+ * abilities, three Downfalls and a live encounter section is taller than the
+ * sheet, and a page that cannot scroll simply loses its bottom rows.
+ */
+.glvr-boss-tabpage:not(.active) {
+  display: none;
+}
+
+.glvr-boss-tabpage.active {
+  display: block;
+  overflow-y: auto;
+  padding: var(--gl-sp-4);
+}
+
+/* The panel's own top margin was for sitting under something. It no longer is. */
+.glvr-boss-tabpage .glvr-boss-panel {
+  margin-top: 0;
+}
+
+.glvr-boss-tab i {
+  margin-right: var(--gl-sp-2);
+}

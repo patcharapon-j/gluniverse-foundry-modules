@@ -790,6 +790,46 @@ if (!/!isExtraTurn\(/.test(primaryOwner.slice(0, primaryOwner.indexOf(";") + 1))
   fail("boss: primaryOwner accepts an extra turn — every combat hook would then re-sync it as a boss of its own");
 }
 
+/*
+ * The sheet tab. AppV1 binds its `Tabs` inside `activateListeners`, which runs
+ * before the render hook, so the nav link injected here is invisible to it: this
+ * feature activates its own page. Two things about that are load-bearing and
+ * neither shows in a diff. Foundry's `Tabs` must never be handed this tab's
+ * name — its own `active` has to keep naming one of the sheet's real tabs, or
+ * the next render restores nothing and the body comes back empty — and leaving
+ * this page has to be done by hand, because Foundry still believes the tab being
+ * clicked is the active one and its handler no-ops.
+ */
+const bossSheetSource = read("scripts/features/pf2e-variant-rules/boss/sheet.mjs");
+if (!bossSheetSource.includes(`"[data-tab='notes']"`)) {
+  fail("boss: the sheet tab is not anchored after Notes");
+}
+if (!bossSheetSource.includes("stopPropagation")) {
+  fail("boss: the tab link does not stop propagation — Foundry's Tabs would take a tab name it cannot resolve");
+}
+if (!/tabs\.active = name/.test(bossSheetSource)) {
+  fail("boss: leaving the boss tab never restores Foundry's own tab state, so the next re-render lands nowhere");
+}
+if (!bossSheetSource.includes("SHEET_ANCHORS")) {
+  fail("boss: the inline fallback is gone — the simple NPC sheet has no tab strip to mount a tab on");
+}
+
+/*
+ * Raising max Hit Points and current Hit Points in one update silently clamps
+ * the value back to the old maximum: `CreaturePF2e#_preUpdate` clamps an
+ * incoming `hp.value` against the maximum the actor has at that moment. The
+ * boss would gain its Hit Points and immediately sit at half of them.
+ */
+const applySource = read("scripts/features/pf2e-variant-rules/boss/apply.mjs");
+const writeHp = applySource.slice(applySource.indexOf("async function writeHp"));
+const writeHpBody = writeHp.slice(0, writeHp.indexOf("\n}\n") + 1);
+if (!/hp\.max[\s\S]*?actor\.update[\s\S]*?hp\.value/.test(writeHpBody)) {
+  fail("boss: writeHp must write the maximum in its own update before the value, or PF2e clamps the value to the old max");
+}
+if ((writeHpBody.match(/actor\.update\(/g) ?? []).length < 2) {
+  fail("boss: writeHp writes max and value in one update — PF2e clamps the value against the old maximum");
+}
+
 /* 9i. Settings and registration. */
 
 const bossPrefix = "vr.boss";
@@ -815,6 +855,9 @@ for (const [pattern, message] of [
 }
 for (const m of bossCss.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) {
   if (m[1].startsWith("gl-")) fail(`css: @keyframes '${m[1]}' takes a bare gl- name and would override the shared pool`);
+}
+if (!/\.glvr-boss-tabpage:not\(\.active\)/.test(bossCss)) {
+  fail("css: the boss tab page has no hidden state — it would render under whichever tab is open");
 }
 if (!moduleJson.styles.includes("styles/pf2e-variant-rules-boss.css")) {
   fail("boss: styles/pf2e-variant-rules-boss.css is not listed in module.json");

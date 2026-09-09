@@ -29,8 +29,16 @@ position: "Boss's typically have the same defenses as the base creature."
 
 ## Building one
 
-The panel is on the NPC sheet's main tab, GM-only. Pick a tier, then add up to
-three Boss Abilities from the catalogue and one Downfall per ability.
+The panel has its own tab on the NPC sheet, after Notes, and is GM-only. Pick a
+tier, then add up to three Boss Abilities from the catalogue and one Downfall per
+ability.
+
+The tab is this feature's own, not one of PF2e's: AppV1 binds a sheet's tab
+handler before the render hook fires, so a link injected from a module is
+invisible to it. The page is therefore activated by hand, and Foundry's own tab
+state is deliberately never told this tab's name, since it has to keep naming a
+real tab for the next render to restore anything. The simple NPC sheet has no
+tab strip at all, and there the panel is still appended inline.
 
 Each ability becomes a real `action` item on the actor with its PF2e action cost,
 its traits, and a description whose numbers are computed for *this* boss — the
@@ -145,6 +153,15 @@ scale keys its entry declares and no others; that every trait written to an item
 is one PF2e actually knows; and that `writeHp` writes the maximum in its own
 update before the value, since `CreaturePF2e#_preUpdate` clamps an incoming
 `hp.value` against the maximum the actor has at that moment.
+
+One live-world failure is worth stating outright, because nothing about it is
+subtle once it happens and nothing about it is visible before. An extra turn is a
+real Combatant carrying the boss's own actor and token, so it passes every "is
+this a boss?" test in the feature. Syncing one gives it extra turns of its own,
+each of which fires `createCombatant` and syncs again: the encounter doubles its
+boss entries per pass. In testing that reached about 1800 combatants and hung the
+client. Both the hook filter and `syncBossTurns` itself refuse an extra turn now,
+and the check tool requires both.
 
 For the look, `.preview/boss.html` renders the panel and the rail cards against
 the real stylesheets. Serve it — a `file://` page does not execute its module

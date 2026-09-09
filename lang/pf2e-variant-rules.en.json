@@ -75,6 +75,7 @@
   "GLVR.settings.boss.extraTurns.hint": "Adds the boss's second and third turns to the initiative order. In card initiative mode the deck handles this instead and no extra entries are created.",
   "GLVR.boss.title": "Boss",
   "GLVR.boss.panel": "Boss Creature",
+  "GLVR.boss.tab": "Boss",
   "GLVR.boss.notABoss": "This creature is not a boss.",
   "GLVR.boss.markGreater": "Make Greater",
   "GLVR.boss.markSupreme": "Make Supreme",

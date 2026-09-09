@@ -679,6 +679,24 @@ specific trigger spent until the boss's next *initial* turn — which matters
 because a Supreme boss takes three turns between initial turns, so collapsing them
 lets one critical hit disrupt it twice in a round.
 
+An extra turn is a real Combatant carrying the boss's **own actor and token**, so
+it answers yes to every "is this a boss?" test in the feature. Sync one and it is
+given extras of its own, each of which fires `createCombatant` and syncs again,
+so the encounter doubles its boss entries per pass — in a live world that reached
+~1800 combatants and hung the client inside a minute. The hook filter and
+`syncBossTurns` both refuse an extra turn, and the check tool requires both,
+because one guard is one edit away from being the only one.
+
+The boss panel is on **its own sheet tab**, and that tab is this feature's, not
+PF2e's. AppV1 binds a sheet's `Tabs` inside `activateListeners`, which runs
+*before* the render hook, so a nav link injected from a module is invisible to it
+and the page has to be activated by hand. Two consequences are load-bearing:
+Foundry's `Tabs` must never be handed this tab's name (its `active` has to keep
+naming one of the sheet's real tabs, or the next render restores nothing and the
+body comes back blank), and *leaving* the tab has to be done by hand too, since
+Foundry still believes the tab being clicked is the active one and its handler
+no-ops.
+
 Multi-turn initiative has two completely separate implementations and they must
 never both run. Card mode already models it through the per-actor
 `init.cardConfig` `{cards, turns}` flag; standard mode has nothing (nothing in the
