@@ -63,7 +63,18 @@
 }
 .gldex-bar-tag { margin-left: auto; color: var(--gl-teal); }
 
-.gldex-owners { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3); margin-left: auto; }
+/* A GM at a six-player table has seven of these plus Everyone, so the row
+   scrolls rather than wrapping the header into three lines. */
+.gldex-owners {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--gl-sp-3);
+  min-width: 0;
+  margin-left: auto;
+  overflow-x: auto;
+  justify-content: flex-end;
+}
+.gldex-owner { flex: 0 0 auto; }
 .gldex-owner.is-on { border-color: var(--gl-accent); color: var(--gl-text-bright); }
 
 .gldex-body {
@@ -155,6 +166,15 @@
 }
 .gldex-forget { margin-left: auto; }
 
+.gldex-scope {
+  margin: var(--gl-sp-5) 0 0;
+  padding: var(--gl-sp-4);
+  border-left: 2px solid var(--gl-teal);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
 .gldex-complete {
   margin: var(--gl-sp-5) 0 0;
   padding: var(--gl-sp-4);
@@ -215,7 +235,15 @@
   letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
 }
-.gldex-toggle { margin-left: auto; }
+.gldex-controls { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
+/* Falsifying is the one destructive-feeling control here — it deliberately puts
+   something untrue on a player's screen — so it carries the hazard hue rather
+   than sitting in the row looking like Reveal's twin. */
+.gldex-falsify {
+  border-color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-edge));
+  color: var(--gl-hazard);
+}
+.gldex-falsify:hover:not(:disabled) { border-color: var(--gl-hazard); }
 
 .gldex-sealed {
   display: flex;
@@ -348,3 +376,9 @@
   letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
 }
+
+/* ── The token HUD button ─────────────────────────────────────────────────── */
+
+/* Foundry styles `.control-icon` itself; this only carries the accent so the
+   glyph reads as this feature's rather than as one of the core controls. */
+.gldex-hud > i { color: var(--gl-cyan); }

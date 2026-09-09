@@ -73,6 +73,24 @@ export function subjectKey(actor) {
 /** The character a piece of knowledge belongs to. */
 export const ownerKey = (pc) => pc?.id ?? null;
 
+/**
+ * The characters "the whole party" means.
+ *
+ * PF2e's party actor is the answer when the world has one, because it is the
+ * roster the GM already curates and it excludes the retired characters and NPC
+ * stand-ins that `type === "character"` alone would sweep up. Without one, fall
+ * back to characters a player actually owns — an unowned character is a prop,
+ * and revealing to it writes knowledge nobody will ever read.
+ */
+export function partyCharacters() {
+  const party = game.actors?.party ?? null;
+  const members = party?.members ?? null;
+  if (Array.isArray(members) && members.length) return members.filter((a) => a?.type === "character");
+  return (game.actors ?? []).filter(
+    (a) => a.type === "character" && Object.entries(a.ownership ?? {}).some(([id, level]) => id !== "default" && level === 3)
+  );
+}
+
 const entryOf = (data, subject) => data[subject] ?? null;
 
 /**
@@ -107,20 +125,32 @@ function mutate(data, subject, owner) {
   return data[subject].owners[owner];
 }
 
-/** Record one or more sections as truly learned. */
+/**
+ * Owners as a list.
+ *
+ * Every write takes one owner or many and performs a single settings write, so
+ * revealing to a five-member party is one round trip rather than five — and,
+ * more importantly, cannot half-apply if one of them fails.
+ */
+const ownerList = (owner) => (Array.isArray(owner) ? owner : [owner]).filter(Boolean);
+
+/** Record one or more sections as truly learned, for one owner or several. */
 export async function reveal(subject, owner, keys) {
-  if (!subject || !owner) return false;
+  const owners = ownerList(owner);
+  if (!subject || !owners.length) return false;
   const wanted = (Array.isArray(keys) ? keys : [keys]).filter((k) => ALL_SECTION_KEYS.includes(k));
   if (!wanted.length) return false;
 
   const data = readAll();
-  const rec = mutate(data, subject, owner);
-  const set = new Set(rec.sections);
-  for (const key of wanted) set.add(key);
-  rec.sections = [...set];
-  // A section learned truly overrides a lie about the same section. The reverse
-  // is not true — see `revealFalse`.
-  rec.false = (rec.false ?? []).filter((f) => !set.has(f.section));
+  for (const one of owners) {
+    const rec = mutate(data, subject, one);
+    const set = new Set(rec.sections);
+    for (const key of wanted) set.add(key);
+    rec.sections = [...set];
+    // A section learned truly overrides a lie about the same section. The
+    // reverse is not true — see `revealFalse`.
+    rec.false = (rec.false ?? []).filter((f) => !set.has(f.section));
+  }
   await writeAll(data);
   return true;
 }
@@ -138,12 +168,18 @@ export async function reveal(subject, owner, keys) {
  * something the player earned rather than fail to add to it.
  */
 export async function revealFalse(subject, owner, section, fromUuid) {
-  if (!subject || !owner || !ALL_SECTION_KEYS.includes(section)) return false;
+  const owners = ownerList(owner);
+  if (!subject || !owners.length || !ALL_SECTION_KEYS.includes(section)) return false;
   const data = readAll();
-  const rec = mutate(data, subject, owner);
-  if (rec.sections.includes(section)) return false;
-  rec.false = (rec.false ?? []).filter((f) => f.section !== section);
-  rec.false.push({ section, from: fromUuid ?? null });
+  let wrote = false;
+  for (const one of owners) {
+    const rec = mutate(data, subject, one);
+    if (rec.sections.includes(section)) continue;
+    rec.false = (rec.false ?? []).filter((f) => f.section !== section);
+    rec.false.push({ section, from: fromUuid ?? null });
+    wrote = true;
+  }
+  if (!wrote) return false;
   await writeAll(data);
   return true;
 }
@@ -151,10 +187,15 @@ export async function revealFalse(subject, owner, section, fromUuid) {
 /** Take a section back — the GM's undo, and the only way a lie is corrected. */
 export async function redact(subject, owner, section) {
   const data = readAll();
-  const rec = data[subject]?.owners?.[owner];
-  if (!rec) return false;
-  rec.sections = (rec.sections ?? []).filter((k) => k !== section);
-  rec.false = (rec.false ?? []).filter((f) => f.section !== section);
+  let wrote = false;
+  for (const one of ownerList(owner)) {
+    const rec = data[subject]?.owners?.[one];
+    if (!rec) continue;
+    rec.sections = (rec.sections ?? []).filter((k) => k !== section);
+    rec.false = (rec.false ?? []).filter((f) => f.section !== section);
+    wrote = true;
+  }
+  if (!wrote) return false;
   await writeAll(data);
   return true;
 }

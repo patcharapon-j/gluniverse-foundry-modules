@@ -38,12 +38,20 @@ const ability = (name, cost, traits, body) => `
     <div class="gldex-ability-body">${body}</div>
   </div>`;
 
+const controls = (known, lie) => {
+  const parts = [];
+  if (!known) parts.push(`<button type="button" class="gl-btn gldex-toggle">Reveal</button>`);
+  if (!known && !lie) parts.push(`<button type="button" class="gl-btn gldex-falsify">Falsify</button>`);
+  if (known || lie) parts.push(`<button type="button" class="gl-btn gldex-toggle">Redact</button>`);
+  return `<span class="gldex-controls">${parts.join("")}</span>`;
+};
+
 const section = (key, label, state, body, { gm = false, known = false, lie = false } = {}) => `
   <article class="gldex-section" data-section="${key}" data-state="${state}">
     <header class="gldex-section-head">
       <span class="gldex-section-label">${label}</span>
       ${lie ? `<span class="gldex-section-lie">False</span>` : ""}
-      ${gm ? `<button type="button" class="gl-btn gldex-toggle">${known ? "Redact" : "Reveal"}</button>` : ""}
+      ${gm ? controls(known, lie) : ""}
     </header>
     <div class="gldex-section-body">${body}</div>
   </article>`;
@@ -101,8 +109,10 @@ const window_ = (title, { gm }) => `
       ${
         gm
           ? `<span class="gldex-owners">
-               <button type="button" class="gl-btn gldex-owner is-on">Seri Voss</button>
+               <button type="button" class="gl-btn gldex-owner is-on">Everyone</button>
+               <button type="button" class="gl-btn gldex-owner">Seri Voss</button>
                <button type="button" class="gl-btn gldex-owner">Brack</button>
+               <button type="button" class="gl-btn gldex-owner">Ondine</button>
              </span>`
           : `<span class="gldex-bar-owner">Seri Voss</span>`
       }
@@ -125,6 +135,7 @@ const window_ = (title, { gm }) => `
           </div>
           ${gm ? `<button type="button" class="gl-btn gldex-forget">Forget</button>` : ""}
         </header>
+        ${gm ? `<p class="gldex-scope">Revealing here writes to every member of the party at once. What is shown is everything anyone knows.</p>` : ""}
         ${gm ? `<p class="gldex-complete">Creaturedex complete. Discerning Aid may be used against this creature.</p>` : ""}
         ${section("characteristics", "Characteristics", "known", CHARACTERISTICS, { gm, known: true })}
         ${section("defense", "Defense", gm ? "false" : "known", DEFENSE, { gm, known: false, lie: gm })}
@@ -184,7 +195,7 @@ const html = `<!doctype html>
   .preview-chat { width:340px; font-size:14px; }
 </style></head><body>
 ${window_("Player view — one section sealed", { gm: false })}
-${window_("GM view — reveal controls, and the lie labelled", { gm: true })}
+${window_("GM view — everyone selected, three controls, the lie labelled", { gm: true })}
 <div style="display:flex;flex-direction:column;gap:24px">
   ${offer("reveal", `<p class="gldex-offer-note is-warn">A repeat attempt: this creature has not taken a turn since the last one.</p>`)}
   ${offer("false", `<p class="gldex-offer-note is-hazard">Whatever is chosen will be recorded as true and shown to the player as true.</p>`)}

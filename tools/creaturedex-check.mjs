@@ -426,6 +426,98 @@ if (!existsSync(join(ROOT, previewPath))) {
   }
 }
 
+/* ── 10. Whole-party reveal, the three GM controls, and the roads in ─────── */
+
+const appSrc = read("scripts/features/pf2e-creaturedex/app.mjs");
+const bodyOf = (name, src = appSrc) => {
+  const at = src.indexOf(name);
+  if (at < 0) return "";
+  const end = src.indexOf("\n  }", at);
+  return end < 0 ? src.slice(at) : src.slice(at, end);
+};
+
+// Party Knowledge is a *read* — a union over the owners — so that flipping the
+// setting off never invents or destroys a fact. The GM's "Everyone" mode has to
+// obey the same rule going the other way: a reveal to the party writes one row
+// per character, because a shared `party` bucket would read back only while the
+// setting was on and would vanish the moment a table turned it off, taking
+// every creature the party learned that way with it.
+const writeKeys = bodyOf("get writeKeys()");
+if (!/partyCharacters\(\)/.test(writeKeys)) {
+  fail("app: writeKeys does not fan out to partyCharacters(), so a whole-party reveal writes somewhere per-character reads cannot see");
+}
+if (/return\s*\[\s*PARTY_KEY/.test(writeKeys) || /owners?\s*=\s*PARTY_KEY/.test(writeKeys)) {
+  fail("app: writeKeys writes to the PARTY_KEY bucket, which only reads back while Party Knowledge is on");
+}
+// The read side keeps using PARTY_KEY, which is what makes the union happen.
+if (!/PARTY_KEY/.test(bodyOf("get readKey()"))) {
+  fail("app: readKey no longer resolves the whole-party view, so 'Everyone' shows one character's knowledge");
+}
+
+// Three controls, three states, and every one of them has to survive the round
+// trip from context flag to template branch to registered action. A flag the
+// template never reads is a control that does not exist; an action name the
+// application does not register is a button that silently does nothing.
+const actionsBlock = appSrc.slice(appSrc.indexOf("actions: {"), appSrc.indexOf("static PARTS"));
+for (const [flag, action] of [
+  ["canReveal", "revealSection"],
+  ["canFalsify", "falsifySection"],
+  ["canClear", "clearSection"],
+]) {
+  if (!new RegExp(`${flag}:`).test(appSrc)) fail(`app: the section context no longer produces \`${flag}\``);
+  if (!hbs.includes(`{{#if ${flag}}}`)) fail(`templates: dex.hbs never branches on \`${flag}\`, so that control is unreachable`);
+  if (!hbs.includes(`data-action="${action}"`)) fail(`templates: dex.hbs has no button wired to \`${action}\``);
+  if (!new RegExp(`${action}:`).test(actionsBlock)) fail(`app: \`${action}\` is not a registered action, so its button does nothing`);
+}
+// Falsify must refuse a section that is already false. Writing a second lie over
+// the first is a click that changes nothing while looking like it worked.
+if (!/canFalsify:\s*!isKnown && !lie/.test(appSrc)) {
+  fail("app: canFalsify is not gated on both `!isKnown` and `!lie`");
+}
+
+// A player may only open a creature the party has learned something about, and
+// "something" has to include a *lie*: a player who was told one and nothing else
+// cannot see that it is false, so an entry that refuses to open is the module
+// losing the one thing they were given.
+const mayView = bodyOf("static mayView(actor)");
+if (!/game\.user\.isGM/.test(mayView) || !/knownSections/.test(mayView) || !/falseSections/.test(mayView)) {
+  fail("app: mayView no longer gates a non-GM on knowledge (both true and false sections), so it identifies unknown creatures");
+}
+if (!/return\s+known\s*\?\s*uuid\s*:\s*null/.test(mayView)) {
+  fail("app: mayView returns a subject for a creature nothing is known about");
+}
+if (!/mayView\(/.test(bodyOf("static openForActor(actor)"))) {
+  fail("app: openForActor bypasses mayView");
+}
+
+// The roads onto the canvas. Each of them fails silently when it is dropped: the
+// keybinding stops answering, the HUD button stops appearing, and an open window
+// stops following the target — none of which errors.
+for (const [needle, why] of [
+  [/^\s+registerKeybinding\(\);/m, "the open-target keybinding is declared but never called"],
+  [/^\s+registerTokenHud\(\);/m, "the token HUD button is declared but never registered"],
+  [/Hooks\.on\("targetToken"/, "an open window no longer follows the user's target"],
+]) {
+  if (!needle.test(indexSrc)) fail(`index: ${why}`);
+}
+// Both entry points resolve a creature the same way, and all three sources
+// matter: a player aiming a spell has a target, a summoner has a controlled
+// token, and "point at it" is a hover. Drop one and the key does nothing for
+// that gesture while working everywhere else.
+const pointed = indexSrc.slice(indexSrc.indexOf("function pointedActor"), indexSrc.indexOf("function registerKeybinding"));
+for (const source of ["targets", "controlled", "hover"]) {
+  if (!pointed.includes(source)) fail(`index: pointedActor ignores \`${source}\`, so that gesture opens nothing`);
+}
+// The HUD icon is drawn only where it can lead somewhere. On an unknown creature
+// it is a button whose only possible answer is "nothing learned".
+if (!/mayView\(/.test(indexSrc.slice(indexSrc.indexOf("function registerTokenHud")))) {
+  fail("index: the token HUD button is drawn without asking mayView, so it appears on creatures it cannot open");
+}
+// Nothing here may run at import time — a disabled feature must stay inert.
+if (/^Hooks\.on\(/m.test(indexSrc)) {
+  fail("index: a hook is registered at import time, so the feature is live even when disabled");
+}
+
 /* ── report ──────────────────────────────────────────────────────────────── */
 
 if (problems.length) {

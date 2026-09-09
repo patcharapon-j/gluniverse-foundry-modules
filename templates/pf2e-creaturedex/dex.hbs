@@ -10,7 +10,7 @@
   <header class="gldex-bar">
     <span class="gldex-bar-title">{{localize "GLDEX.app.title"}}</span>
     {{#if showOwners}}
-      <span class="gldex-owners">
+      <span class="gldex-owners gl-scroll">
         {{#each owners}}
           <button type="button" class="gl-btn gldex-owner{{#if selected}} is-on{{/if}}"
                   data-action="setOwner" data-owner="{{id}}">{{name}}</button>
@@ -56,6 +56,10 @@
           {{/if}}
         </header>
 
+        {{#if everyone}}
+          <p class="gldex-scope">{{localize "GLDEX.app.everyoneNote"}}</p>
+        {{/if}}
+
         {{#if detail.complete}}
           <p class="gldex-complete">{{localize "GLDEX.app.completeNote"}}</p>
         {{/if}}
@@ -66,9 +70,23 @@
               <span class="gldex-section-label">{{label}}</span>
               {{#if isLie}}<span class="gldex-section-lie">{{localize "GLDEX.app.false"}}</span>{{/if}}
               {{#if ../isGM}}
-                <button type="button" class="gl-btn gldex-toggle" data-action="toggleSection" data-section="{{key}}">
-                  {{#if known}}{{localize "GLDEX.app.redact"}}{{else}}{{localize "GLDEX.app.reveal"}}{{/if}}
-                </button>
+                <span class="gldex-controls">
+                  {{#if canReveal}}
+                    <button type="button" class="gl-btn gldex-toggle" data-action="revealSection" data-section="{{key}}">
+                      {{localize "GLDEX.app.reveal"}}
+                    </button>
+                  {{/if}}
+                  {{#if canFalsify}}
+                    <button type="button" class="gl-btn gldex-falsify" data-action="falsifySection" data-section="{{key}}">
+                      {{localize "GLDEX.app.falsify"}}
+                    </button>
+                  {{/if}}
+                  {{#if canClear}}
+                    <button type="button" class="gl-btn gldex-toggle" data-action="clearSection" data-section="{{key}}">
+                      {{localize "GLDEX.app.redact"}}
+                    </button>
+                  {{/if}}
+                </span>
               {{/if}}
             </header>
             <div class="gldex-section-body">{{{html}}}</div>

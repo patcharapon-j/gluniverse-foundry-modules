@@ -1,0 +1,77 @@
+{{!--
+  Dents — the table's configuration.
+
+  Names are dotted (`types.weapon`, `materials.adamantine`) so Foundry's own
+  form parser hands the save handler a nested object; there is no manual
+  scraping of the DOM anywhere in this sheet.
+--}}
+<div class="glvr-cfg-root gl-glass gl-type">
+
+  <p class="glvr-cfg-lead">{{localize "GLVR.dentConfig.lead"}}</p>
+
+  <fieldset class="glvr-cfg-block">
+    <legend>{{localize "GLVR.dentConfig.thresholds"}}</legend>
+    <div class="glvr-cfg-grid">
+      <label class="glvr-cfg-field">
+        <span>{{localize "GLVR.dentConfig.broken"}}</span>
+        <input type="number" name="broken" value="{{broken}}" min="1" step="1">
+      </label>
+      <label class="glvr-cfg-field">
+        <span>{{localize "GLVR.dentConfig.destroyed"}}</span>
+        <input type="number" name="destroyed" value="{{destroyed}}" min="2" step="1">
+      </label>
+      <label class="glvr-cfg-field">
+        <span>{{localize "GLVR.dentConfig.sturdy"}}</span>
+        <input type="number" name="sturdyMultiplier" value="{{sturdyMultiplier}}" min="1" step="1">
+      </label>
+    </div>
+    <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.thresholdsNote"}}</p>
+  </fieldset>
+
+  <fieldset class="glvr-cfg-block">
+    <legend>{{localize "GLVR.dentConfig.categories"}}</legend>
+    <div class="glvr-cfg-types">
+      {{#each types}}
+        <label class="glvr-cfg-check">
+          <input type="checkbox" name="types.{{key}}" {{#if on}}checked{{/if}}>
+          <span>{{label}}</span>
+        </label>
+      {{/each}}
+    </div>
+    <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.categoriesNote"}}</p>
+  </fieldset>
+
+  <fieldset class="glvr-cfg-block">
+    <legend>{{localize "GLVR.dentConfig.grades"}}</legend>
+    <div class="glvr-cfg-grid">
+      {{#each grades}}
+        <label class="glvr-cfg-field">
+          <span>{{label}}</span>
+          <input type="number" name="grades.{{key}}" value="{{value}}" step="1">
+        </label>
+      {{/each}}
+    </div>
+  </fieldset>
+
+  <fieldset class="glvr-cfg-block">
+    <legend>{{localize "GLVR.dentConfig.materials"}}</legend>
+    <div class="glvr-cfg-materials gl-scroll">
+      {{#each materials}}
+        <label class="glvr-cfg-field">
+          <span>{{label}}</span>
+          <input type="number" name="materials.{{key}}" value="{{value}}" step="1">
+        </label>
+      {{/each}}
+    </div>
+    <p class="glvr-cfg-note">{{localize "GLVR.dentConfig.materialsNote"}}</p>
+  </fieldset>
+
+  <footer class="glvr-cfg-foot">
+    <button type="button" class="gl-btn glvr-cfg-reset" data-action="reset">
+      {{localize "GLVR.dentConfig.reset"}}
+    </button>
+    <button type="submit" class="gl-btn gl-btn-accent glvr-cfg-save">
+      {{localize "GLVR.dentConfig.save"}}
+    </button>
+  </footer>
+</div>

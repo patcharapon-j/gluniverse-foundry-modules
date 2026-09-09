@@ -1,7 +1,6 @@
 {
   "GLS.feature.pf2e-creaturedex.title": "Creaturedex",
   "GLS.feature.pf2e-creaturedex.hint": "Recall Knowledge reveals a creature's stat block one section at a time, and the party keeps what it learns.",
-
   "GLDEX.settings.partyKnowledge.name": "Party knowledge",
   "GLDEX.settings.partyKnowledge.hint": "Treat everything any character has learned as known to the whole party, so one member's success completes the creaturedex for everyone. Off by default: the book prints this as an optional sidebar for tables that want to encourage shared tactics. Turning it on or off never adds or destroys knowledge — it only changes how a character's dex is read.",
   "GLDEX.settings.noSecretChecks.name": "No secret checks",
@@ -14,7 +13,6 @@
   "GLDEX.settings.chatOffer.hint": "Add the section picker to a Recall Knowledge check made through PF2e's own action, resolved against whatever the roller had targeted. Every reveal is also available by hand from the dex window, so a table that rolls its skills directly loses nothing but the shortcut.",
   "GLDEX.settings.playerAccess.name": "Players may open the dex",
   "GLDEX.settings.playerAccess.hint": "Let a player open the Creaturedex from their own character sheet and read what that character has learned. Turn this off to keep the dex a GM-facing readout the table is told about rather than one they browse.",
-
   "GLDEX.app.title": "Creaturedex",
   "GLDEX.app.open": "Creaturedex",
   "GLDEX.app.empty": "Nothing learned yet.",
@@ -24,19 +22,15 @@
   "GLDEX.app.reveal": "Reveal",
   "GLDEX.app.redact": "Redact",
   "GLDEX.app.completeNote": "Creaturedex complete. Discerning Aid may be used against this creature.",
-
   "GLDEX.kind.creature": "Creature",
   "GLDEX.kind.hazard": "Hazard",
-
   "GLDEX.section.characteristics": "Characteristics",
   "GLDEX.section.defense": "Defense",
   "GLDEX.section.offense": "Offense",
   "GLDEX.section.complexity": "Complexity and Stealth",
   "GLDEX.section.disable": "Disable and Trigger",
   "GLDEX.section.routine": "Routine and Reset",
-
   "GLDEX.sealed": "{section} not yet learned.",
-
   "GLDEX.row.level": "Level",
   "GLDEX.row.rarity": "Rarity",
   "GLDEX.row.size": "Size",
@@ -63,7 +57,6 @@
   "GLDEX.row.stealth": "Stealth",
   "GLDEX.row.hardness": "Hardness",
   "GLDEX.row.reset": "Reset",
-
   "GLDEX.offer.title": "Creaturedex",
   "GLDEX.offer.reveal": "Reveal {count} section(s).",
   "GLDEX.offer.false": "Reveal one section falsely.",
@@ -72,14 +65,16 @@
   "GLDEX.offer.repeat": "A repeat attempt: this creature has not taken a turn since the last one.",
   "GLDEX.offer.forced": "The die chose {section}.",
   "GLDEX.offer.falseHint": "Whatever is chosen will be recorded as true and shown to the player as true.",
-
   "GLDEX.card.learned": "{actor} learns the {section} of {subject}.",
   "GLDEX.card.complete": "{subject}: creaturedex complete.",
-
   "GLDEX.forget.action": "Forget",
   "GLDEX.forget.title": "Forget this creature?",
   "GLDEX.forget.body": "Every character's knowledge of this creature is discarded, including anything recorded as false. This cannot be undone.",
-
   "GLDEX.aid.name": "Discerning Aid",
-  "GLDEX.aid.text": "<p><strong>Trigger</strong> An ally would target a creature or hazard with an effect requiring a skill check, attack roll or saving throw, or would be targeted by one of its effects.</p><p><strong>Requirements</strong> You have completed the creaturedex of the triggering creature or hazard.</p><p>Attempt a Recall Knowledge check against the standard DC of that creature's level. Your result grants the same circumstance bonus the Aid reaction would, applied to your ally's check or to the DC they are rolling against, and imposes the same penalty on a critical failure. The bonus increases if you are a master or legendary in the skill you used.</p><p>This counts as the Aid reaction for every purpose.</p>"
+  "GLDEX.aid.text": "<p><strong>Trigger</strong> An ally would target a creature or hazard with an effect requiring a skill check, attack roll or saving throw, or would be targeted by one of its effects.</p><p><strong>Requirements</strong> You have completed the creaturedex of the triggering creature or hazard.</p><p>Attempt a Recall Knowledge check against the standard DC of that creature's level. Your result grants the same circumstance bonus the Aid reaction would, applied to your ally's check or to the DC they are rolling against, and imposes the same penalty on a critical failure. The bonus increases if you are a master or legendary in the skill you used.</p><p>This counts as the Aid reaction for every purpose.</p>",
+  "GLDEX.app.everyone": "Everyone",
+  "GLDEX.app.everyoneNote": "Revealing here writes to every member of the party at once. What is shown is everything anyone knows.",
+  "GLDEX.app.falsify": "Falsify",
+  "GLDEX.app.unknown": "Nothing has been learned about {name} yet.",
+  "GLDEX.app.openTarget": "Open the Creaturedex for the targeted creature"
 }

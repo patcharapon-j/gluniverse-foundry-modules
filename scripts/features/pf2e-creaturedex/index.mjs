@@ -129,9 +129,97 @@ function registerHeaderButtons() {
   });
 }
 
+/* ── From a token on the canvas ──────────────────────────────────────────── */
+
+/**
+ * The creature a user means right now: their target, else their controlled
+ * token, else the token under the pointer.
+ *
+ * Targeting is the only one of the three a player can perform on a hostile
+ * creature — they cannot control it and its sheet is closed to them — so it
+ * leads. The other two are there for the GM, who almost always has the thing
+ * selected rather than targeted.
+ */
+function pointedActor() {
+  const targeted = [...(game.user?.targets ?? [])][0]?.actor ?? null;
+  if (targeted) return targeted;
+  const controlled = canvas?.tokens?.controlled?.[0]?.actor ?? null;
+  if (controlled) return controlled;
+  return canvas?.tokens?.hover?.actor ?? null;
+}
+
+/**
+ * A keybinding, because the canvas has no gesture a player can use on a creature
+ * they do not own.
+ *
+ * Double-click opens a sheet they have no permission for, right-click opens a
+ * HUD they cannot summon, and the token's context menu belongs to the GM. Core
+ * Foundry leaves `K` unbound, and a user can rebind it from Foundry's own
+ * Configure Controls.
+ */
+function registerKeybinding() {
+  try {
+    game.keybindings.register(SUITE_ID, "dex.openTarget", {
+      name: "GLDEX.app.openTarget",
+      editable: [{ key: "KeyK" }],
+      restricted: false,
+      onDown: () => {
+        if (!mayOpen()) return false;
+        const actor = pointedActor();
+        if (!actor) return false;
+        CreaturedexApp.openForActor(actor);
+        return true;
+      },
+    });
+  } catch (error) {
+    warn("pf2e-creaturedex | could not register the open-target keybinding", error);
+  }
+}
+
+/**
+ * A button on the token HUD.
+ *
+ * This is the GM's road in and, in practice, only theirs: the HUD is summoned by
+ * right-clicking a token you control, and a player controls none of the
+ * creatures in this dex. It is registered anyway rather than gated on `isGM`,
+ * because a summoner's own minion is a creature a player owns and might well
+ * have studied.
+ */
+function registerTokenHud() {
+  Hooks.on("renderTokenHUD", (hud, html) => {
+    try {
+      if (!mayOpen()) return;
+      const root = html instanceof HTMLElement ? html : html?.[0] ?? null;
+      const column = root?.querySelector(".col.left") ?? root?.querySelector(".control-icons");
+      const actor = hud?.object?.actor ?? null;
+      if (!column || !actor || !["npc", "hazard"].includes(actor.type)) return;
+      if (!CreaturedexApp.mayView(actor)) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "control-icon gldex-hud";
+      button.dataset.action = "gldex";
+      button.setAttribute("aria-label", L("GLDEX.app.title") || "Creaturedex");
+      button.innerHTML = '<i class="fa-solid fa-book-skull"></i>';
+      button.addEventListener("click", () => CreaturedexApp.openForActor(actor));
+      column.append(button);
+    } catch (error) {
+      warn("pf2e-creaturedex | could not add the token HUD button", error);
+    }
+  });
+}
+
 function onInit() {
   registerHeaderButtons();
   registerObservation();
+  registerKeybinding();
+  registerTokenHud();
+  // An open window follows the target, so a player aiming at something they
+  // have studied sees its entry without touching the window at all.
+  Hooks.on("targetToken", (user, token, targeted) => {
+    if (user !== game.user || !targeted) return;
+    if (token?.actor) CreaturedexApp.followTarget(token.actor);
+  });
   Hooks.on("createChatMessage", (message) => {
     stampSubject(message).catch((e) => warn("pf2e-creaturedex | stamp failed", e));
   });

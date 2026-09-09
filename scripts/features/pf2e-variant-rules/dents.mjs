@@ -28,7 +28,7 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { FLAGS, SETTINGS } from "./constants.mjs";
+import { DEFAULT_DENT_CONFIG, DENT_TYPES, FLAGS, SETTINGS } from "./constants.mjs";
 import { dentState, dentThresholds, hpForDents, dentsRepaired } from "./rules.mjs";
 import { dentsOn, get } from "./settings.mjs";
 import { normalizeHtml, itemDurability, isSturdyShield, isConstruct, contextType, outcomeOf } from "./pf2e.mjs";
@@ -36,32 +36,59 @@ import { normalizeHtml, itemDurability, isSturdyShield, isConstruct, contextType
 const CLASS = "glvr-dent";
 
 /**
- * The physical item types a dent track is drawn on.
+ * The table's dent configuration.
  *
- * This list is the rule, not a convenience: PF2e ships **every** physical item
- * with `hp: { value: 0, max: 0 }` and `hardness: 0` (`template.json`'s
- * `physical` template), and only a handful of shields in the compendium
- * override it. Gating this feature on item HP therefore silenced it on every
- * item in a real world — including the weapons and armour the rule is written
- * for — while looking like a careful guard. Item HP is what the dent count
- * *reflects into* where it exists, never what decides whether dents apply.
- *
- * Consumables and treasure are left out on purpose. A potion that takes a hit
- * shatters and coins do not dent, so a four-rung durability track on either is
- * a control that will never be moved.
+ * Read at call time rather than captured, so changing a threshold in the config
+ * sheet is reflected on the next sheet render instead of the next reload. A
+ * world that has never opened that sheet reads the shipped defaults, which are
+ * the printed rule exactly.
  */
-const DENTABLE = new Set(["weapon", "armor", "shield", "equipment", "backpack", "book"]);
+export function dentConfig() {
+  const stored = get(SETTINGS.dentsConfig, null);
+  if (!stored || typeof stored !== "object") return DEFAULT_DENT_CONFIG;
+  return {
+    ...DEFAULT_DENT_CONFIG,
+    ...stored,
+    types: { ...DEFAULT_DENT_CONFIG.types, ...(stored.types ?? {}) },
+    grades: { ...DEFAULT_DENT_CONFIG.grades, ...(stored.grades ?? {}) },
+    materials: { ...(stored.materials ?? {}) },
+  };
+}
 
-/** Items this rule applies to: dentable gear not carried by a construct. */
-export function tracksDents(item) {
+/**
+ * Items this rule applies to: a configured type, not carried by a construct.
+ *
+ * Which types those are is the GM's, but that it is a *type* question and not an
+ * HP question is not. PF2e ships **every** physical item with
+ * `hp: { value: 0, max: 0 }` and `hardness: 0` (`template.json`'s `physical`
+ * template), and only a handful of shields in the compendium override it.
+ * Gating this feature on item HP therefore silenced it on every item in a real
+ * world — including the weapons and armour the rule is written for — while
+ * looking like a careful guard. Item HP is what the dent count *reflects into*
+ * where it exists, never what decides whether dents apply.
+ */
+export function tracksDents(item, config = null) {
   if (!item?.isOfType?.("physical")) return false;
-  if (!DENTABLE.has(item.type)) return false;
+  const cfg = config ?? dentConfig();
+  if (!DENT_TYPES.includes(item.type)) return false;
+  if (!cfg.types?.[item.type]) return false;
   return !isConstruct(item.actor);
 }
 
 export const getDents = (item) => Math.max(0, Math.trunc(Number(item?.getFlag?.(SUITE_ID, FLAGS.dents)) || 0));
 
-export const optionsFor = (item) => ({ sturdy: isSturdyShield(item) });
+/**
+ * The three things about an item that can move its thresholds.
+ *
+ * Material and grade are read straight off PF2e's own `system.material`, so a
+ * config row is looked up by the key the system already stores and there is no
+ * translation step to drift.
+ */
+export const optionsFor = (item) => ({
+  sturdy: isSturdyShield(item),
+  material: item?.system?.material?.type ?? null,
+  grade: item?.system?.material?.grade ?? null,
+});
 
 /**
  * Set an item's dent count and reflect it into HP.
@@ -70,9 +97,10 @@ export const optionsFor = (item) => ({ sturdy: isSturdyShield(item) });
  * and HP disagree.
  */
 export async function setDents(item, count) {
-  if (!tracksDents(item)) return false;
+  const config = dentConfig();
+  if (!tracksDents(item, config)) return false;
   const opts = optionsFor(item);
-  const { destroyed } = dentThresholds(opts);
+  const { destroyed } = dentThresholds(opts, config);
   const dents = Math.max(0, Math.min(destroyed, Math.trunc(Number(count) || 0)));
   const { max } = itemDurability(item);
 
@@ -81,7 +109,7 @@ export async function setDents(item, count) {
   // items — which ship at 0/0 — there is no getter to keep honest and the flag
   // stands alone.
   const update = { [`flags.${SUITE_ID}.${FLAGS.dents}`]: dents };
-  if (max > 0) update["system.hp.value"] = hpForDents(dents, max, opts);
+  if (max > 0) update["system.hp.value"] = hpForDents(dents, max, opts, config);
 
   try {
     await item.update(update);
@@ -110,10 +138,11 @@ const canEdit = () => !!game.user?.isGM;
    ══════════════════════════════════════════════════════════════════════════ */
 
 function renderTrack(item, editable) {
+  const config = dentConfig();
   const dents = getDents(item);
   const opts = optionsFor(item);
-  const { broken, destroyed } = dentThresholds(opts);
-  const state = dentState(dents, opts);
+  const { broken, destroyed } = dentThresholds(opts, config);
+  const state = dentState(dents, opts, config);
 
   const cells = Array.from({ length: destroyed }, (_, i) => {
     const n = i + 1;
@@ -208,10 +237,11 @@ const ROW_ANCHORS = [".item-name", ".data", ":scope"];
 
 /** An intact item says nothing; a dented one says how badly, in one glance. */
 function renderBadge(item) {
+  const config = dentConfig();
   const dents = getDents(item);
   const opts = optionsFor(item);
-  const { destroyed } = dentThresholds(opts);
-  const state = dentState(dents, opts);
+  const { destroyed } = dentThresholds(opts, config);
+  const state = dentState(dents, opts, config);
   const label = game.i18n.format("GLVR.dents.badge", {
     dents: String(dents),
     destroyed: String(destroyed),

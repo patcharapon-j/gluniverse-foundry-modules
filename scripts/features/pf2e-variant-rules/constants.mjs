@@ -78,6 +78,7 @@ export const SETTINGS = Object.freeze({
 
   // Dents
   dentsRepair: "vr.dent.repairButton",
+  dentsConfig: "vr.dent.config",
 
   // Lasting Wounds
   woundsBlockRest: "vr.wound.blockRest",
@@ -109,6 +110,90 @@ export const FLAGS = Object.freeze({
  */
 export const DENTS_BROKEN = 2;
 export const DENTS_DESTROYED = 4;
+
+/**
+ * The physical item types a dent track can be drawn on.
+ *
+ * PF2e's own list of physical types, in the order the config sheet shows them.
+ * Which of them a table actually uses is a setting — see `DEFAULT_DENT_CONFIG`
+ * — because "does a potion dent" is a ruling, not a fact about the data model.
+ */
+export const DENT_TYPES = Object.freeze([
+  "weapon",
+  "armor",
+  "shield",
+  "equipment",
+  "backpack",
+  "book",
+  "consumable",
+  "treasure",
+  "ammo",
+]);
+
+/** PF2e item grades, low to high. A grade is the "tier" of a made thing. */
+export const DENT_GRADES = Object.freeze(["low", "standard", "high"]);
+
+/**
+ * PF2e's precious materials, keyed exactly as `system.material.type` stores
+ * them so a config row can be looked up with no translation step. Labels come
+ * from PF2e's own `PF2E.PreciousMaterial*` keys rather than being restated
+ * here, so a material renamed by the system renames itself in our sheet.
+ */
+export const DENT_MATERIALS = Object.freeze([
+  "abysium",
+  "adamantine",
+  "cold-iron",
+  "dawnsilver",
+  "djezet",
+  "dragonhide",
+  "dreamweb",
+  "duskwood",
+  "grisantian-pelt",
+  "inubrix",
+  "keep-stone",
+  "noqual",
+  "orichalcum",
+  "peachwood",
+  "siccatite",
+  "silver",
+  "sisterstone",
+  "sisterstone-dusk",
+  "sisterstone-scarlet",
+  "sloughstone",
+  "sovereign-steel",
+  "warpglass",
+]);
+
+/**
+ * The table's dent configuration, as it ships.
+ *
+ * The defaults are the book and nothing else: 2/4, doubled for a sturdy shield,
+ * on the gear the rule is written for. Every other row is zero, so a GM who
+ * never opens the config sheet plays exactly the printed rule.
+ *
+ * `grades` and `materials` are *extra dents on the destroyed rung*. Adamantine
+ * armour taking two more hits before it is scrap is the obvious use, and it
+ * composes with the sturdy multiplier rather than replacing it — a sturdy
+ * adamantine shield is both.
+ */
+export const DEFAULT_DENT_CONFIG = Object.freeze({
+  broken: DENTS_BROKEN,
+  destroyed: DENTS_DESTROYED,
+  sturdyMultiplier: 2,
+  types: Object.freeze({
+    weapon: true,
+    armor: true,
+    shield: true,
+    equipment: true,
+    backpack: true,
+    book: true,
+    consumable: false,
+    treasure: false,
+    ammo: false,
+  }),
+  grades: Object.freeze({ low: 0, standard: 0, high: 0 }),
+  materials: Object.freeze({}),
+});
 
 /** Degrees of success, as PF2e spells them in `flags.pf2e.context.outcome`. */
 export const OUTCOME = Object.freeze({

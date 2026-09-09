@@ -49,6 +49,7 @@ const read = (p) => readFileSync(join(ROOT, p), "utf8");
 
 const rules = await import(join(FEATURE, "rules.mjs"));
 const { chipTriggers, chipAmount, chipBasis, resolveChip, dentsFromDamage, dentThresholds, dentState, hpForDents, dentsRepaired, carefulQualifies, woundPenalties } = rules;
+const { DEFAULT_DENT_CONFIG } = await import(join(FEATURE, "constants.mjs"));
 
 // Chip fires on the highest no-damage degree and nowhere else.
 if (!chipTriggers("attack-roll", "failure")) fail("chip: a missed Strike must trigger chip damage");
@@ -190,15 +191,97 @@ if (!/tracksDents/.test(tracksBody)) {
       "so that gate hides the track on every item in the world while looking like a guard."
   );
 }
+// Which categories dent is the table's, but the shipped default has to be the
+// printed rule: a fresh world that never opens the config sheet must find dents
+// on the gear the rule is written for.
 for (const type of ["weapon", "armor", "shield"]) {
-  if (!new RegExp(`DENTABLE[^;]*"${type}"`, "s").test(dentsSrc)) {
-    fail(`dents: DENTABLE does not list "${type}" — the rule is written for exactly that gear`);
+  if (DEFAULT_DENT_CONFIG.types?.[type] !== true) {
+    fail(`dents: the shipped config does not enable "${type}" — the rule is written for exactly that gear`);
   }
+}
+// And the sheet has to actually reach the setting, or the config is a form that
+// writes somewhere nothing reads.
+if (!/SETTINGS\.dentsConfig/.test(dentsSrc)) {
+  fail("dents: dents.mjs never reads the dent configuration, so the config sheet changes nothing");
+}
+
+/* The thresholds must stay sane for every combination the sheet can produce.
+   A destroyed rung at or below the broken one deletes the broken state — an
+   item goes from working to gone in one hit — and both render perfectly. */
+for (const broken of [1, 2, 5, 9]) {
+  for (const destroyed of [2, 4, 6]) {
+    for (const sturdy of [false, true]) {
+      for (const bonus of [0, 3, -2]) {
+        const cfg = {
+          ...DEFAULT_DENT_CONFIG,
+          broken,
+          destroyed,
+          sturdyMultiplier: 2,
+          grades: { high: bonus },
+          materials: {},
+        };
+        const t = dentThresholds({ sturdy, grade: "high" }, cfg);
+        if (!(t.broken >= 1 && t.broken < t.destroyed)) {
+          fail(
+            `dents: config {broken:${broken}, destroyed:${destroyed}, bonus:${bonus}, sturdy:${sturdy}} ` +
+              `yields ${t.broken}/${t.destroyed}, which has no broken state`
+          );
+        }
+      }
+    }
+  }
+}
+// Grade and material compose with the sturdy multiplier rather than replacing
+// it — a sturdy adamantine shield is both things at once.
+const composed = dentThresholds(
+  { sturdy: true, grade: "high", material: "adamantine" },
+  { ...DEFAULT_DENT_CONFIG, grades: { high: 1 }, materials: { adamantine: 2 } }
+);
+if (composed.destroyed !== 4 * 2 + 3) {
+  fail(`dents: sturdy + grade + material must compose (expected 11 destroyed, got ${composed.destroyed})`);
+}
+
+// The save handler clamps the same invariant the sheet's inputs cannot.
+const cfgSrc = readFileSync(join(FEATURE, "dent-config.mjs"), "utf8");
+if (!/config\.broken >= config\.destroyed/.test(cfgSrc)) {
+  fail("dents: the config sheet does not keep the broken rung below the destroyed one");
+}
+// Building an ApplicationV2 subclass at module scope would take this very tool
+// down: settings.mjs is reached transitively by pure modules, under plain Node.
+if (/^const \{[^}]*\} = foundry\./m.test(cfgSrc)) {
+  fail("dents: dent-config.mjs reaches for `foundry` at import time, which breaks every pure importer of settings.mjs");
 }
 // The reflection has to stay conditional on the item actually having HP, or a
 // write of `hp.value: 0` lands on every 0/0 item for no reason.
 if (!/max\s*>\s*0/.test(codeOf("setDents"))) {
   fail("dents: setDents writes item HP unconditionally; only an item with HP has a getter to keep honest");
+}
+
+// The sheet reaches the world through Foundry's own form parser, which builds a
+// nested object only from a dotted `name`. A flat `name="weapon"` saves a config
+// with no `types` key at all, `dentConfig()` merges the defaults back over the
+// hole, and the GM's edit is silently discarded while the form submits happily.
+const cfgHbs = read("templates/pf2e-variant-rules/dent-config.hbs");
+for (const [group, pattern] of [
+  ["types", /name="types\.\{\{/],
+  ["grades", /name="grades\.\{\{/],
+  ["materials", /name="materials\.\{\{/],
+]) {
+  if (!pattern.test(cfgHbs)) {
+    fail(`dents: the config sheet's ${group} inputs are not named \`${group}.<key>\`, so the form parser writes a flat object`);
+  }
+}
+// And something has to open it. A registered Object setting with no menu in
+// front of it is a config a GM can only reach by typing into the console.
+const settingsSrc = readFileSync(join(FEATURE, "settings.mjs"), "utf8");
+if (!/registerMenu\([^)]*dent[^)]*configMenu/s.test(settingsSrc) || !/type:\s*DentConfigApp\(\)/.test(settingsSrc)) {
+  fail("dents: the dent config sheet is never registered as a settings menu, so nothing opens it");
+}
+// The nudge controls carry a single glyph each and sit inside a panel whose
+// surface rule sizes the wordy buttons beside them. Left on that size they come
+// out several times the height of the rung they adjust, which is what shipped.
+if (!/\.glvr-dent-less,\s*\.glvr-dent-more\s*\{[^}]*font-size:/.test(read("styles/pf2e-variant-rules.css"))) {
+  fail("dents: the +/- nudge buttons take the panel's own type rather than declaring their own, which oversizes them");
 }
 
 /* ── 2c. Every button this feature ships is sized ────────────────────────── */

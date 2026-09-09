@@ -14,7 +14,8 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { SETTINGS } from "./constants.mjs";
+import { DEFAULT_DENT_CONFIG, SETTINGS } from "./constants.mjs";
+import { DentConfigApp } from "./dent-config.mjs";
 
 /** Read a setting without throwing when it has not been registered yet. */
 export function get(key, fallback = undefined) {
@@ -84,6 +85,27 @@ export function registerSettings() {
 
   // ── Dents ───────────────────────────────────────────────────────────────
   game.settings.register(SUITE_ID, SETTINGS.dentsRepair, bool(SETTINGS.dentsRepair, true));
+
+  // One object rather than a setting per material: twenty-two rows in the
+  // Control Center, each needing its own i18n pair, for a table that most
+  // worlds leave entirely at zero.
+  game.settings.register(SUITE_ID, SETTINGS.dentsConfig, {
+    name: `GLVR.settings.${SETTINGS.dentsConfig.slice("vr.".length)}.name`,
+    hint: `GLVR.settings.${SETTINGS.dentsConfig.slice("vr.".length)}.hint`,
+    scope: "world",
+    config: false,
+    type: Object,
+    default: foundry.utils.deepClone(DEFAULT_DENT_CONFIG),
+  });
+
+  game.settings.registerMenu(SUITE_ID, "vr.dent.configMenu", {
+    name: "GLVR.dentConfig.title",
+    label: "GLVR.dentConfig.label",
+    hint: "GLVR.dentConfig.hint",
+    icon: "fa-solid fa-shield-halved",
+    type: DentConfigApp(),
+    restricted: true,
+  });
 
   // ── Lasting Wounds ──────────────────────────────────────────────────────
   game.settings.register(SUITE_ID, SETTINGS.woundsBlockRest, bool(SETTINGS.woundsBlockRest, true));

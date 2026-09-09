@@ -19,7 +19,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { SETTINGS, sectionKeys } from "./constants.mjs";
+import { PARTY_KEY, SETTINGS, sectionKeys } from "./constants.mjs";
 import { isComplete, missingSections } from "./rules.mjs";
 import { buildSections } from "./sections.mjs";
 import { renderSealed, renderSection } from "./render.mjs";
@@ -30,9 +30,12 @@ import {
   knownSections,
   knownSubjects,
   ownerKey,
+  partyCharacters,
   partyMode,
   redact,
   reveal,
+  revealFalse,
+  subjectKey,
 } from "./store.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -67,7 +70,9 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       setOwner: CreaturedexApp.prototype._onSetOwner,
       setSubject: CreaturedexApp.prototype._onSetSubject,
-      toggleSection: CreaturedexApp.prototype._onToggleSection,
+      revealSection: CreaturedexApp.prototype._onReveal,
+      falsifySection: CreaturedexApp.prototype._onFalsify,
+      clearSection: CreaturedexApp.prototype._onClear,
       forgetSubject: CreaturedexApp.prototype._onForget,
     },
   };
@@ -83,16 +88,52 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#subjectUuid = options.subjectUuid ?? null;
   }
 
+  /** True when the GM has the whole party selected rather than one character. */
+  get everyone() {
+    return game.user.isGM && this.#ownerId === PARTY_KEY;
+  }
+
   get owner() {
+    if (this.everyone) return null;
     const pool = viewableCharacters();
     return pool.find((a) => a.id === this.#ownerId) ?? pool[0] ?? null;
+  }
+
+  /**
+   * The key a *read* resolves against.
+   *
+   * `PARTY_KEY` makes `knownSections` union every owner, which is exactly what
+   * "what does the party know" means and is also what the Party Knowledge
+   * sidebar does for a single character. So the whole-party view is a read mode,
+   * not a separate store.
+   */
+  get readKey() {
+    return this.everyone ? PARTY_KEY : ownerKey(this.owner);
+  }
+
+  /**
+   * The characters a *write* lands on.
+   *
+   * Fanned out across the party rather than written to a shared `party` bucket.
+   * A shared bucket would only read back while the Party Knowledge setting was
+   * on, so turning that setting off would silently delete everything the GM had
+   * revealed to "everyone" — and each character's own dex would be empty while
+   * the GM's screen looked correct.
+   */
+  get writeKeys() {
+    if (!this.everyone) {
+      const key = ownerKey(this.owner);
+      return key ? [key] : [];
+    }
+    return partyCharacters().map((a) => a.id);
   }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const isGM = game.user.isGM;
     const owner = this.owner;
-    const ownerId = ownerKey(owner);
+    const ownerId = this.readKey;
+    const everyone = this.everyone;
 
     const subjects = [];
     for (const uuid of knownSubjects()) {
@@ -124,9 +165,15 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ...context,
       isGM,
       party: partyMode(),
-      owners: viewableCharacters().map((a) => ({ id: a.id, name: a.name, selected: a.id === ownerId })),
-      showOwners: isGM && viewableCharacters().length > 1,
-      ownerName: owner?.name ?? "",
+      // "Everyone" leads the list because revealing to the table is the common
+      // case at an actual table: the players have just been told out loud.
+      owners: [
+        ...(isGM ? [{ id: PARTY_KEY, name: L("GLDEX.app.everyone"), selected: everyone }] : []),
+        ...viewableCharacters().map((a) => ({ id: a.id, name: a.name, selected: !everyone && a.id === ownerId })),
+      ],
+      showOwners: isGM,
+      everyone,
+      ownerName: everyone ? L("GLDEX.app.everyone") : (owner?.name ?? ""),
       subjects,
       detail: await this.#detail(ownerId),
       empty: !subjects.length,
@@ -162,6 +209,13 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
         // takes the whole window with it.
         isLie: !isKnown && !!lie && game.user.isGM,
         known: isKnown,
+        // Three GM controls, not one toggle. A section can be true, false or
+        // unknown, and the missing third state was the reason there was no way
+        // to plant a lie by hand at all — the only road to one was a critical
+        // failure the dice had to hand you.
+        canReveal: !isKnown,
+        canFalsify: !isKnown && !lie,
+        canClear: isKnown || !!lie,
         html: isKnown || lie ? await renderSection(section) : renderSealed(key),
       });
     }
@@ -191,22 +245,47 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   /**
-   * The GM's manual reveal.
+   * The GM's manual controls.
    *
    * This is the road every table can always use — a check the module never saw,
-   * a creature nobody targeted, a correction after a misclick — so it is not
-   * gated on an offer or on a roll at all.
+   * a creature nobody targeted, a correction after a misclick — so none of it is
+   * gated on an offer or on a roll.
    */
-  async _onToggleSection(event, target) {
-    if (!game.user.isGM) return;
-    const key = target.dataset.section;
-    const ownerId = ownerKey(this.owner);
+  #write(target) {
+    if (!game.user.isGM) return null;
+    const section = target?.dataset?.section ?? null;
+    const owners = this.writeKeys;
     const uuid = this.#subjectUuid;
-    if (!key || !ownerId || !uuid) return;
+    if (!section || !owners.length || !uuid) return null;
+    return { section, owners, uuid };
+  }
 
-    const known = knownSections(uuid, ownerId);
-    if (known.includes(key)) await redact(uuid, ownerId, key);
-    else await reveal(uuid, ownerId, key);
+  async _onReveal(event, target) {
+    const w = this.#write(target);
+    if (!w) return;
+    await reveal(w.uuid, w.owners, w.section);
+    await this.render();
+  }
+
+  /**
+   * Plant a lie by hand.
+   *
+   * The book only produces one on a critical failure, but a GM needs to be able
+   * to make the same thing happen for a reason the dice did not supply — a
+   * disguised creature, a poisoned source, a lie the party was told in
+   * character. Without this control the mechanic existed but had no switch.
+   */
+  async _onFalsify(event, target) {
+    const w = this.#write(target);
+    if (!w) return;
+    await revealFalse(w.uuid, w.owners, w.section, null);
+    await this.render();
+  }
+
+  async _onClear(event, target) {
+    const w = this.#write(target);
+    if (!w) return;
+    await redact(w.uuid, w.owners, w.section);
     await this.render();
   }
 
@@ -227,8 +306,62 @@ export class CreaturedexApp extends HandlebarsApplicationMixin(ApplicationV2) {
   /** One window, reused — a second dex open beside the first is just confusing. */
   static open(options = {}) {
     const existing = foundry.applications.instances.get("gldex-app");
-    const app = existing instanceof CreaturedexApp ? existing : new CreaturedexApp(options);
-    return app.render({ force: true });
+    if (existing instanceof CreaturedexApp) {
+      if (options.subjectUuid) existing.showSubject(options.subjectUuid);
+      if (options.ownerId) existing.#ownerId = options.ownerId;
+      return existing.render({ force: true });
+    }
+    return new CreaturedexApp(options).render({ force: true });
+  }
+
+  /** Point an already-open window at a creature without re-opening it. */
+  showSubject(uuid) {
+    this.#subjectUuid = uuid ?? null;
+    if (this.rendered) this.render();
+  }
+
+  /**
+   * Open the entry for a creature on the canvas.
+   *
+   * A player may only open a creature they have learned something about. An
+   * unknown creature's entry would print its **actor** name and portrait, and a
+   * GM who hid a token's name did so on purpose — so "nothing learned" is the
+   * honest answer rather than a window that quietly identifies the thing the
+   * party is looking at.
+   */
+  static mayView(actor) {
+    const uuid = subjectKey(actor);
+    if (!uuid) return null;
+    if (game.user.isGM) return uuid;
+    const known = viewableCharacters().some(
+      (pc) => knownSections(uuid, ownerKey(pc)).length || falseSections(uuid, ownerKey(pc)).length
+    );
+    return known ? uuid : null;
+  }
+
+  static openForActor(actor) {
+    const uuid = CreaturedexApp.mayView(actor);
+    if (!uuid) {
+      ui.notifications?.info(L("GLDEX.app.unknown", { name: actor?.token?.name ?? actor?.name ?? "" }));
+      return null;
+    }
+    return CreaturedexApp.open({ subjectUuid: uuid });
+  }
+
+  /**
+   * Follow the user's target, but only into a window that is already open.
+   *
+   * Targeting is a thing players do constantly and for reasons that have nothing
+   * to do with the dex; opening a window on it would be a window that appears
+   * while you are aiming a spell. Silent when the creature is unknown, because
+   * a notification on every target would be noise — the keybinding is where a
+   * player asks the question and gets an answer.
+   */
+  static followTarget(actor) {
+    const app = foundry.applications.instances.get("gldex-app");
+    if (!(app instanceof CreaturedexApp) || !app.rendered) return;
+    const uuid = CreaturedexApp.mayView(actor);
+    if (uuid) app.showSubject(uuid);
   }
 }
 

@@ -577,9 +577,30 @@ one. PF2e authors item HP on shields and on virtually nothing else: the
 therefore reads as a careful guard and silences the whole rule — no panel on any
 weapon, any suit of armour or any pack in a real world, which is indistinguishable
 from the feature being switched off, and which is exactly how it first shipped.
-Which items carry dents is the `DENTABLE` type list in `dents.mjs`; item HP is
-only written back where it exists. The check tool refuses a `tracksDents` that
-consults HP or Hardness.
+Which items carry dents is `DENT_TYPES` in `constants.mjs` filtered by the
+table's own `types` config; item HP is only written back where it exists. The
+check tool refuses a `tracksDents` that consults HP or Hardness.
+
+**The dent thresholds are a GM-editable config**, because "does a potion dent"
+and "how much does adamantine buy you" are rulings rather than facts about the
+data model. `DEFAULT_DENT_CONFIG` ships the printed rule and nothing else — 2/4,
+doubled on a sturdy shield, on the gear the rule is written for, every grade and
+material row at zero — so a table that never opens the sheet plays the book. Two
+things there fail silently. Foundry's form parser builds a nested object only
+from a **dotted** `name`: a flat `name="weapon"` saves a config with no `types`
+key, `dentConfig()` merges the defaults back over the hole, and the GM's edit is
+discarded while the form submits happily. And the sheet must be reachable — a
+registered Object setting with no `registerMenu` in front of it is a config a GM
+can only reach through the console. The check tool pins both, along with the
+threshold invariant across every combination the sheet can produce: a destroyed
+rung at or below the broken one deletes the broken state entirely, so an item
+goes from working to gone in one hit and every number involved still renders.
+
+`dent-config.mjs` builds its ApplicationV2 subclass in a **memoised factory**,
+not at module scope. `settings.mjs` is imported transitively by pure modules the
+check tools load under plain Node, where `foundry` does not exist, so a
+top-level `const { ApplicationV2 } = foundry.applications.api` takes the tooling
+down rather than the feature.
 
 One more that is invisible in a diff and in any preview built on the suite's own
 panels: **`.gl-btn` declares no font-size**. It states its padding in `em` and
@@ -600,13 +621,26 @@ every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
 or the catalog's longest-first sort hands the child's keys to the parent and its
 settings group renders empty; and the two runtime-built i18n families
 (`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
-key), which nothing else checks:
+key), which nothing else checks; and that the dent nudge controls carry a size of
+their own rather than the panel's, since a `+` and a `-` left at the surface
+default come out several times the height of the rung they adjust:
 
 ```bash
 node tools/pf2e-variant-rules-check.mjs
 ```
 
-Zero problems required. Three things about this feature are worth knowing before
+Zero problems required. Nothing there can show you a panel. For that:
+
+```bash
+node tools/variant-rules-preview.mjs --out=.preview/vr.html && node tools/preview-server.mjs 8954
+```
+
+**Serve it.** It draws the dent track in a 16px host and the chat cards in a 14px
+one, because the type a button inherits is the whole bug, and it renders the dent
+config sheet at its real window size, where a footer clipped by a stray
+`height: 100%` is visible and in a diff is not.
+
+Three things about this feature are worth knowing before
 you change it.
 
 **Chip Damage and Dents run in assist mode on purpose.** PF2e exposes no hook on
@@ -808,6 +842,18 @@ node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview
 **Serve it.** The page puts the player view next to the GM view and draws both
 chat cards at a real chat log's 14px, which is the only size at which an unsized
 button looks wrong. See `docs/CREATUREDEX.md`.
+
+Two more things it pins, both of which are silent. A whole-party reveal is a
+**fan-out**, one row per member, never a shared `party` row: Party Knowledge is a
+*read* — a union over the owners — so that a table can turn it off mid-campaign
+without inventing or destroying a fact, and a shared row would read back only
+while it was on. And every road onto the board — the `K` keybinding, the token
+HUD button, an open window following the target — has to ask `mayView` first. An
+unknown creature's entry prints its **actor** name and portrait, and a GM who hid
+a token's name did so on purpose, so a window that opens anyway quietly
+identifies the thing the party is looking at. Knowing a *lie* counts as knowing
+something there: a player told one cannot see that it is false, so refusing to
+open is the module losing the only thing they were given.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

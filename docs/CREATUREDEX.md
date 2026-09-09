@@ -102,6 +102,59 @@ If that ever degrades into trusting the payload, a player can hand themselves a
 completed creaturedex for anything on the board and no screen looks wrong.
 `tools/creaturedex-check.mjs` pins each of those five checks by name.
 
+## The GM writes by hand, to one character or to all of them
+
+The socket is the *player's* road, and it exists only because the book hands the
+choice of section to the roller. Everything the GM does is an ordinary write from
+a GM client: three controls on every section row, shown by state rather than all
+at once, so what is on screen is what the section can currently become.
+
+| section state | controls |
+| --- | --- |
+| unknown | Reveal, Falsify |
+| known | Redact |
+| false | Reveal, Redact |
+
+Falsify plants a lie by hand. The book only produces one on a critical failure,
+but a disguised creature, a poisoned source or a lie the party was told in
+character all want the same thing and the dice do not supply them. It is refused
+on a section that is already false: a second lie over the first changes nothing
+while looking like it worked.
+
+The owner row above them selects who the write lands on, and its first entry is
+**Everyone**. That is a fan-out, not a bucket: a whole-party reveal writes one row
+per party member. Party Knowledge is implemented as a *read* — a union over the
+owners — precisely so the setting can be turned off mid-campaign without
+inventing or destroying a fact, and a shared `party` row would read back only
+while the setting was on and vanish the moment a table turned it off, taking
+every creature learned that way with it. `writeKeys` is pinned for that reason.
+
+## Getting to a creature from the board
+
+Three roads, because a player owns none of the creatures in the dex and so has no
+gesture the canvas will give them: double-click opens a sheet they lack
+permission for, right-click summons a HUD they cannot raise, and the token's
+context menu is the GM's.
+
+- **`K`** (rebindable in Foundry's own Configure Controls, and unbound in core)
+  opens the entry for whatever the user is pointing at: their target first, then a
+  controlled token, then a hover. All three matter — a player aiming a spell has a
+  target, a summoner has a controlled token, and "point at it" is a hover.
+- **A token HUD button**, drawn only where it leads somewhere. It is registered
+  for everyone rather than gated on `isGM`, because a summoner's own minion is a
+  creature a player owns and might well have studied.
+- **An already-open window follows the target.** Silently, and only when the
+  window is open: a dex that appeared while you were aiming a spell would be a
+  window nobody asked for, and a notification on every target would be noise.
+
+All three go through `CreaturedexApp.mayView`, which answers `null` for a creature
+the party knows nothing about. An unknown creature's entry would print its
+**actor** name and portrait, and a GM who hid a token's name did so on purpose, so
+"nothing learned" is the honest answer rather than a window that quietly
+identifies the thing the party is looking at. Knowing a *lie* counts: a player
+told one cannot see that it is false, so refusing to open there is the module
+losing the only thing they were given.
+
 ## Discerning Aid
 
 Granted once, on a character's first completed dex, as a real Item so that
@@ -144,7 +197,10 @@ hazard through the extractor and asserts every field the book names lands in the
 section the book puts it in (and in **only** that section — a field in two
 sections is worse than a field in none, because the player buys one and silently
 receives part of another), pins the five socket checks, the base-actor key, both
-runtime-built i18n families, and that every button is sized.
+runtime-built i18n families, that every button is sized, that a whole-party
+reveal fans out to the members rather than writing a shared bucket, that all
+three section controls survive the trip from context flag to template branch to
+registered action, and that every road in from the board still asks `mayView`.
 
 It cannot show you how any of it looks. For that:
 

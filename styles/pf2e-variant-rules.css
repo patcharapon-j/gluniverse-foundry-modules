@@ -49,11 +49,16 @@
 }
 
 /* The two nudges are a matched pair and read as one control, so they are sized
-   to the wider of the two glyphs rather than to their own labels. */
+   to the wider of the two glyphs rather than to their own labels — and they are
+   sized *down* from the row's type, not up. They carry one character each and
+   sit beside a three-character number box on an item sheet; at the row's own
+   size they were the largest thing in the panel, which made a minor bookkeeping
+   control look like the panel's primary action. */
 .glvr-dent-less,
 .glvr-dent-more {
-  min-width: 2.6em;
-  padding: 0.5em 0.7em;
+  min-width: 2.2em;
+  padding: 0.3em 0.5em;
+  font-size: var(--gl-fs-2xs);
 }
 
 .glvr-dent-head {
@@ -398,4 +403,100 @@
   color: var(--gl-text);
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-xs);
+}
+
+/* ── Dent configuration sheet ─────────────────────────────────────────────── */
+
+/* No `height: 100%` and no scroller of its own. ApplicationV2's
+   `.window-content` is already the scrolling box; a second one inside it either
+   resolves to nothing (a percentage height against a parent that has none) or
+   clips the footer off the bottom of a sheet whose only submit button lives
+   there. The sheet is a column that grows, and the window scrolls it. */
+.glvr-cfg-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-5);
+  padding: var(--gl-sp-6);
+  --gl-accent: var(--gl-warn);
+  color: var(--gl-text);
+}
+
+.glvr-cfg-lead { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); line-height: var(--gl-lh-normal); }
+
+.glvr-cfg-block {
+  margin: 0;
+  padding: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+}
+.glvr-cfg-block > legend {
+  padding: 0 var(--gl-sp-3);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+
+.glvr-cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gl-sp-4);
+}
+
+.glvr-cfg-field { display: flex; align-items: center; gap: var(--gl-sp-4); min-width: 0; }
+.glvr-cfg-field > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glvr-cfg-field input[type="number"] {
+  flex: 0 0 auto;
+  width: 4em;
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.glvr-cfg-field input[type="number"]:focus-visible { border-color: var(--gl-accent); outline: none; }
+
+.glvr-cfg-types { display: flex; flex-wrap: wrap; gap: var(--gl-sp-4) var(--gl-sp-6); }
+.glvr-cfg-check { display: flex; align-items: center; gap: var(--gl-sp-3); font-size: var(--gl-fs-xs); }
+
+/* Twenty-two materials is a list, not a grid: it scrolls in its own box so the
+   sheet does not become a page nobody reaches the bottom of. */
+.glvr-cfg-materials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gl-sp-3) var(--gl-sp-6);
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: var(--gl-sp-4);
+}
+
+.glvr-cfg-note {
+  margin: var(--gl-sp-4) 0 0;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-normal);
+}
+
+.glvr-cfg-foot { display: flex; justify-content: flex-end; gap: var(--gl-sp-4); }
+
+/* Sized here for the same reason every other button in this feature is:
+   `.gl-btn` takes the host's type and inflates its own padding to match. */
+.glvr-cfg-root .gl-btn {
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.6em 1.1em;
 }
