@@ -90,7 +90,7 @@ and a slow violet miasma drawn behind it in WebGL. Its extra entries additionall
 carry a "Turn 2 of 3" chip, so the initial turn, the one that clears Downfalls,
 is readable without opening anything.
 
-The accent is `--gl-dread`, a purple that exists for this and nothing else. Both
+The accent is `--gl-tyrant`, a purple that exists for this and nothing else. Both
 purples already on the rail were taken: `--gl-violet` means "secret, hidden,
 mystery" and paints the scrambled cards, `--gl-orchid` is the dying accent, so a
 boss on either would be exactly the colour of a hidden combatant or a downed

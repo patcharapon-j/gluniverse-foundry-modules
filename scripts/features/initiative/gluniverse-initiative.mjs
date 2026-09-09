@@ -33,7 +33,7 @@ import {
   PORTRAIT_FRAME_LIMITS
 } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
-import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_DREAD, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
+import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TYRANT, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./token-overlay.mjs";
 /**
  * Boss Creatures reads, from the PF2e variant rules feature.
@@ -5469,7 +5469,7 @@ class CardFXManager {
         break:    mk(FX_FRAG_BREAK,    { uBreakAmber: [...S.breakAmber], uBreakHot: [...S.breakHot] }),
         dying:    mk(FX_FRAG_DYING,    { uVeinBase:   [...S.veinBase],   uVeinHot:  [...S.veinHot]  }),
         scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
-        dread:    mk(FX_FRAG_DREAD,    { uDreadBase:  [...S.dreadBase],  uDreadHot: [...S.dreadHot], uIntensity: 1 })
+        dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
       };
       // Force each filter's GLSL program to compile now. Otherwise the program
       // compiles lazily on the first frame a card is broken/dying/mystery, stalling
@@ -5610,8 +5610,8 @@ class CardFXManager {
     set(this.filters.dying,    "uVeinHot",    S.veinHot);
     set(this.filters.scramble, "uMysteryA",   S.mysteryA);
     set(this.filters.scramble, "uMysteryB",   S.mysteryB);
-    set(this.filters.dread,    "uDreadBase",  S.dreadBase);
-    set(this.filters.dread,    "uDreadHot",   S.dreadHot);
+    set(this.filters.dread,    "uTyrantBase",  S.tyrantBase);
+    set(this.filters.dread,    "uTyrantHot",   S.tyrantHot);
   }
 
   destroy() {

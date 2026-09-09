@@ -4,7 +4,7 @@
  * Identity is routed through `--gl-accent` on the panel root and remapped per
  * tier, so the figures, the buttons, the rules and the focus rings all move
  * together, and the panel matches the initiative card exactly: both tiers take
- * --gl-dread, the purple that exists for bosses and nothing else, and a Supreme
+ * --gl-tyrant, the purple that exists for bosses and nothing else, and a Supreme
  * boss is the same hue carried further rather than a second one. The
  * panel sits inside PF2e's own sheet, which is a light, dense surface, so this
  * sheet spends its edges rather than its fills — one chamfered outline, hairline
@@ -13,7 +13,7 @@
  */
 
 .glvr-boss-panel {
-  --gl-accent: var(--gl-dread);
+  --gl-accent: var(--gl-tyrant);
   display: flex;
   flex-direction: column;
   gap: var(--gl-sp-4);
@@ -34,9 +34,9 @@
  * they were looking at two different things.
  */
 .glvr-boss-panel[data-tier="supreme"] {
-  --gl-accent: var(--gl-dread);
-  border-color: color-mix(in srgb, var(--gl-dread) 46%, var(--gl-edge));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-dread) 22%, transparent);
+  --gl-accent: var(--gl-tyrant);
+  border-color: color-mix(in srgb, var(--gl-tyrant) 46%, var(--gl-edge));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-tyrant) 22%, transparent);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */

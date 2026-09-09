@@ -40,9 +40,9 @@
   --gluni-stable:           var(--gl-teal);
   --gluni-stable-hot:       var(--gl-teal-hot);
   --gluni-violet:      var(--gl-violet);
-  --gluni-dread:       var(--gl-dread);       /* boss presence */
-  --gluni-dread-hot:   var(--gl-dread-hot);
-  --gluni-dread-deep:  var(--gl-dread-deep);
+  --gluni-tyrant:       var(--gl-tyrant);       /* boss presence */
+  --gluni-tyrant-hot:   var(--gl-tyrant-hot);
+  --gluni-tyrant-deep:  var(--gl-tyrant-deep);
   --gluni-ink:         var(--gl-ink-0);
   --gluni-line:        rgb(var(--gl-tint-light) / 0.10);
   --gluni-line-strong: var(--gl-line-strong);
@@ -1811,7 +1811,7 @@
  * the one creature at the table that acts three times a round look exactly like
  * the four that act once.
  *
- * The hue is --gl-dread, a purple that exists for this and nothing else. The two
+ * The hue is --gl-tyrant, a purple that exists for this and nothing else. The two
  * purples already in the rail were both spoken for: --gl-violet is "secret,
  * hidden, mystery" and paints the scrambled cards, and --gl-orchid is the dying
  * accent, so a boss on it would be exactly the colour of a downed party member
@@ -1830,7 +1830,7 @@
  * cascade and own the card's field when they apply.
  */
 .gluni-card--boss {
-  --gluni-accent: var(--gluni-dread);
+  --gluni-accent: var(--gluni-tyrant);
 }
 
 /*
@@ -1858,7 +1858,7 @@
 /* A Supreme boss is the same frame with more weight behind it. */
 .gluni-card--boss-supreme .gluni-card-surface {
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-dread-hot) 72%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-tyrant-hot) 72%, transparent),
     inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.58),
     inset 0 0 0 5px color-mix(in srgb, var(--gluni-accent) 38%, transparent),
     0 0 22px color-mix(in srgb, var(--gluni-accent) 30%, transparent);

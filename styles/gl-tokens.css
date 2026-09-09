@@ -89,9 +89,9 @@
    * is much deeper and far more saturated than both, which is what separates it
    * at card size where a hue alone would not.
    */
-  --gl-dread: #8b46e8;           /* boss presence */
-  --gl-dread-hot: #cfa8ff;       /* its lit edge */
-  --gl-dread-deep: #35105e;      /* the shadow the miasma is drawn in */
+  --gl-tyrant: #8b46e8;           /* boss presence */
+  --gl-tyrant-hot: #cfa8ff;       /* its lit edge */
+  --gl-tyrant-deep: #35105e;      /* the shadow the miasma is drawn in */
   --gl-jade: #54d6a6;            /* conditions, sustained effects */
   --gl-jade-hot: #c2ffe8;
   --gl-teal: #4ad9c0;            /* stabilised, held, at rest */

@@ -777,7 +777,7 @@ for (const cls of ["gluni-card--boss", "gluni-card--boss-supreme", "gluni-card--
 /*
  * The boss hue, and the shader that carries it.
  *
- * --gl-dread exists because both purples already on this rail are spoken for:
+ * --gl-tyrant exists because both purples already on this rail are spoken for:
  * --gl-violet is "secret, hidden, mystery" and paints the scrambled cards,
  * --gl-orchid is the dying accent. A boss sharing either would be the same
  * colour as a hidden combatant or a downed party member, which renders
@@ -785,14 +785,28 @@ for (const cls of ["gluni-card--boss", "gluni-card--boss-supreme", "gluni-card--
  */
 const tokensCss = read("styles/gl-tokens.css");
 const hueOf = (name) => tokensCss.match(new RegExp(`--gl-${name}:\\s*(#[0-9a-fA-F]{3,8})`))?.[1]?.toLowerCase() ?? null;
-const dread = hueOf("dread");
-if (!dread) fail("boss: --gl-dread is not declared in gl-tokens.css");
-for (const other of ["violet", "orchid", "peril", "signal"]) {
-  if (dread && hueOf(other) === dread) {
-    fail(`boss: --gl-dread is the same colour as --gl-${other}, so a boss reads as whatever that already means`);
+const tyrant = hueOf("tyrant");
+if (!tyrant) fail("boss: --gl-tyrant is not declared in gl-tokens.css");
+/*
+ * A custom property is one flat global namespace shared by the colours, the
+ * durations and the easings, and this hue shipped as --gl-dread, which was
+ * already a 3.2s motion duration used by three other features. The colour lost
+ * the cascade and every boss was painted "calc(3.2s * 1)" — an invalid colour,
+ * so the accent silently fell back and the cards looked ordinary. Had it won,
+ * it would have broken those three animations instead. Neither errors.
+ */
+for (const [name] of [["tyrant"], ["tyrant-hot"], ["tyrant-deep"]]) {
+  const declarations = [...tokensCss.matchAll(new RegExp(`^\\s*--gl-${name}:`, "gm"))].length;
+  if (declarations !== 1) {
+    fail(`boss: --gl-${name} is declared ${declarations} times in gl-tokens.css — colours, durations and easings share one namespace`);
   }
 }
-if (!initCss.includes("--gluni-accent: var(--gluni-dread)")) {
+for (const other of ["violet", "orchid", "peril", "signal"]) {
+  if (tyrant && hueOf(other) === tyrant) {
+    fail(`boss: --gl-tyrant is the same colour as --gl-${other}, so a boss reads as whatever that already means`);
+  }
+}
+if (!initCss.includes("--gluni-accent: var(--gluni-tyrant)")) {
   fail("boss: the card accent is not routed through the dread token");
 }
 if (/--gluni-accent:\s*var\(--gluni-(dying|violet)\)/.test(
@@ -803,26 +817,26 @@ if (/--gluni-accent:\s*var\(--gluni-(dying|violet)\)/.test(
 
 /*
  * A shader uniform that is declared and never written holds whatever the driver
- * started it at, forever, and nothing errors. Every uniform FX_FRAG_DREAD
+ * started it at, forever, and nothing errors. Every uniform FX_FRAG_TYRANT
  * declares has to be set by the host — uSampler excepted, which PIXI binds.
  */
 const initGl = read("scripts/features/initiative/gl.mjs");
-const dreadFrag = initGl.slice(initGl.indexOf("export const FX_FRAG_DREAD"));
-const dreadBody = dreadFrag.slice(0, dreadFrag.indexOf("`;") + 2);
-if (!dreadBody.includes("gl_FragColor")) fail("boss: FX_FRAG_DREAD could not be located in gl.mjs");
+const tyrantFrag = initGl.slice(initGl.indexOf("export const FX_FRAG_TYRANT"));
+const tyrantBody = tyrantFrag.slice(0, tyrantFrag.indexOf("`;") + 2);
+if (!tyrantBody.includes("gl_FragColor")) fail("boss: FX_FRAG_TYRANT could not be located in gl.mjs");
 const railSource = read("scripts/features/initiative/gluniverse-initiative.mjs");
-const dreadUniforms = new Set();
-for (const m of dreadBody.matchAll(/uniform\s+(?:float|vec2|vec3|vec4|sampler2D)\s+([^;]+);/g)) {
-  for (const name of m[1].split(",")) dreadUniforms.add(name.trim());
+const tyrantUniforms = new Set();
+for (const m of tyrantBody.matchAll(/uniform\s+(?:float|vec2|vec3|vec4|sampler2D)\s+([^;]+);/g)) {
+  for (const name of m[1].split(",")) tyrantUniforms.add(name.trim());
 }
-for (const name of dreadUniforms) {
+for (const name of tyrantUniforms) {
   if (name === "uSampler") continue;
   if (!railSource.includes(`uniforms.${name}`) && !railSource.includes(`${name}:`)) {
-    fail(`boss: FX_FRAG_DREAD declares ${name} and nothing ever writes it`);
+    fail(`boss: FX_FRAG_TYRANT declares ${name} and nothing ever writes it`);
   }
 }
 const palette = read("scripts/features/initiative/constants.mjs");
-for (const key of ["dreadBase", "dreadHot"]) {
+for (const key of ["tyrantBase", "tyrantHot"]) {
   if (!palette.includes(`${key}:`)) fail(`boss: ACTIVE_SHADER_PALETTE has no ${key} — the shader would paint black`);
 }
 
