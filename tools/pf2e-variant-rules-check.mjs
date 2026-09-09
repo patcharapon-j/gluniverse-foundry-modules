@@ -774,6 +774,71 @@ for (const cls of ["gluni-card--boss", "gluni-card--boss-supreme", "gluni-card--
   if (!initCss.includes(`.${cls}`)) fail(`boss: styles/initiative.css defines no .${cls}`);
 }
 
+/*
+ * The boss hue, and the shader that carries it.
+ *
+ * --gl-dread exists because both purples already on this rail are spoken for:
+ * --gl-violet is "secret, hidden, mystery" and paints the scrambled cards,
+ * --gl-orchid is the dying accent. A boss sharing either would be the same
+ * colour as a hidden combatant or a downed party member, which renders
+ * perfectly and is simply a lie about what the row is.
+ */
+const tokensCss = read("styles/gl-tokens.css");
+const hueOf = (name) => tokensCss.match(new RegExp(`--gl-${name}:\\s*(#[0-9a-fA-F]{3,8})`))?.[1]?.toLowerCase() ?? null;
+const dread = hueOf("dread");
+if (!dread) fail("boss: --gl-dread is not declared in gl-tokens.css");
+for (const other of ["violet", "orchid", "peril", "signal"]) {
+  if (dread && hueOf(other) === dread) {
+    fail(`boss: --gl-dread is the same colour as --gl-${other}, so a boss reads as whatever that already means`);
+  }
+}
+if (!initCss.includes("--gluni-accent: var(--gluni-dread)")) {
+  fail("boss: the card accent is not routed through the dread token");
+}
+if (/--gluni-accent:\s*var\(--gluni-(dying|violet)\)/.test(
+  initCss.slice(initCss.indexOf(".gluni-card--boss {"), initCss.indexOf(".gluni-card--dying .gluni-card-surface"))
+)) {
+  fail("boss: a boss card takes the dying or mystery accent");
+}
+
+/*
+ * A shader uniform that is declared and never written holds whatever the driver
+ * started it at, forever, and nothing errors. Every uniform FX_FRAG_DREAD
+ * declares has to be set by the host — uSampler excepted, which PIXI binds.
+ */
+const initGl = read("scripts/features/initiative/gl.mjs");
+const dreadFrag = initGl.slice(initGl.indexOf("export const FX_FRAG_DREAD"));
+const dreadBody = dreadFrag.slice(0, dreadFrag.indexOf("`;") + 2);
+if (!dreadBody.includes("gl_FragColor")) fail("boss: FX_FRAG_DREAD could not be located in gl.mjs");
+const railSource = read("scripts/features/initiative/gluniverse-initiative.mjs");
+const dreadUniforms = new Set();
+for (const m of dreadBody.matchAll(/uniform\s+(?:float|vec2|vec3|vec4|sampler2D)\s+([^;]+);/g)) {
+  for (const name of m[1].split(",")) dreadUniforms.add(name.trim());
+}
+for (const name of dreadUniforms) {
+  if (name === "uSampler") continue;
+  if (!railSource.includes(`uniforms.${name}`) && !railSource.includes(`${name}:`)) {
+    fail(`boss: FX_FRAG_DREAD declares ${name} and nothing ever writes it`);
+  }
+}
+const palette = read("scripts/features/initiative/constants.mjs");
+for (const key of ["dreadBase", "dreadHot"]) {
+  if (!palette.includes(`${key}:`)) fail(`boss: ACTIVE_SHADER_PALETTE has no ${key} — the shader would paint black`);
+}
+
+/*
+ * Dread is the resting state of a boss card, so it must lose to the two states
+ * that say something is happening *to* it. A boss that is dying or whose guard
+ * has broken has to show that, not a haze.
+ */
+const modeBlock = railSource.slice(railSource.indexOf("const fxMode = !fxReady"));
+const modeExpr = modeBlock.slice(0, modeBlock.indexOf(";") + 1);
+for (const earlier of ['"break"', '"dying"']) {
+  if (modeExpr.indexOf(earlier) < 0 || modeExpr.indexOf(earlier) > modeExpr.indexOf('"dread"')) {
+    fail(`boss: the dread effect is chosen before ${earlier} — a boss in trouble would look untroubled`);
+  }
+}
+
 const encounterSource = read("scripts/features/flatfinder/encounter.js");
 if (!encounterSource.includes("bossXpFactor(actor)")) {
   fail("boss: the Flatfinder encounter budget no longer multiplies a boss's XP");

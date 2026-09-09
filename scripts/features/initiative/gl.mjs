@@ -104,6 +104,45 @@ void main(void){
 // it switches to a thin, cool, marching dashed perimeter ("on deck" / queued read)
 // so it's formally distinct from the active plasma pedestal. uReduced freezes
 // motion for the reduced animation tier.
+// Boss dread (initiative card only): a slow violet miasma that rises from the
+// bottom edge and clings to the sides, with a few brighter filaments where it is
+// densest. It is the quietest effect in this file on purpose. A boss holds the
+// rail for two or three slots of every round, so anything that flickered or
+// raced would be the loudest thing on screen for half the encounter; this
+// breathes, at a period long enough that you notice the card is not still
+// without ever catching it moving.
+//
+// The centre is deliberately left thin. A portrait's face is in the middle of
+// the frame and the effect has to read as something around the creature rather
+// than a wash over it.
+//
+// uIntensity carries the tier: a Supreme boss is the same colour, more of it.
+// Hue says "boss", amount says "how much of one" — which leaves --gl-dread free
+// to mean exactly one thing on the rail.
+export const FX_FRAG_DREAD = `
+varying vec2 vTextureCoord;
+uniform sampler2D uSampler;
+uniform float uTime, uSeed, uAspect, uIntensity;
+uniform vec3 uDreadBase, uDreadHot;
+${FX_GLSL_NOISE}
+void main(void){
+  vec2 uv=vTextureCoord;
+  // Domain warp on two different drifts, so the smoke wanders instead of
+  // scrolling: a visible scroll direction reads as a texture, not as air.
+  vec2 w=vec2(gluFbm(uv*2.2+vec2(0.0,-uTime*0.035)), gluFbm(uv*2.2+vec2(4.7,uTime*0.026)));
+  float smoke=gluFbm(uv*3.0+w*1.35+vec2(0.0,-uTime*0.055));
+  float rise=smoothstep(1.0,0.12,uv.y);                 // heaviest along the bottom
+  float edge=max(smoothstep(0.40,0.0,uv.x), smoothstep(0.60,1.0,uv.x));
+  float mask=max(rise*0.78, edge);
+  float body=smoke*mix(0.22,1.0,mask);
+  float ridge=1.0-abs(smoke*2.0-1.0);
+  float filament=smoothstep(0.93,1.0,ridge)*mask;       // the few lit threads
+  float breath=0.84+0.16*sin(uTime*0.5+uSeed);
+  float a=clamp((body*0.34+filament*0.30)*breath*uIntensity,0.0,0.78);
+  vec3 col=mix(uDreadBase,uDreadHot,clamp(filament*1.6,0.0,1.0));
+  gl_FragColor=vec4(col*a, a);
+}`;
+
 export const FX_FRAG_TURN = `
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;

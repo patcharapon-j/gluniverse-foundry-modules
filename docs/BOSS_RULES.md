@@ -85,10 +85,26 @@ after 2 party members have acted, a Supreme boss's after 1 and 3 — re-derived 
 the real party size, because those numbers are stated for a party of four and
 taken literally would put two boss turns back to back at a table of five.
 
-On the rail a boss carries a **BOSS** chip and its own accent: Greater the
-ceremony amber, Supreme the peril crimson. Its extra entries additionally carry a
-"Turn 2 of 3" chip, so the initial turn — the one that clears Downfalls — is
-readable without opening anything.
+On the rail a boss carries a **BOSS** chip, its own accent, a three-ring frame
+and a slow violet miasma drawn behind it in WebGL. Its extra entries additionally
+carry a "Turn 2 of 3" chip, so the initial turn, the one that clears Downfalls,
+is readable without opening anything.
+
+The accent is `--gl-dread`, a purple that exists for this and nothing else. Both
+purples already on the rail were taken: `--gl-violet` means "secret, hidden,
+mystery" and paints the scrambled cards, `--gl-orchid` is the dying accent, so a
+boss on either would be exactly the colour of a hidden combatant or a downed
+party member. Both tiers share the hue and differ in weight: a Supreme boss gets
+a heavier frame and a denser miasma, and the card already states the tier where
+it counts, since its extra entries read "Turn 2 of 3" against a Greater's
+"Turn 2 of 2".
+
+The miasma is a fragment shader on the same `CardFXManager` that draws the
+guard-break and dying effects, so a boss card costs one more program and no new
+machinery. It is the quietest effect in that file deliberately: a boss holds two
+or three slots of every round, and anything that flickered would be the loudest
+thing on screen for half the encounter. It yields to break and dying, which are
+states of the current fight and the more urgent thing for the card to say.
 
 ## Flatfinder and Proficiency-without-Level
 

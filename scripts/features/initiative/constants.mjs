@@ -81,6 +81,8 @@ export const ACTIVE_SHADER_PALETTE = {
   mysteryB:   [0.37, 0.92, 1.0],       // FX_FRAG_SCRAMBLE cyan
   delayBase:  [0.29, 0.64, 1.0],       // FX_FRAG_DELAY blue
   delayHot:   [0.60, 0.85, 1.0],
+  dreadBase:  [0.208, 0.063, 0.369],   // FX_FRAG_DREAD --gl-dread-deep (the body)
+  dreadHot:   [0.812, 0.659, 1.0],     // FX_FRAG_DREAD --gl-dread-hot (the filaments)
   breakAmber: [1.0, 0.694, 0.176],     // FX_FRAG_BREAK amber
   breakHot:   [1.0, 0.878, 0.439],
   splashHot:  [1.0, 0.694, 0.176],     // BREAK_GL_FRAG full-screen

@@ -33,7 +33,7 @@ import {
   PORTRAIT_FRAME_LIMITS
 } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
-import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
+import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_DREAD, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./token-overlay.mjs";
 /**
  * Boss Creatures reads, from the PF2e variant rules feature.
@@ -1968,13 +1968,26 @@ export class GLUniverseInitiativeOverlay {
     // persistent states). Falls back to the CSS background when WebGL is
     // unsupported.
     const fxReady = !card.adhoc && cardFX?.supported;
+    // A boss yields to break and dying. Those are states of this fight, and a
+    // boss in one of them is a boss in trouble — the more urgent thing for the
+    // card to be saying. Dread is what a boss looks like when nothing else is
+    // happening to it, which is most of the encounter.
     const fxMode = !fxReady
       ? null
       : card.mystery
         ? "scramble"
         : card.portrait
-          ? (card.guardBroken ? "break" : card.dying && !card.dying.stable ? "dying" : null)
+          ? (card.guardBroken
+              ? "break"
+              : card.dying && !card.dying.stable
+                ? "dying"
+                : card.boss
+                  ? "dread"
+                  : null)
           : null;
+    // The tier rides on the canvas rather than on a filter of its own: one
+    // program, one compile, and the amount of miasma is a per-frame uniform.
+    const fxIntensity = fxMode === "dread" ? (card.boss.tier === "supreme" ? 1.55 : 1) : 1;
 
     const slotAttr = Number.isInteger(card.cardSlot) ? ` data-card-slot="${card.cardSlot}"` : "";
 
@@ -2030,7 +2043,7 @@ export class GLUniverseInitiativeOverlay {
             </div>
           `
           : ""}
-        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" aria-hidden="true"></canvas>` : ""}
+        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" data-fx-intensity="${fxIntensity}" aria-hidden="true"></canvas>` : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
             ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
@@ -5455,7 +5468,8 @@ class CardFXManager {
       this.filters = {
         break:    mk(FX_FRAG_BREAK,    { uBreakAmber: [...S.breakAmber], uBreakHot: [...S.breakHot] }),
         dying:    mk(FX_FRAG_DYING,    { uVeinBase:   [...S.veinBase],   uVeinHot:  [...S.veinHot]  }),
-        scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] })
+        scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
+        dread:    mk(FX_FRAG_DREAD,    { uDreadBase:  [...S.dreadBase],  uDreadHot: [...S.dreadHot], uIntensity: 1 })
       };
       // Force each filter's GLSL program to compile now. Otherwise the program
       // compiles lazily on the first frame a card is broken/dying/mystery, stalling
@@ -5501,6 +5515,7 @@ class CardFXManager {
         ctx: cv.getContext("2d"),
         mode,
         seed: prev?.seed ?? Math.random() * 100,
+        intensity: Number(cv.dataset.fxIntensity) || 1,
         impact: prev?.impact ?? [0.42 + Math.random() * 0.36, 0.18 + Math.random() * 0.42],
         t0: prev && prev.mode === mode ? prev.t0 : performance.now()
       });
@@ -5571,6 +5586,7 @@ class CardFXManager {
         filter.uniforms.uAspect = rw / rh;
         filter.uniforms.uTexel = 1 / rh;
         if (entry.mode === "break") filter.uniforms.uImpact = entry.impact;
+        if (entry.mode === "dread") filter.uniforms.uIntensity = entry.intensity;
         this.sprite.width = rw;
         this.sprite.height = rh;
         this.sprite.filters = [filter];
@@ -5594,6 +5610,8 @@ class CardFXManager {
     set(this.filters.dying,    "uVeinHot",    S.veinHot);
     set(this.filters.scramble, "uMysteryA",   S.mysteryA);
     set(this.filters.scramble, "uMysteryB",   S.mysteryB);
+    set(this.filters.dread,    "uDreadBase",  S.dreadBase);
+    set(this.filters.dread,    "uDreadHot",   S.dreadHot);
   }
 
   destroy() {

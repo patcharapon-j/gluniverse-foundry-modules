@@ -40,7 +40,9 @@
   --gluni-stable:           var(--gl-teal);
   --gluni-stable-hot:       var(--gl-teal-hot);
   --gluni-violet:      var(--gl-violet);
-  --gluni-peril:       var(--gl-peril);   /* escalation beyond hazard — Supreme bosses */
+  --gluni-dread:       var(--gl-dread);       /* boss presence */
+  --gluni-dread-hot:   var(--gl-dread-hot);
+  --gluni-dread-deep:  var(--gl-dread-deep);
   --gluni-ink:         var(--gl-ink-0);
   --gluni-line:        rgb(var(--gl-tint-light) / 0.10);
   --gluni-line-strong: var(--gl-line-strong);
@@ -1809,33 +1811,93 @@
  * the one creature at the table that acts three times a round look exactly like
  * the four that act once.
  *
- * Greater takes the suite's ceremony amber and Supreme its peril crimson, whose
- * token is defined as "escalation beyond hazard" and is therefore the one hue in
- * the pool that already means what a Supreme boss means. Orchid is deliberately
- * NOT used here despite reading well at this size: it is the dying accent, so a
- * Supreme boss at full Hit Points would be exactly the colour the rail uses for
- * a downed party member.
+ * The hue is --gl-dread, a purple that exists for this and nothing else. The two
+ * purples already in the rail were both spoken for: --gl-violet is "secret,
+ * hidden, mystery" and paints the scrambled cards, and --gl-orchid is the dying
+ * accent, so a boss on it would be exactly the colour of a downed party member
+ * at full Hit Points. Amber and crimson, which this shipped with first, are the
+ * suite's ceremony and hazard hues and both already appear on this rail.
  *
- * The accent is all that changes: --gluni-holo-a, -b and -c and the break blend
- * derive from it, so the whole card follows without a second declaration, and a
- * dying or guard-broken boss still yields to those states as it should — those
- * rules come later in the cascade and own the card's field when they apply.
+ * BOTH tiers take the same accent, and that is deliberate. A hue can say one
+ * thing well; asked to say two it says neither, and the card already carries the
+ * tier where it matters — a Supreme boss's extra entries read "Turn 2 of 3"
+ * against a Greater's "Turn 2 of 2". So the hue means "boss" and the *amount*
+ * means how much of one: Supreme takes a heavier frame and a stronger miasma.
+ *
+ * The accent drives --gluni-holo-a, -b and -c and the break blend, so the whole
+ * card follows without a second declaration, and a dying or guard-broken boss
+ * still yields to those states as it should — those rules come later in the
+ * cascade and own the card's field when they apply.
  */
 .gluni-card--boss {
-  --gluni-accent: var(--gluni-signal);
-}
-
-.gluni-card--boss-supreme {
-  --gluni-accent: var(--gluni-peril);
+  --gluni-accent: var(--gluni-dread);
 }
 
 /*
- * The boss's frame. A 1px inset ring on the surface rather than a border on the
- * card: the card itself is the element the FLIP animation transforms between
- * rail and active size, and a border there would be scaled with it.
+ * The frame.
+ *
+ * Inset rings on the surface rather than a border on the card: the card itself
+ * is the element the FLIP animation transforms between rail and active size, and
+ * a border there would be scaled with it.
+ *
+ * Three rings rather than one, because a single hairline is what every other
+ * state on this rail already uses and a boss has to out-weigh all of them: an
+ * accent hairline, a dark gap, then a faint outer echo, with a bloom outside the
+ * card so it reads as lit rather than outlined. The gap is what makes it look
+ * deliberate — two adjacent lines read as a thick border, two with a shadow
+ * between them read as a frame.
  */
 .gluni-card--boss .gluni-card-surface {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 52%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 62%, transparent),
+    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.5),
+    inset 0 0 0 4px color-mix(in srgb, var(--gluni-accent) 24%, transparent),
+    0 0 16px color-mix(in srgb, var(--gluni-accent) 20%, transparent);
+}
+
+/* A Supreme boss is the same frame with more weight behind it. */
+.gluni-card--boss-supreme .gluni-card-surface {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-dread-hot) 72%, transparent),
+    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.58),
+    inset 0 0 0 5px color-mix(in srgb, var(--gluni-accent) 38%, transparent),
+    0 0 22px color-mix(in srgb, var(--gluni-accent) 30%, transparent);
+}
+
+/*
+ * The teeth. Two short marks biting in at opposite corners of the active card,
+ * struck on the spec layer, which is already a full-card overlay above the
+ * portrait and whose pseudo-elements are free — so this adds nothing to the DOM.
+ * Not the bracket layer, which looks like the obvious host and is not: it is an
+ * 8px corner mark, so a pseudo-element inset inside it lands in an 8px box
+ * rather than on the card.
+ *
+ * Only the card whose turn it is carries them. On every slot at once they would
+ * be wallpaper, and the point of them is the one row the GM is looking at.
+ */
+.gluni-card--boss.gluni-card--active .gluni-card-spec::before,
+.gluni-card--boss.gluni-card--active .gluni-card-spec::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 0 solid var(--gluni-accent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.gluni-card--boss.gluni-card--active .gluni-card-spec::before {
+  top: 3px;
+  left: 3px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.gluni-card--boss.gluni-card--active .gluni-card-spec::after {
+  right: 3px;
+  bottom: 3px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
 }
 
 /* An extra turn is the same creature, and reads as a lighter echo of it. */
@@ -1843,8 +1905,11 @@
   filter: saturate(0.82) brightness(0.9);
 }
 
-.gluni-card--boss-extra .gluni-card-surface {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 28%, transparent);
+.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 34%, transparent),
+    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.34);
 }
 
 .gluni-boss-tag {
