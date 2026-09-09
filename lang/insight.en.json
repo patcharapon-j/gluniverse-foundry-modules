@@ -1,11 +1,9 @@
 {
   "INSIGHT.ModuleTitle": "Gluniverse Insight",
-
   "INSIGHT.SettingTheme": "Notification Accent",
   "INSIGHT.SettingThemeHint": "Accent colour and sound profile for Insight notifications. Both use the shared Etched Glass material.",
   "INSIGHT.ThemeDreadlight": "Dreadlight",
   "INSIGHT.ThemeFantasy": "Fantasy",
-
   "INSIGHT.SettingSoundEnabled": "Enable Sounds",
   "INSIGHT.SettingSoundEnabledHint": "Play sounds when notifications appear.",
   "INSIGHT.SettingSoundVolume": "Sound Volume",
@@ -15,7 +13,6 @@
   "INSIGHT.AnimationNormal": "Normal",
   "INSIGHT.AnimationFast": "Fast",
   "INSIGHT.AnimationInstant": "Instant",
-
   "INSIGHT.ComposeTitle": "Send Insight",
   "INSIGHT.ComposeTarget": "Target Recipient",
   "INSIGHT.ComposeTargetHint": "Select which user receives this notification. Other GMs are included so you can whisper to a co-GM or GM assistant.",
@@ -28,7 +25,12 @@
   "INSIGHT.SettingSoundFileHint": "Optional audio file to play instead of the default procedural sound. Leave blank to use the built-in sound.",
   "INSIGHT.ComposeSend": "Send",
   "INSIGHT.ComposeSent": "Sent!",
-
-  "INSIGHT.Dismiss": "Dismiss",
-  "INSIGHT.SceneControl": "Send Insight"
+  "INSIGHT.Dismiss": "Acknowledge",
+  "INSIGHT.SceneControl": "Send Insight",
+  "INSIGHT.SenseDefault": "Insight",
+  "INSIGHT.SettingEdgeIntensity": "Screen Edge Alert",
+  "INSIGHT.SettingEdgeIntensityHint": "How hard the screen edge lights up when an Insight arrives. Full is the intended reveal; Subtle drops the vignette and halves the burn; Off leaves only the card.",
+  "INSIGHT.EdgeFull": "Full",
+  "INSIGHT.EdgeSubtle": "Subtle",
+  "INSIGHT.EdgeOff": "Off"
 }

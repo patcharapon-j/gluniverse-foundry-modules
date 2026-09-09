@@ -1,3 +1,4 @@
+import { animate, createTimeline, stagger, createMotionOwner, motionDuration } from "../../core/motion.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { onThemeChange, scaledMs } from "../../core/theme.mjs";
 
@@ -32,9 +33,20 @@ import {
   PORTRAIT_FRAME_LIMITS
 } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
-import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_APEX, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
+import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TYRANT, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./token-overlay.mjs";
-import { getPF2eDyingState, getDnd5eDeathState, getDyingState, getActorAttributeValue, getConditionValue, hasActorItem, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getActorItems, getItemSlug, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText, getApexState, getApexGroupCombatants } from "./conditions.mjs";
+/**
+ * Boss Creatures reads, from the PF2e variant rules feature.
+ *
+ * A deliberate cross-feature import rather than two agreeing string constants:
+ * the flag shape and the tier names then have exactly one definition and this
+ * file cannot drift from it. Both functions are pure, read their enable setting
+ * at call time, and return null when the rule is off or the world is not PF2e,
+ * so an ordinary encounter is unaffected and nothing runs at import time.
+ */
+import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
+import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
+import { getPF2eDyingState, getDnd5eDeathState, getDyingState, getActorAttributeValue, getConditionValue, hasActorItem, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getActorItems, getItemSlug, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
 
 
 // Exported as a live binding: token-overlay.mjs reads `overlay` (enabled state,
@@ -1095,9 +1107,13 @@ function getCombatantSceneId(combatant) {
   return combatant?.scene?.id ?? combatant?.sceneId ?? combatant?.token?.parent?.id ?? combatant?.token?.scene?.id ?? null;
 }
 
-class GLUniverseInitiativeOverlay {
+export class GLUniverseInitiativeOverlay {
   constructor() {
     this.root = null;
+    this._railMotion = createMotionOwner();
+    this._collectMotion = createMotionOwner();
+    this._collectLayers = new Set();
+    this._splashes = new Map();
     this.drag = null;
     this.renderTimer = null;
     this.lastRound = game.combat?.round ?? null;
@@ -1383,6 +1399,7 @@ class GLUniverseInitiativeOverlay {
     const hasActiveCombat = hasCombatants && (Boolean(combat?.started) || game.user.isGM);
 
     if (!this.enabled || !hasActiveCombat) {
+      this.clearPresentationMotion();
       this.finishCardDrag();
       this.closeInitiativeContextMenu();
       closeBreakGaugeEditor();
@@ -1443,6 +1460,7 @@ class GLUniverseInitiativeOverlay {
     this.applyPosition(settings.edge);
 
     if (markupChanged) {
+      this._railMotion.clear();
       this.closeInitiativeContextMenu();
       this.root.innerHTML = markup;
       this.lastMarkup = markup;
@@ -1786,10 +1804,6 @@ class GLUniverseInitiativeOverlay {
 
     const guardBroken = !adhoc && Boolean(getGuardBreakState(combatant));
     const dying = mystery || adhoc ? null : getDyingState(combatant);
-    // Apex (PF2e-Flatfinder solo boss). Suppressed for mystery (never leak that a
-    // hidden token is a boss / its phase) and defeated (the defeated treatment
-    // wins — menace dies with it), per the agreed precedence.
-    const apex = mystery || adhoc || combatant.defeated ? null : getApexState(combatant);
     // Generic conditions are completely overridden by dying/break/delay — those
     // states own the card's background field and announce themselves.
     const conditionsOverridden = options.delayed || guardBroken || Boolean(dying);
@@ -1810,8 +1824,11 @@ class GLUniverseInitiativeOverlay {
       guardBroken,
       breakGauge: mystery || adhoc ? null : getBreakGaugeState(combatant),
       dying,
-      apex,
       conditions,
+      // A mystery card must not leak that this creature is a boss: the tier is
+      // exactly the kind of thing the party has not learned about it yet.
+      boss: mystery || adhoc ? null : bossBadge(combatant.actor),
+      bossTurn: mystery || adhoc ? null : turnMarker(combatant),
       name: mystery ? localize("GLUNI.Unknown") : adhoc?.name ?? combatant.name,
       initiative: combatant.initiative,
       portrait,
@@ -1915,30 +1932,6 @@ class GLUniverseInitiativeOverlay {
     `;
   }
 
-  // Apex kicker tags: a crowned APEX label on every apex card, plus either the
-  // reprise ordinal (k/N — "the boss acts again") or, on the prime, the current
-  // HP phase. The crown lives here over the dark scrim, never on the portrait.
-  renderApexKicker(apex) {
-    const crown = `<span class="gluni-apex-tag"><i class="fa-solid fa-crown" aria-hidden="true"></i>${escapeHTML(localize("GLUNI.Apex.Tag").toUpperCase())}</span>`;
-    if (apex.role === "reprise") {
-      const aria = formatLocalized("GLUNI.Apex.Ordinal.Aria", { index: apex.index, total: apex.total });
-      return `${crown}<span class="gluni-apex-tag gluni-apex-tag--ordinal" role="img" aria-label="${escapeAttr(aria)}">${apex.index}/${apex.total}</span>`;
-    }
-    const roman = ["", "I", "II", "III"][apex.phase] ?? "I";
-    const aria = formatLocalized("GLUNI.Apex.Aria", { phase: apex.phase });
-    return `${crown}<span class="gluni-apex-tag gluni-apex-tag--phase" role="img" aria-label="${escapeAttr(aria)}">${escapeHTML(localize("GLUNI.Apex.PhaseLabel").toUpperCase())} ${roman}</span>`;
-  }
-
-  // Three-segment phase indicator on the prime card, filled to the current HP
-  // phase — the boss's life as a threat meter (composed → enraged → desperate).
-  renderApexPhasePips(apex) {
-    const aria = formatLocalized("GLUNI.Apex.Aria", { phase: apex.phase });
-    const pips = Array.from({ length: 3 }, (_unused, index) =>
-      `<span class="gluni-apex-phase-pip${index < apex.phase ? " gluni-apex-phase-pip--on" : ""}" aria-hidden="true"></span>`
-    ).join("");
-    return `<div class="gluni-apex-phase-pips" role="img" aria-label="${escapeAttr(aria)}">${pips}</div>`;
-  }
-
   renderCombatantCard(card) {
     const classes = [
       "gluni-card",
@@ -1947,15 +1940,15 @@ class GLUniverseInitiativeOverlay {
       card.delayed ? "gluni-card--delayed" : "",
       card.adhoc ? "gluni-card--adhoc" : "",
       card.adhoc ? `gluni-card--adhoc-${card.adhoc.type}` : "",
+      card.boss ? "gluni-card--boss" : "",
+      card.boss ? `gluni-card--boss-${card.boss.tier}` : "",
+      card.bossTurn ? "gluni-card--boss-extra" : "",
       card.guardBroken ? "gluni-card--guard-broken" : "",
       card.conditions ? "gluni-card--conditioned" : "",
       card.dying ? "gluni-card--dying" : "",
       card.dying ? `gluni-card--dying-${card.dying.severity}` : "",
       card.dying?.kind === "deathsaves" ? "gluni-card--deathsaves" : "",
       card.dying?.stable ? "gluni-card--stable" : "",
-      card.apex ? "gluni-card--apex" : "",
-      card.apex ? `gluni-card--apex-${card.apex.role}` : "",
-      card.apex ? `gluni-card--apex-phase-${card.apex.phase}` : "",
       card.mystery ? "gluni-card--mystery" : "",
       card.defeated ? "gluni-card--defeated" : "",
       card.cardMode ? "gluni-card--card-mode" : "",
@@ -1974,18 +1967,34 @@ class GLUniverseInitiativeOverlay {
     // a glitch scramble over the "?"; portrait cards get break/dying (the
     // persistent states). Falls back to the CSS background when WebGL is
     // unsupported.
-    // Apex ember runs only on the showpiece prime or an active reprise — bounding
-    // the live GPU work (inactive reprises carry the CSS treatment alone). Guard
-    // break / dying FX still take the portrait when present (break is on top).
-    const apexFx = card.apex && (card.apex.role === "prime" || card.active);
     const fxReady = !card.adhoc && cardFX?.supported;
+    // A boss yields to break and dying. Those are states of this fight, and a
+    // boss in one of them is a boss in trouble — the more urgent thing for the
+    // card to be saying. Dread is what a boss looks like when nothing else is
+    // happening to it, which is most of the encounter.
     const fxMode = !fxReady
       ? null
       : card.mystery
         ? "scramble"
         : card.portrait
-          ? (card.guardBroken ? "break" : card.dying && !card.dying.stable ? "dying" : apexFx ? "apex" : null)
+          ? (card.guardBroken
+              ? "break"
+              : card.dying && !card.dying.stable
+                ? "dying"
+                : card.boss
+                  ? "dread"
+                  : null)
           : null;
+    // The tier rides on the canvas rather than on a filter of its own: one
+    // program, one compile, and the amount of miasma is a per-frame uniform.
+    // An extra turn is an echo of the boss, not a second boss: it takes the same
+    // sigil at a little over half strength. Its card is also the busiest on the
+    // rail — name, BOSS chip, "Turn 2 of 3" and an initiative — so it is the one
+    // place a full-strength effect would cost legibility.
+    const fxIntensity =
+      fxMode === "dread"
+        ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
+        : 1;
 
     const slotAttr = Number.isInteger(card.cardSlot) ? ` data-card-slot="${card.cardSlot}"` : "";
 
@@ -2041,26 +2050,22 @@ class GLUniverseInitiativeOverlay {
             </div>
           `
           : ""}
-        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}"${fxMode === "apex" ? ` data-fx-phase="${card.apex.phase}"` : ""} aria-hidden="true"></canvas>` : ""}
-        ${card.apex
-          ? `<div class="gluni-card-apex-corona" aria-hidden="true"></div>
-             <div class="gluni-card-apex-corners" aria-hidden="true"><span></span><span></span><span></span><span></span></div>`
-          : ""}
+        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" data-fx-intensity="${fxIntensity}" aria-hidden="true"></canvas>` : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
             ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
-            ${card.apex ? this.renderApexKicker(card.apex) : ""}
             ${card.guardBroken ? `<span class="gluni-guard-break-tag">${localize("GLUNI.GuardBreak").toUpperCase()}</span>` : ""}
             ${card.dying ? (card.dying.kind === "deathsaves"
               ? `<span class="gluni-dying-tag${card.dying.stable ? " gluni-dying-tag--stable" : ""}">${(card.dying.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase()}</span>`
               : `<span class="gluni-dying-tag">${localize("GLUNI.Dying.Label").toUpperCase()} ${card.dying.value}</span>`) : ""}
             ${card.adhoc ? `<span class="gluni-adhoc-tag">${escapeHTML(card.adhoc.label).toUpperCase()}</span>` : ""}
             ${card.adhoc?.oneShot ? `<span class="gluni-adhoc-tag gluni-adhoc-tag--oneshot">${localize("GLUNI.AdHoc.OneShot").toUpperCase()} ${formatRound(card.adhoc.round)}</span>` : ""}
+            ${card.boss ? `<span class="gluni-boss-tag">${localize("GLVR.boss.cardTag")}</span>` : ""}
+            ${card.boss && card.bossTurn ? `<span class="gluni-boss-tag gluni-boss-tag--turn">${formatLocalized("GLVR.boss.turnBadge", { index: card.bossTurn.index, total: card.bossTurn.of })}</span>` : ""}
             ${card.delayed ? `<span class="gluni-delayed-tag">${localize("GLUNI.Delayed").toUpperCase()}</span>` : ""}
           </div>
           <h3>${escapeHTML(card.name)}</h3>
           ${card.dying ? (card.dying.kind === "deathsaves" ? renderDeathSavePips(card.dying) : renderDyingPips(card.dying)) : ""}
-          ${card.apex?.role === "prime" ? this.renderApexPhasePips(card.apex) : ""}
           ${card.breakGauge ? renderBreakGaugeBar(card.breakGauge) : ""}
         </div>
         ${card.cardMode ? this.renderCardBadge(card) : `<span class="gluni-initiative-badge">${formatInitiative(card.initiative)}</span>`}
@@ -2204,10 +2209,10 @@ class GLUniverseInitiativeOverlay {
 
   animateTurnChange(oldRects, options = {}) {
     const items = Array.from(this.root.querySelectorAll("[data-gluni-key]"));
-    const previousActiveKey = options.previousActiveKey ?? null;
     const roundDelta = Number(options.roundDelta) || 0;
-    const enterItems = [];   // no continuity rect -> CSS enter animation
+    const enterItems = [];   // no continuity rect -> staggered entrance
     const flipItems = [];     // { item, dx, dy, scaleX, scaleY }
+    const uiScale = this.root.offsetWidth ? this.root.getBoundingClientRect().width / this.root.offsetWidth : 1;
 
     // Read pass: measure every moved item's new rect up front. Interleaving these
     // getBoundingClientRect() reads with the preflip class/style writes below
@@ -2230,47 +2235,31 @@ class GLUniverseInitiativeOverlay {
       const moved = Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5;
       const resized = Math.abs(scaleX - 1) >= 0.01 || Math.abs(scaleY - 1) >= 0.01;
 
-      if (moved || resized) flipItems.push({ item, dx, dy, scaleX, scaleY });
+      if (moved || resized) flipItems.push({ item, dx: dx / (uiScale || 1), dy: dy / (uiScale || 1), scaleX, scaleY });
     }
 
-    // Write pass: apply enter classes + preflip transforms only (no reads here, so
-    // nothing forces a reflow mid-loop).
-    for (const { item, isActive } of enterItems) {
-      item.classList.add("gluni-item--entering");
-      if (!isActive) item.classList.add("gluni-item--entering-bottom");
-      if (isActive && item.dataset.gluniKey !== previousActiveKey) item.classList.add("gluni-card--active-entering");
-      window.setTimeout(() => item.classList.remove("gluni-item--entering", "gluni-item--entering-bottom", "gluni-card--active-entering"), animMs(680));
-    }
-
-    for (const { item, dx, dy, scaleX, scaleY } of flipItems) {
-      item.classList.add("gluni-item--preflip");
-      item.style.setProperty("--gluni-flip-x", `${Math.round(dx)}px`);
-      item.style.setProperty("--gluni-flip-y", `${Math.round(dy)}px`);
-      item.style.setProperty("--gluni-flip-scale-x", scaleX.toFixed(4));
-      item.style.setProperty("--gluni-flip-scale-y", scaleY.toFixed(4));
-    }
-
-    if (flipItems.length) {
-      this.root.getBoundingClientRect();   // single reflow to commit the preflip offsets
-
-      for (const { item } of flipItems) {
-        item.classList.remove("gluni-item--preflip");
-        item.classList.add("gluni-item--flipping");
-
-        window.requestAnimationFrame(() => {
-          item.style.setProperty("--gluni-flip-x", "0px");
-          item.style.setProperty("--gluni-flip-y", "0px");
-          item.style.setProperty("--gluni-flip-scale-x", "1");
-          item.style.setProperty("--gluni-flip-scale-y", "1");
-        });
-
-        window.setTimeout(() => item.classList.remove("gluni-item--flipping"), animMs(680));
-      }
-    }
-
-    // ---- Magic-move hand-off: the card morphs from its small rail size into the active
-    // size purely via the FLIP transform above. No slam, shake, shockwave, swipe, or badge
-    // count-up — the initiative number simply snaps to its new value to match the move. ----
+    // Animate only the FLIP variables, preserving hover, drag and UI-scale transforms.
+    const play = (item, properties, delay = 0) => {
+      item.classList.add("gluni-anime-motion");
+      const animation = animate(item, {
+        autoplay: false, ...properties, duration: motionDuration(620, this.root), delay,
+        ease: "outQuint", onComplete: () => {
+          animation.revert();
+          item.classList.remove("gluni-anime-motion");
+          this._railMotion.forget(animation);
+        }
+      });
+      this._railMotion.add(animation);
+      animation.play();
+    };
+    enterItems.forEach(({ item, isActive }, index) => play(item, {
+      opacity: [0, 1], "--gluni-flip-y": [isActive ? "-18px" : "24px", "0px"],
+      "--gluni-flip-scale-x": [0.96, 1], "--gluni-flip-scale-y": [0.96, 1]
+    }, motionDuration(Math.min(index, 6) * 35, this.root)));
+    for (const { item, dx, dy, scaleX, scaleY } of flipItems) play(item, {
+      "--gluni-flip-x": [`${dx}px`, "0px"], "--gluni-flip-y": [`${dy}px`, "0px"],
+      "--gluni-flip-scale-x": [scaleX, 1], "--gluni-flip-scale-y": [scaleY, 1]
+    });
   }
 
   // ---- Card-mode collect / deal / reshuffle motion --------------------------
@@ -2335,37 +2324,90 @@ class GLUniverseInitiativeOverlay {
 
     const stubCx = stubRect.left + stubRect.width / 2;
     const stubCy = stubRect.top + stubRect.height / 2;
-    let alive = items.length;
-    const finish = () => { if (--alive <= 0) layer.remove(); };
-
+    this._collectLayers.add(layer);
+    const timeline = createTimeline({ autoplay: false, onComplete: () => {
+      timeline.revert();
+      this._collectMotion.forget(timeline);
+      this._collectLayers.delete(layer);
+      layer.remove();
+    }});
+    this._collectMotion.add(timeline);
     items.forEach((item, index) => {
       const ghost = document.createElement("div");
       ghost.className = "gluni-card-ghost gluni-card-ghost--collect";
+      ghost.setAttribute("aria-hidden", "true");
       ghost.innerHTML = item.html;
+      // Clones are decorative: never duplicate identifiers or actionable controls.
+      ghost.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
+      ghost.inert = true;
       ghost.style.left = `${item.rect.left}px`;
       ghost.style.top = `${item.rect.top}px`;
       ghost.style.width = `${item.rect.width}px`;
       ghost.style.height = `${item.rect.height}px`;
       layer.appendChild(ghost);
-
       const dx = stubCx - (item.rect.left + item.rect.width / 2);
       const dy = stubCy - (item.rect.top + item.rect.height / 2);
-      const delay = stagger ? index * 55 : 0;
-      // Keep the tilt under 90° so the cloned face never mirrors into a backwards
-      // card on its way into the deck; the stub's card-back carries the "now
-      // face-down in the deck" read.
-      const anim = ghost.animate([
-        { transform: "translate(0px, 0px) scale(1) rotateY(0deg)", opacity: 1, offset: 0 },
-        { transform: `translate(${dx * 0.4}px, ${dy * 0.4}px) scale(0.82) rotateY(34deg)`, opacity: 0.9, offset: 0.55 },
-        { transform: `translate(${dx}px, ${dy}px) scale(0.14) rotateY(58deg)`, opacity: 0, offset: 1 }
-      ], { duration: 440, delay, easing: "cubic-bezier(0.55, 0, 0.36, 1)", fill: "forwards" });
-      anim.onfinish = finish;
-      anim.oncancel = finish;
+      timeline.add(ghost, {
+        x: [0, dx], y: [0, dy], scale: [1, 0.14], rotateY: [0, 58],
+        opacity: [1, 0], duration: motionDuration(480, this.root), ease: "inOutCubic"
+      }, motionDuration(stagger ? index * 45 : 0, this.root));
     });
+    timeline.play();
+  }
 
-    // Safety net: if WAAPI events never fire (e.g. the tab was hidden), make sure
-    // the throwaway layer is still cleaned up.
-    window.setTimeout(() => layer.isConnected && layer.remove(), 440 + items.length * 55 + 400);
+  clearPresentationMotion() {
+    this._railMotion.clear();
+    this.root?.querySelectorAll(".gluni-anime-motion").forEach(node => node.classList.remove("gluni-anime-motion"));
+    this._collectMotion.clear();
+    for (const layer of this._collectLayers) layer.remove();
+    this._collectLayers.clear();
+    for (const entry of this._splashes.values()) entry.dispose();
+    this._splashes.clear();
+  }
+
+  playSplashMotion(splash, kind, cleanup = () => {}) {
+    this._splashes.get(kind)?.dispose();
+    const isBreak = kind === "break";
+    const prefix = isBreak ? "gluni-break-splash" : "gluni-round";
+    const inner = splash.querySelector(`.${isBreak ? prefix : "gluni-round-splash"}-inner`);
+    const digits = splash.querySelectorAll(".d");
+    const label = splash.querySelector(`.${prefix}-label span:last-child`);
+    const subtitle = splash.querySelector(`.${isBreak ? prefix + "-name" : prefix + "-sub"} span`);
+    const tick = splash.querySelector(".tick");
+    const rule = splash.querySelector(`.${prefix}-rule`);
+    if (rule) rule.style.transform = "translate(-50%, -50%)";
+    // The shader and rule glints retain their specialized renderers. The text,
+    // deck and shell have one timeline so translated titles always finish entering.
+    splash.classList.add("gluni-anime-splash", `gluni-${kind}-splash--show`);
+    for (const node of [inner, ...digits, label, subtitle, tick, rule]) {
+      if (node) node.classList.add("gluni-anime-motion");
+    }
+    const ms = value => motionDuration(value, splash);
+    const hold = ms((isBreak ? this.getBreakSplashHold() : this.getRoundSplashHold())
+      + Math.max(0, digits.length - 10) * 20);
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      timeline.revert();
+      cleanup();
+      splash.remove();
+      if (this._splashes.get(kind)?.dispose === dispose) this._splashes.delete(kind);
+    };
+    const timeline = createTimeline({ autoplay: false, onComplete: dispose });
+    this._splashes.set(kind, { dispose });
+    timeline.add(splash, { opacity: [0, 1], duration: ms(100), ease: "outQuad" }, 0);
+    timeline.add(inner, { opacity: [0, 1], y: [12, 0], scale: [0.975, 1], duration: ms(420), ease: "outQuint" }, ms(45));
+    timeline.add(rule, { opacity: [0, 1], scaleX: [0, 1], duration: ms(420), ease: "outExpo" }, 0);
+    timeline.add(tick, { width: [0, 44], duration: ms(280), ease: "outCubic" }, ms(150));
+    timeline.add(label, { opacity: [0, 1], y: [4, 0], duration: ms(260), ease: "outCubic" }, ms(140));
+    timeline.add(digits, { opacity: [0, 1], y: [isBreak ? 20 : 12, 0], scaleY: [1.08, 1],
+      delay: stagger(ms(24)), duration: ms(460), ease: "outQuint" }, ms(180));
+    timeline.add(subtitle, { opacity: [0, 1], y: [5, 0], duration: ms(300), ease: "outCubic" }, ms(340));
+    timeline.add(inner, { opacity: [1, 0], y: [0, -9], duration: ms(320), ease: "inCubic" }, hold);
+    timeline.add(rule, { opacity: [1, 0], scaleX: [1, 0.6], duration: ms(300), ease: "inCubic" }, hold);
+    timeline.add(splash, { opacity: [1, 0], duration: ms(220), ease: "inQuad" }, hold + ms(160));
+    timeline.play();
   }
 
   getContinuityRect(oldRects, key, roundDelta = 0) {
@@ -3160,13 +3202,11 @@ class GLUniverseInitiativeOverlay {
     if (syncGauge) await this.writeBreakGaugeValue(combatant, 0);   // manual break empties the gauge
     await this.clearKnownPF2eDelayFlags(combatant);
     await this.applyPF2eGuardBreakEffect(combatant);
-    const movedApexGroup = await this.moveGuardBrokenCombatantBeforeActive(combatant, activeId);
+    await this.moveGuardBrokenCombatantBeforeActive(combatant, activeId);
     this.queueGuardBreakImpact({ combatId: combat.id, combatantId: combatant.id });
     this.broadcastGuardBreakImpact(combatant.id);
 
-    // The Apex group move already settles the turn pointer (advancing off the
-    // boss when it was active), so skip the single-turn advance in that case.
-    if (wasActive && !movedApexGroup) await this.changeTurn(1);
+    if (wasActive) await this.changeTurn(1);
     else this.broadcastRefresh();
   }
 
@@ -3228,24 +3268,15 @@ class GLUniverseInitiativeOverlay {
   }
 
   // Relocates a guard-broken combatant so it forfeits the rest of the current
-  // round. For an Apex boss (which acts several times a round) this sweeps the
-  // whole boss group — prime plus every reprise — out of the round at once and
-  // settles the turn pointer itself; it returns true in that case so the caller
-  // skips its own turn advance. A normal single combatant returns false.
+  // round: it is re-seeded just above the active turn, so the round moves past it.
   async moveGuardBrokenCombatantBeforeActive(combatant, activeId) {
     const combat = this.combat;
     const current = combat?.combatant;
-    if (!combat?.started || !current || !combatant) return false;
-
-    const group = getApexGroupCombatants(combat, combatant);
-    if (group && group.length > 1) {
-      await this.moveGuardBrokenApexGroupBeforeActive(group);
-      return true;
-    }
+    if (!combat?.started || !current || !combatant) return;
 
     const turns = Array.from(combat.turns ?? []);
     const currentIndex = turns.findIndex(turn => turn.id === current.id);
-    if (currentIndex < 0) return false;
+    if (currentIndex < 0) return;
 
     const before = currentIndex > 0 ? turns[currentIndex - 1] : null;
     const targetInitiative = chooseInitiativeBetween({
@@ -3256,62 +3287,6 @@ class GLUniverseInitiativeOverlay {
 
     await this.applyCombatantInitiative(combatant, targetInitiative);
     if (activeId) await this.restoreActiveTurn(activeId);
-    return false;
-  }
-
-  // Moves an entire Apex boss group ahead of the next non-boss combatant so none
-  // of the boss's turns (the prime or any reprise) fire again this round, and the
-  // whole block reappears next round in its correct relative order. The round
-  // resumes on the anchor — the first combatant at or after the active turn that
-  // is not part of the group — which also ends the boss's turn when it was active.
-  async moveGuardBrokenApexGroupBeforeActive(group) {
-    const combat = this.combat;
-    const current = combat?.combatant;
-    if (!combat?.started || !current || !group?.length) return;
-
-    const turns = Array.from(combat.turns ?? [])
-      .map(entry => Array.isArray(entry) ? entry[1] : entry)
-      .filter(Boolean);
-    const moverIds = new Set(group.map(member => member.id));
-
-    // The anchor is where the round picks back up: the first non-boss combatant
-    // at or after the active turn. If the boss closes out the round, fall back to
-    // the first non-boss combatant overall so the block still lands cleanly.
-    const currentIndex = Math.max(0, turns.findIndex(turn => turn.id === current.id));
-    let anchor = null;
-    for (let i = currentIndex; i < turns.length; i += 1) {
-      if (!moverIds.has(turns[i].id)) { anchor = turns[i]; break; }
-    }
-    if (!anchor) anchor = turns.find(turn => !moverIds.has(turn.id)) ?? null;
-    if (!anchor) return;   // boss-only combat: nothing meaningful to reorder
-
-    // Top bound of the relocated block: the nearest non-boss combatant ranked
-    // above the anchor (none when the anchor already sits at the top).
-    const anchorIndex = turns.findIndex(turn => turn.id === anchor.id);
-    let before = null;
-    for (let i = anchorIndex - 1; i >= 0; i -= 1) {
-      if (!moverIds.has(turns[i].id)) { before = turns[i]; break; }
-    }
-
-    // Pack the group contiguously between `before` and the anchor, descending in
-    // canonical order (prime first) so the boss reads in the right order when it
-    // acts next round.
-    const existing = turns
-      .filter(turn => !moverIds.has(turn.id))
-      .map(turn => Number(turn.initiative))
-      .filter(Number.isFinite);
-
-    let upper = before?.initiative;
-    for (const mover of group) {
-      const target = chooseInitiativeBetween({ before: upper, after: anchor.initiative, existing });
-      await this.applyCombatantInitiative(mover, target);
-      existing.push(target);
-      upper = target;
-    }
-
-    // Resume on the anchor; the whole boss block now sits just behind the turn
-    // pointer, so it has effectively passed for this round.
-    await this.restoreActiveTurn(anchor.id);
   }
 
   clearActiveGuardBreakSoon() {
@@ -3418,21 +3393,11 @@ class GLUniverseInitiativeOverlay {
     // deck. Uses the shared pre-compiled renderer, so no per-break shader compilation.
     let breakGL = null;
     const renderer = getBreakSplashRenderer();
-    if (renderer?.play(splash, { lifeMs: this.getBreakGLLife() })) {
+    if (renderer?.play(splash, { lifeMs: motionDuration(this.getBreakGLLife(), splash) })) {
       breakGL = renderer;
     }
 
-    window.requestAnimationFrame(() => splash.classList.add("gluni-break-splash--show"));
-    // Short screen-shake on impact.
-    window.requestAnimationFrame(() => {
-      splash.classList.add("gluni-break-splash--shake");
-      window.setTimeout(() => splash.classList.remove("gluni-break-splash--shake"), animMs(520));
-    });
-    window.setTimeout(() => splash.classList.add("gluni-break-splash--leave"), this.getBreakSplashHold());
-    window.setTimeout(() => {
-      breakGL?.stop(splash);
-      splash.remove();
-    }, this.getBreakSplashDuration());
+    this.playSplashMotion(splash, "break", () => breakGL?.stop(splash));
   }
 
   getBreakSplashHold() {
@@ -4079,9 +4044,7 @@ class GLUniverseInitiativeOverlay {
     `;
     document.body.appendChild(splash);
 
-    window.requestAnimationFrame(() => splash.classList.add("gluni-round-splash--show"));
-    window.setTimeout(() => splash.classList.add("gluni-round-splash--leave"), this.getRoundSplashHold());
-    window.setTimeout(() => splash.remove(), this.getRoundSplashDuration());
+    this.playSplashMotion(splash, "round");
   }
 
   getRoundSplashHold() {
@@ -5513,7 +5476,7 @@ class CardFXManager {
         break:    mk(FX_FRAG_BREAK,    { uBreakAmber: [...S.breakAmber], uBreakHot: [...S.breakHot] }),
         dying:    mk(FX_FRAG_DYING,    { uVeinBase:   [...S.veinBase],   uVeinHot:  [...S.veinHot]  }),
         scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
-        apex:     mk(FX_FRAG_APEX,     { uPhase: 1, uApexBase: [...S.apexBase], uApexHot: [...S.apexHot] })
+        dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantMid: [...S.tyrantMid], uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
       };
       // Force each filter's GLSL program to compile now. Otherwise the program
       // compiles lazily on the first frame a card is broken/dying/mystery, stalling
@@ -5559,10 +5522,8 @@ class CardFXManager {
         ctx: cv.getContext("2d"),
         mode,
         seed: prev?.seed ?? Math.random() * 100,
+        intensity: Number(cv.dataset.fxIntensity) || 1,
         impact: prev?.impact ?? [0.42 + Math.random() * 0.36, 0.18 + Math.random() * 0.42],
-        // Apex HP phase (1..3) read fresh from the rebuilt canvas each render, so
-        // escalation tracks HP without resetting the ember clock.
-        phase: mode === "apex" ? (Number(cv.dataset.fxPhase) || 1) : 1,
         t0: prev && prev.mode === mode ? prev.t0 : performance.now()
       });
     });
@@ -5632,7 +5593,7 @@ class CardFXManager {
         filter.uniforms.uAspect = rw / rh;
         filter.uniforms.uTexel = 1 / rh;
         if (entry.mode === "break") filter.uniforms.uImpact = entry.impact;
-        if (entry.mode === "apex") filter.uniforms.uPhase = entry.phase;
+        if (entry.mode === "dread") filter.uniforms.uIntensity = entry.intensity;
         this.sprite.width = rw;
         this.sprite.height = rh;
         this.sprite.filters = [filter];
@@ -5656,8 +5617,8 @@ class CardFXManager {
     set(this.filters.dying,    "uVeinHot",    S.veinHot);
     set(this.filters.scramble, "uMysteryA",   S.mysteryA);
     set(this.filters.scramble, "uMysteryB",   S.mysteryB);
-    set(this.filters.apex,     "uApexBase",   S.apexBase);
-    set(this.filters.apex,     "uApexHot",    S.apexHot);
+    set(this.filters.dread,    "uTyrantBase",  S.tyrantBase);
+    set(this.filters.dread,    "uTyrantHot",   S.tyrantHot);
   }
 
   destroy() {

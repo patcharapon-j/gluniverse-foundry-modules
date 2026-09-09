@@ -1,5 +1,6 @@
 import { MODULE_ID, getSetting } from './settings.js';
 import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
+import { animate, createTimeline, motionDuration } from '../../core/motion.mjs';
 import { StagePostFX } from './postfx/index.mjs';
 
 const SHOW_DURATION = 400;
@@ -47,7 +48,7 @@ function slotContentHTML(actor, isHighlighted, { hidden = false } = {}) {
  *
  * Uses DOM reconciliation (keyed by slotId) instead of innerHTML
  * so that enter, exit, and FLIP reorder animations work smoothly.
- * Show/hide uses the Web Animations API for reliability.
+ * Show/hide and slot choreography share owned Anime.js animations.
  */
 export class StageOverlay {
     constructor() {
@@ -63,10 +64,9 @@ export class StageOverlay {
         this._exitingElements = new Set();
         /** True when the overlay is currently hidden */
         this._isHidden = true;
-        /** Currently running show/hide animation (so we can cancel it) */
-        this._visibilityAnim = null;
         /** @type {StagePostFX|null} Created on first show, never before. */
         this._postfx = null;
+        this._motions = new Map();
     }
 
     // ─── Character art post-processing ───
@@ -187,7 +187,7 @@ export class StageOverlay {
     }
 
     render() {
-        if (this._element) this._element.remove();
+        if (this._element) this.close();
 
         const container = document.createElement('div');
         container.id = 'gluniverse-stage-overlay';
@@ -262,67 +262,55 @@ export class StageOverlay {
         }
     }
 
-    // ─── Show / Hide via Web Animations API ───
-
-    _animateShow() {
-        if (!this._element) return;
-
-        // Cancel any in-flight show/hide animation
-        if (this._visibilityAnim) {
-            this._visibilityAnim.cancel();
-            this._visibilityAnim = null;
+    // Each element owns independent visibility, layout and content channels.
+    // Replacing one channel reverts its previous writes before a new sequence.
+    _stopMotion(el, channel) {
+        const channels = this._motions.get(el);
+        channels?.get(channel)?.revert();
+        channels?.delete(channel);
+        if (!channels?.size) {
+            this._motions.delete(el);
+            el.classList.remove("glstage-anime-owned");
         }
-
-        // Make sure element is in hidden visual state before animating
-        this._element.classList.remove('hidden');
-        this._element.style.opacity = '0';
-
-        const anim = this._element.animate([
-            { opacity: 0, transform: 'translateY(25px)' },
-            { opacity: 1, transform: 'translateY(0)' }
-        ], {
-            duration: SHOW_DURATION,
-            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-            fill: 'forwards'
-        });
-
-        this._visibilityAnim = anim;
-        anim.finished.then(() => {
-            if (this._visibilityAnim === anim) {
-                this._visibilityAnim = null;
-                // Apply final state directly so we don't depend on fill: forwards
-                this._element.style.opacity = '';
-                this._element.style.transform = '';
-            }
-        }).catch(() => {}); // cancelled — ignore
     }
 
-    _animateHide() {
-        if (!this._element) return;
-
-        if (this._visibilityAnim) {
-            this._visibilityAnim.cancel();
-            this._visibilityAnim = null;
-        }
-
-        const anim = this._element.animate([
-            { opacity: 1, transform: 'translateY(0)' },
-            { opacity: 0, transform: 'translateY(25px)' }
-        ], {
-            duration: HIDE_DURATION,
-            easing: 'cubic-bezier(0.55, 0, 1, 0.45)',
-            fill: 'forwards'
-        });
-
-        this._visibilityAnim = anim;
-        anim.finished.then(() => {
-            if (this._visibilityAnim === anim) {
-                this._visibilityAnim = null;
-                this._element.classList.add('hidden');
-                this._element.style.opacity = '';
-                this._element.style.transform = '';
+    _motion(el, channel, build) {
+        this._stopMotion(el, channel);
+        let channels = this._motions.get(el);
+        if (!channels) this._motions.set(el, channels = new Map());
+        el.classList.add("glstage-anime-owned");
+        const animation = build(() => {
+            if (channels.get(channel) !== animation) return;
+            animation.revert();
+            channels.delete(channel);
+            if (!channels.size) {
+                this._motions.delete(el);
+                el.classList.remove("glstage-anime-owned");
             }
-        }).catch(() => {}); // cancelled — ignore
+        });
+        channels.set(channel, animation);
+        animation.play();
+        return animation;
+    }
+
+    _animateShow() { this._animateVisibility(true); }
+    _animateHide() { this._animateVisibility(false); }
+
+    _animateVisibility(show) {
+        const el = this._element;
+        if (!el) return;
+        const opacity = this._isHidden && show && el.classList.contains('hidden')
+            ? 0 : Number(getComputedStyle(el).opacity);
+        const from = el.classList.contains('hidden') ? 0 : opacity;
+        this._stopMotion(el, 'visibility');
+        el.classList.remove('hidden');
+        this._motion(el, 'visibility', done => animate(el, {
+            autoplay: false,
+            opacity: [from, show ? 1 : 0],
+            duration: motionDuration(show ? SHOW_DURATION : HIDE_DURATION, el),
+            ease: show ? 'outCubic' : 'inCubic',
+            onComplete: () => { done(); el.classList.toggle('hidden', !show); }
+        }));
     }
 
     // ─── DOM-Reconciling Render ───
@@ -385,6 +373,10 @@ export class StageOverlay {
         const slotElements = new Map();
         for (const [slotId, { slot, index }] of desired) {
             let el = container.querySelector(`:scope > [data-slot-id="${slotId}"]`);
+            if (el && this._exitingElements.has(el)) {
+                this._stopMotion(el, 'exit');
+                this._exitingElements.delete(el);
+            }
             const isNew = !el;
 
             if (isNew) {
@@ -392,12 +384,7 @@ export class StageOverlay {
                 container.appendChild(el);
                 // Enter animation — skip if stage was just shown (the show animation handles it)
                 if (!wasHidden && slot.actor) {
-                    el.classList.add('glstage-slot-entering');
-                    el.addEventListener('animationend', (e) => {
-                        if (e.target === el || el.contains(e.target)) {
-                            el.classList.remove('glstage-slot-entering');
-                        }
-                    }, { once: true });
+                    this._enterContent(el);
                 }
             } else {
                 this._updateSlotElement(el, slot, index, hasHighlight);
@@ -432,61 +419,29 @@ export class StageOverlay {
     }
 
     _flipAnimate(slotElements, oldRects) {
-        for (const [slotId, el] of slotElements) {
-            const oldRect = oldRects.get(slotId);
-            if (!oldRect) continue;
-            const newRect = el.getBoundingClientRect();
-            const dx = oldRect.left - newRect.left;
-            const dy = oldRect.top - newRect.top;
+        // Capture the visible position before reverting an interrupted layout.
+        for (const el of slotElements.values()) this._stopMotion(el, 'layout');
+        const moves = [...slotElements].map(([id, el]) => ({
+            el, old: oldRects.get(id), rect: el.getBoundingClientRect()
+        }));
+        for (const { el, old, rect } of moves) {
+            if (!old) continue;
+            const dx = old.left - rect.left, dy = old.top - rect.top;
             if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
-
-            el.style.transform = `translate(${dx}px, ${dy}px)`;
-            el.style.transition = 'none';
-            void el.offsetWidth;
-            el.style.transition = 'transform 0.4s ease';
-            el.style.transform = '';
-            el.addEventListener('transitionend', function handler(e) {
-                if (e.propertyName === 'transform') {
-                    el.style.transition = '';
-                    el.removeEventListener('transitionend', handler);
-                }
-            });
+            this._motion(el, 'layout', done => animate(el, {
+            autoplay: false,
+                x: [dx, 0], y: [dy, 0], duration: motionDuration(400, el),
+                ease: 'outQuint', onComplete: done
+            }));
         }
     }
 
-    /**
-     * FLIP reposition on remaining children after a slot exit animation completes.
-     */
-    _flipRemainingSlots() {
-        const container = this._charactersEl;
-        if (!container) return;
-
-        const children = [...container.children].filter(c => !this._exitingElements.has(c));
-
-        for (const child of children) {
-            const oldLeft = child._flipOldLeft;
-            const oldTop = child._flipOldTop;
-            if (oldLeft == null) continue;
-            delete child._flipOldLeft;
-            delete child._flipOldTop;
-
-            const newRect = child.getBoundingClientRect();
-            const dx = oldLeft - newRect.left;
-            const dy = oldTop - newRect.top;
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
-
-            child.style.transform = `translate(${dx}px, ${dy}px)`;
-            child.style.transition = 'none';
-            void child.offsetWidth;
-            child.style.transition = 'transform 0.35s ease';
-            child.style.transform = '';
-            child.addEventListener('transitionend', function handler(e) {
-                if (e.propertyName === 'transform') {
-                    child.style.transition = '';
-                    child.removeEventListener('transitionend', handler);
-                }
-            });
-        }
+    _enterContent(el) {
+        this._motion(el, 'content', done => animate(el.children, {
+            autoplay: false,
+            opacity: [0, 1], duration: motionDuration(360, el),
+            delay: (_, i) => motionDuration(i * 55, el), ease: 'outCubic', onComplete: done
+        }));
     }
 
     _createSlotElement(slotId, slot, index, hasHighlight) {
@@ -513,6 +468,7 @@ export class StageOverlay {
     }
 
     _updateSlotElement(el, slot, index, hasHighlight) {
+        this._stopMotion(el, 'content');
         const actor = slot.actor;
         const isHighlighted = this._state.highlightedSlot === index;
         const isDimmed = hasHighlight && !isHighlighted;
@@ -560,10 +516,7 @@ export class StageOverlay {
             // Actor was assigned to a previously empty slot — build content + enter anim
             el.classList.remove('stage-slot-empty');
             el.innerHTML = slotContentHTML(actor, isHighlighted);
-            el.classList.add('glstage-slot-entering');
-            el.addEventListener('animationend', () => {
-                el.classList.remove('glstage-slot-entering');
-            }, { once: true });
+            this._enterContent(el);
         }
     }
 
@@ -572,123 +525,69 @@ export class StageOverlay {
      * Fades old character out, then fades new character in.
      */
     _crossfadeContent(el, actor, index, hasHighlight) {
-        const isHighlighted = this._state.highlightedSlot === index;
-
-        // The outgoing wrap is about to be discarded — drop its post-processing
-        // registration so the effect doesn't hold a detached element alive.
+        const highlighted = this._state.highlightedSlot === index;
         const outgoing = el.querySelector('.stage-actor-img-wrap');
-        if (outgoing) this._postfx?.unregister(outgoing);
-
-        // Fade out + subtle downward drift
-        const oldChildren = el.querySelectorAll('.stage-actor-img-wrap, .stage-actor-name');
-        const fadeOutAnims = [];
-        for (const child of oldChildren) {
-            fadeOutAnims.push(child.animate(
-                [
-                    { opacity: 1, translate: '0 0' },
-                    { opacity: 0, translate: '0 8px' }
-                ],
-                { duration: 250, easing: 'ease-in', fill: 'forwards' }
-            ).finished);
-        }
-
-        Promise.all(fadeOutAnims).then(() => {
-            // Swap in new content
-            el.innerHTML = slotContentHTML(actor, isHighlighted, { hidden: true });
-
-            // The wrap is a new element, so the effect has to be re-attached.
-            this._syncPostFX();
-
-            // Fade in + subtle upward rise
-            const newChildren = el.querySelectorAll('.stage-actor-img-wrap, .stage-actor-name');
-            for (const child of newChildren) {
-                const anim = child.animate(
-                    [
-                        { opacity: 0, translate: '0 8px' },
-                        { opacity: 1, translate: '0 0' }
-                    ],
-                    { duration: 300, easing: 'ease-out', fill: 'forwards' }
-                );
-                anim.finished.then(() => {
-                    child.style.opacity = '';
-                    anim.cancel();
-                }).catch(() => {});
-            }
-        }).catch(() => {}); // cancelled — ignore
+        this._motion(el, 'content', done => {
+            const timeline = createTimeline({ autoplay: false });
+            timeline.add([...el.children], {
+                opacity: [1, 0], duration: motionDuration(160, el), ease: 'inQuad'
+            });
+            timeline.call(() => {
+                if (outgoing) this._postfx?.unregister(outgoing);
+                el.innerHTML = slotContentHTML(actor, highlighted);
+                this._syncPostFX();
+                // Finish the old channel before attaching the new nodes.
+                done();
+                this._enterContent(el);
+            });
+            return timeline;
+        });
     }
 
-    /**
-     * Animate a slot's content fading out when unassigned.
-     * Preserves the slot's dimensions during the fade to prevent layout shift.
-     */
     _animateContentExit(el) {
-        const rect = el.getBoundingClientRect();
-        el.style.minWidth = `${rect.width}px`;
-        el.style.minHeight = `${rect.height}px`;
-
-        el.classList.add('glstage-content-exiting');
         el.classList.remove('highlighted', 'dimmed');
-
-        const onDone = () => {
-            el.classList.remove('glstage-content-exiting');
-            const wrap = el.querySelector('.stage-actor-img-wrap');
-            if (wrap) this._postfx?.unregister(wrap);
-            el.innerHTML = '';
-            el.classList.add('stage-slot-empty');
-            // Smoothly shrink to the empty slot size
-            el.style.transition = 'min-width 0.3s ease, min-height 0.3s ease';
-            el.style.minWidth = '';
-            el.style.minHeight = '';
-            const cleanup = () => {
-                el.style.transition = '';
-                el.removeEventListener('transitionend', cleanup);
-            };
-            el.addEventListener('transitionend', cleanup);
-        };
-
-        let pending = el.querySelectorAll('.stage-actor-img-wrap, .stage-actor-name').length;
-        if (pending === 0) { onDone(); return; }
-
-        const onAnim = (e) => {
-            if (e.target.parentElement !== el) return;
-            pending--;
-            if (pending <= 0) {
-                el.removeEventListener('animationend', onAnim);
-                onDone();
+        this._motion(el, 'content', done => animate(el.children, {
+            autoplay: false,
+            opacity: [1, 0], duration: motionDuration(240, el), ease: 'inQuad',
+            onComplete: () => {
+                done();
+                const wrap = el.querySelector('.stage-actor-img-wrap');
+                if (wrap) this._postfx?.unregister(wrap);
+                el.replaceChildren();
+                el.classList.add('stage-slot-empty');
             }
-        };
-        el.addEventListener('animationend', onAnim);
+        }));
     }
 
-    /**
-     * Animate a slot element off the stage, then remove it.
-     * After removal, FLIP remaining slots to fill the gap.
-     */
     _animateSlotExit(el) {
+        const visible = el.getBoundingClientRect();
+        this._stopMotion(el, 'content');
+        this._stopMotion(el, 'layout');
+        const resting = el.getBoundingClientRect();
+        const dx = visible.left - resting.left, dy = visible.top - resting.top;
         this._exitingElements.add(el);
-        const container = this._charactersEl;
-
-        // Snapshot sibling positions BEFORE exit animation takes layout effect
-        const siblings = [...container.children].filter(c => c !== el && !this._exitingElements.has(c));
-        for (const sib of siblings) {
-            const r = sib.getBoundingClientRect();
-            sib._flipOldLeft = r.left;
-            sib._flipOldTop = r.top;
-        }
-
-        el.classList.add('glstage-slot-exiting');
-        el.addEventListener('animationend', () => {
-            el.remove();
-            this._exitingElements.delete(el);
-            this._flipRemainingSlots();
-        }, { once: true });
+        this._motion(el, 'exit', done => animate(el, {
+            autoplay: false,
+            opacity: [Number(getComputedStyle(el).opacity), 0], x: [dx, dx], y: [dy, dy + 18], duration: motionDuration(280, el), ease: 'inCubic',
+            onComplete: () => {
+                const remaining = new Map([...this._charactersEl.children]
+                    .filter(child => !this._exitingElements.has(child))
+                    .map(child => [child.dataset.slotId, child]));
+                const rects = new Map([...remaining].map(([id, child]) => [id, child.getBoundingClientRect()]));
+                done();
+                const wrap = el.querySelector('.stage-actor-img-wrap');
+                if (wrap) this._postfx?.unregister(wrap);
+                el.remove();
+                this._exitingElements.delete(el);
+                this._flipAnimate(remaining, rects);
+            }
+        }));
     }
 
     close() {
-        if (this._visibilityAnim) {
-            this._visibilityAnim.cancel();
-            this._visibilityAnim = null;
-        }
+        for (const channels of this._motions.values()) for (const animation of channels.values()) animation.revert();
+        this._motions.clear();
+        this._exitingElements.clear();
         // Releases the WebGL context and its textures. Without this a module
         // reload leaks one context per cycle until the browser starts evicting.
         this._postfx?.destroy();

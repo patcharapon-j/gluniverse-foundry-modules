@@ -862,3 +862,8 @@
     min-width: 28px;
     text-align: center;
 }
+
+/* Owned slot/visibility choreography must not be interpolated a second time. */
+.glstage-anime-owned {
+    transition: none !important;
+}

@@ -1,6 +1,6 @@
 /**
  * DelvingEditor — the visual editor for Delving Mode (a Settings-menu app modeled
- * on the Weather / Support editors). Configures:
+ * on the Weather editor). Configures:
  *   • the turn definition (unit × count + label) and the weather-every-N-turns cadence;
  *   • full CRUD on delving RESOURCES and their ordered STAGES (each a dice pool
  *     {size, count, discard} + an effect look {archetype, intensity, two tints,
@@ -357,7 +357,7 @@ export class DelvingEditor extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-/** Register the Delving settings menu (alongside Calendar / Weather / Support). */
+/** Register the Delving settings menu (alongside Calendar / Weather). */
 export function registerDelvingMenu() {
   game.settings.registerMenu(MODULE_ID, "ct.delvingEditor", {
     name: "GLCT.delving.editor.title",

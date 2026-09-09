@@ -81,6 +81,17 @@
   --gl-violet-hot: #e0d4ff;
   --gl-orchid: #cf85e0;          /* dying / unstable — distinct from violet */
   --gl-orchid-hot: #f6d9fb;
+  /*
+   * Boss presence. Deliberately its own stop rather than a reuse of the two
+   * purples above: --gl-violet already means "secret, hidden, mystery" on the
+   * initiative rail and --gl-orchid means "dying", so a boss painted in either
+   * would be the same colour as a hidden combatant or a downed party member. It
+   * is much deeper and far more saturated than both, which is what separates it
+   * at card size where a hue alone would not.
+   */
+  --gl-tyrant: #8b46e8;           /* boss presence */
+  --gl-tyrant-hot: #cfa8ff;       /* its lit edge */
+  --gl-tyrant-deep: #35105e;      /* the shadow the miasma is drawn in */
   --gl-jade: #54d6a6;            /* conditions, sustained effects */
   --gl-jade-hot: #c2ffe8;
   --gl-teal: #4ad9c0;            /* stabilised, held, at rest */
@@ -94,12 +105,6 @@
   --gl-holo-a: var(--gl-cyan);
   --gl-holo-b: var(--gl-violet);
   --gl-holo-c: #ff66b3;
-
-  /* Apex — the solo-boss eclipse-violet set. */
-  --gl-apex: #b14bff;
-  --gl-apex-deep: #3c0a6b;
-  --gl-apex-hot: #ff7bd6;
-  --gl-apex-ink: #140422;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -392,18 +397,14 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
      • #gls-control-center — the panel that hosts the slider; zooming it would
        make it resize under the cursor while dragging.
    ════════════════════════════════════════════════════════════════════════ */
-#glmm-studio,
-#glmm-viewer,
 #glct-hud,
 #glct-tracker-hud,
 #glct-weather-hud,
-#glct-support-hud,
 #glct-calendar,
 #glct-calendar-editor,
 #glct-weather-editor,
 #glct-delving-editor,
 #glct-events,
-#glct-support-editor,
 #glct-module-config,
 #glct-shift-names-editor,
 #gluniverse-foundry-modules-critical-gm-config,
@@ -426,8 +427,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .stream-pacer-peril-stage,
 .stream-pacer-peril-indicator-wrap,
 .stream-pacer-campfire-bar-wrap,
-.insight-notification,
-.glucargo-minimap {
+.insight-notification {
   zoom: var(--gl-ui-scale, 1);
 }
 
@@ -464,9 +464,8 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
    A feature sheet declaring its own `::before` on a .gl-glass element replaces
    this (same specificity, later sheet). That is a supported opt-out, not an
-   accident, and there is exactly one: .glmm-viewer, which draws a livelier
-   chamfer glint of its own. Check for it before adding a ::before to anything
-   carrying .gl-glass. */
+   accident — check for one before adding a ::before to anything carrying
+   .gl-glass. */
 .gl-glass::before {
   content: "";
   position: absolute;
@@ -676,22 +675,22 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
    .gl-btn is excluded because it already presses; doubling would over-sink it. */
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) button:not(.gl-btn) {
   transition: scale var(--gl-d-tap) var(--gl-ease);
 }
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) button:not(.gl-btn):active:not(:disabled) {
   scale: var(--gl-press-scale);
 }
@@ -710,12 +709,12 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
    :focus-visible, not :focus — a mouse click should not leave a ring behind. */
 .gl-focusable:focus-visible,
 :is(
-  #glmm-studio, #glmm-viewer, #glct-hud, #glct-tracker-hud, #glct-weather-hud,
-  #glct-support-hud, #glct-calendar, #glct-events, #stream-pacer-hud,
+  #glct-hud, #glct-tracker-hud, #glct-weather-hud,
+  #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
   #gls-control-center, #gluniverse-pf2e-statblock-importer,
-  .gluni-initiative, .glucargo-minimap, .glo-root
+  .gluni-initiative, .glo-root
 ) :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
   outline: var(--gl-focus-outline);
   outline-offset: 2px;

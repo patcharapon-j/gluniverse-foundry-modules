@@ -32,7 +32,6 @@ import { Suite } from "../../core/registry.mjs";
 const PROMOTED = {
   trackers: "clocks-trackers",
   weather: "clocks-weather",
-  support: "clocks-support",
   delving: "clocks-delving",
 };
 
@@ -101,16 +100,6 @@ export const FEATURE_TREE = [
       {
         key: "hudChip", default: true,
         label: "GLCT.features.weather.hudChip.name", hint: "GLCT.features.weather.hudChip.hint"
-      }
-    ]
-  },
-  {
-    key: "support", icon: "fa-solid fa-user-shield", setting: SETTINGS.supportEnabled, default: false,
-    label: "GLCT.features.support.name", hint: "GLCT.features.support.hint",
-    children: [
-      {
-        key: "passiveTokenIcon", setting: SETTINGS.supportPassiveTokenIcon, default: true, pf2eOnly: true,
-        label: "GLCT.features.support.passiveTokenIcon.name", hint: "GLCT.features.support.passiveTokenIcon.hint"
       }
     ]
   },

@@ -40,10 +40,9 @@
   --gluni-stable:           var(--gl-teal);
   --gluni-stable-hot:       var(--gl-teal-hot);
   --gluni-violet:      var(--gl-violet);
-  --gluni-apex:        var(--gl-apex);
-  --gluni-apex-deep:   var(--gl-apex-deep);
-  --gluni-apex-hot:    var(--gl-apex-hot);
-  --gluni-apex-ink:    var(--gl-apex-ink);
+  --gluni-tyrant:       var(--gl-tyrant);       /* boss presence */
+  --gluni-tyrant-hot:   var(--gl-tyrant-hot);
+  --gluni-tyrant-deep:  var(--gl-tyrant-deep);
   --gluni-ink:         var(--gl-ink-0);
   --gluni-line:        rgb(var(--gl-tint-light) / 0.10);
   --gluni-line-strong: var(--gl-line-strong);
@@ -1081,6 +1080,23 @@
   pointer-events: none;
 }
 
+/*
+ * The boss liquid is the exception: it goes UNDER the portrait rather than over
+ * it. Break, dying and scramble are things happening *to* the creature and
+ * belong on top of its face; a boss's miasma is what it is standing in, and an
+ * ominous wash laid over the art just dims the portrait. Below the portrait
+ * layer it is the card's own material instead, and the masked boss portrait
+ * (see .gluni-card--boss .gluni-card-portrait) is what lets it be seen.
+ *
+ * z-index 0 rather than a negative value: .gluni-card-surface is a stacking
+ * context, so 0 still paints above its background and below the portrait wrap
+ * at 1. A negative index would slide under the surface's own gradient and
+ * disappear completely.
+ */
+.gluni-card-portrait-fx--dread {
+  z-index: 0;
+}
+
 .gluni-card--active .gluni-card-adhoc-bg {
   inset: -42px 0 0 0;
 }
@@ -1137,6 +1153,7 @@
 
 .gluni-active-tag,
 .gluni-adhoc-tag,
+.gluni-boss-tag,
 .gluni-delayed-tag,
 .gluni-guard-break-tag,
 .gluni-dying-tag {
@@ -1801,6 +1818,413 @@
 
 .gluni-card--dying {
   --gluni-accent: var(--gluni-dying);
+}
+
+/*
+ * Boss Creatures (PF2e variant rules).
+ *
+ * A boss overrides its disposition accent on purpose. Hostile red is what every
+ * other enemy on the rail already carries, so leaving a boss on it would make
+ * the one creature at the table that acts three times a round look exactly like
+ * the four that act once.
+ *
+ * The hue is --gl-tyrant, a purple that exists for this and nothing else. The two
+ * purples already in the rail were both spoken for: --gl-violet is "secret,
+ * hidden, mystery" and paints the scrambled cards, and --gl-orchid is the dying
+ * accent, so a boss on it would be exactly the colour of a downed party member
+ * at full Hit Points. Amber and crimson, which this shipped with first, are the
+ * suite's ceremony and hazard hues and both already appear on this rail.
+ *
+ * BOTH tiers take the same accent, and that is deliberate. A hue can say one
+ * thing well; asked to say two it says neither, and the card already carries the
+ * tier where it matters — a Supreme boss's extra entries read "Turn 2 of 3"
+ * against a Greater's "Turn 2 of 2". So the hue means "boss" and the *amount*
+ * means how much of one: Supreme takes a heavier frame and a stronger miasma.
+ *
+ * The accent drives --gluni-holo-a, -b and -c and the break blend, so the whole
+ * card follows without a second declaration, and a dying or guard-broken boss
+ * still yields to those states as it should — those rules come later in the
+ * cascade and own the card's field when they apply.
+ */
+.gluni-card--boss {
+  --gluni-accent: var(--gluni-tyrant);
+}
+
+/*
+ * A boss is physically bigger than the creatures around it, because on a rail of
+ * identically-sized cards that is the only cue that survives being glanced at.
+ * Colour and a chip both need reading; size does not. It is also the honest
+ * shape of the thing: this card owns two or three of the round's slots, so it
+ * occupying more of the round's rail is a description rather than an emphasis.
+ *
+ * Height and width both. Height alone reads as a card with more room in it;
+ * width alone reads as a rendering glitch. Together they read as a bigger card.
+ * The overhang is small on purpose — the active card already claims 12px, and a
+ * boss that out-reached the creature whose turn it is would be lying about who
+ * is acting.
+ */
+.gluni-card--boss .gluni-card-surface {
+  min-height: 74px;
+}
+
+.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 86px;
+}
+
+/*
+ * An extra turn is an echo, not a second boss. It stays clearly larger than an
+ * ordinary card and clearly smaller than the boss's own initial turn, which is
+ * the turn that matters: it is the one that clears Downfalls.
+ */
+.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 64px;
+}
+
+.gluni-card--active.gluni-card--boss .gluni-card-surface {
+  min-height: 142px;
+}
+
+.gluni-card--active.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 154px;
+}
+
+.gluni-card--active.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--active.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 128px;
+}
+
+/*
+ * The overhang. `justify-self` has to be restated per rail side: an explicit
+ * width defeats the `stretch` the card ships with, and the item then parks at
+ * the start of its column, which would send the extra width off the *outside*
+ * edge of a right-hand rail instead of into the screen.
+ *
+ * Excluded when active, which already sets its own width and shift; two
+ * competing overhangs on one card is a fight, not a hierarchy.
+ */
+.gluni-card--boss:not(.gluni-card--active) {
+  width: calc(100% + 8px);
+}
+
+.gluni-card--boss-supreme:not(.gluni-card--active) {
+  width: calc(100% + 13px);
+}
+
+.gluni-card--boss-extra:not(.gluni-card--active),
+.gluni-card--boss-extra.gluni-card--boss-supreme:not(.gluni-card--active) {
+  width: calc(100% + 4px);
+}
+
+.gluni-initiative--right .gluni-card--boss:not(.gluni-card--active) {
+  justify-self: end;
+}
+
+.gluni-initiative--left .gluni-card--boss:not(.gluni-card--active) {
+  justify-self: start;
+}
+
+/* The name grows with the card. Held under the active card's 16px. */
+.gluni-card--boss h3 {
+  font-size: 13px;
+}
+
+.gluni-card--boss-supreme h3 {
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+.gluni-card--boss-extra h3,
+.gluni-card--boss-extra.gluni-card--boss-supreme h3 {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/*
+ * The frame, which is a different shape rather than the same shape in another
+ * colour. Every other card on this rail is a plain rectangle with one hairline;
+ * a boss's silhouette is cut at two opposite corners and its frame is struck as
+ * corner brackets rather than as a continuous edge, so it is recognisable from
+ * across the screen with the colour taken away.
+ *
+ * The cut is on the surface rather than on the card: the card is the element the
+ * FLIP animation transforms between rail and active size, and a clip on it would
+ * be scaled with it into a different-sized notch on every frame of the move.
+ */
+.gluni-card--boss .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 16px) 0,
+    100% 16px,
+    100% 100%,
+    16px 100%,
+    0 calc(100% - 16px)
+  );
+  /* Three lines rather than one: the rim, a dark gutter, and a second faint rule
+     inside it. A doubled frame is the cheapest way to say "more" about a card
+     whose neighbours all carry a single hairline, and it costs no DOM. */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 58%, transparent),
+    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.42),
+    inset 0 0 0 5px color-mix(in srgb, var(--gluni-accent) 22%, transparent);
+}
+
+/* A Supreme boss is cut deeper and lined harder. Same shape, more of it. */
+.gluni-card--boss-supreme .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 24px) 0,
+    100% 24px,
+    100% 100%,
+    24px 100%,
+    0 calc(100% - 24px)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-tyrant-hot) 74%, transparent),
+    inset 0 0 0 5px rgb(var(--gl-tint-dark) / 0.5),
+    inset 0 0 0 7px color-mix(in srgb, var(--gluni-tyrant-hot) 30%, transparent),
+    0 0 26px color-mix(in srgb, var(--gluni-accent) 30%, transparent);
+}
+
+/*
+ * The brackets. Two L-shaped marks at the corners the cut does *not* touch, so
+ * the frame reads as four deliberate decisions rather than as a rectangle that
+ * lost two corners. Struck on the spec layer, which is already a full-card
+ * overlay above the portrait and whose pseudo-elements are free, so this adds
+ * nothing to the DOM.
+ *
+ * Not the bracket layer, which looks like the obvious host and is not: it is an
+ * 8px corner mark, so a pseudo-element inset inside it lands in an 8px box
+ * rather than on the card.
+ */
+.gluni-card--boss .gluni-card-spec::before,
+.gluni-card--boss .gluni-card-spec::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 0 solid var(--gluni-accent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.gluni-card--boss .gluni-card-spec::before {
+  top: 4px;
+  left: 4px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.gluni-card--boss .gluni-card-spec::after {
+  right: 4px;
+  bottom: 4px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+}
+
+/*
+ * Letting the liquid be seen.
+ *
+ * The portrait is a full-bleed, opaque cover image: parking the FX canvas below
+ * it (see .gluni-card-portrait-fx--dread) puts the effect somewhere nothing can
+ * ever look at unless the portrait gives way. So a boss's portrait is masked —
+ * solid where the creature is, dissolving toward the card's edges — and what
+ * shows through the dissolve is the liquid underneath.
+ *
+ * That is the whole reason the effect is under the art rather than over it. Over
+ * the art it is a coloured film on somebody's face; under it, with the face
+ * eaten away at the edges, the creature is standing in the thing.
+ *
+ * The ellipse is centred on --gluni-portrait-normal-x/-y, which is where the
+ * crop puts the creature, not on the card. Its vertical radius overruns the card
+ * and its horizontal radius does not, so the fade happens left and right — along
+ * the card's long axis, which is where there is room for it — and the creature
+ * keeps its head.
+ *
+ * Degrades honestly: with WebGL unavailable there is no canvas and the mask
+ * reveals the card's own ink gradient, which reads as a vignette rather than as
+ * a hole.
+ */
+.gluni-card--boss .gluni-card-portrait {
+  -webkit-mask-image: radial-gradient(
+    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    #000 0%,
+    #000 24%,
+    rgb(0 0 0 / 0.52) 54%,
+    rgb(0 0 0 / 0.14) 78%,
+    transparent 96%
+  );
+  mask-image: radial-gradient(
+    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    #000 0%,
+    #000 24%,
+    rgb(0 0 0 / 0.52) 54%,
+    rgb(0 0 0 / 0.14) 78%,
+    transparent 96%
+  );
+}
+
+/* Active cards re-crop to the active focal point, so the mask follows it. */
+.gluni-card--active.gluni-card--boss .gluni-card-portrait {
+  -webkit-mask-image: radial-gradient(
+    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    #000 0%,
+    #000 30%,
+    rgb(0 0 0 / 0.60) 58%,
+    rgb(0 0 0 / 0.18) 80%,
+    transparent 98%
+  );
+  mask-image: radial-gradient(
+    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    #000 0%,
+    #000 30%,
+    rgb(0 0 0 / 0.60) 58%,
+    rgb(0 0 0 / 0.18) 80%,
+    transparent 98%
+  );
+}
+
+/*
+ * The ink scrim over the portrait is nearly opaque at the accent edge, which is
+ * exactly where the mask has opened the portrait up. Left alone it paints out
+ * the liquid on the side of the card the eye starts from. Thinned rather than
+ * removed: it is what makes the name readable.
+ */
+.gluni-card--boss .gluni-card-surface::before {
+  background: linear-gradient(
+    95deg,
+    color-mix(in srgb, var(--gl-ink-0) 56%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 20%, transparent) 50%,
+    transparent
+  );
+}
+
+.gluni-initiative--left .gluni-card--boss .gluni-card-surface::before {
+  background: linear-gradient(
+    -95deg,
+    color-mix(in srgb, var(--gl-ink-0) 56%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 20%, transparent) 50%,
+    transparent
+  );
+}
+
+/*
+ * A measured rule along the bottom edge. The last piece of "more complex": every
+ * other card on the rail ends in a plain line, and a ruled one reads as an
+ * instrument rather than a label. It hangs off the portrait wrap's spare
+ * ::after, so it costs no DOM and tracks the wrap when an active card grows
+ * upward into the notch.
+ *
+ * The ticks are a repeating gradient rather than marks in device pixels because
+ * they are ornament, not a hairline: on a display that cannot resolve them they
+ * blur into the solid rule underneath, which is the same statement quieter.
+ */
+.gluni-card--boss .gluni-card-portrait-wrap::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  height: 5px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-accent) 72%, transparent) 0 1px,
+      transparent 1px 7px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 4px,
+      color-mix(in srgb, var(--gluni-accent) 30%, transparent) 4px
+    );
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 74%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 74%, transparent 100%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+/* Supreme is the same ruler, read finer. */
+.gluni-card--boss-supreme .gluni-card-portrait-wrap::after {
+  height: 7px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-tyrant-hot) 78%, transparent) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--gluni-tyrant-hot) 38%, transparent) 6px
+    );
+  opacity: 0.8;
+}
+
+/* An extra turn is the same creature, and reads as a lighter echo of it. */
+.gluni-card--boss-extra .gluni-card-portrait {
+  filter: saturate(0.82) brightness(0.9);
+}
+
+.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 34%, transparent),
+    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.3);
+}
+
+.gluni-card--boss-extra .gluni-card-spec::before,
+.gluni-card--boss-extra .gluni-card-spec::after {
+  opacity: 0.5;
+  border-width: 0;
+}
+
+.gluni-card--boss-extra .gluni-card-spec::before {
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.gluni-card--boss-extra .gluni-card-spec::after {
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+}
+
+/* The echo carries the greater ruler, quietly, whatever tier it belongs to. */
+.gluni-card--boss-extra .gluni-card-portrait-wrap::after,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-portrait-wrap::after {
+  height: 4px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-accent) 62%, transparent) 0 1px,
+      transparent 1px 8px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--gluni-accent) 22%, transparent) 3px
+    );
+  opacity: 0.44;
+}
+
+.gluni-boss-tag {
+  color: var(--gluni-ink);
+  background: var(--gluni-accent, var(--gluni-signal));
+}
+
+/* The "turn 2 of 3" chip is a readout, not an alarm: outline, not fill. */
+.gluni-boss-tag--turn {
+  color: var(--gluni-accent, var(--gluni-signal));
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-signal)) 62%, transparent);
 }
 
 .gluni-card--dying .gluni-card-surface {
@@ -5346,6 +5770,56 @@
     font-size: 11px;
   }
 
+  /*
+   * The narrow layout restates the card heights at .gluni-card .gluni-card-surface,
+   * which ties the boss rules above on specificity and beats them on order — so a
+   * boss on a small screen came out exactly the size of everything else, which is
+   * the one thing this card is not allowed to be. The scale is compressed rather
+   * than dropped: the rail is narrower here, so the same absolute overhang would
+   * be a much larger fraction of it.
+   */
+  .gluni-card--boss .gluni-card-surface {
+    min-height: 66px;
+  }
+
+  .gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 76px;
+  }
+
+  .gluni-card--boss-extra .gluni-card-surface,
+  .gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 58px;
+  }
+
+  .gluni-card--active.gluni-card--boss .gluni-card-surface {
+    min-height: 126px;
+  }
+
+  .gluni-card--active.gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 136px;
+  }
+
+  .gluni-card--boss:not(.gluni-card--active) {
+    width: calc(100% + 5px);
+  }
+
+  .gluni-card--boss-supreme:not(.gluni-card--active) {
+    width: calc(100% + 9px);
+  }
+
+  .gluni-card--boss h3 {
+    font-size: 12px;
+  }
+
+  .gluni-card--boss-supreme h3 {
+    font-size: 13px;
+  }
+
+  .gluni-card--boss-extra h3,
+  .gluni-card--boss-extra.gluni-card--boss-supreme h3 {
+    font-size: 11px;
+  }
+
   .gluni-card-content {
     padding-right: 38px;
   }
@@ -6296,204 +6770,13 @@
   }
 }
 
-
-/* ============================================================================
- * Apex enemy — PF2e-Flatfinder solo-boss card (eclipse-violet).
- * A more elaborate, menacing treatment for a solo creature: a thick gradient
- * accent, a breathing violet aura, four corner filigree brackets, a crowned
- * APEX kicker, and a 3-segment phase meter that escalates with the boss's HP
- * (Flatfinder's 66% / 33% beats: Phase I composed -> II enraged -> III
- * desperate). Extra turns ("reprise") read as a subordinate echo of the prime,
- * lighting back up while active. Footprint stays uniform (no rail-geometry
- * change) per the design decision; menace comes from ornament + motion.
- * The WebGL ember/corona is the live portrait layer; this CSS is the structure
- * (and the full fallback when WebGL is unavailable).
- * ==========================================================================*/
-.gluni-card--apex {
-  --gluni-accent: var(--gluni-apex);
-  --gluni-apex-breath: var(--gl-dread);
+/* Anime owns these nodes only while a rail movement or splash is alive.
+   Static glass, pseudo-element glints and WebGL remain in their own layers. */
+.gluni-anime-motion {
+  animation: none !important;
+  transition: none !important;
+  will-change: transform, opacity;
 }
-
-/* the default single corner bracket gives way to the four-corner filigree */
-.gluni-card--apex .gluni-card-bracket { display: none; }
-
-.gluni-card--apex .gluni-card-accent {
-  width: 5px;
-  background: linear-gradient(180deg, var(--gluni-apex-hot), var(--gluni-apex) 45%, var(--gluni-apex-deep));
-  box-shadow:
-    0 0 18px var(--gluni-apex),
-    0 0 38px color-mix(in srgb, var(--gluni-apex-deep) 60%, transparent);
+.gluni-anime-splash .gluni-anime-motion {
+  filter: none;
 }
-
-/* breathing aura — tightens + accelerates as the phase rises */
-.gluni-card--apex .gluni-card-surface {
-  animation: gluni-apex-breathe var(--gluni-apex-breath) var(--gluni-ease) infinite;
-}
-@keyframes gluni-apex-breathe {
-  0%, 100% {
-    box-shadow:
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.07),
-      inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 42%, var(--gluni-line)),
-      inset 0 0 30px rgb(var(--gl-tint-dark) / 0.45),
-      0 0 0 1px color-mix(in srgb, var(--gluni-apex-deep) 50%, transparent),
-      0 0 22px color-mix(in srgb, var(--gluni-apex) 22%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10),
-      inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 66%, var(--gluni-line)),
-      inset 0 0 30px rgb(var(--gl-tint-dark) / 0.45),
-      0 0 0 1px color-mix(in srgb, var(--gluni-apex-deep) 72%, transparent),
-      0 0 42px color-mix(in srgb, var(--gluni-apex) 44%, transparent);
-  }
-}
-
-/* corona glow over the lower face (CSS fallback + reinforcement of the shader) */
-.gluni-card-apex-corona {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  background: radial-gradient(80% 60% at 50% 64%, color-mix(in srgb, var(--gluni-apex) 22%, transparent), transparent 70%);
-  mix-blend-mode: screen;
-}
-
-/* four corner filigree brackets */
-.gluni-card-apex-corners { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
-.gluni-card-apex-corners span {
-  position: absolute;
-  width: 13px;
-  height: 13px;
-  border: 0 solid color-mix(in srgb, var(--gluni-apex-hot) 80%, transparent);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--gluni-apex) 70%, transparent));
-}
-.gluni-card-apex-corners span:nth-child(1) { top: 5px;    left: 6px;  border-top-width: 2px;    border-left-width: 2px; }
-.gluni-card-apex-corners span:nth-child(2) { top: 14px;   right: 6px; border-top-width: 2px;    border-right-width: 2px; }
-.gluni-card-apex-corners span:nth-child(3) { bottom: 5px; left: 6px;  border-bottom-width: 2px; border-left-width: 2px; }
-.gluni-card-apex-corners span:nth-child(4) { bottom: 5px; right: 6px; border-bottom-width: 2px; border-right-width: 2px; }
-.gluni-initiative--left .gluni-card-apex-corners span:nth-child(2) { top: 5px; }
-
-/* crowned APEX kicker + ordinal / phase chips */
-.gluni-apex-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 12px;
-  padding: 0 5px;
-  color: var(--gluni-apex-ink);
-  background: linear-gradient(90deg, var(--gluni-apex-deep), var(--gluni-apex-hot), var(--gluni-apex));
-  font-size: 7px;
-  font-weight: var(--gl-weight-heavy);
-  letter-spacing: 0.22em;
-  line-height: 1;
-  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-white) 40%, transparent),
-    0 0 16px color-mix(in srgb, var(--gluni-apex) 70%, transparent);
-}
-.gluni-apex-tag i { font-size: 7px; }
-.gluni-apex-tag--ordinal,
-.gluni-apex-tag--phase {
-  color: var(--gluni-apex-hot);
-  background: color-mix(in srgb, var(--gl-ink-0) 60%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 64%, transparent);
-  font-variant-numeric: tabular-nums;
-}
-.gluni-apex-tag--phase { background: transparent; }
-
-/* 3-segment phase meter on the prime */
-.gluni-apex-phase-pips { display: flex; align-items: center; gap: 3px; height: 12px; margin-top: 2px; }
-.gluni-apex-phase-pip {
-  width: 14px;
-  height: 3px;
-  border-radius: 1px;
-  background: color-mix(in srgb, var(--gluni-apex) 22%, var(--gl-ink-0));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 30%, transparent);
-}
-.gluni-apex-phase-pip--on {
-  background: linear-gradient(90deg, var(--gluni-apex), var(--gluni-apex-hot));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--gluni-apex) 80%, transparent);
-}
-
-/* a faint sepia/cool wash on the portrait so the violet ember reads over it */
-.gluni-card--apex .gluni-card-portrait { filter: contrast(1.12) saturate(1.04) brightness(0.98); }
-
-/* ---- phase escalation ------------------------------------------------------ */
-.gluni-card--apex-phase-1 { --gluni-apex-breath: var(--gl-dread); }
-.gluni-card--apex-phase-2 { --gluni-apex-breath: calc(var(--gl-dread) * 0.58); }
-.gluni-card--apex-phase-2 .gluni-card h3 { color: color-mix(in srgb, var(--gluni-apex-hot) 26%, var(--gluni-white)); }
-.gluni-card--apex-phase-3 { --gluni-apex-breath: calc(var(--gl-dread) * 0.32); }
-.gluni-card--apex-phase-3 .gluni-card h3 { color: var(--gluni-apex-hot); }
-.gluni-card--apex-phase-3 .gluni-card-apex-corona {
-  background: radial-gradient(85% 70% at 50% 60%, color-mix(in srgb, var(--gluni-apex) 38%, transparent), transparent 72%);
-}
-/* stress fractures (kept on the corona ::after so they never fight the active
-   card's own ::after holo lattice) */
-.gluni-card--apex-phase-3 .gluni-card-apex-corona::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.5;
-  mix-blend-mode: screen;
-  background:
-    linear-gradient(120deg, transparent 0 41%, color-mix(in srgb, var(--gluni-apex-hot) 55%, transparent) 41% 41.6%, transparent 42%),
-    linear-gradient(28deg,  transparent 0 67%, color-mix(in srgb, var(--gluni-apex-hot) 45%, transparent) 67% 67.5%, transparent 68%),
-    linear-gradient(80deg,  transparent 0 22%, color-mix(in srgb, var(--gluni-apex) 40%, transparent) 22% 22.4%, transparent 23%);
-}
-/* gentle shudder only at the desperate phase (on the surface, not .gluni-card,
-   so it never interferes with the FLIP transforms on the card element) */
-.gluni-card--apex-phase-3 .gluni-card-surface {
-  animation:
-    gluni-apex-breathe var(--gluni-apex-breath) var(--gluni-ease) infinite,
-    gluni-apex-shudder var(--gl-breathe) steps(6, end) infinite;
-}
-@keyframes gluni-apex-shudder {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-0.6px); }
-  60% { transform: translateX(0.6px); }
-}
-
-/* ---- reprise (extra turns): subordinate echo, uniform footprint ------------ */
-.gluni-card--apex-reprise .gluni-card-surface { animation: none; }
-.gluni-card--apex-reprise .gluni-card-portrait { filter: grayscale(0.5) brightness(0.62) contrast(1.05); }
-.gluni-card--apex-reprise .gluni-card-accent {
-  width: 3px;
-  background: color-mix(in srgb, var(--gluni-apex) 58%, #2a2330);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--gluni-apex) 38%, transparent);
-}
-.gluni-card--apex-reprise .gluni-card-surface {
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.05),
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 22%, var(--gluni-line)),
-    inset 0 0 24px rgb(var(--gl-tint-dark) / 0.5);
-}
-.gluni-card--apex-reprise .gluni-card-apex-corona { opacity: 0.4; }
-.gluni-card--apex-reprise .gluni-card-apex-corners span { opacity: 0.45; filter: none; }
-.gluni-card--apex-reprise .gluni-apex-tag {
-  background: color-mix(in srgb, var(--gl-ink-0) 50%, transparent);
-  color: color-mix(in srgb, var(--gluni-apex-hot) 70%, var(--gluni-text-dim));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 40%, transparent);
-}
-.gluni-card--apex-reprise .gluni-apex-tag--ordinal {
-  color: var(--gluni-apex-hot);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-apex) 60%, transparent);
-}
-
-/* reprise while it IS its turn: lifts back to near-prime intensity */
-.gluni-card--apex-reprise.gluni-card--active .gluni-card-surface {
-  animation: gluni-apex-breathe var(--gl-breathe) var(--gluni-ease) infinite;
-}
-.gluni-card--apex-reprise.gluni-card--active .gluni-card-portrait { filter: grayscale(0.12) brightness(0.92) contrast(1.08); }
-.gluni-card--apex-reprise.gluni-card--active .gluni-card-accent {
-  width: 4px;
-  background: linear-gradient(180deg, var(--gluni-apex-hot), var(--gluni-apex), var(--gluni-apex-deep));
-  box-shadow: 0 0 16px var(--gluni-apex);
-}
-.gluni-card--apex-reprise.gluni-card--active .gluni-card-apex-corona { opacity: 1; }
-.gluni-card--apex-reprise.gluni-card--active .gluni-card-apex-corners span { opacity: 0.9; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--gluni-apex) 70%, transparent)); }
-
-/* hide the two upper corner brackets on an active card (the surface extends
-   upward there, leaving the brackets stranded) — keep the lower pair anchored */
-.gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(1),
-.gluni-card--apex.gluni-card--active .gluni-card-apex-corners span:nth-child(2) { display: none; }
-

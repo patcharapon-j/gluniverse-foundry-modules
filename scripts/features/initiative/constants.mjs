@@ -81,12 +81,13 @@ export const ACTIVE_SHADER_PALETTE = {
   mysteryB:   [0.37, 0.92, 1.0],       // FX_FRAG_SCRAMBLE cyan
   delayBase:  [0.29, 0.64, 1.0],       // FX_FRAG_DELAY blue
   delayHot:   [0.60, 0.85, 1.0],
+  tyrantBase:  [0.208, 0.063, 0.369],   // FX_FRAG_TYRANT --gl-tyrant-deep (the pool)
+  tyrantMid:   [0.545, 0.275, 0.910],   // FX_FRAG_TYRANT --gl-tyrant (the body of the liquid)
+  tyrantHot:   [0.812, 0.659, 1.0],     // FX_FRAG_TYRANT --gl-tyrant-hot (the filaments)
   breakAmber: [1.0, 0.694, 0.176],     // FX_FRAG_BREAK amber
   breakHot:   [1.0, 0.878, 0.439],
   splashHot:  [1.0, 0.694, 0.176],     // BREAK_GL_FRAG full-screen
-  splashGlow: [1.0, 0.878, 0.439],
-  apexBase:   [0.694, 0.294, 1.0],     // FX_FRAG_APEX eclipse-violet ember
-  apexHot:    [1.0, 0.482, 0.839]
+  splashGlow: [1.0, 0.878, 0.439]
 };
 
 export function getDispositionColors(disposition) {
@@ -94,8 +95,7 @@ export function getDispositionColors(disposition) {
 }
 
 // Flag keys are prefixed with "init." for cross-feature isolation on shared
-// documents (scope is the suite id MODULE_ID). APEX.* flags mirror the
-// flatfinder feature's own ff.-prefixed keys under the same suite scope.
+// documents (scope is the suite id MODULE_ID).
 export const FLAGS = {
   visibility: "init.visibility",
   manualDelayed: "init.manualDelayed",
@@ -148,24 +148,6 @@ export const VISIBILITY = {
 // remove exactly the effect we created when the break is cleared.
 export const PF2E_GUARD_BREAK_EFFECT_SLUG = "gluni-guard-break";
 export const PF2E_GUARD_BREAK_PENALTY = 2;
-
-// PF2e-Flatfinder integration (optional, soft one-directional read). Flatfinder
-// marks a solo "Apex" boss with an actor flag and creates extra Combatant
-// documents for the boss's additional turns (at initiative -10, -20, …), tagging
-// the original as "prime" and each extra with its 1-based ordinal. We only ever
-// READ these — the overlay never writes Flatfinder flags. Key names mirror
-// Flatfinder's own constants.js; keep them in sync if that module renames them.
-// The PHASE_THRESHOLDS mirror Flatfinder's HP-phase beats so the card's menace
-// escalates in lock-step with the boss's mechanical phases.
-export const APEX = Object.freeze({
-  // Flatfinder is now the "flatfinder" feature of this same suite, so its apex
-  // flags live under the suite scope with the ff.-prefixed keys it writes.
-  MODULE_ID: "gluniverse-foundry-modules",
-  FLAG: "ff.apex",            // actor flag: { enabled, turns }
-  PRIME_FLAG: "ff.apexPrime", // combatant flag on the boss's primary turn (true)
-  EXTRA_FLAG: "ff.apexExtra", // combatant flag on an extra turn: { primeId, index, total }
-  PHASE_THRESHOLDS: Object.freeze([0.66, 0.33]) // HP fraction → Phase II / Phase III
-});
 
 export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.A11y.OverlayLabel": "Initiative order",
@@ -265,10 +247,6 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.AdHoc.Visibility": "Visibility",
   "GLUNI.Delayed": "Delayed",
   "GLUNI.GuardBreak": "Break",
-  "GLUNI.Apex.Tag": "Apex",
-  "GLUNI.Apex.PhaseLabel": "Phase",
-  "GLUNI.Apex.Aria": "Apex solo creature, phase {phase} of 3",
-  "GLUNI.Apex.Ordinal.Aria": "Apex extra turn {index} of {total}",
   "GLUNI.Conditions.Title": "Conditions",
   "GLUNI.Conditions.Hide": "Hide on tracker",
   "GLUNI.Conditions.Show": "Show on tracker",

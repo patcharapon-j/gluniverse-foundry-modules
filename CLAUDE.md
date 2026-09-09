@@ -67,7 +67,7 @@ Foundry only lets a package register settings/flags/sockets under *its own* id.
 So every former per-module namespace collapses onto `SUITE_ID`, and isolation is
 achieved by **key-prefixing** (settings + flags) and **payload-tagging**
 (sockets). Per-feature prefixes: `ct.`, `init.`, `ff.`, `dd.`, `stage.`, `lg.`,
-`cargo.`, etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
+etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
 
 ## Conventions (read before editing)
 
@@ -75,8 +75,8 @@ achieved by **key-prefixing** (settings + flags) and **payload-tagging**
   adapter must NOT register Hooks or open UI at import time; only inside
   `onInit`/`onReady` so disabled features stay inert.
 - **Localization** — all UI strings go through `game.i18n.localize/format`. Keep
-  each module's existing key namespace (`GLCT.*`, `GLS.*`, `GLLG.*`, `GLUCARGO.*`,
-  `GLSBI.*`, `GLUNI.*`, etc.) — they don't collide. **Watch dynamic keys**: code
+  each module's existing key namespace (`GLCT.*`, `GLS.*`, `GLLG.*`, `GLSBI.*`,
+  `GLUNI.*`, etc.) — they don't collide. **Watch dynamic keys**: code
   that builds a key at runtime (e.g. `` `GLCT.weather.arch.${a}` ``) breaks
   silently when a value's key is missing. When you add to an enum/archetype set,
   add the matching lang keys. Do NOT localize stored data values or
@@ -205,62 +205,6 @@ table**; halation, glow radius and glow sense are **absolute**, because no style
 carries a value for them to multiply — halation is a claim about a lens and none
 of the three styles is one. Don't "fix" that asymmetry by adding them to the
 tables: a multiplier over a table value of 0 is a dial that cannot be turned on.
-
-**When touching the PF2e Ultimates token overlay** (`features/pf2e-ultimates/token-overlay.mjs`),
-the three shaders there draw in the quad's UV space, so how big a feature lands
-on screen depends on the scene's grid size and the canvas zoom — a rim that
-reads correctly on a grid-100 map is sub-pixel on a grid-50 one and crawls
-between pixel centres. The shaders defend against that with `uTexel` (one
-device pixel in UV units, fed from the mesh's world transform each frame) and
-the helpers in `SCALE_PRELUDE`. None of it is visible in a diff, and a shader
-that fails to compile falls back to a static icon rather than erroring, so run:
-
-```bash
-node tools/ultimate-overlay-check.mjs
-```
-
-Zero problems required. It compiles all three in headless Chromium and scores
-them against a box-filtered ground truth at five quad sizes: the still frame,
-the movement between frames, and the movement under a half-pixel pan. It also
-pins the two invariants the design rests on — that the filtering is inert at
-`uTexel` 0 (a missing uniform must degrade to the old look, not a blank quad)
-and that it changes nothing at sizes with room for the detail. Needs Playwright;
-skips cleanly with exit 0 without it. `--sheet=/tmp/ult.png` writes a
-before/after/truth contact sheet — the only way to see what any of it looks
-like short of a session.
-
-**When touching the PF2e damage dice** (`features/pf2e-damage-dice/`), the
-texture set under `assets/pf2e-damage-dice/textures/` is *generated*, not
-hand-drawn. Re-bake it after any change to a recipe or to the damage-type table,
-and confirm the set is complete:
-
-```bash
-node tools/gen-damage-textures.mjs && node tools/gen-damage-textures.mjs --check
-```
-
-The tool fails if `damage-types.mjs` declares a glow a type's baked emission map
-does not have (or vice versa). To review a recipe change without launching
-Foundry, render a contact sheet — a tiling seam or a blown-out glow is obvious
-there and invisible in a diff:
-
-```bash
-node tools/gen-damage-textures.mjs --sheet=/tmp/damage-dice.png
-```
-
-**When touching Locations** (`features/locations/`, `styles/locations.css`),
-re-run its consistency check. Everything it covers fails *silently* — a duration
-that disagrees between the CSS token and the `ms` mirror, a `url(#…)` naming a
-filter that does not exist, an `animation:` with no `@keyframes`, a style with no
-i18n key, a `feComposite` that blacks out the plate:
-
-```bash
-node tools/locations-check.mjs
-```
-
-Zero problems required. It cannot check how any of it *looks* — for that,
-`--sheet=/tmp/locations.html` writes a page with every style frozen
-mid-transition; open it. See `docs/LOCATIONS.md` for the one-phase curtain model
-and the v13/v14 background split.
 
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.
@@ -409,57 +353,6 @@ the real animation model. **Serve it** (`node tools/preview-server.mjs`) — a
 `docs/RESOURCE_BARS.md` for the pipeline, the unit convention and the
 permission contract.
 
-**When touching the token condition rail** (`features/token-conditions/`), re-run
-its consistency check. Everything it covers fails *silently*: a shader that will
-not compile degrades to nothing rather than erroring; a uniform declared and
-never written holds its initial value forever; the plate's geometry is described
-by the GLSL, by `constants.mjs` and by the host, so a counter drifts half off
-its own tab the moment two of them disagree; a hairline sized in geometry units
-instead of device pixels vanishes for every player without a HiDPI monitor; an
-animated behaviour missing from `SHED_ORDER` never degrades under load; a
-redacted effect whose name is populated before the redaction is checked leaks it
-the moment somebody draws one more thing; dropping any of PF2e's own three gates
-(`isExpired`, `system.tokenIcon.show`, `isIdentified`) takes a control away from
-every GM who already knows where it is; a missing `updateWorldTime` hook freezes
-every duration gauge where it stood; a `null` life collapsed into `0` draws a
-full countdown bar under every effect that has no duration at all; and the
-resting layout — a block of plates packed inside the token's own square — can be
-retuned into either of its two failures without a diff showing it, since a plate
-a third larger silently takes a Medium token from twelve slots to four, and a
-raised column ceiling tiles the creature's artwork instead of sitting beside it,
-neither of which appears until the sixth round of somebody else's fight:
-
-```bash
-node tools/token-conditions-check.mjs
-```
-
-Zero problems required. Note that the plate deliberately reuses the resource
-bar's material and its `uTime * 1.35` breath clock — a dying creature's bar and
-its DYING plate are one alarm, not two — and that gold appears in exactly one
-place here, a sustained effect's duration gauge.
-
-The layout has **two arrangements**, and `layout()` computes both in full and
-interpolates position *and* size between them. They are different shapes, not one
-shape at two scales: easing the resting layout into the expanded one instead
-would send every plate past the first column to the wrong place. The resting one
-stays inside the token's square on purpose — a column that outgrows its token
-grows over the creatures standing next to it — while the hover one is free to
-overlap, because it exists only while the cursor is on the token. `capacityFor`
-floors the GM's plate cap at what the square can actually hold; without it the
-setting is a number that means "and then draw the rest on somebody else". The
-two axes are spaced by different constants on purpose (`gap` down a column,
-the tighter `colGap` across them, and the same split for the group seam) —
-every pixel between two columns is a pixel further the block reaches over the
-artwork. The unfold is a fixed-duration tween off `TIMING.unfold`, not a
-per-frame smoothing: a smoothing never arrives, and its invisible tail is most
-of what makes a hover feel slow.
-
-To see it, `node tools/token-conditions-preview.mjs --out=.preview/conditions.html`
-writes a page that compiles **both** shipped shaders in one WebGL2 context and
-puts them through one bright-pass. **Serve it** (`node tools/preview-server.mjs`).
-See `docs/TOKEN_CONDITIONS.md` for the tone system, the two data models and the
-permission contract.
-
 **When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
 `styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it
 covers fails *silently*. The load-bearing one: a level's surge threshold is
@@ -602,6 +495,460 @@ See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
 different transport channels, why the standing instability is drawn in the HUD
 chip rather than over the board, and why every pass runs live off a warmed
 context rather than from baked frames.
+
+**When touching the PF2e areas** (`features/pf2e-aoe/`), re-run its consistency
+check. It covers the closed semantic vocabulary, classification ties, profile
+precedence, PF2e coverage (the 5/10/5 diagonal, half-grid cone origins, blocked
+cells, emanation footprints), every shader uniform being both declared and
+written by the host, the shed gates, and the atlas layout the shader's
+`uAtlasRect` assumes:
+
+```bash
+node tools/pf2e-aoe-check.mjs
+```
+
+Zero failures required. It cannot compile a line of GLSL, and a shader that
+fails to compile restores that Region to Foundry's native highlight rather than
+erroring, so after touching `shader.mjs` render it:
+
+```bash
+node tools/pf2e-aoe-preview.mjs --out=.preview/aoe.html && node tools/preview-server.mjs
+```
+
+The page exposes `__aoeArchSheet`, `__aoeSheet` and `__aoeTimeSheet` for
+headless contact sheets. Three things about that shader are invisible in a diff.
+Every band of the frame is drawn against `latticeSdf` — the PF2e staircase —
+not the smooth shape; drawing any of them against the shape puts two disagreeing
+edges on a rules lattice. Every hairline is sized in device pixels through
+`uTexel`, never in grid units. And the material fill is computed only on the
+ground and shade planes: the boundary and atmosphere planes must not reach for
+`fill`, or three of four passes pay for frost's dendrite search again. The
+material atlas is generated, not drawn — re-bake and confirm after any recipe
+change with `node tools/gen-pf2e-aoe-atlas.mjs && node tools/gen-pf2e-aoe-atlas.mjs --check`;
+its tiles must stay seamless (periodic noise) and the host must keep mipmaps
+off on it, or the `fract()` tiling draws a hairline grid at the repeat. See
+`docs/PF2E_AOE.md` for the frame and the material contract.
+
+**When touching Insight** (`features/insight/`, `styles/insight.css`,
+`templates/insight/`), re-run its consistency check. An Insight arrival is a
+sequence of classes applied to elements by a clock, over CSS that is almost
+entirely one-shot keyframes — so nothing here throws when it breaks, a beat of
+the reveal just never happens, on a player's screen, once, while the GM's own
+screen looks correct. It pins every element the renderer reaches for against
+the template (a rename makes `querySelector` return null, which drops a beat
+silently and throws outright on the two that are not optional); the *reverse*
+direction too, because most of the arrival — the flash, the scan, the four
+corner marks, the frame — is nodes JS never touches and CSS alone animates, so
+a rename on either side simply deletes that beat; the stage clock in
+`tools/insight-preview.mjs` against the one in `notification.mjs`, since the
+preview is where this feature is judged and a preview on its own timings
+flatters a reveal nobody ships; that every setting the renderer reads is
+registered (`game.settings.get` on an unregistered key throws *inside* the
+render, losing the whole notification rather than degrading it); that every
+edge-intensity tier names a class the CSS defines, since a tier that resolves
+to nothing renders as "full" — the one outcome a player who turned the edge
+down did not consent to; that every sound profile carries all three stages,
+because a missing one is a designed no-op and a profile that lost its `impact`
+is a silent alert on the exact beat the alert exists for; and that a preset
+only ever remaps `--gl-accent` plus this feature's own `--insight-*` tokens,
+because presets are **not** themes and one that repaints a surface forks
+Etched Glass while looking perfectly fine in its own file:
+
+```bash
+node tools/insight-check.mjs
+```
+
+Zero problems required. Two of its rules are there because this feature got
+both wrong on the way in.
+
+`--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` are
+declared at `:root` **against the `:root` accent**, so they do not follow a
+scoped `--gl-accent` remap — a custom property's `var()` is substituted where
+it is declared, and descendants inherit the already-resolved value. Reading one
+inside a violet card paints the suite's default blue, and only on the elements
+that happen to use it. Every accent-derived value in `styles/insight.css` is
+struck inline with `color-mix()` for that reason; the check refuses the four.
+
+And **an accent that covers a whole viewport has to be corrected per hue.**
+The edge bands blend with `screen` over a cool canvas, where amber carries far
+further than a luminance-matched violet would predict: on the shared burn the
+Fantasy preset washed the entire frame yellow instead of lighting its edges,
+and looked deliberate in every file involved. That is why a preset may set
+`--insight-burn` and `--insight-reach-*` at all — the edge is the one place a
+preset's hue is spread across the whole screen, so it is the one place the
+preset carries its own correction.
+
+It cannot show you how any of this looks, and a still cannot either — the
+arrival *is* the feature. For that, `node tools/insight-preview.mjs` writes a
+page that drives the real stylesheets and the real template through the real
+stage order across four simulated 1200×675 desktops, plus the card at 1:1.
+**Serve it** (`node tools/preview-server.mjs`) — a `file://` page loads the CSS
+but not the module script, so you get a card frozen at its pre-entry values and
+conclude, wrongly, that the reveal is broken. Add `--artifact=<path>` for a
+self-contained copy that opens anywhere.
+
+**When touching the PF2e variant rules** (`features/pf2e-variant-rules/`), re-run
+its consistency check. Everything it covers fails *silently*.
+
+The load-bearing one is the dent → item-HP reflection. Dents live in a flag, but
+PF2e derives `isBroken` / `isDestroyed` straight off HP (`hp.value === 0` is
+destroyed, `hp.value <= floor(max / 2)` is broken) and shields read those getters
+to decide whether they still grant an AC bonus — so the reflection is the only
+thing making "broken" mean anything. It **must** round down: on an item with odd
+max HP, rounding 15 × 0.5 up to 8 leaves a two-dent item one point above PF2e's
+threshold of 7 and it never reads as broken. Even-HP items are fine, which is
+exactly how that survives a play session.
+
+That reflection is a *consequence* of a dent count, never a precondition for
+one. PF2e authors item HP on shields and on virtually nothing else: the
+`physical` template in `template.json` ships every item at
+`hp: { value: 0, max: 0 }` with `hardness: 0`, and both `isBroken` and
+`isDestroyed` begin `max > 0`. Requiring item HP before drawing a dent track
+therefore reads as a careful guard and silences the whole rule — no panel on any
+weapon, any suit of armour or any pack in a real world, which is indistinguishable
+from the feature being switched off, and which is exactly how it first shipped.
+Which items carry dents is `DENT_TYPES` in `constants.mjs` filtered by the
+table's own `types` config; item HP is only written back where it exists. The
+check tool refuses a `tracksDents` that consults HP or Hardness.
+
+**The dent thresholds are a GM-editable config**, because "does a potion dent"
+and "how much does adamantine buy you" are rulings rather than facts about the
+data model. `DEFAULT_DENT_CONFIG` ships the printed rule and nothing else — 2/4,
+doubled on a sturdy shield, on the gear the rule is written for, every grade and
+material row at zero — so a table that never opens the sheet plays the book. Two
+things there fail silently. Foundry's form parser builds a nested object only
+from a **dotted** `name`: a flat `name="weapon"` saves a config with no `types`
+key, `dentConfig()` merges the defaults back over the hole, and the GM's edit is
+discarded while the form submits happily. And the sheet must be reachable — a
+registered Object setting with no `registerMenu` in front of it is a config a GM
+can only reach through the console. The check tool pins both, along with the
+threshold invariant across every combination the sheet can produce: a destroyed
+rung at or below the broken one deletes the broken state entirely, so an item
+goes from working to gone in one hit and every number involved still renders.
+
+**Hardness is the whole input to the rule, and PF2e supplies none.** Damage at
+or below Hardness does nothing, above it is one dent, above twice it is two — so
+an item at Hardness 0 takes the *maximum* two dents from every hit that lands and
+is destroyed in two blows. `ShieldPF2e#prepareBaseData` is the only place in the
+entire system that ever writes a real Hardness; every other physical item ships
+from `template.json` at 0 and stays there. A resolver that simply reads
+`system.hardness` is therefore one where a solid adamantine greatsword shatters
+as fast as a wooden spoon, and nothing reports it. `hardness.mjs` is the ladder
+down: the GM's per-item override, then `system.hardness` where PF2e or a rule
+element actually set one (which keeps a shield's reinforcing runes and grade
+improvements — recomputing from the material alone would silently throw them
+away), then the material's own Hardness at its grade from **PF2e's own table**,
+then the table's per-type default, which ships at 0. The panel prints where the
+number came from, because a GM looking at a 10 otherwise has no way to tell
+adamantine from a default they set months ago except by changing it.
+
+**TABLE: OBJECT DENTS is keyed on possession, not on size.** The same paragraph
+(p. 48) that gives Tiny 1/2 through Gargantuan 16/32 for objects pins anything
+"carried, held, or wielded" at 2/4 *however large it is*. So implementing
+"infer dents from size" by reading `system.size` — the obvious reading — quietly
+makes every Large weapon in the world four times as durable, which renders
+perfectly and is not the rule. `optionsFor` derives `carried` from the owning
+actor's type (a creature is carrying it; a loot actor standing in for a chest or
+a door, or no actor at all, is scenery) and the check tool asserts both
+directions of that table.
+
+`dent-config.mjs` builds its ApplicationV2 subclass in a **memoised factory**,
+not at module scope. `settings.mjs` is imported transitively by pure modules the
+check tools load under plain Node, where `foundry` does not exist, so a
+top-level `const { ApplicationV2 } = foundry.applications.api` takes the tooling
+down rather than the feature.
+
+One more that is invisible in a diff and in any preview built on the suite's own
+panels: **`.gl-btn` declares no font-size**. It states its padding in `em` and
+takes its type from the host, so a button dropped into a chat card renders at
+14px and one on a PF2e sheet larger still, beside labels this feature strikes at
+9–11px — and because the padding is proportional it inflates with the type until
+the label crowds its own border. Every button a feature ships has to be sized by
+that feature, either on its own class or through one `<surface> .gl-btn` rule;
+the check tool walks the emitted buttons and requires it.
+
+It also pins that chip damage fires on a miss but **not** on a critical miss (the
+book excludes every degree past the first that deals no damage, so getting this
+wrong doubles the rule's frequency); that an applicable resistance *negates* chip
+damage rather than reducing it; that a spell's rank beats its level and a level-0
+effect clamps to 1 rather than chipping for nothing; that the healing penalty
+stays negative, since a positive value would silently *increase* healing; that
+every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
+or the catalog's longest-first sort hands the child's keys to the parent and its
+settings group renders empty; and the two runtime-built i18n families
+(`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
+key, plus `GLVR.dents.source.*`, `GLVR.dents.hardnessFrom.*` and
+`GLVR.dents.size.*`), which nothing else checks; that the material table has not
+drifted from PF2e's own numbers, since a wrong value there is a silent lie about
+the system's data; that a blank field in the per-item override *clears* rather
+than storing a zero, which would make an item arrive already destroyed; and that
+the dent nudge controls carry a size of their own rather than the panel's, since
+a `+` and a `-` left at the surface default come out several times the height of
+the rung they adjust:
+
+```bash
+node tools/pf2e-variant-rules-check.mjs
+```
+
+Zero problems required. Nothing there can show you a panel. For that:
+
+```bash
+node tools/variant-rules-preview.mjs --out=.preview/vr.html && node tools/preview-server.mjs 8954
+```
+
+**Serve it.** It draws the dent track in a 16px host and the chat cards in a 14px
+one, because the type a button inherits is the whole bug, and it renders the dent
+config sheet at its real window size, where a footer clipped by a stray
+`height: 100%` is visible and in a diff is not.
+
+Three things about this feature are worth knowing before
+you change it.
+
+**Chip Damage and Dents run in assist mode on purpose.** PF2e exposes no hook on
+damage application and nothing else in this suite has ever written into that
+pipeline; the GM presses a button and the module never silently changes a number.
+`applyFlatDamage` in `apply.mjs` is the single place damage is written, and it
+passes `damage` as a bare **number** with `final: true` — the number branch skips
+`applyIWR` entirely and `final` additionally zeroes hardness and the shield-block
+prompt, so the actor loses exactly what the card promised. `applyDamage` consumes
+its `token` argument unguarded, so an actor with no token on the active scene has
+to be refused up front rather than allowed to throw.
+
+**Careful Consumption never calls PF2e's `consume()`.** That function takes only a
+quantity, fires no hook, and builds a bare `DamageRoll(...).toMessage()` that
+bypasses every synthetic in the system — there is nothing to hook. Because the
+path is thin we simply do not use it: the same `(formula)[type,kind]` string is
+rebuilt, evaluated with `maximize: true`, and posted, so PF2e's own apply buttons
+still work and nothing was patched.
+
+**Lasting Wounds has two limits that are PF2e's, not ours.** `applyDamage` skips
+every modifier when called with `final: true`, which is what dragging a token's
+HP bar does — so bar-dragged healing ignores the penalty while chat-card healing
+honours it. And Treat Wounds rolls against a plain numeric DC, so
+`StatisticCheck#roll` takes its un-targeted branch and the message carries **no**
+`context.target` and no `target:*` roll options; the patient is resolved from the
+user's own target or selection instead. The healing penalty itself is a custom
+modifier on the `healing-received` selector — `prepareSynthetics` pushes every
+key of `system.customModifiers` into `synthetics.modifiers` with no allow-list,
+so that works without an effect item or a rule element. `addCustomModifier`
+refuses a duplicate *label*, so changing the value means remove-then-add.
+
+**Two seams with PF2e that this feature got wrong on the way in.** There is no
+"largest possible total" property on a Foundry `Roll` — the one the chat-card
+button originally read exists nowhere in core, so it was always `undefined`, the
+guard in front of it always tripped, and the button never rendered on any card
+while every other part of the feature looked correct. The maximum is produced by
+`evaluateSync({ maximize: true })` on a fresh copy of the same formula now, which
+is the same operation the pre-roll path performs, so the two routes agree by
+construction. And a consumable carries **no action cost at all** in PF2e:
+`system.uses.value` is the dose count, and reading it as one disqualified every
+multi-dose elixir for the crime of having doses left. Doses and `quantity` are
+also different counters, so spending a use decrements `system.uses.value` exactly
+as `ConsumablePF2e#consume` does; spending quantity first destroys a part-used
+elixir at the first sip. The check pins all four.
+
+**Three more seams, all of which shipped wrong once.** `Check.roll(check, context)`
+sums `check.modifiers`; the context's own `modifiers` array is copied into
+`context.origin` as metadata about the roller and is never added to anything, so
+the Medicine penalty written there was recorded, displayed nowhere and changed no
+result. It goes on the check now, through `StatisticModifier#push`, which dedupes
+by slug so a reroll cannot stack a second copy. Second, a dent readout gated on
+`isGM` looks perfectly correct on the GM's screen and is simply absent on every
+other one, which is the failure nobody at the table can report: reading and
+writing are separate questions here, and the two sheet passes reach
+`game.user.isGM` only through `canEdit()`. Third, the Careful Consumption button
+lives where a player is standing when they decide to drink something, which is
+PF2e's inventory summary and the item's own chat card, not the item sheet's
+Details tab. `ItemSummaryRenderer#toggleSummary` fires no hook, so the sheet is
+watched with a MutationObserver that is re-entrant exactly once. The check pins
+all of it.
+
+**Boss Creatures adds a sixth rule and three new seams**, all of which fail
+silently. The load-bearing one is that a boss's level bump (+2 Greater, +4
+Supreme) must **never** be written to `system.details.level.value`. pf2e-flatten
+implements Proficiency-without-Level by adding a custom modifier equal to minus
+the actor's stored level and re-flattening whenever that level changes, so
+storing the bump makes it subtract that much a second time from every check and
+DC the boss makes: a Supreme boss comes out four points *worse* than the creature
+it was built from, in PWoL worlds only, with every number on its sheet looking
+ordinary. That is the same trap Flatfinder's own `adjustments.js` is written to
+avoid for Elite/Weak. The level lives in a flag and is read back out for
+incapacitation only.
+
+Second, the Boss DC is a **static** number computed from the level table, so
+nothing in pf2e-flatten can reach it. In a PWoL world the PCs' saves are
+flattened by their own level and this DC would not be, leaving every save against
+the boss about a level too hard while each number involved looks right on its
+own; `bossDc()` takes the actor's own flattening offset for that reason. Third,
+the level bump and the XP multiplier must reach Flatfinder by *different* routes:
+`threatXp` already derives XP from the level difference, so a boss level fed into
+that lookup on top of the ×2/×3 factor counts the boss twice.
+
+Two more. The book's turn rotations ("the boss's second turn typically occurs
+after 2 members of the party have acted") are stated **for a party of four**;
+stored literally they place two boss turns back to back at a table of five, which
+the same page forbids outright, so `turnOffsets()` re-derives them as fractions of
+the real party and `planTurns()` clamps an overflowing offset to the bottom of the
+round rather than letting it wrap above the boss's own initiative. And the two
+Downfall locks are **different locks** — one Downfall per boss *turn*, and a
+specific trigger spent until the boss's next *initial* turn — which matters
+because a Supreme boss takes three turns between initial turns, so collapsing them
+lets one critical hit disrupt it twice in a round.
+
+An extra turn is a real Combatant carrying the boss's **own actor and token**, so
+it answers yes to every "is this a boss?" test in the feature. Sync one and it is
+given extras of its own, each of which fires `createCombatant` and syncs again,
+so the encounter doubles its boss entries per pass — in a live world that reached
+~1800 combatants and hung the client inside a minute. The hook filter and
+`syncBossTurns` both refuse an extra turn, and the check tool requires both,
+because one guard is one edit away from being the only one.
+
+On the rail the boss effect is the one card effect drawn **under** the portrait,
+and two rules have to agree for it to exist at all. The canvas is parked below
+the portrait layer, and the boss portrait is masked so the creature dissolves
+into the liquid at its edges. Break, dying and scramble are things happening *to*
+a creature and belong over its face; a boss's miasma is what it is standing in, and
+laid over the art it is just a coloured film on somebody. Without the mask the
+canvas is behind a full-bleed opaque cover image and can never be seen, which
+looks exactly like WebGL being unavailable — and a mask on a portrait reads as a
+cosmetic vignette, so it is the half that will be deleted. The check tool
+requires both.
+
+A boss card is also **bigger** than the cards around it, which is the only cue
+that survives a glance, and that has to be restated inside the `@media
+(max-width: 720px)` block: the narrow layout sets the height at
+`.gluni-card .gluni-card-surface`, tying the boss rules on specificity and
+beating them on order, so a boss below 720px came out exactly the size of the
+creatures it towers over while the desktop rail looked correct. The check tool
+measures both layouts.
+
+The boss panel is on **its own sheet tab**, and that tab is this feature's, not
+PF2e's. AppV1 binds a sheet's `Tabs` inside `activateListeners`, which runs
+*before* the render hook, so a nav link injected from a module is invisible to it
+and the page has to be activated by hand. Two consequences are load-bearing:
+Foundry's `Tabs` must never be handed this tab's name (its `active` has to keep
+naming one of the sheet's real tabs, or the next render restores nothing and the
+body comes back blank), and *leaving* the tab has to be done by hand too, since
+Foundry still believes the tab being clicked is the active one and its handler
+no-ops.
+
+Multi-turn initiative has two completely separate implementations and they must
+never both run. Card mode already models it through the per-actor
+`init.cardConfig` `{cards, turns}` flag; standard mode has nothing (nothing in the
+suite wraps `Combat#setupTurns`, subclasses `Combatant`, or mutates
+`combat.turns`), so a boss there gets N−1 extra real Combatant documents flagged
+as its Nth turn. A boss carrying both would be dealt nine turns a round.
+
+Two PF2e data-model facts this feature depends on. An NPC has **no DataModel**
+(`CONFIG.Actor.dataModels` covers army/familiar/hazard/loot/party/vehicle only),
+so `system.attributes.hp.max` is an unvalidated `_source` field and an
+`actor.update()` on it persists — but `CreaturePF2e#_preUpdate` clamps an incoming
+`hp.value` against the maximum the actor has *at that moment*, so max and value
+must be written in two updates or the boss gains its Hit Points and immediately
+sits at half of them. And PF2e's trait field is a tagify widget built with
+`enforceWhitelist`, so a trait the system has no entry for survives an
+`update()` and is then dropped the first time a GM touches the traits on that
+item; the book's own new traits (`boss`, `telegraph`) therefore live in
+`bookTraits` and are printed in the description instead of becoming trait chips.
+See `docs/BOSS_RULES.md`.
+
+A fifth rule from the same book section, **Belts**, deliberately ships no code —
+a PF2e container with `system.stowing = false` already holds four items at full
+Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
+quietly reversed.
+
+**When touching the Creaturedex** (`features/pf2e-creaturedex/`), re-run its
+consistency check. Everything it covers fails *silently*.
+
+A section key is **data**: it is written into world knowledge the moment a GM
+reveals anything, so renaming one does not throw — it forgets every creature the
+party has ever learned, on the next load, with nothing reported. The book prints
+an exact field list per section and the check is the only place that list is
+compared against the code; a field in *two* sections is worse than a field in
+none, because the player buys one section and silently receives part of another.
+PF2e's own `system.category` (`interaction` / `defensive` / `offensive`) is the
+book's three headings under other names, so an ability routes itself — but the
+field's schema default is `null`, PF2e's own NPC sheet never reads it (it groups
+by action cost instead) and its only consumer anywhere in the system is a
+compendium-browser filter, so most bestiary abilities arrive **untagged**. A
+guess from the action cost gets a majority right and the rest *leak*: an
+offensive ability filed under Defense hands a player exactly what they did not
+buy, and the stat block still looks ordinary. So an untagged ability routes
+nowhere and is **deferred to completion**, where there is nothing left to leak.
+`abilitySection` returning null is what makes that possible, and the check
+refuses a fallback that guesses.
+
+**The reveal is the GM's click, and the absence of a roll hook is pinned.** The
+book's trigger is a Recall Knowledge check; the module's is a button, because
+knowledge gets granted at a real table for reasons a roll does not cover — a
+check made out of character, a creature nobody targeted, a correction after a
+misclick. Wiring it back to a chat card is a change that reads as an improvement
+in its own diff and puts a *player's click on the write path of a world setting*,
+which then needs a socket that re-derives every claim it is handed because a raw
+Foundry socket carries no attested identity. `chat.mjs`, `reveal.mjs`, a
+chat-card hook, a socket and any read of `context.outcome` are all refused
+outright for that reason.
+
+The load-bearing one now is that **the store holds rendered snapshots, not
+pointers.** Foundry hands every client the full Actor document, so a player who
+holds no permission on a creature can still read `actor.system` from the console.
+A dex that stored "Seri knows Defense" and rendered it out of the live actor
+would be drawing a lock on the player's own screen over data one line away —
+theatre, with every screen looking correct. A section is rendered by the GM's
+client at reveal time and the *result* is stored, so the store contains exactly
+what was handed over; redacting the last holder drops the snapshot with it, which
+is that guarantee's other half. Snapshots are taken **post-flatten**, since
+`pf2e-flatten` rewrites NPC numbers and the player should see what will really
+apply at their table, and a section is therefore a memory rather than a live
+view — which is why there is a Refresh action.
+
+Two more. Identity is the creature's **kind**: the compendium source where there
+is one, else a normalised name-and-level slug. One goblin warrior exists as the
+compendium entry, a world duplicate and a `statsblock-import` creation all at
+once, so keying on `actor.uuid` files three monsters and completes none of them;
+the level is in the slug because a hand-built elite should not have the ordinary
+goblin's AC answer for it. And a false section is stored beside the true ones and
+rendered **identically** to its holder, marked only in the GM's view — a lie a
+player can see is not a lie.
+
+The doctoring pass that generates a lie has two rules a diff cannot show. A drift
+is **never zero**, or the one row a player checks comes back as the truth while
+the GM cannot tell from the dialog. And **immunities are never altered in either
+direction**: removing one empties the poison rogue's whole kit into something
+that was never going to care, and inventing one stops them trying at all. That
+one is pinned twice — behaviourally, and structurally on the switch — because a
+PF2e immunity list is words with no digits in it, so routing it into the numeric
+drift changes nothing, passes every value assertion, and leaves the source saying
+immunities are fair game for the next row shape that carries a number.
+
+```bash
+node tools/creaturedex-check.mjs
+```
+
+Zero problems required. It cannot show you how any of it looks, and the sealed
+plate can only be judged beside a revealed section:
+
+```bash
+node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview-server.mjs 8953
+```
+
+**Serve it.** The page puts the player view next to the GM view, draws the
+reveal notice at a real chat log's 14px (the only size at which an unsized button
+looks wrong) and shows the Falsify dialog, which is the last screen a lie passes
+before a player sees it. See `docs/CREATUREDEX.md`.
+
+Two more things it pins, both of which are silent. A whole-party reveal is a
+**fan-out**, one row per member, never a shared `party` row: Party Knowledge is a
+*read* — a union over the owners — so that a table can turn it off mid-campaign
+without inventing or destroying a fact, and a shared row would read back only
+while it was on. And every road in — the scene control, the `K` keybinding, the token
+HUD button, the actor-directory right-click, an open window following the target
+— has to ask `mayView` first. An
+unknown creature's entry prints its **actor** name and portrait, and a GM who hid
+a token's name did so on purpose, so a window that opens anyway quietly
+identifies the thing the party is looking at. Knowing a *lie* counts as knowing
+something there: a player told one cannot see that it is false, so refusing to
+open is the module losing the only thing they were given.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

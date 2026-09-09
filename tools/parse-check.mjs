@@ -103,7 +103,6 @@ function describe(npc) {
     npc.effects.length ? `${npc.effects.length} effect(s)` : "",
     npc.inventory.length ? `${npc.inventory.length} item(s)` : ""
   ].filter(Boolean);
-  if (npc.engine) bits.push(`engine: ${npc.engine.tier}/${npc.engine.allegiance}`);
   if (npc.recallKnowledge?.length) bits.push(`${npc.recallKnowledge.length} RK rung(s)`);
   return `${bits.join(", ")}${counts.length ? ` — ${counts.join(", ")}` : ""}`;
 }

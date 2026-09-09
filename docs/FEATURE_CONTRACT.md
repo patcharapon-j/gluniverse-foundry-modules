@@ -37,7 +37,7 @@ with the suite registry. This document is the binding contract for that port.
    (e.g. `GLUNI.*`, `FF.*`). These are merged into one `lang/en.json`; key
    prefixes already differ per module so they won't collide. Do not rename them.
 6. **CSS classes** — keep the module's existing unique prefix (`gluni-`, `gllg-`,
-   `glucargo-`, `insight-`, etc.). They do not collide. CSS files move to
+   `insight-`, `glct-`, etc.). They do not collide. CSS files move to
    `styles/<featureId>.css` (may be multiple).
 
 ### Theme interface
@@ -194,7 +194,6 @@ rather than at the end.
 | clocks-tracker     | ct.                          | null              | —               | core ON |
 | clocks-trackers    | ct.tracker, ct.sheetTrackers | null              | ⤷ clocks-tracker | ON     |
 | clocks-weather     | ct.weather                   | null              | ⤷ clocks-tracker | off    |
-| clocks-support     | ct.support                   | null              | ⤷ clocks-tracker | off    |
 | clocks-delving     | ct.delving                   | null              | ⤷ clocks-tracker | off    |
 | initiative         | init.                        | null              | —               | off     |
 | flatfinder         | ff.                          | pf2e              | —               | off     |
@@ -204,24 +203,21 @@ rather than at the end.
 | stream-pacer       | sp.                          | null              | —               | off     |
 | statsblock-import  | sbi.                         | pf2e              | —               | off     |
 | loot-gen           | lg.                          | ["pf2e","dnd5e"]  | —               | off     |
-| cargo-grid         | cargo.                       | null              | —               | off     |
 | tidy5e-slots       | tidy.                        | dnd5e             | tidy5e-sheet    | off     |
 | pf2e-flatten       | flatten.                     | pf2e              | —               | off     |
 | pf2e-level-zero    | l0.                          | pf2e              | —               | off     |
 | critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |
-| minimap            | mm.                          | null              | —               | off     |
-| etched-chat        | ec.                          | pf2e              | —               | off     |
 | timer              | timer.                       | null              | —               | off     |
 | mythic-gme         | mythic.                      | null              | —               | off     |
 | oracles            | oracle.                      | null              | —               | off     |
-| pf2e-ultimates     | ult.                         | pf2e              | —               | off     |
-| mobile             | mob.                         | null              | —               | off     |
-| pf2e-damage-dice   | dmg.                         | pf2e              | dice-so-nice    | off     |
-| locations          | loc.                         | null              | —               | off     |
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
-| token-conditions   | tc.                          | pf2e              | —               | off     |
 | pf2e-aoe            | aoe.                         | pf2e              | —               | off     |
+| pf2e-variant-rules | vr.                          | pf2e              | —               | off     |
+| vr-careful-consumption | vr.careful               | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-chip-damage     | vr.chip                      | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-dents           | vr.dent                      | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-lasting-wounds  | vr.wound                     | pf2e              | ⤷ pf2e-variant-rules | off |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

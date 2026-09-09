@@ -1,7 +1,7 @@
 import { MODULE_ID, SOCKET_NAME, SETTINGS, TOKEN_OVERLAY_PALETTE, DISPOSITION_PALETTE, 
 getDispositionColors, FLAGS, INITIATIVE_MODE, CARD_CONFIG_DEFAULTS, CARD_CONFIG_LIMITS, 
 BREAK_GAUGE_DEFAULT_MAX, BREAK_GAUGE_MODES, BREAK_GAUGE_FLASH_SEC, BREAK_GAUGE_SHEEN_SEC, 
-VISIBILITY, PF2E_GUARD_BREAK_EFFECT_SLUG, PF2E_GUARD_BREAK_PENALTY, APEX, LOCALIZATION_FALLBACKS,
+VISIBILITY, PF2E_GUARD_BREAK_EFFECT_SLUG, PF2E_GUARD_BREAK_PENALTY, LOCALIZATION_FALLBACKS,
 ADHOC_DEFAULT_TYPE, ADHOC_TYPES, ADHOC_VISIBILITY_MODES, ADHOC_LIFECYCLE, 
 ADHOC_LIFECYCLE_MODES, STATUS_ANIMATION, ADHOC_ICON_CHOICES, COMBATANT_RENDER_UPDATE_KEYS, 
 ACTOR_RENDER_UPDATE_KEYS, FALLBACK_PORTRAIT, PORTRAIT_MIN_PIXELS, CONFIGURABLE_ACTOR_TYPES, 
@@ -371,103 +371,6 @@ export function getGuardBreakState(combatant) {
   if (!value) return null;
   if (typeof value === "object") return value;
   return {};
-}
-
-// True only when the optional PF2e-Flatfinder module is installed and active, so
-// the whole Apex integration self-gates to zero cost when it isn't present.
-export function isFlatfinderActive() {
-  return Boolean(game.system?.id === "pf2e" && game.modules?.get?.(APEX.MODULE_ID)?.active);
-}
-
-// Hybrid Apex actor check: prefer Flatfinder's own API (the stable contract) and
-// fall back to reading the actor flag it sets. Either confirms a solo-boss actor.
-function isApexActor(actor) {
-  if (!actor) return false;
-  const api = game.modules?.get?.(APEX.MODULE_ID)?.api;
-  if (typeof api?.isApexActor === "function") {
-    try { return Boolean(api.isApexActor(actor)); } catch { /* fall through to flag */ }
-  }
-  return Boolean(actor.getFlag?.(APEX.MODULE_ID, APEX.FLAG)?.enabled);
-}
-
-// 0..3 HP phase mirroring Flatfinder's phase beats: Phase I (full → 66%),
-// Phase II (≤66%, enraged), Phase III (≤33%, desperate). Unknown HP stays Phase I
-// so a creature with no readable pool never reads as "desperate".
-function getApexPhase(actor) {
-  const hp = actor?.system?.attributes?.hp;
-  const value = Number(hp?.value);
-  const max = Number(hp?.max);
-  if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) return { phase: 1, ratio: 1 };
-  const ratio = clamp(value / max, 0, 1);
-  const [t2, t3] = APEX.PHASE_THRESHOLDS;
-  const phase = ratio <= t3 ? 3 : ratio <= t2 ? 2 : 1;
-  return { phase, ratio };
-}
-
-// Per-combatant Apex (solo boss) view-model, or null. Reads Flatfinder's flags
-// without ever writing them. `role` is "prime" (the showpiece turn) or "reprise"
-// (one of the boss's extra turns, carrying its 1-based ordinal). Callers suppress
-// this for mystery/defeated cards so a hidden boss never leaks its phase/HP.
-export function getApexState(combatant) {
-  if (!isFlatfinderActive()) return null;
-
-  const extra = combatant?.getFlag?.(APEX.MODULE_ID, APEX.EXTRA_FLAG);
-  const prime = combatant?.getFlag?.(APEX.MODULE_ID, APEX.PRIME_FLAG);
-  const actor = combatant?.actor;
-  const apexActor = isApexActor(actor);
-
-  // An extra turn is one Flatfinder inserted for an already-apex boss; a prime is
-  // the boss's primary turn. Require apex confirmation (flag/API) so a stray flag
-  // on a non-apex combatant can never style a normal creature.
-  if (extra && typeof extra === "object" && apexActor) {
-    const total = Math.max(2, Math.round(Number(extra.total) || 0));
-    const index = clamp(Math.round(Number(extra.index) || 1), 1, total);
-    const { phase, ratio } = getApexPhase(actor);
-    return { role: "reprise", index, total, phase, hpRatio: ratio };
-  }
-  if (apexActor || prime === true) {
-    const { phase, ratio } = getApexPhase(actor);
-    return { role: "prime", index: 1, total: 1, phase, hpRatio: ratio };
-  }
-  return null;
-}
-
-// Returns every Combatant that belongs to the same Apex boss as `combatant` —
-// the prime turn plus all of Flatfinder's reprise/extra turns — as an ordered
-// array (prime first, then extras by ascending ordinal), or null when the
-// combatant is not part of an Apex group. The group is resolved through the
-// prime's id (the extras carry it on their `apexExtra.primeId` flag), so a
-// guard break can sweep the whole boss out of the round rather than only the
-// single turn that was struck.
-export function getApexGroupCombatants(combat, combatant) {
-  if (!isFlatfinderActive() || !combat || !combatant) return null;
-  if (!getApexState(combatant)) return null;
-
-  // The prime's combatant id keys the group: it is the boss's own id when this
-  // is the prime turn, otherwise the primeId stamped onto the extra's flag.
-  const extra = combatant.getFlag?.(APEX.MODULE_ID, APEX.EXTRA_FLAG);
-  const primeId = (extra && typeof extra === "object" && extra.primeId) || combatant.id;
-
-  const all = Array.from(combat.combatants ?? [])
-    .map(entry => Array.isArray(entry) ? entry[1] : entry)
-    .filter(Boolean);
-
-  const ordinalOf = member => {
-    if (member.id === primeId) return 0;
-    const ex = member.getFlag?.(APEX.MODULE_ID, APEX.EXTRA_FLAG);
-    const index = Math.round(Number(ex?.index));
-    return Number.isFinite(index) && index > 0 ? index : Number.MAX_SAFE_INTEGER;
-  };
-
-  const members = all.filter(member => {
-    if (member.id === primeId) return true;
-    const ex = member.getFlag?.(APEX.MODULE_ID, APEX.EXTRA_FLAG);
-    return Boolean(ex && typeof ex === "object" && ex.primeId === primeId);
-  });
-
-  if (members.length === 0) return null;
-  members.sort((a, b) => ordinalOf(a) - ordinalOf(b));
-  return members;
 }
 
 // Normalizes the stored break-gauge flag into { max, value, mode, ratio } or

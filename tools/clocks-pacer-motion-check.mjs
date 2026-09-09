@@ -1,0 +1,67 @@
+/** Lifecycle checks without Foundry: execute adapters with injected motion/DOM. */
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+
+const timelines = [];
+const timeline = () => {
+  const t = { calls: [], adds: [], add(...a) { this.adds.push(a); return this; }, call(fn, at) { this.calls.push({fn, at}); return this; }, play() {}, revert() { this.reverted = true; } };
+  timelines.push(t); return t;
+};
+const owner = () => { const items = []; return { add(a) { items.push(a); return a; }, clear() { for (const a of items.splice(0)) a.revert(); } }; };
+const classes = () => { const values = new Set(); return { add: (...a) => a.forEach(x => values.add(x)), remove: (...a) => a.forEach(x => values.delete(x)), contains: x => values.has(x) }; };
+const node = () => ({ classList: classes(), style: { setProperty() {} }, children: [], appendChild(n) { this.children.push(n); }, remove() { this.removed = true; }, querySelectorAll() { return []; } });
+const ctx = vm.createContext({ console, Math, FEATURE_ID: 'stream-pacer', createTimeline: timeline, createMotionOwner: owner, motionDuration: n => n, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, document: { createElement: node }, animate: () => timeline(), stagger: n => n, featurePath: () => '', PacerManager: {}, PerilWebGL: class { stop() {} destroy() {} } });
+async function load(path, name) {
+  const source = (await fs.readFile(new URL('../' + path, import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '').replace('export class ' + name, 'globalThis.' + name + ' = class ' + name);
+  vm.runInContext(source, ctx);
+  return ctx[name];
+}
+const DiceSlot = await load('scripts/features/clocks-tracker/delving/dice-slot.js', 'DiceSlot');
+const host = Object.assign(node(), { dataset: {}, closest: () => null, clientWidth: 200, clientHeight: 56 });
+let settled = 0;
+const slot = DiceSlot.mount(host, { faces: [1, 6, 3], size: 6, discard: 2 }, () => settled++);
+slot._spin();
+const roll = timelines.at(-1);
+assert.deepEqual(Array.from(slot.reels, r => r.strip.children.at(-1).textContent), ['1', '6', '3']);
+const reveal = roll.calls.find(c => c.at === 1380);
+assert.ok(reveal, 'discard waits for last reel plus reveal hold');
+assert.equal(slot.reels[0].reel.classList.contains('drop'), false);
+reveal.fn();
+assert.equal(slot.reels[0].reel.classList.contains('drop'), true);
+assert.equal(slot.reels[1].reel.classList.contains('drop'), false);
+slot.destroy(); slot.destroy();
+assert.equal(settled, 1, 'settle exactly once under interruption');
+assert.equal(roll.reverted, true);
+assert.equal(host.classList.contains('dx-tumbling'), false);
+const PerilOverlay = await load('scripts/features/stream-pacer/PerilOverlay.js', 'PerilOverlay');
+const peril = new PerilOverlay();
+peril._stageEl = node(); peril._activationToken = 1;
+let handoffs = 0;
+peril._renderIndicator = () => handoffs++;
+peril._scheduleHandoff(1);
+const stage = timelines.at(-1);
+peril._hideIndicator();
+stage.calls.forEach(c => c.fn());
+assert.equal(handoffs, 0, 'dismiss invalidates queued handoff');
+assert.equal(stage.reverted, true);
+peril.destroy();
+assert.equal(peril._activationToken, 3, 'destroy invalidates async rendering');
+const hudSource = await fs.readFile(new URL('../scripts/features/clocks-tracker/apps/hud.js', import.meta.url), 'utf8');
+const tweenMethod = hudSource.slice(hudSource.indexOf('  _tweenBar('), hudSource.indexOf('  /**\n   * Compact value-flash:'));
+vm.runInContext('globalThis.hudTween = ({' + tweenMethod + '})._tweenBar;', ctx);
+let tweenOptions;
+ctx.animate = (bar, options) => { tweenOptions = options; return timeline(); };
+const hudOwner = owner(); hudOwner.forget = () => {};
+const hud = { _barMotion: hudOwner };
+const bar = { style: { transition: 'width 1s ease', width: '' } };
+ctx.hudTween.call(hud, bar, 40, 200, 420, () => {});
+assert.equal(bar.style.transition, 'none');
+hudOwner.clear();
+assert.equal(bar.style.transition, 'width 1s ease', 'interrupted width motion restores CSS');
+let completed = false;
+ctx.hudTween.call(hud, bar, 200, 40, 420, () => { completed = true; });
+tweenOptions.onComplete();
+assert.equal(bar.style.width, '', 'completed tween releases intrinsic width');
+assert.equal(completed, true);
+console.log('Clocks/Pacer motion checks passed: outcomes, reveal order, exactly-once settle, cancellation.');

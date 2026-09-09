@@ -134,7 +134,7 @@ export function regionGeometry(region) {
 
   const bounds = rectFrom(region?.bounds) ?? rectFrom(document?.bounds)
     ?? fallbackBounds(shape, origin, grid, radius, base);
-  const pad = Math.max(LAYOUT.skirtRise, LAYOUT.scorchSpread) + 0.65;
+  const pad = Math.max(LAYOUT.skirtRise, LAYOUT.scorchSpread, LAYOUT.orbitOut + LAYOUT.glowReach * 3, LAYOUT.landReach + 0.5) + 0.65;
   const x0 = (bounds.x - origin.x) / grid - pad;
   const y0 = (bounds.y - origin.y) / grid - pad;
   const x1 = (bounds.x + bounds.width - origin.x) / grid + pad;

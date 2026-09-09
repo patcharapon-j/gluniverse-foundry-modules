@@ -1,3 +1,5 @@
+import { createCinematicMotion } from "./motion.mjs";
+import { motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
 
@@ -394,7 +396,6 @@ function readGlobalInterfaceVolume() {
 const FALLBACK_IMAGE$1 = "icons/svg/mystery-man.svg";
 const BG_FADE_IN_FRACTION = 0.2;
 const BG_FADE_OUT_FRACTION = 0.28;
-const BG_PEAK_ALPHA = 0.85;
 const VIDEO_LAYER_CLASS = "gluc-video-layer";
 
 /** Does this asset path name a video the cut-in should play rather than blit? */
@@ -459,19 +460,30 @@ async function runImageCinematic(event) {
   playSfx(event.isPC ? "pc" : "gm");
   app2.start();
   const start = performance.now();
+  const motion = createCinematicMotion(event.durationMs, { scale: motionScale(container) });
   await new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(watchdog);
+      app2.ticker.remove(tick);
+      motion.destroy();
+      resolve();
+    };
     const tick = () => {
-      const t = Math.min(1, (performance.now() - start) / event.durationMs);
-      const frame = animate(t);
+      if (done) return;
+      const elapsed = performance.now() - start;
+      const frame = motion.sample(elapsed);
       backdrop.alpha = frame.bgAlpha;
       sprite.alpha = frame.imgAlpha;
       sprite.scale.set(baseScale * frame.scaleMul);
+      sprite.position.y = sh * 0.5 + frame.lift;
       drawMask(frame.wipe);
-      if (t >= 1) {
-        app2.ticker.remove(tick);
-        resolve();
-      }
+      if (elapsed >= event.durationMs) finish();
     };
+    // A hidden tab must not hold every later queued cinematic hostage.
+    const watchdog = setTimeout(finish, event.durationMs + VIDEO_WATCHDOG_SLACK_MS);
     app2.ticker.add(tick);
   });
   sprite.mask = null;
@@ -517,6 +529,8 @@ async function runVideoCinematic(event) {
   await startVideo(video);
   const durationMs = videoDuration(event, video);
   const edges = videoEdges(durationMs);
+  const motion = createCinematicMotion(durationMs, { edges, scale: motionScale(host) });
+  let raf = null;
   let laidOutW = 0;
   let laidOutH = 0;
   const start = performance.now();
@@ -536,7 +550,7 @@ async function runVideoCinematic(event) {
       const tick = () => {
         if (done) return;
         const t = Math.min(1, (performance.now() - start) / durationMs);
-        const frame = animate(t, edges);
+        const frame = motion.sample(t * durationMs);
         const { sw, sh } = screenSize();
         if (sw !== laidOutW || sh !== laidOutH) {
           laidOutW = sw;
@@ -545,18 +559,20 @@ async function runVideoCinematic(event) {
         }
         backdrop.style.opacity = String(frame.bgAlpha);
         video.style.opacity = String(frame.imgAlpha);
-        video.style.transform = `translate(-50%, -50%) scale(${frame.scaleMul})`;
+        video.style.transform = `translate(-50%, -50%) translateY(${frame.lift}px) scale(${frame.scaleMul})`;
         const inset = (1 - clamp01(frame.wipe)) * 50;
         video.style.clipPath = `inset(${inset}% 0% ${inset}% 0%)`;
         if (t >= 1) {
           finish();
           return;
         }
-        requestAnimationFrame(tick);
+        raf = requestAnimationFrame(tick);
       };
       tick();
     });
   } finally {
+    if (raf != null) cancelAnimationFrame(raf);
+    motion.destroy();
     releaseVideo(video);
     layer.remove();
   }
@@ -635,59 +651,6 @@ async function startVideo(video) {
       return false;
     }
   }
-}
-const HOLD_DRIFT = 0.04;
-const OUT_SCALE_BOOST = 0.16;
-const DEFAULT_EDGES = {
-  easeIn: EASE_IN_FRACTION,
-  easeOut: EASE_OUT_FRACTION,
-  bgIn: BG_FADE_IN_FRACTION,
-  bgOut: BG_FADE_OUT_FRACTION
-};
-function animate(t, edges = DEFAULT_EDGES) {
-  const { easeIn, easeOut, bgIn, bgOut } = edges;
-  let bgAlpha;
-  if (t < bgIn) {
-    bgAlpha = easeOutCubic(t / bgIn) * BG_PEAK_ALPHA;
-  } else if (t > 1 - bgOut) {
-    const k = (t - (1 - bgOut)) / bgOut;
-    bgAlpha = BG_PEAK_ALPHA * (1 - easeInCubic(k));
-  } else {
-    bgAlpha = BG_PEAK_ALPHA;
-  }
-  let imgAlpha = 1;
-  let scaleMul = 1;
-  let wipe = 1;
-  if (t < easeIn) {
-    const k = t / easeIn;
-    imgAlpha = easeOutCubic(k);
-    scaleMul = 0.92 + 0.08 * easeOutQuint(k);
-    wipe = easeOutQuart(k);
-  } else if (t > 1 - easeOut) {
-    const k = (t - (1 - easeOut)) / easeOut;
-    imgAlpha = 1 - easeInCubic(k);
-    scaleMul = 1 + HOLD_DRIFT + OUT_SCALE_BOOST * easeOutCubic(k);
-  } else {
-    const holdLen = 1 - easeIn - easeOut;
-    const k = (t - easeIn) / holdLen;
-    scaleMul = 1 + HOLD_DRIFT * easeInOutSine(k);
-  }
-  return { bgAlpha, imgAlpha, scaleMul, wipe };
-}
-function easeOutCubic(t) {
-  return 1 - (1 - t) ** 3;
-}
-function easeInCubic(t) {
-  return t ** 3;
-}
-function easeOutQuart(t) {
-  return 1 - (1 - t) ** 4;
-}
-function easeOutQuint(t) {
-  return 1 - (1 - t) ** 5;
-}
-function easeInOutSine(t) {
-  return -(Math.cos(Math.PI * t) - 1) / 2;
 }
 function screenSize() {
   return { sw: window.innerWidth, sh: window.innerHeight };

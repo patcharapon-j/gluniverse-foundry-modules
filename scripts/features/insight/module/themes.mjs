@@ -31,9 +31,29 @@ const PRESETS = {
       // Signal amber — warm arcane ceremony.
       "--gl-accent": "var(--gl-signal)",
       "--insight-body-style": "italic",
+      // Amber sits far higher on the luminance ramp than violet AND the
+      // bands blend with `screen` over a cool canvas, where yellow carries
+      // much further than a matched luminance would predict. Left on the
+      // shared burn, this preset washes the whole frame rather than lighting
+      // its edges. The edge is the one place the accent covers a whole
+      // viewport, so it is the one place that has to be corrected per hue.
+      "--insight-burn": "0.42",
+      "--insight-reach-y": "19%",
+      "--insight-reach-x": "15%",
     },
   },
 };
+
+/**
+ * The preset table itself. Exported so tools/insight-preview.mjs can drive
+ * the real presets rather than a mirror — a hand-copied table there drifts
+ * the moment one is retuned, and the preview then flatters a look that no
+ * player will ever see.
+ * @returns {Record<string, {label: string, vars: Record<string,string>}>}
+ */
+export function getPresets() {
+  return PRESETS;
+}
 
 /** Resolve a preset id to its config, falling back to the default. */
 function resolve(id) {

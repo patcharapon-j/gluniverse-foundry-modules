@@ -67,8 +67,21 @@ function cellsTexture(cells) {
 let sharedAtlas = null;
 function materialAtlas() {
   if (sharedAtlas && !sharedAtlas.destroyed) return sharedAtlas;
-  try { sharedAtlas = PIXI.Texture.from(`modules/${SUITE_ID}/assets/pf2e-aoe/material-atlas.png`); }
-  catch { sharedAtlas = PIXI.Texture.WHITE; }
+  try {
+    sharedAtlas = PIXI.Texture.from(`modules/${SUITE_ID}/assets/pf2e-aoe/material-atlas.png`);
+    /* The shader tiles each 128px tile with fract(), so the UV is discontinuous
+       at every repeat. With mipmaps on, the derivative spike at that seam picks
+       the smallest level for one pixel and draws a dark hairline grid across
+       the area — at exactly the repeat period, on exactly the material it is
+       meant to hide. Linear, no mips: the tiles are sized so the finer layer
+       stays near 1:1 at ordinary zoom. */
+    const base = sharedAtlas.baseTexture;
+    if (base) {
+      base.mipmap = PIXI.MIPMAP_MODES?.OFF ?? 0;
+      base.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? base.scaleMode;
+      base.wrapMode = PIXI.WRAP_MODES?.CLAMP ?? base.wrapMode;
+    }
+  } catch { sharedAtlas = PIXI.Texture.WHITE; }
   return sharedAtlas;
 }
 
@@ -299,7 +312,9 @@ class AoeHost {
     this.spectacle.eventMode = "none";
     this.spectacle.zIndex = ROOT_Z;
     this.spectacle.filterArea = canvas.app?.screen ?? null;
-    this.bloom = createBloomFilter({ intensity: 0.50 });
+    /* The frame's rule and brackets sit at the top of the ramp on purpose so
+       the bloom lifts them into light; the fill never reaches the knee. */
+    this.bloom = createBloomFilter({ intensity: 0.62 });
     if (this.bloom) {
       this.bloom.resolution = canvas.app?.renderer?.resolution ?? 1;
       this.bloom.multisample = PIXI.MSAA_QUALITY?.NONE ?? 0;

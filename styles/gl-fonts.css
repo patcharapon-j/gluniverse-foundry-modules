@@ -69,8 +69,8 @@
    Pinning `font-weight: 700` on the sole face of the family solves that — CSS
    font matching has nothing else to choose, and a variable font clamps its
    `wght` axis to the declared range. Every request for this family therefore
-   renders Bold, canvas included. Do not widen this range or add a second weight
-   without revisiting `scripts/features/pf2e-damage-dice/dsn.mjs`. */
+   renders Bold, canvas included. Keep it that way for any future canvas
+   consumer; the feature it was bundled for has since been removed. */
 @font-face {
   font-family: "Google Sans Code";
   src: url("../assets/fonts/google-sans-code/GoogleSansCode-latin.woff2") format("woff2-variations"),

@@ -1,7 +1,7 @@
 /**
  * Promoted Clocks & Tracker sub-features.
  *
- * Trackers, Weather, Mission Support and Delving were previously buried inside
+ * Trackers, Weather and Delving were previously buried inside
  * clocks-tracker's internal FEATURE_TREE. They are now first-class suite features
  * with their own enable/disable toggle and settings group in the Control Center,
  * gated on the core clocks-tracker engine via `requiresFeature`.
@@ -10,7 +10,7 @@
  * setting (or moduleConfig blob entry) the engine already reacts to, so flipping
  * it in the Control Center fires the engine's existing onChange side-effects
  * (opening/closing HUDs, re-seating auras…) and takes effect live. The bridge in
- * ./features.js makes the engine's internal `Features.on("weather"|"support"|…)`
+ * ./features.js makes the engine's internal `Features.on("weather"|"delving"|…)`
  * resolve to these suite toggles, so there is a single source of truth.
  */
 
@@ -75,17 +75,6 @@ export function registerSubFeatures() {
     requiresFeature: "clocks-tracker",
     defaultEnabled: false,
     ...settingBacked(SETTINGS.weatherEnabled),
-  });
-
-  Suite.register({
-    id: "clocks-support",
-    title: "GLS.feature.clocks-support.title",
-    hint: "GLS.feature.clocks-support.hint",
-    icon: "fa-solid fa-user-shield",
-    settingPrefix: "ct.support",
-    requiresFeature: "clocks-tracker",
-    defaultEnabled: false,
-    ...settingBacked(SETTINGS.supportEnabled),
   });
 
   Suite.register({

@@ -42,8 +42,8 @@ permission.
   new creature from this text alone, so a section left out is a section the new
   creature does not have.
 - The **grammar for exactly the sections that stat block uses**, and no others.
-  A GM reflavouring a common goblin should not be reading the `## Engine` spec,
-  and a section whose grammar is absent is one the model has no reason to
+  A GM reflavouring a common goblin should not be reading the `## Phases`
+  spec, and a section whose grammar is absent is one the model has no reason to
   invent.
 - The **rung rules**, permits and freezes both.
 - The **GM's concept**, which is the highest-value line in the payload and is
@@ -59,7 +59,7 @@ fails at once. Only the dialog's own labels are localized.
 
 ### Locked sections
 
-`## Engine`, `## Phases` and `## Recall Knowledge` are reproduce-verbatim at
+`## Phases` and `## Recall Knowledge` are reproduce-verbatim at
 rungs 1–2, rename-only at rung 3, and retunable at rung 4. They carry
 automation this feature has no business rewriting on a reskin.
 

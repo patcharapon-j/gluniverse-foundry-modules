@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gluniverse motion workshop</title>
+<link rel="stylesheet" href="/styles/gl-fonts.css">
+<link rel="stylesheet" href="/styles/gl-tokens.css">
+<link rel="stylesheet" href="/styles/gl-motion.css">
+<link rel="stylesheet" href="/styles/timer.css">
+<link rel="stylesheet" href="/styles/stage-main.css">
+<link rel="stylesheet" href="/styles/stage-animations.css">
+<link rel="stylesheet" href="/styles/initiative.css">
+<link rel="stylesheet" href="/styles/clocks-tracker-hud.css">
+<link rel="stylesheet" href="/styles/clocks-tracker-delving.css">
+<link rel="stylesheet" href="/styles/stream-pacer.css">
+<link rel="stylesheet" href="/styles/destiny-dice.css">
+<link rel="stylesheet" href="/styles/insight.css">
+<style>
+body { margin:0; background:var(--gl-ink-0); color:var(--gl-text); font-family:var(--gl-display); }
+main { max-width:1000px; margin:120px auto 40px; padding:24px; }
+h1 {font-weight:500} p {color:var(--gl-text-dim);max-width:70ch;line-height:1.6}
+.controls {display:flex;gap:10px;flex-wrap:wrap;margin:24px 0} button,select {padding:10px;font:inherit;background:var(--gl-ink-2);color:var(--gl-text);border:1px solid var(--gl-line)}
+#results {white-space:pre-wrap;font:13px var(--gl-tech);line-height:1.7} #dice {position:relative;height:68px;max-width:500px;padding:16px}
+#critical {height:240px;overflow:hidden;position:relative;border:1px solid var(--gl-line);background:var(--gl-ink-1)}
+#critical-art {position:absolute;inset:0;display:grid;place-content:center;text-align:center;background:radial-gradient(ellipse at 65% 40%,var(--gl-violet),transparent 60%);font:48px var(--gl-display)}
+#critical-art small {font:12px var(--gl-tech);letter-spacing:.3em;color:var(--gl-text-dim)}
+#critical-back {position:absolute;inset:0;background:var(--gl-ink-0)}
+a {color:var(--gl-accent)}
+</style>
+<main class="gl-type">
+<p>GLUNIVERSE / MOTION WORKSHOP</p><h1>Eight features. One motion engine.</h1>
+<p>This local workshop runs production animation code with lightweight Foundry fixtures. It checks presentation and cancellation; it does not simulate networked game rules, Dice So Nice, or the GPU renderers.</p>
+<div class="controls"><select id="tier"><option value="1">Default</option><option value="0.6">Reduced</option><option value="1.4">Cinematic</option><option value="0">None</option></select><button id="checks">Run browser checks</button><a href="/.preview/insight.html">Insight full-screen preview</a></div>
+<div class="controls"><button id="timer-start">Start timer</button><button id="timer-pause">Pause / resume</button><button id="timer-expire">Expire</button><button id="timer-stop">Stop</button><button id="roll">Roll delving pool</button><button id="peril">Dire Peril</button><button id="dismiss-peril">Dismiss Peril</button><button id="critical-play">Critical cut-in</button></div>
+<div id="dice" class="glct-cc-dice gl-well"></div>
+<div id="critical"><div id="critical-back"></div><div id="critical-art"><small>CRITICAL / FRAME PREVIEW</small>Decisive strike</div></div>
+<pre id="results">Ready.</pre>
+</main>
+<script type="module">
+const values = new Map([['sp.perilWebGLEnabled',false],['timer.sound',false]]);
+const labels = {};
+const manifest = await fetch('/module.json').then(r=>r.json());
+for (const lang of manifest.languages) Object.assign(labels, await fetch('/'+lang.path).then(r=>r.json()));
+const localize = key => labels[key] ?? key;
+globalThis.game = {user:{isGM:false,id:'preview'},paused:false,combat:null,settings:{get:(_id,k)=>values.get(k),set:async(_id,k,v)=>values.set(k,v)},i18n:{localize,format:localize}};
+globalThis.Hooks = {on(){},off(){},callAll(){}};
+globalThis.ui = {notifications:{warn:console.warn,error:console.error}};
+const escape = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Only each/if/plain/localize used by the preview's shipped templates.
+function render(source,ctx) {
+ return source.replace(/{{#each (\w+)}}([\s\S]*?){{\/each}}/g,(_,key,body)=>(ctx[key]??[]).map(item=>render(body,{...ctx,this:item})).join(''))
+ .replace(/{{#if (\w+)}}([\s\S]*?){{\/if}}/g,(_,key,body)=>ctx[key]?render(body,ctx):'')
+ .replace(/{{localize "([^"]+)"}}/g,(_,key)=>escape(localize(key)))
+ .replace(/{{([\w.]+)}}/g,(_,key)=>escape(key.split('.').reduce((v,k)=>v?.[k],ctx)));
+}
+globalThis.foundry = {applications:{api:{ApplicationV2:class{},HandlebarsApplicationMixin:base=>base},instances:new Map(),handlebars:{renderTemplate:async(path,ctx)=>render(await fetch('/'+path.replace('modules/gluniverse-foundry-modules/','')).then(r=>r.text()),ctx)}}};
+const { TimerHUD } = await import('/scripts/features/timer/hud.mjs');
+const { DiceSlot } = await import('/scripts/features/clocks-tracker/delving/dice-slot.js');
+const { PerilOverlay } = await import('/scripts/features/stream-pacer/PerilOverlay.js');
+const { createCinematicMotion } = await import('/scripts/features/critical/motion.mjs');
+TimerHUD.mount();
+let state={active:false,running:false,remainingMs:65000,totalMs:65000,expired:false,worldPaused:false,anchor:Date.now()};
+function timer(patch){state={...state,...patch};values.set('timer.state',state);TimerHUD.onState(state)}
+document.querySelector('#timer-start').onclick=()=>timer({active:true,running:true,remainingMs:65000,expired:false,anchor:Date.now()});
+document.querySelector('#timer-pause').onclick=()=>timer({running:!state.running,remainingMs:TimerHUD._lastRem??state.remainingMs,anchor:Date.now()});
+document.querySelector('#timer-expire').onclick=()=>timer({active:true,remainingMs:0,running:false,expired:true});
+document.querySelector('#timer-stop').onclick=()=>timer({active:false});
+document.querySelector('#tier').onchange=e=>document.body.style.setProperty('--gl-motion-scale',e.target.value);
+let dice;
+document.querySelector('#roll').onclick=()=>{dice?.destroy();const host=document.querySelector('#dice');delete host.dataset.tumbled;dice=DiceSlot.mount(host,{faces:[6,2,4,1,5],discard:2},()=>{host.textContent='6 · 2 discarded · 4 · 1 discarded · 5';delete host.dataset.tumbled})};
+const peril=new PerilOverlay();
+document.querySelector('#peril').onclick=()=>peril._playStageAndShowIndicator();
+document.querySelector('#dismiss-peril').onclick=()=>peril._hideIndicator();
+let cinematic,raf;
+document.querySelector('#critical-play').onclick=()=>{if(raf)cancelAnimationFrame(raf);cinematic?.destroy();cinematic=createCinematicMotion(2200,{scale:Number(document.querySelector('#tier').value)});const start=performance.now();const art=document.querySelector('#critical-art'),back=document.querySelector('#critical-back');const tick=()=>{const elapsed=performance.now()-start,f=cinematic.sample(elapsed);art.style.opacity=f.imgAlpha;art.style.transform=`translateY(${f.lift}px) scale(${f.scaleMul})`;art.style.clipPath=`inset(${(1-f.wipe)*50}% 0)`;back.style.opacity=f.bgAlpha;if(elapsed<2200)raf=requestAnimationFrame(tick);else cinematic.destroy()};tick()};
+document.querySelector('#checks').onclick=async()=>{const output=document.querySelector('#results');output.textContent='Checking…';try {const suites=[['stage-initiative-motion-check','runStageInitiativeMotionChecks'],['insight-destiny-browser-check','runInsightDestinyMotionChecks'],['clocks-pacer-browser-check','runClocksPacerBrowserChecks'],['timer-browser-check','runTimerBrowserChecks']];const results=[];for(const [file,fn] of suites){const mod=await import('/tools/'+file+'.mjs');const result=await mod[fn]();results.push(...(result.assertions??result));output.textContent=results.join("\n")+"\nChecking next suite…"}output.textContent=results.join('\n')+'\n\nPASS: '+results.length+' assertions';window.motionCheckResults=results;}catch(error){output.textContent=error.stack;throw error}};
+</script>

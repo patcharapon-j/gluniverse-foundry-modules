@@ -7,6 +7,7 @@ import {
   ARCHETYPES,
   ARCHETYPE_PALETTE,
   DAMAGE_ARCHETYPE,
+  LAYOUT,
   SETTINGS,
 } from "../scripts/features/pf2e-aoe/constants.mjs";
 import { SHED_ORDER, TIMING } from "../scripts/features/pf2e-aoe/anim.mjs";
@@ -117,8 +118,8 @@ for (const value of MATERIALS) ok(materialDescriptor(value).id === value, `mater
 const atlas = await readFile(new URL("assets/pf2e-aoe/material-atlas.png", ROOT));
 ok(atlas.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
   "material atlas is not a valid PNG payload");
-ok(atlas.readUInt32BE(16) === 256 && atlas.readUInt32BE(20) === 256,
-  "material atlas must retain its 256 × 256 channel-packed layout");
+ok(atlas.readUInt32BE(16) === 1024 && atlas.readUInt32BE(20) === 512,
+  "material atlas must retain its 1024 × 512 layout of 8 × 4 tiles (the shader's uAtlasRect assumes it)");
 const worldProfiles = normalizeWorldProfiles({ schema: 1, profiles: [{
   id: "world:silence-field", name: "Silence Field",
   semantics: { function: "conceal", material: "sonic", behavior: "contain" },
@@ -190,6 +191,36 @@ ok(/uGridOffset/.test(FRAGMENT_SHADER), "half-grid phase uniform is missing");
 ok(/uGridless/.test(FRAGMENT_SHADER), "gridless continuous-geometry uniform is missing");
 ok(/warningFill/.test(FRAGMENT_SHADER) && /warningBeat/.test(FRAGMENT_SHADER), "Warning Zone branch is missing");
 
+/* The frame. Every band is drawn against the lattice distance, the fill is
+   computed only on the planes that read it, and the atlas the shader's
+   uAtlasRect assumes is the one the generator bakes. None of this errors when
+   it drifts: a band on the smooth shape draws two disagreeing edges, a fill on
+   the boundary plane triples frost's cost, and a stale atlas is just a
+   different texture. */
+ok(/float latticeSdf\(/.test(FRAGMENT_SHADER) && /float sdL = mix\(latticeSdf\(/.test(FRAGMENT_SHADER),
+  "the frame must draw against the lattice signed distance");
+for (const band of ["cornerTick", "orbitRing", "chevrons", "behaviourPace"]) {
+  ok(new RegExp(`float ${band}\\(`).test(FRAGMENT_SHADER), `frame is missing ${band}`);
+}
+const fillSite = FRAGMENT_SHADER.indexOf("fill = archFill(p, t);");
+const fillGate = FRAGMENT_SHADER.lastIndexOf("if (onGround || onShade) {", fillSite);
+ok(fillSite > 0 && fillGate > 0 && fillSite - fillGate < 40,
+  "the material fill must be computed only on the ground and shade planes");
+ok(!/if \(onAir\) \{[\s\S]*?archFill/.test(FRAGMENT_SHADER.slice(FRAGMENT_SHADER.indexOf("if (onAir) {"), FRAGMENT_SHADER.indexOf("if (onEdge) {"))),
+  "the atmosphere plane must not evaluate the material fill");
+for (const key of ["rulePx", "ruleInset", "orbitPx", "orbitOut", "orbitSegments", "fresnelReach", "glowReach",
+  "tickIn", "tickOut", "dotPx", "scanPeriod", "landReach", "atlasInset", "atlasScaleA", "atlasScaleB"]) {
+  ok(Number.isFinite(LAYOUT[key]) && LAYOUT[key] > 0, `LAYOUT.${key} is missing`);
+}
+ok(Math.abs(LAYOUT.atlasInset - 0.5 / 1024) < 1e-9, "atlas inset must be half a texel of the 1024-wide atlas");
+{
+  const { execFileSync } = await import("node:child_process");
+  let baked = true;
+  try { execFileSync(process.execPath, [fileURLToPath(new URL("tools/gen-pf2e-aoe-atlas.mjs", ROOT)), "--check"], { stdio: "pipe" }); }
+  catch { baked = false; }
+  ok(baked, "shipped material atlas does not match its generator — run node tools/gen-pf2e-aoe-atlas.mjs");
+}
+
 ok(!SHED_ORDER.includes("lattice") && !SHED_ORDER.includes("boundary"),
   "rules lattice and boundary may never be shed");
 ok(SHED_ORDER[0] === "tokenEdgeLight", "token edge light must shed first");
@@ -210,6 +241,8 @@ const [host, controls, moduleJsonText, featureIndex, langText, mainSource] = awa
   text("scripts/features/pf2e-aoe/main.mjs"),
 ]);
 for (const name of Object.keys(UNIFORMS)) ok(host.includes(name), `host never writes ${name}`);
+ok(/base\.mipmap = PIXI\.MIPMAP_MODES\?\.OFF/.test(host),
+  "host must load the material atlas with mipmaps off (fract() tiling draws a mip seam otherwise)");
 ok(host.includes("sprite.glAoeTokenId = token.id"),
   "token edge sprites must retain their Token id for animation tracking");
 const moduleJson = JSON.parse(moduleJsonText);

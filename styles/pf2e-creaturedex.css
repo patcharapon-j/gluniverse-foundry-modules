@@ -1,0 +1,406 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Creaturedex — Etched Glass surfaces
+
+   The book prints its three sections in three colours — Characteristics green,
+   Defense blue, Offense red — and those are the only colours in this feature.
+   Each is a semantic token routed through `--gl-accent` on the section root, so
+   the border, the label, the rule and the sealed plate all follow from one
+   declaration and a retheme carries every one of them.
+
+   Nothing here redeclares a foundation token, writes a raw duration or easing,
+   or strikes a veil from anything but a tint channel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Control metrics ──────────────────────────────────────────────────────
+   `.gl-btn` declares no font size and states its padding in `em`, so it takes
+   the host's type — 14px in a chat card, more in an app frame — beside labels
+   this feature strikes at 9-11px, and the padding inflates with it until the
+   label crowds its own border. Every button this feature ships is sized here. */
+.gldex-root .gl-btn,
+.gldex-lie-root .gl-btn {
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.55em 0.9em;
+}
+
+/* ── The window ───────────────────────────────────────────────────────────── */
+
+.gldex-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: var(--gl-sp-5);
+  padding: var(--gl-sp-6);
+  color: var(--gl-text);
+}
+
+.gldex-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  padding-bottom: var(--gl-sp-4);
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.gldex-bar-title {
+  color: var(--gl-text-bright);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+
+.gldex-bar-owner,
+.gldex-bar-tag {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-bar-tag { margin-left: auto; color: var(--gl-teal); }
+
+/* A GM at a six-player table has seven of these plus Everyone, so the row
+   scrolls rather than wrapping the header into three lines. */
+.gldex-owners {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--gl-sp-3);
+  min-width: 0;
+  margin-left: auto;
+  overflow-x: auto;
+  justify-content: flex-end;
+}
+.gldex-owner { flex: 0 0 auto; }
+.gldex-owner.is-on { border-color: var(--gl-accent); color: var(--gl-text-bright); }
+
+.gldex-body {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: var(--gl-sp-5);
+}
+
+/* ── The shelf ────────────────────────────────────────────────────────────── */
+
+.gldex-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--gl-sp-3);
+  border-right: 1px solid var(--gl-hair);
+}
+
+.gldex-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  width: 100%;
+  padding: var(--gl-sp-3);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--gl-d-quick) var(--gl-ease),
+    color var(--gl-d-quick) var(--gl-ease);
+}
+.gldex-entry:hover { color: var(--gl-text); border-color: var(--gl-accent-soft); }
+.gldex-entry.is-on { border-color: var(--gl-accent); color: var(--gl-text-bright); }
+
+.gldex-entry-img {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border: 1px solid var(--gl-hair);
+}
+
+.gldex-entry-meta { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
+.gldex-entry-name {
+  overflow: hidden;
+  font-size: var(--gl-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gldex-entry-count {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A completed dex is the one state worth a mark of its own: it is what unlocks
+   Discerning Aid, so it has to be legible at a glance down the shelf. */
+.gldex-entry.is-complete { border-color: color-mix(in srgb, var(--gl-signal) 45%, transparent); }
+.gldex-entry-seal { flex: none; color: var(--gl-signal); font-size: var(--gl-fs-3xs); }
+
+/* ── The stat block ───────────────────────────────────────────────────────── */
+
+.gldex-detail { min-height: 0; overflow-y: auto; padding-right: var(--gl-sp-3); }
+
+.gldex-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-5);
+  padding-bottom: var(--gl-sp-5);
+  border-bottom: 1px solid var(--gl-hair);
+}
+.gldex-detail-img { width: 52px; height: 52px; object-fit: cover; border: 1px solid var(--gl-edge); }
+.gldex-detail-meta { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 2px; }
+.gldex-detail-name { margin: 0; color: var(--gl-text-bright); font-size: var(--gl-fs-lg); }
+.gldex-detail-kind {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-forget { margin-left: auto; }
+
+.gldex-scope {
+  margin: var(--gl-sp-5) 0 0;
+  padding: var(--gl-sp-4);
+  border-left: 2px solid var(--gl-teal);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.gldex-complete {
+  margin: var(--gl-sp-5) 0 0;
+  padding: var(--gl-sp-4);
+  border-left: 2px solid var(--gl-signal);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.gldex-section {
+  --gl-accent: var(--gl-cyan);
+  margin-top: var(--gl-sp-5);
+  padding: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  border-left: 2px solid var(--gl-accent);
+}
+
+/* The book's own three colours, and the hazard table's three alongside them. */
+.gldex-section[data-section="characteristics"],
+.gldex-section[data-section="complexity"] { --gl-accent: var(--gl-good); }
+.gldex-section[data-section="defense"],
+.gldex-section[data-section="disable"] { --gl-accent: var(--gl-cyan); }
+.gldex-section[data-section="offense"],
+.gldex-section[data-section="routine"] { --gl-accent: var(--gl-hazard); }
+
+/* A sealed section keeps its colour but loses its light: the player can see
+   which section they have not bought, which is the whole choice the rule
+   offers, without seeing anything of its shape. */
+.gldex-section[data-state="sealed"] {
+  border-left-color: color-mix(in srgb, var(--gl-accent) 30%, transparent);
+  background: none;
+}
+
+.gldex-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  margin-bottom: var(--gl-sp-4);
+}
+.gldex-section-label {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+/* GM-only, and deliberately loud: the one thing on this screen the player in
+   front of it is not seeing. */
+.gldex-section-lie {
+  padding: 0 var(--gl-sp-3);
+  border: 1px solid color-mix(in srgb, var(--gl-hazard) 50%, transparent);
+  color: var(--gl-hazard);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-controls { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
+/* Falsifying is the one destructive-feeling control here — it deliberately puts
+   something untrue on a player's screen — so it carries the hazard hue rather
+   than sitting in the row looking like Reveal's twin. */
+.gldex-falsify {
+  border-color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-edge));
+  color: var(--gl-hazard);
+}
+.gldex-falsify:hover:not(:disabled) { border-color: var(--gl-hazard); }
+
+.gldex-sealed {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-5) var(--gl-sp-4);
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.gldex-row {
+  display: flex;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-2) 0;
+  border-top: 1px solid var(--gl-hair);
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-normal);
+}
+.gldex-row:first-child { border-top: 0; }
+.gldex-row-key {
+  flex: 0 0 116px;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-row-val { flex: 1 1 auto; min-width: 0; color: var(--gl-text); }
+.gldex-num,
+.gldex-dmg { font-family: var(--gl-tech); font-variant-numeric: tabular-nums; }
+.gldex-dmg { color: var(--gl-accent); }
+
+.gldex-spell-rank { font-size: var(--gl-fs-xs); }
+.gldex-spell-rank > span {
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  text-transform: uppercase;
+}
+
+.gldex-prose { margin-top: var(--gl-sp-4); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+
+.gldex-ability { margin-top: var(--gl-sp-5); padding-top: var(--gl-sp-4); border-top: 1px solid var(--gl-hair); }
+.gldex-ability-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gl-sp-3); }
+.gldex-ability-name { color: var(--gl-text-bright); font-size: var(--gl-fs-sm); font-weight: var(--gl-weight-bold); }
+.gldex-cost { color: var(--gl-accent); font-size: var(--gl-fs-3xs); }
+.gldex-ability-body { margin-top: var(--gl-sp-3); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+
+.gldex-traits { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); }
+.gldex-trait {
+  padding: 0 var(--gl-sp-3);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.gldex-empty { color: var(--gl-text-faint); font-size: var(--gl-fs-xs); font-style: italic; }
+
+/* ── The reveal notice ─────────────────────────────────────────────────────── */
+
+.gldex-card {
+  --gl-accent: var(--gl-cyan);
+  padding: var(--gl-sp-4);
+  border-left: 2px solid var(--gl-accent);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  font-size: var(--gl-fs-xs);
+}
+.gldex-card[data-section="characteristics"],
+.gldex-card[data-section="complexity"] { --gl-accent: var(--gl-good); }
+.gldex-card[data-section="offense"],
+.gldex-card[data-section="routine"] { --gl-accent: var(--gl-hazard); }
+.gldex-card[data-complete="true"] { --gl-accent: var(--gl-signal); }
+.gldex-card-line { margin: 0; color: var(--gl-text); }
+.gldex-card-done {
+  margin: var(--gl-sp-3) 0 0;
+  color: var(--gl-signal);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+
+/* ── The token HUD button ─────────────────────────────────────────────────── */
+
+/* Foundry styles `.control-icon` itself; this only carries the accent so the
+   glyph reads as this feature's rather than as one of the core controls. */
+.gldex-hud > i { color: var(--gl-cyan); }
+
+/* ── Authoring a lie ──────────────────────────────────────────────────────── */
+
+/* This window is the last screen that shows a falsehood before a player does,
+   so it reads in the hazard key throughout rather than in the window accent —
+   a GM glancing at it should never mistake it for an ordinary reveal. */
+.gldex-lie-root {
+  --gl-accent: var(--gl-hazard);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-5);
+}
+.gldex-lie-lead { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+.gldex-lie-lead strong { color: var(--gl-accent); font-family: var(--gl-tech); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
+
+.gldex-lie-modes { display: flex; gap: var(--gl-sp-3); }
+.gldex-lie-mode.is-on { border-color: var(--gl-accent); color: var(--gl-accent); }
+
+.gldex-lie-field { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.gldex-lie-field > span {
+  flex: 0 0 auto;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-lie-field select { flex: 1 1 auto; min-width: 0; }
+
+.gldex-lie-note { margin: 0; color: var(--gl-text-faint); font-size: var(--gl-fs-3xs); line-height: var(--gl-lh-snug); }
+.gldex-lie-actions { display: flex; justify-content: flex-start; }
+
+.gldex-lie-draft { display: flex; flex-direction: column; gap: var(--gl-sp-3); }
+.gldex-lie-row { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.gldex-lie-key {
+  flex: 0 0 8.5em;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-lie-row input { flex: 1 1 auto; min-width: 0; font-size: var(--gl-fs-xs); }
+.gldex-lie-extras {
+  margin: 0;
+  padding-left: var(--gl-sp-5);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+}
+.gldex-lie-foot { display: flex; justify-content: flex-end; }
+.gldex-lie-send { border-color: var(--gl-accent); color: var(--gl-accent); }
+
+/* ── The GM's per-entry tools ─────────────────────────────────────────────── */
+
+.gldex-detail-tools { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
+
+/* Abilities PF2e left uncategorised, printed once the entry is finished. */
+.gldex-deferred-note {
+  margin: var(--gl-sp-4) 0 0;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+  font-style: italic;
+}
+.gldex-section-extra { --gl-accent: var(--gl-text-dim); }

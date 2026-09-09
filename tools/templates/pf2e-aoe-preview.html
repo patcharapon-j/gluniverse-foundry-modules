@@ -1,4 +1,4 @@
-<title>PF2e AoE — visual review 5</title>
+<title>PF2e AoE — visual review 6 · frame</title>
 <link rel="stylesheet" href="../styles/gl-fonts.css">
 <link rel="stylesheet" href="../styles/gl-tokens.css">
 <style>
@@ -53,7 +53,7 @@
 </style>
 
 <header>
-  <h1>PF2e AoE · review 5</h1>
+  <h1>PF2e AoE · review 6</h1>
   <label>treatment
     <select id="treatment"></select>
   </label>
@@ -92,16 +92,15 @@
 </header>
 
 <main>
-  <p class="note"><b>Spellglass is selected.</b> The style controls preview the GM-authored color and
-  optional centered label on any archetype. <b>Generic</b> is a flat color field for ad-hoc use;
-  <b>Warning</b> is a pulsing boss-attack telegraph. Token artwork is never displaced; only a restrained,
-  alpha-masked edge light is allowed. All fourteen archetypes
-  use treatment <b>grounded</b>, entrance
-  <b>ignite</b>, one of four particulate classes, a palette and a
-  <b>shade</b>: what it does to the floor, multiplied under everything else. The shade is what makes any
-  of this legible on a bright map, where compositing over pale stone alone reads as a wash; toggle it above.
-  The lattice is three-valued: covered, <b>blocked</b> (in the area, out of line of effect), and outside.
-  Coverage here is a preview stand-in; the shipped feature mirrors PF2e's rules resolver.</p>
+  <p class="note"><b>Spellglass, reworked.</b> Every area is drawn as a <b>tactical frame</b> first and a
+  material second: one crisp rule on the rules edge (the PF2e staircase on a grid, the true shape gridless),
+  bracket marks on its convex corners, a finer inset rule, a soft glow outside and a fresnel band falling
+  away inside; a dashed <b>orbit ring</b> on the true geometry turning at the behaviour's pace; direction
+  chevrons on cones and lines; and a scan pulse from origin to edge. The material shows through the frame as
+  structure — a channel-packed detail atlas over the procedural fills — not as a tinted slab, and the
+  <b>shade</b> multiplies the floor under it so it stays legible on pale stone; toggle it above. The lattice
+  is three-valued: covered, <b>blocked</b> (in the area, out of line of effect), and outside. Coverage here is
+  a preview stand-in; the shipped feature mirrors PF2e's rules resolver.</p>
   <div id="rows"></div>
 </main>
 
@@ -812,7 +811,7 @@ window.__aoeReady = true;
 window.__aoeSheet = (opts = {}) => {
   const cellPx = opts.cellPx || 300;
   const pad = 14, labelBand = 26;
-  const cols = SHAPES.length, rowsN = TREATMENTS.length;
+  const cols = SHAPES.length, rowsN = Math.ceil(slots.length / cols);
   const width = pad + cols * (cellPx + pad);
   const height = labelBand + rowsN * (cellPx + pad + labelBand);
   const rects = slots.map((_, i) => {
@@ -924,6 +923,73 @@ window.__aoeTimeSheet = (opts = {}) => {
               " · " + modes[parseInt(ui.backdrop.value, 10)] +
               "   —   " + SHAPES.map((x) => x.label).join("  |  "), pad, 13);
 
+  const url = out.toDataURL("image/png");
+  SHEET = null; resize();
+  return url;
+};
+
+/**
+ * A hero sheet: chosen profile × shape pairs at TABLE SCALE, which is the only
+ * scale the frame's fine detail — the brackets, the inset rule, the cell marks,
+ * the orbit ring — can be judged at. `picks` is [[profileIndex, shapeIndex],
+ * ...]; `steps` frames of `stepMs` each (50 ms by default, so a settled
+ * area costs a fifth of the frames a 16 ms clock would), `pulse` fires the
+ * trigger beat `pulseAt` steps before the end.
+ */
+window.__aoeHeroSheet = (opts = {}) => {
+  const picks = opts.picks || [[0, 0], [2, 1], [1, 3], [11, 2]];
+  const cellPx = opts.cellPx || 320;
+  const cols = opts.cols || Math.min(4, picks.length);
+  const rowsN = Math.ceil(picks.length / cols);
+  const pad = 12, labelBand = 24;
+  const width = pad + cols * (cellPx + pad);
+  const rowH = cellPx + pad + labelBand;
+  const height = labelBand + rowsN * rowH;
+  const stepMs = opts.stepMs || 50;
+  const steps = opts.steps || 50;
+
+  if (typeof opts.backdrop === "number") ui.backdrop.value = String(opts.backdrop);
+  if (typeof opts.entrance === "number") ui.entrance.value = String(opts.entrance);
+  if (typeof opts.shade === "boolean") ui.shade.checked = opts.shade;
+  if (typeof opts.shed === "number") ui.shed.value = String(opts.shed);
+
+  const rects = slots.map(() => null);
+  picks.forEach(([ai, si], i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    const x = pad + c * (cellPx + pad);
+    const yTop = labelBand + r * rowH + labelBand;
+    rects[ai * SHAPES.length + si] = { x, y: height - yTop - cellPx, w: cellPx, h: cellPx };
+  });
+  SHEET = { width, height, rects };
+  for (const sl of slots) sl.anim = new AoeAnim({ motionScale: 1 });
+  resize();
+  const pulseAt = opts.pulse ? (opts.pulseAt || 6) : -1;
+  for (let i = 1; i <= steps; i++) {
+    if (pulseAt >= 0 && i === steps - pulseAt) for (const sl of slots) sl.anim.pulse();
+    last = (i - 1) * stepMs; frame(i * stepMs);
+  }
+  gl.finish();
+
+  const out = document.createElement("canvas");
+  out.width = width; out.height = height;
+  const cx = out.getContext("2d");
+  cx.fillStyle = "#0a0c10"; cx.fillRect(0, 0, width, height);
+  cx.drawImage(canvas, 0, 0);
+  cx.font = "12px ui-monospace, Menlo, monospace";
+  cx.textBaseline = "middle";
+  picks.forEach(([ai, si], i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    const x = pad + c * (cellPx + pad);
+    const yTop = labelBand + r * rowH + labelBand;
+    cx.fillStyle = "#7fd4ff"; cx.fillText(REVIEW_ARCHES[ai].label, x, yTop - 12);
+    cx.fillStyle = "#7c8899";
+    cx.fillText("  ·  " + SHAPES[si].label, x + cx.measureText(REVIEW_ARCHES[ai].label).width, yTop - 12);
+  });
+  cx.fillStyle = "#7c8899";
+  const modes = ["neutral", "realistic", "stress"];
+  cx.fillText("PF2e AoE · hero · t = " + Math.round(steps * stepMs) + " ms · " + modes[parseInt(ui.backdrop.value, 10)]
+    + " · entrance " + ENTRANCES[parseInt(ui.entrance.value, 10)].label + " · shed " + ui.shed.value
+    + (opts.pulse ? " · trigger beat" : ""), pad, 12);
   const url = out.toDataURL("image/png");
   SHEET = null; resize();
   return url;
