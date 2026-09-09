@@ -49,6 +49,7 @@ const read = (p) => readFileSync(join(ROOT, p), "utf8");
 
 const rules = await import(join(FEATURE, "rules.mjs"));
 const { chipTriggers, chipAmount, chipBasis, resolveChip, dentsFromDamage, dentThresholds, dentState, hpForDents, dentsRepaired, carefulQualifies, woundPenalties } = rules;
+const { DEFAULT_DENT_CONFIG } = await import(join(FEATURE, "constants.mjs"));
 
 // Chip fires on the highest no-damage degree and nowhere else.
 if (!chipTriggers("attack-roll", "failure")) fail("chip: a missed Strike must trigger chip damage");
@@ -165,6 +166,263 @@ if (!/renderActorSheetPF2e/.test(dentsSrc)) {
 // make typing 3 mean "add 3" and the box would climb every time it was used.
 if (!/setDents\(item, event/.test(dentsSrc)) {
   fail("dents: the GM's override must set an absolute value, not add one");
+}
+
+// PF2e authors item HP on shields and on almost nothing else: `template.json`'s
+// `physical` template ships every item at `hp: { value: 0, max: 0 }` with
+// `hardness: 0`, and both `isBroken` and `isDestroyed` begin `max > 0`. So a
+// gate that requires item HP before a dent track is drawn reads as a careful
+// guard and silences the entire rule — no panel on any weapon, any suit of
+// armour or any pack in a real world, which is indistinguishable from the
+// feature being switched off. HP is what a dent count reflects *into*, never
+// what decides whether dents apply.
+// Prose is not code: both of these functions explain the rule they implement in
+// a comment that names the very expression being looked for, so a body has to be
+// stripped before it can be interrogated.
+const codeOf = (name) =>
+  (bodyOf(name) ?? "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+const tracksBody = codeOf("tracksDents");
+if (!/tracksDents/.test(tracksBody)) {
+  fail("dents: tracksDents is missing — nothing decides which items carry a dent track");
+} else if (/itemDurability|hp\s*[.?]|\bhardness\b/.test(tracksBody)) {
+  fail(
+    "dents: tracksDents consults item HP or Hardness. PF2e ships every physical item at 0/0, " +
+      "so that gate hides the track on every item in the world while looking like a guard."
+  );
+}
+// Which categories dent is the table's, but the shipped default has to be the
+// printed rule: a fresh world that never opens the config sheet must find dents
+// on the gear the rule is written for.
+for (const type of ["weapon", "armor", "shield"]) {
+  if (DEFAULT_DENT_CONFIG.types?.[type] !== true) {
+    fail(`dents: the shipped config does not enable "${type}" — the rule is written for exactly that gear`);
+  }
+}
+// And the sheet has to actually reach the setting, or the config is a form that
+// writes somewhere nothing reads.
+if (!/SETTINGS\.dentsConfig/.test(dentsSrc)) {
+  fail("dents: dents.mjs never reads the dent configuration, so the config sheet changes nothing");
+}
+
+/* The thresholds must stay sane for every combination the sheet can produce.
+   A destroyed rung at or below the broken one deletes the broken state — an
+   item goes from working to gone in one hit — and both render perfectly. */
+for (const broken of [1, 2, 5, 9]) {
+  for (const destroyed of [2, 4, 6]) {
+    for (const sturdy of [false, true]) {
+      for (const bonus of [0, 3, -2]) {
+        const cfg = {
+          ...DEFAULT_DENT_CONFIG,
+          broken,
+          destroyed,
+          sturdyMultiplier: 2,
+          grades: { high: bonus },
+          materials: {},
+        };
+        const t = dentThresholds({ sturdy, grade: "high" }, cfg);
+        if (!(t.broken >= 1 && t.broken < t.destroyed)) {
+          fail(
+            `dents: config {broken:${broken}, destroyed:${destroyed}, bonus:${bonus}, sturdy:${sturdy}} ` +
+              `yields ${t.broken}/${t.destroyed}, which has no broken state`
+          );
+        }
+      }
+    }
+  }
+}
+// Grade and material compose with the sturdy multiplier rather than replacing
+// it — a sturdy adamantine shield is both things at once.
+const composed = dentThresholds(
+  { sturdy: true, grade: "high", material: "adamantine" },
+  { ...DEFAULT_DENT_CONFIG, grades: { high: 1 }, materials: { adamantine: 2 } }
+);
+if (composed.destroyed !== 4 * 2 + 3) {
+  fail(`dents: sturdy + grade + material must compose (expected 11 destroyed, got ${composed.destroyed})`);
+}
+
+// The save handler clamps the same invariant the sheet's inputs cannot.
+const cfgSrc = readFileSync(join(FEATURE, "dent-config.mjs"), "utf8");
+if (!/config\.broken >= config\.destroyed/.test(cfgSrc)) {
+  fail("dents: the config sheet does not keep the broken rung below the destroyed one");
+}
+// Building an ApplicationV2 subclass at module scope would take this very tool
+// down: settings.mjs is reached transitively by pure modules, under plain Node.
+if (/^const \{[^}]*\} = foundry\./m.test(cfgSrc)) {
+  fail("dents: dent-config.mjs reaches for `foundry` at import time, which breaks every pure importer of settings.mjs");
+}
+// The reflection has to stay conditional on the item actually having HP, or a
+// write of `hp.value: 0` lands on every 0/0 item for no reason.
+if (!/max\s*>\s*0/.test(codeOf("setDents"))) {
+  fail("dents: setDents writes item HP unconditionally; only an item with HP has a getter to keep honest");
+}
+
+/* ── 2b-i. Objects scale with size; gear does not ─────────────────────────── */
+
+/* TABLE: OBJECT DENTS (p. 48) is keyed on POSSESSION, not on size. The same
+   paragraph that gives Tiny 1/2 through Gargantuan 16/32 pins anything
+   "carried, held, or wielded" at 2/4 however large it is — so reading the table
+   off `system.size` alone, which is the obvious way to implement "infer dents
+   from object size", would quietly make every Large weapon in the world four
+   times as durable. That renders perfectly and is not the rule. */
+{
+  const book = { tiny: [1, 2], sm: [2, 4], med: [2, 4], lg: [4, 8], huge: [8, 16], grg: [16, 32] };
+  for (const [size, [b, d]] of Object.entries(book)) {
+    const object = dentThresholds({ size, carried: false });
+    if (object.broken !== b || object.destroyed !== d) {
+      fail(`dents: a ${size} OBJECT should be ${b}/${d}, got ${object.broken}/${object.destroyed}`);
+    }
+    const gear = dentThresholds({ size, carried: true });
+    if (gear.broken !== 2 || gear.destroyed !== 4) {
+      fail(
+        `dents: a ${size} item on a creature must stay at the flat 2/4 — the size table is for objects, ` +
+          `and applying it to gear makes every large weapon several times as durable`
+      );
+    }
+  }
+  // Turning the table off has to fall back to the flat rule rather than to zero.
+  const off = dentThresholds({ size: "grg", carried: false }, { ...DEFAULT_DENT_CONFIG, sizeAware: false });
+  if (off.broken !== 2 || off.destroyed !== 4) fail("dents: with the size table off, an object must use the flat rule");
+}
+
+/* ── 2b-ii. Hardness has to be reachable ──────────────────────────────────── */
+
+/* Hardness is the whole input to the rule: damage at or below it does nothing,
+   above it is one dent, above twice it is two. So an item at Hardness 0 takes
+   the MAXIMUM two dents from every hit that lands and dies in two blows.
+
+   PF2e ships every physical item at 0 and `ShieldPF2e#prepareBaseData` is the
+   only place in the system that ever writes a real number there. A resolver
+   that just reads `system.hardness` is therefore a resolver that says a solid
+   adamantine greatsword is exactly as tough as a wooden spoon. */
+{
+  const { hardnessOf, materialHardness, HARDNESS_SOURCE } = await import(join(FEATURE, "hardness.mjs"));
+
+  // These are PF2e's own numbers, not ours; a drift here is a silent lie about
+  // the system's data.
+  if (materialHardness("adamantine", "standard") !== 10) fail("hardness: adamantine (standard) is 10 in PF2e's table");
+  if (materialHardness("orichalcum", "high") !== 16) fail("hardness: orichalcum (high) is 16 in PF2e's table");
+  // A material with no row at the asked-for grade must not fall through to the
+  // type default, which would read as the material meaning nothing at all.
+  if (materialHardness("adamantine", "low") !== 10) {
+    fail("hardness: a material with no low-grade row must fall to its nearest, not to nothing");
+  }
+  if (materialHardness("steel", "standard") !== null) fail("hardness: an unknown material must answer null");
+
+  const at = (item, cfg) => hardnessOf(item, cfg);
+  const plain = { type: "weapon", system: { hardness: 0 } };
+  if (at(plain, DEFAULT_DENT_CONFIG).value !== 0) fail("hardness: a plain item with no config falls to 0");
+  if (at(plain, { ...DEFAULT_DENT_CONFIG, hardness: { weapon: 6 } }).value !== 6) {
+    fail("hardness: the per-type table default is not being read");
+  }
+  const adamant = { type: "weapon", system: { hardness: 0, material: { type: "adamantine", grade: "standard" } } };
+  if (at(adamant, DEFAULT_DENT_CONFIG).value !== 10) fail("hardness: a precious material must supply its own value");
+  if (at(adamant, DEFAULT_DENT_CONFIG).source !== HARDNESS_SOURCE.material) fail("hardness: the source must be reported");
+
+  // PF2e's own value wins over the material table: a shield has already had its
+  // reinforcing runes and grade improvements folded in, and recomputing from
+  // the material alone would silently throw those away.
+  const shield = { type: "shield", system: { hardness: 13, material: { type: "adamantine", grade: "standard" } } };
+  if (at(shield, DEFAULT_DENT_CONFIG).value !== 13) {
+    fail("hardness: PF2e's own value must beat the material table, or a shield loses its reinforcing runes");
+  }
+
+  // And the GM's override beats everything, including a real system value.
+  const overridden = {
+    type: "shield",
+    system: { hardness: 13 },
+    flags: { "gluniverse-foundry-modules": { "vr.dent.override": { hardness: 2 } } },
+  };
+  if (at(overridden, DEFAULT_DENT_CONFIG).value !== 2) fail("hardness: a per-item override must win outright");
+}
+
+/* ── 2b-iii. The per-item override ────────────────────────────────────────── */
+
+{
+  const forced = dentThresholds({ size: "grg", carried: false, override: { broken: 3, destroyed: 5 } });
+  if (forced.broken !== 3 || forced.destroyed !== 5) fail("dents: a per-item override must beat the size table");
+  // Partial: "this is tougher than its size says" and "this shatters when
+  // dented" are separate rulings, and a GM stating one must not have to state
+  // the other.
+  const partial = dentThresholds({ override: { destroyed: 9 } });
+  if (partial.destroyed !== 9 || partial.broken !== 2) fail("dents: a partial override must leave the other rung alone");
+  // A blank field clears rather than storing zero, or an item arrives already
+  // destroyed the moment a GM opens the dialog and presses Save.
+  const dentsSrcOv = readFileSync(join(FEATURE, "dents.mjs"), "utf8");
+  const setter = dentsSrcOv.slice(dentsSrcOv.indexOf("export async function setDentOverride"));
+  if (!/unsetFlag/.test(setter.slice(0, setter.indexOf("\n}")))) {
+    fail("dents: setDentOverride never clears, so a blank field would store a zero and destroy the item");
+  }
+}
+
+// The sheet reaches the world through Foundry's own form parser, which builds a
+// nested object only from a dotted `name`. A flat `name="weapon"` saves a config
+// with no `types` key at all, `dentConfig()` merges the defaults back over the
+// hole, and the GM's edit is silently discarded while the form submits happily.
+const cfgHbs = read("templates/pf2e-variant-rules/dent-config.hbs");
+for (const [group, pattern] of [
+  ["types", /name="types\.\{\{/],
+  ["grades", /name="grades\.\{\{/],
+  ["materials", /name="materials\.\{\{/],
+]) {
+  if (!pattern.test(cfgHbs)) {
+    fail(`dents: the config sheet's ${group} inputs are not named \`${group}.<key>\`, so the form parser writes a flat object`);
+  }
+}
+// And something has to open it. A registered Object setting with no menu in
+// front of it is a config a GM can only reach by typing into the console.
+const settingsSrc = readFileSync(join(FEATURE, "settings.mjs"), "utf8");
+if (!/registerMenu\([^)]*dent[^)]*configMenu/s.test(settingsSrc) || !/type:\s*DentConfigApp\(\)/.test(settingsSrc)) {
+  fail("dents: the dent config sheet is never registered as a settings menu, so nothing opens it");
+}
+// The nudge controls carry a single glyph each and sit inside a panel whose
+// surface rule sizes the wordy buttons beside them. Left on that size they come
+// out several times the height of the rung they adjust, which is what shipped.
+if (!/\.glvr-dent-less,\s*\.glvr-dent-more\s*\{[^}]*font-size:/.test(read("styles/pf2e-variant-rules.css"))) {
+  fail("dents: the +/- nudge buttons take the panel's own type rather than declaring their own, which oversizes them");
+}
+
+/* ── 2c. Every button this feature ships is sized ────────────────────────── */
+
+// `.gl-btn` declares no font-size and states its padding in `em`, so an unsized
+// button takes the host surface's type — 14px in a chat card, more inside a PF2e
+// sheet — beside labels this feature strikes at 9-11px, and its padding inflates
+// along with it until the label crowds its own border. Nothing errors, and no
+// preview built on the suite's own panels reproduces it, because the fault is
+// inherited from the host rather than declared anywhere.
+const vrCss = read("styles/pf2e-variant-rules.css") + "\n" + read("styles/pf2e-variant-rules-boss.css");
+
+// A rule that sizes a whole surface covers every button inside it.
+const SIZED_SURFACES = [...vrCss.matchAll(/\.(glvr-[a-z-]+)\s+\.gl-btn[^{]*\{([^}]*)\}/g)]
+  .filter((m) => /font-size:/.test(m[2]))
+  .map((m) => m[1]);
+
+// Otherwise the button's own class has to carry a size.
+const SIZED_CLASSES = new Set(
+  [...vrCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => /font-size:/.test(m[2]))
+    .flatMap((m) => [...m[1].matchAll(/\.(glvr-[a-z-]+)/g)].map((c) => c[1]))
+);
+
+for (const [file, surface] of [
+  ["dents.mjs", null],
+  ["careful.mjs", null],
+  ["chip.mjs", null],
+  ["boss/sheet.mjs", "glvr-boss-panel"],
+]) {
+  const text = readFileSync(join(FEATURE, file), "utf8");
+  const prefix = text.match(/const CLASS = "([a-z-]+)"/)?.[1];
+  if (!prefix) fail(`${file}: no CLASS prefix — the button audit cannot resolve its class names`);
+  if (surface && SIZED_SURFACES.includes(surface)) continue;
+  for (const m of text.matchAll(/class="gl-btn[^"]*\$\{CLASS\}-([a-z-]+)"/g)) {
+    const cls = `${prefix}-${m[1]}`;
+    if (!SIZED_CLASSES.has(cls)) {
+      fail(
+        `${file}: .${cls} is a .gl-btn with no font-size of its own and no sized surface around it, ` +
+          "so it renders at the host sheet or chat card's type beside 9-11px labels"
+      );
+    }
+  }
 }
 
 /* ── 3. Careful Consumption ──────────────────────────────────────────────── */

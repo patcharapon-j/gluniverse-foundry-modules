@@ -569,6 +569,74 @@ max HP, rounding 15 × 0.5 up to 8 leaves a two-dent item one point above PF2e's
 threshold of 7 and it never reads as broken. Even-HP items are fine, which is
 exactly how that survives a play session.
 
+That reflection is a *consequence* of a dent count, never a precondition for
+one. PF2e authors item HP on shields and on virtually nothing else: the
+`physical` template in `template.json` ships every item at
+`hp: { value: 0, max: 0 }` with `hardness: 0`, and both `isBroken` and
+`isDestroyed` begin `max > 0`. Requiring item HP before drawing a dent track
+therefore reads as a careful guard and silences the whole rule — no panel on any
+weapon, any suit of armour or any pack in a real world, which is indistinguishable
+from the feature being switched off, and which is exactly how it first shipped.
+Which items carry dents is `DENT_TYPES` in `constants.mjs` filtered by the
+table's own `types` config; item HP is only written back where it exists. The
+check tool refuses a `tracksDents` that consults HP or Hardness.
+
+**The dent thresholds are a GM-editable config**, because "does a potion dent"
+and "how much does adamantine buy you" are rulings rather than facts about the
+data model. `DEFAULT_DENT_CONFIG` ships the printed rule and nothing else — 2/4,
+doubled on a sturdy shield, on the gear the rule is written for, every grade and
+material row at zero — so a table that never opens the sheet plays the book. Two
+things there fail silently. Foundry's form parser builds a nested object only
+from a **dotted** `name`: a flat `name="weapon"` saves a config with no `types`
+key, `dentConfig()` merges the defaults back over the hole, and the GM's edit is
+discarded while the form submits happily. And the sheet must be reachable — a
+registered Object setting with no `registerMenu` in front of it is a config a GM
+can only reach through the console. The check tool pins both, along with the
+threshold invariant across every combination the sheet can produce: a destroyed
+rung at or below the broken one deletes the broken state entirely, so an item
+goes from working to gone in one hit and every number involved still renders.
+
+**Hardness is the whole input to the rule, and PF2e supplies none.** Damage at
+or below Hardness does nothing, above it is one dent, above twice it is two — so
+an item at Hardness 0 takes the *maximum* two dents from every hit that lands and
+is destroyed in two blows. `ShieldPF2e#prepareBaseData` is the only place in the
+entire system that ever writes a real Hardness; every other physical item ships
+from `template.json` at 0 and stays there. A resolver that simply reads
+`system.hardness` is therefore one where a solid adamantine greatsword shatters
+as fast as a wooden spoon, and nothing reports it. `hardness.mjs` is the ladder
+down: the GM's per-item override, then `system.hardness` where PF2e or a rule
+element actually set one (which keeps a shield's reinforcing runes and grade
+improvements — recomputing from the material alone would silently throw them
+away), then the material's own Hardness at its grade from **PF2e's own table**,
+then the table's per-type default, which ships at 0. The panel prints where the
+number came from, because a GM looking at a 10 otherwise has no way to tell
+adamantine from a default they set months ago except by changing it.
+
+**TABLE: OBJECT DENTS is keyed on possession, not on size.** The same paragraph
+(p. 48) that gives Tiny 1/2 through Gargantuan 16/32 for objects pins anything
+"carried, held, or wielded" at 2/4 *however large it is*. So implementing
+"infer dents from size" by reading `system.size` — the obvious reading — quietly
+makes every Large weapon in the world four times as durable, which renders
+perfectly and is not the rule. `optionsFor` derives `carried` from the owning
+actor's type (a creature is carrying it; a loot actor standing in for a chest or
+a door, or no actor at all, is scenery) and the check tool asserts both
+directions of that table.
+
+`dent-config.mjs` builds its ApplicationV2 subclass in a **memoised factory**,
+not at module scope. `settings.mjs` is imported transitively by pure modules the
+check tools load under plain Node, where `foundry` does not exist, so a
+top-level `const { ApplicationV2 } = foundry.applications.api` takes the tooling
+down rather than the feature.
+
+One more that is invisible in a diff and in any preview built on the suite's own
+panels: **`.gl-btn` declares no font-size**. It states its padding in `em` and
+takes its type from the host, so a button dropped into a chat card renders at
+14px and one on a PF2e sheet larger still, beside labels this feature strikes at
+9–11px — and because the padding is proportional it inflates with the type until
+the label crowds its own border. Every button a feature ships has to be sized by
+that feature, either on its own class or through one `<surface> .gl-btn` rule;
+the check tool walks the emitted buttons and requires it.
+
 It also pins that chip damage fires on a miss but **not** on a critical miss (the
 book excludes every degree past the first that deals no damage, so getting this
 wrong doubles the rule's frequency); that an applicable resistance *negates* chip
@@ -579,13 +647,31 @@ every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
 or the catalog's longest-first sort hands the child's keys to the parent and its
 settings group renders empty; and the two runtime-built i18n families
 (`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
-key), which nothing else checks:
+key, plus `GLVR.dents.source.*`, `GLVR.dents.hardnessFrom.*` and
+`GLVR.dents.size.*`), which nothing else checks; that the material table has not
+drifted from PF2e's own numbers, since a wrong value there is a silent lie about
+the system's data; that a blank field in the per-item override *clears* rather
+than storing a zero, which would make an item arrive already destroyed; and that
+the dent nudge controls carry a size of their own rather than the panel's, since
+a `+` and a `-` left at the surface default come out several times the height of
+the rung they adjust:
 
 ```bash
 node tools/pf2e-variant-rules-check.mjs
 ```
 
-Zero problems required. Three things about this feature are worth knowing before
+Zero problems required. Nothing there can show you a panel. For that:
+
+```bash
+node tools/variant-rules-preview.mjs --out=.preview/vr.html && node tools/preview-server.mjs 8954
+```
+
+**Serve it.** It draws the dent track in a 16px host and the chat cards in a 14px
+one, because the type a button inherits is the whole bug, and it renders the dent
+config sheet at its real window size, where a footer clipped by a stray
+`height: 100%` is visible and in a diff is not.
+
+Three things about this feature are worth knowing before
 you change it.
 
 **Chip Damage and Dents run in assist mode on purpose.** PF2e exposes no hook on
@@ -740,6 +826,99 @@ A fifth rule from the same book section, **Belts**, deliberately ships no code �
 a PF2e container with `system.stowing = false` already holds four items at full
 Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
 quietly reversed.
+
+**When touching the Creaturedex** (`features/pf2e-creaturedex/`), re-run its
+consistency check. Everything it covers fails *silently*.
+
+A section key is **data**: it is written into world knowledge the moment a GM
+reveals anything, so renaming one does not throw — it forgets every creature the
+party has ever learned, on the next load, with nothing reported. The book prints
+an exact field list per section and the check is the only place that list is
+compared against the code; a field in *two* sections is worse than a field in
+none, because the player buys one section and silently receives part of another.
+PF2e's own `system.category` (`interaction` / `defensive` / `offensive`) is the
+book's three headings under other names, so an ability routes itself — but the
+field's schema default is `null`, PF2e's own NPC sheet never reads it (it groups
+by action cost instead) and its only consumer anywhere in the system is a
+compendium-browser filter, so most bestiary abilities arrive **untagged**. A
+guess from the action cost gets a majority right and the rest *leak*: an
+offensive ability filed under Defense hands a player exactly what they did not
+buy, and the stat block still looks ordinary. So an untagged ability routes
+nowhere and is **deferred to completion**, where there is nothing left to leak.
+`abilitySection` returning null is what makes that possible, and the check
+refuses a fallback that guesses.
+
+**The reveal is the GM's click, and the absence of a roll hook is pinned.** The
+book's trigger is a Recall Knowledge check; the module's is a button, because
+knowledge gets granted at a real table for reasons a roll does not cover — a
+check made out of character, a creature nobody targeted, a correction after a
+misclick. Wiring it back to a chat card is a change that reads as an improvement
+in its own diff and puts a *player's click on the write path of a world setting*,
+which then needs a socket that re-derives every claim it is handed because a raw
+Foundry socket carries no attested identity. `chat.mjs`, `reveal.mjs`, a
+chat-card hook, a socket and any read of `context.outcome` are all refused
+outright for that reason.
+
+The load-bearing one now is that **the store holds rendered snapshots, not
+pointers.** Foundry hands every client the full Actor document, so a player who
+holds no permission on a creature can still read `actor.system` from the console.
+A dex that stored "Seri knows Defense" and rendered it out of the live actor
+would be drawing a lock on the player's own screen over data one line away —
+theatre, with every screen looking correct. A section is rendered by the GM's
+client at reveal time and the *result* is stored, so the store contains exactly
+what was handed over; redacting the last holder drops the snapshot with it, which
+is that guarantee's other half. Snapshots are taken **post-flatten**, since
+`pf2e-flatten` rewrites NPC numbers and the player should see what will really
+apply at their table, and a section is therefore a memory rather than a live
+view — which is why there is a Refresh action.
+
+Two more. Identity is the creature's **kind**: the compendium source where there
+is one, else a normalised name-and-level slug. One goblin warrior exists as the
+compendium entry, a world duplicate and a `statsblock-import` creation all at
+once, so keying on `actor.uuid` files three monsters and completes none of them;
+the level is in the slug because a hand-built elite should not have the ordinary
+goblin's AC answer for it. And a false section is stored beside the true ones and
+rendered **identically** to its holder, marked only in the GM's view — a lie a
+player can see is not a lie.
+
+The doctoring pass that generates a lie has two rules a diff cannot show. A drift
+is **never zero**, or the one row a player checks comes back as the truth while
+the GM cannot tell from the dialog. And **immunities are never altered in either
+direction**: removing one empties the poison rogue's whole kit into something
+that was never going to care, and inventing one stops them trying at all. That
+one is pinned twice — behaviourally, and structurally on the switch — because a
+PF2e immunity list is words with no digits in it, so routing it into the numeric
+drift changes nothing, passes every value assertion, and leaves the source saying
+immunities are fair game for the next row shape that carries a number.
+
+```bash
+node tools/creaturedex-check.mjs
+```
+
+Zero problems required. It cannot show you how any of it looks, and the sealed
+plate can only be judged beside a revealed section:
+
+```bash
+node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview-server.mjs 8953
+```
+
+**Serve it.** The page puts the player view next to the GM view, draws the
+reveal notice at a real chat log's 14px (the only size at which an unsized button
+looks wrong) and shows the Falsify dialog, which is the last screen a lie passes
+before a player sees it. See `docs/CREATUREDEX.md`.
+
+Two more things it pins, both of which are silent. A whole-party reveal is a
+**fan-out**, one row per member, never a shared `party` row: Party Knowledge is a
+*read* — a union over the owners — so that a table can turn it off mid-campaign
+without inventing or destroying a fact, and a shared row would read back only
+while it was on. And every road in — the scene control, the `K` keybinding, the token
+HUD button, the actor-directory right-click, an open window following the target
+— has to ask `mayView` first. An
+unknown creature's entry prints its **actor** name and portrait, and a GM who hid
+a token's name did so on purpose, so a window that opens anyway quietly
+identifies the thing the party is looking at. Knowing a *lie* counts as knowing
+something there: a player told one cannot see that it is false, so refusing to
+open is the module losing the only thing they were given.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

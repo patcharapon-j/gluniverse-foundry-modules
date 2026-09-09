@@ -9,7 +9,7 @@
  * Source: *Adventures+* pp. 45–46.
  */
 
-import { DENTS_BROKEN, DENTS_DESTROYED, OUTCOME, CHIP_MINIMUM } from "./constants.mjs";
+import { DEFAULT_DENT_CONFIG, OBJECT_DENTS, OUTCOME, CHIP_MINIMUM } from "./constants.mjs";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CHIP DAMAGE
@@ -160,21 +160,72 @@ export function dentsFromDamage(damage, hardness) {
   return 1;
 }
 
+const int = (value, fallback) => {
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) ? n : fallback;
+};
+
 /**
  * The dent thresholds for one item.
  *
- * A sturdy shield doubles both rungs (2→4 broken, 4→8 destroyed), which the
- * book states outright. Everything else uses the base pair.
+ * The book gives one pair — 2 broken, 4 destroyed — and one modifier: a sturdy
+ * shield doubles both. Everything past that is the table's, supplied as
+ * `config`; with no config this is the printed rule exactly.
+ *
+ * Grade and material contribute **extra dents on the destroyed rung**, and the
+ * broken rung takes half of that bonus rounded down, so a tougher item stays
+ * roughly half-way through its life when it breaks rather than becoming an item
+ * that is destroyed and broken at nearly the same count. The two compose with
+ * the sturdy multiplier rather than replacing it: a sturdy adamantine shield is
+ * both things at once, which is what a player would expect from the fiction.
+ *
+ * The clamp at the end is not defensive tidying. A config with a zero or
+ * negative destroyed rung would make `dentState` call an intact item destroyed,
+ * and a broken rung at or above the destroyed one deletes the broken state
+ * altogether — both render perfectly and neither reports anything.
  */
-export function dentThresholds({ sturdy = false } = {}) {
-  const scale = sturdy ? 2 : 1;
-  return { broken: DENTS_BROKEN * scale, destroyed: DENTS_DESTROYED * scale };
+export function dentThresholds(
+  { sturdy = false, grade = null, material = null, size = null, carried = true, override = null } = {},
+  config = null
+) {
+  const cfg = config ?? DEFAULT_DENT_CONFIG;
+
+  /* The GM's per-item override short-circuits everything, including the
+     multiplier and the bonuses. A partial override is honoured a rung at a
+     time, because "this door is tougher than its size says" and "this door
+     breaks the moment it is dented" are different rulings and a GM should not
+     have to state both to make one. */
+  const forcedBroken = Number.isFinite(Number(override?.broken)) ? Math.max(1, int(override.broken, 1)) : null;
+  const forcedDestroyed = Number.isFinite(Number(override?.destroyed)) ? Math.max(2, int(override.destroyed, 2)) : null;
+
+  /* An item nobody is carrying is an OBJECT, and objects scale with size:
+
+       "Objects, such as doors or walls, typically require more dents than
+        items, depending on their size, to be destroyed or repaired."
+
+     while the same paragraph pins gear at the flat 2/4 however big it is. So
+     possession decides which rule applies, not size — keying on size alone
+     would make every Large weapon in the world four times as durable, which
+     renders perfectly and is not what the book says. */
+  const table = !carried && cfg.sizeAware !== false ? (OBJECT_DENTS[size] ?? null) : null;
+  const baseBroken = table ? table.broken : int(cfg.broken, DEFAULT_DENT_CONFIG.broken);
+  const baseDestroyed = table ? table.destroyed : int(cfg.destroyed, DEFAULT_DENT_CONFIG.destroyed);
+
+  const scale = sturdy ? Math.max(1, int(cfg.sturdyMultiplier, DEFAULT_DENT_CONFIG.sturdyMultiplier)) : 1;
+  const bonus =
+    int(cfg.grades?.[grade], 0) + int(cfg.materials?.[material], 0);
+
+  const destroyed = forcedDestroyed ?? baseDestroyed * scale + bonus;
+  const broken = forcedBroken ?? baseBroken * scale + Math.floor(bonus / 2);
+
+  const safeDestroyed = Math.max(2, destroyed);
+  return { broken: Math.min(Math.max(1, broken), safeDestroyed - 1), destroyed: safeDestroyed };
 }
 
 /** Which of the four states a dent count puts an item in. */
-export function dentState(dents, opts = {}) {
+export function dentState(dents, opts = {}, config = null) {
   const n = Math.max(0, Math.trunc(Number(dents) || 0));
-  const { broken, destroyed } = dentThresholds(opts);
+  const { broken, destroyed } = dentThresholds(opts, config);
   if (n >= destroyed) return "destroyed";
   if (n >= broken) return "broken";
   if (n > 0) return "dented";
@@ -196,10 +247,10 @@ export function dentState(dents, opts = {}) {
  * and PF2e never calls it broken. The bug would appear only on odd-HP items,
  * which is exactly the kind of thing that survives a play session unnoticed.
  */
-export function hpForDents(dents, maxHp, opts = {}) {
+export function hpForDents(dents, maxHp, opts = {}, config = null) {
   const max = Math.max(0, Math.trunc(Number(maxHp) || 0));
   if (max === 0) return 0;
-  const { destroyed } = dentThresholds(opts);
+  const { destroyed } = dentThresholds(opts, config);
   const n = Math.max(0, Math.trunc(Number(dents) || 0));
   if (n >= destroyed) return 0;
   const fraction = 1 - n / destroyed;

@@ -27,3 +27,4 @@ import "./resource-bars/index.mjs";
 import "./pf2e-aoe/index.mjs";
 import "./pf2e-arcane-surge/index.mjs";
 import "./pf2e-variant-rules/index.mjs";
+import "./pf2e-creaturedex/index.mjs";

@@ -1,0 +1,56 @@
+<div class="gl-glass gldex-lie-root">
+  <p class="gldex-lie-lead">
+    {{localize "GLDEX.falsify.lead"}}
+    <strong>{{sectionLabel}}</strong> &middot; <strong>{{subjectName}}</strong>
+  </p>
+
+  <div class="gldex-lie-modes">
+    <button type="button" class="gl-btn gldex-lie-mode {{#if borrow}}is-on{{/if}}" data-action="setMode" data-mode="borrow">
+      {{localize "GLDEX.falsify.borrow"}}
+    </button>
+    <button type="button" class="gl-btn gldex-lie-mode {{#if doctor}}is-on{{/if}}" data-action="setMode" data-mode="doctor">
+      {{localize "GLDEX.falsify.doctor"}}
+    </button>
+  </div>
+
+  {{#if borrow}}
+    <label class="gldex-lie-field">
+      <span>{{localize "GLDEX.falsify.sourceLabel"}}</span>
+      <select name="source">
+        {{#each candidates}}
+          <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}{{#if level}} ({{level}}){{/if}}</option>
+        {{/each}}
+      </select>
+    </label>
+    <p class="gldex-lie-note">{{localize "GLDEX.falsify.borrowHint"}}</p>
+  {{else}}
+    <p class="gldex-lie-note">
+      {{localize "GLDEX.falsify.doctorHint"}}
+      {{#if iwr}} {{localize "GLDEX.falsify.iwrOn"}}{{/if}}
+    </p>
+  {{/if}}
+
+  <div class="gldex-lie-actions">
+    <button type="button" class="gl-btn gldex-lie-gen" data-action="generate">{{localize "GLDEX.falsify.generate"}}</button>
+  </div>
+
+  {{#if ready}}
+    <div class="gldex-lie-draft">
+      <p class="gldex-lie-note">{{localize "GLDEX.falsify.editHint"}}</p>
+      {{#each rows}}
+        <label class="gldex-lie-row">
+          <span class="gldex-lie-key">{{label}}</span>
+          <input type="text" data-row-key="{{key}}" value="{{value}}">
+        </label>
+      {{/each}}
+      {{#if extras}}
+        <ul class="gldex-lie-extras">
+          {{#each extras}}<li>{{this}}</li>{{/each}}
+        </ul>
+      {{/if}}
+    </div>
+    <footer class="gldex-lie-foot">
+      <button type="button" class="gl-btn gldex-lie-send" data-action="send">{{localize "GLDEX.falsify.send"}}</button>
+    </footer>
+  {{/if}}
+</div>

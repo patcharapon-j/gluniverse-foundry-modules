@@ -1,0 +1,120 @@
+{{!--
+  Creaturedexing — the dex window.
+
+  Section bodies arrive already rendered (they contain enriched PF2e text and
+  must not be escaped again), so they are emitted with triple braces. Everything
+  authored here is escaped normally.
+--}}
+<div class="gldex-root gl-glass gl-type">
+
+  <header class="gldex-bar">
+    <span class="gldex-bar-title">{{localize "GLDEX.app.title"}}</span>
+    {{#if showOwners}}
+      <span class="gldex-owners gl-scroll">
+        {{#each owners}}
+          <button type="button" class="gl-btn gldex-owner{{#if selected}} is-on{{/if}}"
+                  data-action="setOwner" data-owner="{{id}}">{{name}}</button>
+        {{/each}}
+      </span>
+    {{else}}
+      <span class="gldex-bar-owner">{{ownerName}}</span>
+    {{/if}}
+    {{#if party}}<span class="gldex-bar-tag">{{localize "GLDEX.app.party"}}</span>{{/if}}
+  </header>
+
+  <div class="gldex-body">
+
+    <nav class="gldex-shelf gl-scroll">
+      {{#if empty}}
+        <p class="gldex-empty">{{localize "GLDEX.app.empty"}}</p>
+      {{/if}}
+      {{#each subjects}}
+        <button type="button" class="gldex-entry{{#if selected}} is-on{{/if}}{{#if complete}} is-complete{{/if}}"
+                data-action="setSubject" data-key="{{key}}">
+          <img class="gldex-entry-img" src="{{img}}" alt="">
+          <span class="gldex-entry-meta">
+            <span class="gldex-entry-name">{{name}}</span>
+            <span class="gldex-entry-count">{{count}} / {{total}}</span>
+          </span>
+          {{#if complete}}<i class="fa-solid fa-certificate gldex-entry-seal" aria-hidden="true"></i>{{/if}}
+        </button>
+      {{/each}}
+    </nav>
+
+    <section class="gldex-detail gl-scroll">
+      {{#if detail}}
+        <header class="gldex-detail-head">
+          <img class="gldex-detail-img" src="{{detail.img}}" alt="">
+          <div class="gldex-detail-meta">
+            <h2 class="gldex-detail-name">{{detail.name}}</h2>
+            <span class="gldex-detail-kind">{{detail.kindLabel}}</span>
+          </div>
+          {{#if isGM}}
+            <div class="gldex-detail-tools">
+              <button type="button" class="gl-btn gldex-refresh" data-action="refreshSubject"
+                      title="{{localize "GLDEX.app.refreshHint"}}">
+                {{localize "GLDEX.app.refresh"}}
+              </button>
+              <button type="button" class="gl-btn gldex-forget" data-action="forgetSubject" data-key="{{detail.key}}">
+                {{localize "GLDEX.forget.action"}}
+              </button>
+            </div>
+          {{/if}}
+        </header>
+
+        {{#if everyone}}
+          <p class="gldex-scope">{{localize "GLDEX.app.everyoneNote"}}</p>
+        {{/if}}
+
+        {{#if detail.complete}}
+          <p class="gldex-complete">{{localize "GLDEX.app.completeNote"}}</p>
+        {{/if}}
+
+        {{#each detail.sections}}
+          <article class="gldex-section" data-section="{{key}}" data-state="{{state}}">
+            <header class="gldex-section-head">
+              <span class="gldex-section-label">{{label}}</span>
+              {{#if isLie}}<span class="gldex-section-lie">{{localize "GLDEX.app.false"}}</span>{{/if}}
+              {{#if ../isGM}}
+                <span class="gldex-controls">
+                  {{#if canReveal}}
+                    <button type="button" class="gl-btn gldex-toggle" data-action="revealSection" data-section="{{key}}">
+                      {{localize "GLDEX.app.reveal"}}
+                    </button>
+                  {{/if}}
+                  {{#if canFalsify}}
+                    <button type="button" class="gl-btn gldex-falsify" data-action="falsifySection" data-section="{{key}}">
+                      {{localize "GLDEX.app.falsify"}}
+                    </button>
+                  {{/if}}
+                  {{#if canClear}}
+                    <button type="button" class="gl-btn gldex-toggle" data-action="clearSection" data-section="{{key}}">
+                      {{localize "GLDEX.app.redact"}}
+                    </button>
+                  {{/if}}
+                </span>
+              {{/if}}
+            </header>
+            <div class="gldex-section-body">{{{html}}}</div>
+          </article>
+        {{/each}}
+        {{#if detail.deferredCount}}
+          <p class="gldex-deferred-note">{{localize "GLDEX.app.deferred"}}</p>
+        {{/if}}
+        {{#if detail.deferred}}
+          <article class="gldex-section gldex-section-extra">
+            <header class="gldex-section-head">
+              <h3 class="gldex-section-label">{{localize "GLDEX.app.deferredTitle"}}</h3>
+            </header>
+            <div class="gldex-section-body">
+              {{#each detail.deferred}}{{{this}}}{{/each}}
+            </div>
+          </article>
+        {{/if}}
+      {{else}}
+        <p class="gldex-empty">{{localize "GLDEX.app.pick"}}</p>
+      {{/if}}
+    </section>
+
+  </div>
+</div>

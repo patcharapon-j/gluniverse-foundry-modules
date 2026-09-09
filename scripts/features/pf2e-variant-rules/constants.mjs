@@ -78,6 +78,7 @@ export const SETTINGS = Object.freeze({
 
   // Dents
   dentsRepair: "vr.dent.repairButton",
+  dentsConfig: "vr.dent.config",
 
   // Lasting Wounds
   woundsBlockRest: "vr.wound.blockRest",
@@ -98,6 +99,8 @@ export const FLAGS = Object.freeze({
   chip: "vr.chip",
   /** Careful Consumption: set on a card once its result has been maximized. */
   careful: "vr.careful",
+  /** Per-item GM override: { broken, destroyed, hardness }, any of them null. */
+  dentOverride: "vr.dent.override",
 });
 
 /**
@@ -109,6 +112,190 @@ export const FLAGS = Object.freeze({
  */
 export const DENTS_BROKEN = 2;
 export const DENTS_DESTROYED = 4;
+
+/**
+ * TABLE: OBJECT DENTS (p. 48).
+ *
+ *   "Objects, such as doors or walls, typically require more dents than items,
+ *    depending on their size, to be destroyed or repaired. When determining how
+ *    many dents an object has, use the following thresholds."
+ *
+ * Note what the same paragraph says about everything a character is using:
+ *
+ *   "[an item] carried, held, or wielded can only sustain 2 dents before
+ *    becoming broken, or 4 dents before being destroyed"
+ *
+ * So this table is for *objects* and the flat 2/4 is for *gear*, and the
+ * distinction is possession rather than size. A greatsword does not become
+ * harder to break by being Large; a door does. Keying the table on size alone
+ * would quietly make every big weapon in the world four times as durable, which
+ * renders perfectly and is not the rule.
+ *
+ * Keys are PF2e's own size values, and Small and Medium share a row exactly as
+ * the book prints them.
+ */
+export const OBJECT_DENTS = Object.freeze({
+  tiny: Object.freeze({ broken: 1, destroyed: 2 }),
+  sm: Object.freeze({ broken: 2, destroyed: 4 }),
+  med: Object.freeze({ broken: 2, destroyed: 4 }),
+  lg: Object.freeze({ broken: 4, destroyed: 8 }),
+  huge: Object.freeze({ broken: 8, destroyed: 16 }),
+  grg: Object.freeze({ broken: 16, destroyed: 32 }),
+});
+
+/**
+ * The actor types that make an item *carried* rather than an object.
+ *
+ * A creature is holding it; anything else — a loot actor standing in for a
+ * chest or a door, a vehicle, or no actor at all — is scenery, and scenery is
+ * what the size table is written for.
+ */
+export const CARRIER_TYPES = Object.freeze(["character", "npc", "familiar"]);
+
+/**
+ * Hardness by precious material and grade.
+ *
+ * These are **PF2e's own numbers**, lifted from the material valuation table it
+ * uses to prepare a shield (the standard-shield column, rather than the thinner
+ * buckler or the tower-shield special case). They are the only per-grade
+ * hardness figures the system publishes anywhere.
+ *
+ * The reason this table has to exist at all: `ShieldPF2e#prepareBaseData` is the
+ * *only* place PF2e applies material hardness. Every other physical item ships
+ * from `template.json` at `hardness: 0` and stays there, so a weapon of solid
+ * adamantine and a wooden spoon are equally hard as far as the data model is
+ * concerned — and with hardness 0 every hit that lands at all deals the maximum
+ * two dents, which destroys any item in two blows.
+ *
+ * A shield is therefore never looked up here: PF2e has already computed its
+ * hardness, including reinforcing runes and grade improvements, and reading the
+ * live value keeps those. This is the fallback for everything else.
+ */
+export const MATERIAL_HARDNESS = Object.freeze({
+  abysium: Object.freeze({ standard: 6, high: 10 }),
+  adamantine: Object.freeze({ standard: 10, high: 13 }),
+  "cold-iron": Object.freeze({ low: 5, standard: 7, high: 10 }),
+  dawnsilver: Object.freeze({ standard: 5, high: 8 }),
+  djezet: Object.freeze({ standard: 5, high: 8 }),
+  duskwood: Object.freeze({ standard: 5, high: 8 }),
+  inubrix: Object.freeze({ standard: 4, high: 7 }),
+  "keep-stone": Object.freeze({ high: 11 }),
+  noqual: Object.freeze({ high: 10 }),
+  orichalcum: Object.freeze({ high: 16 }),
+  siccatite: Object.freeze({ standard: 6, high: 10 }),
+  silver: Object.freeze({ low: 3, standard: 5, high: 8 }),
+});
+
+/**
+ * The physical item types a dent track can be drawn on.
+ *
+ * PF2e's own list of physical types, in the order the config sheet shows them.
+ * Which of them a table actually uses is a setting — see `DEFAULT_DENT_CONFIG`
+ * — because "does a potion dent" is a ruling, not a fact about the data model.
+ */
+export const DENT_TYPES = Object.freeze([
+  "weapon",
+  "armor",
+  "shield",
+  "equipment",
+  "backpack",
+  "book",
+  "consumable",
+  "treasure",
+  "ammo",
+]);
+
+/** PF2e item grades, low to high. A grade is the "tier" of a made thing. */
+export const DENT_GRADES = Object.freeze(["low", "standard", "high"]);
+
+/**
+ * PF2e's precious materials, keyed exactly as `system.material.type` stores
+ * them so a config row can be looked up with no translation step. Labels come
+ * from PF2e's own `PF2E.PreciousMaterial*` keys rather than being restated
+ * here, so a material renamed by the system renames itself in our sheet.
+ */
+export const DENT_MATERIALS = Object.freeze([
+  "abysium",
+  "adamantine",
+  "cold-iron",
+  "dawnsilver",
+  "djezet",
+  "dragonhide",
+  "dreamweb",
+  "duskwood",
+  "grisantian-pelt",
+  "inubrix",
+  "keep-stone",
+  "noqual",
+  "orichalcum",
+  "peachwood",
+  "siccatite",
+  "silver",
+  "sisterstone",
+  "sisterstone-dusk",
+  "sisterstone-scarlet",
+  "sloughstone",
+  "sovereign-steel",
+  "warpglass",
+]);
+
+/**
+ * The table's dent configuration, as it ships.
+ *
+ * The defaults are the book and nothing else: 2/4, doubled for a sturdy shield,
+ * on the gear the rule is written for. Every other row is zero, so a GM who
+ * never opens the config sheet plays exactly the printed rule.
+ *
+ * `grades` and `materials` are *extra dents on the destroyed rung*. Adamantine
+ * armour taking two more hits before it is scrap is the obvious use, and it
+ * composes with the sturdy multiplier rather than replacing it — a sturdy
+ * adamantine shield is both.
+ */
+export const DEFAULT_DENT_CONFIG = Object.freeze({
+  broken: DENTS_BROKEN,
+  destroyed: DENTS_DESTROYED,
+  sturdyMultiplier: 2,
+  types: Object.freeze({
+    weapon: true,
+    armor: true,
+    shield: true,
+    equipment: true,
+    backpack: true,
+    book: true,
+    consumable: false,
+    treasure: false,
+    ammo: false,
+  }),
+  grades: Object.freeze({ low: 0, standard: 0, high: 0 }),
+  materials: Object.freeze({}),
+  /**
+   * Use TABLE: OBJECT DENTS for an item nobody is carrying.
+   *
+   * On by default, because it is the printed rule. It changes nothing for gear:
+   * an item on a creature stays at the flat 2/4 whatever its size.
+   */
+  sizeAware: true,
+  /**
+   * Fallback Hardness by item type, for an item PF2e gives none and whose
+   * material says nothing either.
+   *
+   * Ships at zero across the board, which is the book's silence rather than a
+   * number we made up. A table that wants ordinary gear to shrug off small hits
+   * sets these once; a GM who wants one particular thing to sets the per-item
+   * override instead.
+   */
+  hardness: Object.freeze({
+    weapon: 0,
+    armor: 0,
+    shield: 0,
+    equipment: 0,
+    backpack: 0,
+    book: 0,
+    consumable: 0,
+    treasure: 0,
+    ammo: 0,
+  }),
+});
 
 /** Degrees of success, as PF2e spells them in `flags.pf2e.context.outcome`. */
 export const OUTCOME = Object.freeze({

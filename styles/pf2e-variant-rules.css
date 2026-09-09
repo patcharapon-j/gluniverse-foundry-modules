@@ -28,6 +28,39 @@
   font-family: var(--gl-display);
 }
 
+/* ── Control metrics ──────────────────────────────────────────────────────
+   `.gl-btn` states its padding in `em` and deliberately declares no font size,
+   so it takes whatever the host surface sets — 14px in a chat card, more inside
+   a PF2e sheet. Against labels struck at 9–11px that reads as a control
+   borrowed from another program, and because the padding is proportional the
+   button gains the same slack the type did: the label ends up crowding the
+   border it should sit well inside.
+
+   Every button this feature ships is sized here, in one place, so the metric is
+   a decision rather than an accident of where the card happened to land. */
+.glvr-chip-apply,
+.glvr-chip-dismiss,
+.glvr-careful-max,
+.glvr-dent-less,
+.glvr-dent-more,
+.glvr-dent-fix {
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+}
+
+/* The two nudges are a matched pair and read as one control, so they are sized
+   to the wider of the two glyphs rather than to their own labels — and they are
+   sized *down* from the row's type, not up. They carry one character each and
+   sit beside a three-character number box on an item sheet; at the row's own
+   size they were the largest thing in the panel, which made a minor bookkeeping
+   control look like the panel's primary action. */
+.glvr-dent-less,
+.glvr-dent-more {
+  min-width: 2.2em;
+  padding: 0.3em 0.5em;
+  font-size: var(--gl-fs-2xs);
+}
+
 .glvr-dent-head {
   display: flex;
   align-items: center;
@@ -155,7 +188,7 @@
   margin: 0;
 }
 .glvr-chip-acts > .gl-btn { flex: none; }
-.glvr-chip-dismiss { padding-inline: var(--gl-sp-4); }
+.glvr-chip-dismiss { padding-inline: 0.8em; }
 
 /* Negated: the figure reads as a nullity rather than as damage nobody applied. */
 .glvr-chip.is-negated .glvr-chip-num {
@@ -371,3 +404,140 @@
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-xs);
 }
+
+/* ── Dent configuration sheet ─────────────────────────────────────────────── */
+
+/* No `height: 100%` and no scroller of its own. ApplicationV2's
+   `.window-content` is already the scrolling box; a second one inside it either
+   resolves to nothing (a percentage height against a parent that has none) or
+   clips the footer off the bottom of a sheet whose only submit button lives
+   there. The sheet is a column that grows, and the window scrolls it. */
+.glvr-cfg-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-5);
+  padding: var(--gl-sp-6);
+  --gl-accent: var(--gl-warn);
+  color: var(--gl-text);
+}
+
+.glvr-cfg-lead { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); line-height: var(--gl-lh-normal); }
+
+.glvr-cfg-block {
+  margin: 0;
+  padding: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+}
+.glvr-cfg-block > legend {
+  padding: 0 var(--gl-sp-3);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+
+.glvr-cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gl-sp-4);
+}
+
+.glvr-cfg-field { display: flex; align-items: center; gap: var(--gl-sp-4); min-width: 0; }
+.glvr-cfg-field > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glvr-cfg-field input[type="number"] {
+  flex: 0 0 auto;
+  width: 4em;
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.glvr-cfg-field input[type="number"]:focus-visible { border-color: var(--gl-accent); outline: none; }
+
+.glvr-cfg-types { display: flex; flex-wrap: wrap; gap: var(--gl-sp-4) var(--gl-sp-6); }
+.glvr-cfg-check { display: flex; align-items: center; gap: var(--gl-sp-3); font-size: var(--gl-fs-xs); }
+
+/* Twenty-two materials is a list, not a grid: it scrolls in its own box so the
+   sheet does not become a page nobody reaches the bottom of. */
+.glvr-cfg-materials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--gl-sp-3) var(--gl-sp-6);
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: var(--gl-sp-4);
+}
+
+.glvr-cfg-note {
+  margin: var(--gl-sp-4) 0 0;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-normal);
+}
+
+.glvr-cfg-foot { display: flex; justify-content: flex-end; gap: var(--gl-sp-4); }
+
+/* Sized here for the same reason every other button in this feature is:
+   `.gl-btn` takes the host's type and inflates its own padding to match. */
+.glvr-cfg-root .gl-btn {
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.6em 1.1em;
+}
+
+/* ── Dents: where the numbers came from ───────────────────────────────────── */
+
+/* Hardness is the whole input to the rule and PF2e leaves it at 0 on everything
+   but a shield, so the panel states the value AND its provenance. A GM looking
+   at a 10 needs to know whether that is adamantine, a shield PF2e computed, or
+   a default they set months ago — otherwise the only way to find out is to
+   change it and watch what moves. */
+.glvr-dent-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-3) var(--gl-sp-4);
+  margin-top: var(--gl-sp-3);
+  padding-top: var(--gl-sp-3);
+  border-top: 1px solid var(--gl-edge-faint, var(--gl-edge));
+}
+.glvr-dent-fact {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glvr-dent-src {
+  margin-left: var(--gl-sp-2);
+  color: var(--gl-text-faint);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.glvr-dent-cfg {
+  margin-left: auto;
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.4em 0.8em;
+}
+
+/* The per-item override rides in a DialogV2, which supplies no width of its
+   own; without this the three fields stack into a column one input wide. */
+.glvr-cfg-item .glvr-cfg-grid { min-width: 22em; }
