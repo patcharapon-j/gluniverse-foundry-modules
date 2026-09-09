@@ -268,9 +268,33 @@ for (const type of ["reaction", "passive", "action", "free"]) {
     fail(`sections: an uncategorised ${type} is being guessed at rather than deferred, which leaks it into a section nobody bought`);
   }
 }
+/* Attack of Opportunity — Reactive Strike after the remaster — is tagged
+   `defensive` by PF2e because Paizo's stat block prints it in the Defense
+   block. It is a Strike, and what a player buys with Offense is what happens if
+   they move past this thing, so PF2e's own tag has to lose here. This is the
+   one place the category is overruled by data rather than by a GM, and it fails
+   the way everything else in this feature fails: the reaction renders perfectly
+   under Defense and the player who paid for the section it belongs to never
+   sees it. Bestiary entries qualify the name in parentheses, and the qualifier
+   never changes the answer. */
+for (const name of ["Attack of Opportunity", "Reactive Strike", "Reactive Strike (Jaws Only)"]) {
+  if (abilitySection(ability(name, "defensive", "reaction")) !== "offense") {
+    fail(`sections: "${name}" must sit under Offense — it is a Strike, whatever PF2e's category says`);
+  }
+  // Untagged too: a name we know the answer for is not the guess the fallback refuses.
+  if (abilitySection(ability(name, null, "reaction")) !== "offense") {
+    fail(`sections: an untagged "${name}" must still route to Offense rather than being deferred`);
+  }
+}
+// And that override is narrow: every other defensive reaction stays put.
+if (abilitySection(ability("Shield Block", "defensive", "reaction")) !== "defense") {
+  fail("sections: the named-ability map is routing abilities it has no entry for");
+}
 // A GM's own override still wins outright — that is what an override is for.
 const OVERRIDDEN = { ...ability("x", null, "action"), flags: { "gluniverse-foundry-modules": { "dex.section": "defense" } } };
 if (abilitySection(OVERRIDDEN) !== "defense") fail("sections: a per-item GM override must beat everything");
+const OVERRIDDEN_NAMED = { ...ability("Reactive Strike", "defensive", "reaction"), flags: { "gluniverse-foundry-modules": { "dex.section": "characteristics" } } };
+if (abilitySection(OVERRIDDEN_NAMED) !== "characteristics") fail("sections: a per-item GM override must beat the named-ability map too");
 // And a deferred ability has to actually come out somewhere, or it is deleted
 // rather than held back.
 if (!buildSections(NPC).deferred) fail("sections: buildSections drops uncategorised abilities instead of deferring them");

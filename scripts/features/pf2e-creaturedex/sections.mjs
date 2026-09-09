@@ -15,10 +15,15 @@
  * `defensive`, `offensive`. Those are the book's own three headings under
  * different names ("Interaction Abilities", "Automatic/Reactive Abilities",
  * "Offensive or Proactive Abilities"), so an ability routes itself. Where a
- * category is missing — homebrew, an importer that never set one — the action
- * type decides: a reaction is reactive, a passive is automatic, and anything
- * else is proactive. Guessing wrong there puts a real ability in the wrong
- * section, which reads to the table as the GM revealing the wrong thing.
+ * category is missing — homebrew, an importer that never set one — the ability
+ * is DEFERRED to completion rather than guessed at, because a guess that lands
+ * wrong hands a player exactly the information they did not buy while the stat
+ * block still looks ordinary. See `abilitySection`.
+ *
+ * Two things beat PF2e's category: a GM's per-item override, and the handful of
+ * abilities in `NAME_SECTIONS` whose section is a fact rather than an inference
+ * — Attack of Opportunity / Reactive Strike is tagged `defensive` because
+ * Paizo prints it in the Defense block, and it is a Strike.
  *
  * ## Empty rows are dropped, and that is a rules decision
  *
@@ -122,10 +127,45 @@ const abilityEntry = (item) => ({
 });
 
 /**
+ * Abilities whose section is a *fact about the ability*, not a guess.
+ *
+ * PF2e tags Attack of Opportunity — Reactive Strike after the remaster — as
+ * `defensive`, because Paizo's stat block prints it in the Defense block. It is
+ * a Strike. What a player buys with Offense is "what happens to me if I move
+ * past this thing or cast in its reach", and that answer living under Defense
+ * means the player who bought the section it belongs to never sees it while
+ * everything renders correctly.
+ *
+ * This is not the fallback the module refuses. A guess reads an action cost and
+ * infers; this reads a name we know the answer for, so a miss here is not a
+ * misfiling — it falls through to PF2e's own category, which is exactly where
+ * the ability would have gone anyway. That is also what makes it safe in a
+ * non-English world, where PF2e's translation modules rename the item and the
+ * GM's per-item override remains the way through.
+ */
+const NAME_SECTIONS = new Map([
+  ["attack of opportunity", "offense"],
+  ["reactive strike", "offense"],
+]);
+
+/**
+ * Bestiary entries qualify these in parentheses — "Reactive Strike (Jaws
+ * Only)", "Attack of Opportunity (Special)" — and the qualifier never changes
+ * which section the ability belongs to.
+ */
+const baseName = (name) =>
+  String(name ?? "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+/**
  * Route one ability to a section, or admit that we cannot.
  *
- * A GM's own override wins outright — that is what an override is for. Then
- * PF2e's `system.category`, which enumerates `interaction` / `defensive` /
+ * A GM's own override wins outright — that is what an override is for. Then the
+ * named abilities above, which are known rather than inferred. Then PF2e's
+ * `system.category`, which enumerates `interaction` / `defensive` /
  * `offensive` and is the book's three headings under other names.
  *
  * And then **null**, not a guess. The field's schema default is `null`, PF2e's
@@ -142,6 +182,8 @@ const abilityEntry = (item) => ({
 export function abilitySection(item) {
   const override = item?.flags?.[SUITE_ID]?.[FLAGS.section] ?? null;
   if (override && ALL_SECTION_KEYS.includes(override)) return override;
+  const named = NAME_SECTIONS.get(baseName(item?.name));
+  if (named) return named;
   const category = item?.system?.category ?? null;
   if (category === "interaction") return "characteristics";
   if (category === "defensive") return "defense";
