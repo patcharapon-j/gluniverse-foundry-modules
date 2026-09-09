@@ -4,47 +4,14 @@
  * Pure and Foundry-free so `tools/creaturedex-check.mjs` can exercise every one
  * of them under plain Node. Nothing here reads a setting, a flag or a document;
  * callers pass the world in and get a decision back.
+ *
+ * Note what is **not** here: nothing reads a Recall Knowledge roll. A reveal is
+ * the GM's click, so there is no outcome to convert into a section count, no
+ * offer to spend down and no repeat-attempt ledger. The book's roll is still
+ * the fiction; it is simply not the trigger.
  */
 
 import { OUTCOME } from "./constants.mjs";
-
-/**
- * How many sections a Recall Knowledge result buys.
- *
- *   "Critical Success … the GM also reveals two sections of the stat block for
- *    the creature or hazard of your choice.
- *    Success … reveals one section of the stat block … of your choice."
- *
- * Failure buys nothing and critical failure buys a lie, which is a different
- * kind of answer and is reported separately by `outcomeEffect`.
- */
-export function revealCount(outcome) {
-  if (outcome === OUTCOME.critSuccess) return 2;
-  if (outcome === OUTCOME.success) return 1;
-  return 0;
-}
-
-/**
- * What a result actually does, once the table's own options are applied.
- *
- * The "It's Not a Secret" sidebar is the one option that changes an outcome
- * rather than the presentation of it:
- *
- *   "In the event your table does not play with secret checks on Recall
- *    Knowledge, it is encouraged that the critical failure effect for the
- *    Recall Knowledge is removed entirely."
- *
- * Removed entirely means removed — a critical failure becomes an ordinary
- * failure, not a quieter lie. A table that can see the die cannot be told a
- * falsehood by it.
- */
-export function outcomeEffect(outcome, { noSecret = false } = {}) {
-  if (outcome === OUTCOME.critFailure) {
-    return noSecret ? { kind: "none", count: 0 } : { kind: "false", count: 1 };
-  }
-  const count = revealCount(outcome);
-  return { kind: count > 0 ? "reveal" : "none", count };
-}
 
 /**
  * Is this subject's creaturedex complete?
@@ -79,8 +46,8 @@ export const missingSections = (known, available) => {
  *    increasing the circumstance bonus if you are a master or legendary in the
  *    skill you used to Recall Knowledge."
  *
- * So this is Aid's own table, keyed on the proficiency rank of the skill the
- * *Recall Knowledge* was made with — not the skill the ally is rolling.
+ * Aid's own table, keyed on the degree of success of the Aid check and on the
+ * proficiency rank of the skill the knowledge was gained with.
  */
 export function aidBonus(outcome, rank = "trained") {
   if (outcome === OUTCOME.critSuccess) {
@@ -93,43 +60,102 @@ export function aidBonus(outcome, rank = "trained") {
   return 0;
 }
 
-/**
- * The optional 1d4 pick.
- *
- *   "it can be appropriate to simply roll 1d4 randomly to determine which
- *    section is revealed, allowing the player to choose on a 4."
- *
- * Returns the section key the die chose, or `null` for "the player chooses".
- * The die is always 1d4 even when the subject has fewer than three sections —
- * a roll past the end is the same freedom a 4 grants, which keeps a simple
- * hazard from being harder to learn than a creature.
- */
-export function rollSection(roll, available) {
-  const keys = (available ?? []).filter(Boolean);
-  const n = Math.trunc(Number(roll) || 0);
-  if (n < 1 || n > 3) return null;
-  return keys[n - 1] ?? null;
-}
+/* ── doctoring a section into a lie ──────────────────────────────────────── */
 
 /**
- * May this character attempt Recall Knowledge on this subject again?
- *
- *   "characters should be able to use Recall Knowledge on the same creature or
- *    hazard again, regardless of their results on previous checks, after they
- *    have seen the creature or hazard take its turn during an encounter in
- *    which they could be observed by the creature that used Recall Knowledge."
- *
- * The first attempt is always free; every attempt after that has to be paid for
- * by a turn the party has watched the subject take. Counting turns rather than
- * asking "has it acted at all" is what stops one observed turn from unlocking
- * an unlimited run of retries in the same round.
- *
- * This is advisory. Nothing in this feature blocks a roll the GM allows — the
- * card says whether the attempt is a repeat and leaves the ruling where it
- * belongs.
+ * The die ladder a damage step moves along. One step, never two — a d4 that
+ * became a d12 is not a lie, it is a typo.
  */
-export function canAttempt(attempts, observedTurns) {
-  const made = Math.max(0, Math.trunc(Number(attempts) || 0));
-  const seen = Math.max(0, Math.trunc(Number(observedTurns) || 0));
-  return made === 0 || seen >= made;
+const DICE = [4, 6, 8, 10, 12];
+
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+/**
+ * A signed drift of at most `spread`, never zero.
+ *
+ * Never zero matters: a doctoring pass that rolls 0 on the one row a player
+ * checks has produced a "lie" that is the truth, and the GM has no way to see
+ * that from the dialog. Every row this touches actually moves.
+ */
+function drift(rng, spread) {
+  const size = 1 + Math.floor(rng() * spread);
+  return rng() < 0.5 ? -size : size;
+}
+
+/** Shift every integer in a string by `fn`, leaving the prose around it alone. */
+const shiftNumbers = (text, fn) => String(text ?? "").replace(/-?\d+/g, (m) => String(fn(Number(m))));
+
+/** `+14, +9, +4` and `Fort +12, Ref +8, Will +10` keep their signs. */
+const shiftSigned = (text, fn) =>
+  String(text ?? "").replace(/([+-])(\d+)/g, (_m, sign, digits) => {
+    const value = fn(Number(`${sign}${digits}`));
+    return `${value >= 0 ? "+" : "-"}${Math.abs(value)}`;
+  });
+
+/**
+ * Perturb one real section into a plausible false one.
+ *
+ * The constraint the book's critical failure puts on us is sharp: a lie has to
+ * be *plausible enough to act on* and must not silently delete a player's whole
+ * kit on one bad roll. So the drift is bounded per row type, and two categories
+ * are refused outright.
+ *
+ * **Immunities are never touched, in either direction.** Removing one is the
+ * case the design brief named: the poison-focused rogue empties their kit into
+ * a creature that was never going to care, and a random pass chose that, not
+ * the GM. Adding a false immunity costs exactly the same thing from the other
+ * side — the rogue reads "immune to poison" and never tries at all — so the row
+ * is passed through untouched and the GM writes that lie by hand if they want
+ * it. Weaknesses and resistances *are* fair game, but only behind `iwr`,
+ * because burning your best spell for nothing costs a turn rather than a build.
+ *
+ * `rng` is injected so this is deterministic under test and so a GM pressing
+ * "reroll" in the dialog gets a genuinely different lie rather than the same
+ * one from a cached seed.
+ */
+export function doctorSection(section, { rng = Math.random, iwr = false } = {}) {
+  if (!section || typeof section !== "object") return section;
+  const out = JSON.parse(JSON.stringify(section));
+
+  out.rows = (out.rows ?? []).map((r) => {
+    const row = { ...r };
+    switch (row.key) {
+      case "ac":
+      case "perception":
+      case "stealth":
+      case "hardness":
+        row.value = shiftNumbers(row.value, (n) => Math.max(0, n + drift(rng, 2)));
+        break;
+      case "saves":
+        row.value = shiftSigned(row.value, (n) => n + drift(rng, 2));
+        break;
+      case "hp":
+        row.value = shiftNumbers(row.value, (n) => Math.max(1, Math.round(n * (1 + drift(rng, 2) * 0.1))));
+        break;
+      case "speed":
+        row.value = shiftNumbers(row.value, (n) => Math.max(5, n + drift(rng, 1) * 5));
+        break;
+      case "weaknesses":
+      case "resistances":
+        if (iwr) row.value = shiftNumbers(row.value, (n) => Math.max(1, n + drift(rng, 1) * 5));
+        break;
+      // `immunities` and everything descriptive fall through untouched.
+      default:
+        break;
+    }
+    return row;
+  });
+
+  for (const kind of ["melee", "ranged"]) {
+    for (const strike of out.strikes?.[kind] ?? []) {
+      strike.bonus = shiftSigned(strike.bonus, (n) => n + drift(rng, 2));
+      strike.damage = String(strike.damage ?? "").replace(/(\d+)d(\d+)/g, (m, count, faces) => {
+        const at = DICE.indexOf(Number(faces));
+        if (at < 0) return m;
+        return `${count}d${DICE[clamp(at + (rng() < 0.5 ? -1 : 1), 0, DICE.length - 1)]}`;
+      });
+    }
+  }
+
+  return out;
 }

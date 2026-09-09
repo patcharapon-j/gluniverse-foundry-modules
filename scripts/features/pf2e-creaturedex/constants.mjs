@@ -31,35 +31,47 @@ export const PREFIX = "dex.";
  * first for no read that needs it.
  */
 export const SETTINGS = Object.freeze({
-  /** The book's "Party Knowledge" sidebar: one pool for the whole table. */
+  /**
+   * The book's "Party Knowledge" sidebar: one pool for the whole table.
+   *
+   * On by default. The sidebar presents sharing as the collaborative option,
+   * and a per-player dex locks the one player who missed a session out of
+   * knowledge their character was standing next to.
+   */
   party: "dex.partyKnowledge",
-  /** The "It's Not a Secret" sidebar: drop the critical-failure effect. */
-  noSecret: "dex.noSecretChecks",
-  /** The sidebar variant: roll 1d4 for the section, player chooses on a 4. */
-  randomSection: "dex.randomSection",
   /** Grant the Discerning Aid reaction as a real item on completion. */
   grantAid: "dex.grantAid",
-  /** Offer the reveal on Recall Knowledge chat cards. */
-  chatOffer: "dex.chatOffer",
-  /** Let players open the dex and pick their own section. */
+  /** Let players open the dex at all. */
   playerAccess: "dex.playerAccess",
+  /**
+   * How a Recall Knowledge check is answered when `pf2e-recall` is also on.
+   *
+   * The two features answer the same roll in different currencies: the prose is
+   * what the GM reads aloud, the section is what the player consults. Layered
+   * they compose; unmanaged they are two answers to one roll, and the prose
+   * saying "you sense it is dangerous" beside a card printing AC 24 is the
+   * failure. One setting so a table never gets that by surprise.
+   */
+  delivery: "dex.delivery",
+  /**
+   * May the doctoring pass alter immunities, weaknesses and resistances?
+   *
+   * Off by default. A lie about AC costs a turn, which is the rule working; a
+   * lie about a weakness costs a spell slot, which is also fine. Hiding an
+   * immunity costs a character concept, so removal is refused outright even
+   * with this on -- see `doctorSection`.
+   */
+  doctorIwr: "dex.doctorIwr",
 });
 
-/**
- * On a Recall Knowledge chat card: the creature the roll was about and the
- * character who rolled, stamped once by the active GM.
- *
- * It lives here rather than in chat.mjs because `reveal.mjs` must read it to
- * validate an incoming request, and importing it from chat.mjs would close a
- * cycle between the two.
- */
-export const SUBJECT_FLAG = "dex.subject";
+/** The values `SETTINGS.delivery` may take. */
+export const DELIVERY = Object.freeze({ prose: "prose", sections: "sections", both: "both" });
 
 export const FLAGS = Object.freeze({
   /** On a PC: they have been granted the Discerning Aid reaction. */
   aidGranted: "dex.aidGranted",
-  /** On an NPC/hazard: creatures whose turn the party has observed. */
-  observed: "dex.observed",
+  /** On an item: this ability's section, overriding what PF2e says. */
+  section: "dex.section",
 });
 
 /** The shared owner key used when the Party Knowledge sidebar is in play. */
@@ -88,7 +100,13 @@ export const ALL_SECTION_KEYS = Object.freeze([
   ...SECTIONS.hazard.map((s) => s.key),
 ]);
 
-/** PF2e degrees of success, as the chat card reports them. */
+/**
+ * PF2e degrees of success.
+ *
+ * Nothing in this feature reads a Recall Knowledge roll -- reveals are the GM's
+ * click, by design. These are here for Discerning Aid, whose bonus is keyed on
+ * the degree of success of the *Aid* check the ally's helper makes.
+ */
 export const OUTCOME = Object.freeze({
   critSuccess: "criticalSuccess",
   success: "success",

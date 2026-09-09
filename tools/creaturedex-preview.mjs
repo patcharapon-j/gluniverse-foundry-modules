@@ -9,7 +9,7 @@
  * meaning at a glance. That is a look, not an assertion.
  *
  * The markup here mirrors `templates/pf2e-creaturedex/dex.hbs` and the offer
- * card built in `chat.mjs`. `tools/creaturedex-check.mjs` refuses any
+ * dialog built in `falsify.mjs`. `tools/creaturedex-check.mjs` refuses any
  * `gldex-` class in this file that neither of those actually emits, so a
  * preview cannot drift into showing a window the module does not build.
  *
@@ -133,7 +133,7 @@ const window_ = (title, { gm }) => `
             <h2 class="gldex-detail-name">Mire Drake</h2>
             <span class="gldex-detail-kind">Creature</span>
           </div>
-          ${gm ? `<button type="button" class="gl-btn gldex-forget">Forget</button>` : ""}
+          ${gm ? `<div class="gldex-detail-tools"><button type="button" class="gl-btn gldex-refresh">Refresh</button><button type="button" class="gl-btn gldex-forget">Forget</button></div>` : ""}
         </header>
         ${gm ? `<p class="gldex-scope">Revealing here writes to every member of the party at once. What is shown is everything anyone knows.</p>` : ""}
         ${gm ? `<p class="gldex-complete">Creaturedex complete. Discerning Aid may be used against this creature.</p>` : ""}
@@ -145,23 +145,31 @@ const window_ = (title, { gm }) => `
   </div>
 </div>`;
 
-const offer = (kind, note) => `
-<div class="preview-frame preview-chat">
-  <div class="preview-label">Chat card — ${kind}</div>
-  <section class="gldex-offer" data-kind="${kind}">
-    <header class="gldex-offer-head">
-      <span class="gldex-offer-title">Creaturedex</span>
-      <span class="gldex-offer-subject">Mire Drake</span>
-    </header>
-    <p class="gldex-offer-line">${kind === "false" ? "Reveal one section falsely." : "Reveal 2 section(s)."}</p>
-    <div class="gldex-offer-picks">
-      <button type="button" class="gl-btn gldex-offer-pick" data-known="true" disabled>Characteristics</button>
-      <button type="button" class="gl-btn gldex-offer-pick">Defense</button>
-      <button type="button" class="gl-btn gldex-offer-pick">Offense</button>
+const lie = `
+<div class="preview-frame">
+  <div class="preview-label">Falsify — authoring a lie, before it lands</div>
+  <div class="gl-glass gldex-lie-root">
+    <p class="gldex-lie-lead">Author an incorrect stat block for <strong>Defense</strong> &middot; <strong>Mire Drake</strong></p>
+    <div class="gldex-lie-modes">
+      <button type="button" class="gl-btn gldex-lie-mode">Borrow a creature</button>
+      <button type="button" class="gl-btn gldex-lie-mode is-on">Doctor the truth</button>
     </div>
-    ${note}
-    <footer class="gldex-offer-foot">For Seri Voss</footer>
-  </section>
+    <p class="gldex-lie-note">Numbers drift within bounds. Immunities are never touched in either direction: hiding one costs a character their whole kit, and inventing one stops them trying at all.</p>
+    <div class="gldex-lie-actions">
+      <button type="button" class="gl-btn gldex-lie-gen">Generate</button>
+    </div>
+    <div class="gldex-lie-draft">
+      <p class="gldex-lie-note">Edit anything before it lands. This is the last screen that shows the lie before a player does.</p>
+      <label class="gldex-lie-row"><span class="gldex-lie-key">AC</span><input type="text" value="19"></label>
+      <label class="gldex-lie-row"><span class="gldex-lie-key">Saving Throws</span><input type="text" value="Fortitude +12, Reflex +11, Will +7"></label>
+      <label class="gldex-lie-row"><span class="gldex-lie-key">HP</span><input type="text" value="72"></label>
+      <label class="gldex-lie-row"><span class="gldex-lie-key">Immunities</span><input type="text" value="poison"></label>
+      <ul class="gldex-lie-extras"><li>2 abilit(y/ies) carried through as generated</li></ul>
+    </div>
+    <footer class="gldex-lie-foot">
+      <button type="button" class="gl-btn gldex-lie-send">Send the lie</button>
+    </footer>
+  </div>
 </div>`;
 
 const card = `
@@ -193,13 +201,14 @@ const html = `<!doctype html>
   /* A chat card inherits the log's type size, which is what makes an unsized
      button in one look wrong. Reproduce it rather than guessing. */
   .preview-chat { width:340px; font-size:14px; }
+  /* The Falsify dialog is an ApplicationV2 window; supply its box the same way. */
+  .preview-frame > .gldex-lie-root { width:560px; border:1px solid var(--gl-edge); }
 </style></head><body>
 ${window_("Player view — one section sealed", { gm: false })}
 ${window_("GM view — everyone selected, three controls, the lie labelled", { gm: true })}
 <div style="display:flex;flex-direction:column;gap:24px">
-  ${offer("reveal", `<p class="gldex-offer-note is-warn">A repeat attempt: this creature has not taken a turn since the last one.</p>`)}
-  ${offer("false", `<p class="gldex-offer-note is-hazard">Whatever is chosen will be recorded as true and shown to the player as true.</p>`)}
   ${card}
+  ${lie}
 </div>
 </body></html>`;
 

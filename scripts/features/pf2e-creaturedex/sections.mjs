@@ -28,6 +28,9 @@
  * feature is built entirely on that distinction.
  */
 
+import { SUITE_ID } from "../../core/const.mjs";
+import { ALL_SECTION_KEYS, FLAGS } from "./constants.mjs";
+
 const list = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter(Boolean);
 
 const signed = (n) => {
@@ -119,25 +122,39 @@ const abilityEntry = (item) => ({
 });
 
 /**
- * Route one ability to a section.
+ * Route one ability to a section, or admit that we cannot.
  *
- * PF2e's own category wins wherever it exists; the action type is the fallback,
- * never the primary, because a GM who deliberately filed an ability under
- * "interaction" meant it.
+ * A GM's own override wins outright — that is what an override is for. Then
+ * PF2e's `system.category`, which enumerates `interaction` / `defensive` /
+ * `offensive` and is the book's three headings under other names.
+ *
+ * And then **null**, not a guess. The field's schema default is `null`, PF2e's
+ * own NPC sheet never reads it (it groups abilities by action cost instead) and
+ * its only consumer anywhere in the system is a compendium-browser filter — so
+ * nothing pressures Paizo's bestiary data to fill it in, and most abilities
+ * arrive untagged. Guessing from the action cost gets a majority right and the
+ * rest *leak*: an offensive ability filed under Defense hands a player exactly
+ * the information they did not buy, and the stat block still looks ordinary.
+ *
+ * Returning null is what lets `buildSections` defer those to completion
+ * instead, which makes the uncertain case safe rather than leaky.
  */
 export function abilitySection(item) {
+  const override = item?.flags?.[SUITE_ID]?.[FLAGS.section] ?? null;
+  if (override && ALL_SECTION_KEYS.includes(override)) return override;
   const category = item?.system?.category ?? null;
   if (category === "interaction") return "characteristics";
   if (category === "defensive") return "defense";
   if (category === "offensive") return "offense";
-  const type = item?.system?.actionType?.value ?? "action";
-  if (type === "reaction" || type === "passive") return "defense";
-  return "offense";
+  return null;
 }
 
 function abilitiesBySection(actor) {
-  const out = { characteristics: [], defense: [], offense: [] };
-  for (const item of list(actor?.itemTypes?.action)) out[abilitySection(item)].push(abilityEntry(item));
+  const out = { characteristics: [], defense: [], offense: [], deferred: [] };
+  for (const item of list(actor?.itemTypes?.action)) {
+    const key = abilitySection(item);
+    out[key ?? "deferred"].push(abilityEntry(item));
+  }
   return out;
 }
 
@@ -341,12 +358,12 @@ function hazardSections(actor) {
  */
 export function buildSections(actor) {
   const kind = subjectKind(actor);
-  if (!kind) return { kind: null, sections: [] };
+  if (!kind) return { kind: null, sections: [], deferred: [] };
   const all = kind === "hazard" ? hazardSections(actor) : creatureSections(actor);
   const sections = all.filter(
     (s) => s.rows.length || s.abilities?.length || s.prose || s.spells?.length || s.strikes?.melee?.length || s.strikes?.ranged?.length
   );
-  return { kind, sections };
+  return { kind, sections, deferred: kind === "hazard" ? [] : abilitiesBySection(actor).deferred };
 }
 
 /** The keys a subject can actually have revealed. */

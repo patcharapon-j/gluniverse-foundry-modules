@@ -13,20 +13,27 @@
  *     thing. The book prints an exact field list per section and this is the
  *     only place that list is checked against the code.
  *
- *   • An ability with no `system.category` falls back to its action type. Get
- *     that fallback wrong and a homebrew creature's reaction lands under
- *     Offense, which looks like a perfectly ordinary stat block.
+ *   • An ability with no `system.category` must be DEFERRED, not guessed at.
+ *     PF2e's schema defaults that field to null and its own NPC sheet never
+ *     reads it, so most bestiary abilities arrive untagged; a guess from the
+ *     action cost gets a majority right and the rest *leak* — an offensive
+ *     ability filed under Defense hands a player exactly what they did not buy,
+ *     and the stat block still looks ordinary.
  *
- *   • The reveal socket is the one place in this suite where a *player's* click
- *     writes world state. A raw Foundry socket carries no attested identity, so
- *     the executing GM has to re-derive every claim from shared documents. If
- *     that ever degrades to trusting the payload, a player can hand themselves
- *     a completed creaturedex for anything on the board and no screen looks
- *     wrong.
+ *   • The store holds RENDERED SNAPSHOTS, not pointers. Foundry hands every
+ *     client the full Actor document, so a window that redacted a live actor
+ *     would be drawing a lock on the player's own screen over data one console
+ *     call away. Degrade the store back into "which sections were bought" and
+ *     the feature becomes theatre while every screen still looks right.
  *
- *   • Knowledge is keyed by the *base* actor. Key it by `actor.uuid` and every
- *     unlinked token becomes its own creature, so the party re-learns the same
- *     goblin eight times and loses all of it when the scene resets.
+ *   • Knowledge is keyed by the creature's *kind*, not its document. Key it by
+ *     `actor.uuid` and every duplicate and unlinked token becomes its own
+ *     creature, so the party re-learns the same goblin in every dungeon and
+ *     completes none of them.
+ *
+ *   • A lie is authored, and the pass that generates one must never touch an
+ *     immunity. Removing one empties a character's whole kit into something
+ *     that was never going to care; inventing one stops them trying at all.
  *
  *   • Two whole i18n families (`GLDEX.section.*`, `GLDEX.row.*`) are built at
  *     runtime from data, so nothing else catches a missing one — it renders as
@@ -53,7 +60,7 @@ const rules = await import(join(FEATURE, "rules.mjs"));
 const sectionsMod = await import(join(FEATURE, "sections.mjs"));
 const constants = await import(join(FEATURE, "constants.mjs"));
 
-const { revealCount, outcomeEffect, isComplete, missingSections, aidBonus, rollSection, canAttempt } = rules;
+const { isComplete, missingSections, aidBonus } = rules;
 const { buildSections, abilitySection, subjectKind, availableSections } = sectionsMod;
 const { SECTIONS, ALL_SECTION_KEYS, OUTCOME, SETTINGS, PREFIX } = constants;
 
@@ -79,23 +86,6 @@ if (SECTIONS.creature[0].key !== "characteristics" || SECTIONS.creature[2].key !
 
 /* ── 2. Pure rule logic ──────────────────────────────────────────────────── */
 
-if (revealCount(OUTCOME.critSuccess) !== 2) fail("rules: a critical success reveals two sections");
-if (revealCount(OUTCOME.success) !== 1) fail("rules: a success reveals one section");
-if (revealCount(OUTCOME.failure) !== 0) fail("rules: a failure reveals none");
-if (revealCount(OUTCOME.critFailure) !== 0) fail("rules: a critical failure reveals no TRUE section");
-
-if (outcomeEffect(OUTCOME.critFailure).kind !== "false") {
-  fail("rules: a critical failure must produce a false section, not nothing");
-}
-// The "It's Not a Secret" sidebar removes the effect *entirely*: a table that
-// can see the die cannot be lied to by it, so a quieter lie is not the fix.
-if (outcomeEffect(OUTCOME.critFailure, { noSecret: true }).kind !== "none") {
-  fail("rules: with secret checks off, a critical failure must teach nothing at all rather than a quieter lie");
-}
-if (outcomeEffect(OUTCOME.success, { noSecret: true }).count !== 1) {
-  fail("rules: 'no secret checks' must not touch any outcome but the critical failure");
-}
-
 if (!isComplete(["a", "b"], ["a", "b"])) fail("rules: knowing every available section completes the dex");
 if (isComplete(["a"], ["a", "b"])) fail("rules: a missing section is not a complete dex");
 // "you need only reveal the number of sections it has available"
@@ -113,19 +103,79 @@ if (aidBonus(OUTCOME.success, "legendary") !== 1) fail("aid: rank scales the cri
 if (aidBonus(OUTCOME.failure) !== 0) fail("aid: a failure grants nothing");
 if (aidBonus(OUTCOME.critFailure) !== -1) fail("aid: a critical failure is a -1 PENALTY, not a zero");
 
-const KEYS3 = ["characteristics", "defense", "offense"];
-if (rollSection(1, KEYS3) !== "characteristics") fail("rules: 1 on the d4 names the first section");
-if (rollSection(3, KEYS3) !== "offense") fail("rules: 3 on the d4 names the third section");
-if (rollSection(4, KEYS3) !== null) fail("rules: 4 on the d4 lets the player choose");
-// A simple hazard has fewer sections than the die can name; that has to read as
-// free choice, or a one-section subject would be harder to learn than a dragon.
-if (rollSection(3, ["complexity"]) !== null) fail("rules: a die past the last section must fall back to a free choice");
-if (rollSection(null, KEYS3) !== null) fail("rules: no die means a free choice");
+/* The doctoring pass, which is the only place this feature invents a number.
 
-if (!canAttempt(0, 0)) fail("rules: the first attempt is always allowed");
-if (canAttempt(1, 0)) fail("rules: a second attempt needs an observed turn");
-if (!canAttempt(1, 1)) fail("rules: one observed turn pays for one repeat");
-if (canAttempt(2, 1)) fail("rules: one observed turn must not pay for two repeats");
+   Two properties matter and neither is visible in a diff. A drift of zero is a
+   "lie" that is the truth, on the one row the player happens to check, with the
+   GM unable to see it from the dialog. And an immunity must survive in BOTH
+   directions: removing one is the case the design brief named, and adding one
+   costs the same character the same kit from the other side. */
+const TRUTH = {
+  key: "defense",
+  rows: [
+    { key: "ac", value: "21" },
+    { key: "saves", value: "Fort +14, Ref +10, Will +8" },
+    { key: "hp", value: "90" },
+    { key: "immunities", value: "poison, precision" },
+    { key: "resistances", value: "fire 10" },
+  ],
+  strikes: { melee: [{ name: "jaws", bonus: "+14", damage: "2d8+7 piercing" }], ranged: [] },
+};
+
+// A deterministic stream, so a miss here is reproducible rather than flaky.
+const stream = (seed) => () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+
+for (const seed of [1, 7, 99, 12345, 777777]) {
+  const lie = rules.doctorSection(TRUTH, { rng: stream(seed) });
+  const val = (k) => lie.rows.find((r) => r.key === k)?.value;
+  const truth = (k) => TRUTH.rows.find((r) => r.key === k)?.value;
+
+  if (val("immunities") !== truth("immunities")) {
+    fail(`doctor(seed ${seed}): immunities were altered — never, in either direction`);
+  }
+  // Off by default, so a resistance must be left alone unless asked for.
+  if (val("resistances") !== truth("resistances")) {
+    fail(`doctor(seed ${seed}): resistances shifted with the IWR option off`);
+  }
+  for (const key of ["ac", "saves", "hp"]) {
+    if (val(key) === truth(key)) {
+      fail(`doctor(seed ${seed}): ${key} came back unchanged, so the "lie" is the truth on that row`);
+    }
+  }
+  const ac = Number(val("ac"));
+  if (!Number.isFinite(ac) || Math.abs(ac - 21) > 2) fail(`doctor(seed ${seed}): AC drifted ${ac - 21}, outside ±2`);
+  const hp = Number(val("hp"));
+  if (!Number.isFinite(hp) || Math.abs(hp - 90) > 90 * 0.25) fail(`doctor(seed ${seed}): HP drifted outside ±20%`);
+  const dmg = lie.strikes.melee[0].damage;
+  if (!/^2d(6|10) \+?7 piercing$|^2d(6|10)\+7 piercing$/.test(dmg)) {
+    fail(`doctor(seed ${seed}): damage die moved more than one step (${dmg})`);
+  }
+}
+
+// With the option on, an IWR row may move — but the immunity still may not.
+{
+  const lie = rules.doctorSection(TRUTH, { rng: stream(3), iwr: true });
+  const val = (k) => lie.rows.find((r) => r.key === k)?.value;
+  if (val("immunities") !== "poison, precision") fail("doctor: the IWR option must not unlock immunities");
+  if (val("resistances") === "fire 10") fail("doctor: with the IWR option on, a resistance must actually move");
+}
+
+/* And the same rule, structurally.
+
+   The behavioural test above cannot bite on its own: a PF2e immunity list is
+   words (`poison, precision`) with no digits in it, so routing `immunities`
+   into the numeric-drift branch changes nothing and passes every value check
+   while stating in the source that immunities are fair game. The next row
+   shape that carries a number would then start drifting. So the switch itself
+   is pinned: `immunities` must never appear as a case it mutates. */
+{
+  const doctorSrc = read("scripts/features/pf2e-creaturedex/rules.mjs");
+  const body = doctorSrc.slice(doctorSrc.indexOf("export function doctorSection"));
+  const sw = body.slice(body.indexOf("switch (row.key)"), body.indexOf("return row;"));
+  if (/case "immunities"/.test(sw)) {
+    fail("doctor: `immunities` is a case the doctoring switch mutates — it must never be, in either direction");
+  }
+}
 
 /* ── 3. The book's field lists ───────────────────────────────────────────── */
 
@@ -206,9 +256,24 @@ if (abilitySection(ability("x", "interaction")) !== "characteristics") fail("sec
 if (abilitySection(ability("x", "defensive")) !== "defense") fail("sections: a defensive ability belongs to Defense");
 if (abilitySection(ability("x", "offensive")) !== "offense") fail("sections: an offensive ability belongs to Offense");
 // The fallback, which is what homebrew and importers actually hit.
-if (abilitySection(ability("x", null, "reaction")) !== "defense") fail("sections: an uncategorised reaction falls back to Defense");
-if (abilitySection(ability("x", null, "passive")) !== "defense") fail("sections: an uncategorised passive falls back to Defense");
-if (abilitySection(ability("x", null, "action")) !== "offense") fail("sections: an uncategorised action falls back to Offense");
+/* An untagged ability must route NOWHERE. PF2e's schema defaults `category` to
+   null and its own NPC sheet never reads the field, so most bestiary abilities
+   arrive untagged — a guess from the action cost gets a majority right and the
+   rest LEAK, handing a player who bought Defense an offensive ability while the
+   stat block still looks entirely ordinary. Null is what lets buildSections
+   hold them back until the entry is complete, at which point there is nothing
+   left to leak. */
+for (const type of ["reaction", "passive", "action", "free"]) {
+  if (abilitySection(ability("x", null, type)) !== null) {
+    fail(`sections: an uncategorised ${type} is being guessed at rather than deferred, which leaks it into a section nobody bought`);
+  }
+}
+// A GM's own override still wins outright — that is what an override is for.
+const OVERRIDDEN = { ...ability("x", null, "action"), flags: { "gluniverse-foundry-modules": { "dex.section": "defense" } } };
+if (abilitySection(OVERRIDDEN) !== "defense") fail("sections: a per-item GM override must beat everything");
+// And a deferred ability has to actually come out somewhere, or it is deleted
+// rather than held back.
+if (!buildSections(NPC).deferred) fail("sections: buildSections drops uncategorised abilities instead of deferring them");
 
 if (!byKey.offense?.strikes?.melee?.length) fail("sections: melee strikes are missing from Offense");
 if (!byKey.offense?.strikes?.ranged?.length) fail("sections: a `melee` item carrying a range is a RANGED strike");
@@ -249,43 +314,82 @@ if (!hazRows.complexity?.includes("stealth")) fail("sections: Stealth belongs to
 if (subjectKind({ type: "character" }) !== null) fail("sections: a PC is not a creaturedex subject");
 if (availableSections(NPC).length !== 3) fail("sections: a full creature offers three sections");
 
-/* ── 4. The socket may not trust its payload ─────────────────────────────── */
+/* ── 4. Nothing watches a roll ───────────────────────────────────────────── */
 
-const revealSrc = read("scripts/features/pf2e-creaturedex/reveal.mjs");
-const applyBody = revealSrc.slice(revealSrc.indexOf("export async function applyReveal"));
-const applyEnd = applyBody.indexOf("\n}");
-const apply = applyEnd < 0 ? applyBody : applyBody.slice(0, applyEnd);
-
-for (const [needle, why] of [
-  ["game.user?.isGM", "a non-GM client cannot write world state, so the guard has to be here"],
-  ["game.messages", "the offer must be re-read from the message, never taken from the payload"],
-  ["testUserPermission", "the asking user must actually own the character the knowledge is filed under"],
-  ["offer.remaining", "an offer already spent must not pay out twice"],
-  ["available.includes(section)", "a section the subject does not have must be refused"],
-  [
-    "SUBJECT_FLAG",
-    "the card must be one this feature stamped, and the claimed creature and character must be the ones it " +
-      "stamped — otherwise any message carrying an outcome, a player's own attack roll included, is a valid ticket",
-  ],
-  ["stamp.uuid !== subjectUuid", "the claimed subject must match the stamp rather than be taken on trust"],
-  ["stamp.owner !== ownerId", "the claimed character must match the stamp rather than be taken on trust"],
-]) {
-  if (!apply.includes(needle)) {
-    fail(`reveal: applyReveal no longer checks \`${needle}\` — ${why}`);
+/* The reveal is the GM's click. That was a deliberate scope decision and it is
+   one a later change could quietly undo by "helpfully" wiring the chat card
+   back up — which would put a player's click on the write path of a world
+   setting and re-introduce a socket that has to re-derive every claim it is
+   handed. The absence is the invariant, so the absence is what is pinned. */
+for (const gone of ["chat.mjs", "reveal.mjs"]) {
+  if (existsSync(join(FEATURE, gone))) {
+    fail(`${gone} is back: reveals are the GM's click, not a Recall Knowledge hook`);
   }
 }
-if (!/activeGM/.test(revealSrc)) {
-  fail("reveal: the socket handler must run on exactly one GM, or two logged-in GMs both apply the same reveal");
+const appSrcEarly = read("scripts/features/pf2e-creaturedex/app.mjs");
+const idxEarly = read("scripts/features/pf2e-creaturedex/index.mjs");
+for (const [needle, why] of [
+  [/renderChatMessageHTML/, "a chat-card hook is back"],
+  [/emitSocket|onSocket/, "a socket is back, and this feature has no payload it could safely trust"],
+  [/flags\.pf2e\.context\.outcome|context\?\.outcome/, "a roll outcome is being read"],
+]) {
+  for (const [where, src] of [["app.mjs", appSrcEarly], ["index.mjs", idxEarly]]) {
+    if (needle.test(src)) fail(`${where}: ${why} — the reveal is the GM's click`);
+  }
 }
 
-/* ── 5. Identity ─────────────────────────────────────────────────────────── */
+/* ── 5. Identity, and the snapshot store ─────────────────────────────────── */
 
+/* A dex entry is a creature KIND. The compendium source is that identity where
+   it exists, because it is what survives every copy made from the entry; the
+   name-and-level slug is the fallback for a world actor or an imported one.
+   Keying on `actor.uuid` would file the compendium goblin, the world duplicate
+   and the imported one separately — three monsters to Foundry, one to the
+   fiction, and a dex that is never completed. */
+const identity = await import(join(FEATURE, "identity.mjs"));
+const { dexKey, slugify } = identity;
+
+const COMPENDIUM = { name: "Goblin Warrior", _stats: { compendiumSource: "Compendium.pf2e.pathfinder-bestiary.Actor.abc" }, system: { details: { level: { value: 1 } } } };
+const WORLD_COPY = { name: "Goblin Warrior", _stats: {}, system: { details: { level: { value: 1 } } } };
+const IMPORTED = { name: "goblin  warrior", _stats: {}, system: { details: { level: { value: 1 } } } };
+const ELITE = { name: "Goblin Warrior", _stats: {}, system: { details: { level: { value: 3 } } } };
+
+if (dexKey(COMPENDIUM) !== "Compendium.pf2e.pathfinder-bestiary.Actor.abc") {
+  fail("identity: the compendium source must win, or every copy of a bestiary entry is its own creature");
+}
+if (dexKey(WORLD_COPY) !== dexKey(IMPORTED)) {
+  fail("identity: two spellings of the same world creature must land on one key");
+}
+if (dexKey(WORLD_COPY) === dexKey(ELITE)) {
+  fail("identity: a level-shifted variant must key separately — the ordinary goblin's AC must not answer for the elite");
+}
+if (slugify("Sløugh's  Wärden!") !== "sloughs-warden") {
+  fail(`identity: slugify does not normalise (got ${slugify("Sløugh's  Wärden!")})`);
+}
+// An unlinked token carries a synthetic actor naming the TOKEN.
+const TOKEN_ACTOR = { isToken: true, token: { baseActor: WORLD_COPY }, name: "Goblin Warrior (2)", _stats: {}, system: {} };
+if (dexKey(TOKEN_ACTOR) !== dexKey(WORLD_COPY)) {
+  fail("identity: an unlinked token must resolve to its base actor, or every copy on the map is its own creature");
+}
+
+/* The store keeps what was handed over, not a pointer to read it back from. */
 const storeSrc = read("scripts/features/pf2e-creaturedex/store.mjs");
-const keyBody = storeSrc.slice(storeSrc.indexOf("export function subjectKey"));
-if (!/baseActor/.test(keyBody.slice(0, keyBody.indexOf("\n}")))) {
-  fail(
-    "store: subjectKey does not resolve an unlinked token to its base actor, so every token becomes its own creature"
-  );
+for (const [needle, why] of [
+  [/export async function reveal\(subject, owner, keys, snapshots/, "reveal must take the rendered snapshots it is storing"],
+  [/export function trueSnapshot|export const trueSnapshot/, "the truth snapshot must be readable back out"],
+  [/export async function refresh\(/, "the GM needs a way to re-take a stale snapshot"],
+]) {
+  if (!needle.test(storeSrc)) fail(`store: ${why}`);
+}
+/* Redacting the last holder of a section must drop the stored truth with it, or
+   the store keeps content nobody was told — which is the one guarantee it has. */
+if (!/delete\s+data\[subject\]\?\.sections\?\.\[section\]/.test(storeSrc)) {
+  fail("store: redact leaves the truth snapshot behind after the last holder loses the section");
+}
+/* And the window must not read the creature to draw a section. */
+const appSrcSnap = read("scripts/features/pf2e-creaturedex/app.mjs");
+if (/renderSection\(\s*section\s*\)/.test(appSrcSnap)) {
+  fail("app: a section is being rendered from the live actor rather than from its stored snapshot");
 }
 
 /* ── 6. Settings, prefixes and i18n ──────────────────────────────────────── */
@@ -338,19 +442,19 @@ for (const key of rowKeysUsed) {
 for (const kind of ["creature", "hazard"]) {
   if (!has(`GLDEX.kind.${kind}`)) fail(`i18n: GLDEX.kind.${kind} is missing`);
 }
-for (const kind of ["reveal", "false", "none"]) {
-  if (!has(`GLDEX.offer.${kind}`)) fail(`i18n: GLDEX.offer.${kind} is missing`);
+for (const key of ["both", "prose", "sections"]) {
+  if (!has(`GLDEX.delivery.${key}`)) fail(`i18n: GLDEX.delivery.${key} is missing — it is a settings choice label`);
 }
 
 // Static keys, swept out of the source so a rename on one side is caught.
 const sources = [
   "scripts/features/pf2e-creaturedex/app.mjs",
-  "scripts/features/pf2e-creaturedex/chat.mjs",
-  "scripts/features/pf2e-creaturedex/reveal.mjs",
+  "scripts/features/pf2e-creaturedex/falsify.mjs",
   "scripts/features/pf2e-creaturedex/render.mjs",
   "scripts/features/pf2e-creaturedex/aid.mjs",
   "scripts/features/pf2e-creaturedex/index.mjs",
   "templates/pf2e-creaturedex/dex.hbs",
+  "templates/pf2e-creaturedex/falsify.hbs",
 ].map(read).join("\n");
 for (const match of sources.matchAll(/["'`](GLDEX\.[A-Za-z0-9_.]+)["'`]/g)) {
   if (!has(match[1])) fail(`i18n: ${match[1]} is referenced but not defined`);
@@ -385,7 +489,7 @@ for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
     if (m) sized.push(m[1]);
   }
 }
-for (const surface of ["gldex-root", "gldex-offer"]) {
+for (const surface of ["gldex-root", "gldex-lie-root"]) {
   if (!sized.includes(surface)) {
     fail(
       `styles: .${surface} .gl-btn declares no font-size, so its buttons take the host's type ` +
@@ -417,10 +521,37 @@ if (!existsSync(join(ROOT, previewPath))) {
   }
   // Classes the renderer builds by concatenation, which the sweep above cannot
   // see as whole tokens.
-  for (const suffix of ["head", "title", "subject", "line", "picks", "pick", "note", "foot"]) {
-    emitted.add(`gldex-offer-${suffix}`);
-  }
+  for (const suffix of ["line", "done"]) emitted.add(`gldex-card-${suffix}`);
   const preview = read(previewPath);
+  /* Every class the preview draws must have a rule behind it.
+
+     This is the third direction and it is the one that bit: deleting a block of
+     CSS around a class that is still emitted leaves the element rendering as
+     bare text on the page, which no "is this class invented?" sweep can see and
+     which reads in a diff as removing something unused. */
+  /* Classes that deliberately carry no rule of their own: the three buttons take
+     everything from `.gl-btn` plus the surface sizing rule above, and the section
+     body is a bare container its parent lays out. Anything NOT listed here that
+     has lost its rule has lost a surface. */
+  const UNSTYLED_BY_DESIGN = new Set(["gldex-toggle", "gldex-refresh", "gldex-lie-gen", "gldex-section-body"]);
+  for (const cls of new Set([...preview.matchAll(/gldex-[a-z-]+/g)].map((x) => x[0]))) {
+    if (UNSTYLED_BY_DESIGN.has(cls)) continue;
+    // The class has to appear as a selector token of its own, not only as a
+    // longer name or an attribute-qualified variant: `.gldex-card[data-section]`
+    // rules survived the block that gave `.gldex-card` its box being deleted,
+    // and a \b test called that styled.
+    if (!new RegExp("\\." + cls + "(?![a-z0-9-\\[])").test(css)) {
+      fail(`styles: .${cls} is drawn by the preview and has no rule anywhere, so it renders unstyled`);
+    }
+  }
+  /* The sweep below only refuses classes the preview INVENTS. A control the
+     module ships and the preview never draws is the opposite drift and is
+     invisible to it, so the surfaces that get judged here are named. */
+  for (const shown of ["gldex-refresh", "gldex-forget", "gldex-lie-root", "gldex-lie-send", "gldex-card"]) {
+    if (!preview.includes(shown)) {
+      fail(`preview: .${shown} is shipped but the preview never draws it, so nobody ever looks at it`);
+    }
+  }
   for (const m of new Set([...preview.matchAll(/gldex-[a-z-]+/g)].map((x) => x[0]))) {
     if (!emitted.has(m)) fail(`preview: .${m} appears in the preview but nothing in the module emits it`);
   }
@@ -483,7 +614,7 @@ const mayView = bodyOf("static mayView(actor)");
 if (!/game\.user\.isGM/.test(mayView) || !/knownSections/.test(mayView) || !/falseSections/.test(mayView)) {
   fail("app: mayView no longer gates a non-GM on knowledge (both true and false sections), so it identifies unknown creatures");
 }
-if (!/return\s+known\s*\?\s*uuid\s*:\s*null/.test(mayView)) {
+if (!/return\s+known\s*\?\s*key\s*:\s*null/.test(mayView)) {
   fail("app: mayView returns a subject for a creature nothing is known about");
 }
 if (!/mayView\(/.test(bodyOf("static openForActor(actor)"))) {

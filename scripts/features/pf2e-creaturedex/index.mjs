@@ -7,9 +7,16 @@
  *
  * A stat block is three sections; Recall Knowledge buys them one at a time; all
  * three is a Completed Creaturedex, which grants the Discerning Aid reaction.
- * Every optional reading the book prints in a sidebar — Party Knowledge, It's
- * Not a Secret, the 1d4 pick — is a setting here rather than a decision baked
- * into the code, because the book prints them as choices for the table.
+ *
+ * ## The GM reveals; nothing watches a roll
+ *
+ * The book's trigger is a Recall Knowledge check, but the *module's* trigger is
+ * the GM pressing a button. That is deliberate and it is the whole shape of the
+ * feature: a table's knowledge is granted for reasons a die roll does not cover
+ * — a check made out of character, a creature nobody targeted, something a
+ * player worked out and was simply told. Watching rolls would make those the
+ * exceptions instead of the ordinary case, and it would put a player's click on
+ * the write path of a world setting for no gain.
  *
  * ## Its relationship with the Recall Knowledge feature
  *
@@ -25,11 +32,9 @@
 
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
+import { DELIVERY, FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
 import { CreaturedexApp, mayOpen } from "./app.mjs";
-import { onRenderChat, stampSubject } from "./chat.mjs";
-import { registerRevealSocket } from "./reveal.mjs";
-import { noteObserved, subjectKey } from "./store.mjs";
+import { dexKey } from "./identity.mjs";
 
 const L = (key) => {
   const s = game.i18n.localize(key);
@@ -55,34 +60,33 @@ function registerSettings() {
     default: {},
   });
 
-  game.settings.register(SUITE_ID, SETTINGS.party, bool(SETTINGS.party, false));
-  game.settings.register(SUITE_ID, SETTINGS.noSecret, bool(SETTINGS.noSecret, false));
-  game.settings.register(SUITE_ID, SETTINGS.randomSection, bool(SETTINGS.randomSection, false));
-  game.settings.register(SUITE_ID, SETTINGS.grantAid, bool(SETTINGS.grantAid, true));
-  game.settings.register(SUITE_ID, SETTINGS.chatOffer, bool(SETTINGS.chatOffer, true));
+  // Party Knowledge is ON. The sidebar presents sharing as the collaborative
+  // option, and a per-player dex locks the player who missed a session out of
+  // knowledge their character was standing next to.
+  game.settings.register(SUITE_ID, SETTINGS.party, bool(SETTINGS.party, true));
+  // Auto-granting an item to a PC is invasive, and the reaction is per-creature
+  // — a granted item has to consult the dex at use time anyway, so the grant
+  // buys almost nothing over printing the reaction on the entry.
+  game.settings.register(SUITE_ID, SETTINGS.grantAid, bool(SETTINGS.grantAid, false));
   game.settings.register(SUITE_ID, SETTINGS.playerAccess, bool(SETTINGS.playerAccess, true));
-}
+  game.settings.register(SUITE_ID, SETTINGS.doctorIwr, bool(SETTINGS.doctorIwr, false));
 
-/* ── observed turns ──────────────────────────────────────────────────────── */
-
-/**
- * A creature's turn ending is what pays for the next Recall Knowledge attempt
- * against it, so it is counted when the turn *ends* rather than when it starts.
- *
- * Only the active GM writes. Every client fires this hook, and a world setting
- * written by five clients at once is five round trips and a race.
- */
-function registerObservation() {
-  const seen = (combat, prior) => {
-    if (game.users?.activeGM !== game.user) return;
-    const combatant = prior?.combatantId ? combat?.combatants?.get(prior.combatantId) : null;
-    const actor = combatant?.actor ?? null;
-    if (!actor || !["npc", "hazard"].includes(actor.type)) return;
-    const key = subjectKey(actor);
-    if (!key) return;
-    noteObserved(key, combat?.id ?? null).catch((e) => warn("pf2e-creaturedex | observation failed", e));
-  };
-  Hooks.on("combatTurnChange", seen);
+  // How a Recall Knowledge check gets answered when `pf2e-recall` is also on.
+  // Explicit rather than accidental: the prose saying "you sense it is
+  // dangerous" beside a card printing AC 24 is two answers to one roll.
+  game.settings.register(SUITE_ID, SETTINGS.delivery, {
+    name: `GLDEX.settings.${SETTINGS.delivery.slice(PREFIX.length)}.name`,
+    hint: `GLDEX.settings.${SETTINGS.delivery.slice(PREFIX.length)}.hint`,
+    scope: "world",
+    config: true,
+    type: String,
+    choices: {
+      [DELIVERY.both]: "GLDEX.delivery.both",
+      [DELIVERY.prose]: "GLDEX.delivery.prose",
+      [DELIVERY.sections]: "GLDEX.delivery.sections",
+    },
+    default: DELIVERY.both,
+  });
 }
 
 /* ── the way in ──────────────────────────────────────────────────────────── */
@@ -103,7 +107,7 @@ function registerHeaderButtons() {
     const doc = app?.document ?? app?.actor ?? null;
     if (doc?.documentName !== "Actor") return null;
     if (doc.type === "character") return { ownerId: doc.id };
-    if (game.user.isGM && ["npc", "hazard"].includes(doc.type)) return { subjectUuid: doc.uuid };
+    if (game.user.isGM && ["npc", "hazard"].includes(doc.type)) return { subject: dexKey(doc), pending: doc };
     return null;
   };
 
@@ -209,9 +213,98 @@ function registerTokenHud() {
   });
 }
 
+/**
+ * A scene control, which is the browsable road in.
+ *
+ * The two moments this feature serves want different surfaces. "What do I know
+ * about *this* thing" is one click from a token, mid-combat. "What have we
+ * learned" is a shelf you browse between sessions, and a shelf needs somewhere
+ * to live that is not attached to any one creature — which is what this is.
+ *
+ * It sits under Token controls rather than getting a layer of its own: a whole
+ * scene-control group for one button is a lot of chrome, and Foundry's own
+ * grouping puts "things about creatures on the board" there.
+ *
+ * v13 changed `getSceneControlButtons` from an array of groups to a record
+ * keyed by name, with `tools` a record rather than an array. Both shapes are
+ * handled because the suite supports v13 and v14, and reading the wrong one is
+ * a button that simply never appears.
+ */
+function registerSceneControl() {
+  Hooks.on("getSceneControlButtons", (controls) => {
+    try {
+      if (!mayOpen()) return;
+      const group = Array.isArray(controls) ? controls.find((c) => c.name === "token") : controls?.token;
+      if (!group) return;
+      const tool = {
+        name: "gldex",
+        title: "GLDEX.app.open",
+        icon: "fa-solid fa-book-skull",
+        button: true,
+        visible: true,
+        order: 99,
+        onChange: () => CreaturedexApp.open({}),
+        onClick: () => CreaturedexApp.open({}),
+      };
+      if (Array.isArray(group.tools)) {
+        if (!group.tools.some((t) => t.name === "gldex")) group.tools.push(tool);
+      } else if (group.tools && typeof group.tools === "object") {
+        group.tools.gldex ??= tool;
+      }
+    } catch (error) {
+      warn("pf2e-creaturedex | could not add the scene control", error);
+    }
+  });
+}
+
+/**
+ * Right-click an actor in the sidebar.
+ *
+ * The GM's mental model is "this creature", and sometimes that creature is a
+ * row in the Actors directory rather than a token on a map — prep, or a
+ * creature that is not on the board at all. `pf2e-recall` reaches its own panel
+ * the same way, so this reads as native rather than as a second convention.
+ *
+ * v13 renamed `getActorDirectoryEntryContext` to `getActorContextOptions`.
+ * Both are registered because the suite supports v13 and v14; the guard keeps a
+ * double registration from producing two identical menu items.
+ */
+function registerContextMenu() {
+  /**
+   * A FRESH entry object per menu, never a shared one. ContextMenu writes
+   * `entry.element` onto the object it renders and resolves a click by matching
+   * it back, so one object pushed into two menus has the two of them fighting
+   * over a single slot and the loser's click silently does nothing.
+   */
+  const entry = () => ({
+    name: "GLDEX.app.open",
+    icon: '<i class="fa-solid fa-book-skull"></i>',
+    condition: (target) => {
+      if (!mayOpen()) return false;
+      const li = target instanceof HTMLElement ? target : target?.[0];
+      const actor = game.actors?.get(li?.dataset?.entryId ?? li?.dataset?.documentId);
+      if (!actor || !["npc", "hazard"].includes(actor.type)) return false;
+      return !!CreaturedexApp.mayView(actor);
+    },
+    callback: (target) => {
+      const li = target instanceof HTMLElement ? target : target?.[0];
+      const actor = game.actors?.get(li?.dataset?.entryId ?? li?.dataset?.documentId);
+      return actor ? CreaturedexApp.openForActor(actor) : null;
+    },
+  });
+
+  const add = (options) => {
+    if (options.some((o) => o.name === "GLDEX.app.open")) return;
+    options.push(entry());
+  };
+  Hooks.on("getActorDirectoryEntryContext", (_html, options) => add(options));
+  Hooks.on("getActorContextOptions", (_app, options) => add(options));
+}
+
 function onInit() {
   registerHeaderButtons();
-  registerObservation();
+  registerSceneControl();
+  registerContextMenu();
   registerKeybinding();
   registerTokenHud();
   // An open window follows the target, so a player aiming at something they
@@ -220,15 +313,9 @@ function onInit() {
     if (user !== game.user || !targeted) return;
     if (token?.actor) CreaturedexApp.followTarget(token.actor);
   });
-  Hooks.on("createChatMessage", (message) => {
-    stampSubject(message).catch((e) => warn("pf2e-creaturedex | stamp failed", e));
-  });
-  Hooks.on("renderChatMessageHTML", onRenderChat);
 }
 
-function onReady() {
-  registerRevealSocket();
-}
+function onReady() {}
 
 Suite.register({
   id: FEATURE_ID,

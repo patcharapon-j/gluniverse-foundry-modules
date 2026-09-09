@@ -17,7 +17,7 @@
    this feature strikes at 9-11px, and the padding inflates with it until the
    label crowds its own border. Every button this feature ships is sized here. */
 .gldex-root .gl-btn,
-.gldex-offer .gl-btn {
+.gldex-lie-root .gl-btn {
   font-size: var(--gl-fs-3xs);
   line-height: var(--gl-lh-tight);
   padding: 0.55em 0.9em;
@@ -309,51 +309,7 @@
 
 .gldex-empty { color: var(--gl-text-faint); font-size: var(--gl-fs-xs); font-style: italic; }
 
-/* ── The offer, on a Recall Knowledge card ────────────────────────────────── */
-
-.gldex-offer {
-  --gl-accent: var(--gl-cyan);
-  position: relative;
-  margin-top: var(--gl-sp-5);
-  padding: var(--gl-sp-4) var(--gl-sp-5);
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 42%), var(--gl-surface-inset);
-  border: 1px solid var(--gl-edge);
-  box-shadow: var(--gl-etch-soft);
-  font-family: var(--gl-display);
-}
-/* A critical failure's offer is the same shape in a different key, so the GM
-   never mistakes which one they are resolving. */
-.gldex-offer[data-kind="false"] { --gl-accent: var(--gl-hazard); }
-
-.gldex-offer-head { display: flex; align-items: center; gap: var(--gl-sp-4); }
-.gldex-offer-title {
-  color: var(--gl-accent);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-xwide);
-  text-transform: uppercase;
-}
-.gldex-offer-subject { margin-left: auto; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-.gldex-offer-line { margin: var(--gl-sp-3) 0 0; color: var(--gl-text); font-size: var(--gl-fs-xs); }
-.gldex-offer-picks { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3); margin-top: var(--gl-sp-4); }
-/* Already known: still listed, so the player can see what they have, but not
-   spendable. */
-.gldex-offer-pick[data-known="true"] { color: var(--gl-text-faint); }
-.gldex-offer-note { margin: var(--gl-sp-3) 0 0; color: var(--gl-text-faint); font-size: var(--gl-fs-3xs); }
-.gldex-offer-note.is-warn { color: var(--gl-warn); }
-.gldex-offer-note.is-hazard { color: var(--gl-hazard); }
-.gldex-offer-foot {
-  margin-top: var(--gl-sp-4);
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-
-/* ── The announcement ─────────────────────────────────────────────────────── */
+/* ── The reveal notice ─────────────────────────────────────────────────────── */
 
 .gldex-card {
   --gl-accent: var(--gl-cyan);
@@ -377,8 +333,74 @@
   text-transform: uppercase;
 }
 
+
 /* ── The token HUD button ─────────────────────────────────────────────────── */
 
 /* Foundry styles `.control-icon` itself; this only carries the accent so the
    glyph reads as this feature's rather than as one of the core controls. */
 .gldex-hud > i { color: var(--gl-cyan); }
+
+/* ── Authoring a lie ──────────────────────────────────────────────────────── */
+
+/* This window is the last screen that shows a falsehood before a player does,
+   so it reads in the hazard key throughout rather than in the window accent —
+   a GM glancing at it should never mistake it for an ordinary reveal. */
+.gldex-lie-root {
+  --gl-accent: var(--gl-hazard);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-5);
+}
+.gldex-lie-lead { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+.gldex-lie-lead strong { color: var(--gl-accent); font-family: var(--gl-tech); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
+
+.gldex-lie-modes { display: flex; gap: var(--gl-sp-3); }
+.gldex-lie-mode.is-on { border-color: var(--gl-accent); color: var(--gl-accent); }
+
+.gldex-lie-field { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.gldex-lie-field > span {
+  flex: 0 0 auto;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-lie-field select { flex: 1 1 auto; min-width: 0; }
+
+.gldex-lie-note { margin: 0; color: var(--gl-text-faint); font-size: var(--gl-fs-3xs); line-height: var(--gl-lh-snug); }
+.gldex-lie-actions { display: flex; justify-content: flex-start; }
+
+.gldex-lie-draft { display: flex; flex-direction: column; gap: var(--gl-sp-3); }
+.gldex-lie-row { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.gldex-lie-key {
+  flex: 0 0 8.5em;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.gldex-lie-row input { flex: 1 1 auto; min-width: 0; font-size: var(--gl-fs-xs); }
+.gldex-lie-extras {
+  margin: 0;
+  padding-left: var(--gl-sp-5);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+}
+.gldex-lie-foot { display: flex; justify-content: flex-end; }
+.gldex-lie-send { border-color: var(--gl-accent); color: var(--gl-accent); }
+
+/* ── The GM's per-entry tools ─────────────────────────────────────────────── */
+
+.gldex-detail-tools { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
+
+/* Abilities PF2e left uncategorised, printed once the entry is finished. */
+.gldex-deferred-note {
+  margin: var(--gl-sp-4) 0 0;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+  font-style: italic;
+}
+.gldex-section-extra { --gl-accent: var(--gl-text-dim); }

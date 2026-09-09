@@ -30,7 +30,7 @@
       {{/if}}
       {{#each subjects}}
         <button type="button" class="gldex-entry{{#if selected}} is-on{{/if}}{{#if complete}} is-complete{{/if}}"
-                data-action="setSubject" data-uuid="{{uuid}}">
+                data-action="setSubject" data-key="{{key}}">
           <img class="gldex-entry-img" src="{{img}}" alt="">
           <span class="gldex-entry-meta">
             <span class="gldex-entry-name">{{name}}</span>
@@ -50,9 +50,15 @@
             <span class="gldex-detail-kind">{{detail.kindLabel}}</span>
           </div>
           {{#if isGM}}
-            <button type="button" class="gl-btn gldex-forget" data-action="forgetSubject" data-uuid="{{detail.uuid}}">
-              {{localize "GLDEX.forget.action"}}
-            </button>
+            <div class="gldex-detail-tools">
+              <button type="button" class="gl-btn gldex-refresh" data-action="refreshSubject"
+                      title="{{localize "GLDEX.app.refreshHint"}}">
+                {{localize "GLDEX.app.refresh"}}
+              </button>
+              <button type="button" class="gl-btn gldex-forget" data-action="forgetSubject" data-key="{{detail.key}}">
+                {{localize "GLDEX.forget.action"}}
+              </button>
+            </div>
           {{/if}}
         </header>
 
@@ -92,6 +98,19 @@
             <div class="gldex-section-body">{{{html}}}</div>
           </article>
         {{/each}}
+        {{#if detail.deferredCount}}
+          <p class="gldex-deferred-note">{{localize "GLDEX.app.deferred"}}</p>
+        {{/if}}
+        {{#if detail.deferred}}
+          <article class="gldex-section gldex-section-extra">
+            <header class="gldex-section-head">
+              <h3 class="gldex-section-label">{{localize "GLDEX.app.deferredTitle"}}</h3>
+            </header>
+            <div class="gldex-section-body">
+              {{#each detail.deferred}}{{{this}}}{{/each}}
+            </div>
+          </article>
+        {{/if}}
       {{else}}
         <p class="gldex-empty">{{localize "GLDEX.app.pick"}}</p>
       {{/if}}

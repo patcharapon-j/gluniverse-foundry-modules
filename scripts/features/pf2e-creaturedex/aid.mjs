@@ -64,7 +64,7 @@ function aidItemData() {
  * choice, and re-granting would override it every session.
  */
 export async function grantAid(pc) {
-  if (!pc || !get(SETTINGS.grantAid, true)) return false;
+  if (!pc || !get(SETTINGS.grantAid, false)) return false;
   if (hasAid(pc)) return false;
   try {
     await pc.createEmbeddedDocuments("Item", [aidItemData()]);

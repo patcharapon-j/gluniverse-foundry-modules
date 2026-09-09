@@ -807,26 +807,58 @@ compared against the code; a field in *two* sections is worse than a field in
 none, because the player buys one section and silently receives part of another.
 PF2e's own `system.category` (`interaction` / `defensive` / `offensive`) is the
 book's three headings under other names, so an ability routes itself — but the
-fallback for an ability with no category is guesswork, and guessing wrong files a
-real ability under the wrong section while the stat block still looks ordinary.
+field's schema default is `null`, PF2e's own NPC sheet never reads it (it groups
+by action cost instead) and its only consumer anywhere in the system is a
+compendium-browser filter, so most bestiary abilities arrive **untagged**. A
+guess from the action cost gets a majority right and the rest *leak*: an
+offensive ability filed under Defense hands a player exactly what they did not
+buy, and the stat block still looks ordinary. So an untagged ability routes
+nowhere and is **deferred to completion**, where there is nothing left to leak.
+`abilitySection` returning null is what makes that possible, and the check
+refuses a fallback that guesses.
 
-The load-bearing one is the socket. This is the only place in the suite where a
-**player's click writes world state**, because the book gives the choice of
-section to the player. A raw Foundry module socket carries no server-attested
-identity, so the executing GM ignores everything in the payload except three
-pointers and re-derives every claim from shared documents: the message and the
-outcome *it* records, how much of that offer the message's own flag says has
-already been paid out, whether the sending user actually owns that character, and
-whether the subject even has that section. Degrade any of it into trusting the
-payload and a player can hand themselves a completed creaturedex for anything on
-the board with no screen looking wrong. The check pins all five by name.
+**The reveal is the GM's click, and the absence of a roll hook is pinned.** The
+book's trigger is a Recall Knowledge check; the module's is a button, because
+knowledge gets granted at a real table for reasons a roll does not cover — a
+check made out of character, a creature nobody targeted, a correction after a
+misclick. Wiring it back to a chat card is a change that reads as an improvement
+in its own diff and puts a *player's click on the write path of a world setting*,
+which then needs a socket that re-derives every claim it is handed because a raw
+Foundry socket carries no attested identity. `chat.mjs`, `reveal.mjs`, a
+chat-card hook, a socket and any read of `context.outcome` are all refused
+outright for that reason.
 
-Two more. Knowledge is keyed by the **base** actor, so eight goblins are one
-creature to learn and the entry survives their tokens; keying on `actor.uuid`
-makes every unlinked token its own creature. And a false section is stored beside
-the true ones and rendered **identically** to its holder, marked only in the GM's
-view — a lie a player can see is not a lie, and that asymmetry is the mechanic
-rather than an oversight.
+The load-bearing one now is that **the store holds rendered snapshots, not
+pointers.** Foundry hands every client the full Actor document, so a player who
+holds no permission on a creature can still read `actor.system` from the console.
+A dex that stored "Seri knows Defense" and rendered it out of the live actor
+would be drawing a lock on the player's own screen over data one line away —
+theatre, with every screen looking correct. A section is rendered by the GM's
+client at reveal time and the *result* is stored, so the store contains exactly
+what was handed over; redacting the last holder drops the snapshot with it, which
+is that guarantee's other half. Snapshots are taken **post-flatten**, since
+`pf2e-flatten` rewrites NPC numbers and the player should see what will really
+apply at their table, and a section is therefore a memory rather than a live
+view — which is why there is a Refresh action.
+
+Two more. Identity is the creature's **kind**: the compendium source where there
+is one, else a normalised name-and-level slug. One goblin warrior exists as the
+compendium entry, a world duplicate and a `statsblock-import` creation all at
+once, so keying on `actor.uuid` files three monsters and completes none of them;
+the level is in the slug because a hand-built elite should not have the ordinary
+goblin's AC answer for it. And a false section is stored beside the true ones and
+rendered **identically** to its holder, marked only in the GM's view — a lie a
+player can see is not a lie.
+
+The doctoring pass that generates a lie has two rules a diff cannot show. A drift
+is **never zero**, or the one row a player checks comes back as the truth while
+the GM cannot tell from the dialog. And **immunities are never altered in either
+direction**: removing one empties the poison rogue's whole kit into something
+that was never going to care, and inventing one stops them trying at all. That
+one is pinned twice — behaviourally, and structurally on the switch — because a
+PF2e immunity list is words with no digits in it, so routing it into the numeric
+drift changes nothing, passes every value assertion, and leaves the source saying
+immunities are fair game for the next row shape that carries a number.
 
 ```bash
 node tools/creaturedex-check.mjs
@@ -839,16 +871,18 @@ plate can only be judged beside a revealed section:
 node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview-server.mjs 8953
 ```
 
-**Serve it.** The page puts the player view next to the GM view and draws both
-chat cards at a real chat log's 14px, which is the only size at which an unsized
-button looks wrong. See `docs/CREATUREDEX.md`.
+**Serve it.** The page puts the player view next to the GM view, draws the
+reveal notice at a real chat log's 14px (the only size at which an unsized button
+looks wrong) and shows the Falsify dialog, which is the last screen a lie passes
+before a player sees it. See `docs/CREATUREDEX.md`.
 
 Two more things it pins, both of which are silent. A whole-party reveal is a
 **fan-out**, one row per member, never a shared `party` row: Party Knowledge is a
 *read* — a union over the owners — so that a table can turn it off mid-campaign
 without inventing or destroying a fact, and a shared row would read back only
-while it was on. And every road onto the board — the `K` keybinding, the token
-HUD button, an open window following the target — has to ask `mayView` first. An
+while it was on. And every road in — the scene control, the `K` keybinding, the token
+HUD button, the actor-directory right-click, an open window following the target
+— has to ask `mayView` first. An
 unknown creature's entry prints its **actor** name and portrait, and a GM who hid
 a token's name did so on purpose, so a window that opens anyway quietly
 identifies the thing the party is looking at. Knowing a *lie* counts as knowing
