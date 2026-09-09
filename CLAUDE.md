@@ -762,6 +762,53 @@ a PF2e container with `system.stowing = false` already holds four items at full
 Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
 quietly reversed.
 
+**When touching the Creaturedex** (`features/pf2e-creaturedex/`), re-run its
+consistency check. Everything it covers fails *silently*.
+
+A section key is **data**: it is written into world knowledge the moment a GM
+reveals anything, so renaming one does not throw — it forgets every creature the
+party has ever learned, on the next load, with nothing reported. The book prints
+an exact field list per section and the check is the only place that list is
+compared against the code; a field in *two* sections is worse than a field in
+none, because the player buys one section and silently receives part of another.
+PF2e's own `system.category` (`interaction` / `defensive` / `offensive`) is the
+book's three headings under other names, so an ability routes itself — but the
+fallback for an ability with no category is guesswork, and guessing wrong files a
+real ability under the wrong section while the stat block still looks ordinary.
+
+The load-bearing one is the socket. This is the only place in the suite where a
+**player's click writes world state**, because the book gives the choice of
+section to the player. A raw Foundry module socket carries no server-attested
+identity, so the executing GM ignores everything in the payload except three
+pointers and re-derives every claim from shared documents: the message and the
+outcome *it* records, how much of that offer the message's own flag says has
+already been paid out, whether the sending user actually owns that character, and
+whether the subject even has that section. Degrade any of it into trusting the
+payload and a player can hand themselves a completed creaturedex for anything on
+the board with no screen looking wrong. The check pins all five by name.
+
+Two more. Knowledge is keyed by the **base** actor, so eight goblins are one
+creature to learn and the entry survives their tokens; keying on `actor.uuid`
+makes every unlinked token its own creature. And a false section is stored beside
+the true ones and rendered **identically** to its holder, marked only in the GM's
+view — a lie a player can see is not a lie, and that asymmetry is the mechanic
+rather than an oversight.
+
+```bash
+node tools/creaturedex-check.mjs
+```
+
+Zero problems required. It cannot show you how any of it looks, and the sealed
+plate can only be judged beside a revealed section:
+
+```bash
+node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview-server.mjs 8953
+```
+
+**Serve it.** The page puts the player view next to the GM view and draws both
+chat cards at a real chat log's 14px, which is the only size at which an unsized
+button looks wrong. See `docs/CREATUREDEX.md`.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a
