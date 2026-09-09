@@ -503,6 +503,42 @@ if (downfallAvailable({ turnSerial: 4, roundSerial: 2, lastTurn: 4, lastRound: n
 if (downfallAvailable({ turnSerial: 5, roundSerial: 2, lastTurn: null, lastRound: 2 })) {
   fail("boss: a trigger that already fired this round must stay spent until the boss's next initial turn");
 }
+
+/*
+ * Three things about how that state is stored, each of which shipped wrong and
+ * each of which fails without a word.
+ *
+ * `setFlag` merges, so writing `{}` over an object clears nothing: the
+ * per-trigger immunities have to live in an array, which is replaced wholesale.
+ * Stored as a map they survived the boss's initial turn and every Downfall
+ * became single-use for the whole encounter.
+ *
+ * `Number(null)` is 0 and `Number.isFinite(0)` is true, so coercing `lastTurn`
+ * turns "never suffered a Downfall" into "suffered one on turn 0" — and with
+ * `turnSerial` also starting at 0, the first Downfall of an encounter is refused
+ * as already spent.
+ *
+ * And `addCustomModifier` slugs the *label* it is handed, so removing by a slug
+ * of our own choosing matches nothing, `removeCustomModifier` returns quietly,
+ * and the re-add is then refused as a duplicate label: the penalty stays at −1
+ * however many separate Downfalls land.
+ */
+const downfallSource = read("scripts/features/pf2e-variant-rules/boss/downfall.mjs");
+if (/fired:\s*\{/.test(downfallSource)) {
+  fail("boss: the fired-trigger set is an object — setFlag merges, so it can never be cleared");
+}
+if (!/fired:\s*\[\]/.test(downfallSource)) {
+  fail("boss: the fired-trigger set must be an array, so writing [] actually clears it");
+}
+if (/lastTurn:\s*Number\.isFinite\(Number\(/.test(downfallSource)) {
+  fail("boss: lastTurn is coerced through Number(), which reads a stored null as turn 0 and spends the encounter's first Downfall");
+}
+if (!/typeof raw\.lastTurn === "number"/.test(downfallSource)) {
+  fail("boss: lastTurn must be read as a number without coercion, or null becomes 0");
+}
+if (!/entry\?\.label === label/.test(downfallSource)) {
+  fail("boss: the defence penalty is removed by a slug of our own choosing — PF2e stores the slug of the label, so nothing is removed and the penalty can never climb");
+}
 if (!downfallAvailable({ turnSerial: 5, roundSerial: 2, lastTurn: 4, lastRound: 1 })) {
   fail("boss: a new turn and a new round must re-arm a Downfall");
 }

@@ -29,11 +29,20 @@ import { bossProfile } from "./profile.mjs";
 
 const L = (key, data) => (data ? game.i18n.format(key, data) : game.i18n.localize(key));
 
-/** The blank state a combatant starts a fight in. */
+/**
+ * The blank state a combatant starts a fight in.
+ *
+ * `fired` is an array of Downfall ids rather than a map of id → round, and that
+ * is not a style choice: `setFlag` merges, so writing `{}` over an object does
+ * nothing at all. Clearing the per-trigger immunities at the boss's initial turn
+ * silently failed, leaving every Downfall single-use for the whole encounter
+ * instead of once per round. An array is replaced wholesale, so `[]` clears.
+ * The round is already carried by `roundSerial`; the map was storing it twice.
+ */
 const EMPTY = Object.freeze({
   turnSerial: 0,
   roundSerial: 0,
-  fired: {},
+  fired: [],
   lastTurn: null,
   triggered: [],
   telegraph: null,
@@ -45,8 +54,13 @@ export function readState(combatant) {
   return {
     turnSerial: Math.max(0, Math.trunc(Number(raw.turnSerial) || 0)),
     roundSerial: Math.max(0, Math.trunc(Number(raw.roundSerial) || 0)),
-    fired: raw.fired && typeof raw.fired === "object" ? { ...raw.fired } : {},
-    lastTurn: Number.isFinite(Number(raw.lastTurn)) ? Number(raw.lastTurn) : null,
+    fired: Array.isArray(raw.fired) ? raw.fired.filter((id) => typeof id === "string") : [],
+    // `Number(null)` is 0 and `Number.isFinite(0)` is true, so coercing here
+    // turned "this boss has never suffered a Downfall" into "it suffered one on
+    // turn 0" — and with `turnSerial` also starting at 0 the very first Downfall
+    // of an encounter was refused as already spent, with nothing to see but a
+    // greyed-out button.
+    lastTurn: typeof raw.lastTurn === "number" && Number.isFinite(raw.lastTurn) ? raw.lastTurn : null,
     triggered: Array.isArray(raw.triggered) ? raw.triggered.filter((id) => typeof id === "string") : [],
     telegraph: raw.telegraph && typeof raw.telegraph === "object" ? { ...raw.telegraph } : null,
   };
@@ -72,7 +86,7 @@ export function canTrigger(combatant, downfallId) {
     turnSerial: state.turnSerial,
     roundSerial: state.roundSerial,
     lastTurn: state.lastTurn,
-    lastRound: state.fired[downfallId] ?? null,
+    lastRound: state.fired.includes(downfallId) ? state.roundSerial : null,
   });
 }
 
@@ -89,7 +103,7 @@ export async function triggerDownfall(combatant, downfallId) {
 
   const state = readState(combatant);
   if (state.lastTurn === state.turnSerial) return { applied: false, reason: "spent" };
-  if (state.fired[downfallId] === state.roundSerial) return { applied: false, reason: "immune" };
+  if (state.fired.includes(downfallId)) return { applied: false, reason: "immune" };
 
   // Separate Downfalls stack; the same one twice does not.
   const triggered = state.triggered.includes(downfallId)
@@ -101,7 +115,7 @@ export async function triggerDownfall(combatant, downfallId) {
     ...state,
     triggered,
     lastTurn: state.turnSerial,
-    fired: { ...state.fired, [downfallId]: state.roundSerial },
+    fired: state.fired.includes(downfallId) ? state.fired : [...state.fired, downfallId],
     // "any Telegraphs currently active are disrupted" — and a disrupted
     // Telegraph means the ability cannot be used at all, not merely delayed.
     telegraph: null,
@@ -121,6 +135,14 @@ export async function triggerDownfall(combatant, downfallId) {
  * item or a rule element. `addCustomModifier` refuses a duplicate *label*, so a
  * penalty climbing from −1 to −2 has to be removed and re-added rather than
  * updated in place.
+ *
+ * The removal has to find what is actually there. `addCustomModifier` slugs the
+ * *label* it was given and stores that, so removing by a slug of this feature's
+ * own choosing matches nothing — and `removeCustomModifier` does not complain
+ * about a slug it cannot find, it simply returns. The old modifier would stay,
+ * the new one would be refused as a duplicate label, and the penalty would sit
+ * at −1 however many Downfalls landed. So the entries are found by label and
+ * removed by whatever slug they carry.
  */
 export async function syncPenalty(combatant, penalty) {
   const actor = combatant?.actor;
@@ -128,10 +150,16 @@ export async function syncPenalty(combatant, penalty) {
 
   const label = L("GLVR.boss.downfalls.modifier");
   for (const selector of DEFENCE_SELECTORS) {
-    try {
-      await actor.removeCustomModifier(selector, DOWNFALL_SLUG);
-    } catch {
-      /* nothing to remove is the normal case */
+    const slugs = new Set([DOWNFALL_SLUG]);
+    for (const entry of actor.system?.customModifiers?.[selector] ?? []) {
+      if (entry?.label === label && entry?.slug) slugs.add(entry.slug);
+    }
+    for (const slug of slugs) {
+      try {
+        await actor.removeCustomModifier(selector, slug);
+      } catch {
+        /* nothing to remove is the normal case */
+      }
     }
   }
   if (penalty >= 0) return;
@@ -148,7 +176,7 @@ export async function syncPenalty(combatant, penalty) {
 /** Clear every Downfall and its penalty. Called at the boss's initial turn. */
 export async function clearDownfalls(combatant) {
   const state = readState(combatant);
-  await writeState(combatant, { ...state, triggered: [], fired: {} });
+  await writeState(combatant, { ...state, triggered: [], fired: [] });
   await syncPenalty(combatant, 0);
 }
 
@@ -171,7 +199,7 @@ export async function advanceTurn(combatant, { initial = false } = {}) {
 
   if (initial) {
     next.triggered = [];
-    next.fired = {};
+    next.fired = [];
   }
   await writeState(combatant, next);
   if (initial) await syncPenalty(combatant, 0);
