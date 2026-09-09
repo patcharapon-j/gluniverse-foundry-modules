@@ -21,6 +21,7 @@
 
 import { clamp01, hex6 } from "../../../core/util.mjs";
 import { loadPixelImage, corsRetryUrl, invalidateAsset } from "./asset.mjs";
+import { tallyPixels, NEUTRAL_STATS } from "./tally.mjs";
 
 /** Width of the sampling thumbnail — also the number of columns we keep. */
 const THUMB_W = 32;
@@ -261,7 +262,17 @@ export function analyse(data) {
   if (ambientWeight > 0) ambient = ambient.map((v) => clamp01(v / ambientWeight));
   else ambient = [0.5, 0.5, 0.5];
 
-  return { ambient, columns, centroid: findKeyLight(lum), luminance: luma(ambient) };
+  return {
+    ambient,
+    columns,
+    centroid: findKeyLight(lum),
+    luminance: luma(ambient),
+    // The room half of the reference match. Deliberately measured over the whole
+    // frame rather than the row-weighted mean above: the ambient is asking "what
+    // colour is the light down where people stand", and this is asking "what
+    // tonal range is this painting drawn in", which is a property of all of it.
+    stats: tallyPixels(data, 1),
+  };
 }
 
 /** Build the degraded sample used when pixels are unavailable. */

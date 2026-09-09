@@ -121,6 +121,186 @@ export function registerSettings() {
         onChange: () => notifyPostFXConfig()
     });
 
+    // --- The reference match ---
+    //
+    // Four dials, and the reason there are four rather than one is the whole
+    // point of them. A single "match the background" slider gives a GM who does
+    // not like the result nothing to do but turn it down, which throws away the
+    // three parts that were working. Split, the failure names itself: a cast
+    // that has gone too far is a different complaint from a figure that has been
+    // flattened, and each has its own slider sitting next to it.
+    //
+    // All four are inert at 0, and 0 across all four is the look this feature
+    // had before any of it existed — so a world that dislikes the whole idea can
+    // return to the previous behaviour exactly rather than approximately.
+
+    // The one most GMs actually want. "Why does this character look pasted on"
+    // is a colour-temperature complaint far more often than anything else.
+    game.settings.register(MODULE_ID, k('ppMatchCast'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppMatchCast.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppMatchCast.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 70,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    game.settings.register(MODULE_ID, k('ppMatchSat'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppMatchSat.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppMatchSat.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 60,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // Lower than cast, deliberately. Level and contrast move the art's own
+    // drawing rather than the light on it, and a portrait's contrast is a
+    // decision its artist made — overriding that wholesale is how a grade starts
+    // damaging the thing it was meant to seat.
+    game.settings.register(MODULE_ID, k('ppMatchBright'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppMatchBright.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppMatchBright.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 50,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    game.settings.register(MODULE_ID, k('ppMatchTone'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppMatchTone.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppMatchTone.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 50,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // How hard skin resists the two chromatic dials above. Default high: a
+    // viewer's tolerance for a shifted skin tone is far narrower than for any
+    // other colour in the frame, because it is the one hue everybody has a
+    // lifetime of reference for. Turning this down is a legitimate choice for a
+    // cast that isn't human, which is why it is a dial and not a constant.
+    game.settings.register(MODULE_ID, k('ppSkinGuard'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppSkinGuard.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppSkinGuard.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 75,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // --- The light kit ---
+    //
+    // These two are multipliers over whatever the chosen style already says, so
+    // 100 is "the style's own balance" rather than a fixed quantity — a GM
+    // turning the wrap up on a cel stage still gets cel proportions.
+
+    game.settings.register(MODULE_ID, k('ppWrap'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppWrap.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppWrap.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 100,
+        range: { min: 0, max: 200, step: 10 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    game.settings.register(MODULE_ID, k('ppBacklight'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppBacklight.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppBacklight.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 100,
+        range: { min: 0, max: 200, step: 10 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // Blank means "derive it from the room", which is what all three colour
+    // overrides do until a GM says otherwise. An unparseable value is treated as
+    // blank rather than rejected — a half-typed hex must not black out the cast.
+    game.settings.register(MODULE_ID, k('ppBacklightColor'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppBacklightColor.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppBacklightColor.hint'),
+        scope: 'world',
+        config: true,
+        type: String,
+        default: '',
+        onChange: () => notifyPostFXConfig()
+    });
+
+    game.settings.register(MODULE_ID, k('ppFillColor'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppFillColor.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppFillColor.hint'),
+        scope: 'world',
+        config: true,
+        type: String,
+        default: '',
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // Spill reach. 100 is the falloff the shader had before it was adjustable.
+    game.settings.register(MODULE_ID, k('ppGlowRadius'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppGlowRadius.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppGlowRadius.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 100,
+        range: { min: 25, max: 200, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // How bright the art has to be just inside the outline before it throws any
+    // light at all. 0 clears everything but true black, so the dial starts inert
+    // and raising it confines the glow to what is actually lit.
+    game.settings.register(MODULE_ID, k('ppGlowSense'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppGlowSense.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppGlowSense.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    // Absolute rather than a multiplier, and off by default: halation is a
+    // statement about a *lens*, and none of the three styles is one. It is the
+    // one term here a table has to ask for.
+    game.settings.register(MODULE_ID, k('ppHalation'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppHalation.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppHalation.hint'),
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 100, step: 5 },
+        onChange: () => notifyPostFXConfig()
+    });
+
+    game.settings.register(MODULE_ID, k('ppHalationColor'), {
+        name: game.i18n.localize('GLSTAGE.settings.ppHalationColor.name'),
+        hint: game.i18n.localize('GLSTAGE.settings.ppHalationColor.hint'),
+        scope: 'world',
+        config: true,
+        type: String,
+        default: '',
+        onChange: () => notifyPostFXConfig()
+    });
+
     // Per-player escape hatch. Client-scoped so someone on a weak machine can
     // kill the shader without having to argue with the GM about the look.
     game.settings.register(MODULE_ID, k('ppQuality'), {

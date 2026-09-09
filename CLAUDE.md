@@ -176,6 +176,36 @@ Neither tool can check how any of this *looks* on real art; that needs a real
 session. See `docs/STAGE_LIGHTING.md` for the shading model, the edge terms and
 the asset-hosting contract (S3/CORS).
 
+**The grade is measured on both sides** (`postfx/tally.mjs`), and its four
+components — light colour, saturation, brightness, tonal range — are separable
+*by design*, not by tidiness: a GM who dislikes the result has to be able to find
+which part they dislike, and a single per-channel affine (the obvious
+simplification, and one multiply instead of four) makes every dial a different
+way of asking the same question. `postfx-check` asserts one dial moves one
+property, including that the cast's own luma is 1 — skip that and brightness and
+light colour both move the level. Every component is its own identity at 0, so a
+world can get the previous look back exactly.
+
+**Skin resists the two chromatic components and takes the two achromatic ones in
+full.** That asymmetry is the feature: a face in a blue night scene has to get
+darker without going blue. It is also why the four have to stay separable — if
+level and hue arrived as one matrix there would be nothing to split. The wiring
+is pinned structurally by `postfx-check` (the guard must not reach the level or
+contrast statements) and the *behaviour* only by the browser harness, which
+scores a skin patch against a luminance-matched grey under a hard blue cast.
+Matched luminance is the point: "skin changes less" is satisfied for free by a
+darker patch. Two easy-to-lose assertions sit beside it — that the guard leaves
+brightness alone (a guard that held back level too leaves every face floating at
+its original exposure in a dark room, which is worse than a blue one), and that
+it does not spill onto neutrals (an over-generous ellipse holds the match back
+everywhere, which reads as the feature not working).
+
+The light kit's `ppWrap` and `ppBacklight` are **multipliers over the style
+table**; halation, glow radius and glow sense are **absolute**, because no style
+carries a value for them to multiply — halation is a claim about a lens and none
+of the three styles is one. Don't "fix" that asymmetry by adding them to the
+tables: a multiplier over a table value of 0 is a dial that cannot be turned on.
+
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.
 Every GM control on an event resolves its row by the event's `id`, so an event

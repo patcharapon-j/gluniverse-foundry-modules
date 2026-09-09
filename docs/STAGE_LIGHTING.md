@@ -57,7 +57,7 @@ interior form the model cannot see.
 The claim that this is a change of *shape* is checked rather than asserted:
 `tools/stage-lighting-preview.mjs` measures the fill past the terminator (0.004
 against the realistic model's 0.012 — the cel fill sits on the dither floor) and
-the mean luminance over the whole figure (0.384 against 0.382, so the strength
+the mean luminance over the whole figure (0.385 against 0.385, so the strength
 dial does not need re-tuning when a stage switches style).
 
 ### Rim light only
@@ -80,8 +80,8 @@ Everything that puts a gradient on the body from the lamp's direction goes:
 
 `KEY_FLAT` is not zero, and that is the design. Dropping the key term would
 darken every stage by whatever it was carrying, so instead the lamp stops being a
-*direction* and becomes an *exposure*: mean luminance lands at 0.380 against the
-semi-realistic model's 0.382, so a GM switching style does not then have to
+*direction* and becomes an *exposure*: mean luminance lands at 0.385 against the
+semi-realistic model's 0.385, so a GM switching style does not then have to
 re-tune the strength dial.
 
 `RIM_ONLY_FALLOFF` is large because the field it raises sits at 0.5 exactly on
@@ -106,6 +106,117 @@ image's own alpha, which is the quantity the shader's spill term reads, reached
 by a different route; and because the `<img>` paints over its own shadow, on this
 path the light *cannot* reach the art. The strength dial rides in the shadow
 colour's alpha, since a filter has no opacity of its own.
+
+## The grade
+
+Two things happen to a character here, in this order, and they answer different
+questions. The **grade** asks what colour the character is *painted* in; the
+**lighting** asks what is falling on them. Everything below happens to `base`
+before a single light term is computed, which is what lets a rim land on already
+corrected skin rather than on the original art with a correction laid over it.
+
+For its first several versions the grade was open-loop: it measured the room and
+multiplied the art by a tint. Nothing ever looked at the art. That is enough to
+make a character warmer or cooler, and it is not enough to make one *belong* to a
+scene — because belonging is a claim about two things at once. A portrait painted
+in flat daylight and one painted with crushed blacks need opposite corrections to
+land in the same room, and a tint cannot tell them apart.
+
+So both sides are measured, into the same shape (`postfx/tally.mjs`):
+
+| | |
+| --- | --- |
+| `black` / `mid` / `white` | per channel, from a 64-bin histogram — the tonal range |
+| `mean` | per channel — the colour cast |
+| `luma` | overall level |
+| `sat` | overall chroma, luma-weighted |
+
+Neither measurement costs a decode. The normal prepass already walks every pixel
+of the art at 256px and the scene sampler already holds the background at 32px;
+this is one extra pass over a buffer that was being walked anyway.
+
+Two details in the measurement carry more weight than they look like they should.
+
+**The range is read at percentiles, not at min and max.** One specular ping, one
+anti-aliased corner of a signature, and a min/max white point is 1.0 for the
+entire figure — after which the contrast match is reading a single pixel and
+swinging the whole cast with it. 2% and 98%.
+
+**The subject is measured above the same alpha the bounding box uses.** The
+antialiased fringe of a cut-out carries whatever the art was lifted off, which is
+very often black; measuring it would put the subject's black point on the
+*background it came from* and then correct the character for it.
+
+### Four dials, not one
+
+`matchGrade` turns a pair of those into a correction with four components, and
+the fact that they are separable is the design rather than tidiness:
+
+| component | moves | leaves alone |
+| --- | --- | --- |
+| brightness | the mean level | contrast, hue, chroma |
+| tonal range | contrast about the subject's own mean | the mean level, hue, chroma |
+| light colour | hue | the level — it is luma-normalised |
+| saturation | chroma | the level, hue |
+
+A GM who does not like the result has to be able to find out *which part* they do
+not like, and they can only do that if moving one slider changes one thing. The
+obvious simplification here is a single per-channel affine mapping subject black
+and white onto scene black and white — it is one multiply and it does all four at
+once. It also makes every dial a different way of asking the same question, so
+none of them answers it.
+
+Two consequences of holding that line:
+
+- **Contrast pivots on the subject's own mean.** A raw black-to-white affine
+  moves the average as a side effect, so a stage that only wanted more contrast
+  quietly gets darker too.
+- **The cast is luma-normalised.** A per-channel multiplier re-exposes the
+  picture unless its own luma is exactly 1. Skip that and brightness and light
+  colour both move the level, and a GM chasing an over-bright figure has two
+  sliders that each half-work.
+
+Every component is its own identity at weight 0, so all four at 0 is the picture
+this feature produced before any of it existed — exactly, not approximately.
+Unmeasurable art or an unmeasurable room (a degraded scene, a flat background
+colour, a CORS failure) makes the match inert rather than making it up; the
+ambient tint that was always there still reaches the art.
+
+Every ratio is **clamped**, and the clamps are the difference between a grade and
+a disaster. The measurement can legitimately return an enormous number — a
+near-black portrait against a snowfield asks for roughly 6× — and obeying it does
+not put the character in the room, it destroys the character. Past the bounds the
+honest answer is that the art does not belong in that scene and no correction
+will fix it.
+
+### Skin
+
+A blue night exterior is a correct measurement of a blue night exterior, and
+applying it honestly turns every face in the cast blue. Nobody reads that as
+moonlight; they read it as broken, because a viewer's tolerance for a shifted
+skin tone is far narrower than for any other colour in the frame — it is the one
+hue everybody has a lifetime of reference for.
+
+So skin resists the two **chromatic** components and takes the two achromatic
+ones in full. A face in a dark room gets darker and loses contrast along with
+everything else; what it does not do is change hue. That asymmetry is the whole
+trick, and it is the reason the four components have to stay separable — if level
+and hue arrived as one matrix there would be nothing here to split.
+
+Detection is a soft ellipse in **chroma**, which is where skin actually clusters:
+across every human complexion the Cb/Cr pair moves far less than luma does, which
+is why video has subsampled it since the 1950s. One ellipse in chroma covers the
+whole range of real complexions; the same test in RGB matches only the pale end.
+Both ends of the luma range are excluded, because chroma is meaningless at
+either — near black it is quantisation, and near white it is a blown highlight. The
+second matters more than it sounds: a white shirt sits a long way up the Cr axis,
+and protecting it would leave an uncorrected patch in the middle of a corrected
+figure.
+
+`postfx-check` pins the asymmetry structurally — the skin term must not reach the
+level or contrast statements. If it ever does, skin stops being dimmed by the
+scene at all, and every face in the cast floats at its original exposure in a dark
+room, lit from nowhere.
 
 ## The shading model
 
@@ -148,6 +259,8 @@ The terms, in the order they apply:
 | rim halo | The wide inward falloff from the outline. On its own this is a soft wash with no edge in it. |
 | rim core | A tight, near-white line hugging the outline. On its own this is a drawn outline with no light in it. See below — together they are the effect. |
 | spill | The same edge continuing *past* the silhouette into the air. |
+| light wrap | The room's own colour arriving *inward* over the edge — the other direction of the same exchange, and the cheapest thing there is for stopping a cut-out looking cut out. Takes no `facing`: it is the whole background, not one lamp. |
+| backlight | Light coming *through* thin art rather than round it — hair, a hem, a sleeve seen edge on. Off the unrescaled field, which is what keeps it a wash instead of a third line on an edge that already has two. |
 | contour | Interior form edges — a lapel over a shirt, a collar, an arm crossing hair. The alpha silhouette cannot see any of them. |
 | specular / sheen | A tight lobe and a broad one. Both gated on thickness and on the art's own brightness, so a highlight lands on a pauldron and never on black cloth. The tight lobe alone puts a speck on metal and nothing on cloth; the broad one is what separates satin from wool and gives hair a band. |
 | grounding | The bottom of a full body sits in its own shadow. Framing-dependent — see below. |
@@ -211,6 +324,52 @@ canvas also carries the opaque character and `screen`/`plus-lighter` on the
 element would blow the figure itself through the background. Over the dark
 painted backgrounds this feature targets that is indistinguishable from additive.
 Over a bright background the spill is subtler than it should be.
+
+## The light kit
+
+Six dials a GM can reach, sitting on top of the model rather than inside it.
+Two of them are **multipliers over the chosen style's own balance**, so 100% is
+"whatever this style says" and turning the wrap up on a cel stage still gets cel
+proportions; the rest are absolute, because no style carries a value for them to
+multiply.
+
+| Setting | | |
+| --- | --- | --- |
+| `ppWrap` | ×, default 100% | the light wrap above |
+| `ppBacklight` | ×, default 100% | the backlight above |
+| `ppBacklightColor` | blank = the key | a backlight is the same lamp from behind |
+| `ppFillColor` | blank = `bounceLight` | the hue the shadow side leans toward |
+| `ppGlowRadius` | 100% = the old falloff | how far the spill reaches |
+| `ppGlowSense` | 0 = inert | how bright the art must be to throw light |
+| `ppHalation` | 0 = off | warm bleed in the outer spill |
+| `ppHalationColor` | blank = warm | see below |
+
+Three of those need a word about why they are shaped the way they are.
+
+**Glow radius rides on the exponent, not on the probe.** The falloff the spill
+descends is the prepass's blurred alpha, and its width was fixed at prepass time
+— so how fast we descend it is the only thing left to move.
+
+**Glow sense reads the rind guard's inner tap.** Out past the silhouette this
+fragment's own art is transparent by definition, so the only colour reading
+available is the one already being taken a few pixels inward for the dark-rind
+guard. At 0 it clears everything but true black, which is why the dial starts
+inert.
+
+**Halation is off by default and its colour is a setting rather than derived.**
+Every other colour here comes from the room; this one cannot, because halation is
+light that entered the emulsion or the sensor stack, scattered, and came back out
+around a highlight. Long wavelengths scatter furthest and are absorbed least, so
+the residue is always warm. A blue halation is not a stylistic variant of it — it
+is a different effect wearing its name. And it is off by default because it is a
+statement about a *lens*, and none of the three styles is one; they are claims
+about how light falls on a figure.
+
+`u_fill` — how far the shadow side travels toward the bounce hue — was a literal
+`0.7` in the shader and keeps that value, so this term starts exactly where it
+was. It is a dial now because it is a property of the room rather than of the
+model: a stage lit by one saturated source wants more separation than one
+standing in overcast daylight.
 
 ## Art with a dark rind
 
@@ -333,6 +492,32 @@ declared in the GLSL and looked up from JS. It cannot compile a line of GLSL,
 which matters more than it sounds: a shader that fails to compile does not throw,
 it degrades silently to the CSS fallback.
 
+It also carries the whole of the grade, which is pure arithmetic and therefore
+provable here rather than by eye:
+
+- **The measurement.** A flat field has no tonal range; a ramp reads black < mid
+  < white; four blown pixels in a thousand do not become the white point; and
+  transparent pixels are not measured whatever colour they carry.
+- **Inertness.** Every dial at zero is the exact identity, and so is an
+  unmeasurable subject or an unmeasurable room. This is what lets the feature
+  ship a changed default look without a world being unable to get the old one
+  back exactly.
+- **Separability**, one assertion per dial: brightness moves the level and
+  nothing else, tonal range the contrast and nothing else, and so on — including
+  that the cast's own luma is 1 to within 1e-4, which is what stops it
+  re-exposing the picture it is only supposed to re-tint.
+- **The clamps.** A near-black figure against a snowfield asks for roughly 6×;
+  the answer that comes back is bounded, and nothing returns NaN from a
+  zero-span subject.
+- **Shape checks** on three things the shader's comments claim and a diff would
+  show as one word: that the skin guard cannot reach the level or contrast
+  statements, that the wrap takes no `facing`, and that the backlight reads the
+  unrescaled field.
+- **Uniform writes**, which is the other half of the existing uniform check: a
+  location that is never written holds whatever the driver initialised it to for
+  the life of the context, with no error and nothing to see but a term that does
+  nothing — or one that does something constant to every character on the stage.
+
 `stage-lighting-preview` fills that gap. It serves the repo, drives the real
 `getNormalMap` / `prepare` / `draw` in headless Chromium against a synthetic
 character, and asserts the things a diff cannot show — that the shader compiles
@@ -343,6 +528,28 @@ silhouette, and that the rim stands down on art carrying its own black rind. Tha
 last one renders the same silhouette twice, differing only in the colour of its
 boundary pixels, so the two numbers are directly comparable.
 
+**The skin guard is measured here and nowhere else** — it lives entirely inside
+the fragment shader, so `postfx-check` can prove it is *wired* to the chromatic
+terms and only a real GL context can prove it does anything. It gets its own
+two-patch swatch rather than the figure above, for two reasons: the figure has no
+skin tone in it (its face is a pale off-white, deliberately — it is there to be a
+tonal step for the contour term), and giving it one would move every whole-figure
+mean the other assertions are written against.
+
+The swatch is a mid skin tone beside a grey of **matched luminance**, graded hard
+toward blue, and each patch is scored against the same render with the cast at
+identity. Matching the luminance is the point: the claim is not "skin changes
+less", which a darker patch would satisfy for free — it is that skin resists the
+*hue* while taking the level. Unguarded, the cast moves skin by +0.052 and the
+grey by +0.087; guarded, skin moves +0.023 and the grey is untouched at +0.087.
+
+Two of the four assertions there are the ones easiest to lose. That skin's
+*brightness* is unaffected by the guard — one that held back level too would
+leave every face floating at its original exposure in a dark room, lit from
+nowhere, which is far more obviously wrong than a blue one. And that the guard
+does not spill onto the neutral patch beside it — an over-generous ellipse holds
+the match back everywhere, which reads as the feature simply not working.
+
 Every one of those is a property of the effect rather than of one style, so each
 style is put through them again — none of it follows from the realistic set
 passing, because the styles are separate paths through the shader. On top of that
@@ -350,7 +557,7 @@ each gets the measurements that make it a style and not a second set of dials.
 
 For **cel**: the fill past the terminator is flat (0.004 spread against 0.012, on
 the flat coat panel only, so the art's own colour cannot leak into the number) and
-the exposure has not moved (0.384 against 0.382).
+the exposure has not moved (0.385 against 0.385).
 
 For **rim only**, two, and they answer different halves of the claim:
 
@@ -359,7 +566,7 @@ For **rim only**, two, and they answer different halves of the claim:
   shading gradient *is* the thing that would change; the mean shift is 0.000
   against the semi-realistic model's 0.025, over 127k pixels. Flatness alone
   would not have proved this — an even wash is still a wash.
-- **The rim reaches 3.2% of the figure's width in**, against 11.4%
+- **The rim reaches 2.9% of the figure's width in**, against 11.3%
   semi-realistic. Getting this number honestly took a second attempt: reading a
   luminance profile inward from the outline crosses the art's own materials — a
   dark shirt, then a pale coat — so any single baseline scores the *artwork's*

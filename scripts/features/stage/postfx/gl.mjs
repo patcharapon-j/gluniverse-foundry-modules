@@ -59,6 +59,42 @@ uniform float u_night;        // scotopic desaturation, 0..1
 uniform float u_shadow;       // dim amount, 0..1
 uniform float u_lift;         // highlight boost, 0..1
 
+// ── The reference match ──
+// Four corrections carrying the room's measured colour onto the character's
+// measured colour, worked out in tally.mjs and arriving here already weighted.
+// Each is its own identity when its dial is at zero — cast (1,1,1), gain 1,
+// bright 1, sat 1 — so the whole block is a no-op for a world that has never
+// touched it, which is the same contract u_cel and u_rimOnly hold to.
+//
+// They are separate uniforms rather than one combined matrix for the reason set
+// out in matchGrade: a GM who dislikes the result has to be able to find which
+// part they dislike, and a matrix cannot be asked that question. Two of the four
+// are chromatic and are what the skin guard below holds back; the other two move
+// level and contrast, which skin is supposed to receive in full.
+uniform vec3  u_mCast;        // per-channel hue correction, luma-normalised
+uniform float u_mGain;        // contrast about u_mPivot
+uniform float u_mPivot;       // the subject's own mean luma
+uniform float u_mBright;      // level correction
+uniform float u_mSat;         // chroma correction
+uniform float u_skin;         // how hard skin resists the two chromatic terms
+
+// ── Light wrap ──
+// The room's own colour, arriving *inward* over the silhouette edge. The spill
+// term already carries the character's light outward into the air; this is the
+// other half of the same physical story and the one that actually makes a
+// cut-out sit in a plate.
+uniform float u_wrap;
+uniform vec3  u_wrapColor;
+
+// ── The light kit ──
+uniform float u_backlight;    // broad transmission through thin regions
+uniform vec3  u_backColor;
+uniform float u_fill;         // how far the shadow side goes to the bounce hue
+uniform float u_glowRadius;   // spill reach multiplier
+uniform float u_glowSense;    // luma the art must reach just inside to glow
+uniform float u_halation;     // warm bleed in the outer spill
+uniform vec3  u_halationColor;
+
 // ── Style ──
 // 0 = the semi-realistic model, 1 = cel/anime. Every banded term below is a
 // crossfade against its continuous twin rather than a branch, so 0 is the old
@@ -123,6 +159,69 @@ const vec3 NIGHT = vec3(0.88, 1.00, 1.32);
 vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
 vec3 toSRGB(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
 
+// ── Skin ──
+// A blue night exterior is a correct measurement of a blue night exterior, and
+// applying it honestly turns every face in the cast blue. Nobody reads that as
+// "lit by moonlight"; they read it as broken, because a viewer's tolerance for a
+// shifted skin tone is far narrower than for any other colour in the frame —
+// it is the one hue everyone has a lifetime of reference for.
+//
+// So skin resists the *chromatic* half of the match and takes the achromatic
+// half in full. A face in a dark room gets darker and loses contrast along with
+// everything else; what it does not do is change hue. That asymmetry is the
+// whole trick, and it is why matchGrade keeps the four components separable —
+// if level and hue arrived as one matrix there would be nothing here to split.
+//
+// Detection is a soft ellipse in chroma, which is where skin actually clusters:
+// across every human complexion the Cb/Cr pair moves far less than luma does,
+// which is exactly why video codecs have subsampled it since the 1950s. Working
+// in chroma rather than in RGB is what makes one ellipse cover the whole range
+// of real complexions instead of matching only the pale end of it.
+const vec2 SKIN_CENTRE = vec2(0.395, 0.598);   // Cb, Cr, offset to 0..1
+const vec2 SKIN_RADIUS = vec2(0.105, 0.078);
+
+// Evaluated on *encoded* colour, because that is the space the chroma cluster
+// was ever measured in — linearising first moves the ellipse off the data.
+float skinMask(vec3 srgb) {
+  float cb = -0.169 * srgb.r - 0.331 * srgb.g + 0.500 * srgb.b + 0.5;
+  float cr =  0.500 * srgb.r - 0.419 * srgb.g - 0.081 * srgb.b + 0.5;
+  vec2 d = (vec2(cb, cr) - SKIN_CENTRE) / SKIN_RADIUS;
+  float inside = 1.0 - smoothstep(0.70, 1.30, length(d));
+
+  // Chroma is meaningless at both ends of the range: near black it is
+  // quantisation, near white it is a blown highlight. Both would otherwise
+  // "read as skin", and the second one matters — a white shirt sits a long way
+  // up the Cr axis and protecting it would leave a pale patch the grade never
+  // reached in the middle of an otherwise corrected figure.
+  float l = dot(srgb, LUMA);
+  return inside * smoothstep(0.06, 0.18, l) * (1.0 - smoothstep(0.86, 0.98, l));
+}
+
+/**
+ * Apply the reference match to linear art.
+ *
+ * Level and contrast ride on a *ratio* applied to the whole triplet, so they
+ * move brightness without touching hue — the same reasoning that keeps the
+ * diffuse multiplier a ratio rather than a re-derived pair of lights. Only the
+ * last two steps are allowed to move colour, and they are the two keep holds
+ * back over skin.
+ */
+vec3 gradeMatch(vec3 lin, float keep) {
+  float l = max(dot(lin, LUMA), 1e-4);
+  // Contrast about the subject's own mean, so this cannot also move the mean.
+  float toned = (l - u_mPivot) * u_mGain + u_mPivot;
+  // …and level, which is the only term that may.
+  toned *= u_mBright;
+  vec3 outc = lin * (max(toned, 0.0) / l);
+
+  // Hue. Luma-normalised upstream, so it re-tints without re-exposing.
+  outc *= mix(vec3(1.0), u_mCast, keep);
+
+  // Chroma, about the pixel's own level.
+  float l2 = dot(outc, LUMA);
+  return mix(vec3(l2), outc, mix(1.0, u_mSat, keep));
+}
+
 // The normal field is prepassed small and stretched across a render several
 // times its size. Plain bilinear is only C0, so on a shading ramp this smooth
 // the texel lattice shows up as faint diamond creases. Smoothstepping the
@@ -135,6 +234,21 @@ const float CONTOUR_STEP = 0.004;
 
 // Radius of the tight silhouette probe, in uv — see nearAlpha().
 const float EDGE_RING = 0.004;
+
+// How fast the light wrap falls away going inward. Low on purpose: this is the
+// one edge term meant to be a *wash* rather than a line. The rim's exponents run
+// from 3.5 to 22 and every one of them is trying to find an outline; if this one
+// did too there would be three lines on the same edge, and the wrap would read
+// as a second rim in the wrong colour instead of as the room bleeding round the
+// figure.
+const float WRAP_FALLOFF = 1.7;
+
+// Transmission through thin regions — hair, a cloak's hem, a sleeve seen edge
+// on. Applied to the *unrescaled* field, which is what separates it from the
+// rim: the rim normalises against the half of its ramp that is inside the figure
+// so that it can make a line, and this deliberately does not, so it stays broad
+// and reaches well inside wherever the art is thin.
+const float BACK_FALLOFF = 1.4;
 
 // How far inward the rind guard looks, in uv. The near tap has to clear a matte
 // a few pixels thick; the far one has to still be on the same garment, or the
@@ -338,21 +452,35 @@ void main() {
     // field the second. Using only the wide one — the obvious thing, since it is
     // already there — spreads the spill into a fog bank with no edge in it.
     float hot = smoothstep(0.0, 0.5, tight);
-    float wide = pow(smoothstep(0.0, 0.5, thick), 3.5);
+    // Radius rides on the exponent rather than on the probe. The falloff here is
+    // the prepass's blurred alpha and its width was fixed at prepass time, so how
+    // fast we descend it is the only thing left to move.
+    float wide = pow(smoothstep(0.0, 0.5, thick), 3.5 / max(u_glowRadius, 0.25));
     float reach = clamp(hot * 0.85 + wide * 0.4, 0.0, 1.0);
     // Cel keeps the spill but not the haze: it tightens to a band following the
     // silhouette, which is how the style draws light escaping past a contour.
     // Most of the wide lobe goes; enough stays to keep the band off the outline.
     reach = mix(reach, clamp(celStep(hot, 0.30, 0.22) * 0.9 + wide * 0.2, 0.0, 1.0), u_cel);
-    float a = reach * facing * u_glow * u_intensity
+    // Which parts of the figure are bright enough to throw light at all. The
+    // sample is the rind guard's inner tap, which is already the art a few pixels
+    // inside this point — and out here that is the only colour reading there is,
+    // since this fragment's own art is transparent by definition. At sense 0 this
+    // clears everything but true black, so the dial starts inert.
+    float sense = smoothstep(-0.02, 0.35, dot(rindBody.rgb, LUMA) - u_glowSense);
+    float a = reach * facing * u_glow * u_intensity * sense
             * mix(1.0, 0.30, rind)         // not against the asset's own outline
             * mix(1.0, 0.22, u_shadow)     // a dimmed character does not glow
             * mix(0.4, 1.0, u_exposure)    // nor does one in a dark room, much
             * (1.0 + u_lift * 0.6);        // a spotlit one glows harder
     a = clamp(a, 0.0, 1.0);
     // Hot toward the outline, the lamp's colour further out — a blown highlight
-    // loses its hue before it loses its brightness.
-    gl_FragColor = vec4(mix(u_key, vec3(1.0), 0.6 * reach) * a, a);
+    // loses its hue before it loses its brightness. Halation then carries the
+    // *outer* end further still: real lens and emulsion bleed runs red, because
+    // long wavelengths scatter furthest through a medium, and it is the single
+    // cue that most reliably reads as photographed rather than composited.
+    vec3 spill = mix(u_key, vec3(1.0), 0.6 * reach);
+    spill = mix(spill, u_halationColor, u_halation * (1.0 - reach) * 0.75);
+    gl_FragColor = vec4(spill * a, a);
     return;
   }
 
@@ -360,7 +488,17 @@ void main() {
   // toward the edges. Thin regions get a shallower Z so they catch more rim.
   vec3 N = normalize(vec3(n2, mix(0.35, 1.0, thick)));
 
-  vec3 base = toLinear(art.rgb);
+  // ── The grade ──
+  // The room's measurement applied to the art's, before a single light touches
+  // it. This half of the feature is a statement about *pigment* — what colour
+  // the character is painted in — and the lighting below is a statement about
+  // illumination; keeping them in that order is what lets a rim land on already
+  // corrected skin rather than on the original art with a correction over it.
+  //
+  // Skin holds back the two chromatic terms and takes level and contrast in
+  // full, so a face in a blue room gets darker without going blue. See skinMask.
+  float keep = 1.0 - skinMask(art.rgb) * u_skin;
+  vec3 base = gradeMatch(toLinear(art.rgb), keep);
   vec3 keyL = toLinear(u_key);
 
   // Falloff normalised at the figure's centre, so overall exposure is unchanged
@@ -428,7 +566,11 @@ void main() {
   // stay, at the midpoint: the character is still lit by this room, just not
   // from anywhere in it.
   bounce = mix(bounce, 0.5, u_rimOnly);
-  vec3 amb = mix(u_ambient, u_bounce, bounce * 0.7) * ao;
+  // u_fill is how far the shadow side is allowed to travel toward the bounce
+  // hue. It was a literal 0.7; a GM whose room is lit by one saturated source
+  // wants more separation than one standing in overcast daylight, and that is a
+  // property of the scene rather than of the model.
+  vec3 amb = mix(u_ambient, u_bounce, bounce * u_fill) * ao;
 
   // ── Rim, in two lobes ──
   // Neither lobe alone is the effect. A wide falloff on its own is a soft wash
@@ -524,6 +666,32 @@ void main() {
   // The core is not in here — see the note where it is added, below the dial.
   vec3 lit = base * toLinear(amb + u_key * diffuse)
            + keyL * (rimHalo * u_rim + spec + sheen + contour);
+
+  // ── Light wrap ──
+  // The spill above carries the character's light outward into the air. This is
+  // the other direction of the same exchange: the room is *behind* the figure,
+  // so its light arrives round every edge and lands a short way inside. It is
+  // the cheapest thing in compositing that makes a cut-out stop looking cut out,
+  // and the reason is that a real edge is never a step — there is always some
+  // background in the outermost millimetre of a foreground subject.
+  //
+  // Unlike every other edge term here it takes no facing. The rim is one lamp
+  // and sweeps only the part of the outline turned toward it; the wrap is the
+  // whole room and arrives from all of it at once. Gating it on the lamp's
+  // bearing would turn the room back into a second key, which is precisely the
+  // reading it exists to break.
+  float wrapShape = mix(pow(edge, WRAP_FALLOFF), celStep(edge, 0.34, 0.10), u_cel);
+  lit += toLinear(u_wrapColor) * (wrapShape * u_wrap * attenAdd * mix(1.0, 0.55, rind));
+
+  // ── Backlight ──
+  // Light coming *through* the figure rather than round it: hair, a cloak's hem,
+  // a sleeve seen edge on. The unrescaled field is what makes it distinct from
+  // the rim — the rim normalises against the inside half of its ramp so that it
+  // can resolve a line, and this does not, so it stays broad and reaches deep
+  // wherever the art is genuinely thin. On anything solid it is nearly absent,
+  // which is correct: that is what solid means.
+  float backShape = mix(pow(1.0 - thick, BACK_FALLOFF), celStep(1.0 - thick, 0.52, 0.12), u_cel);
+  lit += toLinear(u_backColor) * (backShape * facing * u_backlight * attenAdd);
 
   // Grounding: light reaching the floor is blocked by the figure itself, so the
   // lowest part of a full body sits darker. Confined to the bottom of the
@@ -756,6 +924,21 @@ export class StageGL {
       lift: gl.getUniformLocation(program, "u_lift"),
       cel: gl.getUniformLocation(program, "u_cel"),
       rimOnly: gl.getUniformLocation(program, "u_rimOnly"),
+      mCast: gl.getUniformLocation(program, "u_mCast"),
+      mGain: gl.getUniformLocation(program, "u_mGain"),
+      mPivot: gl.getUniformLocation(program, "u_mPivot"),
+      mBright: gl.getUniformLocation(program, "u_mBright"),
+      mSat: gl.getUniformLocation(program, "u_mSat"),
+      skin: gl.getUniformLocation(program, "u_skin"),
+      wrap: gl.getUniformLocation(program, "u_wrap"),
+      wrapColor: gl.getUniformLocation(program, "u_wrapColor"),
+      backlight: gl.getUniformLocation(program, "u_backlight"),
+      backColor: gl.getUniformLocation(program, "u_backColor"),
+      fill: gl.getUniformLocation(program, "u_fill"),
+      glowRadius: gl.getUniformLocation(program, "u_glowRadius"),
+      glowSense: gl.getUniformLocation(program, "u_glowSense"),
+      halation: gl.getUniformLocation(program, "u_halation"),
+      halationColor: gl.getUniformLocation(program, "u_halationColor"),
     };
 
     gl.uniform1i(this.uniforms.art, 0);
@@ -981,6 +1164,25 @@ export class StageGL {
     gl.uniform1f(u.lift, params.lift);
     gl.uniform1f(u.cel, params.cel);
     gl.uniform1f(u.rimOnly, params.rimOnly);
+    // The match arrives pre-weighted from `matchGrade`, already at its identity
+    // when the dials are down — there is no "off" branch here on purpose, since
+    // a branch is a second code path and this has to be provably the old picture
+    // at zero rather than merely close to it.
+    gl.uniform3fv(u.mCast, params.mCast);
+    gl.uniform1f(u.mGain, params.mGain);
+    gl.uniform1f(u.mPivot, params.mPivot);
+    gl.uniform1f(u.mBright, params.mBright);
+    gl.uniform1f(u.mSat, params.mSat);
+    gl.uniform1f(u.skin, params.skin);
+    gl.uniform1f(u.wrap, params.wrap);
+    gl.uniform3fv(u.wrapColor, params.wrapColor);
+    gl.uniform1f(u.backlight, params.backlight);
+    gl.uniform3fv(u.backColor, params.backColor);
+    gl.uniform1f(u.fill, params.fill);
+    gl.uniform1f(u.glowRadius, params.glowRadius);
+    gl.uniform1f(u.glowSense, params.glowSense);
+    gl.uniform1f(u.halation, params.halation);
+    gl.uniform3fv(u.halationColor, params.halationColor);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
