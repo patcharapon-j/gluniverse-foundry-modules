@@ -45,6 +45,15 @@ its traits, and a description whose numbers are computed for *this* boss — the
 Boss DC, the damage dice, the resistance, the appendage count. Removing the
 ability deletes the item.
 
+Downfalls are items too, one passive each, named for their trigger and carrying
+the GM's own note. That is what puts them on the main tab beside the creature's
+other passives, and it is also how they reach **Recall Knowledge**: the book's
+rule for discovering a boss's Downfalls is a Recall Knowledge check, and that
+feature reads a creature's ability items, so as items they arrive there without a
+second integration. The brief additionally carries a `Boss` line — the tier, the
+level it counts as, and how many turns a round it takes — which is the most
+useful thing a party can learn about one and is invisible in a statblock.
+
 Downfalls are the party's lever. Each has a trigger type (the book's seven, plus
 the "critical hit or failed save" one every boss carries) and a free-text note
 saying what actually sets it off at your table. The panel reports when the counts
@@ -85,10 +94,12 @@ after 2 party members have acted, a Supreme boss's after 1 and 3 — re-derived 
 the real party size, because those numbers are stated for a party of four and
 taken literally would put two boss turns back to back at a table of five.
 
-On the rail a boss carries a **BOSS** chip, its own accent, a three-ring frame
-and a slow violet miasma drawn behind it in WebGL. Its extra entries additionally
-carry a "Turn 2 of 3" chip, so the initial turn, the one that clears Downfalls,
-is readable without opening anything.
+On the rail a boss is a different shape, not just a different colour. Its
+silhouette is cut at two opposite corners, its frame is struck as corner brackets
+rather than a continuous edge, and a slowly counter-rotating engraved sigil turns
+behind the portrait in WebGL. It carries a **BOSS** chip, and its extra entries
+additionally carry a "Turn 2 of 3" chip, so the initial turn, the one that clears
+Downfalls, is readable without opening anything.
 
 The accent is `--gl-tyrant`, a purple that exists for this and nothing else. Both
 purples already on the rail were taken: `--gl-violet` means "secret, hidden,
@@ -99,12 +110,20 @@ a heavier frame and a denser miasma, and the card already states the tier where
 it counts, since its extra entries read "Turn 2 of 3" against a Greater's
 "Turn 2 of 2".
 
-The miasma is a fragment shader on the same `CardFXManager` that draws the
+The sigil is a fragment shader on the same `CardFXManager` that draws the
 guard-break and dying effects, so a boss card costs one more program and no new
-machinery. It is the quietest effect in that file deliberately: a boss holds two
-or three slots of every round, and anything that flickered would be the loudest
-thing on screen for half the encounter. It yields to break and dying, which are
-states of the current fight and the more urgent thing for the card to say.
+machinery. It shares no *technique* with them, which is the point: every other
+effect on that rail is value noise, and a fourth noise effect would read as a
+variant of the third however it were tuned. This one has no noise in it. It is
+two rings of radial ticks and a radial falloff, struck through `uTexel` so the
+hairlines are device pixels rather than card units, and it is hard-edged and
+concentric where the others are soft and wandering.
+
+It is also the quietest effect in that file, deliberately. A boss holds two or
+three slots of every round, so anything that flickered would be the loudest thing
+on screen for half the encounter; an extra turn takes it at a little over half
+strength again, since its card is the busiest on the rail. It yields to break and
+dying, which are states of the current fight and the more urgent thing to say.
 
 ## Flatfinder and Proficiency-without-Level
 

@@ -1987,7 +1987,14 @@ export class GLUniverseInitiativeOverlay {
           : null;
     // The tier rides on the canvas rather than on a filter of its own: one
     // program, one compile, and the amount of miasma is a per-frame uniform.
-    const fxIntensity = fxMode === "dread" ? (card.boss.tier === "supreme" ? 1.55 : 1) : 1;
+    // An extra turn is an echo of the boss, not a second boss: it takes the same
+    // sigil at a little over half strength. Its card is also the busiest on the
+    // rail — name, BOSS chip, "Turn 2 of 3" and an initiative — so it is the one
+    // place a full-strength effect would cost legibility.
+    const fxIntensity =
+      fxMode === "dread"
+        ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
+        : 1;
 
     const slotAttr = Number.isInteger(card.cardSlot) ? ` data-card-slot="${card.cardSlot}"` : "";
 

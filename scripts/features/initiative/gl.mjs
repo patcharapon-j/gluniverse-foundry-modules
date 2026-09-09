@@ -149,17 +149,22 @@ void main(void){
   float r=length(p);
   float px=uTexel*1.6;                                  // one hairline, in device pixels
   float turn=uTime*0.10+uSeed;
-  float ringA=gluTickRing(p,0.30,24.0, turn,      0.55, px*1.6);
-  float ringB=gluTickRing(p,0.42,40.0,-turn*0.55, 0.68, px*1.2);
+  float ringA=gluTickRing(p,0.26,24.0, turn,      0.55, px*1.5);
+  float ringB=gluTickRing(p,0.36,40.0,-turn*0.55, 0.68, px*1.1);
   // A continuous hairline under each tick ring, so the marks read as struck on
   // a circle rather than as loose dashes.
-  float hair=smoothstep(px,0.0,abs(r-0.30))*0.34+smoothstep(px,0.0,abs(r-0.42))*0.22;
+  float hair=smoothstep(px,0.0,abs(r-0.26))*0.30+smoothstep(px,0.0,abs(r-0.36))*0.20;
   // The aura. Clear over the middle of the card, which is where the creature's
-  // face is, and pooled into the corners the portrait has least to say in.
-  float aura=smoothstep(0.26,0.78,r);
+  // face is, and graded all the way out rather than reaching full strength
+  // early: at a tighter falloff the corners flattened to one even wash, which
+  // reads as a coloured box behind the card instead of as light pooling in it.
+  float aura=smoothstep(0.30,1.05,r);
   float breath=0.86+0.14*sin(uTime*0.45+uSeed*1.7);
   float strokes=clamp(ringA+ringB+hair,0.0,1.0);
-  float a=clamp((aura*0.30+strokes*0.55)*breath*uIntensity,0.0,0.74);
+  // The card carries a name, a turn chip and an initiative over this, all of
+  // them small: the sigil is held well under them on purpose. It is meant to be
+  // noticed second.
+  float a=clamp((aura*0.20+strokes*0.30)*breath*uIntensity,0.0,0.62);
   vec3 col=mix(uTyrantBase,uTyrantHot,clamp(strokes*1.4,0.0,1.0));
   gl_FragColor=vec4(col*a, a);
 }`;
