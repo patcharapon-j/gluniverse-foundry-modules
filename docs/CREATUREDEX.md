@@ -25,11 +25,22 @@ them as choices for the table.
 **PF2e already sorts an NPC's abilities into exactly these three.**
 `system.category` is `interaction` / `defensive` / `offensive`, which are the
 book's own headings under other names, so an ability routes itself. Where a
-category is absent — homebrew, an importer that never set one — the action type
-decides: a reaction or a passive is defensive, anything else offensive. That
-fallback is the part worth checking after a change, because getting it wrong
-puts a real ability in the wrong section and the stat block still looks
-perfectly ordinary.
+category is absent — homebrew, an importer that never set one — the ability is
+**deferred to completion** rather than guessed at: a guess from the action cost
+gets a majority right and the rest leak, handing a player who bought Defense an
+offensive ability while the stat block still looks perfectly ordinary.
+
+Two things beat PF2e's category. A GM's per-item override, which is what an
+override is for; and a short map of abilities whose section is a *fact* rather
+than an inference. Only **Attack of Opportunity** — *Reactive Strike* after the
+remaster — is on it. PF2e tags it `defensive` because Paizo's stat block prints
+it in the Defense block, and it is a Strike: what a player buys with Offense is
+"what happens if I move past this thing", so leaving it under Defense means the
+player who paid for the section it belongs to never sees it. The map is keyed on
+the name with any parenthetical qualifier stripped ("Reactive Strike (Jaws
+Only)"), so it is English-only by construction — in a translated world the
+ability falls back to PF2e's category, which is where it would have gone anyway,
+and the per-item override is the way through.
 
 **Section keys are data.** They are written into world knowledge the moment a GM
 reveals anything. Renaming one does not throw; it forgets every creature the
