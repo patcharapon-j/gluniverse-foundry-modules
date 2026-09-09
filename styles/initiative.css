@@ -1080,6 +1080,23 @@
   pointer-events: none;
 }
 
+/*
+ * The boss liquid is the exception: it goes UNDER the portrait rather than over
+ * it. Break, dying and scramble are things happening *to* the creature and
+ * belong on top of its face; a boss's miasma is what it is standing in, and an
+ * ominous wash laid over the art just dims the portrait. Below the portrait
+ * layer it is the card's own material instead, and the masked boss portrait
+ * (see .gluni-card--boss .gluni-card-portrait) is what lets it be seen.
+ *
+ * z-index 0 rather than a negative value: .gluni-card-surface is a stacking
+ * context, so 0 still paints above its background and below the portrait wrap
+ * at 1. A negative index would slide under the surface's own gradient and
+ * disappear completely.
+ */
+.gluni-card-portrait-fx--dread {
+  z-index: 0;
+}
+
 .gluni-card--active .gluni-card-adhoc-bg {
   inset: -42px 0 0 0;
 }
@@ -1834,6 +1851,96 @@
 }
 
 /*
+ * A boss is physically bigger than the creatures around it, because on a rail of
+ * identically-sized cards that is the only cue that survives being glanced at.
+ * Colour and a chip both need reading; size does not. It is also the honest
+ * shape of the thing: this card owns two or three of the round's slots, so it
+ * occupying more of the round's rail is a description rather than an emphasis.
+ *
+ * Height and width both. Height alone reads as a card with more room in it;
+ * width alone reads as a rendering glitch. Together they read as a bigger card.
+ * The overhang is small on purpose — the active card already claims 12px, and a
+ * boss that out-reached the creature whose turn it is would be lying about who
+ * is acting.
+ */
+.gluni-card--boss .gluni-card-surface {
+  min-height: 74px;
+}
+
+.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 86px;
+}
+
+/*
+ * An extra turn is an echo, not a second boss. It stays clearly larger than an
+ * ordinary card and clearly smaller than the boss's own initial turn, which is
+ * the turn that matters: it is the one that clears Downfalls.
+ */
+.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 64px;
+}
+
+.gluni-card--active.gluni-card--boss .gluni-card-surface {
+  min-height: 142px;
+}
+
+.gluni-card--active.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 154px;
+}
+
+.gluni-card--active.gluni-card--boss-extra .gluni-card-surface,
+.gluni-card--active.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  min-height: 128px;
+}
+
+/*
+ * The overhang. `justify-self` has to be restated per rail side: an explicit
+ * width defeats the `stretch` the card ships with, and the item then parks at
+ * the start of its column, which would send the extra width off the *outside*
+ * edge of a right-hand rail instead of into the screen.
+ *
+ * Excluded when active, which already sets its own width and shift; two
+ * competing overhangs on one card is a fight, not a hierarchy.
+ */
+.gluni-card--boss:not(.gluni-card--active) {
+  width: calc(100% + 8px);
+}
+
+.gluni-card--boss-supreme:not(.gluni-card--active) {
+  width: calc(100% + 13px);
+}
+
+.gluni-card--boss-extra:not(.gluni-card--active),
+.gluni-card--boss-extra.gluni-card--boss-supreme:not(.gluni-card--active) {
+  width: calc(100% + 4px);
+}
+
+.gluni-initiative--right .gluni-card--boss:not(.gluni-card--active) {
+  justify-self: end;
+}
+
+.gluni-initiative--left .gluni-card--boss:not(.gluni-card--active) {
+  justify-self: start;
+}
+
+/* The name grows with the card. Held under the active card's 16px. */
+.gluni-card--boss h3 {
+  font-size: 13px;
+}
+
+.gluni-card--boss-supreme h3 {
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+.gluni-card--boss-extra h3,
+.gluni-card--boss-extra.gluni-card--boss-supreme h3 {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/*
  * The frame, which is a different shape rather than the same shape in another
  * colour. Every other card on this rail is a plain rectangle with one hairline;
  * a boss's silhouette is cut at two opposite corners and its frame is struck as
@@ -1847,31 +1954,36 @@
 .gluni-card--boss .gluni-card-surface {
   clip-path: polygon(
     0 0,
-    calc(100% - 13px) 0,
-    100% 13px,
+    calc(100% - 16px) 0,
+    100% 16px,
     100% 100%,
-    13px 100%,
-    0 calc(100% - 13px)
+    16px 100%,
+    0 calc(100% - 16px)
   );
+  /* Three lines rather than one: the rim, a dark gutter, and a second faint rule
+     inside it. A doubled frame is the cheapest way to say "more" about a card
+     whose neighbours all carry a single hairline, and it costs no DOM. */
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 58%, transparent),
-    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.42);
+    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.42),
+    inset 0 0 0 5px color-mix(in srgb, var(--gluni-accent) 22%, transparent);
 }
 
 /* A Supreme boss is cut deeper and lined harder. Same shape, more of it. */
 .gluni-card--boss-supreme .gluni-card-surface {
   clip-path: polygon(
     0 0,
-    calc(100% - 19px) 0,
-    100% 19px,
+    calc(100% - 24px) 0,
+    100% 24px,
     100% 100%,
-    19px 100%,
-    0 calc(100% - 19px)
+    24px 100%,
+    0 calc(100% - 24px)
   );
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-tyrant-hot) 74%, transparent),
     inset 0 0 0 5px rgb(var(--gl-tint-dark) / 0.5),
-    0 0 20px color-mix(in srgb, var(--gluni-accent) 26%, transparent);
+    inset 0 0 0 7px color-mix(in srgb, var(--gluni-tyrant-hot) 30%, transparent),
+    0 0 26px color-mix(in srgb, var(--gluni-accent) 30%, transparent);
 }
 
 /*
@@ -1910,6 +2022,145 @@
   border-bottom-width: 2px;
 }
 
+/*
+ * Letting the liquid be seen.
+ *
+ * The portrait is a full-bleed, opaque cover image: parking the FX canvas below
+ * it (see .gluni-card-portrait-fx--dread) puts the effect somewhere nothing can
+ * ever look at unless the portrait gives way. So a boss's portrait is masked —
+ * solid where the creature is, dissolving toward the card's edges — and what
+ * shows through the dissolve is the liquid underneath.
+ *
+ * That is the whole reason the effect is under the art rather than over it. Over
+ * the art it is a coloured film on somebody's face; under it, with the face
+ * eaten away at the edges, the creature is standing in the thing.
+ *
+ * The ellipse is centred on --gluni-portrait-normal-x/-y, which is where the
+ * crop puts the creature, not on the card. Its vertical radius overruns the card
+ * and its horizontal radius does not, so the fade happens left and right — along
+ * the card's long axis, which is where there is room for it — and the creature
+ * keeps its head.
+ *
+ * Degrades honestly: with WebGL unavailable there is no canvas and the mask
+ * reveals the card's own ink gradient, which reads as a vignette rather than as
+ * a hole.
+ */
+.gluni-card--boss .gluni-card-portrait {
+  -webkit-mask-image: radial-gradient(
+    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    #000 0%,
+    #000 24%,
+    rgb(0 0 0 / 0.52) 54%,
+    rgb(0 0 0 / 0.14) 78%,
+    transparent 96%
+  );
+  mask-image: radial-gradient(
+    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    #000 0%,
+    #000 24%,
+    rgb(0 0 0 / 0.52) 54%,
+    rgb(0 0 0 / 0.14) 78%,
+    transparent 96%
+  );
+}
+
+/* Active cards re-crop to the active focal point, so the mask follows it. */
+.gluni-card--active.gluni-card--boss .gluni-card-portrait {
+  -webkit-mask-image: radial-gradient(
+    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    #000 0%,
+    #000 30%,
+    rgb(0 0 0 / 0.60) 58%,
+    rgb(0 0 0 / 0.18) 80%,
+    transparent 98%
+  );
+  mask-image: radial-gradient(
+    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    #000 0%,
+    #000 30%,
+    rgb(0 0 0 / 0.60) 58%,
+    rgb(0 0 0 / 0.18) 80%,
+    transparent 98%
+  );
+}
+
+/*
+ * The ink scrim over the portrait is nearly opaque at the accent edge, which is
+ * exactly where the mask has opened the portrait up. Left alone it paints out
+ * the liquid on the side of the card the eye starts from. Thinned rather than
+ * removed: it is what makes the name readable.
+ */
+.gluni-card--boss .gluni-card-surface::before {
+  background: linear-gradient(
+    95deg,
+    color-mix(in srgb, var(--gl-ink-0) 56%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 20%, transparent) 50%,
+    transparent
+  );
+}
+
+.gluni-initiative--left .gluni-card--boss .gluni-card-surface::before {
+  background: linear-gradient(
+    -95deg,
+    color-mix(in srgb, var(--gl-ink-0) 56%, transparent),
+    color-mix(in srgb, var(--gl-ink-0) 20%, transparent) 50%,
+    transparent
+  );
+}
+
+/*
+ * A measured rule along the bottom edge. The last piece of "more complex": every
+ * other card on the rail ends in a plain line, and a ruled one reads as an
+ * instrument rather than a label. It hangs off the portrait wrap's spare
+ * ::after, so it costs no DOM and tracks the wrap when an active card grows
+ * upward into the notch.
+ *
+ * The ticks are a repeating gradient rather than marks in device pixels because
+ * they are ornament, not a hairline: on a display that cannot resolve them they
+ * blur into the solid rule underneath, which is the same statement quieter.
+ */
+.gluni-card--boss .gluni-card-portrait-wrap::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  height: 5px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-accent) 72%, transparent) 0 1px,
+      transparent 1px 7px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 4px,
+      color-mix(in srgb, var(--gluni-accent) 30%, transparent) 4px
+    );
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 74%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 18%, #000 74%, transparent 100%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+/* Supreme is the same ruler, read finer. */
+.gluni-card--boss-supreme .gluni-card-portrait-wrap::after {
+  height: 7px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-tyrant-hot) 78%, transparent) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--gluni-tyrant-hot) 38%, transparent) 6px
+    );
+  opacity: 0.8;
+}
+
 /* An extra turn is the same creature, and reads as a lighter echo of it. */
 .gluni-card--boss-extra .gluni-card-portrait {
   filter: saturate(0.82) brightness(0.9);
@@ -1917,6 +2168,14 @@
 
 .gluni-card--boss-extra .gluni-card-surface,
 .gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 34%, transparent),
     inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.3);
@@ -1936,6 +2195,24 @@
 .gluni-card--boss-extra .gluni-card-spec::after {
   border-right-width: 1px;
   border-bottom-width: 1px;
+}
+
+/* The echo carries the greater ruler, quietly, whatever tier it belongs to. */
+.gluni-card--boss-extra .gluni-card-portrait-wrap::after,
+.gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-portrait-wrap::after {
+  height: 4px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gluni-accent) 62%, transparent) 0 1px,
+      transparent 1px 8px
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--gluni-accent) 22%, transparent) 3px
+    );
+  opacity: 0.44;
 }
 
 .gluni-boss-tag {
@@ -5490,6 +5767,56 @@
   }
 
   .gluni-card h3 {
+    font-size: 11px;
+  }
+
+  /*
+   * The narrow layout restates the card heights at .gluni-card .gluni-card-surface,
+   * which ties the boss rules above on specificity and beats them on order — so a
+   * boss on a small screen came out exactly the size of everything else, which is
+   * the one thing this card is not allowed to be. The scale is compressed rather
+   * than dropped: the rail is narrower here, so the same absolute overhang would
+   * be a much larger fraction of it.
+   */
+  .gluni-card--boss .gluni-card-surface {
+    min-height: 66px;
+  }
+
+  .gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 76px;
+  }
+
+  .gluni-card--boss-extra .gluni-card-surface,
+  .gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 58px;
+  }
+
+  .gluni-card--active.gluni-card--boss .gluni-card-surface {
+    min-height: 126px;
+  }
+
+  .gluni-card--active.gluni-card--boss-supreme .gluni-card-surface {
+    min-height: 136px;
+  }
+
+  .gluni-card--boss:not(.gluni-card--active) {
+    width: calc(100% + 5px);
+  }
+
+  .gluni-card--boss-supreme:not(.gluni-card--active) {
+    width: calc(100% + 9px);
+  }
+
+  .gluni-card--boss h3 {
+    font-size: 12px;
+  }
+
+  .gluni-card--boss-supreme h3 {
+    font-size: 13px;
+  }
+
+  .gluni-card--boss-extra h3,
+  .gluni-card--boss-extra.gluni-card--boss-supreme h3 {
     font-size: 11px;
   }
 

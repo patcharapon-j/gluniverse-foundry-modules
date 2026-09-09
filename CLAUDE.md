@@ -687,6 +687,25 @@ so the encounter doubles its boss entries per pass — in a live world that reac
 `syncBossTurns` both refuse an extra turn, and the check tool requires both,
 because one guard is one edit away from being the only one.
 
+On the rail the boss effect is the one card effect drawn **under** the portrait,
+and two rules have to agree for it to exist at all. The canvas is parked below
+the portrait layer, and the boss portrait is masked so the creature dissolves
+into the liquid at its edges. Break, dying and scramble are things happening *to*
+a creature and belong over its face; a boss's miasma is what it is standing in, and
+laid over the art it is just a coloured film on somebody. Without the mask the
+canvas is behind a full-bleed opaque cover image and can never be seen, which
+looks exactly like WebGL being unavailable — and a mask on a portrait reads as a
+cosmetic vignette, so it is the half that will be deleted. The check tool
+requires both.
+
+A boss card is also **bigger** than the cards around it, which is the only cue
+that survives a glance, and that has to be restated inside the `@media
+(max-width: 720px)` block: the narrow layout sets the height at
+`.gluni-card .gluni-card-surface`, tying the boss rules on specificity and
+beating them on order, so a boss below 720px came out exactly the size of the
+creatures it towers over while the desktop rail looked correct. The check tool
+measures both layouts.
+
 The boss panel is on **its own sheet tab**, and that tab is this feature's, not
 PF2e's. AppV1 binds a sheet's `Tabs` inside `activateListeners`, which runs
 *before* the render hook, so a nav link injected from a module is invisible to it

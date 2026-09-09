@@ -836,8 +836,72 @@ for (const name of tyrantUniforms) {
   }
 }
 const palette = read("scripts/features/initiative/constants.mjs");
-for (const key of ["tyrantBase", "tyrantHot"]) {
+for (const key of ["tyrantBase", "tyrantMid", "tyrantHot"]) {
   if (!palette.includes(`${key}:`)) fail(`boss: ACTIVE_SHADER_PALETTE has no ${key} — the shader would paint black`);
+}
+
+/*
+ * The boss effect is the one card effect that is drawn *under* the portrait, and
+ * two rules have to agree for it to be visible at all. Neither errors alone.
+ *
+ * The canvas has to be parked below the portrait layer — otherwise a wash sits
+ * over the creature's face, which is the overlay this deliberately stopped being.
+ * And the portrait has to be masked — otherwise an opaque full-bleed cover image
+ * hides the canvas completely and the card is simply a boss with no effect on
+ * it, which looks exactly like WebGL being unavailable.
+ *
+ * The second is the one that will be lost: a mask on a portrait reads as a
+ * cosmetic vignette, and deleting it costs nothing visible on the frame it is
+ * deleted in. It is what the whole effect is looked at through.
+ */
+const fxDreadRule = initCss.slice(initCss.indexOf(".gluni-card-portrait-fx--dread"));
+if (!/^\.gluni-card-portrait-fx--dread\s*\{[^}]*z-index:\s*0\s*;/.test(fxDreadRule)) {
+  fail("boss: the dread canvas is not parked under the portrait — the liquid would be an overlay on the creature's face");
+}
+for (const [selector, when] of [
+  ["\n.gluni-card--boss .gluni-card-portrait {", "at rest"],
+  ["\n.gluni-card--active.gluni-card--boss .gluni-card-portrait {", "on its own turn"]
+]) {
+  const at = initCss.indexOf(selector);
+  if (at < 0 || !initCss.slice(at, initCss.indexOf("}", at)).includes("mask-image:")) {
+    fail(`boss: the boss portrait is not masked ${when} — the liquid is drawn under an opaque portrait and can never be seen`);
+  }
+}
+
+/*
+ * A boss is bigger than the creatures around it. That is the cue that survives
+ * being glanced at, and it is the one the card shipped without: on a rail of
+ * identically-sized cards a boss read as an ordinary card in another colour.
+ * Both tiers must out-measure the ordinary card, and Supreme must out-measure
+ * Greater, or the tier is stated only by a chip nobody reads at this size.
+ */
+const surfaceMin = (css, selector) => {
+  const at = css.indexOf(`${selector} {`);
+  if (at < 0) return null;
+  const m = /min-height:\s*(\d+)px/.exec(css.slice(at, css.indexOf("}", at)));
+  return m ? Number(m[1]) : null;
+};
+/*
+ * Checked in BOTH layouts. The narrow block restates the card height at
+ * `.gluni-card .gluni-card-surface`, which ties the boss rules on specificity and
+ * beats them on order, so a boss below 720px silently came out exactly the size
+ * of the creatures it towers over while the desktop rail looked correct.
+ */
+const narrowAt = initCss.indexOf("@media (max-width: 720px)");
+const layouts = [
+  ["the rail", initCss.slice(0, narrowAt < 0 ? undefined : narrowAt)],
+  ["the narrow rail", narrowAt < 0 ? "" : initCss.slice(narrowAt)]
+];
+for (const [where, css] of layouts) {
+  const baseCard = surfaceMin(css, ".gluni-card-surface") ?? surfaceMin(css, ".gluni-card .gluni-card-surface");
+  const greaterCard = surfaceMin(css, ".gluni-card--boss .gluni-card-surface");
+  const supremeCard = surfaceMin(css, ".gluni-card--boss-supreme .gluni-card-surface");
+  if (!baseCard) fail(`boss: the ordinary card's min-height could not be read for ${where}`);
+  else if (!greaterCard || greaterCard <= baseCard) {
+    fail(`boss: on ${where} a Greater boss card is not taller than an ordinary card`);
+  } else if (!supremeCard || supremeCard <= greaterCard) {
+    fail(`boss: on ${where} a Supreme boss card is not taller than a Greater one`);
+  }
 }
 
 /*

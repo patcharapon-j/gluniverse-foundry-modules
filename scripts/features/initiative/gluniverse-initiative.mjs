@@ -5476,7 +5476,7 @@ class CardFXManager {
         break:    mk(FX_FRAG_BREAK,    { uBreakAmber: [...S.breakAmber], uBreakHot: [...S.breakHot] }),
         dying:    mk(FX_FRAG_DYING,    { uVeinBase:   [...S.veinBase],   uVeinHot:  [...S.veinHot]  }),
         scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
-        dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
+        dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantMid: [...S.tyrantMid], uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
       };
       // Force each filter's GLSL program to compile now. Otherwise the program
       // compiles lazily on the first frame a card is broken/dying/mystery, stalling

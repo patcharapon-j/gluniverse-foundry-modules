@@ -94,30 +94,70 @@ after 2 party members have acted, a Supreme boss's after 1 and 3 — re-derived 
 the real party size, because those numbers are stated for a party of four and
 taken literally would put two boss turns back to back at a table of five.
 
-On the rail a boss is a different shape, not just a different colour. Its
-silhouette is cut at two opposite corners, its frame is struck as corner brackets
-rather than a continuous edge, and a slowly counter-rotating engraved sigil turns
-behind the portrait in WebGL. It carries a **BOSS** chip, and its extra entries
-additionally carry a "Turn 2 of 3" chip, so the initial turn, the one that clears
-Downfalls, is readable without opening anything.
+On the rail a boss is a different size and a different material, not just a
+different colour.
+
+**Size, because size is the only cue that survives a glance.** A boss card is
+taller and reaches further across the rail than the creatures around it, and a
+Supreme boss further than a Greater. That is a description rather than an
+emphasis: this card owns two or three of the round's slots, so it occupying more
+of the round's rail is the truth about it. Its extra turns are deliberately
+smaller than its own initial turn and still larger than an ordinary card, because
+the initial turn is the one that clears Downfalls.
+
+**Shape.** The silhouette is cut at two opposite corners, deeper for Supreme; the
+frame is doubled, a rim and a second faint rule inside a dark gutter; it is
+struck as corner brackets at the two corners the cut does not touch; and the
+bottom edge is a measured rule rather than a plain line. All of it is
+recognisable with the colour taken away.
+
+**Material.** A slow, viscous liquid fills the whole card, pale filaments folding
+through it, and it is drawn *underneath* the portrait: the boss's portrait is
+masked so the creature dissolves into it at the edges, and what shows through is
+the liquid. The creature is standing in the thing rather than in front of it.
+
+Two rules have to agree for any of that to be visible and neither errors alone.
+The canvas is parked below the portrait layer — over it, the effect is a coloured
+film on somebody's face, which is the overlay this deliberately stopped being.
+And the portrait has to stay masked: it is a full-bleed opaque cover image, so
+without the mask the canvas is hidden completely and the card looks exactly like
+a boss on a machine with no WebGL. The mask is the one that will be lost, because
+it reads as a cosmetic vignette and deleting it costs nothing visible in the
+frame it is deleted in. The check tool requires both.
 
 The accent is `--gl-tyrant`, a purple that exists for this and nothing else. Both
 purples already on the rail were taken: `--gl-violet` means "secret, hidden,
 mystery" and paints the scrambled cards, `--gl-orchid` is the dying accent, so a
 boss on either would be exactly the colour of a hidden combatant or a downed
-party member. Both tiers share the hue and differ in weight: a Supreme boss gets
-a heavier frame and a denser miasma, and the card already states the tier where
-it counts, since its extra entries read "Turn 2 of 3" against a Greater's
-"Turn 2 of 2".
+party member. Both tiers share the hue and differ in weight, and the card already
+states the tier where it counts, since its extra entries read "Turn 2 of 3"
+against a Greater's "Turn 2 of 2".
 
-The sigil is a fragment shader on the same `CardFXManager` that draws the
-guard-break and dying effects, so a boss card costs one more program and no new
-machinery. It shares no *technique* with them, which is the point: every other
-effect on that rail is value noise, and a fourth noise effect would read as a
-variant of the third however it were tuned. This one has no noise in it. It is
-two rings of radial ticks and a radial falloff, struck through `uTexel` so the
-hairlines are device pixels rather than card units, and it is hard-edged and
-concentric where the others are soft and wandering.
+The liquid runs on the same `CardFXManager` that draws the guard-break and dying
+effects, so a boss card costs one more program and no new machinery. It replaced
+a sigil of two counter-rotating rings of engraved ticks, which was wrong in a way
+worth recording: concentric marks on a rectangular card read as a target pasted
+onto it, they carry nothing the card does not already say, and at rail size two
+of them are a smudge with a hole in the middle. A material has no such problem —
+there is nothing to centre and nothing to miss.
+
+How the liquid is made: the field is warped by a flow of its own before it is
+sampled. One level of that is marble; feeding the warp back into the sample point
+is what makes it fold into itself, and folding is what separates a liquid from a
+cloud. Ridging the result leaves only the crests, which is the *surface* of the
+liquid rather than its density — thin pale filaments over a body held in shadow.
+Both the flow and the sample drift, on different axes at different rates, so it
+never repeats and never obviously loops.
+
+Three deliberate choices about cost, since this is on screen for the whole
+encounter rather than for a moment. The octave count is local (3) rather than the
+shared helper's 5: there is no fine structure here to resolve and the extra
+octaves are invisible under a portrait. There are four noise calls, not the six a
+two-level warp wants. And there is no `uTexel` anywhere — nothing here is
+*struck*, so nothing needs a hairline sized in device pixels; the filaments are a
+power of the fold, so their width comes from the field's gradient and they gain
+pixels on a HiDPI display rather than losing them, which is the failure the
+device-pixel rule exists to prevent.
 
 It is also the quietest effect in that file, deliberately. A boss holds two or
 three slots of every round, so anything that flickered would be the loudest thing
@@ -198,13 +238,25 @@ boss entries per pass. In testing that reached about 1800 combatants and hung th
 client. Both the hook filter and `syncBossTurns` itself refuse an extra turn now,
 and the check tool requires both.
 
-For the look, `.preview/boss.html` renders the panel and the rail cards against
-the real stylesheets. Serve it — a `file://` page does not execute its module
-script:
+It also requires that a boss card out-measure an ordinary one **in both
+layouts**. The narrow block below 720px restates the card height at
+`.gluni-card .gluni-card-surface`, which ties the boss rules on specificity and
+beats them on order, so a boss on a small screen silently came out exactly the
+size of the creatures it towers over while the desktop rail looked correct.
+
+For the look, the preview generator writes a page that renders the panel and a
+**mixed** rail — a boss standing among the ordinary cards it is meant to
+out-measure, which is the only way that claim can be judged — and compiles the
+real `FX_FRAG_TYRANT` in a real WebGL context, reporting the compile log rather
+than swallowing it. A fragment shader that fails to compile degrades to nothing
+drawn: the card renders perfectly and the effect is simply absent.
 
 ```bash
-node tools/preview-server.mjs 8951
+node tools/boss-preview.mjs --out=.preview/boss.html && node tools/preview-server.mjs 8951
 ```
+
+Serve it. A `file://` page does not execute its module script, so opening the
+output directly gives you cards with no liquid in them and no error either.
 
 Neither the check tool nor the preview can prove how any of this behaves in a live
 encounter; that needs a session.

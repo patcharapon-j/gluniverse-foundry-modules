@@ -104,68 +104,95 @@ void main(void){
 // it switches to a thin, cool, marching dashed perimeter ("on deck" / queued read)
 // so it's formally distinct from the active plasma pedestal. uReduced freezes
 // motion for the reduced animation tier.
-// Boss presence (initiative card only): a slowly counter-rotating engraved
-// sigil behind the creature, with a dark aura pooled at the edges of the card.
+// Boss presence (initiative card only): a slow, viscous liquid filling the whole
+// card, with pale filaments folding through it. It is drawn UNDERNEATH the
+// portrait — the host parks this canvas below the portrait layer and the boss's
+// portrait is masked so the creature dissolves into it at the edges — so this is
+// the card's material rather than an overlay on the art. The creature is standing
+// in the thing, not in front of it.
 //
-// Deliberately built from nothing this file already uses. Every other effect
-// here is value noise: the guard-break shards, the dying veins and the delay
-// bands are all fbm, and a fourth fbm effect would read as a variant of the
-// third however it were tuned — the same soft, wandering texture in a different
-// hue. This one has no noise in it at all. It is two rings of radial ticks and
-// a radial falloff, so it is hard-edged, concentric and obviously struck rather
-// than grown, which is also what Etched Glass is: engraving, not weather.
+// This replaces a sigil of two counter-rotating tick rings. Rings are cheap in
+// the literal sense: concentric marks on a rectangular card read as a target
+// pasted onto it, they carry no information the card doesn't already state, and
+// at rail size two of them are just a smudge with a hole in the middle. A
+// material has no such problem — there is nothing to centre and nothing to miss.
 //
-// The rings turn against each other at a fifth and a tenth of a revolution a
-// minute. A boss holds two or three slots of every round, so anything faster
-// would be the loudest thing on screen for half the encounter; at this rate the
-// card is never quite still and you never catch it moving.
+// How the liquid is made: the field is warped by a flow of its own before it is
+// sampled (`gluTyrantFlow` produces the offset, `body` samples the warped
+// point). One level of that is marble; feeding the warp back into the sample
+// point is what makes it fold into itself, which is what separates a liquid
+// from a cloud. Both the flow and the sample drift, at different rates and on
+// different axes, so the pattern never repeats and never obviously loops.
 //
-// Every ring is struck through uTexel — device pixels, not card units — because
-// a hairline written in geometry units is ~2px on a HiDPI display and vanishes
-// on an ordinary one, and no preview run on one machine shows you the other.
+// Three deliberate choices about cost. The octave count is local (3) rather than
+// gluFbm's 5: this is a soft body with no fine structure to resolve, and the two
+// extra octaves are invisible under a portrait while doubling the sample count
+// on a card that is on screen for the whole encounter. There are four noise
+// calls, not the six a two-level warp wants. And there is no uTexel anywhere:
+// nothing here is *struck*, so nothing here needs a hairline sized in device
+// pixels. The filaments are a power of the fold, so their width is set by the
+// field's gradient in card space — they gain pixels on a HiDPI display rather
+// than losing them, which is the failure mode the uTexel rule exists to prevent.
 //
-// uIntensity carries the tier: a Supreme boss is the same sigil, cut deeper.
-// Hue says "boss", amount says "how much of one", which leaves --gl-tyrant free
-// to mean exactly one thing on the rail.
+// uIntensity carries the tier: a Supreme boss is the same liquid, deeper. Hue
+// says "boss", amount says "how much of one", which leaves --gl-tyrant free to
+// mean exactly one thing on the rail.
 export const FX_FRAG_TYRANT = `
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
-uniform float uTime, uSeed, uAspect, uTexel, uIntensity;
-uniform vec3 uTyrantBase, uTyrantHot;
-// One tick ring: count marks around a circle of radius rad, turning at spin,
-// each mark duty of its own arc. w is the stroke width, in device pixels.
-float gluTickRing(vec2 p, float rad, float count, float spin, float duty, float w){
-  float r=length(p);
-  float band=smoothstep(w,0.0,abs(r-rad));
-  float ang=atan(p.y,p.x)+spin;
-  float marks=smoothstep(duty-0.12,duty+0.12,abs(sin(ang*count*0.5)));
-  return band*marks;
+uniform float uTime, uSeed, uAspect, uIntensity;
+uniform vec3 uTyrantBase, uTyrantMid, uTyrantHot;
+${FX_GLSL_NOISE}
+// Three octaves, and each one is rotated as well as scaled. Doubling alone
+// stacks every octave's lattice on the same axes, which shows up in a slow field
+// as a faint square grain; the offset breaks the alignment for free.
+float gluTyrantFbm(vec2 p){
+  float s=0.0,a=0.5;
+  for(int i=0;i<3;i++){ s+=a*gluVNoise(p); p=p*2.03+vec2(1.7,9.2); a*=0.5; }
+  return s;
+}
+// The flow: how far a point is dragged, and in which direction. The two
+// components read the field at unrelated offsets and drift on opposite axes, so
+// the drag is a circulation rather than a uniform slide.
+vec2 gluTyrantFlow(vec2 p, float t){
+  return vec2(gluTyrantFbm(p + vec2(0.0, -t)),
+              gluTyrantFbm(p + vec2(4.7, 2.3) + vec2(t*0.6, 0.0)));
 }
 void main(void){
   vec2 uv=vTextureCoord;
-  // Card space, corrected so the sigil is round on a card three times as wide
-  // as it is tall rather than an ellipse the width of the rail.
-  vec2 p=uv-vec2(0.5); p.x*=uAspect;
-  float r=length(p);
-  float px=uTexel*1.6;                                  // one hairline, in device pixels
-  float turn=uTime*0.10+uSeed;
-  float ringA=gluTickRing(p,0.26,24.0, turn,      0.55, px*1.5);
-  float ringB=gluTickRing(p,0.36,40.0,-turn*0.55, 0.68, px*1.1);
-  // A continuous hairline under each tick ring, so the marks read as struck on
-  // a circle rather than as loose dashes.
-  float hair=smoothstep(px,0.0,abs(r-0.26))*0.30+smoothstep(px,0.0,abs(r-0.36))*0.20;
-  // The aura. Clear over the middle of the card, which is where the creature's
-  // face is, and graded all the way out rather than reaching full strength
-  // early: at a tighter falloff the corners flattened to one even wash, which
-  // reads as a coloured box behind the card instead of as light pooling in it.
-  float aura=smoothstep(0.30,1.05,r);
-  float breath=0.86+0.14*sin(uTime*0.45+uSeed*1.7);
-  float strokes=clamp(ringA+ringB+hair,0.0,1.0);
-  // The card carries a name, a turn chip and an initiative over this, all of
-  // them small: the sigil is held well under them on purpose. It is meant to be
-  // noticed second.
-  float a=clamp((aura*0.20+strokes*0.30)*breath*uIntensity,0.0,0.62);
-  vec3 col=mix(uTyrantBase,uTyrantHot,clamp(strokes*1.4,0.0,1.0));
+  // Card space, corrected so the liquid's cells are round on a card three times
+  // as wide as it is tall rather than stretched into bands down the rail.
+  vec2 p=vec2(uv.x*uAspect, uv.y);
+  // A boss holds two or three slots of every round, so anything quick here would
+  // be the loudest thing on screen for half the encounter. At this rate the card
+  // is never quite still and you never catch it moving.
+  float t=uTime*0.055;
+
+  vec2 flow=gluTyrantFlow(p*2.2, t);
+  float body=gluTyrantFbm(p*2.2 + 2.9*flow + vec2(0.0, t*0.35));
+  // A second, much larger-scale read of the same flow, running the other way.
+  // This is what gives the card depth: without it the liquid is one even
+  // agitation everywhere, which reads as static however fast it moves.
+  float veil=gluTyrantFbm(p*1.05 - 1.6*flow - vec2(t*0.5, 0.0));
+
+  // Ridged. The fold lines are where the warped field passes through its middle,
+  // so this is the *surface* of the liquid rather than its density, and raising
+  // it to a power leaves only the crests: thin pale filaments over a dark body.
+  float fold=1.0-abs(body*2.0-1.0);
+  float film=pow(clamp(fold,0.0,1.0),6.0);
+  float pool=smoothstep(0.28,0.88,veil);
+
+  // Liquid settles. A gentle vertical bias costs nothing and stops the card
+  // looking like a texture swatch cropped to a rectangle.
+  float settle=mix(0.74,1.16,smoothstep(0.05,0.95,uv.y));
+  float breath=0.88+0.12*sin(uTime*0.31+uSeed*1.7);
+
+  float a=clamp((0.20+pool*0.36+film*0.42)*settle*breath*uIntensity, 0.0, 0.90);
+  // Held short of the full mid tone. At the full mix the card is an even, fairly
+  // vivid purple, which is pretty rather than ominous; stopping the ramp early
+  // keeps the body in shadow and lets the filaments be the only bright thing.
+  vec3 col=mix(uTyrantBase, uTyrantMid, pool*0.72);
+  col=mix(col, uTyrantHot, film*0.85);
   gl_FragColor=vec4(col*a, a);
 }`;
 

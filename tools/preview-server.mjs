@@ -11,7 +11,9 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const PORT = Number(process.argv[2] || 8931);
+// An explicit argument wins; PORT lets a harness that assigns its own port drive
+// this without editing the launch config.
+const PORT = Number(process.argv[2] || process.env.PORT || 8931);
 const TYPES = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
 createServer(async (req, res) => {
