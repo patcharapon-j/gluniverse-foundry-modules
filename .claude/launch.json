@@ -4,8 +4,11 @@
     {
       "name": "preview",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["tools/preview-server.mjs", "8931"],
-      "port": 8931
+      "runtimeArgs": [
+        "tools/preview-server.mjs"
+      ],
+      "port": 8931,
+      "autoPort": true
     }
   ]
 }

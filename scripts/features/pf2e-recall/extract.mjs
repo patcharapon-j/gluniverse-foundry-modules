@@ -21,6 +21,7 @@
  */
 
 import { EXTRACT_CHAR_CAP } from "./constants.mjs";
+import { bossBadge, bossIncapacitationLevel } from "../pf2e-variant-rules/boss/profile.mjs";
 
 /* -------------------------------------------------- text pipeline ------- */
 
@@ -138,6 +139,34 @@ function withDetail(value, detail) {
 }
 
 /** PF2e stores size abbreviated; spell it out for a reader. */
+/**
+ * What a boss is, for the brief.
+ *
+ * The book's own rule for discovering a boss's Downfalls is Recall Knowledge, so
+ * this feature is where they have to arrive. The Downfalls themselves come
+ * through `actionEntries` — they are real passive items on the creature — and
+ * what is added here is the standing the numbers alone do not show: that this is
+ * a boss at all, what it counts as, and how many turns a round it takes, which
+ * is the single most useful thing a party can learn about one and is invisible
+ * in a statblock.
+ *
+ * `bossBadge` answers null when the rule is off or the creature is ordinary, so
+ * this costs nothing at every other table.
+ */
+function bossLine(actor) {
+  const badge = bossBadge(actor);
+  if (!badge) return "";
+  const tier = game.i18n?.localize?.(`GLVR.boss.tier.${badge.tier}`) ?? badge.tier;
+  const level = bossIncapacitationLevel(actor);
+  return [
+    tier,
+    level === null ? "" : `counts as level ${level}`,
+    `${badge.turns} turns per round`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
 const SIZES = { tiny: "tiny", sm: "small", med: "medium", lg: "large", huge: "huge", grg: "gargantuan" };
 
 const ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
@@ -415,6 +444,7 @@ function extractActor(actor) {
       Weaknesses: weaknesses.join(", "),
       Resistances: resistances.join(", "),
       Speed: speedLine(actor),
+      Boss: bossLine(actor),
     },
     sections: sections([
       { title: "Attacks", entries: attackEntries(actor) },

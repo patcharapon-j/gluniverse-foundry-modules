@@ -81,6 +81,17 @@
   --gl-violet-hot: #e0d4ff;
   --gl-orchid: #cf85e0;          /* dying / unstable — distinct from violet */
   --gl-orchid-hot: #f6d9fb;
+  /*
+   * Boss presence. Deliberately its own stop rather than a reuse of the two
+   * purples above: --gl-violet already means "secret, hidden, mystery" on the
+   * initiative rail and --gl-orchid means "dying", so a boss painted in either
+   * would be the same colour as a hidden combatant or a downed party member. It
+   * is much deeper and far more saturated than both, which is what separates it
+   * at card size where a hue alone would not.
+   */
+  --gl-tyrant: #8b46e8;           /* boss presence */
+  --gl-tyrant-hot: #cfa8ff;       /* its lit edge */
+  --gl-tyrant-deep: #35105e;      /* the shadow the miasma is drawn in */
   --gl-jade: #54d6a6;            /* conditions, sustained effects */
   --gl-jade-hot: #c2ffe8;
   --gl-teal: #4ad9c0;            /* stabilised, held, at rest */

@@ -213,6 +213,11 @@ rather than at the end.
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
 | pf2e-aoe            | aoe.                         | pf2e              | —               | off     |
+| pf2e-variant-rules | vr.                          | pf2e              | —               | off     |
+| vr-careful-consumption | vr.careful               | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-chip-damage     | vr.chip                      | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-dents           | vr.dent                      | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-lasting-wounds  | vr.wound                     | pf2e              | ⤷ pf2e-variant-rules | off |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

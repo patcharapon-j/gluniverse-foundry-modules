@@ -1,0 +1,373 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PF2e Variant Rules — Etched Glass surfaces
+   ══════════════════════════════════════════════════════════════════════════
+
+   Four rules, four hues, every one an existing semantic token routed through
+   `--gl-accent` on a scoped selector:
+
+     Chip Damage          --gl-hazard  danger
+     Careful Consumption  --gl-good    success
+     Dents                --gl-warn    "strain, breaking point"
+     Repair               --gl-teal    "stabilised, at rest"
+
+   Nothing here redeclares a foundation token, writes a raw duration or easing,
+   or strikes a veil from anything but a tint channel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared card chrome ─────────────────────────────────────────────────── */
+.glvr-chip,
+.glvr-dent-repair,
+.glvr-dent-panel,
+.glvr-rest {
+  position: relative;
+  margin-top: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 42%), var(--gl-surface-inset);
+  border: 1px solid var(--gl-edge);
+  box-shadow: var(--gl-etch-soft);
+  font-family: var(--gl-display);
+}
+
+.glvr-dent-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-4) var(--gl-sp-6);
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.glvr-dent-title {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+
+.glvr-dent-state,
+.glvr-careful-cost {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glvr-dent-panel {
+  padding: var(--gl-sp-6);
+}
+
+.glvr-dent-line {
+  margin: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-normal);
+}
+
+.glvr-dent-fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-4);
+  margin-top: var(--gl-sp-5);
+}
+
+/* ── Chip Damage ────────────────────────────────────────────────────────── */
+/* One strip: tag, figure, provenance, controls. The card sits under a roll the
+   table has just read, so it carries no explanation of its own. */
+.glvr-chip {
+  --gl-accent: var(--gl-hazard);
+  padding: var(--gl-sp-4) var(--gl-sp-5);
+}
+
+.glvr-chip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+}
+
+.glvr-chip-tag {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-right: var(--gl-sp-4);
+  border-right: 1px solid var(--gl-hair);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  writing-mode: horizontal-tb;
+}
+
+/* The figure is pressed into the plate rather than sitting on a panel of its
+   own: one inset well is the whole of the card’s depth. */
+.glvr-chip-num {
+  flex: none;
+  min-width: 1.8em;
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: color-mix(in srgb, var(--gl-accent) 10%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 32%, transparent);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.06);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xl);
+  font-weight: var(--gl-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--gl-lh-tight);
+  text-align: center;
+}
+
+.glvr-chip-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+.glvr-chip-what {
+  overflow: hidden;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The sum, kept deliberately quieter than the figure it explains. */
+.glvr-chip-calc {
+  overflow: hidden;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glvr-chip-acts {
+  display: flex;
+  flex: none;
+  gap: var(--gl-sp-3);
+  margin: 0;
+}
+.glvr-chip-acts > .gl-btn { flex: none; }
+.glvr-chip-dismiss { padding-inline: var(--gl-sp-4); }
+
+/* Negated: the figure reads as a nullity rather than as damage nobody applied. */
+.glvr-chip.is-negated .glvr-chip-num {
+  background: var(--gl-surface-inset);
+  border-color: var(--gl-hair);
+  color: var(--gl-text-faint);
+  text-decoration: line-through;
+}
+
+.glvr-chip-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-3);
+  margin-top: var(--gl-sp-4);
+  padding-top: var(--gl-sp-4);
+  border-top: 1px solid var(--gl-hair);
+}
+.glvr-chip-type {
+  padding: var(--gl-sp-1) var(--gl-sp-4);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease);
+}
+.glvr-chip-type:hover { color: var(--gl-text-bright); border-color: var(--gl-accent-soft); }
+
+/* A resisted type negates the chip damage outright, so the chosen state reads as
+   a *good* outcome for the defender rather than as the hazard hue beside it. */
+.glvr-chip-type[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--gl-good) 14%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-good) 55%, transparent);
+  color: var(--gl-good);
+}
+
+.glvr-chip.is-resolved { opacity: 0.72; }
+.glvr-chip.is-resolved .glvr-chip-what { color: var(--gl-text-faint); font-style: italic; }
+
+/* ── Careful Consumption ────────────────────────────────────────────────── */
+.glvr-careful-flavor { --gl-accent: var(--gl-good); }
+.glvr-careful-tag {
+  display: inline-block;
+  margin-right: var(--gl-sp-3);
+  padding: 2px var(--gl-sp-4);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 40%, transparent);
+  border-radius: var(--gl-r-pill);
+  background: var(--gl-accent-faint);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+
+/* The button beside PF2e's own Use, inside an expanded inventory row. It
+   borrows the sheet's button metrics rather than the suite's, so it reads as one
+   of the row's controls instead of as a panel dropped into it. */
+.glvr-careful-go {
+  --gl-accent: var(--gl-good);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  background: color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 38%, transparent);
+  color: var(--gl-accent);
+  cursor: pointer;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  transition:
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease);
+}
+.glvr-careful-go:hover { background: color-mix(in srgb, var(--gl-accent) 20%, var(--gl-ink-2)); }
+
+.glvr-careful-post {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  margin-top: var(--gl-sp-5);
+}
+.glvr-careful-post .glvr-careful-cost { margin-left: 0; }
+
+/* ── Dents ──────────────────────────────────────────────────────────────── */
+.glvr-dent-panel { --gl-accent: var(--gl-warn); }
+.glvr-dent-repair { --gl-accent: var(--gl-teal); padding: var(--gl-sp-6); }
+
+.glvr-dent-track { display: flex; gap: var(--gl-sp-3); margin: var(--gl-sp-5) 0; }
+.glvr-dent-cell {
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  height: var(--gl-sp-10);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-variant-numeric: tabular-nums;
+  transition: background var(--gl-d-brisk) var(--gl-ease), border-color var(--gl-d-brisk) var(--gl-ease);
+}
+.glvr-dent-cell.is-hit {
+  background: color-mix(in srgb, var(--gl-warn) 20%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-warn) 55%, transparent);
+  color: var(--gl-warn);
+}
+/* Past the broken rung the item is mechanically impaired, which is a different
+   statement from "damaged" and gets the hazard hue to say so. */
+.glvr-dent-cell.is-broken {
+  background: color-mix(in srgb, var(--gl-hazard) 20%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--gl-hazard) 55%, transparent);
+  color: var(--gl-hazard);
+}
+
+.glvr-dent-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gl-sp-4); }
+.glvr-dent-count {
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.glvr-dent-scale {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+/* The GM's override box. Sized to its content so the footer keeps reading as one
+   line rather than as a form. */
+.glvr-dent-set {
+  width: 3.4em;
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.glvr-dent-set:focus-visible { border-color: var(--gl-accent); outline: none; }
+.glvr-dent-of {
+  color: var(--gl-text-faint);
+  white-space: nowrap;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The inline badge on an inventory row ───────────────────────────────────
+   Players read their gear on the actor sheet, not on an item sheet, so the count
+   has to be legible there. Only a dented item draws one: a badge on every intact
+   row is a column of noise that says nothing. */
+.glvr-dent-chip {
+  --gl-accent: var(--gl-warn);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  margin-left: var(--gl-sp-3);
+  padding: 0 var(--gl-sp-3);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
+  background: color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-2));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 34%, transparent);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.glvr-dent-chip[data-state="broken"],
+.glvr-dent-chip[data-state="destroyed"] { --gl-accent: var(--gl-hazard); }
+.glvr-dent-chip-of { opacity: 0.62; }
+
+.glvr-dent-panel[data-state="destroyed"] { --gl-accent: var(--gl-hazard); }
+.glvr-dent-panel[data-state="broken"] { --gl-accent: var(--gl-hazard); }
+
+.glvr-dent-fix-n {
+  margin-left: var(--gl-sp-3);
+  color: var(--gl-warn);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Lasting Wounds — the rest notice ───────────────────────────────────── */
+.glvr-rest { --gl-accent: var(--gl-orchid); padding: var(--gl-sp-6); }
+.glvr-rest-head {
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+}
+.glvr-rest-line { margin: var(--gl-sp-4) 0 0; color: var(--gl-text-dim); font-size: var(--gl-fs-sm); }
+.glvr-rest-list {
+  margin: var(--gl-sp-4) 0 0;
+  padding-left: var(--gl-sp-9);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+}

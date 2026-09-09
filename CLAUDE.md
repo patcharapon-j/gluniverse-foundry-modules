@@ -557,6 +557,190 @@ but not the module script, so you get a card frozen at its pre-entry values and
 conclude, wrongly, that the reveal is broken. Add `--artifact=<path>` for a
 self-contained copy that opens anywhere.
 
+**When touching the PF2e variant rules** (`features/pf2e-variant-rules/`), re-run
+its consistency check. Everything it covers fails *silently*.
+
+The load-bearing one is the dent → item-HP reflection. Dents live in a flag, but
+PF2e derives `isBroken` / `isDestroyed` straight off HP (`hp.value === 0` is
+destroyed, `hp.value <= floor(max / 2)` is broken) and shields read those getters
+to decide whether they still grant an AC bonus — so the reflection is the only
+thing making "broken" mean anything. It **must** round down: on an item with odd
+max HP, rounding 15 × 0.5 up to 8 leaves a two-dent item one point above PF2e's
+threshold of 7 and it never reads as broken. Even-HP items are fine, which is
+exactly how that survives a play session.
+
+It also pins that chip damage fires on a miss but **not** on a critical miss (the
+book excludes every degree past the first that deals no damage, so getting this
+wrong doubles the rule's frequency); that an applicable resistance *negates* chip
+damage rather than reducing it; that a spell's rank beats its level and a level-0
+effect clamps to 1 rather than chipping for nothing; that the healing penalty
+stays negative, since a positive value would silently *increase* healing; that
+every sub-feature prefix is strictly longer than the parent's `vr.` catch-all,
+or the catalog's longest-first sort hands the child's keys to the parent and its
+settings group renders empty; and the two runtime-built i18n families
+(`GLVR.dents.state.*`, and the settings labels derived by slicing `vr.` off a
+key), which nothing else checks:
+
+```bash
+node tools/pf2e-variant-rules-check.mjs
+```
+
+Zero problems required. Three things about this feature are worth knowing before
+you change it.
+
+**Chip Damage and Dents run in assist mode on purpose.** PF2e exposes no hook on
+damage application and nothing else in this suite has ever written into that
+pipeline; the GM presses a button and the module never silently changes a number.
+`applyFlatDamage` in `apply.mjs` is the single place damage is written, and it
+passes `damage` as a bare **number** with `final: true` — the number branch skips
+`applyIWR` entirely and `final` additionally zeroes hardness and the shield-block
+prompt, so the actor loses exactly what the card promised. `applyDamage` consumes
+its `token` argument unguarded, so an actor with no token on the active scene has
+to be refused up front rather than allowed to throw.
+
+**Careful Consumption never calls PF2e's `consume()`.** That function takes only a
+quantity, fires no hook, and builds a bare `DamageRoll(...).toMessage()` that
+bypasses every synthetic in the system — there is nothing to hook. Because the
+path is thin we simply do not use it: the same `(formula)[type,kind]` string is
+rebuilt, evaluated with `maximize: true`, and posted, so PF2e's own apply buttons
+still work and nothing was patched.
+
+**Lasting Wounds has two limits that are PF2e's, not ours.** `applyDamage` skips
+every modifier when called with `final: true`, which is what dragging a token's
+HP bar does — so bar-dragged healing ignores the penalty while chat-card healing
+honours it. And Treat Wounds rolls against a plain numeric DC, so
+`StatisticCheck#roll` takes its un-targeted branch and the message carries **no**
+`context.target` and no `target:*` roll options; the patient is resolved from the
+user's own target or selection instead. The healing penalty itself is a custom
+modifier on the `healing-received` selector — `prepareSynthetics` pushes every
+key of `system.customModifiers` into `synthetics.modifiers` with no allow-list,
+so that works without an effect item or a rule element. `addCustomModifier`
+refuses a duplicate *label*, so changing the value means remove-then-add.
+
+**Two seams with PF2e that this feature got wrong on the way in.** There is no
+"largest possible total" property on a Foundry `Roll` — the one the chat-card
+button originally read exists nowhere in core, so it was always `undefined`, the
+guard in front of it always tripped, and the button never rendered on any card
+while every other part of the feature looked correct. The maximum is produced by
+`evaluateSync({ maximize: true })` on a fresh copy of the same formula now, which
+is the same operation the pre-roll path performs, so the two routes agree by
+construction. And a consumable carries **no action cost at all** in PF2e:
+`system.uses.value` is the dose count, and reading it as one disqualified every
+multi-dose elixir for the crime of having doses left. Doses and `quantity` are
+also different counters, so spending a use decrements `system.uses.value` exactly
+as `ConsumablePF2e#consume` does; spending quantity first destroys a part-used
+elixir at the first sip. The check pins all four.
+
+**Three more seams, all of which shipped wrong once.** `Check.roll(check, context)`
+sums `check.modifiers`; the context's own `modifiers` array is copied into
+`context.origin` as metadata about the roller and is never added to anything, so
+the Medicine penalty written there was recorded, displayed nowhere and changed no
+result. It goes on the check now, through `StatisticModifier#push`, which dedupes
+by slug so a reroll cannot stack a second copy. Second, a dent readout gated on
+`isGM` looks perfectly correct on the GM's screen and is simply absent on every
+other one, which is the failure nobody at the table can report: reading and
+writing are separate questions here, and the two sheet passes reach
+`game.user.isGM` only through `canEdit()`. Third, the Careful Consumption button
+lives where a player is standing when they decide to drink something, which is
+PF2e's inventory summary and the item's own chat card, not the item sheet's
+Details tab. `ItemSummaryRenderer#toggleSummary` fires no hook, so the sheet is
+watched with a MutationObserver that is re-entrant exactly once. The check pins
+all of it.
+
+**Boss Creatures adds a sixth rule and three new seams**, all of which fail
+silently. The load-bearing one is that a boss's level bump (+2 Greater, +4
+Supreme) must **never** be written to `system.details.level.value`. pf2e-flatten
+implements Proficiency-without-Level by adding a custom modifier equal to minus
+the actor's stored level and re-flattening whenever that level changes, so
+storing the bump makes it subtract that much a second time from every check and
+DC the boss makes: a Supreme boss comes out four points *worse* than the creature
+it was built from, in PWoL worlds only, with every number on its sheet looking
+ordinary. That is the same trap Flatfinder's own `adjustments.js` is written to
+avoid for Elite/Weak. The level lives in a flag and is read back out for
+incapacitation only.
+
+Second, the Boss DC is a **static** number computed from the level table, so
+nothing in pf2e-flatten can reach it. In a PWoL world the PCs' saves are
+flattened by their own level and this DC would not be, leaving every save against
+the boss about a level too hard while each number involved looks right on its
+own; `bossDc()` takes the actor's own flattening offset for that reason. Third,
+the level bump and the XP multiplier must reach Flatfinder by *different* routes:
+`threatXp` already derives XP from the level difference, so a boss level fed into
+that lookup on top of the ×2/×3 factor counts the boss twice.
+
+Two more. The book's turn rotations ("the boss's second turn typically occurs
+after 2 members of the party have acted") are stated **for a party of four**;
+stored literally they place two boss turns back to back at a table of five, which
+the same page forbids outright, so `turnOffsets()` re-derives them as fractions of
+the real party and `planTurns()` clamps an overflowing offset to the bottom of the
+round rather than letting it wrap above the boss's own initiative. And the two
+Downfall locks are **different locks** — one Downfall per boss *turn*, and a
+specific trigger spent until the boss's next *initial* turn — which matters
+because a Supreme boss takes three turns between initial turns, so collapsing them
+lets one critical hit disrupt it twice in a round.
+
+An extra turn is a real Combatant carrying the boss's **own actor and token**, so
+it answers yes to every "is this a boss?" test in the feature. Sync one and it is
+given extras of its own, each of which fires `createCombatant` and syncs again,
+so the encounter doubles its boss entries per pass — in a live world that reached
+~1800 combatants and hung the client inside a minute. The hook filter and
+`syncBossTurns` both refuse an extra turn, and the check tool requires both,
+because one guard is one edit away from being the only one.
+
+On the rail the boss effect is the one card effect drawn **under** the portrait,
+and two rules have to agree for it to exist at all. The canvas is parked below
+the portrait layer, and the boss portrait is masked so the creature dissolves
+into the liquid at its edges. Break, dying and scramble are things happening *to*
+a creature and belong over its face; a boss's miasma is what it is standing in, and
+laid over the art it is just a coloured film on somebody. Without the mask the
+canvas is behind a full-bleed opaque cover image and can never be seen, which
+looks exactly like WebGL being unavailable — and a mask on a portrait reads as a
+cosmetic vignette, so it is the half that will be deleted. The check tool
+requires both.
+
+A boss card is also **bigger** than the cards around it, which is the only cue
+that survives a glance, and that has to be restated inside the `@media
+(max-width: 720px)` block: the narrow layout sets the height at
+`.gluni-card .gluni-card-surface`, tying the boss rules on specificity and
+beating them on order, so a boss below 720px came out exactly the size of the
+creatures it towers over while the desktop rail looked correct. The check tool
+measures both layouts.
+
+The boss panel is on **its own sheet tab**, and that tab is this feature's, not
+PF2e's. AppV1 binds a sheet's `Tabs` inside `activateListeners`, which runs
+*before* the render hook, so a nav link injected from a module is invisible to it
+and the page has to be activated by hand. Two consequences are load-bearing:
+Foundry's `Tabs` must never be handed this tab's name (its `active` has to keep
+naming one of the sheet's real tabs, or the next render restores nothing and the
+body comes back blank), and *leaving* the tab has to be done by hand too, since
+Foundry still believes the tab being clicked is the active one and its handler
+no-ops.
+
+Multi-turn initiative has two completely separate implementations and they must
+never both run. Card mode already models it through the per-actor
+`init.cardConfig` `{cards, turns}` flag; standard mode has nothing (nothing in the
+suite wraps `Combat#setupTurns`, subclasses `Combatant`, or mutates
+`combat.turns`), so a boss there gets N−1 extra real Combatant documents flagged
+as its Nth turn. A boss carrying both would be dealt nine turns a round.
+
+Two PF2e data-model facts this feature depends on. An NPC has **no DataModel**
+(`CONFIG.Actor.dataModels` covers army/familiar/hazard/loot/party/vehicle only),
+so `system.attributes.hp.max` is an unvalidated `_source` field and an
+`actor.update()` on it persists — but `CreaturePF2e#_preUpdate` clamps an incoming
+`hp.value` against the maximum the actor has *at that moment*, so max and value
+must be written in two updates or the boss gains its Hit Points and immediately
+sits at half of them. And PF2e's trait field is a tagify widget built with
+`enforceWhitelist`, so a trait the system has no entry for survives an
+`update()` and is then dropped the first time a GM touches the traits on that
+item; the book's own new traits (`boss`, `telegraph`) therefore live in
+`bookTraits` and are printed in the description instead of becoming trait chips.
+See `docs/BOSS_RULES.md`.
+
+A fifth rule from the same book section, **Belts**, deliberately ships no code —
+a PF2e container with `system.stowing = false` already holds four items at full
+Bulk. The check tool fails if a `belt.mjs` ever appears, so that decision is not
+quietly reversed.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

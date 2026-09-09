@@ -33,8 +33,19 @@ import {
   PORTRAIT_FRAME_LIMITS
 } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier } from "./util.mjs";
-import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
+import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING, FX_FRAG_DELAY, FX_FRAG_SCRAMBLE, FX_FRAG_TYRANT, FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat, FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./token-overlay.mjs";
+/**
+ * Boss Creatures reads, from the PF2e variant rules feature.
+ *
+ * A deliberate cross-feature import rather than two agreeing string constants:
+ * the flag shape and the tier names then have exactly one definition and this
+ * file cannot drift from it. Both functions are pure, read their enable setting
+ * at call time, and return null when the rule is off or the world is not PF2e,
+ * so an ordinary encounter is unaffected and nothing runs at import time.
+ */
+import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
+import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
 import { getPF2eDyingState, getDnd5eDeathState, getDyingState, getActorAttributeValue, getConditionValue, hasActorItem, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getActorItems, getItemSlug, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
 
 
@@ -1814,6 +1825,10 @@ export class GLUniverseInitiativeOverlay {
       breakGauge: mystery || adhoc ? null : getBreakGaugeState(combatant),
       dying,
       conditions,
+      // A mystery card must not leak that this creature is a boss: the tier is
+      // exactly the kind of thing the party has not learned about it yet.
+      boss: mystery || adhoc ? null : bossBadge(combatant.actor),
+      bossTurn: mystery || adhoc ? null : turnMarker(combatant),
       name: mystery ? localize("GLUNI.Unknown") : adhoc?.name ?? combatant.name,
       initiative: combatant.initiative,
       portrait,
@@ -1925,6 +1940,9 @@ export class GLUniverseInitiativeOverlay {
       card.delayed ? "gluni-card--delayed" : "",
       card.adhoc ? "gluni-card--adhoc" : "",
       card.adhoc ? `gluni-card--adhoc-${card.adhoc.type}` : "",
+      card.boss ? "gluni-card--boss" : "",
+      card.boss ? `gluni-card--boss-${card.boss.tier}` : "",
+      card.bossTurn ? "gluni-card--boss-extra" : "",
       card.guardBroken ? "gluni-card--guard-broken" : "",
       card.conditions ? "gluni-card--conditioned" : "",
       card.dying ? "gluni-card--dying" : "",
@@ -1950,13 +1968,33 @@ export class GLUniverseInitiativeOverlay {
     // persistent states). Falls back to the CSS background when WebGL is
     // unsupported.
     const fxReady = !card.adhoc && cardFX?.supported;
+    // A boss yields to break and dying. Those are states of this fight, and a
+    // boss in one of them is a boss in trouble — the more urgent thing for the
+    // card to be saying. Dread is what a boss looks like when nothing else is
+    // happening to it, which is most of the encounter.
     const fxMode = !fxReady
       ? null
       : card.mystery
         ? "scramble"
         : card.portrait
-          ? (card.guardBroken ? "break" : card.dying && !card.dying.stable ? "dying" : null)
+          ? (card.guardBroken
+              ? "break"
+              : card.dying && !card.dying.stable
+                ? "dying"
+                : card.boss
+                  ? "dread"
+                  : null)
           : null;
+    // The tier rides on the canvas rather than on a filter of its own: one
+    // program, one compile, and the amount of miasma is a per-frame uniform.
+    // An extra turn is an echo of the boss, not a second boss: it takes the same
+    // sigil at a little over half strength. Its card is also the busiest on the
+    // rail — name, BOSS chip, "Turn 2 of 3" and an initiative — so it is the one
+    // place a full-strength effect would cost legibility.
+    const fxIntensity =
+      fxMode === "dread"
+        ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
+        : 1;
 
     const slotAttr = Number.isInteger(card.cardSlot) ? ` data-card-slot="${card.cardSlot}"` : "";
 
@@ -2012,7 +2050,7 @@ export class GLUniverseInitiativeOverlay {
             </div>
           `
           : ""}
-        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" aria-hidden="true"></canvas>` : ""}
+        ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" data-fx-intensity="${fxIntensity}" aria-hidden="true"></canvas>` : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
             ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
@@ -2022,6 +2060,8 @@ export class GLUniverseInitiativeOverlay {
               : `<span class="gluni-dying-tag">${localize("GLUNI.Dying.Label").toUpperCase()} ${card.dying.value}</span>`) : ""}
             ${card.adhoc ? `<span class="gluni-adhoc-tag">${escapeHTML(card.adhoc.label).toUpperCase()}</span>` : ""}
             ${card.adhoc?.oneShot ? `<span class="gluni-adhoc-tag gluni-adhoc-tag--oneshot">${localize("GLUNI.AdHoc.OneShot").toUpperCase()} ${formatRound(card.adhoc.round)}</span>` : ""}
+            ${card.boss ? `<span class="gluni-boss-tag">${localize("GLVR.boss.cardTag")}</span>` : ""}
+            ${card.boss && card.bossTurn ? `<span class="gluni-boss-tag gluni-boss-tag--turn">${formatLocalized("GLVR.boss.turnBadge", { index: card.bossTurn.index, total: card.bossTurn.of })}</span>` : ""}
             ${card.delayed ? `<span class="gluni-delayed-tag">${localize("GLUNI.Delayed").toUpperCase()}</span>` : ""}
           </div>
           <h3>${escapeHTML(card.name)}</h3>
@@ -5435,7 +5475,8 @@ class CardFXManager {
       this.filters = {
         break:    mk(FX_FRAG_BREAK,    { uBreakAmber: [...S.breakAmber], uBreakHot: [...S.breakHot] }),
         dying:    mk(FX_FRAG_DYING,    { uVeinBase:   [...S.veinBase],   uVeinHot:  [...S.veinHot]  }),
-        scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] })
+        scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
+        dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantMid: [...S.tyrantMid], uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
       };
       // Force each filter's GLSL program to compile now. Otherwise the program
       // compiles lazily on the first frame a card is broken/dying/mystery, stalling
@@ -5481,6 +5522,7 @@ class CardFXManager {
         ctx: cv.getContext("2d"),
         mode,
         seed: prev?.seed ?? Math.random() * 100,
+        intensity: Number(cv.dataset.fxIntensity) || 1,
         impact: prev?.impact ?? [0.42 + Math.random() * 0.36, 0.18 + Math.random() * 0.42],
         t0: prev && prev.mode === mode ? prev.t0 : performance.now()
       });
@@ -5551,6 +5593,7 @@ class CardFXManager {
         filter.uniforms.uAspect = rw / rh;
         filter.uniforms.uTexel = 1 / rh;
         if (entry.mode === "break") filter.uniforms.uImpact = entry.impact;
+        if (entry.mode === "dread") filter.uniforms.uIntensity = entry.intensity;
         this.sprite.width = rw;
         this.sprite.height = rh;
         this.sprite.filters = [filter];
@@ -5574,6 +5617,8 @@ class CardFXManager {
     set(this.filters.dying,    "uVeinHot",    S.veinHot);
     set(this.filters.scramble, "uMysteryA",   S.mysteryA);
     set(this.filters.scramble, "uMysteryB",   S.mysteryB);
+    set(this.filters.dread,    "uTyrantBase",  S.tyrantBase);
+    set(this.filters.dread,    "uTyrantHot",   S.tyrantHot);
   }
 
   destroy() {

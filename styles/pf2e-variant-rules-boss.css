@@ -1,0 +1,400 @@
+/**
+ * Boss Creatures — the NPC sheet panel and the chat cards.
+ *
+ * Identity is routed through `--gl-accent` on the panel root and remapped per
+ * tier, so the figures, the buttons, the rules and the focus rings all move
+ * together, and the panel matches the initiative card exactly: both tiers take
+ * --gl-tyrant, the purple that exists for bosses and nothing else, and a Supreme
+ * boss is the same hue carried further rather than a second one. The
+ * panel sits inside PF2e's own sheet, which is a light, dense surface, so this
+ * sheet spends its edges rather than its fills — one chamfered outline, hairline
+ * rules between groups, and colour reserved for the two things the GM is
+ * actually scanning for: the Boss DC and a live Downfall penalty.
+ */
+
+.glvr-boss-panel {
+  --gl-accent: var(--gl-tyrant);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  margin-top: var(--gl-sp-6);
+  padding: var(--gl-sp-5);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-sm);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+}
+
+/*
+ * A Supreme boss keeps the hue and gains weight, exactly as its card does. The
+ * two must not disagree: the panel and the rail are two views of one creature,
+ * and a GM reading a crimson sheet beside a purple card would reasonably assume
+ * they were looking at two different things.
+ */
+.glvr-boss-panel[data-tier="supreme"] {
+  --gl-accent: var(--gl-tyrant);
+  border-color: color-mix(in srgb, var(--gl-tyrant) 46%, var(--gl-edge));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-tyrant) 22%, transparent);
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.glvr-boss-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+}
+
+.glvr-boss-title {
+  flex: 1;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-bright);
+}
+
+.glvr-boss-tier {
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  border: 1px solid var(--gl-accent);
+  border-radius: var(--gl-cut-xs);
+  color: var(--gl-accent);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glvr-boss-unmark {
+  flex: 0 0 auto;
+  padding: 0 var(--gl-sp-2);
+  border: 0;
+  background: none;
+  color: var(--gl-text-faint);
+  cursor: pointer;
+  transition: color var(--gl-d-tap) var(--gl-ease);
+}
+
+.glvr-boss-unmark:hover {
+  color: var(--gl-hazard);
+}
+
+/* ── Statistics ──────────────────────────────────────────────────────────── */
+
+/*
+ * Auto-fit rather than a fixed column count: this panel lands in the NPC sheet's
+ * narrow sidebar on one release and in the full-width main tab on another, and a
+ * three-column grid in a 180px sidebar clips the Boss DC — the one figure the GM
+ * opened the panel to read.
+ */
+.glvr-boss-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: var(--gl-sp-2);
+}
+
+.glvr-boss-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-1);
+  padding: var(--gl-sp-3);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-cut-xs);
+  background: rgb(var(--gl-tint-light) / 0.03);
+}
+
+/*
+ * Wraps rather than truncating. This panel lands in the NPC sheet's sidebar on
+ * one PF2e release and its full-width main tab on another, and at the narrow end
+ * an ellipsis turns "Boss modifier" into "BOSS MODIF..." — which is not a label.
+ * A second line costs one row of height; an unreadable label costs the readout.
+ */
+.glvr-boss-stat-label {
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+  overflow-wrap: anywhere;
+}
+
+.glvr-boss-stat-value {
+  font-size: var(--gl-fs-md);
+  font-weight: var(--gl-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-bright);
+}
+
+/* The Boss DC and the boss modifier are what the GM reads aloud. */
+.glvr-boss-stat:nth-child(3) .glvr-boss-stat-value,
+.glvr-boss-stat:nth-child(4) .glvr-boss-stat-value {
+  color: var(--gl-accent);
+}
+
+/* ── Groups ──────────────────────────────────────────────────────────────── */
+
+.glvr-boss-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  padding-top: var(--gl-sp-4);
+  border-top: 1px solid var(--gl-hair);
+}
+
+.glvr-boss-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gl-sp-3);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glvr-boss-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-faint);
+}
+
+.glvr-boss-penalty {
+  color: var(--gl-hazard);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: var(--gl-track-normal);
+}
+
+.glvr-boss-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.glvr-boss-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-cut-xs);
+  background: rgb(var(--gl-tint-light) / 0.02);
+}
+
+.glvr-boss-row-name {
+  flex: 0 0 auto;
+  font-weight: var(--gl-weight-medium);
+  color: var(--gl-text-bright);
+}
+
+/* Costs and notes give up their width first; a name that wraps is unreadable. */
+.glvr-boss-row-cost,
+.glvr-boss-row-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--gl-fs-3xs);
+  color: var(--gl-text-faint);
+}
+
+.glvr-boss-row-cost {
+  text-align: right;
+}
+
+.glvr-boss-drop,
+.glvr-boss-drop-downfall {
+  flex: 0 0 auto;
+  padding: 0 var(--gl-sp-2);
+  border: 0;
+  background: none;
+  color: var(--gl-text-faint);
+  cursor: pointer;
+  transition: color var(--gl-d-tap) var(--gl-ease);
+}
+
+.glvr-boss-drop:hover,
+.glvr-boss-drop-downfall:hover {
+  color: var(--gl-hazard);
+}
+
+.glvr-boss-empty {
+  margin: 0;
+  color: var(--gl-text-faint);
+  font-style: italic;
+}
+
+.glvr-boss-note {
+  margin: 0;
+  font-size: var(--gl-fs-3xs);
+  color: var(--gl-text-faint);
+}
+
+.glvr-boss-note.is-warn {
+  color: var(--gl-warn);
+}
+
+.glvr-boss-note.is-good {
+  color: var(--gl-good);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.glvr-boss-add,
+.glvr-boss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-2);
+}
+
+.glvr-boss-add select,
+.glvr-boss-add input[type="text"],
+.glvr-boss-row input[type="text"] {
+  flex: 1 1 90px;
+  min-width: 0;
+  height: auto;
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-xs);
+  background: var(--gl-surface);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+}
+
+.glvr-boss-fire:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/*
+ * Reclaiming the row from PF2e's own sheet styles.
+ *
+ * PF2e sets `button { width: 100% }` inside its actor sheets. In a flex row that
+ * is not a cosmetic difference: the button takes the entire line and every
+ * sibling collapses to zero, so an ability's action cost disappears and a
+ * Downfall's note field becomes a 14px box that cannot be typed into. Both look
+ * like missing features rather than a layout bug, and neither shows up outside
+ * a real PF2e sheet — a standalone preview has no system stylesheet to fight.
+ *
+ * These selectors are scoped to the panel and carry one extra class so they beat
+ * the system's element rules without reaching for !important. Module styles load
+ * after system styles, so equal specificity would already win; the extra class
+ * is insurance against PF2e tightening its own selectors later.
+ */
+.glvr-boss-panel button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+/* Rows wrap rather than squeeze: the panel can land in a narrow sidebar. */
+.glvr-boss-panel .glvr-boss-row {
+  flex-wrap: wrap;
+}
+
+.glvr-boss-panel .glvr-boss-row-cost {
+  flex: 0 0 auto;
+}
+
+.glvr-boss-panel .glvr-boss-row-note {
+  flex: 1 1 60px;
+}
+
+.glvr-boss-panel .glvr-boss-row input[type="text"],
+.glvr-boss-panel .glvr-boss-add input[type="text"],
+.glvr-boss-panel .glvr-boss-add select {
+  flex: 1 1 100px;
+  width: auto;
+}
+
+/* ── Chat cards ──────────────────────────────────────────────────────────── */
+
+.glvr-boss-card {
+  --gl-accent: var(--gl-warn);
+  padding: var(--gl-sp-4);
+  border-left: 2px solid var(--gl-accent);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+}
+
+.glvr-boss-card[data-kind="downfall"] {
+  --gl-accent: var(--gl-good);
+}
+
+.glvr-boss-card p {
+  margin: 0;
+}
+
+/* ── Ability item descriptions ───────────────────────────────────────────── */
+
+/*
+ * These render inside PF2e's own item description, not in a suite surface, so
+ * they inherit that sheet's type and only claim the trait chip's own box.
+ */
+.glvr-boss-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-2);
+  margin: 0 0 var(--gl-sp-3);
+}
+
+.glvr-boss-trait {
+  padding: var(--gl-sp-1) var(--gl-sp-3);
+  border: 1px solid var(--gl-warn);
+  border-radius: var(--gl-cut-xs);
+  color: var(--gl-warn);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glvr-boss-meta {
+  margin: 0 0 var(--gl-sp-3);
+  font-size: var(--gl-fs-3xs);
+  color: var(--gl-text-dim);
+}
+
+/* ── The sheet tab ───────────────────────────────────────────────────────── */
+
+/*
+ * The tab strip and the page injected into it.
+ *
+ * The panel used to be appended to the main tab, where it sat under a creature's
+ * own statistics in the narrowest column on the sheet. On its own page it gets
+ * the full body width, so the stat grid can breathe and a Downfall note is a
+ * field rather than a slot.
+ *
+ * This page is created after the sheet was built, so it inherits the system's
+ * `.tab` rules but none of the per-tab ones PF2e writes for its own five. What
+ * it needs from us is the show/hide pair and its own scroll — a boss with three
+ * abilities, three Downfalls and a live encounter section is taller than the
+ * sheet, and a page that cannot scroll simply loses its bottom rows.
+ */
+.glvr-boss-tabpage:not(.active) {
+  display: none;
+}
+
+.glvr-boss-tabpage.active {
+  display: block;
+  overflow-y: auto;
+  padding: var(--gl-sp-4);
+}
+
+/* The panel's own top margin was for sitting under something. It no longer is. */
+.glvr-boss-tabpage .glvr-boss-panel {
+  margin-top: 0;
+}
+
+.glvr-boss-tab i {
+  margin-right: var(--gl-sp-2);
+}
