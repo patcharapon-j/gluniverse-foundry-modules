@@ -10,13 +10,31 @@
 import { registerBossSheet } from "./sheet.mjs";
 import { bossProfile } from "./profile.mjs";
 import { refreshAbilityText } from "./apply.mjs";
-import { onCombatantRemoved, onTurnChanged, syncBossTurns, syncEncounter } from "./initiative.mjs";
+import {
+  isExtraTurn,
+  onCombatantRemoved,
+  onTurnChanged,
+  syncBossTurns,
+  syncEncounter,
+} from "./initiative.mjs";
 import { resetState, syncPenalty } from "./downfall.mjs";
 
 /** Only the one acting GM writes; every client receives these hooks. */
 const acting = () => game.user?.isGM && game.users?.activeGM === game.user;
 
-const primaryOwner = (combatant) => combatant?.actor && bossProfile(combatant.actor);
+/**
+ * Is this the combatant that *owns* a boss's turns?
+ *
+ * The `isExtraTurn` half is load-bearing. An extra turn is a real Combatant
+ * pointing at the same actor and token as the boss it belongs to, so every
+ * "is this a boss?" test in this feature passes on one. Without this the
+ * `createCombatant` hook hands each new extra straight back to
+ * `syncBossTurns`, which gives it extras of its own, each of which fires the
+ * hook again: the encounter doubles its boss entries per pass and the client
+ * stops responding within seconds.
+ */
+const primaryOwner = (combatant) =>
+  !!combatant?.actor && !isExtraTurn(combatant) && !!bossProfile(combatant.actor);
 
 export function registerBoss() {
   registerBossSheet();

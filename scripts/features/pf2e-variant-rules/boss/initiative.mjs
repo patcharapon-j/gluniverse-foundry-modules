@@ -152,6 +152,12 @@ function partySize(combat) {
 export async function syncBossTurns(combat, combatant) {
   if (!combat || !combatant) return;
   if (!game.user?.isGM || game.users?.activeGM !== game.user) return;
+  // Never sync an extra turn. It carries the boss's own actor, so it answers
+  // yes to every test that asks whether it is a boss, and syncing one gives it
+  // extras of its own — which fire `createCombatant`, which syncs them. The
+  // callers guard this too; it is repeated here because the cost of one missed
+  // guard is an encounter that grows exponentially until the client hangs.
+  if (isExtraTurn(combatant)) return;
 
   const profile = bossProfile(combatant.actor);
   const existing = extrasFor(combat, combatant.id);

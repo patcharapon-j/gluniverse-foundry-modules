@@ -771,19 +771,23 @@ if (!bossInitSource.includes("deleteEmbeddedDocuments")) {
 }
 
 /*
- * Raising max Hit Points and current Hit Points in one update silently clamps
- * the value back to the old maximum: `CreaturePF2e#_preUpdate` clamps an
- * incoming `hp.value` against the maximum the actor has at that moment. The
- * boss would gain its Hit Points and immediately sit at half of them.
+ * An extra turn is a real Combatant carrying the boss's own actor and token, so
+ * it answers yes to every "is this a boss?" test in the feature. Sync one and it
+ * is given extras of its own, each of which fires `createCombatant` and syncs
+ * again — the encounter doubles its boss entries per pass. This is not a subtle
+ * failure: it took a live world to ~1800 combatants and hung the client. Both
+ * the hook's own filter and the sync itself have to refuse.
  */
-const applySource = read("scripts/features/pf2e-variant-rules/boss/apply.mjs");
-const writeHp = applySource.slice(applySource.indexOf("async function writeHp"));
-const writeHpBody = writeHp.slice(0, writeHp.indexOf("\n}\n") + 1);
-if (!/hp\.max[\s\S]*?actor\.update[\s\S]*?hp\.value/.test(writeHpBody)) {
-  fail("boss: writeHp must write the maximum in its own update before the value, or PF2e clamps the value to the old max");
+const syncTurns = bossInitSource.slice(bossInitSource.indexOf("export async function syncBossTurns"));
+const syncTurnsBody = syncTurns.slice(0, syncTurns.indexOf("\n}\n") + 1);
+if (!syncTurnsBody) fail("boss: syncBossTurns could not be located in initiative.mjs");
+if (!/isExtraTurn\(combatant\)\)\s*return/.test(syncTurnsBody)) {
+  fail("boss: syncBossTurns does not refuse an extra turn — syncing one gives it extras of its own, without bound");
 }
-if ((writeHpBody.match(/actor\.update\(/g) ?? []).length < 2) {
-  fail("boss: writeHp writes max and value in one update — PF2e clamps the value against the old maximum");
+const bossIndexSource = read("scripts/features/pf2e-variant-rules/boss/index.mjs");
+const primaryOwner = bossIndexSource.slice(bossIndexSource.indexOf("const primaryOwner"));
+if (!/!isExtraTurn\(/.test(primaryOwner.slice(0, primaryOwner.indexOf(";") + 1))) {
+  fail("boss: primaryOwner accepts an extra turn — every combat hook would then re-sync it as a boss of its own");
 }
 
 /* 9i. Settings and registration. */
