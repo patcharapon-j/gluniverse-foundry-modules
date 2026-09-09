@@ -28,6 +28,34 @@
   font-family: var(--gl-display);
 }
 
+/* ── Control metrics ──────────────────────────────────────────────────────
+   `.gl-btn` states its padding in `em` and deliberately declares no font size,
+   so it takes whatever the host surface sets — 14px in a chat card, more inside
+   a PF2e sheet. Against labels struck at 9–11px that reads as a control
+   borrowed from another program, and because the padding is proportional the
+   button gains the same slack the type did: the label ends up crowding the
+   border it should sit well inside.
+
+   Every button this feature ships is sized here, in one place, so the metric is
+   a decision rather than an accident of where the card happened to land. */
+.glvr-chip-apply,
+.glvr-chip-dismiss,
+.glvr-careful-max,
+.glvr-dent-less,
+.glvr-dent-more,
+.glvr-dent-fix {
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+}
+
+/* The two nudges are a matched pair and read as one control, so they are sized
+   to the wider of the two glyphs rather than to their own labels. */
+.glvr-dent-less,
+.glvr-dent-more {
+  min-width: 2.6em;
+  padding: 0.5em 0.7em;
+}
+
 .glvr-dent-head {
   display: flex;
   align-items: center;
@@ -155,7 +183,7 @@
   margin: 0;
 }
 .glvr-chip-acts > .gl-btn { flex: none; }
-.glvr-chip-dismiss { padding-inline: var(--gl-sp-4); }
+.glvr-chip-dismiss { padding-inline: 0.8em; }
 
 /* Negated: the figure reads as a nullity rather than as damage nobody applied. */
 .glvr-chip.is-negated .glvr-chip-num {

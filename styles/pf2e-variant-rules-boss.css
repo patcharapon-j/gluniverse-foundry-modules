@@ -270,6 +270,21 @@
   font-size: var(--gl-fs-3xs);
 }
 
+/*
+ * Button metrics.
+ *
+ * `.gl-btn` declares no font size, so on an actor sheet it inherits PF2e's —
+ * roughly half again the 9px this panel sets on its own inputs, notes and
+ * selects. The buttons then read as system controls that wandered in, and their
+ * em padding scales up with the type, leaving the label pressed against its own
+ * border. Sized to the row they sit in.
+ */
+.glvr-boss-panel .gl-btn {
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.55em 0.9em;
+}
+
 .glvr-boss-fire:disabled {
   opacity: 0.45;
   cursor: default;

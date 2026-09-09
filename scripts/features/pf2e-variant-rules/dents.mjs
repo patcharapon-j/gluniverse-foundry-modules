@@ -4,11 +4,17 @@
  * "In this ruleset, items no longer have a broken threshold; instead, they have
  * the ability to take a number of dents."
  *
- * The dent count is authoritative and lives in our own flag. We then write the
- * item HP that makes PF2e agree, because `isBroken` and `isDestroyed` are pure
- * getters off HP (`pf2e.mjs:45097`) and shields read them to decide whether they
- * still grant an AC bonus. Without that reflection "broken" would be a word this
- * feature prints while no existing rule about broken items ever fires.
+ * The dent count is authoritative and lives in our own flag. Where an item has
+ * HP we also write the value that makes PF2e agree, because `isBroken` and
+ * `isDestroyed` are pure getters off HP and shields read them to decide whether
+ * they still grant an AC bonus. Without that reflection "broken" would be a word
+ * this feature prints while no existing rule about broken items ever fires.
+ *
+ * That reflection is a consequence of the dent count, never a precondition for
+ * it. PF2e authors item HP on shields and almost nothing else — every other
+ * physical item ships `hp: { value: 0, max: 0 }` — so requiring HP before
+ * drawing the track hid this rule from every weapon and every suit of armour in
+ * a real world. See `DENTABLE`.
  *
  * Note this is a single derived field write, not an interception of the damage
  * pipeline — it carries none of the fragility that put Chip Damage in assist
@@ -29,10 +35,27 @@ import { normalizeHtml, itemDurability, isSturdyShield, isConstruct, contextType
 
 const CLASS = "glvr-dent";
 
-/** Items this rule applies to: physical, damageable, not carried by a construct. */
+/**
+ * The physical item types a dent track is drawn on.
+ *
+ * This list is the rule, not a convenience: PF2e ships **every** physical item
+ * with `hp: { value: 0, max: 0 }` and `hardness: 0` (`template.json`'s
+ * `physical` template), and only a handful of shields in the compendium
+ * override it. Gating this feature on item HP therefore silenced it on every
+ * item in a real world — including the weapons and armour the rule is written
+ * for — while looking like a careful guard. Item HP is what the dent count
+ * *reflects into* where it exists, never what decides whether dents apply.
+ *
+ * Consumables and treasure are left out on purpose. A potion that takes a hit
+ * shatters and coins do not dent, so a four-rung durability track on either is
+ * a control that will never be moved.
+ */
+const DENTABLE = new Set(["weapon", "armor", "shield", "equipment", "backpack", "book"]);
+
+/** Items this rule applies to: dentable gear not carried by a construct. */
 export function tracksDents(item) {
   if (!item?.isOfType?.("physical")) return false;
-  if (itemDurability(item).max <= 0) return false;
+  if (!DENTABLE.has(item.type)) return false;
   return !isConstruct(item.actor);
 }
 
@@ -53,11 +76,15 @@ export async function setDents(item, count) {
   const dents = Math.max(0, Math.min(destroyed, Math.trunc(Number(count) || 0)));
   const { max } = itemDurability(item);
 
+  // The HP reflection only means something on an item that has HP: PF2e's
+  // `isBroken` / `isDestroyed` both begin `max > 0`, so on the great majority of
+  // items — which ship at 0/0 — there is no getter to keep honest and the flag
+  // stands alone.
+  const update = { [`flags.${SUITE_ID}.${FLAGS.dents}`]: dents };
+  if (max > 0) update["system.hp.value"] = hpForDents(dents, max, opts);
+
   try {
-    await item.update({
-      [`flags.${SUITE_ID}.${FLAGS.dents}`]: dents,
-      "system.hp.value": hpForDents(dents, max, opts),
-    });
+    await item.update(update);
     return true;
   } catch (error) {
     warn("pf2e-variant-rules | could not write a dent count", error);
@@ -120,12 +147,20 @@ function renderTrack(item, editable) {
   </section>`;
 }
 
-/** Where the panel goes, in falling order of preference — PF2e markup drifts. */
+/**
+ * Where the panel goes, in falling order of preference — PF2e markup drifts.
+ *
+ * The first choice puts the track immediately above the Publication fieldset
+ * that closes every Details tab, so it reads as the last of the item's own
+ * fields rather than as something bolted past the end of the sheet. Each entry
+ * carries its own insert position: a panel appended *inside* a form group would
+ * land between a label and its input.
+ */
 const SHEET_ANCHORS = [
-  ".tab[data-tab='details'] .form-group:last-of-type",
-  ".tab[data-tab='details']",
-  ".sheet-body .tab.active",
-  ".sheet-body",
+  [".tab[data-tab='details'] fieldset.publication", "beforebegin"],
+  [".tab[data-tab='details']", "beforeend"],
+  [".sheet-body .tab.active", "beforeend"],
+  [".sheet-body", "beforeend"],
 ];
 
 function onRenderItemSheet(app, html) {
@@ -139,11 +174,11 @@ function onRenderItemSheet(app, html) {
     if (!dentsOn()) return;
     if (!item?.isOwner || !tracksDents(item)) return;
 
-    const host = SHEET_ANCHORS.map((sel) => root.querySelector(sel)).find(Boolean);
-    if (!host) return;
+    const spot = SHEET_ANCHORS.map(([sel, where]) => [root.querySelector(sel), where]).find(([node]) => node);
+    if (!spot) return;
 
     const editable = canEdit();
-    host.insertAdjacentHTML("beforeend", renderTrack(item, editable));
+    spot[0].insertAdjacentHTML(spot[1], renderTrack(item, editable));
     if (!editable) return;
 
     const panel = root.querySelector(`.${CLASS}-panel`);

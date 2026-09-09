@@ -167,6 +167,83 @@ if (!/setDents\(item, event/.test(dentsSrc)) {
   fail("dents: the GM's override must set an absolute value, not add one");
 }
 
+// PF2e authors item HP on shields and on almost nothing else: `template.json`'s
+// `physical` template ships every item at `hp: { value: 0, max: 0 }` with
+// `hardness: 0`, and both `isBroken` and `isDestroyed` begin `max > 0`. So a
+// gate that requires item HP before a dent track is drawn reads as a careful
+// guard and silences the entire rule — no panel on any weapon, any suit of
+// armour or any pack in a real world, which is indistinguishable from the
+// feature being switched off. HP is what a dent count reflects *into*, never
+// what decides whether dents apply.
+// Prose is not code: both of these functions explain the rule they implement in
+// a comment that names the very expression being looked for, so a body has to be
+// stripped before it can be interrogated.
+const codeOf = (name) =>
+  (bodyOf(name) ?? "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+const tracksBody = codeOf("tracksDents");
+if (!/tracksDents/.test(tracksBody)) {
+  fail("dents: tracksDents is missing — nothing decides which items carry a dent track");
+} else if (/itemDurability|hp\s*[.?]|\bhardness\b/.test(tracksBody)) {
+  fail(
+    "dents: tracksDents consults item HP or Hardness. PF2e ships every physical item at 0/0, " +
+      "so that gate hides the track on every item in the world while looking like a guard."
+  );
+}
+for (const type of ["weapon", "armor", "shield"]) {
+  if (!new RegExp(`DENTABLE[^;]*"${type}"`, "s").test(dentsSrc)) {
+    fail(`dents: DENTABLE does not list "${type}" — the rule is written for exactly that gear`);
+  }
+}
+// The reflection has to stay conditional on the item actually having HP, or a
+// write of `hp.value: 0` lands on every 0/0 item for no reason.
+if (!/max\s*>\s*0/.test(codeOf("setDents"))) {
+  fail("dents: setDents writes item HP unconditionally; only an item with HP has a getter to keep honest");
+}
+
+/* ── 2c. Every button this feature ships is sized ────────────────────────── */
+
+// `.gl-btn` declares no font-size and states its padding in `em`, so an unsized
+// button takes the host surface's type — 14px in a chat card, more inside a PF2e
+// sheet — beside labels this feature strikes at 9-11px, and its padding inflates
+// along with it until the label crowds its own border. Nothing errors, and no
+// preview built on the suite's own panels reproduces it, because the fault is
+// inherited from the host rather than declared anywhere.
+const vrCss = read("styles/pf2e-variant-rules.css") + "\n" + read("styles/pf2e-variant-rules-boss.css");
+
+// A rule that sizes a whole surface covers every button inside it.
+const SIZED_SURFACES = [...vrCss.matchAll(/\.(glvr-[a-z-]+)\s+\.gl-btn[^{]*\{([^}]*)\}/g)]
+  .filter((m) => /font-size:/.test(m[2]))
+  .map((m) => m[1]);
+
+// Otherwise the button's own class has to carry a size.
+const SIZED_CLASSES = new Set(
+  [...vrCss.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => /font-size:/.test(m[2]))
+    .flatMap((m) => [...m[1].matchAll(/\.(glvr-[a-z-]+)/g)].map((c) => c[1]))
+);
+
+for (const [file, surface] of [
+  ["dents.mjs", null],
+  ["careful.mjs", null],
+  ["chip.mjs", null],
+  ["boss/sheet.mjs", "glvr-boss-panel"],
+]) {
+  const text = readFileSync(join(FEATURE, file), "utf8");
+  const prefix = text.match(/const CLASS = "([a-z-]+)"/)?.[1];
+  if (!prefix) fail(`${file}: no CLASS prefix — the button audit cannot resolve its class names`);
+  if (surface && SIZED_SURFACES.includes(surface)) continue;
+  for (const m of text.matchAll(/class="gl-btn[^"]*\$\{CLASS\}-([a-z-]+)"/g)) {
+    const cls = `${prefix}-${m[1]}`;
+    if (!SIZED_CLASSES.has(cls)) {
+      fail(
+        `${file}: .${cls} is a .gl-btn with no font-size of its own and no sized surface around it, ` +
+          "so it renders at the host sheet or chat card's type beside 9-11px labels"
+      );
+    }
+  }
+}
+
 /* ── 3. Careful Consumption ──────────────────────────────────────────────── */
 
 const elixir = { type: "consumable", actionCost: 1, formula: "1d6+6", kind: "healing" };

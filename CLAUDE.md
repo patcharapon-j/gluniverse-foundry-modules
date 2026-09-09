@@ -569,6 +569,27 @@ max HP, rounding 15 × 0.5 up to 8 leaves a two-dent item one point above PF2e's
 threshold of 7 and it never reads as broken. Even-HP items are fine, which is
 exactly how that survives a play session.
 
+That reflection is a *consequence* of a dent count, never a precondition for
+one. PF2e authors item HP on shields and on virtually nothing else: the
+`physical` template in `template.json` ships every item at
+`hp: { value: 0, max: 0 }` with `hardness: 0`, and both `isBroken` and
+`isDestroyed` begin `max > 0`. Requiring item HP before drawing a dent track
+therefore reads as a careful guard and silences the whole rule — no panel on any
+weapon, any suit of armour or any pack in a real world, which is indistinguishable
+from the feature being switched off, and which is exactly how it first shipped.
+Which items carry dents is the `DENTABLE` type list in `dents.mjs`; item HP is
+only written back where it exists. The check tool refuses a `tracksDents` that
+consults HP or Hardness.
+
+One more that is invisible in a diff and in any preview built on the suite's own
+panels: **`.gl-btn` declares no font-size**. It states its padding in `em` and
+takes its type from the host, so a button dropped into a chat card renders at
+14px and one on a PF2e sheet larger still, beside labels this feature strikes at
+9–11px — and because the padding is proportional it inflates with the type until
+the label crowds its own border. Every button a feature ships has to be sized by
+that feature, either on its own class or through one `<surface> .gl-btn` rule;
+the check tool walks the emitted buttons and requires it.
+
 It also pins that chip damage fires on a miss but **not** on a critical miss (the
 book excludes every degree past the first that deals no damage, so getting this
 wrong doubles the rule's frequency); that an applicable resistance *negates* chip
