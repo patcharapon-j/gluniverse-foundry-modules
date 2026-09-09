@@ -1834,68 +1834,78 @@
 }
 
 /*
- * The frame.
+ * The frame, which is a different shape rather than the same shape in another
+ * colour. Every other card on this rail is a plain rectangle with one hairline;
+ * a boss's silhouette is cut at two opposite corners and its frame is struck as
+ * corner brackets rather than as a continuous edge, so it is recognisable from
+ * across the screen with the colour taken away.
  *
- * Inset rings on the surface rather than a border on the card: the card itself
- * is the element the FLIP animation transforms between rail and active size, and
- * a border there would be scaled with it.
- *
- * Three rings rather than one, because a single hairline is what every other
- * state on this rail already uses and a boss has to out-weigh all of them: an
- * accent hairline, a dark gap, then a faint outer echo, with a bloom outside the
- * card so it reads as lit rather than outlined. The gap is what makes it look
- * deliberate — two adjacent lines read as a thick border, two with a shadow
- * between them read as a frame.
+ * The cut is on the surface rather than on the card: the card is the element the
+ * FLIP animation transforms between rail and active size, and a clip on it would
+ * be scaled with it into a different-sized notch on every frame of the move.
  */
 .gluni-card--boss .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 13px) 0,
+    100% 13px,
+    100% 100%,
+    13px 100%,
+    0 calc(100% - 13px)
+  );
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 62%, transparent),
-    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.5),
-    inset 0 0 0 4px color-mix(in srgb, var(--gluni-accent) 24%, transparent),
-    0 0 16px color-mix(in srgb, var(--gluni-accent) 20%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 58%, transparent),
+    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.42);
 }
 
-/* A Supreme boss is the same frame with more weight behind it. */
+/* A Supreme boss is cut deeper and lined harder. Same shape, more of it. */
 .gluni-card--boss-supreme .gluni-card-surface {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 19px) 0,
+    100% 19px,
+    100% 100%,
+    19px 100%,
+    0 calc(100% - 19px)
+  );
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-tyrant-hot) 72%, transparent),
-    inset 0 0 0 4px rgb(var(--gl-tint-dark) / 0.58),
-    inset 0 0 0 5px color-mix(in srgb, var(--gluni-accent) 38%, transparent),
-    0 0 22px color-mix(in srgb, var(--gluni-accent) 30%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-tyrant-hot) 74%, transparent),
+    inset 0 0 0 5px rgb(var(--gl-tint-dark) / 0.5),
+    0 0 20px color-mix(in srgb, var(--gluni-accent) 26%, transparent);
 }
 
 /*
- * The teeth. Two short marks biting in at opposite corners of the active card,
- * struck on the spec layer, which is already a full-card overlay above the
- * portrait and whose pseudo-elements are free — so this adds nothing to the DOM.
+ * The brackets. Two L-shaped marks at the corners the cut does *not* touch, so
+ * the frame reads as four deliberate decisions rather than as a rectangle that
+ * lost two corners. Struck on the spec layer, which is already a full-card
+ * overlay above the portrait and whose pseudo-elements are free, so this adds
+ * nothing to the DOM.
+ *
  * Not the bracket layer, which looks like the obvious host and is not: it is an
  * 8px corner mark, so a pseudo-element inset inside it lands in an 8px box
  * rather than on the card.
- *
- * Only the card whose turn it is carries them. On every slot at once they would
- * be wallpaper, and the point of them is the one row the GM is looking at.
  */
-.gluni-card--boss.gluni-card--active .gluni-card-spec::before,
-.gluni-card--boss.gluni-card--active .gluni-card-spec::after {
+.gluni-card--boss .gluni-card-spec::before,
+.gluni-card--boss .gluni-card-spec::after {
   content: "";
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 16px;
+  height: 16px;
   border: 0 solid var(--gluni-accent);
-  opacity: 0.85;
+  opacity: 0.9;
   pointer-events: none;
 }
 
-.gluni-card--boss.gluni-card--active .gluni-card-spec::before {
-  top: 3px;
-  left: 3px;
+.gluni-card--boss .gluni-card-spec::before {
+  top: 4px;
+  left: 4px;
   border-top-width: 2px;
   border-left-width: 2px;
 }
 
-.gluni-card--boss.gluni-card--active .gluni-card-spec::after {
-  right: 3px;
-  bottom: 3px;
+.gluni-card--boss .gluni-card-spec::after {
+  right: 4px;
+  bottom: 4px;
   border-right-width: 2px;
   border-bottom-width: 2px;
 }
@@ -1909,7 +1919,23 @@
 .gluni-card--boss-extra.gluni-card--boss-supreme .gluni-card-surface {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 34%, transparent),
-    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.34);
+    inset 0 0 0 3px rgb(var(--gl-tint-dark) / 0.3);
+}
+
+.gluni-card--boss-extra .gluni-card-spec::before,
+.gluni-card--boss-extra .gluni-card-spec::after {
+  opacity: 0.5;
+  border-width: 0;
+}
+
+.gluni-card--boss-extra .gluni-card-spec::before {
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.gluni-card--boss-extra .gluni-card-spec::after {
+  border-right-width: 1px;
+  border-bottom-width: 1px;
 }
 
 .gluni-boss-tag {

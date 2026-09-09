@@ -945,6 +945,41 @@ if ((writeHpBody.match(/actor\.update\(/g) ?? []).length < 2) {
   fail("boss: writeHp writes max and value in one update — PF2e clamps the value against the old maximum");
 }
 
+/*
+ * Downfalls are real items, and every path that changes one has to say so.
+ *
+ * They lived in the profile flag alone to begin with, which put the one part of
+ * a boss the party is meant to discover in the one place nothing reads: not the
+ * creature's passive list, and not Recall Knowledge, which is the rule the book
+ * gives for discovering them. A sync missing from any one of the four mutation
+ * paths leaves the sheet and the item list disagreeing, and the sheet is the one
+ * that looks right.
+ */
+if (!applySource.includes("export async function syncDownfallItems")) {
+  fail("boss: Downfalls are not created as items, so nothing that reads a creature's abilities can see them");
+}
+if (!/actionType: \{ value: "passive" \}/.test(applySource.slice(applySource.indexOf("downfallItemData")))) {
+  fail("boss: a Downfall item must be passive — it is not something the boss does");
+}
+const downfallCalls = (bossSheetSource.match(/syncDownfallItems\(actor\)/g) ?? []).length;
+if (downfallCalls < 4) {
+  fail(`boss: only ${downfallCalls} of the four Downfall mutations sync the items (mark, add, remove, note)`);
+}
+
+/*
+ * And the boss's standing has to reach Recall Knowledge. The Downfall items
+ * arrive on their own through the action extractor; what a statblock cannot show
+ * is that the creature is a boss at all and how many turns a round it takes,
+ * which is the most useful thing a party can learn about one.
+ */
+const recallExtract = read("scripts/features/pf2e-recall/extract.mjs");
+if (!recallExtract.includes("bossBadge")) {
+  fail("boss: Recall Knowledge never learns that a creature is a boss");
+}
+if (!/Boss: bossLine\(actor\)/.test(recallExtract)) {
+  fail("boss: the boss line is built but never placed in the brief");
+}
+
 /* 9i. Settings and registration. */
 
 const bossPrefix = "vr.boss";

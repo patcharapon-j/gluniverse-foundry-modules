@@ -104,42 +104,63 @@ void main(void){
 // it switches to a thin, cool, marching dashed perimeter ("on deck" / queued read)
 // so it's formally distinct from the active plasma pedestal. uReduced freezes
 // motion for the reduced animation tier.
-// Boss presence (initiative card only): a slow violet miasma that rises from the
-// bottom edge and clings to the sides, with a few brighter filaments where it is
-// densest. It is the quietest effect in this file on purpose. A boss holds the
-// rail for two or three slots of every round, so anything that flickered or
-// raced would be the loudest thing on screen for half the encounter; this
-// breathes, at a period long enough that you notice the card is not still
-// without ever catching it moving.
+// Boss presence (initiative card only): a slowly counter-rotating engraved
+// sigil behind the creature, with a dark aura pooled at the edges of the card.
 //
-// The centre is deliberately left thin. A portrait's face is in the middle of
-// the frame and the effect has to read as something around the creature rather
-// than a wash over it.
+// Deliberately built from nothing this file already uses. Every other effect
+// here is value noise: the guard-break shards, the dying veins and the delay
+// bands are all fbm, and a fourth fbm effect would read as a variant of the
+// third however it were tuned — the same soft, wandering texture in a different
+// hue. This one has no noise in it at all. It is two rings of radial ticks and
+// a radial falloff, so it is hard-edged, concentric and obviously struck rather
+// than grown, which is also what Etched Glass is: engraving, not weather.
 //
-// uIntensity carries the tier: a Supreme boss is the same colour, more of it.
-// Hue says "boss", amount says "how much of one" — which leaves --gl-tyrant free
+// The rings turn against each other at a fifth and a tenth of a revolution a
+// minute. A boss holds two or three slots of every round, so anything faster
+// would be the loudest thing on screen for half the encounter; at this rate the
+// card is never quite still and you never catch it moving.
+//
+// Every ring is struck through uTexel — device pixels, not card units — because
+// a hairline written in geometry units is ~2px on a HiDPI display and vanishes
+// on an ordinary one, and no preview run on one machine shows you the other.
+//
+// uIntensity carries the tier: a Supreme boss is the same sigil, cut deeper.
+// Hue says "boss", amount says "how much of one", which leaves --gl-tyrant free
 // to mean exactly one thing on the rail.
 export const FX_FRAG_TYRANT = `
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
-uniform float uTime, uSeed, uAspect, uIntensity;
+uniform float uTime, uSeed, uAspect, uTexel, uIntensity;
 uniform vec3 uTyrantBase, uTyrantHot;
-${FX_GLSL_NOISE}
+// One tick ring: count marks around a circle of radius rad, turning at spin,
+// each mark duty of its own arc. w is the stroke width, in device pixels.
+float gluTickRing(vec2 p, float rad, float count, float spin, float duty, float w){
+  float r=length(p);
+  float band=smoothstep(w,0.0,abs(r-rad));
+  float ang=atan(p.y,p.x)+spin;
+  float marks=smoothstep(duty-0.12,duty+0.12,abs(sin(ang*count*0.5)));
+  return band*marks;
+}
 void main(void){
   vec2 uv=vTextureCoord;
-  // Domain warp on two different drifts, so the smoke wanders instead of
-  // scrolling: a visible scroll direction reads as a texture, not as air.
-  vec2 w=vec2(gluFbm(uv*2.2+vec2(0.0,-uTime*0.035)), gluFbm(uv*2.2+vec2(4.7,uTime*0.026)));
-  float smoke=gluFbm(uv*3.0+w*1.35+vec2(0.0,-uTime*0.055));
-  float rise=smoothstep(1.0,0.12,uv.y);                 // heaviest along the bottom
-  float edge=max(smoothstep(0.40,0.0,uv.x), smoothstep(0.60,1.0,uv.x));
-  float mask=max(rise*0.78, edge);
-  float body=smoke*mix(0.22,1.0,mask);
-  float ridge=1.0-abs(smoke*2.0-1.0);
-  float filament=smoothstep(0.93,1.0,ridge)*mask;       // the few lit threads
-  float breath=0.84+0.16*sin(uTime*0.5+uSeed);
-  float a=clamp((body*0.34+filament*0.30)*breath*uIntensity,0.0,0.78);
-  vec3 col=mix(uTyrantBase,uTyrantHot,clamp(filament*1.6,0.0,1.0));
+  // Card space, corrected so the sigil is round on a card three times as wide
+  // as it is tall rather than an ellipse the width of the rail.
+  vec2 p=uv-vec2(0.5); p.x*=uAspect;
+  float r=length(p);
+  float px=uTexel*1.6;                                  // one hairline, in device pixels
+  float turn=uTime*0.10+uSeed;
+  float ringA=gluTickRing(p,0.30,24.0, turn,      0.55, px*1.6);
+  float ringB=gluTickRing(p,0.42,40.0,-turn*0.55, 0.68, px*1.2);
+  // A continuous hairline under each tick ring, so the marks read as struck on
+  // a circle rather than as loose dashes.
+  float hair=smoothstep(px,0.0,abs(r-0.30))*0.34+smoothstep(px,0.0,abs(r-0.42))*0.22;
+  // The aura. Clear over the middle of the card, which is where the creature's
+  // face is, and pooled into the corners the portrait has least to say in.
+  float aura=smoothstep(0.26,0.78,r);
+  float breath=0.86+0.14*sin(uTime*0.45+uSeed*1.7);
+  float strokes=clamp(ringA+ringB+hair,0.0,1.0);
+  float a=clamp((aura*0.30+strokes*0.55)*breath*uIntensity,0.0,0.74);
+  vec3 col=mix(uTyrantBase,uTyrantHot,clamp(strokes*1.4,0.0,1.0));
   gl_FragColor=vec4(col*a, a);
 }`;
 

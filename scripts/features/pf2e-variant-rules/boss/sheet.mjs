@@ -17,7 +17,16 @@ import { ABILITY_KIND, DOWNFALL_TRIGGER } from "./constants.mjs";
 import { ABILITIES, abilitiesOfKind, abilityById } from "./data.mjs";
 import { MAX_ABILITIES, bossTurns, bossXpFactor, downfallBalance, tierOf, TIERS } from "./rules.mjs";
 import { bossOn, storedProfile, TIER_ORDER, updateProfile } from "./profile.mjs";
-import { addAbility, bossStats, costLabel, markBoss, refreshAbilityText, removeAbility, unmarkBoss } from "./apply.mjs";
+import {
+  addAbility,
+  bossStats,
+  costLabel,
+  markBoss,
+  refreshAbilityText,
+  removeAbility,
+  syncDownfallItems,
+  unmarkBoss,
+} from "./apply.mjs";
 import { syncCardConfig, isExtraTurn } from "./initiative.mjs";
 import { canTrigger, currentPenalty, readState, readTelegraph, setTelegraph, triggerDownfall } from "./downfall.mjs";
 import { announceDownfall, announceTelegraph } from "./chat.mjs";
@@ -409,6 +418,7 @@ function wire(root, actor) {
       await markBoss(actor, tier);
       await syncCardConfig(actor, bossTurns(tier));
       await refreshAbilityText(actor);
+      await syncDownfallItems(actor);
       actor.sheet?.render(false);
     });
   }
@@ -440,6 +450,7 @@ function wire(root, actor) {
     await updateProfile(actor, {
       downfalls: [...profile.downfalls, { id: foundry.utils.randomID(), type, note: "" }],
     });
+    await syncDownfallItems(actor);
     actor.sheet?.render(false);
   });
 
@@ -449,6 +460,7 @@ function wire(root, actor) {
       if (!profile) return;
       const index = Number(button.dataset.index);
       await updateProfile(actor, { downfalls: profile.downfalls.filter((_, i) => i !== index) });
+      await syncDownfallItems(actor);
       actor.sheet?.render(false);
     });
   }
@@ -494,6 +506,9 @@ function wire(root, actor) {
         i === index ? { ...entry, note: input.value } : entry
       );
       await updateProfile(actor, { downfalls });
+      // The item carries the note, so it has to follow the field. The sheet is
+      // still not re-rendered: a GM mid-sentence would lose the caret.
+      await syncDownfallItems(actor);
     });
   }
 }

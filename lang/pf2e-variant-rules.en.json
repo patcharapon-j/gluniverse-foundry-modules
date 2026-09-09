@@ -110,6 +110,8 @@
   "GLVR.boss.abilities.kindHint.devastation": "Telegraphed, and costs the boss actions.",
   "GLVR.boss.abilities.kindHint.passive": "Always on.",
   "GLVR.boss.downfalls.heading": "Downfalls",
+"GLVR.boss.downfallItem.name": "Downfall: {trigger}",
+"GLVR.boss.downfallItem.text": "Triggering this Downfall gives the boss a -1 status penalty to AC and saving throws until the beginning of its next initial turn, climbing to -3 as separate Downfalls land, and disrupts anything it has Telegraphed. A boss cannot Shrug It Off.",
   "GLVR.boss.downfalls.add": "Add downfall",
   "GLVR.boss.downfalls.remove": "Remove",
   "GLVR.boss.downfalls.empty": "No Downfalls yet.",

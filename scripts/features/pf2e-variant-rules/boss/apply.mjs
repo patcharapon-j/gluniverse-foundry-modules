@@ -8,6 +8,7 @@
  */
 
 import { SUITE_ID, warn } from "../../../core/const.mjs";
+import { escapeHTML } from "../../../core/util.mjs";
 import { BOSS_FLAGS } from "./constants.mjs";
 import { ABILITIES, CORE_ACTIONS, abilityById } from "./data.mjs";
 import { bossHp, bossLevel, bossDc, bossModifier, resolveScale, tierOf, MAX_ABILITIES } from "./rules.mjs";
@@ -279,6 +280,78 @@ export async function syncCoreActions(actor) {
     "Item",
     missing.map((entry) => abilityItemData(entry, scale, { core: true }))
   );
+}
+
+/* ── Downfalls, as items ─────────────────────────────────────────────────── */
+
+/**
+ * A Downfall as a real PF2e ability item.
+ *
+ * Downfalls used to live only in the profile flag, which meant the one part of a
+ * boss the party is meant to work out was the one part that appeared nowhere a
+ * GM normally looks: not in the creature's own passive list, and not in anything
+ * that reads a creature's abilities — Recall Knowledge included, which is the
+ * rule the book actually gives for discovering them. As an item it is on the
+ * main tab beside every other passive and every consumer gets it for free.
+ *
+ * Passive, and category-less on purpose: PF2e groups the NPC sheet's actions by
+ * active against passive, and a Downfall is not something the boss does.
+ */
+export function downfallItemData(entry) {
+  const trigger = L(`GLVR.boss.trigger.${entry.type}`);
+  const note = String(entry.note ?? "").trim();
+  const body = note || L(`GLVR.boss.triggerHint.${entry.type}`);
+  return {
+    name: L("GLVR.boss.downfallItem.name", { trigger }),
+    type: "action",
+    img: "icons/magic/control/silhouette-hold-change-purple.webp",
+    system: {
+      description: {
+        value: `<p>${escapeHTML(body)}</p><p>${L("GLVR.boss.downfallItem.text")}</p>`,
+      },
+      actionType: { value: "passive" },
+      actions: { value: null },
+      category: null,
+      traits: { value: [], rarity: "common" },
+      publication: { title: "Adventures+", license: "OGL", remaster: false },
+    },
+    flags: { [SUITE_ID]: { [OWNED]: { id: entry.id, downfall: true } } },
+  };
+}
+
+/**
+ * Bring the Downfall items in line with the profile.
+ *
+ * Idempotent, and reconciled by id rather than rebuilt, so editing the note on
+ * one Downfall does not delete and recreate the other two — which would lose
+ * anything a GM had added to those items by hand.
+ */
+export async function syncDownfallItems(actor) {
+  const profile = storedProfile(actor);
+  const owned = grantedItems(actor).filter((item) => item.getFlag(SUITE_ID, OWNED)?.downfall);
+  const wanted = profile?.downfalls ?? [];
+  const byId = new Map(owned.map((item) => [item.getFlag(SUITE_ID, OWNED).id, item]));
+
+  const doomed = owned
+    .filter((item) => !wanted.some((entry) => entry.id === item.getFlag(SUITE_ID, OWNED).id))
+    .map((item) => item.id);
+  if (doomed.length) await actor.deleteEmbeddedDocuments("Item", doomed);
+
+  const creates = [];
+  const updates = [];
+  for (const entry of wanted) {
+    const data = downfallItemData(entry);
+    const current = byId.get(entry.id);
+    if (!current) {
+      creates.push(data);
+      continue;
+    }
+    const description = data.system.description.value;
+    if (current.name === data.name && current.system?.description?.value === description) continue;
+    updates.push({ _id: current.id, name: data.name, "system.description.value": description });
+  }
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  if (creates.length) await actor.createEmbeddedDocuments("Item", creates);
 }
 
 /**
