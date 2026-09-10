@@ -372,8 +372,11 @@ where a collision silently breaks another module's die; and the two guards a
 double-fire would destroy — one casting one check, one card one roll.
 
 Two more it pins because this feature got both wrong on the way in. The
-stability cracks in the HUD must run the **shared** fracture from
-`core/fx-glsl.mjs`, not a lookalike — four features carry that one crack now.
+stability cracks in the HUD must **not** run the shared glass fracture from
+`core/fx-glsl.mjs`: they are a fraying weave of their own, because a broken
+creature already carries that crack in three places and instability sharing it
+read as one more thing being broken. Their field also has a fixed CSS-pixel scale
+(`CRACK_FIELD_PX`), never the strip's height, or a shorter chip squashes them.
 And each level's hue must be a single statement: `palette.mjs`'s `LEVEL_KEYS`
 and the `.glas-level-*` accent remaps naming the same token, with no two levels
 naming the same one. `unbound` was on `--gl-holo-b`, which `gl-tokens.css`
@@ -398,8 +401,8 @@ node tools/arcane-surge-preview.mjs --out=.preview/surge.html
 execute its module script, so the shaders never compile and you get an empty box
 rather than a failure. The crack row there is drawn at **shipping size** — a
 strip in a HUD bar — with a nearest-neighbour 4× mirror beside it, because the
-shared fracture's shards are the finest detail in the suite and this is the
-smallest place any of them has been asked to land. Ignore that page's
+weave's threads are one device pixel wide and this is the smallest place any
+effect in the suite has been asked to land. Ignore that page's
 `ms/frame` readout: a dozen canvases and a throttled tab put it in the hundreds
 while the shader is doing nothing. The `ms/draw` figure beside it is the one
 that means something.

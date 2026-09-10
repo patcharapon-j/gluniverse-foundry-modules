@@ -7,8 +7,8 @@
  * spellcasting subsystem that stops working because somebody turned off the
  * calendar would be a surprising way to lose it.
  *
- * The chip is also where the instability itself is DRAWN — glass cracking out
- * of the label that names it, spreading further the worse the level gets. See
+ * The chip is also where the instability itself is DRAWN — a weave fraying
+ * around the label that names it, coming further apart the worse the level gets. See
  * `cracks.mjs` for why that is here rather than over the board.
  *
  * The chip is a readout, not a control panel. Steady the Spell and Invite the
@@ -111,6 +111,18 @@ function render(level, flash) {
 function wire(host) {
   const chip = host.querySelector("[data-glas-chip]");
   if (chip && game.user.isGM) chip.addEventListener("click", (event) => openPicker(event.currentTarget));
+
+  /* In the HUD the slot sits inside the date cell, which is itself a
+     `data-action="openCalendar"` target: ApplicationV2 resolves a click by
+     `closest("[data-action]")` and the chip carries no action of its own, so an
+     unguarded click would open the calendar over the picker. Enter/Space are
+     stopped too, because the cell re-dispatches them as a click. Escape is left
+     alone so the picker's own close still hears it. */
+  const wrap = host.querySelector(".glas-stability");
+  wrap?.addEventListener("click", (event) => event.stopPropagation());
+  wrap?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════════════

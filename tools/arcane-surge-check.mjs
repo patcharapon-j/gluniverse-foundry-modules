@@ -274,28 +274,34 @@ for (const [label, frag, uniforms, hostRel] of [
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   5c. The cracks are the SUITE's crack, not a lookalike
+   5c. Instability is its OWN pattern, not the break fracture
    ══════════════════════════════════════════════════════════════════════
-   A broken creature's token, its initiative card, its health bar and this all
-   run the same fracture out of `core/fx-glsl.mjs`. Reimplementing it here would
-   render perfectly and then drift from the other three the first time any of
-   them was touched — which is the exact failure sharing the field exists to
-   prevent, and the reason that module says so at the top. */
+   The HUD cracks once ran the suite's shared glass fracture out of
+   `core/fx-glsl.mjs`. They do not any more, on purpose: a broken creature's
+   token, its initiative card and its health bar all carry that crack, and a
+   world coming apart then read as one more thing being broken. Re-importing
+   the shared field reads as tidying in its own diff and puts the two states
+   back into one look, so it is refused. */
 
 {
   const src = read(`${FEATURE}/shader.mjs`);
-  if (!/from\s+"\.\.\/\.\.\/core\/fx-glsl\.mjs"/.test(src)) {
-    fail("shader.mjs", "does not import the shared fracture — the HUD cracks would be a lookalike");
+  if (/^\s*import\b[^;]*core\/fx-glsl\.mjs/m.test(src)) {
+    fail("shader.mjs", "imports core/fx-glsl.mjs — instability must not share the break fracture's look");
   }
-  if (!shader.CRACK_FRAG.includes("gluBreakField")) {
-    fail("crack shader", "does not call gluBreakField() — it is not running the suite's fracture");
+  if (/gluBreakField|gluVoroEdge/.test(shader.CRACK_FRAG)) {
+    fail("crack shader", "runs the glass break fracture — instability is its own pattern");
   }
-  /* The shared field needs both of these in scope, and neither failure is a
-     compile error you would see from Node: uSeed missing makes every hash
-     collapse, and the texel clamp is the only thing standing between the
-     shards and a crawling mess on a strip this small. */
+  /* The weave needs both: uTexel is the hairline width (without it the threads
+     are either mush or sub-pixel and deleted), uSeed is the per-world phase. */
   for (const name of ["uSeed", "uTexel"]) {
-    if (!shader.CRACK_UNIFORMS.includes(name)) fail("crack shader", `the shared fracture needs "${name}"`);
+    if (!shader.CRACK_UNIFORMS.includes(name)) fail("crack shader", `the weave needs "${name}"`);
+  }
+  /* The ladder is drawn as the threads PARTING. A gap term that stopped
+     depending on uChaos would render a weave that loosens and never comes
+     apart, which reads as Fraying at every level. */
+  const parted = shader.CRACK_FRAG.match(/float\s+parted\s*=\s*([^;]+);/);
+  if (!parted || !/uChaos/.test(parted[1])) {
+    fail("crack shader", "the threads' parting is not driven by uChaos — every level would fray the same");
   }
 }
 
@@ -433,8 +439,23 @@ for (const [label, frag, uniforms, hostRel] of [
       if (!/z-index:\s*0/.test(block[1])) fail("css", ".glas-cracks must sit under the chip's text");
     }
     // The bleed is only a bleed if nothing clips it.
-    if (!/#glct-hud \.cell\.glas-slot\b[^}]*overflow:\s*visible/s.test(css)) {
-      fail("css", "the HUD's stability cell clips its contents — the cracks would be cut off at the chip's edge");
+    if (!/#glct-hud \.glas-slot\s*\{[^}]*overflow:\s*visible/s.test(css)) {
+      fail("css", "the HUD's stability slot clips its contents — the cracks would be cut off at the chip's edge");
+    }
+  }
+  /* The field's scale is a fixed CSS size. Derived from the canvas height it
+     shrinks every shard with the chip, so the same fracture reads as crushed
+     in a shorter slot — and nothing errors, it just looks worse. */
+  {
+    const host = read(`${FEATURE}/cracks.mjs`);
+    const texel = [...host.matchAll(/uniform1f\(this\.uniforms\.uTexel,\s*([^;]+)\);/g)].map((m) => m[1]);
+    if (!texel.length) fail("cracks.mjs", "never writes uTexel");
+    for (const expr of texel) {
+      if (!/CRACK_FIELD_PX/.test(expr)) fail("cracks.mjs", `uTexel is not derived from CRACK_FIELD_PX: ${expr}`);
+    }
+    if (!(shader.CRACK_FIELD_PX > 0)) fail("crack shader", "CRACK_FIELD_PX must be a positive CSS size");
+    if (/\baspect\b/.test(shader.CRACK_FRAG) || !/vUv\s*\*\s*uRes\s*\*\s*uTexel/.test(shader.CRACK_FRAG)) {
+      fail("crack shader", "field space must be vUv * uRes * uTexel — a height-relative mapping scales the shards with the chip");
     }
   }
   if (!/\.glas-burst\b[^}]*z-index:\s*var\(--gl-z-splash\)/s.test(css)) {

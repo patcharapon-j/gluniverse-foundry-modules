@@ -46,27 +46,30 @@
           </span>
           <span class="mo" data-mo></span>
         </span>
-        {{!-- Weather readout: compact icon · condition · intensity, nested in the
-              date cluster so it reads as part of the left section. The animated
-              diorama is the full-bar layer behind everything; this is just the
-              label + click target. Hidden until weather is enabled + configured. --}}
-        <button type="button" class="wxmini hidden" data-weather data-action="openWeather"
-                aria-label="{{localize 'GLCT.weather.chipHint'}}" title="{{localize 'GLCT.weather.chipHint'}}">
-          <span class="wxmini-ico"><i data-wxicon class="fa-solid fa-cloud"></i></span>
-          <span class="wxmini-text">
-            <span class="wxmini-label" data-wxlabel></span>
-            <span class="wxmini-temp" data-wxtemp></span>
-          </span>
-          <span class="wxmini-haz" data-wxhaz title="{{localize 'GLCT.weather.hazard'}}"><i class="fa-solid fa-skull"></i></span>
-        </button>
+        {{!-- The readout stack beside the date: weather on top, stability under
+              it. Stacked rather than side by side so neither widens the bar, and
+              the bar's height is fixed, so the pair is sized to fit inside it. --}}
+        <span class="wxstack">
+          {{!-- Weather readout: compact icon · condition · intensity, nested in the
+                date cluster so it reads as part of the left section. The animated
+                diorama is the full-bar layer behind everything; this is just the
+                label + click target. Hidden until weather is enabled + configured. --}}
+          <button type="button" class="wxmini hidden" data-weather data-action="openWeather"
+                  aria-label="{{localize 'GLCT.weather.chipHint'}}" title="{{localize 'GLCT.weather.chipHint'}}">
+            <span class="wxmini-ico"><i data-wxicon class="fa-solid fa-cloud"></i></span>
+            <span class="wxmini-text">
+              <span class="wxmini-label" data-wxlabel></span>
+              <span class="wxmini-temp" data-wxtemp></span>
+            </span>
+            <span class="wxmini-haz" data-wxhaz title="{{localize 'GLCT.weather.hazard'}}"><i class="fa-solid fa-skull"></i></span>
+          </button>
+          {{!-- Stability readout. Filled by the PF2e Arcane Surge feature when it
+                runs, collapsed to nothing when it does not — a hole, not a
+                dependency; neither feature requires the other. It also hosts
+                that feature's crack effect. --}}
+          <span class="glas-slot" data-stability></span>
+        </span>
       </div>
-
-      {{!-- Stability readout: its own cell, beside the date rather than inside
-            it. Filled by the PF2e Arcane Surge feature when it runs, collapsed
-            to nothing when it does not — a hole, not a dependency; neither
-            feature requires the other. It also hosts that feature's crack
-            effect, which needs a box of its own to break out of. --}}
-      <div class="cell glas-slot" data-stability></div>
 
       <div class="cell shift-hero" data-shifthero>
         <span class="sdial" data-dial></span>

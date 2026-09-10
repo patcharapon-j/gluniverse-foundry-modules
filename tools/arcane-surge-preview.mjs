@@ -16,8 +16,8 @@
  *
  * What it is for: the crack strip has a frame budget it must live inside for
  * hours AND a per-pixel question no diff can answer — it runs the suite's
- * shared fracture at twenty-odd device pixels tall, which is far and away the
- * smallest place those shards have been asked to land. It is therefore drawn
+ * weave at twenty-odd device pixels tall with one-pixel threads, which is far
+ * and away the smallest place any effect in the suite has been asked to land. It is therefore drawn
  * here at SHIPPING SIZE, over a real label, at the real device-pixel ratio.
  * The beats are here at full size beside it, with a frame-time readout.
  *
@@ -56,6 +56,7 @@ const levelRgb = Object.fromEntries(constants.LEVELS.map((level) => [level, pale
 const page = template
   .replace("/*__VERT__*/", JSON.stringify(shader.VERT))
   .replace("/*__CRACK_FRAG__*/", JSON.stringify(shader.CRACK_FRAG))
+  .replace("/*__CRACK_FIELD_PX__*/", JSON.stringify(shader.CRACK_FIELD_PX))
   .replace("/*__BURST_FRAG__*/", JSON.stringify(shader.BURST_FRAG))
   .replace("/*__SEVERITY_FRAG__*/", JSON.stringify(shader.SEVERITY_FRAG))
   .replace("/*__SEVERITY_UNIFORMS__*/", JSON.stringify(shader.SEVERITY_UNIFORMS))

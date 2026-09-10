@@ -277,7 +277,7 @@ export function sizeToViewport(canvas, gl, scale = 1) {
  *
  * The bleed is what makes the cracks read as being AROUND the label rather than
  * as a texture inside a box: the fracture has to be allowed to leave the chip's
- * own rectangle, or its outermost shards are all clipped to the same four
+ * own rectangle, or its outermost strokes are all clipped to the same four
  * straight lines and the whole thing reads as a filled panel.
  *
  * Returns `null` while the element has no layout — a HUD that is collapsed, on
@@ -285,12 +285,33 @@ export function sizeToViewport(canvas, gl, scale = 1) {
  * costs a GL error per frame and shows nothing.
  */
 export function sizeToElement(canvas, gl, element, bleed = 0) {
-  const box = element?.getBoundingClientRect();
-  if (!box || box.width <= 0 || box.height <= 0) return null;
+  if (!element || element.offsetWidth <= 0 || element.offsetHeight <= 0) return null;
 
-  const cssW = box.width + bleed * 2;
-  const cssH = box.height + bleed * 2;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  /* A canvas is a REPLACED element: with `inset` alone and an auto width the
+     browser uses the intrinsic size from the width/height attributes — which
+     are device pixels — and the strip renders at twice its box on any HiDPI
+     display. The CSS size has to be stated.
+
+     It is stated RELATIVE to the element, never as a measured pixel count. The
+     suite's Interface Scale is a CSS `zoom` on the HUD, and a measured
+     `getBoundingClientRect()` is already zoomed: written back as a length it is
+     zoomed a second time, so at any scale but 100% the canvas came out larger
+     than its chip and anchored off its centre. */
+  canvas.style.inset = "auto";
+  canvas.style.left = `${-bleed}px`;
+  canvas.style.top = `${-bleed}px`;
+  canvas.style.width = `calc(100% + ${bleed * 2}px)`;
+  canvas.style.height = `calc(100% + ${bleed * 2}px)`;
+
+  /* Layout size (unzoomed) for the field's scale; on-screen size for the buffer.
+     The computed size, not offsetWidth: that rounds to a whole pixel, and the
+     rounding lands on one axis and not the other, stretching the pattern. */
+  const style = getComputedStyle(canvas);
+  const cssW = parseFloat(style.width) || element.offsetWidth + bleed * 2;
+  const cssH = parseFloat(style.height) || element.offsetHeight + bleed * 2;
+  const shown = canvas.getBoundingClientRect();
+  const zoom = shown.height > 0 ? shown.height / cssH : 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * zoom;
   const w = Math.max(1, Math.round(cssW * dpr));
   const h = Math.max(1, Math.round(cssH * dpr));
 
@@ -298,13 +319,6 @@ export function sizeToElement(canvas, gl, element, bleed = 0) {
     canvas.width = w;
     canvas.height = h;
   }
-  /* A canvas is a REPLACED element: with `inset` alone and an auto width the
-     browser uses the intrinsic size from the width/height attributes — which
-     are device pixels — and the strip renders at twice its box on any HiDPI
-     display. The CSS size has to be stated. */
-  canvas.style.inset = `${-bleed}px`;
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
   gl?.viewport(0, 0, w, h);
   return { w, h, cssW, cssH };
 }

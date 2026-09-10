@@ -120,17 +120,16 @@
 #glct-hud .bar.has-wx .date .m sup{background:none;-webkit-text-fill-color:rgb(var(--gl-tint-light));color:rgb(var(--gl-tint-light))}
 
 /* Weather readout — compact, nested inside the date cluster (left section) so it
-   reads as part of that group rather than a separate box on the right. A hairline
-   on the left separates it from the date stack. icon · condition · intensity; the
+   reads as part of that group rather than a separate box on the right. It sits at
+   the top of the readout stack (.wxstack, hud.css), which carries the hairline
+   separating it from the date stack. icon · condition · intensity; the
    click target that opens the Hex Flower window. Tint is scoped here
    (--glct-weather-*) so it never bleeds onto the shift-coloured HUD. */
 #glct-hud .date .wxmini{--glct-weather-tint:#cfe8ff;--glct-weather-glow:#7fb4e6;
   appearance:none;border:none;background:none;color:inherit;font:inherit;text-align:left;
   position:relative;display:flex;align-items:center;gap:7px;cursor:pointer;
-  align-self:stretch;margin:7px 0;padding:0 0 0 11px}
+  margin:0;padding:0;max-width:100%}
 #glct-hud .date .wxmini.hidden{display:none}
-#glct-hud .date .wxmini::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:1px;
-  background:linear-gradient(180deg,transparent,var(--hair) 22%,var(--hair) 78%,transparent)}
 #glct-hud .date .wxmini:hover .wxmini-label{background:none;-webkit-text-fill-color:rgb(var(--gl-tint-light));color:rgb(var(--gl-tint-light))}
 #glct-hud .date .wxmini-ico{display:grid;place-items:center;width:23px;height:23px;flex:none;border-radius:7px;
   color:color-mix(in srgb,var(--glct-weather-tint) 72%,rgb(var(--gl-tint-light)));font-size:13px;
@@ -153,6 +152,12 @@
 #glct-hud .date .wxmini.ominous .wxmini-ico{color:#ffb4ad;filter:drop-shadow(0 0 8px color-mix(in srgb,var(--gl-hazard) 70%,transparent))}
 #glct-hud .date .wxmini.ominous .wxmini-label{background:none;-webkit-text-fill-color:#ffd9d4;color:#ffd9d4}
 #glct-hud .date .wxmini.ominous .wxmini-haz{display:inline-block}
+
+/* Sharing the stack with a stability readout: the bar's height is fixed, so the
+   weather row gives up its second label line and some icon to make room. */
+#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini{gap:6px}
+#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini-ico{width:18px;height:18px;border-radius:5px;font-size:10px}
+#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini-label{-webkit-line-clamp:1;max-width:110px}
 
 /* ============================================================
    2) HEX FLOWER WINDOW — frameless glass dock.

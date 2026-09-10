@@ -101,7 +101,8 @@ receiving verdicts from it.
 
 ## Where the controls live
 
-The **stability chip** is a readout in its own cell of the time-tracker HUD, and
+The **stability chip** is a readout under the weather in the time-tracker HUD's
+date cell (the bar's height is fixed, so the pair is sized to fit it), and
 it is also where the instability is *drawn* — see the crack layer below. A GM
 clicking it gets a level picker: four names and four markers, nothing else.
 Descriptions under them made the popover taller than the HUD it hangs off and
@@ -142,29 +143,27 @@ so the table can tell a ruling from a roll.
 
 They have very different budgets and that difference is the whole design.
 
-**Cracks** run for hours, inside the stability chip. Glass splintering out of
-the label that names the level, spreading further around it and glowing harder
-as the level worsens. It is the **suite's own fracture**, imported as a field
-from `core/fx-glsl.mjs` rather than written again — a broken creature's token,
-its initiative card, its health bar and this are one crack in different colours,
-and a lookalike would have drifted from all three the first time any of them was
-touched. Pauses on `document.hidden`. Under load it sheds `drift`, which stops
+**Cracks** run for hours, inside the stability chip. A weave of threads running
+through the label that names the level: loosening at Fraying, parting at Unbound,
+snapping into splayed fibres at Unraveling, reaching further around the label as
+it worsens. It is **deliberately not** the suite's glass fracture from
+`core/fx-glsl.mjs`. It ran that field once, and a world coming apart then read as
+one more thing being broken, since a broken creature's token, its initiative card
+and its health bar all carry that crack. Pauses on `document.hidden`. Under load it sheds `drift`, which stops
 the clock and leaves the cracks — what degrades must be the motion, never the
 state. Measured cost at chip size: **0.001 ms per draw**.
 
 Three things about it are load-bearing and none are obvious:
 
-- **The impact is the middle of the label.** Putting it on the level marker, at
-  the left, seemed righter — the cracks should come *out of* the dot. What it
-  produced was a splat over one end of the word and a dark tail at the other,
-  because coverage falls off with distance from the impact and one end of a wide
-  strip is much further away than the other.
-- **Chaos is spent on spread, not on shard size.** The strip is a couple of
-  dozen pixels tall; halving the cell size there buys mush.
-- **The clock never starts at zero.** `gluBreakField` opens over its first ~0.7
-  seconds and then settles, so it is fed a time that is always past that. From
-  zero it would replay the guard-break's shatter every time the HUD repainted —
-  which it does on every clock tick.
+- **The weave is centred on the label.** Anchored on the level marker, at the
+  left, the falloff left a splat over one end of the word and a dark tail at the
+  other, because one end of a wide strip is much further away than the other.
+- **Chaos is spent on spread and looseness, not on thread size.** The strip is a
+  couple of dozen pixels tall; finer threads there buy mush. The threads are one
+  device pixel wide at every level.
+- **The field has a fixed CSS-pixel scale** (`CRACK_FIELD_PX`), never the
+  strip's own height. Tied to the height, a shorter chip shrinks the weave with
+  it and the pattern reads as squashed. A smaller chip shows less of it instead.
 
 ### Why this is not a full-screen veil any more
 
@@ -293,7 +292,7 @@ bidirectional completeness, the JS↔CSS duration mirrors, the z-band and
 pointer-events of both drawn layers, every runtime-built i18n key, the die's
 defensive registration, and the one-casting-one-check / one-card-one-roll
 guards. Two of its sections exist for things this pass got wrong on the way in:
-the cracks must run the *shared* fracture rather than a lookalike, and each
+the cracks must *not* run the shared break fracture, and each
 stability level's hue must be one statement — `LEVEL_KEYS` and the
 `.glas-level-*` accent remaps naming the same token, with no two levels naming
 the same one. The first draft had `unbound` on `--gl-holo-b`, which
