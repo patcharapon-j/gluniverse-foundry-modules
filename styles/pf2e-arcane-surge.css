@@ -345,13 +345,14 @@
 /* ══════════════════════════════════════════════════════════════════════
    The stability chip
    ══════════════════════════════════════════════════════════════════════
-   Its own cell in the HUD bar: one line, one marker, one word. It is the whole
-   readout, so it is sized against the bar rather than tucked under the weather
-   chip — which is also what gives the cracks a box of their own to break out of.
+   In the HUD bar it sits under the weather readout: one line, one marker, one
+   word. The crack canvas is sized to this box but draws its field at a fixed
+   CSS-pixel scale (`CRACK_FIELD_PX`), so a smaller chip shows less of the
+   weave rather than a squashed copy of it.
 
    The chip itself is deliberately UNFILLED. A panel background would sit on top
-   of the fracture and leave only the ten-pixel bleed showing; with nothing but a
-   hairline the glass reads as breaking through the label rather than behind a
+   of the weave and leave only the ten-pixel bleed showing; with nothing but a
+   hairline the threads read as running through the label rather than behind a
    card. `position: relative` is load-bearing twice over: it is the crack
    canvas's containing block, and it is what puts the text above it. */
 
@@ -745,17 +746,37 @@
   color: var(--gl-ink-0);
 }
 
-/* The slot the time-tracker HUD offers. It is a hole, not a dependency: when
-   this feature is off the slot collapses and the bar closes over it. */
-#glct-hud .cell.glas-slot:empty {
+/* The slot the time-tracker HUD offers, under the weather readout. It is a
+   hole, not a dependency: when this feature is off the slot collapses and the
+   stack closes over it. */
+#glct-hud .glas-slot:empty {
   display: none;
 }
 
-/* The bleed has to be allowed out of the cell, or the cracks are clipped by the
+/* The bleed has to be allowed out of the slot, or the cracks are clipped by the
    HUD's own layout box the moment they leave the chip. */
-#glct-hud .cell.glas-slot {
-  padding: 0 10px;
+#glct-hud .glas-slot {
+  display: flex;
   overflow: visible;
+}
+
+/* The bar's height is fixed and the chip shares its column with the weather
+   row, so in the HUD it is struck a size smaller than the standalone panel's.
+   Sized in px like the rest of the bar, not in rem, so the fit does not depend
+   on the page's root font size. */
+#glct-hud .glas-chip {
+  gap: 5px;
+  padding: 2px 7px;
+}
+
+#glct-hud .glas-chip-mark {
+  width: 6px;
+  height: 6px;
+}
+
+#glct-hud .glas-chip-level {
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

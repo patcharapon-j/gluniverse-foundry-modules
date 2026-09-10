@@ -1,7 +1,7 @@
 /**
  * GLUniverse Suite — the stability cracks.
  *
- * The instability the party is standing in, drawn as glass splintering out of
+ * The instability the party is standing in, drawn as a weave fraying around
  * the label that names it in the time-tracker HUD. It is the standing cost of
  * the feature — it runs for as long as the party is somewhere unstable, which
  * can be a whole session — and everything here is shaped by that.
@@ -11,7 +11,7 @@
  * screen, which is the one part of the screen the play is happening in. Making
  * it quiet enough to live with made it read as haze; making it read as a threat
  * made it something a GM had to look through for three hours. A strip of
- * cracking glass beside the word "Unraveling" says the same thing, is never in
+ * fraying weave around the word "Unraveling" says the same thing, is never in
  * anybody's way, and costs about a thousandth of the fill rate.
  *
  * Two lifecycle facts drive the rest of it:
@@ -33,7 +33,7 @@ import { FrameBudget } from "./anim.mjs";
 import { bindFullscreenTriangle, buildProgram, mountCanvas, sizeToElement, uniformLocations, webglSupported } from "./gl-host.mjs";
 import { chaosFor } from "./levels.mjs";
 import { levelFloats } from "./palette.mjs";
-import { CRACK_FRAG, CRACK_UNIFORMS, VERT } from "./shader.mjs";
+import { CRACK_FIELD_PX, CRACK_FRAG, CRACK_UNIFORMS, VERT } from "./shader.mjs";
 import { ambientEnabled, isConcealed, visibleLevel } from "./settings.mjs";
 
 /** How long the cracks take to spread or close when the GM changes the level.
@@ -43,9 +43,9 @@ const FADE_MS = 1100;
 /**
  * How far past the chip's own box the canvas reaches, in CSS pixels.
  *
- * Without it every outermost shard is clipped to the same four straight lines
- * and the fracture reads as a filled panel rather than as something breaking
- * out of the label.
+ * Without it every loose thread end is clipped to the chip's own four straight
+ * lines and the weave reads as a filled panel rather than as something coming
+ * apart around the label.
  */
 const BLEED = 10;
 
@@ -195,7 +195,7 @@ class CrackHost {
     gl.uniform1f(this.uniforms.uChaos, 1);
     gl.uniform1f(this.uniforms.uDrift, 1);
     gl.uniform1f(this.uniforms.uSeed, this.seed);
-    gl.uniform1f(this.uniforms.uTexel, 1 / 48);
+    gl.uniform1f(this.uniforms.uTexel, 1 / CRACK_FIELD_PX);
     // Zero fade: the shader runs in full, the compositor shows nothing.
     gl.uniform1f(this.uniforms.uFade, 0);
     gl.clearColor(0, 0, 0, 0);
@@ -252,12 +252,16 @@ class CrackHost {
     gl.uniform1f(this.uniforms.uDrift, this.budget.allows("drift") ? 1 : 0);
     gl.uniform1f(this.uniforms.uFade, this.fade);
     gl.uniform1f(this.uniforms.uSeed, this.seed);
-    /* One device pixel in field units. The shared field's shard edges are the
-       finest thing in the suite and this strip is the smallest place any of
-       them has been drawn, so without this they crawl on every repaint. At 0
-       the clamp inside the field is inert, so a missing uniform degrades to
-       the unfiltered look rather than to a blank strip. */
-    gl.uniform1f(this.uniforms.uTexel, 1 / Math.max(1, this.canvas.height));
+    /* One device pixel in field units: the weave's threads are drawn exactly
+       this wide, so they stay hairlines on every display instead of going
+       sub-pixel (and vanishing) on an ordinary one.
+
+       It is also the field's SCALE: the shader maps pixels to field units
+       through it. Derived from a fixed CSS size, never from the canvas height —
+       tied to the height, a shorter chip shrinks the weave with it and the
+       pattern reads as crushed. cssH / h is the device-pixel ratio as
+       sizeToElement actually rounded it. */
+    gl.uniform1f(this.uniforms.uTexel, this._size.cssH / (this._size.h * CRACK_FIELD_PX));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     this._raf = requestAnimationFrame(() => this._frame());

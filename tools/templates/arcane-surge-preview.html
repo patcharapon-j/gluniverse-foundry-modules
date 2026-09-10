@@ -35,9 +35,9 @@
      to four straight lines. */
   .strips .chipwrap { position: relative; }
   .strips .chip {
-    position: relative; z-index: 1; padding: 3px 8px;
+    position: relative; z-index: 1; padding: 2px 7px;
     border: 1px solid rgb(255 255 255 / 0.08);
-    font: 700 11px/1.2 "Bahnschrift", Consolas, monospace;
+    font: 700 10px/1.2 "Bahnschrift", Consolas, monospace;
     letter-spacing: 0.04em; text-transform: capitalize; color: #eef1f7;
   }
   .strips canvas {
@@ -45,7 +45,7 @@
     z-index: 0; mix-blend-mode: screen;
   }
   /* The same canvas, at the same device resolution, blown up with no filtering.
-     Every question this row answers — does a hairline survive, does a shard
+     Every question this row answers — does a hairline survive, does a thread
      land on a pixel centre, does the word stay readable through it — is a
      question about individual pixels, and none of them can be seen at 1×. */
   .zoomed .stage { height: 190px; }
@@ -65,8 +65,8 @@
   <p>The real shaders, compiled in a real WebGL context, driven by the real animation model.
      Everything here runs LIVE — nothing is baked. The crack row is the standing cost, and it is
      drawn at the size it actually ships at: a strip in the time-tracker HUD, not a full screen.
-     That size is the whole test — the shared fracture's shards are the finest detail in the
-     suite and this is the smallest place any of them has been asked to land. The beats are
+     That size is the whole test — the weave's threads are one device pixel wide and this is
+     the smallest place any effect in the suite has been asked to land. The beats are
      one-shots; they render supersampled and average down, which is what keeps the rings and
      filaments from crawling.</p>
 </header>
@@ -91,6 +91,7 @@
 
 const VERT = /*__VERT__*/;
 const CRACK_FRAG = /*__CRACK_FRAG__*/;
+const CRACK_FIELD_PX = /*__CRACK_FIELD_PX__*/;
 const BURST_FRAG = /*__BURST_FRAG__*/;
 const SEVERITY_FRAG = /*__SEVERITY_FRAG__*/;
 const BLIT_FRAG = /*__BLIT_FRAG__*/;
@@ -184,7 +185,7 @@ function fitDpr(canvas) {
 
 /* A chip-shaped cell: the canvas overhangs a real label at a real size, on a
    real device-pixel ratio, which is the only configuration in which the
-   question "do the shards crawl?" has a meaningful answer. */
+   question "do the threads crawl?" has a meaningful answer. */
 function makeStrip(host, level) {
   const cell = document.createElement("div");
   cell.className = "cell";
@@ -262,7 +263,8 @@ function runCrack(hostId, level, mirrorId) {
     gl.uniform1f(u.uDrift, budget.allows("drift") ? 1 : 0);
     gl.uniform1f(u.uFade, 1);
     gl.uniform1f(u.uSeed, seed);
-    gl.uniform1f(u.uTexel, 1 / Math.max(1, cell.canvas.height));
+    // The field's scale, as the host sets it: a fixed CSS size, not the strip's height.
+    gl.uniform1f(u.uTexel, cell.canvas.clientHeight / (Math.max(1, cell.canvas.height) * CRACK_FIELD_PX));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     /* Copied in the SAME frame callback: a WebGL canvas is cleared when the

@@ -4,12 +4,12 @@
  * Three programs, three budgets:
  *
  *   CRACK runs for HOURS, but only inside the stability chip — a strip a couple
- *   of dozen pixels tall in the time-tracker HUD. It is the suite's OWN glass
- *   fracture, imported from `core/fx-glsl.mjs` rather than reimplemented, so
- *   the instability creeping around the label and the guard-break tearing a
- *   token apart are visibly one crack in two colours. What rises with the
- *   stability level is how far the web REACHES around the label and how hard it
- *   glows — not how fine the shards are, because at this size finer is mush.
+ *   of dozen pixels tall in the time-tracker HUD. It is a fraying WEAVE, and
+ *   deliberately not the suite's glass fracture: instability is the world
+ *   coming apart, not one more thing being broken, and the two must not share
+ *   a look. What rises with the stability level is how far the weave REACHES
+ *   and how badly it has come apart — not how fine the threads are, because at
+ *   this size finer is mush.
  *
  *   BURST fires on a surge, live and full-screen. It is deliberately nothing
  *   like the suite's golden glass fracture: no Voronoi, no crack lines. This is
@@ -30,8 +30,6 @@
  * declared and never written holds its initial value for the life of the
  * context, so the effect renders, just wrong, and nothing reports it.
  */
-
-import { FX_GLSL_BREAK_FIELD, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
 
 /** Shared by every program: a full-screen triangle, no index buffer. */
 export const VERT = `
@@ -92,15 +90,24 @@ float glasRidge2(vec2 p) {
    not any more, and the reason is worth keeping: a session-long layer over the
    board competes with the map for exactly the space the play happens in, and
    the only way to make it read as a threat was to make it loud enough to be in
-   the way. The state belongs where the state is NAMED — a few pixels of glass
-   splintering around the word "Unraveling" says the same thing, costs a
+   the way. The state belongs where the state is NAMED — a few pixels of weave
+   fraying around the word "Unraveling" says the same thing, costs a
    thousandth of the fill rate, and never once sits between a GM and a token.
 
-   The fracture itself is the suite's, imported as a FIELD from
-   `core/fx-glsl.mjs` rather than written again here. Four features now carry
-   one crack: a broken creature's token, its initiative card, its health bar,
-   and this. A lookalike would have drifted from all three the first time any
-   of them was touched. */
+   It is deliberately NOT the suite's glass fracture (`core/fx-glsl.mjs`). It
+   ran that field once, and a world coming apart then read as one more thing
+   being broken: a broken creature's token, its initiative card and its health
+   bar all carry that crack. Instability is its own picture — threads running
+   through the label that loosen at Fraying, part at Unbound and snap into
+   splayed fibres at Unraveling, which is the ladder's own vocabulary drawn. */
+
+/**
+ * One field unit, in CSS pixels. The weave's lane spacing, wobble and reach
+ * are tuned in these units, and pinning the unit here keeps that look whatever
+ * size the chip is laid out at. The host derives `uTexel` from it; nothing may
+ * derive it from the canvas's own height again.
+ */
+export const CRACK_FIELD_PX = 42;
 
 export const CRACK_FRAG = `
 precision mediump float;
@@ -109,68 +116,101 @@ varying vec2 vUv;
 uniform float uTime;
 uniform vec2  uRes;
 uniform float uChaos;   // 0 at Stable, 1 at Unraveling
-uniform float uDrift;   // 1 = animating, 0 = shed (frozen at the settled frame)
+uniform float uDrift;   // 1 = animating, 0 = shed (frozen in place)
 uniform float uFade;    // level cross-fade envelope, 0..1
-uniform float uSeed;    // required by the shared field's hashes
-uniform float uTexel;   // one device pixel in field units — the shard de-aliaser
+uniform float uSeed;    // per-world phase, so no two worlds fray identically
+uniform float uTexel;   // one device pixel in field units — the hairline width
 uniform vec3  uDeep;
 uniform vec3  uMid;     // the LEVEL's own hue, matching the chip's marker
 uniform vec3  uHot;
 
-${FX_GLSL_NOISE}
-${FX_GLSL_BREAK_FIELD}
+${NOISE}
 
 void main() {
-  /* Field space: isotropic, one unit = the strip's height. The shared field's
-     cells are round, so anything else stretches them into ovals. */
-  float aspect = uRes.x / max(uRes.y, 1.0);
-  vec2 q = vec2(vUv.x * aspect, vUv.y);
+  /* Field space: isotropic, and at a FIXED scale — uTexel is one device pixel in
+     field units, pinned by the host to CRACK_FIELD_PX rather than to the strip's
+     own height. A non-uniform mapping bends every wave out of true; and a unit
+     tied to the strip's height shrinks the weave with the chip, so the same
+     pattern reads as crushed flat in a shorter slot. A smaller chip shows less
+     of the weave, never a smaller one.
 
-  // When drift is shed the clock stops rather than the cracks vanishing: what
+     CENTRED ON THE LABEL. Anchored at one end, the pattern's falloff leaves a
+     splat over one end of the word and a dark tail at the other. */
+  vec2 centre = 0.5 * uRes * uTexel;
+  vec2 p = vUv * uRes * uTexel - centre;
+
+  // When drift is shed the clock stops rather than the weave vanishing: what
   // degrades under load is the motion, never the state.
   float t = uTime * uDrift;
 
-  /* The fracture is a STATE, not an event. gluBreakField opens over its first
-     ~0.7 seconds and then settles, so it is fed a clock that always starts past
-     that; only the energy flowing along the seams still moves. Passing it a
-     time from zero would replay the guard-break's shatter every time the HUD
-     repainted, which it does on every clock tick. */
-  float ftime = 6.0 + t;
+  // Bounded: glasHash multiplies its input by ~300, and a mediump context is
+  // entitled to lose that in the fraction.
+  float seed = fract(uSeed * 0.137) * 10.0;
 
-  /* THE IMPACT IS THE MIDDLE OF THE LABEL. An earlier pass put it near the left
-     edge, on the level marker, on the theory that the cracks should come out of
-     the dot. What that actually produced was a splat over one end of the word
-     and a dark tail at the other, because the field's coverage falls off with
-     distance from the impact and one end of a wide strip is much further from a
-     corner than the other. Centred, the same fracture wraps the word evenly and
-     grows outward in every direction, which is what "around the label" means. */
-  vec2 impact = vec2(0.5 * aspect, 0.5);
-
-  /* Chaos is spent on SPREAD, not on shard size. The strip is a couple of dozen
-     pixels tall: halving the cell size there buys mush, while growing how far
-     the web reaches around the label is legible at a glance and across the
-     table. Density moves a little so the worst rungs are busier, not finer.
+  /* Chaos is spent on SPREAD and LOOSENESS, not on finer threads. The strip is
+     a couple of dozen pixels tall: finer buys mush, while how far the weave
+     reaches and how badly it has come apart are legible across the table.
 
      Reach is measured against HALF THE STRIP's long axis, so the ladder means
      the same thing on a chip that says "Fraying" and one that says
-     "Unraveling" — which are visibly different widths. */
-  float span = 0.5 * aspect;
-  float reach = mix(0.34, 1.15, uChaos) * span;
-  float dense = mix(0.22, 0.30, uChaos);
+     "Unraveling" — which are visibly different widths. Both ends feather out:
+     the canvas edge is four straight lines, and a thread cut by one reads as a
+     clipped texture rather than something coming loose. */
+  float span = centre.x;
+  float reach = mix(0.50, 1.05, uChaos) * span;
+  float spread = smoothstep(reach, reach * 0.55, abs(p.x));
+  float feather = smoothstep(centre.y, centre.y - 0.12, abs(p.y));
 
-  vec4 f = gluBreakField(q, impact, ftime, 0.010, uTexel, dense, reach);
-  float crack = f.x;
-  float halo  = f.y;
-  float flow  = f.w;
-  /* f.z — the shared field's white-hot impact core — is deliberately unused.
-     It is scaled by 1/reach like everything else, so at the reach this needs to
-     cover a whole chip it stops being a point and floods the strip. */
+  float strand = 0.0;
+  float halo = 0.0;
+  float flow = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    float lane = (fi - 1.5) * 0.085;
 
-  vec3 col = mix(uDeep, uMid, clamp(crack * 1.20 + halo * 0.75, 0.0, 1.0));
+    /* LOOSENESS grows with chaos and toward the ends, so the weave stays
+       tightest over the word and frays outward from it. */
+    float amp = (0.012 + 0.09 * uChaos) * (0.35 + abs(p.x) / max(span, 0.001));
+    float freq = 5.0 + fi * 1.9;
+    float phase = p.x * freq + t * (0.5 + 0.2 * fi) + fi * 2.3 + seed;
+    float y = lane + amp * sin(phase)
+      + (glasNoise(vec2(p.x * 3.0 + t * 0.25, fi * 7.1 + seed)) * 2.0 - 1.0) * amp * 0.7;
+
+    // Distance to the curve, not to its height: without the slope term a thread
+    // thins to nothing on every steep stretch of its own wave.
+    float slope = amp * freq * cos(phase);
+    float norm = inversesqrt(1.0 + slope * slope);
+    float off = abs(p.y - y);
+    float d = off * norm;
+
+    /* PARTING. Stretches of each thread go missing, more of them the worse the
+       level; the gaps crawl slowly so the weave is visibly still giving way.
+       Below zero at Stable-adjacent chaos, so Fraying barely parts at all. */
+    float parted = mix(-0.05, 0.42, uChaos);
+    float gap = smoothstep(parted + 0.05, parted - 0.05, glasNoise(vec2(p.x * 2.4 + t * 0.04, fi * 13.7 + seed)));
+    float line = (1.0 - smoothstep(0.5 * uTexel, 1.5 * uTexel, d)) * (1.0 - gap);
+
+    /* FIBRES. Where a thread parts it splits in two and the halves pull apart:
+       |off - splay| is a pair of hairlines either side of the thread's path.
+       gap * (1 - gap) peaks at the edges of each gap, so the fibres live at the
+       torn ends and are gone by the middle of the hole. */
+    float splay = gap * (0.03 + 0.05 * uChaos);
+    float fibre = (1.0 - smoothstep(0.35 * uTexel, 1.1 * uTexel, abs(off - splay) * norm)) * gap * (1.0 - gap) * 4.0;
+
+    // Over-under: a woven thread dips behind its neighbours at a regular beat.
+    float weave = 0.7 + 0.3 * step(0.0, sin(p.x * 16.0 + fi * 3.14159));
+    float thread = max(line * weave, fibre);
+
+    strand = max(strand, thread);
+    halo = max(halo, (1.0 - smoothstep(0.0, 0.045, d)) * (1.0 - gap) * 0.35);
+    flow = max(flow, thread * pow(0.5 + 0.5 * sin(p.x * 8.0 - t * (1.8 + 0.35 * fi) + fi * 2.7), 8.0));
+  }
+
+  vec3 col = mix(uDeep, uMid, clamp(strand * 1.20 + halo * 0.75, 0.0, 1.0));
   col = mix(col, uHot, clamp(flow * 1.40, 0.0, 1.0));
   col = mix(col, vec3(1.0), clamp(flow * flow * 0.65, 0.0, 1.0));
 
-  float body = clamp(crack * 1.30 + halo * 1.00 + flow * 0.65, 0.0, 1.0);
+  float body = clamp(strand * 1.30 + halo + flow * 0.65, 0.0, 1.0) * spread * feather;
 
   /* Multiplied by chaos, not offset by it, so Stable is exactly inert. The host
      also stops drawing there, but an invariant that only holds because the code
