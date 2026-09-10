@@ -369,10 +369,16 @@
   z-index: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
+  /* Foundry's core sheet gives every <button> height/min-height: 2em, which
+     makes the chip 28px tall whatever its own padding says. */
+  height: auto;
+  min-height: 0;
   padding: 3px 8px;
   background: transparent;
   border: 1px solid var(--gl-hair);
+  border-radius: 0;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
   color: var(--gl-text);
   cursor: default;
@@ -760,23 +766,38 @@
   overflow: visible;
 }
 
-/* The bar's height is fixed and the chip shares its column with the weather
-   row, so in the HUD it is struck a size smaller than the standalone panel's.
+/* In the HUD the chip is a third line of the weather readout, not a box under
+   it: no frame, no padding, the marker centred under the weather icon and the
+   level's name flush with the weather's own text. The icon is 18px with a 6px
+   gap, so a 6px marker with 6px either side lands the name on the same column.
    Sized in px like the rest of the bar, not in rem, so the fit does not depend
-   on the page's root font size. */
+   on the page's root font size. The crack canvas still bleeds past this box,
+   over the weather text, which sits above it. */
 #glct-hud .glas-chip {
-  gap: 5px;
-  padding: 2px 7px;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  clip-path: none;
+}
+
+#glct-hud .glas-chip.glas-clickable:hover {
+  background: none;
+}
+
+#glct-hud .glas-chip.glas-clickable:hover .glas-chip-level {
+  color: var(--gl-accent);
 }
 
 #glct-hud .glas-chip-mark {
   width: 6px;
   height: 6px;
+  margin: 0 6px;
 }
 
 #glct-hud .glas-chip-level {
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 11px;
+  line-height: 1.12;
+  transition: color var(--gl-d-quick);
 }
 
 /* ══════════════════════════════════════════════════════════════════════

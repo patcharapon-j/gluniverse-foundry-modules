@@ -128,7 +128,10 @@
 #glct-hud .date .wxmini{--glct-weather-tint:#cfe8ff;--glct-weather-glow:#7fb4e6;
   appearance:none;border:none;background:none;color:inherit;font:inherit;text-align:left;
   position:relative;display:flex;align-items:center;gap:7px;cursor:pointer;
-  margin:0;padding:0;max-width:100%}
+  margin:0;padding:0;max-width:100%;
+  /* Foundry's core sheet gives every <button> height/min-height:2em and centred
+     content; left alone that makes this row 28px tall inside a 54px bar */
+  height:auto;min-height:0;border-radius:0;justify-content:flex-start}
 #glct-hud .date .wxmini.hidden{display:none}
 #glct-hud .date .wxmini:hover .wxmini-label{background:none;-webkit-text-fill-color:rgb(var(--gl-tint-light));color:rgb(var(--gl-tint-light))}
 #glct-hud .date .wxmini-ico{display:grid;place-items:center;width:23px;height:23px;flex:none;border-radius:7px;
