@@ -13,6 +13,7 @@ export const PREFIX = "rb.";
 export const SETTINGS = Object.freeze({
   /* World — these change what the table reads, so the GM owns them. */
   enabledBars: PREFIX + "enabledBars",     // "both" | "primary"
+  liquid: PREFIX + "liquid",               // ink | mercury | lava — the primary bar's material
   segmentMode: PREFIX + "segmentMode",     // "count" | "perHp"
   segments: PREFIX + "segments",           // divisions across the fill, 0 = continuous
   segmentSize: PREFIX + "segmentSize",     // HP per division, when mode is perHp

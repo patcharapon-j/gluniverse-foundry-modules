@@ -43,14 +43,24 @@ const fxGlsl = await import(new URL("scripts/core/fx-glsl.mjs", ROOT).href);
 const initConst = await import(new URL("scripts/features/initiative/constants.mjs", ROOT).href);
 const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs", ROOT).href);
 
-/* ── 1. The uniform table, the GLSL and the JS all agree ────────────────── */
+/* ── 1. The uniform table, every liquid's GLSL and the JS all agree ─────── */
 {
-  const glsl = strip(shader.FRAGMENT_SHADER);
-  const declared = new Set([...glsl.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]));
+  /* Per liquid, because each liquid is its own program. A uniform that only one
+     liquid's chunk reads is declared in all three and optimised out of two, and
+     a bar in a lava world then holds whatever that uniform's initial value was —
+     so "declared" is not enough; each program has to actually read it. */
+  const before = problems;
   const listed = new Set(Object.keys(shader.UNIFORMS));
-
-  for (const u of listed) if (!declared.has(u)) fail(`UNIFORMS lists ${u}, which the GLSL never declares.`);
-  for (const u of declared) if (!listed.has(u)) fail(`GLSL declares ${u}, which UNIFORMS does not list.`);
+  for (const liquid of shader.LIQUIDS) {
+    const glsl = strip(shader.fragmentShader(liquid));
+    const declared = new Set([...glsl.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]));
+    for (const u of listed) if (!declared.has(u)) fail(`UNIFORMS lists ${u}, which the ${liquid} GLSL never declares.`);
+    for (const u of declared) if (!listed.has(u)) fail(`The ${liquid} GLSL declares ${u}, which UNIFORMS does not list.`);
+    const body = glsl.replace(/uniform\s+\w+\s+\w+\s*(\[\d+\])?\s*;/g, "");
+    for (const u of listed)
+      if (!new RegExp(`\\b${u}\\b`).test(body))
+        fail(`The ${liquid} program declares ${u} but never reads it; the compiler will optimise it away and every write to it is lost.`);
+  }
 
   /* A uniform nothing writes is a silent no-op, not an error. */
   const written = strip(hostSrc);
@@ -59,19 +69,22 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (!new RegExp(`\\b${u}\\b`).test(written) && !new RegExp(`\\b${u}\\b`).test(strip(shaderSrc.split("FRAGMENT_SHADER")[0])))
       fail(`${u} is declared but never written from host.mjs — it will always hold its initial value.`);
   }
-  if (!problems) ok(`${listed.size} uniforms: declared, listed and written`);
+  if (problems === before) ok(`${listed.size} uniforms: declared, read and listed in all ${shader.LIQUIDS.length} liquids, and written`);
 }
 
 /* ── 2. uTexel = 0 must be inert ────────────────────────────────────────── */
 {
-  const glsl = strip(shader.FRAGMENT_SHADER);
-  /* Every clamp against px must be a max()/smoothstep that degrades to the
-     unfiltered form at px = 0 — never a divide by it. */
-  const divides = [...glsl.matchAll(/\/\s*uTexel\b/g)];
-  if (divides.length) fail(`The shader divides by uTexel directly in ${divides.length} place(s). Divide by px, which is floored to an epsilon — uTexel itself is 0 whenever the uniform is missing.`);
-  if (!/px = max\(uTexel \* uAspect, [0-9.]+\)/.test(glsl))
-    fail("px is not derived as max(uTexel * uAspect, epsilon); the epsilon is what keeps uTexel 0 inert.");
-  else ok("uTexel 0 is inert (px floors to epsilon, no divisions by px)");
+  const before = problems;
+  for (const liquid of shader.LIQUIDS) {
+    const glsl = strip(shader.fragmentShader(liquid));
+    /* Every clamp against px must be a max()/smoothstep that degrades to the
+       unfiltered form at px = 0 — never a divide by it. */
+    const divides = [...glsl.matchAll(/\/\s*uTexel\b/g)];
+    if (divides.length) fail(`The ${liquid} shader divides by uTexel directly in ${divides.length} place(s). Divide by px, which is floored to an epsilon — uTexel itself is 0 whenever the uniform is missing.`);
+    if (!/px = max\(uTexel \* uAspect, [0-9.]+\)/.test(glsl))
+      fail(`The ${liquid} shader does not derive px as max(uTexel * uAspect, epsilon); the epsilon is what keeps uTexel 0 inert.`);
+  }
+  if (problems === before) ok(`uTexel 0 is inert in all ${shader.LIQUIDS.length} liquids (px floors to epsilon, no divisions by uTexel)`);
 }
 
 /* ── 3. The ramp still mirrors gl-tokens.css ────────────────────────────── */
@@ -239,7 +252,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave", "breakFlow", "reveal"];
+                    "sparks", "wave", "breakFlow", "reveal", "wobble", "flow", "slosh"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -481,7 +494,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
        - the extraction not being an identity for the original consumers, which
          changes the token and the card while nothing in this feature is even
          running. */
-  const glsl = strip(shader.FRAGMENT_SHADER);
+  const glsls = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
   const shaderMod = strip(shaderSrc);
   const h = strip(hostSrc);
 
@@ -514,8 +527,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (!goldDrift) ok("the fracture's two golds match the initiative tracker's breakAmber / breakHot");
 
   /* One field, shared — not two that look alike. */
-  if (!/gluBreakField\(/.test(glsl))
-    fail("The bar shader does not call gluBreakField; the fracture is no longer the shared one from core/fx-glsl.mjs.");
+  if (!glsls.every((glsl) => /gluBreakField\(/.test(glsl)))
+    fail("A liquid's bar shader does not call gluBreakField; the fracture is no longer the shared one from core/fx-glsl.mjs.");
   else if (!/FX_GLSL_BREAK_FIELD/.test(shaderMod))
     fail("shader.mjs does not import FX_GLSL_BREAK_FIELD, so whatever gluBreakField it is calling is a local copy.");
   else if (/float gluVoroEdge\(/.test(shaderMod.split("SCALE_PRELUDE")[1] ?? ""))
@@ -535,13 +548,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
      bloom has somewhere to spill; a fracture that is not masked by the silhouette
      draws gold shards floating in that margin, past the cut corner, and looks
      like a rendering fault rather than a broken bar. */
-  const block = /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(glsl)?.[0] ?? "";
-  if (!block) fail("The guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
-  else if (!/mBody/.test(block))
+  const blocks = glsls.map((glsl) => /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(glsl)?.[0] ?? "");
+  if (blocks.some((block) => !block)) fail("A liquid's guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
+  else if (blocks.some((block) => !/mBody/.test(block)))
     fail("The fracture is not masked by mBody; the cracks will spill into the quad's bloom margin, outside the bar's own silhouette.");
-  else if (/0\.299/.test(block))
-    fail("The guard-break block desaturates the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
-  else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone");
+  else if (blocks.some((block) => /0\.299|LAVA_BREAK_DIM/.test(block)))
+    fail("The guard-break block desaturates or dims the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
+  else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone, in every liquid");
 
   /* The break is a different source from the values, and moves on its own. */
   if (!/readBreak\(/.test(h))
@@ -745,7 +758,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const REF_BAR_PX = 19;
   const px = 1 / REF_BAR_PX;
   const GL_FADE_LO = 0.8, GL_FADE_HI = 2.2;
-  const glsl = strip(shader.FRAGMENT_SHADER);
+  /* The frame below is shared by every liquid, but each program is assembled
+     separately, so each is checked: a gate lost in one splice is lost in one
+     world. The detail gates are the union over all three. */
+  const variants = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
+  const glsl = variants.join("\n");
 
   /* The segment gap is world-sized, so it scales with zoom — and floored in
      device pixels, so it never falls under the size at which it would vanish.
@@ -754,7 +771,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
      floor it is sub-pixel on an ordinary display at a normal zoom, and the
      colour-blind position channel disappears for every player without a retina
      monitor. */
-  const floor = /float gapP = min\(max\(uSegW, px \* ([0-9.]+)\), segW \* [0-9.]+\)/.exec(glsl);
+  const floors = variants.map((v) => /float gapP = min\(max\(uSegW, px \* ([0-9.]+)\), segW \* [0-9.]+\)/.exec(v));
+  const floor = floors.every(Boolean) ? floors.reduce((lo, f) => (Number(f[1]) < Number(lo[1]) ? f : lo)) : null;
   if (!floor)
     fail("The segment gap is not max(uSegW, px * floor): either it is pinned to device pixels again (no zoom scaling) or it has lost its device-pixel floor (divisions vanish on an ordinary display).");
   else if (Number(floor[1]) < 1)
@@ -776,12 +794,15 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
 
   /* "Off means no division marks of any kind": the quarter register ticks under
      the bar are divisions too, and are cut from the same switch. */
-  if (!/tickMark \*=[^;]*uSeg/.test(glsl))
+  if (!variants.every((v) => /tickMark \*=[^;]*uSeg/.test(v)))
     fail("The quarter tick marks under the bar do not follow uSeg, so turning the dividers off still leaves division marks on the bar.");
   else ok("the quarter tick marks follow the dividers switch");
 
-  const gated = [...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)]
-    .map((m) => ({ raw: m[0], value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) }));
+  const gated = [...new Set([...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)].map((m) => m[0]))]
+    .map((raw) => {
+      const m = /rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/.exec(raw);
+      return { raw, value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) };
+    });
 
   if (!gated.length) fail("No literal rbDetail() gates found; the size-check has nothing to verify.");
   const faint = [];
@@ -793,6 +814,279 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   }
   if (gated.length) ok(`${gated.length} detail gate(s) still resolve on a ${REF_BAR_PX}px bar`);
   if (faint.length) console.log("      partial at the reference size (by design, but worth knowing): " + faint.join(", "));
+}
+
+/* ── 7m. The liquids ─────────────────────────────────────────────────────── */
+{
+  /* Everything in this section renders perfectly when it is wrong. A liquid
+     whose front drifts off the value draws a bar that is a few pixels long or
+     short at every health; a length that springs reads as jelly; a lava that
+     does not dim hides the guard break it is carrying; a program that compiles
+     all three liquids costs every bar three materials; and an animation played
+     on anime.js's shared engine keeps the check tool's own process alive and a
+     bar animating off a clock the hitstop cannot freeze. */
+  const idxSrc = strip(await src("scripts/features/resource-bars/index.mjs"));
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const constants = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
+  const lang = JSON.parse(await src("lang/resource-bars.en.json"));
+  const h = strip(hostSrc);
+  const a = strip(animSrc);
+
+  /* (a) The setting: world-scoped, offering exactly the programs the shader can
+     build, defaulting to ink, with its strings — and a change reaches the bars
+     already on the canvas. */
+  const reg = /world\(SETTINGS\.liquid,\s*\{([\s\S]*?)\}\);/.exec(idxSrc)?.[1] ?? "";
+  const choices = [...((/choices:\s*\{([\s\S]*?)\}/.exec(reg)?.[1]) ?? "").matchAll(/(\w+):\s*"(GLRB\.[\w.]+)"/g)];
+  if (constants.SETTINGS.liquid !== "rb.liquid")
+    fail(`SETTINGS.liquid is ${constants.SETTINGS.liquid}, not rb.liquid.`);
+  else if (!reg)
+    fail("rb.liquid is not registered as a world setting in index.mjs; the liquid is part of what the table reads, not one viewer's preference.");
+  else if (choices.map((m) => m[1]).join(",") !== shader.LIQUIDS.join(","))
+    fail(`The liquid setting offers ${choices.map((m) => m[1]).join(", ") || "nothing"} but the shader builds ${shader.LIQUIDS.join(", ")}; a choice with no program falls back to ink and reads as a setting that does nothing.`);
+  else if (!/default:\s*DEFAULT_LIQUID/.test(reg) || shader.DEFAULT_LIQUID !== "ink")
+    fail("The liquid setting does not default to ink, the calmest of the three.");
+  else if (choices.some((m) => !(m[2] in lang)))
+    fail("A liquid choice has no string; the Control Center would print its key.");
+  else if (/refractive/i.test(lang["GLS.feature.resource-bars.hint"] ?? ""))
+    fail("The feature hint still promises refractive glass, which no longer exists.");
+  else if (!/liquid:\s*LIQUIDS\.includes\(/.test(mainSrc))
+    fail("main.mjs does not resolve the liquid against the shader's own list, so a hand-edited world can hand the host a liquid with no program.");
+  else if (/\bFRAGMENT_SHADER\b/.test(h) || !/fragmentShader\(opts\.liquid/.test(h) || !/fragmentShader\(this\.liquid\)/.test(h))
+    fail("host.mjs compiles something other than the world's liquid (the default alias FRAGMENT_SHADER, or a hard-coded variant), so a lava world draws ink.");
+  else if (!/if \(reliquid\) this\.swapLiquid\(mesh\)/.test(h) || !/liquid:\s*this\.liquid/.test(h))
+    fail("Changing the liquid does not reach the bars already on the canvas (configure never swaps their programs, or new meshes are not built with it).");
+  else ok("rb.liquid is a world setting offering exactly the shader's liquids, defaulting to ink, and every bar on the canvas recompiles when it changes");
+
+  /* (b) One material per program, and the refractive ribbons gone. */
+  const markers = { ink: "inkField", mercury: "mercuryEnv", lava: "lavaCells" };
+  let mixed = 0;
+  if (Object.keys(markers).sort().join() !== [...shader.LIQUIDS].sort().join()) {
+    fail(`A liquid was added without a material marker here (liquids ${shader.LIQUIDS.join(", ")}); this check can no longer tell the programs apart.`);
+    mixed++;
+  }
+  for (const liquid of shader.LIQUIDS) {
+    const g = strip(shader.fragmentShader(liquid));
+    for (const [other, marker] of Object.entries(markers)) {
+      const has = new RegExp(`\\b${marker}\\(`).test(g);
+      if (other === liquid && !has) { fail(`The ${liquid} program does not contain its own material (${marker}).`); mixed++; }
+      if (other !== liquid && has) { fail(`The ${liquid} program also compiles ${other}'s material (${marker}); every bar would pay for a liquid it never draws.`); mixed++; }
+    }
+    if (/glassLight|glassShade|\bglint\b|\bfacet\b/.test(g)) { fail(`The ${liquid} program still carries the refractive ribbons — the "lines and stuff" the liquids replaced.`); mixed++; }
+  }
+  if (shader.fragmentShader("no-such-liquid") !== shader.fragmentShader(shader.DEFAULT_LIQUID))
+    fail("An unknown liquid does not fall back to the default program.");
+  else if (shader.FRAGMENT_SHADER !== shader.fragmentShader(shader.DEFAULT_LIQUID))
+    fail("FRAGMENT_SHADER is no longer the default liquid's program.");
+  else if (!mixed) ok("each liquid's program carries only its own material, and none carries the refractive ribbons");
+
+  /* (c) The idle loop wraps invisibly. Every moving term must turn a whole
+     number of times in it, or the liquid steps once a minute on a bar nobody
+     is watching. */
+  let loopBad = 0;
+  if (shader.IDLE_LOOP_S !== anim.TIMING.idleLoopMs / anim.TIMING.clockMs) {
+    fail(`The shader's IDLE_LOOP_S (${shader.IDLE_LOOP_S}s) is not the loop anim.mjs wraps its clock at (${anim.TIMING.idleLoopMs / anim.TIMING.clockMs}s).`);
+    loopBad++;
+  }
+  for (const liquid of shader.LIQUIDS) {
+    const g = strip(shader.fragmentShader(liquid));
+    const outside = g.replace(/float rbPhase\(float k\) \{[\s\S]*?\n\}/, "").replace(/uniform float uTime;/, "");
+    if (/\buTime\b/.test(outside)) {
+      fail(`The ${liquid} program reads uTime outside rbPhase(); that term is not a whole number of turns of the idle loop and steps when the loop wraps.`);
+      loopBad++;
+    }
+    const turns = [
+      ...[...g.matchAll(/\brbPhase\(([^()]*)\)/g)].map((m) => m[1].trim()),
+      ...[...g.matchAll(/\brbDrift\(([^,()]*),/g)].map((m) => m[1].trim()),
+    ].filter((t) => t !== "float k" && t !== "k");
+    const odd = turns.filter((t) => !/^\d+\.0$/.test(t));
+    if (odd.length) {
+      fail(`The ${liquid} program turns rbPhase/rbDrift by ${odd.join(", ")}; only whole numbers of turns wrap seamlessly.`);
+      loopBad++;
+    }
+  }
+  if (!loopBad) ok(`every idle term in every liquid turns a whole number of times in the ${shader.IDLE_LOOP_S}s loop`);
+
+  /* (d) The front bends around the value without moving it, and never far. */
+  const bodies = new Set(shader.LIQUIDS.map((l) =>
+    /float rbFront\(float fy, float wobble, float slosh\) \{([\s\S]*?)\n\}/.exec(shader.fragmentShader(l))?.[1]));
+  if (bodies.has(undefined)) fail("A liquid has no rbFront(), so its front is not the zero-mean meniscus.");
+  else if (bodies.size !== 1) fail("The liquids do not share one rbFront(); the budget below is checked against one of them only.");
+  else {
+    const body = [...bodies][0];
+    let frontBad = 0;
+    for (const [key, value] of Object.entries(shader.FRONT))
+      if (!body.includes(value.toFixed(4))) { fail(`rbFront() does not use FRONT.${key} (${value.toFixed(4)}); the exported budget no longer describes the shader.`); frontBad++; }
+    let fn = null;
+    try {
+      fn = new Function("fy", "wobble", "slosh", "rbPhase",
+        body.replace(/\bfloat\s+/g, "let ").replace(/\b(sin|cos|abs|sqrt)\(/g, "Math.$1("));
+    } catch (e) { fail("rbFront() could not be read as plain arithmetic: " + e.message); frontBad++; }
+    if (fn && !frontBad) {
+      const W = (2 * Math.PI) / shader.IDLE_LOOP_S;
+      const N = 2000;
+      let worstMean = 0, worstAmp = 0;
+      try {
+        for (let t = 0; t < shader.IDLE_LOOP_S; t += 0.53) {
+          const phase = (k) => t * W * k;
+          for (const wobble of [0, 1]) for (const slosh of [-1, -0.6, -0.25, 0, 0.4, 1]) {
+            let sum = 0;
+            for (let i = 0; i <= N; i++) {
+              const d = fn(-1 + (2 * i) / N, wobble, slosh, phase);
+              sum += (i === 0 || i === N ? 0.5 : 1) * d;
+              worstAmp = Math.max(worstAmp, Math.abs(d));
+            }
+            worstMean = Math.max(worstMean, Math.abs(sum / N));
+          }
+        }
+        if (worstMean > 1e-4)
+          fail(`rbFront() is not zero-mean across the bar's height (worst mean ${worstMean.toExponential(2)} bar heights): the front's centre has moved off the value, so the bar misreports its own length.`);
+        else if (worstAmp > 1 / 3)
+          fail(`rbFront() reaches ${worstAmp.toFixed(3)} bar heights; past a third of the bar's height the front stops being a curve on a length and becomes a second, disagreeing length.`);
+        else ok(`the front is zero-mean across the bar (worst ${worstMean.toExponential(1)}) and stays within ${worstAmp.toFixed(3)} bar heights (cap 0.333), evaluated from rbFront()'s own GLSL`);
+      } catch (e) { fail("rbFront() uses something this check cannot evaluate: " + e.message); }
+    }
+  }
+  const g0s = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
+  const every = (re) => g0s.every((g) => re.test(g));
+  if (!every(/float fy = clamp\(p\.y \/ fh, -1\.0, 1\.0\)/))
+    fail("fy is not the fill's own height, symmetric about the mid-line; a zero-mean profile over a lopsided span has a non-zero mean.");
+  else if (!every(/float frontX = fillX \+ rbFront\(fy, uWobble, uSlosh\) \* hero \* endFade/))
+    fail("The fill's edge is not fillX + rbFront() gated by hero and endFade: either the rails bend, or the front no longer flattens against the ends of the tube.");
+  else if (!every(/ghostX \+ rbFront\(fy, uWobble, 0\.0\)/))
+    fail("The chip trail's edge sloshes; it is spent liquid and keeps only the meniscus.");
+  else if (!every(/mFillA \* rbEdge\(frontX \+ px, frontX - px, p\.x\)/) || !every(/rbGauss\(p\.x - frontX, 0\.060\)/) || !every(/float headIn = rbGauss\(p\.x - frontX/))
+    fail("The fill mask, the head glow or the flash no longer follows the bent front, so the liquid and its light disagree about where the edge is.");
+  else ok("the fill, the head glow and the flash follow the bent front; the chip trail keeps only the meniscus; the rails stay straight");
+
+  /* (e) The lava gives way to a guard break. */
+  const lava = strip(shader.fragmentShader("lava"));
+  const dim = shader.LAVA_BREAK_DIM;
+  if (!(dim >= 0.4 && dim < 1))
+    fail(`LAVA_BREAK_DIM is ${dim}; under 0.4 the lava's seams still out-shine the gold fracture laid over them, and at 1 the lava goes dark and stops reading as lava.`);
+  else if (!/float glowAmt = [^;]*\(1\.0 - LAVA_BREAK_DIM \* uBreak\)/.test(lava))
+    fail("The lava's seam glow does not dim under uBreak; under a guard break the gold fracture disappears into the lava.");
+  else if (!/lavaSeam \* \([^;]*glowAmt/.test(lava))
+    fail("glowAmt no longer drives the lava's seams, so dimming it dims nothing.");
+  else if (shader.LIQUIDS.some((l) => l !== "lava" && /LAVA_BREAK_DIM \*/.test(strip(shader.fragmentShader(l)))))
+    fail("A liquid other than lava dims under the guard break; only lava's seams compete with the gold.");
+  else ok(`the lava gives up ${Math.round(dim * 100)}% of its seam glow under a guard break so the gold reads; nothing else dims`);
+
+  /* (f) No length springs, and the one spring there is settles. Structural
+     first, because a spring on a length is one edit away from looking fine. */
+  const springs = [...a.matchAll(/\bspring\(/g)].length;
+  const sloshUses = [...a.matchAll(/\bsloshSpring\(/g)].length;
+  if (springs !== 1 || !/function sloshSpring\([^)]*\)\s*\{\s*return spring\(/.test(a))
+    fail("anim.mjs calls spring() somewhere other than sloshSpring(); a spring on a length reads as jelly.");
+  else if (sloshUses !== 2 || !/slosh:\s*\[[^\]]*\],\s*ease:\s*sloshSpring\(/.test(a))
+    fail("sloshSpring() is given to something other than the slosh channel.");
+  else if (/\b(?:in|out|inOut|outIn)(?:Back|Elastic|Bounce)\b/.test(a))
+    fail("anim.mjs uses an overshooting ease (back, elastic or bounce); nothing in the bar may overshoot but the slosh.");
+  else ok("the only spring in anim.mjs drives the slosh, and no ease overshoots");
+
+  /* …and behaviourally: every length stays inside the span of its change and
+     moves one way only, at full and reduced motion; the slosh stays within
+     -1..1, swings through the value, and comes to rest at exactly 0. */
+  let lengthBad = 0;
+  const noLen = (msg) => { if (lengthBad++ < 4) fail(msg); };
+  for (const scale of [1, 0.6]) {
+    for (const [from, to] of [[1, 0.4], [0.3, 0.9], [0.8, 0.79], [0.05, 1], [1, 0], [0.5, 0.49]]) {
+      const bar = new anim.BarAnim(from, { motionScale: scale });
+      bar.step(16);
+      bar.set(to, { max: 60 });
+      const lo = Math.min(from, to) - 1e-9, hi = Math.max(from, to) + 1e-9;
+      const down = to < from;
+      const prev = { frac: bar.frac, ghost: bar.ghost, num: bar.num };
+      let crossings = 0, sign = Math.sign(bar.slosh), steps = 0;
+      for (; steps < 800 && (steps < 2 || bar.hot); steps++) {
+        bar.step(16);
+        for (const key of ["frac", "ghost", "num"]) {
+          const v = bar[key];
+          if (v < lo || v > hi) noLen(`${key} left the span of a ${from}→${to} change at motion ${scale} (reached ${v.toFixed(4)}): a length overshot.`);
+          const moved = v - prev[key];
+          if (down ? moved > 1e-12 : moved < -1e-12) noLen(`${key} reversed during a ${from}→${to} change at motion ${scale}: a length recoiled.`);
+          prev[key] = v;
+        }
+        if (Math.abs(bar.slosh) > 1 + 1e-9) noLen(`The slosh reached ${bar.slosh.toFixed(3)}; the shader's front budget assumes -1..1.`);
+        const s = Math.sign(bar.slosh);
+        if (s && sign && s !== sign) crossings++;
+        if (s) sign = s;
+      }
+      if (bar.frac !== to || bar.num !== to || bar.ghost !== to)
+        noLen(`A ${from}→${to} change did not come to rest exactly on its value (frac ${bar.frac}, readout ${bar.num}, trail ${bar.ghost}).`);
+      if (bar.slosh !== 0) noLen(`The slosh after a ${from}→${to} change never came to rest (${bar.slosh}).`);
+      if (scale === 1 && crossings < 2) noLen(`The slosh after a ${from}→${to} change does not swing through the value (${crossings} crossings); a front that only eases back is not a slosh.`);
+    }
+  }
+  /* A long run of random changes, some mid-flight: nothing ever moves away from
+     its target, and the trail never sits inside the fill. */
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const bar = new anim.BarAnim(0.6);
+  for (let n = 0; n < 80 && lengthBad < 4; n++) {
+    bar.set(Math.round(rnd() * 100) / 100, { max: 40 });
+    let gapF = Math.abs(bar.target - bar.frac), gapN = Math.abs(bar.target - bar.num);
+    const steps = 1 + Math.floor(rnd() * 45);
+    for (let i = 0; i < steps; i++) {
+      bar.step(8 + rnd() * 30);
+      const gf = Math.abs(bar.target - bar.frac), gn = Math.abs(bar.target - bar.num);
+      if (gf > gapF + 1e-9 || gn > gapN + 1e-9) { noLen("Under rapid changes a length moved away from its target — an overshoot or a recoil."); break; }
+      if (bar.ghost < bar.frac - 1e-12) { noLen("Under rapid changes the chip trail fell inside the fill."); break; }
+      gapF = gf; gapN = gn;
+    }
+  }
+  const quiet = new anim.BarAnim(0.8, { motionScale: 0 });
+  quiet.set(0.3);
+  quiet.step(16);
+  const hushed = new anim.BarAnim(0.8);
+  hushed.set(0.3);
+  hushed.step(30);
+  hushed.set(0.5, { silent: true });
+  if (quiet.slosh !== 0 || hushed.slosh !== 0) noLen("The slosh survives motion \"none\" or a silent update.");
+  if (!lengthBad) ok("fill, trail and readout never overshoot or recoil at full or reduced motion, under single or rapid changes; the slosh stays in -1..1, swings, and rests at 0");
+
+  /* (g) anime.js is sought, never played, and its shared engine is untouched. */
+  const { engine } = await import(new URL("scripts/vendor/animejs/engine/engine.js", ROOT).href);
+  if (/useDefaultMainLoop|\bengine\b|timeUnit|\bglobals\b|\.speed\s*=|playbackRate|pauseOnDocumentHidden/.test(a))
+    fail("anim.mjs reaches into anime.js's engine or globals. That engine is shared with Insight, the initiative tracker and the rest of the suite; it is not this feature's to configure.");
+  else if (/\.(?:play|resume|restart|reverse)\(/.test(a) || /autoplay:\s*true/.test(a))
+    fail("anim.mjs plays an animation. Played animations run on the shared engine's own frame loop, which the hitstop, the off-screen freeze and motion \"none\" cannot reach.");
+  else if ([...a.matchAll(/\banimate\(/g)].length !== 1 || !/animate\(target, \{ \.\.\.params, autoplay: false, composition: "none" \}\)/.test(a))
+    fail("An animation is built outside tween(), the one place autoplay is turned off.");
+  else if ([...a.matchAll(/\bcreateTimeline\(/g)].length !== 1 || !/createTimeline\(\{ autoplay: false/.test(a))
+    fail("A timeline is built outside timeline(), the one place autoplay is turned off.");
+  else if (/vendor\/animejs/.test(animSrc) || !/from "\.\.\/\.\.\/core\/motion\.mjs"/.test(animSrc))
+    fail("anim.mjs imports anime.js directly rather than through core/motion.mjs, the suite's one entry point.");
+  else if (engine.useDefaultMainLoop !== true || engine.speed !== 1 || engine.reqId || engine._head)
+    fail("After driving bars through every path above, anime.js's shared engine has changed: something was played, scheduled or reconfigured.");
+  else ok("every tween is built paused and sought on the model's clock; the shared anime.js engine is untouched after driving it");
+
+  /* (h) …which is also what lets a plain Node process that drives the model
+     exit. A played animation schedules setImmediate and never lets go. */
+  const { spawnSync } = await import("node:child_process");
+  const animUrl = new URL("scripts/features/resource-bars/anim.mjs", ROOT).href;
+  const driver = `const m = await import(${JSON.stringify(animUrl)});
+    const b = new m.BarAnim(0.8); b.step(16); b.set(0.3, { max: 50 }); b.setBroken(true); b.setHover(true);
+    for (let i = 0; i < 30; i++) b.step(16);
+    b.set(0.9, { max: 50 }); b.step(16); b.setBroken(false); b.step(16);
+    const r = new m.RevealAnim(); r.show(true); r.step(16); r.hide(true); r.step(16);
+    console.log("driven");`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", driver], { encoding: "utf8", timeout: 20000 });
+  if (run.error?.code === "ETIMEDOUT" || run.signal)
+    fail("A Node process that drives the animation model mid-flight does not exit: something in anim.mjs keeps the event loop alive.");
+  else if (run.status !== 0 || !/driven/.test(run.stdout))
+    fail("Driving the animation model in a fresh Node process failed: " + (run.stderr || run.stdout).trim().split("\n").slice(-3).join(" | "));
+  else ok("a fresh Node process driving the model mid-flight exits on its own");
+
+  /* (i) The liquid's motion rides the primary bar only, and every part of it
+     is shed on its own entry — including the idle tick itself. */
+  if (!/const liquid = role === "hero";/.test(h)
+    || !/u\.uFlow = liquid && this\.allows\("flow"\) \? 1 : 0/.test(h)
+    || !/u\.uWobble = liquid && this\.allows\("wobble"\) \? 1 : 0/.test(h)
+    || !/u\.uSlosh = liquid && a && this\.allows\("slosh"\) \? clamp\(a\.slosh, -1, 1\) : 0/.test(h))
+    fail("host.mjs does not write uFlow, uWobble and uSlosh for the primary bar only, each behind its own shed gate (and the slosh clamped to -1..1).");
+  else if (!/const idle = [^;]*this\.allows\("flow"\)/.test(h) || !/const idleFlow = [^;]*this\.allows\("flow"\)/.test(h))
+    fail("Shedding \"flow\" leaves idle bars in the ticker, so the one standing cost every visible bar pays can never be given up.");
+  else ok("the liquid's flow, wobble and slosh ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
 }
 
 /* ── 10. The shader compiles ────────────────────────────────────────────── */
@@ -824,35 +1118,37 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   }
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  const result = await page.evaluate(({ vert, frag, names }) => {
-    const c = document.createElement("canvas");
-    const gl = c.getContext("webgl2") || c.getContext("webgl");
-    if (!gl) return { error: "no WebGL context" };
-    const build = (type, srcText, label) => {
-      const sh = gl.createShader(type);
-      gl.shaderSource(sh, srcText);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return label + ": " + gl.getShaderInfoLog(sh);
-      return sh;
-    };
-    const vs = build(gl.VERTEX_SHADER, vert, "vertex");
-    if (typeof vs === "string") return { error: vs };
-    const fs = build(gl.FRAGMENT_SHADER, frag, "fragment");
-    if (typeof fs === "string") return { error: fs };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return { error: "link: " + gl.getProgramInfoLog(prog) };
-    /* A uniform the compiler optimised away is a uniform nothing reads. */
-    const dead = [];
-    for (const name of names)
-      if (gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name) === null) dead.push(name);
-    return { dead };
-  }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.FRAGMENT_SHADER, names: Object.keys(shader.UNIFORMS) });
+  for (const liquid of shader.LIQUIDS) {
+    const result = await page.evaluate(({ vert, frag, names }) => {
+      const c = document.createElement("canvas");
+      const gl = c.getContext("webgl2") || c.getContext("webgl");
+      if (!gl) return { error: "no WebGL context" };
+      const build = (type, srcText, label) => {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, srcText);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return label + ": " + gl.getShaderInfoLog(sh);
+        return sh;
+      };
+      const vs = build(gl.VERTEX_SHADER, vert, "vertex");
+      if (typeof vs === "string") return { error: vs };
+      const fs = build(gl.FRAGMENT_SHADER, frag, "fragment");
+      if (typeof fs === "string") return { error: fs };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return { error: "link: " + gl.getProgramInfoLog(prog) };
+      /* A uniform the compiler optimised away is a uniform nothing reads. */
+      const dead = [];
+      for (const name of names)
+        if (gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name) === null) dead.push(name);
+      return { dead };
+    }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.fragmentShader(liquid), names: Object.keys(shader.UNIFORMS) });
 
+    if (result.error) fail(`The ${liquid} shader does not compile: ` + result.error);
+    else if (result.dead?.length) fail(`Uniforms optimised away in the ${liquid} program (nothing in it reads them): ` + result.dead.join(", "));
+    else ok(`the ${liquid} fragment shader compiles and links, and every uniform survives`);
+  }
   await browser.close();
-  if (result.error) fail("The shader does not compile: " + result.error);
-  else if (result.dead?.length) fail("Uniforms optimised away (nothing in the shader reads them): " + result.dead.join(", "));
-  else ok("the fragment shader compiles and links, and every uniform survives");
 }
 
 console.log(problems ? `\n${problems} problem(s)` : "\nno problems");

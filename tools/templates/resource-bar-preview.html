@@ -1,6 +1,6 @@
-<title>Refractive Core · Resource Bars</title>
-<link rel="stylesheet" href="../styles/gl-fonts.css">
-<link rel="stylesheet" href="../styles/gl-tokens.css">
+<title>Health Liquids · Resource Bars</title>
+<link rel="stylesheet" href="__ROOT__/styles/gl-fonts.css">
+<link rel="stylesheet" href="__ROOT__/styles/gl-tokens.css">
 <style>
 :root{
   --ink0:#02070b; --ink1:#080b11; --ink2:#0b0f17; --ink3:#161d2c;
@@ -118,14 +118,14 @@ input[type=range]{padding:0; width:230px}
 <canvas id="gl"></canvas>
 <div class="page">
   <header>
-    <h1>Refractive Core <span> / Resource Bars</span></h1>
-    <p class="sub">The live shader, at token size and enlarged. Try damage, healing, temporary HP and guard break below.</p>
+    <h1>Health Liquids <span> / Resource Bars</span></h1>
+    <p class="sub">The live shaders — ink, mercury and lava — at token size and enlarged, driven by the real anime.js model. Pick a liquid below; every cell without a liquid of its own follows it.</p>
   </header>
 
   <h2>Token-width fit · 128px</h2>
   <div class="stage" id="stage"></div>
   <h2>Damage and healing</h2>
-  <p class="note">Damage tears through the fill with a jagged front and an amber trail. Healing restores it with curved ripples and drifting lights.</p>
+  <p class="note">The fill snaps and everything holds for the hitstop; then the change wave crosses the bar in the liquid's own idiom, the chip trail drains, the readout counts, and the front sloshes through the value and settles on it.</p>
 
   <div class="play">
     <div class="slot" id="live" data-live="1"></div>
@@ -136,6 +136,7 @@ input[type=range]{padding:0; width:230px}
       <button data-set="1">Full</button>
     </div>
     <div class="row">
+      <label class="f">Liquid <select id="liquid"></select></label>
       <label class="f">Value <input type="range" id="scrub" min="0" max="100" value="80"></label>
       <label class="f">Motion
         <select id="motion"><option value="1">Full</option><option value="0.6">Reduced</option><option value="0">None</option></select>
@@ -155,6 +156,36 @@ input[type=range]{padding:0; width:230px}
   <h2>Health ladder</h2>
 
   <div class="grid" id="row-ladder"></div>
+
+  <h2>Liquids</h2>
+  <p class="note">Each liquid down the health ladder, whatever the switcher says. All three take the health ramp, including the arterial shift at the bottom of it.</p>
+  <div class="grid" id="row-liq-ink"></div>
+  <div class="grid" id="row-liq-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-liq-lava" style="margin-top:22px"></div>
+
+  <h2>Bloodied</h2>
+  <p class="note">Just above and just below half. Ink goes turbid and dark; mercury tarnishes and necks into beads; lava's crust thickens and its seams sputter.</p>
+  <div class="grid" id="row-blood"></div>
+
+  <h2>The slosh</h2>
+  <p class="note">The real model, stepped to fixed points after a hit and after a heal and then held. The front swings through the value and settles on it; averaged over the bar's height its centre never leaves the value.</p>
+  <div class="grid" id="row-slosh-ink"></div>
+  <div class="grid" id="row-slosh-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-slosh-lava" style="margin-top:22px"></div>
+
+  <h2>Reactions</h2>
+  <p class="note">The change wave and the impact, in each liquid's idiom: ink bursts into a plume, mercury ripples and throws droplets that split, lava flares and spatters embers.</p>
+  <div class="grid" id="row-react-ink"></div>
+  <div class="grid" id="row-react-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-react-lava" style="margin-top:22px"></div>
+
+  <h2>Lava under a guard break</h2>
+  <p class="note">The lava dims its own seams while the guard is broken, so the initiative tracker's gold fracture reads over it. Ink and mercury beside it for comparison.</p>
+  <div class="grid" id="row-lava-break"></div>
+
+  <h2>Shed under load</h2>
+  <p class="note">Flow and wobble given up: the liquid keeps its colour, its bloodied look and its front, and loses only its motion.</p>
+  <div class="grid" id="row-shed"></div>
 
   <h2>In motion</h2>
 
@@ -211,9 +242,17 @@ input[type=range]{padding:0; width:230px}
 </div>
 
 <script type="module">
-/*__ANIM_SRC__*/
+/*__ANIM_IMPORT__*/
 
-const FRAG = /*__FRAG__*/;
+/* Every liquid's program, exactly as shader.mjs assembles it. */
+const FRAGS = /*__FRAGS__*/;
+const LIQUIDS = /*__LIQUIDS__*/;
+let liquidDefault = /*__DEFAULT_LIQUID__*/;
+/* ?liquid=lava opens the page on that liquid, for headless contact sheets. */
+{
+  const asked = new URLSearchParams(location.search).get("liquid");
+  if (LIQUIDS.includes(asked)) liquidDefault = asked;
+}
 const VERT = /*__VERT__*/;
 const RAMPS = /*__RAMPS__*/;
 const TEMP_COL = /*__TEMP_COL__*/;
@@ -267,41 +306,43 @@ function compile(type, src, label) {
   return sh;
 }
 
-const prog = gl.createProgram();
-gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT, "vertex shader"));
-gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG, "fragment shader"));
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail("Program failed to link:\n" + gl.getProgramInfoLog(prog));
-gl.useProgram(prog);
-
 const buf = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, buf);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
   -1, -1, 0, 1,   1, -1, 1, 1,   -1, 1, 0, 0,
    1, -1, 1, 1,   1,  1, 1, 0,   -1, 1, 0, 0,
 ]), gl.STATIC_DRAW);
-const aPos = gl.getAttribLocation(prog, "aVertexPosition");
-const aUv = gl.getAttribLocation(prog, "aUvs");
-gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-gl.enableVertexAttribArray(aUv);  gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 16, 8);
+
+/* One program per liquid, as the feature builds them — a world only ever
+   compiles its own, but this page has to show all three side by side.
+
+   Every uniform is looked up from the shader module's own UNIFORMS table rather
+   than from a list kept here. A hand-maintained copy drifts the moment a
+   uniform is added: gl.uniform1f(undefined, x) is a silent no-op, and the new
+   effect simply does not appear in the preview while looking perfectly fine in
+   the source. Which is precisely the failure this page exists to catch. */
+const UNIFORM_NAMES = /*__UNIFORM_NAMES__*/;
+const PROGS = {};
+for (const liquid of LIQUIDS) {
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT, "vertex shader"));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAGS[liquid], liquid + " fragment shader"));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail(liquid + " program failed to link:\n" + gl.getProgramInfoLog(prog));
+  const U = {};
+  for (const name of UNIFORM_NAMES) U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
+  const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
+  if (dead.length) fail("Uniforms declared but not found in the linked " + liquid + " program: " + dead.join(", ") +
+    "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
+  PROGS[liquid] = { prog, U, aPos: gl.getAttribLocation(prog, "aVertexPosition"), aUv: gl.getAttribLocation(prog, "aUvs") };
+}
+/* Which bar program is bound; anything else that binds a program clears it. */
+let bound = null;
+document.body.dataset.programs = LIQUIDS.join(",");
 
 gl.enable(gl.BLEND);
 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 gl.enable(gl.SCISSOR_TEST);
-
-/* Every uniform, looked up once, from the shader module's own UNIFORMS table
-   rather than from a list kept here. A hand-maintained copy drifts the moment a
-   uniform is added: getUniformLocation returns undefined for a name nobody
-   asked for, gl.uniform1f(undefined, x) is a silent no-op, and the new effect
-   simply does not appear in the preview while looking perfectly fine in the
-   source. Which is precisely the failure this page exists to catch. */
-const U = {};
-for (const name of /*__UNIFORM_NAMES__*/) {
-  U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
-}
-const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
-if (dead.length) fail("Uniforms declared but not found in the linked program: " + dead.join(", ") +
-  "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
 
 
 /* ── Numerals ─────────────────────────────────────────────────────────────
@@ -473,8 +514,7 @@ function drawRun(parts, rightPx, midPx, w, h, fitted = false) {
       penX += adv;
     }
   }
-  gl.useProgram(prog);
-  pointAttribs(aPos, aUv);
+  bound = null;
 }
 
 document.fonts.ready.then(() => { atlas = buildAtlas(); });
@@ -725,18 +765,59 @@ for (const f of [1, 0.62, 0.32, 0.12]) {
   add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
 }
 
+/* ── The liquids ──────────────────────────────────────────────────────────
+   Cells with a `liquid` of their own ignore the switcher, so the three can be
+   judged side by side at every state that changes how they look. */
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-liq-" + liquid);
+  for (const f of [1, 0.78, 0.5, 0.49, 0.32, 0.18, 0.06]) {
+    add(row, { title: liquid + " · " + pct(f), sub: "<i>uFrac " + f.toFixed(2) + "</i>", frac: f, seg: 10, max: 58, liquid });
+  }
+}
+
+const bloodRow = document.getElementById("row-blood");
+for (const liquid of LIQUIDS) {
+  add(bloodRow, { title: liquid + " · 56%", sub: "<i>above half</i>", frac: 0.56, seg: 10, max: 58, liquid });
+  add(bloodRow, { title: liquid + " · 40%", sub: "<i>bloodied</i>", frac: 0.40, seg: 10, max: 58, liquid });
+}
+
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-react-" + liquid);
+  add(row, { title: "Damage wave", sub: "<i>" + liquid + "</i>", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58, liquid });
+  add(row, { title: "Heal wave", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>early</i>", frac: 0.45, ghost: 0.78, chip: 0.85, flash: 0.5, hit: 0.66, hitX: 0.45, slosh: 0.8, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>late</i>", frac: 0.45, ghost: 0.7, chip: 0.3, hit: 0.3, hitX: 0.45, slosh: -0.2, seg: 10, max: 58, liquid });
+  add(row, { title: "Heal impact", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 0.5, heal: 1, hit: 0.55, hitX: 0.5, slosh: -0.7, seg: 10, max: 58, liquid });
+}
+
+const lavaBreak = document.getElementById("row-lava-break");
+add(lavaBreak, { title: "Lava, intact", sub: "<i>seams at full glow</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava" });
+add(lavaBreak, { title: "Lava, spreading", sub: "<i>0.3s</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 0.3, brkX: 0.62 });
+add(lavaBreak, { title: "Lava, broken", sub: "<i>seams dimmed, gold reads</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.62 });
+add(lavaBreak, { title: "Lava, broken and bloodied", sub: "<i>thick crust, sputtering</i>", frac: 0.3, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.55 });
+add(lavaBreak, { title: "Ink, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "ink", brk: 1, brkT: 2.4, brkX: 0.62 });
+add(lavaBreak, { title: "Mercury, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "mercury", brk: 1, brkT: 2.4, brkX: 0.62 });
+
+const shedRow = document.getElementById("row-shed");
+for (const liquid of LIQUIDS) {
+  add(shedRow, { title: liquid + " · shed", sub: "<i>uFlow 0, uWobble 0</i>", frac: 0.62, seg: 10, max: 58, liquid, flow: 0, wobble: 0 });
+  add(shedRow, { title: liquid + " · shed, bloodied", sub: "<i>uFlow 0, uWobble 0</i>", frac: 0.38, seg: 10, max: 58, liquid, flow: 0, wobble: 0 });
+}
+
 /* ── The frozen sequence ──────────────────────────────────────────────────
    Each cell owns a BarAnim advanced to a fixed point on the timeline with the
    real step(), then never stepped again. The render loop only advances `live`,
    so everything here holds. Nothing is a drawing of the curve; it is the
    curve, sampled. */
-function frozen(row, { from, to, marks, max }) {
+function frozen(row, { from, to, marks, max, liquid }) {
   for (const ms of marks) {
     const a = new BarAnim(from, { motionScale: 1 });
     a.step(16);
     a.set(to, { max });
     for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
-    const slot = add(row, { title: ms + "ms", sub: "<i>" + (to < from ? "hit" : "heal") + "</i>", seg: 10, max });
+    const sub = "<i>" + (liquid ? liquid + " · " : "") + (to < from ? "hit" : "heal")
+      + " · slosh " + a.slosh.toFixed(2) + "</i>";
+    add(row, { title: ms + "ms", sub, seg: 10, max, liquid });
     cells[cells.length - 1].anim = a;
   }
 }
@@ -744,6 +825,11 @@ frozen(document.getElementById("row-seq-hit"),
   { from: 0.8, to: 0.45, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 frozen(document.getElementById("row-seq-heal"),
   { from: 0.35, to: 0.72, marks: [0, 55, 130, 240, 380, 620], max: 58 });
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-slosh-" + liquid);
+  frozen(row, { from: 0.8, to: 0.45, marks: [70, 180, 330, 520, 900], max: 58, liquid });
+  frozen(row, { from: 0.35, to: 0.72, marks: [70, 180, 330, 520, 900], max: 58, liquid });
+}
 
 /* The token stage. */
 const stage = document.getElementById("stage");
@@ -794,6 +880,16 @@ for (const b of document.querySelectorAll("[data-set]"))
   b.addEventListener("click", () => { live.set(+b.dataset.set, { max: 160 }); syncScrub(); });
 const syncScrub = () => { scrub.value = Math.round(live.target * 100); };
 
+const liquidSelect = document.getElementById("liquid");
+for (const liquid of LIQUIDS) {
+  const o = document.createElement("option");
+  o.value = liquid;
+  o.textContent = liquid[0].toUpperCase() + liquid.slice(1);
+  liquidSelect.append(o);
+}
+liquidSelect.value = liquidDefault;
+liquidSelect.addEventListener("change", (e) => { liquidDefault = e.target.value; });
+
 document.getElementById("motion").addEventListener("change", (e) => {
   motionScale = +e.target.value; live.motionScale = motionScale;
 });
@@ -826,8 +922,7 @@ function draw(now) {
 
   /* ── Pass 1: the bars, into the high-range buffer ───────────────────── */
   gl.bindFramebuffer(gl.FRAMEBUFFER, rtScene.fb);
-  gl.useProgram(prog);
-  pointAttribs(aPos, aUv);
+  bound = null;
   gl.enable(gl.BLEND);
   gl.viewport(0, 0, rtScene.w, rtScene.h);
   gl.scissor(0, 0, rtScene.w, rtScene.h);
@@ -842,6 +937,9 @@ function draw(now) {
 
     const a = c.anim;
     const s = c.spec;
+    const L = PROGS[s.liquid ?? liquidDefault] ?? PROGS[LIQUIDS[0]];
+    if (bound !== L) { gl.useProgram(L.prog); pointAttribs(L.aPos, L.aUv); bound = L; }
+    const U = L.U;
 
     /* The quad never moves. Every part of an impact happens inside it — the
        sweep crosses it, the ring expands, the trail drains — while the frame
@@ -893,6 +991,11 @@ function draw(now) {
     gl.uniform1f(U.uChip, a ? a.chip : (s.chip ?? 0));
     gl.uniform1f(U.uWave, a ? a.wave : (s.wave ?? 0));
     gl.uniform1f(U.uWaveX, a ? a.waveX : (s.waveX ?? frac));
+    /* The liquid's motion rides the primary bar only, exactly as host.mjs
+       writes it; a shed cell zeroes flow and wobble. */
+    gl.uniform1f(U.uFlow, isHero ? (s.flow ?? 1) : 0);
+    gl.uniform1f(U.uWobble, isHero ? (s.wobble ?? 1) : 0);
+    gl.uniform1f(U.uSlosh, isHero ? Math.max(-1, Math.min(1, a ? a.slosh : (s.slosh ?? 0))) : 0);
     gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
@@ -987,6 +1090,8 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
     "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
     "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
+    "</b> &nbsp;·&nbsp; slosh <b>" + live.slosh.toFixed(2) +
+    "</b> &nbsp;·&nbsp; liquid <b>" + liquidDefault +
     "</b> &nbsp;·&nbsp; break <b>" + live.broken.toFixed(2) + "@" + live.breakT.toFixed(2) + "s" +
     "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; material <b>" + (live.motionScale > 0 ? "looping" : "still") + "</b>";

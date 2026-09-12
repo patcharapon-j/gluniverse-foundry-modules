@@ -16,8 +16,8 @@ do. One quad and a fragment shader makes all of that free, and makes "animates
 every frame" cost nothing extra.
 
 The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
-layers separated by air rather than welded into one frame, a flat high-key fill
-lit by a single hard specular, and **one cut corner, top-right**. The palette is
+layers separated by air rather than welded into one frame, a stylised liquid in
+the health colour (see **Liquids**), and **one cut corner, top-right**. The palette is
 entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
 exactly one place — the top of the stroke.
 
@@ -247,6 +247,103 @@ gap's *floor* by it, so a negative value out of a hand-edited world inverts the
 
 ---
 
+## Liquids
+
+The primary bar is filled with one of three liquids, chosen by the world setting
+`rb.liquid`:
+
+| | |
+|---|---|
+| **Ink** (default) | a slow domain-warped flow along the tube, posterised into a few flat tones of the health colour |
+| **Mercury** | mirror-bright liquid chrome — a stylised studio environment of three hard bands reflected in a tube, tinted by the health colour — with a rounded bead of a front |
+| **Lava** | a dark crust of rounded plates drifting over soft glowing seams in the health colour |
+
+They replaced a refractive-glass material — travelling ribbons of caustic light
+with glints and a facet pattern — that did its job as *glass* and failed as
+*health*: at token size the ribbons were lines, and a fill that reads as lines
+reads as a texture laid over the bar rather than as what the bar is full of. The
+rules for the replacement came from that failure. **Stylised, not physical**:
+flat tones, hard reflections, clean shapes, and no grain, because grain on a
+19px bar is noise over the one reading the player came for. **Ink is the
+default** because it is the calmest; a fill that is always quietly moving still
+mostly should not be asking to be looked at.
+
+**One program per liquid.** `fragmentShader(liquid)` string-assembles the shared
+frame with one liquid's chunk, so a world compiles only its own and a bar pays
+for one material. Changing the setting swaps the program on every mesh already
+on the canvas (`swapLiquid`) rather than rebuilding the meshes: a rebuilt mesh
+sorts above its own readout, and would restart whatever uniforms it was part-way
+through. The rails and the shield rail keep a flat plate — a secondary resource
+is not health, and the same liquid would say it is — as a branch inside the same
+program rather than a fourth one. `resource-bar-check` runs its uniform and unit
+checks once per liquid, because a uniform only one liquid's chunk reads is
+optimised out of the other two programs and holds its initial value there.
+
+All three are tinted by the same health ramp — OKLab, the colour-blind-safe
+ramp, the arterial shift at the bottom — so the hue still carries the reading
+whichever liquid a GM picks.
+
+### The front
+
+The leading edge is a rounded **meniscus**, not a ruler line, and it is most of
+what makes the fill read as liquid. `rbFront()` gives the front's offset at each
+height from three terms: the meniscus itself, a very small idle wobble, and a
+**slosh** after each value change that swings through the value and settles.
+
+Every profile in it — `1/3 − y²`, `y`, `y² − 1/3`, `cos πy` — integrates to zero
+over the fill's height, so **the front's centre is exactly the value**. The shape
+bends around the reading and never moves it; a bulge that was not zero-mean would
+make every bar a few pixels long or short at every health, and nothing would ever
+report it. The amplitudes are budgeted so all three at their worst stay inside a
+third of a bar height (0.275): past that the front stops being a curve on a
+length and becomes a second, disagreeing length. The front flattens against both
+ends of the tube, so a full bar is full to the lip and an empty one shows no
+sliver of meniscus.
+
+`resource-bar-check` holds both claims by evaluating `rbFront()`'s **own GLSL**
+as JavaScript across the idle loop and the slosh range, which is why that
+function has to stay plain arithmetic.
+
+The head glow and the flash follow the bent front. The chip trail keeps the
+meniscus but not the slosh: it is spent liquid, and a trail that sloshed in step
+with the fill would read as the same body.
+
+### Bloodied
+
+Below half, each liquid says so in its own idiom, and the colour takes only a
+partial pull towards the danger end of the ramp. The old material swapped colour
+outright at 50%, and a colour that jumps at a threshold says more than the number
+does.
+
+| | |
+|---|---|
+| **Ink** | turbid: fewer, muddier tones, pulled dark by a slow cloud |
+| **Mercury** | tarnished to a dull sheen of itself, and necked down into rounded beads anchored to the front, so the front bead is always a whole one |
+| **Lava** | the crust thickens — narrower channels, fuller plates — and the glow sputters, seam by seam |
+
+The lava's light is heat as depth into a channel: narrow cracks glow dimly and
+only the pools where plates part run bright. A crack that is bright along its
+whole length is a line, and a bar full of bright lines reads as writing — or as
+the guard-break fracture, which is exactly what lava most needs not to look like.
+
+### The idle loop
+
+The liquids move all the time, so their motion has to survive the clock
+wrapping. `anim.mjs` wraps the idle clock at 64 seconds, and every moving term in
+every liquid goes through `rbPhase(k)` — an angle turning k whole times per loop
+— or `rbDrift(k, period)`, periodic noise slid k whole periods per loop. With an
+integer k the wrap lands on the frame it left; with anything else every bar on
+the map steps once a minute. The check refuses any other read of `uTime` and any
+non-integer turn.
+
+That motion is the one standing cost every visible bar pays, so it is the first
+thing given up under load: `sweep` freezes the clock, `wobble` takes the
+meniscus's wobble out, and `flow` drops the liquid's animated layer in the shader
+and takes idle bars out of the ticker altogether. None of them touches the
+colour, the bloodied look or the front.
+
+---
+
 ## The shape of a change
 
 A value change is a sequence, and the order is what makes it read as an event:
@@ -254,30 +351,38 @@ A value change is a sequence, and the order is what makes it read as an event:
 | | |
 |---|---|
 | **0ms** | the fill snaps to the new value and everything **stops** |
-| **~55ms** | the hitstop releases; the sweep and the ring both start from a standstill |
+| **~55ms** | the hitstop releases; the wave, the impact and the slosh all start from a standstill |
 | **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
 | **~420ms** | the readout has finished counting |
-| **~800ms** | the wave has crossed the bar and gone |
+| **~500ms** | the wave has crossed the bar and gone |
+| **~1.4s** | the front's slosh has settled |
 
 Three things about it are easy to get wrong and impossible to unsee afterwards.
 
-**Nothing about the geometry moves, and no length springs.** Not the mesh
-transform, not the fill's height, and no overshoot, recoil or settle on any
-value. Every one of those was tried and every one reads, on a bar, as jelly — an
-instrument that wobbles is an instrument you stop trusting. Lengths use a
-quintic ease-out: one long deceleration that arrives exactly once and stops. The
-whole reaction is light travelling across something rigid.
+**No length springs.** Not the fill, not the chip trail, not the readout: no
+overshoot, recoil or settle on any value. Every one of those was tried and every
+one reads, on a bar, as jelly — an instrument that wobbles is an instrument you
+stop trusting. Lengths use a quintic ease-out: one long deceleration that arrives
+exactly once and stops. The frame and the fill's height never move either.
+
+The one spring in the feature is the **slosh**, and it moves the liquid's front
+*around* the value, which the zero-mean front guarantees it cannot change.
+`resource-bar-check` pins that twice: structurally (one `spring()` call, given to
+`slosh` only, and no back, elastic or bounce ease anywhere) and behaviourally,
+driving single and rapid changes at full and reduced motion and failing any
+length that leaves the span of its change or moves backwards.
 
 **The hitstop is the load-bearing beat.** A freeze before the reaction is most
 of what separates "the number went down" from "that hurt". It holds every
-channel, including the value tweens and the popup timers.
+channel, including the value tweens, the popup timers and a fracture fading out.
 
 **The wave is the loudest thing here.** It crosses the *whole* bar in the
 direction the value moved — scoped to just the span that changed it is a detail
 you have to already be looking at the bar to catch, and on a one-point heal it
 is a flicker two pixels wide.
 
-It is **deliberately simple**: a glowing line, and a colour ramp trailing it.
+It is **deliberately simple**, and its structure is the same in every liquid: a
+crest, and the colour trailing it.
 An earlier pass gave it a bowed crest, a decaying crest train, slope shading, a
 domed cross-section and flow streaks, and all of it fought the one thing the
 effect is for. This is read peripherally, in under half a second, while you are
@@ -285,12 +390,12 @@ looking at something else. Structure inside the ramp is detail nobody has time
 to resolve, and every extra term was one more thing driving the colour to white.
 Three parts, and nothing else:
 
-1. **The line.** Three widths — a coloured halo, a hot core, a white filament —
-   so it reads as light rather than as a painted stroke.
-2. **The ramp.** One exponential decay behind the front, coloured in three
-   stops: deep at the tail, the wave's hue through the body, a hot shoulder just
-   behind the line. Three stops rather than a fade to nothing, because a fade in
-   motion is a smear.
+1. **The crest.** Light laid on top of the material, so it reads as light rather
+   than as a painted stroke.
+2. **The colour behind it.** One exponential decay behind the front, drawn in the
+   liquid's own terms — posterised steps in ink, hard chrome bands in mercury,
+   flaring seams in lava — rather than as a smooth fade, because a fade in motion
+   is a smear.
 3. **Nothing ahead of it.** That asymmetry is the direction cue, since a
    symmetric band travelling along a bar is a highlight and a highlight can be
    going either way.
@@ -302,6 +407,18 @@ the same pale smear. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth
 of a wide hero bar, so the effect that is meant to be loudest quietly becomes a
 local highlight on exactly the bars with room to show it.
+
+What changes per liquid is the idiom, for the wave and for the impact alike:
+
+| | Wave | Impact |
+|---|---|---|
+| **Ink** | a lobed, billowing front pushing a posterised plume | a burst of round blobs thinning into rings; droplets flung along the bar |
+| **Mercury** | a packet of hard chrome ripple bands behind the front | concentric ripple rings; droplets that split in two as they fly |
+| **Lava** | the crust's seams flare in the wave's colour while the plates stay dark | a flare at the wound and one soft ring; embers on ballistic arcs |
+
+The uniforms and shed gates are the same under every idiom — `wave`, `ring` and
+`sparks` give up exactly what they always did — so no liquid can add a reaction
+that never degrades.
 
 The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
@@ -345,6 +462,46 @@ readout when its token is resized.
 
 ---
 
+## The animation model
+
+`anim.mjs` is built on the suite's vendored anime.js (v4.5.0, reached through
+`core/motion.mjs`), and nothing in it is ever *played*. Every tween is created
+with `autoplay: false` and moved with `.seek()` on the model's own clock, which
+the PIXI ticker advances through `step(dt)`. A change's reaction is one timeline
+— hit, punch, flash, the count, the wave's crossing and its fade, the slosh, and
+either the chip heat or the heal's glide — and the chip trail's hold-and-drain is
+a second, because a heal cancels the reaction but not the drain. Each popup, the
+fracture's fade-out and the hover gloss are single animations.
+
+Seeking rather than playing is not a style choice. anime.js's engine is
+**shared** — Insight, the initiative tracker and half a dozen other features run
+their DOM animations on it — so its speed, its main loop and its globals are not
+this feature's to touch. And a played animation runs on that engine's own
+requestAnimationFrame, which knows nothing about the three things this model
+depends on: the hitstop, which freezes every channel mid-flight (it is a clock,
+`_live`, that simply does not advance during the stop); an off-screen bar, whose
+idle clock freezes while its transitions keep running; and motion "none", which
+promises no frames at all. It is also what lets the check tool drive the model
+under plain Node: a played animation schedules `setImmediate` there and the
+process never exits, and the check proves a process driving bars mid-flight
+does.
+
+Two things stay arithmetic because they are clocks, not tweens: the idle loop
+and the guard break's shatter clock run for as long as the creature does.
+
+A timeline writes nothing until it is first sought, so `set()` writes every
+channel's first frame itself — and those first frames are exactly what the
+hitstop holds, since nothing is sought during it. Finished tweens are snapped to
+their exact end values, because `hot` and the tests compare with `===`.
+
+One behaviour changed in the port, found by the check's random-change test. A
+damage that lands **above** a heal still gliding up — a value of 0.89 hit to 0.88
+while the fill is drawn at 0.87 — snaps the fill *up* to the true value, and the
+chip trail now starts from at least that value. Before, the trail sat inside the
+fill for the length of the hitstop, when nothing is stepped to correct it.
+
+---
+
 ## Hot and cold
 
 Two things are true of a bar that is doing nothing, and only the first used to
@@ -375,7 +532,9 @@ moving the window to a display with a different pixel ratio changes it.
 Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear
 in that list; the check tool enforces it, so a new effect cannot be added that
-never degrades.
+never degrades. The standing costs lead it — the idle clock (`sweep`), the
+meniscus `wobble`, the liquid's `flow`, and a settled fracture's `breakFlow` —
+and everything after them is paid once per change, `slosh` included.
 
 ---
 
@@ -426,6 +585,13 @@ broke. A guard break says nothing about hit points, and a bar that dulls its own
 fill to announce an unrelated state has stopped being the measurement it is there
 to be.
 
+The one liquid that gives way is **lava**, and it gives way in its light, not in
+its reading. Lava's seams are warm light in cracks, and the fracture is gold
+light in cracks; laid over one another at full strength the break the tracker put
+there disappears into the liquid. So while `uBreak` is on the lava dims its own
+seam glow by `LAVA_BREAK_DIM` — never its plates, never its hue — and the check
+refuses that dimming anywhere else, including inside the fracture block.
+
 It nucleates at the **leading edge of the fill as it stood when the guard went**,
 captured once and then held. That point is the only one on a bar that means
 anything, so it is where the eye already is and where the shards are finest — and
@@ -447,8 +613,8 @@ wrap cannot step the fracture mid-breath.
 
 A broken creature's bar is therefore **hot for as long as it is broken**, the
 same standing cost as low health and for the same reason. `breakFlow` sits
-second in `SHED_ORDER` because of it — it is one of only two standing costs in
-that list, everything after it being paid once per change. Shedding it freezes
+among the standing costs at the head of `SHED_ORDER` because of it, with the
+liquid's own idle motion; everything after them is paid once per change. Shedding it freezes
 the fracture at its settled frame and drops the bar out of the ticker; the crack
 stays exactly where it was. **What degrades is the motion, never the state.**
 The same is true of motion tier "none", where the fracture arrives already
@@ -574,7 +740,7 @@ How the answer changes on screen:
 | **Leaving sight** | instant; a fade would leave the bar hanging over a token this client can no longer see |
 | **Scene load, a new token, panning** | instant — the first decision for an entry never animates, and culling is `renderable`, not visibility |
 
-`reveal` is in `SHED_ORDER`, directly after the idle sweep: under load a bar
+`reveal` is in `SHED_ORDER`, directly after the liquid's idle motion: under load a bar
 simply pops, which costs nobody any information.
 
 ---
@@ -626,11 +792,10 @@ bar permanently once you dropped below the threshold, and a static stripe
 pattern on the element a player checks constantly is decoration you have to look
 past. The second channel is now *temporal* — a ~4.6s pulse, slow enough to read
 as breathing rather than as an alarm, and it lands on the **liquid** as well as
-the chrome. The fill carries a domain-warped cell texture while it lasts: two
-sine fields multiplied together give a plaid whose axes you can see, so the
-sample point is displaced by another pair of sines first, which stretches and
-folds the cells into something that reads as movement *inside* the liquid rather
-than as a texture laid over it. Four sines, no texture fetch. The trough's own
+the chrome: the fill's lower rim brightens on the same clock, over whichever
+liquid is in the tube rather than in place of its motion. There used to be a
+domain-warped cell texture swapped in for the duration, which is exactly the
+kind of second material the liquids made unnecessary. The trough's own
 diagonal scan pattern was removed at the same time — on a bar that is mostly
 empty, which is every bar that matters, those stripes were the largest thing on
 screen and the fill had to compete with them. A client-scoped colour-blind-safe
@@ -644,7 +809,7 @@ ramp (blue → orange) is offered as a third option.
 node tools/resource-bar-check.mjs
 ```
 
-Zero problems required. It pins the uniform table against the GLSL *and* the JS
+Zero problems required. It pins the uniform table against every liquid's GLSL *and* the JS
 that writes it, that `uTexel = 0` stays inert, that the OKLab ramp still mirrors
 `gl-tokens.css`, that no raw millisecond literal has escaped `TIMING`, that the
 glyph atlas covers every character a run can emit, that the numeric readout is
@@ -673,18 +838,47 @@ clipped to the bar's silhouette and does not desaturate the fill, that
 `TIMING.breakInMs` still agrees with the field's own settle and `BREAK_WRAP` is
 a whole number of cycles of both moving terms, that the nucleation point is
 captured rather than followed, and that freezing the fracture stops its clock and
-releases the ticker **without losing the crack**. With Playwright present
-it also compiles the shader and checks that no uniform was optimised away.
+releases the ticker **without losing the crack**.
+
+For the liquids it pins that `rb.liquid` offers exactly the programs the shader
+builds and recompiles the bars on the canvas when it changes; that each program
+carries only its own material and none carries the old ribbons; that every idle
+term turns a whole number of times in the loop; that `rbFront()` is zero-mean and
+inside its third-of-a-bar budget, evaluated from its own GLSL; that the fill, the
+head glow and the flash follow the bent front while the rails stay straight; that
+lava, and only lava, dims under a guard break; that the only spring drives the
+slosh and no length overshoots or recoils, tested by driving the model; that
+every tween is built paused and the shared anime.js engine is untouched after
+all of that; that a fresh Node process driving the model exits; and that flow,
+wobble and slosh are primary-bar-only and shed on their own entries.
+
+With Playwright present it also compiles every liquid's shader and checks that no
+uniform was optimised away. Without it, headless Chrome does the same job on the
+served preview page: `--dump-dom` with `--use-angle=swiftshader
+--enable-unsafe-swiftshader --virtual-time-budget=5000` prints the page's error
+panel if any program fails to compile or link.
 
 ```bash
 node tools/resource-bar-preview.mjs --out=.preview/bars.html
 ```
 
-Writes a self-contained page that compiles the **real** shader in the browser's
-own WebGL2 context and drives it with the **real** animation model. Serve it
-(`node tools/preview-server.mjs`) rather than opening it as a file — a `file://`
-page does not run its module script. `--artifact=` emits the same page without
-the document wrapper, for publishing.
+Writes a page that compiles the **real** shaders — all three liquids — in the
+browser's own WebGL2 context and drives them with the **real** animation model,
+which it **imports** from the repository. Serve it from the repository root
+(`node tools/preview-server.mjs`, then `/.preview/bars.html`) rather than opening
+it as a file: a `file://` page does not run its module script, and a server
+rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
+that liquid. It has rows for each liquid down the health ladder, bloodied, the
+slosh after a hit and a heal, each liquid's reactions, lava under a guard break
+and a shed bar, plus a liquid switcher on the live bar.
+
+The model used to be pasted into the page verbatim, which stopped working the
+moment it imported anime.js. `--artifact=` has no server behind it, so it inlines
+the model and everything it imports — anime.js included — through a small
+linker in the tool that rewrites each module's imports and exports into one
+module script. That is only safe because the graph is acyclic and every import
+and export sits at column 0, and the linker throws rather than guessing when
+either stops being true.
 
 Neither tool can tell you how any of this looks on a real battlemap at a real
 zoom. That needs a session.

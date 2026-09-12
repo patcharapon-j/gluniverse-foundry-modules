@@ -16,6 +16,7 @@ import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
 import { breakSourceActive, tokensForCombatant } from "./break.mjs";
+import { DEFAULT_LIQUID, LIQUIDS } from "./shader.mjs";
 
 const get = (key, fallback) => {
   try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
@@ -64,6 +65,9 @@ function currentOptions() {
   const tier = get(SETTINGS.motionTier, MOTION_TIER_DEFAULT);
   return {
     bothBars: get(SETTINGS.enabledBars, "both") === "both",
+    /* Resolved against the shader's own list: a hand-edited world holding a
+       liquid that does not exist gets ink, not a bar with no program. */
+    liquid: LIQUIDS.includes(get(SETTINGS.liquid, DEFAULT_LIQUID)) ? get(SETTINGS.liquid, DEFAULT_LIQUID) : DEFAULT_LIQUID,
     segmentMode: get(SETTINGS.segmentMode, "count") === "perHp" ? "perHp" : "count",
     segments: Number(get(SETTINGS.segments, 10)) || 0,
     segmentSize: Number(get(SETTINGS.segmentSize, 5)) || 0,
