@@ -14,21 +14,26 @@
  *   3. One container is one place to hide everything when the feature is
  *      switched off mid-session.
  *
- * Visible bars run a quiet idle material loop. Value transitions advance even
- * off screen so they return in the correct state. Off-screen material clocks
- * are frozen, and the shared shed budget removes glints before impact cues.
+ * Visible bars run a quiet idle liquid loop. Value transitions advance even
+ * off screen so they return in the correct state. Off-screen liquid clocks are
+ * frozen, and the shared shed budget stills the liquid before it touches an
+ * impact cue.
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
+import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
-import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
+import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "../../core/bloom.mjs";
+/* ── Names ── */
+import { HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
+import { cipherSeed, decideLabel, invalidateKnowledge, labelContext, labelReserved, reserveFacts, tokenFacts } from "./mystify.mjs";
+import { resetCipherAtlas } from "./cipher-atlas.mjs";
 
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
 
@@ -100,10 +105,11 @@ function makeBarMesh(role, opts) {
   const uniforms = {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0,
-    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default,
-    uRole: role,
+    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.segW ?? 0,
+    uRole: role, uFade: 1,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
+    uFlow: 1, uSurge: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -111,7 +117,10 @@ function makeBarMesh(role, opts) {
     uBreakAmber: new Float32Array(hexToFloat3(BREAK_AMBER)),
     uBreakHot: new Float32Array(hexToFloat3(BREAK_HOT)),
   };
-  const shader = PIXI.Shader.from(VERTEX_SHADER, FRAGMENT_SHADER, uniforms);
+  /* One program per liquid, and only the world's liquid is ever compiled. The
+     rails run it too — their flat plate is a branch inside it, not a fourth
+     program. */
+  const shader = PIXI.Shader.from(VERTEX_SHADER, fragmentShader(opts.liquid ?? DEFAULT_LIQUID), uniforms);
   const mesh = new PIXI.Mesh(unitQuad(), shader);
   mesh.blendMode = PIXI.BLEND_MODES?.NORMAL ?? "normal";
   return mesh;
@@ -139,9 +148,32 @@ class BarEntry {
        an impact, and PIXI compares uniform vectors element-wise, so mutating one
        buffer in place uploads exactly when a fresh array would. */
     this._ink = new Float32Array(REST_INK);
+    /* Whether this client sees the bar, and the transition that got it there.
+       An entry is *hidden*, never destroyed, when permission or sight takes the
+       bar away: destroying it threw away the animation state and brought it
+       back with a silent first read, and the destroy/recreate pair on every
+       mouse pass was most of what the flicker was. */
+    this.vis = new RevealAnim({ motionScale: host.motionScale ?? 1 });
+    this.group.visible = false;
+    /* False until the first visibility decision. That first decision is always
+       instant — a scene loading, or a token being dropped onto it, is not a bar
+       *appearing*, and fading every bar on the map in at once is noise. */
+    this.decided = false;
+
+    /* ── Names ── The label, created the first time this token reserves one;
+       whether its first decision has been made (first is instant, as for the
+       bar); the reserved row in world pixels, 0 without one; and the frame the
+       last layout placed it in. */
+    this.label = null;
+    this.labelDecided = false;
+    this.labelReserve = undefined;
+    this.nameRowH = 0;
+    this.labelFrame = null;
   }
 
   destroy() {
+    this.label?.destroy();
+    this.label = null;
     this.group.destroy({ children: true });
   }
 
@@ -153,8 +185,15 @@ class BarEntry {
     return this.anims[role];
   }
 
-  /** Pull new values in, arming whatever animation the change deserves. */
-  read(opts) {
+  /**
+   * Pull new values in, arming whatever animation the change deserves.
+   *
+   * `silent` applies the values without an impact. It is set while the bar is
+   * hidden from this client: a creature hit while nobody here could see its
+   * bar has nothing to replay when the bar comes back, and an impact arriving
+   * with the fade-in would read as the hit happening now.
+   */
+  read(opts, { silent = false } = {}) {
     const next = readToken(this.token, opts);
     if (!next) { this.reading = null; return; }
     const first = !this.reading;
@@ -166,7 +205,7 @@ class BarEntry {
         if (!bar) return;
         const a = this.animFor(role, bar.frac);
         a.motionScale = this.host.motionScale;
-        if (first) a.set(bar.frac, { silent: true });
+        if (first || silent) a.set(bar.frac, { silent: true });
         else a.set(bar.frac, { max: this.host.floatingDeltas ? max : 0 });
       };
       set("hero", next.hero, next.hero?.max ?? 0);
@@ -201,10 +240,13 @@ class BarHost {
   constructor() {
     this.entries = new Map();
     this.container = null;
+    /** Names: the unfiltered layer the labels live on. */
+    this.labels = null;
     this.ticking = false;
     this.frameMs = 16;
     this.shed = 0;
     this.opts = {};
+    this.liquid = DEFAULT_LIQUID;
     this._tick = this.tick.bind(this);
     this._lastTime = 0;
   }
@@ -216,21 +258,45 @@ class BarHost {
     this.motionScale = opts.motionScale;
     this.floatingDeltas = opts.floatingDeltas;
     this.ramp = rampUniform(opts.ramp);
+    const liquid = opts.liquid ?? DEFAULT_LIQUID;
+    const reliquid = liquid !== this.liquid;
+    this.liquid = liquid;
     for (const entry of this.entries.values()) {
       for (const role of ROLES) {
         const mesh = entry.meshes[role];
         if (mesh) {
+          if (reliquid) this.swapLiquid(mesh);
           mesh.shader.uniforms.uRamp = this.ramp;
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
-          mesh.shader.uniforms.uSegW = this.dividerWidth();
+          mesh.shader.uniforms.uSegW = this.dividerWidth() / (entry.rows[role]?.h || 1);
         }
         if (entry.anims[role]) {
           entry.anims[role].motionScale = opts.motionScale;
           if (opts.motionScale === 0) entry.anims[role].step(0);
         }
       }
+      entry.vis.motionScale = opts.motionScale;
+      if (opts.motionScale === 0) entry.vis.step(0);
+      entry.group.visible = entry.vis.drawn;
+      if (entry.label) entry.label.motionScale = opts.motionScale;   // names
     }
     this.applyBloom();
+  }
+
+  /**
+   * Recompile one bar for the world's liquid.
+   *
+   * The shader is swapped on the mesh that already exists rather than the mesh
+   * being rebuilt, for two reasons that only show up later: a new mesh added
+   * back to the entry's group sorts *above* the readout that was added after
+   * the old one, so every number on the table disappears behind its own bar;
+   * and every uniform the bar was carrying — mid-impact, mid-fade — would
+   * restart from its defaults. The uniforms are carried across as they stand.
+   */
+  swapLiquid(mesh) {
+    const old = mesh.shader;
+    mesh.shader = PIXI.Shader.from(VERTEX_SHADER, fragmentShader(this.liquid), { ...old.uniforms });
+    old.destroy?.();
   }
 
   applyBloom() {
@@ -265,6 +331,15 @@ class BarHost {
        on top anyway — both paths land above the token furniture. */
     this.container.zIndex = CONTAINER_Z;
     layer.addChild(this.container);
+    /* ── Names ── A second container at the same depth, *unfiltered*. The bloom
+       is for light the bar emits; a white label inside it haloes every name on
+       the map, and widens the filter's measured bounds by a row per token. Added
+       after the bars, so equal zIndex puts the names on top. */
+    this.labels = new PIXI.Container();
+    this.labels.eventMode = "none";
+    this.labels.sortableChildren = false;
+    this.labels.zIndex = CONTAINER_Z;
+    layer.addChild(this.labels);
     this.applyBloom();
     this.refreshAll();
   }
@@ -282,6 +357,15 @@ class BarHost {
     this.container = null;
     this.bloom = null;
     resetAtlas();
+    /* ── Names ── */
+    try {
+      this.labels?.destroy({ children: true });
+    } catch {
+      /* Torn down with its layer, as the bar container can be. */
+    }
+    this.labels = null;
+    resetNameRasters();
+    resetCipherAtlas();
   }
 
   /* ── Entries ─────────────────────────────────────────────────────────── */
@@ -290,14 +374,27 @@ class BarHost {
     if (!this.container || !canvas?.tokens) return;
     const seen = new Set();
     for (const token of canvas.tokens.placeables) {
+      if (token.isPreview) continue;
       seen.add(token.id);
-      this.refreshToken(token);
+      this.refreshToken(token, { decide: false });
     }
     for (const [id, entry] of this.entries) {
       if (!seen.has(id)) { entry.destroy(); this.entries.delete(id); }
     }
+    /* Build here; decide in the pass this schedules. At canvasReady Foundry has
+       drawn every token but not applied its render flags yet, so bars.visible
+       and token.visible still hold their defaults — both true — and a decision
+       made now would show every hidden bar on the map until the first hover. A
+       settings change takes the same road: forcing one state pass is cheap and
+       keeps visibility on a single decision path. */
+    canvas.tokens.setAllRenderFlags?.({ refreshState: true });
     this.cull();
     this.syncTicker();
+  }
+
+  /** Build or re-read a token's entry without touching its visibility. */
+  track(token) {
+    this.refreshToken(token, { decide: false });
   }
 
   /**
@@ -309,24 +406,36 @@ class BarHost {
    */
   reposition(token) {
     const entry = this.entries.get(token?.id);
-    if (!entry || !entry.reading) return;
+    if (!entry || (!entry.reading && !entry.label) || token?.isPreview) return;
     entry.token = token;
     this.layout(entry);
     this.cullEntry(entry);
     this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
+    entry.label?.flush();
   }
 
-  remove(id) {
+  /**
+   * Drop an entry. `token`, when given, has to be the placeable the entry is
+   * bound to: a destroyed drag preview carries the real token's id, and removing
+   * by id alone deleted the real token's bar the moment a drag ended.
+   */
+  remove(id, token = null) {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (token && entry.token !== token) return;
     entry.destroy();
     this.entries.delete(id);
   }
 
-  refreshToken(token) {
-    if (!this.container || !token?.id) return;
-
-    if (!canViewBars(token)) { this.remove(token.id); this.syncTicker(); return; }
+  /**
+   * Read a token's values and lay its bar out.
+   *
+   * `decide` also re-evaluates whether this client may see it. Pass false from
+   * anywhere Foundry has not yet run `_refreshState` — the value hooks, a draw,
+   * canvasReady — where the permission answer on the token is the previous one.
+   */
+  refreshToken(token, { decide = true } = {}) {
+    if (!this.container || !token?.id || token.isPreview) return;
 
     let entry = this.entries.get(token.id);
     if (!entry) {
@@ -339,12 +448,169 @@ class BarHost {
       bothBars: this.opts.bothBars,
       pf2eLayers: this.opts.pf2eLayers,
       breakFx: this.opts.breakFx,
-    });
-    if (!entry.reading) { this.remove(token.id); return; }
+    }, { silent: !entry.vis.shown });
+    /* A token with no readable bar still keeps its entry when it can show a
+       name — a light, a marker or a loot pile gets `── NAME ──` in the slot. */
+    entry.labelReserve = this.reservesLabel(token);
+    if (!entry.reading && !entry.labelReserve) { this.remove(token.id); this.syncTicker(); return; }
 
     this.layout(entry);
+    if (decide) this.applyVisibility(entry);
     this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    entry.label?.flush();
     this.syncTicker();
+  }
+
+  /**
+   * Re-decide visibility after Foundry's state pass, without re-reading values.
+   *
+   * Hover, selection, Alt and every step of a move arrive here, so this stays
+   * off the data path. A token with no entry yet takes the full one.
+   */
+  applyState(token) {
+    const entry = this.entries.get(token?.id);
+    if (!entry || (!entry.reading && !entry.label)) { this.refreshToken(token); return; }
+    entry.token = token;
+    entry.labelReserve = this.reservesLabel(token);
+    this.layout(entry);
+    this.applyVisibility(entry);
+    this.cullEntry(entry);
+    this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    entry.label?.flush();
+    this.syncTicker();
+  }
+
+  /**
+   * Show or hide one entry for this client.
+   *
+   * Only ever called once Foundry's `_refreshState` has run, which is what
+   * makes `canViewBars` current. The permission rule itself stays in
+   * `visibility.mjs`; this decides only *how* the answer changes on screen.
+   */
+  applyVisibility(entry) {
+    const token = entry.token;
+    /* A name-only entry has no bar to show, whatever bars.visible says. */
+    const can = !!entry.reading && canViewBars(token);
+    const v = entry.vis;
+    v.motionScale = this.motionScale;
+    const animate = entry.decided && this.motionScale > 0 && this.allows("reveal");
+    if (can && !v.shown) {
+      v.show(animate);
+    } else if (!can && v.shown) {
+      /* Out of sight is instant. A fade is for a hover or a selection letting
+         go; over a token that has just walked out of vision it would leave the
+         bar hanging where this client can no longer see anything. */
+      const inSight = !!token.visible && !token.document?.isSecret;
+      v.hide(animate && inSight);
+    }
+    entry.decided = true;
+    entry.group.visible = v.drawn;
+    /* The name is decided in the same pass because it reads the same state
+       Foundry has just refreshed. It never reads the bar's decision: Display Name
+       and Display Bars are separate settings, and either may show alone. */
+    this.applyLabel(entry);
+  }
+
+  /* ── Names ──────────────────────────────────────────────────────────────
+     The label on the bar. What it says and whether it shows is `mystify.mjs`'s;
+     how it looks and moves is `name.mjs`'s. This block only routes the one into
+     the other on the same decision path the bars use. */
+
+  /**
+   * Whether a token can ever show a label here, which reserves its row.
+   *
+   * Layout-safe: reads no hover, no selection and no sight, so asking it from a
+   * value hook or a drag frame decides nothing about visibility.
+   */
+  reservesLabel(token) {
+    if (this.opts.names === false || !String(token?.document?.name ?? "").trim()) return false;
+    try {
+      return labelReserved(reserveFacts(token), labelContext({ namesOn: true }));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Decide this token's label for this client. Only ever called from
+   * applyVisibility — the refreshToken pass — so `nameplate.visible` and the
+   * hover state are both current.
+   */
+  applyLabel(entry) {
+    const token = entry.token;
+    const facts = tokenFacts(token);
+    const ctx = labelContext({ namesOn: this.opts.names !== false, onKnowledge: () => this.invalidateLabels() });
+    const d = decideLabel(facts, ctx);
+
+    if (!d.reserve) {
+      if (entry.label) { entry.label.destroy(); entry.label = null; }
+      entry.labelDecided = false;
+      if (entry.nameRowH) { entry.labelReserve = false; this.layout(entry); }
+      return;
+    }
+
+    const label = entry.label ?? this.labelOf(entry);
+    const animate = entry.labelDecided && this.motionScale > 0 && this.allows("reveal");
+    label.setContent(d, { animate: animate && this.allows("nameDecode") });
+    if (d.present && !label.shown) {
+      label.show(animate);
+    } else if (!d.present && label.shown) {
+      /* Out of sight is instant, exactly as for the bar. */
+      const inSight = !!token.visible && !token.document?.isSecret;
+      label.hide(animate && inSight);
+    }
+    entry.labelDecided = true;
+    if (!entry.nameRowH) { entry.labelReserve = true; this.layout(entry); }
+    label.flush();
+  }
+
+  /** Create an entry's label on the label layer. */
+  labelOf(entry) {
+    const label = new NameLabel({ seed: cipherSeed(entry.token?.id), motionScale: this.motionScale ?? 1 });
+    entry.label = label;
+    this.labels?.addChild(label.group);
+    label.view(this.zoom(), canvas?.app?.renderer?.resolution ?? 1);
+    label.setRenderable(entry.group.renderable !== false);
+    this.layoutLabel(entry);
+    return label;
+  }
+
+  /** Hand the label the geometry the last layout computed. */
+  layoutLabel(entry) {
+    const f = entry.labelFrame;
+    if (!entry.label || !f) return;
+    const r = entry.reading;
+    const bar = r?.hero ? { h: f.heroH, pad: HERO_PAD_Y } : r?.rail ? { h: f.railH, pad: RAIL_PAD_Y } : null;
+    entry.label.setGeometry(nameGeometry({
+      baseX: entry.baseX, barsTop: f.barsTop, w: f.w, heroH: f.heroH, scale: this.opts.nameScale, bar,
+    }));
+  }
+
+  /** The canvas zoom, read where it is set rather than off a transform PIXI updates on render. */
+  zoom() {
+    return Math.abs(canvas?.stage?.scale?.x ?? 1) || 1;
+  }
+
+  /** Re-read zoom and resolution into every label: raster bucket, hairline, zoom fade. */
+  viewLabels() {
+    const scale = this.zoom();
+    const res = canvas?.app?.renderer?.resolution ?? 1;
+    for (const entry of this.entries.values()) {
+      if (!entry.label) continue;
+      entry.label.view(scale, res);
+      entry.label.flush();
+    }
+  }
+
+  /**
+   * Something a label decision reads has changed outside any token: the dex's
+   * knowledge, PF2e's name-visibility switch, a character's ownership. Forget the
+   * memoised answers and re-decide on Foundry's next state pass, which is the one
+   * place decisions are made.
+   */
+  invalidateLabels() {
+    invalidateKnowledge();
+    if (this.container) canvas?.tokens?.setAllRenderFlags?.({ refreshState: true });
   }
 
   /**
@@ -436,22 +702,30 @@ class BarHost {
     const off = this.offsetFor(token);
 
     const rows = [];
-    if (entry.reading.hero) rows.push(["hero", ROLE.hero, heroH]);
-    if (entry.reading.rail) rows.push(["rail", ROLE.rail, railH]);
-    if (entry.reading.shield) rows.push(["shield", ROLE.shield, railH]);
+    if (entry.reading?.hero) rows.push(["hero", ROLE.hero, heroH]);
+    if (entry.reading?.rail) rows.push(["rail", ROLE.rail, railH]);
+    if (entry.reading?.shield) rows.push(["shield", ROLE.shield, railH]);
 
     entry.baseX = token.x + off.x * grid;
     // The default stack begins below the token; explicit offsets still apply.
-    let y = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
+    const top = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
+    /* ── Names ── The name row is reserved whenever a label is *possible*, not
+       when one is drawn, so the bars under it never move with a hover. The
+       offsets above move it with the rest of the stack. */
+    const reserve = entry.labelReserve ?? this.reservesLabel(token);
+    entry.nameRowH = reserve ? nameRowHeight(heroH, this.opts.nameScale) : 0;
+    let y = top + entry.nameRowH;
+    entry.labelFrame = { barsTop: y, w, heroH, railH };
     entry.rows = {};
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
       if (!mesh) {
         mesh = makeBarMesh(roleId, {
           segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0,
-          dividerWidth: this.dividerWidth(),
+          segW: this.dividerWidth() / h,
           ramp: this.ramp,
           seed: entry.seed,
+          liquid: this.liquid,
         });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
@@ -466,10 +740,14 @@ class BarHost {
     for (const role of ROLES) {
       if (!entry.rows[role] && entry.meshes[role]) entry.meshes[role].visible = false;
     }
+    this.layoutLabel(entry);   // names
     entry.heroH = heroH;
     entry.heroW = w;
     /* The stack's world-space extent, for culling. Grown upward by a hero
-       height because the floating deltas rise out of the top of the bar. */
+       height because the floating deltas rise out of the top of the bar — and,
+       with a name row, out of the top of the row, which is still no higher than
+       this: the row sits between the token and the bars and the deltas start
+       above it, so both reach the same height they did without one. */
     entry.box = { x0: entry.baseX, y0: token.y + token.h - heroH * 1.5 + off.y * grid,
                   x1: entry.baseX + w, y1: y };
   }
@@ -529,6 +807,7 @@ class BarHost {
       y0: Math.min(a.y, b.y) - CULL_PAD, y1: Math.max(a.y, b.y) + CULL_PAD,
     };
     for (const entry of this.entries.values()) this.cullEntry(entry);
+    this.viewLabels();   // names: zoom decides raster size, hairline width and fade
     this.syncTicker();
   }
 
@@ -546,11 +825,16 @@ class BarHost {
        visible rather than hiding one this pass has no information about. */
     entry.group.renderable =
       !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
+    entry.label?.setRenderable(entry.group.renderable);   // names share the stack's box
   }
 
   syncTicker() {
+    /* An idle bar on screen wants frames for its liquid's own motion — unless
+       the shed has taken that motion away, in which case it wants none. */
+    const idleFlow = this.motionScale > 0 && this.allows("flow");
     const wanted = [...this.entries.values()].some((e) =>
-      (e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot));
+      e.vis.hot || e.label?.hot || (e.group.visible
+        && ((e.group.renderable && idleFlow) || Object.values(e.anims).some((a) => a?.hot))));
     if (wanted && !this.ticking) {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
@@ -580,7 +864,17 @@ class BarHost {
 
     let anyHot = false;
     for (const entry of this.entries.values()) {
-      let hot = false;
+      /* The transition first: it decides whether there is anything to draw. */
+      const transitioning = entry.vis.hot;
+      if (transitioning) {
+        entry.vis.step(dt);
+        entry.group.visible = entry.vis.drawn;
+      }
+      /* ── Names ── Stepped on their own: a label can be on screen while its bar
+         is hidden, and fading while its bar is already gone. */
+      if (entry.label?.step(dt, { flurry: this.allows("flurry"), decode: this.allows("nameDecode") })) anyHot = true;
+      if (!entry.group.visible) continue;
+      let hot = transitioning;
       for (const role of ROLES) {
         const a = entry.anims[role];
         if (!a) continue;
@@ -588,7 +882,10 @@ class BarHost {
         const wasHot = a.hot;
         if (a.step(dt) || wasHot) hot = true;
       }
-      const idle = entry.group.renderable && this.motionScale > 0;
+      /* The liquid's idle motion is the one standing cost every visible bar
+         pays, so it is the one "flow" sheds: past it, a bar that is not
+         changing is not ticked at all and keeps its last frame. */
+      const idle = entry.group.renderable && this.motionScale > 0 && this.allows("flow");
       if (hot || idle) this.writeUniforms(entry, now / 1000);
       if (hot || idle) anyHot = true;
     }
@@ -614,7 +911,8 @@ class BarHost {
       const u = mesh.shader.uniforms;
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
-      u.uSegW = this.dividerWidth();
+      u.uSegW = this.dividerWidth() / base.h;
+      u.uFade = entry.vis.fade;
       u.uTime = a ? a.time + entry.seed : 0;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
@@ -628,6 +926,14 @@ class BarHost {
       u.uChip = a && this.allows("ghost") ? a.chip : 0;
       u.uWave = a && this.allows("wave") ? a.wave : 0;
       u.uWaveX = a ? a.waveX : u.uFrac;
+      /* The liquid rides the primary bar only; the rails keep a flat plate and
+         get hard zeros. Each part of its motion is its own shed entry: the
+         animated layer, and the surge through it after a change. The surge is
+         clamped here as well as bounded by its spring, because the liquids'
+         texture offsets and light lifts are budgeted for -1..1. */
+      const liquid = role === "hero";
+      u.uFlow = liquid && this.allows("flow") ? 1 : 0;
+      u.uSurge = liquid && a && this.allows("surge") ? clamp(a.surge, -1, 1) : 0;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
@@ -727,9 +1033,12 @@ class BarHost {
       // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);
     }
+    /* The readout fades in and out with its bar, never ahead of it. */
+    const textAlpha = entry.vis.fade;
     if (entry.textMesh) {
       const punch = 1;
       entry.textMesh.visible = true;
+      entry.textMesh.shader.uniforms.uOpacity = textAlpha;
       entry.textMesh.scale.set(punch);
       entry.textMesh.position.set(anchorX, anchorY);
 
@@ -769,12 +1078,13 @@ class BarHost {
       const inT = Math.min(1, pop.t / 0.14);
       const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
       entry.popupMesh.visible = true;
-      entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha);
+      entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha) * textAlpha;
       entry.popupMesh.scale.set(popScale);
       /* It rises and drifts back along the bar, so consecutive deltas fan out
-         instead of stacking on one another. */
+         instead of stacking on one another. Names: it starts above the name row,
+         not on it — a delta born on top of the name is read as part of it. */
       entry.popupMesh.position.set(anchorX - w * (0.02 + 0.06 * e),
-                                   anchorY - h * (POPUP_LIFT + POPUP_RISE * e));
+                                   anchorY - h * (POPUP_LIFT + POPUP_RISE * e) - (entry.nameRowH || 0));
     }
   }
 

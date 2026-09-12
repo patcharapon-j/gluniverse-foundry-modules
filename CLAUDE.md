@@ -331,7 +331,32 @@ Anything meant to read as a hairline must be sized in **device pixels** (`px`),
 never in the shader's geometry units — a fixed value is ~2px on a HiDPI display
 and sub-pixel on an ordinary one, where `rbDetail` deletes it, so the detail
 silently vanishes for every player without a retina monitor and no preview you
-run yourself will show you that.
+run yourself will show you that. The division gap is the one deliberate
+exception, and it keeps the rule's intent: it is world-sized so it scales with
+zoom, *floored* in device pixels so it can never shrink under one.
+
+Visibility is decided in exactly one place, the `refreshToken` hook, because
+`token.bars.visible` is only current after Foundry's `_refreshState` pass. Asked
+from `hoverToken`/`controlToken` it is one event stale (that inverted Hover-mode
+bars), and during `draw()` `token.visible` is forced false. Bars are hidden, never
+destroyed, when permission or sight removes them, and drag previews — clones that
+carry the real token's id — are refused by every hook.
+
+Names ride the same pass (`name.mjs`, `mystify.mjs`). Foundry's nameplate is
+suppressed with `nameplate.renderable`, never `visible` — `nameplate.visible` is
+the Display Name answer the label reads — and the label is decided inside
+`applyVisibility`. Its row is reserved whenever a label is *possible*, never only
+while one is drawn, or the bar jumps under the cursor; floating deltas start above
+that row. Under PF2e a creature whose name is hidden from players shows them a
+cipher, and three rules keep it from leaking: a player's decision carries
+`text: null`, so nothing downstream can draw, rasterise or decode the name; the
+cipher is seeded from the token id alone (a length that followed the name lets
+players count letters) and holds no letters, digits, `+ - / %` or `§`; and a
+decode only ever runs cipher → name. `CreaturedexApp.mayView` is resolved with a
+lazy `import()` and fails closed, because `app.mjs` touches
+`foundry.applications` at module scope. Label motion is anime.js seeked from the
+host's clock, never autoplayed and never touching the shared engine, with every
+duration in `NAME_TIMING`. `resource-bar-check` pins all of it.
 
 A third: `PIXI.Filter` defaults its `resolution` to **1**, not to the
 renderer's, and the filter system sizes its intermediate textures from the
@@ -346,12 +371,55 @@ children and every Foundry layer declares one; left at the default the bars sort
 under the tokens layer, so the hover border draws over them — correct in every
 other respect, wrong only while a token is hovered.
 
+The primary bar is filled with a **liquid** — ink, mercury or lava, the world
+setting `rb.liquid` — and each liquid is its own program, assembled by
+`fragmentShader(liquid)` so a bar only pays for the material it draws. Every
+check runs per variant: a uniform only one liquid reads is optimised out of the
+other two and silently holds its initial value there. Four more things it pins
+that no diff shows. The fill always ends in a **straight, sharp vertical edge**
+exactly at the value — a function of x and the value only, one device pixel of
+antialiasing — and nothing in a liquid (its flow, its bloodied look, its surge)
+may bend or move it. The liquid is **never darker than its ramp colour**: a
+liquid chunk may shade `base` only through `rbShade` inside its `LIQUID_SHADE`
+range (never below `LIQUID_FLOOR`), and otherwise only lighten (`rbLighten`) or
+move towards or away from an equal-luma grey (`rbSoften` / `rbSaturate`) — plus,
+in lava alone, one amber lean (`rbWarm` at `LAVA_WARMTH`, bounded 0.2–0.4) that
+deliberately biases the health colour and whose worst luminance loss is budgeted
+against lava's shade floor; the check evaluates those helpers and ranges numerically and refuses INK or black
+mixes, darkening writes and sub-floor multipliers inside the chunks. Each
+liquid's identity therefore lives in how its light *moves* — ink's drifting
+plumes, mercury's gliding sheen, lava's pulsing pools — at a feature scale that
+survives a 19px bar; bloodied is slower, paler and gentler, never darker, and
+lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than dimming. The trough, dividers and fracture seams are not the liquid and keep
+their dark. Every idle term turns a whole number of times in the 64s idle loop,
+through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
+once a minute when the clock wraps. And the **only spring** in the feature is the
+`surge` through the liquid's texture and light after a change: no length — fill,
+chip trail, readout — may spring or overshoot, and the check drives the model to
+prove it rather than trusting the easing names.
+
+The animation model runs on **anime.js, sought rather than played**. Every tween
+is built with `autoplay: false` and moved with `.seek()` on the model's own clock
+(the PIXI ticker's `step(dt)`); nothing touches the engine, its speed or its main
+loop, because that engine is shared with Insight, the initiative tracker and the
+rest of the suite. A played animation would run on the engine's own frame loop,
+where the hitstop, the off-screen freeze and motion "none" cannot reach it — and
+it schedules `setImmediate` under Node, so the check tool also proves a process
+driving the model exits on its own.
+
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
-a page that compiles the real shader in a real WebGL2 context and drives it with
-the real animation model. **Serve it** (`node tools/preview-server.mjs`) — a
-`file://` page does not execute its module script. See
-`docs/RESOURCE_BARS.md` for the pipeline, the unit convention and the
-permission contract.
+a page that compiles all three liquids' real shaders in a real WebGL2 context and
+drives them with the real animation model, which it **imports** from the repo.
+**Serve it** from the repository root (`node tools/preview-server.mjs`, then
+`/.preview/bars.html?liquid=lava`) — a `file://` page does not execute its module
+script, and a server rooted anywhere else cannot resolve the imports.
+`--artifact=` inlines the model and anime.js through a small import linker
+instead, for a page with no server behind it. Without Playwright the check tool
+cannot compile GLSL, but headless Chrome can: `chrome --headless=new
+--use-angle=swiftshader --enable-unsafe-swiftshader --virtual-time-budget=5000
+--dump-dom <served page>` prints the page's `.err` panel if any program fails.
+See `docs/RESOURCE_BARS.md` for the pipeline, the liquids, the unit convention
+and the permission contract.
 
 **When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
 `styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it

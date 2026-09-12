@@ -16,8 +16,8 @@ do. One quad and a fragment shader makes all of that free, and makes "animates
 every frame" cost nothing extra.
 
 The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
-layers separated by air rather than welded into one frame, a flat high-key fill
-lit by a single hard specular, and **one cut corner, top-right**. The palette is
+layers separated by air rather than welded into one frame, a stylised liquid in
+the health colour (see **Liquids**), and **one cut corner, top-right**. The palette is
 entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
 exactly one place — the top of the stroke.
 
@@ -201,26 +201,30 @@ fades a division out once its gap falls under a device pixel, but the count is
 also what sets that gap, so past the cap the bar is more gap than plate long
 before the fade takes over.
 
-The gap itself is `uSegW` **device pixels** — six by default — floored at
-`0.005 * uSegW` in geometry units and capped at 0.42 of a plate. Six rather than
-the two it started at because the gap is what makes the fill read as assembled
-plates rather than as a bar with scratches in it. Device pixels rather than
-geometry units for the reason in **Units** above: a fixed value is two pixels on
-a retina display and sub-pixel on an ordinary one, where `rbDetail` deletes it
-and the colour-blind position channel silently disappears for half the table.
-The cap is what holds the line at forty divisions, where the px term would
-otherwise win and leave more gap than plate; the floor scales with the width
-rather than sitting at a fixed 0.030, or every width under it would draw
-identically on a bar tall enough for the floor to win and the setting would
-silently stop doing anything.
+The gap is **world-sized**: the setting is pixels at 100% zoom — six by default
+— and the host divides it by the bar's world height, so `uSegW` reaches the
+shader in bar heights and scales with the canvas. It is floored at **a pixel and
+a half** and capped at 0.42 of a plate. Six rather than the two it started at
+because the gap is what makes the fill read as assembled plates rather than as a
+bar with scratches in it.
 
-`DIVIDER.min` is **3**, and that is a legibility floor rather than a taste.
-`rbDetail` fades anything under `GL_FADE_HI` (2.2 device pixels) out, so a
-thinner choice than that does not give the GM a *finer* divider, it gives them a
-*fainter* one — a slider whose bottom end looks like a bug. Three is the first
-whole pixel clear of the fade, so every value the setting offers draws at full
-strength. The check tool pins the range against the shader's own thresholds
-rather than against the number.
+It used to be held at a fixed number of device pixels, for the reason in
+**Units** above — a fixed geometry width is two pixels on a retina display and
+sub-pixel on an ordinary one, where the colour-blind position channel silently
+disappears for half the table. That was right about displays and wrong about
+zoom: six pixels at every zoom level is a hairline on a zoomed-in bar and most of
+the plate on a zoomed-out one. The floor keeps the display fix without the zoom
+bug. It is a floor rather than a fade because a zoomed-out bar that loses its
+divisions has lost the only reading that is not hue.
+
+The cap is what holds the line at forty divisions, where the width would
+otherwise leave more gap than plate. The check tool pins all three parts: the
+world-sized term, the device-pixel floor, and that every host write actually
+divides by the bar's height.
+
+The quarter register marks under the bar are divisions too. They follow `uSeg`,
+so a bar with the dividers off — or a count of zero — carries no division marks
+of any kind.
 
 **Off is a switch, not the bottom of the slider.** `rb.dividers` resolves inside
 `segmentsFor()`, which means it returns a count of zero and the divisions are
@@ -243,6 +247,154 @@ gap's *floor* by it, so a negative value out of a hand-edited world inverts the
 
 ---
 
+## Liquids
+
+The primary bar is filled with one of three liquids, chosen by the world setting
+`rb.liquid`:
+
+| | |
+|---|---|
+| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and pale plumes of the health colour, blending as they move along the tube |
+| **Mercury** | a pearly, silvered body with a broad, soft, bright sheen gliding the length of the bar — reflective through a travelling highlight, never through dark bands |
+| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
+
+Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
+visible, low-frequency motion made only of lighter tints and saturation: features
+between a third of a bar height and a whole one, and speeds under a bar height a
+second, calm enough for forty tokens on a map. A first pass at "smooth and light"
+was so even that the three read as the same pastel plate; the identity has to
+live in *how the light moves*, because darkness is not available to carry it.
+
+Motion alone did not separate ink from lava at 19px — both were a saturated fill
+in the same hue — so **lava's warmth deliberately biases the health colour**.
+`LAVA_WARMTH` leans its whole body amber through `rbWarm`, which lifts red into
+its headroom and only eases green and blue: green lava is a yellow-leaning green,
+blue lava on the colour-blind-safe ramp a warmer blue, and a nearly dead lava is
+still danger red, because the lean can never carry a hue across the ramp. It is
+bounded in the check (0.2–0.4), and it is the one colour step in any liquid that
+may cost luminance. Ink goes the other way: fewer, larger plumes, with the
+contrast between a vivid body and near-white peaks turned up.
+
+They replaced a refractive-glass material — travelling ribbons of caustic light
+with glints and a facet pattern — that did its job as *glass* and failed as
+*health*: at token size the ribbons were lines, and a fill that reads as lines
+reads as a texture laid over the bar rather than as what the bar is full of. The
+rules for the replacement came from that failure. **Stylised, not physical, and
+smooth**: soft blended light, no hard shading, no bands, steps or crisp shapes
+inside the liquid, and no grain, because anything with an edge on a 19px bar is
+noise over the one reading the player came for. (A first pass of these liquids
+had posterised ink, hard chrome bands and a plated lava crust, and at token size
+every one of them read as lines again.) **Ink is the
+default** because it is the calmest; a fill that is always quietly moving still
+mostly should not be asking to be looked at.
+
+**One program per liquid.** `fragmentShader(liquid)` string-assembles the shared
+frame with one liquid's chunk, so a world compiles only its own and a bar pays
+for one material. Changing the setting swaps the program on every mesh already
+on the canvas (`swapLiquid`) rather than rebuilding the meshes: a rebuilt mesh
+sorts above its own readout, and would restart whatever uniforms it was part-way
+through. The rails and the shield rail keep a flat plate — a secondary resource
+is not health, and the same liquid would say it is — as a branch inside the same
+program rather than a fourth one. `resource-bar-check` runs its uniform and unit
+checks once per liquid, because a uniform only one liquid's chunk reads is
+optimised out of the other two programs and holds its initial value there.
+
+All three are tinted by the same health ramp — OKLab, the colour-blind-safe
+ramp, the arterial shift at the bottom — so the hue still carries the reading
+whichever liquid a GM picks.
+
+### The edge
+
+The fill always ends in a **straight, sharp vertical edge exactly at the value**:
+`rbEdge(fillX ± half a pixel, p.x)`, about one device pixel of antialiasing, and a
+function of x and the value alone. The liquid moves *behind* that edge and never
+moves it — not its flow, not its bloodied look, not its surge after a change.
+
+A first pass drew a rounded meniscus front that sloshed and wobbled, with every
+term zero-mean over the bar's height so its centre stayed on the value. That was
+true and it did not matter: a curved, moving edge reads as an imprecise one, and
+the edge is the one part of the bar that *is* the measurement. The chip trail's
+edge is cut the same way, and the head glow and the flash sit on it.
+`resource-bar-check` pins the edge's exact expression, that the fill mask is the
+trough × that edge × the dividers and nothing else, and that no liquid chunk
+writes any of them.
+
+### Never darker than the ramp
+
+The liquid never uses dark or black. **Every liquid pixel stays at least
+`LIQUID_FLOOR` (0.8) of its ramp colour's luminance**, because a fill that dips
+below the colour the ramp hands it stops reading as the health colour and starts
+reading as a darker, different one — and dark bands inside a fill are exactly
+what "lines and hard shading" looked like.
+
+The rule is enforced by construction rather than by eye. A liquid may do only
+three things to a colour, all defined in the shared frame:
+
+| | |
+|---|---|
+| `rbShade(base, field, lo, hi)` | the one multiplication: `base` scaled inside the liquid's own `LIQUID_SHADE` range, whose low end is at or above the floor |
+| `rbLighten(c, toward, t)` | towards a lighter colour channel by channel (`max(c, toward)`), so no channel can drop |
+| `rbSoften(c, t)` | towards a grey of the **same** luma, so paler and never darker |
+| `rbSaturate(c, t)` | away from that grey, at the same luma: more colour, and clamping a negative channel only adds light |
+| `rbWarm(c, t)` | lava only, once, at `LAVA_WARMTH`: red lifted into its headroom, green and blue eased, so luma can fall to `1 − 0.3t` and no further — the check requires lava's shade floor times that factor to stay at or above the floor |
+
+Each fill is one `rbShade` followed only by `rbLighten`/`rbSoften`/`rbSaturate`
+of itself (and, in lava alone, one `rbWarm`);
+each wave may only `rbLighten` or add light, and each impact only adds light.
+`resource-bar-check` pins the helpers' bodies to JavaScript mirrors, evaluates
+thousands of random shade-lighten-soften chains against the floor, and refuses
+INK or black, any other write to the liquid's colour, and any hard-edged
+operation (`floor`, `fract`, `step`, crisp discs, thin bands) inside a liquid
+chunk. The shared frame follows the same rule where it touches the liquid: the
+reading well recesses only the empty trough, and the low-health breath brightens.
+
+Not the liquid, and deliberately still dark: the trough, the black divider gaps,
+the frame, and the guard-break fracture's seams.
+
+### Bloodied
+
+Below half, each liquid says so in its own idiom — **slower, paler and gentler,
+never darker** — and the colour stays on the ramp. It has to be legible at token
+size between 51% and 49%, where the ramp colour itself barely moves, so all three
+changes land at once: the motion drops to a third or a quarter of its speed, the
+colour loses saturation and lifts towards a milky pale, and the texture's
+amplitude roughly halves. A speed cannot be blended in the idle loop (turns must
+be whole numbers), so each liquid evaluates its quick and its slow version only
+in the point-and-a-half band either side of half, where the two are mixed. The old material swapped colour
+outright at 50%, and a colour that jumps at a threshold says more than the number
+does; the transition runs over the last point and a half above half so it
+arrives rather than snaps.
+
+| | |
+|---|---|
+| **Ink** | swirls slow to a quarter and fold less, contrast drops, and the ink goes pale and milky |
+| **Mercury** | the sheen slows to a third, spreads and fades, and the pearly body goes milkier |
+| **Lava** | pools slow to a third and soften, the pulse and the shimmer calm, and the glow loses its saturation and goes pale |
+
+### The surge
+
+The one spring in the feature is the **surge** after a value change, and it has a
+job that measures nothing: it pushes the liquid's texture back and forth along
+the tube and lifts its light, then settles, while the edge stays on the value.
+Hit and heal push opposite ways.
+
+### The idle loop
+
+The liquids move all the time, so their motion has to survive the clock
+wrapping. `anim.mjs` wraps the idle clock at 64 seconds, and every moving term in
+every liquid goes through `rbPhase(k)` — an angle turning k whole times per loop
+— or `rbDrift(k, period)`, periodic noise slid k whole periods per loop. With an
+integer k the wrap lands on the frame it left; with anything else every bar on
+the map steps once a minute. The check refuses any other read of `uTime` and any
+non-integer turn.
+
+That motion is the one standing cost every visible bar pays, so it is the first
+thing given up under load: `sweep` freezes the clock, and `flow` drops the
+liquid's animated layer in the shader and takes idle bars out of the ticker
+altogether. Neither touches the colour, the bloodied look or the edge.
+
+---
+
 ## The shape of a change
 
 A value change is a sequence, and the order is what makes it read as an event:
@@ -250,30 +402,38 @@ A value change is a sequence, and the order is what makes it read as an event:
 | | |
 |---|---|
 | **0ms** | the fill snaps to the new value and everything **stops** |
-| **~55ms** | the hitstop releases; the sweep and the ring both start from a standstill |
+| **~55ms** | the hitstop releases; the wave, the impact and the surge all start from a standstill |
 | **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
 | **~420ms** | the readout has finished counting |
-| **~800ms** | the wave has crossed the bar and gone |
+| **~500ms** | the wave has crossed the bar and gone |
+| **~1.4s** | the surge through the liquid has settled |
 
 Three things about it are easy to get wrong and impossible to unsee afterwards.
 
-**Nothing about the geometry moves, and no length springs.** Not the mesh
-transform, not the fill's height, and no overshoot, recoil or settle on any
-value. Every one of those was tried and every one reads, on a bar, as jelly — an
-instrument that wobbles is an instrument you stop trusting. Lengths use a
-quintic ease-out: one long deceleration that arrives exactly once and stops. The
-whole reaction is light travelling across something rigid.
+**No length springs.** Not the fill, not the chip trail, not the readout: no
+overshoot, recoil or settle on any value. Every one of those was tried and every
+one reads, on a bar, as jelly — an instrument that wobbles is an instrument you
+stop trusting. Lengths use a quintic ease-out: one long deceleration that arrives
+exactly once and stops. The frame and the fill's height never move either.
+
+The one spring in the feature is the **surge**, and it moves the liquid's texture
+and light, never the edge that measures. `resource-bar-check` pins that twice:
+structurally (one `spring()` call, given to `surge` only, and no back, elastic or
+bounce ease anywhere) and behaviourally,
+driving single and rapid changes at full and reduced motion and failing any
+length that leaves the span of its change or moves backwards.
 
 **The hitstop is the load-bearing beat.** A freeze before the reaction is most
 of what separates "the number went down" from "that hurt". It holds every
-channel, including the value tweens and the popup timers.
+channel, including the value tweens, the popup timers and a fracture fading out.
 
 **The wave is the loudest thing here.** It crosses the *whole* bar in the
 direction the value moved — scoped to just the span that changed it is a detail
 you have to already be looking at the bar to catch, and on a one-point heal it
 is a flicker two pixels wide.
 
-It is **deliberately simple**: a glowing line, and a colour ramp trailing it.
+It is **deliberately simple**, and its structure is the same in every liquid: a
+crest, and the colour trailing it.
 An earlier pass gave it a bowed crest, a decaying crest train, slope shading, a
 domed cross-section and flow streaks, and all of it fought the one thing the
 effect is for. This is read peripherally, in under half a second, while you are
@@ -281,23 +441,35 @@ looking at something else. Structure inside the ramp is detail nobody has time
 to resolve, and every extra term was one more thing driving the colour to white.
 Three parts, and nothing else:
 
-1. **The line.** Three widths — a coloured halo, a hot core, a white filament —
-   so it reads as light rather than as a painted stroke.
-2. **The ramp.** One exponential decay behind the front, coloured in three
-   stops: deep at the tail, the wave's hue through the body, a hot shoulder just
-   behind the line. Three stops rather than a fade to nothing, because a fade in
-   motion is a smear.
+1. **The crest.** Light laid on top of the material, so it reads as light rather
+   than as a painted stroke.
+2. **The colour behind it.** One exponential decay behind the front, drawn in the
+   liquid's own terms — a clouded plume in ink, soft ripples in mercury, a hot
+   flare in lava — each soft, and each only ever lightening what it crosses.
 3. **Nothing ahead of it.** That asymmetry is the direction cue, since a
    symmetric band travelling along a bar is a highlight and a highlight can be
    going either way.
 
-The ramp *replaces* the colour of the material it crosses; only the line goes on
-top as light. Written the obvious way, as pure additive light over an
-already-bright plate, the green of a heal and the red of a hit both arrive as
-the same pale smear. Its length is a fraction of the **bar**, not a fixed
+The colour behind the front lightens the material it crosses *towards the
+wave's hue* (`rbLighten`, channel by channel), and only the crest goes on top as
+added light. Written as pure additive light over an already-bright liquid, the
+green of a heal and the red of a hit both arrive as the same pale smear; a
+per-channel lighten keeps them apart without ever darkening the liquid. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth
 of a wide hero bar, so the effect that is meant to be loudest quietly becomes a
 local highlight on exactly the bars with room to show it.
+
+What changes per liquid is the idiom, for the wave and for the impact alike:
+
+| | Wave | Impact |
+|---|---|---|
+| **Ink** | a soft plume of paler ink, clouded by low-frequency noise | a wide soft ring and round blobs blooming out of the wound; soft droplets along the bar |
+| **Mercury** | soft ripples of light behind the front — a sine, never a band | three soft concentric swells; soft droplets that part in two as they fly |
+| **Lava** | one broad hot flare in the wave's colour | a flare at the wound and one soft ring; soft embers on ballistic arcs |
+
+The uniforms and shed gates are the same under every idiom — `wave`, `ring` and
+`sparks` give up exactly what they always did — so no liquid can add a reaction
+that never degrades.
 
 The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
@@ -341,6 +513,46 @@ readout when its token is resized.
 
 ---
 
+## The animation model
+
+`anim.mjs` is built on the suite's vendored anime.js (v4.5.0, reached through
+`core/motion.mjs`), and nothing in it is ever *played*. Every tween is created
+with `autoplay: false` and moved with `.seek()` on the model's own clock, which
+the PIXI ticker advances through `step(dt)`. A change's reaction is one timeline
+— hit, punch, flash, the count, the wave's crossing and its fade, the surge, and
+either the chip heat or the heal's glide — and the chip trail's hold-and-drain is
+a second, because a heal cancels the reaction but not the drain. Each popup, the
+fracture's fade-out and the hover gloss are single animations.
+
+Seeking rather than playing is not a style choice. anime.js's engine is
+**shared** — Insight, the initiative tracker and half a dozen other features run
+their DOM animations on it — so its speed, its main loop and its globals are not
+this feature's to touch. And a played animation runs on that engine's own
+requestAnimationFrame, which knows nothing about the three things this model
+depends on: the hitstop, which freezes every channel mid-flight (it is a clock,
+`_live`, that simply does not advance during the stop); an off-screen bar, whose
+idle clock freezes while its transitions keep running; and motion "none", which
+promises no frames at all. It is also what lets the check tool drive the model
+under plain Node: a played animation schedules `setImmediate` there and the
+process never exits, and the check proves a process driving bars mid-flight
+does.
+
+Two things stay arithmetic because they are clocks, not tweens: the idle loop
+and the guard break's shatter clock run for as long as the creature does.
+
+A timeline writes nothing until it is first sought, so `set()` writes every
+channel's first frame itself — and those first frames are exactly what the
+hitstop holds, since nothing is sought during it. Finished tweens are snapped to
+their exact end values, because `hot` and the tests compare with `===`.
+
+One behaviour changed in the port, found by the check's random-change test. A
+damage that lands **above** a heal still gliding up — a value of 0.89 hit to 0.88
+while the fill is drawn at 0.87 — snaps the fill *up* to the true value, and the
+chip trail now starts from at least that value. Before, the trail sat inside the
+fill for the length of the hitstop, when nothing is stepped to correct it.
+
+---
+
 ## Hot and cold
 
 Two things are true of a bar that is doing nothing, and only the first used to
@@ -371,7 +583,9 @@ moving the window to a display with a different pixel ratio changes it.
 Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear
 in that list; the check tool enforces it, so a new effect cannot be added that
-never degrades.
+never degrades. The standing costs lead it — the idle clock (`sweep`), the
+liquid's `flow`, and a settled fracture's `breakFlow` — and everything after them
+is paid once per change, `surge` included.
 
 ---
 
@@ -422,6 +636,17 @@ broke. A guard break says nothing about hit points, and a bar that dulls its own
 fill to announce an unrelated state has stopped being the measurement it is there
 to be.
 
+The one liquid that gives way is **lava**, and it gives way in its variation,
+not in its brightness or its reading. Lava is bright, soft, continuous glow and
+the fracture is sharp gold light in cracks; over a lively lava the break the
+tracker put there reads as one more bright wobble among many. So while `uBreak`
+is on, the lava *calms* by `LAVA_BREAK_CALM` — its convection flattens towards an
+even glow and its hot highlights ease — and the sharp gold is the only structure
+left on the bar. It never darkens to do it; the floor holds. That the lava is
+soft and continuous everywhere is also what keeps it from reading as a fracture
+in the first place. The check refuses the calming anywhere but the lava, and
+inside the fracture block.
+
 It nucleates at the **leading edge of the fill as it stood when the guard went**,
 captured once and then held. That point is the only one on a bar that means
 anything, so it is where the eye already is and where the shards are finest — and
@@ -443,8 +668,8 @@ wrap cannot step the fracture mid-breath.
 
 A broken creature's bar is therefore **hot for as long as it is broken**, the
 same standing cost as low health and for the same reason. `breakFlow` sits
-second in `SHED_ORDER` because of it — it is one of only two standing costs in
-that list, everything after it being paid once per change. Shedding it freezes
+among the standing costs at the head of `SHED_ORDER` because of it, with the
+liquid's own idle motion; everything after them is paid once per change. Shedding it freezes
 the fracture at its settled frame and drops the bar out of the ticker; the crack
 stays exactly where it was. **What degrades is the motion, never the state.**
 The same is true of motion tier "none", where the fracture arrives already
@@ -526,6 +751,250 @@ Foundry's bars are suppressed with `renderable = false`, never `visible = false`
 
 ---
 
+## When a bar is shown
+
+`visibility.mjs` says *whether* this client may see a bar. *When* that question
+is asked turned out to matter as much as the answer, and getting it wrong was the
+report that bars "appear and disappear on hover and move".
+
+**Decisions are made in the `refreshToken` hook and nowhere else.** Foundry sets
+a render flag and fires `hoverToken`/`controlToken` at once, but assigns
+`token.bars.visible` in `Token#_refreshState` on the *next* render pass — and the
+`refreshToken` hook runs after that pass. Decided from the hover hooks, the
+answer was one event stale, so Hover-mode bars were inverted (hovering in hid the
+bar, hovering out showed it) and Control-mode bars did the same on select. Alt
+fires no hook at all, only a `refreshState` on every token, and movement arrives
+as `refreshVisibility`, which the old code routed to a position-only path — so a
+token that walked out of sight kept its bar. Both reach the hook now.
+
+Three places look like they know and do not: the value hooks (`updateActor`
+and friends, which fire before the flags they queue are applied), `drawToken`
+(during `draw()` Foundry forces `token.visible` false), and `canvasReady` (every
+flag is still pending, so `bars.visible` holds its default of true). Those
+build and read; `refreshAll` then forces one `refreshState` pass so the decision
+is made on current state.
+
+**A bar is hidden, never destroyed.** Destroying an entry when permission took
+the bar away threw away its animation state and brought it back with a silent
+first read — on every mouse pass. `RevealAnim` in `anim.mjs` holds the decision
+and its transition; values that change while a bar is hidden are applied
+silently, so nothing replays as an impact when it comes back.
+
+**Drag previews are refused by every hook.** A preview is a clone that carries
+the real token's id; bound to one, the real bar followed the ghost and was
+deleted when the ghost was destroyed, not to return until the token next
+updated. `remove()` also checks that the placeable being destroyed is the one
+the entry is bound to.
+
+How the answer changes on screen:
+
+| | |
+|---|---|
+| **Appearing** (hover, select, Alt, walking into sight) | a tight plain fade in, `TIMING.fadeInMs` (120ms) |
+| **A hover or selection letting go** | the same fade out, `TIMING.fadeOutMs`; a fade caught half way turns round from where it is |
+| **Leaving sight** | instant; a fade would leave the bar hanging over a token this client can no longer see |
+| **Scene load, a new token, panning** | instant — the first decision for an entry never animates, and culling is `renderable`, not visibility |
+
+`reveal` is in `SHED_ORDER`, directly after the liquid's idle motion: under load a bar
+simply pops, which costs nobody any information.
+
+---
+
+## Names
+
+Foundry's nameplate is a `PIXI.Text` centred under the token, in a font and a
+position nothing else in this feature shares. Once the bars are an instrument, a
+caption floating near them reads as a second, unrelated widget, so the name moves
+onto the bar: uppercase, lightly tracked, in the readout's own `--gl-tech`,
+left-aligned on the top edge of the top bar's *body* and followed by a hairline
+rule running toward the cut corner. A token with no readable bar — a light
+source token, a marker, a loot pile — gets the same name centred in the same
+slot as `── NAME ──`. `name.mjs` owns how a label looks and moves; `mystify.mjs`
+owns what it says and whether it shows.
+
+| | |
+|---|---|
+| **Names on bars** | `rb.names`, world, default on. Off hands every nameplate back to Foundry. |
+| **Name text size** | `rb.nameScale`, client, the readout's range. |
+
+**The nameplate is suppressed with `renderable`, never `visible`**, for the same
+reason the bars are: `nameplate.visible` is Foundry's Display Name answer,
+assigned in `Token#_refreshState` as `!isSecret && _canViewMode(displayName)`, and
+`canViewName` reads it. It is re-evaluated in every pass, so turning the setting
+off — or a token losing its name — gives Foundry's nameplate straight back.
+
+**The name is decided where the bar is**: in `applyVisibility`, from the
+`refreshToken` hook, after Foundry's state pass. A rename arrives as
+`refreshNameplate`, which is routed to the same decision. It is independent of
+Display Bars — a name whose bar is hidden still draws alone in its slot — but its
+*style* follows whether the token has a bar at all, not whether that bar is on
+screen this frame. A Hover-mode bar under an Always-mode name would otherwise
+switch the name between centred and left-aligned on every mouse pass.
+
+### The row is always reserved
+
+The bar stack moves down by the name row whenever a label is *possible* — names
+on, a non-empty name, and Display Name not None (or a mystifiable creature, below)
+— not when one is drawn. Reserving only while the name is visible is the obvious
+version and it is the jump Phase 1 removed, back again: a Hover-mode name pushing
+its bar down a row under the cursor. `layout()` never reads whether a label is
+shown, and `resource-bar-check` pins that. The offsets move the whole stack,
+name included; the row grows with `rb.nameScale`, since layout is per client
+anyway; and floating deltas start above the row rather than on it, because a
+delta born on top of the name reads as part of it.
+
+### Text
+
+Names are arbitrary Unicode, so the numeral atlas cannot draw them. Each is
+rasterised once per **(text, size bucket)**, with the bucket following the
+label's font size in *device* pixels at a third of an octave per step. A label is
+therefore re-rastered only when zoom crosses a step — crisp at every zoom, and
+nothing uploaded while the canvas stands still. Rasters are reference-counted and
+destroyed with their last label. Letters are tracked with the canvas's own
+`letterSpacing` rather than drawn one at a time, which would break every script
+that shapes across letters; glyphs the tech font lacks fall back to system fonts.
+
+The raster uses the numerals' channel code (outline red, body green) so the ink
+can be tinted — the GM's dimmed view — without tinting the outline, and it is cut
+off in the shader at `uCut`, which is how a decode resolves it left to right
+without a second texture.
+
+Labels live on a **second, unfiltered container** at the bars' zIndex. Inside the
+bloom a white label haloes on every token, and adds a row per token to the
+filter's measured bounds.
+
+Long names shrink to fit down to **75%**, then take an ellipsis. Shrinking first
+because a slightly smaller whole name beats a truncated one; floored because past
+three-quarters a label no longer matches the ones around it. The width limit is
+the bar up to its cut corner, or the token width less the flanks for a centred
+label.
+
+Below about **six device pixels of cap height** a label fades out — a smoothstep
+over 4.5–7px, so a zoom thins it continuously rather than popping it. Uppercase
+at that size is a grey smear, and a smear on every token is worse than nothing.
+The rule and the flanks are **one device pixel** through zoom × resolution, the
+hairline rule from **Units** above.
+
+### Motion
+
+`LabelMotion` is anime.js on a plain state object, `autoplay: false`, seeked to
+its own elapsed time from the host's ticker. That keeps the motion tier, the
+off-screen freeze and the Node check tool working, and it never touches the
+shared engine's loop or speed, which Insight and Initiative own. Every duration is
+in `NAME_TIMING`. The rules are the bar's: appearing and a hover letting go are
+the bar's own tight fade (`fadeInMs`/`fadeOutMs`, pinned equal to `TIMING`'s, so a
+name and its bar arrive and leave together), leaving sight is instant, and the
+first decision for an entry is instant. Nothing sweeps or decodes on a mouse pass —
+on a Hover-mode token that is a show on every pass. The one decode is
+identification, below. `nameDecode` is in `SHED_ORDER`; shed, a decode simply
+snaps.
+
+---
+
+## Mystification
+
+Under PF2e only, and only for `character`, `npc`, `familiar` and `hazard` actors —
+the things a Recall Knowledge check is made against. A loot pile or a vehicle is
+not a mystery anyone rolls to solve, so those follow plain Display Name: hidden
+means no label.
+
+A creature's name is **hidden from players** when either:
+
+- PF2e's *Token settings determine name visibility* is on and the token's own
+  `playersCanSeeName` is false; or
+- the Creaturedex is enabled and `CreaturedexApp.mayView(actor)` is null for this
+  user.
+
+Two readers are exempt, and both exemptions are easy to lose because the failure
+looks harmless. **The party** (`actor.alliance === "party"`) is never an unknown
+creature: PF2e's own rule already says so, but the dex has no such clause —
+nobody reveals a player character in it — so without the exemption every PC and
+companion wears a cipher the moment the Creaturedex is switched on. And **an
+owner** always reads the name of what they own: a player's own summon or familiar
+is not a mystery to them, whatever the table has hidden from everyone else.
+
+When mystification applies, a label is either the real name or a **cipher**, and
+**it never rides with its bar**. Display Name and Display Bars are separate
+settings and a table uses them separately: an NPC whose hit points are the GM's
+business still wears its name, and a PC can show the party its bar without a
+caption. A readable name shows exactly where Foundry's nameplate would. A cipher
+shows there too, and also on hover or Alt while in sight, because PF2e hides a
+name *through* Display Name, so Display Name alone would never show one. The
+GM's dimmed view appears wherever players would get a cipher, and never less
+often than Foundry's own nameplate.
+
+**Why a cipher and not nothing.** A hidden name used to be no label, which on a
+canvas where every other token carries one reads as "this token is scenery". A
+run of glyphs says "there is a creature here and you do not know what it is",
+which is the actual state of the table.
+
+The cipher's own rules are all about carrying no information:
+
+- **No letters, no digits.** About a third is `?`; the rest is
+  `! # * & ~ ^ = < > † ‡ ¤ ◇ ◆ ▚ ▞ ░`. `+ - / %` are excluded because the
+  readout and the deltas use them, so a cipher containing one sits beside a bar
+  looking like a number; `§` because it reads as an S.
+- **Its length comes from the token id**, 6–9 glyphs, never from the name. A
+  cipher that grew with the name would let a player count letters.
+- **It flurries, it does not flicker.** Every ~4s two or three glyphs re-roll, on
+  a per-token phase so a map full of unknowns does not re-roll in unison. The
+  glyphs are a pure function of (seed, beat), with a slot keeping the glyph of the
+  last beat that touched it. The period is *divided* by the motion scale: reduced
+  motion shortens animations, and a shorter period would flicker more on the
+  setting that asked for less. `flurry` is in `SHED_ORDER`.
+- **It is an atlas.** A flurry is a geometry rebuild, not a texture upload, and
+  the run uses a uniform advance so a `?` becoming a `░` does not shuffle every
+  glyph after it and drag the rule along.
+
+When a creature is **identified** while its label is on screen, the cipher
+decodes into the name, left to right, in about 600ms — starting from the exact
+glyphs the player was looking at, so the first frame does not pop. The GM always
+reads the real name: at 70% brightness, with a small `◇` marker in the accent,
+when players see a cipher.
+
+### The leak rules
+
+A leak here renders perfectly on the GM's screen and appears only on a player's.
+
+- **A player's decision for a hidden creature carries `text: null`.** The label
+  cannot draw, rasterise or decode a string it was never handed, which is a
+  stronger guarantee than any number of "if hidden" checks further down. The
+  raster cache is only ever asked for `content.text`; losing the name drops the
+  raster and binds an empty texture; a decode only ever starts on cipher → name,
+  and losing the name mid-decode snaps it.
+- **The cipher cannot see the name.** `cipherGlyphs(seed, epoch)` has no name
+  parameter, and the check tool pins that and proves `composeLabel`'s cipher mode
+  is unchanged by one being present.
+- **The decision is never stale.** It is made in the `refreshToken` pass, and
+  re-made on the updates that change it without touching a token: the dex's
+  `dex.knowledge`, PF2e's name-visibility setting (both through `updateSetting`
+  and `createSetting`), a user's assigned character, and an actor's ownership or
+  alliance. Each forgets the memoised answers and asks Foundry for a state pass,
+  so the decision itself still happens in one place.
+
+### Reading the Creaturedex
+
+`mayView` is the authority on what a player knows, and it is used rather than
+restated — including its rule that knowing a *lie* counts, because a player told
+one cannot see that it is false. It is not imported statically: `app.mjs`
+destructures `foundry.applications.api` at module scope, which does not exist
+under the Node tooling that loads this feature, and a static import would tie the
+two features' import graphs together. It is resolved with a dynamic `import()` on
+first use — in a world, that module is already evaluated, so it lands on the next
+microtask — and every label is re-decided when it does. **Until then the answer
+is a cipher**, because the only safe way to be wrong about a secret is towards
+keeping it.
+
+`mayView` answers yes for any GM, so the GM's marker asks the dex's store directly
+for the whole party (`knownSections`/`falseSections` on `PARTY_KEY`): the marker
+means *no party character knows anything about this kind of creature*. In a world
+with Party Knowledge off, one player may know a creature another does not; the
+marker then stays off as long as anyone knows it. Answers are memoised per
+creature kind until something invalidates them, because every `knownSections`
+call deep-clones the whole dex and an Alt press re-decides every token.
+
+---
+
 ## Colour
 
 The fill hue is a function of the health fraction, interpolated in **OKLab**: a
@@ -573,11 +1042,10 @@ bar permanently once you dropped below the threshold, and a static stripe
 pattern on the element a player checks constantly is decoration you have to look
 past. The second channel is now *temporal* — a ~4.6s pulse, slow enough to read
 as breathing rather than as an alarm, and it lands on the **liquid** as well as
-the chrome. The fill carries a domain-warped cell texture while it lasts: two
-sine fields multiplied together give a plaid whose axes you can see, so the
-sample point is displaced by another pair of sines first, which stretches and
-folds the cells into something that reads as movement *inside* the liquid rather
-than as a texture laid over it. Four sines, no texture fetch. The trough's own
+the chrome: the fill's lower rim brightens on the same clock, over whichever
+liquid is in the tube rather than in place of its motion. There used to be a
+domain-warped cell texture swapped in for the duration, which is exactly the
+kind of second material the liquids made unnecessary. The trough's own
 diagonal scan pattern was removed at the same time — on a bar that is mostly
 empty, which is every bar that matters, those stripes were the largest thing on
 screen and the fill had to compete with them. A client-scoped colour-blind-safe
@@ -591,7 +1059,7 @@ ramp (blue → orange) is offered as a third option.
 node tools/resource-bar-check.mjs
 ```
 
-Zero problems required. It pins the uniform table against the GLSL *and* the JS
+Zero problems required. It pins the uniform table against every liquid's GLSL *and* the JS
 that writes it, that `uTexel = 0` stays inert, that the OKLab ramp still mirrors
 `gl-tokens.css`, that no raw millisecond literal has escaped `TIMING`, that the
 glyph atlas covers every character a run can emit, that the numeric readout is
@@ -620,18 +1088,78 @@ clipped to the bar's silhouette and does not desaturate the fill, that
 `TIMING.breakInMs` still agrees with the field's own settle and `BREAK_WRAP` is
 a whole number of cycles of both moving terms, that the nucleation point is
 captured rather than followed, and that freezing the fracture stops its clock and
-releases the ticker **without losing the crack**. With Playwright present
-it also compiles the shader and checks that no uniform was optimised away.
+releases the ticker **without losing the crack**.
+
+For the liquids it pins that `rb.liquid` offers exactly the programs the shader
+builds and recompiles the bars on the canvas when it changes; that each program
+carries only its own material and none carries the old ribbons; that every idle
+term turns a whole number of times in the loop; that the fill ends in a straight
+vertical edge that depends on x and the value only, with the chip trail, head
+glow and flash on it; that every liquid stays at or above `LIQUID_FLOOR` of its
+ramp colour's luminance, through pinned helper bodies, evaluated shade ranges and
+lighten/soften chains, and a refusal of INK, black, other colour writes and
+hard-edged operations inside the chunks; that lava, and only lava, calms under a
+guard break; that the only spring drives the surge and no length overshoots or
+recoils, tested by driving the model; that every tween is built paused and the
+shared anime.js engine is untouched after all of that; that a fresh Node process
+driving the model exits; and that flow and surge are primary-bar-only and shed on
+their own entries.
+
+With Playwright present it also compiles every liquid's shader and checks that no
+uniform was optimised away. Without it, headless Chrome does the same job on the
+served preview page: `--dump-dom` with `--use-angle=swiftshader
+--enable-unsafe-swiftshader --virtual-time-budget=5000` prints the page's error
+panel if any program fails to compile or link.
+
+For names it pins that Foundry's nameplate is suppressed through `renderable`
+and handed back on disable; that the name is decided from `nameplate.visible`
+inside `applyVisibility` and nowhere else; mystification's scope and gate order,
+behaviourally, including which probes run for which tokens; that a player's
+decision for a hidden creature never carries the name, that a name raster is only
+acquired on the guarded path and dropped with the name, and that a decode only
+ever starts on cipher → name; that the Creaturedex is read lazily and its
+knowledge key still matches; the cipher's glyph set, its id-seeded length, its
+independence from the name and the size of a flurry beat; that label motion is
+seeked rather than autoplayed, never touches the shared engine, and has no
+millisecond literal outside its tables; the 75%-then-ellipsis fit, the continuous
+zoom fade and the device-pixel hairline; that the rule stops short of the cut and
+the pads still mirror the shader; that the row is reserved and the bars do not
+move when a name is drawn; that deltas start above the row; and that both
+settings are registered, read and localised.
 
 ```bash
 node tools/resource-bar-preview.mjs --out=.preview/bars.html
 ```
 
-Writes a self-contained page that compiles the **real** shader in the browser's
-own WebGL2 context and drives it with the **real** animation model. Serve it
-(`node tools/preview-server.mjs`) rather than opening it as a file — a `file://`
-page does not run its module script. `--artifact=` emits the same page without
-the document wrapper, for publishing.
+Writes a page that compiles the **real** shaders — all three liquids — in the
+browser's own WebGL2 context and drives them with the **real** animation model,
+which it **imports** from the repository. Serve it from the repository root
+(`node tools/preview-server.mjs`, then `/.preview/bars.html`) rather than opening
+it as a file: a `file://` page does not run its module script, and a server
+rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
+that liquid. It has rows for each liquid down the health ladder, bloodied, the
+surge after a hit and a heal, each liquid's reactions, lava under a guard break
+and a shed bar, plus a liquid switcher on the live bar. `?sheet=ink` (or
+`mercury`, `lava`, `names`, `compare`) hides everything but one contact sheet — a
+liquid at 100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged;
+the Names rows; or the three liquids side by side at token size at 100/62/49/12%,
+drawn twice 1.5s apart on one seed so a single still shows the motion — so a
+headless screenshot of the top of the page is the whole sheet.
+
+The model used to be pasted into the page verbatim, which stopped working the
+moment it imported anime.js. `--artifact=` has no server behind it, so it inlines
+the model and everything it imports — anime.js included — through a small
+linker in the tool that rewrites each module's imports and exports into one
+module script. That is only safe because the graph is acyclic and every import
+and export sits at column 0, and the linker throws rather than guessing when
+either stops being true.
+
+Its **Names** section (on a bar, with no bar, long names on narrow tokens, the
+player's cipher, the GM's view, and the zoom-out fade) imports the real
+`name.mjs`, `mystify.mjs` and `cipher-atlas.mjs` — layout, fit, cipher,
+composition and anime.js motion are the shipped code; only the pixel compositor
+is the page's own Canvas2D. Because it imports them it needs the same server, and
+it expects the page under `.preview/`.
 
 Neither tool can tell you how any of this looks on a real battlemap at a real
 zoom. That needs a session.

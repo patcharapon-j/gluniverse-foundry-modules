@@ -1,6 +1,6 @@
-<title>Refractive Core · Resource Bars</title>
-<link rel="stylesheet" href="../styles/gl-fonts.css">
-<link rel="stylesheet" href="../styles/gl-tokens.css">
+<title>Health Liquids · Resource Bars</title>
+<link rel="stylesheet" href="__ROOT__/styles/gl-fonts.css">
+<link rel="stylesheet" href="__ROOT__/styles/gl-tokens.css">
 <style>
 :root{
   --ink0:#02070b; --ink1:#080b11; --ink2:#0b0f17; --ink3:#161d2c;
@@ -113,19 +113,26 @@ input[type=range]{padding:0; width:230px}
   font-family:var(--mono); font-size:12.5px; color:#ffc0c6; background:rgb(255 74 82 / .1);
   border:1px solid rgb(255 74 82 / .35); padding:14px 16px; white-space:pre-wrap; margin:20px 0;
 }
+/* ── Names ── the label canvas sits over the reserved row and the bar's top. */
+.nm-cell{position:relative}
+.nm-label{position:absolute; left:0; top:0; pointer-events:none}
+.nm-empty{border-top:1px dashed var(--line)}
+/* ── Contact sheets (?sheet=…) ── fixed columns so a headless screenshot is stable. */
+#sheet .grid.sheet-small{grid-template-columns:repeat(4, 180px)}
+#sheet .grid.sheet-big{grid-template-columns:repeat(2, 540px)}
 </style>
 
 <canvas id="gl"></canvas>
 <div class="page">
   <header>
-    <h1>Refractive Core <span> / Resource Bars</span></h1>
-    <p class="sub">The live shader, at token size and enlarged. Try damage, healing, temporary HP and guard break below.</p>
+    <h1>Health Liquids <span> / Resource Bars</span></h1>
+    <p class="sub">The live shaders — ink, mercury and lava — at token size and enlarged, driven by the real anime.js model. Pick a liquid below; every cell without a liquid of its own follows it.</p>
   </header>
 
   <h2>Token-width fit · 128px</h2>
   <div class="stage" id="stage"></div>
   <h2>Damage and healing</h2>
-  <p class="note">Damage tears through the fill with a jagged front and an amber trail. Healing restores it with curved ripples and drifting lights.</p>
+  <p class="note">The fill snaps and everything holds for the hitstop; then the change wave crosses the bar in the liquid's own idiom, the chip trail drains, the readout counts, and a soft surge runs through the liquid and settles — while the bar's edge stays a straight line exactly on the value.</p>
 
   <div class="play">
     <div class="slot" id="live" data-live="1"></div>
@@ -136,6 +143,7 @@ input[type=range]{padding:0; width:230px}
       <button data-set="1">Full</button>
     </div>
     <div class="row">
+      <label class="f">Liquid <select id="liquid"></select></label>
       <label class="f">Value <input type="range" id="scrub" min="0" max="100" value="80"></label>
       <label class="f">Motion
         <select id="motion"><option value="1">Full</option><option value="0.6">Reduced</option><option value="0">None</option></select>
@@ -155,6 +163,36 @@ input[type=range]{padding:0; width:230px}
   <h2>Health ladder</h2>
 
   <div class="grid" id="row-ladder"></div>
+
+  <h2>Liquids</h2>
+  <p class="note">Each liquid down the health ladder, whatever the switcher says. All three take the health ramp, including the arterial shift at the bottom of it.</p>
+  <div class="grid" id="row-liq-ink"></div>
+  <div class="grid" id="row-liq-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-liq-lava" style="margin-top:22px"></div>
+
+  <h2>Bloodied</h2>
+  <p class="note">Just above and just below half. Every liquid grows slower, paler and gentler, never darker: ink's swirls slow to a quarter and go milky, mercury's sheen slows to a third and fades, lava's pools slow and soften and its glow goes pale.</p>
+  <div class="grid" id="row-blood"></div>
+
+  <h2>The surge</h2>
+  <p class="note">The real model, stepped to fixed points after a hit and after a heal and then held. The liquid's texture swings back and forth through the tube and its light lifts, then settles; the edge never moves off the value.</p>
+  <div class="grid" id="row-surge-ink"></div>
+  <div class="grid" id="row-surge-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-surge-lava" style="margin-top:22px"></div>
+
+  <h2>Reactions</h2>
+  <p class="note">The change wave and the impact, in each liquid's idiom and always soft and light: a plume of paler ink, soft mercury ripples and parting droplets, a lava flare with drifting embers.</p>
+  <div class="grid" id="row-react-ink"></div>
+  <div class="grid" id="row-react-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-react-lava" style="margin-top:22px"></div>
+
+  <h2>Lava under a guard break</h2>
+  <p class="note">The lava calms while the guard is broken — its glow evens out, it never darkens — so the initiative tracker's sharp gold fracture reads over it. Ink and mercury beside it for comparison.</p>
+  <div class="grid" id="row-lava-break"></div>
+
+  <h2>Shed under load</h2>
+  <p class="note">Flow given up: the liquid keeps its colour, its bloodied look and its straight edge, and loses only its motion.</p>
+  <div class="grid" id="row-shed"></div>
 
   <h2>In motion</h2>
 
@@ -207,13 +245,48 @@ input[type=range]{padding:0; width:230px}
 
   <div class="grid" id="row-cb"></div>
 
+  <!-- ── Names ─────────────────────────────────────────────────────────────
+       Self-contained: the module script at the bottom of the page fills these.
+       It imports the shipped name.mjs / mystify.mjs / cipher-atlas.mjs. -->
+  <h2>Names</h2>
+  <p class="note">The name on the bar's top edge, tracked uppercase in the readout's face, with a one-device-pixel rule running toward the cut corner. The row above the bar is reserved whether or not the name is drawn, so the bar never moves.</p>
+  <div class="row">
+    <button id="nm-appear">Replay appear</button>
+    <button id="nm-fade">Hover out / in</button>
+    <button id="nm-identify" class="cool">Identify ciphers</button>
+    <button id="nm-rehide" class="hot">Hide names again</button>
+    <label class="f">Motion
+      <select id="nm-motion"><option value="1">Full</option><option value="0.6">Reduced</option><option value="0">None</option></select>
+    </label>
+  </div>
+  <div class="grid" id="row-names-a2"></div>
+  <h2>Names · no bar</h2>
+  <div class="grid" id="row-names-centred"></div>
+  <h2>Names · long names</h2>
+  <div class="grid" id="row-names-long"></div>
+  <h2>Names · cipher, player view</h2>
+  <p class="note">No letters, no digits, no readout symbols. Length comes from the token id, never the name. Every ~4s two or three glyphs re-roll, each token on its own phase. Identify decodes from the exact cipher on screen.</p>
+  <div class="grid" id="row-names-cipher"></div>
+  <h2>Names · GM view</h2>
+  <div class="grid" id="row-names-gm"></div>
+  <h2>Names · zoom-out fade</h2>
+  <p class="note">Cap height in device pixels. Whole at 7px and above, gone at 4.5px, continuous between.</p>
+  <div class="ladder" id="row-names-zoom"></div>
 
 </div>
 
 <script type="module">
-/*__ANIM_SRC__*/
+/*__ANIM_IMPORT__*/
 
-const FRAG = /*__FRAG__*/;
+/* Every liquid's program, exactly as shader.mjs assembles it. */
+const FRAGS = /*__FRAGS__*/;
+const LIQUIDS = /*__LIQUIDS__*/;
+let liquidDefault = /*__DEFAULT_LIQUID__*/;
+/* ?liquid=lava opens the page on that liquid, for headless contact sheets. */
+{
+  const asked = new URLSearchParams(location.search).get("liquid");
+  if (LIQUIDS.includes(asked)) liquidDefault = asked;
+}
 const VERT = /*__VERT__*/;
 const RAMPS = /*__RAMPS__*/;
 const TEMP_COL = /*__TEMP_COL__*/;
@@ -267,41 +340,43 @@ function compile(type, src, label) {
   return sh;
 }
 
-const prog = gl.createProgram();
-gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT, "vertex shader"));
-gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG, "fragment shader"));
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail("Program failed to link:\n" + gl.getProgramInfoLog(prog));
-gl.useProgram(prog);
-
 const buf = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, buf);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
   -1, -1, 0, 1,   1, -1, 1, 1,   -1, 1, 0, 0,
    1, -1, 1, 1,   1,  1, 1, 0,   -1, 1, 0, 0,
 ]), gl.STATIC_DRAW);
-const aPos = gl.getAttribLocation(prog, "aVertexPosition");
-const aUv = gl.getAttribLocation(prog, "aUvs");
-gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-gl.enableVertexAttribArray(aUv);  gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 16, 8);
+
+/* One program per liquid, as the feature builds them — a world only ever
+   compiles its own, but this page has to show all three side by side.
+
+   Every uniform is looked up from the shader module's own UNIFORMS table rather
+   than from a list kept here. A hand-maintained copy drifts the moment a
+   uniform is added: gl.uniform1f(undefined, x) is a silent no-op, and the new
+   effect simply does not appear in the preview while looking perfectly fine in
+   the source. Which is precisely the failure this page exists to catch. */
+const UNIFORM_NAMES = /*__UNIFORM_NAMES__*/;
+const PROGS = {};
+for (const liquid of LIQUIDS) {
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT, "vertex shader"));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAGS[liquid], liquid + " fragment shader"));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail(liquid + " program failed to link:\n" + gl.getProgramInfoLog(prog));
+  const U = {};
+  for (const name of UNIFORM_NAMES) U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
+  const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
+  if (dead.length) fail("Uniforms declared but not found in the linked " + liquid + " program: " + dead.join(", ") +
+    "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
+  PROGS[liquid] = { prog, U, aPos: gl.getAttribLocation(prog, "aVertexPosition"), aUv: gl.getAttribLocation(prog, "aUvs") };
+}
+/* Which bar program is bound; anything else that binds a program clears it. */
+let bound = null;
+document.body.dataset.programs = LIQUIDS.join(",");
 
 gl.enable(gl.BLEND);
 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 gl.enable(gl.SCISSOR_TEST);
-
-/* Every uniform, looked up once, from the shader module's own UNIFORMS table
-   rather than from a list kept here. A hand-maintained copy drifts the moment a
-   uniform is added: getUniformLocation returns undefined for a name nobody
-   asked for, gl.uniform1f(undefined, x) is a silent no-op, and the new effect
-   simply does not appear in the preview while looking perfectly fine in the
-   source. Which is precisely the failure this page exists to catch. */
-const U = {};
-for (const name of /*__UNIFORM_NAMES__*/) {
-  U[name] = gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name);
-}
-const dead = Object.entries(U).filter(([, v]) => v === null).map(([k]) => k);
-if (dead.length) fail("Uniforms declared but not found in the linked program: " + dead.join(", ") +
-  "\n(a uniform the compiler optimised away is a uniform nothing in the shader reads)");
 
 
 /* ── Numerals ─────────────────────────────────────────────────────────────
@@ -473,8 +548,7 @@ function drawRun(parts, rightPx, midPx, w, h, fitted = false) {
       penX += adv;
     }
   }
-  gl.useProgram(prog);
-  pointAttribs(aPos, aUv);
+  bound = null;
 }
 
 document.fonts.ready.then(() => { atlas = buildAtlas(); });
@@ -725,18 +799,59 @@ for (const f of [1, 0.62, 0.32, 0.12]) {
   add(cb, { title: pct(f), sub: "safe ramp", frac: f, seg: 10, ramp: "safe" });
 }
 
+/* ── The liquids ──────────────────────────────────────────────────────────
+   Cells with a `liquid` of their own ignore the switcher, so the three can be
+   judged side by side at every state that changes how they look. */
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-liq-" + liquid);
+  for (const f of [1, 0.78, 0.5, 0.49, 0.32, 0.18, 0.06]) {
+    add(row, { title: liquid + " · " + pct(f), sub: "<i>uFrac " + f.toFixed(2) + "</i>", frac: f, seg: 10, max: 58, liquid });
+  }
+}
+
+const bloodRow = document.getElementById("row-blood");
+for (const liquid of LIQUIDS) {
+  add(bloodRow, { title: liquid + " · 56%", sub: "<i>above half</i>", frac: 0.56, seg: 10, max: 58, liquid });
+  add(bloodRow, { title: liquid + " · 40%", sub: "<i>bloodied</i>", frac: 0.40, seg: 10, max: 58, liquid });
+}
+
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-react-" + liquid);
+  add(row, { title: "Damage wave", sub: "<i>" + liquid + "</i>", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58, liquid });
+  add(row, { title: "Heal wave", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>early</i>", frac: 0.45, ghost: 0.78, chip: 0.85, flash: 0.5, hit: 0.66, hitX: 0.45, surge: 0.8, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>late</i>", frac: 0.45, ghost: 0.7, chip: 0.3, hit: 0.3, hitX: 0.45, surge: -0.2, seg: 10, max: 58, liquid });
+  add(row, { title: "Heal impact", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 0.5, heal: 1, hit: 0.55, hitX: 0.5, surge: -0.7, seg: 10, max: 58, liquid });
+}
+
+const lavaBreak = document.getElementById("row-lava-break");
+add(lavaBreak, { title: "Lava, intact", sub: "<i>seams at full glow</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava" });
+add(lavaBreak, { title: "Lava, spreading", sub: "<i>0.3s</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 0.3, brkX: 0.62 });
+add(lavaBreak, { title: "Lava, broken", sub: "<i>seams dimmed, gold reads</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.62 });
+add(lavaBreak, { title: "Lava, broken and bloodied", sub: "<i>thicker, calmer, still bright</i>", frac: 0.3, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.55 });
+add(lavaBreak, { title: "Ink, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "ink", brk: 1, brkT: 2.4, brkX: 0.62 });
+add(lavaBreak, { title: "Mercury, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "mercury", brk: 1, brkT: 2.4, brkX: 0.62 });
+
+const shedRow = document.getElementById("row-shed");
+for (const liquid of LIQUIDS) {
+  add(shedRow, { title: liquid + " · shed", sub: "<i>uFlow 0</i>", frac: 0.62, seg: 10, max: 58, liquid, flow: 0 });
+  add(shedRow, { title: liquid + " · shed, bloodied", sub: "<i>uFlow 0</i>", frac: 0.38, seg: 10, max: 58, liquid, flow: 0 });
+}
+
 /* ── The frozen sequence ──────────────────────────────────────────────────
    Each cell owns a BarAnim advanced to a fixed point on the timeline with the
    real step(), then never stepped again. The render loop only advances `live`,
    so everything here holds. Nothing is a drawing of the curve; it is the
    curve, sampled. */
-function frozen(row, { from, to, marks, max }) {
+function frozen(row, { from, to, marks, max, liquid }) {
   for (const ms of marks) {
     const a = new BarAnim(from, { motionScale: 1 });
     a.step(16);
     a.set(to, { max });
     for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
-    const slot = add(row, { title: ms + "ms", sub: "<i>" + (to < from ? "hit" : "heal") + "</i>", seg: 10, max });
+    const sub = "<i>" + (liquid ? liquid + " · " : "") + (to < from ? "hit" : "heal")
+      + " · surge " + a.surge.toFixed(2) + "</i>";
+    add(row, { title: ms + "ms", sub, seg: 10, max, liquid });
     cells[cells.length - 1].anim = a;
   }
 }
@@ -744,6 +859,83 @@ frozen(document.getElementById("row-seq-hit"),
   { from: 0.8, to: 0.45, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 frozen(document.getElementById("row-seq-heal"),
   { from: 0.35, to: 0.72, marks: [0, 55, 130, 240, 380, 620], max: 58 });
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-surge-" + liquid);
+  frozen(row, { from: 0.8, to: 0.45, marks: [70, 180, 330, 520, 900], max: 58, liquid });
+  frozen(row, { from: 0.35, to: 0.72, marks: [70, 180, 330, 520, 900], max: 58, liquid });
+}
+
+/* ── Contact sheets ───────────────────────────────────────────────────────
+   ?sheet=ink|mercury|lava|names shows one purpose-built section and hides the
+   rest of the page, so a headless screenshot of the top of the page is the whole
+   sheet. A liquid sheet is that liquid at 100/62/51/49/40/12% and one hit and
+   one heal, each frozen 200ms after the change, at token size and enlarged. */
+{
+  const sheet = new URLSearchParams(location.search).get("sheet");
+  const page = document.querySelector(".page");
+  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names" || sheet === "compare")) {
+    const keep = new Set();
+    if (sheet === "names") {
+      for (const el of page.children) {
+        if ((el.id || "").startsWith("row-names-") && el.id !== "row-names-zoom") keep.add(el);
+        if (el.tagName === "H2" && el.textContent.startsWith("Names") && !/zoom/.test(el.textContent)) keep.add(el);
+      }
+    } else if (sheet === "compare") {
+      /* The three liquids side by side at token size, twice: the second copy
+         runs 1.5s ahead on the same seed, so one still shows the motion. */
+      const section = document.createElement("section");
+      section.id = "sheet";
+      let html = "";
+      for (const dt of [0, 1.5]) {
+        html += "<h2>token size, 128px · " + (dt ? "t + 1.5s" : "t") + "</h2>";
+        for (const liquid of LIQUIDS) html += "<div class=\"grid sheet-small\" id=\"cmp-" + liquid + "-" + dt + "\"></div>";
+      }
+      section.innerHTML = html;
+      page.prepend(section);
+      keep.add(section);
+      for (const dt of [0, 1.5]) for (const liquid of LIQUIDS) for (const frac of [1, 0.62, 0.49, 0.12]) {
+        add(document.getElementById("cmp-" + liquid + "-" + dt), {
+          title: liquid + " · " + pct(frac), sub: "<i>" + (frac < 0.5 ? "bloodied · " : "") + (dt ? "+1.5s" : "t") + "</i>",
+          frac, seg: 10, max: 58, liquid, w: 128, h: 30.72, seed: 37, timeOffset: dt,
+        });
+      }
+    } else {
+      const section = document.createElement("section");
+      section.id = "sheet";
+      section.innerHTML = "<h2>" + sheet + " · token size, 128px</h2><div class=\"grid sheet-small\" id=\"sheet-small\"></div>"
+        + "<h2>" + sheet + " · enlarged</h2><div class=\"grid sheet-big\" id=\"sheet-big\"></div>";
+      page.prepend(section);
+      keep.add(section);
+      const plan = [
+        { title: "100%", frac: 1 },
+        { title: "62%", frac: 0.62 },
+        { title: "51%", sub: "just above half", frac: 0.51 },
+        { title: "49%", sub: "bloodied", frac: 0.49 },
+        { title: "40%", sub: "bloodied", frac: 0.40 },
+        { title: "12%", sub: "bloodied, low", frac: 0.12 },
+        { title: "Hit, 80 → 50%", sub: "200ms after", change: [0.8, 0.5] },
+        { title: "Heal, 35 → 70%", sub: "200ms after", change: [0.35, 0.7] },
+      ];
+      for (const [id, size] of [["sheet-small", { w: 128, h: 30.72 }], ["sheet-big", { w: 520, h: 96 }]]) {
+        for (const p of plan) {
+          add(document.getElementById(id), {
+            title: p.title, sub: "<i>" + sheet + (p.sub ? " · " + p.sub : "") + "</i>",
+            frac: p.frac ?? 0.6, seg: 10, max: 58, liquid: sheet, ...size,
+          });
+          if (p.change) {
+            const a = new BarAnim(p.change[0], { motionScale: 1 });
+            a.step(16);
+            a.set(p.change[1], { max: 58 });
+            for (let t = 0; t < 200; t += 8) a.step(8);
+            cells[cells.length - 1].anim = a;
+          }
+        }
+      }
+    }
+    for (const el of [...page.children]) if (!keep.has(el)) el.style.display = "none";
+    document.body.dataset.sheet = sheet;
+  }
+}
 
 /* The token stage. */
 const stage = document.getElementById("stage");
@@ -794,6 +986,16 @@ for (const b of document.querySelectorAll("[data-set]"))
   b.addEventListener("click", () => { live.set(+b.dataset.set, { max: 160 }); syncScrub(); });
 const syncScrub = () => { scrub.value = Math.round(live.target * 100); };
 
+const liquidSelect = document.getElementById("liquid");
+for (const liquid of LIQUIDS) {
+  const o = document.createElement("option");
+  o.value = liquid;
+  o.textContent = liquid[0].toUpperCase() + liquid.slice(1);
+  liquidSelect.append(o);
+}
+liquidSelect.value = liquidDefault;
+liquidSelect.addEventListener("change", (e) => { liquidDefault = e.target.value; });
+
 document.getElementById("motion").addEventListener("change", (e) => {
   motionScale = +e.target.value; live.motionScale = motionScale;
 });
@@ -826,8 +1028,7 @@ function draw(now) {
 
   /* ── Pass 1: the bars, into the high-range buffer ───────────────────── */
   gl.bindFramebuffer(gl.FRAMEBUFFER, rtScene.fb);
-  gl.useProgram(prog);
-  pointAttribs(aPos, aUv);
+  bound = null;
   gl.enable(gl.BLEND);
   gl.viewport(0, 0, rtScene.w, rtScene.h);
   gl.scissor(0, 0, rtScene.w, rtScene.h);
@@ -842,6 +1043,9 @@ function draw(now) {
 
     const a = c.anim;
     const s = c.spec;
+    const L = PROGS[s.liquid ?? liquidDefault] ?? PROGS[LIQUIDS[0]];
+    if (bound !== L) { gl.useProgram(L.prog); pointAttribs(L.aPos, L.aUv); bound = L; }
+    const U = L.U;
 
     /* The quad never moves. Every part of an impact happens inside it — the
        sweep crosses it, the ring expands, the trail drains — while the frame
@@ -859,7 +1063,7 @@ function draw(now) {
     const rampKey = a ? liveRamp : (s.ramp || "default");
     const temp = a ? liveTemp : (s.temp ?? 0);
 
-    gl.uniform1f(U.uTime, a ? a.time : t);
+    gl.uniform1f(U.uTime, a ? a.time : t + (s.timeOffset ?? 0));
     gl.uniform1f(U.uTexel, 1 / w);
     gl.uniform1f(U.uAspect, w / h);
     gl.uniform1f(U.uFrac, frac);
@@ -878,9 +1082,12 @@ function draw(now) {
     gl.uniform1f(U.uBreakFlow, isHero ? (s.brkFlow ?? 1) : 0);
     /* Stable per bar, as the token id makes it in play — a fracture that
        reshuffles its shards every frame is confetti. */
-    gl.uniform1f(U.uSeed, c.seed ?? (c.seed = Math.random() * 100));
+    gl.uniform1f(U.uSeed, c.seed ?? (c.seed = s.seed ?? Math.random() * 100));
     gl.uniform1f(U.uSeg, s.seg ?? 0);
-    gl.uniform1f(U.uSegW, s.segW ?? 6);
+    /* The setting is pixels at 100% zoom; the shader wants bar heights, exactly
+       as host.mjs divides it by the bar's world height. */
+    gl.uniform1f(U.uSegW, (s.segW ?? 6) * dpr * SS / h);
+    gl.uniform1f(U.uFade, s.fade ?? 1);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));
@@ -889,6 +1096,10 @@ function draw(now) {
     gl.uniform1f(U.uChip, a ? a.chip : (s.chip ?? 0));
     gl.uniform1f(U.uWave, a ? a.wave : (s.wave ?? 0));
     gl.uniform1f(U.uWaveX, a ? a.waveX : (s.waveX ?? frac));
+    /* The liquid's motion rides the primary bar only, exactly as host.mjs
+       writes it; a shed cell zeroes flow. */
+    gl.uniform1f(U.uFlow, isHero ? (s.flow ?? 1) : 0);
+    gl.uniform1f(U.uSurge, isHero ? Math.max(-1, Math.min(1, a ? a.surge : (s.surge ?? 0))) : 0);
     gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
@@ -983,6 +1194,8 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
     "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
     "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
+    "</b> &nbsp;·&nbsp; surge <b>" + live.surge.toFixed(2) +
+    "</b> &nbsp;·&nbsp; liquid <b>" + liquidDefault +
     "</b> &nbsp;·&nbsp; break <b>" + live.broken.toFixed(2) + "@" + live.breakT.toFixed(2) + "s" +
     "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; material <b>" + (live.motionScale > 0 ? "looping" : "still") + "</b>";
@@ -993,4 +1206,227 @@ function draw(now) {
 }
 
 requestAnimationFrame(draw);
+
+/* Names: the section below adds its bars through the same cell list. */
+window.__rbPreview = { add };
+</script>
+
+<script type="module">
+/* ── Names ────────────────────────────────────────────────────────────────
+   The real layout, fit, cipher, composition and anime.js motion from the shipped
+   modules. Only the pixel compositor below is this page's: in Foundry the same
+   composition is drawn by name.mjs's meshes, here by Canvas2D over the bar the
+   script above renders. */
+import {
+  CIPHER_ADVANCE_OF_CAP, bakeCipherAtlas,
+} from "../scripts/features/resource-bars/cipher-atlas.mjs";
+import {
+  HERO_PAD_Y, LabelMotion, NAME_INK, NAME_LAYOUT, NAME_TIMING, capRatio, composeLabel, displayText,
+  fitLabel, measureEm, nameGeometry, nameRowHeight, rasterBucket, rasterLabel, textRoom, zoomFade,
+} from "../scripts/features/resource-bars/name.mjs";
+import { GM_MARKER, cipherSeed, flurryEpoch } from "../scripts/features/resource-bars/mystify.mjs";
+import { hexToRgb, withAlpha } from "../scripts/core/theme.mjs";
+
+const rgbaOf = (hex, k = 1, a = 1) => {
+  const { r, g, b } = hexToRgb(hex);
+  return "rgba(" + Math.round(r * k) + "," + Math.round(g * k) + "," + Math.round(b * k) + "," + a + ")";
+};
+const PAINT = { ink: rgbaOf(NAME_INK.text), edge: rgbaOf(NAME_INK.edge) };
+const PAINT_GM = { ink: rgbaOf(NAME_INK.text, NAME_INK.gmDim), edge: PAINT.edge };
+const PAINT_MARK = { ink: rgbaOf(NAME_INK.marker), edge: PAINT.edge };
+
+const labels = [];
+let motionScale = 1;
+
+function nameCell(host, spec) {
+  const zoom = spec.zoom ?? 1;
+  const rowH = nameRowHeight(spec.h, spec.scale ?? 1);
+  let cell, slot;
+  if (spec.bar && window.__rbPreview) {
+    slot = window.__rbPreview.add(host, {
+      title: spec.title, sub: spec.sub, frac: spec.frac ?? 0.62, seg: 10, max: spec.max,
+      w: spec.w * zoom, h: spec.h * zoom,
+    });
+    cell = slot.parentElement;
+  } else {
+    cell = document.createElement("div");
+    cell.className = "cell";
+    slot = document.createElement("div");
+    slot.className = "slot nm-empty";
+    slot.style.width = spec.w * zoom + "px";
+    slot.style.height = spec.h * zoom + "px";
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = "<b>" + spec.title + "</b>" + (spec.sub || "");
+    cell.append(slot, cap);
+    host.append(cell);
+  }
+  cell.classList.add("nm-cell");
+  slot.style.marginTop = rowH * zoom + "px";
+  const canvas = document.createElement("canvas");
+  canvas.className = "nm-label";
+  cell.prepend(canvas);
+  const motion = new LabelMotion({ motionScale });
+  motion.show(false);
+  const label = {
+    spec, canvas, motion, zoom, rowH, clock: 0, epoch: 0, rasters: new Map(),
+    seed: cipherSeed(spec.id ?? spec.title),
+    cipher: !!spec.cipher, gm: !!spec.gm,
+  };
+  labels.push(label);
+  return label;
+}
+
+let cipherAtlas = null, markerAtlas = null;
+
+function drawLabel(L, dt) {
+  const { spec, canvas, motion, zoom } = L;
+  motion.motionScale = motionScale;
+  if (motion.hot) motion.step(dt);
+  L.clock += dt;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = spec.w * zoom, cssH = (L.rowH + spec.h) * zoom;
+  /* Keyed on both dimensions and the ratio, not on width alone: a 200px cell at
+     dpr 1.5 is exactly the 300px a fresh canvas already has, and a width-only
+     test leaves it unsized and stretched. */
+  const sizeKey = Math.round(cssW * dpr) + "x" + Math.round(cssH * dpr) + "@" + dpr;
+  if (L.sizeKey !== sizeKey) {
+    L.sizeKey = sizeKey;
+    canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const g = nameGeometry({ baseX: 0, barsTop: L.rowH, w: spec.w, heroH: spec.h, scale: spec.scale ?? 1,
+    bar: spec.bar ? { h: spec.h, pad: HERO_PAD_Y } : null });
+  const device = zoom * dpr;
+  const fade = zoomFade(g.cap * device);
+  if (!motion.drawn || fade <= 0) return;
+  const alpha = motion.state.fade * fade;
+  const mode = L.cipher ? "cipher" : "text";
+  const room = textRoom(g, { marker: L.gm && spec.hidden });
+  const fit = mode === "text" ? fitLabel(displayText(spec.name), { cap: g.cap, maxWidth: room, measure: measureEm, capRatio: capRatio() }) : null;
+  if (mode === "cipher" && motionScale > 0) L.epoch = flurryEpoch(L.clock, L.seed, NAME_TIMING.flurryMs / motionScale);
+  const tick = Math.floor(L.clock / Math.max(1, NAME_TIMING.scrambleMs * motionScale));
+  const adv = g.cap * CIPHER_ADVANCE_OF_CAP;
+  const comp = composeLabel({ mode, fit, seed: L.seed, epoch: L.epoch, tick, decode: motion.state.decode,
+    identify: motion.mode === "identify", adv, maxWidth: room });
+  const left = g.centred ? g.centre - comp.final / 2 : g.left;
+  ctx.setTransform(device, 0, 0, device, 0, 0);
+  ctx.globalAlpha = alpha;
+
+  if (fit && comp.cut > 0) {
+    const font = (g.cap / capRatio()) * fit.scale;
+    const px = rasterBucket(font * device);
+    const key = px + (L.gm ? "gm" : "") + fit.text;
+    let r = L.rasters.get(key);
+    if (!r) { r = rasterLabel(fit.text, px, { paint: L.gm ? PAINT_GM : PAINT }); L.rasters.set(key, r); }
+    const k = font / px;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left - 1, 0, comp.cut + 1, L.rowH + spec.h);
+    ctx.clip();
+    ctx.drawImage(r.canvas, left - r.textX * k, g.baseline - r.baselineY * k, r.width * k, r.height * k);
+    ctx.restore();
+  }
+
+  const glyph = (atlas, ch, cx, size = 1) => {
+    const m = atlas.metrics[ch];
+    if (!m) return;
+    const k = (g.cap * size) / atlas.capPx;
+    ctx.drawImage(atlas.canvas, m.x, 0, atlas.cellW, atlas.cellH,
+      cx - (atlas.cellW * k) / 2, g.capMid - (atlas.cellH * k) / 2, atlas.cellW * k, atlas.cellH * k);
+  };
+  cipherAtlas ??= bakeCipherAtlas({ paint: PAINT });
+  for (const q of comp.glyphs) glyph(cipherAtlas, q.ch, left + q.cx);
+
+  let end = comp.end;
+  if (L.gm && spec.hidden && end > 0) {
+    markerAtlas ??= bakeCipherAtlas({ paint: PAINT_MARK });
+    const size = NAME_LAYOUT.markerOfCap;
+    const half = (g.cap * size * CIPHER_ADVANCE_OF_CAP) / 2;
+    const cx = left + end + g.cap * NAME_LAYOUT.markerGapOfCap + half;
+    glyph(markerAtlas, GM_MARKER, cx, size);
+    end = cx + half - left;
+  }
+
+  const thick = NAME_LAYOUT.rulePx / device;
+  ctx.fillStyle = withAlpha(NAME_INK.rule, NAME_INK.ruleAlpha);
+  const rule = (x0, x1) => { if (x1 > x0) ctx.fillRect(x0, g.capMid - thick / 2, x1 - x0, thick); };
+  if (g.centred) {
+    if (g.flank > 0 && comp.final > 0) {
+      const l = g.centre - comp.final / 2, r = g.centre + comp.final / 2;
+      rule(l - g.flankGap - g.flank, l - g.flankGap);
+      rule(r + g.flankGap, r + g.flankGap + g.flank);
+    }
+  } else {
+    const x0 = left + end + g.ruleGap;
+    if (g.ruleStop - x0 >= g.cap * NAME_LAYOUT.ruleMinOfCap) rule(x0, g.ruleStop);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* A 128px grid gives a 30.72px hero quad; 64px gives the 16px floor. */
+const G128 = { w: 128, h: 30.72 }, G200 = { w: 200, h: 44 }, G64 = { w: 64, h: 16 };
+const row = (id) => document.getElementById(id);
+
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Goblin Warchanter", title: "On a bar", sub: "<i>128px token</i>", max: 58, frac: 0.7 });
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Ogre", title: "Short name", sub: "<i>the rule runs to the cut</i>", max: 120, frac: 0.35 });
+nameCell(row("row-names-a2"), { ...G200, bar: true, name: "Knight-Captain Avery", title: "Large token", sub: "<i>200px</i>", max: 212, frac: 0.9 });
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Ælfrīc Þórsson", title: "Non-Latin", sub: "<i>diacritics; fallback fonts</i>", max: 40, frac: 0.5 });
+
+nameCell(row("row-names-centred"), { ...G128, bar: false, name: "Torch", title: "No bar", sub: "<i>── NAME ──</i>" });
+nameCell(row("row-names-centred"), { ...G128, bar: false, name: "Supply Cache", title: "Loot pile", sub: "<i>same baseline a bar would give</i>" });
+nameCell(row("row-names-centred"), { ...G64, bar: false, name: "Brazier", title: "Small token", sub: "<i>flanks cap at 12% of the width</i>" });
+
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Brute", title: "Fits", sub: "<i>64px</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Warchanter", title: "Shrunk to fit", sub: "<i>≥ 75%</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Ancient Red Dragon of the Ashen Waste", title: "Ellipsis", sub: "<i>75%, then …</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G128, bar: false, name: "Ancient Red Dragon of the Ashen Waste", title: "Ellipsis, no bar", sub: "<i>128px</i>" });
+
+const ciphers = [
+  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "aX93kq", name: "Goblin Warchanter", title: "Hidden, hovered", sub: "<i>on hover or Alt</i>", max: 58, frac: 0.7 }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "Q1z0pp", name: "Ogre", title: "Short real name", sub: "<i>same cipher length rules</i>", max: 120, frac: 0.4 }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: false, cipher: true, id: "mm4Tb2", name: "Ancient Red Dragon of the Ashen Waste", title: "Bar hidden", sub: "<i>a name never needs its bar</i>" }),
+  nameCell(row("row-names-cipher"), { ...G64, bar: true, cipher: true, id: "zz81Lk", name: "Imp", title: "Narrow token", sub: "<i>truncated to the width, not the name</i>", max: 20 }),
+];
+
+nameCell(row("row-names-gm"), { ...G128, bar: true, gm: true, hidden: true, name: "Goblin Warchanter", title: "Players see a cipher", sub: "<i>real name at 70%, ◇ marker</i>", max: 58, frac: 0.7 });
+nameCell(row("row-names-gm"), { ...G128, bar: true, gm: true, hidden: false, name: "Goblin Warchanter", title: "Players see the name", sub: "<i>full brightness, no marker</i>", max: 58, frac: 0.7 });
+
+const dprNow = Math.min(window.devicePixelRatio || 1, 2);
+for (const zoom of [1, 0.8, 0.7, 0.62, 0.55, 0.45]) {
+  const cap = nameGeometry({ baseX: 0, barsTop: 0, w: G128.w, heroH: G128.h, bar: null }).cap * zoom * dprNow;
+  nameCell(row("row-names-zoom"), { ...G128, zoom, bar: true, name: "Goblin Warchanter", title: "zoom " + zoom,
+    sub: "<i>cap " + cap.toFixed(1) + " device px</i>", max: 58, frac: 0.7 });
+}
+
+document.getElementById("nm-motion").addEventListener("change", (e) => { motionScale = +e.target.value; });
+document.getElementById("nm-appear").addEventListener("click", () => {
+  for (const L of labels) { L.motion.hide(false); L.motion.show(true); }
+});
+document.getElementById("nm-fade").addEventListener("click", () => {
+  for (const L of labels) { if (L.motion.shown) L.motion.hide(true); else L.motion.show(true); }
+});
+document.getElementById("nm-identify").addEventListener("click", () => {
+  for (const L of ciphers) { if (!L.cipher) continue; L.cipher = false; L.motion.identify(true); }
+});
+document.getElementById("nm-rehide").addEventListener("click", () => {
+  for (const L of ciphers) { L.cipher = true; L.motion.finish(); }
+});
+
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(50, now - lastT);
+  lastT = now;
+  for (const L of labels) {
+    const r = L.canvas.getBoundingClientRect();
+    if (r.bottom < -40 || r.top > innerHeight + 40) { L.clock += dt; if (L.motion.hot) L.motion.step(dt); continue; }
+    drawLabel(L, dt);
+  }
+  document.body.dataset.nameLabels = String(labels.length);
+  requestAnimationFrame(loop);
+}
+document.fonts.ready.then(() => requestAnimationFrame(loop));
 </script>

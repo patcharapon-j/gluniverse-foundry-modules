@@ -13,6 +13,7 @@ export const PREFIX = "rb.";
 export const SETTINGS = Object.freeze({
   /* World — these change what the table reads, so the GM owns them. */
   enabledBars: PREFIX + "enabledBars",     // "both" | "primary"
+  liquid: PREFIX + "liquid",               // ink | mercury | lava — the primary bar's material
   segmentMode: PREFIX + "segmentMode",     // "count" | "perHp"
   segments: PREFIX + "segments",           // divisions across the fill, 0 = continuous
   segmentSize: PREFIX + "segmentSize",     // HP per division, when mode is perHp
@@ -32,6 +33,12 @@ export const SETTINGS = Object.freeze({
   ramp: PREFIX + "ramp",                   // default | safe
   numbers: PREFIX + "numbers",             // hover | always | never
   numberScale: PREFIX + "numberScale",     // readout size, × the bar-derived default
+
+  /* ── Names ── The label on the bar (see name.mjs / mystify.mjs). Whether the
+     table's names move onto the bars is the GM's; how big one person needs them
+     is theirs. The size shares READOUT's range. */
+  names: PREFIX + "names",                 // world: our label replaces Foundry's nameplate
+  nameScale: PREFIX + "nameScale",         // client: label size, × the bar-derived default
 });
 
 /**
@@ -92,20 +99,18 @@ export const OFFSET = Object.freeze({ min: -3, max: 3, step: 0.05 });
 export const SEGMENTS = Object.freeze({ max: 60, sizeMin: 1, sizeMax: 100 });
 
 /**
- * How wide the gap between two plates is, in **device pixels**.
+ * How wide the gap between two plates is, in **pixels at 100% zoom**.
  *
- * Device pixels and not geometry units for the reason the shader's comment
- * gives at length: a fixed geometry width is ~2px on a HiDPI display and
- * sub-pixel on an ordinary one, where `rbDetail` correctly deletes it and the
- * divisions — and with them the colour-blind position channel — silently
- * disappear for every player without a retina monitor.
+ * World-sized, so the gap scales with the canvas. It used to be held at a fixed
+ * number of device pixels, which was correct about the one thing it set out to
+ * fix — a gap in geometry units is ~2px on a HiDPI display and sub-pixel on an
+ * ordinary one — and wrong about zoom: six pixels at every zoom level is a
+ * hairline on a zoomed-in bar and most of the plate on a zoomed-out one.
  *
- * `min` is not a taste. `rbDetail` fades anything under GL_FADE_HI (2.2 device
- * pixels) out, so a thinner choice than that would not give the GM a *finer*
- * divider, it would give them a *fainter* one — a setting whose lowest values
- * look like a bug. Three is the first whole pixel above that line, so every
- * value the GM can pick draws at full strength. `tools/resource-bar-check.mjs`
- * pins it against the shader's own thresholds.
+ * The host divides this by the bar's world height before it reaches the shader
+ * (`uSegW` is in bar heights), and the shader floors the result at a pixel and a
+ * half. That floor is what keeps the old fix: a zoomed-out bar keeps its
+ * divisions — the colour-blind position channel — rather than losing them.
  */
 export const DIVIDER = Object.freeze({ min: 3, max: 14, step: 1, default: 6 });
 

@@ -43,14 +43,24 @@ const fxGlsl = await import(new URL("scripts/core/fx-glsl.mjs", ROOT).href);
 const initConst = await import(new URL("scripts/features/initiative/constants.mjs", ROOT).href);
 const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs", ROOT).href);
 
-/* ── 1. The uniform table, the GLSL and the JS all agree ────────────────── */
+/* ── 1. The uniform table, every liquid's GLSL and the JS all agree ─────── */
 {
-  const glsl = strip(shader.FRAGMENT_SHADER);
-  const declared = new Set([...glsl.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]));
+  /* Per liquid, because each liquid is its own program. A uniform that only one
+     liquid's chunk reads is declared in all three and optimised out of two, and
+     a bar in a lava world then holds whatever that uniform's initial value was —
+     so "declared" is not enough; each program has to actually read it. */
+  const before = problems;
   const listed = new Set(Object.keys(shader.UNIFORMS));
-
-  for (const u of listed) if (!declared.has(u)) fail(`UNIFORMS lists ${u}, which the GLSL never declares.`);
-  for (const u of declared) if (!listed.has(u)) fail(`GLSL declares ${u}, which UNIFORMS does not list.`);
+  for (const liquid of shader.LIQUIDS) {
+    const glsl = strip(shader.fragmentShader(liquid));
+    const declared = new Set([...glsl.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]));
+    for (const u of listed) if (!declared.has(u)) fail(`UNIFORMS lists ${u}, which the ${liquid} GLSL never declares.`);
+    for (const u of declared) if (!listed.has(u)) fail(`The ${liquid} GLSL declares ${u}, which UNIFORMS does not list.`);
+    const body = glsl.replace(/uniform\s+\w+\s+\w+\s*(\[\d+\])?\s*;/g, "");
+    for (const u of listed)
+      if (!new RegExp(`\\b${u}\\b`).test(body))
+        fail(`The ${liquid} program declares ${u} but never reads it; the compiler will optimise it away and every write to it is lost.`);
+  }
 
   /* A uniform nothing writes is a silent no-op, not an error. */
   const written = strip(hostSrc);
@@ -59,19 +69,22 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (!new RegExp(`\\b${u}\\b`).test(written) && !new RegExp(`\\b${u}\\b`).test(strip(shaderSrc.split("FRAGMENT_SHADER")[0])))
       fail(`${u} is declared but never written from host.mjs — it will always hold its initial value.`);
   }
-  if (!problems) ok(`${listed.size} uniforms: declared, listed and written`);
+  if (problems === before) ok(`${listed.size} uniforms: declared, read and listed in all ${shader.LIQUIDS.length} liquids, and written`);
 }
 
 /* ── 2. uTexel = 0 must be inert ────────────────────────────────────────── */
 {
-  const glsl = strip(shader.FRAGMENT_SHADER);
-  /* Every clamp against px must be a max()/smoothstep that degrades to the
-     unfiltered form at px = 0 — never a divide by it. */
-  const divides = [...glsl.matchAll(/\/\s*uTexel\b/g)];
-  if (divides.length) fail(`The shader divides by uTexel directly in ${divides.length} place(s). Divide by px, which is floored to an epsilon — uTexel itself is 0 whenever the uniform is missing.`);
-  if (!/px = max\(uTexel \* uAspect, [0-9.]+\)/.test(glsl))
-    fail("px is not derived as max(uTexel * uAspect, epsilon); the epsilon is what keeps uTexel 0 inert.");
-  else ok("uTexel 0 is inert (px floors to epsilon, no divisions by px)");
+  const before = problems;
+  for (const liquid of shader.LIQUIDS) {
+    const glsl = strip(shader.fragmentShader(liquid));
+    /* Every clamp against px must be a max()/smoothstep that degrades to the
+       unfiltered form at px = 0 — never a divide by it. */
+    const divides = [...glsl.matchAll(/\/\s*uTexel\b/g)];
+    if (divides.length) fail(`The ${liquid} shader divides by uTexel directly in ${divides.length} place(s). Divide by px, which is floored to an epsilon — uTexel itself is 0 whenever the uniform is missing.`);
+    if (!/px = max\(uTexel \* uAspect, [0-9.]+\)/.test(glsl))
+      fail(`The ${liquid} shader does not derive px as max(uTexel * uAspect, epsilon); the epsilon is what keeps uTexel 0 inert.`);
+  }
+  if (problems === before) ok(`uTexel 0 is inert in all ${shader.LIQUIDS.length} liquids (px floors to epsilon, no divisions by uTexel)`);
 }
 
 /* ── 3. The ramp still mirrors gl-tokens.css ────────────────────────────── */
@@ -164,6 +177,83 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail("visibility.mjs no longer defers to Foundry's own token.bars.visible; recomputing the rule invites drift from core.");
 }
 
+/* ── 6b. Visibility is decided after Foundry's own pass, and hides ────────── */
+{
+  /* The flicker, and the leak that came with it. Foundry sets a render flag and
+     fires hoverToken/controlToken immediately, but assigns bars.visible in
+     _refreshState on the next pass; the refreshToken hook runs after that pass.
+     Deciding anywhere else reads the previous answer — Hover-mode bars came out
+     inverted — and a movement-only refresh that never re-decides leaves a bar
+     on a token that walked out of sight. Every one of these renders correctly
+     on the screen of whoever is testing it. */
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const h = strip(hostSrc);
+  const listens = (name) => new RegExp(`on\\("${name}"`).test(mainSrc);
+  if (listens("hoverToken") || listens("controlToken"))
+    fail("main.mjs listens to hoverToken/controlToken again. Both fire before _refreshState assigns bars.visible, so a decision made there reads the previous answer and inverts Hover-mode bars.");
+  else if (!/on\("refreshToken",\s*\(token,\s*flags\)/.test(mainSrc)
+    || !/flags\?\.refreshState/.test(mainSrc) || !/flags\?\.refreshVisibility/.test(mainSrc))
+    fail("The refreshToken hook no longer routes refreshState/refreshVisibility to a visibility decision, so hovers, Alt and walking out of sight never reach the bar.");
+  else ok("visibility is decided in the refreshToken pass, after Foundry has computed it");
+
+  const unguarded = ["drawToken", "destroyToken", "refreshToken"].filter((n) =>
+    !new RegExp(`on\\("${n}"[\\s\\S]{0,160}isPreview`).test(mainSrc));
+  if (unguarded.length)
+    fail(`${unguarded.join(", ")} do not refuse drag previews. A preview carries the real token's id: bound to it, the real bar follows the ghost and is destroyed when the drag ends.`);
+  else ok("drag previews are refused by every token hook");
+
+  const decide = h.slice(h.indexOf("applyVisibility(entry"));
+  if (/canViewBars\(token\)\)\s*\{\s*this\.remove\(/.test(h))
+    fail("host.mjs destroys an entry when permission takes its bar away. Hide it instead: destroy-and-recreate on every hover is the flicker, and it throws the animation state away.");
+  else if (!/\.hide\(/.test(decide) || !/token\.visible/.test(decide))
+    fail("applyVisibility does not tell leaving sight apart from a hover letting go; a bar fading over a token that just walked out of vision lingers where this client can no longer see.");
+  else ok("bars are hidden rather than destroyed, and leaving sight hides them instantly");
+
+  if (!/setAllRenderFlags(?:\?\.)?\(\{\s*refreshState:\s*true\s*\}\)/.test(h))
+    fail("refreshAll does not force a refreshState pass, so bars built at canvasReady are decided on Foundry's pre-refresh defaults — bars.visible starts true — and show hidden hit points until the first hover.");
+  else if (!/decide:\s*false/.test(mainSrc))
+    fail("The value hooks (updateActor, updateToken, …) decide visibility. They fire before Foundry applies the flags they queue, so their answer is stale.");
+  else ok("nothing decides on stale state: canvasReady forces a pass, value hooks only read");
+}
+
+/* ── 6c. Appearing and letting go are a tight plain fade; leaving sight is instant ── */
+{
+  let bad = 0;
+  const no = (msg) => { fail(msg); bad++; };
+  const r = new anim.RevealAnim({ motionScale: 1 });
+  r.show(false);
+  if (r.fade !== 1 || r.hot) no("An instant show (the first decision after a load) is not instant.");
+  r.hide(true);
+  r.step(16);
+  if (!(r.fade > 0 && r.fade < 1)) no("Hover-out does not fade.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.fadeOutMs / 16) + 2; i++) r.step(16);
+  if (r.drawn || r.hot) no("A bar is still drawn after its fade-out has finished.");
+  r.show(true);
+  r.step(16);
+  if (!(r.fade > 0 && r.fade < 1)) no("A bar becoming visible does not fade in.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.fadeInMs / 16) + 2; i++) r.step(16);
+  if (r.fade !== 1 || r.hot) no("The fade-in never finishes, so the bar stays in the ticker.");
+  r.hide(false);
+  if (r.drawn || r.hot) no("An instant hide — leaving sight — still draws or animates.");
+  const sight = new anim.RevealAnim({ motionScale: 1 });
+  sight.show(false); sight.hide(true); sight.step(16); sight.hide(false);
+  if (sight.drawn || sight.hot) no("Leaving sight during a hover-out fade does not cut the fade short; the bar lingers over a token this client cannot see.");
+  const back = new anim.RevealAnim({ motionScale: 1 });
+  back.show(false); back.hide(true); back.step(40);
+  const f0 = back.fade;
+  back.show(true); back.step(1);
+  if (!(back.fade >= f0) || !back.drawn) no("A bar caught mid fade-out restarts from nothing instead of turning round, which is a flicker of its own.");
+  const still = new anim.RevealAnim({ motionScale: 0 });
+  still.show(true);
+  if (still.fade !== 1 || still.hot) no("At motion \"none\" a bar still fades in.");
+  /* The user asked for this outright: a sweep on every mouse pass is a show. */
+  for (const k of ["fadeInMs", "fadeOutMs"])
+    if (!(anim.TIMING[k] > 0 && anim.TIMING[k] <= 180)) no(`TIMING.${k} is ${anim.TIMING[k]}ms; the bar's fades are meant to be tight (at most 180ms).`);
+  if ("reveal" in r || /uReveal/.test(shaderSrc + hostSrc))
+    no("The left-to-right materialise wipe is back. Appearing is a plain fade.");
+  if (!bad) ok("appearing and letting go are a tight fade that turns round mid-way, leaving sight is instant, motion none is still");
+}
+
 /* ── 7. Every animated behaviour can be shed ────────────────────────────── */
 {
   const h = strip(hostSrc);
@@ -171,7 +261,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave", "breakFlow"];
+                    "sparks", "wave", "breakFlow", "reveal", "flow", "surge"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -413,7 +503,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
        - the extraction not being an identity for the original consumers, which
          changes the token and the card while nothing in this feature is even
          running. */
-  const glsl = strip(shader.FRAGMENT_SHADER);
+  const glsls = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
   const shaderMod = strip(shaderSrc);
   const h = strip(hostSrc);
 
@@ -446,8 +536,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (!goldDrift) ok("the fracture's two golds match the initiative tracker's breakAmber / breakHot");
 
   /* One field, shared — not two that look alike. */
-  if (!/gluBreakField\(/.test(glsl))
-    fail("The bar shader does not call gluBreakField; the fracture is no longer the shared one from core/fx-glsl.mjs.");
+  if (!glsls.every((glsl) => /gluBreakField\(/.test(glsl)))
+    fail("A liquid's bar shader does not call gluBreakField; the fracture is no longer the shared one from core/fx-glsl.mjs.");
   else if (!/FX_GLSL_BREAK_FIELD/.test(shaderMod))
     fail("shader.mjs does not import FX_GLSL_BREAK_FIELD, so whatever gluBreakField it is calling is a local copy.");
   else if (/float gluVoroEdge\(/.test(shaderMod.split("SCALE_PRELUDE")[1] ?? ""))
@@ -467,13 +557,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
      bloom has somewhere to spill; a fracture that is not masked by the silhouette
      draws gold shards floating in that margin, past the cut corner, and looks
      like a rendering fault rather than a broken bar. */
-  const block = /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(glsl)?.[0] ?? "";
-  if (!block) fail("The guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
-  else if (!/mBody/.test(block))
+  const blocks = glsls.map((glsl) => /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(glsl)?.[0] ?? "");
+  if (blocks.some((block) => !block)) fail("A liquid's guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
+  else if (blocks.some((block) => !/mBody/.test(block)))
     fail("The fracture is not masked by mBody; the cracks will spill into the quad's bloom margin, outside the bar's own silhouette.");
-  else if (/0\.299/.test(block))
-    fail("The guard-break block desaturates the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
-  else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone");
+  else if (blocks.some((block) => /0\.299|LAVA_BREAK_CALM/.test(block)))
+    fail("The guard-break block desaturates or dims the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
+  else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone, in every liquid");
 
   /* The break is a different source from the values, and moves on its own. */
   if (!/readBreak\(/.test(h))
@@ -677,30 +767,51 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const REF_BAR_PX = 19;
   const px = 1 / REF_BAR_PX;
   const GL_FADE_LO = 0.8, GL_FADE_HI = 2.2;
-  const glsl = strip(shader.FRAGMENT_SHADER);
+  /* The frame below is shared by every liquid, but each program is assembled
+     separately, so each is checked: a gate lost in one splice is lost in one
+     world. The detail gates are the union over all three. */
+  const variants = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
+  const glsl = variants.join("\n");
 
-  /* The segment gap is deliberately *not* a fixed magnitude: pinned to px it is
-     the same hairline on every display. Check that it still is — a literal
-     creeping back in here is the retina-only-divisions bug returning. */
-  if (!/float gapP = min\(max\(px \* (?:[0-9.]+|uSegW),/.test(glsl))
-    fail("The segment gap is not derived from px. A fixed value is ~2px on a HiDPI display and sub-pixel on an ordinary one, so the divisions vanish for players without a retina monitor.");
-  else ok("segment gap is pinned to device pixels, not geometry units");
+  /* The segment gap is world-sized, so it scales with zoom — and floored in
+     device pixels, so it never falls under the size at which it would vanish.
+     Both halves fail silently. Pinned to px alone it is the same six pixels at
+     every zoom, most of the plate on a zoomed-out table; world-sized with no
+     floor it is sub-pixel on an ordinary display at a normal zoom, and the
+     colour-blind position channel disappears for every player without a retina
+     monitor. */
+  const floors = variants.map((v) => /float gapP = min\(max\(uSegW, px \* ([0-9.]+)\), segW \* [0-9.]+\)/.exec(v));
+  const floor = floors.every(Boolean) ? floors.reduce((lo, f) => (Number(f[1]) < Number(lo[1]) ? f : lo)) : null;
+  if (!floor)
+    fail("The segment gap is not max(uSegW, px * floor): either it is pinned to device pixels again (no zoom scaling) or it has lost its device-pixel floor (divisions vanish on an ordinary display).");
+  else if (Number(floor[1]) < 1)
+    fail(`The segment gap's floor is ${floor[1]} device pixels; under one pixel the antialiasing ramp swallows it and the divisions read as nothing on a zoomed-out bar.`);
+  else ok(`segment gap scales with zoom and is floored at ${floor[1]} device pixels`);
 
-  /* And every width the GM can *choose* has to clear the fade, or the thin end
-     of the slider hands them a fainter divider rather than a finer one — which
-     renders perfectly and reads as the setting being broken. The floor scales
-     with the width for the same reason: a fixed floor makes every width below
-     it draw identically on a tall bar. */
-  if (DIVIDER.min < GL_FADE_HI)
-    fail(`The thinnest divider the GM can pick is ${DIVIDER.min} device pixels, under rbDetail's ${GL_FADE_HI}px fade. That end of the slider fades the divisions out instead of thinning them.`);
+  /* The host is what turns "pixels at 100% zoom" into bar heights. A write that
+     skips the division hands the shader a width fifty times too large, and the
+     segW cap then quietly makes every divider the same maximum width. */
+  const hostPlain = strip(hostSrc);
+  const segWrites = [...hostPlain.matchAll(/uSegW\s*[:=]\s*([^,;\n]+)/g)].map((m) => m[1].trim());
+  const undivided = segWrites.filter((w) => !/\//.test(w) && !/opts\.segW/.test(w));
+  if (!segWrites.length) fail("host.mjs never writes uSegW.");
+  else if (undivided.length)
+    fail(`uSegW is written without dividing by the bar's world height (${undivided.join(" | ")}); the shader expects bar heights, not pixels.`);
   else if (DIVIDER.default < DIVIDER.min || DIVIDER.default > DIVIDER.max)
     fail(`The default divider width (${DIVIDER.default}) is outside the range the setting offers.`);
-  else if (!/max\(px \* uSegW, [0-9.]+ \* uSegW\)/.test(glsl))
-    fail("The segment gap's floor does not scale with uSegW, so every width below it draws the same on a bar tall enough for the floor to win — the thickness setting silently stops doing anything.");
-  else ok(`every divider width ${DIVIDER.min}–${DIVIDER.max}px clears the ${GL_FADE_HI}px fade, and the floor scales with it`);
+  else ok(`every uSegW write converts pixels at 100% zoom into bar heights (${segWrites.length} sites)`);
 
-  const gated = [...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)]
-    .map((m) => ({ raw: m[0], value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) }));
+  /* "Off means no division marks of any kind": the quarter register ticks under
+     the bar are divisions too, and are cut from the same switch. */
+  if (!variants.every((v) => /tickMark \*=[^;]*uSeg/.test(v)))
+    fail("The quarter tick marks under the bar do not follow uSeg, so turning the dividers off still leaves division marks on the bar.");
+  else ok("the quarter tick marks follow the dividers switch");
+
+  const gated = [...new Set([...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)].map((m) => m[0]))]
+    .map((raw) => {
+      const m = /rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/.exec(raw);
+      return { raw, value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) };
+    });
 
   if (!gated.length) fail("No literal rbDetail() gates found; the size-check has nothing to verify.");
   const faint = [];
@@ -712,6 +823,757 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   }
   if (gated.length) ok(`${gated.length} detail gate(s) still resolve on a ${REF_BAR_PX}px bar`);
   if (faint.length) console.log("      partial at the reference size (by design, but worth knowing): " + faint.join(", "));
+}
+
+/* ── 11. Names on the bars, and PF2e mystification ──────────────────────── */
+{
+  /* Every rule below fails silently, and the worst of them fail only on a
+     player's screen. A nameplate hidden with `visible` blinds the permission read
+     it is supposed to feed; a decision taken from a value hook is one event
+     stale; a cipher that grows with the name lets a player count letters; a
+     decode that runs over a hidden name prints it for 600ms; a row that is only
+     reserved while the name is drawn moves the bar under the cursor. None of it
+     throws, and the GM's own screen shows none of it. */
+  const nameMod = await import(new URL("scripts/features/resource-bars/name.mjs", ROOT).href);
+  const myst = await import(new URL("scripts/features/resource-bars/mystify.mjs", ROOT).href);
+  const nameSrc = strip(await src("scripts/features/resource-bars/name.mjs"));
+  const mystSrc = strip(await src("scripts/features/resource-bars/mystify.mjs"));
+  const cipherAtlasSrc = strip(await src("scripts/features/resource-bars/cipher-atlas.mjs"));
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const idxSrc = strip(await src("scripts/features/resource-bars/index.mjs"));
+  const storeSrc = await src("scripts/features/pf2e-creaturedex/store.mjs");
+  const h = strip(hostSrc);
+  let bad = 0;
+  const no = (msg) => { fail(msg); bad++; };
+  const section = (label, fn) => { const before = bad; fn(); if (bad === before) ok(label); };
+  const bodyOf = (text, head) => {
+    const at = text.indexOf(head);
+    if (at < 0) return "";
+    /* The body's brace, not a destructured parameter's. */
+    const sig = text.indexOf(") {", at);
+    const open = sig < 0 ? text.indexOf("{", at) : sig + 2;
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}" && --depth === 0) return text.slice(open, i + 1);
+    }
+    return text.slice(open);
+  };
+
+  section("Foundry's nameplate is suppressed with renderable, never visible, and handed back on disable", () => {
+    const all = [hostSrc, mainSrc, nameSrc, mystSrc].map(strip).join("\n");
+    if (/nameplate\.visible\s*=(?!=)/.test(all))
+      no("Something assigns nameplate.visible. That is Foundry's Display Name answer, which the label reads; hiding the nameplate with it makes every name invisible to ourselves.");
+    if (!/nameplate\.renderable\s*=\s*!host\.reservesLabel\(token\)/.test(mainSrc))
+      no("suppressNative does not suppress the nameplate through renderable, re-evaluated per token — either two names are drawn, or turning the setting off never gives Foundry's back.");
+    if (!/nameplate\)\s*token\.nameplate\.renderable\s*=\s*true/.test(bodyOf(mainSrc, "export function onDisable")))
+      no("onDisable does not restore nameplate.renderable, so disabling the feature leaves every token nameless.");
+  });
+
+  section("the name is decided in the refreshToken pass, from nameplate.visible, beside the bar", () => {
+    if (!/token\.nameplate\.visible/.test(bodyOf(mystSrc, "export function canViewName")))
+      no("canViewName does not read token.nameplate.visible; recomputing Display Name invites drift from core.");
+    if (!/this\.applyLabel\(entry\)/.test(bodyOf(h, "applyVisibility(entry) {")))
+      no("applyVisibility does not decide the label. The name has to be decided in the same pass as the bar — after _refreshState — or it is one event stale.");
+    const calls = [...h.matchAll(/\bdecideLabel\(/g)].length;
+    if (calls !== 1 || !/decideLabel\(facts, ctx\)/.test(bodyOf(h, "applyLabel(entry) {")))
+      no("decideLabel is called outside applyLabel. Every other road in (value hooks, draws, drags) reads stale state.");
+    if (/applyLabel|decideLabel/.test(mainSrc))
+      no("main.mjs decides labels directly; the hooks there fire before Foundry applies the flags they queue.");
+    if (!/flags\?\.refreshNameplate/.test(mainSrc))
+      no("The refreshToken hook does not route refreshNameplate to a decision, so a renamed token keeps its old label.");
+  });
+
+  section("mystification: scope, gate order, and presence", () => {
+    if ([...myst.MYSTIFY_TYPES].sort().join() !== "character,familiar,hazard,npc")
+      no(`MYSTIFY_TYPES is ${myst.MYSTIFY_TYPES.join(", ")}; the design scopes it to character, npc, familiar and hazard. Anything else follows plain Display Name.`);
+    const run = (f, over = {}) => {
+      const calls = { gated: 0, canSee: 0, dex: 0, knows: 0 };
+      const ctx = {
+        namesOn: true, isGM: false, system: "pf2e", highlight: false, NONE: 0,
+        pf2eNamesGated: () => { calls.gated++; return over.gated ?? false; },
+        playersCanSeeName: () => { calls.canSee++; return over.canSee ?? true; },
+        dexActive: () => { calls.dex++; return over.dex ?? false; },
+        dexKnows: () => { calls.knows++; return over.knows ?? true; },
+        ...(over.ctx ?? {}),
+      };
+      const facts = { name: "Goblin Warchanter", displayName: 30, actorType: "npc", nameVisible: false,
+        inSight: true, hover: false, ...f };
+      return { d: myst.decideLabel(facts, ctx), calls, probed: calls.gated + calls.canSee + calls.dex + calls.knows };
+    };
+    let r = run({}, { ctx: { namesOn: false } });
+    if (r.d.reserve || r.probed) no("With names off a label is still reserved or a probe still runs.");
+    r = run({ name: "   " });
+    if (r.d.reserve) no("A token with a blank name reserves a label.");
+    r = run({ nameVisible: false }, { ctx: { system: "dnd5e" }, gated: true, canSee: false, dex: true, knows: false });
+    if (r.probed) no("Outside PF2e a mystification probe ran; the system gate must come first.");
+    if (r.d.present || r.d.text !== "Goblin Warchanter" || r.d.cipher)
+      no("Outside PF2e the label does not follow Display Name alone.");
+    if (run({ displayName: 0 }, { ctx: { system: "dnd5e" } }).d.reserve)
+      no("A non-mystified token whose Display Name is None still reserves a row.");
+    if (!run({ nameVisible: true }, { ctx: { system: "dnd5e" } }).d.present)
+      no("A non-mystified token whose nameplate is visible does not show its label.");
+    r = run({ actorType: "loot", nameVisible: false }, { gated: true, canSee: false, dex: true, knows: false });
+    if (r.probed || r.d.cipher || r.d.present) no("A PF2e loot token was mystified; out-of-scope types follow plain Display Name, so hidden means no label.");
+
+    r = run({}, { gated: true, canSee: false });
+    if (r.d.text !== null || !r.d.cipher) no("PF2e's name-visibility gate does not give a player a cipher.");
+    if (JSON.stringify(r.d).includes("Goblin")) no("A player's decision for a hidden creature carries its name. Nothing downstream can be trusted not to draw a string it was handed.");
+    const gm = run({}, { gated: true, canSee: false, ctx: { isGM: true } }).d;
+    if (gm.text !== "Goblin Warchanter" || !gm.dim || !gm.marker || gm.cipher)
+      no("The GM does not see the real name, dimmed and marked, on a creature players cannot read.");
+    r = run({}, { gated: false, dex: false });
+    if (r.calls.knows) no("The Creaturedex was asked while it is not running.");
+    if (r.d.cipher) no("A creature with no gate closed shows a cipher.");
+    if (!run({}, { gated: false, dex: true, knows: false }).d.cipher) no("The Creaturedex gate does not hide an unknown creature's name.");
+    if (run({}, { gated: false, dex: true, knows: true }).d.cipher) no("A creature the party knows still shows a cipher.");
+    if (!run({}, { gated: true, canSee: false, dex: true, knows: true }).d.cipher) no("Either gate must suffice: knowing a creature in the dex undid PF2e's name-visibility switch.");
+    if (!run({ displayName: 0 }).d.reserve) no("A mystified token's Display Name still decides whether a row is reserved; under mystification it only decides real name versus cipher.");
+
+    /* Presence is the name's own question. Display Name and Display Bars are
+       separate settings on every token, and a label that rode with its bar hid
+       the name of every NPC whose hit points were the GM's business. */
+    if (/barsVisible|vis\.shown/.test(bodyOf(h, "applyLabel(entry) {")) || /barsVisible/.test(mystSrc))
+      no("A name label's presence reads the bar's visibility. A token may show its name without its bar, or its bar without its name.");
+    if (!run({ nameVisible: true }).d.present) no("An NPC whose name this client can read by Display Name does not show it on its own.");
+    if (!run({ actorType: "character", party: true, nameVisible: true }, { gated: true, canSee: true, dex: true, knows: false }).d.present)
+      no("A PC's name does not show on its own when Display Name allows it.");
+    if (run({ nameVisible: false, hover: true }).d.present) no("A readable name shows on hover against its own Display Name setting.");
+    if (run({}, { gated: true, canSee: false }).d.present) no("A cipher shows with no hover and no Display Name allowing it.");
+    if (!run({ hover: true }, { gated: true, canSee: false }).d.present) no("A cipher does not show on hover.");
+    if (!run({}, { gated: true, canSee: false, ctx: { highlight: true } }).d.present) no("A cipher does not show under Alt.");
+    if (run({ hover: true, inSight: false }, { gated: true, canSee: false, ctx: { highlight: true } }).d.present) no("A cipher shows on a token this client cannot see.");
+    if (!run({ nameVisible: true }, { gated: false, dex: true, knows: false }).d.present)
+      no("A creature hidden only by the dex, whose Display Name lets players see it, does not show its cipher without a hover.");
+    if (!run({ hover: true }, { gated: true, canSee: false, ctx: { isGM: true } }).d.present)
+      no("The GM does not see a hidden creature's name where players would see its cipher.");
+
+    /* Two readers who always know the name. Both render perfectly when wrong —
+       as a cipher over somebody's own character, which a table notices at once
+       and nobody files as a leak, so it ships. */
+    r = run({ actorType: "character", party: true }, { gated: false, dex: true, knows: false });
+    if (r.d.cipher) no("A party member wears a cipher under the Creaturedex gate. Nobody reveals a player character in the dex, so every PC would be a mystery the moment it is switched on.");
+    r = run({ owner: true }, { gated: true, canSee: false, dex: true, knows: false });
+    if (r.d.cipher || r.d.text !== "Goblin Warchanter") no("A player sees a cipher on a token they own — their own summon or familiar.");
+    if (!run({ owner: false, party: false }, { gated: false, dex: true, knows: false }).d.cipher)
+      no("The owner/party exceptions leaked into the unowned, non-party case.");
+  });
+
+  section("the cipher carries no letters, no digits, no readout vocabulary, and nothing of the name", () => {
+    const set = Array.from(myst.CIPHER_GLYPHS);
+    if (/[A-Za-z0-9]/.test(myst.CIPHER_GLYPHS)) no("The cipher glyph set contains a letter or a digit.");
+    for (const ch of "+-/%§") if (myst.CIPHER_GLYPHS.includes(ch)) no(`The cipher glyph set contains "${ch}", which the readout uses (or which reads as a letter).`);
+    if (!set.includes(myst.GM_MARKER)) no("The GM marker is not in the cipher atlas, so it draws as a gap.");
+    const sig = /export function cipherGlyphs\(([^)]*)\)/.exec(mystSrc)?.[1] ?? "";
+    if (!sig || /name|text|label/i.test(sig) || sig.split(",").length > 2)
+      no("cipherGlyphs takes more than (seed, epoch). A cipher must not be able to see the name it replaces.");
+    if (myst.cipherSeed.length !== 1 || !/cipherSeed\(entry\.token\?\.id\)/.test(h))
+      no("The cipher is not seeded from the token id alone.");
+    let q = 0, total = 0;
+    const lengths = new Set();
+    for (let i = 0; i < 400; i++) {
+      const seed = myst.cipherSeed("tok" + i.toString(36));
+      const run = myst.cipherGlyphs(seed, 0);
+      lengths.add(run.length);
+      if (run.length < myst.CIPHER_LENGTH.min || run.length > myst.CIPHER_LENGTH.max) no(`A cipher is ${run.length} glyphs long.`);
+      for (const ch of run) { total++; if (ch === "?") q++; if (!set.includes(ch)) no(`A cipher emitted "${ch}", which is not in the atlas.`); }
+      if (myst.cipherGlyphs(seed, 7).join("") !== myst.cipherGlyphs(seed, 7).join("")) no("The cipher is not deterministic.");
+    }
+    if (q / total < 0.25 || q / total > 0.42) no(`"?" is ${(100 * q / total).toFixed(0)}% of cipher glyphs; the design asks for about a third.`);
+    if (lengths.size < 3) no("Cipher lengths barely vary, which makes the length itself a signal.");
+    const fit = nameMod.fitLabel("GOBLIN WARCHANTER", { cap: 9, maxWidth: 200, measure: (t) => t.length * 0.6 });
+    const a = nameMod.composeLabel({ mode: "cipher", fit, seed: 77, adv: 10 });
+    const b = nameMod.composeLabel({ mode: "cipher", seed: 77, adv: 10 });
+    if (JSON.stringify(a) !== JSON.stringify(b) || a.cut !== 0)
+      no("composeLabel's cipher mode changes when a name is present. The cipher must not be able to depend on it.");
+
+    let changes = 0, beats = 0;
+    for (let s = 0; s < 50; s++) {
+      const seed = myst.cipherSeed("flurry" + s);
+      for (let e = 1; e <= 30; e++) {
+        const prev = myst.cipherGlyphs(seed, e - 1), next = myst.cipherGlyphs(seed, e);
+        const d = prev.filter((ch, i) => ch !== next[i]).length;
+        if (d > myst.FLURRY.max) no(`A flurry beat changed ${d} glyphs; it is two or three at a time, not a flicker.`);
+        changes += d; beats++;
+      }
+    }
+    if (changes / beats < 1.2) no("The flurry barely changes anything per beat.");
+    const period = nameMod.NAME_TIMING.flurryMs;
+    const phases = new Set(Array.from({ length: 40 }, (_, i) => myst.flurryEpoch(period / 2, myst.cipherSeed("p" + i), period)));
+    if (phases.size < 2) no("Every token's flurry is on the same beat; the map re-rolls in unison.");
+    if (!/Array\.from\(CIPHER_GLYPHS\)/.test(cipherAtlasSrc)) no("The cipher atlas does not bake CIPHER_GLYPHS, so some cipher glyph draws as a gap.");
+  });
+
+  section("a hidden name is never drawn: no decode, no raster, no texture on a player's label", () => {
+    const S = nameMod.shouldIdentify;
+    if (!S({ cipher: true, text: null }, { text: "X" })) no("Identification (cipher → name) does not decode.");
+    if (S({ text: "X" }, { cipher: true, text: null }) || S({ cipher: true, text: null }, { cipher: true, text: null }) || S({ text: null, cipher: false }, { text: "X" }))
+      no("A decode can start on something other than cipher → name.");
+    const setContent = bodyOf(nameSrc, "setContent(next");
+    if (!/dropRaster\(\)/.test(setContent) || !/cipher:\s*!next\?\.text/.test(setContent))
+      no("setContent does not drop the raster when the name goes, or lets a label hold a name and a cipher at once.");
+    if (!/!c\.text && this\.motion\.decoding/.test(setContent)) no("Losing the name mid-decode does not stop the decode.");
+    const drawName = bodyOf(nameSrc, "drawName(fit");
+    if (!/!this\.content\.text/.test(drawName) || [...nameSrc.matchAll(/acquireRaster\(/g)].length !== 2)
+      no("A name raster can be acquired somewhere other than drawName's guarded path.");
+    if (!/uTex = PIXI\.Texture\.EMPTY/.test(bodyOf(nameSrc, "dropRaster() {")))
+      no("Dropping the raster leaves the old texture bound to the name mesh.");
+    if (/from\s+["'][^"']*pf2e-creaturedex\/app\.mjs["']/.test(mystSrc) || !/import\("\.\.\/pf2e-creaturedex\/app\.mjs"\)/.test(mystSrc) || !/mayView\(/.test(mystSrc))
+      no("mystify.mjs does not resolve CreaturedexApp.mayView lazily. A static import breaks this tool under Node and ties the import graphs together.");
+    const knows = bodyOf(mystSrc, "function dexKnows");
+    if (!/knownSections/.test(knows) || !/falseSections/.test(knows) || !/if \(!dexApp\) \{ loadDex\(onLoad\); return false; \}/.test(knows))
+      no("The dex probe does not count false knowledge, or is not closed (cipher) until the dex has answered.");
+    const storeKey = /const KEY = "([^"]+)"/.exec(storeSrc)?.[1];
+    if (storeKey !== myst.DEX_KNOWLEDGE_SETTING) no(`The dex keeps knowledge in "${storeKey}" but labels refresh on "${myst.DEX_KNOWLEDGE_SETTING}".`);
+    if (!myst.LABEL_SETTING_KEYS.includes("pf2e.metagame_tokenSetsNameVisibility") || !/on\("updateSetting",\s*labelSetting\)/.test(mainSrc))
+      no("Labels are not re-decided when the dex or PF2e's name-visibility setting updates.");
+  });
+
+  section("label motion is anime.js, seeked from the host's clock, and every duration is in NAME_TIMING", () => {
+    const M = nameMod.LabelMotion;
+    const m = new M({ motionScale: 1 });
+    m.show(false);
+    if (m.state.fade !== 1 || m.state.decode !== 1 || m.hot) no("An instant show (first decision) is not instant.");
+    m.hide(true); m.step(16);
+    if (!(m.state.fade > 0 && m.state.fade < 1)) no("A label letting go of a hover does not fade.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.fadeOutMs / 16) + 2; i++) m.step(16);
+    if (m.drawn || m.hot) no("A faded label is still drawn or still animating.");
+    m.show(true); m.step(16);
+    if (!(m.state.fade > 0 && m.state.fade < 1) || m.state.decode !== 1)
+      no("A label appearing does not fade in, or decodes as it appears; on every mouse pass a decode is a show.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.fadeInMs / 16) + 2; i++) m.step(16);
+    if (m.state.fade !== 1 || m.hot) no("The label's fade-in never finishes.");
+    m.identify(true); m.step(16);
+    if (!(m.state.decode > 0 && m.state.decode < 1)) no("Identification does not decode.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.identifyMs / 16) + 2; i++) m.step(16);
+    if (m.state.decode !== 1 || m.hot) no("The identification decode never finishes.");
+    m.hide(false);
+    if (m.drawn) no("Leaving sight does not hide a label instantly.");
+    const off = new M({ motionScale: 1 }); off.identify(true);
+    if (off.hot) no("A label that is not showing ran an identification decode.");
+    const back = new M({ motionScale: 1 }); back.show(false); back.hide(true); back.step(40);
+    const f0 = back.state.fade;
+    back.show(true); back.step(1);
+    if (!(back.state.fade >= f0) || back.state.decode !== 1 || !back.drawn) no("A label caught mid fade-out restarts from nothing instead of turning round.");
+    const sight = new M({ motionScale: 1 }); sight.show(false); sight.hide(true); sight.step(16); sight.hide(false);
+    if (sight.drawn || sight.hot) no("Leaving sight during a label's hover-out fade does not cut it short.");
+    const still = new M({ motionScale: 0 }); still.show(true);
+    if (still.hot || still.state.fade !== 1) no("At motion \"none\" a label still fades in.");
+    if (nameMod.NAME_TIMING.fadeOutMs !== anim.TIMING.fadeOutMs || nameMod.NAME_TIMING.fadeInMs !== anim.TIMING.fadeInMs)
+      no("The label's fades have drifted from the bar's; a name and its bar arrive and leave together.");
+    if (Math.abs(nameMod.NAME_TIMING.identifyMs - 600) > 150) no("Identification is not ~600ms.");
+
+    if (!/autoplay:\s*false/.test(nameSrc) || /\.(play|resume)\(/.test(nameSrc) || /useDefaultMainLoop|engine\.|\.speed\s*=/.test(nameSrc))
+      no("name.mjs autoplays an animation or touches the shared anime.js engine; other features own its loop and speed.");
+    if (!/_anim\.seek\(Math\.min\(this\._t, this\._duration\), true\)/.test(nameSrc)) no("LabelMotion is not advanced by seeking to its own elapsed time.");
+    const tables = nameSrc.replace(/export const [A-Z_]+ = Object\.freeze\(\{[\s\S]*?\}\);/g, "")
+      .replace(/`[\s\S]*?`/g, "")
+      .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+    const literals = [...tables.matchAll(/(?<![\w.])(\d{2,5})(?![\w.])/g)].map((x) => Number(x[1])).filter((n) => n >= 40 && n <= 5000);
+    if (literals.length) no(`name.mjs has millisecond-looking literals outside its tables: ${[...new Set(literals)].join(", ")}.`);
+    if (/core\/motion\.mjs|animate/.test(mystSrc + cipherAtlasSrc)) no("Animation has leaked out of name.mjs, where its timing table is pinned.");
+    if (!/NAME_TIMING\.flurryMs\s*\/\s*Math\.max\(this\.motionScale/.test(nameSrc))
+      no("The flurry period is not scaled by the motion tier (divided: reduced motion must flicker less, not more).");
+    for (const k of ["flurry", "nameDecode"]) {
+      if (!anim.SHED_ORDER.includes(k)) no(`SHED_ORDER does not list "${k}".`);
+      if (!new RegExp(`allows\\("${k}"\\)`).test(h)) no(`host.mjs never gates "${k}", so it cannot be shed.`);
+    }
+  });
+
+  section("a decode starts from what was on screen and ends on the name", () => {
+    const measure = (t) => Array.from(t).length * 0.6;
+    const fit = nameMod.fitLabel("OGRE", { cap: 10, maxWidth: 400, measure, capRatio: 0.7 });
+    const seed = myst.cipherSeed("t1");
+    const start = nameMod.composeLabel({ mode: "text", fit, seed, epoch: 3, decode: 0, identify: true, adv: 11 });
+    const cipher = myst.cipherGlyphs(seed, 3);
+    if (start.cut !== 0 || start.glyphs.map((g) => g.ch).join("") !== cipher.join(""))
+      no("Identification does not start from the exact cipher the player was looking at; the first frame pops.");
+    const done = nameMod.composeLabel({ mode: "text", fit, seed, decode: 1, identify: true, adv: 11 });
+    if (done.glyphs.length || Math.abs(done.cut - fit.width) > 1e-9) no("A finished decode still draws glyphs, or does not show the whole name.");
+    const appear = nameMod.composeLabel({ mode: "text", fit, seed, decode: 0, adv: 11 });
+    const cipherNow = nameMod.composeLabel({ mode: "cipher", seed, decode: 0, adv: 11 });
+    if (appear.glyphs.length || Math.abs(appear.cut - fit.width) > 1e-9 || cipherNow.glyphs.length !== myst.cipherGlyphs(seed, 0).length)
+      no("A label composes a partial run outside identification. Appearing is a fade on the whole label; only cipher → name decodes.");
+  });
+
+  section("long names shrink to 75% and then take an ellipsis, never escaping their width", () => {
+    const measure = (t) => Array.from(t).length * 0.6;
+    const cap = 10, capRatio = 0.7, font = cap / capRatio;
+    const short = nameMod.fitLabel("OGRE", { cap, maxWidth: 200, measure, capRatio });
+    if (short.scale !== 1 || short.text !== "OGRE") no("A name that fits is altered.");
+    const w = measure("GRAND WYRM") * font;
+    const mid = nameMod.fitLabel("GRAND WYRM", { cap, maxWidth: w * 0.85, measure, capRatio });
+    if (!(mid.scale < 1 && mid.scale >= 0.75) || mid.text !== "GRAND WYRM" || mid.width > w * 0.85 + 1e-6) no("A slightly long name is not shrunk to fit.");
+    const long = nameMod.fitLabel("ANCIENT RED DRAGON OF THE ASHEN WASTE", { cap, maxWidth: w * 0.85, measure, capRatio });
+    if (long.scale !== 0.75 || !long.text.endsWith("…") || long.width > w * 0.85 + 1e-6 || !"ANCIENT RED DRAGON OF THE ASHEN WASTE".startsWith(long.text.slice(0, -1).trimEnd()))
+      no("A long name is not shrunk to 75% and then shortened with an ellipsis inside its width.");
+    if (long.stops.length !== long.graphemes.length + 1 || long.stops.some((s, i) => i && s < long.stops[i - 1]) || Math.abs(long.stops.at(-1) - long.width) > 1e-9)
+      no("fitLabel's grapheme stops are not monotonic or do not end at the label's width.");
+    if (nameMod.fitLabel("OGRE", { cap, maxWidth: 1, measure, capRatio }).text !== "") no("A name with no room at all draws a clipped glyph instead of nothing.");
+  });
+
+  section("labels fade continuously below ~6 device pixels of cap height", () => {
+    const Z = nameMod.zoomFade;
+    if (Z(nameMod.NAME_LAYOUT.fadeLoPx) !== 0 || Z(nameMod.NAME_LAYOUT.fadeHiPx) !== 1) no("zoomFade does not run from gone to whole across its band.");
+    if (!(Z(6) > 0 && Z(6) < 1)) no("A 6px cap is not mid-fade.");
+    let prev = 0;
+    for (let px = 0; px <= 12; px += 0.05) {
+      const v = Z(px);
+      if (v < prev - 1e-9 || v - prev > 0.08) { no("zoomFade is not monotonic and continuous; a zoom would pop the label."); break; }
+      prev = v;
+    }
+    if (!/this\.fade = g \? zoomFade\(g\.cap \* this\.scale \* this\.res\)/.test(nameSrc))
+      no("The label's fade is not measured in device pixels (cap × zoom × resolution).");
+  });
+
+  section("hairlines are device pixels; the rule stops short of the cut; pads mirror the shader", () => {
+    if (nameMod.NAME_LAYOUT.rulePx !== 1 || !/NAME_LAYOUT\.rulePx \/ Math\.max\(1e-6, this\.scale \* this\.res\)/.test(nameSrc) || !/s\.height = thick/.test(nameSrc))
+      no("The name rule's thickness is not one device pixel through zoom × resolution; a world-sized hairline vanishes on an ordinary display.");
+    if (!/label\.view\(scale, res\)/.test(h) || !/resolution/.test(bodyOf(h, "viewLabels() {")))
+      no("The host does not hand labels the renderer's resolution.");
+    const glsl = strip(shader.FRAGMENT_SHADER);
+    const pad = /padY = mix\(([0-9.]+), ([0-9.]+), hero\)/.exec(glsl);
+    if (!pad || Number(pad[1]) !== nameMod.RAIL_PAD_Y || Number(pad[2]) !== nameMod.HERO_PAD_Y)
+      no("HERO_PAD_Y / RAIL_PAD_Y no longer mirror the shader's padY, so the name floats off (or into) the bar's top edge.");
+    if (!/import \{[^}]*\bCUT\b[^}]*\} from "\.\/shader\.mjs"/.test(nameSrc)) no("name.mjs does not take CUT from shader.mjs; the rule and the cut corner are one geometry described twice.");
+    const g = nameMod.nameGeometry({ baseX: 0, barsTop: 100, w: 128, heroH: 30, bar: { h: 30, pad: nameMod.HERO_PAD_Y } });
+    const cutLen = 30 * (0.5 - nameMod.HERO_PAD_Y) * shader.CUT;
+    if (!(g.ruleStop < 128 - cutLen) || g.textMax > 128 - cutLen + 1e-9) no("The A2 rule or text runs into the cut corner.");
+    if (g.baseline > 100 + 30 * nameMod.HERO_PAD_Y) no("The name baseline sits inside the bar body.");
+    const c = nameMod.nameGeometry({ baseX: 0, barsTop: 100, w: 128, heroH: 30, bar: null });
+    if (!c.centred || Math.abs(c.baseline - g.baseline) > 1e-9 || c.textMax + 2 * (c.flank + c.flankGap) > 128 + 1e-9)
+      no("A bar-less `── NAME ──` label is not centred within the token on the same baseline its bar would give it.");
+    if (/labels\.filters/.test(h) || !/labels\.zIndex = CONTAINER_Z/.test(h)) no("The label layer is filtered, or does not sort with the bars.");
+    /* The GM's marker sits after the name, so a name that fills the bar pushed it
+       off the token — on the only screen that ever draws it. */
+    const long = "ANCIENT RED DRAGON OF THE ASHEN WASTE";
+    const gmFit = nameMod.fitLabel(long, { cap: g.cap, maxWidth: nameMod.textRoom(g, { marker: true }), measure: (t) => Array.from(t).length * 0.6, capRatio: 0.7 });
+    if (gmFit.width + nameMod.markerSpan(g.cap) > g.textMax + 1e-6)
+      no("A long name leaves no room for the GM's marker, which is then drawn past the bar's right end.");
+    if ([...nameSrc.matchAll(/maxWidth: textRoom\(g, c\)/g)].length !== 2 || !/return x \+ markerSpan\(g\.cap\)/.test(nameSrc))
+      no("The label fits or composes against the geometry's full width, or the marker's drawn span disagrees with the room reserved for it.");
+  });
+
+  {
+    const { host } = await import(new URL("scripts/features/resource-bars/host.mjs", ROOT).href);
+    const saved = { canvas: globalThis.canvas, game: globalThis.game, CONST: globalThis.CONST, opts: host.opts };
+    const before = bad;
+    try {
+      globalThis.CONST = { TOKEN_DISPLAY_MODES: { NONE: 0, HOVER: 30, ALWAYS: 50 } };
+      const stubMesh = () => ({ position: { set(x, y) { this.x = x; this.y = y; } }, scale: { set(x, y) { this.x = x; this.y = y; } }, shader: { uniforms: {} } });
+      const lay = (opts, doc, reading, system = "dnd5e", extra = {}) => {
+        globalThis.game = { system: { id: system }, user: { isGM: false } };
+        globalThis.canvas = { dimensions: { size: 100 } };
+        host.opts = opts;
+        const entry = { token: { x: 40, y: 60, w: 100, h: 100, document: doc, actor: extra.actor ?? null }, reading, meshes: { hero: stubMesh(), rail: stubMesh(), shield: stubMesh() }, ...extra.entry };
+        host.layout(entry);
+        return entry;
+      };
+      const both = { hero: {}, rail: {}, shield: {} };
+      const off = lay({ names: false }, { name: "Ogre", displayName: 30 }, both);
+      const on = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both);
+      if (off.nameRowH !== 0) no("With names off a row is still reserved.");
+      if (!(on.nameRowH > 0) || Math.abs(on.meshes.hero.position.y - off.meshes.hero.position.y - on.nameRowH) > 1e-9)
+        no("The bar stack does not move down by exactly the name row.");
+      const g = nameMod.nameGeometry({ baseX: on.baseX, ...on.labelFrame, scale: 1, bar: { h: on.labelFrame.heroH, pad: nameMod.HERO_PAD_Y } });
+      if (g.baseline - g.cap < 60 + 100 - 1e-9) no("The name row overlaps the token.");
+      const shown = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both, "dnd5e", { entry: { label: { shown: true, setGeometry() {} } } });
+      const hidden = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both, "dnd5e", { entry: { label: { shown: false, setGeometry() {} } } });
+      if (shown.meshes.hero.position.y !== hidden.meshes.hero.position.y) no("The bar moves when the name is drawn — the hover jump.");
+      if (/\b(shown|present|hover)\b/.test(bodyOf(h, "layout(entry) {"))) no("layout() reads whether the label is drawn; the row must depend only on whether one is possible.");
+      const mystic = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 0 }, both, "pf2e", { actor: { type: "npc" } });
+      if (!(mystic.nameRowH > 0)) no("A mystified creature with Display Name None has no row, so its cipher would jump the bar on hover.");
+      const big = lay({ names: true, nameScale: 2 }, { name: "Ogre", displayName: 30 }, both);
+      if (!(big.nameRowH > on.nameRowH)) no("The name size setting does not grow the reserved row, so a larger name overlaps the token.");
+      const only = lay({ names: true, nameScale: 1 }, { name: "Torch", displayName: 30 }, null);
+      if (!(only.nameRowH > 0) || !only.labelFrame || !only.box) no("A token with no bar cannot lay out a name-only label.");
+      if (!/if \(!entry\.reading && !entry\.labelReserve\) \{ this\.remove\(/.test(h))
+        no("refreshToken still removes an entry with no reading even when it can show a name.");
+    } catch (error) {
+      no("The name layout test threw: " + (error?.stack ?? error));
+    } finally {
+      globalThis.canvas = saved.canvas; globalThis.game = saved.game; globalThis.CONST = saved.CONST; host.opts = saved.opts;
+    }
+    if (!/POPUP_RISE \* e\) - \(entry\.nameRowH \|\| 0\)/.test(h)) no("Floating deltas start inside the name row instead of above it.");
+    if (bad === before) ok("the name row is reserved, the bars never jump with a hover, and deltas start above it");
+  }
+
+  section("the settings exist, are read, and have their strings", () => {
+    for (const key of ["names", "nameScale"]) {
+      if (!new RegExp(`SETTINGS\\.${key},\\s*\\{[\\s\\S]{0,80}name:\\s*"GLRB\\.`).test(idxSrc)) no(`SETTINGS.${key} is not registered with a GLRB name in index.mjs.`);
+      if (!new RegExp(`SETTINGS\\.${key}\\b`).test(mainSrc)) no(`main.mjs never reads SETTINGS.${key}, so the setting does nothing.`);
+    }
+    if (!/SETTINGS\.nameScale,[\s\S]{0,200}range:\s*\{\s*min:\s*READOUT\.min,\s*max:\s*READOUT\.max/.test(idxSrc)) no("rb.nameScale does not share the readout's range.");
+  });
+
+  if (!bad) ok("names: every pin above holds");
+}
+
+/* ── 7m. The liquids ─────────────────────────────────────────────────────── */
+{
+  /* Everything in this section renders perfectly when it is wrong. A liquid
+     whose front drifts off the value draws a bar that is a few pixels long or
+     short at every health; a length that springs reads as jelly; a lava that
+     does not dim hides the guard break it is carrying; a program that compiles
+     all three liquids costs every bar three materials; and an animation played
+     on anime.js's shared engine keeps the check tool's own process alive and a
+     bar animating off a clock the hitstop cannot freeze. */
+  const idxSrc = strip(await src("scripts/features/resource-bars/index.mjs"));
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const constants = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
+  const lang = JSON.parse(await src("lang/resource-bars.en.json"));
+  const h = strip(hostSrc);
+  const a = strip(animSrc);
+
+  /* (a) The setting: world-scoped, offering exactly the programs the shader can
+     build, defaulting to ink, with its strings — and a change reaches the bars
+     already on the canvas. */
+  const reg = /world\(SETTINGS\.liquid,\s*\{([\s\S]*?)\}\);/.exec(idxSrc)?.[1] ?? "";
+  const choices = [...((/choices:\s*\{([\s\S]*?)\}/.exec(reg)?.[1]) ?? "").matchAll(/(\w+):\s*"(GLRB\.[\w.]+)"/g)];
+  if (constants.SETTINGS.liquid !== "rb.liquid")
+    fail(`SETTINGS.liquid is ${constants.SETTINGS.liquid}, not rb.liquid.`);
+  else if (!reg)
+    fail("rb.liquid is not registered as a world setting in index.mjs; the liquid is part of what the table reads, not one viewer's preference.");
+  else if (choices.map((m) => m[1]).join(",") !== shader.LIQUIDS.join(","))
+    fail(`The liquid setting offers ${choices.map((m) => m[1]).join(", ") || "nothing"} but the shader builds ${shader.LIQUIDS.join(", ")}; a choice with no program falls back to ink and reads as a setting that does nothing.`);
+  else if (!/default:\s*DEFAULT_LIQUID/.test(reg) || shader.DEFAULT_LIQUID !== "ink")
+    fail("The liquid setting does not default to ink, the calmest of the three.");
+  else if (choices.some((m) => !(m[2] in lang)))
+    fail("A liquid choice has no string; the Control Center would print its key.");
+  else if (/refractive/i.test(lang["GLS.feature.resource-bars.hint"] ?? ""))
+    fail("The feature hint still promises refractive glass, which no longer exists.");
+  else if (!/liquid:\s*LIQUIDS\.includes\(/.test(mainSrc))
+    fail("main.mjs does not resolve the liquid against the shader's own list, so a hand-edited world can hand the host a liquid with no program.");
+  else if (/\bFRAGMENT_SHADER\b/.test(h) || !/fragmentShader\(opts\.liquid/.test(h) || !/fragmentShader\(this\.liquid\)/.test(h))
+    fail("host.mjs compiles something other than the world's liquid (the default alias FRAGMENT_SHADER, or a hard-coded variant), so a lava world draws ink.");
+  else if (!/if \(reliquid\) this\.swapLiquid\(mesh\)/.test(h) || !/liquid:\s*this\.liquid/.test(h))
+    fail("Changing the liquid does not reach the bars already on the canvas (configure never swaps their programs, or new meshes are not built with it).");
+  else ok("rb.liquid is a world setting offering exactly the shader's liquids, defaulting to ink, and every bar on the canvas recompiles when it changes");
+
+  /* (b) One material per program, and the refractive ribbons gone. */
+  const markers = { ink: "inkField", mercury: "sheenQ", lava: "lavaField" };
+  let mixed = 0;
+  if (Object.keys(markers).sort().join() !== [...shader.LIQUIDS].sort().join()) {
+    fail(`A liquid was added without a material marker here (liquids ${shader.LIQUIDS.join(", ")}); this check can no longer tell the programs apart.`);
+    mixed++;
+  }
+  for (const liquid of shader.LIQUIDS) {
+    const g = strip(shader.fragmentShader(liquid));
+    for (const [other, marker] of Object.entries(markers)) {
+      const has = new RegExp(`\\b${marker}\\b`).test(g);
+      if (other === liquid && !has) { fail(`The ${liquid} program does not contain its own material (${marker}).`); mixed++; }
+      if (other !== liquid && has) { fail(`The ${liquid} program also compiles ${other}'s material (${marker}); every bar would pay for a liquid it never draws.`); mixed++; }
+    }
+    if (/glassLight|glassShade|\bglint\b|\bfacet\b/.test(g)) { fail(`The ${liquid} program still carries the refractive ribbons — the "lines and stuff" the liquids replaced.`); mixed++; }
+  }
+  if (shader.fragmentShader("no-such-liquid") !== shader.fragmentShader(shader.DEFAULT_LIQUID))
+    fail("An unknown liquid does not fall back to the default program.");
+  else if (shader.FRAGMENT_SHADER !== shader.fragmentShader(shader.DEFAULT_LIQUID))
+    fail("FRAGMENT_SHADER is no longer the default liquid's program.");
+  else if (!mixed) ok("each liquid's program carries only its own material, and none carries the refractive ribbons");
+
+  /* (c) The idle loop wraps invisibly. Every moving term must turn a whole
+     number of times in it, or the liquid steps once a minute on a bar nobody
+     is watching. */
+  let loopBad = 0;
+  if (shader.IDLE_LOOP_S !== anim.TIMING.idleLoopMs / anim.TIMING.clockMs) {
+    fail(`The shader's IDLE_LOOP_S (${shader.IDLE_LOOP_S}s) is not the loop anim.mjs wraps its clock at (${anim.TIMING.idleLoopMs / anim.TIMING.clockMs}s).`);
+    loopBad++;
+  }
+  for (const liquid of shader.LIQUIDS) {
+    const g = strip(shader.fragmentShader(liquid));
+    const outside = g.replace(/float rbPhase\(float k\) \{[\s\S]*?\n\}/, "").replace(/uniform float uTime;/, "");
+    if (/\buTime\b/.test(outside)) {
+      fail(`The ${liquid} program reads uTime outside rbPhase(); that term is not a whole number of turns of the idle loop and steps when the loop wraps.`);
+      loopBad++;
+    }
+    const turns = [
+      ...[...g.matchAll(/\brbPhase\(([^()]*)\)/g)].map((m) => m[1].trim()),
+      ...[...g.matchAll(/\brbDrift\(([^,()]*),/g)].map((m) => m[1].trim()),
+    ].filter((t) => t !== "float k" && t !== "k");
+    const odd = turns.filter((t) => !/^\d+\.0$/.test(t));
+    if (odd.length) {
+      fail(`The ${liquid} program turns rbPhase/rbDrift by ${odd.join(", ")}; only whole numbers of turns wrap seamlessly.`);
+      loopBad++;
+    }
+  }
+  if (!loopBad) ok(`every idle term in every liquid turns a whole number of times in the ${shader.IDLE_LOOP_S}s loop`);
+
+  /* (d) The edge is a straight, sharp vertical line at the value. The fill mask
+     may depend on x and the value only: anything that reads the height, the
+     clock, the surge or a liquid's field into the edge bends it, and a bent edge
+     is a bar a few pixels long or short at every health that nothing reports. */
+  const glslMod = await import(new URL("scripts/core/glsl.mjs", ROOT).href);
+  const g0s = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
+  const every = (re) => g0s.every((g) => re.test(g));
+  const edgeOf = (g) => /float fillEdge = ([^;]*);/.exec(g)?.[1] ?? "";
+  const chunkCode = (l) => strip(Object.values(shader.LIQUID_CHUNKS[l]).join("\n"));
+  if (g0s.some((g) => /\brbFront\b|\bfrontX\b|\buWobble\b|\buSlosh\b|\bendFade\b/.test(g)))
+    fail("A liquid program still bends the edge: rbFront, frontX, endFade, uWobble or uSlosh is back.");
+  else if (!every(/float fillX\s*=\s*mix\(fx0, fx1, clamp\(uFrac,\s*0\.0, 1\.0\)\);/))
+    fail("fillX is no longer the value mapped straight onto the fill span.");
+  else if (!g0s.every((g) => edgeOf(g) === "rbEdge(fillX + px * 0.5, fillX - px * 0.5, p.x)"))
+    fail(`The fill edge is not rbEdge(fillX ± half a device pixel, p.x); it depends on something besides x and the value, or it is softer than a pixel (${edgeOf(g0s[0]) || "missing"}).`);
+  else if (!every(/float mFill\s*=\s*mFillA \* fillEdge \* segMask;/))
+    fail("The fill mask is not the trough × the edge × the dividers alone; anything else multiplied in is a height-dependent edge.");
+  else if (!every(/rbEdge\(ghostX \+ px \* 0\.5, ghostX - px \* 0\.5, p\.x\)/))
+    fail("The chip trail's edge is no longer a straight line at the trail's value.");
+  else if (!every(/float headIn = rbGauss\(p\.x - fillX,/) || !every(/rbGauss\(p\.x - fillX, 0\.060\)/))
+    fail("The head glow or the flash no longer sits on the straight edge.");
+  else if (shader.LIQUIDS.some((l) => /\b(?:mFill|fillX|fillEdge|mFillA)\s*[*+\-/]?=(?!=)/.test(chunkCode(l))))
+    fail("A liquid chunk writes the fill edge or its mask.");
+  else if (shader.LIQUIDS.some((l) => !/\buSurge\b/.test(strip(shader.LIQUID_CHUNKS[l].fill))))
+    fail("A liquid's fill never reads uSurge, so the surge spring has no job in it — the spring would be animating nothing.");
+  else {
+    /* The edge's width, from the prelude's own GL_EDGE: rbEdge floors a
+       transition at that many device pixels, so half a pixel either side of the
+       value must come out at about one pixel of antialiasing. */
+    const glEdge = Number(/const float GL_EDGE = ([0-9.]+);/.exec(glslMod.SCALE_PRELUDE)?.[1]);
+    const width = Math.max(1, glEdge);
+    if (!(width <= 1.5))
+      fail(`The edge antialiases over ${width} device pixels; the design is a sharp edge of about one.`);
+    else ok(`the fill ends in a straight vertical edge at the value in every liquid — x and the value only, ${width} device pixels of antialiasing — with the chip trail, head glow and flash on it, and the surge moving only texture and light`);
+  }
+
+  /* (d2) The liquid is never darker than its ramp colour. The only colour
+     operations a liquid may use are the three helpers below; their bodies are
+     pinned to the mirrors this check evaluates, the shade ranges are pinned to
+     the floor, and every write in every liquid chunk is pinned to the helpers. */
+  let lumBad = 0;
+  const lumFail = (m) => { fail(m); lumBad++; };
+  const luma = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const clamp01 = (t) => Math.min(1, Math.max(0, t));
+  const shadeJs = (base, f, lo, hi) => base.map((v) => v * (lo + (hi - lo) * clamp01(f)));
+  const lightenJs = (c, to, t) => c.map((v, i) => v + (Math.max(v, to[i]) - v) * clamp01(t));
+  const softenJs = (c, t) => { const g = luma(c); return c.map((v) => v + (g - v) * clamp01(t)); };
+  const saturateJs = (c, t) => { const g = luma(c); return c.map((v) => Math.max(0, g + (v - g) * (1 + clamp01(t)))); };
+  const warmJs = (c, t) => { const k = clamp01(t); return [Math.max(c[0], c[0] + (1 - c[0]) * 0.5 * k), c[1] * (1 - 0.22 * k), c[2] * (1 - 0.30 * k)]; };
+  const head = shader.fragmentShader(shader.DEFAULT_LIQUID);
+  const mirrored = {
+    rbShade: "return base * mix(lo, hi, clamp(field, 0.0, 1.0));",
+    rbLighten: "return mix(c, max(c, toward), clamp(t, 0.0, 1.0));",
+    rbSoften: "return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));",
+    rbSaturate: "return max(vec3(dot(c, LUMA)) + (c - vec3(dot(c, LUMA))) * (1.0 + clamp(t, 0.0, 1.0)), vec3(0.0));",
+    rbWarm: "return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));",
+  };
+  for (const [fn, body] of Object.entries(mirrored)) {
+    const got = new RegExp(`vec3 ${fn}\\([^)]*\\) \\{\\s*([^}]*?)\\s*\\}`).exec(head)?.[1];
+    if (got !== body) lumFail(`${fn}() is not the body this check mirrors (${got ?? "missing"}); the luminance floor would be proven about a different function.`);
+  }
+  if (!/const vec3 LUMA = vec3\(0\.299, 0\.587, 0\.114\);/.test(head))
+    lumFail("LUMA is not the luma weights, so rbSoften's grey is not of equal luma.");
+  if (!(shader.LIQUID_FLOOR >= 0.8))
+    lumFail(`LIQUID_FLOOR is ${shader.LIQUID_FLOOR}; the liquid must stay at least 0.8 of its ramp colour's luminance.`);
+  let seedL = 11;
+  const rndL = () => (seedL = (seedL * 16807) % 2147483647) / 2147483647;
+  let worstLum = Infinity;
+  for (const liquid of shader.LIQUIDS) {
+    const [lo, hi] = shader.LIQUID_SHADE[liquid] ?? [];
+    if (!(lo >= shader.LIQUID_FLOOR && hi >= lo)) { lumFail(`${liquid}'s shade range [${lo}, ${hi}] reaches below LIQUID_FLOOR (${shader.LIQUID_FLOOR}).`); continue; }
+    const fn = strip(shader.LIQUID_CHUNKS[liquid].functions);
+    const cLo = Number(/const float SHADE_LO = ([0-9.]+);/.exec(fn)?.[1]);
+    const cHi = Number(/const float SHADE_HI = ([0-9.]+);/.exec(fn)?.[1]);
+    if (cLo !== lo || cHi !== hi) lumFail(`The ${liquid} program's SHADE_LO/SHADE_HI (${cLo}, ${cHi}) are not LIQUID_SHADE.${liquid}.`);
+    /* Random ramp colours, a shade from anywhere in (and past) the field's
+       range, then six random lighten/soften steps with out-of-range amounts. */
+    /* A liquid that warms does so once, at LAVA_WARMTH, somewhere in its chain. */
+    const warms = /\brbWarm\(/.test(strip(shader.LIQUID_CHUNKS[liquid].fill));
+    for (let n = 0; n < 4000; n++) {
+      const base = [rndL(), rndL(), rndL()];
+      if (luma(base) < 0.02) continue;
+      let c = shadeJs(base, rndL() * 1.4 - 0.2, lo, hi);
+      const warmAt = warms ? Math.floor(rndL() * 6) : -1;
+      for (let s = 0; s < 6; s++) {
+        if (s === warmAt) c = warmJs(c, shader.LAVA_WARMTH);
+        const pick = rndL();
+        const amount = rndL() * 1.4 - 0.2;
+        c = pick < 0.4 ? lightenJs(c, [rndL(), rndL(), rndL()], amount)
+          : pick < 0.7 ? softenJs(c, amount) : saturateJs(c, amount);
+      }
+      worstLum = Math.min(worstLum, luma(c) / luma(base));
+    }
+  }
+  if (worstLum < shader.LIQUID_FLOOR - 1e-9)
+    lumFail(`A chain of rbShade/rbLighten/rbSoften reached ${worstLum.toFixed(3)} of the ramp colour's luminance, under the ${shader.LIQUID_FLOOR} floor.`);
+  for (const liquid of shader.LIQUIDS) {
+    const ch = shader.LIQUID_CHUNKS[liquid];
+    const all = chunkCode(liquid);
+    if (/\bINK0?\b|vec3\(\s*0(?:\.0*)?\s*\)/.test(all))
+      lumFail(`The ${liquid} chunk mixes in INK or black; the liquid never uses dark.`);
+    const fill = strip(ch.fill);
+    const writes = [...fill.matchAll(/\bfillCol\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
+    const firstOk = writes[0]?.[1] === "=" && /^rbShade\(base,/.test(writes[0][2]);
+    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften|Saturate|Warm)\(fillCol,/.test(m[2]));
+    if (!firstOk || !restOk)
+      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften/rbSaturate (or lava's one rbWarm) of itself; any other write can take it below the floor.`);
+    /* rbWarm is the one step that may cost luminance, so it is lava's alone,
+       taken once, at LAVA_WARMTH, and budgeted against the shade floor. */
+    const warmCalls = [...fill.matchAll(/\brbWarm\(([^;]*)\);/g)];
+    if (liquid !== "lava" && warmCalls.length)
+      lumFail(`The ${liquid} fill warms its colour; only lava may lean amber, and only once.`);
+    if (liquid === "lava") {
+      const W = shader.LAVA_WARMTH;
+      const lo = shader.LIQUID_SHADE.lava[0];
+      if (warmCalls.length !== 1 || !/^fillCol, LAVA_WARMTH\)?$/.test(warmCalls[0][1].trim()))
+        lumFail(`The lava fill does not warm exactly once, at LAVA_WARMTH (found ${warmCalls.map((m) => m[1]).join(" | ") || "none"}).`);
+      else if (!(W >= 0.2 && W <= 0.4))
+        lumFail(`LAVA_WARMTH is ${W}; under 0.2 lava cannot be told from ink at token size, over 0.4 green lava reads orange and the health colour stops carrying the reading.`);
+      else if (lo * (1 - 0.3 * W) < shader.LIQUID_FLOOR - 1e-9)
+        lumFail(`Lava's shade floor ${lo} × rbWarm's worst loss (1 − 0.3 × ${W}) is ${(lo * (1 - 0.3 * W)).toFixed(3)}, under LIQUID_FLOOR ${shader.LIQUID_FLOOR}.`);
+      else if (Number(/const float LAVA_WARMTH = ([0-9.]+);/.exec(head)?.[1]) !== W)
+        lumFail("The GLSL LAVA_WARMTH is not the exported constant.");
+    }
+    else if ((fill.match(/\brbShade\(/g) || []).length !== 1 || !/rbShade\(base, [^;]*, SHADE_LO, SHADE_HI\)/.test(fill))
+      lumFail(`The ${liquid} fill does not shade exactly once, inside its own SHADE range.`);
+    const fx = strip(ch.wave + "\n" + ch.impact);
+    const cWrites = [...fx.matchAll(/(?:^|[^\w.])C\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
+    if (cWrites.some((m) => !(m[1] === "+=" || (m[1] === "=" && /^rbLighten\(C,/.test(m[2])))))
+      lumFail(`The ${liquid} wave or impact writes C other than by adding light or rbLighten(C, …); a reaction must never darken the liquid.`);
+  }
+  if (!every(/float readingWell = [^;]*\* \(1\.0 - mFill\);/))
+    lumFail("The reading well darkens the liquid; it may recess the empty trough only.");
+  if (g0s.some((g) => /base = mix\(base, rampAt\(/.test(g)))
+    lumFail("base is pulled towards another ramp colour; bloodied belongs in the liquid, paler and calmer, not in a darker colour.");
+  if (!lumBad)
+    ok(`every liquid stays at or above ${shader.LIQUID_FLOOR}× its ramp colour's luminance: shade ranges ${shader.LIQUIDS.map((l) => l + " " + shader.LIQUID_SHADE[l].join("–")).join(", ")}, worst lighten/soften/saturate chain ${worstLum.toFixed(3)}, and no chunk mixes INK or black or writes colour any other way`);
+
+  /* (d3) Smooth and blended: nothing inside a liquid quantises, steps, draws a
+     crisp shape or a thin band. Hashes and noise live in the shared frame; a
+     chunk only blends them. */
+  const hard = shader.LIQUIDS.flatMap((l) =>
+    [...chunkCode(l).matchAll(/\b(floor|fract|step|rbCover|rbBand|lavaCells|mercuryEnv)\(/g)].map((m) => `${l}: ${m[1]}()`));
+  if (hard.length)
+    fail(`A liquid uses a hard-edged operation (${[...new Set(hard)].join(", ")}); the liquid, its bloodied look and its reactions must be soft and blended.`);
+  else ok("no liquid chunk quantises, steps, or draws a crisp shape or thin band");
+
+  /* (e) The lava calms under a guard break — it never dims. */
+  const lava = strip(shader.fragmentShader("lava"));
+  const calmK = shader.LAVA_BREAK_CALM;
+  if (!(calmK >= 0.4 && calmK <= 1))
+    fail(`LAVA_BREAK_CALM is ${calmK}; under 0.4 the lava's convection still competes with the sharp gold fracture laid over it.`);
+  else if (!/float calm = LAVA_BREAK_CALM \* uBreak;/.test(lava) || !/heat = mix\(heat, [0-9.]+, calm\);/.test(lava) || !/\(1\.0 - calm\)\)/.test(lava))
+    fail("The lava does not calm under uBreak (its variation must flatten and its highlights ease); the gold fracture reads as one more bright wobble.");
+  else if (shader.LIQUIDS.some((l) => l !== "lava" && /LAVA_BREAK_CALM \*/.test(strip(shader.fragmentShader(l)))))
+    fail("A liquid other than lava changes under the guard break.");
+  else ok(`the lava calms by ${Math.round(calmK * 100)}% under a guard break — flatter, never darker — so the sharp gold reads; nothing else changes`);
+
+  /* (f) No length springs, and the one spring there is settles. Structural
+     first, because a spring on a length is one edit away from looking fine. */
+  const springs = [...a.matchAll(/\bspring\(/g)].length;
+  const surgeUses = [...a.matchAll(/\bsurgeSpring\(/g)].length;
+  if (springs !== 1 || !/function surgeSpring\([^)]*\)\s*\{\s*return spring\(/.test(a))
+    fail("anim.mjs calls spring() somewhere other than surgeSpring(); a spring on a length reads as jelly.");
+  else if (surgeUses !== 2 || !/surge:\s*\[[^\]]*\],\s*ease:\s*surgeSpring\(/.test(a))
+    fail("surgeSpring() is given to something other than the surge channel.");
+  else if (/\b(?:in|out|inOut|outIn)(?:Back|Elastic|Bounce)\b/.test(a))
+    fail("anim.mjs uses an overshooting ease (back, elastic or bounce); nothing in the bar may overshoot but the surge.");
+  else ok("the only spring in anim.mjs drives the surge, and no ease overshoots");
+
+  /* …and behaviourally: every length stays inside the span of its change and
+     moves one way only, at full and reduced motion; the surge stays within
+     -1..1, swings back and forth, and comes to rest at exactly 0. */
+  let lengthBad = 0;
+  const noLen = (msg) => { if (lengthBad++ < 4) fail(msg); };
+  for (const scale of [1, 0.6]) {
+    for (const [from, to] of [[1, 0.4], [0.3, 0.9], [0.8, 0.79], [0.05, 1], [1, 0], [0.5, 0.49]]) {
+      const bar = new anim.BarAnim(from, { motionScale: scale });
+      bar.step(16);
+      bar.set(to, { max: 60 });
+      const lo = Math.min(from, to) - 1e-9, hi = Math.max(from, to) + 1e-9;
+      const down = to < from;
+      const prev = { frac: bar.frac, ghost: bar.ghost, num: bar.num };
+      let crossings = 0, sign = Math.sign(bar.surge), steps = 0;
+      for (; steps < 800 && (steps < 2 || bar.hot); steps++) {
+        bar.step(16);
+        for (const key of ["frac", "ghost", "num"]) {
+          const v = bar[key];
+          if (v < lo || v > hi) noLen(`${key} left the span of a ${from}→${to} change at motion ${scale} (reached ${v.toFixed(4)}): a length overshot.`);
+          const moved = v - prev[key];
+          if (down ? moved > 1e-12 : moved < -1e-12) noLen(`${key} reversed during a ${from}→${to} change at motion ${scale}: a length recoiled.`);
+          prev[key] = v;
+        }
+        if (Math.abs(bar.surge) > 1 + 1e-9) noLen(`The surge reached ${bar.surge.toFixed(3)}; the liquids' texture offsets and light lifts assume -1..1.`);
+        const s = Math.sign(bar.surge);
+        if (s && sign && s !== sign) crossings++;
+        if (s) sign = s;
+      }
+      if (bar.frac !== to || bar.num !== to || bar.ghost !== to)
+        noLen(`A ${from}→${to} change did not come to rest exactly on its value (frac ${bar.frac}, readout ${bar.num}, trail ${bar.ghost}).`);
+      if (bar.surge !== 0) noLen(`The surge after a ${from}→${to} change never came to rest (${bar.surge}).`);
+      if (scale === 1 && crossings < 2) noLen(`The surge after a ${from}→${to} change does not swing back and forth (${crossings} crossings); a liquid that only eases back does not surge.`);
+    }
+  }
+  /* A long run of random changes, some mid-flight: nothing ever moves away from
+     its target, and the trail never sits inside the fill. */
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const bar = new anim.BarAnim(0.6);
+  for (let n = 0; n < 80 && lengthBad < 4; n++) {
+    bar.set(Math.round(rnd() * 100) / 100, { max: 40 });
+    let gapF = Math.abs(bar.target - bar.frac), gapN = Math.abs(bar.target - bar.num);
+    const steps = 1 + Math.floor(rnd() * 45);
+    for (let i = 0; i < steps; i++) {
+      bar.step(8 + rnd() * 30);
+      const gf = Math.abs(bar.target - bar.frac), gn = Math.abs(bar.target - bar.num);
+      if (gf > gapF + 1e-9 || gn > gapN + 1e-9) { noLen("Under rapid changes a length moved away from its target — an overshoot or a recoil."); break; }
+      if (bar.ghost < bar.frac - 1e-12) { noLen("Under rapid changes the chip trail fell inside the fill."); break; }
+      gapF = gf; gapN = gn;
+    }
+  }
+  const quiet = new anim.BarAnim(0.8, { motionScale: 0 });
+  quiet.set(0.3);
+  quiet.step(16);
+  const hushed = new anim.BarAnim(0.8);
+  hushed.set(0.3);
+  hushed.step(30);
+  hushed.set(0.5, { silent: true });
+  if (quiet.surge !== 0 || hushed.surge !== 0) noLen("The surge survives motion \"none\" or a silent update.");
+  if (!lengthBad) ok("fill, trail and readout never overshoot or recoil at full or reduced motion, under single or rapid changes; the surge stays in -1..1, swings, and rests at 0");
+
+  /* (g) anime.js is sought, never played, and its shared engine is untouched. */
+  const { engine } = await import(new URL("scripts/vendor/animejs/engine/engine.js", ROOT).href);
+  if (/useDefaultMainLoop|\bengine\b|timeUnit|\bglobals\b|\.speed\s*=|playbackRate|pauseOnDocumentHidden/.test(a))
+    fail("anim.mjs reaches into anime.js's engine or globals. That engine is shared with Insight, the initiative tracker and the rest of the suite; it is not this feature's to configure.");
+  else if (/\.(?:play|resume|restart|reverse)\(/.test(a) || /autoplay:\s*true/.test(a))
+    fail("anim.mjs plays an animation. Played animations run on the shared engine's own frame loop, which the hitstop, the off-screen freeze and motion \"none\" cannot reach.");
+  else if ([...a.matchAll(/\banimate\(/g)].length !== 1 || !/animate\(target, \{ \.\.\.params, autoplay: false, composition: "none" \}\)/.test(a))
+    fail("An animation is built outside tween(), the one place autoplay is turned off.");
+  else if ([...a.matchAll(/\bcreateTimeline\(/g)].length !== 1 || !/createTimeline\(\{ autoplay: false/.test(a))
+    fail("A timeline is built outside timeline(), the one place autoplay is turned off.");
+  else if (/vendor\/animejs/.test(animSrc) || !/from "\.\.\/\.\.\/core\/motion\.mjs"/.test(animSrc))
+    fail("anim.mjs imports anime.js directly rather than through core/motion.mjs, the suite's one entry point.");
+  else if (engine.useDefaultMainLoop !== true || engine.speed !== 1 || engine.reqId || engine._head)
+    fail("After driving bars through every path above, anime.js's shared engine has changed: something was played, scheduled or reconfigured.");
+  else ok("every tween is built paused and sought on the model's clock; the shared anime.js engine is untouched after driving it");
+
+  /* (h) …which is also what lets a plain Node process that drives the model
+     exit. A played animation schedules setImmediate and never lets go. */
+  const { spawnSync } = await import("node:child_process");
+  const animUrl = new URL("scripts/features/resource-bars/anim.mjs", ROOT).href;
+  const driver = `const m = await import(${JSON.stringify(animUrl)});
+    const b = new m.BarAnim(0.8); b.step(16); b.set(0.3, { max: 50 }); b.setBroken(true); b.setHover(true);
+    for (let i = 0; i < 30; i++) b.step(16);
+    b.set(0.9, { max: 50 }); b.step(16); b.setBroken(false); b.step(16);
+    const r = new m.RevealAnim(); r.show(true); r.step(16); r.hide(true); r.step(16);
+    console.log("driven");`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", driver], { encoding: "utf8", timeout: 20000 });
+  if (run.error?.code === "ETIMEDOUT" || run.signal)
+    fail("A Node process that drives the animation model mid-flight does not exit: something in anim.mjs keeps the event loop alive.");
+  else if (run.status !== 0 || !/driven/.test(run.stdout))
+    fail("Driving the animation model in a fresh Node process failed: " + (run.stderr || run.stdout).trim().split("\n").slice(-3).join(" | "));
+  else ok("a fresh Node process driving the model mid-flight exits on its own");
+
+  /* (i) The liquid's motion rides the primary bar only, and every part of it
+     is shed on its own entry — including the idle tick itself. */
+  if (!/const liquid = role === "hero";/.test(h)
+    || !/u\.uFlow = liquid && this\.allows\("flow"\) \? 1 : 0/.test(h)
+    || !/u\.uSurge = liquid && a && this\.allows\("surge"\) \? clamp\(a\.surge, -1, 1\) : 0/.test(h))
+    fail("host.mjs does not write uFlow and uSurge for the primary bar only, each behind its own shed gate (and the surge clamped to -1..1).");
+  else if (/uWobble|uSlosh|"wobble"|"slosh"/.test(h) || anim.SHED_ORDER.includes("wobble") || anim.SHED_ORDER.includes("slosh"))
+    fail("The removed front wobble or slosh is still written by the host or still has a shed entry.");
+  else if (!/const idle = [^;]*this\.allows\("flow"\)/.test(h) || !/const idleFlow = [^;]*this\.allows\("flow"\)/.test(h))
+    fail("Shedding \"flow\" leaves idle bars in the ticker, so the one standing cost every visible bar pays can never be given up.");
+  else ok("the liquid's flow and surge ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
 }
 
 /* ── 10. The shader compiles ────────────────────────────────────────────── */
@@ -743,35 +1605,37 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   }
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  const result = await page.evaluate(({ vert, frag, names }) => {
-    const c = document.createElement("canvas");
-    const gl = c.getContext("webgl2") || c.getContext("webgl");
-    if (!gl) return { error: "no WebGL context" };
-    const build = (type, srcText, label) => {
-      const sh = gl.createShader(type);
-      gl.shaderSource(sh, srcText);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return label + ": " + gl.getShaderInfoLog(sh);
-      return sh;
-    };
-    const vs = build(gl.VERTEX_SHADER, vert, "vertex");
-    if (typeof vs === "string") return { error: vs };
-    const fs = build(gl.FRAGMENT_SHADER, frag, "fragment");
-    if (typeof fs === "string") return { error: fs };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return { error: "link: " + gl.getProgramInfoLog(prog) };
-    /* A uniform the compiler optimised away is a uniform nothing reads. */
-    const dead = [];
-    for (const name of names)
-      if (gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name) === null) dead.push(name);
-    return { dead };
-  }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.FRAGMENT_SHADER, names: Object.keys(shader.UNIFORMS) });
+  for (const liquid of shader.LIQUIDS) {
+    const result = await page.evaluate(({ vert, frag, names }) => {
+      const c = document.createElement("canvas");
+      const gl = c.getContext("webgl2") || c.getContext("webgl");
+      if (!gl) return { error: "no WebGL context" };
+      const build = (type, srcText, label) => {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, srcText);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return label + ": " + gl.getShaderInfoLog(sh);
+        return sh;
+      };
+      const vs = build(gl.VERTEX_SHADER, vert, "vertex");
+      if (typeof vs === "string") return { error: vs };
+      const fs = build(gl.FRAGMENT_SHADER, frag, "fragment");
+      if (typeof fs === "string") return { error: fs };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return { error: "link: " + gl.getProgramInfoLog(prog) };
+      /* A uniform the compiler optimised away is a uniform nothing reads. */
+      const dead = [];
+      for (const name of names)
+        if (gl.getUniformLocation(prog, name === "uRamp" ? "uRamp[0]" : name) === null) dead.push(name);
+      return { dead };
+    }, { vert: shader.PREVIEW_VERTEX_SHADER, frag: shader.fragmentShader(liquid), names: Object.keys(shader.UNIFORMS) });
 
+    if (result.error) fail(`The ${liquid} shader does not compile: ` + result.error);
+    else if (result.dead?.length) fail(`Uniforms optimised away in the ${liquid} program (nothing in it reads them): ` + result.dead.join(", "));
+    else ok(`the ${liquid} fragment shader compiles and links, and every uniform survives`);
+  }
   await browser.close();
-  if (result.error) fail("The shader does not compile: " + result.error);
-  else if (result.dead?.length) fail("Uniforms optimised away (nothing in the shader reads them): " + result.dead.join(", "));
-  else ok("the fragment shader compiles and links, and every uniform survives");
 }
 
 console.log(problems ? `\n${problems} problem(s)` : "\nno problems");

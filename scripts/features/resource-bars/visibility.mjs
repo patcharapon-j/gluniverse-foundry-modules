@@ -17,9 +17,10 @@
  *
  * We prefer Foundry's answer when it has one (below); this exists for the
  * window before `token.bars` is built, and as a guard against a future version
- * moving that property.
+ * moving that property. Exported for the name label's own fallback in
+ * `mystify.mjs`, which reads `nameplate.visible` first for the same reason.
  */
-function canViewMode(token, mode) {
+export function canViewMode(token, mode) {
   const M = CONST.TOKEN_DISPLAY_MODES;
   const highlight = canvas?.tokens?.highlightObjects ?? false;
   switch (mode) {
@@ -40,6 +41,14 @@ function canViewMode(token, mode) {
  * time it refreshes a token, so that is the authority when it exists — reading
  * its answer rather than recomputing one means we cannot drift away from it as
  * the core rules change.
+ *
+ * "By the time it refreshes" is the whole condition. `bars.visible` is assigned
+ * in `Token#_refreshState`, on the render pass *after* a hover or a selection,
+ * so this answer is only current when asked from the `refreshToken` hook. Asked
+ * from `hoverToken` or `controlToken` it is the previous answer, and asked
+ * during `draw()` — which forces `token.visible` false for its duration — it is
+ * "no" for every token nobody controls. `main.mjs` routes every decision
+ * through that hook for this reason.
  */
 export function canViewBars(token) {
   if (!token?.document || token.document.isSecret) return false;

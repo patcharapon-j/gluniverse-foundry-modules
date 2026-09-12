@@ -2,6 +2,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { DIVIDER, FEATURE_ID, OFFSET, PREFIX, READOUT, SEGMENTS, SETTINGS } from "./constants.mjs";
+import { DEFAULT_LIQUID } from "./shader.mjs";
 import { onInit, onReady, api, reconfigure } from "./main.mjs";
 
 /**
@@ -25,6 +26,23 @@ function registerSettings() {
     type: String,
     choices: { both: "GLRB.Settings.EnabledBars.Both", primary: "GLRB.Settings.EnabledBars.Primary" },
     default: "both",
+  });
+
+  /* What fills the primary bar. World-scoped because it is part of what the
+     table reads — two players describing "the one whose lava is sputtering" must
+     be looking at the same material — and because each liquid is its own shader
+     program, swapped on every bar at once when this changes. The choice keys are
+     the shader's LIQUIDS, which resource-bar-check pins. */
+  world(SETTINGS.liquid, {
+    name: "GLRB.Settings.Liquid.Name",
+    hint: "GLRB.Settings.Liquid.Hint",
+    type: String,
+    choices: {
+      ink: "GLRB.Settings.Liquid.Ink",
+      mercury: "GLRB.Settings.Liquid.Mercury",
+      lava: "GLRB.Settings.Liquid.Lava",
+    },
+    default: DEFAULT_LIQUID,
   });
 
   /* Whether the plates are separated at all. A switch rather than a "0 width",
@@ -193,6 +211,29 @@ function registerSettings() {
       never: "GLRB.Settings.Numbers.Never",
     },
     default: "hover",
+  });
+
+  /* ── Names ──────────────────────────────────────────────────────────────
+     The name moves onto the bar. World-scoped because it changes what the whole
+     table reads — and, under PF2e, whether a creature's name is a cipher — and a
+     table where half the screens show Foundry's nameplate and half show ours is
+     two tables describing the same token differently. Off hands every nameplate
+     back to Foundry. */
+  world(SETTINGS.names, {
+    name: "GLRB.Settings.Names.Name",
+    hint: "GLRB.Settings.Names.Hint",
+    type: Boolean,
+    default: true,
+  });
+
+  /* The viewer's own eyes, so the viewer's own setting — the readout's range,
+     because the two are read side by side. */
+  client(SETTINGS.nameScale, {
+    name: "GLRB.Settings.NameScale.Name",
+    hint: "GLRB.Settings.NameScale.Hint",
+    type: Number,
+    range: { min: READOUT.min, max: READOUT.max, step: READOUT.step },
+    default: 1,
   });
 }
 
