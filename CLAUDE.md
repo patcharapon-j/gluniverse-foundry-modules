@@ -382,8 +382,10 @@ antialiasing — and nothing in a liquid (its flow, its bloodied look, its surge
 may bend or move it. The liquid is **never darker than its ramp colour**: a
 liquid chunk may shade `base` only through `rbShade` inside its `LIQUID_SHADE`
 range (never below `LIQUID_FLOOR`), and otherwise only lighten (`rbLighten`) or
-move towards or away from an equal-luma grey (`rbSoften` / `rbSaturate`); the
-check evaluates those helpers and ranges numerically and refuses INK or black
+move towards or away from an equal-luma grey (`rbSoften` / `rbSaturate`) — plus,
+in lava alone, one amber lean (`rbWarm` at `LAVA_WARMTH`, bounded 0.2–0.4) that
+deliberately biases the health colour and whose worst luminance loss is budgeted
+against lava's shade floor; the check evaluates those helpers and ranges numerically and refuses INK or black
 mixes, darkening writes and sub-floor multipliers inside the chunks. Each
 liquid's identity therefore lives in how its light *moves* — ink's drifting
 plumes, mercury's gliding sheen, lava's pulsing pools — at a feature scale that

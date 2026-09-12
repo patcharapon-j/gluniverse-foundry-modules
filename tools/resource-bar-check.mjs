@@ -1318,12 +1318,14 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const lightenJs = (c, to, t) => c.map((v, i) => v + (Math.max(v, to[i]) - v) * clamp01(t));
   const softenJs = (c, t) => { const g = luma(c); return c.map((v) => v + (g - v) * clamp01(t)); };
   const saturateJs = (c, t) => { const g = luma(c); return c.map((v) => Math.max(0, g + (v - g) * (1 + clamp01(t)))); };
+  const warmJs = (c, t) => { const k = clamp01(t); return [Math.max(c[0], c[0] + (1 - c[0]) * 0.5 * k), c[1] * (1 - 0.22 * k), c[2] * (1 - 0.30 * k)]; };
   const head = shader.fragmentShader(shader.DEFAULT_LIQUID);
   const mirrored = {
     rbShade: "return base * mix(lo, hi, clamp(field, 0.0, 1.0));",
     rbLighten: "return mix(c, max(c, toward), clamp(t, 0.0, 1.0));",
     rbSoften: "return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));",
     rbSaturate: "return max(vec3(dot(c, LUMA)) + (c - vec3(dot(c, LUMA))) * (1.0 + clamp(t, 0.0, 1.0)), vec3(0.0));",
+    rbWarm: "return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));",
   };
   for (const [fn, body] of Object.entries(mirrored)) {
     const got = new RegExp(`vec3 ${fn}\\([^)]*\\) \\{\\s*([^}]*?)\\s*\\}`).exec(head)?.[1];
@@ -1345,11 +1347,15 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (cLo !== lo || cHi !== hi) lumFail(`The ${liquid} program's SHADE_LO/SHADE_HI (${cLo}, ${cHi}) are not LIQUID_SHADE.${liquid}.`);
     /* Random ramp colours, a shade from anywhere in (and past) the field's
        range, then six random lighten/soften steps with out-of-range amounts. */
+    /* A liquid that warms does so once, at LAVA_WARMTH, somewhere in its chain. */
+    const warms = /\brbWarm\(/.test(strip(shader.LIQUID_CHUNKS[liquid].fill));
     for (let n = 0; n < 4000; n++) {
       const base = [rndL(), rndL(), rndL()];
       if (luma(base) < 0.02) continue;
       let c = shadeJs(base, rndL() * 1.4 - 0.2, lo, hi);
+      const warmAt = warms ? Math.floor(rndL() * 6) : -1;
       for (let s = 0; s < 6; s++) {
+        if (s === warmAt) c = warmJs(c, shader.LAVA_WARMTH);
         const pick = rndL();
         const amount = rndL() * 1.4 - 0.2;
         c = pick < 0.4 ? lightenJs(c, [rndL(), rndL(), rndL()], amount)
@@ -1368,9 +1374,26 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     const fill = strip(ch.fill);
     const writes = [...fill.matchAll(/\bfillCol\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
     const firstOk = writes[0]?.[1] === "=" && /^rbShade\(base,/.test(writes[0][2]);
-    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften|Saturate)\(fillCol,/.test(m[2]));
+    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften|Saturate|Warm)\(fillCol,/.test(m[2]));
     if (!firstOk || !restOk)
-      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften/rbSaturate of itself; any other write can take it below the floor.`);
+      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften/rbSaturate (or lava's one rbWarm) of itself; any other write can take it below the floor.`);
+    /* rbWarm is the one step that may cost luminance, so it is lava's alone,
+       taken once, at LAVA_WARMTH, and budgeted against the shade floor. */
+    const warmCalls = [...fill.matchAll(/\brbWarm\(([^;]*)\);/g)];
+    if (liquid !== "lava" && warmCalls.length)
+      lumFail(`The ${liquid} fill warms its colour; only lava may lean amber, and only once.`);
+    if (liquid === "lava") {
+      const W = shader.LAVA_WARMTH;
+      const lo = shader.LIQUID_SHADE.lava[0];
+      if (warmCalls.length !== 1 || !/^fillCol, LAVA_WARMTH\)?$/.test(warmCalls[0][1].trim()))
+        lumFail(`The lava fill does not warm exactly once, at LAVA_WARMTH (found ${warmCalls.map((m) => m[1]).join(" | ") || "none"}).`);
+      else if (!(W >= 0.2 && W <= 0.4))
+        lumFail(`LAVA_WARMTH is ${W}; under 0.2 lava cannot be told from ink at token size, over 0.4 green lava reads orange and the health colour stops carrying the reading.`);
+      else if (lo * (1 - 0.3 * W) < shader.LIQUID_FLOOR - 1e-9)
+        lumFail(`Lava's shade floor ${lo} × rbWarm's worst loss (1 − 0.3 × ${W}) is ${(lo * (1 - 0.3 * W)).toFixed(3)}, under LIQUID_FLOOR ${shader.LIQUID_FLOOR}.`);
+      else if (Number(/const float LAVA_WARMTH = ([0-9.]+);/.exec(head)?.[1]) !== W)
+        lumFail("The GLSL LAVA_WARMTH is not the exported constant.");
+    }
     else if ((fill.match(/\brbShade\(/g) || []).length !== 1 || !/rbShade\(base, [^;]*, SHADE_LO, SHADE_HI\)/.test(fill))
       lumFail(`The ${liquid} fill does not shade exactly once, inside its own SHADE range.`);
     const fx = strip(ch.wave + "\n" + ch.impact);

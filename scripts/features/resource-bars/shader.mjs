@@ -28,8 +28,9 @@
  *   - **The liquid is never darker than its ramp colour.** Every liquid chunk
  *     shades `base` through `rbShade` inside its own LIQUID_SHADE range (never
  *     below LIQUID_FLOOR) and otherwise only lightens (`rbLighten`), moves
- *     towards (`rbSoften`) or away from (`rbSaturate`) an equal-luma grey. No
- *     black, no INK, no
+ *     towards (`rbSoften`) or away from (`rbSaturate`) an equal-luma grey —
+ *     plus, in lava alone, one bounded amber lean (`rbWarm`, LAVA_WARMTH) whose
+ *     worst loss is budgeted against the floor. No black, no INK, no
  *     darkening gradient. The trough, the dividers and the guard-break seams are
  *     not the liquid and keep their dark.
  *
@@ -206,7 +207,7 @@ export const LIQUID_FLOOR = 0.8;
 export const LIQUID_SHADE = Object.freeze({
   ink: Object.freeze([0.84, 1.10]),
   mercury: Object.freeze([0.90, 1.05]),
-  lava: Object.freeze([0.86, 1.10]),
+  lava: Object.freeze([0.92, 1.12]),
 });
 
 /**
@@ -220,6 +221,21 @@ export const LIQUID_SHADE = Object.freeze({
  * it; the floor holds.
  */
 export const LAVA_BREAK_CALM = 0.6;
+
+/**
+ * How far the lava leans amber, through `rbWarm`, 0..1.
+ *
+ * This deliberately biases the health colour. At token size ink and lava were
+ * both a saturated fill in the same hue and could not be told apart; warmth is
+ * what makes lava lava. It is bounded so the reading survives: green lava is a
+ * warm, yellow-leaning green rather than orange, blue lava (the colour-blind-safe
+ * ramp) is a warmer blue, and red stays danger red — `rbWarm` lifts red into its
+ * headroom and only eases green and blue, so it can never pull a hue across the
+ * ramp. It is the one colour step in any liquid allowed to cost luminance, at
+ * most `1 - 0.3 × LAVA_WARMTH`, and `resource-bar-check` pins that the lava's
+ * shade floor times that factor stays at or above LIQUID_FLOOR.
+ */
+export const LAVA_WARMTH = 0.35;
 
 const f4 = (n) => n.toFixed(4);
 const shadeConsts = (liquid) =>
@@ -235,6 +251,7 @@ const float BREAK_DENSE = ` + f4(BREAK_DENSE) + `;
 const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
 const float LAVA_BREAK_CALM = ` + f4(LAVA_BREAK_CALM) + `;
+const float LAVA_WARMTH = ` + f4(LAVA_WARMTH) + `;
 const float LOOP_W = ` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
@@ -444,6 +461,14 @@ vec3 rbSaturate(vec3 c, float t) {
   return max(vec3(dot(c, LUMA)) + (c - vec3(dot(c, LUMA))) * (1.0 + clamp(t, 0.0, 1.0)), vec3(0.0));
 }
 
+/* Towards amber: red lifted into its headroom (never lowered, even above 1),
+   green and blue eased by at most 22% and 30% of t. Luma cannot fall below
+   (1 - 0.3t) of the input — the only bounded loss any liquid may take, and lava
+   alone takes it, once. */
+vec3 rbWarm(vec3 c, float t) {
+  return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));
+}
+
 /* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. The
    trough, the frame and the fracture's seams use these; no liquid does. */
 const vec3 INK  = vec3(0.043, 0.059, 0.090);
@@ -466,10 +491,11 @@ export const LIQUID_CHUNKS = Object.freeze({
   ink: Object.freeze({
     functions: shadeConsts("ink") + `
 float inkField(vec2 lq, float driftA, float driftB, float fold) {
-  /* About a bar height per swirl along the bar and half that across it — big
-     enough to read on a 19px bar, never grain. driftA must be whole turns of
-     period 12 and driftB of period 8, which the call sites guarantee. */
-  vec2 w = vec2(lq.x * 1.2, lq.y * 2.0);
+  /* Fewer, larger plumes: about a bar height and a third per swirl along the
+     bar and two-thirds of one across it, so a 19px bar holds two or three of
+     them and each is big enough to read. driftA must be whole turns of period
+     12 and driftB of period 8, which the call sites guarantee. */
+  vec2 w = vec2(lq.x * 0.75, lq.y * 1.5);
   vec2 warp = vec2(rbNoise(w * 0.5 + vec2(driftB, 1.7), 8.0),
                    rbNoise(w * 0.5 + vec2(-driftB, 5.3), 8.0));
   return rbNoise(w + (warp - 0.5) * fold + vec2(driftA, 0.0), 12.0);
@@ -490,13 +516,15 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
       float slowI = bloodied > 0.001 ? inkField(lqI, rbDrift(1.0, 12.0), rbDrift(1.0, 8.0), 1.2) : 0.0;
       fieldI = mix(quickI, slowI, bloodied);
     } else {
-      fieldI = rbNoise(vec2(lqI.x * 1.2, lqI.y * 2.0), 12.0);
+      fieldI = rbNoise(vec2(lqI.x * 0.75, lqI.y * 1.5), 12.0);
     }
+    /* High contrast between a vivid, saturated body and near-white plumes —
+       still only lighter, still blended over a wide soft band. */
     float ampI = mix(1.0, 0.45, bloodied);
-    fillCol = rbShade(base, mix(0.5, smoothstep(0.2, 0.8, fieldI), ampI), SHADE_LO, SHADE_HI);
-    fillCol = rbSaturate(fillCol, 0.35 * (1.0 - bloodied));
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.30), smoothstep(0.35, 0.65, fieldI) * 0.55 * ampI);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.60), smoothstep(0.62, 0.92, fieldI) * 0.80 * ampI);
+    fillCol = rbShade(base, mix(0.5, smoothstep(0.25, 0.60, fieldI), ampI), SHADE_LO, SHADE_HI);
+    fillCol = rbSaturate(fillCol, 0.60 * (1.0 - bloodied));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(0.45, 0.70, fieldI) * 0.35 * ampI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.78), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);
     fillCol = rbSoften(fillCol, 0.50 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), 0.30 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);
@@ -660,16 +688,20 @@ float lavaField(vec2 lq, float drift) {
     float pulse = mix(0.5 + 0.5 * sin(rbPhase(20.0) + heat * 3.0),
                       0.5 + 0.5 * sin(rbPhase(7.0) + heat * 3.0), bloodied);
     fillCol = rbShade(base, heat, SHADE_LO, SHADE_HI);
-    fillCol = rbSaturate(fillCol, mix(0.60, 0.15, bloodied));
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.78, 0.42), 0.30), mix(0.45, 0.20, bloodied));
+    /* The warmth: the whole body leans amber, deliberately biasing the health
+       colour — green lava is a yellow-leaning green, blue lava a warmer blue,
+       red stays red. The one bounded loss of luminance in any liquid. */
+    fillCol = rbWarm(fillCol, LAVA_WARMTH);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.72, 0.30), 0.35), mix(0.40, 0.25, bloodied));
     float pools = smoothstep(0.45, 0.95, heat) * mix(0.55 + 0.45 * pulse, 0.60 + 0.15 * pulse, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.95, 0.80), 0.55) * 1.10,
-                        pools * mix(0.95, 0.45, bloodied) * (1.0 - calm));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), 0.60) * 1.20,
+                        pools * mix(1.0, 0.50, bloodied) * (1.0 - calm));
+    fillCol = rbSaturate(fillCol, mix(0.65, 0.30, bloodied));
     float shimmerL = 0.0;
     if (uFlow > 0.5) shimmerL = 0.5 + 0.5 * sin(lqL.y * 7.0 - rbPhase(48.0) + 1.5 * sin(lqL.x * 2.2 + rbPhase(9.0)));
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), shimmerL * mix(0.14, 0.05, bloodied) * (1.0 - calm));
-    fillCol = rbSoften(fillCol, 0.35 * bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), 0.22 * bloodied + abs(uSurge) * 0.18);
+    fillCol = rbSoften(fillCol, 0.20 * bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), 0.18 * bloodied + abs(uSurge) * 0.18);
 `,
     wave: `
   if (uWave > 0.001) {

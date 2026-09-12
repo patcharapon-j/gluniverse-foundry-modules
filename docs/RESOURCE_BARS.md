@@ -256,7 +256,7 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 |---|---|
 | **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and pale plumes of the health colour, blending as they move along the tube |
 | **Mercury** | a pearly, silvered body with a broad, soft, bright sheen gliding the length of the bar — reflective through a travelling highlight, never through dark bands |
-| **Lava** | a warm, saturated glow in the health colour with brighter pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
+| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
 
 Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
 visible, low-frequency motion made only of lighter tints and saturation: features
@@ -264,6 +264,16 @@ between a third of a bar height and a whole one, and speeds under a bar height a
 second, calm enough for forty tokens on a map. A first pass at "smooth and light"
 was so even that the three read as the same pastel plate; the identity has to
 live in *how the light moves*, because darkness is not available to carry it.
+
+Motion alone did not separate ink from lava at 19px — both were a saturated fill
+in the same hue — so **lava's warmth deliberately biases the health colour**.
+`LAVA_WARMTH` leans its whole body amber through `rbWarm`, which lifts red into
+its headroom and only eases green and blue: green lava is a yellow-leaning green,
+blue lava on the colour-blind-safe ramp a warmer blue, and a nearly dead lava is
+still danger red, because the lean can never carry a hue across the ramp. It is
+bounded in the check (0.2–0.4), and it is the one colour step in any liquid that
+may cost luminance. Ink goes the other way: fewer, larger plumes, with the
+contrast between a vivid body and near-white peaks turned up.
 
 They replaced a refractive-glass material — travelling ribbons of caustic light
 with glints and a facet pattern — that did its job as *glass* and failed as
@@ -326,9 +336,10 @@ three things to a colour, all defined in the shared frame:
 | `rbLighten(c, toward, t)` | towards a lighter colour channel by channel (`max(c, toward)`), so no channel can drop |
 | `rbSoften(c, t)` | towards a grey of the **same** luma, so paler and never darker |
 | `rbSaturate(c, t)` | away from that grey, at the same luma: more colour, and clamping a negative channel only adds light |
+| `rbWarm(c, t)` | lava only, once, at `LAVA_WARMTH`: red lifted into its headroom, green and blue eased, so luma can fall to `1 − 0.3t` and no further — the check requires lava's shade floor times that factor to stay at or above the floor |
 
 Each fill is one `rbShade` followed only by `rbLighten`/`rbSoften`/`rbSaturate`
-of itself;
+of itself (and, in lava alone, one `rbWarm`);
 each wave may only `rbLighten` or add light, and each impact only adds light.
 `resource-bar-check` pins the helpers' bodies to JavaScript mirrors, evaluates
 thousands of random shade-lighten-soften chains against the floor, and refuses
