@@ -682,6 +682,14 @@ A creature's name is **hidden from players** when either:
 - the Creaturedex is enabled and `CreaturedexApp.mayView(actor)` is null for this
   user.
 
+Two readers are exempt, and both exemptions are easy to lose because the failure
+looks harmless. **The party** (`actor.alliance === "party"`) is never an unknown
+creature: PF2e's own rule already says so, but the dex has no such clause —
+nobody reveals a player character in it — so without the exemption every PC and
+companion wears a cipher the moment the Creaturedex is switched on. And **an
+owner** always reads the name of what they own: a player's own summon or familiar
+is not a mystery to them, whatever the table has hidden from everyone else.
+
 When mystification applies, Display Name stops deciding whether a label shows and
 starts deciding which label: the real name, or a **cipher**. A label with a bar
 this player can see rides with that bar; a label whose bar is hidden from them

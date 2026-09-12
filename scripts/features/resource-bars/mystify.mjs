@@ -236,7 +236,12 @@ export function labelReserved(facts, ctx) {
  */
 export function hiddenFromPlayers(facts, ctx) {
   if (ctx.pf2eNamesGated() && !ctx.playersCanSeeName(facts)) return true;
-  if (ctx.dexActive() && !ctx.dexKnows(facts)) return true;
+  /* The party is never an unknown creature. PF2e's own rule already says so
+     (`playersCanSeeName` is true for alliance "party"); the dex has no such
+     clause, because nobody reveals a *player character* in it — so without this
+     every PC and companion in the party would wear a cipher the moment the
+     Creaturedex was switched on. */
+  if (ctx.dexActive() && !facts.party && !ctx.dexKnows(facts)) return true;
   return false;
 }
 
@@ -265,7 +270,7 @@ export function decideLabel(facts, ctx) {
   const hidden = hiddenFromPlayers(facts, ctx);
   /* The one line the leak rules rest on. A player's decision for a hidden
      creature never carries its name, so nothing downstream can draw it. */
-  const text = hidden && !ctx.isGM ? null : name;
+  const text = hidden && !ctx.isGM && !facts.owner ? null : name;
   const present = facts.barsVisible
     ? true
     : !!facts.inSight && (!!facts.hover || !!ctx.highlight);
@@ -309,6 +314,11 @@ export function tokenFacts(token, { barsVisible = false } = {}) {
     barsVisible: !!barsVisible,
     inSight: !!token?.visible && !doc?.isSecret,
     hover: !!token?.hover,
+    /* A player always knows the name of something they own — their own
+       summon, familiar or hireling — whatever the table has hidden from the
+       rest of the party. */
+    owner: !!token?.isOwner,
+    party: token?.actor?.alliance === "party",
   };
 }
 

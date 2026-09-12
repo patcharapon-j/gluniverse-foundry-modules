@@ -905,6 +905,16 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (!run({ hover: true }).d.present) no("With its bar hidden, a mystified label does not show on hover.");
     if (!run({}, { ctx: { highlight: true } }).d.present) no("With its bar hidden, a mystified label does not show under Alt.");
     if (run({ hover: true, inSight: false }, { ctx: { highlight: true } }).d.present) no("A mystified label shows on a token this client cannot see.");
+
+    /* Two readers who always know the name. Both render perfectly when wrong —
+       as a cipher over somebody's own character, which a table notices at once
+       and nobody files as a leak, so it ships. */
+    r = run({ actorType: "character", party: true }, { gated: false, dex: true, knows: false });
+    if (r.d.cipher) no("A party member wears a cipher under the Creaturedex gate. Nobody reveals a player character in the dex, so every PC would be a mystery the moment it is switched on.");
+    r = run({ owner: true }, { gated: true, canSee: false, dex: true, knows: false });
+    if (r.d.cipher || r.d.text !== "Goblin Warchanter") no("A player sees a cipher on a token they own — their own summon or familiar.");
+    if (!run({ owner: false, party: false }, { gated: false, dex: true, knows: false }).d.cipher)
+      no("The owner/party exceptions leaked into the unowned, non-party case.");
   });
 
   section("the cipher carries no letters, no digits, no readout vocabulary, and nothing of the name", () => {
