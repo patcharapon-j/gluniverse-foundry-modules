@@ -1,39 +1,54 @@
 /**
  * GLUniverse Suite — resource bars: the animation model.
  *
- * Pure and dependency-free: this module owns *when* a bar looks like what, and
- * knows nothing about PIXI, Foundry, or the DOM. That is what lets the preview
- * harness drive the real thing rather than an approximation of it.
+ * This module owns *when* a bar looks like what, and knows nothing about PIXI,
+ * Foundry, or the DOM. That is what lets the preview harness drive the real
+ * thing rather than an approximation of it.
  *
  * Every duration lives in TIMING and nowhere else. `tools/resource-bar-check.mjs`
  * pins that — a raw `260` in the update path would survive every test while
  * silently ignoring the user's motion tier, which is not a failure anyone would
  * report as a bug.
  *
+ * ── anime.js, sought rather than played ──
+ *
+ * The tweens are anime.js timelines and animations, and none of them is ever
+ * *played*. Each is built with `autoplay: false` and moved with `.seek(ms)` on
+ * this model's own clock, which the PIXI ticker advances through `step(dt)`.
+ *
+ * The suite's anime.js engine is shared — Insight, the initiative tracker and
+ * half a dozen other features run their DOM animations on it — so it is not
+ * this feature's to reconfigure: no engine speed, no main loop, no globals. And
+ * a played animation would put these tweens on that engine's own
+ * requestAnimationFrame, which cannot know three things this model depends on:
+ * that the hitstop freezes every channel mid-flight, that an off-screen bar's
+ * idle clock is frozen while its transitions keep running, and that a bar at
+ * motion "none" gets no frames at all. Seeking keeps one clock in charge. It is
+ * also what lets the check tool drive the model under plain Node, where a
+ * played animation would schedule `setImmediate` and keep the process alive.
+ *
+ * The *clocks* — the idle loop and the guard break's shatter clock — stay
+ * arithmetic. They are not tweens: they run for as long as a creature exists.
+ *
  * ── The shape of a change ──
  *
- * A value change is not one animation, it is a short sequence, and the order is
- * what makes it read as an event rather than as a transition:
- *
  *   0ms    the fill snaps to the new value and everything *stops*
- *   ~55ms  the hitstop releases; the sweep and the ring both start from a
- *          standstill rather than from mid-flight
+ *   ~55ms  the hitstop releases; the sweep, the ring and the slosh all start
+ *          from a standstill rather than from mid-flight
  *   ~180ms the chip trail begins to drain, white-hot, cooling as it goes
  *   ~420ms the readout has finished counting to the new number
- *   ~720ms the sweep has crossed the bar and gone
+ *   ~500ms the sweep has crossed the bar and gone
+ *   ~1.4s  the front's slosh has settled
  *
- * Two pieces carry it. The **hitstop** is easy to leave out and impossible to
- * unsee afterwards: a beat of held frames before the reaction is most of what
- * separates "the number went down" from "that hurt". The **sweep** is what you
- * catch from the corner of your eye — a front crossing the whole bar in the
- * direction the value moved.
- *
- * What is deliberately absent is any spring. No overshoot, no recoil, no
- * settle, and nothing at all touching the fill's height. Springs are the
- * standard way to make a bar feel alive and on a bar they read as jelly; an
- * instrument that wobbles is an instrument you stop trusting. Every length here
- * decelerates once, cleanly, and stops.
+ * **No length springs.** The fill, the chip trail and the readout each
+ * decelerate once, cleanly, and stop — springs are the standard way to make a
+ * bar feel alive and on a *length* they read as jelly; an instrument that
+ * wobbles is an instrument you stop trusting. The one spring here moves the
+ * liquid's front around the value, never the value: `slosh` bends the meniscus,
+ * and the shader keeps its centre exactly on `frac`.
  */
+
+import { animate, createTimeline, eases, spring } from "../../core/motion.mjs";
 
 /**
  * Durations in unscaled milliseconds, each named for the `--gl-d-*` token it
@@ -41,7 +56,7 @@
  * exactly as `--gl-motion-scale` does for CSS.
  */
 export const TIMING = Object.freeze({
-  idleLoopMs: 64000, // four refraction cycles; exact wrap for every idle channel
+  idleLoopMs: 64000, // the idle loop; every idle term in the shader turns a whole number of times in it
   clockMs: 1000,   // shader clock, milliseconds per second
   stopMs: 55,      // the hitstop: every channel holds its first frame
   holdMs: 180,     // --gl-d-quick   the beat before the chip trail starts draining
@@ -54,14 +69,15 @@ export const TIMING = Object.freeze({
   waveMs: 440,     // the wave crossing the bar
   sweepInMs: 420,  // --gl-d-move    gloss fading in on hover
   sweepOutMs: 540, // --gl-d-glide   and back out
-  hitMs: 480,      // the impact ring + spokes, from landing to gone
+  hitMs: 480,      // the impact reaction, from landing to gone
   punchMs: 300,    // the readout scaling up and settling back
   popupMs: 950,    // a floating delta, rise and fade
-  hotMs: 2200,     // how long a bar keeps animating after a change (see COLD below)
+  hotMs: 2200,     // how long a bar keeps animating after a change (see `hot`)
   breakInMs: 715,  // the guard-break fracture spreading (see BREAK_SETTLE_S)
   breakOutMs: 320, // --gl-d-brisk   and fading again when the break is cleared
   revealMs: 260,   // --gl-d-brisk   a bar materialising as it becomes visible
   fadeOutMs: 150,  // a bar fading when a hover or a selection lets go of it
+  sloshMs: 380,    // the front's slosh spring, perceived; it settles in about 3.5× this
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
@@ -104,31 +120,77 @@ export const POPUP_RISE = 1.00;
 /** Peak scale of the readout punch. */
 export const PUNCH = 0.08;
 
-const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
+/**
+ * How springy the front's slosh is. Anime.js's `bounce`: at 0.6 the front swings
+ * through the value about three times — a quarter as far back the first time —
+ * and is still inside a spring's rest threshold well before `hotMs` lets the
+ * bar go cold.
+ */
+export const SLOSH_BOUNCE = 0.6;
 
-/** Cubic ease-out — the readout's count, which should arrive rather than creep. */
-const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+/** The share of the wave's life spent crossing; the rest is its fade. */
+export const WAVE_TRAVEL = 0.72;
+
+const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
 /**
  * Quintic ease-out. Everything that moves a *length* uses this.
  *
  * No overshoot, no oscillation, no spring. An earlier pass had the fill recoil
  * past its new value and ring back onto it, and the trail settle the same way;
- * both are the standard way to make a bar feel alive and both read, on a bar,
- * as jelly. A health bar is an instrument. What makes it satisfying is a long
- * clean deceleration that arrives exactly once and stops.
+ * both read, on a bar, as jelly. What makes it satisfying is a long clean
+ * deceleration that arrives exactly once and stops.
  */
-const glide = (t) => 1 - Math.pow(1 - t, 5);
+const GLIDE = eases.outQuint;
+
+/** Cubic ease-out — the readout's count, which should arrive rather than creep. */
+const COUNT = eases.outCubic;
 
 /**
  * The sweep's own travel: near-linear, with only a slight deceleration.
  *
  * A quintic here would put the front three-quarters of the way down the bar in
  * the first fifth of its life and then crawl, which is the wrong shape for the
- * one thing meant to be caught peripherally — by the time the eye arrives the
- * crossing has already happened. A sweep wants to be *seen* crossing.
+ * one thing meant to be caught peripherally. A sweep wants to be *seen*
+ * crossing. `out(1.7)` is `1 - (1 - t)^1.7`.
  */
-const travel = (t) => 1 - Math.pow(1 - t, 1.7);
+const TRAVEL = eases.out(1.7);
+
+/** 1 → 0 as `(1 - t)^1.8`: a chip cools fast and then lingers warm. */
+const COOL = eases.out(1.8);
+
+/** 1 → 0 as `(1 - t)^1.6`: a linear decay reads as a shape being scaled rather
+ *  than as light going out. */
+const FADE_OUT = eases.out(1.6);
+
+const LINEAR = eases.linear;
+
+/** 0 → peak → 0, with the settle drawn out: the readout's punch. */
+const PUNCH_CURVE = (t) => Math.sin(t * Math.PI) * Math.pow(1 - t, 0.55);
+
+/** The idle strength of the hover gloss. */
+const IDLE_SWEEP = 0.22;
+
+/**
+ * One tween, never played. The suite's engine is shared, so every animation
+ * this feature builds is created paused and moved only by `seek()`.
+ */
+function tween(target, params) {
+  return animate(target, { ...params, autoplay: false, composition: "none" });
+}
+
+/** A paused timeline whose children neither compose with nor override anything. */
+function timeline() {
+  return createTimeline({ autoplay: false, defaults: { composition: "none", ease: LINEAR } });
+}
+
+/**
+ * The only spring in the feature, and the only thing it may be given to.
+ * `resource-bar-check` refuses a spring anywhere else in this file.
+ */
+function sloshSpring(durationMs) {
+  return spring({ bounce: SLOSH_BOUNCE, duration: durationMs });
+}
 
 /**
  * One bar's live visual state.
@@ -150,48 +212,25 @@ export class BarAnim {
 
     this.bloom = 0;
     this.flash = 0;
-    this.sweep = 0;
+    this.sweep = IDLE_SWEEP;
     /** How fresh the chip trail is: 1 the frame it is cut, 0 once cooled. */
     this.chip = 0;
 
-    this._changedAt = -Infinity;
-    this._stop = 0;
-    this._hold = 0;
-    this._drain = 1;
-    this._ghostFrom = this.frac;
-    this._fillFrom = this.frac;
-    this._fillT = 1;
-    this._numFrom = this.frac;
-    this._numT = 1;
-    this._bloomT = 1;
-    this._flashT = 1;
-    this._chipT = 1;
-    this._hover = false;
-    this._now = 0;
-    this.time = 0;
-    this.idleFrozen = false;
-
     /* Impact state. `hitX` is where the value *was* when it changed, so the
-       ring emanates from the point on the bar that moved rather than from its
-       middle — the difference between an effect that belongs to the event and
-       one that belongs to the widget. */
+       reaction emanates from the point on the bar that moved rather than from
+       its middle. */
     this.hit = 0;
     this.hitX = 1;
     this.heal = 0;
     this.punch = 0;
-    this._hitT = 1;
-    this._punchT = 1;
 
-    /* The change wave: a front that travels the span the value moved, in the
-       direction it moved. `wave` is its amplitude, `waveX` where its front has
-       got to as a fraction along the bar. Rendered by the shader; the two
-       endpoints live here because only the model knows where the value came
-       from. */
+    /* The change wave: `wave` is its amplitude, `waveX` where its front has got
+       to as a fraction along the bar. */
     this.wave = 0;
     this.waveX = this.frac;
-    this._waveA = this.frac;
-    this._waveB = this.frac;
-    this._waveT = 1;
+
+    /** The front's slosh, -1..1: a spring around 0 that bends the meniscus. */
+    this.slosh = 0;
 
     /* The guard break. `broken` is how present the fracture is (the shatter is
        its own arrival, so this goes to 1 at once and only fades on the way out);
@@ -202,16 +241,59 @@ export class BarAnim {
     this.breakX = this.frac;
     /** Set by the renderer from the shed budget: freeze the fracture, keep it. */
     this.breakFrozen = false;
-    this._breakOn = false;
-    this._breakOutT = 1;
 
     /** Floating deltas, newest last. Each is { text, heal, t } with t in 0..1. */
     this.popups = [];
+
+    /** The shader's idle clock, in seconds, wrapping at TIMING.idleLoopMs. */
+    this.time = 0;
+    this.idleFrozen = false;
+
+    /** Real milliseconds this model has been stepped. */
+    this._now = 0;
+    /** The same, less every hitstop — the clock every tween is sought on. */
+    this._live = 0;
+    this._changedAt = -Infinity;
+    this._stop = 0;
+    this._hover = false;
+    this._breakOn = false;
+
+    /* Live tweens, each { tw, at }: `at` is the `_live` time it started.
+         _impact    one change's whole reaction — replaced by every set()
+         _drain     the chip trail's hold-and-drain, which a heal does not cancel
+         _breakOut  the fracture fading when a break is cleared
+         _gloss     the hover gloss */
+    this._impact = null;
+    this._drain = null;
+    this._breakOut = null;
+    this._gloss = null;
   }
 
   /** A duration in TIMING, scaled by the user's motion tier. 0 disables motion. */
   _ms(key) {
     return TIMING[key] * this.motionScale;
+  }
+
+  _play(tw) {
+    return { tw, at: this._live };
+  }
+
+  /** Seek a tween to where this model's clock says it is. False once finished. */
+  _seek(slot) {
+    const local = this._live - slot.at;
+    const end = slot.tw.duration;
+    slot.tw.seek(local < end ? local : end);
+    return local < end;
+  }
+
+  /** Every length at its target, every reaction at rest, nothing running. */
+  _settle() {
+    this.frac = this.ghost = this.num = this.target;
+    this.waveX = this.target;
+    this._stop = 0;
+    this._impact = this._drain = null;
+    this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = this.slosh = 0;
+    this.popups.length = 0;
   }
 
   /**
@@ -227,25 +309,18 @@ export class BarAnim {
     const next = clamp01(frac);
     if (next === this.target) return;
 
-    // Cancel the previous length tween before changing direction. A damage
-    // event during a heal must not keep interpolating from the old heal origin.
-    this._fillT = 1;
-    this._bloomT = 1;
-    this._flashT = 1;
-    this._chipT = 1;
+    /* Every change replaces the previous change's reaction wholesale, fill glide
+       included, so a damage event during a heal never keeps interpolating from
+       the old heal origin: the fill stays wherever the glide had got to. The
+       chip trail's drain is the one thing a heal leaves running — the span the
+       last hit took is still lost. */
+    this._impact = null;
     const damaged = next < this.target;
     const delta = next - this.target;
-    const from = this.target;
     this.target = next;
 
     if (silent || this.motionScale === 0) {
-      this.frac = this.ghost = this.num = next;
-      this.waveX = next;
-      this._stop = this._hold = 0;
-      this._drain = this._fillT = this._numT = 1;
-      this._hitT = this._punchT = this._waveT = 1;
-      this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = 0;
-      this.popups.length = 0;
+      this._settle();
       return;
     }
 
@@ -254,48 +329,88 @@ export class BarAnim {
 
     /* The impact fires for both directions — a heal that lands silently reads
        as a number quietly changing, which is the thing we are replacing. */
-    this._hitT = 0;
-    this._punchT = 0;
     this.hitX = damaged ? next : this.frac;
     this.heal = damaged ? 0 : 1;
-
-    /* The readout counts rather than snaps, in both directions. */
-    this._numFrom = this.num;
-    this._numT = 0;
-
-    /* The sweep crosses the *whole* bar, not just the span that changed.
-       Scoped to the delta it is a detail you have to already be looking at the
-       bar to catch, and on a one-point heal it is a flicker two pixels wide.
-       Crossing the full length in the direction the value moved makes it the
-       thing that tells you, from the corner of your eye, that something
-       happened and which way — which is the job. */
-    this._waveA = damaged ? 1 : 0;
-    this._waveB = damaged ? 0 : 1;
-    this._waveT = 0;
 
     if (max > 0) {
       const n = Math.round(Math.abs(delta) * max);
       if (n > 0) {
-        this.popups.push({ text: (damaged ? "-" : "+") + n, heal: damaged ? 0 : 1, t: 0 });
+        const pop = { text: (damaged ? "-" : "+") + n, heal: damaged ? 0 : 1, t: 0 };
+        pop._slot = this._play(tween(pop, { t: [0, 1], duration: this._ms("popupMs"), ease: LINEAR }));
+        this.popups.push(pop);
         /* A burst of small hits must not become a wall of text. */
         if (this.popups.length > 4) this.popups.shift();
       }
     }
 
     if (damaged) {
-      // The fill drops immediately; the ghost stays put and drains after a beat.
-      this.ghost = Math.max(this.ghost, this.frac);
+      /* The fill drops immediately; the ghost stays put and drains after a
+         beat, from wherever an earlier drain had got to.
+
+         `next` is in the max as well, for a damage that lands above a heal
+         still gliding up — a value of 0.89 hit down to 0.88 while the fill is
+         drawn at 0.87. The fill snaps to the true value, which is *up*, and a
+         trail left at the old fill would sit inside it through the hitstop,
+         when nothing is stepped to correct it. */
+      this.ghost = Math.max(this.ghost, this.frac, next);
       this.frac = next;
-      this._hold = this._ms("holdMs");
-      this._drain = 0;
-      this._ghostFrom = this.ghost;
-      this._flashT = 0;
-      this._chipT = 0;
-    } else {
-      this._fillFrom = this.frac;
-      this._fillT = 0;
-      this._bloomT = 0;
+      const drain = timeline().add(this, {
+        ghost: [this.ghost, next], duration: this._ms("drainMs"), ease: GLIDE,
+      }, this._ms("holdMs"));
+      this._drain = this._play(drain);
     }
+
+    this._impact = this._play(this._reaction(damaged));
+  }
+
+  /**
+   * One change's reaction, as a timeline on this model's clock.
+   *
+   * A timeline writes nothing until it is first sought, so every channel's first
+   * frame is set here as well — and those first frames are exactly what the
+   * hitstop holds, because nothing seeks during it.
+   */
+  _reaction(damaged) {
+    const ms = (key) => this._ms(key);
+    /* The sweep crosses the *whole* bar in the direction the value moved.
+       Scoped to the delta it is a detail you have to already be looking at the
+       bar to catch; crossing the full length makes it the thing that tells you,
+       from the corner of your eye, that something happened and which way. */
+    const waveFrom = damaged ? 1 : 0;
+    const waveTo = damaged ? 0 : 1;
+    const crossing = ms("waveMs") * WAVE_TRAVEL;
+
+    this.hit = 1;
+    this.punch = 0;
+    this.flash = 1;
+    this.wave = 1;
+    this.waveX = waveFrom;
+    this.slosh = damaged ? 1 : -1;
+    this.chip = damaged ? 1 : 0;
+    this.bloom = damaged ? 0 : 1;
+
+    const tl = timeline()
+      .add(this, { hit: [1, 0], duration: ms("hitMs"), ease: FADE_OUT }, 0)
+      .add(this, { punch: [0, PUNCH], duration: ms("punchMs"), ease: PUNCH_CURVE }, 0)
+      .add(this, { flash: [1, 0], duration: ms("flashMs") }, 0)
+      /* The readout counts rather than snaps, in both directions. */
+      .add(this, { num: [this.num, this.target], duration: ms("countMs"), ease: COUNT }, 0)
+      /* It crosses at full strength and only then fades: a front that fades
+         *while* it travels never arrives anywhere, and arriving is what reads. */
+      .add(this, { waveX: [waveFrom, waveTo], duration: crossing, ease: TRAVEL }, 0)
+      .add(this, { wave: [1, 0], duration: ms("waveMs") - crossing }, crossing)
+      /* The front swings through the value and settles on it. A spring, and the
+         only one: it bends the liquid's surface, not the length it measures. */
+      .add(this, { slosh: [this.slosh, 0], ease: sloshSpring(ms("sloshMs")) }, 0);
+
+    if (damaged) {
+      tl.add(this, { chip: [1, 0], duration: ms("chipMs"), ease: COOL }, 0);
+    } else {
+      /* The fill glides up to meet a heal. One deceleration, no overshoot. */
+      tl.add(this, { bloom: [1, 0], duration: ms("bloomMs") }, 0)
+        .add(this, { frac: [this.frac, this.target], duration: ms("fillMs"), ease: GLIDE }, 0);
+    }
+    return tl;
   }
 
   /**
@@ -317,19 +432,35 @@ export class BarAnim {
     if (next) {
       this.breakX = clamp01(at);
       this.broken = 1;
-      this._breakOutT = 1;
+      this._breakOut = null;
       /* At motion "none" the fracture is a fact, not an animation: it arrives
          already settled and its clock never moves again. */
       this.breakT = this.motionScale === 0 ? BREAK_SETTLE_S : 0;
+    } else if (this.motionScale === 0) {
+      this.broken = 0;
+      this._breakOut = null;
     } else {
-      this._breakOutT = this.motionScale === 0 ? 1 : 0;
-      if (this.motionScale === 0) this.broken = 0;
+      this._breakOut = this._play(tween(this, {
+        broken: [this.broken, 0], duration: this._ms("breakOutMs"), ease: LINEAR,
+      }));
     }
   }
 
-  /** Hover / control state drives the specular sweep, and nothing else. */
+  /** Hover / control state drives the gloss, and nothing else. */
   setHover(on) {
-    this._hover = !!on;
+    const next = !!on;
+    if (next === this._hover) return;
+    this._hover = next;
+    if (this.motionScale === 0) {
+      this.sweep = next ? 1 : 0;
+      this._gloss = null;
+      return;
+    }
+    this._gloss = this._play(tween(this, {
+      sweep: [this.sweep, next ? 1 : IDLE_SWEEP],
+      duration: this._ms(next ? "sweepInMs" : "sweepOutMs"),
+      ease: GLIDE,
+    }));
   }
 
   /**
@@ -341,118 +472,62 @@ export class BarAnim {
     const s = this.motionScale;
 
     if (s === 0) {
-      this.frac = this.ghost = this.num = this.target;
-      this.bloom = this.flash = 0;
-      this.hit = this.punch = this.chip = this.wave = 0;
-      this.popups.length = 0;
+      this._settle();
       this.sweep = this._hover ? 1 : 0;
+      this._gloss = null;
       /* The fracture is state, not motion, so it survives the tier that turns
          every animation off — it just arrives fully formed and stops. */
       this.broken = this._breakOn ? 1 : 0;
+      this._breakOut = null;
       this.breakT = BREAK_SETTLE_S;
       return false;
     }
 
     /* ── Hitstop ──────────────────────────────────────────────────────────
-       Every channel holds its first frame for a beat. Nothing here is a tween;
-       the point is the absence of one. Released, the sweep and the ring both
-       start from a standstill, which is what makes them read as a reaction to
-       something rather than as the tail of a transition. */
+       Every channel holds its first frame for a beat. Nothing is sought, so
+       every tween stays exactly where set() left it — including an earlier
+       change's popups and a fracture fading out. Released, the sweep, the ring
+       and the slosh all start from a standstill, which is what makes them read
+       as a reaction to something rather than as the tail of a transition. */
+    let live = dt;
     if (this._stop > 0) {
       this._stop -= dt;
-      this.flash = 1;
-      this.chip = 1;
-      this.hit = 1;
-      this.wave = 1;
-      this.waveX = this._waveA;
-      return true;
+      if (this._stop > 0) return true;
+      live = -this._stop;
+      this._stop = 0;
     }
+    this._live += live;
 
-    if (!this.idleFrozen) this.time = (this.time + dt / (TIMING.clockMs * s))
+    if (!this.idleFrozen) this.time = (this.time + live / (TIMING.clockMs * s))
       % (TIMING.idleLoopMs / TIMING.clockMs);
 
-    /* Both of the value tweens below interpolate from a captured *start*
-       value, never from the current one. Easing from the current value each
-       frame compounds the curve: a 540ms drain lands in about 190ms and reads
-       as a snap, which is a bug no one would ever file as one — the trail just
-       quietly stops doing its job. */
-
-    // The fill glides up to meet a heal. One deceleration, no overshoot.
-    if (this._fillT < 1) {
-      this._fillT = Math.min(1, this._fillT + dt / Math.max(1, this._ms("fillMs")));
-      this.frac = clamp01(this._fillFrom + (this.target - this._fillFrom) * glide(this._fillT));
-      if (this._fillT >= 1) this.frac = this.target;
+    if (this._impact && !this._seek(this._impact)) {
+      this._impact = null;
+      /* At rest exactly, not within a float of it: `hot` and the tests compare. */
+      this.frac = this.num = this.target;
+      this.hit = this.punch = this.flash = this.chip = this.bloom = this.wave = this.slosh = 0;
     }
 
-    // The chip trail: hold, then drain to meet the fill.
-    if (this.ghost > this.frac) {
-      if (this._hold > 0) this._hold -= dt;
-      else {
-        this._drain = Math.min(1, this._drain + dt / Math.max(1, this._ms("drainMs")));
-        this.ghost = this._ghostFrom + (this.frac - this._ghostFrom) * glide(this._drain);
-        if (this._drain >= 1) this.ghost = this.frac;
-      }
-    } else if (this.ghost < this.frac) {
-      this.ghost = this.frac;
-    }
+    // The chip trail: hold, then drain to meet the fill; never below it.
+    if (this._drain && !this._seek(this._drain)) this._drain = null;
+    if (!this._drain || this.ghost < this.frac) this.ghost = this.frac;
 
-    // The readout counts. A number that snaps is a number you did not see move.
-    if (this._numT < 1) {
-      this._numT = Math.min(1, this._numT + dt / Math.max(1, this._ms("countMs")));
-      this.num = this._numFrom + (this.target - this._numFrom) * easeOut(this._numT);
-      if (this._numT >= 1) this.num = this.target;
-    }
-
-    const adv = (t, key) => (t >= 1 ? 1 : Math.min(1, t + dt / Math.max(1, this._ms(key))));
-    this._bloomT = adv(this._bloomT, "bloomMs");
-    this._flashT = adv(this._flashT, "flashMs");
-    this._chipT = adv(this._chipT, "chipMs");
-    this._waveT = adv(this._waveT, "waveMs");
-
-    this._hitT = adv(this._hitT, "hitMs");
-    this._punchT = adv(this._punchT, "punchMs");
-
-    this.bloom = 1 - this._bloomT;
-    this.flash = 1 - this._flashT;
-    this.chip = Math.pow(1 - this._chipT, 1.8);
-
-    /* The sweep crosses in the first three-quarters of its life at full
-       strength and fades out over the last quarter. A front that fades *while*
-       it travels never arrives anywhere, and arriving is the part that reads. */
-    const wt = this._waveT;
-    this.waveX = this._waveA + (this._waveB - this._waveA) * travel(Math.min(1, wt / 0.72));
-    this.wave = wt >= 1 ? 0 : Math.min(1, (1 - wt) / 0.28);
-
-    /* The ring fades on a curve, not a line: a linear decay reads as a shape
-       being scaled rather than as light going out. */
-    this.hit = Math.pow(1 - this._hitT, 1.6);
-    /* Overshoot and settle. The readout is the thing the eye is on during a
-       change, so it gets the most pronounced easing on the bar. */
-    this.punch = this._punchT >= 1 ? 0
-      : Math.sin(this._punchT * Math.PI) * Math.pow(1 - this._punchT, 0.55) * PUNCH;
-
-    for (const pop of this.popups) pop.t = Math.min(1, pop.t + dt / Math.max(1, this._ms("popupMs")));
+    for (const pop of this.popups) this._seek(pop._slot);
     while (this.popups.length && this.popups[0].t >= 1) this.popups.shift();
 
     /* The fracture's clock. One rate for the whole life of the crack: the same
        walk that spreads it in TIMING.breakInMs then carries its pulse and its
        flow, so at full motion both run in real seconds and match the token's. */
-    if (this._breakOn || this.broken > 0) {
-      if (!this.breakFrozen) {
-        this.breakT += (dt / Math.max(1, this._ms("breakInMs"))) * BREAK_SETTLE_S;
-        if (this.breakT > BREAK_WRAP) this.breakT -= BREAK_WRAP;
-      }
-      if (!this._breakOn) {
-        this._breakOutT = adv(this._breakOutT, "breakOutMs");
-        this.broken = 1 - this._breakOutT;
-      }
+    if ((this._breakOn || this.broken > 0) && !this.breakFrozen) {
+      this.breakT += (live / Math.max(1, this._ms("breakInMs"))) * BREAK_SETTLE_S;
+      if (this.breakT > BREAK_WRAP) this.breakT -= BREAK_WRAP;
+    }
+    if (this._breakOut && !this._seek(this._breakOut)) {
+      this._breakOut = null;
+      this.broken = 0;
     }
 
-    // A quiet idle glint strengthens on hover.
-    const wantSweep = this._hover ? 1 : 0.22;
-    const sweepRate = dt / Math.max(1, this._ms(wantSweep ? "sweepInMs" : "sweepOutMs"));
-    this.sweep += (wantSweep - this.sweep) * clamp01(sweepRate * 2.2);
-    if (Math.abs(wantSweep - this.sweep) < 0.004) this.sweep = wantSweep;
+    if (this._gloss && !this._seek(this._gloss)) this._gloss = null;
 
     return this.hot;
   }
@@ -470,11 +545,9 @@ export class BarAnim {
   get hot() {
     if (this.motionScale === 0) return false;
     if (this._stop > 0) return true;
-    if (this._hover || this.sweep > 0.23) return true;
-    if (this.ghost !== this.frac || this._fillT < 1) return true;
-    if (this._bloomT < 1 || this._flashT < 1) return true;
-    if (this._chipT < 1 || this._waveT < 1 || this._numT < 1) return true;
-    if (this._hitT < 1 || this._punchT < 1 || this.popups.length) return true;
+    if (this._hover || this._gloss) return true;
+    if (this.ghost !== this.frac || this._impact || this._drain) return true;
+    if (this.popups.length) return true;
     if (this.low > 0) return true; // the low-health pulse is continuous by design
     /* A settled fracture is still breathing, so a broken creature's bar stays
        hot for as long as it is broken — the same standing cost as low health,
@@ -514,12 +587,23 @@ export class RevealAnim {
     /** Overall opacity, 0..1. */
     this.fade = 0;
     this._mode = null;
-    this._t = 1;
-    this._from = 1;
+    this._tween = null;
+    this._t = 0;
   }
 
   _ms(key) {
     return TIMING[key] * this.motionScale;
+  }
+
+  _begin(mode, tw) {
+    this._mode = mode;
+    this._tween = tw;
+    this._t = 0;
+  }
+
+  _end() {
+    this._mode = null;
+    this._tween = null;
   }
 
   /** True while any part of the bar would draw. */
@@ -538,22 +622,25 @@ export class RevealAnim {
     this.fade = 1;
     /* Caught mid fade-out: come straight back. Replaying the wipe over a bar
        that never finished leaving is a flicker of its own. */
-    if (wasDrawn) { this.reveal = 1; this._mode = null; return; }
-    if (animate && this.motionScale > 0) { this.reveal = 0; this._t = 0; this._mode = "reveal"; }
-    else { this.reveal = 1; this._mode = null; }
+    if (wasDrawn) { this.reveal = 1; this._end(); return; }
+    if (animate && this.motionScale > 0) {
+      /* The sweep's own curve: the front has to be seen crossing. */
+      this._begin("reveal", tween(this, { reveal: [0, 1], duration: this._ms("revealMs"), ease: TRAVEL }));
+    } else {
+      this.reveal = 1;
+      this._end();
+    }
   }
 
   hide(animate = false) {
     const wasDrawn = this.drawn;
     this.shown = false;
     if (animate && wasDrawn && this.motionScale > 0) {
-      this._from = this.fade;
-      this._t = 0;
-      this._mode = "fade";
+      this._begin("fade", tween(this, { fade: [this.fade, 0], duration: this._ms("fadeOutMs"), ease: LINEAR }));
     } else {
       this.fade = 0;
       this.reveal = 0;
-      this._mode = null;
+      this._end();
     }
   }
 
@@ -562,18 +649,16 @@ export class RevealAnim {
     if (this._mode === null) return false;
     if (this.motionScale === 0) {
       this.fade = this.reveal = this.shown ? 1 : 0;
-      this._mode = null;
+      this._end();
       return false;
     }
-    if (this._mode === "reveal") {
-      this._t = Math.min(1, this._t + dt / Math.max(1, this._ms("revealMs")));
-      /* The sweep's own curve: the front has to be seen crossing. */
-      this.reveal = travel(this._t);
-      if (this._t >= 1) { this.reveal = 1; this._mode = null; }
-    } else {
-      this._t = Math.min(1, this._t + dt / Math.max(1, this._ms("fadeOutMs")));
-      this.fade = this._from * (1 - this._t);
-      if (this._t >= 1) { this.fade = 0; this.reveal = 0; this._mode = null; }
+    this._t += dt;
+    const end = this._tween.duration;
+    this._tween.seek(this._t < end ? this._t : end);
+    if (this._t >= end) {
+      if (this._mode === "reveal") this.reveal = 1;
+      else { this.fade = 0; this.reveal = 0; }
+      this._end();
     }
     return this._mode !== null;
   }
@@ -585,17 +670,24 @@ export class RevealAnim {
  * every animated behaviour appears here, so a new effect cannot be added that
  * never degrades.
  *
- * `breakFlow` sits second because it is one of only two standing costs in the
- * list — everything after it is transient, paid once per change, while a broken
- * creature's bar is hot for as long as it is broken. Giving it up freezes the
- * fracture at its settled frame and drops that bar out of the ticker; the crack
- * stays exactly where it was. What degrades is the motion, never the state: a
+ * The first four are the standing costs — paid every frame by every bar on
+ * screen, or by every broken one — and everything after them is transient, paid
+ * once per change:
+ *
+ *   sweep      freezes the idle clock: the liquid holds its last frame
+ *   wobble     takes the meniscus's idle wobble out
+ *   flow       drops the liquid's animated layer in the shader, and takes idle
+ *              bars out of the ticker altogether
+ *   breakFlow  freezes a fracture at its settled frame
+ *
+ * What degrades is the motion, never the state: a frozen fracture keeps its
+ * crack, a still liquid keeps its colour, its bloodied look and its front. A
  * shed that could hide "this creature's guard is broken" would be trading the
  * information for the frame rate, which is not a trade this list is allowed to
  * make.
  */
 export const SHED_ORDER = Object.freeze([
-  "sweep", "reveal", "breakFlow", "popups", "sparks", "ring", "numbers", "punch", "ghost",
+  "sweep", "wobble", "flow", "reveal", "breakFlow", "popups", "sparks", "ring", "slosh", "numbers", "punch", "ghost",
   "wave", "bloom",
   "flurry", "nameDecode", // names: the cipher's standing flurry; a label's decode (snaps when shed)
 ]);

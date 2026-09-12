@@ -2,7 +2,7 @@
 export { animate } from "../vendor/animejs/animation/index.js";
 export { createTimeline } from "../vendor/animejs/timeline/index.js";
 export { stagger } from "../vendor/animejs/utils/stagger.js";
-export { eases } from "../vendor/animejs/easings/index.js";
+export { eases, spring } from "../vendor/animejs/easings/index.js";
 import { scaledMs } from "./theme.mjs";
 
 /** Resolve the existing suite/feature motion tier without retiming game state. */

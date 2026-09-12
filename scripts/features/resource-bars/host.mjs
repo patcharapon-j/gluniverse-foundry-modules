@@ -14,13 +14,14 @@
  *   3. One container is one place to hide everything when the feature is
  *      switched off mid-session.
  *
- * Visible bars run a quiet idle material loop. Value transitions advance even
- * off screen so they return in the correct state. Off-screen material clocks
- * are frozen, and the shared shed budget removes glints before impact cues.
+ * Visible bars run a quiet idle liquid loop. Value transitions advance even
+ * off screen so they return in the correct state. Off-screen liquid clocks are
+ * frozen, and the shared shed budget stills the liquid before it touches an
+ * impact cue.
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
+import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
@@ -108,6 +109,7 @@ function makeBarMesh(role, opts) {
     uRole: role, uReveal: 1, uFade: 1,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
+    uFlow: 1, uWobble: 1, uSlosh: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -115,7 +117,10 @@ function makeBarMesh(role, opts) {
     uBreakAmber: new Float32Array(hexToFloat3(BREAK_AMBER)),
     uBreakHot: new Float32Array(hexToFloat3(BREAK_HOT)),
   };
-  const shader = PIXI.Shader.from(VERTEX_SHADER, FRAGMENT_SHADER, uniforms);
+  /* One program per liquid, and only the world's liquid is ever compiled. The
+     rails run it too — their flat plate is a branch inside it, not a fourth
+     program. */
+  const shader = PIXI.Shader.from(VERTEX_SHADER, fragmentShader(opts.liquid ?? DEFAULT_LIQUID), uniforms);
   const mesh = new PIXI.Mesh(unitQuad(), shader);
   mesh.blendMode = PIXI.BLEND_MODES?.NORMAL ?? "normal";
   return mesh;
@@ -241,6 +246,7 @@ class BarHost {
     this.frameMs = 16;
     this.shed = 0;
     this.opts = {};
+    this.liquid = DEFAULT_LIQUID;
     this._tick = this.tick.bind(this);
     this._lastTime = 0;
   }
@@ -252,10 +258,14 @@ class BarHost {
     this.motionScale = opts.motionScale;
     this.floatingDeltas = opts.floatingDeltas;
     this.ramp = rampUniform(opts.ramp);
+    const liquid = opts.liquid ?? DEFAULT_LIQUID;
+    const reliquid = liquid !== this.liquid;
+    this.liquid = liquid;
     for (const entry of this.entries.values()) {
       for (const role of ROLES) {
         const mesh = entry.meshes[role];
         if (mesh) {
+          if (reliquid) this.swapLiquid(mesh);
           mesh.shader.uniforms.uRamp = this.ramp;
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
           mesh.shader.uniforms.uSegW = this.dividerWidth() / (entry.rows[role]?.h || 1);
@@ -271,6 +281,22 @@ class BarHost {
       if (entry.label) entry.label.motionScale = opts.motionScale;   // names
     }
     this.applyBloom();
+  }
+
+  /**
+   * Recompile one bar for the world's liquid.
+   *
+   * The shader is swapped on the mesh that already exists rather than the mesh
+   * being rebuilt, for two reasons that only show up later: a new mesh added
+   * back to the entry's group sorts *above* the readout that was added after
+   * the old one, so every number on the table disappears behind its own bar;
+   * and every uniform the bar was carrying — mid-impact, mid-materialise — would
+   * restart from its defaults. The uniforms are carried across as they stand.
+   */
+  swapLiquid(mesh) {
+    const old = mesh.shader;
+    mesh.shader = PIXI.Shader.from(VERTEX_SHADER, fragmentShader(this.liquid), { ...old.uniforms });
+    old.destroy?.();
   }
 
   applyBloom() {
@@ -698,6 +724,7 @@ class BarHost {
           segW: this.dividerWidth() / h,
           ramp: this.ramp,
           seed: entry.seed,
+          liquid: this.liquid,
         });
         entry.meshes[role] = mesh;
         entry.group.addChild(mesh);
@@ -801,9 +828,12 @@ class BarHost {
   }
 
   syncTicker() {
+    /* An idle bar on screen wants frames for its liquid's own motion — unless
+       the shed has taken that motion away, in which case it wants none. */
+    const idleFlow = this.motionScale > 0 && this.allows("flow");
     const wanted = [...this.entries.values()].some((e) =>
       e.vis.hot || e.label?.hot || (e.group.visible
-        && ((e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot))));
+        && ((e.group.renderable && idleFlow) || Object.values(e.anims).some((a) => a?.hot))));
     if (wanted && !this.ticking) {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
@@ -851,7 +881,10 @@ class BarHost {
         const wasHot = a.hot;
         if (a.step(dt) || wasHot) hot = true;
       }
-      const idle = entry.group.renderable && this.motionScale > 0;
+      /* The liquid's idle motion is the one standing cost every visible bar
+         pays, so it is the one "flow" sheds: past it, a bar that is not
+         changing is not ticked at all and keeps its last frame. */
+      const idle = entry.group.renderable && this.motionScale > 0 && this.allows("flow");
       if (hot || idle) this.writeUniforms(entry, now / 1000);
       if (hot || idle) anyHot = true;
     }
@@ -893,6 +926,15 @@ class BarHost {
       u.uChip = a && this.allows("ghost") ? a.chip : 0;
       u.uWave = a && this.allows("wave") ? a.wave : 0;
       u.uWaveX = a ? a.waveX : u.uFrac;
+      /* The liquid rides the primary bar only; the rails keep a flat plate and
+         get hard zeros. Each part of its motion is its own shed entry: the idle
+         wobble, the animated layer, and the slosh after a change. The slosh is
+         clamped here as well as bounded by its spring, because the shader's
+         amplitude budget assumes -1..1 and nothing downstream checks. */
+      const liquid = role === "hero";
+      u.uFlow = liquid && this.allows("flow") ? 1 : 0;
+      u.uWobble = liquid && this.allows("wobble") ? 1 : 0;
+      u.uSlosh = liquid && a && this.allows("slosh") ? clamp(a.slosh, -1, 1) : 0;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
