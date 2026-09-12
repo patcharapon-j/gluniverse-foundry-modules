@@ -1087,7 +1087,6 @@ function draw(now) {
     /* The setting is pixels at 100% zoom; the shader wants bar heights, exactly
        as host.mjs divides it by the bar's world height. */
     gl.uniform1f(U.uSegW, (s.segW ?? 6) * dpr * SS / h);
-    gl.uniform1f(U.uReveal, s.reveal ?? 1);
     gl.uniform1f(U.uFade, s.fade ?? 1);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
@@ -1387,9 +1386,9 @@ nameCell(row("row-names-long"), { ...G64, bar: true, name: "Ancient Red Dragon o
 nameCell(row("row-names-long"), { ...G128, bar: false, name: "Ancient Red Dragon of the Ashen Waste", title: "Ellipsis, no bar", sub: "<i>128px</i>" });
 
 const ciphers = [
-  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "aX93kq", name: "Goblin Warchanter", title: "Hidden, bar visible", sub: "<i>rides with the bar</i>", max: 58, frac: 0.7 }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "aX93kq", name: "Goblin Warchanter", title: "Hidden, hovered", sub: "<i>on hover or Alt</i>", max: 58, frac: 0.7 }),
   nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "Q1z0pp", name: "Ogre", title: "Short real name", sub: "<i>same cipher length rules</i>", max: 120, frac: 0.4 }),
-  nameCell(row("row-names-cipher"), { ...G128, bar: false, cipher: true, id: "mm4Tb2", name: "Ancient Red Dragon of the Ashen Waste", title: "Bar hidden, hovered", sub: "<i>alone, only on hover or Alt</i>" }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: false, cipher: true, id: "mm4Tb2", name: "Ancient Red Dragon of the Ashen Waste", title: "Bar hidden", sub: "<i>a name never needs its bar</i>" }),
   nameCell(row("row-names-cipher"), { ...G64, bar: true, cipher: true, id: "zz81Lk", name: "Imp", title: "Narrow token", sub: "<i>truncated to the width, not the name</i>", max: 20 }),
 ];
 

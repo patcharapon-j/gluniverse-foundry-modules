@@ -253,8 +253,13 @@ export function hiddenFromPlayers(facts, ctx) {
  *   2. not mystifiable → Foundry's Display Name answer, and only that
  *   3. mystifiable → real name or cipher from `hiddenFromPlayers`; the GM always
  *      reads the real one, dimmed and marked when players cannot
- *   4. mystifiable presence → with the bar when this client sees the bar,
- *      otherwise only while hovered (or Alt), and only in sight
+ *   4. presence is the name's own question, never the bar's: Foundry's Display
+ *      Name answer — and, for a name hidden from players, also while hovered (or
+ *      Alt) in sight, so a cipher appears where a player looks for a name
+ *
+ * Bars and names are separate settings on every token, and a table uses them
+ * separately: an NPC whose hit points are the GM's business can still wear its
+ * name, and a PC can show its bar to the party without a caption.
  */
 export function decideLabel(facts, ctx) {
   if (!labelReserved(facts, ctx)) return NONE;
@@ -271,9 +276,12 @@ export function decideLabel(facts, ctx) {
   /* The one line the leak rules rest on. A player's decision for a hidden
      creature never carries its name, so nothing downstream can draw it. */
   const text = hidden && !ctx.isGM && !facts.owner ? null : name;
-  const present = facts.barsVisible
-    ? true
-    : !!facts.inSight && (!!facts.hover || !!ctx.highlight);
+  /* A hidden name is usually hidden *by* Display Name (that is how PF2e's switch
+     works), so Display Name alone would never show its cipher; the hover term is
+     the cipher's own. The GM's view shows wherever players would get a cipher, and
+     never less than Foundry's nameplate would have. */
+  const present = !!facts.nameVisible
+    || (hidden && !!facts.inSight && (!!facts.hover || !!ctx.highlight));
   return {
     reserve: true, present, text, cipher: text === null,
     dim: hidden && !!ctx.isGM, marker: hidden && !!ctx.isGM, mystified: true,
@@ -303,7 +311,7 @@ export function canViewName(token) {
 }
 
 /** The facts the decision reads, gathered from a live token. */
-export function tokenFacts(token, { barsVisible = false } = {}) {
+export function tokenFacts(token) {
   const doc = token?.document;
   return {
     token,
@@ -311,7 +319,6 @@ export function tokenFacts(token, { barsVisible = false } = {}) {
     displayName: doc?.displayName,
     actorType: token?.actor?.type ?? null,
     nameVisible: canViewName(token),
-    barsVisible: !!barsVisible,
     inSight: !!token?.visible && !doc?.isSecret,
     hover: !!token?.hover,
     /* A player always knows the name of something they own — their own

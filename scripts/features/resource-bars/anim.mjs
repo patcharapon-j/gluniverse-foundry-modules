@@ -76,8 +76,8 @@ export const TIMING = Object.freeze({
   hotMs: 2200,     // how long a bar keeps animating after a change (see `hot`)
   breakInMs: 715,  // the guard-break fracture spreading (see BREAK_SETTLE_S)
   breakOutMs: 320, // --gl-d-brisk   and fading again when the break is cleared
-  revealMs: 260,   // --gl-d-brisk   a bar materialising as it becomes visible
-  fadeOutMs: 150,  // a bar fading when a hover or a selection lets go of it
+  fadeInMs: 120,   // --gl-d-tap     a bar fading in as it becomes visible
+  fadeOutMs: 120,  // --gl-d-tap     and out when a hover or a selection lets go of it
   surgeMs: 380,    // the surge through the liquid, perceived; the spring settles in about 3.5× this
 });
 
@@ -570,12 +570,12 @@ export class BarAnim {
  *
  * Three rules, each of which reads as a bug when it is broken:
  *
- *   - Appearing **materialises**, left to right (`reveal`). On every mouse pass
- *     over a Hover-mode token a bar that pops reads as flicker even when the rule
- *     behind it is correct; one that is wiped in reads as summoned.
- *   - Disappearing because a hover or selection let go **fades** (`fade`). It
- *     never plays the wipe backwards: a bar draining right to left is exactly
- *     what a creature losing all of its hit points looks like.
+ *   - Appearing and a hover or selection letting go are a **short, plain fade**.
+ *     On every mouse pass over a Hover-mode token a bar that pops reads as
+ *     flicker even when the rule behind it is correct; anything more than a fade
+ *     (a sweep, a wipe) is a show on every pass, and draining a bar sideways is
+ *     exactly what a creature losing all of its hit points looks like.
+ *   - A fade caught half way turns round from where it is, never from an end.
  *   - Disappearing because the token left sight is **instant**. The caller says
  *     so by passing `animate` false; a fade there leaves a bar lingering over a
  *     token this client can no longer see.
@@ -585,8 +585,6 @@ export class RevealAnim {
     this.motionScale = motionScale;
     /** The decision: may this client see the bar right now. */
     this.shown = false;
-    /** The wipe front, 0 (nothing drawn) .. 1 (the whole bar). */
-    this.reveal = 0;
     /** Overall opacity, 0..1. */
     this.fade = 0;
     this._mode = null;
@@ -611,7 +609,7 @@ export class RevealAnim {
 
   /** True while any part of the bar would draw. */
   get drawn() {
-    return this.fade > 0 && (this.reveal > 0 || this._mode === "reveal");
+    return this.fade > 0 || this._mode === "in";
   }
 
   /** True while a transition still needs frames. */
@@ -620,17 +618,14 @@ export class RevealAnim {
   }
 
   show(animate = false) {
-    const wasDrawn = this.drawn;
     this.shown = true;
-    this.fade = 1;
-    /* Caught mid fade-out: come straight back. Replaying the wipe over a bar
-       that never finished leaving is a flicker of its own. */
-    if (wasDrawn) { this.reveal = 1; this._end(); return; }
-    if (animate && this.motionScale > 0) {
-      /* The sweep's own curve: the front has to be seen crossing. */
-      this._begin("reveal", tween(this, { reveal: [0, 1], duration: this._ms("revealMs"), ease: TRAVEL }));
+    if (this._mode === "in" || (this._mode === null && this.fade >= 1)) return;
+    /* From wherever a fade-out left it: a bar caught leaving turns round. */
+    const from = this.fade;
+    if (animate && this.motionScale > 0 && from < 1) {
+      this._begin("in", tween(this, { fade: [from, 1], duration: this._ms("fadeInMs") * (1 - from), ease: LINEAR }));
     } else {
-      this.reveal = 1;
+      this.fade = 1;
       this._end();
     }
   }
@@ -638,11 +633,11 @@ export class RevealAnim {
   hide(animate = false) {
     const wasDrawn = this.drawn;
     this.shown = false;
+    if (animate && this._mode === "out") return;
     if (animate && wasDrawn && this.motionScale > 0) {
-      this._begin("fade", tween(this, { fade: [this.fade, 0], duration: this._ms("fadeOutMs"), ease: LINEAR }));
+      this._begin("out", tween(this, { fade: [this.fade, 0], duration: this._ms("fadeOutMs") * this.fade, ease: LINEAR }));
     } else {
       this.fade = 0;
-      this.reveal = 0;
       this._end();
     }
   }
@@ -651,7 +646,7 @@ export class RevealAnim {
   step(dt) {
     if (this._mode === null) return false;
     if (this.motionScale === 0) {
-      this.fade = this.reveal = this.shown ? 1 : 0;
+      this.fade = this.shown ? 1 : 0;
       this._end();
       return false;
     }
@@ -659,8 +654,7 @@ export class RevealAnim {
     const end = this._tween.duration;
     this._tween.seek(this._t < end ? this._t : end);
     if (this._t >= end) {
-      if (this._mode === "reveal") this.reveal = 1;
-      else { this.fade = 0; this.reveal = 0; }
+      this.fade = this._mode === "in" ? 1 : 0;
       this._end();
     }
     return this._mode !== null;

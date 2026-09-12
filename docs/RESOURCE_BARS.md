@@ -790,8 +790,8 @@ How the answer changes on screen:
 
 | | |
 |---|---|
-| **Appearing** (hover, select, Alt, walking into sight) | materialises left to right behind a line of light, `TIMING.revealMs` |
-| **A hover or selection letting go** | fades, `TIMING.fadeOutMs` — never the wipe played backwards, which is exactly what a creature losing all its hit points looks like |
+| **Appearing** (hover, select, Alt, walking into sight) | a tight plain fade in, `TIMING.fadeInMs` (120ms) |
+| **A hover or selection letting go** | the same fade out, `TIMING.fadeOutMs`; a fade caught half way turns round from where it is |
 | **Leaving sight** | instant; a fade would leave the bar hanging over a token this client can no longer see |
 | **Scene load, a new token, panning** | instant — the first decision for an entry never animates, and culling is `renderable`, not visibility |
 
@@ -881,11 +881,13 @@ hairline rule from **Units** above.
 its own elapsed time from the host's ticker. That keeps the motion tier, the
 off-screen freeze and the Node check tool working, and it never touches the
 shared engine's loop or speed, which Insight and Initiative own. Every duration is
-in `NAME_TIMING`. The rules are the bar's: appearing **decodes in** — a lead front
-brings scrambled glyphs in, a lag front resolves them, so the first frame is not
-a full run of noise — a hover letting go fades in the bar's own 150ms, leaving
-sight is instant, and the first decision for an entry is instant. `nameDecode` is
-in `SHED_ORDER`; shed, a decode simply snaps.
+in `NAME_TIMING`. The rules are the bar's: appearing and a hover letting go are
+the bar's own tight fade (`fadeInMs`/`fadeOutMs`, pinned equal to `TIMING`'s, so a
+name and its bar arrive and leave together), leaving sight is instant, and the
+first decision for an entry is instant. Nothing sweeps or decodes on a mouse pass —
+on a Hover-mode token that is a show on every pass. The one decode is
+identification, below. `nameDecode` is in `SHED_ORDER`; shed, a decode simply
+snaps.
 
 ---
 
@@ -911,10 +913,15 @@ companion wears a cipher the moment the Creaturedex is switched on. And **an
 owner** always reads the name of what they own: a player's own summon or familiar
 is not a mystery to them, whatever the table has hidden from everyone else.
 
-When mystification applies, Display Name stops deciding whether a label shows and
-starts deciding which label: the real name, or a **cipher**. A label with a bar
-this player can see rides with that bar; a label whose bar is hidden from them
-shows only on hover or Alt, and only in sight.
+When mystification applies, a label is either the real name or a **cipher**, and
+**it never rides with its bar**. Display Name and Display Bars are separate
+settings and a table uses them separately: an NPC whose hit points are the GM's
+business still wears its name, and a PC can show the party its bar without a
+caption. A readable name shows exactly where Foundry's nameplate would. A cipher
+shows there too, and also on hover or Alt while in sight, because PF2e hides a
+name *through* Display Name, so Display Name alone would never show one. The
+GM's dimmed view appears wherever players would get a cipher, and never less
+often than Foundry's own nameplate.
 
 **Why a cipher and not nothing.** A hidden name used to be no label, which on a
 canvas where every other token carries one reads as "this token is scenery". A

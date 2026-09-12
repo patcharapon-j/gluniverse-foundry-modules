@@ -102,7 +102,6 @@ export const UNIFORMS = Object.freeze({
   uSeg: "float",      // divisions across the fill, 0 = one continuous plate
   uSegW: "float",     // the gap between two plates, in bar heights (world-sized: it scales with zoom)
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
-  uReveal: "float",   // materialise wipe: 0 nothing drawn, 1 the whole bar
   uFade: "float",     // overall opacity while a bar fades out, 1 at rest
 
   uFlow: "float",     // the liquid's own animated layer, 1 on, 0 once shed under load
@@ -274,7 +273,6 @@ uniform float uWaveX;
 uniform float uSeg;
 uniform float uSegW;
 uniform float uRole;
-uniform float uReveal;
 uniform float uFade;
 uniform float uFlow;
 uniform float uSurge;
@@ -1077,18 +1075,11 @@ void main(void) {
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;
 
-  /* ── Materialise ───────────────────────────────────────────────────────
-     A bar becoming visible is wiped in from the left behind a line of light;
-     one a hover lets go of fades. Both are applied last, to the finished pixel
-     and its bloom floor, so nothing the bar draws can arrive ahead of the front
-     or linger after the fade. At rest both are 1 and this branch is skipped. */
-  if (uReveal < 0.999 || uFade < 0.999) {
-    float frontM = mix(-b.x - 0.35, b.x + 0.35, clamp(uReveal, 0.0, 1.0));
-    float shownMask = rbEdge(frontM + 0.10, frontM - 0.10, p.x);
-    float front = rbGauss(p.x - frontM, 0.05) * mBody
-                * step(0.001, uReveal) * (1.0 - smoothstep(0.80, 1.0, uReveal));
-    outC = outC * shownMask + mix(base, vec3(1.0), 0.55) * front * 1.2;
-    outA = outA * shownMask + front * 0.8;
+  /* ── Fade ──────────────────────────────────────────────────────────────
+     A bar appearing or a hover letting go is a plain fade, applied last to the
+     finished pixel and its bloom floor so nothing the bar draws can arrive ahead
+     of it or linger after it. At rest it is 1 and this branch is skipped. */
+  if (uFade < 0.999) {
     outC *= uFade;
     outA *= uFade;
   }

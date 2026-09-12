@@ -59,7 +59,7 @@
   "GLRB.Settings.OffsetY.Name": "Bar offset — vertical",
   "GLRB.Settings.OffsetY.Hint": "Shifts every bar up or down, in grid squares. Negative moves the stack up onto the token, positive moves it further below. A token can override this in its own configuration.",
   "GLRB.Settings.Names.Name": "Names on bars",
-  "GLRB.Settings.Names.Hint": "Draw each token's name on its bar, in place of Foundry's nameplate; a token with no bar gets its name centred in the same place. The name follows the token's Display Name setting. In Pathfinder 2e, a creature whose name players cannot see (PF2e's name-visibility setting, or nothing learned about it in the Creaturedex) shows players a cipher instead, and decodes when it is identified. Off restores Foundry's nameplates.",
+  "GLRB.Settings.Names.Hint": "Draw each token's name on its bar, in place of Foundry's nameplate; a token with no bar gets its name centred in the same place. The name follows the token's Display Name setting, separately from Display Bars, so a token can show its name without its bar or its bar without its name. In Pathfinder 2e, a creature whose name players cannot see (PF2e's name-visibility setting, or nothing learned about it in the Creaturedex) shows players a cipher instead, on hover or wherever Display Name allows, and decodes when it is identified. Off restores Foundry's nameplates.",
   "GLRB.Settings.NameScale.Name": "Name text size",
   "GLRB.Settings.NameScale.Hint": "Scales the name drawn on the bars. Long names shrink and then shorten to fit, and names fade out when zoomed too far out to read.",
   "GLRB.TokenConfig.Legend": "GLUniverse Resource Bars",

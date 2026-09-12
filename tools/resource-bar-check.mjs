@@ -216,33 +216,42 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   else ok("nothing decides on stale state: canvasReady forces a pass, value hooks only read");
 }
 
-/* ── 6c. Appearing materialises, hover-out fades, neither plays backwards ── */
+/* ── 6c. Appearing and letting go are a tight plain fade; leaving sight is instant ── */
 {
   let bad = 0;
   const no = (msg) => { fail(msg); bad++; };
   const r = new anim.RevealAnim({ motionScale: 1 });
   r.show(false);
-  if (r.reveal !== 1 || r.fade !== 1 || r.hot) no("An instant show (the first decision after a load) is not instant.");
+  if (r.fade !== 1 || r.hot) no("An instant show (the first decision after a load) is not instant.");
   r.hide(true);
   r.step(16);
-  if (!(r.fade > 0 && r.fade < 1) || r.reveal !== 1)
-    no("Hover-out does not fade — or it plays the wipe backwards, which reads exactly like the creature losing all its hit points.");
+  if (!(r.fade > 0 && r.fade < 1)) no("Hover-out does not fade.");
   for (let i = 0; i < Math.ceil(anim.TIMING.fadeOutMs / 16) + 2; i++) r.step(16);
-  if (r.drawn) no("A bar is still drawn after its fade-out has finished.");
+  if (r.drawn || r.hot) no("A bar is still drawn after its fade-out has finished.");
   r.show(true);
   r.step(16);
-  if (!(r.reveal > 0 && r.reveal < 1)) no("A bar becoming visible does not materialise.");
-  for (let i = 0; i < Math.ceil(anim.TIMING.revealMs / 16) + 2; i++) r.step(16);
-  if (r.reveal !== 1 || r.hot) no("The materialise never finishes, so the bar stays in the ticker.");
+  if (!(r.fade > 0 && r.fade < 1)) no("A bar becoming visible does not fade in.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.fadeInMs / 16) + 2; i++) r.step(16);
+  if (r.fade !== 1 || r.hot) no("The fade-in never finishes, so the bar stays in the ticker.");
   r.hide(false);
   if (r.drawn || r.hot) no("An instant hide — leaving sight — still draws or animates.");
+  const sight = new anim.RevealAnim({ motionScale: 1 });
+  sight.show(false); sight.hide(true); sight.step(16); sight.hide(false);
+  if (sight.drawn || sight.hot) no("Leaving sight during a hover-out fade does not cut the fade short; the bar lingers over a token this client cannot see.");
   const back = new anim.RevealAnim({ motionScale: 1 });
-  back.show(false); back.hide(true); back.step(40); back.show(true);
-  if (back.reveal !== 1 || back.fade !== 1) no("A bar caught mid fade-out replays the wipe instead of coming straight back, which is a flicker of its own.");
+  back.show(false); back.hide(true); back.step(40);
+  const f0 = back.fade;
+  back.show(true); back.step(1);
+  if (!(back.fade >= f0) || !back.drawn) no("A bar caught mid fade-out restarts from nothing instead of turning round, which is a flicker of its own.");
   const still = new anim.RevealAnim({ motionScale: 0 });
   still.show(true);
-  if (still.reveal !== 1 || still.hot) no("At motion \"none\" a bar still materialises.");
-  if (!bad) ok("appearing materialises, hover-out fades, leaving sight is instant, motion none is still");
+  if (still.fade !== 1 || still.hot) no("At motion \"none\" a bar still fades in.");
+  /* The user asked for this outright: a sweep on every mouse pass is a show. */
+  for (const k of ["fadeInMs", "fadeOutMs"])
+    if (!(anim.TIMING[k] > 0 && anim.TIMING[k] <= 180)) no(`TIMING.${k} is ${anim.TIMING[k]}ms; the bar's fades are meant to be tight (at most 180ms).`);
+  if ("reveal" in r || /uReveal/.test(shaderSrc + hostSrc))
+    no("The left-to-right materialise wipe is back. Appearing is a plain fade.");
+  if (!bad) ok("appearing and letting go are a tight fade that turns round mid-way, leaving sight is instant, motion none is still");
 }
 
 /* ── 7. Every animated behaviour can be shed ────────────────────────────── */
@@ -889,7 +898,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
         ...(over.ctx ?? {}),
       };
       const facts = { name: "Goblin Warchanter", displayName: 30, actorType: "npc", nameVisible: false,
-        barsVisible: false, inSight: true, hover: false, ...f };
+        inSight: true, hover: false, ...f };
       return { d: myst.decideLabel(facts, ctx), calls, probed: calls.gated + calls.canSee + calls.dex + calls.knows };
     };
     let r = run({}, { ctx: { namesOn: false } });
@@ -921,11 +930,23 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (!run({}, { gated: true, canSee: false, dex: true, knows: true }).d.cipher) no("Either gate must suffice: knowing a creature in the dex undid PF2e's name-visibility switch.");
     if (!run({ displayName: 0 }).d.reserve) no("A mystified token's Display Name still decides whether a row is reserved; under mystification it only decides real name versus cipher.");
 
-    if (!run({ barsVisible: true }, { gated: true, canSee: false }).d.present) no("A cipher does not ride with a bar this player can see.");
-    if (run({ barsVisible: false }, { gated: true, canSee: false }).d.present) no("With its bar hidden, a mystified label shows without a hover.");
-    if (!run({ hover: true }).d.present) no("With its bar hidden, a mystified label does not show on hover.");
-    if (!run({}, { ctx: { highlight: true } }).d.present) no("With its bar hidden, a mystified label does not show under Alt.");
-    if (run({ hover: true, inSight: false }, { ctx: { highlight: true } }).d.present) no("A mystified label shows on a token this client cannot see.");
+    /* Presence is the name's own question. Display Name and Display Bars are
+       separate settings on every token, and a label that rode with its bar hid
+       the name of every NPC whose hit points were the GM's business. */
+    if (/barsVisible|vis\.shown/.test(bodyOf(h, "applyLabel(entry) {")) || /barsVisible/.test(mystSrc))
+      no("A name label's presence reads the bar's visibility. A token may show its name without its bar, or its bar without its name.");
+    if (!run({ nameVisible: true }).d.present) no("An NPC whose name this client can read by Display Name does not show it on its own.");
+    if (!run({ actorType: "character", party: true, nameVisible: true }, { gated: true, canSee: true, dex: true, knows: false }).d.present)
+      no("A PC's name does not show on its own when Display Name allows it.");
+    if (run({ nameVisible: false, hover: true }).d.present) no("A readable name shows on hover against its own Display Name setting.");
+    if (run({}, { gated: true, canSee: false }).d.present) no("A cipher shows with no hover and no Display Name allowing it.");
+    if (!run({ hover: true }, { gated: true, canSee: false }).d.present) no("A cipher does not show on hover.");
+    if (!run({}, { gated: true, canSee: false, ctx: { highlight: true } }).d.present) no("A cipher does not show under Alt.");
+    if (run({ hover: true, inSight: false }, { gated: true, canSee: false, ctx: { highlight: true } }).d.present) no("A cipher shows on a token this client cannot see.");
+    if (!run({ nameVisible: true }, { gated: false, dex: true, knows: false }).d.present)
+      no("A creature hidden only by the dex, whose Display Name lets players see it, does not show its cipher without a hover.");
+    if (!run({ hover: true }, { gated: true, canSee: false, ctx: { isGM: true } }).d.present)
+      no("The GM does not see a hidden creature's name where players would see its cipher.");
 
     /* Two readers who always know the name. Both render perfectly when wrong —
        as a cipher over somebody's own character, which a table notices at once
@@ -1018,9 +1039,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.fadeOutMs / 16) + 2; i++) m.step(16);
     if (m.drawn || m.hot) no("A faded label is still drawn or still animating.");
     m.show(true); m.step(16);
-    if (!(m.state.decode > 0 && m.state.decode < 1)) no("A label appearing does not decode in.");
-    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.appearMs / 16) + 2; i++) m.step(16);
-    if (m.state.decode !== 1 || m.hot) no("The appear decode never finishes.");
+    if (!(m.state.fade > 0 && m.state.fade < 1) || m.state.decode !== 1)
+      no("A label appearing does not fade in, or decodes as it appears; on every mouse pass a decode is a show.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.fadeInMs / 16) + 2; i++) m.step(16);
+    if (m.state.fade !== 1 || m.hot) no("The label's fade-in never finishes.");
     m.identify(true); m.step(16);
     if (!(m.state.decode > 0 && m.state.decode < 1)) no("Identification does not decode.");
     for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.identifyMs / 16) + 2; i++) m.step(16);
@@ -1029,11 +1051,16 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (m.drawn) no("Leaving sight does not hide a label instantly.");
     const off = new M({ motionScale: 1 }); off.identify(true);
     if (off.hot) no("A label that is not showing ran an identification decode.");
-    const back = new M({ motionScale: 1 }); back.show(false); back.hide(true); back.step(40); back.show(true);
-    if (back.state.fade !== 1 || back.state.decode !== 1) no("A label caught mid fade-out replays its decode instead of coming straight back.");
+    const back = new M({ motionScale: 1 }); back.show(false); back.hide(true); back.step(40);
+    const f0 = back.state.fade;
+    back.show(true); back.step(1);
+    if (!(back.state.fade >= f0) || back.state.decode !== 1 || !back.drawn) no("A label caught mid fade-out restarts from nothing instead of turning round.");
+    const sight = new M({ motionScale: 1 }); sight.show(false); sight.hide(true); sight.step(16); sight.hide(false);
+    if (sight.drawn || sight.hot) no("Leaving sight during a label's hover-out fade does not cut it short.");
     const still = new M({ motionScale: 0 }); still.show(true);
-    if (still.hot || still.state.decode !== 1) no("At motion \"none\" a label still decodes.");
-    if (nameMod.NAME_TIMING.fadeOutMs !== anim.TIMING.fadeOutMs) no("The label's hover-out fade has drifted from the bar's; the two leave together.");
+    if (still.hot || still.state.fade !== 1) no("At motion \"none\" a label still fades in.");
+    if (nameMod.NAME_TIMING.fadeOutMs !== anim.TIMING.fadeOutMs || nameMod.NAME_TIMING.fadeInMs !== anim.TIMING.fadeInMs)
+      no("The label's fades have drifted from the bar's; a name and its bar arrive and leave together.");
     if (Math.abs(nameMod.NAME_TIMING.identifyMs - 600) > 150) no("Identification is not ~600ms.");
 
     if (!/autoplay:\s*false/.test(nameSrc) || /\.(play|resume)\(/.test(nameSrc) || /useDefaultMainLoop|engine\.|\.speed\s*=/.test(nameSrc))
@@ -1064,7 +1091,9 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     const done = nameMod.composeLabel({ mode: "text", fit, seed, decode: 1, identify: true, adv: 11 });
     if (done.glyphs.length || Math.abs(done.cut - fit.width) > 1e-9) no("A finished decode still draws glyphs, or does not show the whole name.");
     const appear = nameMod.composeLabel({ mode: "text", fit, seed, decode: 0, adv: 11 });
-    if (appear.glyphs.length || appear.cut !== 0) no("An appearing label pops in as a full run of noise on its first frame.");
+    const cipherNow = nameMod.composeLabel({ mode: "cipher", seed, decode: 0, adv: 11 });
+    if (appear.glyphs.length || Math.abs(appear.cut - fit.width) > 1e-9 || cipherNow.glyphs.length !== myst.cipherGlyphs(seed, 0).length)
+      no("A label composes a partial run outside identification. Appearing is a fade on the whole label; only cipher → name decodes.");
   });
 
   section("long names shrink to 75% and then take an ellipsis, never escaping their width", () => {

@@ -54,8 +54,8 @@ import { cipherGlyphs, cipherLength, flurryEpoch, GM_MARKER, scrambleGlyph } fro
  * less. At motion "none" the flurry does not run at all.
  */
 export const NAME_TIMING = Object.freeze({
-  appearMs: 320,    // a label materialising: scrambled glyphs resolving left to right
-  fadeOutMs: 150,   // a hover or selection letting go — the bar's own fade
+  fadeInMs: 120,    // a label appearing — the bar's own fade
+  fadeOutMs: 120,   // a hover or selection letting go — the bar's own fade
   identifyMs: 600,  // a cipher decoding into the real name, on identification
   scrambleMs: 60,   // how often a still-decoding glyph re-rolls
   flurryMs: 4000,   // a standing cipher: two or three glyphs re-roll this often
@@ -63,17 +63,10 @@ export const NAME_TIMING = Object.freeze({
 
 /** anime.js ease names for each transition. */
 export const NAME_EASE = Object.freeze({
-  appear: "out(1.7)",   // the bar's own sweep curve: the front has to be seen crossing
+  appear: "linear",
   identify: "inOut(1.6)",
   fade: "linear",
 });
-
-/**
- * Where the two decode fronts sit. The *lead* front brings scrambled glyphs in;
- * the *lag* front resolves them. A decode with only one front pops the whole run
- * in as noise on its first frame.
- */
-export const DECODE_FRONTS = Object.freeze({ lead: 1.6, lag: 0.25 });
 
 /** Label geometry. Sizes are fractions of the cap height unless named otherwise. */
 export const NAME_LAYOUT = Object.freeze({
@@ -286,31 +279,27 @@ export function composeLabel({ mode, fit = null, seed = 0, epoch = 0, tick = 0, 
   const glyphs = [];
   const fits = (cx) => cx + adv / 2 <= maxWidth + 1e-6;
 
+  /* Appearing is a fade on the whole label, so a cipher is always its whole run. */
   if (mode === "cipher") {
     const run = cipherGlyphs(seed, epoch);
-    const len = run.length;
-    const lead = p >= 1 ? len : Math.ceil(len * clamp01(p * DECODE_FRONTS.lead));
-    const done = p >= 1 ? len : Math.floor(len * clamp01((p - DECODE_FRONTS.lag) / (1 - DECODE_FRONTS.lag)));
-    let end = 0;
     let final = 0;
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < run.length; i++) {
       const cx = (i + 0.5) * adv;
       if (!fits(cx)) break;
+      glyphs.push({ ch: run[i], cx });
       final = cx + adv / 2;
-      if (i >= lead) continue;
-      glyphs.push({ ch: i < done ? run[i] : scrambleGlyph(seed, i, tick), cx });
-      end = final;
     }
-    return { cut: 0, glyphs, end, final };
+    return { cut: 0, glyphs, end: final, final };
   }
 
   const n = fit?.graphemes?.length ?? 0;
   const stops = fit?.stops ?? [0];
   const width = fit?.width ?? 0;
   if (!n) return { cut: 0, glyphs, end: 0, final: 0 };
-  if (p >= 1) return { cut: width, glyphs, end: width, final: width };
+  /* The only partial composition is identification; anything else is the name. */
+  if (p >= 1 || !identify) return { cut: width, glyphs, end: width, final: width };
 
-  if (identify) {
+  {
     /* From the cipher, not from nothing: at the first frame the run is exactly
        the cipher the player was looking at, and it shrinks as the name grows. */
     const run = cipherGlyphs(seed, epoch);
@@ -328,17 +317,6 @@ export function composeLabel({ mode, fit = null, seed = 0, epoch = 0, tick = 0, 
     }
     return { cut, glyphs, end, final: width };
   }
-
-  const lead = Math.min(n, Math.ceil(n * clamp01(p * DECODE_FRONTS.lead)));
-  const k = Math.min(lead, Math.floor(n * clamp01((p - DECODE_FRONTS.lag) / (1 - DECODE_FRONTS.lag))));
-  const cut = stops[k];
-  let end = cut;
-  for (let i = k; i < lead; i++) {
-    const cx = (stops[i] + stops[i + 1]) / 2;
-    glyphs.push({ ch: scrambleGlyph(seed, i, tick), cx });
-    end = Math.max(end, stops[i + 1]);
-  }
-  return { cut, glyphs, end, final: width };
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -506,8 +484,9 @@ void main(void) {
 
 /**
  * Whether a label is on screen, and how it got there — the name's counterpart to
- * the bar's RevealAnim, with the same three rules: appearing materialises (here,
- * by decoding in), a hover letting go fades, leaving sight is instant.
+ * the bar's RevealAnim, with the same rules: appearing and a hover letting go are
+ * a short plain fade that turns round from wherever it is, and leaving sight is
+ * instant. The one decode is identification, cipher → name, which happens once.
  *
  * `state` is the plain object anime.js writes to. Nothing autoplays; `step(dt)`
  * seeks the running animation to this label's own elapsed time.
@@ -524,13 +503,14 @@ export class LabelMotion {
     this._duration = 0;
   }
 
-  get drawn() { return this.state.fade > 0; }
+  get drawn() { return this.state.fade > 0 || this.mode === "appear"; }
   get hot() { return this._anim !== null; }
-  get decoding() { return this.mode === "appear" || this.mode === "identify"; }
+  get decoding() { return this.mode === "identify"; }
 
-  _run(mode, key, props) {
+  /** `portion` shortens a fade that starts part way, so its speed is constant. */
+  _run(mode, key, props, portion = 1) {
     this.cancel();
-    const duration = NAME_TIMING[key] * this.motionScale;
+    const duration = NAME_TIMING[key] * this.motionScale * portion;
     if (!(duration > 0)) {
       for (const [k, v] of Object.entries(props)) this.state[k] = v[1];
       return;
@@ -545,30 +525,32 @@ export class LabelMotion {
   }
 
   show(animate = false) {
-    const wasDrawn = this.drawn;
     this.shown = true;
-    /* Caught mid fade-out: come straight back, as the bar does. */
-    if (wasDrawn) { this.cancel(); this.state.fade = 1; this.state.decode = 1; return; }
-    this.state.fade = 1;
-    if (animate && this.motionScale > 0) this._run("appear", "appearMs", { decode: [0, 1] });
-    else { this.cancel(); this.state.decode = 1; }
+    if (this.mode === "appear" || this.mode === "identify" || (!this._anim && this.state.fade >= 1)) return;
+    /* From wherever a fade-out left it: a label caught leaving turns round. */
+    const from = this.state.fade;
+    this.state.decode = 1;
+    if (animate && this.motionScale > 0 && from < 1) this._run("appear", "fadeInMs", { fade: [from, 1] }, 1 - from);
+    else { this.cancel(); this.state.fade = 1; }
   }
 
   hide(animate = false) {
     const wasDrawn = this.drawn;
     this.shown = false;
+    if (animate && this.mode === "fade") return;
+    this.state.decode = 1;
     if (animate && wasDrawn && this.motionScale > 0) {
-      this._run("fade", "fadeOutMs", { fade: [this.state.fade, 0] });
+      this._run("fade", "fadeOutMs", { fade: [this.state.fade, 0] }, this.state.fade);
     } else {
       this.cancel();
       this.state.fade = 0;
-      this.state.decode = 1;
     }
   }
 
   /** Cipher → name. Only meaningful on a label that is showing. */
   identify(animate = false) {
     if (!this.shown) return;
+    this.state.fade = 1;
     if (animate && this.motionScale > 0) this._run("identify", "identifyMs", { decode: [0, 1] });
     else { this.cancel(); this.state.decode = 1; }
   }
@@ -590,6 +572,7 @@ export class LabelMotion {
     const mode = this.mode;
     this.cancel();
     if (mode === "fade") this.state.fade = 0;
+    else if (mode === "appear") this.state.fade = 1;
     else this.state.decode = 1;
     if (!this.shown) this.state.fade = 0;
   }

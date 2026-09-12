@@ -106,7 +106,7 @@ function makeBarMesh(role, opts) {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0,
     uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.segW ?? 0,
-    uRole: role, uReveal: 1, uFade: 1,
+    uRole: role, uFade: 1,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uFlow: 1, uSurge: 0,
@@ -157,7 +157,7 @@ class BarEntry {
     this.group.visible = false;
     /* False until the first visibility decision. That first decision is always
        instant — a scene loading, or a token being dropped onto it, is not a bar
-       *appearing*, and materialising every bar on the map at once is noise. */
+       *appearing*, and fading every bar on the map in at once is noise. */
     this.decided = false;
 
     /* ── Names ── The label, created the first time this token reserves one;
@@ -191,7 +191,7 @@ class BarEntry {
    * `silent` applies the values without an impact. It is set while the bar is
    * hidden from this client: a creature hit while nobody here could see its
    * bar has nothing to replay when the bar comes back, and an impact arriving
-   * with the materialise would read as the hit happening now.
+   * with the fade-in would read as the hit happening now.
    */
   read(opts, { silent = false } = {}) {
     const next = readToken(this.token, opts);
@@ -290,7 +290,7 @@ class BarHost {
    * being rebuilt, for two reasons that only show up later: a new mesh added
    * back to the entry's group sorts *above* the readout that was added after
    * the old one, so every number on the table disappears behind its own bar;
-   * and every uniform the bar was carrying — mid-impact, mid-materialise — would
+   * and every uniform the bar was carrying — mid-impact, mid-fade — would
    * restart from its defaults. The uniforms are carried across as they stand.
    */
   swapLiquid(mesh) {
@@ -505,8 +505,9 @@ class BarHost {
     }
     entry.decided = true;
     entry.group.visible = v.drawn;
-    /* The name is decided in the same pass, after the bar, because a mystified
-       creature's label rides with whatever was just decided for its bar. */
+    /* The name is decided in the same pass because it reads the same state
+       Foundry has just refreshed. It never reads the bar's decision: Display Name
+       and Display Bars are separate settings, and either may show alone. */
     this.applyLabel(entry);
   }
 
@@ -532,12 +533,12 @@ class BarHost {
 
   /**
    * Decide this token's label for this client. Only ever called from
-   * applyVisibility — the refreshToken pass — so `nameplate.visible`, the hover
-   * state and the bar decision it can ride with are all current.
+   * applyVisibility — the refreshToken pass — so `nameplate.visible` and the
+   * hover state are both current.
    */
   applyLabel(entry) {
     const token = entry.token;
-    const facts = tokenFacts(token, { barsVisible: !!entry.reading && entry.vis.shown });
+    const facts = tokenFacts(token);
     const ctx = labelContext({ namesOn: this.opts.names !== false, onKnowledge: () => this.invalidateLabels() });
     const d = decideLabel(facts, ctx);
 
@@ -552,7 +553,7 @@ class BarHost {
     const animate = entry.labelDecided && this.motionScale > 0 && this.allows("reveal");
     label.setContent(d, { animate: animate && this.allows("nameDecode") });
     if (d.present && !label.shown) {
-      label.show(animate && this.allows("nameDecode"));
+      label.show(animate);
     } else if (!d.present && label.shown) {
       /* Out of sight is instant, exactly as for the bar. */
       const inSight = !!token.visible && !token.document?.isSecret;
@@ -911,7 +912,6 @@ class BarHost {
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
       u.uSegW = this.dividerWidth() / base.h;
-      u.uReveal = entry.vis.reveal;
       u.uFade = entry.vis.fade;
       u.uTime = a ? a.time + entry.seed : 0;
       u.uFrac = a ? a.frac : bar.frac;
@@ -1033,10 +1033,8 @@ class BarHost {
       // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);
     }
-    /* The readout arrives with the bar rather than ahead of it — once the
-       materialise front has crossed most of the bar — and fades with it. */
-    const vis = entry.vis;
-    const textAlpha = vis.fade * clamp((vis.reveal - 0.55) / 0.35, 0, 1);
+    /* The readout fades in and out with its bar, never ahead of it. */
+    const textAlpha = entry.vis.fade;
     if (entry.textMesh) {
       const punch = 1;
       entry.textMesh.visible = true;
