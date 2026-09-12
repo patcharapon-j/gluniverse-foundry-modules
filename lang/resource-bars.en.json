@@ -1,6 +1,6 @@
 {
   "GLS.feature.resource-bars.title": "Resource Bars",
-  "GLS.feature.resource-bars.hint": "Replaces token bars with refractive glass, in-bar values, idle light motion, and damage and healing effects. Includes PF2e temporary HP and shield layers.",
+  "GLS.feature.resource-bars.hint": "Replaces token bars with refractive glass, in-bar values, idle light motion, and damage and healing effects, and moves token names onto the bars. Includes PF2e temporary HP and shield layers, and ciphered names for creatures the party has not identified.",
   "GLRB.Settings.EnabledBars.Name": "Bars to replace",
   "GLRB.Settings.EnabledBars.Hint": "Whether the secondary bar (bar2) is drawn alongside the primary one. Whatever each token's bars are bound to is respected either way.",
   "GLRB.Settings.EnabledBars.Both": "Both bars",
@@ -53,6 +53,10 @@
   "GLRB.Settings.OffsetX.Hint": "Shifts every bar sideways, in grid squares (0.1 is a tenth of a square). Grid squares rather than pixels so the placement holds on scenes with different grid sizes. A token can override this in its own configuration.",
   "GLRB.Settings.OffsetY.Name": "Bar offset — vertical",
   "GLRB.Settings.OffsetY.Hint": "Shifts every bar up or down, in grid squares. Negative moves the stack up onto the token, positive moves it further below. A token can override this in its own configuration.",
+  "GLRB.Settings.Names.Name": "Names on bars",
+  "GLRB.Settings.Names.Hint": "Draw each token's name on its bar, in place of Foundry's nameplate; a token with no bar gets its name centred in the same place. The name follows the token's Display Name setting. In Pathfinder 2e, a creature whose name players cannot see (PF2e's name-visibility setting, or nothing learned about it in the Creaturedex) shows players a cipher instead, and decodes when it is identified. Off restores Foundry's nameplates.",
+  "GLRB.Settings.NameScale.Name": "Name text size",
+  "GLRB.Settings.NameScale.Hint": "Scales the name drawn on the bars. Long names shrink and then shorten to fit, and names fade out when zoomed too far out to read.",
   "GLRB.TokenConfig.Legend": "GLUniverse Resource Bars",
   "GLRB.TokenConfig.OffsetX.Name": "Bar offset — horizontal",
   "GLRB.TokenConfig.OffsetX.Hint": "Grid squares. Leave blank to follow the world default shown in the field.",

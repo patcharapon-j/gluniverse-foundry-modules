@@ -16,6 +16,7 @@ import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
 import { breakSourceActive, tokensForCombatant } from "./break.mjs";
+import { LABEL_SETTING_KEYS } from "./mystify.mjs";   // names
 
 const get = (key, fallback) => {
   try { return game.settings.get(SUITE_ID, key); } catch { return fallback; }
@@ -83,6 +84,9 @@ function currentOptions() {
     ramp: get(SETTINGS.ramp, "default"),
     numbers: numbersMode(),
     numberScale: clampScale(get(SETTINGS.numberScale, 1)),
+    /* Names. The size shares the readout's clamp, for the readout's reason. */
+    names: !!get(SETTINGS.names, true),
+    nameScale: clampScale(get(SETTINGS.nameScale, 1)),
   };
 }
 
@@ -101,6 +105,11 @@ export function reconfigure() {
  */
 function suppressNative(token) {
   if (token?.bars) token.bars.renderable = false;
+  /* Names, by the same rule and for the same reason: `nameplate.visible` is
+     Foundry's Display Name answer (assigned in `_refreshState`), and
+     `mystify.mjs` reads it. Re-evaluated on every pass, so turning the setting
+     off — or a token losing its name — hands the nameplate straight back. */
+  if (token?.nameplate) token.nameplate.renderable = !host.reservesLabel(token);
 }
 
 let installed = false;
@@ -181,8 +190,24 @@ export function onReady() {
     suppressNative(token);
     if (token.isPreview) return;
     if (flags?.refreshBars || flags?.refreshSize) host.refreshToken(token);
-    else if (flags?.refreshState || flags?.refreshVisibility) host.applyState(token);
+    /* refreshNameplate is how a rename arrives; it is a decision like the rest,
+       because the label's text is part of what is decided. */
+    else if (flags?.refreshState || flags?.refreshVisibility || flags?.refreshNameplate) host.applyState(token);
     else host.reposition(token);
+  });
+
+  /* ── Names ────────────────────────────────────────────────────────────
+     Three things change a name label without touching the token it is on: the
+     Creaturedex's knowledge, PF2e's name-visibility switch, and who owns which
+     character (a player's knowledge is their characters'). Each forgets the
+     memoised answers and asks Foundry for a state pass, so the decision itself is
+     still made in the refreshToken hook above and nowhere else. */
+  const labelSetting = (setting) => { if (LABEL_SETTING_KEYS.includes(setting?.key)) host.invalidateLabels(); };
+  on("updateSetting", labelSetting);
+  on("createSetting", labelSetting);
+  on("updateUser", (_user, changes) => { if (changes && "character" in changes) host.invalidateLabels(); });
+  on("updateActor", (_actor, changes) => {
+    if (changes?.ownership !== undefined || changes?.system?.details?.alliance !== undefined) host.invalidateLabels();
   });
 
   /* Value changes. `updateItem` is here for PF2e shields, whose HP lives on an
@@ -237,6 +262,7 @@ export function onDisable() {
   /* Give Foundry its bars back. */
   for (const token of canvas?.tokens?.placeables ?? []) {
     if (token.bars) token.bars.renderable = true;
+    if (token.nameplate) token.nameplate.renderable = true;   // and its nameplate
   }
 }
 

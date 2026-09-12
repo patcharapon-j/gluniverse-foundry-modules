@@ -579,6 +579,186 @@ simply pops, which costs nobody any information.
 
 ---
 
+## Names
+
+Foundry's nameplate is a `PIXI.Text` centred under the token, in a font and a
+position nothing else in this feature shares. Once the bars are an instrument, a
+caption floating near them reads as a second, unrelated widget, so the name moves
+onto the bar: uppercase, lightly tracked, in the readout's own `--gl-tech`,
+left-aligned on the top edge of the top bar's *body* and followed by a hairline
+rule running toward the cut corner. A token with no readable bar — a light
+source token, a marker, a loot pile — gets the same name centred in the same
+slot as `── NAME ──`. `name.mjs` owns how a label looks and moves; `mystify.mjs`
+owns what it says and whether it shows.
+
+| | |
+|---|---|
+| **Names on bars** | `rb.names`, world, default on. Off hands every nameplate back to Foundry. |
+| **Name text size** | `rb.nameScale`, client, the readout's range. |
+
+**The nameplate is suppressed with `renderable`, never `visible`**, for the same
+reason the bars are: `nameplate.visible` is Foundry's Display Name answer,
+assigned in `Token#_refreshState` as `!isSecret && _canViewMode(displayName)`, and
+`canViewName` reads it. It is re-evaluated in every pass, so turning the setting
+off — or a token losing its name — gives Foundry's nameplate straight back.
+
+**The name is decided where the bar is**: in `applyVisibility`, from the
+`refreshToken` hook, after Foundry's state pass. A rename arrives as
+`refreshNameplate`, which is routed to the same decision. It is independent of
+Display Bars — a name whose bar is hidden still draws alone in its slot — but its
+*style* follows whether the token has a bar at all, not whether that bar is on
+screen this frame. A Hover-mode bar under an Always-mode name would otherwise
+switch the name between centred and left-aligned on every mouse pass.
+
+### The row is always reserved
+
+The bar stack moves down by the name row whenever a label is *possible* — names
+on, a non-empty name, and Display Name not None (or a mystifiable creature, below)
+— not when one is drawn. Reserving only while the name is visible is the obvious
+version and it is the jump Phase 1 removed, back again: a Hover-mode name pushing
+its bar down a row under the cursor. `layout()` never reads whether a label is
+shown, and `resource-bar-check` pins that. The offsets move the whole stack,
+name included; the row grows with `rb.nameScale`, since layout is per client
+anyway; and floating deltas start above the row rather than on it, because a
+delta born on top of the name reads as part of it.
+
+### Text
+
+Names are arbitrary Unicode, so the numeral atlas cannot draw them. Each is
+rasterised once per **(text, size bucket)**, with the bucket following the
+label's font size in *device* pixels at a third of an octave per step. A label is
+therefore re-rastered only when zoom crosses a step — crisp at every zoom, and
+nothing uploaded while the canvas stands still. Rasters are reference-counted and
+destroyed with their last label. Letters are tracked with the canvas's own
+`letterSpacing` rather than drawn one at a time, which would break every script
+that shapes across letters; glyphs the tech font lacks fall back to system fonts.
+
+The raster uses the numerals' channel code (outline red, body green) so the ink
+can be tinted — the GM's dimmed view — without tinting the outline, and it is cut
+off in the shader at `uCut`, which is how a decode resolves it left to right
+without a second texture.
+
+Labels live on a **second, unfiltered container** at the bars' zIndex. Inside the
+bloom a white label haloes on every token, and adds a row per token to the
+filter's measured bounds.
+
+Long names shrink to fit down to **75%**, then take an ellipsis. Shrinking first
+because a slightly smaller whole name beats a truncated one; floored because past
+three-quarters a label no longer matches the ones around it. The width limit is
+the bar up to its cut corner, or the token width less the flanks for a centred
+label.
+
+Below about **six device pixels of cap height** a label fades out — a smoothstep
+over 4.5–7px, so a zoom thins it continuously rather than popping it. Uppercase
+at that size is a grey smear, and a smear on every token is worse than nothing.
+The rule and the flanks are **one device pixel** through zoom × resolution, the
+hairline rule from **Units** above.
+
+### Motion
+
+`LabelMotion` is anime.js on a plain state object, `autoplay: false`, seeked to
+its own elapsed time from the host's ticker. That keeps the motion tier, the
+off-screen freeze and the Node check tool working, and it never touches the
+shared engine's loop or speed, which Insight and Initiative own. Every duration is
+in `NAME_TIMING`. The rules are the bar's: appearing **decodes in** — a lead front
+brings scrambled glyphs in, a lag front resolves them, so the first frame is not
+a full run of noise — a hover letting go fades in the bar's own 150ms, leaving
+sight is instant, and the first decision for an entry is instant. `nameDecode` is
+in `SHED_ORDER`; shed, a decode simply snaps.
+
+---
+
+## Mystification
+
+Under PF2e only, and only for `character`, `npc`, `familiar` and `hazard` actors —
+the things a Recall Knowledge check is made against. A loot pile or a vehicle is
+not a mystery anyone rolls to solve, so those follow plain Display Name: hidden
+means no label.
+
+A creature's name is **hidden from players** when either:
+
+- PF2e's *Token settings determine name visibility* is on and the token's own
+  `playersCanSeeName` is false; or
+- the Creaturedex is enabled and `CreaturedexApp.mayView(actor)` is null for this
+  user.
+
+When mystification applies, Display Name stops deciding whether a label shows and
+starts deciding which label: the real name, or a **cipher**. A label with a bar
+this player can see rides with that bar; a label whose bar is hidden from them
+shows only on hover or Alt, and only in sight.
+
+**Why a cipher and not nothing.** A hidden name used to be no label, which on a
+canvas where every other token carries one reads as "this token is scenery". A
+run of glyphs says "there is a creature here and you do not know what it is",
+which is the actual state of the table.
+
+The cipher's own rules are all about carrying no information:
+
+- **No letters, no digits.** About a third is `?`; the rest is
+  `! # * & ~ ^ = < > † ‡ ¤ ◇ ◆ ▚ ▞ ░`. `+ - / %` are excluded because the
+  readout and the deltas use them, so a cipher containing one sits beside a bar
+  looking like a number; `§` because it reads as an S.
+- **Its length comes from the token id**, 6–9 glyphs, never from the name. A
+  cipher that grew with the name would let a player count letters.
+- **It flurries, it does not flicker.** Every ~4s two or three glyphs re-roll, on
+  a per-token phase so a map full of unknowns does not re-roll in unison. The
+  glyphs are a pure function of (seed, beat), with a slot keeping the glyph of the
+  last beat that touched it. The period is *divided* by the motion scale: reduced
+  motion shortens animations, and a shorter period would flicker more on the
+  setting that asked for less. `flurry` is in `SHED_ORDER`.
+- **It is an atlas.** A flurry is a geometry rebuild, not a texture upload, and
+  the run uses a uniform advance so a `?` becoming a `░` does not shuffle every
+  glyph after it and drag the rule along.
+
+When a creature is **identified** while its label is on screen, the cipher
+decodes into the name, left to right, in about 600ms — starting from the exact
+glyphs the player was looking at, so the first frame does not pop. The GM always
+reads the real name: at 70% brightness, with a small `◇` marker in the accent,
+when players see a cipher.
+
+### The leak rules
+
+A leak here renders perfectly on the GM's screen and appears only on a player's.
+
+- **A player's decision for a hidden creature carries `text: null`.** The label
+  cannot draw, rasterise or decode a string it was never handed, which is a
+  stronger guarantee than any number of "if hidden" checks further down. The
+  raster cache is only ever asked for `content.text`; losing the name drops the
+  raster and binds an empty texture; a decode only ever starts on cipher → name,
+  and losing the name mid-decode snaps it.
+- **The cipher cannot see the name.** `cipherGlyphs(seed, epoch)` has no name
+  parameter, and the check tool pins that and proves `composeLabel`'s cipher mode
+  is unchanged by one being present.
+- **The decision is never stale.** It is made in the `refreshToken` pass, and
+  re-made on the updates that change it without touching a token: the dex's
+  `dex.knowledge`, PF2e's name-visibility setting (both through `updateSetting`
+  and `createSetting`), a user's assigned character, and an actor's ownership or
+  alliance. Each forgets the memoised answers and asks Foundry for a state pass,
+  so the decision itself still happens in one place.
+
+### Reading the Creaturedex
+
+`mayView` is the authority on what a player knows, and it is used rather than
+restated — including its rule that knowing a *lie* counts, because a player told
+one cannot see that it is false. It is not imported statically: `app.mjs`
+destructures `foundry.applications.api` at module scope, which does not exist
+under the Node tooling that loads this feature, and a static import would tie the
+two features' import graphs together. It is resolved with a dynamic `import()` on
+first use — in a world, that module is already evaluated, so it lands on the next
+microtask — and every label is re-decided when it does. **Until then the answer
+is a cipher**, because the only safe way to be wrong about a secret is towards
+keeping it.
+
+`mayView` answers yes for any GM, so the GM's marker asks the dex's store directly
+for the whole party (`knownSections`/`falseSections` on `PARTY_KEY`): the marker
+means *no party character knows anything about this kind of creature*. In a world
+with Party Knowledge off, one player may know a creature another does not; the
+marker then stays off as long as anyone knows it. Answers are memoised per
+creature kind until something invalidates them, because every `knownSections`
+call deep-clones the whole dex and an Alt press re-decides every token.
+
+---
+
 ## Colour
 
 The fill hue is a function of the health fraction, interpolated in **OKLab**: a
@@ -676,6 +856,22 @@ captured rather than followed, and that freezing the fracture stops its clock an
 releases the ticker **without losing the crack**. With Playwright present
 it also compiles the shader and checks that no uniform was optimised away.
 
+For names it pins that Foundry's nameplate is suppressed through `renderable`
+and handed back on disable; that the name is decided from `nameplate.visible`
+inside `applyVisibility` and nowhere else; mystification's scope and gate order,
+behaviourally, including which probes run for which tokens; that a player's
+decision for a hidden creature never carries the name, that a name raster is only
+acquired on the guarded path and dropped with the name, and that a decode only
+ever starts on cipher → name; that the Creaturedex is read lazily and its
+knowledge key still matches; the cipher's glyph set, its id-seeded length, its
+independence from the name and the size of a flurry beat; that label motion is
+seeked rather than autoplayed, never touches the shared engine, and has no
+millisecond literal outside its tables; the 75%-then-ellipsis fit, the continuous
+zoom fade and the device-pixel hairline; that the rule stops short of the cut and
+the pads still mirror the shader; that the row is reserved and the bars do not
+move when a name is drawn; that deltas start above the row; and that both
+settings are registered, read and localised.
+
 ```bash
 node tools/resource-bar-preview.mjs --out=.preview/bars.html
 ```
@@ -685,6 +881,13 @@ own WebGL2 context and drives it with the **real** animation model. Serve it
 (`node tools/preview-server.mjs`) rather than opening it as a file — a `file://`
 page does not run its module script. `--artifact=` emits the same page without
 the document wrapper, for publishing.
+
+Its **Names** section (on a bar, with no bar, long names on narrow tokens, the
+player's cipher, the GM's view, and the zoom-out fade) imports the real
+`name.mjs`, `mystify.mjs` and `cipher-atlas.mjs` — layout, fit, cipher,
+composition and anime.js motion are the shipped code; only the pixel compositor
+is the page's own Canvas2D. Because it imports them it needs the same server, and
+it expects the page under `.preview/`.
 
 Neither tool can tell you how any of this looks on a real battlemap at a real
 zoom. That needs a session.

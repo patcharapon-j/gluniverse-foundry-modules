@@ -29,6 +29,10 @@ import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "../../core/bloom.mjs";
+/* ── Names ── */
+import { HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
+import { cipherSeed, decideLabel, invalidateKnowledge, labelContext, labelReserved, reserveFacts, tokenFacts } from "./mystify.mjs";
+import { resetCipherAtlas } from "./cipher-atlas.mjs";
 
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
 
@@ -150,9 +154,21 @@ class BarEntry {
        instant — a scene loading, or a token being dropped onto it, is not a bar
        *appearing*, and materialising every bar on the map at once is noise. */
     this.decided = false;
+
+    /* ── Names ── The label, created the first time this token reserves one;
+       whether its first decision has been made (first is instant, as for the
+       bar); the reserved row in world pixels, 0 without one; and the frame the
+       last layout placed it in. */
+    this.label = null;
+    this.labelDecided = false;
+    this.labelReserve = undefined;
+    this.nameRowH = 0;
+    this.labelFrame = null;
   }
 
   destroy() {
+    this.label?.destroy();
+    this.label = null;
     this.group.destroy({ children: true });
   }
 
@@ -219,6 +235,8 @@ class BarHost {
   constructor() {
     this.entries = new Map();
     this.container = null;
+    /** Names: the unfiltered layer the labels live on. */
+    this.labels = null;
     this.ticking = false;
     this.frameMs = 16;
     this.shed = 0;
@@ -250,6 +268,7 @@ class BarHost {
       entry.vis.motionScale = opts.motionScale;
       if (opts.motionScale === 0) entry.vis.step(0);
       entry.group.visible = entry.vis.drawn;
+      if (entry.label) entry.label.motionScale = opts.motionScale;   // names
     }
     this.applyBloom();
   }
@@ -286,6 +305,15 @@ class BarHost {
        on top anyway — both paths land above the token furniture. */
     this.container.zIndex = CONTAINER_Z;
     layer.addChild(this.container);
+    /* ── Names ── A second container at the same depth, *unfiltered*. The bloom
+       is for light the bar emits; a white label inside it haloes every name on
+       the map, and widens the filter's measured bounds by a row per token. Added
+       after the bars, so equal zIndex puts the names on top. */
+    this.labels = new PIXI.Container();
+    this.labels.eventMode = "none";
+    this.labels.sortableChildren = false;
+    this.labels.zIndex = CONTAINER_Z;
+    layer.addChild(this.labels);
     this.applyBloom();
     this.refreshAll();
   }
@@ -303,6 +331,15 @@ class BarHost {
     this.container = null;
     this.bloom = null;
     resetAtlas();
+    /* ── Names ── */
+    try {
+      this.labels?.destroy({ children: true });
+    } catch {
+      /* Torn down with its layer, as the bar container can be. */
+    }
+    this.labels = null;
+    resetNameRasters();
+    resetCipherAtlas();
   }
 
   /* ── Entries ─────────────────────────────────────────────────────────── */
@@ -343,11 +380,12 @@ class BarHost {
    */
   reposition(token) {
     const entry = this.entries.get(token?.id);
-    if (!entry || !entry.reading || token?.isPreview) return;
+    if (!entry || (!entry.reading && !entry.label) || token?.isPreview) return;
     entry.token = token;
     this.layout(entry);
     this.cullEntry(entry);
     this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
+    entry.label?.flush();
   }
 
   /**
@@ -385,11 +423,15 @@ class BarHost {
       pf2eLayers: this.opts.pf2eLayers,
       breakFx: this.opts.breakFx,
     }, { silent: !entry.vis.shown });
-    if (!entry.reading) { this.remove(token.id); this.syncTicker(); return; }
+    /* A token with no readable bar still keeps its entry when it can show a
+       name — a light, a marker or a loot pile gets `── NAME ──` in the slot. */
+    entry.labelReserve = this.reservesLabel(token);
+    if (!entry.reading && !entry.labelReserve) { this.remove(token.id); this.syncTicker(); return; }
 
     this.layout(entry);
     if (decide) this.applyVisibility(entry);
     this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    entry.label?.flush();
     this.syncTicker();
   }
 
@@ -401,12 +443,14 @@ class BarHost {
    */
   applyState(token) {
     const entry = this.entries.get(token?.id);
-    if (!entry || !entry.reading) { this.refreshToken(token); return; }
+    if (!entry || (!entry.reading && !entry.label)) { this.refreshToken(token); return; }
     entry.token = token;
+    entry.labelReserve = this.reservesLabel(token);
     this.layout(entry);
     this.applyVisibility(entry);
     this.cullEntry(entry);
     this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    entry.label?.flush();
     this.syncTicker();
   }
 
@@ -419,7 +463,8 @@ class BarHost {
    */
   applyVisibility(entry) {
     const token = entry.token;
-    const can = canViewBars(token);
+    /* A name-only entry has no bar to show, whatever bars.visible says. */
+    const can = !!entry.reading && canViewBars(token);
     const v = entry.vis;
     v.motionScale = this.motionScale;
     const animate = entry.decided && this.motionScale > 0 && this.allows("reveal");
@@ -434,6 +479,111 @@ class BarHost {
     }
     entry.decided = true;
     entry.group.visible = v.drawn;
+    /* The name is decided in the same pass, after the bar, because a mystified
+       creature's label rides with whatever was just decided for its bar. */
+    this.applyLabel(entry);
+  }
+
+  /* ── Names ──────────────────────────────────────────────────────────────
+     The label on the bar. What it says and whether it shows is `mystify.mjs`'s;
+     how it looks and moves is `name.mjs`'s. This block only routes the one into
+     the other on the same decision path the bars use. */
+
+  /**
+   * Whether a token can ever show a label here, which reserves its row.
+   *
+   * Layout-safe: reads no hover, no selection and no sight, so asking it from a
+   * value hook or a drag frame decides nothing about visibility.
+   */
+  reservesLabel(token) {
+    if (this.opts.names === false || !String(token?.document?.name ?? "").trim()) return false;
+    try {
+      return labelReserved(reserveFacts(token), labelContext({ namesOn: true }));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Decide this token's label for this client. Only ever called from
+   * applyVisibility — the refreshToken pass — so `nameplate.visible`, the hover
+   * state and the bar decision it can ride with are all current.
+   */
+  applyLabel(entry) {
+    const token = entry.token;
+    const facts = tokenFacts(token, { barsVisible: !!entry.reading && entry.vis.shown });
+    const ctx = labelContext({ namesOn: this.opts.names !== false, onKnowledge: () => this.invalidateLabels() });
+    const d = decideLabel(facts, ctx);
+
+    if (!d.reserve) {
+      if (entry.label) { entry.label.destroy(); entry.label = null; }
+      entry.labelDecided = false;
+      if (entry.nameRowH) { entry.labelReserve = false; this.layout(entry); }
+      return;
+    }
+
+    const label = entry.label ?? this.labelOf(entry);
+    const animate = entry.labelDecided && this.motionScale > 0 && this.allows("reveal");
+    label.setContent(d, { animate: animate && this.allows("nameDecode") });
+    if (d.present && !label.shown) {
+      label.show(animate && this.allows("nameDecode"));
+    } else if (!d.present && label.shown) {
+      /* Out of sight is instant, exactly as for the bar. */
+      const inSight = !!token.visible && !token.document?.isSecret;
+      label.hide(animate && inSight);
+    }
+    entry.labelDecided = true;
+    if (!entry.nameRowH) { entry.labelReserve = true; this.layout(entry); }
+    label.flush();
+  }
+
+  /** Create an entry's label on the label layer. */
+  labelOf(entry) {
+    const label = new NameLabel({ seed: cipherSeed(entry.token?.id), motionScale: this.motionScale ?? 1 });
+    entry.label = label;
+    this.labels?.addChild(label.group);
+    label.view(this.zoom(), canvas?.app?.renderer?.resolution ?? 1);
+    label.setRenderable(entry.group.renderable !== false);
+    this.layoutLabel(entry);
+    return label;
+  }
+
+  /** Hand the label the geometry the last layout computed. */
+  layoutLabel(entry) {
+    const f = entry.labelFrame;
+    if (!entry.label || !f) return;
+    const r = entry.reading;
+    const bar = r?.hero ? { h: f.heroH, pad: HERO_PAD_Y } : r?.rail ? { h: f.railH, pad: RAIL_PAD_Y } : null;
+    entry.label.setGeometry(nameGeometry({
+      baseX: entry.baseX, barsTop: f.barsTop, w: f.w, heroH: f.heroH, scale: this.opts.nameScale, bar,
+    }));
+  }
+
+  /** The canvas zoom, read where it is set rather than off a transform PIXI updates on render. */
+  zoom() {
+    return Math.abs(canvas?.stage?.scale?.x ?? 1) || 1;
+  }
+
+  /** Re-read zoom and resolution into every label: raster bucket, hairline, zoom fade. */
+  viewLabels() {
+    const scale = this.zoom();
+    const res = canvas?.app?.renderer?.resolution ?? 1;
+    for (const entry of this.entries.values()) {
+      if (!entry.label) continue;
+      entry.label.view(scale, res);
+      entry.label.flush();
+    }
+  }
+
+  /**
+   * Something a label decision reads has changed outside any token: the dex's
+   * knowledge, PF2e's name-visibility switch, a character's ownership. Forget the
+   * memoised answers and re-decide on Foundry's next state pass, which is the one
+   * place decisions are made.
+   */
+  invalidateLabels() {
+    invalidateKnowledge();
+    if (this.container) canvas?.tokens?.setAllRenderFlags?.({ refreshState: true });
   }
 
   /**
@@ -525,13 +675,20 @@ class BarHost {
     const off = this.offsetFor(token);
 
     const rows = [];
-    if (entry.reading.hero) rows.push(["hero", ROLE.hero, heroH]);
-    if (entry.reading.rail) rows.push(["rail", ROLE.rail, railH]);
-    if (entry.reading.shield) rows.push(["shield", ROLE.shield, railH]);
+    if (entry.reading?.hero) rows.push(["hero", ROLE.hero, heroH]);
+    if (entry.reading?.rail) rows.push(["rail", ROLE.rail, railH]);
+    if (entry.reading?.shield) rows.push(["shield", ROLE.shield, railH]);
 
     entry.baseX = token.x + off.x * grid;
     // The default stack begins below the token; explicit offsets still apply.
-    let y = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
+    const top = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
+    /* ── Names ── The name row is reserved whenever a label is *possible*, not
+       when one is drawn, so the bars under it never move with a hover. The
+       offsets above move it with the rest of the stack. */
+    const reserve = entry.labelReserve ?? this.reservesLabel(token);
+    entry.nameRowH = reserve ? nameRowHeight(heroH, this.opts.nameScale) : 0;
+    let y = top + entry.nameRowH;
+    entry.labelFrame = { barsTop: y, w, heroH, railH };
     entry.rows = {};
     for (const [role, roleId, h] of rows) {
       let mesh = entry.meshes[role];
@@ -555,10 +712,14 @@ class BarHost {
     for (const role of ROLES) {
       if (!entry.rows[role] && entry.meshes[role]) entry.meshes[role].visible = false;
     }
+    this.layoutLabel(entry);   // names
     entry.heroH = heroH;
     entry.heroW = w;
     /* The stack's world-space extent, for culling. Grown upward by a hero
-       height because the floating deltas rise out of the top of the bar. */
+       height because the floating deltas rise out of the top of the bar — and,
+       with a name row, out of the top of the row, which is still no higher than
+       this: the row sits between the token and the bars and the deltas start
+       above it, so both reach the same height they did without one. */
     entry.box = { x0: entry.baseX, y0: token.y + token.h - heroH * 1.5 + off.y * grid,
                   x1: entry.baseX + w, y1: y };
   }
@@ -618,6 +779,7 @@ class BarHost {
       y0: Math.min(a.y, b.y) - CULL_PAD, y1: Math.max(a.y, b.y) + CULL_PAD,
     };
     for (const entry of this.entries.values()) this.cullEntry(entry);
+    this.viewLabels();   // names: zoom decides raster size, hairline width and fade
     this.syncTicker();
   }
 
@@ -635,11 +797,12 @@ class BarHost {
        visible rather than hiding one this pass has no information about. */
     entry.group.renderable =
       !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
+    entry.label?.setRenderable(entry.group.renderable);   // names share the stack's box
   }
 
   syncTicker() {
     const wanted = [...this.entries.values()].some((e) =>
-      e.vis.hot || (e.group.visible
+      e.vis.hot || e.label?.hot || (e.group.visible
         && ((e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot))));
     if (wanted && !this.ticking) {
       canvas.app.ticker.add(this._tick);
@@ -676,6 +839,9 @@ class BarHost {
         entry.vis.step(dt);
         entry.group.visible = entry.vis.drawn;
       }
+      /* ── Names ── Stepped on their own: a label can be on screen while its bar
+         is hidden, and fading while its bar is already gone. */
+      if (entry.label?.step(dt, { flurry: this.allows("flurry"), decode: this.allows("nameDecode") })) anyHot = true;
       if (!entry.group.visible) continue;
       let hot = transitioning;
       for (const role of ROLES) {
@@ -876,9 +1042,10 @@ class BarHost {
       entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha) * textAlpha;
       entry.popupMesh.scale.set(popScale);
       /* It rises and drifts back along the bar, so consecutive deltas fan out
-         instead of stacking on one another. */
+         instead of stacking on one another. Names: it starts above the name row,
+         not on it — a delta born on top of the name is read as part of it. */
       entry.popupMesh.position.set(anchorX - w * (0.02 + 0.06 * e),
-                                   anchorY - h * (POPUP_LIFT + POPUP_RISE * e));
+                                   anchorY - h * (POPUP_LIFT + POPUP_RISE * e) - (entry.nameRowH || 0));
     }
   }
 

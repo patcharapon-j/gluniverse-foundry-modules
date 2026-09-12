@@ -194,6 +194,29 @@ function registerSettings() {
     },
     default: "hover",
   });
+
+  /* ── Names ──────────────────────────────────────────────────────────────
+     The name moves onto the bar. World-scoped because it changes what the whole
+     table reads — and, under PF2e, whether a creature's name is a cipher — and a
+     table where half the screens show Foundry's nameplate and half show ours is
+     two tables describing the same token differently. Off hands every nameplate
+     back to Foundry. */
+  world(SETTINGS.names, {
+    name: "GLRB.Settings.Names.Name",
+    hint: "GLRB.Settings.Names.Hint",
+    type: Boolean,
+    default: true,
+  });
+
+  /* The viewer's own eyes, so the viewer's own setting — the readout's range,
+     because the two are read side by side. */
+  client(SETTINGS.nameScale, {
+    name: "GLRB.Settings.NameScale.Name",
+    hint: "GLRB.Settings.NameScale.Hint",
+    type: Number,
+    range: { min: READOUT.min, max: READOUT.max, step: READOUT.step },
+    default: 1,
+  });
 }
 
 Suite.register({

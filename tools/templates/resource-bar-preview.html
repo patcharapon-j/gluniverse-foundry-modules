@@ -113,6 +113,10 @@ input[type=range]{padding:0; width:230px}
   font-family:var(--mono); font-size:12.5px; color:#ffc0c6; background:rgb(255 74 82 / .1);
   border:1px solid rgb(255 74 82 / .35); padding:14px 16px; white-space:pre-wrap; margin:20px 0;
 }
+/* ── Names ── the label canvas sits over the reserved row and the bar's top. */
+.nm-cell{position:relative}
+.nm-label{position:absolute; left:0; top:0; pointer-events:none}
+.nm-empty{border-top:1px dashed var(--line)}
 </style>
 
 <canvas id="gl"></canvas>
@@ -207,6 +211,33 @@ input[type=range]{padding:0; width:230px}
 
   <div class="grid" id="row-cb"></div>
 
+  <!-- ── Names ─────────────────────────────────────────────────────────────
+       Self-contained: the module script at the bottom of the page fills these.
+       It imports the shipped name.mjs / mystify.mjs / cipher-atlas.mjs. -->
+  <h2>Names</h2>
+  <p class="note">The name on the bar's top edge, tracked uppercase in the readout's face, with a one-device-pixel rule running toward the cut corner. The row above the bar is reserved whether or not the name is drawn, so the bar never moves.</p>
+  <div class="row">
+    <button id="nm-appear">Replay appear</button>
+    <button id="nm-fade">Hover out / in</button>
+    <button id="nm-identify" class="cool">Identify ciphers</button>
+    <button id="nm-rehide" class="hot">Hide names again</button>
+    <label class="f">Motion
+      <select id="nm-motion"><option value="1">Full</option><option value="0.6">Reduced</option><option value="0">None</option></select>
+    </label>
+  </div>
+  <div class="grid" id="row-names-a2"></div>
+  <h2>Names · no bar</h2>
+  <div class="grid" id="row-names-centred"></div>
+  <h2>Names · long names</h2>
+  <div class="grid" id="row-names-long"></div>
+  <h2>Names · cipher, player view</h2>
+  <p class="note">No letters, no digits, no readout symbols. Length comes from the token id, never the name. Every ~4s two or three glyphs re-roll, each token on its own phase. Identify decodes from the exact cipher on screen.</p>
+  <div class="grid" id="row-names-cipher"></div>
+  <h2>Names · GM view</h2>
+  <div class="grid" id="row-names-gm"></div>
+  <h2>Names · zoom-out fade</h2>
+  <p class="note">Cap height in device pixels. Whole at 7px and above, gone at 4.5px, continuous between.</p>
+  <div class="ladder" id="row-names-zoom"></div>
 
 </div>
 
@@ -997,4 +1028,227 @@ function draw(now) {
 }
 
 requestAnimationFrame(draw);
+
+/* Names: the section below adds its bars through the same cell list. */
+window.__rbPreview = { add };
+</script>
+
+<script type="module">
+/* ── Names ────────────────────────────────────────────────────────────────
+   The real layout, fit, cipher, composition and anime.js motion from the shipped
+   modules. Only the pixel compositor below is this page's: in Foundry the same
+   composition is drawn by name.mjs's meshes, here by Canvas2D over the bar the
+   script above renders. */
+import {
+  CIPHER_ADVANCE_OF_CAP, bakeCipherAtlas,
+} from "../scripts/features/resource-bars/cipher-atlas.mjs";
+import {
+  HERO_PAD_Y, LabelMotion, NAME_INK, NAME_LAYOUT, NAME_TIMING, capRatio, composeLabel, displayText,
+  fitLabel, measureEm, nameGeometry, nameRowHeight, rasterBucket, rasterLabel, textRoom, zoomFade,
+} from "../scripts/features/resource-bars/name.mjs";
+import { GM_MARKER, cipherSeed, flurryEpoch } from "../scripts/features/resource-bars/mystify.mjs";
+import { hexToRgb, withAlpha } from "../scripts/core/theme.mjs";
+
+const rgbaOf = (hex, k = 1, a = 1) => {
+  const { r, g, b } = hexToRgb(hex);
+  return "rgba(" + Math.round(r * k) + "," + Math.round(g * k) + "," + Math.round(b * k) + "," + a + ")";
+};
+const PAINT = { ink: rgbaOf(NAME_INK.text), edge: rgbaOf(NAME_INK.edge) };
+const PAINT_GM = { ink: rgbaOf(NAME_INK.text, NAME_INK.gmDim), edge: PAINT.edge };
+const PAINT_MARK = { ink: rgbaOf(NAME_INK.marker), edge: PAINT.edge };
+
+const labels = [];
+let motionScale = 1;
+
+function nameCell(host, spec) {
+  const zoom = spec.zoom ?? 1;
+  const rowH = nameRowHeight(spec.h, spec.scale ?? 1);
+  let cell, slot;
+  if (spec.bar && window.__rbPreview) {
+    slot = window.__rbPreview.add(host, {
+      title: spec.title, sub: spec.sub, frac: spec.frac ?? 0.62, seg: 10, max: spec.max,
+      w: spec.w * zoom, h: spec.h * zoom,
+    });
+    cell = slot.parentElement;
+  } else {
+    cell = document.createElement("div");
+    cell.className = "cell";
+    slot = document.createElement("div");
+    slot.className = "slot nm-empty";
+    slot.style.width = spec.w * zoom + "px";
+    slot.style.height = spec.h * zoom + "px";
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = "<b>" + spec.title + "</b>" + (spec.sub || "");
+    cell.append(slot, cap);
+    host.append(cell);
+  }
+  cell.classList.add("nm-cell");
+  slot.style.marginTop = rowH * zoom + "px";
+  const canvas = document.createElement("canvas");
+  canvas.className = "nm-label";
+  cell.prepend(canvas);
+  const motion = new LabelMotion({ motionScale });
+  motion.show(false);
+  const label = {
+    spec, canvas, motion, zoom, rowH, clock: 0, epoch: 0, rasters: new Map(),
+    seed: cipherSeed(spec.id ?? spec.title),
+    cipher: !!spec.cipher, gm: !!spec.gm,
+  };
+  labels.push(label);
+  return label;
+}
+
+let cipherAtlas = null, markerAtlas = null;
+
+function drawLabel(L, dt) {
+  const { spec, canvas, motion, zoom } = L;
+  motion.motionScale = motionScale;
+  if (motion.hot) motion.step(dt);
+  L.clock += dt;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = spec.w * zoom, cssH = (L.rowH + spec.h) * zoom;
+  /* Keyed on both dimensions and the ratio, not on width alone: a 200px cell at
+     dpr 1.5 is exactly the 300px a fresh canvas already has, and a width-only
+     test leaves it unsized and stretched. */
+  const sizeKey = Math.round(cssW * dpr) + "x" + Math.round(cssH * dpr) + "@" + dpr;
+  if (L.sizeKey !== sizeKey) {
+    L.sizeKey = sizeKey;
+    canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const g = nameGeometry({ baseX: 0, barsTop: L.rowH, w: spec.w, heroH: spec.h, scale: spec.scale ?? 1,
+    bar: spec.bar ? { h: spec.h, pad: HERO_PAD_Y } : null });
+  const device = zoom * dpr;
+  const fade = zoomFade(g.cap * device);
+  if (!motion.drawn || fade <= 0) return;
+  const alpha = motion.state.fade * fade;
+  const mode = L.cipher ? "cipher" : "text";
+  const room = textRoom(g, { marker: L.gm && spec.hidden });
+  const fit = mode === "text" ? fitLabel(displayText(spec.name), { cap: g.cap, maxWidth: room, measure: measureEm, capRatio: capRatio() }) : null;
+  if (mode === "cipher" && motionScale > 0) L.epoch = flurryEpoch(L.clock, L.seed, NAME_TIMING.flurryMs / motionScale);
+  const tick = Math.floor(L.clock / Math.max(1, NAME_TIMING.scrambleMs * motionScale));
+  const adv = g.cap * CIPHER_ADVANCE_OF_CAP;
+  const comp = composeLabel({ mode, fit, seed: L.seed, epoch: L.epoch, tick, decode: motion.state.decode,
+    identify: motion.mode === "identify", adv, maxWidth: room });
+  const left = g.centred ? g.centre - comp.final / 2 : g.left;
+  ctx.setTransform(device, 0, 0, device, 0, 0);
+  ctx.globalAlpha = alpha;
+
+  if (fit && comp.cut > 0) {
+    const font = (g.cap / capRatio()) * fit.scale;
+    const px = rasterBucket(font * device);
+    const key = px + (L.gm ? "gm" : "") + fit.text;
+    let r = L.rasters.get(key);
+    if (!r) { r = rasterLabel(fit.text, px, { paint: L.gm ? PAINT_GM : PAINT }); L.rasters.set(key, r); }
+    const k = font / px;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left - 1, 0, comp.cut + 1, L.rowH + spec.h);
+    ctx.clip();
+    ctx.drawImage(r.canvas, left - r.textX * k, g.baseline - r.baselineY * k, r.width * k, r.height * k);
+    ctx.restore();
+  }
+
+  const glyph = (atlas, ch, cx, size = 1) => {
+    const m = atlas.metrics[ch];
+    if (!m) return;
+    const k = (g.cap * size) / atlas.capPx;
+    ctx.drawImage(atlas.canvas, m.x, 0, atlas.cellW, atlas.cellH,
+      cx - (atlas.cellW * k) / 2, g.capMid - (atlas.cellH * k) / 2, atlas.cellW * k, atlas.cellH * k);
+  };
+  cipherAtlas ??= bakeCipherAtlas({ paint: PAINT });
+  for (const q of comp.glyphs) glyph(cipherAtlas, q.ch, left + q.cx);
+
+  let end = comp.end;
+  if (L.gm && spec.hidden && end > 0) {
+    markerAtlas ??= bakeCipherAtlas({ paint: PAINT_MARK });
+    const size = NAME_LAYOUT.markerOfCap;
+    const half = (g.cap * size * CIPHER_ADVANCE_OF_CAP) / 2;
+    const cx = left + end + g.cap * NAME_LAYOUT.markerGapOfCap + half;
+    glyph(markerAtlas, GM_MARKER, cx, size);
+    end = cx + half - left;
+  }
+
+  const thick = NAME_LAYOUT.rulePx / device;
+  ctx.fillStyle = withAlpha(NAME_INK.rule, NAME_INK.ruleAlpha);
+  const rule = (x0, x1) => { if (x1 > x0) ctx.fillRect(x0, g.capMid - thick / 2, x1 - x0, thick); };
+  if (g.centred) {
+    if (g.flank > 0 && comp.final > 0) {
+      const l = g.centre - comp.final / 2, r = g.centre + comp.final / 2;
+      rule(l - g.flankGap - g.flank, l - g.flankGap);
+      rule(r + g.flankGap, r + g.flankGap + g.flank);
+    }
+  } else {
+    const x0 = left + end + g.ruleGap;
+    if (g.ruleStop - x0 >= g.cap * NAME_LAYOUT.ruleMinOfCap) rule(x0, g.ruleStop);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* A 128px grid gives a 30.72px hero quad; 64px gives the 16px floor. */
+const G128 = { w: 128, h: 30.72 }, G200 = { w: 200, h: 44 }, G64 = { w: 64, h: 16 };
+const row = (id) => document.getElementById(id);
+
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Goblin Warchanter", title: "On a bar", sub: "<i>128px token</i>", max: 58, frac: 0.7 });
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Ogre", title: "Short name", sub: "<i>the rule runs to the cut</i>", max: 120, frac: 0.35 });
+nameCell(row("row-names-a2"), { ...G200, bar: true, name: "Knight-Captain Avery", title: "Large token", sub: "<i>200px</i>", max: 212, frac: 0.9 });
+nameCell(row("row-names-a2"), { ...G128, bar: true, name: "Ælfrīc Þórsson", title: "Non-Latin", sub: "<i>diacritics; fallback fonts</i>", max: 40, frac: 0.5 });
+
+nameCell(row("row-names-centred"), { ...G128, bar: false, name: "Torch", title: "No bar", sub: "<i>── NAME ──</i>" });
+nameCell(row("row-names-centred"), { ...G128, bar: false, name: "Supply Cache", title: "Loot pile", sub: "<i>same baseline a bar would give</i>" });
+nameCell(row("row-names-centred"), { ...G64, bar: false, name: "Brazier", title: "Small token", sub: "<i>flanks cap at 12% of the width</i>" });
+
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Brute", title: "Fits", sub: "<i>64px</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Warchanter", title: "Shrunk to fit", sub: "<i>≥ 75%</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G64, bar: true, name: "Ancient Red Dragon of the Ashen Waste", title: "Ellipsis", sub: "<i>75%, then …</i>", max: 30 });
+nameCell(row("row-names-long"), { ...G128, bar: false, name: "Ancient Red Dragon of the Ashen Waste", title: "Ellipsis, no bar", sub: "<i>128px</i>" });
+
+const ciphers = [
+  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "aX93kq", name: "Goblin Warchanter", title: "Hidden, bar visible", sub: "<i>rides with the bar</i>", max: 58, frac: 0.7 }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: true, cipher: true, id: "Q1z0pp", name: "Ogre", title: "Short real name", sub: "<i>same cipher length rules</i>", max: 120, frac: 0.4 }),
+  nameCell(row("row-names-cipher"), { ...G128, bar: false, cipher: true, id: "mm4Tb2", name: "Ancient Red Dragon of the Ashen Waste", title: "Bar hidden, hovered", sub: "<i>alone, only on hover or Alt</i>" }),
+  nameCell(row("row-names-cipher"), { ...G64, bar: true, cipher: true, id: "zz81Lk", name: "Imp", title: "Narrow token", sub: "<i>truncated to the width, not the name</i>", max: 20 }),
+];
+
+nameCell(row("row-names-gm"), { ...G128, bar: true, gm: true, hidden: true, name: "Goblin Warchanter", title: "Players see a cipher", sub: "<i>real name at 70%, ◇ marker</i>", max: 58, frac: 0.7 });
+nameCell(row("row-names-gm"), { ...G128, bar: true, gm: true, hidden: false, name: "Goblin Warchanter", title: "Players see the name", sub: "<i>full brightness, no marker</i>", max: 58, frac: 0.7 });
+
+const dprNow = Math.min(window.devicePixelRatio || 1, 2);
+for (const zoom of [1, 0.8, 0.7, 0.62, 0.55, 0.45]) {
+  const cap = nameGeometry({ baseX: 0, barsTop: 0, w: G128.w, heroH: G128.h, bar: null }).cap * zoom * dprNow;
+  nameCell(row("row-names-zoom"), { ...G128, zoom, bar: true, name: "Goblin Warchanter", title: "zoom " + zoom,
+    sub: "<i>cap " + cap.toFixed(1) + " device px</i>", max: 58, frac: 0.7 });
+}
+
+document.getElementById("nm-motion").addEventListener("change", (e) => { motionScale = +e.target.value; });
+document.getElementById("nm-appear").addEventListener("click", () => {
+  for (const L of labels) { L.motion.hide(false); L.motion.show(true); }
+});
+document.getElementById("nm-fade").addEventListener("click", () => {
+  for (const L of labels) { if (L.motion.shown) L.motion.hide(true); else L.motion.show(true); }
+});
+document.getElementById("nm-identify").addEventListener("click", () => {
+  for (const L of ciphers) { if (!L.cipher) continue; L.cipher = false; L.motion.identify(true); }
+});
+document.getElementById("nm-rehide").addEventListener("click", () => {
+  for (const L of ciphers) { L.cipher = true; L.motion.finish(); }
+});
+
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(50, now - lastT);
+  lastT = now;
+  for (const L of labels) {
+    const r = L.canvas.getBoundingClientRect();
+    if (r.bottom < -40 || r.top > innerHeight + 40) { L.clock += dt; if (L.motion.hot) L.motion.step(dt); continue; }
+    drawLabel(L, dt);
+  }
+  document.body.dataset.nameLabels = String(labels.length);
+  requestAnimationFrame(loop);
+}
+document.fonts.ready.then(() => requestAnimationFrame(loop));
 </script>

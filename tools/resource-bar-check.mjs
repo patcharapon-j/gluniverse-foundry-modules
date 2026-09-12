@@ -795,6 +795,360 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (faint.length) console.log("      partial at the reference size (by design, but worth knowing): " + faint.join(", "));
 }
 
+/* ── 11. Names on the bars, and PF2e mystification ──────────────────────── */
+{
+  /* Every rule below fails silently, and the worst of them fail only on a
+     player's screen. A nameplate hidden with `visible` blinds the permission read
+     it is supposed to feed; a decision taken from a value hook is one event
+     stale; a cipher that grows with the name lets a player count letters; a
+     decode that runs over a hidden name prints it for 600ms; a row that is only
+     reserved while the name is drawn moves the bar under the cursor. None of it
+     throws, and the GM's own screen shows none of it. */
+  const nameMod = await import(new URL("scripts/features/resource-bars/name.mjs", ROOT).href);
+  const myst = await import(new URL("scripts/features/resource-bars/mystify.mjs", ROOT).href);
+  const nameSrc = strip(await src("scripts/features/resource-bars/name.mjs"));
+  const mystSrc = strip(await src("scripts/features/resource-bars/mystify.mjs"));
+  const cipherAtlasSrc = strip(await src("scripts/features/resource-bars/cipher-atlas.mjs"));
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const idxSrc = strip(await src("scripts/features/resource-bars/index.mjs"));
+  const storeSrc = await src("scripts/features/pf2e-creaturedex/store.mjs");
+  const h = strip(hostSrc);
+  let bad = 0;
+  const no = (msg) => { fail(msg); bad++; };
+  const section = (label, fn) => { const before = bad; fn(); if (bad === before) ok(label); };
+  const bodyOf = (text, head) => {
+    const at = text.indexOf(head);
+    if (at < 0) return "";
+    /* The body's brace, not a destructured parameter's. */
+    const sig = text.indexOf(") {", at);
+    const open = sig < 0 ? text.indexOf("{", at) : sig + 2;
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}" && --depth === 0) return text.slice(open, i + 1);
+    }
+    return text.slice(open);
+  };
+
+  section("Foundry's nameplate is suppressed with renderable, never visible, and handed back on disable", () => {
+    const all = [hostSrc, mainSrc, nameSrc, mystSrc].map(strip).join("\n");
+    if (/nameplate\.visible\s*=(?!=)/.test(all))
+      no("Something assigns nameplate.visible. That is Foundry's Display Name answer, which the label reads; hiding the nameplate with it makes every name invisible to ourselves.");
+    if (!/nameplate\.renderable\s*=\s*!host\.reservesLabel\(token\)/.test(mainSrc))
+      no("suppressNative does not suppress the nameplate through renderable, re-evaluated per token — either two names are drawn, or turning the setting off never gives Foundry's back.");
+    if (!/nameplate\)\s*token\.nameplate\.renderable\s*=\s*true/.test(bodyOf(mainSrc, "export function onDisable")))
+      no("onDisable does not restore nameplate.renderable, so disabling the feature leaves every token nameless.");
+  });
+
+  section("the name is decided in the refreshToken pass, from nameplate.visible, beside the bar", () => {
+    if (!/token\.nameplate\.visible/.test(bodyOf(mystSrc, "export function canViewName")))
+      no("canViewName does not read token.nameplate.visible; recomputing Display Name invites drift from core.");
+    if (!/this\.applyLabel\(entry\)/.test(bodyOf(h, "applyVisibility(entry) {")))
+      no("applyVisibility does not decide the label. The name has to be decided in the same pass as the bar — after _refreshState — or it is one event stale.");
+    const calls = [...h.matchAll(/\bdecideLabel\(/g)].length;
+    if (calls !== 1 || !/decideLabel\(facts, ctx\)/.test(bodyOf(h, "applyLabel(entry) {")))
+      no("decideLabel is called outside applyLabel. Every other road in (value hooks, draws, drags) reads stale state.");
+    if (/applyLabel|decideLabel/.test(mainSrc))
+      no("main.mjs decides labels directly; the hooks there fire before Foundry applies the flags they queue.");
+    if (!/flags\?\.refreshNameplate/.test(mainSrc))
+      no("The refreshToken hook does not route refreshNameplate to a decision, so a renamed token keeps its old label.");
+  });
+
+  section("mystification: scope, gate order, and presence", () => {
+    if ([...myst.MYSTIFY_TYPES].sort().join() !== "character,familiar,hazard,npc")
+      no(`MYSTIFY_TYPES is ${myst.MYSTIFY_TYPES.join(", ")}; the design scopes it to character, npc, familiar and hazard. Anything else follows plain Display Name.`);
+    const run = (f, over = {}) => {
+      const calls = { gated: 0, canSee: 0, dex: 0, knows: 0 };
+      const ctx = {
+        namesOn: true, isGM: false, system: "pf2e", highlight: false, NONE: 0,
+        pf2eNamesGated: () => { calls.gated++; return over.gated ?? false; },
+        playersCanSeeName: () => { calls.canSee++; return over.canSee ?? true; },
+        dexActive: () => { calls.dex++; return over.dex ?? false; },
+        dexKnows: () => { calls.knows++; return over.knows ?? true; },
+        ...(over.ctx ?? {}),
+      };
+      const facts = { name: "Goblin Warchanter", displayName: 30, actorType: "npc", nameVisible: false,
+        barsVisible: false, inSight: true, hover: false, ...f };
+      return { d: myst.decideLabel(facts, ctx), calls, probed: calls.gated + calls.canSee + calls.dex + calls.knows };
+    };
+    let r = run({}, { ctx: { namesOn: false } });
+    if (r.d.reserve || r.probed) no("With names off a label is still reserved or a probe still runs.");
+    r = run({ name: "   " });
+    if (r.d.reserve) no("A token with a blank name reserves a label.");
+    r = run({ nameVisible: false }, { ctx: { system: "dnd5e" }, gated: true, canSee: false, dex: true, knows: false });
+    if (r.probed) no("Outside PF2e a mystification probe ran; the system gate must come first.");
+    if (r.d.present || r.d.text !== "Goblin Warchanter" || r.d.cipher)
+      no("Outside PF2e the label does not follow Display Name alone.");
+    if (run({ displayName: 0 }, { ctx: { system: "dnd5e" } }).d.reserve)
+      no("A non-mystified token whose Display Name is None still reserves a row.");
+    if (!run({ nameVisible: true }, { ctx: { system: "dnd5e" } }).d.present)
+      no("A non-mystified token whose nameplate is visible does not show its label.");
+    r = run({ actorType: "loot", nameVisible: false }, { gated: true, canSee: false, dex: true, knows: false });
+    if (r.probed || r.d.cipher || r.d.present) no("A PF2e loot token was mystified; out-of-scope types follow plain Display Name, so hidden means no label.");
+
+    r = run({}, { gated: true, canSee: false });
+    if (r.d.text !== null || !r.d.cipher) no("PF2e's name-visibility gate does not give a player a cipher.");
+    if (JSON.stringify(r.d).includes("Goblin")) no("A player's decision for a hidden creature carries its name. Nothing downstream can be trusted not to draw a string it was handed.");
+    const gm = run({}, { gated: true, canSee: false, ctx: { isGM: true } }).d;
+    if (gm.text !== "Goblin Warchanter" || !gm.dim || !gm.marker || gm.cipher)
+      no("The GM does not see the real name, dimmed and marked, on a creature players cannot read.");
+    r = run({}, { gated: false, dex: false });
+    if (r.calls.knows) no("The Creaturedex was asked while it is not running.");
+    if (r.d.cipher) no("A creature with no gate closed shows a cipher.");
+    if (!run({}, { gated: false, dex: true, knows: false }).d.cipher) no("The Creaturedex gate does not hide an unknown creature's name.");
+    if (run({}, { gated: false, dex: true, knows: true }).d.cipher) no("A creature the party knows still shows a cipher.");
+    if (!run({}, { gated: true, canSee: false, dex: true, knows: true }).d.cipher) no("Either gate must suffice: knowing a creature in the dex undid PF2e's name-visibility switch.");
+    if (!run({ displayName: 0 }).d.reserve) no("A mystified token's Display Name still decides whether a row is reserved; under mystification it only decides real name versus cipher.");
+
+    if (!run({ barsVisible: true }, { gated: true, canSee: false }).d.present) no("A cipher does not ride with a bar this player can see.");
+    if (run({ barsVisible: false }, { gated: true, canSee: false }).d.present) no("With its bar hidden, a mystified label shows without a hover.");
+    if (!run({ hover: true }).d.present) no("With its bar hidden, a mystified label does not show on hover.");
+    if (!run({}, { ctx: { highlight: true } }).d.present) no("With its bar hidden, a mystified label does not show under Alt.");
+    if (run({ hover: true, inSight: false }, { ctx: { highlight: true } }).d.present) no("A mystified label shows on a token this client cannot see.");
+  });
+
+  section("the cipher carries no letters, no digits, no readout vocabulary, and nothing of the name", () => {
+    const set = Array.from(myst.CIPHER_GLYPHS);
+    if (/[A-Za-z0-9]/.test(myst.CIPHER_GLYPHS)) no("The cipher glyph set contains a letter or a digit.");
+    for (const ch of "+-/%§") if (myst.CIPHER_GLYPHS.includes(ch)) no(`The cipher glyph set contains "${ch}", which the readout uses (or which reads as a letter).`);
+    if (!set.includes(myst.GM_MARKER)) no("The GM marker is not in the cipher atlas, so it draws as a gap.");
+    const sig = /export function cipherGlyphs\(([^)]*)\)/.exec(mystSrc)?.[1] ?? "";
+    if (!sig || /name|text|label/i.test(sig) || sig.split(",").length > 2)
+      no("cipherGlyphs takes more than (seed, epoch). A cipher must not be able to see the name it replaces.");
+    if (myst.cipherSeed.length !== 1 || !/cipherSeed\(entry\.token\?\.id\)/.test(h))
+      no("The cipher is not seeded from the token id alone.");
+    let q = 0, total = 0;
+    const lengths = new Set();
+    for (let i = 0; i < 400; i++) {
+      const seed = myst.cipherSeed("tok" + i.toString(36));
+      const run = myst.cipherGlyphs(seed, 0);
+      lengths.add(run.length);
+      if (run.length < myst.CIPHER_LENGTH.min || run.length > myst.CIPHER_LENGTH.max) no(`A cipher is ${run.length} glyphs long.`);
+      for (const ch of run) { total++; if (ch === "?") q++; if (!set.includes(ch)) no(`A cipher emitted "${ch}", which is not in the atlas.`); }
+      if (myst.cipherGlyphs(seed, 7).join("") !== myst.cipherGlyphs(seed, 7).join("")) no("The cipher is not deterministic.");
+    }
+    if (q / total < 0.25 || q / total > 0.42) no(`"?" is ${(100 * q / total).toFixed(0)}% of cipher glyphs; the design asks for about a third.`);
+    if (lengths.size < 3) no("Cipher lengths barely vary, which makes the length itself a signal.");
+    const fit = nameMod.fitLabel("GOBLIN WARCHANTER", { cap: 9, maxWidth: 200, measure: (t) => t.length * 0.6 });
+    const a = nameMod.composeLabel({ mode: "cipher", fit, seed: 77, adv: 10 });
+    const b = nameMod.composeLabel({ mode: "cipher", seed: 77, adv: 10 });
+    if (JSON.stringify(a) !== JSON.stringify(b) || a.cut !== 0)
+      no("composeLabel's cipher mode changes when a name is present. The cipher must not be able to depend on it.");
+
+    let changes = 0, beats = 0;
+    for (let s = 0; s < 50; s++) {
+      const seed = myst.cipherSeed("flurry" + s);
+      for (let e = 1; e <= 30; e++) {
+        const prev = myst.cipherGlyphs(seed, e - 1), next = myst.cipherGlyphs(seed, e);
+        const d = prev.filter((ch, i) => ch !== next[i]).length;
+        if (d > myst.FLURRY.max) no(`A flurry beat changed ${d} glyphs; it is two or three at a time, not a flicker.`);
+        changes += d; beats++;
+      }
+    }
+    if (changes / beats < 1.2) no("The flurry barely changes anything per beat.");
+    const period = nameMod.NAME_TIMING.flurryMs;
+    const phases = new Set(Array.from({ length: 40 }, (_, i) => myst.flurryEpoch(period / 2, myst.cipherSeed("p" + i), period)));
+    if (phases.size < 2) no("Every token's flurry is on the same beat; the map re-rolls in unison.");
+    if (!/Array\.from\(CIPHER_GLYPHS\)/.test(cipherAtlasSrc)) no("The cipher atlas does not bake CIPHER_GLYPHS, so some cipher glyph draws as a gap.");
+  });
+
+  section("a hidden name is never drawn: no decode, no raster, no texture on a player's label", () => {
+    const S = nameMod.shouldIdentify;
+    if (!S({ cipher: true, text: null }, { text: "X" })) no("Identification (cipher → name) does not decode.");
+    if (S({ text: "X" }, { cipher: true, text: null }) || S({ cipher: true, text: null }, { cipher: true, text: null }) || S({ text: null, cipher: false }, { text: "X" }))
+      no("A decode can start on something other than cipher → name.");
+    const setContent = bodyOf(nameSrc, "setContent(next");
+    if (!/dropRaster\(\)/.test(setContent) || !/cipher:\s*!next\?\.text/.test(setContent))
+      no("setContent does not drop the raster when the name goes, or lets a label hold a name and a cipher at once.");
+    if (!/!c\.text && this\.motion\.decoding/.test(setContent)) no("Losing the name mid-decode does not stop the decode.");
+    const drawName = bodyOf(nameSrc, "drawName(fit");
+    if (!/!this\.content\.text/.test(drawName) || [...nameSrc.matchAll(/acquireRaster\(/g)].length !== 2)
+      no("A name raster can be acquired somewhere other than drawName's guarded path.");
+    if (!/uTex = PIXI\.Texture\.EMPTY/.test(bodyOf(nameSrc, "dropRaster() {")))
+      no("Dropping the raster leaves the old texture bound to the name mesh.");
+    if (/from\s+["'][^"']*pf2e-creaturedex\/app\.mjs["']/.test(mystSrc) || !/import\("\.\.\/pf2e-creaturedex\/app\.mjs"\)/.test(mystSrc) || !/mayView\(/.test(mystSrc))
+      no("mystify.mjs does not resolve CreaturedexApp.mayView lazily. A static import breaks this tool under Node and ties the import graphs together.");
+    const knows = bodyOf(mystSrc, "function dexKnows");
+    if (!/knownSections/.test(knows) || !/falseSections/.test(knows) || !/if \(!dexApp\) \{ loadDex\(onLoad\); return false; \}/.test(knows))
+      no("The dex probe does not count false knowledge, or is not closed (cipher) until the dex has answered.");
+    const storeKey = /const KEY = "([^"]+)"/.exec(storeSrc)?.[1];
+    if (storeKey !== myst.DEX_KNOWLEDGE_SETTING) no(`The dex keeps knowledge in "${storeKey}" but labels refresh on "${myst.DEX_KNOWLEDGE_SETTING}".`);
+    if (!myst.LABEL_SETTING_KEYS.includes("pf2e.metagame_tokenSetsNameVisibility") || !/on\("updateSetting",\s*labelSetting\)/.test(mainSrc))
+      no("Labels are not re-decided when the dex or PF2e's name-visibility setting updates.");
+  });
+
+  section("label motion is anime.js, seeked from the host's clock, and every duration is in NAME_TIMING", () => {
+    const M = nameMod.LabelMotion;
+    const m = new M({ motionScale: 1 });
+    m.show(false);
+    if (m.state.fade !== 1 || m.state.decode !== 1 || m.hot) no("An instant show (first decision) is not instant.");
+    m.hide(true); m.step(16);
+    if (!(m.state.fade > 0 && m.state.fade < 1)) no("A label letting go of a hover does not fade.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.fadeOutMs / 16) + 2; i++) m.step(16);
+    if (m.drawn || m.hot) no("A faded label is still drawn or still animating.");
+    m.show(true); m.step(16);
+    if (!(m.state.decode > 0 && m.state.decode < 1)) no("A label appearing does not decode in.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.appearMs / 16) + 2; i++) m.step(16);
+    if (m.state.decode !== 1 || m.hot) no("The appear decode never finishes.");
+    m.identify(true); m.step(16);
+    if (!(m.state.decode > 0 && m.state.decode < 1)) no("Identification does not decode.");
+    for (let i = 0; i < Math.ceil(nameMod.NAME_TIMING.identifyMs / 16) + 2; i++) m.step(16);
+    if (m.state.decode !== 1 || m.hot) no("The identification decode never finishes.");
+    m.hide(false);
+    if (m.drawn) no("Leaving sight does not hide a label instantly.");
+    const off = new M({ motionScale: 1 }); off.identify(true);
+    if (off.hot) no("A label that is not showing ran an identification decode.");
+    const back = new M({ motionScale: 1 }); back.show(false); back.hide(true); back.step(40); back.show(true);
+    if (back.state.fade !== 1 || back.state.decode !== 1) no("A label caught mid fade-out replays its decode instead of coming straight back.");
+    const still = new M({ motionScale: 0 }); still.show(true);
+    if (still.hot || still.state.decode !== 1) no("At motion \"none\" a label still decodes.");
+    if (nameMod.NAME_TIMING.fadeOutMs !== anim.TIMING.fadeOutMs) no("The label's hover-out fade has drifted from the bar's; the two leave together.");
+    if (Math.abs(nameMod.NAME_TIMING.identifyMs - 600) > 150) no("Identification is not ~600ms.");
+
+    if (!/autoplay:\s*false/.test(nameSrc) || /\.(play|resume)\(/.test(nameSrc) || /useDefaultMainLoop|engine\.|\.speed\s*=/.test(nameSrc))
+      no("name.mjs autoplays an animation or touches the shared anime.js engine; other features own its loop and speed.");
+    if (!/_anim\.seek\(Math\.min\(this\._t, this\._duration\), true\)/.test(nameSrc)) no("LabelMotion is not advanced by seeking to its own elapsed time.");
+    const tables = nameSrc.replace(/export const [A-Z_]+ = Object\.freeze\(\{[\s\S]*?\}\);/g, "")
+      .replace(/`[\s\S]*?`/g, "")
+      .replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
+    const literals = [...tables.matchAll(/(?<![\w.])(\d{2,5})(?![\w.])/g)].map((x) => Number(x[1])).filter((n) => n >= 40 && n <= 5000);
+    if (literals.length) no(`name.mjs has millisecond-looking literals outside its tables: ${[...new Set(literals)].join(", ")}.`);
+    if (/core\/motion\.mjs|animate/.test(mystSrc + cipherAtlasSrc)) no("Animation has leaked out of name.mjs, where its timing table is pinned.");
+    if (!/NAME_TIMING\.flurryMs\s*\/\s*Math\.max\(this\.motionScale/.test(nameSrc))
+      no("The flurry period is not scaled by the motion tier (divided: reduced motion must flicker less, not more).");
+    for (const k of ["flurry", "nameDecode"]) {
+      if (!anim.SHED_ORDER.includes(k)) no(`SHED_ORDER does not list "${k}".`);
+      if (!new RegExp(`allows\\("${k}"\\)`).test(h)) no(`host.mjs never gates "${k}", so it cannot be shed.`);
+    }
+  });
+
+  section("a decode starts from what was on screen and ends on the name", () => {
+    const measure = (t) => Array.from(t).length * 0.6;
+    const fit = nameMod.fitLabel("OGRE", { cap: 10, maxWidth: 400, measure, capRatio: 0.7 });
+    const seed = myst.cipherSeed("t1");
+    const start = nameMod.composeLabel({ mode: "text", fit, seed, epoch: 3, decode: 0, identify: true, adv: 11 });
+    const cipher = myst.cipherGlyphs(seed, 3);
+    if (start.cut !== 0 || start.glyphs.map((g) => g.ch).join("") !== cipher.join(""))
+      no("Identification does not start from the exact cipher the player was looking at; the first frame pops.");
+    const done = nameMod.composeLabel({ mode: "text", fit, seed, decode: 1, identify: true, adv: 11 });
+    if (done.glyphs.length || Math.abs(done.cut - fit.width) > 1e-9) no("A finished decode still draws glyphs, or does not show the whole name.");
+    const appear = nameMod.composeLabel({ mode: "text", fit, seed, decode: 0, adv: 11 });
+    if (appear.glyphs.length || appear.cut !== 0) no("An appearing label pops in as a full run of noise on its first frame.");
+  });
+
+  section("long names shrink to 75% and then take an ellipsis, never escaping their width", () => {
+    const measure = (t) => Array.from(t).length * 0.6;
+    const cap = 10, capRatio = 0.7, font = cap / capRatio;
+    const short = nameMod.fitLabel("OGRE", { cap, maxWidth: 200, measure, capRatio });
+    if (short.scale !== 1 || short.text !== "OGRE") no("A name that fits is altered.");
+    const w = measure("GRAND WYRM") * font;
+    const mid = nameMod.fitLabel("GRAND WYRM", { cap, maxWidth: w * 0.85, measure, capRatio });
+    if (!(mid.scale < 1 && mid.scale >= 0.75) || mid.text !== "GRAND WYRM" || mid.width > w * 0.85 + 1e-6) no("A slightly long name is not shrunk to fit.");
+    const long = nameMod.fitLabel("ANCIENT RED DRAGON OF THE ASHEN WASTE", { cap, maxWidth: w * 0.85, measure, capRatio });
+    if (long.scale !== 0.75 || !long.text.endsWith("…") || long.width > w * 0.85 + 1e-6 || !"ANCIENT RED DRAGON OF THE ASHEN WASTE".startsWith(long.text.slice(0, -1).trimEnd()))
+      no("A long name is not shrunk to 75% and then shortened with an ellipsis inside its width.");
+    if (long.stops.length !== long.graphemes.length + 1 || long.stops.some((s, i) => i && s < long.stops[i - 1]) || Math.abs(long.stops.at(-1) - long.width) > 1e-9)
+      no("fitLabel's grapheme stops are not monotonic or do not end at the label's width.");
+    if (nameMod.fitLabel("OGRE", { cap, maxWidth: 1, measure, capRatio }).text !== "") no("A name with no room at all draws a clipped glyph instead of nothing.");
+  });
+
+  section("labels fade continuously below ~6 device pixels of cap height", () => {
+    const Z = nameMod.zoomFade;
+    if (Z(nameMod.NAME_LAYOUT.fadeLoPx) !== 0 || Z(nameMod.NAME_LAYOUT.fadeHiPx) !== 1) no("zoomFade does not run from gone to whole across its band.");
+    if (!(Z(6) > 0 && Z(6) < 1)) no("A 6px cap is not mid-fade.");
+    let prev = 0;
+    for (let px = 0; px <= 12; px += 0.05) {
+      const v = Z(px);
+      if (v < prev - 1e-9 || v - prev > 0.08) { no("zoomFade is not monotonic and continuous; a zoom would pop the label."); break; }
+      prev = v;
+    }
+    if (!/this\.fade = g \? zoomFade\(g\.cap \* this\.scale \* this\.res\)/.test(nameSrc))
+      no("The label's fade is not measured in device pixels (cap × zoom × resolution).");
+  });
+
+  section("hairlines are device pixels; the rule stops short of the cut; pads mirror the shader", () => {
+    if (nameMod.NAME_LAYOUT.rulePx !== 1 || !/NAME_LAYOUT\.rulePx \/ Math\.max\(1e-6, this\.scale \* this\.res\)/.test(nameSrc) || !/s\.height = thick/.test(nameSrc))
+      no("The name rule's thickness is not one device pixel through zoom × resolution; a world-sized hairline vanishes on an ordinary display.");
+    if (!/label\.view\(scale, res\)/.test(h) || !/resolution/.test(bodyOf(h, "viewLabels() {")))
+      no("The host does not hand labels the renderer's resolution.");
+    const glsl = strip(shader.FRAGMENT_SHADER);
+    const pad = /padY = mix\(([0-9.]+), ([0-9.]+), hero\)/.exec(glsl);
+    if (!pad || Number(pad[1]) !== nameMod.RAIL_PAD_Y || Number(pad[2]) !== nameMod.HERO_PAD_Y)
+      no("HERO_PAD_Y / RAIL_PAD_Y no longer mirror the shader's padY, so the name floats off (or into) the bar's top edge.");
+    if (!/import \{[^}]*\bCUT\b[^}]*\} from "\.\/shader\.mjs"/.test(nameSrc)) no("name.mjs does not take CUT from shader.mjs; the rule and the cut corner are one geometry described twice.");
+    const g = nameMod.nameGeometry({ baseX: 0, barsTop: 100, w: 128, heroH: 30, bar: { h: 30, pad: nameMod.HERO_PAD_Y } });
+    const cutLen = 30 * (0.5 - nameMod.HERO_PAD_Y) * shader.CUT;
+    if (!(g.ruleStop < 128 - cutLen) || g.textMax > 128 - cutLen + 1e-9) no("The A2 rule or text runs into the cut corner.");
+    if (g.baseline > 100 + 30 * nameMod.HERO_PAD_Y) no("The name baseline sits inside the bar body.");
+    const c = nameMod.nameGeometry({ baseX: 0, barsTop: 100, w: 128, heroH: 30, bar: null });
+    if (!c.centred || Math.abs(c.baseline - g.baseline) > 1e-9 || c.textMax + 2 * (c.flank + c.flankGap) > 128 + 1e-9)
+      no("A bar-less `── NAME ──` label is not centred within the token on the same baseline its bar would give it.");
+    if (/labels\.filters/.test(h) || !/labels\.zIndex = CONTAINER_Z/.test(h)) no("The label layer is filtered, or does not sort with the bars.");
+    /* The GM's marker sits after the name, so a name that fills the bar pushed it
+       off the token — on the only screen that ever draws it. */
+    const long = "ANCIENT RED DRAGON OF THE ASHEN WASTE";
+    const gmFit = nameMod.fitLabel(long, { cap: g.cap, maxWidth: nameMod.textRoom(g, { marker: true }), measure: (t) => Array.from(t).length * 0.6, capRatio: 0.7 });
+    if (gmFit.width + nameMod.markerSpan(g.cap) > g.textMax + 1e-6)
+      no("A long name leaves no room for the GM's marker, which is then drawn past the bar's right end.");
+    if ([...nameSrc.matchAll(/maxWidth: textRoom\(g, c\)/g)].length !== 2 || !/return x \+ markerSpan\(g\.cap\)/.test(nameSrc))
+      no("The label fits or composes against the geometry's full width, or the marker's drawn span disagrees with the room reserved for it.");
+  });
+
+  {
+    const { host } = await import(new URL("scripts/features/resource-bars/host.mjs", ROOT).href);
+    const saved = { canvas: globalThis.canvas, game: globalThis.game, CONST: globalThis.CONST, opts: host.opts };
+    const before = bad;
+    try {
+      globalThis.CONST = { TOKEN_DISPLAY_MODES: { NONE: 0, HOVER: 30, ALWAYS: 50 } };
+      const stubMesh = () => ({ position: { set(x, y) { this.x = x; this.y = y; } }, scale: { set(x, y) { this.x = x; this.y = y; } }, shader: { uniforms: {} } });
+      const lay = (opts, doc, reading, system = "dnd5e", extra = {}) => {
+        globalThis.game = { system: { id: system }, user: { isGM: false } };
+        globalThis.canvas = { dimensions: { size: 100 } };
+        host.opts = opts;
+        const entry = { token: { x: 40, y: 60, w: 100, h: 100, document: doc, actor: extra.actor ?? null }, reading, meshes: { hero: stubMesh(), rail: stubMesh(), shield: stubMesh() }, ...extra.entry };
+        host.layout(entry);
+        return entry;
+      };
+      const both = { hero: {}, rail: {}, shield: {} };
+      const off = lay({ names: false }, { name: "Ogre", displayName: 30 }, both);
+      const on = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both);
+      if (off.nameRowH !== 0) no("With names off a row is still reserved.");
+      if (!(on.nameRowH > 0) || Math.abs(on.meshes.hero.position.y - off.meshes.hero.position.y - on.nameRowH) > 1e-9)
+        no("The bar stack does not move down by exactly the name row.");
+      const g = nameMod.nameGeometry({ baseX: on.baseX, ...on.labelFrame, scale: 1, bar: { h: on.labelFrame.heroH, pad: nameMod.HERO_PAD_Y } });
+      if (g.baseline - g.cap < 60 + 100 - 1e-9) no("The name row overlaps the token.");
+      const shown = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both, "dnd5e", { entry: { label: { shown: true, setGeometry() {} } } });
+      const hidden = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 30 }, both, "dnd5e", { entry: { label: { shown: false, setGeometry() {} } } });
+      if (shown.meshes.hero.position.y !== hidden.meshes.hero.position.y) no("The bar moves when the name is drawn — the hover jump.");
+      if (/\b(shown|present|hover)\b/.test(bodyOf(h, "layout(entry) {"))) no("layout() reads whether the label is drawn; the row must depend only on whether one is possible.");
+      const mystic = lay({ names: true, nameScale: 1 }, { name: "Ogre", displayName: 0 }, both, "pf2e", { actor: { type: "npc" } });
+      if (!(mystic.nameRowH > 0)) no("A mystified creature with Display Name None has no row, so its cipher would jump the bar on hover.");
+      const big = lay({ names: true, nameScale: 2 }, { name: "Ogre", displayName: 30 }, both);
+      if (!(big.nameRowH > on.nameRowH)) no("The name size setting does not grow the reserved row, so a larger name overlaps the token.");
+      const only = lay({ names: true, nameScale: 1 }, { name: "Torch", displayName: 30 }, null);
+      if (!(only.nameRowH > 0) || !only.labelFrame || !only.box) no("A token with no bar cannot lay out a name-only label.");
+      if (!/if \(!entry\.reading && !entry\.labelReserve\) \{ this\.remove\(/.test(h))
+        no("refreshToken still removes an entry with no reading even when it can show a name.");
+    } catch (error) {
+      no("The name layout test threw: " + (error?.stack ?? error));
+    } finally {
+      globalThis.canvas = saved.canvas; globalThis.game = saved.game; globalThis.CONST = saved.CONST; host.opts = saved.opts;
+    }
+    if (!/POPUP_RISE \* e\) - \(entry\.nameRowH \|\| 0\)/.test(h)) no("Floating deltas start inside the name row instead of above it.");
+    if (bad === before) ok("the name row is reserved, the bars never jump with a hover, and deltas start above it");
+  }
+
+  section("the settings exist, are read, and have their strings", () => {
+    for (const key of ["names", "nameScale"]) {
+      if (!new RegExp(`SETTINGS\\.${key},\\s*\\{[\\s\\S]{0,80}name:\\s*"GLRB\\.`).test(idxSrc)) no(`SETTINGS.${key} is not registered with a GLRB name in index.mjs.`);
+      if (!new RegExp(`SETTINGS\\.${key}\\b`).test(mainSrc)) no(`main.mjs never reads SETTINGS.${key}, so the setting does nothing.`);
+    }
+    if (!/SETTINGS\.nameScale,[\s\S]{0,200}range:\s*\{\s*min:\s*READOUT\.min,\s*max:\s*READOUT\.max/.test(idxSrc)) no("rb.nameScale does not share the readout's range.");
+  });
+
+  if (!bad) ok("names: every pin above holds");
+}
+
 /* ── 10. The shader compiles ────────────────────────────────────────────── */
 {
   const { createRequire } = await import("node:module");

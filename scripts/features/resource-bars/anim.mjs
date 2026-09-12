@@ -597,4 +597,5 @@ export class RevealAnim {
 export const SHED_ORDER = Object.freeze([
   "sweep", "reveal", "breakFlow", "popups", "sparks", "ring", "numbers", "punch", "ghost",
   "wave", "bloom",
+  "flurry", "nameDecode", // names: the cipher's standing flurry; a label's decode (snaps when shed)
 ]);

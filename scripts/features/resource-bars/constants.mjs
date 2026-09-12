@@ -32,6 +32,12 @@ export const SETTINGS = Object.freeze({
   ramp: PREFIX + "ramp",                   // default | safe
   numbers: PREFIX + "numbers",             // hover | always | never
   numberScale: PREFIX + "numberScale",     // readout size, × the bar-derived default
+
+  /* ── Names ── The label on the bar (see name.mjs / mystify.mjs). Whether the
+     table's names move onto the bars is the GM's; how big one person needs them
+     is theirs. The size shares READOUT's range. */
+  names: PREFIX + "names",                 // world: our label replaces Foundry's nameplate
+  nameScale: PREFIX + "nameScale",         // client: label size, × the bar-derived default
 });
 
 /**

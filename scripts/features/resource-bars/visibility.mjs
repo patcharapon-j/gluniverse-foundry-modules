@@ -17,9 +17,10 @@
  *
  * We prefer Foundry's answer when it has one (below); this exists for the
  * window before `token.bars` is built, and as a guard against a future version
- * moving that property.
+ * moving that property. Exported for the name label's own fallback in
+ * `mystify.mjs`, which reads `nameplate.visible` first for the same reason.
  */
-function canViewMode(token, mode) {
+export function canViewMode(token, mode) {
   const M = CONST.TOKEN_DISPLAY_MODES;
   const highlight = canvas?.tokens?.highlightObjects ?? false;
   switch (mode) {

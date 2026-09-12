@@ -342,6 +342,22 @@ bars), and during `draw()` `token.visible` is forced false. Bars are hidden, nev
 destroyed, when permission or sight removes them, and drag previews — clones that
 carry the real token's id — are refused by every hook.
 
+Names ride the same pass (`name.mjs`, `mystify.mjs`). Foundry's nameplate is
+suppressed with `nameplate.renderable`, never `visible` — `nameplate.visible` is
+the Display Name answer the label reads — and the label is decided inside
+`applyVisibility`. Its row is reserved whenever a label is *possible*, never only
+while one is drawn, or the bar jumps under the cursor; floating deltas start above
+that row. Under PF2e a creature whose name is hidden from players shows them a
+cipher, and three rules keep it from leaking: a player's decision carries
+`text: null`, so nothing downstream can draw, rasterise or decode the name; the
+cipher is seeded from the token id alone (a length that followed the name lets
+players count letters) and holds no letters, digits, `+ - / %` or `§`; and a
+decode only ever runs cipher → name. `CreaturedexApp.mayView` is resolved with a
+lazy `import()` and fails closed, because `app.mjs` touches
+`foundry.applications` at module scope. Label motion is anime.js seeked from the
+host's clock, never autoplayed and never touching the shared engine, with every
+duration in `NAME_TIMING`. `resource-bar-check` pins all of it.
+
 A third: `PIXI.Filter` defaults its `resolution` to **1**, not to the
 renderer's, and the filter system sizes its intermediate textures from the
 filter. Left alone, the whole bar container renders at half the device pixels on
