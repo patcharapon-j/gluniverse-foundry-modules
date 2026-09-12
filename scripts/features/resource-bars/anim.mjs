@@ -33,19 +33,20 @@
  * ── The shape of a change ──
  *
  *   0ms    the fill snaps to the new value and everything *stops*
- *   ~55ms  the hitstop releases; the sweep, the ring and the slosh all start
+ *   ~55ms  the hitstop releases; the sweep, the ring and the surge all start
  *          from a standstill rather than from mid-flight
  *   ~180ms the chip trail begins to drain, white-hot, cooling as it goes
  *   ~420ms the readout has finished counting to the new number
  *   ~500ms the sweep has crossed the bar and gone
- *   ~1.4s  the front's slosh has settled
+ *   ~1.4s  the surge through the liquid has settled
  *
  * **No length springs.** The fill, the chip trail and the readout each
  * decelerate once, cleanly, and stop — springs are the standard way to make a
  * bar feel alive and on a *length* they read as jelly; an instrument that
- * wobbles is an instrument you stop trusting. The one spring here moves the
- * liquid's front around the value, never the value: `slosh` bends the meniscus,
- * and the shader keeps its centre exactly on `frac`.
+ * wobbles is an instrument you stop trusting. The one spring here is `surge`,
+ * and it moves nothing that measures: it pushes the liquid's texture back and
+ * forth through the tube and lifts its light, while the bar's edge stays a
+ * straight line exactly on `frac`.
  */
 
 import { animate, createTimeline, eases, spring } from "../../core/motion.mjs";
@@ -77,7 +78,7 @@ export const TIMING = Object.freeze({
   breakOutMs: 320, // --gl-d-brisk   and fading again when the break is cleared
   revealMs: 260,   // --gl-d-brisk   a bar materialising as it becomes visible
   fadeOutMs: 150,  // a bar fading when a hover or a selection lets go of it
-  sloshMs: 380,    // the front's slosh spring, perceived; it settles in about 3.5× this
+  surgeMs: 380,    // the surge through the liquid, perceived; the spring settles in about 3.5× this
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
@@ -121,12 +122,12 @@ export const POPUP_RISE = 1.00;
 export const PUNCH = 0.08;
 
 /**
- * How springy the front's slosh is. Anime.js's `bounce`: at 0.6 the front swings
- * through the value about three times — a quarter as far back the first time —
- * and is still inside a spring's rest threshold well before `hotMs` lets the
- * bar go cold.
+ * How springy the surge is. Anime.js's `bounce`: at 0.6 the liquid's texture
+ * swings back and forth about three times — a quarter as far back the first
+ * time — and is still inside a spring's rest threshold well before `hotMs` lets
+ * the bar go cold.
  */
-export const SLOSH_BOUNCE = 0.6;
+export const SURGE_BOUNCE = 0.6;
 
 /** The share of the wave's life spent crossing; the rest is its fade. */
 export const WAVE_TRAVEL = 0.72;
@@ -188,8 +189,8 @@ function timeline() {
  * The only spring in the feature, and the only thing it may be given to.
  * `resource-bar-check` refuses a spring anywhere else in this file.
  */
-function sloshSpring(durationMs) {
-  return spring({ bounce: SLOSH_BOUNCE, duration: durationMs });
+function surgeSpring(durationMs) {
+  return spring({ bounce: SURGE_BOUNCE, duration: durationMs });
 }
 
 /**
@@ -229,8 +230,9 @@ export class BarAnim {
     this.wave = 0;
     this.waveX = this.frac;
 
-    /** The front's slosh, -1..1: a spring around 0 that bends the meniscus. */
-    this.slosh = 0;
+    /** The surge through the liquid, -1..1: a spring around 0 that moves its
+     *  texture and light, never its edge. */
+    this.surge = 0;
 
     /* The guard break. `broken` is how present the fracture is (the shatter is
        its own arrival, so this goes to 1 at once and only fades on the way out);
@@ -292,7 +294,7 @@ export class BarAnim {
     this.waveX = this.target;
     this._stop = 0;
     this._impact = this._drain = null;
-    this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = this.slosh = 0;
+    this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = this.surge = 0;
     this.popups.length = 0;
   }
 
@@ -385,7 +387,7 @@ export class BarAnim {
     this.flash = 1;
     this.wave = 1;
     this.waveX = waveFrom;
-    this.slosh = damaged ? 1 : -1;
+    this.surge = damaged ? 1 : -1;
     this.chip = damaged ? 1 : 0;
     this.bloom = damaged ? 0 : 1;
 
@@ -399,9 +401,10 @@ export class BarAnim {
          *while* it travels never arrives anywhere, and arriving is what reads. */
       .add(this, { waveX: [waveFrom, waveTo], duration: crossing, ease: TRAVEL }, 0)
       .add(this, { wave: [1, 0], duration: ms("waveMs") - crossing }, crossing)
-      /* The front swings through the value and settles on it. A spring, and the
-         only one: it bends the liquid's surface, not the length it measures. */
-      .add(this, { slosh: [this.slosh, 0], ease: sloshSpring(ms("sloshMs")) }, 0);
+      /* The liquid surges back and forth through the tube and settles. A spring,
+         and the only one: it moves the liquid's texture and light, never the
+         length it measures. */
+      .add(this, { surge: [this.surge, 0], ease: surgeSpring(ms("surgeMs")) }, 0);
 
     if (damaged) {
       tl.add(this, { chip: [1, 0], duration: ms("chipMs"), ease: COOL }, 0);
@@ -487,7 +490,7 @@ export class BarAnim {
        Every channel holds its first frame for a beat. Nothing is sought, so
        every tween stays exactly where set() left it — including an earlier
        change's popups and a fracture fading out. Released, the sweep, the ring
-       and the slosh all start from a standstill, which is what makes them read
+       and the surge all start from a standstill, which is what makes them read
        as a reaction to something rather than as the tail of a transition. */
     let live = dt;
     if (this._stop > 0) {
@@ -505,7 +508,7 @@ export class BarAnim {
       this._impact = null;
       /* At rest exactly, not within a float of it: `hot` and the tests compare. */
       this.frac = this.num = this.target;
-      this.hit = this.punch = this.flash = this.chip = this.bloom = this.wave = this.slosh = 0;
+      this.hit = this.punch = this.flash = this.chip = this.bloom = this.wave = this.surge = 0;
     }
 
     // The chip trail: hold, then drain to meet the fill; never below it.
@@ -670,24 +673,23 @@ export class RevealAnim {
  * every animated behaviour appears here, so a new effect cannot be added that
  * never degrades.
  *
- * The first four are the standing costs — paid every frame by every bar on
+ * The first three are the standing costs — paid every frame by every bar on
  * screen, or by every broken one — and everything after them is transient, paid
  * once per change:
  *
  *   sweep      freezes the idle clock: the liquid holds its last frame
- *   wobble     takes the meniscus's idle wobble out
- *   flow       drops the liquid's animated layer in the shader, and takes idle
+ *   flow      drops the liquid's animated layer in the shader, and takes idle
  *              bars out of the ticker altogether
  *   breakFlow  freezes a fracture at its settled frame
  *
  * What degrades is the motion, never the state: a frozen fracture keeps its
- * crack, a still liquid keeps its colour, its bloodied look and its front. A
+ * crack, a still liquid keeps its colour, its bloodied look and its edge. A
  * shed that could hide "this creature's guard is broken" would be trading the
  * information for the frame rate, which is not a trade this list is allowed to
  * make.
  */
 export const SHED_ORDER = Object.freeze([
-  "sweep", "wobble", "flow", "reveal", "breakFlow", "popups", "sparks", "ring", "slosh", "numbers", "punch", "ghost",
+  "sweep", "flow", "reveal", "breakFlow", "popups", "sparks", "ring", "surge", "numbers", "punch", "ghost",
   "wave", "bloom",
   "flurry", "nameDecode", // names: the cipher's standing flurry; a label's decode (snaps when shed)
 ]);

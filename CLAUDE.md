@@ -376,17 +376,23 @@ setting `rb.liquid` — and each liquid is its own program, assembled by
 `fragmentShader(liquid)` so a bar only pays for the material it draws. Every
 check runs per variant: a uniform only one liquid reads is optimised out of the
 other two and silently holds its initial value there. Four more things it pins
-that no diff shows. The leading edge is `rbFront()`, a meniscus whose every
-profile integrates to **zero** over the fill's height, so the front bends around
-the value without moving it, and whose worst case stays under a third of a bar
-height; the check evaluates that function's own GLSL numerically, so keep it to
-plain arithmetic, `sin`, `cos` and `rbPhase`. Every idle term turns a whole
-number of times in the 64s idle loop, through `rbPhase(k)` / `rbDrift(k, period)`
-with integer `k`, or the liquid steps once a minute when the clock wraps. The
-lava dims its own seams under a guard break (`LAVA_BREAK_DIM`), or the gold
-fracture disappears into it. And the **only spring** in the feature is the
-front's slosh: no length — fill, chip trail, readout — may spring or overshoot,
-and the check drives the model to prove it rather than trusting the easing names.
+that no diff shows. The fill always ends in a **straight, sharp vertical edge**
+exactly at the value — a function of x and the value only, one device pixel of
+antialiasing — and nothing in a liquid (its flow, its bloodied look, its surge)
+may bend or move it. The liquid is **never darker than its ramp colour**: a
+liquid chunk may shade `base` only through `rbShade` inside its `LIQUID_SHADE`
+range (never below `LIQUID_FLOOR`), and otherwise only lighten (`rbLighten`) or
+desaturate to an equal-luma grey (`rbSoften`); the check evaluates those helpers
+and ranges numerically and refuses INK or black mixes, darkening writes and
+sub-floor multipliers inside the chunks. So bloodied is paler and calmer, never
+darker, and lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than
+dimming. The trough, dividers and fracture seams are not the liquid and keep
+their dark. Every idle term turns a whole number of times in the 64s idle loop,
+through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
+once a minute when the clock wraps. And the **only spring** in the feature is the
+`surge` through the liquid's texture and light after a change: no length — fill,
+chip trail, readout — may spring or overshoot, and the check drives the model to
+prove it rather than trusting the easing names.
 
 The animation model runs on **anime.js, sought rather than played**. Every tween
 is built with `autoplay: false` and moved with `.seek()` on the model's own clock

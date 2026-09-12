@@ -6,7 +6,7 @@
   "GLRB.Settings.EnabledBars.Both": "Both bars",
   "GLRB.Settings.EnabledBars.Primary": "Primary bar only",
   "GLRB.Settings.Liquid.Name": "Health liquid",
-  "GLRB.Settings.Liquid.Hint": "What fills the primary bar, for everyone at the table. Ink flows slowly in a few flat tones; mercury is bright liquid chrome; lava is a dark crust over glowing seams. All three take the health colour, change when a creature drops below half, and slosh when its hit points change. Secondary bars keep a flat plate.",
+  "GLRB.Settings.Liquid.Hint": "What fills the primary bar, for everyone at the table. Ink is smooth, slowly blending swirls; mercury is a soft, light metallic sheen; lava is a bright molten glow. All three take the health colour, grow paler and calmer below half, and surge softly when hit points change, and the bar always ends in a straight edge at the value. Secondary bars keep a flat plate.",
   "GLRB.Settings.Liquid.Ink": "Ink",
   "GLRB.Settings.Liquid.Mercury": "Mercury",
   "GLRB.Settings.Liquid.Lava": "Lava",

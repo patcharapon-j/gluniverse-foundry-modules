@@ -109,7 +109,7 @@ function makeBarMesh(role, opts) {
     uRole: role, uReveal: 1, uFade: 1,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
-    uFlow: 1, uWobble: 1, uSlosh: 0,
+    uFlow: 1, uSurge: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -927,14 +927,13 @@ class BarHost {
       u.uWave = a && this.allows("wave") ? a.wave : 0;
       u.uWaveX = a ? a.waveX : u.uFrac;
       /* The liquid rides the primary bar only; the rails keep a flat plate and
-         get hard zeros. Each part of its motion is its own shed entry: the idle
-         wobble, the animated layer, and the slosh after a change. The slosh is
-         clamped here as well as bounded by its spring, because the shader's
-         amplitude budget assumes -1..1 and nothing downstream checks. */
+         get hard zeros. Each part of its motion is its own shed entry: the
+         animated layer, and the surge through it after a change. The surge is
+         clamped here as well as bounded by its spring, because the liquids'
+         texture offsets and light lifts are budgeted for -1..1. */
       const liquid = role === "hero";
       u.uFlow = liquid && this.allows("flow") ? 1 : 0;
-      u.uWobble = liquid && this.allows("wobble") ? 1 : 0;
-      u.uSlosh = liquid && a && this.allows("slosh") ? clamp(a.slosh, -1, 1) : 0;
+      u.uSurge = liquid && a && this.allows("surge") ? clamp(a.surge, -1, 1) : 0;
       u.uTemp = role === "hero" ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 

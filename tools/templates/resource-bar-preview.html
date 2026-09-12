@@ -117,6 +117,9 @@ input[type=range]{padding:0; width:230px}
 .nm-cell{position:relative}
 .nm-label{position:absolute; left:0; top:0; pointer-events:none}
 .nm-empty{border-top:1px dashed var(--line)}
+/* ── Contact sheets (?sheet=…) ── fixed columns so a headless screenshot is stable. */
+#sheet .grid.sheet-small{grid-template-columns:repeat(4, 180px)}
+#sheet .grid.sheet-big{grid-template-columns:repeat(2, 540px)}
 </style>
 
 <canvas id="gl"></canvas>
@@ -129,7 +132,7 @@ input[type=range]{padding:0; width:230px}
   <h2>Token-width fit · 128px</h2>
   <div class="stage" id="stage"></div>
   <h2>Damage and healing</h2>
-  <p class="note">The fill snaps and everything holds for the hitstop; then the change wave crosses the bar in the liquid's own idiom, the chip trail drains, the readout counts, and the front sloshes through the value and settles on it.</p>
+  <p class="note">The fill snaps and everything holds for the hitstop; then the change wave crosses the bar in the liquid's own idiom, the chip trail drains, the readout counts, and a soft surge runs through the liquid and settles — while the bar's edge stays a straight line exactly on the value.</p>
 
   <div class="play">
     <div class="slot" id="live" data-live="1"></div>
@@ -168,27 +171,27 @@ input[type=range]{padding:0; width:230px}
   <div class="grid" id="row-liq-lava" style="margin-top:22px"></div>
 
   <h2>Bloodied</h2>
-  <p class="note">Just above and just below half. Ink goes turbid and dark; mercury tarnishes and necks into beads; lava's crust thickens and its seams sputter.</p>
+  <p class="note">Just above and just below half. Every liquid grows paler and calmer, never darker: ink folds less and loses contrast, mercury's sheen spreads and goes milky, lava's convection evens out and its heat flickers softly.</p>
   <div class="grid" id="row-blood"></div>
 
-  <h2>The slosh</h2>
-  <p class="note">The real model, stepped to fixed points after a hit and after a heal and then held. The front swings through the value and settles on it; averaged over the bar's height its centre never leaves the value.</p>
-  <div class="grid" id="row-slosh-ink"></div>
-  <div class="grid" id="row-slosh-mercury" style="margin-top:22px"></div>
-  <div class="grid" id="row-slosh-lava" style="margin-top:22px"></div>
+  <h2>The surge</h2>
+  <p class="note">The real model, stepped to fixed points after a hit and after a heal and then held. The liquid's texture swings back and forth through the tube and its light lifts, then settles; the edge never moves off the value.</p>
+  <div class="grid" id="row-surge-ink"></div>
+  <div class="grid" id="row-surge-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-surge-lava" style="margin-top:22px"></div>
 
   <h2>Reactions</h2>
-  <p class="note">The change wave and the impact, in each liquid's idiom: ink bursts into a plume, mercury ripples and throws droplets that split, lava flares and spatters embers.</p>
+  <p class="note">The change wave and the impact, in each liquid's idiom and always soft and light: a plume of paler ink, soft mercury ripples and parting droplets, a lava flare with drifting embers.</p>
   <div class="grid" id="row-react-ink"></div>
   <div class="grid" id="row-react-mercury" style="margin-top:22px"></div>
   <div class="grid" id="row-react-lava" style="margin-top:22px"></div>
 
   <h2>Lava under a guard break</h2>
-  <p class="note">The lava dims its own seams while the guard is broken, so the initiative tracker's gold fracture reads over it. Ink and mercury beside it for comparison.</p>
+  <p class="note">The lava calms while the guard is broken — its glow evens out, it never darkens — so the initiative tracker's sharp gold fracture reads over it. Ink and mercury beside it for comparison.</p>
   <div class="grid" id="row-lava-break"></div>
 
   <h2>Shed under load</h2>
-  <p class="note">Flow and wobble given up: the liquid keeps its colour, its bloodied look and its front, and loses only its motion.</p>
+  <p class="note">Flow given up: the liquid keeps its colour, its bloodied look and its straight edge, and loses only its motion.</p>
   <div class="grid" id="row-shed"></div>
 
   <h2>In motion</h2>
@@ -816,23 +819,23 @@ for (const liquid of LIQUIDS) {
   const row = document.getElementById("row-react-" + liquid);
   add(row, { title: "Damage wave", sub: "<i>" + liquid + "</i>", frac: 0.45, ghost: 0.78, chip: 0.6, wave: 1, waveX: 0.62, seg: 10, max: 58, liquid });
   add(row, { title: "Heal wave", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 1, heal: 1, wave: 1, waveX: 0.52, seg: 10, max: 58, liquid });
-  add(row, { title: "Hit", sub: "<i>early</i>", frac: 0.45, ghost: 0.78, chip: 0.85, flash: 0.5, hit: 0.66, hitX: 0.45, slosh: 0.8, seg: 10, max: 58, liquid });
-  add(row, { title: "Hit", sub: "<i>late</i>", frac: 0.45, ghost: 0.7, chip: 0.3, hit: 0.3, hitX: 0.45, slosh: -0.2, seg: 10, max: 58, liquid });
-  add(row, { title: "Heal impact", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 0.5, heal: 1, hit: 0.55, hitX: 0.5, slosh: -0.7, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>early</i>", frac: 0.45, ghost: 0.78, chip: 0.85, flash: 0.5, hit: 0.66, hitX: 0.45, surge: 0.8, seg: 10, max: 58, liquid });
+  add(row, { title: "Hit", sub: "<i>late</i>", frac: 0.45, ghost: 0.7, chip: 0.3, hit: 0.3, hitX: 0.45, surge: -0.2, seg: 10, max: 58, liquid });
+  add(row, { title: "Heal impact", sub: "<i>" + liquid + "</i>", frac: 0.62, bloom: 0.5, heal: 1, hit: 0.55, hitX: 0.5, surge: -0.7, seg: 10, max: 58, liquid });
 }
 
 const lavaBreak = document.getElementById("row-lava-break");
 add(lavaBreak, { title: "Lava, intact", sub: "<i>seams at full glow</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava" });
 add(lavaBreak, { title: "Lava, spreading", sub: "<i>0.3s</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 0.3, brkX: 0.62 });
 add(lavaBreak, { title: "Lava, broken", sub: "<i>seams dimmed, gold reads</i>", frac: 0.62, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.62 });
-add(lavaBreak, { title: "Lava, broken and bloodied", sub: "<i>thick crust, sputtering</i>", frac: 0.3, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.55 });
+add(lavaBreak, { title: "Lava, broken and bloodied", sub: "<i>thicker, calmer, still bright</i>", frac: 0.3, seg: 10, max: 58, liquid: "lava", brk: 1, brkT: 2.4, brkX: 0.55 });
 add(lavaBreak, { title: "Ink, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "ink", brk: 1, brkT: 2.4, brkX: 0.62 });
 add(lavaBreak, { title: "Mercury, broken", sub: "<i>for comparison</i>", frac: 0.62, seg: 10, max: 58, liquid: "mercury", brk: 1, brkT: 2.4, brkX: 0.62 });
 
 const shedRow = document.getElementById("row-shed");
 for (const liquid of LIQUIDS) {
-  add(shedRow, { title: liquid + " · shed", sub: "<i>uFlow 0, uWobble 0</i>", frac: 0.62, seg: 10, max: 58, liquid, flow: 0, wobble: 0 });
-  add(shedRow, { title: liquid + " · shed, bloodied", sub: "<i>uFlow 0, uWobble 0</i>", frac: 0.38, seg: 10, max: 58, liquid, flow: 0, wobble: 0 });
+  add(shedRow, { title: liquid + " · shed", sub: "<i>uFlow 0</i>", frac: 0.62, seg: 10, max: 58, liquid, flow: 0 });
+  add(shedRow, { title: liquid + " · shed, bloodied", sub: "<i>uFlow 0</i>", frac: 0.38, seg: 10, max: 58, liquid, flow: 0 });
 }
 
 /* ── The frozen sequence ──────────────────────────────────────────────────
@@ -847,7 +850,7 @@ function frozen(row, { from, to, marks, max, liquid }) {
     a.set(to, { max });
     for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
     const sub = "<i>" + (liquid ? liquid + " · " : "") + (to < from ? "hit" : "heal")
-      + " · slosh " + a.slosh.toFixed(2) + "</i>";
+      + " · surge " + a.surge.toFixed(2) + "</i>";
     add(row, { title: ms + "ms", sub, seg: 10, max, liquid });
     cells[cells.length - 1].anim = a;
   }
@@ -857,9 +860,62 @@ frozen(document.getElementById("row-seq-hit"),
 frozen(document.getElementById("row-seq-heal"),
   { from: 0.35, to: 0.72, marks: [0, 55, 130, 240, 380, 620], max: 58 });
 for (const liquid of LIQUIDS) {
-  const row = document.getElementById("row-slosh-" + liquid);
+  const row = document.getElementById("row-surge-" + liquid);
   frozen(row, { from: 0.8, to: 0.45, marks: [70, 180, 330, 520, 900], max: 58, liquid });
   frozen(row, { from: 0.35, to: 0.72, marks: [70, 180, 330, 520, 900], max: 58, liquid });
+}
+
+/* ── Contact sheets ───────────────────────────────────────────────────────
+   ?sheet=ink|mercury|lava|names shows one purpose-built section and hides the
+   rest of the page, so a headless screenshot of the top of the page is the whole
+   sheet. A liquid sheet is that liquid at 100/62/51/49/40/12% and one hit and
+   one heal, each frozen 200ms after the change, at token size and enlarged. */
+{
+  const sheet = new URLSearchParams(location.search).get("sheet");
+  const page = document.querySelector(".page");
+  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names")) {
+    const keep = new Set();
+    if (sheet === "names") {
+      for (const el of page.children) {
+        if ((el.id || "").startsWith("row-names-") && el.id !== "row-names-zoom") keep.add(el);
+        if (el.tagName === "H2" && el.textContent.startsWith("Names") && !/zoom/.test(el.textContent)) keep.add(el);
+      }
+    } else {
+      const section = document.createElement("section");
+      section.id = "sheet";
+      section.innerHTML = "<h2>" + sheet + " · token size, 128px</h2><div class=\"grid sheet-small\" id=\"sheet-small\"></div>"
+        + "<h2>" + sheet + " · enlarged</h2><div class=\"grid sheet-big\" id=\"sheet-big\"></div>";
+      page.prepend(section);
+      keep.add(section);
+      const plan = [
+        { title: "100%", frac: 1 },
+        { title: "62%", frac: 0.62 },
+        { title: "51%", sub: "just above half", frac: 0.51 },
+        { title: "49%", sub: "bloodied", frac: 0.49 },
+        { title: "40%", sub: "bloodied", frac: 0.40 },
+        { title: "12%", sub: "bloodied, low", frac: 0.12 },
+        { title: "Hit, 80 → 50%", sub: "200ms after", change: [0.8, 0.5] },
+        { title: "Heal, 35 → 70%", sub: "200ms after", change: [0.35, 0.7] },
+      ];
+      for (const [id, size] of [["sheet-small", { w: 128, h: 30.72 }], ["sheet-big", { w: 520, h: 96 }]]) {
+        for (const p of plan) {
+          add(document.getElementById(id), {
+            title: p.title, sub: "<i>" + sheet + (p.sub ? " · " + p.sub : "") + "</i>",
+            frac: p.frac ?? 0.6, seg: 10, max: 58, liquid: sheet, ...size,
+          });
+          if (p.change) {
+            const a = new BarAnim(p.change[0], { motionScale: 1 });
+            a.step(16);
+            a.set(p.change[1], { max: 58 });
+            for (let t = 0; t < 200; t += 8) a.step(8);
+            cells[cells.length - 1].anim = a;
+          }
+        }
+      }
+    }
+    for (const el of [...page.children]) if (!keep.has(el)) el.style.display = "none";
+    document.body.dataset.sheet = sheet;
+  }
 }
 
 /* The token stage. */
@@ -1023,10 +1079,9 @@ function draw(now) {
     gl.uniform1f(U.uWave, a ? a.wave : (s.wave ?? 0));
     gl.uniform1f(U.uWaveX, a ? a.waveX : (s.waveX ?? frac));
     /* The liquid's motion rides the primary bar only, exactly as host.mjs
-       writes it; a shed cell zeroes flow and wobble. */
+       writes it; a shed cell zeroes flow. */
     gl.uniform1f(U.uFlow, isHero ? (s.flow ?? 1) : 0);
-    gl.uniform1f(U.uWobble, isHero ? (s.wobble ?? 1) : 0);
-    gl.uniform1f(U.uSlosh, isHero ? Math.max(-1, Math.min(1, a ? a.slosh : (s.slosh ?? 0))) : 0);
+    gl.uniform1f(U.uSurge, isHero ? Math.max(-1, Math.min(1, a ? a.surge : (s.surge ?? 0))) : 0);
     gl.uniform3fv(U.uRamp, RAMPS[rampKey]);
     gl.uniform3fv(U.uTempCol, TEMP_COL);
     gl.uniform3fv(U.uShieldCol, SHIELD_COL);
@@ -1121,7 +1176,7 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; ghost <b>" + live.ghost.toFixed(3) +
     "</b> &nbsp;·&nbsp; readout <b>" + live.num.toFixed(3) +
     "</b> &nbsp;·&nbsp; wave <b>" + live.wave.toFixed(2) + "@" + live.waveX.toFixed(2) +
-    "</b> &nbsp;·&nbsp; slosh <b>" + live.slosh.toFixed(2) +
+    "</b> &nbsp;·&nbsp; surge <b>" + live.surge.toFixed(2) +
     "</b> &nbsp;·&nbsp; liquid <b>" + liquidDefault +
     "</b> &nbsp;·&nbsp; break <b>" + live.broken.toFixed(2) + "@" + live.breakT.toFixed(2) + "s" +
     "</b> &nbsp;·&nbsp; hdr <b>" +

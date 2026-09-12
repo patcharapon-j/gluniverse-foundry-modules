@@ -252,7 +252,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave", "breakFlow", "reveal", "wobble", "flow", "slosh"];
+                    "sparks", "wave", "breakFlow", "reveal", "flow", "surge"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -552,7 +552,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (blocks.some((block) => !block)) fail("A liquid's guard-break block is no longer guarded by uBreak, so every intact bar pays for a Voronoi field and two octaves of fbm every frame.");
   else if (blocks.some((block) => !/mBody/.test(block)))
     fail("The fracture is not masked by mBody; the cracks will spill into the quad's bloom margin, outside the bar's own silhouette.");
-  else if (blocks.some((block) => /0\.299|LAVA_BREAK_DIM/.test(block)))
+  else if (blocks.some((block) => /0\.299|LAVA_BREAK_CALM/.test(block)))
     fail("The guard-break block desaturates or dims the bar. A broken guard says nothing about hit points, and a bar that dulls its own fill to announce an unrelated state has stopped being a measurement.");
   else ok("the fracture is clipped to the bar's silhouette and leaves the reading alone, in every liquid");
 
@@ -1222,7 +1222,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   else ok("rb.liquid is a world setting offering exactly the shader's liquids, defaulting to ink, and every bar on the canvas recompiles when it changes");
 
   /* (b) One material per program, and the refractive ribbons gone. */
-  const markers = { ink: "inkField", mercury: "mercuryEnv", lava: "lavaCells" };
+  const markers = { ink: "inkField", mercury: "sheenQ", lava: "lavaField" };
   let mixed = 0;
   if (Object.keys(markers).sort().join() !== [...shader.LIQUIDS].sort().join()) {
     fail(`A liquid was added without a material marker here (liquids ${shader.LIQUIDS.join(", ")}); this check can no longer tell the programs apart.`);
@@ -1231,7 +1231,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const liquid of shader.LIQUIDS) {
     const g = strip(shader.fragmentShader(liquid));
     for (const [other, marker] of Object.entries(markers)) {
-      const has = new RegExp(`\\b${marker}\\(`).test(g);
+      const has = new RegExp(`\\b${marker}\\b`).test(g);
       if (other === liquid && !has) { fail(`The ${liquid} program does not contain its own material (${marker}).`); mixed++; }
       if (other !== liquid && has) { fail(`The ${liquid} program also compiles ${other}'s material (${marker}); every bar would pay for a liquid it never draws.`); mixed++; }
     }
@@ -1270,86 +1270,151 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   }
   if (!loopBad) ok(`every idle term in every liquid turns a whole number of times in the ${shader.IDLE_LOOP_S}s loop`);
 
-  /* (d) The front bends around the value without moving it, and never far. */
-  const bodies = new Set(shader.LIQUIDS.map((l) =>
-    /float rbFront\(float fy, float wobble, float slosh\) \{([\s\S]*?)\n\}/.exec(shader.fragmentShader(l))?.[1]));
-  if (bodies.has(undefined)) fail("A liquid has no rbFront(), so its front is not the zero-mean meniscus.");
-  else if (bodies.size !== 1) fail("The liquids do not share one rbFront(); the budget below is checked against one of them only.");
-  else {
-    const body = [...bodies][0];
-    let frontBad = 0;
-    for (const [key, value] of Object.entries(shader.FRONT))
-      if (!body.includes(value.toFixed(4))) { fail(`rbFront() does not use FRONT.${key} (${value.toFixed(4)}); the exported budget no longer describes the shader.`); frontBad++; }
-    let fn = null;
-    try {
-      fn = new Function("fy", "wobble", "slosh", "rbPhase",
-        body.replace(/\bfloat\s+/g, "let ").replace(/\b(sin|cos|abs|sqrt)\(/g, "Math.$1("));
-    } catch (e) { fail("rbFront() could not be read as plain arithmetic: " + e.message); frontBad++; }
-    if (fn && !frontBad) {
-      const W = (2 * Math.PI) / shader.IDLE_LOOP_S;
-      const N = 2000;
-      let worstMean = 0, worstAmp = 0;
-      try {
-        for (let t = 0; t < shader.IDLE_LOOP_S; t += 0.53) {
-          const phase = (k) => t * W * k;
-          for (const wobble of [0, 1]) for (const slosh of [-1, -0.6, -0.25, 0, 0.4, 1]) {
-            let sum = 0;
-            for (let i = 0; i <= N; i++) {
-              const d = fn(-1 + (2 * i) / N, wobble, slosh, phase);
-              sum += (i === 0 || i === N ? 0.5 : 1) * d;
-              worstAmp = Math.max(worstAmp, Math.abs(d));
-            }
-            worstMean = Math.max(worstMean, Math.abs(sum / N));
-          }
-        }
-        if (worstMean > 1e-4)
-          fail(`rbFront() is not zero-mean across the bar's height (worst mean ${worstMean.toExponential(2)} bar heights): the front's centre has moved off the value, so the bar misreports its own length.`);
-        else if (worstAmp > 1 / 3)
-          fail(`rbFront() reaches ${worstAmp.toFixed(3)} bar heights; past a third of the bar's height the front stops being a curve on a length and becomes a second, disagreeing length.`);
-        else ok(`the front is zero-mean across the bar (worst ${worstMean.toExponential(1)}) and stays within ${worstAmp.toFixed(3)} bar heights (cap 0.333), evaluated from rbFront()'s own GLSL`);
-      } catch (e) { fail("rbFront() uses something this check cannot evaluate: " + e.message); }
-    }
-  }
+  /* (d) The edge is a straight, sharp vertical line at the value. The fill mask
+     may depend on x and the value only: anything that reads the height, the
+     clock, the surge or a liquid's field into the edge bends it, and a bent edge
+     is a bar a few pixels long or short at every health that nothing reports. */
+  const glslMod = await import(new URL("scripts/core/glsl.mjs", ROOT).href);
   const g0s = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
   const every = (re) => g0s.every((g) => re.test(g));
-  if (!every(/float fy = clamp\(p\.y \/ fh, -1\.0, 1\.0\)/))
-    fail("fy is not the fill's own height, symmetric about the mid-line; a zero-mean profile over a lopsided span has a non-zero mean.");
-  else if (!every(/float frontX = fillX \+ rbFront\(fy, uWobble, uSlosh\) \* hero \* endFade/))
-    fail("The fill's edge is not fillX + rbFront() gated by hero and endFade: either the rails bend, or the front no longer flattens against the ends of the tube.");
-  else if (!every(/ghostX \+ rbFront\(fy, uWobble, 0\.0\)/))
-    fail("The chip trail's edge sloshes; it is spent liquid and keeps only the meniscus.");
-  else if (!every(/mFillA \* rbEdge\(frontX \+ px, frontX - px, p\.x\)/) || !every(/rbGauss\(p\.x - frontX, 0\.060\)/) || !every(/float headIn = rbGauss\(p\.x - frontX/))
-    fail("The fill mask, the head glow or the flash no longer follows the bent front, so the liquid and its light disagree about where the edge is.");
-  else ok("the fill, the head glow and the flash follow the bent front; the chip trail keeps only the meniscus; the rails stay straight");
+  const edgeOf = (g) => /float fillEdge = ([^;]*);/.exec(g)?.[1] ?? "";
+  const chunkCode = (l) => strip(Object.values(shader.LIQUID_CHUNKS[l]).join("\n"));
+  if (g0s.some((g) => /\brbFront\b|\bfrontX\b|\buWobble\b|\buSlosh\b|\bendFade\b/.test(g)))
+    fail("A liquid program still bends the edge: rbFront, frontX, endFade, uWobble or uSlosh is back.");
+  else if (!every(/float fillX\s*=\s*mix\(fx0, fx1, clamp\(uFrac,\s*0\.0, 1\.0\)\);/))
+    fail("fillX is no longer the value mapped straight onto the fill span.");
+  else if (!g0s.every((g) => edgeOf(g) === "rbEdge(fillX + px * 0.5, fillX - px * 0.5, p.x)"))
+    fail(`The fill edge is not rbEdge(fillX ± half a device pixel, p.x); it depends on something besides x and the value, or it is softer than a pixel (${edgeOf(g0s[0]) || "missing"}).`);
+  else if (!every(/float mFill\s*=\s*mFillA \* fillEdge \* segMask;/))
+    fail("The fill mask is not the trough × the edge × the dividers alone; anything else multiplied in is a height-dependent edge.");
+  else if (!every(/rbEdge\(ghostX \+ px \* 0\.5, ghostX - px \* 0\.5, p\.x\)/))
+    fail("The chip trail's edge is no longer a straight line at the trail's value.");
+  else if (!every(/float headIn = rbGauss\(p\.x - fillX,/) || !every(/rbGauss\(p\.x - fillX, 0\.060\)/))
+    fail("The head glow or the flash no longer sits on the straight edge.");
+  else if (shader.LIQUIDS.some((l) => /\b(?:mFill|fillX|fillEdge|mFillA)\s*[*+\-/]?=(?!=)/.test(chunkCode(l))))
+    fail("A liquid chunk writes the fill edge or its mask.");
+  else if (shader.LIQUIDS.some((l) => !/\buSurge\b/.test(strip(shader.LIQUID_CHUNKS[l].fill))))
+    fail("A liquid's fill never reads uSurge, so the surge spring has no job in it — the spring would be animating nothing.");
+  else {
+    /* The edge's width, from the prelude's own GL_EDGE: rbEdge floors a
+       transition at that many device pixels, so half a pixel either side of the
+       value must come out at about one pixel of antialiasing. */
+    const glEdge = Number(/const float GL_EDGE = ([0-9.]+);/.exec(glslMod.SCALE_PRELUDE)?.[1]);
+    const width = Math.max(1, glEdge);
+    if (!(width <= 1.5))
+      fail(`The edge antialiases over ${width} device pixels; the design is a sharp edge of about one.`);
+    else ok(`the fill ends in a straight vertical edge at the value in every liquid — x and the value only, ${width} device pixels of antialiasing — with the chip trail, head glow and flash on it, and the surge moving only texture and light`);
+  }
 
-  /* (e) The lava gives way to a guard break. */
+  /* (d2) The liquid is never darker than its ramp colour. The only colour
+     operations a liquid may use are the three helpers below; their bodies are
+     pinned to the mirrors this check evaluates, the shade ranges are pinned to
+     the floor, and every write in every liquid chunk is pinned to the helpers. */
+  let lumBad = 0;
+  const lumFail = (m) => { fail(m); lumBad++; };
+  const luma = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const clamp01 = (t) => Math.min(1, Math.max(0, t));
+  const shadeJs = (base, f, lo, hi) => base.map((v) => v * (lo + (hi - lo) * clamp01(f)));
+  const lightenJs = (c, to, t) => c.map((v, i) => v + (Math.max(v, to[i]) - v) * clamp01(t));
+  const softenJs = (c, t) => { const g = luma(c); return c.map((v) => v + (g - v) * clamp01(t)); };
+  const head = shader.fragmentShader(shader.DEFAULT_LIQUID);
+  const mirrored = {
+    rbShade: "return base * mix(lo, hi, clamp(field, 0.0, 1.0));",
+    rbLighten: "return mix(c, max(c, toward), clamp(t, 0.0, 1.0));",
+    rbSoften: "return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));",
+  };
+  for (const [fn, body] of Object.entries(mirrored)) {
+    const got = new RegExp(`vec3 ${fn}\\([^)]*\\) \\{\\s*([^}]*?)\\s*\\}`).exec(head)?.[1];
+    if (got !== body) lumFail(`${fn}() is not the body this check mirrors (${got ?? "missing"}); the luminance floor would be proven about a different function.`);
+  }
+  if (!/const vec3 LUMA = vec3\(0\.299, 0\.587, 0\.114\);/.test(head))
+    lumFail("LUMA is not the luma weights, so rbSoften's grey is not of equal luma.");
+  if (!(shader.LIQUID_FLOOR >= 0.8))
+    lumFail(`LIQUID_FLOOR is ${shader.LIQUID_FLOOR}; the liquid must stay at least 0.8 of its ramp colour's luminance.`);
+  let seedL = 11;
+  const rndL = () => (seedL = (seedL * 16807) % 2147483647) / 2147483647;
+  let worstLum = Infinity;
+  for (const liquid of shader.LIQUIDS) {
+    const [lo, hi] = shader.LIQUID_SHADE[liquid] ?? [];
+    if (!(lo >= shader.LIQUID_FLOOR && hi >= lo)) { lumFail(`${liquid}'s shade range [${lo}, ${hi}] reaches below LIQUID_FLOOR (${shader.LIQUID_FLOOR}).`); continue; }
+    const fn = strip(shader.LIQUID_CHUNKS[liquid].functions);
+    const cLo = Number(/const float SHADE_LO = ([0-9.]+);/.exec(fn)?.[1]);
+    const cHi = Number(/const float SHADE_HI = ([0-9.]+);/.exec(fn)?.[1]);
+    if (cLo !== lo || cHi !== hi) lumFail(`The ${liquid} program's SHADE_LO/SHADE_HI (${cLo}, ${cHi}) are not LIQUID_SHADE.${liquid}.`);
+    /* Random ramp colours, a shade from anywhere in (and past) the field's
+       range, then six random lighten/soften steps with out-of-range amounts. */
+    for (let n = 0; n < 4000; n++) {
+      const base = [rndL(), rndL(), rndL()];
+      if (luma(base) < 0.02) continue;
+      let c = shadeJs(base, rndL() * 1.4 - 0.2, lo, hi);
+      for (let s = 0; s < 6; s++) {
+        c = rndL() < 0.5 ? lightenJs(c, [rndL(), rndL(), rndL()], rndL() * 1.4 - 0.2) : softenJs(c, rndL() * 1.4 - 0.2);
+      }
+      worstLum = Math.min(worstLum, luma(c) / luma(base));
+    }
+  }
+  if (worstLum < shader.LIQUID_FLOOR - 1e-9)
+    lumFail(`A chain of rbShade/rbLighten/rbSoften reached ${worstLum.toFixed(3)} of the ramp colour's luminance, under the ${shader.LIQUID_FLOOR} floor.`);
+  for (const liquid of shader.LIQUIDS) {
+    const ch = shader.LIQUID_CHUNKS[liquid];
+    const all = chunkCode(liquid);
+    if (/\bINK0?\b|vec3\(\s*0(?:\.0*)?\s*\)/.test(all))
+      lumFail(`The ${liquid} chunk mixes in INK or black; the liquid never uses dark.`);
+    const fill = strip(ch.fill);
+    const writes = [...fill.matchAll(/\bfillCol\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
+    const firstOk = writes[0]?.[1] === "=" && /^rbShade\(base,/.test(writes[0][2]);
+    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften)\(fillCol,/.test(m[2]));
+    if (!firstOk || !restOk)
+      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften of itself; any other write can take it below the floor.`);
+    else if ((fill.match(/\brbShade\(/g) || []).length !== 1 || !/rbShade\(base, [^;]*, SHADE_LO, SHADE_HI\)/.test(fill))
+      lumFail(`The ${liquid} fill does not shade exactly once, inside its own SHADE range.`);
+    const fx = strip(ch.wave + "\n" + ch.impact);
+    const cWrites = [...fx.matchAll(/(?:^|[^\w.])C\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
+    if (cWrites.some((m) => !(m[1] === "+=" || (m[1] === "=" && /^rbLighten\(C,/.test(m[2])))))
+      lumFail(`The ${liquid} wave or impact writes C other than by adding light or rbLighten(C, …); a reaction must never darken the liquid.`);
+  }
+  if (!every(/float readingWell = [^;]*\* \(1\.0 - mFill\);/))
+    lumFail("The reading well darkens the liquid; it may recess the empty trough only.");
+  if (g0s.some((g) => /base = mix\(base, rampAt\(/.test(g)))
+    lumFail("base is pulled towards another ramp colour; bloodied belongs in the liquid, paler and calmer, not in a darker colour.");
+  if (!lumBad)
+    ok(`every liquid stays at or above ${shader.LIQUID_FLOOR}× its ramp colour's luminance: shade ranges ${shader.LIQUIDS.map((l) => l + " " + shader.LIQUID_SHADE[l].join("–")).join(", ")}, worst lighten/soften chain ${worstLum.toFixed(3)}, and no chunk mixes INK or black or writes colour any other way`);
+
+  /* (d3) Smooth and blended: nothing inside a liquid quantises, steps, draws a
+     crisp shape or a thin band. Hashes and noise live in the shared frame; a
+     chunk only blends them. */
+  const hard = shader.LIQUIDS.flatMap((l) =>
+    [...chunkCode(l).matchAll(/\b(floor|fract|step|rbCover|rbBand|lavaCells|mercuryEnv)\(/g)].map((m) => `${l}: ${m[1]}()`));
+  if (hard.length)
+    fail(`A liquid uses a hard-edged operation (${[...new Set(hard)].join(", ")}); the liquid, its bloodied look and its reactions must be soft and blended.`);
+  else ok("no liquid chunk quantises, steps, or draws a crisp shape or thin band");
+
+  /* (e) The lava calms under a guard break — it never dims. */
   const lava = strip(shader.fragmentShader("lava"));
-  const dim = shader.LAVA_BREAK_DIM;
-  if (!(dim >= 0.4 && dim < 1))
-    fail(`LAVA_BREAK_DIM is ${dim}; under 0.4 the lava's seams still out-shine the gold fracture laid over them, and at 1 the lava goes dark and stops reading as lava.`);
-  else if (!/float glowAmt = [^;]*\(1\.0 - LAVA_BREAK_DIM \* uBreak\)/.test(lava))
-    fail("The lava's seam glow does not dim under uBreak; under a guard break the gold fracture disappears into the lava.");
-  else if (!/lavaSeam \* \([^;]*glowAmt/.test(lava))
-    fail("glowAmt no longer drives the lava's seams, so dimming it dims nothing.");
-  else if (shader.LIQUIDS.some((l) => l !== "lava" && /LAVA_BREAK_DIM \*/.test(strip(shader.fragmentShader(l)))))
-    fail("A liquid other than lava dims under the guard break; only lava's seams compete with the gold.");
-  else ok(`the lava gives up ${Math.round(dim * 100)}% of its seam glow under a guard break so the gold reads; nothing else dims`);
+  const calmK = shader.LAVA_BREAK_CALM;
+  if (!(calmK >= 0.4 && calmK <= 1))
+    fail(`LAVA_BREAK_CALM is ${calmK}; under 0.4 the lava's convection still competes with the sharp gold fracture laid over it.`);
+  else if (!/float calm = LAVA_BREAK_CALM \* uBreak;/.test(lava) || !/heat = mix\(heat, [0-9.]+, calm\);/.test(lava) || !/\(1\.0 - calm\)\)/.test(lava))
+    fail("The lava does not calm under uBreak (its variation must flatten and its highlights ease); the gold fracture reads as one more bright wobble.");
+  else if (shader.LIQUIDS.some((l) => l !== "lava" && /LAVA_BREAK_CALM \*/.test(strip(shader.fragmentShader(l)))))
+    fail("A liquid other than lava changes under the guard break.");
+  else ok(`the lava calms by ${Math.round(calmK * 100)}% under a guard break — flatter, never darker — so the sharp gold reads; nothing else changes`);
 
   /* (f) No length springs, and the one spring there is settles. Structural
      first, because a spring on a length is one edit away from looking fine. */
   const springs = [...a.matchAll(/\bspring\(/g)].length;
-  const sloshUses = [...a.matchAll(/\bsloshSpring\(/g)].length;
-  if (springs !== 1 || !/function sloshSpring\([^)]*\)\s*\{\s*return spring\(/.test(a))
-    fail("anim.mjs calls spring() somewhere other than sloshSpring(); a spring on a length reads as jelly.");
-  else if (sloshUses !== 2 || !/slosh:\s*\[[^\]]*\],\s*ease:\s*sloshSpring\(/.test(a))
-    fail("sloshSpring() is given to something other than the slosh channel.");
+  const surgeUses = [...a.matchAll(/\bsurgeSpring\(/g)].length;
+  if (springs !== 1 || !/function surgeSpring\([^)]*\)\s*\{\s*return spring\(/.test(a))
+    fail("anim.mjs calls spring() somewhere other than surgeSpring(); a spring on a length reads as jelly.");
+  else if (surgeUses !== 2 || !/surge:\s*\[[^\]]*\],\s*ease:\s*surgeSpring\(/.test(a))
+    fail("surgeSpring() is given to something other than the surge channel.");
   else if (/\b(?:in|out|inOut|outIn)(?:Back|Elastic|Bounce)\b/.test(a))
-    fail("anim.mjs uses an overshooting ease (back, elastic or bounce); nothing in the bar may overshoot but the slosh.");
-  else ok("the only spring in anim.mjs drives the slosh, and no ease overshoots");
+    fail("anim.mjs uses an overshooting ease (back, elastic or bounce); nothing in the bar may overshoot but the surge.");
+  else ok("the only spring in anim.mjs drives the surge, and no ease overshoots");
 
   /* …and behaviourally: every length stays inside the span of its change and
-     moves one way only, at full and reduced motion; the slosh stays within
-     -1..1, swings through the value, and comes to rest at exactly 0. */
+     moves one way only, at full and reduced motion; the surge stays within
+     -1..1, swings back and forth, and comes to rest at exactly 0. */
   let lengthBad = 0;
   const noLen = (msg) => { if (lengthBad++ < 4) fail(msg); };
   for (const scale of [1, 0.6]) {
@@ -1360,7 +1425,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       const lo = Math.min(from, to) - 1e-9, hi = Math.max(from, to) + 1e-9;
       const down = to < from;
       const prev = { frac: bar.frac, ghost: bar.ghost, num: bar.num };
-      let crossings = 0, sign = Math.sign(bar.slosh), steps = 0;
+      let crossings = 0, sign = Math.sign(bar.surge), steps = 0;
       for (; steps < 800 && (steps < 2 || bar.hot); steps++) {
         bar.step(16);
         for (const key of ["frac", "ghost", "num"]) {
@@ -1370,15 +1435,15 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
           if (down ? moved > 1e-12 : moved < -1e-12) noLen(`${key} reversed during a ${from}→${to} change at motion ${scale}: a length recoiled.`);
           prev[key] = v;
         }
-        if (Math.abs(bar.slosh) > 1 + 1e-9) noLen(`The slosh reached ${bar.slosh.toFixed(3)}; the shader's front budget assumes -1..1.`);
-        const s = Math.sign(bar.slosh);
+        if (Math.abs(bar.surge) > 1 + 1e-9) noLen(`The surge reached ${bar.surge.toFixed(3)}; the liquids' texture offsets and light lifts assume -1..1.`);
+        const s = Math.sign(bar.surge);
         if (s && sign && s !== sign) crossings++;
         if (s) sign = s;
       }
       if (bar.frac !== to || bar.num !== to || bar.ghost !== to)
         noLen(`A ${from}→${to} change did not come to rest exactly on its value (frac ${bar.frac}, readout ${bar.num}, trail ${bar.ghost}).`);
-      if (bar.slosh !== 0) noLen(`The slosh after a ${from}→${to} change never came to rest (${bar.slosh}).`);
-      if (scale === 1 && crossings < 2) noLen(`The slosh after a ${from}→${to} change does not swing through the value (${crossings} crossings); a front that only eases back is not a slosh.`);
+      if (bar.surge !== 0) noLen(`The surge after a ${from}→${to} change never came to rest (${bar.surge}).`);
+      if (scale === 1 && crossings < 2) noLen(`The surge after a ${from}→${to} change does not swing back and forth (${crossings} crossings); a liquid that only eases back does not surge.`);
     }
   }
   /* A long run of random changes, some mid-flight: nothing ever moves away from
@@ -1405,8 +1470,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   hushed.set(0.3);
   hushed.step(30);
   hushed.set(0.5, { silent: true });
-  if (quiet.slosh !== 0 || hushed.slosh !== 0) noLen("The slosh survives motion \"none\" or a silent update.");
-  if (!lengthBad) ok("fill, trail and readout never overshoot or recoil at full or reduced motion, under single or rapid changes; the slosh stays in -1..1, swings, and rests at 0");
+  if (quiet.surge !== 0 || hushed.surge !== 0) noLen("The surge survives motion \"none\" or a silent update.");
+  if (!lengthBad) ok("fill, trail and readout never overshoot or recoil at full or reduced motion, under single or rapid changes; the surge stays in -1..1, swings, and rests at 0");
 
   /* (g) anime.js is sought, never played, and its shared engine is untouched. */
   const { engine } = await import(new URL("scripts/vendor/animejs/engine/engine.js", ROOT).href);
@@ -1445,12 +1510,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
      is shed on its own entry — including the idle tick itself. */
   if (!/const liquid = role === "hero";/.test(h)
     || !/u\.uFlow = liquid && this\.allows\("flow"\) \? 1 : 0/.test(h)
-    || !/u\.uWobble = liquid && this\.allows\("wobble"\) \? 1 : 0/.test(h)
-    || !/u\.uSlosh = liquid && a && this\.allows\("slosh"\) \? clamp\(a\.slosh, -1, 1\) : 0/.test(h))
-    fail("host.mjs does not write uFlow, uWobble and uSlosh for the primary bar only, each behind its own shed gate (and the slosh clamped to -1..1).");
+    || !/u\.uSurge = liquid && a && this\.allows\("surge"\) \? clamp\(a\.surge, -1, 1\) : 0/.test(h))
+    fail("host.mjs does not write uFlow and uSurge for the primary bar only, each behind its own shed gate (and the surge clamped to -1..1).");
+  else if (/uWobble|uSlosh|"wobble"|"slosh"/.test(h) || anim.SHED_ORDER.includes("wobble") || anim.SHED_ORDER.includes("slosh"))
+    fail("The removed front wobble or slosh is still written by the host or still has a shed entry.");
   else if (!/const idle = [^;]*this\.allows\("flow"\)/.test(h) || !/const idleFlow = [^;]*this\.allows\("flow"\)/.test(h))
     fail("Shedding \"flow\" leaves idle bars in the ticker, so the one standing cost every visible bar pays can never be given up.");
-  else ok("the liquid's flow, wobble and slosh ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
+  else ok("the liquid's flow and surge ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
 }
 
 /* ── 10. The shader compiles ────────────────────────────────────────────── */

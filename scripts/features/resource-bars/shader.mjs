@@ -2,11 +2,11 @@
  * GLUniverse Suite — resource bars: the fragment shader.
  *
  * One quad per bar, everything computed per-pixel: the recessed well, the
- * health liquid and its meniscus front, the chip trail, the temp-HP overlay,
- * the segment ticks, the low-health breath, the change wave, the impact and its
- * debris, and the chamfered Etched Glass frame. Doing it in a shader rather
- * than in PIXI.Graphics is what makes "shading" and "animates every frame"
- * cheap instead of a per-token retessellation.
+ * health liquid, the chip trail, the temp-HP overlay, the segment ticks, the
+ * low-health breath, the change wave, the impact and its debris, and the
+ * chamfered Etched Glass frame. Doing it in a shader rather than in
+ * PIXI.Graphics is what makes "shading" and "animates every frame" cheap
+ * instead of a per-token retessellation.
  *
  * ── Three liquids, one program each ──
  *
@@ -18,6 +18,19 @@
  * (on some drivers) evaluated as all three. `fragmentShader(liquid)` is the only
  * way a program is built, and `tools/resource-bar-check.mjs` checks every
  * variant rather than the default one.
+ *
+ * Two rules hold for every liquid, and both are pinned:
+ *
+ *   - **The edge is a straight vertical line at the value**, one device pixel of
+ *     antialiasing wide. Nothing inside the liquid — its flow, its bloodied look,
+ *     its surge after a change — may move or bend it; the liquid moves *behind*
+ *     a sharp edge.
+ *   - **The liquid is never darker than its ramp colour.** Every liquid chunk
+ *     shades `base` through `rbShade` inside its own LIQUID_SHADE range (never
+ *     below LIQUID_FLOOR) and otherwise only lightens (`rbLighten`) or
+ *     desaturates to an equal-luma grey (`rbSoften`). No black, no INK, no
+ *     darkening gradient. The trough, the dividers and the guard-break seams are
+ *     not the liquid and keep their dark.
  *
  * The rails and the shield rail keep a flat plate: a secondary resource is not
  * health, and giving it the same liquid would say it is.
@@ -91,8 +104,7 @@ export const UNIFORMS = Object.freeze({
   uFade: "float",     // overall opacity while a bar fades out, 1 at rest
 
   uFlow: "float",     // the liquid's own animated layer, 1 on, 0 once shed under load
-  uWobble: "float",   // the meniscus's idle wobble, 1 on, 0 once shed
-  uSlosh: "float",    // the front's slosh after a change, -1..1, 0 at rest or shed
+  uSurge: "float",    // the surge through the liquid after a change, -1..1; texture and light only, never the edge
 
   uBreak: "float",     // guard-break fracture, 0..1 (0 = intact); hero row only
   uBreakT: "float",    // seconds since the fracture landed — the shatter's own clock
@@ -176,37 +188,41 @@ export const DEFAULT_LIQUID = "ink";
 export const IDLE_LOOP_S = 64;
 
 /**
- * The leading edge's shape, in bar heights.
+ * The dimmest a liquid pixel may be, as a fraction of its ramp colour.
  *
- * The front is a rounded meniscus rather than a ruler line, which is most of
- * what makes the fill read as liquid. It has three terms — the meniscus itself,
- * a very small idle wobble, and the slosh a value change sets off — and each is
- * built from a profile across the fill's height whose **mean is zero**:
- * `1/3 - y²`, `y`, `y² - 1/3` and `cos(πy)` all integrate to nothing over
- * [-1, 1]. So the centre of the front, averaged over the bar's height, is
- * exactly where the value is. The shape bends around the reading; it never
- * moves it.
- *
- * The amplitudes are chosen so that the worst case of all three together stays
- * inside a third of a bar height either way: 0.15 × 2/3 + 0.025 × 1 + 0.15 × 1
- * = 0.275. Past that the front stops being a curve on a length and becomes a
- * second, disagreeing length. `resource-bar-check` evaluates `rbFront`'s own
- * GLSL numerically to hold both claims, rather than trusting this comment.
+ * A liquid that dips below the colour the ramp hands it stops reading as the
+ * health colour and starts reading as a darker, different one — and dark bands
+ * inside a fill are exactly what "lines and hard shading" looked like. So the
+ * only multiplication any liquid applies to `base` is `rbShade`, inside its own
+ * range below, whose low end is at or above this floor; everything else a liquid
+ * does can only lighten or keep luminance. `resource-bar-check` evaluates the
+ * helpers and the ranges numerically and refuses anything in a liquid chunk that
+ * could darken.
  */
-export const FRONT = Object.freeze({ meniscus: 0.15, wobble: 0.025, slosh: 0.15 });
+export const LIQUID_FLOOR = 0.8;
+
+/** Each liquid's `rbShade` range, [low, high], as multiples of its ramp colour. */
+export const LIQUID_SHADE = Object.freeze({
+  ink: Object.freeze([0.90, 1.16]),
+  mercury: Object.freeze([0.94, 1.10]),
+  lava: Object.freeze([0.96, 1.24]),
+});
 
 /**
- * How much of its own glow the lava gives up while the guard is broken.
+ * How much of its internal variation the lava gives up while the guard is broken.
  *
- * The lava's seams are warm light in cracks between plates, and the guard break
- * is gold light in cracks — laid over one another at full strength the fracture
- * the initiative tracker put there simply disappears into the lava. So the lava
- * dims its *seams* (never its plates, and never the hue: the reading is not
- * touched) and lets the gold carry the break.
+ * The lava is bright, soft, continuous glow, and the guard break is sharp gold
+ * light in cracks — laid over a lively lava at full strength the fracture reads
+ * as one more bright wobble among many. So under a break the lava *calms*: its
+ * convection flattens towards an even glow and its hot highlights ease off, and
+ * the sharp gold is the only structure left on the bar. It never darkens to do
+ * it; the floor holds.
  */
-export const LAVA_BREAK_DIM = 0.65;
+export const LAVA_BREAK_CALM = 0.6;
 
 const f4 = (n) => n.toFixed(4);
+const shadeConsts = (liquid) =>
+  `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
 
 /* ── The shared frame ───────────────────────────────────────────────────── */
 
@@ -217,7 +233,7 @@ const float SHIELD_PITCH = ` + f4(SHIELD_PITCH) + `;
 const float BREAK_DENSE = ` + f4(BREAK_DENSE) + `;
 const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
-const float LAVA_BREAK_DIM = ` + f4(LAVA_BREAK_DIM) + `;
+const float LAVA_BREAK_CALM = ` + f4(LAVA_BREAK_CALM) + `;
 const float LOOP_W = ` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
@@ -243,8 +259,7 @@ uniform float uRole;
 uniform float uReveal;
 uniform float uFade;
 uniform float uFlow;
-uniform float uWobble;
-uniform float uSlosh;
+uniform float uSurge;
 uniform float uBreak;
 uniform float uBreakT;
 uniform float uBreakX;
@@ -299,6 +314,13 @@ float rbDetail(float w) {
 /* Antialiased coverage of an SDF: 1 inside, 0 outside, one pixel of transition. */
 float rbCover(float d) {
   return 1.0 - smoothstep(-px * 0.5, px * 0.5, d);
+}
+
+/* A soft round blob — never a disc with an edge — floored at a pixel with its
+   light preserved, so a small one fades rather than aliasing. */
+float rbBlob(vec2 d, float r) {
+  float w = max(r, px * GL_BAND);
+  return exp(-dot(d, d) / (w * w)) * (r / w);
 }
 
 float sdBox(vec2 p, vec2 b) {
@@ -394,87 +416,87 @@ float rbNoise(vec2 x, float period) {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-/* The leading edge, as an x-offset from the true value at height fy (-1 at the
-   bottom of the fill, 1 at the top). Every profile here integrates to zero over
-   [-1, 1], so the front's centre is the value; see FRONT in shader.mjs for the
-   amplitude budget. resource-bar-check evaluates this function's own source, so
-   keep it to float arithmetic, sin, cos and rbPhase. */
-float rbFront(float fy, float wobble, float slosh) {
-  float meniscus = ` + f4(FRONT.meniscus) + ` * (0.3333333333 - fy * fy);
-  float lean = ` + f4(FRONT.wobble) + ` * wobble * (0.6 * fy * sin(rbPhase(3.0)) + 0.6 * (fy * fy - 0.3333333333) * sin(rbPhase(5.0) + 1.3));
-  float surge = ` + f4(FRONT.slosh) + ` * slosh * (0.75 * fy + 0.25 * cos(3.1415926536 * fy));
-  return meniscus + lean + surge;
+/* ── The liquid's colour operations ──────────────────────────────────────
+   The only three things a liquid may do to a colour, each unable to take it
+   below the floor. resource-bar-check mirrors these bodies in JS and evaluates
+   them, so change them only together with the check. */
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+
+/* The one multiplication: the ramp colour scaled inside [lo, hi] by a field. */
+vec3 rbShade(vec3 base, float field, float lo, float hi) {
+  return base * mix(lo, hi, clamp(field, 0.0, 1.0));
 }
 
-/* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. */
+/* Towards a lighter colour, channel by channel: no channel can drop. */
+vec3 rbLighten(vec3 c, vec3 toward, float t) {
+  return mix(c, max(c, toward), clamp(t, 0.0, 1.0));
+}
+
+/* Towards a grey of the same luma: paler, never darker (the weights sum to 1). */
+vec3 rbSoften(vec3 c, float t) {
+  return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));
+}
+
+/* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. The
+   trough, the frame and the fracture's seams use these; no liquid does. */
 const vec3 INK  = vec3(0.043, 0.059, 0.090);
 const vec3 INK0 = vec3(0.008, 0.027, 0.043);
 `;
 
 /* ── The liquids ────────────────────────────────────────────────────────────
-   Each liquid is five snippets spliced into main() — `functions` at file scope,
-   `decl` before the fill, `fill` (writes fillCol and cover), `wave` and `impact`
-   — so they read main()'s locals directly instead of through a twelve-argument
-   signature per liquid. Every snippet must use only what main() has declared by
-   the point it is spliced in. */
+   Each liquid is four snippets: `functions` at file scope, and `fill` (writes
+   fillCol), `wave` and `impact` spliced into main() so they read its locals
+   directly. Every snippet must use only what main() has declared by the point it
+   is spliced in, and every one is held to the same three rules the check tool
+   enforces: smooth (no steps, no bands, no crisp shapes), never darker than
+   base, and never touching the edge. */
 
-const LIQUID_CHUNKS = {
-  /* Ink, or plasma: a slow domain-warped field flowing along the tube,
-     posterised into a few flat tones of the health colour. The calmest of the
-     three and the default, because a fill that is always quietly moving is
-     still a fill that is mostly not asking to be looked at. */
-  ink: {
-    functions: `
-float inkField(vec2 lq) {
-  /* Stretched along the bar so it reads as flow down a tube, not as blotches. */
-  vec2 w = vec2(lq.x * 0.95, lq.y * 2.6);
+export const LIQUID_CHUNKS = Object.freeze({
+  /* Ink, or plasma: slow domain-warped swirls flowing along the tube, blended
+     smoothly through a narrow range of the health colour. The calmest of the
+     three and the default, because a fill that is always quietly moving is still
+     a fill that is mostly not asking to be looked at. */
+  ink: Object.freeze({
+    functions: shadeConsts("ink") + `
+float inkField(vec2 lq, float thick) {
+  /* Stretched along the bar and kept low-frequency, so it reads as flow down a
+     tube rather than as blotches. Thicker ink folds less. */
+  vec2 w = vec2(lq.x * 0.80, lq.y * 1.9);
   if (uFlow < 0.5) return rbNoise(w, 12.0);
-  vec2 warp = vec2(rbNoise(w * 0.7 + vec2(rbDrift(1.0, 6.0), 1.7), 6.0),
-                   rbNoise(w * 0.7 + vec2(-rbDrift(2.0, 6.0), 5.3), 6.0));
-  return rbNoise(w + (warp - 0.5) * 2.2 + vec2(rbDrift(3.0, 12.0), 0.0), 12.0);
+  vec2 warp = vec2(rbNoise(w * 0.6 + vec2(rbDrift(1.0, 6.0), 1.7), 6.0),
+                   rbNoise(w * 0.6 + vec2(-rbDrift(2.0, 6.0), 5.3), 6.0));
+  return rbNoise(w + (warp - 0.5) * mix(2.0, 0.9, thick) + vec2(rbDrift(3.0, 12.0), 0.0), 12.0);
 }
 `,
-    decl: ``,
     fill: `
-    float field = inkField(lq);
-    /* Posterised, with each step antialiased against the device pixel: flat
-       tones are what make it read as drawn ink rather than as smoke. */
-    float levels = mix(4.0, 3.0, bloodied);
-    float s = clamp(field * 1.25 - 0.12, 0.0, 0.999) * levels;
-    float aaI = clamp(6.0 * px, 0.06, 0.45);
-    float tone = (floor(s) + smoothstep(1.0 - aaI, 1.0, fract(s))) / levels;
-    vec3 deep = base * 0.16;
-    vec3 midI = base * 0.60;
-    vec3 lite = mix(base, vec3(1.0), 0.30) * 1.05;
-    fillCol = mix(mix(deep, midI, clamp(tone * 2.0, 0.0, 1.0)), lite, clamp(tone * 2.0 - 1.0, 0.0, 1.0));
-    fillCol *= 0.76 + 0.34 * depth;
-    /* Bloodied: turbid. A slow cloud muddies the tones and pulls them dark, so
-       the same liquid now reads as something has got into it. */
-    float cloud = rbNoise(vec2(lq.x * 0.45 + rbDrift(1.0, 8.0), lq.y * 1.3 + 3.1), 8.0);
-    vec3 murk = mix(INK0, base * 0.24, 0.35 + 0.65 * cloud);
-    fillCol = mix(fillCol, murk, bloodied * (0.42 + 0.38 * cloud));
-    fillCol += mix(base, vec3(1.0), 0.55) * rbBand(hb - 0.80, 0.035) * mix(0.55, 0.20, bloodied);
-    fillCol += base * rbBand(hb + 0.83, 0.045) * 0.30;
+    /* Blended, never quantised: the field goes straight into the shade. The
+       surge pushes the swirls along the tube after a change; the edge does not
+       move. Bloodied, the ink thickens — it folds less, its contrast halves and
+       its colour goes paler — rather than going dark. */
+    float swirl = smoothstep(0.12, 0.88, inkField(lq + vec2(uSurge * 0.45, 0.0), bloodied));
+    swirl = mix(swirl, 0.5, 0.5 * bloodied);
+    fillCol = rbShade(base, swirl, SHADE_LO, SHADE_HI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), swirl * swirl * 0.30);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.30), smoothstep(-0.4, 1.0, fy) * 0.22);
+    fillCol = rbSoften(fillCol, 0.30 * bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.25), 0.18 * bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);
 `,
     wave: `
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-    /* A billowing front, lobed by noise, pushing a plume of ink behind it. */
-    float lobe = rbNoise(vec2(fy * 1.6 + 2.0, uWaveX * 5.0), 64.0) - 0.5;
-    float wd = (p.x - wx) * dir + fy * fy * 0.16 + lobe * 0.16;
+    float wd = (p.x - wx) * dir;
     float area = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
     vec3 waveCol = mix(vec3(1.0, 0.22, 0.08), vec3(0.20, 0.90, 0.64), uHeal);
     float behind = max(-wd, 0.0);
-    float plume = exp(-behind / 0.55) * (1.0 - step(0.0, wd));
-    /* Posterised like the liquid it is pushing through: three flat steps. */
-    float ps = plume * 3.0;
-    float aaP = clamp(6.0 * px, 0.10, 0.5);
-    float plumeStep = (floor(ps) + smoothstep(1.0 - aaP, 1.0, fract(ps))) / 3.0;
-    C = mix(C, waveCol * (0.30 + 0.60 * plumeStep), plumeStep * area * 0.85);
-    float crest = rbGauss(wd, 0.05);
-    C += mix(waveCol, vec3(1.0), 0.35) * crest * area * 1.10;
-    C += waveCol * crest * uWave * mTrough * 0.20;
+    /* A soft plume of lighter ink behind the front, clouded by low-frequency
+       noise, fading ahead of the front rather than stopping at a line. */
+    float cloudW = rbNoise(vec2(p.x * 1.3 - uWaveX * 6.0, p.y * 2.4 + 1.0), 64.0);
+    float plume = exp(-behind / 0.55) * (1.0 - smoothstep(-0.04, 0.04, wd)) * (0.65 + 0.35 * cloudW);
+    C = rbLighten(C, mix(waveCol, vec3(1.0), 0.40), plume * area * 0.75);
+    C += mix(waveCol, vec3(1.0), 0.40) * rbGauss(wd, 0.09) * area * 0.80;
+    C += waveCol * rbGauss(wd, 0.09) * uWave * mTrough * 0.18;
   }
 `,
     impact: `
@@ -484,95 +506,69 @@ float inkField(vec2 lq) {
     float grow = 1.0 - uHit;
     float radius = grow * 1.05;
     vec3 hitCol = mix(vec3(1.00, 0.42, 0.34), vec3(0.55, 1.00, 0.72), uHeal);
-    /* A burst of ink: round blobs pushed out from the wound, thinning into
-       rings as the envelope decays, instead of a single hairline ring. */
-    float splash = rbGauss(r - radius, 0.045) * uHit * uHit * 0.9;
+    /* A soft burst of ink: a wide ring of light and round blobs blooming out of
+       the wound, each fading as it spreads. */
+    float splash = rbGauss(r - radius, 0.08) * uHit * uHit * 0.8;
     for (int n = 0; n < 5; n++) {
       float fn = float(n);
       float ang = fn * 1.2566371 + uSeed;
       vec2 c = vec2(cos(ang), sin(ang) * 0.55) * radius * 0.85;
-      float rr = 0.08 + 0.14 * grow;
-      float disc = rbCover(length(hp - c) - rr) - rbCover(length(hp - c) - rr * grow * 0.85);
-      splash += clamp(disc, 0.0, 1.0) * uHit * uHit * 1.2;
+      splash += rbBlob(hp - c, 0.10 + 0.14 * grow) * uHit * uHit * 0.9;
     }
-    /* Droplets flung along the bar's own axis: which way the ink went. */
+    /* Droplets drifting along the bar's own axis: which way the ink went. */
     float drops = 0.0;
     for (int n = 0; n < 4; n++) {
       float fn = float(n);
       float side = mod(fn, 2.0) < 0.5 ? -1.0 : 1.0;
       vec2 c = vec2(side * radius * (1.15 + fn * 0.22), (fn - 1.5) * 0.18 * grow);
-      drops += rbCover(length(hp - c) - (0.05 + 0.03 * uHit));
+      drops += rbBlob(hp - c, 0.07);
     }
-    C += hitCol * (splash + drops * uHit * uSpark * 1.3 * (1.0 - uHeal * 0.4))
+    C += hitCol * (splash + drops * uHit * uSpark * 1.1 * (1.0 - uHeal * 0.4))
        * mix(1.0, 0.45, 1.0 - hero) * mBody;
   }
 `,
-  },
+  }),
 
-  /* Mercury: a cylinder of liquid metal. Mirror-bright, stylised rather than
-     physical — a studio environment of three hard bands reflected in a tube,
-     tinted by the health colour — with a rounded bead of a front. Chrome reads
-     as chrome from the hardness of its reflections, so there is no grain here at
-     all. */
-  mercury: {
-    functions: `
-/* The environment the tube reflects, as a function of the reflected height. */
-vec3 mercuryEnv(float ny, float aa, vec3 base) {
-  vec3 hi = mix(base, vec3(1.0), 0.72);
-  vec3 lo = base * 0.10 + INK * 0.6;
-  vec3 skyC = mix(hi * 1.25, base * 0.85, smoothstep(0.25, 1.0, ny) * 0.55);
-  vec3 midC = base * 0.46;
-  vec3 floorC = mix(base * 0.80, hi, 0.25);
-  vec3 env = mix(floorC, midC, smoothstep(-0.62 - aa, -0.62 + aa, ny));
-  env = mix(env, lo, smoothstep(-0.05 - aa, -0.05 + aa, ny));
-  return mix(env, skyC, smoothstep(0.18 - aa, 0.18 + aa, ny));
-}
-`,
-    decl: ``,
+  /* Mercury: a soft, light metallic sheen. The health colour silvered a little,
+     a broad highlight riding high in the tube, and slow undulations along it —
+     read as liquid metal from its smoothness and its light, not from hard
+     reflection bands. */
+  mercury: Object.freeze({
+    functions: shadeConsts("mercury"),
     fill: `
     float ripple = 0.0;
     if (uFlow > 0.5) {
-      ripple = 0.07 * sin(lq.x * 1.7 - rbPhase(3.0))
-             + 0.035 * sin(lq.x * 3.9 + rbPhase(5.0) + uSeed);
+      ripple = 0.10 * sin(lq.x * 1.1 - rbPhase(3.0))
+             + 0.05 * sin(lq.x * 2.3 + rbPhase(5.0) + uSeed);
     }
-    /* One device pixel in the fill's own height units, so the band edges stay a
-       pixel wide at every zoom: hard, never aliased. */
-    float aaM = clamp(px / fh * 1.5, 0.02, 0.35);
-    fillCol = mercuryEnv(clamp(fy * 0.92 + ripple, -1.0, 1.0), aaM, base);
-    /* The rounded front: a bright crescent a little behind the edge, and the
-       edge itself turning away into shadow. */
-    float toFront = frontX - p.x;
-    fillCol *= 1.0 - 0.50 * (1.0 - smoothstep(0.0, 0.06, toFront));
-    fillCol += mix(base, vec3(1.0), 0.75) * rbBand(toFront - 0.09, 0.022)
-             * smoothstep(-0.3, 0.7, fy) * 0.85;
-    /* Bloodied: tarnished, and breaking into beads. The metal dulls towards a
-       grey sheen of itself, and the column necks down between rounded beads
-       anchored to the front, so the front bead is always a whole one. */
-    vec3 dull = mix(vec3(dot(fillCol, vec3(0.299, 0.587, 0.114))), fillCol, 0.55) * 0.62 + base * 0.08;
-    fillCol = mix(fillCol, dull, bloodied * 0.75);
-    float beadL = 0.78;
-    float bx = mod(frontX - fh - p.x + beadL * 0.5, beadL) - beadL * 0.5;
-    float neck = mix(fh * 1.2, fh * 0.30, bloodied);
-    cover = rbCover(min(length(vec2(bx, p.y)) - fh, abs(p.y) - neck));
+    /* Bloodied, the metal thickens: its undulation calms, the sheen spreads and
+       softens, and it goes milkier — paler, never tarnished dark. The surge
+       rolls a slow swell along the sheen after a change. */
+    ripple = ripple * mix(1.0, 0.45, bloodied) + uSurge * 0.22 * sin(lq.x * 0.9 + 1.7);
+    float ny = clamp(fy * 0.85 + ripple, -1.0, 1.0);
+    fillCol = rbShade(base, 0.5 + 0.5 * ny, SHADE_LO, SHADE_HI);
+    fillCol = rbSoften(fillCol, mix(0.22, 0.45, bloodied));
+    float sheenQ = (ny - 0.30) / mix(0.42, 0.60, bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.70), exp(-sheenQ * sheenQ) * mix(0.60, 0.35, bloodied));
+    float shimmerM = 0.5;
+    if (uFlow > 0.5) shimmerM = 0.5 + 0.5 * sin(lq.x * 1.3 - rbPhase(2.0) + uSeed);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.45), shimmerM * 0.12 + abs(uSurge) * 0.15);
 `,
     wave: `
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-    float wd = (p.x - wx) * dir + fy * fy * 0.10;
+    float wd = (p.x - wx) * dir;
     float area = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
     vec3 waveCol = mix(vec3(1.0, 0.22, 0.08), vec3(0.20, 0.90, 0.64), uHeal);
     float behind = max(-wd, 0.0);
-    float wake = exp(-behind / 0.45) * (1.0 - step(0.0, wd));
-    /* A ripple packet behind the front, drawn as hard chrome bands in the
-       wave's colour. Left out once a band can no longer hold a few pixels. */
-    float rip = sin(behind * 14.0) * wake;
-    float aaW = clamp(14.0 * px, 0.05, 0.6);
-    float bandM = smoothstep(0.35 - aaW, 0.35 + aaW, rip) * rbDetail(0.22);
-    C = mix(C, waveCol * (0.25 + 0.90 * bandM), wake * area * 0.75);
-    float crest = rbGauss(wd, 0.035);
-    C += mix(waveCol, vec3(1.0), 0.50) * crest * area * 1.25;
-    C += waveCol * crest * uWave * mTrough * 0.22;
+    /* Soft ripples of light behind the front — a sine, never a band — whose
+       modulation is left out once it can no longer hold a few pixels. */
+    float wake = exp(-behind / 0.45) * (1.0 - smoothstep(-0.04, 0.04, wd));
+    float ripW = 0.70 + 0.30 * sin(behind * 9.0) * rbDetail(0.22);
+    C = rbLighten(C, mix(waveCol, vec3(1.0), 0.50), wake * ripW * area * 0.70);
+    C += mix(waveCol, vec3(1.0), 0.50) * rbGauss(wd, 0.08) * area * 0.85;
+    C += waveCol * rbGauss(wd, 0.08) * uWave * mTrough * 0.20;
   }
 `,
     impact: `
@@ -583,12 +579,12 @@ vec3 mercuryEnv(float ny, float aa, vec3 base) {
     float radius = grow * 1.05;
     vec3 hitCol = mix(vec3(1.00, 0.42, 0.34), vec3(0.55, 1.00, 0.72), uHeal);
     vec3 chrome = mix(hitCol, vec3(1.0), 0.55);
-    /* Ripple rings: three concentric fronts, the outermost the brightest. */
-    float ring = rbBand(r - radius, 0.022) * 1.4
-               + rbBand(r - radius * 0.66, 0.018) * 0.9
-               + rbBand(r - radius * 0.38, 0.015) * 0.55;
+    /* Ripple rings: three soft concentric swells, the outermost the brightest. */
+    float ring = rbGauss(r - radius, 0.055) * 1.0
+               + rbGauss(r - radius * 0.66, 0.05) * 0.65
+               + rbGauss(r - radius * 0.38, 0.045) * 0.40;
     ring *= uHit * uHit;
-    /* Droplets thrown along the bar that split in two as they fly. */
+    /* Soft droplets thrown along the bar that part in two as they fly. */
     float drops = 0.0;
     float apart = smoothstep(0.25, 0.75, grow);
     for (int n = 0; n < 4; n++) {
@@ -597,97 +593,59 @@ vec3 mercuryEnv(float ny, float aa, vec3 base) {
       float fly = radius * (1.12 + fn * 0.20);
       vec2 c0 = vec2(side * fly, (fn - 1.5) * 0.10 + apart * 0.11);
       vec2 c1 = vec2(side * fly * 1.04, (fn - 1.5) * 0.10 - apart * 0.11);
-      float rad = mix(0.075, 0.048, apart);
-      drops += rbCover(length(hp - c0) - rad)
-             + rbCover(length(hp - c1) - rad) * smoothstep(0.2, 0.4, grow);
+      float rad = mix(0.085, 0.06, apart);
+      drops += rbBlob(hp - c0, rad) + rbBlob(hp - c1, rad) * smoothstep(0.2, 0.4, grow);
     }
-    C += chrome * (ring * 1.2 + drops * uHit * uSpark * 1.4 * (1.0 - uHeal * 0.3))
+    C += chrome * (ring + drops * uHit * uSpark * 1.1 * (1.0 - uHeal * 0.3))
        * mix(1.0, 0.45, 1.0 - hero) * mBody;
   }
 `,
-  },
+  }),
 
-  /* Lava: a dark crust of rounded plates drifting over soft glowing seams in
-     the health colour. It has to read as nothing like the guard-break fracture
-     it will sometimes carry — that is thin gold lines and sharp shards — so the
-     plates are pebbles, the seams are wide soft channels, and the light is the
-     health hue. And while a guard break is on, it dims its own seams so the
-     gold can be seen. */
-  lava: {
-    functions: `
-/* Rounded crust cells: x = distance to the cell border, y = distance to the
-   cell's own point, z = a per-cell hash. Periodic in x so the drift wraps. */
-vec3 lavaCells(vec2 x, float period) {
-  vec2 n = floor(x);
-  vec2 f = fract(x);
-  float f1 = 9.0;
-  float f2 = 9.0;
-  float id = 0.0;
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      vec2 g = vec2(float(i), float(j));
-      vec2 cellKey = vec2(mod(n.x + g.x, period), n.y + g.y);
-      /* Points held off the cell edges, so the plates come out round. */
-      vec2 o = vec2(rbHash(cellKey), rbHash(cellKey + 17.3)) * 0.8 + 0.1;
-      vec2 r = g + o - f;
-      float d = dot(r, r);
-      if (d < f1) { f2 = f1; f1 = d; id = rbHash(cellKey + 5.1); }
-      else if (d < f2) { f2 = d; }
-    }
-  }
-  return vec3(sqrt(f2) - sqrt(f1), sqrt(f1), id);
+  /* Lava: a bright molten glow in the health colour, slowly convecting. Soft and
+     continuous everywhere, which is what keeps it distinct from the guard-break
+     fracture — sharp gold lines — that it sometimes carries, and under a break it
+     calms so that fracture is the only structure on the bar. */
+  lava: Object.freeze({
+    functions: shadeConsts("lava") + `
+float lavaField(vec2 lq) {
+  vec2 w = vec2(lq.x * 0.9, lq.y * 2.2);
+  float a = rbNoise(w + vec2(rbDrift(1.0, 16.0), 0.0), 16.0);
+  if (uFlow < 0.5) return a;
+  float b = rbNoise(w * 1.9 + vec2(-rbDrift(3.0, 16.0), 4.0), 16.0);
+  return a * 0.65 + b * 0.35;
 }
 `,
-    decl: `
-  float lavaSeam = 0.0;
-`,
     fill: `
-    /* Big plates — about a bar height across, so one or two span the fill —
-       because at token size a crust of small plates is a field of bright
-       squiggles, and squiggles read as writing rather than as rock. */
-    vec3 cellL = lavaCells(vec2(lq.x * 1.55 + rbDrift(1.0, 16.0), lq.y * 1.75 + 0.5), 16.0);
-    /* Bloodied: the crust thickens — narrower channels, fuller plates. */
-    float seamW = mix(0.10, 0.04, bloodied);
-    float softL = clamp(px * 3.0, 0.04, 0.20);
-    /* The plate is the cell's interior intersected with a disc about its own
-       point, so its corners are arcs rather than the shards of a fracture, and
-       where three plates meet they part around a pool. */
-    float plateD = min(cellL.x - seamW, (0.55 + 0.12 * cellL.z + bloodied * 0.15) - cellL.y);
-    float plate = smoothstep(0.0, softL, plateD);
-    lavaSeam = 1.0 - plate;
-    float pulse = 1.0;
-    if (uFlow > 0.5) pulse = 0.78 + 0.22 * sin(lq.x * 2.2 - rbPhase(6.0) + cellL.z * 6.2831853);
-    /* …and its glow sputters, seam by seam. */
-    float sputter = mix(1.0, 0.30 + 0.70 * smoothstep(-0.25, 0.25, sin(rbPhase(71.0) + cellL.z * 40.0) + 0.35), bloodied);
-    float glowAmt = pulse * sputter * (1.0 - LAVA_BREAK_DIM * uBreak);
-    /* Heat is depth into the channel: a narrow crack glows dimly in the health
-       hue and only the pools run bright. A crack that is bright along its whole
-       length is a line, and a bar full of bright lines reads as writing — or as
-       the guard-break fracture this liquid has to stay distinct from. */
-    float heat = smoothstep(0.0, 0.22, -plateD);
-    vec3 crust = mix(INK0, base * 0.13, 0.40 + 0.30 * depth) * (0.80 + 0.35 * cellL.z);
-    vec3 ember = base * (0.40 + 0.60 * glowAmt);
-    vec3 pool = mix(base, vec3(1.0, 0.95, 0.85), 0.20) * (0.75 + 0.75 * glowAmt);
-    fillCol = crust + base * exp(-max(plateD, 0.0) / 0.07) * 0.22 * glowAmt * plate;
-    fillCol = mix(fillCol, mix(ember, pool, heat), lavaSeam * (0.30 + 0.70 * glowAmt));
-    fillCol += vec3(0.9) * rbBand(hb - 0.76, 0.05) * 0.06 * plate;
+    /* Bloodied, the lava thickens — its convection evens out — and its heat
+       flickers, softly and only ever upward from its floor. Under a guard break
+       it calms instead of dimming: variation flattens towards an even glow and
+       the hot highlights ease, so the sharp gold reads over it. */
+    float calm = LAVA_BREAK_CALM * uBreak;
+    float heat = smoothstep(0.2, 0.8, lavaField(lq + vec2(uSurge * 0.40, 0.0)));
+    heat = mix(heat, 0.5, 0.45 * bloodied);
+    heat = mix(heat, 0.35, calm);
+    float flicker = 0.5 + 0.5 * sin(rbPhase(37.0) + lq.x * 1.7);
+    fillCol = rbShade(base, heat, SHADE_LO, SHADE_HI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.95, 0.82), 0.45),
+                        (heat * heat * mix(0.55, 0.35, bloodied) + bloodied * flicker * 0.12) * (1.0 - calm));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(-0.3, 1.0, fy) * 0.18 + abs(uSurge) * 0.18);
 `,
     wave: `
   if (uWave > 0.001) {
     float wx = mix(fx0 - 0.14, fx1 + 0.14, clamp(uWaveX, 0.0, 1.0));
     float dir = uHeal > 0.5 ? 1.0 : -1.0;
-    float wd = (p.x - wx) * dir + fy * fy * 0.12;
+    float wd = (p.x - wx) * dir;
     float area = mix(max(mFill, mGhost), mFill, uHeal) * uWave;
     vec3 waveCol = mix(vec3(1.0, 0.22, 0.08), vec3(0.20, 0.90, 0.64), uHeal);
     float behind = max(-wd, 0.0);
-    float flare = exp(-behind / 0.50) * (1.0 - step(0.0, wd));
-    /* The crust catches behind the front: its seams flare in the wave's colour
-       while the plates stay dark, so the flare has the crust's own shape. */
-    vec3 flareCol = mix(waveCol, vec3(1.0, 0.90, 0.70), 0.25);
-    C = mix(C, mix(waveCol * 0.25, flareCol * 1.6, lavaSeam), flare * area * 0.85);
-    float crest = rbGauss(wd, 0.05);
-    C += flareCol * crest * area * 1.30;
-    C += waveCol * crest * uWave * mTrough * 0.22;
+    /* A flare: the glow behind the front runs hotter in the wave's colour, one
+       broad soft swell rather than anything with an edge. */
+    float flare = exp(-behind / 0.60) * (1.0 - smoothstep(-0.05, 0.05, wd));
+    vec3 flareCol = mix(waveCol, vec3(1.0, 0.92, 0.75), 0.40);
+    C = rbLighten(C, flareCol, flare * area * 0.80);
+    C += flareCol * rbGauss(wd, 0.10) * area * 0.90;
+    C += waveCol * rbGauss(wd, 0.10) * uWave * mTrough * 0.20;
   }
 `,
     impact: `
@@ -698,26 +656,25 @@ vec3 lavaCells(vec2 x, float period) {
     float radius = grow * 1.05;
     vec3 hitCol = mix(vec3(1.00, 0.42, 0.34), vec3(0.55, 1.00, 0.72), uHeal);
     /* A flare at the wound, and one soft ring leaving it. */
-    float flareHit = exp(-r / (0.10 + 0.35 * grow)) * uHit * uHit * 1.4;
-    float ring = rbGauss(r - radius, 0.05) * uHit * uHit * 0.9;
-    /* Embers spattered on ballistic arcs — up, then down — cooling as they go. */
+    float flareHit = exp(-r / (0.10 + 0.35 * grow)) * uHit * uHit * 1.2;
+    float ring = rbGauss(r - radius, 0.08) * uHit * uHit * 0.8;
+    /* Soft embers on ballistic arcs — up, then down — cooling as they go. */
     float embers = 0.0;
     for (int n = 0; n < 6; n++) {
       float fn = float(n);
       float side = mod(fn, 2.0) < 0.5 ? -1.0 : 1.0;
-      float h1 = fract(sin(fn * 12.9898 + uSeed) * 43758.5453);
-      float vx = side * (0.8 + 0.9 * h1);
-      float vy = 0.55 + 0.5 * fract(h1 * 7.13);
+      float vx = side * (0.8 + 0.9 * rbHash(vec2(fn, 7.3)));
+      float vy = 0.55 + 0.5 * rbHash(vec2(fn, 1.9));
       vec2 c = vec2(vx * grow * 1.1, vy * grow - 1.3 * grow * grow);
-      embers += rbCover(length(hp - c) - (0.05 * uHit + 0.012));
+      embers += rbBlob(hp - c, 0.03 + 0.05 * uHit);
     }
     vec3 emberCol = mix(hitCol, vec3(1.0, 0.92, 0.60), uHit);
-    C += (hitCol * (flareHit + ring) + emberCol * embers * uHit * uSpark * 1.6)
+    C += (hitCol * (flareHit + ring) + emberCol * embers * uHit * uSpark * 1.3)
        * mix(1.0, 0.45, 1.0 - hero) * mBody;
   }
 `,
-  },
-};
+  }),
+});
 
 const MAIN = `
 void main(void) {
@@ -746,10 +703,8 @@ void main(void) {
   float dBody   = sdCut(p, bb, bb.y * CUT);
   float dTrough = dBody + sw + air;
 
-  /* Nothing animates the frame or the fill's height. An earlier pass compressed
-     the fill plate on impact and it read as jelly — a bar whose height breathes
-     is a bar you stop reading as a measurement. The liquid moves *inside* a
-     rigid instrument, and only its front bends. */
+  /* Nothing animates the frame, the fill's height or its edge. The liquid moves
+     *inside* a rigid instrument. */
   float dFillA  = dTrough + lip;
 
   float mBody   = rbCover(dBody);
@@ -763,32 +718,22 @@ void main(void) {
   float fillX  = mix(fx0, fx1, clamp(uFrac,  0.0, 1.0));
   float ghostX = mix(fx0, fx1, clamp(uGhost, 0.0, 1.0));
 
-  /* ── The front ─────────────────────────────────────────────────────────
-     A rounded meniscus, a very small idle wobble and the slosh after a change,
-     all zero-mean across the fill's height (rbFront), so the front bends around
-     the value without moving it. It flattens against either end of the tube: a
-     full bar is full to the lip, and an empty one shows no sliver of meniscus.
-     The rails keep a straight edge. */
+  /* The fill's own height, -1 at its bottom and 1 at its top, for the liquids'
+     soft vertical light. Never used to place the edge. */
   float fh = max(bb.y - sw - air - lip, 0.0001);
   float fy = clamp(p.y / fh, -1.0, 1.0);
-  float endFade = smoothstep(0.0, 0.35, fillX - fx0) * smoothstep(0.0, 0.35, fx1 - fillX);
-  float frontX = fillX + rbFront(fy, uWobble, uSlosh) * hero * endFade;
-  float ghostFade = smoothstep(0.0, 0.35, ghostX - fx0) * smoothstep(0.0, 0.35, fx1 - ghostX);
-  float ghostFrontX = max(ghostX + rbFront(fy, uWobble, 0.0) * hero * ghostFade, frontX);
 
   /* ── Palette ───────────────────────────────────────────────────────────
      GOLD is PALETTE.signalPale. It is the only warm note and it appears in
      exactly one place — the top of the stroke — which is what keeps it reading
      as a material catching light rather than as a colour scheme.
 
-     "Bloodied" (under half) is a state of the *liquid* — each one shows it in
-     its own idiom below — and a partial pull towards the danger end of the
-     ramp, never a hard swap: a colour that jumps at 50% says more than the
-     number does. */
+     "Bloodied" (under half) is a state of the *liquid* — each shows it in its own
+     idiom, paler and calmer, never darker — so the colour itself stays on the
+     ramp rather than being dragged towards a darker danger colour. */
   float bloodied = hero * (1.0 - smoothstep(0.485, 0.50, uFrac));
   float rampT = clamp(uFrac / 0.72, 0.0, 1.0);
   vec3 base = uRole < 0.5 ? rampAt(rampT) : (uRole < 1.5 ? uRailCol : uShieldCol);
-  base = mix(base, rampAt(0.06), bloodied * 0.40);
   float grey = dot(base, vec3(0.299, 0.587, 0.114));
   base = mix(base, vec3(grey), mix(0.24, 0.06, hero));
   base = mix(base, uTempCol, 0.16 * smoothstep(0.6, 1.0, uFrac) * hero);
@@ -808,12 +753,9 @@ void main(void) {
 
   /* ── The liquid ────────────────────────────────────────────────────────
      lq is fill-local: x from the empty end of the tube, y the bar's own, both
-     in bar heights. cover is the liquid's own coverage, which only mercury's
-     beads ever take below 1. */
+     in bar heights. */
   vec2 lq = vec2(p.x - fx0, p.y);
   vec3 fillCol = vec3(0.0);
-  float cover = 1.0;
-/*__DECL__*/
   if (hero > 0.5) {
 /*__FILL__*/
   } else {
@@ -823,7 +765,7 @@ void main(void) {
     fillCol += mix(base, vec3(1.0), 0.68) * rbBand(hb - 0.81, 0.035) * 0.65;
     fillCol += base * rbBand(hb + 0.83, 0.045) * 0.38;
   }
-  // The lower rim carries the warning, leaving the centre quiet for the value.
+  // The warning brightens the liquid on the breath's clock; it never dims it.
   fillCol += base * uLow * hero * (0.12 + 0.34 * breathe);
 
   /* ── Segments ──────────────────────────────────────────────────────────
@@ -848,15 +790,16 @@ void main(void) {
     segMask = 1.0 - (1.0 - smoothstep(max(0.0, gapP - px), gapP, sx)) * hero;
   }
 
-  /* The same divisions, whispered across the empty trough: without them the
-     spent half of the bar has no scale on it. */
-  float troughDiv = (1.0 - segMask) * mFillA * (1.0 - rbEdge(frontX + px, frontX - px, p.x));
-
-  float mFillEdge = mFillA * rbEdge(frontX + px, frontX - px, p.x) * segMask;
-  float mFill  = mFillEdge * cover;
+  /* ── The edge ──────────────────────────────────────────────────────────
+     A straight, sharp vertical line exactly at the value: a function of x and
+     the value only, one device pixel of antialiasing, nothing that depends on
+     the height. The chip trail's edge is cut the same way. */
+  float fillEdge = rbEdge(fillX + px * 0.5, fillX - px * 0.5, p.x);
+  float troughDiv = (1.0 - segMask) * mFillA * (1.0 - fillEdge);
+  float mFill  = mFillA * fillEdge * segMask;
   float chipOn = smoothstep(0.0, 0.004, uGhost - uFrac);
-  float mGhost = mFillA * rbEdge(ghostFrontX + px, ghostFrontX - px, p.x) * segMask
-               * (1.0 - mFillEdge) * chipOn;
+  float mGhost = mFillA * rbEdge(ghostX + px * 0.5, ghostX - px * 0.5, p.x) * segMask
+               * (1.0 - mFill) * chipOn;
 
   /* ── The chip trail ────────────────────────────────────────────────────
      The span that was just lost. It is cut white-hot and cools over its own
@@ -892,8 +835,10 @@ void main(void) {
      painted. */
   float shimmer = 0.5 + 0.5 * sin(p.x * 5.5 - rbPhase(8.0));
 
-  /* ── The leading edge ──────────────────────────────────────────────────*/
-  float headIn = rbGauss(p.x - frontX, 0.055 + 0.11 * uBloom) * mFillA;
+  /* ── The leading edge's light ──────────────────────────────────────────
+     A glow *on* the liquid just behind the edge, added as light; it softens
+     nothing about the edge itself. */
+  float headIn = rbGauss(p.x - fillX, 0.055 + 0.11 * uBloom) * mFill;
   vec3 headCol = mix(base, vec3(1.0), 0.60 + 0.35 * uBloom);
 
   /* ── Stroke ────────────────────────────────────────────────────────────
@@ -926,8 +871,8 @@ void main(void) {
 
   /* ── The change wave ───────────────────────────────────────────────────
      Crosses the whole bar in the direction the value moved, in the liquid's own
-     idiom. Its colour *replaces* the material behind the front; only the crest
-     goes on top as light; nothing is drawn ahead of it. */
+     idiom: it only ever lightens what it crosses, and nothing is drawn ahead of
+     its front. */
 /*__WAVE__*/
   /* The shield plate: a translucent pane over the fill, then its lattice, its
      top rim, and a hot leading edge where it ends. */
@@ -938,7 +883,7 @@ void main(void) {
   C += uTempCol * rbBand(hb - 0.20, 0.045) * mTempArea * 0.85;
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
   C += uTempCol * rbGauss(p.x - tempX, 0.045) * mTempArea * 1.65;
-  C += headCol * headIn * (0.55 + 1.1 * uBloom) * cover;
+  C += headCol * headIn * (0.55 + 1.1 * uBloom);
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));
@@ -965,9 +910,9 @@ void main(void) {
 
      **It cuts before it lights**: the seam darkens the material it crosses and
      the light goes *in* the seam. **It does not touch the reading**: no
-     desaturation, no dimming of the fill. (The lava liquid dims its own seam
-     glow while this is on, which is a statement about the lava's light, not
-     about the hit points.)
+     desaturation, no dimming of the fill. (The lava liquid calms its own
+     variation while this is on, which is a statement about the lava's light,
+     not about the hit points.)
 
      uBreak arrives 0 on the rails, so this branch — the most expensive thing in
      the shader — is skipped on every bar that is not a broken creature's own. */
@@ -1017,21 +962,23 @@ void main(void) {
   /* ── Impact ────────────────────────────────────────────────────────────
      A bar that only changes length reports a number; the hit has to *land*.
      The envelope decays 1 → 0, so the reaction grows as its amplitude falls,
-     centred on where the value was when it changed. Written above 1.0 on
-     purpose: the bright-pass downstream keeps only what exceeds it. */
+     centred on where the value was when it changed. Pure added light, and
+     written above 1.0 on purpose: the bright-pass downstream keeps only what
+     exceeds it. */
 /*__IMPACT__*/
   /* The flare sits at the wound, and *only* at the wound: a full-quad whiteout
      held through the hitstop buries the readout and the trail exactly when they
      are the two things worth looking at. */
-  C += vec3(1.0, 0.92, 0.86) * uFlash * 1.25 * rbGauss(p.x - frontX, 0.060) * mFillA;
+  C += vec3(1.0, 0.92, 0.86) * uFlash * 1.25 * rbGauss(p.x - fillX, 0.060) * mFillA;
 
   /* The chrome breathes on the same slow clock as the fill. Two red pulses at
      different rates read as two unrelated warnings rather than as one state. */
   C = mix(C, vec3(1.00, 0.20, 0.24), mStroke * uLow * (0.28 + 0.52 * breathe));
   C = mix(C, vec3(1.0), uFlash * 0.06);
 
-  // A broad, soft recess protects the in-bar reading without adding a badge.
-  float readingWell = rbGauss(p.y, 0.13) * hero * mTrough;
+  /* A broad, soft recess protects the in-bar reading without adding a badge.
+     It darkens the empty well only — the liquid is never darkened. */
+  float readingWell = rbGauss(p.y, 0.13) * hero * mTrough * (1.0 - mFill);
   C *= 1.0 - readingWell * 0.34;
   // Dividers remain opaque black across every fill and effect layer.
   C = mix(C, vec3(0.0), (1.0 - segMask) * mFillA);
@@ -1090,7 +1037,6 @@ export function fragmentShader(liquid = DEFAULT_LIQUID) {
   if (built.has(key)) return built.get(key);
   const chunk = LIQUID_CHUNKS[key];
   const src = HEAD + chunk.functions + MAIN
-    .replace("/*__DECL__*/", chunk.decl)
     .replace("/*__FILL__*/", chunk.fill)
     .replace("/*__WAVE__*/", chunk.wave)
     .replace("/*__IMPACT__*/", chunk.impact);

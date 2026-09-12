@@ -254,17 +254,20 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 
 | | |
 |---|---|
-| **Ink** (default) | a slow domain-warped flow along the tube, posterised into a few flat tones of the health colour |
-| **Mercury** | mirror-bright liquid chrome — a stylised studio environment of three hard bands reflected in a tube, tinted by the health colour — with a rounded bead of a front |
-| **Lava** | a dark crust of rounded plates drifting over soft glowing seams in the health colour |
+| **Ink** (default) | smooth, slowly blending swirls flowing along the tube in a narrow range of the health colour |
+| **Mercury** | a soft, light metallic sheen: the health colour silvered a little, a broad highlight riding high in the tube, slow undulations along it |
+| **Lava** | a bright molten glow in the health colour, slowly convecting |
 
 They replaced a refractive-glass material — travelling ribbons of caustic light
 with glints and a facet pattern — that did its job as *glass* and failed as
 *health*: at token size the ribbons were lines, and a fill that reads as lines
 reads as a texture laid over the bar rather than as what the bar is full of. The
-rules for the replacement came from that failure. **Stylised, not physical**:
-flat tones, hard reflections, clean shapes, and no grain, because grain on a
-19px bar is noise over the one reading the player came for. **Ink is the
+rules for the replacement came from that failure. **Stylised, not physical, and
+smooth**: soft blended light, no hard shading, no bands, steps or crisp shapes
+inside the liquid, and no grain, because anything with an edge on a 19px bar is
+noise over the one reading the player came for. (A first pass of these liquids
+had posterised ink, hard chrome bands and a plated lava crust, and at token size
+every one of them read as lines again.) **Ink is the
 default** because it is the calmest; a fill that is always quietly moving still
 mostly should not be asking to be looked at.
 
@@ -283,48 +286,71 @@ All three are tinted by the same health ramp — OKLab, the colour-blind-safe
 ramp, the arterial shift at the bottom — so the hue still carries the reading
 whichever liquid a GM picks.
 
-### The front
+### The edge
 
-The leading edge is a rounded **meniscus**, not a ruler line, and it is most of
-what makes the fill read as liquid. `rbFront()` gives the front's offset at each
-height from three terms: the meniscus itself, a very small idle wobble, and a
-**slosh** after each value change that swings through the value and settles.
+The fill always ends in a **straight, sharp vertical edge exactly at the value**:
+`rbEdge(fillX ± half a pixel, p.x)`, about one device pixel of antialiasing, and a
+function of x and the value alone. The liquid moves *behind* that edge and never
+moves it — not its flow, not its bloodied look, not its surge after a change.
 
-Every profile in it — `1/3 − y²`, `y`, `y² − 1/3`, `cos πy` — integrates to zero
-over the fill's height, so **the front's centre is exactly the value**. The shape
-bends around the reading and never moves it; a bulge that was not zero-mean would
-make every bar a few pixels long or short at every health, and nothing would ever
-report it. The amplitudes are budgeted so all three at their worst stay inside a
-third of a bar height (0.275): past that the front stops being a curve on a
-length and becomes a second, disagreeing length. The front flattens against both
-ends of the tube, so a full bar is full to the lip and an empty one shows no
-sliver of meniscus.
+A first pass drew a rounded meniscus front that sloshed and wobbled, with every
+term zero-mean over the bar's height so its centre stayed on the value. That was
+true and it did not matter: a curved, moving edge reads as an imprecise one, and
+the edge is the one part of the bar that *is* the measurement. The chip trail's
+edge is cut the same way, and the head glow and the flash sit on it.
+`resource-bar-check` pins the edge's exact expression, that the fill mask is the
+trough × that edge × the dividers and nothing else, and that no liquid chunk
+writes any of them.
 
-`resource-bar-check` holds both claims by evaluating `rbFront()`'s **own GLSL**
-as JavaScript across the idle loop and the slosh range, which is why that
-function has to stay plain arithmetic.
+### Never darker than the ramp
 
-The head glow and the flash follow the bent front. The chip trail keeps the
-meniscus but not the slosh: it is spent liquid, and a trail that sloshed in step
-with the fill would read as the same body.
+The liquid never uses dark or black. **Every liquid pixel stays at least
+`LIQUID_FLOOR` (0.8) of its ramp colour's luminance**, because a fill that dips
+below the colour the ramp hands it stops reading as the health colour and starts
+reading as a darker, different one — and dark bands inside a fill are exactly
+what "lines and hard shading" looked like.
 
-### Bloodied
-
-Below half, each liquid says so in its own idiom, and the colour takes only a
-partial pull towards the danger end of the ramp. The old material swapped colour
-outright at 50%, and a colour that jumps at a threshold says more than the number
-does.
+The rule is enforced by construction rather than by eye. A liquid may do only
+three things to a colour, all defined in the shared frame:
 
 | | |
 |---|---|
-| **Ink** | turbid: fewer, muddier tones, pulled dark by a slow cloud |
-| **Mercury** | tarnished to a dull sheen of itself, and necked down into rounded beads anchored to the front, so the front bead is always a whole one |
-| **Lava** | the crust thickens — narrower channels, fuller plates — and the glow sputters, seam by seam |
+| `rbShade(base, field, lo, hi)` | the one multiplication: `base` scaled inside the liquid's own `LIQUID_SHADE` range, whose low end is at or above the floor |
+| `rbLighten(c, toward, t)` | towards a lighter colour channel by channel (`max(c, toward)`), so no channel can drop |
+| `rbSoften(c, t)` | towards a grey of the **same** luma, so paler and never darker |
 
-The lava's light is heat as depth into a channel: narrow cracks glow dimly and
-only the pools where plates part run bright. A crack that is bright along its
-whole length is a line, and a bar full of bright lines reads as writing — or as
-the guard-break fracture, which is exactly what lava most needs not to look like.
+Each fill is one `rbShade` followed only by `rbLighten`/`rbSoften` of itself;
+each wave may only `rbLighten` or add light, and each impact only adds light.
+`resource-bar-check` pins the helpers' bodies to JavaScript mirrors, evaluates
+thousands of random shade-lighten-soften chains against the floor, and refuses
+INK or black, any other write to the liquid's colour, and any hard-edged
+operation (`floor`, `fract`, `step`, crisp discs, thin bands) inside a liquid
+chunk. The shared frame follows the same rule where it touches the liquid: the
+reading well recesses only the empty trough, and the low-health breath brightens.
+
+Not the liquid, and deliberately still dark: the trough, the black divider gaps,
+the frame, and the guard-break fracture's seams.
+
+### Bloodied
+
+Below half, each liquid says so in its own idiom — **paler and calmer, never
+darker** — and the colour stays on the ramp. The old material swapped colour
+outright at 50%, and a colour that jumps at a threshold says more than the number
+does; the transition runs over the last point and a half above half so it
+arrives rather than snaps.
+
+| | |
+|---|---|
+| **Ink** | thicker: the warp folds less, contrast halves, and the colour goes paler and a little desaturated |
+| **Mercury** | thicker: its undulation calms, the sheen spreads and softens, and it goes milkier |
+| **Lava** | thicker: convection evens out, and its heat flickers softly — only ever upward from its floor |
+
+### The surge
+
+The one spring in the feature is the **surge** after a value change, and it has a
+job that measures nothing: it pushes the liquid's texture back and forth along
+the tube and lifts its light, then settles, while the edge stays on the value.
+Hit and heal push opposite ways.
 
 ### The idle loop
 
@@ -337,10 +363,9 @@ the map steps once a minute. The check refuses any other read of `uTime` and any
 non-integer turn.
 
 That motion is the one standing cost every visible bar pays, so it is the first
-thing given up under load: `sweep` freezes the clock, `wobble` takes the
-meniscus's wobble out, and `flow` drops the liquid's animated layer in the shader
-and takes idle bars out of the ticker altogether. None of them touches the
-colour, the bloodied look or the front.
+thing given up under load: `sweep` freezes the clock, and `flow` drops the
+liquid's animated layer in the shader and takes idle bars out of the ticker
+altogether. Neither touches the colour, the bloodied look or the edge.
 
 ---
 
@@ -351,11 +376,11 @@ A value change is a sequence, and the order is what makes it read as an event:
 | | |
 |---|---|
 | **0ms** | the fill snaps to the new value and everything **stops** |
-| **~55ms** | the hitstop releases; the wave, the impact and the slosh all start from a standstill |
+| **~55ms** | the hitstop releases; the wave, the impact and the surge all start from a standstill |
 | **~180ms** | the chip trail starts to drain, white-hot at the wound, cooling as it goes |
 | **~420ms** | the readout has finished counting |
 | **~500ms** | the wave has crossed the bar and gone |
-| **~1.4s** | the front's slosh has settled |
+| **~1.4s** | the surge through the liquid has settled |
 
 Three things about it are easy to get wrong and impossible to unsee afterwards.
 
@@ -365,10 +390,10 @@ one reads, on a bar, as jelly — an instrument that wobbles is an instrument yo
 stop trusting. Lengths use a quintic ease-out: one long deceleration that arrives
 exactly once and stops. The frame and the fill's height never move either.
 
-The one spring in the feature is the **slosh**, and it moves the liquid's front
-*around* the value, which the zero-mean front guarantees it cannot change.
-`resource-bar-check` pins that twice: structurally (one `spring()` call, given to
-`slosh` only, and no back, elastic or bounce ease anywhere) and behaviourally,
+The one spring in the feature is the **surge**, and it moves the liquid's texture
+and light, never the edge that measures. `resource-bar-check` pins that twice:
+structurally (one `spring()` call, given to `surge` only, and no back, elastic or
+bounce ease anywhere) and behaviourally,
 driving single and rapid changes at full and reduced motion and failing any
 length that leaves the span of its change or moves backwards.
 
@@ -393,17 +418,17 @@ Three parts, and nothing else:
 1. **The crest.** Light laid on top of the material, so it reads as light rather
    than as a painted stroke.
 2. **The colour behind it.** One exponential decay behind the front, drawn in the
-   liquid's own terms — posterised steps in ink, hard chrome bands in mercury,
-   flaring seams in lava — rather than as a smooth fade, because a fade in motion
-   is a smear.
+   liquid's own terms — a clouded plume in ink, soft ripples in mercury, a hot
+   flare in lava — each soft, and each only ever lightening what it crosses.
 3. **Nothing ahead of it.** That asymmetry is the direction cue, since a
    symmetric band travelling along a bar is a highlight and a highlight can be
    going either way.
 
-The ramp *replaces* the colour of the material it crosses; only the line goes on
-top as light. Written the obvious way, as pure additive light over an
-already-bright plate, the green of a heal and the red of a hit both arrive as
-the same pale smear. Its length is a fraction of the **bar**, not a fixed
+The colour behind the front lightens the material it crosses *towards the
+wave's hue* (`rbLighten`, channel by channel), and only the crest goes on top as
+added light. Written as pure additive light over an already-bright liquid, the
+green of a heal and the red of a hit both arrive as the same pale smear; a
+per-channel lighten keeps them apart without ever darkening the liquid. Its length is a fraction of the **bar**, not a fixed
 distance in shader units: a constant is a third of a stubby rail and a twelfth
 of a wide hero bar, so the effect that is meant to be loudest quietly becomes a
 local highlight on exactly the bars with room to show it.
@@ -412,9 +437,9 @@ What changes per liquid is the idiom, for the wave and for the impact alike:
 
 | | Wave | Impact |
 |---|---|---|
-| **Ink** | a lobed, billowing front pushing a posterised plume | a burst of round blobs thinning into rings; droplets flung along the bar |
-| **Mercury** | a packet of hard chrome ripple bands behind the front | concentric ripple rings; droplets that split in two as they fly |
-| **Lava** | the crust's seams flare in the wave's colour while the plates stay dark | a flare at the wound and one soft ring; embers on ballistic arcs |
+| **Ink** | a soft plume of paler ink, clouded by low-frequency noise | a wide soft ring and round blobs blooming out of the wound; soft droplets along the bar |
+| **Mercury** | soft ripples of light behind the front — a sine, never a band | three soft concentric swells; soft droplets that part in two as they fly |
+| **Lava** | one broad hot flare in the wave's colour | a flare at the wound and one soft ring; soft embers on ballistic arcs |
 
 The uniforms and shed gates are the same under every idiom — `wave`, `ring` and
 `sparks` give up exactly what they always did — so no liquid can add a reaction
@@ -468,7 +493,7 @@ readout when its token is resized.
 `core/motion.mjs`), and nothing in it is ever *played*. Every tween is created
 with `autoplay: false` and moved with `.seek()` on the model's own clock, which
 the PIXI ticker advances through `step(dt)`. A change's reaction is one timeline
-— hit, punch, flash, the count, the wave's crossing and its fade, the slosh, and
+— hit, punch, flash, the count, the wave's crossing and its fade, the surge, and
 either the chip heat or the heal's glide — and the chip trail's hold-and-drain is
 a second, because a heal cancels the reaction but not the drain. Each popup, the
 fracture's fade-out and the hover gloss are single animations.
@@ -533,8 +558,8 @@ Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear
 in that list; the check tool enforces it, so a new effect cannot be added that
 never degrades. The standing costs lead it — the idle clock (`sweep`), the
-meniscus `wobble`, the liquid's `flow`, and a settled fracture's `breakFlow` —
-and everything after them is paid once per change, `slosh` included.
+liquid's `flow`, and a settled fracture's `breakFlow` — and everything after them
+is paid once per change, `surge` included.
 
 ---
 
@@ -585,12 +610,16 @@ broke. A guard break says nothing about hit points, and a bar that dulls its own
 fill to announce an unrelated state has stopped being the measurement it is there
 to be.
 
-The one liquid that gives way is **lava**, and it gives way in its light, not in
-its reading. Lava's seams are warm light in cracks, and the fracture is gold
-light in cracks; laid over one another at full strength the break the tracker put
-there disappears into the liquid. So while `uBreak` is on the lava dims its own
-seam glow by `LAVA_BREAK_DIM` — never its plates, never its hue — and the check
-refuses that dimming anywhere else, including inside the fracture block.
+The one liquid that gives way is **lava**, and it gives way in its variation,
+not in its brightness or its reading. Lava is bright, soft, continuous glow and
+the fracture is sharp gold light in cracks; over a lively lava the break the
+tracker put there reads as one more bright wobble among many. So while `uBreak`
+is on, the lava *calms* by `LAVA_BREAK_CALM` — its convection flattens towards an
+even glow and its hot highlights ease — and the sharp gold is the only structure
+left on the bar. It never darkens to do it; the floor holds. That the lava is
+soft and continuous everywhere is also what keeps it from reading as a fracture
+in the first place. The check refuses the calming anywhere but the lava, and
+inside the fracture block.
 
 It nucleates at the **leading edge of the fill as it stood when the guard went**,
 captured once and then held. That point is the only one on a bar that means
@@ -1031,14 +1060,17 @@ releases the ticker **without losing the crack**.
 For the liquids it pins that `rb.liquid` offers exactly the programs the shader
 builds and recompiles the bars on the canvas when it changes; that each program
 carries only its own material and none carries the old ribbons; that every idle
-term turns a whole number of times in the loop; that `rbFront()` is zero-mean and
-inside its third-of-a-bar budget, evaluated from its own GLSL; that the fill, the
-head glow and the flash follow the bent front while the rails stay straight; that
-lava, and only lava, dims under a guard break; that the only spring drives the
-slosh and no length overshoots or recoils, tested by driving the model; that
-every tween is built paused and the shared anime.js engine is untouched after
-all of that; that a fresh Node process driving the model exits; and that flow,
-wobble and slosh are primary-bar-only and shed on their own entries.
+term turns a whole number of times in the loop; that the fill ends in a straight
+vertical edge that depends on x and the value only, with the chip trail, head
+glow and flash on it; that every liquid stays at or above `LIQUID_FLOOR` of its
+ramp colour's luminance, through pinned helper bodies, evaluated shade ranges and
+lighten/soften chains, and a refusal of INK, black, other colour writes and
+hard-edged operations inside the chunks; that lava, and only lava, calms under a
+guard break; that the only spring drives the surge and no length overshoots or
+recoils, tested by driving the model; that every tween is built paused and the
+shared anime.js engine is untouched after all of that; that a fresh Node process
+driving the model exits; and that flow and surge are primary-bar-only and shed on
+their own entries.
 
 With Playwright present it also compiles every liquid's shader and checks that no
 uniform was optimised away. Without it, headless Chrome does the same job on the
@@ -1073,8 +1105,11 @@ which it **imports** from the repository. Serve it from the repository root
 it as a file: a `file://` page does not run its module script, and a server
 rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
 that liquid. It has rows for each liquid down the health ladder, bloodied, the
-slosh after a hit and a heal, each liquid's reactions, lava under a guard break
-and a shed bar, plus a liquid switcher on the live bar.
+surge after a hit and a heal, each liquid's reactions, lava under a guard break
+and a shed bar, plus a liquid switcher on the live bar. `?sheet=ink` (or
+`mercury`, `lava`, `names`) hides everything but one contact sheet — a liquid at
+100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged, or the
+Names rows — so a headless screenshot of the top of the page is the whole sheet.
 
 The model used to be pasted into the page verbatim, which stopped working the
 moment it imported anime.js. `--artifact=` has no server behind it, so it inlines
