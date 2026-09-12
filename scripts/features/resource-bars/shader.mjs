@@ -27,8 +27,9 @@
  *     a sharp edge.
  *   - **The liquid is never darker than its ramp colour.** Every liquid chunk
  *     shades `base` through `rbShade` inside its own LIQUID_SHADE range (never
- *     below LIQUID_FLOOR) and otherwise only lightens (`rbLighten`) or
- *     desaturates to an equal-luma grey (`rbSoften`). No black, no INK, no
+ *     below LIQUID_FLOOR) and otherwise only lightens (`rbLighten`), moves
+ *     towards (`rbSoften`) or away from (`rbSaturate`) an equal-luma grey. No
+ *     black, no INK, no
  *     darkening gradient. The trough, the dividers and the guard-break seams are
  *     not the liquid and keep their dark.
  *
@@ -203,9 +204,9 @@ export const LIQUID_FLOOR = 0.8;
 
 /** Each liquid's `rbShade` range, [low, high], as multiples of its ramp colour. */
 export const LIQUID_SHADE = Object.freeze({
-  ink: Object.freeze([0.90, 1.16]),
-  mercury: Object.freeze([0.94, 1.10]),
-  lava: Object.freeze([0.96, 1.24]),
+  ink: Object.freeze([0.84, 1.10]),
+  mercury: Object.freeze([0.90, 1.05]),
+  lava: Object.freeze([0.86, 1.10]),
 });
 
 /**
@@ -437,6 +438,12 @@ vec3 rbSoften(vec3 c, float t) {
   return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));
 }
 
+/* Away from that grey: more colour at the same luma. Only negative channels are
+   clamped, and raising a channel can only add light. */
+vec3 rbSaturate(vec3 c, float t) {
+  return max(vec3(dot(c, LUMA)) + (c - vec3(dot(c, LUMA))) * (1.0 + clamp(t, 0.0, 1.0)), vec3(0.0));
+}
+
 /* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. The
    trough, the frame and the fracture's seams use these; no liquid does. */
 const vec3 INK  = vec3(0.043, 0.059, 0.090);
@@ -458,28 +465,40 @@ export const LIQUID_CHUNKS = Object.freeze({
      a fill that is mostly not asking to be looked at. */
   ink: Object.freeze({
     functions: shadeConsts("ink") + `
-float inkField(vec2 lq, float thick) {
-  /* Stretched along the bar and kept low-frequency, so it reads as flow down a
-     tube rather than as blotches. Thicker ink folds less. */
-  vec2 w = vec2(lq.x * 0.80, lq.y * 1.9);
-  if (uFlow < 0.5) return rbNoise(w, 12.0);
-  vec2 warp = vec2(rbNoise(w * 0.6 + vec2(rbDrift(1.0, 6.0), 1.7), 6.0),
-                   rbNoise(w * 0.6 + vec2(-rbDrift(2.0, 6.0), 5.3), 6.0));
-  return rbNoise(w + (warp - 0.5) * mix(2.0, 0.9, thick) + vec2(rbDrift(3.0, 12.0), 0.0), 12.0);
+float inkField(vec2 lq, float driftA, float driftB, float fold) {
+  /* About a bar height per swirl along the bar and half that across it — big
+     enough to read on a 19px bar, never grain. driftA must be whole turns of
+     period 12 and driftB of period 8, which the call sites guarantee. */
+  vec2 w = vec2(lq.x * 1.2, lq.y * 2.0);
+  vec2 warp = vec2(rbNoise(w * 0.5 + vec2(driftB, 1.7), 8.0),
+                   rbNoise(w * 0.5 + vec2(-driftB, 5.3), 8.0));
+  return rbNoise(w + (warp - 0.5) * fold + vec2(driftA, 0.0), 12.0);
 }
 `,
     fill: `
-    /* Blended, never quantised: the field goes straight into the shade. The
-       surge pushes the swirls along the tube after a change; the edge does not
-       move. Bloodied, the ink thickens — it folds less, its contrast halves and
-       its colour goes paler — rather than going dark. */
-    float swirl = smoothstep(0.12, 0.88, inkField(lq + vec2(uSurge * 0.45, 0.0), bloodied));
-    swirl = mix(swirl, 0.5, 0.5 * bloodied);
-    fillCol = rbShade(base, swirl, SHADE_LO, SHADE_HI);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), swirl * swirl * 0.30);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.30), smoothstep(-0.4, 1.0, fy) * 0.22);
-    fillCol = rbSoften(fillCol, 0.30 * bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.25), 0.18 * bloodied);
+    /* Three light tones of the ramp hue swirling slowly along the tube: a vivid
+       body, a lighter mid tone, and pale plumes where the field peaks, all
+       blended. The surge pushes the swirls along after a change; the edge does
+       not move. Bloodied, the ink slows to a quarter, folds and contrasts less,
+       and goes pale and milky, so the change reads at a glance without anything
+       getting darker. Both speeds are evaluated only in the narrow band either
+       side of half, where they blend. */
+    vec2 lqI = lq + vec2(uSurge * 0.45, 0.0);
+    float fieldI = 0.0;
+    if (uFlow > 0.5) {
+      float quickI = bloodied < 0.999 ? inkField(lqI, rbDrift(4.0, 12.0), rbDrift(3.0, 8.0), 2.4) : 0.0;
+      float slowI = bloodied > 0.001 ? inkField(lqI, rbDrift(1.0, 12.0), rbDrift(1.0, 8.0), 1.2) : 0.0;
+      fieldI = mix(quickI, slowI, bloodied);
+    } else {
+      fieldI = rbNoise(vec2(lqI.x * 1.2, lqI.y * 2.0), 12.0);
+    }
+    float ampI = mix(1.0, 0.45, bloodied);
+    fillCol = rbShade(base, mix(0.5, smoothstep(0.2, 0.8, fieldI), ampI), SHADE_LO, SHADE_HI);
+    fillCol = rbSaturate(fillCol, 0.35 * (1.0 - bloodied));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.30), smoothstep(0.35, 0.65, fieldI) * 0.55 * ampI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.60), smoothstep(0.62, 0.92, fieldI) * 0.80 * ampI);
+    fillCol = rbSoften(fillCol, 0.50 * bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), 0.30 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);
 `,
     wave: `
@@ -536,23 +555,25 @@ float inkField(vec2 lq, float thick) {
   mercury: Object.freeze({
     functions: shadeConsts("mercury"),
     fill: `
-    float ripple = 0.0;
-    if (uFlow > 0.5) {
-      ripple = 0.10 * sin(lq.x * 1.1 - rbPhase(3.0))
-             + 0.05 * sin(lq.x * 2.3 + rbPhase(5.0) + uSeed);
-    }
-    /* Bloodied, the metal thickens: its undulation calms, the sheen spreads and
-       softens, and it goes milkier — paler, never tarnished dark. The surge
-       rolls a slow swell along the sheen after a change. */
-    ripple = ripple * mix(1.0, 0.45, bloodied) + uSurge * 0.22 * sin(lq.x * 0.9 + 1.7);
-    float ny = clamp(fy * 0.85 + ripple, -1.0, 1.0);
-    fillCol = rbShade(base, 0.5 + 0.5 * ny, SHADE_LO, SHADE_HI);
-    fillCol = rbSoften(fillCol, mix(0.22, 0.45, bloodied));
-    float sheenQ = (ny - 0.30) / mix(0.42, 0.60, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.70), exp(-sheenQ * sheenQ) * mix(0.60, 0.35, bloodied));
-    float shimmerM = 0.5;
-    if (uFlow > 0.5) shimmerM = 0.5 + 0.5 * sin(lq.x * 1.3 - rbPhase(2.0) + uSeed);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.45), shimmerM * 0.12 + abs(uSurge) * 0.15);
+    /* A pearly body — silvered a little and lifted towards pale cool and warm
+       tints that drift slowly along it — and one broad, soft, bright sheen
+       gliding the length of the bar, slanted with the tube's curve. The
+       travelling highlight is what reads as reflective. Bloodied, the sheen
+       slows to a third, spreads and fades, and the body goes milky. The surge
+       rolls the sheen along after a change. */
+    vec2 lqM = lq + vec2(uSurge * 0.40, 0.0);
+    float glide = uFlow > 0.5 ? 1.0 : 0.0;
+    fillCol = rbShade(base, 0.5 + 0.5 * fy, SHADE_LO, SHADE_HI);
+    fillCol = rbSoften(fillCol, mix(0.15, 0.75, bloodied));
+    float pearl = 0.5 + 0.5 * sin(lqM.x * 0.9 + rbPhase(3.0) * glide + uSeed);
+    fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), 0.55),
+                                     mix(base, vec3(1.00, 0.95, 0.97), 0.55), pearl), 0.40);
+    float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);
+    float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);
+    float sheenQ = mix(quickS, slowS * 0.45, bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.85),
+                        sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);
 `,
     wave: `
   if (uWave > 0.001) {
@@ -608,28 +629,47 @@ float inkField(vec2 lq, float thick) {
      calms so that fracture is the only structure on the bar. */
   lava: Object.freeze({
     functions: shadeConsts("lava") + `
-float lavaField(vec2 lq) {
-  vec2 w = vec2(lq.x * 0.9, lq.y * 2.2);
-  float a = rbNoise(w + vec2(rbDrift(1.0, 16.0), 0.0), 16.0);
-  if (uFlow < 0.5) return a;
-  float b = rbNoise(w * 1.9 + vec2(-rbDrift(3.0, 16.0), 4.0), 16.0);
-  return a * 0.65 + b * 0.35;
+float lavaField(vec2 lq, float drift) {
+  /* Pools about a bar height across; drift must be whole turns of period 16,
+     which the call sites guarantee (the finer octave takes twice as many). */
+  vec2 w = vec2(lq.x * 1.0, lq.y * 1.8);
+  return rbNoise(w + vec2(drift, 0.0), 16.0) * 0.7
+       + rbNoise(w * 2.0 + vec2(-drift * 2.0, 3.1), 16.0) * 0.3;
 }
 `,
     fill: `
-    /* Bloodied, the lava thickens — its convection evens out — and its heat
-       flickers, softly and only ever upward from its floor. Under a guard break
-       it calms instead of dimming: variation flattens towards an even glow and
-       the hot highlights ease, so the sharp gold reads over it. */
+    /* A warm, saturated glow with brighter pools drifting through it, each
+       swelling and easing on its own slow pulse, and a faint heat shimmer
+       rising through the body. Bloodied: the pools slow to a third and soften,
+       the pulse and the shimmer calm, and the glow goes paler. Under a guard
+       break it calms further — variation flattens, highlights ease — so the
+       sharp gold fracture is the only structure on the bar. It never darkens. */
     float calm = LAVA_BREAK_CALM * uBreak;
-    float heat = smoothstep(0.2, 0.8, lavaField(lq + vec2(uSurge * 0.40, 0.0)));
-    heat = mix(heat, 0.5, 0.45 * bloodied);
-    heat = mix(heat, 0.35, calm);
-    float flicker = 0.5 + 0.5 * sin(rbPhase(37.0) + lq.x * 1.7);
+    vec2 lqL = lq + vec2(uSurge * 0.40, 0.0);
+    float heat = 0.0;
+    if (uFlow > 0.5) {
+      float quickL = bloodied < 0.999 ? lavaField(lqL, rbDrift(3.0, 16.0)) : 0.0;
+      float slowL = bloodied > 0.001 ? lavaField(lqL, rbDrift(1.0, 16.0)) : 0.0;
+      heat = mix(quickL, slowL, bloodied);
+    } else {
+      heat = lavaField(lqL, 0.0);
+    }
+    heat = smoothstep(0.25, 0.85, heat);
+    heat = mix(heat, 0.5, 0.40 * bloodied);
+    heat = mix(heat, 0.5, calm);
+    float pulse = mix(0.5 + 0.5 * sin(rbPhase(20.0) + heat * 3.0),
+                      0.5 + 0.5 * sin(rbPhase(7.0) + heat * 3.0), bloodied);
     fillCol = rbShade(base, heat, SHADE_LO, SHADE_HI);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.95, 0.82), 0.45),
-                        (heat * heat * mix(0.55, 0.35, bloodied) + bloodied * flicker * 0.12) * (1.0 - calm));
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(-0.3, 1.0, fy) * 0.18 + abs(uSurge) * 0.18);
+    fillCol = rbSaturate(fillCol, mix(0.60, 0.15, bloodied));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.78, 0.42), 0.30), mix(0.45, 0.20, bloodied));
+    float pools = smoothstep(0.45, 0.95, heat) * mix(0.55 + 0.45 * pulse, 0.60 + 0.15 * pulse, bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.95, 0.80), 0.55) * 1.10,
+                        pools * mix(0.95, 0.45, bloodied) * (1.0 - calm));
+    float shimmerL = 0.0;
+    if (uFlow > 0.5) shimmerL = 0.5 + 0.5 * sin(lqL.y * 7.0 - rbPhase(48.0) + 1.5 * sin(lqL.x * 2.2 + rbPhase(9.0)));
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), shimmerL * mix(0.14, 0.05, bloodied) * (1.0 - calm));
+    fillCol = rbSoften(fillCol, 0.35 * bloodied);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), 0.22 * bloodied + abs(uSurge) * 0.18);
 `,
     wave: `
   if (uWave > 0.001) {

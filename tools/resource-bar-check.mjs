@@ -1317,11 +1317,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const shadeJs = (base, f, lo, hi) => base.map((v) => v * (lo + (hi - lo) * clamp01(f)));
   const lightenJs = (c, to, t) => c.map((v, i) => v + (Math.max(v, to[i]) - v) * clamp01(t));
   const softenJs = (c, t) => { const g = luma(c); return c.map((v) => v + (g - v) * clamp01(t)); };
+  const saturateJs = (c, t) => { const g = luma(c); return c.map((v) => Math.max(0, g + (v - g) * (1 + clamp01(t)))); };
   const head = shader.fragmentShader(shader.DEFAULT_LIQUID);
   const mirrored = {
     rbShade: "return base * mix(lo, hi, clamp(field, 0.0, 1.0));",
     rbLighten: "return mix(c, max(c, toward), clamp(t, 0.0, 1.0));",
     rbSoften: "return mix(c, vec3(dot(c, LUMA)), clamp(t, 0.0, 1.0));",
+    rbSaturate: "return max(vec3(dot(c, LUMA)) + (c - vec3(dot(c, LUMA))) * (1.0 + clamp(t, 0.0, 1.0)), vec3(0.0));",
   };
   for (const [fn, body] of Object.entries(mirrored)) {
     const got = new RegExp(`vec3 ${fn}\\([^)]*\\) \\{\\s*([^}]*?)\\s*\\}`).exec(head)?.[1];
@@ -1348,7 +1350,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       if (luma(base) < 0.02) continue;
       let c = shadeJs(base, rndL() * 1.4 - 0.2, lo, hi);
       for (let s = 0; s < 6; s++) {
-        c = rndL() < 0.5 ? lightenJs(c, [rndL(), rndL(), rndL()], rndL() * 1.4 - 0.2) : softenJs(c, rndL() * 1.4 - 0.2);
+        const pick = rndL();
+        const amount = rndL() * 1.4 - 0.2;
+        c = pick < 0.4 ? lightenJs(c, [rndL(), rndL(), rndL()], amount)
+          : pick < 0.7 ? softenJs(c, amount) : saturateJs(c, amount);
       }
       worstLum = Math.min(worstLum, luma(c) / luma(base));
     }
@@ -1363,9 +1368,9 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     const fill = strip(ch.fill);
     const writes = [...fill.matchAll(/\bfillCol\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
     const firstOk = writes[0]?.[1] === "=" && /^rbShade\(base,/.test(writes[0][2]);
-    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften)\(fillCol,/.test(m[2]));
+    const restOk = writes.slice(1).every((m) => m[1] === "=" && /^rb(?:Lighten|Soften|Saturate)\(fillCol,/.test(m[2]));
     if (!firstOk || !restOk)
-      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften of itself; any other write can take it below the floor.`);
+      lumFail(`The ${liquid} fill does not colour the liquid as rbShade(base, …) followed only by rbLighten/rbSoften/rbSaturate of itself; any other write can take it below the floor.`);
     else if ((fill.match(/\brbShade\(/g) || []).length !== 1 || !/rbShade\(base, [^;]*, SHADE_LO, SHADE_HI\)/.test(fill))
       lumFail(`The ${liquid} fill does not shade exactly once, inside its own SHADE range.`);
     const fx = strip(ch.wave + "\n" + ch.impact);
@@ -1378,7 +1383,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (g0s.some((g) => /base = mix\(base, rampAt\(/.test(g)))
     lumFail("base is pulled towards another ramp colour; bloodied belongs in the liquid, paler and calmer, not in a darker colour.");
   if (!lumBad)
-    ok(`every liquid stays at or above ${shader.LIQUID_FLOOR}× its ramp colour's luminance: shade ranges ${shader.LIQUIDS.map((l) => l + " " + shader.LIQUID_SHADE[l].join("–")).join(", ")}, worst lighten/soften chain ${worstLum.toFixed(3)}, and no chunk mixes INK or black or writes colour any other way`);
+    ok(`every liquid stays at or above ${shader.LIQUID_FLOOR}× its ramp colour's luminance: shade ranges ${shader.LIQUIDS.map((l) => l + " " + shader.LIQUID_SHADE[l].join("–")).join(", ")}, worst lighten/soften/saturate chain ${worstLum.toFixed(3)}, and no chunk mixes INK or black or writes colour any other way`);
 
   /* (d3) Smooth and blended: nothing inside a liquid quantises, steps, draws a
      crisp shape or a thin band. Hashes and noise live in the shared frame; a

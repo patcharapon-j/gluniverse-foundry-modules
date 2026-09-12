@@ -382,11 +382,13 @@ antialiasing — and nothing in a liquid (its flow, its bloodied look, its surge
 may bend or move it. The liquid is **never darker than its ramp colour**: a
 liquid chunk may shade `base` only through `rbShade` inside its `LIQUID_SHADE`
 range (never below `LIQUID_FLOOR`), and otherwise only lighten (`rbLighten`) or
-desaturate to an equal-luma grey (`rbSoften`); the check evaluates those helpers
-and ranges numerically and refuses INK or black mixes, darkening writes and
-sub-floor multipliers inside the chunks. So bloodied is paler and calmer, never
-darker, and lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than
-dimming. The trough, dividers and fracture seams are not the liquid and keep
+move towards or away from an equal-luma grey (`rbSoften` / `rbSaturate`); the
+check evaluates those helpers and ranges numerically and refuses INK or black
+mixes, darkening writes and sub-floor multipliers inside the chunks. Each
+liquid's identity therefore lives in how its light *moves* — ink's drifting
+plumes, mercury's gliding sheen, lava's pulsing pools — at a feature scale that
+survives a 19px bar; bloodied is slower, paler and gentler, never darker, and
+lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than dimming. The trough, dividers and fracture seams are not the liquid and keep
 their dark. Every idle term turns a whole number of times in the 64s idle loop,
 through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
 once a minute when the clock wraps. And the **only spring** in the feature is the

@@ -254,9 +254,16 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 
 | | |
 |---|---|
-| **Ink** (default) | smooth, slowly blending swirls flowing along the tube in a narrow range of the health colour |
-| **Mercury** | a soft, light metallic sheen: the health colour silvered a little, a broad highlight riding high in the tube, slow undulations along it |
-| **Lava** | a bright molten glow in the health colour, slowly convecting |
+| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and pale plumes of the health colour, blending as they move along the tube |
+| **Mercury** | a pearly, silvered body with a broad, soft, bright sheen gliding the length of the bar — reflective through a travelling highlight, never through dark bands |
+| **Lava** | a warm, saturated glow in the health colour with brighter pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
+
+Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
+visible, low-frequency motion made only of lighter tints and saturation: features
+between a third of a bar height and a whole one, and speeds under a bar height a
+second, calm enough for forty tokens on a map. A first pass at "smooth and light"
+was so even that the three read as the same pastel plate; the identity has to
+live in *how the light moves*, because darkness is not available to carry it.
 
 They replaced a refractive-glass material — travelling ribbons of caustic light
 with glints and a facet pattern — that did its job as *glass* and failed as
@@ -318,8 +325,10 @@ three things to a colour, all defined in the shared frame:
 | `rbShade(base, field, lo, hi)` | the one multiplication: `base` scaled inside the liquid's own `LIQUID_SHADE` range, whose low end is at or above the floor |
 | `rbLighten(c, toward, t)` | towards a lighter colour channel by channel (`max(c, toward)`), so no channel can drop |
 | `rbSoften(c, t)` | towards a grey of the **same** luma, so paler and never darker |
+| `rbSaturate(c, t)` | away from that grey, at the same luma: more colour, and clamping a negative channel only adds light |
 
-Each fill is one `rbShade` followed only by `rbLighten`/`rbSoften` of itself;
+Each fill is one `rbShade` followed only by `rbLighten`/`rbSoften`/`rbSaturate`
+of itself;
 each wave may only `rbLighten` or add light, and each impact only adds light.
 `resource-bar-check` pins the helpers' bodies to JavaScript mirrors, evaluates
 thousands of random shade-lighten-soften chains against the floor, and refuses
@@ -333,17 +342,23 @@ the frame, and the guard-break fracture's seams.
 
 ### Bloodied
 
-Below half, each liquid says so in its own idiom — **paler and calmer, never
-darker** — and the colour stays on the ramp. The old material swapped colour
+Below half, each liquid says so in its own idiom — **slower, paler and gentler,
+never darker** — and the colour stays on the ramp. It has to be legible at token
+size between 51% and 49%, where the ramp colour itself barely moves, so all three
+changes land at once: the motion drops to a third or a quarter of its speed, the
+colour loses saturation and lifts towards a milky pale, and the texture's
+amplitude roughly halves. A speed cannot be blended in the idle loop (turns must
+be whole numbers), so each liquid evaluates its quick and its slow version only
+in the point-and-a-half band either side of half, where the two are mixed. The old material swapped colour
 outright at 50%, and a colour that jumps at a threshold says more than the number
 does; the transition runs over the last point and a half above half so it
 arrives rather than snaps.
 
 | | |
 |---|---|
-| **Ink** | thicker: the warp folds less, contrast halves, and the colour goes paler and a little desaturated |
-| **Mercury** | thicker: its undulation calms, the sheen spreads and softens, and it goes milkier |
-| **Lava** | thicker: convection evens out, and its heat flickers softly — only ever upward from its floor |
+| **Ink** | swirls slow to a quarter and fold less, contrast drops, and the ink goes pale and milky |
+| **Mercury** | the sheen slows to a third, spreads and fades, and the pearly body goes milkier |
+| **Lava** | pools slow to a third and soften, the pulse and the shimmer calm, and the glow loses its saturation and goes pale |
 
 ### The surge
 
@@ -1107,9 +1122,11 @@ rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
 that liquid. It has rows for each liquid down the health ladder, bloodied, the
 surge after a hit and a heal, each liquid's reactions, lava under a guard break
 and a shed bar, plus a liquid switcher on the live bar. `?sheet=ink` (or
-`mercury`, `lava`, `names`) hides everything but one contact sheet — a liquid at
-100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged, or the
-Names rows — so a headless screenshot of the top of the page is the whole sheet.
+`mercury`, `lava`, `names`, `compare`) hides everything but one contact sheet — a
+liquid at 100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged;
+the Names rows; or the three liquids side by side at token size at 100/62/49/12%,
+drawn twice 1.5s apart on one seed so a single still shows the motion — so a
+headless screenshot of the top of the page is the whole sheet.
 
 The model used to be pasted into the page verbatim, which stopped working the
 moment it imported anime.js. `--artifact=` has no server behind it, so it inlines

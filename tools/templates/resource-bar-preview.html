@@ -171,7 +171,7 @@ input[type=range]{padding:0; width:230px}
   <div class="grid" id="row-liq-lava" style="margin-top:22px"></div>
 
   <h2>Bloodied</h2>
-  <p class="note">Just above and just below half. Every liquid grows paler and calmer, never darker: ink folds less and loses contrast, mercury's sheen spreads and goes milky, lava's convection evens out and its heat flickers softly.</p>
+  <p class="note">Just above and just below half. Every liquid grows slower, paler and gentler, never darker: ink's swirls slow to a quarter and go milky, mercury's sheen slows to a third and fades, lava's pools slow and soften and its glow goes pale.</p>
   <div class="grid" id="row-blood"></div>
 
   <h2>The surge</h2>
@@ -873,12 +873,31 @@ for (const liquid of LIQUIDS) {
 {
   const sheet = new URLSearchParams(location.search).get("sheet");
   const page = document.querySelector(".page");
-  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names")) {
+  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names" || sheet === "compare")) {
     const keep = new Set();
     if (sheet === "names") {
       for (const el of page.children) {
         if ((el.id || "").startsWith("row-names-") && el.id !== "row-names-zoom") keep.add(el);
         if (el.tagName === "H2" && el.textContent.startsWith("Names") && !/zoom/.test(el.textContent)) keep.add(el);
+      }
+    } else if (sheet === "compare") {
+      /* The three liquids side by side at token size, twice: the second copy
+         runs 1.5s ahead on the same seed, so one still shows the motion. */
+      const section = document.createElement("section");
+      section.id = "sheet";
+      let html = "";
+      for (const dt of [0, 1.5]) {
+        html += "<h2>token size, 128px · " + (dt ? "t + 1.5s" : "t") + "</h2>";
+        for (const liquid of LIQUIDS) html += "<div class=\"grid sheet-small\" id=\"cmp-" + liquid + "-" + dt + "\"></div>";
+      }
+      section.innerHTML = html;
+      page.prepend(section);
+      keep.add(section);
+      for (const dt of [0, 1.5]) for (const liquid of LIQUIDS) for (const frac of [1, 0.62, 0.49, 0.12]) {
+        add(document.getElementById("cmp-" + liquid + "-" + dt), {
+          title: liquid + " · " + pct(frac), sub: "<i>" + (frac < 0.5 ? "bloodied · " : "") + (dt ? "+1.5s" : "t") + "</i>",
+          frac, seg: 10, max: 58, liquid, w: 128, h: 30.72, seed: 37, timeOffset: dt,
+        });
       }
     } else {
       const section = document.createElement("section");
@@ -1044,7 +1063,7 @@ function draw(now) {
     const rampKey = a ? liveRamp : (s.ramp || "default");
     const temp = a ? liveTemp : (s.temp ?? 0);
 
-    gl.uniform1f(U.uTime, a ? a.time : t);
+    gl.uniform1f(U.uTime, a ? a.time : t + (s.timeOffset ?? 0));
     gl.uniform1f(U.uTexel, 1 / w);
     gl.uniform1f(U.uAspect, w / h);
     gl.uniform1f(U.uFrac, frac);
@@ -1063,7 +1082,7 @@ function draw(now) {
     gl.uniform1f(U.uBreakFlow, isHero ? (s.brkFlow ?? 1) : 0);
     /* Stable per bar, as the token id makes it in play — a fracture that
        reshuffles its shards every frame is confetti. */
-    gl.uniform1f(U.uSeed, c.seed ?? (c.seed = Math.random() * 100));
+    gl.uniform1f(U.uSeed, c.seed ?? (c.seed = s.seed ?? Math.random() * 100));
     gl.uniform1f(U.uSeg, s.seg ?? 0);
     /* The setting is pixels at 100% zoom; the shader wants bar heights, exactly
        as host.mjs divides it by the bar's world height. */
