@@ -201,26 +201,30 @@ fades a division out once its gap falls under a device pixel, but the count is
 also what sets that gap, so past the cap the bar is more gap than plate long
 before the fade takes over.
 
-The gap itself is `uSegW` **device pixels** — six by default — floored at
-`0.005 * uSegW` in geometry units and capped at 0.42 of a plate. Six rather than
-the two it started at because the gap is what makes the fill read as assembled
-plates rather than as a bar with scratches in it. Device pixels rather than
-geometry units for the reason in **Units** above: a fixed value is two pixels on
-a retina display and sub-pixel on an ordinary one, where `rbDetail` deletes it
-and the colour-blind position channel silently disappears for half the table.
-The cap is what holds the line at forty divisions, where the px term would
-otherwise win and leave more gap than plate; the floor scales with the width
-rather than sitting at a fixed 0.030, or every width under it would draw
-identically on a bar tall enough for the floor to win and the setting would
-silently stop doing anything.
+The gap is **world-sized**: the setting is pixels at 100% zoom — six by default
+— and the host divides it by the bar's world height, so `uSegW` reaches the
+shader in bar heights and scales with the canvas. It is floored at **a pixel and
+a half** and capped at 0.42 of a plate. Six rather than the two it started at
+because the gap is what makes the fill read as assembled plates rather than as a
+bar with scratches in it.
 
-`DIVIDER.min` is **3**, and that is a legibility floor rather than a taste.
-`rbDetail` fades anything under `GL_FADE_HI` (2.2 device pixels) out, so a
-thinner choice than that does not give the GM a *finer* divider, it gives them a
-*fainter* one — a slider whose bottom end looks like a bug. Three is the first
-whole pixel clear of the fade, so every value the setting offers draws at full
-strength. The check tool pins the range against the shader's own thresholds
-rather than against the number.
+It used to be held at a fixed number of device pixels, for the reason in
+**Units** above — a fixed geometry width is two pixels on a retina display and
+sub-pixel on an ordinary one, where the colour-blind position channel silently
+disappears for half the table. That was right about displays and wrong about
+zoom: six pixels at every zoom level is a hairline on a zoomed-in bar and most of
+the plate on a zoomed-out one. The floor keeps the display fix without the zoom
+bug. It is a floor rather than a fade because a zoomed-out bar that loses its
+divisions has lost the only reading that is not hue.
+
+The cap is what holds the line at forty divisions, where the width would
+otherwise leave more gap than plate. The check tool pins all three parts: the
+world-sized term, the device-pixel floor, and that every host write actually
+divides by the bar's height.
+
+The quarter register marks under the bar are divisions too. They follow `uSeg`,
+so a bar with the dividers off — or a count of zero — carries no division marks
+of any kind.
 
 **Off is a switch, not the bottom of the slider.** `rb.dividers` resolves inside
 `segmentsFor()`, which means it returns a count of zero and the divisions are
@@ -523,6 +527,55 @@ entirely correct doing it. `resource-bar-check` pins both.
 
 Foundry's bars are suppressed with `renderable = false`, never `visible = false`
 — `visible` is the permission answer this feature reads.
+
+---
+
+## When a bar is shown
+
+`visibility.mjs` says *whether* this client may see a bar. *When* that question
+is asked turned out to matter as much as the answer, and getting it wrong was the
+report that bars "appear and disappear on hover and move".
+
+**Decisions are made in the `refreshToken` hook and nowhere else.** Foundry sets
+a render flag and fires `hoverToken`/`controlToken` at once, but assigns
+`token.bars.visible` in `Token#_refreshState` on the *next* render pass — and the
+`refreshToken` hook runs after that pass. Decided from the hover hooks, the
+answer was one event stale, so Hover-mode bars were inverted (hovering in hid the
+bar, hovering out showed it) and Control-mode bars did the same on select. Alt
+fires no hook at all, only a `refreshState` on every token, and movement arrives
+as `refreshVisibility`, which the old code routed to a position-only path — so a
+token that walked out of sight kept its bar. Both reach the hook now.
+
+Three places look like they know and do not: the value hooks (`updateActor`
+and friends, which fire before the flags they queue are applied), `drawToken`
+(during `draw()` Foundry forces `token.visible` false), and `canvasReady` (every
+flag is still pending, so `bars.visible` holds its default of true). Those
+build and read; `refreshAll` then forces one `refreshState` pass so the decision
+is made on current state.
+
+**A bar is hidden, never destroyed.** Destroying an entry when permission took
+the bar away threw away its animation state and brought it back with a silent
+first read — on every mouse pass. `RevealAnim` in `anim.mjs` holds the decision
+and its transition; values that change while a bar is hidden are applied
+silently, so nothing replays as an impact when it comes back.
+
+**Drag previews are refused by every hook.** A preview is a clone that carries
+the real token's id; bound to one, the real bar followed the ghost and was
+deleted when the ghost was destroyed, not to return until the token next
+updated. `remove()` also checks that the placeable being destroyed is the one
+the entry is bound to.
+
+How the answer changes on screen:
+
+| | |
+|---|---|
+| **Appearing** (hover, select, Alt, walking into sight) | materialises left to right behind a line of light, `TIMING.revealMs` |
+| **A hover or selection letting go** | fades, `TIMING.fadeOutMs` — never the wipe played backwards, which is exactly what a creature losing all its hit points looks like |
+| **Leaving sight** | instant; a fade would leave the bar hanging over a token this client can no longer see |
+| **Scene load, a new token, panning** | instant — the first decision for an entry never animates, and culling is `renderable`, not visibility |
+
+`reveal` is in `SHED_ORDER`, directly after the idle sweep: under load a bar
+simply pops, which costs nobody any information.
 
 ---
 

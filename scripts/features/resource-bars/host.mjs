@@ -22,7 +22,7 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { FRAGMENT_SHADER, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
-import { BarAnim, POPUP_LIFT, POPUP_RISE, SHED_ORDER } from "./anim.mjs";
+import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
@@ -100,8 +100,8 @@ function makeBarMesh(role, opts) {
   const uniforms = {
     uTime: 0, uTexel: 0, uAspect: 6,
     uFrac: 1, uGhost: 1, uBloom: 0, uFlash: 0, uLow: 0,
-    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.dividerWidth ?? DIVIDER.default,
-    uRole: role,
+    uTemp: 0, uCracked: 0, uSeg: opts.segments, uSegW: opts.segW ?? 0,
+    uRole: role, uReveal: 1, uFade: 1,
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uRamp: opts.ramp,
@@ -139,6 +139,17 @@ class BarEntry {
        an impact, and PIXI compares uniform vectors element-wise, so mutating one
        buffer in place uploads exactly when a fresh array would. */
     this._ink = new Float32Array(REST_INK);
+    /* Whether this client sees the bar, and the transition that got it there.
+       An entry is *hidden*, never destroyed, when permission or sight takes the
+       bar away: destroying it threw away the animation state and brought it
+       back with a silent first read, and the destroy/recreate pair on every
+       mouse pass was most of what the flicker was. */
+    this.vis = new RevealAnim({ motionScale: host.motionScale ?? 1 });
+    this.group.visible = false;
+    /* False until the first visibility decision. That first decision is always
+       instant — a scene loading, or a token being dropped onto it, is not a bar
+       *appearing*, and materialising every bar on the map at once is noise. */
+    this.decided = false;
   }
 
   destroy() {
@@ -153,8 +164,15 @@ class BarEntry {
     return this.anims[role];
   }
 
-  /** Pull new values in, arming whatever animation the change deserves. */
-  read(opts) {
+  /**
+   * Pull new values in, arming whatever animation the change deserves.
+   *
+   * `silent` applies the values without an impact. It is set while the bar is
+   * hidden from this client: a creature hit while nobody here could see its
+   * bar has nothing to replay when the bar comes back, and an impact arriving
+   * with the materialise would read as the hit happening now.
+   */
+  read(opts, { silent = false } = {}) {
     const next = readToken(this.token, opts);
     if (!next) { this.reading = null; return; }
     const first = !this.reading;
@@ -166,7 +184,7 @@ class BarEntry {
         if (!bar) return;
         const a = this.animFor(role, bar.frac);
         a.motionScale = this.host.motionScale;
-        if (first) a.set(bar.frac, { silent: true });
+        if (first || silent) a.set(bar.frac, { silent: true });
         else a.set(bar.frac, { max: this.host.floatingDeltas ? max : 0 });
       };
       set("hero", next.hero, next.hero?.max ?? 0);
@@ -222,13 +240,16 @@ class BarHost {
         if (mesh) {
           mesh.shader.uniforms.uRamp = this.ramp;
           mesh.shader.uniforms.uSeg = role === "hero" ? this.segmentsFor(entry.reading?.hero) : 0;
-          mesh.shader.uniforms.uSegW = this.dividerWidth();
+          mesh.shader.uniforms.uSegW = this.dividerWidth() / (entry.rows[role]?.h || 1);
         }
         if (entry.anims[role]) {
           entry.anims[role].motionScale = opts.motionScale;
           if (opts.motionScale === 0) entry.anims[role].step(0);
         }
       }
+      entry.vis.motionScale = opts.motionScale;
+      if (opts.motionScale === 0) entry.vis.step(0);
+      entry.group.visible = entry.vis.drawn;
     }
     this.applyBloom();
   }
@@ -290,14 +311,27 @@ class BarHost {
     if (!this.container || !canvas?.tokens) return;
     const seen = new Set();
     for (const token of canvas.tokens.placeables) {
+      if (token.isPreview) continue;
       seen.add(token.id);
-      this.refreshToken(token);
+      this.refreshToken(token, { decide: false });
     }
     for (const [id, entry] of this.entries) {
       if (!seen.has(id)) { entry.destroy(); this.entries.delete(id); }
     }
+    /* Build here; decide in the pass this schedules. At canvasReady Foundry has
+       drawn every token but not applied its render flags yet, so bars.visible
+       and token.visible still hold their defaults — both true — and a decision
+       made now would show every hidden bar on the map until the first hover. A
+       settings change takes the same road: forcing one state pass is cheap and
+       keeps visibility on a single decision path. */
+    canvas.tokens.setAllRenderFlags?.({ refreshState: true });
     this.cull();
     this.syncTicker();
+  }
+
+  /** Build or re-read a token's entry without touching its visibility. */
+  track(token) {
+    this.refreshToken(token, { decide: false });
   }
 
   /**
@@ -309,24 +343,35 @@ class BarHost {
    */
   reposition(token) {
     const entry = this.entries.get(token?.id);
-    if (!entry || !entry.reading) return;
+    if (!entry || !entry.reading || token?.isPreview) return;
     entry.token = token;
     this.layout(entry);
     this.cullEntry(entry);
     this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
   }
 
-  remove(id) {
+  /**
+   * Drop an entry. `token`, when given, has to be the placeable the entry is
+   * bound to: a destroyed drag preview carries the real token's id, and removing
+   * by id alone deleted the real token's bar the moment a drag ended.
+   */
+  remove(id, token = null) {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (token && entry.token !== token) return;
     entry.destroy();
     this.entries.delete(id);
   }
 
-  refreshToken(token) {
-    if (!this.container || !token?.id) return;
-
-    if (!canViewBars(token)) { this.remove(token.id); this.syncTicker(); return; }
+  /**
+   * Read a token's values and lay its bar out.
+   *
+   * `decide` also re-evaluates whether this client may see it. Pass false from
+   * anywhere Foundry has not yet run `_refreshState` — the value hooks, a draw,
+   * canvasReady — where the permission answer on the token is the previous one.
+   */
+  refreshToken(token, { decide = true } = {}) {
+    if (!this.container || !token?.id || token.isPreview) return;
 
     let entry = this.entries.get(token.id);
     if (!entry) {
@@ -339,12 +384,56 @@ class BarHost {
       bothBars: this.opts.bothBars,
       pf2eLayers: this.opts.pf2eLayers,
       breakFx: this.opts.breakFx,
-    });
-    if (!entry.reading) { this.remove(token.id); return; }
+    }, { silent: !entry.vis.shown });
+    if (!entry.reading) { this.remove(token.id); this.syncTicker(); return; }
 
     this.layout(entry);
+    if (decide) this.applyVisibility(entry);
     this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
     this.syncTicker();
+  }
+
+  /**
+   * Re-decide visibility after Foundry's state pass, without re-reading values.
+   *
+   * Hover, selection, Alt and every step of a move arrive here, so this stays
+   * off the data path. A token with no entry yet takes the full one.
+   */
+  applyState(token) {
+    const entry = this.entries.get(token?.id);
+    if (!entry || !entry.reading) { this.refreshToken(token); return; }
+    entry.token = token;
+    this.layout(entry);
+    this.applyVisibility(entry);
+    this.cullEntry(entry);
+    this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    this.syncTicker();
+  }
+
+  /**
+   * Show or hide one entry for this client.
+   *
+   * Only ever called once Foundry's `_refreshState` has run, which is what
+   * makes `canViewBars` current. The permission rule itself stays in
+   * `visibility.mjs`; this decides only *how* the answer changes on screen.
+   */
+  applyVisibility(entry) {
+    const token = entry.token;
+    const can = canViewBars(token);
+    const v = entry.vis;
+    v.motionScale = this.motionScale;
+    const animate = entry.decided && this.motionScale > 0 && this.allows("reveal");
+    if (can && !v.shown) {
+      v.show(animate);
+    } else if (!can && v.shown) {
+      /* Out of sight is instant. A fade is for a hover or a selection letting
+         go; over a token that has just walked out of vision it would leave the
+         bar hanging where this client can no longer see anything. */
+      const inSight = !!token.visible && !token.document?.isSecret;
+      v.hide(animate && inSight);
+    }
+    entry.decided = true;
+    entry.group.visible = v.drawn;
   }
 
   /**
@@ -449,7 +538,7 @@ class BarHost {
       if (!mesh) {
         mesh = makeBarMesh(roleId, {
           segments: role === "hero" ? this.segmentsFor(entry.reading.hero) : 0,
-          dividerWidth: this.dividerWidth(),
+          segW: this.dividerWidth() / h,
           ramp: this.ramp,
           seed: entry.seed,
         });
@@ -550,7 +639,8 @@ class BarHost {
 
   syncTicker() {
     const wanted = [...this.entries.values()].some((e) =>
-      (e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot));
+      e.vis.hot || (e.group.visible
+        && ((e.group.renderable && this.motionScale > 0) || Object.values(e.anims).some((a) => a?.hot))));
     if (wanted && !this.ticking) {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
@@ -580,7 +670,14 @@ class BarHost {
 
     let anyHot = false;
     for (const entry of this.entries.values()) {
-      let hot = false;
+      /* The transition first: it decides whether there is anything to draw. */
+      const transitioning = entry.vis.hot;
+      if (transitioning) {
+        entry.vis.step(dt);
+        entry.group.visible = entry.vis.drawn;
+      }
+      if (!entry.group.visible) continue;
+      let hot = transitioning;
       for (const role of ROLES) {
         const a = entry.anims[role];
         if (!a) continue;
@@ -614,7 +711,9 @@ class BarHost {
       const u = mesh.shader.uniforms;
 
       u.uSeg = role === "hero" ? this.segmentsFor(r.hero) : 0;
-      u.uSegW = this.dividerWidth();
+      u.uSegW = this.dividerWidth() / base.h;
+      u.uReveal = entry.vis.reveal;
+      u.uFade = entry.vis.fade;
       u.uTime = a ? a.time + entry.seed : 0;
       u.uFrac = a ? a.frac : bar.frac;
       u.uGhost = a && this.allows("ghost") ? a.ghost : u.uFrac;
@@ -727,9 +826,14 @@ class BarHost {
       // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);
     }
+    /* The readout arrives with the bar rather than ahead of it — once the
+       materialise front has crossed most of the bar — and fades with it. */
+    const vis = entry.vis;
+    const textAlpha = vis.fade * clamp((vis.reveal - 0.55) / 0.35, 0, 1);
     if (entry.textMesh) {
       const punch = 1;
       entry.textMesh.visible = true;
+      entry.textMesh.shader.uniforms.uOpacity = textAlpha;
       entry.textMesh.scale.set(punch);
       entry.textMesh.position.set(anchorX, anchorY);
 
@@ -769,7 +873,7 @@ class BarHost {
       const inT = Math.min(1, pop.t / 0.14);
       const popScale = (0.55 + 0.45 * inT) * (1 + 0.35 * Math.sin(inT * Math.PI)) * (1 - 0.14 * e);
       entry.popupMesh.visible = true;
-      entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha);
+      entry.popupMesh.shader.uniforms.uOpacity = Math.max(0, alpha) * textAlpha;
       entry.popupMesh.scale.set(popScale);
       /* It rises and drifts back along the bar, so consecutive deltas fan out
          instead of stacking on one another. */

@@ -60,6 +60,8 @@ export const TIMING = Object.freeze({
   hotMs: 2200,     // how long a bar keeps animating after a change (see COLD below)
   breakInMs: 715,  // the guard-break fracture spreading (see BREAK_SETTLE_S)
   breakOutMs: 320, // --gl-d-brisk   and fading again when the break is cleared
+  revealMs: 260,   // --gl-d-brisk   a bar materialising as it becomes visible
+  fadeOutMs: 150,  // a bar fading when a hover or a selection lets go of it
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
@@ -483,6 +485,101 @@ export class BarAnim {
 }
 
 /**
+ * Whether a bar is on screen for this client, and how it got there.
+ *
+ * Kept apart from BarAnim because it is a fact about *this client's view* of the
+ * token rather than about its values: a bar that fades on hover-out has not lost
+ * anything, and a value change that lands while it is hidden must not replay as
+ * an impact when it comes back.
+ *
+ * Three rules, each of which reads as a bug when it is broken:
+ *
+ *   - Appearing **materialises**, left to right (`reveal`). On every mouse pass
+ *     over a Hover-mode token a bar that pops reads as flicker even when the rule
+ *     behind it is correct; one that is wiped in reads as summoned.
+ *   - Disappearing because a hover or selection let go **fades** (`fade`). It
+ *     never plays the wipe backwards: a bar draining right to left is exactly
+ *     what a creature losing all of its hit points looks like.
+ *   - Disappearing because the token left sight is **instant**. The caller says
+ *     so by passing `animate` false; a fade there leaves a bar lingering over a
+ *     token this client can no longer see.
+ */
+export class RevealAnim {
+  constructor({ motionScale = 1 } = {}) {
+    this.motionScale = motionScale;
+    /** The decision: may this client see the bar right now. */
+    this.shown = false;
+    /** The wipe front, 0 (nothing drawn) .. 1 (the whole bar). */
+    this.reveal = 0;
+    /** Overall opacity, 0..1. */
+    this.fade = 0;
+    this._mode = null;
+    this._t = 1;
+    this._from = 1;
+  }
+
+  _ms(key) {
+    return TIMING[key] * this.motionScale;
+  }
+
+  /** True while any part of the bar would draw. */
+  get drawn() {
+    return this.fade > 0 && (this.reveal > 0 || this._mode === "reveal");
+  }
+
+  /** True while a transition still needs frames. */
+  get hot() {
+    return this._mode !== null;
+  }
+
+  show(animate = false) {
+    const wasDrawn = this.drawn;
+    this.shown = true;
+    this.fade = 1;
+    /* Caught mid fade-out: come straight back. Replaying the wipe over a bar
+       that never finished leaving is a flicker of its own. */
+    if (wasDrawn) { this.reveal = 1; this._mode = null; return; }
+    if (animate && this.motionScale > 0) { this.reveal = 0; this._t = 0; this._mode = "reveal"; }
+    else { this.reveal = 1; this._mode = null; }
+  }
+
+  hide(animate = false) {
+    const wasDrawn = this.drawn;
+    this.shown = false;
+    if (animate && wasDrawn && this.motionScale > 0) {
+      this._from = this.fade;
+      this._t = 0;
+      this._mode = "fade";
+    } else {
+      this.fade = 0;
+      this.reveal = 0;
+      this._mode = null;
+    }
+  }
+
+  /** Advance by `dt` milliseconds. Returns true while still transitioning. */
+  step(dt) {
+    if (this._mode === null) return false;
+    if (this.motionScale === 0) {
+      this.fade = this.reveal = this.shown ? 1 : 0;
+      this._mode = null;
+      return false;
+    }
+    if (this._mode === "reveal") {
+      this._t = Math.min(1, this._t + dt / Math.max(1, this._ms("revealMs")));
+      /* The sweep's own curve: the front has to be seen crossing. */
+      this.reveal = travel(this._t);
+      if (this._t >= 1) { this.reveal = 1; this._mode = null; }
+    } else {
+      this._t = Math.min(1, this._t + dt / Math.max(1, this._ms("fadeOutMs")));
+      this.fade = this._from * (1 - this._t);
+      if (this._t >= 1) { this.fade = 0; this.reveal = 0; this._mode = null; }
+    }
+    return this._mode !== null;
+  }
+}
+
+/**
  * The shed order under load, cheapest sacrifice first. The renderer walks this
  * list and disables effects until it is inside budget; the check tool pins that
  * every animated behaviour appears here, so a new effect cannot be added that
@@ -498,6 +595,6 @@ export class BarAnim {
  * make.
  */
 export const SHED_ORDER = Object.freeze([
-  "sweep", "breakFlow", "popups", "sparks", "ring", "numbers", "punch", "ghost",
+  "sweep", "reveal", "breakFlow", "popups", "sparks", "ring", "numbers", "punch", "ghost",
   "wave", "bloom",
 ]);

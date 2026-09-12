@@ -880,7 +880,11 @@ function draw(now) {
        reshuffles its shards every frame is confetti. */
     gl.uniform1f(U.uSeed, c.seed ?? (c.seed = Math.random() * 100));
     gl.uniform1f(U.uSeg, s.seg ?? 0);
-    gl.uniform1f(U.uSegW, s.segW ?? 6);
+    /* The setting is pixels at 100% zoom; the shader wants bar heights, exactly
+       as host.mjs divides it by the bar's world height. */
+    gl.uniform1f(U.uSegW, (s.segW ?? 6) * dpr * SS / h);
+    gl.uniform1f(U.uReveal, s.reveal ?? 1);
+    gl.uniform1f(U.uFade, s.fade ?? 1);
     gl.uniform1f(U.uRole, s.role ?? 0);
     gl.uniform1f(U.uHit, a ? a.hit : (s.hit ?? 0));
     gl.uniform1f(U.uHitX, a ? a.hitX : (s.hitX ?? frac));

@@ -73,8 +73,10 @@ export const UNIFORMS = Object.freeze({
   uWave: "float",     // change-sweep amplitude, 0..1
   uWaveX: "float",    // the sweep front's position, as a fraction along the bar
   uSeg: "float",      // divisions across the fill, 0 = one continuous plate
-  uSegW: "float",     // the gap between two plates, in device pixels
+  uSegW: "float",     // the gap between two plates, in bar heights (world-sized: it scales with zoom)
   uRole: "float",     // 0 hero bar, 1 secondary rail, 2 shield rail
+  uReveal: "float",   // materialise wipe: 0 nothing drawn, 1 the whole bar
+  uFade: "float",     // overall opacity while a bar fades out, 1 at rest
 
   uBreak: "float",     // guard-break fracture, 0..1 (0 = intact); hero row only
   uBreakT: "float",    // seconds since the fracture landed — the shatter's own clock
@@ -171,6 +173,8 @@ uniform float uWaveX;
 uniform float uSeg;
 uniform float uSegW;
 uniform float uRole;
+uniform float uReveal;
+uniform float uFade;
 uniform float uBreak;
 uniform float uBreakT;
 uniform float uBreakX;
@@ -438,22 +442,20 @@ void main(void) {
   if (uSeg > 0.5) {
     float segW = span / uSeg;
     float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
-    /* Thin — but thin measured in *device pixels*, not in geometry units.
-       A fixed 0.036 here is 2.1px on a retina display and 0.68px on an ordinary
-       one, where rbDetail correctly deletes it: the divisions, and with them
-       the colour-blind position channel, silently disappear for every player
-       without a HiDPI monitor. Previewing at dpr 2 cannot show you this.
+    /* Sized in the *world*, so it scales with the canvas. uSegW arrives in bar
+       heights: the host divides the setting ("pixels at 100% zoom") by the
+       bar's own world height. It used to be held at a fixed number of device
+       pixels, and six pixels at every zoom is a hairline on a zoomed-in bar and
+       most of the plate on a zoomed-out one.
 
-       Pinned to px, the gap is the same width at every size and on every
-       display; uSegW is that width, in device pixels, and every value the GM
-       can choose clears GL_FADE_HI (see DIVIDER in constants.mjs), so it is
-       never half-faded and the plates read as assembled parts rather than as a
-       bar with scratches in it. The floor scales with it rather than sitting at
-       a fixed 0.030, so a wider divider is still wider on a bar tall enough for
-       the floor to win. The segW cap keeps a bar with many divisions from
-       becoming more gap than plate — and it is the cap, not the px term, that
-       does the work once a per-HP division count runs into the dozens. */
-    float gapP = min(max(px * uSegW, 0.005 * uSegW), segW * 0.42);
+       Floored at a pixel and a half rather than faded out, which is what keeps
+       the reason it was ever pinned to device pixels: a fixed geometry width is
+       ~2px on a retina display and sub-pixel on an ordinary one, where it would
+       vanish — and the divisions are the colour-blind position channel. Previewing
+       at dpr 2 cannot show you that. The segW cap keeps a bar with many
+       divisions from becoming more gap than plate; once a per-HP count runs into
+       the dozens it is the cap, not the width, that does the work. */
+    float gapP = min(max(uSegW, px * 1.5), segW * 0.42);
     segMask = 1.0 - (1.0 - smoothstep(max(0.0, gapP - px), gapP, sx)) * hero;
   }
 
@@ -541,7 +543,10 @@ void main(void) {
     float tx = mix(fx0, fx1, float(k) * 0.25);
     tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
-  tickMark *= rbDetail(0.048) * hero * 0.20;
+  /* They are divisions too, so they leave with the divisions: a bar the GM set
+     to one continuous pane (dividers off, or a count of zero) carries no
+     division marks of any kind. */
+  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg);
 
   /* ── Compose ───────────────────────────────────────────────────────────*/
   vec3 C = vec3(0.0);
@@ -772,6 +777,22 @@ void main(void) {
   glow *= outMask * mix(0.45, 1.0, hero);
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;
+
+  /* ── Materialise ───────────────────────────────────────────────────────
+     A bar becoming visible is wiped in from the left behind a line of light;
+     one a hover lets go of fades. Both are applied last, to the finished pixel
+     and its bloom floor, so nothing the bar draws can arrive ahead of the front
+     or linger after the fade. At rest both are 1 and this branch is skipped. */
+  if (uReveal < 0.999 || uFade < 0.999) {
+    float frontX = mix(-b.x - 0.35, b.x + 0.35, clamp(uReveal, 0.0, 1.0));
+    float shownMask = rbEdge(frontX + 0.10, frontX - 0.10, p.x);
+    float front = rbGauss(p.x - frontX, 0.05) * mBody
+                * step(0.001, uReveal) * (1.0 - smoothstep(0.80, 1.0, uReveal));
+    outC = outC * shownMask + mix(base, vec3(1.0), 0.55) * front * 1.2;
+    outA = outA * shownMask + front * 0.8;
+    outC *= uFade;
+    outA *= uFade;
+  }
 
   gl_FragColor = vec4(outC, clamp(outA, 0.0, 1.0));
 }

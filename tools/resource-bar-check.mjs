@@ -164,6 +164,74 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail("visibility.mjs no longer defers to Foundry's own token.bars.visible; recomputing the rule invites drift from core.");
 }
 
+/* ── 6b. Visibility is decided after Foundry's own pass, and hides ────────── */
+{
+  /* The flicker, and the leak that came with it. Foundry sets a render flag and
+     fires hoverToken/controlToken immediately, but assigns bars.visible in
+     _refreshState on the next pass; the refreshToken hook runs after that pass.
+     Deciding anywhere else reads the previous answer — Hover-mode bars came out
+     inverted — and a movement-only refresh that never re-decides leaves a bar
+     on a token that walked out of sight. Every one of these renders correctly
+     on the screen of whoever is testing it. */
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const h = strip(hostSrc);
+  const listens = (name) => new RegExp(`on\\("${name}"`).test(mainSrc);
+  if (listens("hoverToken") || listens("controlToken"))
+    fail("main.mjs listens to hoverToken/controlToken again. Both fire before _refreshState assigns bars.visible, so a decision made there reads the previous answer and inverts Hover-mode bars.");
+  else if (!/on\("refreshToken",\s*\(token,\s*flags\)/.test(mainSrc)
+    || !/flags\?\.refreshState/.test(mainSrc) || !/flags\?\.refreshVisibility/.test(mainSrc))
+    fail("The refreshToken hook no longer routes refreshState/refreshVisibility to a visibility decision, so hovers, Alt and walking out of sight never reach the bar.");
+  else ok("visibility is decided in the refreshToken pass, after Foundry has computed it");
+
+  const unguarded = ["drawToken", "destroyToken", "refreshToken"].filter((n) =>
+    !new RegExp(`on\\("${n}"[\\s\\S]{0,160}isPreview`).test(mainSrc));
+  if (unguarded.length)
+    fail(`${unguarded.join(", ")} do not refuse drag previews. A preview carries the real token's id: bound to it, the real bar follows the ghost and is destroyed when the drag ends.`);
+  else ok("drag previews are refused by every token hook");
+
+  const decide = h.slice(h.indexOf("applyVisibility(entry"));
+  if (/canViewBars\(token\)\)\s*\{\s*this\.remove\(/.test(h))
+    fail("host.mjs destroys an entry when permission takes its bar away. Hide it instead: destroy-and-recreate on every hover is the flicker, and it throws the animation state away.");
+  else if (!/\.hide\(/.test(decide) || !/token\.visible/.test(decide))
+    fail("applyVisibility does not tell leaving sight apart from a hover letting go; a bar fading over a token that just walked out of vision lingers where this client can no longer see.");
+  else ok("bars are hidden rather than destroyed, and leaving sight hides them instantly");
+
+  if (!/setAllRenderFlags(?:\?\.)?\(\{\s*refreshState:\s*true\s*\}\)/.test(h))
+    fail("refreshAll does not force a refreshState pass, so bars built at canvasReady are decided on Foundry's pre-refresh defaults — bars.visible starts true — and show hidden hit points until the first hover.");
+  else if (!/decide:\s*false/.test(mainSrc))
+    fail("The value hooks (updateActor, updateToken, …) decide visibility. They fire before Foundry applies the flags they queue, so their answer is stale.");
+  else ok("nothing decides on stale state: canvasReady forces a pass, value hooks only read");
+}
+
+/* ── 6c. Appearing materialises, hover-out fades, neither plays backwards ── */
+{
+  let bad = 0;
+  const no = (msg) => { fail(msg); bad++; };
+  const r = new anim.RevealAnim({ motionScale: 1 });
+  r.show(false);
+  if (r.reveal !== 1 || r.fade !== 1 || r.hot) no("An instant show (the first decision after a load) is not instant.");
+  r.hide(true);
+  r.step(16);
+  if (!(r.fade > 0 && r.fade < 1) || r.reveal !== 1)
+    no("Hover-out does not fade — or it plays the wipe backwards, which reads exactly like the creature losing all its hit points.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.fadeOutMs / 16) + 2; i++) r.step(16);
+  if (r.drawn) no("A bar is still drawn after its fade-out has finished.");
+  r.show(true);
+  r.step(16);
+  if (!(r.reveal > 0 && r.reveal < 1)) no("A bar becoming visible does not materialise.");
+  for (let i = 0; i < Math.ceil(anim.TIMING.revealMs / 16) + 2; i++) r.step(16);
+  if (r.reveal !== 1 || r.hot) no("The materialise never finishes, so the bar stays in the ticker.");
+  r.hide(false);
+  if (r.drawn || r.hot) no("An instant hide — leaving sight — still draws or animates.");
+  const back = new anim.RevealAnim({ motionScale: 1 });
+  back.show(false); back.hide(true); back.step(40); back.show(true);
+  if (back.reveal !== 1 || back.fade !== 1) no("A bar caught mid fade-out replays the wipe instead of coming straight back, which is a flicker of its own.");
+  const still = new anim.RevealAnim({ motionScale: 0 });
+  still.show(true);
+  if (still.reveal !== 1 || still.hot) no("At motion \"none\" a bar still materialises.");
+  if (!bad) ok("appearing materialises, hover-out fades, leaving sight is instant, motion none is still");
+}
+
 /* ── 7. Every animated behaviour can be shed ────────────────────────────── */
 {
   const h = strip(hostSrc);
@@ -171,7 +239,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave", "breakFlow"];
+                    "sparks", "wave", "breakFlow", "reveal"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -679,25 +747,38 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const GL_FADE_LO = 0.8, GL_FADE_HI = 2.2;
   const glsl = strip(shader.FRAGMENT_SHADER);
 
-  /* The segment gap is deliberately *not* a fixed magnitude: pinned to px it is
-     the same hairline on every display. Check that it still is — a literal
-     creeping back in here is the retina-only-divisions bug returning. */
-  if (!/float gapP = min\(max\(px \* (?:[0-9.]+|uSegW),/.test(glsl))
-    fail("The segment gap is not derived from px. A fixed value is ~2px on a HiDPI display and sub-pixel on an ordinary one, so the divisions vanish for players without a retina monitor.");
-  else ok("segment gap is pinned to device pixels, not geometry units");
+  /* The segment gap is world-sized, so it scales with zoom — and floored in
+     device pixels, so it never falls under the size at which it would vanish.
+     Both halves fail silently. Pinned to px alone it is the same six pixels at
+     every zoom, most of the plate on a zoomed-out table; world-sized with no
+     floor it is sub-pixel on an ordinary display at a normal zoom, and the
+     colour-blind position channel disappears for every player without a retina
+     monitor. */
+  const floor = /float gapP = min\(max\(uSegW, px \* ([0-9.]+)\), segW \* [0-9.]+\)/.exec(glsl);
+  if (!floor)
+    fail("The segment gap is not max(uSegW, px * floor): either it is pinned to device pixels again (no zoom scaling) or it has lost its device-pixel floor (divisions vanish on an ordinary display).");
+  else if (Number(floor[1]) < 1)
+    fail(`The segment gap's floor is ${floor[1]} device pixels; under one pixel the antialiasing ramp swallows it and the divisions read as nothing on a zoomed-out bar.`);
+  else ok(`segment gap scales with zoom and is floored at ${floor[1]} device pixels`);
 
-  /* And every width the GM can *choose* has to clear the fade, or the thin end
-     of the slider hands them a fainter divider rather than a finer one — which
-     renders perfectly and reads as the setting being broken. The floor scales
-     with the width for the same reason: a fixed floor makes every width below
-     it draw identically on a tall bar. */
-  if (DIVIDER.min < GL_FADE_HI)
-    fail(`The thinnest divider the GM can pick is ${DIVIDER.min} device pixels, under rbDetail's ${GL_FADE_HI}px fade. That end of the slider fades the divisions out instead of thinning them.`);
+  /* The host is what turns "pixels at 100% zoom" into bar heights. A write that
+     skips the division hands the shader a width fifty times too large, and the
+     segW cap then quietly makes every divider the same maximum width. */
+  const hostPlain = strip(hostSrc);
+  const segWrites = [...hostPlain.matchAll(/uSegW\s*[:=]\s*([^,;\n]+)/g)].map((m) => m[1].trim());
+  const undivided = segWrites.filter((w) => !/\//.test(w) && !/opts\.segW/.test(w));
+  if (!segWrites.length) fail("host.mjs never writes uSegW.");
+  else if (undivided.length)
+    fail(`uSegW is written without dividing by the bar's world height (${undivided.join(" | ")}); the shader expects bar heights, not pixels.`);
   else if (DIVIDER.default < DIVIDER.min || DIVIDER.default > DIVIDER.max)
     fail(`The default divider width (${DIVIDER.default}) is outside the range the setting offers.`);
-  else if (!/max\(px \* uSegW, [0-9.]+ \* uSegW\)/.test(glsl))
-    fail("The segment gap's floor does not scale with uSegW, so every width below it draws the same on a bar tall enough for the floor to win — the thickness setting silently stops doing anything.");
-  else ok(`every divider width ${DIVIDER.min}–${DIVIDER.max}px clears the ${GL_FADE_HI}px fade, and the floor scales with it`);
+  else ok(`every uSegW write converts pixels at 100% zoom into bar heights (${segWrites.length} sites)`);
+
+  /* "Off means no division marks of any kind": the quarter register ticks under
+     the bar are divisions too, and are cut from the same switch. */
+  if (!/tickMark \*=[^;]*uSeg/.test(glsl))
+    fail("The quarter tick marks under the bar do not follow uSeg, so turning the dividers off still leaves division marks on the bar.");
+  else ok("the quarter tick marks follow the dividers switch");
 
   const gated = [...glsl.matchAll(/rbDetail\(([0-9.]+)\s*(?:\*\s*([0-9.]+))?\)/g)]
     .map((m) => ({ raw: m[0], value: Number(m[1]) * (m[2] ? Number(m[2]) : 1) }));

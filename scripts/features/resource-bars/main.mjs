@@ -152,26 +152,57 @@ export function onReady() {
      measured from the ones that are. */
   on("canvasPan", () => host.cull());
 
-  on("drawToken", (token) => { suppressNative(token); host.refreshToken(token); });
-  on("destroyToken", (token) => host.remove(token?.id));
+  /* A drag preview is a clone that carries the real token's id. Every hook here
+     refuses one: bound to a preview, the real token's bar follows the ghost
+     around and is then destroyed along with it when the drag ends, and does not
+     come back until something updates the token. Native bars are still
+     suppressed on it, or the ghost drags Foundry's own bars along. */
+  on("drawToken", (token) => {
+    suppressNative(token);
+    if (!token.isPreview) host.track(token);
+  });
+  on("destroyToken", (token) => { if (!token?.isPreview) host.remove(token?.id, token); });
   on("deleteToken", (doc) => host.remove(doc?.id));
 
-  /* Position only — this fires every frame of a drag. */
-  on("refreshToken", (token) => { suppressNative(token); host.reposition(token); });
+  /* Where visibility is decided — and the only place it is.
+
+     Foundry sets a render flag and fires hoverToken / controlToken straight
+     away, but only assigns `token.bars.visible` later, in `_refreshState`, on
+     the next pass; this hook is called after that pass. Deciding from the hover
+     hooks read the answer one event stale, which inverted Hover-mode bars
+     (hovering in hid them, hovering out showed them) and never noticed Alt at
+     all, because highlightObjects fires no hook — only a refreshState on every
+     token. Movement arrives here too, as refreshVisibility, which is how a
+     token that walks out of sight loses its bar instead of keeping it.
+
+     A draw is followed by exactly such a pass (`draw()` sets every flag), so
+     `drawToken` builds and this decides. */
+  on("refreshToken", (token, flags) => {
+    suppressNative(token);
+    if (token.isPreview) return;
+    if (flags?.refreshBars || flags?.refreshSize) host.refreshToken(token);
+    else if (flags?.refreshState || flags?.refreshVisibility) host.applyState(token);
+    else host.reposition(token);
+  });
 
   /* Value changes. `updateItem` is here for PF2e shields, whose HP lives on an
-     item rather than on the actor. */
-  const full = (token) => host.refreshToken(token);
+     item rather than on the actor.
+
+     These read the numbers and never decide visibility. When they fire, Foundry
+     has queued the render flags for whatever changed without applying them, so
+     any visibility answer read here is the previous one; the refreshToken pass
+     that follows is the one that knows. */
+  const full = (token) => host.refreshToken(token, { decide: false });
   on("updateToken", (doc) => doc.object && full(doc.object));
   on("updateActor", (actor) => { for (const t of actor.getActiveTokens()) full(t); });
   on("updateItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
   on("createItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
   on("deleteItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
 
-  /* Hover and control gate the sweep and the numeric readout, both of which are
-     permission-shaped, so they go through the full path rather than reposition. */
-  on("hoverToken", (token) => full(token));
-  on("controlToken", (token) => full(token));
+  /* No hoverToken or controlToken listener, on purpose. Both fire before the
+     render pass that updates what they change; the refreshState that pass sets
+     reaches the refreshToken hook above, which is where the readout's hover gate
+     and the bar's own visibility are both re-read. */
 
   /* The initiative tracker's guard break. It is a flag on the Combatant, so
      none of the actor/token hooks above can see it move — and unlike a value

@@ -331,7 +331,16 @@ Anything meant to read as a hairline must be sized in **device pixels** (`px`),
 never in the shader's geometry units — a fixed value is ~2px on a HiDPI display
 and sub-pixel on an ordinary one, where `rbDetail` deletes it, so the detail
 silently vanishes for every player without a retina monitor and no preview you
-run yourself will show you that.
+run yourself will show you that. The division gap is the one deliberate
+exception, and it keeps the rule's intent: it is world-sized so it scales with
+zoom, *floored* in device pixels so it can never shrink under one.
+
+Visibility is decided in exactly one place, the `refreshToken` hook, because
+`token.bars.visible` is only current after Foundry's `_refreshState` pass. Asked
+from `hoverToken`/`controlToken` it is one event stale (that inverted Hover-mode
+bars), and during `draw()` `token.visible` is forced false. Bars are hidden, never
+destroyed, when permission or sight removes them, and drag previews — clones that
+carry the real token's id — are refused by every hook.
 
 A third: `PIXI.Filter` defaults its `resolution` to **1**, not to the
 renderer's, and the filter system sizes its intermediate textures from the

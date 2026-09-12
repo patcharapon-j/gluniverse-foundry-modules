@@ -40,6 +40,14 @@ function canViewMode(token, mode) {
  * time it refreshes a token, so that is the authority when it exists — reading
  * its answer rather than recomputing one means we cannot drift away from it as
  * the core rules change.
+ *
+ * "By the time it refreshes" is the whole condition. `bars.visible` is assigned
+ * in `Token#_refreshState`, on the render pass *after* a hover or a selection,
+ * so this answer is only current when asked from the `refreshToken` hook. Asked
+ * from `hoverToken` or `controlToken` it is the previous answer, and asked
+ * during `draw()` — which forces `token.visible` false for its duration — it is
+ * "no" for every token nobody controls. `main.mjs` routes every decision
+ * through that hook for this reason.
  */
 export function canViewBars(token) {
   if (!token?.document || token.document.isSecret) return false;
