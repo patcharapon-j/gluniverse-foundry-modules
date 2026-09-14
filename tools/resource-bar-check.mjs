@@ -1759,24 +1759,31 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       ok(`every liquid's brightest resting light is a tint of it, never white — ${report.join("; ")} — with the head glow screened on at rest and every peak pinned to its constant`);
 
     /* (d5) …and so is a dying gauge's. The gauge is the same liquid poured in a
-       deepened orchid and calmed, with the veins and the heartbeat laid over it —
-       and the heartbeat loops for as long as the creature is dying, so the peak
-       of a beat is part of the resting look, not a moment. The veins' cores used
-       to lighten all the way to --gl-orchid-hot (itself near-white) and then add
-       a tenth of it on top, so a dying bar went white at every vein and every
-       beat and the bloom pass lit it.
+       deepened orchid and calmed, with the veins, the heartbeat and the ticker's
+       letters laid over it — and the heartbeat loops and the letters run for as
+       long as the creature is dying, so the peak of a beat and a letter's lit rim
+       are part of the resting look, not a moment. The veins' cores used to
+       lighten all the way to --gl-orchid-hot (itself near-white) and then add a
+       tenth of it on top, so a dying bar went white at every vein and every beat
+       and the bloom pass lit it.
 
        Same rule, same floors: no channel of the brightest resting pixel reaches
        1.0, and it keeps its saturation relative to the colour the gauge is *of*
        (the dying base — through rbWarm for lava, as above). Evaluated per liquid
        over every field value, at the veins' core (vein = 1), the loudest beat
-       (the largest dyBeat any phase reaches, which bounds every crossfade) and
-       the head glow screened on. Every statement restated is pinned, and every
-       write that lights the fill inside the dying block must be one of them. */
+       (the largest dyBeat any phase reaches, which bounds every crossfade), a
+       letter's rim at full coverage and the head glow screened on. Every
+       statement restated is pinned, and every write that lights the fill inside
+       the dying block must be one of them. The letters' own dark body is the one
+       write there that is not light; 7n pins it. */
     let dyBad = 0;
     const dyFail = (msg) => { fail(msg); dyBad++; };
     const DY = shader.DYING_PEAK ?? {};
-    const DY_NAMES = { vein: "DYING_PEAK_VEIN", veinTint: "DYING_PEAK_VEIN_TINT", beat: "DYING_PEAK_BEAT", beatTint: "DYING_PEAK_BEAT_TINT" };
+    const DY_NAMES = {
+      vein: "DYING_PEAK_VEIN", veinTint: "DYING_PEAK_VEIN_TINT",
+      beat: "DYING_PEAK_BEAT", beatTint: "DYING_PEAK_BEAT_TINT",
+      rim: "DYING_PEAK_RIM", rimTint: "DYING_PEAK_RIM_TINT",
+    };
     const dyCol = ramp.hexToFloat3(ramp.DYING_COLOR);
     const dyHot = ramp.hexToFloat3(ramp.DYING_HOT);
     const dyBase = dyCol.map((c) => c * mixf(1, c, shader.DYING_DEPTH));
@@ -1795,7 +1802,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
         (s) => { s.c = lightenJs(s.c, mix3(dyBase, dyHot, DY.veinTint), s.vein * DY.vein); }],
       ["C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_BEAT_TINT), dyHeart * mFill * amt * DYING_PEAK_BEAT);",
         (s) => { s.c = lightenJs(s.c, mix3(dyBase, dyHot, DY.beatTint), s.heart * DY.beat); }],
+      ["C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_RIM_TINT), word.r * tIn * mFill * DYING_PEAK_RIM);",
+        (s) => { s.c = lightenJs(s.c, mix3(dyBase, dyHot, DY.rimTint), s.rim * DY.rim); }],
     ];
+    /* The letters' body, cut into the liquid: not light, and pinned in 7n. */
+    const TICKER_CUT = "C = mix(C, uDyingCol * 0.10 + INK0, ink * mFill * 0.94);";
     const dyBeatJs = (th) => Math.pow(0.5 + 0.5 * Math.cos(th), 10) + 0.55 * Math.pow(0.5 + 0.5 * Math.cos(th - 0.95), 10);
     let loudest = 0;
     for (let i = 0; i <= 8192; i++) loudest = Math.max(loudest, dyBeatJs((i / 8192) * Math.PI * 2));
@@ -1821,7 +1832,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
             dyFail(`The ${liquid} program's ${glsl} is ${constOf(g, glsl)} but DYING_PEAK.${key} is ${DY[key]}.`);
       const block = norm(/if \(uDying > 0\.001\) \{[\s\S]*?\n  \}/.exec(g)?.[0] ?? "");
       const onFill = block.split(";").map((s) => s.replace(/^[\s{}]+/, "").trim())
-        .filter((s) => /^C\s*[*+\-/]?=(?!=)/.test(s) && /\bmFill\b/.test(s) && !/\(1\.0 - mFill\)/.test(s)).map((s) => s + ";");
+        .filter((s) => /^C\s*[*+\-/]?=(?!=)/.test(s) && /\bmFill\b/.test(s) && !/\(1\.0 - mFill\)/.test(s)).map((s) => s + ";")
+        .filter((s) => s !== TICKER_CUT);
       if (onFill.join("\n") !== DYING_FILL.map(([s]) => s).join("\n"))
         dyFail(`The ${liquid} dying block lights the fill with something other than the dying peak model's statements (the shader has ${onFill.map((s) => "`" + s + "`").join(", ") || "nothing"}).`);
       if (!numeric.has(liquid) || !MODEL[liquid] || !dyNumeric) continue;
@@ -1834,11 +1846,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
         const s = { base: dyBase, bloodied: 1, surge: 0, calm: 0, shade: shader.LIQUID_SHADE[liquid], c: null, ...d };
         for (const [, run] of m.steps) run?.(s);
         const poured = saturateJs(s.c, shader.DYING_SAT);
-        for (const headIn of [0, 1]) for (const vein of [0, 0.5, 1]) for (const heart of [0, loudest * 0.5, loudest]) {
-          const px = { c: poured.map((v, i) => v + Math.max(1 - v, 0) * glow[i] * GLOW.rest * headIn), vein, heart };
+        for (const headIn of [0, 1]) for (const vein of [0, 0.5, 1]) for (const heart of [0, loudest * 0.5, loudest]) for (const rim of [0, 1]) {
+          const px = { c: poured.map((v, i) => v + Math.max(1 - v, 0) * glow[i] * GLOW.rest * headIn), vein, heart, rim };
           for (const [, run] of DYING_FILL) run(px);
           const hi = Math.max(...px.c);
-          if (hi > top) { top = hi; topAt = `vein ${vein}, beat ${heart.toFixed(2)}, head glow ${headIn}, [${px.c.map((v) => v.toFixed(3)).join(", ")}]`; }
+          if (hi > top) { top = hi; topAt = `vein ${vein}, beat ${heart.toFixed(2)}, letter rim ${rim}, head glow ${headIn}, [${px.c.map((v) => v.toFixed(3)).join(", ")}]`; }
           const l = luma(px.c);
           if (l > brightL) { brightL = l; bright = px.c; }
         }
@@ -1846,15 +1858,15 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       const kept = hsvSat(bright) / Math.max(hsvSat(ref), 1e-6);
       const turn = Math.abs(((hueOf(bright) - hueOf(ref) + 540) % 360) - 180);
       if (!(top < 1.0))
-        dyFail(`The ${liquid} dying gauge's brightest resting pixel reaches ${top.toFixed(3)} in one channel (${topAt}). The heartbeat loops for as long as the creature is dying, so its peak is the resting look, and a clipped channel is orchid lost to white.`);
+        dyFail(`The ${liquid} dying gauge's brightest resting pixel reaches ${top.toFixed(3)} in one channel (${topAt}). The heartbeat loops and the letters run for as long as the creature is dying, so their peak is the resting look, and a clipped channel is orchid lost to white.`);
       if (!(kept >= HUE_FLOOR[liquid]))
-        dyFail(`The ${liquid} dying gauge's brightest resting pixel keeps ${kept.toFixed(3)} of the orchid's saturation ([${bright.map((v) => v.toFixed(3)).join(", ")}]), under the ${HUE_FLOOR[liquid]} floor: its veins and beats read as white rather than as a lighter orchid.`);
+        dyFail(`The ${liquid} dying gauge's brightest resting pixel keeps ${kept.toFixed(3)} of the orchid's saturation ([${bright.map((v) => v.toFixed(3)).join(", ")}]), under the ${HUE_FLOOR[liquid]} floor: its veins, beats and letter rims read as white rather than as a lighter orchid.`);
       if (!(turn <= 30))
-        dyFail(`The ${liquid} dying gauge's brightest resting pixel turns ${turn.toFixed(0)}° away from the orchid's hue; a vein or a beat is a lighter orchid, not another colour.`);
+        dyFail(`The ${liquid} dying gauge's brightest resting pixel turns ${turn.toFixed(0)}° away from the orchid's hue; a vein, a beat or a letter's rim is a lighter orchid, not another colour.`);
       dyReport.push(`${liquid} peak ${top.toFixed(3)}, saturation kept ${kept.toFixed(2)}, hue ${turn.toFixed(0)}°`);
     }
     if (!dyBad)
-      ok(`a dying gauge's brightest resting light — veins at their core, the loudest beat, the head glow — is a tint of the orchid, never white: ${dyReport.join("; ")}`);
+      ok(`a dying gauge's brightest resting light — veins at their core, the loudest beat, a ticker letter's rim, the head glow — is a tint of the orchid, never white: ${dyReport.join("; ")}`);
   }
 
   /* (e) The lava calms under a guard break — it never dims. */
@@ -1967,8 +1979,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     b.set(0.9, { max: 50 }); b.step(16); b.setBroken(false); b.step(16);
     b.setDying({ value: 2, max: 4, doomed: 0, slots: 4, flatline: false });
     for (let i = 0; i < 30; i++) b.step(16);
-    b.setDying({ value: 4, max: 4, doomed: 0, slots: 4, flatline: true }); b.step(16);
-    b.setDying(null); b.step(16);
+    b.setDying({ value: 4, max: 4, doomed: 0, slots: 4, flatline: true }); b.setDead(true); b.step(16);
+    b.setDead(false); b.setDying(null); b.step(16);
     const r = new m.RevealAnim(); r.show(true); r.step(16); r.hide(true); r.step(16);
     console.log("driven");`;
   const run = spawnSync(process.execPath, ["--input-type=module", "-e", driver], { encoding: "utf8", timeout: 20000 });
@@ -1991,24 +2003,30 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   else ok("the liquid's flow and surge ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
 }
 
-/* ── 7n. Dying (PF2e): the gauge, the shared veins, the heartbeat ────────── */
+/* ── 7n. Dying and dead (PF2e): the ticker, the flatline, the shared veins ── */
 {
   /* A dying creature's primary bar stops measuring hit points and becomes the
-     dying gauge. Every rule below fails silently, and most of them fail as a
-     number the table trusts being off by one:
+     dying ticker; a dead one's becomes the flatline. Every rule below fails
+     silently, and most of them fail as something the table trusts being wrong:
 
        - a reader that subtracts doomed from PF2e's dying.max, which already has
          doomed taken off, says death comes one step early — the exact bug the
          initiative tracker shipped with;
-       - a gauge read inside the value diff never appears, because a condition
-         arrives as an item change with no hit points moving;
+       - a dead reader that counts a player character at 0 HP without dying runs
+         the flatline on every knock-out, because PF2e applies the damage and
+         adds dying in two separate operations;
+       - a ticker or a flatline read inside the value diff never appears: a
+         condition or a status arrives with no hit points moving, and the dead
+         status is an ActiveEffect, which no item or actor hook sees;
+       - the ticker's value handed to the raster for a viewer who may not read
+         numbers is a hostile's dying value on a player's screen, looking right;
        - a veins shader forked rather than shared drifts from the card and the
-         token overlay the first time either is touched, and an extraction that
-         is not an identity changes both while nothing in the bars is running;
-       - a heartbeat whose rate is not a whole number of beats per loop steps
-         once a minute, and one that snaps between levels jumps mid-beat;
-       - a shed or a flatline that removes the gauge instead of freezing it
-         trades the information for the frame rate. */
+         token overlay, and an extraction that is not an identity changes both;
+       - a heartbeat or a ticker that is not whole beats per loop, or that snaps
+         between levels, steps once a minute or jumps mid-beat;
+       - a shed that removes the words or the flatline instead of freezing them
+         trades the information for the frame rate;
+       - a hairline sized in world units vanishes on every ordinary display. */
   let bad = 0;
   const no = (msg) => { fail(msg); bad++; };
   const section = (label, fn) => {
@@ -2028,10 +2046,14 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     }
     return text.slice(open);
   };
+  const constOf = (g, name) => Number(new RegExp(`const float ${name} = ([-0-9.]+);`).exec(g)?.[1]);
   const READER = "scripts/core/pf2e-dying.mjs";
   let reader = null, readerErr = null, readerSrc = "";
   try { reader = await import(new URL(READER, ROOT).href); } catch (error) { readerErr = error; }
   try { readerSrc = strip(await src(READER)); } catch { /* reported below */ }
+  let ticker = null, tickerErr = null;
+  try { ticker = await import(new URL("scripts/features/resource-bars/ticker.mjs", ROOT).href); } catch (error) { tickerErr = error; }
+  const tickerSrc = strip(await src("scripts/features/resource-bars/ticker.mjs"));
   let cond = null, condErr = null;
   try { cond = await import(new URL("scripts/features/initiative/conditions.mjs", ROOT).href); } catch (error) { condErr = error; }
   const condSrc = strip(await src("scripts/features/initiative/conditions.mjs"));
@@ -2046,7 +2068,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const h = strip(hostSrc);
   const state = (value, max, doomed = 0) => ({ value, max, doomed, slots: max + doomed, flatline: value >= max });
 
-  section("the PF2e dying reader: derived max as-is, doomed as dead slots, NPCs, and a fallback that subtracts doomed once", () => {
+  section("the PF2e dying reader: derived max as-is, doomed as the hatched share, NPCs, and a fallback that subtracts doomed once", () => {
     if (!reader) { no(`${READER} cannot be imported under plain Node (${readerErr?.message}); both features and the check tools load it.`); return; }
     const R = reader.readPf2eDying;
     if (typeof R !== "function") { no(`${READER} does not export readPf2eDying.`); return; }
@@ -2066,8 +2088,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     want("Diehard (derived max 5)", R(actor({ dying: { value: 3, max: 5 }, items: [item("dying", 3), feat("diehard")] })),
       { value: 3, max: 5, slots: 5, flatline: false });
     /* Doomed at or past the maximum. PF2e clamps dying to its max, so it cannot
-       be above 0 there; a reading of max 0 would draw four dead slots saying 0/0
-       on the bar while the initiative tracker drops the state. Both show nothing. */
+       be above 0 there; there is no gauge to draw, and the dead reader below
+       takes it instead. */
     want("doomed has taken the whole maximum (derived max 0)", R(actor({ dying: { value: 0, max: 0 }, doomed: { value: 4, max: 4 }, items: [item("dying", 1), item("doomed", 4)] })), null);
     want("doomed has taken the whole maximum (item fallback)", R(actor({ items: [item("dying", 2), item("doomed", 4)] })), null);
     want("an NPC carrying dying", R(actor({ type: "npc", dying: { value: 1, max: 4 }, items: [item("dying", 1)] })),
@@ -2079,13 +2101,42 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     want("an NPC with only the condition item", R(actor({ type: "npc", items: [item("dying", 1)] })),
       { value: 1, max: 4, slots: 4 });
     want("a value past the maximum is clamped", R(actor({ items: [item("dying", 6)] })), { value: 4, max: 4, flatline: true });
-    want("flatline at dying 3 of a doomed-1 maximum", R(actor({ dying: { value: 3, max: 3 }, doomed: { value: 1, max: 3 }, items: [item("dying", 3)] })),
+    want("at dying 3 of a doomed-1 maximum", R(actor({ dying: { value: 3, max: 3 }, doomed: { value: 1, max: 3 }, items: [item("dying", 3)] })),
       { value: 3, max: 3, slots: 4, flatline: true });
     if (!readerSrc) no(`${READER} is missing.`);
     if (/^\s*import\b/m.test(readerSrc) || /\b(?:game|foundry|canvas|Hooks|CONFIG)\s*[.?[]/.test(readerSrc))
       no(`${READER} imports something or reaches for a Foundry global. It is the pure reader both features and the check tools load under plain Node.`);
-    if (/\b(?:setFlag|unsetFlag|update|toggleCondition|increaseCondition|decreaseCondition|createEmbeddedDocuments|deleteEmbeddedDocuments|delete)\s*\(/.test(readerSrc))
-      no(`${READER} writes game state. The gauge is a reader: nothing marks a creature dead, defeated or changed.`);
+    if (/\b(?:setFlag|unsetFlag|update|toggleCondition|increaseCondition|decreaseCondition|createEmbeddedDocuments|deleteEmbeddedDocuments|delete|toggleStatusEffect|toggleDefeated)\s*\(/.test(readerSrc))
+      no(`${READER} writes game state. The ticker and the flatline are readings: nothing marks a creature dead, defeated or changed.`);
+  });
+
+  section("the PF2e dead reader: the dead status, dying at its maximum, and 0 HP for NPCs and familiars — never a player character mid-knock-out", () => {
+    if (!reader) return;
+    const D = reader.readPf2eDead;
+    if (typeof D !== "function") { no(`${READER} does not export readPf2eDead.`); return; }
+    const item = (slug, value) => ({ type: "condition", slug, system: { slug, value: { isValued: true, value } } });
+    const actor = ({ type = "character", hp = { value: 0, max: 40 }, statuses, dying, doomed, items = [] } = {}) =>
+      ({ type, ...(statuses ? { statuses } : {}), system: { attributes: { hp, ...(dying ? { dying } : {}), ...(doomed ? { doomed } : {}) } }, items });
+    const want = (label, got, exp) => { if (got !== exp) no(`${label}: readPf2eDead says ${got}, expected ${exp}.`); };
+    want("no actor", D(null), false);
+    want("the dead status, as a Set", D(actor({ hp: { value: 30, max: 40 }, statuses: new Set(["dead"]) })), true);
+    want("the dead status, as an array", D(actor({ type: "npc", hp: { value: 12, max: 40 }, statuses: ["dead"] })), true);
+    want("dying 4 of 4", D(actor({ dying: { value: 4, max: 4 }, items: [item("dying", 4)] })), true);
+    want("dying 3 of a doomed-1 maximum", D(actor({ dying: { value: 3, max: 3 }, doomed: { value: 1, max: 3 }, items: [item("dying", 3), item("doomed", 1)] })), true);
+    want("dying while doomed has taken the whole maximum", D(actor({ dying: { value: 0, max: 0 }, doomed: { value: 4, max: 4 }, items: [item("dying", 1), item("doomed", 4)] })), true);
+    want("dying 2 of 4", D(actor({ dying: { value: 2, max: 4 }, items: [item("dying", 2)] })), false);
+    want("an NPC at 0 HP", D(actor({ type: "npc" })), true);
+    want("a familiar at 0 HP", D(actor({ type: "familiar" })), true);
+    want("an NPC at 0 HP, unconscious", D(actor({ type: "npc", items: [item("unconscious", 1)] })), false);
+    want("an NPC at 0 HP, dying 1", D(actor({ type: "npc", dying: { value: 1, max: 4 }, items: [item("dying", 1)] })), false);
+    want("an NPC at 5 HP", D(actor({ type: "npc", hp: { value: 5, max: 40 } })), false);
+    want("an NPC with no hit-point maximum", D(actor({ type: "npc", hp: { value: 0, max: 0 } })), false);
+    /* The one that reads as a missing case and is the rule: PF2e updates hit
+       points and then adds dying, so this state is every PC's knock-out. */
+    want("a player character at 0 HP before PF2e has added dying", D(actor({})), false);
+    want("a hazard at 0 HP", D(actor({ type: "hazard" })), false);
+    const passed = reader.readPf2eDying(actor({ dying: { value: 4, max: 4 }, items: [item("dying", 4)] }));
+    want("a dying reading handed in", D(actor({}), passed), true);
   });
 
   section("initiative reads dying through the core reader, and no longer subtracts doomed twice", () => {
@@ -2145,7 +2196,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       no("The bar's veins are not core/fx-glsl.mjs's field: a liquid does not call gluDyingField, or shader.mjs forks the noise.");
   });
 
-  section("orchid, from the palette, on the bar and on the initiative tracker alike", () => {
+  section("orchid and steel, from the palette: the bar's orchid is the initiative tracker's, and the flatline is the suite's quiet neutral", () => {
     if (!ramp.DYING_COLOR || ramp.DYING_COLOR !== PALETTE.orchid || ramp.DYING_HOT !== PALETTE.orchidHot)
       no(`ramp.mjs's dying colours are ${ramp.DYING_COLOR} / ${ramp.DYING_HOT}, not PALETTE.orchid / PALETTE.orchidHot.`);
     const r3 = (arr) => arr.map((c) => Math.round(c * 1000) / 1000).join(",");
@@ -2158,93 +2209,164 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (css !== String(PALETTE.orchid).toLowerCase()) no(`PALETTE.orchid (${PALETTE.orchid}) does not mirror --gl-orchid (${css}).`);
     if (!/uDyingCol:\s*new Float32Array\(hexToFloat3\(DYING_COLOR\)\)/.test(h) || !/uDyingHot:\s*new Float32Array\(hexToFloat3\(DYING_HOT\)\)/.test(h))
       no("host.mjs does not feed uDyingCol / uDyingHot from ramp.mjs's DYING_COLOR / DYING_HOT.");
+    if (ramp.DEAD_STEEL !== PALETTE.textDim)
+      no(`ramp.mjs's DEAD_STEEL is ${ramp.DEAD_STEEL}, not PALETTE.textDim; the flatline is the suite's quiet neutral, not a hue of its own.`);
+    const dim = tokensCss.match(/--gl-text-dim:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase();
+    if (dim !== String(PALETTE.textDim).toLowerCase()) no(`PALETTE.textDim (${PALETTE.textDim}) does not mirror --gl-text-dim (${dim}).`);
+    if (!/uSteel:\s*new Float32Array\(hexToFloat3\(DEAD_STEEL\)\)/.test(h)) no("host.mjs does not feed uSteel from ramp.mjs's DEAD_STEEL.");
+    if ("DYING_INK" in ramp || /DYING_INK/.test(h))
+      no("The orchid readout ink is back. While dying the words are the reading, and the numeric readout fades out under them rather than turning orchid.");
   });
 
-  section("the gauge's model: glides in and out, hit points wait underneath, the heartbeat crossfades, flatline stops, the shed freezes, motion none settles", () => {
+  section("the ticker's model: glides in and out, hit points wait underneath, the words enter and run with the heartbeat, the shed freezes, motion none settles", () => {
     const B = anim.BarAnim;
-    if (typeof B.prototype.setDying !== "function") { no("BarAnim has no setDying(); the gauge has no model."); return; }
-    for (const k of ["dyingInMs", "dyingOutMs", "dyingLevelMs", "flatlineMs"])
-      if (!(anim.TIMING[k] > 0)) no(`TIMING.${k} is missing; a dying duration outside TIMING ignores the motion tier.`);
+    if (typeof B.prototype.setDying !== "function") { no("BarAnim has no setDying(); the ticker has no model."); return; }
+    for (const k of ["dyingInMs", "dyingOutMs", "dyingLevelMs", "flatlineMs", "deadInMs", "deadDrainMs", "deadOutMs"])
+      if (!(anim.TIMING[k] > 0)) no(`TIMING.${k} is missing; a dying or dead duration outside TIMING ignores the motion tier.`);
     const run = (bar, ms) => { for (let t = 0; t < ms; t += 16) bar.step(16); };
-    const settleMs = Math.max(anim.TIMING.fillMs, anim.TIMING.countMs, anim.TIMING.dyingInMs ?? 0, anim.TIMING.dyingOutMs ?? 0,
-      anim.TIMING.dyingLevelMs ?? 0, anim.TIMING.flatlineMs ?? 0) + 64;
+    const T = anim.TIMING;
+    const settleMs = Math.max(T.fillMs, T.countMs, T.dyingInMs ?? 0, T.dyingOutMs ?? 0, T.dyingLevelMs ?? 0, T.flatlineMs ?? 0,
+      T.deadInMs ?? 0, T.deadDrainMs ?? 0, T.deadOutMs ?? 0) + 64;
 
     const b = new B(0, { motionScale: 1 });
     b.step(16);
     b.setDying(state(1, 4));
     b.step(16);
-    if (!b.dyingOn) no("setDying with dying 1 does not turn the gauge on.");
+    if (!b.dyingOn) no("setDying with dying 1 does not turn the ticker on.");
     if (!(b.dying > 0 && b.dying < 1)) no("The orchid takeover does not fade in.");
     if (b.hit || b.wave || b.chip || b.bloom || b.flash || b.popups.length)
       no("Dying arriving fires a hit or heal reaction; the gauge taking over is a length change, not damage.");
+    if (!(b.tickerIn >= 0 && b.tickerIn < 1))
+      no(`The words do not enter from the right as dying lands (they had entered ${b.tickerIn} bar heights on the first frame).`);
+    if (!(Math.abs(b.tickerSlide - b.tickerIn) < 1e-9))
+      no(`The words do not slide in with their entering edge (slid ${b.tickerSlide}, edge at ${b.tickerIn}); a wipe uncovering letters already in place is not a scroll in.`);
     run(b, settleMs);
     if (b.frac !== 0.25 || b.num !== 0.25 || b.dying !== 1)
-      no(`Dying 1 of 4 does not settle on a quarter of the bar at full orchid (frac ${b.frac}, readout ${b.num}, dying ${b.dying}).`);
+      no(`Dying 1 of 4 does not settle on a quarter of the bar at full orchid (frac ${b.frac}, count ${b.num}, dying ${b.dying}).`);
+    if (b.tickerIn !== anim.TICKER_FULL || !(b.tickerSlide > b.tickerSpan))
+      no(`The ticker's words never finish sliding in over the bar (edge at ${b.tickerIn}, slid ${b.tickerSlide} over a ${b.tickerSpan}-height bar).`);
     if (b.low !== 0) no("The low-health state still reads while dying; the gauge is not hit points, and the arterial red would fight the orchid.");
-    if (!b.hot) no("A dying bar goes cold, so its heartbeat stops while the creature is still dying.");
+    if (!b.hot) no("A dying bar goes cold, so its heartbeat and its words stop while the creature is still dying.");
     b.set(0.6, { max: 40 });
     b.step(16);
     if (b.frac !== 0.25 || b.popups.length || b.hit) no("A hit-point change while dying moves the gauge or reacts on it.");
-    const t0 = b.dyingT;
-    b.step(16);
+    const t0 = b.dyingT, x0 = b.ticker;
+    run(b, 480);
     if (!(b.dyingT > t0)) no("The dying clock does not advance.");
+    const ran = b.ticker - x0, want = anim.tickerSpeed(0) * (b.dyingT - t0);
+    if (!(Math.abs(ran - want) < 1e-6))
+      no(`At dying 1 the words ran ${ran.toFixed(4)} bar heights while the dying clock moved ${(b.dyingT - t0).toFixed(4)}s at ${anim.tickerSpeed(0)} a second; the ticker is not on the heartbeat's clock.`);
+    const beats = shader.DYING_BEATS ?? [];
+    const speeds = beats.map((_, i) => anim.tickerSpeed(i));
+    if (speeds.some((v, i) => i && !(v > speeds[i - 1])) || speeds.some((v, i) => Math.abs(v - (anim.TICKER_SPEED * beats[i]) / beats[0]) > 1e-9))
+      no(`The ticker's speeds (${speeds.map((v) => v.toFixed(3))}) do not quicken with the heartbeat's rates (${beats}).`);
+    if (!(Math.abs(anim.tickerSpeed(0.5) - (speeds[0] + speeds[1]) / 2) < 1e-9))
+      no("The ticker's speed jumps between levels instead of crossfading with the heartbeat.");
 
     b.setDying(state(2, 4));
     b.step(16);
-    if (!(b.dyingLevel > 0 && b.dyingLevel < 1)) no(`A new dying level snaps the heartbeat (level ${b.dyingLevel}) instead of crossfading it; the beat would jump.`);
+    if (!(b.dyingLevel > 0 && b.dyingLevel < 1)) no(`A new dying level snaps the heartbeat (level ${b.dyingLevel}) instead of crossfading it; the beat and the words would jump.`);
     run(b, settleMs);
     if (b.dyingLevel !== 1 || b.frac !== 0.5) no(`Dying 2 of 4 does not settle at heartbeat level 1 and half the bar (level ${b.dyingLevel}, frac ${b.frac}).`);
 
+    /* Dying at its maximum is only a reading here; death is setDead's, and the
+       host reports both on every read. */
     b.setDying(state(4, 4));
     run(b, settleMs);
-    if (!b.flatline || b.frac !== 1 || b.dyingPulse !== 0)
-      no(`At dying 4 of 4 the gauge does not lock full with the heartbeat stopped (flatline ${b.flatline}, frac ${b.frac}, pulse ${b.dyingPulse}).`);
-    const ft = b.dyingT, it = b.time;
+    if (b.frac !== 1 || b.deadOn) no(`Dying 4 of 4 does not fill the bar, or marks death itself (frac ${b.frac}, dead ${b.deadOn}).`);
+    b.setDead(true);
+    b.step(16);
+    if (!(b.dead > 0 && b.dead < 1)) no("The flatline does not run in; DEAD lands between two frames.");
+    run(b, T.deadDrainMs * 0.5);
+    if (!(b.frac > 0 && b.frac < 1) || !(b.tickerRun > 0 && b.tickerRun < 1) || !(b.dyingPulse < 1))
+      no(`As death lands the liquid does not run out, the words do not coast, or the heartbeat does not die away (frac ${b.frac}, ticker ${b.tickerRun}, pulse ${b.dyingPulse}).`);
+    run(b, settleMs);
+    if (b.dead !== 1 || b.frac !== 0 || b.tickerRun !== 0 || b.dyingPulse !== 0)
+      no(`Death does not settle on an empty bar with the words and the heartbeat stopped (dead ${b.dead}, frac ${b.frac}, ticker ${b.tickerRun}, pulse ${b.dyingPulse}).`);
+    const ft = b.dyingT, it = b.time, tt = b.ticker;
     run(b, 480);
-    if (b.dyingT !== ft || b.time !== it) no("A flatlined bar's veins or liquid still move.");
-    if (b.hot) no("A flatlined bar stays in the ticker with nothing left to animate.");
-    if (b.dying !== 1 || !b.dyingOn) no("Flatline fades the gauge out; the state holds.");
+    if (b.dyingT !== ft || b.time !== it || b.ticker !== tt) no("A dead bar's veins, liquid or words still move.");
+    if (b.hot) no("A dead bar stays in the ticker with nothing left to animate.");
+    if (!b.dyingOn || b.dying !== 1) no("Death clears the dying state out of the model; a revival would not know what the bar returns to.");
+    b.set(0.3, { max: 40 });
+    b.step(16);
+    if (b.frac !== 0 || b.hit || b.popups.length) no("A hit-point change on a dead creature moves the flatline or reacts on it.");
+
+    b.setDead(false);
+    b.step(16);
+    if (!(b.dead > 0 && b.dead < 1)) no("A revival removes the flatline between two frames.");
+    run(b, settleMs);
+    if (b.dead !== 0 || b.frac !== 1 || b.dyingPulse !== 1 || b.tickerRun !== 1)
+      no(`A revival while still dying does not glide back to the gauge with its heartbeat and its words running (frac ${b.frac}, pulse ${b.dyingPulse}, ticker ${b.tickerRun}).`);
 
     b.setDying(null);
     b.step(16);
-    if (!(b.dying > 0 && b.dying < 1) || b.dyingOn) no("Clearing dying removes the orchid between two frames, or leaves the gauge on.");
+    if (!(b.dying > 0 && b.dying < 1) || b.dyingOn) no("Clearing dying removes the orchid between two frames, or leaves the ticker on.");
     run(b, settleMs);
-    if (b.dying !== 0 || b.frac !== 0.6 || b.num !== 0.6)
-      no(`Clearing dying does not glide back to the hit points that arrived underneath (frac ${b.frac}, readout ${b.num}, dying ${b.dying}).`);
+    if (b.dying !== 0 || b.frac !== 0.3 || b.num !== 0.3)
+      no(`Clearing dying does not glide back to the hit points that arrived underneath (frac ${b.frac}, count ${b.num}, dying ${b.dying}).`);
+
+    /* An NPC dies at 0 HP without ever dying: the killing blow lands, then the
+       flatline — and the blow's reaction is still the last thing that happened. */
+    const npc = new B(0.4, { motionScale: 1 });
+    npc.step(16);
+    npc.set(0, { max: 40 });
+    npc.setDead(true);
+    npc.step(T.stopMs + 16);
+    if (!(npc.hit > 0)) no("An NPC's killing blow loses its reaction to the flatline.");
+    if (!(npc.ghost > npc.frac) || !(npc.num > 0))
+      no(`An NPC's killing blow loses its chip trail or its count to the flatline (trail ${npc.ghost}, fill ${npc.frac}, count ${npc.num}); death glided a length that was already 0.`);
+    /* Past the blow's own hot window too: a change keeps a bar ticking for hotMs. */
+    run(npc, Math.max(settleMs, T.hotMs + 64));
+    if (npc.dead !== 1 || npc.frac !== 0 || npc.low !== 0 || npc.hot)
+      no(`A dead NPC does not settle on an empty, still bar with the low-health warning gone (dead ${npc.dead}, frac ${npc.frac}, low ${npc.low}, hot ${npc.hot}).`);
+    npc.set(0.6, { max: 40 });
+    npc.setDead(false);
+    run(npc, settleMs);
+    if (npc.dead !== 0 || npc.frac !== 0.6) no(`A revived NPC does not glide back to its hit points (frac ${npc.frac}).`);
 
     const doom = new B(0, { motionScale: 1 });
     doom.setDying(state(3, 3, 1), { silent: true });
-    if (doom.frac !== 0.75 || doom.dyingDead !== 1 || doom.dyingSlots !== 4 || doom.dyingMax !== 3 || !doom.flatline || doom.dying !== 1)
-      no(`Doomed 1 at dying 3 does not fill three live slots of four and mark the fourth dead (frac ${doom.frac}, dead ${doom.dyingDead}, slots ${doom.dyingSlots}).`);
+    if (doom.frac !== 0.75 || doom.dyingDead !== 1 || doom.dyingSlots !== 4 || doom.dyingMax !== 3 || doom.dying !== 1)
+      no(`Doomed 1 at dying 3 does not fill three quarters of one continuous track and leave the last quarter to doomed (frac ${doom.frac}, doomed share ${doom.dyingDead}, track ${doom.dyingSlots}).`);
 
     const still = new B(0.5, { motionScale: 0 });
     still.setDying(state(2, 4));
     still.step(16);
-    const st = still.dyingT;
+    const sT0 = still.dyingT, sX0 = still.ticker;
     still.step(500);
-    if (still.dying !== 1 || still.frac !== 0.5 || still.dyingPulse !== 1 || still.hot || still.dyingT !== st)
-      no("At motion \"none\" the gauge is not already settled and still, or its clock moves.");
+    if (still.dying !== 1 || still.frac !== 0.5 || still.dyingPulse !== 1 || still.hot || still.dyingT !== sT0 || still.ticker !== sX0 || still.tickerIn !== anim.TICKER_FULL)
+      no("At motion \"none\" the ticker is not already settled and still, with its words entered in full, or its clocks move.");
+    still.setDead(true);
+    still.step(16);
+    if (still.dead !== 1 || still.frac !== 0 || still.dyingPulse !== 0 || still.hot)
+      no("At motion \"none\" death does not arrive already landed and still.");
 
     const shed = new B(0, { motionScale: 1 });
-    shed.setDying(state(2, 4), { silent: true });
+    shed.setDying(state(2, 4));
+    shed.step(16);
     shed.dyingFrozen = true;
-    const sT = shed.dyingT;
+    const sT = shed.dyingT, sX = shed.ticker;
     run(shed, 480);
-    if (shed.dyingT !== sT) no("dyingFrozen does not stop the dying clock, so shedding it saves nothing.");
-    if (!shed.dyingOn || shed.dying !== 1 || shed.frac !== 0.5) no("Shedding the dying motion removed the gauge. The shed gives up motion, never the state.");
+    if (shed.dyingT !== sT || shed.ticker !== sX) no("dyingFrozen does not stop the dying clock and the words, so shedding them saves nothing.");
+    if (shed.tickerIn !== anim.TICKER_FULL) no("A ticker frozen while its words were still entering is left half-written; the shed gives up motion, never what the bar says.");
+    if (!shed.dyingOn || shed.dying !== 1 || shed.frac !== 0.5) no("Shedding the dying motion removed the ticker. The shed gives up motion, never the state.");
     if (shed.hot) no("A frozen dying bar still keeps itself in the ticker.");
 
-    /* The dying clock follows the motion tier the way the idle clock does: one
-       scale for both, so the heartbeat's rates stay in their order (it still
-       quickens with dying) and a user who slowed motion down gets it slowed. */
+    /* Every dying clock follows the motion tier the way the idle clock does: one
+       scale for all of them, so the heartbeat and the words still quicken in
+       order, and a user who slowed motion down gets them slowed. */
     for (const s of [1, 0.6, 1.5]) {
       const tier = new B(0.5, { motionScale: s });
       tier.setDying(state(1, 4), { silent: true });
       tier.step(16);
-      const d0 = tier.dyingT, i0 = tier.time;
+      const d0 = tier.dyingT, i0 = tier.time, w0 = tier.ticker;
       run(tier, 480);
-      if (!(Math.abs((tier.dyingT - d0) - (tier.time - i0)) < 1e-9))
-        no(`At motion ${s} the dying clock moved ${(tier.dyingT - d0).toFixed(4)}s while the idle clock moved ${(tier.time - i0).toFixed(4)}s; the heartbeat and the veins ignore the motion tier.`);
+      const idle = tier.time - i0;
+      if (!(Math.abs((tier.dyingT - d0) - idle) < 1e-9))
+        no(`At motion ${s} the dying clock moved ${(tier.dyingT - d0).toFixed(4)}s while the idle clock moved ${idle.toFixed(4)}s; the heartbeat and the veins ignore the motion tier.`);
+      if (!(Math.abs((tier.ticker - w0) - idle * anim.tickerSpeed(0)) < 1e-9))
+        no(`At motion ${s} the words ran ${(tier.ticker - w0).toFixed(4)} bar heights against ${(idle * anim.tickerSpeed(0)).toFixed(4)}; the ticker ignores the motion tier.`);
     }
 
     const wrap = new B(0, { motionScale: 1 });
@@ -2253,12 +2375,12 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     wrap.step(16);
     if (!(wrap.dyingT >= 0 && wrap.dyingT < 0.02)) no(`The dying clock does not wrap at ${anim.DYING_LOOP_S}s (it reads ${wrap.dyingT}).`);
     if (anim.DYING_LOOP_S !== shader.IDLE_LOOP_S) no("The dying clock does not wrap at the loop the shader's LOOP_W is built on.");
-    const beats = shader.DYING_BEATS ?? [];
     if (!beats.length || beats.some((k, i) => !Number.isInteger(k) || (i && k <= beats[i - 1])))
       no(`DYING_BEATS (${beats}) is not a rising list of whole beats per loop; a fractional rate steps the heartbeat when its clock wraps, and a flat list never quickens.`);
     if (anim.DYING_LEVELS !== beats.length) no(`anim.mjs crossfades ${anim.DYING_LEVELS} heartbeat levels but the shader draws ${beats.length}.`);
+    if (!(anim.TICKER_FULL >= 32)) no(`TICKER_FULL is ${anim.TICKER_FULL} bar heights; a wide token's bar would never show its words in full.`);
 
-    /* No length overshoots or recoils through any gauge transition. */
+    /* No length overshoots or recoils through any ticker or flatline transition. */
     const glide = (label, scale, from, arrange, act, to) => {
       const x = new B(from, { motionScale: scale });
       arrange(x);
@@ -2267,75 +2389,82 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       act(x);
       const lo = Math.min(f0, to) - 1e-9, hi = Math.max(f0, to) + 1e-9, down = to < f0;
       let pf = x.frac, pn = x.num;
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < 240; i++) {
         x.step(16);
-        for (const [k, v, prev] of [["fill", x.frac, pf], ["readout", x.num, pn]]) {
+        for (const [k, v, prev] of [["fill", x.frac, pf], ["count", x.num, pn]]) {
           if (v < lo || v > hi) { no(`${label} at motion ${scale}: the ${k} overshot (${v.toFixed(4)}).`); return; }
           if (down ? v > prev + 1e-12 : v < prev - 1e-12) { no(`${label} at motion ${scale}: the ${k} recoiled.`); return; }
         }
         pf = x.frac; pn = x.num;
       }
-      if (x.frac !== to || x.num !== to) no(`${label} at motion ${scale} does not come to rest on ${to} (fill ${x.frac}, readout ${x.num}).`);
+      if (x.frac !== to || x.num !== to) no(`${label} at motion ${scale} does not come to rest on ${to} (fill ${x.frac}, count ${x.num}).`);
     };
     for (const s of [1, 0.6]) {
       glide("HP 0 → dying 1 of 4", s, 0, () => {}, (x) => x.setDying(state(1, 4)), 0.25);
       glide("dying 3 → dying 1 of 4", s, 0, (x) => x.setDying(state(3, 4), { silent: true }), (x) => x.setDying(state(1, 4)), 0.25);
       glide("dying 2 of 4 → cleared at 60% HP", s, 0.6, (x) => x.setDying(state(2, 4), { silent: true }), (x) => x.setDying(null), 0.6);
       glide("90% HP → dying 1, doomed 1", s, 0.9, () => {}, (x) => x.setDying(state(1, 3, 1)), 0.25);
+      glide("dying 4 of 4 → dead", s, 0, (x) => x.setDying(state(4, 4), { silent: true }), (x) => x.setDead(true), 0);
+      glide("dead → revived into dying 2 of 4", s, 0, (x) => { x.setDying(state(2, 4), { silent: true }); x.setDead(true, { silent: true }); }, (x) => x.setDead(false), 0.5);
+      glide("a dead NPC revived at 60% HP", s, 0.6, (x) => x.setDead(true, { silent: true }), (x) => x.setDead(false), 0.6);
     }
   });
 
-  section("the readout never counts across domains: a dying transition snaps the number, the fill still glides", () => {
-    /* The fill glides between hit points and the gauge because a length is the
-       same quantity on both sides of the change. The number is not: the readout
-       reads `num` over the slots while dying and over the hit-point maximum
-       otherwise, so a count carried through the switch prints a gauge fraction
-       as hit points ("29/58" counting down to the real value as dying clears) or
-       hit points as a gauge ("2/4" counting to "1/4" as it arrives). Every value
-       shown has to belong to the domain it is labelled with. */
+  section("the numeric readout is always hit points: it fades out under the words and the flatline, and never prints a gauge fraction as hit points", () => {
+    /* While dying or dead the words are the reading. The readout still prints —
+       on its way out as the orchid or the flatline arrives, and back in as it
+       leaves — and what it prints has to be the hit points underneath, never the
+       gauge's count read as hit points ("29/58" counting to the real value). */
     const B = anim.BarAnim;
     const HP = 58;
-    const shown = (x) => (typeof x.readout === "function"
-      ? x.readout(HP)
-      : { value: Math.round(x.num * (x.dyingOn ? x.dyingSlots : HP)), max: x.dyingOn ? x.dyingMax : HP });
-    if (typeof B.prototype.readout !== "function")
-      no("BarAnim has no readout(hpMax); the domain the number is counted in is decided outside the model, where nothing can drive it.");
-    const watch = (label, scale, from, arrange, act, allowed) => {
+    if (typeof B.prototype.readout !== "function") { no("BarAnim has no readout(hpMax); the number the readout prints is decided outside the model, where nothing can drive it."); return; }
+    const watch = (label, scale, from, arrange, act, values) => {
       const x = new B(from, { motionScale: scale });
       x.step(16);
       arrange(x);
       x.step(16);
-      const f0 = x.frac;
       act(x);
       const wrong = new Set();
-      let glided = false;
-      for (let i = 0; i < 160; i++) {
-        const r = shown(x);
-        const ok_ = allowed(x);
-        if (r.max !== ok_.max || !ok_.values.includes(r.value)) wrong.add(`${r.value}/${r.max}`);
+      for (let i = 0; i < 200; i++) {
+        const r = x.readout(HP);
+        if (r.max !== HP || !values.includes(r.value)) wrong.add(`${r.value}/${r.max}`);
         x.step(16);
-        if (x.frac !== f0 && x.frac !== x.target) glided = true;
       }
-      if (wrong.size) no(`${label} at motion ${scale}: the readout showed ${[...wrong].join(", ")} — a number counted across from the other domain.`);
-      if (scale > 0 && !glided && f0 !== x.target) no(`${label} at motion ${scale}: the fill snapped instead of gliding; only the number snaps.`);
+      if (wrong.size) no(`${label} at motion ${scale}: the readout showed ${[...wrong].join(", ")}; it may only show ${values.map((v) => v + "/" + HP).join(" or ")}.`);
     };
     for (const s of [1, 0.6]) {
-      watch("an NPC at half HP going down to dying 1 of 4", s, 0.5, () => {}, (x) => x.setDying(state(1, 4)),
-        () => ({ max: 4, values: [1] }));
-      watch("dying 2 of 4 arriving on a 90% HP creature", s, 0.9, () => {}, (x) => x.setDying(state(2, 4)),
-        () => ({ max: 4, values: [2] }));
-      watch("a killing blow, then dying 1 of 4 a beat later", s, 0.5, (x) => { x.set(0, { max: HP }); x.step(70); },
-        (x) => x.setDying(state(1, 4)), (x) => (x.dyingOn ? { max: 4, values: [1] } : { max: HP, values: [0] }));
+      watch("an NPC at half HP going down to dying 1 of 4", s, 0.5, () => {}, (x) => x.setDying(state(1, 4)), [29]);
+      watch("dying 1 → 3 of 4 over a creature at 0 HP", s, 0, (x) => x.setDying(state(1, 4), { silent: true }), (x) => x.setDying(state(3, 4)), [0]);
       watch("dying 2 of 4 cleared with 60% HP underneath", s, 0.2, (x) => { x.setDying(state(2, 4), { silent: true }); x.set(0.6, { max: HP }); },
-        (x) => x.setDying(null), () => ({ max: HP, values: [Math.round(0.6 * HP)] }));
-      watch("dying 1 → 3 of 4 counts inside the gauge", s, 0, (x) => x.setDying(state(1, 4), { silent: true }),
-        (x) => x.setDying(state(3, 4)), () => ({ max: 4, values: [1, 2, 3] }));
+        (x) => x.setDying(null), [35]);
+      watch("dying 4 of 4 → dead, with 60% HP healed in underneath", s, 0, (x) => { x.setDying(state(4, 4), { silent: true }); x.set(0.6, { max: HP }); },
+        (x) => x.setDead(true), [35]);
+      watch("a dead NPC revived at 60%", s, 0, (x) => { x.setDead(true, { silent: true }); x.set(0.6, { max: HP }); }, (x) => x.setDead(false), [35]);
     }
+    const wn = bodyOf(h, "writeNumbers(entry, r) {");
+    if (!/a\.readout\(r\.hero\.max\)/.test(wn) || !/text: String\(shownMax\)/.test(wn) || /dyingSlots|dyingMax|dyingValue/.test(wn))
+      no("writeNumbers does not print the model's readout(hpMax); composing a dying number here again prints the gauge as hit points.");
+    else if (wn.indexOf("if (!show)") < 0 || wn.indexOf("readout(") < wn.indexOf("if (!show)"))
+      no("The readout is composed before the canViewNumbers gate.");
+    if (!/const readAlpha = textAlpha \* Math\.max\(0, 1 - 4 \* \(a \? Math\.max\(a\.dying, a\.dead\) : 0\)\);/.test(wn) || !/uOpacity = readAlpha;/.test(wn))
+      no("The numeric readout does not fade out under the ticker and the flatline, gone within the first quarter of the takeover (opacity × max(0, 1 − 4 × max(dying, dead))); hit points print over the words sliding in to replace them.");
   });
 
-  section("the gauge takes the primary bar over: orchid and calmer liquid, slot dividers, dead slots, a dying block apart from the break, the break hidden while dying", () => {
-    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse", "uDyingCol", "uDyingHot"])
+  section("the ticker and the flatline take the primary bar over: calmer orchid liquid, one continuous track, hatched doom, the words cut into the liquid, a flatline with no hue, the break hidden", () => {
+    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse", "uDyingCol", "uDyingHot",
+      "uTickerTex", "uTickerAspect", "uTickerX", "uTickerIn", "uTickerStill", "uDead", "uDeadTex", "uDeadAspect", "uSteel"])
       if (!(u in shader.UNIFORMS)) no(`UNIFORMS does not list ${u}.`);
+    const P = shader.DEAD_PHASES ?? {};
+    const CONSTS = [
+      ["TICKER_BAND", shader.TICKER_BAND], ["DEAD_BAND", shader.DEAD_BAND], ["DEAD_GAP", shader.DEAD_GAP], ["DYING_HATCH", shader.DYING_HATCH],
+      ["DEAD_LINE_FROM", P.lineFrom], ["DEAD_LINE_TO", P.lineTo], ["DEAD_TEXT_FROM", P.textFrom], ["DEAD_TEXT_TO", P.textTo],
+    ];
+    for (const [name, value] of CONSTS) if (!(value >= 0)) no(`shader.mjs does not export ${name}.`);
+    if (!(P.lineFrom < P.lineTo && P.textFrom < P.textTo && P.lineFrom < P.textFrom && P.textTo <= 1))
+      no(`DEAD_PHASES (${JSON.stringify(P)}) does not draw the line before DEAD comes up, inside the flatline's own run.`);
+    if (!(anim.TIMING.deadDrainMs <= anim.TIMING.deadInMs * P.lineFrom + 1))
+      no(`The liquid drains over ${anim.TIMING.deadDrainMs}ms but the flatline starts drawing at ${Math.round(anim.TIMING.deadInMs * P.lineFrom)}ms; the line would draw through liquid that has not run out.`);
+    const TICKER_CUT = "mix(C, uDyingCol * 0.10 + INK0, ink * mFill * 0.94)";
     for (const liquid of shader.LIQUIDS) {
       const g = strip(shader.fragmentShader(liquid));
       const fillAt = g.indexOf("vec3 fillCol = vec3(0.0);");
@@ -2347,33 +2476,70 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       const resat = g.indexOf("fillCol = rbSaturate(fillCol, DYING_SAT * dyingOn);");
       if (resat < 0 || resat < g.indexOf("fillCol = base * (0.20 + 0.34 * depth);"))
         no(`The ${liquid} gauge's colour is not restored after the pour, or is restored by something other than rbSaturate (same luma, never darker).`);
-      if (!/float segN = mix\(uSeg, uDyingSlots, step\(0\.5, uDying\) \* hero\);/.test(g) || !/\* segN\) \* segW;/.test(g))
-        no(`The ${liquid} bar does not divide the gauge into its slots while dying.`);
-      if (!/tickMark \*=[^;]*\(1\.0 - uDying\)/.test(g)) no(`The ${liquid} bar keeps the hit-point quarter marks under the dying gauge.`);
+      for (const [name, value] of CONSTS)
+        if (!(Math.abs(constOf(g, name) - value) < 5e-5)) no(`The ${liquid} program's ${name} is ${constOf(g, name)} but shader.mjs exports ${value}.`);
+      if (!/float segFade = hero \* \(1\.0 - max\(uDying, uDead\)\);/.test(g) || !/segMask = 1\.0 - \(1\.0 - smoothstep\([^;]*\)\) \* segFade;/.test(g) || !/\* segN\) \* segW;/.test(g))
+        no(`The ${liquid} bar does not fade its plates out as the ticker or the flatline takes over. Both are one continuous track, and switching the dividers off pops every one of them out mid-fade.`);
+      if (!/tickMark \*=[^;]*\(1\.0 - max\(uDying, uDead\)\)/.test(g)) no(`The ${liquid} bar keeps the hit-point quarter marks under the ticker or the flatline.`);
+      if (!/glow \*= [^;]*\(1\.0 - uDead \* hero\)/.test(g)) no(`The ${liquid} bar still casts its contact glow once dead.`);
       const brk = /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(g);
       const dy = /if \(uDying > 0\.001\) \{[\s\S]*?\n  \}/.exec(g);
-      if (!dy) { no(`The ${liquid} program has no dying block guarded by uDying, so every living bar would pay for the veins.`); continue; }
-      if (brk && dy.index > brk.index && dy.index < brk.index + brk[0].length) no(`The ${liquid} dying block sits inside the guard-break block.`);
-      if (/uDying/.test(brk?.[0] ?? "")) no(`The ${liquid} guard-break block reads the dying state; keep the two blocks apart.`);
+      const dd = /if \(uDead > 0\.001\) \{[\s\S]*?\n  \}/.exec(g);
+      if (!dy) { no(`The ${liquid} program has no dying block guarded by uDying, so every living bar would pay for the veins and the words.`); continue; }
+      if (!dd) { no(`The ${liquid} program has no flatline block guarded by uDead, so every living bar would pay for it.`); continue; }
+      for (const [blk, label] of [[dy, "dying"], [dd, "flatline"]])
+        if (brk && blk.index > brk.index && blk.index < brk.index + brk[0].length) no(`The ${liquid} ${label} block sits inside the guard-break block.`);
+      if (/uDying|uDead/.test(brk?.[0] ?? "")) no(`The ${liquid} guard-break block reads the dying or dead state; keep the blocks apart.`);
+      if (!(dd.index > dy.index)) no(`The ${liquid} flatline is drawn before the dying block, so the orchid and the words would paint over DEAD.`);
+
       const block = dy[0];
+      const flat = block.replace(/\s+/g, " ");
       if (!/gluDyingField\(/.test(block) || !/\bmFill\b/.test(block) || !/\bmBody\b/.test(block))
         no(`The ${liquid} dying block does not draw the shared veins, clipped to the bar's body.`);
       if (/0\.299|LAVA_BREAK_CALM/.test(block)) no(`The ${liquid} dying block desaturates the bar or calms the lava through the break's lever; dying is paler and slower, never dimmer.`);
       const writes = [...block.matchAll(/(?:^|[^\w.])C\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
-      const darkens = writes.filter((m) => !(m[1] === "+=" || (m[1] === "=" && (/^rbLighten\(C,/.test(m[2]) || /^mix\(C, [^;]*\bmDead\b/.test(m[2])))));
+      const isCut = (m) => m[1] === "=" && m[2].replace(/\s+/g, " ") === TICKER_CUT;
+      /* Off the liquid — the doomed plate, lettering in the empty trough — a write
+         is weighted by mDead or (1.0 - mFill), and the trough keeps its own rules. */
+      const offLiquid = (s) => /^mix\(C, [^;]*(?:\bmDead\b|\(1\.0 - mFill\))/.test(s);
+      const darkens = writes.filter((m) => !(m[1] === "+=" || isCut(m) || (m[1] === "=" && (/^rbLighten\(C,/.test(m[2]) || offLiquid(m[2])))));
       if (darkens.length)
-        no(`The ${liquid} dying block writes C other than by adding light, rbLighten, or the dead-slot plate: ${darkens.map((m) => m[0].trim()).join(" | ")}`);
-      if (!/float mDead = [^;]*\(1\.0 - mFill\)/.test(block)) no(`The ${liquid} dead slots can paint over the liquid; they belong to the empty end of the bar.`);
-      /* The dead slot's X is a hairline, so it is sized in device pixels and
-         nothing else: a world-sized floor is ~2px on a HiDPI display and
-         sub-pixel on an ordinary one. And it is not faded by rbDetail — a stroke
-         a device pixel or two wide is exactly what that gate deletes. */
-      const crossW = /float crossW = ([^;]*);/.exec(block)?.[1] ?? "";
-      const crossK = Number(/^px \* ([0-9.]+)$/.exec(crossW)?.[1]);
-      if (!(crossK >= 0.5))
-        no(`The ${liquid} dead-slot cross is \`${crossW || "missing"}\` wide; a hairline is px × a constant of at least half a device pixel, with no world-unit floor or cap.`);
-      if (/rbDetail\([^;]*\bcross\b|\bcross\b[^;]*rbDetail\(/.test(block) || /float cross = [^;]*rbDetail\(/.test(block))
-        no(`The ${liquid} dead-slot cross is gated by rbDetail, which deletes a hairline on a 19px bar.`);
+        no(`The ${liquid} dying block writes C other than by adding light, rbLighten, off the liquid, or the letters' own body cut into the liquid: ${darkens.map((m) => m[0].trim()).join(" | ")}`);
+      if (writes.filter(isCut).length !== 1)
+        no(`The ${liquid} dying block cuts the ticker's letters into the liquid ${writes.filter(isCut).length} times; exactly one statement may darken the liquid, and only by the letters' body.`);
+      if (!/float ink = word\.g \* tIn;/.test(block)
+        || !/float tIn = tBand \* tOne \* rbEdge\(fx1 - uTickerIn, [^;]*\* amt \* \(1\.0 - smoothstep\(0\.0, DEAD_LINE_FROM, uDead\)\);/.test(flat))
+        no(`The ${liquid} ticker's letters are not the strip's own body, clipped to the bar and the orchid, entering from the right and going out as the flatline lands.`);
+      if (!/float tPeriod = TICKER_BAND \* max\(uTickerAspect, 0\.001\);/.test(flat) || !/float tU = \(p\.x - fx0 \+ uTickerX\) \/ tPeriod;/.test(flat)
+        || !/texture2D\(uTickerTex, vec2\(tU, /.test(flat))
+        no(`The ${liquid} ticker does not scroll one repetition of its strip by uTickerX across TICKER_BAND of the bar, at the strip's own aspect.`);
+      if (!/float tOne = 1\.0 - uTickerStill \* step\(0\.5, abs\(floor\(tU\) - floor\(\(uTickerX - fx0\) \/ tPeriod\)\)\);/.test(flat))
+        no(`The ${liquid} still ticker is not masked to the one repetition under the bar's centre; at motion "none" it shows cut-off copies at both ends.`);
+      if (!/float mDead = [^;]*\(1\.0 - mFill\)/.test(block)) no(`The ${liquid} doomed zone can paint over the liquid; it belongs to the empty end of the bar.`);
+      /* Hairlines are px × a constant — a world-sized floor is ~2px on a HiDPI
+         display and sub-pixel on an ordinary one — and nothing gates them. */
+      const hatchW = /float hatchW = ([^;]*);/.exec(block)?.[1] ?? "";
+      if (!(Number(/^px \* ([0-9.]+)$/.exec(hatchW)?.[1]) >= 0.5))
+        no(`The ${liquid} doomed hatch is \`${hatchW || "missing"}\` wide; a hairline is px × a constant of at least half a device pixel, with no world-unit floor or cap.`);
+      const pitch = /float hatchP = max\(DYING_HATCH, px \* ([0-9.]+)\);/.exec(block);
+      if (!pitch || !(Number(pitch[1]) >= 3))
+        no(`The ${liquid} doomed hatch's pitch is not DYING_HATCH floored at three or more device pixels; on a small bar it closes up into a flat plate.`);
+      if (/rbDetail\(/.test(block)) no(`The ${liquid} dying block gates a hairline with rbDetail, which deletes it on a 19px bar.`);
+
+      const dead = dd[0];
+      if (/uDyingCol|uDyingHot|\bbase\b|rampAt|uRamp|uBreak|uTempCol/.test(dead))
+        no(`The ${liquid} flatline block reaches for a hue (orchid, the ramp, the break, the shield); nothing on a dead bar has one.`);
+      const lineW = /float lineW = ([^;]*);/.exec(dead)?.[1] ?? "";
+      if (!(Number(/^px \* ([0-9.]+)$/.exec(lineW)?.[1]) >= 0.5))
+        no(`The ${liquid} flatline is \`${lineW || "missing"}\` wide; a hairline is px × a constant of at least half a device pixel, with no world-unit floor.`);
+      if (/rbDetail\(/.test(dead)) no(`The ${liquid} flatline is gated by rbDetail, which deletes a hairline on a 19px bar.`);
+      if (!/\(1\.0 - mFill\)/.test(/float line = [\s\S]*?;/.exec(dead)?.[0] ?? "") || !/step\(DEAD_LINE_FROM, uDead\)/.test(dead))
+        no(`The ${liquid} flatline can draw over liquid that has not run out, or ahead of its beat.`);
+      if (!/texture2D\(uDeadTex,/.test(dead) || !/smoothstep\(DEAD_TEXT_FROM, DEAD_TEXT_TO, uDead\)/.test(dead))
+        no(`The ${liquid} flatline does not bring DEAD up from its own strip, on its own beat.`);
+      if (!/float dIn = [^;]*\* \(1\.0 - mFill\);/.test(dead))
+        no(`The ${liquid} DEAD is not held off the liquid; on a revival its dark outline cuts into the fill gliding back.`);
+
       const outside = g.replace(/float dyPhase\(float k\) \{[\s\S]*?\n\}/, "").replace(/uniform float uDyingT;/, "");
       if (/\buDyingT\b/.test(outside)) no(`The ${liquid} program reads uDyingT outside dyPhase(); that term is not a whole number of turns and steps when the clock wraps.`);
       const turns = [...g.matchAll(/\bdyPhase\(([^()]*)\)/g)].map((m) => m[1].trim()).filter((t) => t !== "float k" && t !== "k");
@@ -2382,10 +2548,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       if (rates.join(",") !== (shader.DYING_BEATS ?? []).map((k) => k.toFixed(1)).join(","))
         no(`The ${liquid} heartbeat runs at ${rates.join(", ") || "nothing"} but DYING_BEATS is ${shader.DYING_BEATS}.`);
     }
-    if (!/u\.uBreak\s*=\s*brk \? brk\.broken \* \(1 - brk\.dying\) : 0/.test(h))
-      no("host.mjs does not hide the guard-break fracture while dying; dying outranks break on the bar.");
+    if (!/u\.uBreak\s*=\s*brk \? brk\.broken \* \(1 - Math\.max\(brk\.dying, brk\.dead\)\) : 0/.test(h))
+      no("host.mjs does not hide the guard-break fracture while dying or dead; both outrank the break on the bar.");
     if (!/const dy = role === "hero" \? a : null;/.test(h))
-      no("host.mjs does not write the dying state onto the primary bar only.");
+      no("host.mjs does not write the dying and dead states onto the primary bar only.");
     /* The dying clock freezes off screen as well as under the shed — the idle
        clock's rule — or an off-screen dying bar keeps the ticker running for a
        heartbeat nobody can see. Decided where the idle freeze is (tick), and
@@ -2397,25 +2563,62 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       no("cullEntry() does not re-decide the dying freeze, so a dying bar scrolled back on screen stays frozen until something else wakes the ticker.");
     if (/dyingFrozen\s*=\s*!this\.allows\("dyingFlow"\)/.test(bodyOf(h, "writeUniforms(entry, time) {")))
       no("writeUniforms overwrites the dying freeze with the shed alone, thawing an off-screen bar.");
-    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse"])
+    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse", "uDead"])
       if (!new RegExp(`u\\.${u} = dy \\? dy\\.\\w+ : 0;`).test(h)) no(`host.mjs does not write ${u} from the primary bar's model (and a hard 0 on the rails).`);
+    if (!/if \(dy\) this\.writeWords\(entry, u, dy, base\);/.test(h)) no("host.mjs does not write the words for the primary bar.");
     const di = anim.SHED_ORDER.indexOf("dyingFlow");
     if (di < 0 || di > anim.SHED_ORDER.indexOf("popups"))
       no("SHED_ORDER does not list dyingFlow among the standing costs, ahead of the per-change effects.");
-    if (!/u\.uTemp = [^;]*dyingOn/.test(h)) no("Temp HP is still plated over the dying gauge, measured against hit points the gauge is not showing.");
+    if (!/u\.uTemp = [^;]*dyingOn[^;]*deadOn/.test(h)) no("Temp HP is still plated over the ticker or the flatline, measured against hit points neither is showing.");
   });
 
-  section("the readout says dying/max in orchid behind the same gate; rb.dyingFx is PF2e's, world-wide, independent, and read outside the value diff", () => {
-    const wn = bodyOf(h, "writeNumbers(entry, r) {");
-    const gate = wn.indexOf("if (!show)");
-    if (!/a\.readout\(r\.hero\.max\)/.test(wn) || !/text: String\(shownMax\)/.test(wn) || /dyingSlots|dyingMax/.test(wn))
-      no("writeNumbers does not print the model's readout(hpMax) (value over the slots and the dying maximum while dying, hit points otherwise); composing it here again lets the number count across domains.");
-    else if (gate < 0 || wn.indexOf("readout(") < gate)
-      no("The dying readout is composed before the canViewNumbers gate.");
-    if (!/DYING_INK/.test(wn)) no("The dying readout is not drawn in orchid.");
-    if (/const DYING_INK\s*=/.test(h) || !Array.isArray(ramp.DYING_INK)
-      || ramp.DYING_INK.map((c) => c.toFixed(4)).join() !== ramp.hexToFloat3(ramp.DYING_COLOR).map((c, i) => c + (ramp.hexToFloat3(ramp.DYING_HOT)[i] - c) * 0.5).map((c) => c.toFixed(4)).join())
-      no("DYING_INK is not ramp.mjs's (orchid halfway to its hot twin); host.mjs and the preview each carrying a copy drift apart.");
+  section("the words: the value behind canViewNumbers and never laid out past it, DEAD for anyone who sees the bar, strips mipped and released, keys in the language file", () => {
+    if (!ticker) { no(`ticker.mjs cannot be imported under plain Node (${tickerErr?.message}); the check and the preview load it.`); return; }
+    const measure = (text, cap, track) => String(text).length * cap * (0.62 + track);
+    const letters = (parts) => parts.filter((p) => p.text).map((p) => p.text).join("");
+    const hidden = ticker.tickerParts("DYING", null);
+    const shown = ticker.tickerParts("DYING", 3);
+    if (/\d/.test(letters(hidden))) no("tickerParts with no value still lays out a digit.");
+    if (!letters(shown).includes("3")) no("tickerParts drops the value it was handed.");
+    if (/\d/.test(letters(ticker.deadParts("DEAD")))) no("DEAD's strip carries a digit.");
+    const L = ticker.layoutStrip(shown, measure);
+    const runs = L.items.filter((i) => i.text);
+    if (!(L.width > 0) || runs.some((r, n) => n && r.x < runs[n - 1].x + runs[n - 1].w) || !(L.centre > 0 && L.centre < 1))
+      no(`layoutStrip overlaps its runs or loses the lettering's centre (${JSON.stringify(L)}).`);
+    const numCap = shown.find((p) => p.text === "3")?.cap, wordCap = shown.find((p) => p.text === "DYING")?.cap;
+    if (!(numCap > wordCap)) no("The ticker's value is not larger than its word; the value is the reading.");
+    if (!(shown.filter((p) => p.gap).reduce((s, p) => s + p.gap, 0) >= 0.5)) no("One repetition of the ticker has no air around it, so repetitions run into each other.");
+    if (/^\s*import\b(?![^\n]*core\/theme\.mjs)/m.test(tickerSrc)) no("ticker.mjs imports something other than core/theme.mjs; it has to stay loadable under plain Node.");
+    if (/^(?:const|let|var)\s+\w+\s*=\s*[^;\n]*\b(?:document|PIXI)\b/m.test(tickerSrc)) no("ticker.mjs touches the document or PIXI at import time.");
+    if (!/strokeStyle = "rgb\(255,0,0\)"/.test(tickerSrc) || !/fillStyle = "rgb\(0,255,0\)"/.test(tickerSrc))
+      no("ticker.mjs does not rasterise the outline in red and the body in green, the channel code the bar shader reads.");
+    if (!/MIPMAP_MODES\?\.ON/.test(tickerSrc) || !/WRAP_MODES\?\.REPEAT/.test(tickerSrc) || !/2 \*\* Math\.ceil\(Math\.log2/.test(tickerSrc))
+      no("The strips do not mip and repeat on a power-of-two width; a 160px strip read on a 19px bar shimmers, and a wrapping strip seams.");
+    const ww = bodyOf(h, "writeWords(entry, u, a, base) {");
+    if (!ww) { no("host.mjs has no writeWords."); return; }
+    if (!/const mode = this\.opts\.numbers === "never" \? "never" : "always";/.test(ww)
+      || !/const value = canViewNumbers\(entry\.token, mode\) \? a\.dyingValue : null;/.test(ww) || !/tickerParts\(words\.dying, value\)/.test(ww))
+      no("writeWords does not gate the ticker's value on canViewNumbers before it is laid out; a hostile's dying value reaches a player's raster.");
+    if (/allows\("numbers"\)/.test(ww)) no("writeWords sheds the ticker's value under load; a shed may give up motion, never what the bar says.");
+    if (/canView|isGM|ownership/.test(ww.replace(/const value = canViewNumbers\([^;]*;/, "")))
+      no("writeWords gates the words or DEAD on something besides the value; both draw wherever the bar does.");
+    if (!/this\.swapStrip\(entry, "tickerStrip", null\)/.test(ww) || !/this\.swapStrip\(entry, "deadStrip", a\.deadOn \|\| a\.dead > 0 \? [^:]*: null,/.test(ww)
+      || !/releaseStrip\(entry\[slot\]\)/.test(bodyOf(h, "swapStrip(entry, slot, key, parts, repeat) {")))
+      no("writeWords does not give a strip back once its state has gone.");
+    if (!/releaseStrip\(this\.tickerStrip\)/.test(h) || !/releaseStrip\(this\.deadStrip\)/.test(h)) no("A destroyed bar keeps its strips referenced.");
+    if (!/resetStrips\(\)/.test(bodyOf(h, "detach() {"))) no("detach() does not drop the strips with the canvas.");
+    if (!/const run = a\.ticker \+ a\.tickerSlide \+ entry\.seed;/.test(ww)
+      || !/u\.uTickerX = \(\(\(run \+ \(entry\.tickerShift \?\? 0\)\) % period\) \+ period\) % period;/.test(ww))
+      no("writeWords does not wrap the words inside one repetition of their strip; the offset has to stay inside it or the words shimmer on a long session.");
+    if (!/entry\.tickerShift = phase \* period - run;/.test(ww))
+      no("writeWords does not carry the words' phase across a change of strip width; a new dying value jumps every letter.");
+    if (!/u\.uTickerStill = still \? 1 : 0;/.test(ww) || !/const still = !!t && this\.motionScale === 0;/.test(ww))
+      no("writeWords does not park a single repetition at motion \"none\"; a still ticker shows cut-off copies at both ends.");
+    for (const k of ["GLRB.Dying.Ticker", "GLRB.Dead.Label"])
+      if (!(k in lang) || !ww.includes(`"${k}"`)) no(`${k} is not both localised in writeWords and present in lang/resource-bars.en.json.`);
+  });
+
+  section("rb.dyingFx is PF2e's, world-wide and independent; dying and death are read outside the value diff, and the dead status wakes the bar", () => {
     if (constants.SETTINGS.dyingFx !== "rb.dyingFx") { no(`SETTINGS.dyingFx is ${constants.SETTINGS.dyingFx}, not rb.dyingFx.`); return; }
     const reg = /world\(SETTINGS\.dyingFx,\s*\{([\s\S]*?)\}\);/.exec(idx)?.[1] ?? "";
     if (!reg) no("rb.dyingFx is not registered as a world setting in index.mjs.");
@@ -2425,21 +2628,29 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       if (!(k in lang) || !reg.includes(k)) no(`${k} is not both referenced by the setting and present in lang/resource-bars.en.json.`);
     const line = /dyingFx:[^\n]*/.exec(mainSrc)?.[0] ?? "";
     if (!/SETTINGS\.dyingFx/.test(line) || !/"pf2e"/.test(line)) no("main.mjs does not resolve dyingFx from its setting and gate it on PF2e.");
-    if (/breakSourceActive|Suite\.enabled/.test(line)) no("dyingFx waits on another feature being enabled; the gauge reads PF2e's own condition and needs nothing else.");
+    if (/breakSourceActive|Suite\.enabled/.test(line)) no("dyingFx waits on another feature being enabled; the ticker reads PF2e's own condition and needs nothing else.");
     const entryBody = h.slice(h.indexOf("class BarEntry"), h.indexOf("class BarHost"));
-    if (!/this\.syncDying\(opts/.test(entryBody) || !/setDying\(opts\.dyingFx \? readDying\(this\.token\) : null/.test(entryBody))
-      no("BarEntry does not read dying beside the break, outside the value diff, gated on dyingFx.");
-    if (/dying/i.test(bodyOf(dataSrc, "export function sameReading")))
-      no("sameReading compares the dying state; a condition change with no hit points moving would then depend on the value diff.");
-    if (!/import \{ readPf2eDying \} from "\.\.\/\.\.\/core\/pf2e-dying\.mjs"/.test(dataSrc)) no("data.mjs does not read dying through the core reader.");
-    const rd = bodyOf(dataSrc, "export function readDying");
-    if (!rd) no("data.mjs has no readDying(token).");
-    else if (/canView|\.visible|isGM|ownership|permission/.test(rd))
-      no("readDying carries a visibility rule of its own; visibility.mjs has already decided whether this bar is seen, and a second rule drifts from it.");
-    else if (!/"pf2e"/.test(rd)) no("readDying does not gate on PF2e.");
+    if (!/this\.syncDying\(opts/.test(entryBody) || !/const dying = opts\.dyingFx \? readDying\(this\.token\) : null;/.test(entryBody)
+      || !/a\.setDead\(!!opts\.dyingFx && readDead\(this\.token, dying\)/.test(entryBody))
+      no("BarEntry does not read dying and death beside the break, outside the value diff, gated on dyingFx.");
+    else if (entryBody.indexOf("a.setDying(dying") > entryBody.indexOf("a.setDead("))
+      no("BarEntry reports death before dying, so a creature reaching its maximum is drained before its gauge fills.");
+    if (/dying|dead/i.test(bodyOf(dataSrc, "export function sameReading")))
+      no("sameReading compares the dying or dead state; a condition or a status with no hit points moving would then depend on the value diff.");
+    if (!/import \{ readPf2eDead, readPf2eDying \} from "\.\.\/\.\.\/core\/pf2e-dying\.mjs"/.test(dataSrc)) no("data.mjs does not read dying and death through the core reader.");
+    for (const fn of ["export function readDying", "export function readDead"]) {
+      const name = fn.slice("export function ".length);
+      const rd = bodyOf(dataSrc, fn + "(");
+      if (!rd) no(`data.mjs has no ${name}.`);
+      else if (/canView|\.visible|isGM|ownership|permission/.test(rd))
+        no(`${name} carries a visibility rule of its own; visibility.mjs has already decided whether this bar is seen, and a second rule drifts from it.`);
+      else if (!/"pf2e"/.test(rd)) no(`${name} does not gate on PF2e.`);
+    }
+    if (!["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"].every((ev) => mainSrc.includes(`on("${ev}", effectTokens)`)))
+      no("main.mjs does not re-read a creature's bar when an ActiveEffect comes or goes; the dead status toggled from the token HUD outside combat would never reach it.");
   });
 
-  if (!bad) ok("dying: every pin above holds");
+  if (!bad) ok("dying and dead: every pin above holds");
 }
 
 /* ── 10. The shader compiles ────────────────────────────────────────────── */

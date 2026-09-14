@@ -24,7 +24,7 @@ export const SETTINGS = Object.freeze({
   floatingDeltas: PREFIX + "floatingDeltas",
   pf2eLayers: PREFIX + "pf2eLayers",       // temp-HP shield plate + shield rail
   breakFx: PREFIX + "breakFx",             // the initiative tracker's guard-break fracture
-  dyingFx: PREFIX + "dyingFx",             // PF2e: the dying gauge takes the primary bar over
+  dyingFx: PREFIX + "dyingFx",             // PF2e: the dying ticker and the flatline take the primary bar over
   bloom: PREFIX + "bloom",                 // the post-process pass
   offsetX: PREFIX + "offsetX",             // world default nudge, in grid squares
   offsetY: PREFIX + "offsetY",

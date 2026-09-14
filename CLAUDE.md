@@ -414,23 +414,35 @@ where the hitstop, the off-screen freeze and motion "none" cannot reach it — a
 it schedules `setImmediate` under Node, so the check tool also proves a process
 driving the model exits on its own.
 
-Under PF2e the **Dying** condition takes the primary bar over as a gauge, and the
-check pins what fails silently there. The reader is `core/pf2e-dying.mjs`, shared
-with the initiative tracker: PF2e's `dying.max` already has doomed taken off, and
-subtracting it again — which the tracker once did — says death comes a step early
-on every doomed creature. Dying is read beside the break, outside `sameReading`,
-because it arrives as a condition item with no hit points moving. The veins are
+Under PF2e the **Dying** condition takes the primary bar over as the dying
+ticker, and death as the flatline, and the check pins what fails silently there.
+The readers are `core/pf2e-dying.mjs`, shared with the initiative tracker: PF2e's
+`dying.max` already has doomed taken off, and subtracting it again — which the
+tracker once did — says death comes a step early on every doomed creature; and
+`readPf2eDead` counts 0 HP as death for NPCs and familiars only, because PF2e
+applies damage and adds dying in two operations and a PC read between them would
+flatline on every knock-out. Both are read beside the break, outside
+`sameReading`, because they arrive as a condition item or a status effect with no
+hit points moving — and the dead status is an ActiveEffect, which is why
+`main.mjs` listens for those. The words are rasterised once per string by
+`ticker.mjs` and sampled by the bar shader, cut dark into the liquid and lit in
+the trough; the ticker's value is gated on `canViewNumbers` *before* it is laid
+out ("on hover" read as "always"), so it never reaches a raster it may not, and it
+is never shed. The veins are
 `FX_GLSL_DYING_FIELD`, and `FX_FRAG_DYING` must keep calling it with its old
 linear drift or the card and token overlay change while no bar is dying; the bar
 orbits the drift instead, on its own clock `uDyingT`, read only inside `dyPhase`
 with whole turns, and the heartbeat's `DYING_BEATS` are whole beats per loop
-crossfaded by level — a fractional rate steps once a minute. Dying outranks the
-break (`uBreak × (1 − dying)`); its block only lightens the liquid, to
-`DYING_PEAK`'s tint, because a beat loops and its peak is resting light; the dying
-clock follows the motion tier and freezes off screen or under `dyingFlow`,
-keeping the gauge; a dying transition snaps the readout rather than counting a
-number across domains (`BarAnim#readout`); and a flatline stops everything and
-writes nothing to the creature.
+crossfaded by level — a fractional rate steps once a minute; the words run on the
+same clock at a speed that follows the beat, their offset wrapped inside one
+repetition of the strip. Dying and death outrank the break
+(`uBreak × (1 − max(dying, dead))`); the dying block only lightens the liquid, to
+`DYING_PEAK`'s tint, except the letters' own body; hairlines — the doomed hatch
+and the flatline — are device pixels; the dying clock follows the motion tier and
+freezes off screen or under `dyingFlow`, keeping the words; the numeric readout is
+always hit points and fades out under both (`BarAnim#readout`); and the flatline
+drains the fill as a length change, draws its line and DEAD in steel with no hue,
+and writes nothing to the creature.
 
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
 a page that compiles all three liquids' real shaders in a real WebGL2 context and

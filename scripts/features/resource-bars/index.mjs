@@ -147,7 +147,8 @@ function registerSettings() {
     default: true,
   });
 
-  /* PF2e's dying condition, carried onto the bar as the dying gauge. World-scoped
+  /* PF2e's dying condition and death, carried onto the bar as the dying ticker
+     and the flatline. World-scoped
      for breakFx's reason: it is a fact about the creature the whole table reads
      off the same bar. Only offered under PF2e (config is what the Control Center
      lists), because it reads PF2e's own condition and is inert anywhere else —

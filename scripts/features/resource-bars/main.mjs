@@ -229,6 +229,20 @@ export function onReady() {
   on("updateItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
   on("createItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
   on("deleteItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });
+  /* The dead status is an ActiveEffect, not an item or a value: toggled from the
+     token HUD outside combat, nothing above fires, and the bar would keep drawing
+     a living creature. */
+  const effectTokens = (effect) => {
+    /* On the actor, or carried onto it by one of its items; and an update is how
+       an effect is switched off without being deleted. */
+    const parent = effect?.parent;
+    const actor = parent?.documentName === "Actor" ? parent
+      : parent?.parent?.documentName === "Actor" ? parent.parent : null;
+    for (const t of actor?.getActiveTokens?.() ?? []) full(t);
+  };
+  on("createActiveEffect", effectTokens);
+  on("updateActiveEffect", effectTokens);
+  on("deleteActiveEffect", effectTokens);
 
   /* No hoverToken or controlToken listener, on purpose. Both fire before the
      render pass that updates what they change; the refreshState that pass sets

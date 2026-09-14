@@ -125,7 +125,16 @@ export const UNIFORMS = Object.freeze({
   uDyingSlots: "float", // the gauge's slots: dying max + doomed
   uDyingDead: "float",  // how many of them, at the right end, doomed has taken
   uDyingLevel: "float", // heartbeat rate index into DYING_BEATS, fractional while it crossfades
-  uDyingPulse: "float", // heartbeat strength, 0 once flatlined
+  uDyingPulse: "float", // heartbeat strength, 0 once dead
+  uTickerTex: "sampler2D", // the dying ticker's strip — one repetition, wrapping (ticker.mjs)
+  uTickerAspect: "float",  // that strip's own width over its height, before the power-of-two stretch
+  uTickerX: "float",       // how far the text has run, in bar heights, inside one repetition
+  uTickerIn: "float",      // how far the text has entered from the right, in bar heights
+  uTickerStill: "float",   // 1 at motion "none": a single repetition, parked with its lettering centred
+
+  uDead: "float",          // the flatline: 0 alive, 1 dead; hero row only
+  uDeadTex: "sampler2D",   // DEAD, one run (ticker.mjs)
+  uDeadAspect: "float",    // that strip's own width over its height
 
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
   uTempCol: "vec3",   // temp-HP overlay colour, sRGB 0..1
@@ -135,6 +144,7 @@ export const UNIFORMS = Object.freeze({
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
   uDyingCol: "vec3",  // --gl-orchid, sRGB 0..1
   uDyingHot: "vec3",  // --gl-orchid-hot, sRGB 0..1
+  uSteel: "vec3",     // --gl-text-dim, sRGB 0..1: the flatline, DEAD and a dead bar's frame
 });
 
 /** Frame shape and the numeric run's safe inset, in bar-height units.
@@ -313,11 +323,49 @@ export const DYING_ORBIT = 0.30;
  *   vein / veinTint   how far a vein's core lightens, and how far its target
  *                     sits from the gauge's orchid towards the hot orchid
  *   beat / beatTint   the same for the heartbeat
+ *   rim / rimTint     the same for the lit rim round each ticker letter cut into
+ *                     the liquid — it runs for as long as the creature is dying,
+ *                     so it is resting light too
  *
  * `resource-bar-check` evaluates every liquid's brightest dying pixel from
- * these, and pins the two statements that read them.
+ * these, and pins the statements that read them.
  */
-export const DYING_PEAK = Object.freeze({ vein: 0.85, veinTint: 0.60, beat: 0.45, beatTint: 0.40 });
+export const DYING_PEAK = Object.freeze({ vein: 0.85, veinTint: 0.60, beat: 0.45, beatTint: 0.40, rim: 0.70, rimTint: 0.60 });
+
+/**
+ * The dying ticker's text band, in bar heights: the strip's full height is mapped
+ * onto this much of the bar, centred. It is the fill's own height (a bar body of
+ * 0.8 less the stroke, the air and the lip on both sides), so the lettering uses
+ * all of the liquid and none of the frame.
+ */
+export const TICKER_BAND = 0.64;
+
+/** DEAD's band, in bar heights — a touch taller than the ticker's: it is read once, from across the table. */
+export const DEAD_BAND = 0.66;
+
+/**
+ * How far the flatline's gap reaches past DEAD on either side, in bar heights —
+ * the line stops short of the letters rather than running into them.
+ */
+export const DEAD_GAP = 0.10;
+
+/**
+ * The flatline's beats, as fractions of `uDead` — the model runs it 0 → 1 over
+ * TIMING.deadInMs while the fill drains over TIMING.deadDrainMs, which ends just
+ * before the line starts:
+ *
+ *   lineFrom → lineTo   the steel line draws across the empty trough, left to right
+ *   textFrom → textTo   DEAD comes up, overlapping the end of the line
+ */
+export const DEAD_PHASES = Object.freeze({ lineFrom: 0.42, lineTo: 0.78, textFrom: 0.70, textTo: 0.95 });
+
+/**
+ * The doomed zone's hatch pitch, in bar heights: world-sized, so it scales with
+ * zoom like the dividers, and floored in device pixels in the shader so it can
+ * never close up into a flat plate. The hatch lines themselves are hairlines,
+ * sized in device pixels alone.
+ */
+export const DYING_HATCH = 0.22;
 
 /**
  * How bright each liquid's peaks get — its plumes, its sheen, its pools — as
@@ -425,6 +473,14 @@ const float DYING_DENSE = ` + f4(DYING_DENSE) + `;
 const float DYING_ORBIT = ` + f4(DYING_ORBIT) + `;
 const float DYING_DEPTH = ` + f4(DYING_DEPTH) + `;
 const float DYING_SAT = ` + f4(DYING_SAT) + `;
+const float DYING_HATCH = ` + f4(DYING_HATCH) + `;
+const float TICKER_BAND = ` + f4(TICKER_BAND) + `;
+const float DEAD_BAND = ` + f4(DEAD_BAND) + `;
+const float DEAD_GAP = ` + f4(DEAD_GAP) + `;
+const float DEAD_LINE_FROM = ` + f4(DEAD_PHASES.lineFrom) + `;
+const float DEAD_LINE_TO = ` + f4(DEAD_PHASES.lineTo) + `;
+const float DEAD_TEXT_FROM = ` + f4(DEAD_PHASES.textFrom) + `;
+const float DEAD_TEXT_TO = ` + f4(DEAD_PHASES.textTo) + `;
 ` + dyingPeakConsts + `const float LOOP_W =` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
@@ -461,6 +517,14 @@ uniform float uDyingSlots;
 uniform float uDyingDead;
 uniform float uDyingLevel;
 uniform float uDyingPulse;
+uniform sampler2D uTickerTex;
+uniform float uTickerAspect;
+uniform float uTickerX;
+uniform float uTickerIn;
+uniform float uTickerStill;
+uniform float uDead;
+uniform sampler2D uDeadTex;
+uniform float uDeadAspect;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
 uniform vec3  uShieldCol;
@@ -469,6 +533,7 @@ uniform vec3  uBreakAmber;
 uniform vec3  uBreakHot;
 uniform vec3  uDyingCol;
 uniform vec3  uDyingHot;
+uniform vec3  uSteel;
 
 /* The guard-break fracture, shared verbatim with the initiative tracker's token
    overlay and card portraits and with the etched-chat crit crack. Only the field
@@ -597,7 +662,7 @@ float rbDrift(float k, float period) {
 }
 
 /* ── The dying clock ─────────────────────────────────────────────────────
-   The same rule on its own clock, uDyingT, which the model freezes at flatline
+   The same rule on its own clock, uDyingT, which the model freezes at death
    and under the shed without touching the liquid's idle loop. dyPhase(k) turns k
    whole times per loop; pass whole numbers. dyBeat is one heartbeat, a lub and a
    softer dub, at k beats per loop. */
@@ -1060,10 +1125,13 @@ void main(void) {
      bar. A groove says "one quantity, subdivided for counting"; a gap says
      "assembled from parts", which is what every game HUD in this idiom says. */
   float segMask = 1.0;
-  /* The dying gauge is its slots, so it is divided into them whatever the
-     hit-point divisions are set to. */
-  float segN = mix(uSeg, uDyingSlots, step(0.5, uDying) * hero);
-  if (segN > 0.5) {
+  /* Hit-point divisions leave with the hit points, fading out as the ticker or
+     the flatline takes the bar: both are one continuous track — doomed's share of
+     it is hatched, not divided off. Faded rather than switched, or every plate
+     pops out halfway through the orchid's arrival. */
+  float segN = uSeg;
+  float segFade = hero * (1.0 - max(uDying, uDead));
+  if (segN > 0.5 && segFade > 0.001) {
     float segW = span / segN;
     float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * segN) * segW;
     /* Sized in the *world*, so it scales with the canvas. uSegW arrives in bar
@@ -1077,7 +1145,7 @@ void main(void) {
        segW cap keeps a bar with many divisions from becoming more gap than
        plate. */
     float gapP = min(max(uSegW, px * 1.5), segW * 0.42);
-    segMask = 1.0 - (1.0 - smoothstep(max(0.0, gapP - px), gapP, sx)) * hero;
+    segMask = 1.0 - (1.0 - smoothstep(max(0.0, gapP - px), gapP, sx)) * segFade;
   }
 
   /* ── The edge ──────────────────────────────────────────────────────────
@@ -1149,7 +1217,7 @@ void main(void) {
     tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
   /* They are divisions too, so they leave with the divisions. */
-  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg) * (1.0 - uDying);
+  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg) * (1.0 - max(uDying, uDead));
 
   /* ── Compose ───────────────────────────────────────────────────────────*/
   vec3 C = vec3(0.0);
@@ -1255,17 +1323,22 @@ void main(void) {
   }
 
   /* ── Dying ─────────────────────────────────────────────────────────────
-     PF2e's dying gauge. The fill above is already the gauge — the host hands
-     uFrac the dying value over its slots, and the edge is the same straight line
-     — so this block only adds what says *dying*: the initiative tracker's
+     PF2e's dying ticker. The fill above is already the dying gauge — the host
+     hands uFrac the dying value over its track, and the edge is the same straight
+     line — so this block only adds what says *dying*: the initiative tracker's
      corruption veins, from the same field in core/fx-glsl.mjs; a heartbeat that
-     quickens with the dying level; and the slots doomed has taken, drawn dead at
-     the far end so the table can see why death comes sooner.
+     quickens with the dying level; the share of the track doomed has taken,
+     hatched at the far end so the table can see why death comes sooner; and the
+     words, DYING and its value, running right to left across the whole bar.
 
-     Over the liquid it only adds light. The dead slots are not liquid — the fill
-     can never reach them — and are a dull plate in the trough. uDying arrives 0
-     on the rails and on every living bar, so none of this is paid there; the
-     host also zeroes uBreak while dying, because dying outranks a broken guard. */
+     Over the liquid the veins, the beat and each letter's rim only add light, and
+     only to a tint (DYING_PEAK). The letters themselves are cut dark into the
+     liquid — they are type laid into the instrument, as the dividers are, not
+     liquid — and lit orchid in the empty trough, so the fill's edge splits a
+     letter as it passes. The doomed zone is not liquid either: the fill can never
+     reach it. uDying arrives 0 on the rails and on every living bar, so none of
+     this is paid there; the host also zeroes uBreak while dying, because dying
+     outranks a broken guard. */
   float dyHeart = 0.0;
   if (uDying > 0.001) {
     float lv = clamp(uDyingLevel, 0.0, ${(DYING_BEATS.length - 1).toFixed(1)});
@@ -1276,21 +1349,20 @@ void main(void) {
     float amt = uDying * mBody;
 
     float slotN = max(uDyingSlots, 1.0);
-    float slotW = span / slotN;
     float deadX = mix(fx0, fx1, clamp((slotN - uDyingDead) / slotN, 0.0, 1.0));
-    float mDead = mFillA * segMask * step(0.5, uDyingDead)
+    float mDead = mFillA * step(0.5, uDyingDead)
                 * rbEdge(deadX - px * 0.5, deadX + px * 0.5, p.x) * (1.0 - mFill);
-    /* Each dead slot is crossed out: a dull plum plate with an X, which is the
-       one mark that reads as "taken" at the size a slot is drawn at. The X is a
-       hairline, so it is sized in device pixels alone — a world-sized floor is
-       two pixels on a HiDPI display and a fraction of one on an ordinary one —
-       and rbBand already keeps it at least a pixel wide, so nothing gates it. */
-    float slotU = (fract((p.x - fx0) / slotW) - 0.5) * slotW;
-    float crossW = px * 0.9;
-    float cross = max(rbBand((slotU - fy * fh * 0.55) * 0.85, crossW),
-                      rbBand((slotU + fy * fh * 0.55) * 0.85, crossW));
+    /* Doomed's share, hatched: a dull plum plate crossed by hairlines at 45°.
+       Each line is sized in device pixels alone — a world-sized width is two
+       pixels on a HiDPI display and a fraction of one on an ordinary one, and
+       nothing gates it — on a pitch that scales with the bar and is floored at
+       four device pixels, so it can never close up into a flat plate. */
+    float hatchP = max(DYING_HATCH, px * 4.0);
+    float hatchD = abs(fract((p.x - p.y) / hatchP) - 0.5) * hatchP * 0.7071068;
+    float hatchW = px * 0.9;
+    float hatch = 1.0 - smoothstep(hatchW * 0.5, hatchW * 0.5 + px, hatchD);
     C = mix(C, mix(troughCol, uDyingCol * 0.42, 0.62), mDead * uDying);
-    C += uDyingCol * cross * mDead * uDying * 0.85;
+    C += uDyingCol * hatch * mDead * uDying * 0.55;
 
     /* Over the liquid the veins and the heartbeat lighten towards a tint of the
        gauge's own orchid (DYING_PEAK), never towards the near-white hot orchid
@@ -1302,6 +1374,68 @@ void main(void) {
 
     C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_BEAT_TINT), dyHeart * mFill * amt * DYING_PEAK_BEAT);
     C += uDyingCol * dyHeart * mStroke * amt * 0.65;
+
+    /* The words. One repetition of the strip spans TICKER_BAND of the bar's
+       height and its own aspect times that along it; REPEAT wraps it, so the whole
+       scroll is one offset, uTickerX, kept inside a single repetition so it never
+       loses precision. The text enters from the right edge as dying lands
+       (uTickerIn) and goes out as the flatline takes the bar. */
+    float tv = 0.5 - p.y / TICKER_BAND;
+    float tBand = step(0.0, tv) * step(tv, 1.0);
+    float tPeriod = TICKER_BAND * max(uTickerAspect, 0.001);
+    float tU = (p.x - fx0 + uTickerX) / tPeriod;
+    vec4 word = texture2D(uTickerTex, vec2(tU, clamp(tv, 0.0, 1.0)));
+    /* Still (motion "none"), one repetition only — the one the bar's centre falls
+       in — so "DYING 2" sits alone in the middle rather than between two cut-off
+       copies. The mask reads floor() of the coordinate, never the texture lookup,
+       so the lookup's derivatives stay continuous. */
+    float tOne = 1.0 - uTickerStill * step(0.5, abs(floor(tU) - floor((uTickerX - fx0) / tPeriod)));
+    float tIn = tBand * tOne * rbEdge(fx1 - uTickerIn, fx1 - uTickerIn + 0.12, p.x)
+              * amt * (1.0 - smoothstep(0.0, DEAD_LINE_FROM, uDead));
+    float ink = word.g * tIn;
+    C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_RIM_TINT), word.r * tIn * mFill * DYING_PEAK_RIM);
+    C = mix(C, uDyingCol * 0.10 + INK0, ink * mFill * 0.94);
+    /* The same lit orchid over the empty trough and the doomed plate alike: a
+       dimmer letter over the hatch lost its word exactly where the table is
+       reading why death comes sooner. */
+    C = mix(C, mix(uDyingCol, uDyingHot, 0.20), ink * mTrough * (1.0 - mFill) * 0.90);
+  }
+
+  /* ── Dead ──────────────────────────────────────────────────────────────
+     The flatline. The model has already drained the fill (uFrac glides to 0 over
+     deadDrainMs — a length change, so the edge stays the straight line at the
+     value), so this block draws what is left once the liquid has run out: the
+     orchid and the veins go out of the trough, the frame cools to steel, one
+     steel hairline draws across the empty trough from left to right, and DEAD
+     comes up in steel in the middle of it. Nothing on a dead bar moves once it
+     has landed, and nothing on it has a hue.
+
+     The line is a hairline, sized in device pixels alone, and its gap stops short
+     of the letters. uDead arrives 0 on the rails and on every living bar. */
+  if (uDead > 0.001) {
+    float dAmt = uDead * mBody;
+    vec3 deadStroke = mix(vec3(0.085, 0.100, 0.140), uSteel * 0.60, smoothstep(-0.75, 0.92, hb));
+    C = mix(C, deadStroke, mStroke * dAmt);
+    C = mix(C, troughCol, mTrough * (1.0 - mFill) * dAmt);
+
+    float lineX = mix(fx0, fx1, smoothstep(DEAD_LINE_FROM, DEAD_LINE_TO, uDead));
+    float dw = DEAD_BAND * max(uDeadAspect, 0.001);
+    float gapX = dw * 0.5 + DEAD_GAP;
+    float lineW = px * 0.9;
+    float line = (1.0 - smoothstep(lineW * 0.5, lineW * 0.5 + px, abs(p.y)))
+               * rbEdge(lineX + px * 0.5, lineX - px * 0.5, p.x)
+               * rbEdge(gapX, gapX + px, abs(p.x))
+               * step(DEAD_LINE_FROM, uDead) * mTrough * (1.0 - mFill);
+    C += uSteel * line * 0.85;
+
+    vec2 du = vec2(p.x / dw + 0.5, 0.5 - p.y / DEAD_BAND);
+    float dBox = step(0.0, du.x) * step(du.x, 1.0) * step(0.0, du.y) * step(du.y, 1.0);
+    vec4 stamp = texture2D(uDeadTex, clamp(du, 0.0, 1.0));
+    /* Off the liquid: a revival glides the fill back while DEAD is still fading
+       out, and its dark outline must not cut into what returns. */
+    float dIn = smoothstep(DEAD_TEXT_FROM, DEAD_TEXT_TO, uDead) * dBox * mBody * (1.0 - mFill);
+    C = mix(C, INK0, stamp.r * dIn);
+    C = mix(C, uSteel, stamp.g * dIn);
   }
 
   /* ── Impact ────────────────────────────────────────────────────────────
@@ -1346,7 +1480,8 @@ void main(void) {
   float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, p.x) * 0.22;
   glow += exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
   glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
-  glow *= outMask * mix(0.45, 1.0, hero);
+  /* A dead bar casts nothing: the liquid that lit it has run out. */
+  glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;
   /* The heartbeat carries past the body too, in orchid. */
