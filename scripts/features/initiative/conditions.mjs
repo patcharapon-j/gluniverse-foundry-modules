@@ -7,28 +7,29 @@ ADHOC_LIFECYCLE_MODES, STATUS_ANIMATION, ADHOC_ICON_CHOICES, COMBATANT_RENDER_UP
 ACTOR_RENDER_UPDATE_KEYS, FALLBACK_PORTRAIT, PORTRAIT_MIN_PIXELS, CONFIGURABLE_ACTOR_TYPES, 
 PORTRAIT_FRAME_DEFAULTS, PORTRAIT_FRAME_LIMITS } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, 
-localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier 
+localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier
 } from "./util.mjs";
+import { readPf2eDying } from "../../core/pf2e-dying.mjs";
 
 // System-aware condition / dying / guard-break / break-gauge state readers
 // and their small HTML render helpers (PF2e + D&D5e aware, system-agnostic
 // fallbacks). Pure data + markup; no overlay/runtime singletons.
 
+// PF2e dying, through the suite's one reader (core/pf2e-dying.mjs), which the
+// resource bars share. Two things changed when it moved there: PF2e's derived
+// dying.max already has doomed taken off, and this used to subtract doomed a
+// second time (doomed 1 read "death at 2" where the book says 3); and any actor
+// carrying the condition counts, NPCs included, as it does on the health bar.
 export function getPF2eDyingState(combatant) {
   if (game.system?.id !== "pf2e") return null;
 
   const actor = combatant?.actor;
-  if (!actor || actor.type !== "character") return null;
+  const state = readPf2eDying(actor);
+  if (!state || state.value <= 0) return null;
 
-  const dyingValue = getActorAttributeValue(actor, "dying") ?? getConditionValue(actor, "dying");
-  const value = Math.max(0, Math.round(Number(dyingValue) || 0));
-  if (value <= 0) return null;
-
-  const doomed = Math.max(0, Math.round(Number(getActorAttributeValue(actor, "doomed") ?? getConditionValue(actor, "doomed") ?? 0) || 0));
-  const rawMax = getActorAttributeValue(actor, "dying", "max");
+  const { value, doomed } = state;
   const hasDiehard = hasActorItem(actor, "diehard");
-  const baseMax = Number.isFinite(rawMax) ? rawMax : hasDiehard ? 5 : 4;
-  const max = clamp(Math.max(1, Math.round(baseMax - doomed)), 1, 9);
+  const max = clamp(Math.max(1, state.max), 1, 9);
   const ratio = clamp(value / max, 0, 1.5);
   const severity = ratio >= 1 ? "critical" : ratio >= 0.67 ? "high" : "low";
 

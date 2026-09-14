@@ -9,40 +9,12 @@
 // and re-exported here unchanged so initiative's existing consumers — and the
 // other FX shaders below that interpolate `${FX_GLSL_NOISE}` — keep working with
 // zero behavior change. The crack colors remain uBreakAmber/uBreakHot uniforms.
-import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK } from "../../core/fx-glsl.mjs";
-export { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK };
-
-// Corruption veins. A domain-warped ridged-noise web of glowing violet veins
-// that creep across the whole face and concentrate toward the edges, with a soft
-// bloom (halo) around the strongest ridges — the full dying look. Kept cheap with
-// a 3-octave noise (vs the 5-octave shared fbm) so the live per-frame token shader
-// stays light; uClipCircle masks the field to a disc for round token overlays.
-export const FX_FRAG_DYING = `
-varying vec2 vTextureCoord;
-uniform sampler2D uSampler;
-uniform float uTime, uSeed, uAspect, uClipCircle;
-uniform vec3 uVeinBase, uVeinHot;
-float gluHashD(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7))+uSeed)*43758.5453); }
-float gluVNoiseD(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
-  return mix(mix(gluHashD(i),gluHashD(i+vec2(1.0,0.0)),f.x),
-             mix(gluHashD(i+vec2(0.0,1.0)),gluHashD(i+vec2(1.0,1.0)),f.x), f.y); }
-float gluFbmD(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<3;i++){ s+=a*gluVNoiseD(p); p*=2.03; a*=0.5; } return s; }
-void main(void){
-  vec2 uv=vTextureCoord;
-  vec2 q=vec2(gluFbmD(uv*3.0+vec2(0.0,uTime*0.05)), gluFbmD(uv*3.0+vec2(5.2,-uTime*0.04)));
-  float n=gluFbmD(uv*4.5+q*1.8);                        // domain-warped for organic, wandering veins
-  float ridge=1.0-abs(n*2.0-1.0);
-  float veins=smoothstep(0.80,0.99,ridge);
-  float eb=max(smoothstep(0.55,0.0,uv.x),smoothstep(0.45,1.0,uv.x));
-  eb=max(eb,smoothstep(0.5,0.0,uv.y));
-  veins*=mix(0.25,1.0,eb);                              // present across the face, densest at the edges
-  float halo=smoothstep(0.6,0.99,ridge)*0.16*eb;        // soft bloom around the strongest veins
-  vec3 violet=uVeinBase, vhot=uVeinHot;
-  vec3 col=mix(violet,vhot,veins);
-  float a=clamp(veins*0.9+halo,0.0,1.0);
-  if(uClipCircle>0.5){ vec2 cc=uv-vec2(0.5); cc.x*=uAspect; a*=smoothstep(0.5,0.47,length(cc)); }
-  gl_FragColor=vec4(col*a, a);
-}`;
+// FX_FRAG_DYING (the corruption veins) moved there too, as a shared field plus
+// this whole-shader wrapper, so the resource bars draw the same veins on a dying
+// creature's health bar. The wrapper calls the field with exactly the drift it
+// always had, so the card and the token overlay are unchanged.
+import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING } from "../../core/fx-glsl.mjs";
+export { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING };
 
 // Delay (token only): a calm blue energy scan drifting at the edges, center
 // clear. uClipCircle masks to a disc for round token overlays.
