@@ -584,8 +584,9 @@ Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear
 in that list; the check tool enforces it, so a new effect cannot be added that
 never degrades. The standing costs lead it — the idle clock (`sweep`), the
-liquid's `flow`, and a settled fracture's `breakFlow` — and everything after them
-is paid once per change, `surge` included.
+liquid's `flow`, a settled fracture's `breakFlow` and a dying gauge's
+`dyingFlow` — and everything after them is paid once per change, `surge`
+included.
 
 ---
 
@@ -721,6 +722,108 @@ permission story is built to avoid.
 `rb.breakFx` turns it off. World-scoped, because it is a fact about the creature
 that the whole table reads off the same bar rather than a preference about how
 much motion one screen shows; that lever already exists and is the motion tier.
+
+---
+
+## Dying (PF2e)
+
+While a creature carries PF2e's **Dying** condition, its primary bar stops
+measuring hit points and becomes the **dying gauge**. The trigger is the
+condition, not the hit points: a creature a GM has left dying above 0 HP still
+shows it, and one at 0 HP without the condition does not.
+
+| | |
+|---|---|
+| **Length** | `dying.value / slots`, ending in the same straight edge at the value the HP fill has |
+| **Slots** | `dying.max + doomed` plates, divided whatever `rb.dividers` says — the gauge *is* its slots |
+| **Dead slots** | the last `doomed` slots, a dull plum plate crossed out at the far end |
+| **Readout** | `dying/max` — `2/4`, or `2/3` at doomed 1 — in orchid |
+| **Setting** | `rb.dyingFx`, world, default on, offered only under PF2e |
+
+**Why dead slots.** PF2e's `dying.max` already has doomed taken off, so a gauge
+`max` slots long would say "death at 3" and nothing about why this party member
+dies a step before everyone else. Keeping the length the table knows — four, or
+five with Diehard — and drawing doomed's share dead at the end shows both.
+
+### The reader
+
+`core/pf2e-dying.mjs` is the suite's one reading of dying, and the initiative
+tracker uses it too. It is pure — no imports, no Foundry globals — so the check
+tools load it under plain Node. It prefers the derived
+`system.attributes.dying` PF2e recomputes before the item hooks fire (NPCs
+inherit it from `CreaturePF2e`, so any actor counts), uses the condition item
+only where that is missing, and subtracts doomed **once**, and only in that
+fallback. The tracker used to subtract it from the derived maximum a second time,
+so doomed 1 read "death at 2" where the book says 3.
+
+Dying is read **outside the value diff**, beside the guard break. It arrives as
+`createItem`/`updateItem`/`deleteItem` with no hit points moving, so hung off
+`sameReading` the gauge would simply never appear. Hit-point changes that land
+while dying are remembered, not drawn — no reaction, no delta — and the fill
+glides back to them when dying clears.
+
+### The look
+
+The liquid keeps its own motion character — ink still swirls, mercury still
+glides, lava still pools — but turns orchid and goes calm by raising
+`bloodied`: slower, gentler, paler, **never darker**. `--gl-orchid` is a pastel
+and bloodied pales it further, which at token size came out as a near-white bar
+that read as full health, so the gauge's colour is deepened from the token itself
+(`DYING_DEPTH`, orchid towards orchid squared) and the poured liquid is pushed
+back away from grey through `rbSaturate` (`DYING_SAT`), at the same luma.
+
+The veins are the initiative tracker's, from the same field. `core/fx-glsl.mjs`
+now exports `FX_GLSL_DYING_FIELD` — `gluDyingField(uv, flowA, flowB)` — beside
+`FX_FRAG_DYING`, which calls it with exactly the linear drift it always had, so
+the card and the token overlay are pixel-identical to before. A bar cannot drift
+linearly: its clock wraps, and a slide through non-periodic noise would jump at
+the wrap. It moves both warp offsets round closed orbits a whole number of times
+per loop instead, at `DYING_DENSE` so the ridges are not a pixel apart.
+
+The **heartbeat** is a lub and a softer dub on the fill, the frame and just past
+the body. `DYING_BEATS` gives 64, 80, 96 and 128 beats per 64s loop — 60, 75, 90
+and 120 a minute — for dying 1, 2, 3 and 4 or more, each a whole number so the
+wrap is invisible. A new level crossfades between rates (`uDyingLevel` tweens
+through the indices) rather than jumping mid-beat. It runs on its own clock,
+`uDyingT`, in real seconds and deliberately not scaled by the motion tier the way
+the idle loop is: the rate is part of the reading, and a tier that sped it up
+would misreport how close to death the creature is.
+
+Over the liquid the dying block only adds light (`rbLighten` or `+=`); the dead
+slots are not liquid — the fill can never reach them — and keep their dark.
+
+**Dying outranks the guard break**, as it does on the token overlay: the host
+writes `uBreak × (1 − dying)`, so the seams give way as the orchid arrives and
+come back if dying clears on a creature still broken. The low-health arterial
+red and its breath hand over too (`low` is scaled by `1 − dying`), and temp HP is
+not plated over a gauge it is not measured against.
+
+### Arriving, leaving, flatline
+
+Arriving, a new level and clearing are all one glide of the fill and the count
+— the heal's quintic, no overshoot, no reaction of its own — in a slot of its
+own that is sought after the reaction timeline. That order matters: the blow that
+put the creature down usually lands a few milliseconds before dying does, and its
+hit still plays out around the glide instead of being cancelled by it. The
+orchid fades in over `dyingInMs` and out over `dyingOutMs`.
+
+At `value >= max` the gauge **flatlines**: the live slots lock full, the
+heartbeat dies away over `flatlineMs`, and the veins and the liquid stop. It is a
+reading, not a verdict. Nothing in this feature — or in the reader — marks a
+creature dead or defeated or writes anything to it; PF2e caps the value and
+leaves the rest to the table, and so does the bar.
+
+`dyingFlow` sits with the standing costs at the head of `SHED_ORDER`. Shed, the
+veins and the heartbeat freeze where they are and the bar leaves the ticker; the
+orchid, the slots and the fill stay. At motion "none" the gauge arrives settled
+and still.
+
+### Visibility
+
+No new rule. The gauge and its veins draw wherever the bar does
+(`canViewBars`), and the digits sit behind `canViewNumbers` exactly as hit points
+do — a player who could not read a hostile's hit points cannot read its dying
+value either.
 
 ---
 
@@ -1090,6 +1193,21 @@ a whole number of cycles of both moving terms, that the nucleation point is
 captured rather than followed, and that freezing the fracture stops its clock and
 releases the ticker **without losing the crack**.
 
+For dying it drives the reader with fake actors — the derived maximum used as
+it is, doomed as dead slots, Diehard, NPCs, the item fallback subtracting doomed
+once, the clamp and the flatline — and pins that it stays pure and writes nothing;
+that the initiative tracker reads through it and puts death at 3 under doomed 1;
+that the veins are core's field and `FX_FRAG_DYING` still calls it with its old
+drift, statement for statement; that both features' orchids are the palette's;
+the model's glide in and out, the hit points waiting underneath, the heartbeat
+crossfade, the flatline, the shed, motion "none", the wrap, and no overshoot
+through any transition; the orchid takeover before the pour, the slot dividers,
+the dead slots, a dying block apart from the break that only adds light,
+`uDyingT` read only inside `dyPhase` with whole turns, heartbeat rates equal to
+`DYING_BEATS`, the break hidden and temp HP dropped while dying; the `dying/max`
+readout inside the gate; and `rb.dyingFx`'s registration, its PF2e gate and its
+independence from every other feature.
+
 For the liquids it pins that `rb.liquid` offers exactly the programs the shader
 builds and recompiles the bars on the canvas when it changes; that each program
 carries only its own material and none carries the old ribbons; that every idle
@@ -1140,10 +1258,12 @@ rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
 that liquid. It has rows for each liquid down the health ladder, bloodied, the
 surge after a hit and a heal, each liquid's reactions, lava under a guard break
 and a shed bar, plus a liquid switcher on the live bar. `?sheet=ink` (or
-`mercury`, `lava`, `names`, `compare`) hides everything but one contact sheet — a
+`mercury`, `lava`, `names`, `compare`, `dying`) hides everything but one contact sheet — a
 liquid at 100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged;
 the Names rows; or the three liquids side by side at token size at 100/62/49/12%,
-drawn twice 1.5s apart on one seed so a single still shows the motion — so a
+drawn twice 1.5s apart on one seed so a single still shows the motion; or every
+liquid's dying gauge at 1/4, 2/3 with a dead slot, 3/5 and 4/5 under Diehard and
+two flatlines, live on the real model — so a
 headless screenshot of the top of the page is the whole sheet.
 
 The model used to be pasted into the page verbatim, which stopped working the

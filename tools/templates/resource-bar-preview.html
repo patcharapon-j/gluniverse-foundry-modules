@@ -120,6 +120,8 @@ input[type=range]{padding:0; width:230px}
 /* ── Contact sheets (?sheet=…) ── fixed columns so a headless screenshot is stable. */
 #sheet .grid.sheet-small{grid-template-columns:repeat(4, 180px)}
 #sheet .grid.sheet-big{grid-template-columns:repeat(2, 540px)}
+#sheet .grid.sheet-dying{grid-template-columns:repeat(6, 150px)}
+#sheet .grid.sheet-dying-big{grid-template-columns:repeat(3, 360px)}
 </style>
 
 <canvas id="gl"></canvas>
@@ -157,6 +159,13 @@ input[type=range]{padding:0; width:230px}
       <label class="f">Guard
         <select id="brk"><option value="0">Intact</option><option value="1">Broken</option></select>
       </label>
+      <label class="f">Dying
+        <select id="dying">
+          <option value="">No</option><option value="1,4,0">1 of 4</option><option value="2,4,0">2 of 4</option>
+          <option value="3,4,0">3 of 4</option><option value="2,3,1">2, doomed 1</option><option value="4,5,0">4, Diehard</option>
+          <option value="4,4,0">Flatline 4/4</option>
+        </select>
+      </label>
     </div>
     <div class="read" id="read"></div>
   </div>
@@ -189,6 +198,15 @@ input[type=range]{padding:0; width:230px}
   <h2>Lava under a guard break</h2>
   <p class="note">The lava calms while the guard is broken — its glow evens out, it never darkens — so the initiative tracker's sharp gold fracture reads over it. Ink and mercury beside it for comparison.</p>
   <div class="grid" id="row-lava-break"></div>
+
+  <h2>Dying (PF2e)</h2>
+  <p class="note">The dying gauge takes the primary bar over: the liquid turns orchid and goes calm, fills toward death in one slot per dying step with doomed's slots dead at the far end, carries the initiative tracker's corruption veins, and beats — quicker at each level — until it flatlines at the maximum. The readout says dying over its maximum. Every cell is the real model, stepped live.</p>
+  <div class="grid" id="row-dying-ink"></div>
+  <div class="grid" id="row-dying-mercury" style="margin-top:22px"></div>
+  <div class="grid" id="row-dying-lava" style="margin-top:22px"></div>
+  <h2>Dying · arriving and leaving</h2>
+  <p class="note">Frozen points on the glide from hit points to the gauge and back: one deceleration, no reaction, the orchid fading in and out. Dying over a broken guard hides the fracture.</p>
+  <div class="grid" id="row-dying-seq"></div>
 
   <h2>Shed under load</h2>
   <p class="note">Flow given up: the liquid keeps its colour, its bloodied look and its straight edge, and loses only its motion.</p>
@@ -294,6 +312,10 @@ const SHIELD_COL = /*__SHIELD_COL__*/;
 const RAIL_COL = /*__RAIL_COL__*/;
 const BREAK_AMBER = /*__BREAK_AMBER__*/;
 const BREAK_HOT = /*__BREAK_HOT__*/;
+const DYING_COL = /*__DYING_COL__*/;
+const DYING_HOT = /*__DYING_HOT__*/;
+/* The dying readout's ink, as host.mjs derives it: orchid lifted halfway to its hot twin. */
+const DYING_INK = DYING_COL.map((c, i) => c + (DYING_HOT[i] - c) * 0.5);
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
@@ -838,6 +860,57 @@ for (const liquid of LIQUIDS) {
   add(shedRow, { title: liquid + " · shed, bloodied", sub: "<i>uFlow 0</i>", frac: 0.38, seg: 10, max: 58, liquid, flow: 0 });
 }
 
+/* ── Dying (PF2e) ─────────────────────────────────────────────────────────
+   Each cell owns a BarAnim with core/pf2e-dying.mjs's reading set on it, and
+   `tick` cells are stepped every frame, so the heartbeat, the veins and the
+   flatline are the model's own rather than a drawing of them. */
+const dyState = (value, max, doomed = 0) =>
+  ({ value, max, doomed, slots: max + doomed, doomedSlots: doomed, flatline: value >= max });
+const DYING_PLAN = [
+  { title: "Dying 1", sub: "1/4", st: dyState(1, 4) },
+  { title: "Dying 2, doomed 1", sub: "2/3 · one slot dead", st: dyState(2, 3, 1) },
+  { title: "Dying 3, Diehard", sub: "3/5", st: dyState(3, 5) },
+  { title: "Dying 4, Diehard", sub: "4/5 · quickest beat", st: dyState(4, 5) },
+  { title: "Flatline", sub: "4/4 · stopped", st: dyState(4, 4) },
+  { title: "Flatline, doomed 1", sub: "3/3 · stopped", st: dyState(3, 3, 1) },
+];
+function dyingCell(host, spec, st, { tick = true, hp = 0, broken = false } = {}) {
+  add(host, spec);
+  const a = new BarAnim(hp, { motionScale: 1 });
+  if (broken) a.setBroken(true, { at: hp });
+  a.setDying(st, { silent: true });
+  const c = cells[cells.length - 1];
+  c.anim = a;
+  c.tick = tick;
+  return a;
+}
+for (const liquid of LIQUIDS) {
+  const row = document.getElementById("row-dying-" + liquid);
+  for (const p of DYING_PLAN)
+    dyingCell(row, { title: liquid + " · " + p.title, sub: "<i>" + p.sub + "</i>", seg: 10, max: 58, liquid }, p.st);
+}
+{
+  const row = document.getElementById("row-dying-seq");
+  for (const ms of [0, 90, 200, 480]) {
+    add(row, { title: "HP 0 → dying 1 · " + ms + "ms", sub: "<i>glide, orchid fading in</i>", seg: 10, max: 58 });
+    const a = new BarAnim(0, { motionScale: 1 });
+    a.step(16);
+    a.setDying(dyState(1, 4));
+    for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
+    cells[cells.length - 1].anim = a;
+  }
+  for (const ms of [120, 600]) {
+    add(row, { title: "Dying 2 → cleared · " + ms + "ms", sub: "<i>back to 62% HP</i>", seg: 10, max: 58 });
+    const a = new BarAnim(0.62, { motionScale: 1 });
+    a.setDying(dyState(2, 4), { silent: true });
+    a.step(16);
+    a.setDying(null);
+    for (let t = 0; t < ms; t += 8) a.step(Math.min(8, ms - t));
+    cells[cells.length - 1].anim = a;
+  }
+  dyingCell(row, { title: "Dying over a broken guard", sub: "<i>the fracture gives way</i>", seg: 10, max: 58 }, dyState(2, 4), { hp: 0.3, broken: true });
+}
+
 /* ── The frozen sequence ──────────────────────────────────────────────────
    Each cell owns a BarAnim advanced to a fixed point on the timeline with the
    real step(), then never stepped again. The render loop only advances `live`,
@@ -873,9 +946,25 @@ for (const liquid of LIQUIDS) {
 {
   const sheet = new URLSearchParams(location.search).get("sheet");
   const page = document.querySelector(".page");
-  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names" || sheet === "compare")) {
+  if (sheet && (LIQUIDS.includes(sheet) || sheet === "names" || sheet === "compare" || sheet === "dying")) {
     const keep = new Set();
-    if (sheet === "names") {
+    if (sheet === "dying") {
+      /* Every liquid down the dying plan at token size, then enlarged. */
+      const section = document.createElement("section");
+      section.id = "sheet";
+      let html = "";
+      for (const liquid of LIQUIDS) html += "<h2>dying · " + liquid + " · token size, 128px</h2><div class=\"grid sheet-dying\" id=\"dy-" + liquid + "\"></div>";
+      for (const liquid of LIQUIDS) html += "<h2>dying · " + liquid + " · enlarged</h2><div class=\"grid sheet-dying-big\" id=\"dyb-" + liquid + "\"></div>";
+      section.innerHTML = html;
+      page.prepend(section);
+      keep.add(section);
+      for (const liquid of LIQUIDS) {
+        for (const p of DYING_PLAN)
+          dyingCell(document.getElementById("dy-" + liquid), { title: p.title, sub: "<i>" + p.sub + "</i>", seg: 10, max: 58, liquid, w: 128, h: 30.72 }, p.st);
+        for (const p of DYING_PLAN.filter((_, i) => i === 0 || i === 1 || i === 4))
+          dyingCell(document.getElementById("dyb-" + liquid), { title: p.title, sub: "<i>" + liquid + " · " + p.sub + "</i>", seg: 10, max: 58, liquid, w: 340, h: 64 }, p.st);
+      }
+    } else if (sheet === "names") {
       for (const el of page.children) {
         if ((el.id || "").startsWith("row-names-") && el.id !== "row-names-zoom") keep.add(el);
         if (el.tagName === "H2" && el.textContent.startsWith("Names") && !/zoom/.test(el.textContent)) keep.add(el);
@@ -948,7 +1037,13 @@ function token(name, spec) {
     const s = document.createElement("div");
     s.className = "slot " + (bar.role === 0 ? "hero" : "rail");
     t.append(s);
-    cells.push({ slot: s, spec: bar });
+    const cell = { slot: s, spec: bar };
+    if (bar.dying) {
+      cell.anim = new BarAnim(bar.frac ?? 0, { motionScale: 1 });
+      cell.anim.setDying(bar.dying, { silent: true });
+      cell.tick = true;
+    }
+    cells.push(cell);
   }
   const n = document.createElement("div"); n.className = "name"; n.textContent = name;
   t.append(n);
@@ -962,6 +1057,10 @@ token("DYING", { bars: [{ frac: 0.09, seg: 10, role: 0, max: 58 }, { frac: 0.7, 
    magnified diagram; this is the only place on the page where the question
    "can you still read the health" is being asked honestly. */
 token("BROKEN", { bars: [{ frac: 0.52, seg: 10, role: 0, max: 58, brk: 1, brkT: 2.4, brkX: 0.52 }, { frac: 0.7, role: 1 }] });
+/* PF2e dying, at the size it is played at: the gauge, a doomed slot, a flatline. */
+token("DYING 2", { bars: [{ frac: 0, seg: 10, role: 0, max: 58, dying: dyState(2, 4) }, { frac: 0.7, role: 1 }] });
+token("DOOMED 1", { bars: [{ frac: 0, seg: 10, role: 0, max: 58, dying: dyState(2, 3, 1) }, { frac: 0.7, role: 1 }] });
+token("FLATLINE", { bars: [{ frac: 0, seg: 10, role: 0, max: 58, dying: dyState(4, 4) }, { frac: 0.7, role: 1 }] });
 
 /* ── The live bar ─────────────────────────────────────────────────────── */
 
@@ -1004,6 +1103,10 @@ document.getElementById("temp").addEventListener("change", (e) => { liveTemp = +
 document.getElementById("brk").addEventListener("change", (e) => {
   live.setBroken(e.target.value === "1", { at: live.frac });
 });
+document.getElementById("dying").addEventListener("change", (e) => {
+  const [value, max, doomed] = e.target.value.split(",").map(Number);
+  live.setDying(e.target.value ? dyState(value, max, doomed) : null);
+});
 
 /* ── Render ───────────────────────────────────────────────────────────── */
 
@@ -1017,6 +1120,7 @@ function draw(now) {
   if (elapsed < 100) frameMean += (elapsed - frameMean) * 0.05;
   last = now;
   live.step(dt);
+  for (const c of cells) if (c.tick && c.anim !== live) c.anim.step(dt);
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
@@ -1071,12 +1175,23 @@ function draw(now) {
     gl.uniform1f(U.uBloom, a ? a.bloom : (s.bloom ?? 0));
     gl.uniform1f(U.uFlash, a ? a.flash : (s.flash ?? 0));
     gl.uniform1f(U.uLow, a ? a.low : Math.max(0, (0.25 - frac) / 0.25));
-    gl.uniform1f(U.uTemp, temp);
+    gl.uniform1f(U.uTemp, a?.dyingOn ? 0 : temp);
     gl.uniform1f(U.uCracked, s.cracked ?? 0);
     /* The guard break rides the primary bar only, exactly as host.mjs writes it:
-       a hard 0 on the rails, so the shader skips its one expensive branch. */
+       a hard 0 on the rails, so the shader skips its one expensive branch — and
+       it gives way to the dying gauge. */
     const isHero = (s.role ?? 0) === 0;
-    gl.uniform1f(U.uBreak, isHero ? (a ? a.broken : (s.brk ?? 0)) : 0);
+    gl.uniform1f(U.uBreak, isHero ? (a ? a.broken * (1 - a.dying) : (s.brk ?? 0)) : 0);
+    /* The dying gauge, exactly as host.mjs writes it: the primary bar only. */
+    const dy = isHero && a ? a : null;
+    gl.uniform1f(U.uDying, dy ? dy.dying : 0);
+    gl.uniform1f(U.uDyingT, dy ? dy.dyingT : 0);
+    gl.uniform1f(U.uDyingSlots, dy ? dy.dyingSlots : 0);
+    gl.uniform1f(U.uDyingDead, dy ? dy.dyingDead : 0);
+    gl.uniform1f(U.uDyingLevel, dy ? dy.dyingLevel : 0);
+    gl.uniform1f(U.uDyingPulse, dy ? dy.dyingPulse : 0);
+    gl.uniform3fv(U.uDyingCol, DYING_COL);
+    gl.uniform3fv(U.uDyingHot, DYING_HOT);
     gl.uniform1f(U.uBreakT, isHero ? (a ? a.breakT : (s.brkT ?? 0)) : 0);
     gl.uniform1f(U.uBreakX, isHero ? (a ? a.breakX : (s.brkX ?? frac)) : 0);
     gl.uniform1f(U.uBreakFlow, isHero ? (s.brkFlow ?? 1) : 0);
@@ -1114,19 +1229,22 @@ function draw(now) {
       /* The viewer's own size setting, on top of the size the bar's height
          gives. It scales the delta too — they are one readout. */
       const ns = (s.numScale ?? 1) * punch;
-      /* `num`, not `frac`: the fill snaps on impact and the readout counts. */
-      const cur = Math.round((a ? a.num : frac) * s.max);
+      /* `num`, not `frac`: the fill snaps on impact and the readout counts.
+         While dying it reads the gauge, dying over its maximum, as host.mjs does. */
+      const gauge = !!a?.dyingOn;
+      const cur = Math.round((a ? a.num : frac) * (gauge ? a.dyingSlots : s.max));
+      const shownMax = gauge ? a.dyingMax : s.max;
       /* Colour follows the event and decays back to white. The maximum shares
          it and steps back by one notch of opacity — enough to rank the two,
          not enough to make the denominator something you go looking for. */
       const heat = a ? a.hit * 0.18 : 0;
       const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
-      const rest = [0.97, 0.99, 1.0];
+      const rest = [0.97, 0.99, 1.0].map((c, i) => c + (DYING_INK[i] - c) * (a ? a.dying : 0));
       const ink = rest.map((c, i) => c + (to[i] - c) * heat);
       drawRun([
         { text: String(cur), size: h * 0.48 * ns, ink },
         { text: "/", size: h * 0.25 * ns, ink, opacity: 0.52, bottom: true },
-        { text: String(s.max), size: h * 0.28 * ns, ink, opacity: 0.60, bottom: true },
+        { text: String(shownMax), size: h * 0.28 * ns, ink, opacity: 0.60, bottom: true },
       ], rightPx, h * 0.5, w, h, true);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
@@ -1197,6 +1315,8 @@ function draw(now) {
     "</b> &nbsp;·&nbsp; surge <b>" + live.surge.toFixed(2) +
     "</b> &nbsp;·&nbsp; liquid <b>" + liquidDefault +
     "</b> &nbsp;·&nbsp; break <b>" + live.broken.toFixed(2) + "@" + live.breakT.toFixed(2) + "s" +
+    "</b> &nbsp;·&nbsp; dying <b>" + live.dying.toFixed(2) + " " + live.dyingValue + "/" + live.dyingMax +
+    " lv " + live.dyingLevel.toFixed(2) + " beat " + live.dyingPulse.toFixed(2) + (live.flatline ? " flat" : "") +
     "</b> &nbsp;·&nbsp; hdr <b>" +
     (HDR ? "16f" : "8-bit") + "</b> &nbsp;·&nbsp; material <b>" + (live.motionScale > 0 ? "looping" : "still") + "</b>";
 

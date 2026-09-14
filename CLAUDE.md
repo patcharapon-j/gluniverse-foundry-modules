@@ -407,6 +407,21 @@ where the hitstop, the off-screen freeze and motion "none" cannot reach it — a
 it schedules `setImmediate` under Node, so the check tool also proves a process
 driving the model exits on its own.
 
+Under PF2e the **Dying** condition takes the primary bar over as a gauge, and the
+check pins what fails silently there. The reader is `core/pf2e-dying.mjs`, shared
+with the initiative tracker: PF2e's `dying.max` already has doomed taken off, and
+subtracting it again — which the tracker once did — says death comes a step early
+on every doomed creature. Dying is read beside the break, outside `sameReading`,
+because it arrives as a condition item with no hit points moving. The veins are
+`FX_GLSL_DYING_FIELD`, and `FX_FRAG_DYING` must keep calling it with its old
+linear drift or the card and token overlay change while no bar is dying; the bar
+orbits the drift instead, on its own clock `uDyingT`, read only inside `dyPhase`
+with whole turns, and the heartbeat's `DYING_BEATS` are whole beats per loop
+crossfaded by level — a fractional rate steps once a minute. Dying outranks the
+break (`uBreak × (1 − dying)`), its block only adds light over the liquid,
+`dyingFlow` freezes the motion and keeps the gauge, and a flatline stops
+everything and writes nothing to the creature.
+
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
 a page that compiles all three liquids' real shaders in a real WebGL2 context and
 drives them with the real animation model, which it **imports** from the repo.

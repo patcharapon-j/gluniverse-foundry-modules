@@ -57,7 +57,9 @@
  */
 
 import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
-import { FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
+import {
+  FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_DYING_FIELD, FX_GLSL_DYING_NOISE, FX_GLSL_NOISE,
+} from "../../core/fx-glsl.mjs";
 
 /* Re-exported so this module stays the single import site for everything the
    feature compiles, as it was when it owned the constant. */
@@ -113,12 +115,21 @@ export const UNIFORMS = Object.freeze({
   uBreakFlow: "float", // the energy flowing along the seams, 0 once shed under load
   uSeed: "float",      // per-token seed, so two broken creatures shatter differently
 
+  uDying: "float",      // PF2e dying gauge's hold on the primary bar, 0..1 (0 = hit points); hero row only
+  uDyingT: "float",     // the veins' and the heartbeat's clock, seconds, wrapping at the idle loop
+  uDyingSlots: "float", // the gauge's slots: dying max + doomed
+  uDyingDead: "float",  // how many of them, at the right end, doomed has taken
+  uDyingLevel: "float", // heartbeat rate index into DYING_BEATS, fractional while it crossfades
+  uDyingPulse: "float", // heartbeat strength, 0 once flatlined
+
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
   uTempCol: "vec3",   // temp-HP overlay colour, sRGB 0..1
   uShieldCol: "vec3", // shield rail colour, sRGB 0..1
   uRailCol: "vec3",   // secondary-rail colour, sRGB 0..1 (the suite accent)
   uBreakAmber: "vec3",// fracture seam gold, sRGB 0..1
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
+  uDyingCol: "vec3",  // --gl-orchid, sRGB 0..1
+  uDyingHot: "vec3",  // --gl-orchid-hot, sRGB 0..1
 });
 
 /** Frame shape and the numeric run's safe inset, in bar-height units.
@@ -236,7 +247,55 @@ export const LAVA_BREAK_CALM = 0.6;
  */
 export const LAVA_WARMTH = 0.35;
 
+/**
+ * The dying heartbeat's rates, in beats per idle loop (64s): dying 1, 2, 3, and
+ * 4 or more — 60, 75, 90 and 120 beats a minute. Whole numbers, so the heartbeat
+ * lands on the frame it left when its clock wraps; rising, so it quickens as the
+ * creature gets closer to death. The model crossfades between their indices
+ * (`uDyingLevel`), and each rate is written into the GLSL as its own literal,
+ * which `resource-bar-check` pins against this table.
+ */
+export const DYING_BEATS = Object.freeze([64, 80, 96, 128]);
+
+/**
+ * The veins' scale on a bar, as a multiplier on the bar's own p space before it
+ * reaches `gluDyingField`. The field was written for card and token quads,
+ * where uv runs 0..1 across the whole face; on a bar p runs a bar height per
+ * unit, so at 1.0 its finest ridges land about a device pixel apart on the 19px
+ * reference bar — the same fracture-is-grain trap BREAK_DENSE documents.
+ */
+export const DYING_DENSE = 0.42;
+
+/**
+ * How much deeper and more saturated than `--gl-orchid` the gauge's liquid is,
+ * 0..1. The token is a pastel, and the liquid then goes through bloodied's calm,
+ * which pales it further; at token size the result was a near-white bar that read
+ * as full health. The deeper tone is derived from the palette colour itself
+ * (orchid multiplied towards orchid squared) rather than from a second hex.
+ */
+export const DYING_DEPTH = 0.45;
+
+/**
+ * How far the poured liquid is pushed away from grey while dying, through
+ * `rbSaturate` — same luma, so it restores the orchid bloodied's calm took out
+ * without making anything darker.
+ */
+export const DYING_SAT = 0.55;
+
+/**
+ * How far the veins' two warp offsets swing, in field units. The initiative
+ * tracker slides them linearly; a bar's clock wraps, so here they go round
+ * closed orbits a whole number of times per loop, at about the same speed.
+ */
+export const DYING_ORBIT = 0.30;
+
 const f4 = (n) => n.toFixed(4);
+
+/* The heartbeat at every level, crossfaded by uDyingLevel: one dyBeat per rate
+   in DYING_BEATS, each weighted by how close the level index is to it. */
+const DYING_HEART = DYING_BEATS
+  .map((k, i) => `dyBeat(${k.toFixed(1)}) * max(0.0, 1.0 - abs(lv - ${i.toFixed(1)}))`)
+  .join("\n             + ");
 const shadeConsts = (liquid) =>
   `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
 
@@ -251,6 +310,10 @@ const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
 const float LAVA_BREAK_CALM = ` + f4(LAVA_BREAK_CALM) + `;
 const float LAVA_WARMTH = ` + f4(LAVA_WARMTH) + `;
+const float DYING_DENSE = ` + f4(DYING_DENSE) + `;
+const float DYING_ORBIT = ` + f4(DYING_ORBIT) + `;
+const float DYING_DEPTH = ` + f4(DYING_DEPTH) + `;
+const float DYING_SAT = ` + f4(DYING_SAT) + `;
 const float LOOP_W = ` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
@@ -281,18 +344,28 @@ uniform float uBreakT;
 uniform float uBreakX;
 uniform float uBreakFlow;
 uniform float uSeed;
+uniform float uDying;
+uniform float uDyingT;
+uniform float uDyingSlots;
+uniform float uDyingDead;
+uniform float uDyingLevel;
+uniform float uDyingPulse;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
 uniform vec3  uShieldCol;
 uniform vec3  uRailCol;
 uniform vec3  uBreakAmber;
 uniform vec3  uBreakHot;
+uniform vec3  uDyingCol;
+uniform vec3  uDyingHot;
 
 /* The guard-break fracture, shared verbatim with the initiative tracker's token
    overlay and card portraits and with the etched-chat crit crack. Only the field
    is shared; the colouring below is this shader's own, because that is the part
    that has to answer to what it is being drawn over. uSeed must be declared
-   before either chunk — both hash against it. */` + FX_GLSL_NOISE + FX_GLSL_BREAK_FIELD + FX_GLSL_BREAK_PULSE + `
+   before either chunk — both hash against it. The dying veins are shared the
+   same way, with the tracker's card and token overlay. */` + FX_GLSL_NOISE + FX_GLSL_BREAK_FIELD + FX_GLSL_BREAK_PULSE
+  + FX_GLSL_DYING_NOISE + FX_GLSL_DYING_FIELD + `
 
 /* One device pixel in p units. Set once in main(), read by the helpers below —
    GLSL ES 1.0 has no closures, so this is a global by necessity. */
@@ -410,6 +483,20 @@ float rbPhase(float k) {
 
 float rbDrift(float k, float period) {
   return rbPhase(k) * period * 0.1591549431;
+}
+
+/* ── The dying clock ─────────────────────────────────────────────────────
+   The same rule on its own clock, uDyingT, which the model freezes at flatline
+   and under the shed without touching the liquid's idle loop. dyPhase(k) turns k
+   whole times per loop; pass whole numbers. dyBeat is one heartbeat, a lub and a
+   softer dub, at k beats per loop. */
+float dyPhase(float k) {
+  return uDyingT * LOOP_W * k;
+}
+
+float dyBeat(float k) {
+  float th = dyPhase(k);
+  return pow(0.5 + 0.5 * cos(th), 10.0) + 0.55 * pow(0.5 + 0.5 * cos(th - 0.95), 10.0);
 }
 
 /* Hash and value noise, periodic in x with the given lattice period so that a
@@ -811,6 +898,13 @@ void main(void) {
      ramp stop reaches. This is the one place the fill is allowed to editorialise,
      because "you are about to die" is not a shade of the same information. */
   base = mix(base, vec3(1.000, 0.106, 0.153), uLow * 0.55 * hero);
+  /* Dying takes the primary bar over: the liquid keeps its own motion but turns
+     orchid and goes calm the way bloodied does — slower, gentler, paler, never
+     darker — because the gauge is not hit points and must not read as a shade of
+     them. */
+  float dyingOn = uDying * hero;
+  base = mix(base, uDyingCol * mix(vec3(1.0), uDyingCol, DYING_DEPTH), dyingOn);
+  bloodied = max(bloodied, dyingOn);
 
   /* ── The trough ────────────────────────────────────────────────────────*/
   /* Flat and dark, with one shadow under the top edge. A well is not supposed
@@ -835,6 +929,9 @@ void main(void) {
     fillCol += mix(base, vec3(1.0), 0.68) * rbBand(hb - 0.81, 0.035) * 0.65;
     fillCol += base * rbBand(hb + 0.83, 0.045) * 0.38;
   }
+  /* A dying gauge gets back the orchid bloodied's calm paled out of it — at the
+     same luma, so nothing the liquid did is made darker. */
+  fillCol = rbSaturate(fillCol, DYING_SAT * dyingOn);
   // The warning brightens the liquid on the breath's clock; it never dims it.
   fillCol += base * uLow * hero * (0.12 + 0.34 * breathe);
 
@@ -843,9 +940,12 @@ void main(void) {
      bar. A groove says "one quantity, subdivided for counting"; a gap says
      "assembled from parts", which is what every game HUD in this idiom says. */
   float segMask = 1.0;
-  if (uSeg > 0.5) {
-    float segW = span / uSeg;
-    float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
+  /* The dying gauge is its slots, so it is divided into them whatever the
+     hit-point divisions are set to. */
+  float segN = mix(uSeg, uDyingSlots, step(0.5, uDying) * hero);
+  if (segN > 0.5) {
+    float segW = span / segN;
+    float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * segN) * segW;
     /* Sized in the *world*, so it scales with the canvas. uSegW arrives in bar
        heights: the host divides the setting ("pixels at 100% zoom") by the
        bar's own world height.
@@ -928,7 +1028,7 @@ void main(void) {
     tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
   /* They are divisions too, so they leave with the divisions. */
-  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg);
+  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg) * (1.0 - uDying);
 
   /* ── Compose ───────────────────────────────────────────────────────────*/
   vec3 C = vec3(0.0);
@@ -1029,6 +1129,49 @@ void main(void) {
     A = max(A, min(lit * amt * 1.10, 1.0));
   }
 
+  /* ── Dying ─────────────────────────────────────────────────────────────
+     PF2e's dying gauge. The fill above is already the gauge — the host hands
+     uFrac the dying value over its slots, and the edge is the same straight line
+     — so this block only adds what says *dying*: the initiative tracker's
+     corruption veins, from the same field in core/fx-glsl.mjs; a heartbeat that
+     quickens with the dying level; and the slots doomed has taken, drawn dead at
+     the far end so the table can see why death comes sooner.
+
+     Over the liquid it only adds light. The dead slots are not liquid — the fill
+     can never reach them — and are a dull plate in the trough. uDying arrives 0
+     on the rails and on every living bar, so none of this is paid there; the
+     host also zeroes uBreak while dying, because dying outranks a broken guard. */
+  float dyHeart = 0.0;
+  if (uDying > 0.001) {
+    float lv = clamp(uDyingLevel, 0.0, ${(DYING_BEATS.length - 1).toFixed(1)});
+    dyHeart = (${DYING_HEART}) * uDyingPulse;
+    vec2 flowA = vec2(cos(dyPhase(2.0)), sin(dyPhase(2.0))) * DYING_ORBIT;
+    vec2 flowB = vec2(5.2, 0.0) + vec2(sin(dyPhase(3.0)), cos(dyPhase(3.0))) * DYING_ORBIT;
+    vec2 vein = gluDyingField(p * DYING_DENSE, flowA, flowB);
+    float amt = uDying * mBody;
+
+    float slotN = max(uDyingSlots, 1.0);
+    float slotW = span / slotN;
+    float deadX = mix(fx0, fx1, clamp((slotN - uDyingDead) / slotN, 0.0, 1.0));
+    float mDead = mFillA * segMask * step(0.5, uDyingDead)
+                * rbEdge(deadX - px * 0.5, deadX + px * 0.5, p.x) * (1.0 - mFill);
+    /* Each dead slot is crossed out: a dull plum plate with an X, which is the
+       one mark that reads as "taken" at the size a slot is drawn at. */
+    float slotU = (fract((p.x - fx0) / slotW) - 0.5) * slotW;
+    float crossW = max(px * 0.9, 0.032);
+    float cross = max(rbBand((slotU - fy * fh * 0.55) * 0.85, crossW),
+                      rbBand((slotU + fy * fh * 0.55) * 0.85, crossW));
+    C = mix(C, mix(troughCol, uDyingCol * 0.42, 0.62), mDead * uDying);
+    C += uDyingCol * cross * mDead * uDying * 0.85;
+
+    C = rbLighten(C, uDyingHot, vein.x * mFill * amt * 0.45);
+    C += uDyingHot * vein.x * mFill * amt * 0.10;
+    C += uDyingCol * (vein.x * 0.65 + vein.y * 0.12) * mTrough * (1.0 - mFill) * (1.0 - mDead) * amt * 0.40;
+
+    C = rbLighten(C, mix(uDyingCol, uDyingHot, 0.55), dyHeart * mFill * amt * 0.40);
+    C += uDyingCol * dyHeart * mStroke * amt * 0.65;
+  }
+
   /* ── Impact ────────────────────────────────────────────────────────────
      A bar that only changes length reports a number; the hit has to *land*.
      The envelope decays 1 → 0, so the reaction grows as its amplitude falls,
@@ -1074,6 +1217,10 @@ void main(void) {
   glow *= outMask * mix(0.45, 1.0, hero);
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;
+  /* The heartbeat carries past the body too, in orchid. */
+  float dyHalo = exp(-outside / 0.060) * outMask * dyHeart * uDying;
+  outC += uDyingCol * dyHalo * 0.50;
+  outA += dyHalo * 0.18;
 
   /* ── Fade ──────────────────────────────────────────────────────────────
      A bar appearing or a hover letting go is a plain fade, applied last to the

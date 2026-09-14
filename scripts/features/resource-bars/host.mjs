@@ -22,10 +22,10 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
-import { readToken, sameReading } from "./data.mjs";
+import { readDying, readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
@@ -71,6 +71,13 @@ const ROLES = ["hero", "rail", "shield"];
 const REST_INK = [0.97, 0.99, 1.0];
 const HIT_INK = [1.0, 0.52, 0.48];
 const HEAL_INK = [0.62, 1.0, 0.78];
+/**
+ * The dying readout's ink: orchid lifted halfway to its hot twin, both from the
+ * palette. Plain orchid over a full orchid gauge is the same hue at nearly the
+ * same lightness, and at flatline — the one reading that matters most — the
+ * digits all but vanished into the fill.
+ */
+const DYING_INK = hexToFloat3(DYING_COLOR).map((c, i) => c + (hexToFloat3(DYING_HOT)[i] - c) * 0.5);
 
 /**
  * A stable per-token seed for the guard-break fracture, in the 0..100 range the
@@ -110,12 +117,15 @@ function makeBarMesh(role, opts) {
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uFlow: 1, uSurge: 0,
+    uDying: 0, uDyingT: 0, uDyingSlots: 0, uDyingDead: 0, uDyingLevel: 0, uDyingPulse: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
     uRailCol: new Float32Array(hexToFloat3(RAIL_COLOR)),
     uBreakAmber: new Float32Array(hexToFloat3(BREAK_AMBER)),
     uBreakHot: new Float32Array(hexToFloat3(BREAK_HOT)),
+    uDyingCol: new Float32Array(hexToFloat3(DYING_COLOR)),
+    uDyingHot: new Float32Array(hexToFloat3(DYING_HOT)),
   };
   /* One program per liquid, and only the world's liquid is ever compiled. The
      rails run it too — their flat plate is a branch inside it, not a fourth
@@ -218,6 +228,23 @@ class BarEntry {
        on its own, and hanging it off `changed` would leave a creature's bar
        intact until the next time something hit it. */
     this.readBreak(opts);
+    /* Dying rides the same road for the same reason: it arrives as a condition
+       item with no hit points moving. */
+    this.readDying(opts, { silent: first || silent });
+  }
+
+  /**
+   * PF2e's dying state, onto the primary bar only — which it takes over as the
+   * dying gauge. A reader, as the break is: nothing here writes to the creature,
+   * and no visibility rule is added, because the gauge is drawn on a bar
+   * `visibility.mjs` has already decided about.
+   */
+  readDying(opts, { silent = false } = {}) {
+    const bar = this.reading?.hero;
+    if (!bar) return;
+    const a = this.animFor("hero", bar.frac);
+    a.motionScale = this.host.motionScale;
+    a.setDying(opts.dyingFx ? readDying(this.token) : null, { silent });
   }
 
   /**
@@ -448,6 +475,7 @@ class BarHost {
       bothBars: this.opts.bothBars,
       pf2eLayers: this.opts.pf2eLayers,
       breakFx: this.opts.breakFx,
+      dyingFx: this.opts.dyingFx,
     }, { silent: !entry.vis.shown });
     /* A token with no readable bar still keeps its entry when it can show a
        name — a light, a marker or a loot pile gets `── NAME ──` in the slot. */
@@ -934,7 +962,8 @@ class BarHost {
       const liquid = role === "hero";
       u.uFlow = liquid && this.allows("flow") ? 1 : 0;
       u.uSurge = liquid && a && this.allows("surge") ? clamp(a.surge, -1, 1) : 0;
-      u.uTemp = role === "hero" ? r.temp : 0;
+      /* Temp HP is measured against hit points, which a dying gauge is not showing. */
+      u.uTemp = role === "hero" && !a?.dyingOn ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
       /* The fracture rides the primary bar and nothing else, so the rails get a
@@ -946,10 +975,25 @@ class BarHost {
       const brk = role === "hero" ? a : null;
       const flowing = this.allows("breakFlow");
       if (brk) brk.breakFrozen = !flowing;
-      u.uBreak = brk ? brk.broken : 0;
+      /* Dying outranks a broken guard on the bar, as it does on the token: the
+         seams give way to the gauge as the orchid takes over, and come back if
+         dying clears while the guard is still broken. */
+      u.uBreak = brk ? brk.broken * (1 - brk.dying) : 0;
       u.uBreakT = brk ? brk.breakT : 0;
       u.uBreakX = brk ? brk.breakX : 0;
       u.uBreakFlow = brk && flowing ? 1 : 0;
+
+      /* The dying gauge, on the primary bar and nothing else — the rails get hard
+         zeros and skip the block. Shedding freezes the veins and the heartbeat
+         where they are; the orchid, the slots and the fill stay. */
+      const dy = role === "hero" ? a : null;
+      if (dy) dy.dyingFrozen = !this.allows("dyingFlow");
+      u.uDying = dy ? dy.dying : 0;
+      u.uDyingT = dy ? dy.dyingT : 0;
+      u.uDyingSlots = dy ? dy.dyingSlots : 0;
+      u.uDyingDead = dy ? dy.dyingDead : 0;
+      u.uDyingLevel = dy ? dy.dyingLevel : 0;
+      u.uDyingPulse = dy ? dy.dyingPulse : 0;
 
       /* Nothing about the geometry is animated — not the mesh transform, not
          the fill's height. Every part of a change is light moving across a
@@ -1012,8 +1056,15 @@ class BarHost {
        readout that snaps is a number nobody saw move. It counts instead, which
        also means a burst of small hits reads as one continuous fall rather than
        as a digit flickering. */
-    const value = Math.round((a ? a.num : r.hero.frac) * r.hero.max);
-    const label = value + "/" + r.hero.max;
+    /* Dying: the gauge's own reading, dying over its maximum (doomed already
+       taken off, so doomed 1 at dying 2 reads 2/3), behind the same gate as hit
+       points. It counts over the slots, because that is the length the fill is
+       measured in; the atlas carries only digits and signs, so no letters. */
+    const gauge = !!a?.dyingOn;
+    const scale = gauge ? a.dyingSlots : r.hero.max;
+    const shownMax = gauge ? a.dyingMax : r.hero.max;
+    const value = Math.round((a ? a.num : r.hero.frac) * scale);
+    const label = value + "/" + shownMax;
 
     /* Cached against everything that shapes the run, not only its text. Size
        comes from the bar's height and the viewer's setting, and neither of
@@ -1027,7 +1078,7 @@ class BarHost {
       const geo = runGeometry([
         { text: String(value), size: h * 0.48 * numScale },
         { text: "/", size: h * 0.25 * numScale, dim: 0.52, bottom: true },
-        { text: String(r.hero.max), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
+        { text: String(shownMax), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
       ], { right, mid, center: false, maxWidth: Math.max(1, w - READOUT_INSET * h * 2), maxHeight: h * 0.70 });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       // The atlas run is centred on the same anchor as its mesh.
@@ -1048,7 +1099,12 @@ class BarHost {
          length either way. */
       const heat = a && this.allows("punch") ? a.hit * 0.18 : 0;
       const to = a?.heal ? HEAL_INK : HIT_INK;
-      for (let i = 0; i < 3; i++) entry._ink[i] = REST_INK[i] + (to[i] - REST_INK[i]) * heat;
+      /* In orchid as the gauge takes over, and back to white as it leaves. */
+      const orchid = a ? a.dying : 0;
+      for (let i = 0; i < 3; i++) {
+        const rest = REST_INK[i] + (DYING_INK[i] - REST_INK[i]) * orchid;
+        entry._ink[i] = rest + (to[i] - rest) * heat;
+      }
     }
 
     /* Floating deltas. "The bar got shorter" is a magnitude you estimate;

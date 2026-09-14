@@ -79,6 +79,10 @@ export const TIMING = Object.freeze({
   fadeInMs: 120,   // --gl-d-tap     a bar fading in as it becomes visible
   fadeOutMs: 120,  // --gl-d-tap     and out when a hover or a selection lets go of it
   surgeMs: 380,    // the surge through the liquid, perceived; the spring settles in about 3.5× this
+  dyingInMs: 320,  // --gl-d-brisk   the orchid taking the bar over when dying lands
+  dyingOutMs: 540, // --gl-d-glide   and handing it back when dying clears
+  dyingLevelMs: 900, // the heartbeat crossfading to a new dying level's rate
+  flatlineMs: 900, // the heartbeat dying away when the gauge reaches its maximum
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
@@ -106,6 +110,21 @@ export const BREAK_SETTLE_S = 1 / 1.4;
  * every few minutes, on a bar nobody is watching at the time.
  */
 export const BREAK_WRAP = Math.PI * 10;
+
+/**
+ * Where the dying clock wraps, in seconds: the idle loop, which the shader's
+ * `LOOP_W` is built on. Every moving dying term — the veins' two orbits and the
+ * heartbeat at every level — turns a whole number of times in it, so the wrap
+ * lands on the frame it left. `resource-bar-check` pins both halves.
+ */
+export const DYING_LOOP_S = TIMING.idleLoopMs / TIMING.clockMs;
+
+/**
+ * How many heartbeat rates the shader carries (`DYING_BEATS` in shader.mjs):
+ * dying 1, 2, 3, and 4 or more. The model crossfades between their indices, so a
+ * new level blends from one rate into the next rather than jumping mid-beat.
+ */
+export const DYING_LEVELS = 4;
 
 /**
  * A floating delta's travel, as a fraction of the quad height.
@@ -244,6 +263,25 @@ export class BarAnim {
     /** Set by the renderer from the shed budget: freeze the fracture, keep it. */
     this.breakFrozen = false;
 
+    /* PF2e dying. While `_dyingOn` the gauge owns the fill's length and `hp` is
+       only remembered, to glide back to when dying clears. `dying` is how far the
+       orchid has taken the bar over (0..1); `dyingT` is the veins' and the
+       heartbeat's clock; `dyingLevel` indexes the heartbeat rate and is fractional
+       while it crossfades; `dyingPulse` is the heartbeat's strength, 0 once the
+       gauge flatlines. Slots, dead slots and the maximum are the reading. */
+    this.hp = this.frac;
+    this.dying = 0;
+    this.dyingT = 0;
+    this.dyingLevel = 0;
+    this.dyingPulse = 0;
+    this.dyingValue = 0;
+    this.dyingMax = 0;
+    this.dyingSlots = 0;
+    this.dyingDead = 0;
+    this.flatline = false;
+    /** Set by the renderer from the shed budget: freeze the veins and the heartbeat, keep the gauge. */
+    this.dyingFrozen = false;
+
     /** Floating deltas, newest last. Each is { text, heal, t } with t in 0..1. */
     this.popups = [];
 
@@ -259,16 +297,31 @@ export class BarAnim {
     this._stop = 0;
     this._hover = false;
     this._breakOn = false;
+    this._dyingOn = false;
+    this._levelTarget = 0;
 
     /* Live tweens, each { tw, at }: `at` is the `_live` time it started.
          _impact    one change's whole reaction — replaced by every set()
          _drain     the chip trail's hold-and-drain, which a heal does not cancel
+         _gauge     the fill gliding between hit points and the dying gauge
          _breakOut  the fracture fading when a break is cleared
-         _gloss     the hover gloss */
+         _gloss     the hover gloss
+         _dyingFade / _dyingLevelTw / _dyingPulseTw
+                    the orchid arriving or leaving, the heartbeat crossfading to
+                    a new rate, and the heartbeat dying away at flatline */
     this._impact = null;
     this._drain = null;
+    this._gauge = null;
     this._breakOut = null;
     this._gloss = null;
+    this._dyingFade = null;
+    this._dyingLevelTw = null;
+    this._dyingPulseTw = null;
+  }
+
+  /** True while the dying gauge owns the primary bar. */
+  get dyingOn() {
+    return this._dyingOn;
   }
 
   /** A duration in TIMING, scaled by the user's motion tier. 0 disables motion. */
@@ -293,9 +346,35 @@ export class BarAnim {
     this.frac = this.ghost = this.num = this.target;
     this.waveX = this.target;
     this._stop = 0;
-    this._impact = this._drain = null;
+    this._impact = this._drain = this._gauge = null;
     this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = this.surge = 0;
     this.popups.length = 0;
+  }
+
+  /**
+   * Move the fill to a new length with no event attached — the dying gauge
+   * taking the bar over, changing level, or handing it back.
+   *
+   * One deceleration, the heal's own glide: no overshoot, no recoil, and no
+   * reaction of its own, because the gauge growing is not damage and a hit
+   * point change arriving underneath it is not a heal. Any reaction already
+   * running (the killing blow that put the creature down, usually a few
+   * milliseconds earlier) is left to finish; this only takes over the length and
+   * the count, and cuts the chip trail to the fill so it cannot draw a span of
+   * hit points over the gauge.
+   */
+  _toLength(next, quiet) {
+    const to = clamp01(next);
+    this.target = to;
+    if (quiet) {
+      this._settle();
+      return;
+    }
+    this._drain = null;
+    this.ghost = this.frac;
+    this._gauge = this._play(timeline()
+      .add(this, { frac: [this.frac, to], duration: this._ms("fillMs"), ease: GLIDE }, 0)
+      .add(this, { num: [this.num, to], duration: this._ms("countMs"), ease: COUNT }, 0));
   }
 
   /**
@@ -309,6 +388,11 @@ export class BarAnim {
    */
   set(frac, { silent = false, max = 0 } = {}) {
     const next = clamp01(frac);
+    /* While dying, the gauge owns the length. Hit points are remembered and
+       nothing else happens — no reaction, no delta — until dying clears and the
+       fill glides back to them. */
+    this.hp = next;
+    if (this._dyingOn) return;
     if (next === this.target) return;
 
     /* Every change replaces the previous change's reaction wholesale, fill glide
@@ -317,6 +401,7 @@ export class BarAnim {
        chip trail's drain is the one thing a heal leaves running — the span the
        last hit took is still lost. */
     this._impact = null;
+    this._gauge = null;
     const damaged = next < this.target;
     const delta = next - this.target;
     this.target = next;
@@ -449,6 +534,91 @@ export class BarAnim {
     }
   }
 
+  /**
+   * Report the creature's PF2e dying state: `core/pf2e-dying.mjs`'s reading, or
+   * null when it is not dying.
+   *
+   * While dying the primary bar is the gauge: the fill glides to `value / slots`
+   * and the orchid fades in. A new level glides the fill and crossfades the
+   * heartbeat to the new rate. Reaching the maximum flatlines it — the gauge
+   * locks full, the heartbeat dies away, the veins and the liquid stop — which is
+   * a reading, never a verdict: nothing here, or anywhere in this feature, marks
+   * a creature dead. Clearing dying fades the orchid out and glides back to the
+   * hit points that arrived underneath.
+   *
+   * Idempotent: the renderer reports on every read, and a reading that has not
+   * changed does nothing.
+   */
+  setDying(state, { silent = false } = {}) {
+    const on = !!state && Number(state.slots) > 0;
+    const quiet = silent || this.motionScale === 0;
+
+    if (!on) {
+      if (!this._dyingOn) return;
+      this._dyingOn = false;
+      this.flatline = false;
+      this._dyingLevelTw = this._dyingPulseTw = null;
+      if (quiet) {
+        this._dyingFade = null;
+        this.dying = 0;
+      } else {
+        this._dyingFade = this._play(tween(this, { dying: [this.dying, 0], duration: this._ms("dyingOutMs"), ease: LINEAR }));
+      }
+      this._toLength(this.hp, quiet);
+      return;
+    }
+
+    const slots = Math.max(1, Math.round(Number(state.slots)));
+    const max = Math.min(slots, Math.max(0, Math.round(Number(state.max) || 0)));
+    const value = Math.min(max, Math.max(0, Math.round(Number(state.value) || 0)));
+    const flat = value >= max;
+    const level = Math.min(DYING_LEVELS - 1, Math.max(0, value - 1));
+    const arriving = !this._dyingOn;
+    if (!arriving && value === this.dyingValue && max === this.dyingMax && slots === this.dyingSlots) return;
+
+    this._dyingOn = true;
+    this.dyingValue = value;
+    this.dyingMax = max;
+    this.dyingSlots = slots;
+    this.dyingDead = slots - max;
+
+    if (arriving) {
+      this._dyingLevelTw = this._dyingPulseTw = null;
+      this.dyingLevel = level;
+      this.dyingPulse = flat ? 0 : 1;
+      if (quiet) {
+        this._dyingFade = null;
+        this.dying = 1;
+      } else {
+        this._dyingFade = this._play(tween(this, { dying: [this.dying, 1], duration: this._ms("dyingInMs"), ease: LINEAR }));
+      }
+    } else {
+      if (level !== this._levelTarget) {
+        if (quiet) {
+          this._dyingLevelTw = null;
+          this.dyingLevel = level;
+        } else {
+          this._dyingLevelTw = this._play(tween(this, {
+            dyingLevel: [this.dyingLevel, level], duration: this._ms("dyingLevelMs"), ease: LINEAR,
+          }));
+        }
+      }
+      if (flat !== this.flatline) {
+        if (quiet) {
+          this._dyingPulseTw = null;
+          this.dyingPulse = flat ? 0 : 1;
+        } else {
+          this._dyingPulseTw = this._play(tween(this, {
+            dyingPulse: [this.dyingPulse, flat ? 0 : 1], duration: this._ms(flat ? "flatlineMs" : "dyingInMs"), ease: LINEAR,
+          }));
+        }
+      }
+    }
+    this._levelTarget = level;
+    this.flatline = flat;
+    this._toLength(value / slots, quiet);
+  }
+
   /** Hover / control state drives the gloss, and nothing else. */
   setHover(on) {
     const next = !!on;
@@ -483,6 +653,12 @@ export class BarAnim {
       this.broken = this._breakOn ? 1 : 0;
       this._breakOut = null;
       this.breakT = BREAK_SETTLE_S;
+      /* Dying is state too: the gauge and its orchid are there, still, with the
+         heartbeat at whatever strength the reading gives it and its clock parked. */
+      this.dying = this._dyingOn ? 1 : 0;
+      this._dyingFade = this._dyingLevelTw = this._dyingPulseTw = null;
+      this.dyingLevel = this._levelTarget;
+      this.dyingPulse = this._dyingOn && !this.flatline ? 1 : 0;
       return false;
     }
 
@@ -501,7 +677,9 @@ export class BarAnim {
     }
     this._live += live;
 
-    if (!this.idleFrozen) this.time = (this.time + live / (TIMING.clockMs * s))
+    /* A flatlined gauge's liquid stops with its heartbeat. */
+    const flatlined = this._dyingOn && this.flatline;
+    if (!this.idleFrozen && !flatlined) this.time = (this.time + live / (TIMING.clockMs * s))
       % (TIMING.idleLoopMs / TIMING.clockMs);
 
     if (this._impact && !this._seek(this._impact)) {
@@ -509,6 +687,12 @@ export class BarAnim {
       /* At rest exactly, not within a float of it: `hot` and the tests compare. */
       this.frac = this.num = this.target;
       this.hit = this.punch = this.flash = this.chip = this.bloom = this.wave = this.surge = 0;
+    }
+    /* After the reaction, so the gauge's glide owns the length and the count
+       while a killing blow's reaction plays out around it. */
+    if (this._gauge && !this._seek(this._gauge)) {
+      this._gauge = null;
+      this.frac = this.num = this.target;
     }
 
     // The chip trail: hold, then drain to meet the fill; never below it.
@@ -530,15 +714,37 @@ export class BarAnim {
       this.broken = 0;
     }
 
+    /* The dying clock: the veins' orbits and the heartbeat. Real seconds, not
+       scaled by the motion tier the way the idle clock is — the heartbeat's rate
+       is part of the reading (it quickens as dying rises), and a tier that sped
+       it up would misreport. Frozen by the shed and by flatline; the gauge stays. */
+    if (this._dyingOn && !this.flatline && !this.dyingFrozen) {
+      this.dyingT += live / TIMING.clockMs;
+      if (this.dyingT >= DYING_LOOP_S) this.dyingT -= DYING_LOOP_S;
+    }
+    if (this._dyingFade && !this._seek(this._dyingFade)) {
+      this._dyingFade = null;
+      this.dying = this._dyingOn ? 1 : 0;
+    }
+    if (this._dyingLevelTw && !this._seek(this._dyingLevelTw)) {
+      this._dyingLevelTw = null;
+      this.dyingLevel = this._levelTarget;
+    }
+    if (this._dyingPulseTw && !this._seek(this._dyingPulseTw)) {
+      this._dyingPulseTw = null;
+      this.dyingPulse = this._dyingOn && !this.flatline ? 1 : 0;
+    }
+
     if (this._gloss && !this._seek(this._gloss)) this._gloss = null;
 
     return this.hot;
   }
 
   /** Low-health state, ramped over the band just above the threshold so it
-   *  arrives rather than snaps. */
+   *  arrives rather than snaps. Handed over while dying: the gauge is not hit
+   *  points, and the arterial red and its breath would fight the orchid. */
   get low() {
-    return clamp01((LOW_AT - this.frac) / LOW_AT);
+    return clamp01((LOW_AT - this.frac) / LOW_AT) * (1 - this.dying);
   }
 
   /**
@@ -549,8 +755,13 @@ export class BarAnim {
     if (this.motionScale === 0) return false;
     if (this._stop > 0) return true;
     if (this._hover || this._gloss) return true;
-    if (this.ghost !== this.frac || this._impact || this._drain) return true;
+    if (this.ghost !== this.frac || this._impact || this._drain || this._gauge) return true;
     if (this.popups.length) return true;
+    if (this._dyingFade || this._dyingLevelTw || this._dyingPulseTw) return true;
+    /* A dying creature's heartbeat is the same standing cost as a broken one's
+       fracture. A flatlined gauge has nothing left to animate, and a frozen one
+       has been given up by the shed. */
+    if (this._dyingOn && !this.flatline && !this.dyingFrozen) return true;
     if (this.low > 0) return true; // the low-health pulse is continuous by design
     /* A settled fracture is still breathing, so a broken creature's bar stays
        hot for as long as it is broken — the same standing cost as low health,
@@ -667,23 +878,25 @@ export class RevealAnim {
  * every animated behaviour appears here, so a new effect cannot be added that
  * never degrades.
  *
- * The first three are the standing costs — paid every frame by every bar on
- * screen, or by every broken one — and everything after them is transient, paid
- * once per change:
+ * The entries up to dyingFlow are the standing costs — paid every frame by
+ * every bar on screen, or by every broken or dying one — and everything after
+ * them is transient, paid once per change:
  *
  *   sweep      freezes the idle clock: the liquid holds its last frame
  *   flow      drops the liquid's animated layer in the shader, and takes idle
  *              bars out of the ticker altogether
  *   breakFlow  freezes a fracture at its settled frame
+ *   dyingFlow  freezes the dying veins and heartbeat where they are
  *
  * What degrades is the motion, never the state: a frozen fracture keeps its
- * crack, a still liquid keeps its colour, its bloodied look and its edge. A
- * shed that could hide "this creature's guard is broken" would be trading the
- * information for the frame rate, which is not a trade this list is allowed to
- * make.
+ * crack, a still liquid keeps its colour, its bloodied look and its edge, a
+ * frozen dying gauge keeps its orchid, its slots and its fill. A shed that could
+ * hide "this creature's guard is broken" or "this creature is dying" would be
+ * trading the information for the frame rate, which is not a trade this list is
+ * allowed to make.
  */
 export const SHED_ORDER = Object.freeze([
-  "sweep", "flow", "reveal", "breakFlow", "popups", "sparks", "ring", "surge", "numbers", "punch", "ghost",
+  "sweep", "flow", "reveal", "breakFlow", "dyingFlow", "popups", "sparks", "ring", "surge", "numbers", "punch", "ghost",
   "wave", "bloom",
   "flurry", "nameDecode", // names: the cipher's standing flurry; a label's decode (snaps when shed)
 ]);

@@ -42,7 +42,7 @@ const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?
 const {
   FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, UNIFORMS,
 } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
-const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
+const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 
 const template = await readFile(new URL("tools/templates/resource-bar-preview.html", ROOT), "utf8");
 const ANIM = new URL("scripts/features/resource-bars/anim.mjs", ROOT);
@@ -122,6 +122,8 @@ function page(animImport, root) {
     "/*__RAIL_COL__*/": JSON.stringify(hexToFloat3(RAIL_COLOR)),
     "/*__BREAK_AMBER__*/": JSON.stringify(hexToFloat3(BREAK_AMBER)),
     "/*__BREAK_HOT__*/": JSON.stringify(hexToFloat3(BREAK_HOT)),
+    "/*__DYING_COL__*/": JSON.stringify(hexToFloat3(DYING_COLOR)),
+    "/*__DYING_HOT__*/": JSON.stringify(hexToFloat3(DYING_HOT)),
     "/*__READOUT_INSET__*/": String(READOUT_INSET),
   };
   /* split/join rather than String#replace: the inlined sources contain `$`

@@ -261,7 +261,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   for (const e of gated)
     if (!anim.SHED_ORDER.includes(e)) fail(`host.mjs gates "${e}" but SHED_ORDER does not list it, so it never actually degrades.`);
   const animated = ["sweep", "ghost", "bloom", "numbers", "popups", "ring", "punch",
-                    "sparks", "wave", "breakFlow", "reveal", "flow", "surge"];
+                    "sparks", "wave", "breakFlow", "reveal", "flow", "surge", "dyingFlow"];
   for (const e of animated)
     if (!gated.has(e)) fail(`"${e}" is animated but is not behind an allows() gate; under load it can never be shed.`);
   for (const e of anim.SHED_ORDER)
@@ -1554,6 +1554,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     const b = new m.BarAnim(0.8); b.step(16); b.set(0.3, { max: 50 }); b.setBroken(true); b.setHover(true);
     for (let i = 0; i < 30; i++) b.step(16);
     b.set(0.9, { max: 50 }); b.step(16); b.setBroken(false); b.step(16);
+    b.setDying({ value: 2, max: 4, doomed: 0, slots: 4, doomedSlots: 0, flatline: false });
+    for (let i = 0; i < 30; i++) b.step(16);
+    b.setDying({ value: 4, max: 4, doomed: 0, slots: 4, doomedSlots: 0, flatline: true }); b.step(16);
+    b.setDying(null); b.step(16);
     const r = new m.RevealAnim(); r.show(true); r.step(16); r.hide(true); r.step(16);
     console.log("driven");`;
   const run = spawnSync(process.execPath, ["--input-type=module", "-e", driver], { encoding: "utf8", timeout: 20000 });
@@ -1574,6 +1578,364 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   else if (!/const idle = [^;]*this\.allows\("flow"\)/.test(h) || !/const idleFlow = [^;]*this\.allows\("flow"\)/.test(h))
     fail("Shedding \"flow\" leaves idle bars in the ticker, so the one standing cost every visible bar pays can never be given up.");
   else ok("the liquid's flow and surge ride the primary bar only, each shed on its own, and shedding flow takes idle bars out of the ticker");
+}
+
+/* ── 7n. Dying (PF2e): the gauge, the shared veins, the heartbeat ────────── */
+{
+  /* A dying creature's primary bar stops measuring hit points and becomes the
+     dying gauge. Every rule below fails silently, and most of them fail as a
+     number the table trusts being off by one:
+
+       - a reader that subtracts doomed from PF2e's dying.max, which already has
+         doomed taken off, says death comes one step early — the exact bug the
+         initiative tracker shipped with;
+       - a gauge read inside the value diff never appears, because a condition
+         arrives as an item change with no hit points moving;
+       - a veins shader forked rather than shared drifts from the card and the
+         token overlay the first time either is touched, and an extraction that
+         is not an identity changes both while nothing in the bars is running;
+       - a heartbeat whose rate is not a whole number of beats per loop steps
+         once a minute, and one that snaps between levels jumps mid-beat;
+       - a shed or a flatline that removes the gauge instead of freezing it
+         trades the information for the frame rate. */
+  let bad = 0;
+  const no = (msg) => { fail(msg); bad++; };
+  const section = (label, fn) => {
+    const before = bad;
+    try { fn(); } catch (error) { no(label + " — threw: " + (error?.stack ?? error)); }
+    if (bad === before) ok(label);
+  };
+  const bodyOf = (text, head) => {
+    const at = text.indexOf(head);
+    if (at < 0) return "";
+    const sig = text.indexOf(") {", at);
+    const open = sig < 0 ? text.indexOf("{", at) : sig + 2;
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}" && --depth === 0) return text.slice(open, i + 1);
+    }
+    return text.slice(open);
+  };
+  const READER = "scripts/core/pf2e-dying.mjs";
+  let reader = null, readerErr = null, readerSrc = "";
+  try { reader = await import(new URL(READER, ROOT).href); } catch (error) { readerErr = error; }
+  try { readerSrc = strip(await src(READER)); } catch { /* reported below */ }
+  let cond = null, condErr = null;
+  try { cond = await import(new URL("scripts/features/initiative/conditions.mjs", ROOT).href); } catch (error) { condErr = error; }
+  const condSrc = strip(await src("scripts/features/initiative/conditions.mjs"));
+  const glSrc = strip(await src("scripts/features/initiative/gl.mjs"));
+  const glMod = await import(new URL("scripts/features/initiative/gl.mjs", ROOT).href).catch((error) => ({ __err: error }));
+  const dataSrc = strip(await src("scripts/features/resource-bars/data.mjs"));
+  const idx = strip(await src("scripts/features/resource-bars/index.mjs"));
+  const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
+  const constants = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
+  const { PALETTE } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
+  const lang = JSON.parse(await src("lang/resource-bars.en.json"));
+  const h = strip(hostSrc);
+  const state = (value, max, doomed = 0) => ({ value, max, doomed, slots: max + doomed, doomedSlots: doomed, flatline: value >= max });
+
+  section("the PF2e dying reader: derived max as-is, doomed as dead slots, NPCs, and a fallback that subtracts doomed once", () => {
+    if (!reader) { no(`${READER} cannot be imported under plain Node (${readerErr?.message}); both features and the check tools load it.`); return; }
+    const R = reader.readPf2eDying;
+    if (typeof R !== "function") { no(`${READER} does not export readPf2eDying.`); return; }
+    const item = (slug, value) => ({ type: "condition", slug, system: { slug, value: { isValued: true, value } } });
+    const feat = (slug) => ({ type: "feat", slug, system: { slug } });
+    const actor = ({ type = "character", dying, doomed, items = [] } = {}) =>
+      ({ type, system: { attributes: { hp: { value: 0, max: 40 }, ...(dying ? { dying } : {}), ...(doomed ? { doomed } : {}) } }, items });
+    const want = (label, got, exp) => {
+      if (exp === null) { if (got !== null) no(`${label}: expected no dying state, got ${JSON.stringify(got)}.`); return; }
+      if (!got) { no(`${label}: expected ${JSON.stringify(exp)}, got ${JSON.stringify(got)}.`); return; }
+      for (const [k, v] of Object.entries(exp)) if (got[k] !== v) no(`${label}: ${k} is ${JSON.stringify(got[k])}, expected ${JSON.stringify(v)}.`);
+    };
+    want("dying 2, doomed 0", R(actor({ dying: { value: 2, max: 4 }, doomed: { value: 0, max: 3 }, items: [item("dying", 2)] })),
+      { value: 2, max: 4, doomed: 0, slots: 4, doomedSlots: 0, flatline: false });
+    want("dying 1, doomed 1 (PF2e's derived max is already 3)", R(actor({ dying: { value: 1, max: 3 }, doomed: { value: 1, max: 3 }, items: [item("dying", 1), item("doomed", 1)] })),
+      { value: 1, max: 3, doomed: 1, slots: 4, doomedSlots: 1, flatline: false });
+    want("Diehard (derived max 5)", R(actor({ dying: { value: 3, max: 5 }, items: [item("dying", 3), feat("diehard")] })),
+      { value: 3, max: 5, slots: 5, doomedSlots: 0, flatline: false });
+    want("an NPC carrying dying", R(actor({ type: "npc", dying: { value: 1, max: 4 }, items: [item("dying", 1)] })),
+      { value: 1, max: 4, slots: 4 });
+    want("no dying condition", R(actor({ dying: { value: 0, max: 4 }, doomed: { value: 1, max: 3 }, items: [item("doomed", 1)] })), null);
+    want("no actor", R(null), null);
+    want("derived data missing, condition items present", R(actor({ items: [item("dying", 2), item("doomed", 1)] })),
+      { value: 2, max: 3, doomed: 1, slots: 4, doomedSlots: 1, flatline: false });
+    want("an NPC with only the condition item", R(actor({ type: "npc", items: [item("dying", 1)] })),
+      { value: 1, max: 4, slots: 4, doomedSlots: 0 });
+    want("a value past the maximum is clamped", R(actor({ items: [item("dying", 6)] })), { value: 4, max: 4, flatline: true });
+    want("flatline at dying 3 of a doomed-1 maximum", R(actor({ dying: { value: 3, max: 3 }, doomed: { value: 1, max: 3 }, items: [item("dying", 3)] })),
+      { value: 3, max: 3, slots: 4, doomedSlots: 1, flatline: true });
+    if (!readerSrc) no(`${READER} is missing.`);
+    if (/^\s*import\b/m.test(readerSrc) || /\b(?:game|foundry|canvas|Hooks|CONFIG)\s*[.?[]/.test(readerSrc))
+      no(`${READER} imports something or reaches for a Foundry global. It is the pure reader both features and the check tools load under plain Node.`);
+    if (/\b(?:setFlag|unsetFlag|update|toggleCondition|increaseCondition|decreaseCondition|createEmbeddedDocuments|deleteEmbeddedDocuments|delete)\s*\(/.test(readerSrc))
+      no(`${READER} writes game state. The gauge is a reader: nothing marks a creature dead, defeated or changed.`);
+  });
+
+  section("initiative reads dying through the core reader, and no longer subtracts doomed twice", () => {
+    if (!/import\s*\{[^}]*\breadPf2eDying\b[^}]*\}\s*from\s*"\.\.\/\.\.\/core\/pf2e-dying\.mjs"/.test(condSrc))
+      no("initiative/conditions.mjs does not import readPf2eDying from core/pf2e-dying.mjs; the card, the overlay and the bar would each read dying their own way.");
+    const body = bodyOf(condSrc, "export function getPF2eDyingState");
+    if (!/readPf2eDying\(/.test(body)) no("getPF2eDyingState does not call the core reader.");
+    if (/-\s*doomed\b|baseMax/.test(body))
+      no("getPF2eDyingState still derives its own maximum from doomed. PF2e's dying.max already has doomed taken off; subtracting it again puts death one step early.");
+    if (!cond) { no("initiative/conditions.mjs cannot be imported under Node: " + condErr?.message); return; }
+    const saved = globalThis.game;
+    try {
+      globalThis.game = { system: { id: "pf2e" } };
+      const combatant = { actor: { type: "character", system: { attributes: { dying: { value: 1, max: 3 }, doomed: { value: 1, max: 3 } } },
+        items: [{ type: "condition", slug: "dying", system: { slug: "dying", value: { value: 1 } } },
+          { type: "condition", slug: "doomed", system: { slug: "doomed", value: { value: 1 } } }] } };
+      const s = cond.getPF2eDyingState(combatant);
+      if (!s || s.max !== 3 || s.value !== 1 || s.doomed !== 1)
+        no(`With doomed 1 the initiative tracker reports ${JSON.stringify(s)}; PF2e puts death at dying 3.`);
+    } finally { globalThis.game = saved; }
+  });
+
+  section("the dying veins are one field in core/fx-glsl.mjs, and the extraction is an identity for the initiative card and overlay", () => {
+    const norm = (s) => strip(s ?? "").replace(/\s+/g, "");
+    const field = norm(fxGlsl.FX_GLSL_DYING_FIELD);
+    const noise = norm(fxGlsl.FX_GLSL_DYING_NOISE);
+    const frag = norm(fxGlsl.FX_FRAG_DYING);
+    if (!field || !noise || !frag) { no("core/fx-glsl.mjs does not export FX_GLSL_DYING_NOISE, FX_GLSL_DYING_FIELD and FX_FRAG_DYING."); return; }
+    /* Statement for statement what FX_FRAG_DYING computed before the move, with
+       its two drift terms lifted into parameters and nothing else touched. */
+    for (const s of [
+      "floatgluHashD(vec2p){returnfract(sin(dot(p,vec2(127.1,311.7))+uSeed)*43758.5453);}",
+      "floatgluVNoiseD(vec2p){vec2i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);returnmix(mix(gluHashD(i),gluHashD(i+vec2(1.0,0.0)),f.x),mix(gluHashD(i+vec2(0.0,1.0)),gluHashD(i+vec2(1.0,1.0)),f.x),f.y);}",
+      "floatgluFbmD(vec2p){floats=0.0,a=0.5;for(inti=0;i<3;i++){s+=a*gluVNoiseD(p);p*=2.03;a*=0.5;}returns;}",
+    ]) if (!noise.includes(s)) no("FX_GLSL_DYING_NOISE has drifted from the noise the veins were drawn with: " + s.slice(0, 48) + "…");
+    for (const s of [
+      "vec2gluDyingField(vec2uv,vec2flowA,vec2flowB){",
+      "vec2q=vec2(gluFbmD(uv*3.0+flowA),gluFbmD(uv*3.0+flowB));",
+      "floatn=gluFbmD(uv*4.5+q*1.8);",
+      "floatridge=1.0-abs(n*2.0-1.0);",
+      "returnvec2(smoothstep(0.80,0.99,ridge),smoothstep(0.6,0.99,ridge));",
+    ]) if (!field.includes(s)) no("gluDyingField is no longer the extracted field: missing " + s);
+    if (!frag.includes("vec2fld=gluDyingField(uv,vec2(0.0,uTime*0.05),vec2(5.2,-uTime*0.04));"))
+      no("FX_FRAG_DYING does not call gluDyingField with the drift it always had (vec2(0.0,uTime*0.05), vec2(5.2,-uTime*0.04)); the card and the token overlay would move differently from before.");
+    for (const s of ["floatveins=fld.x;", "veins*=mix(0.25,1.0,eb);", "floathalo=fld.y*0.16*eb;", "vec3col=mix(violet,vhot,veins);", "floata=clamp(veins*0.9+halo,0.0,1.0);"])
+      if (!frag.includes(s)) no("FX_FRAG_DYING's colouring changed in the move: missing " + s);
+    if (/export const FX_FRAG_DYING\s*=/.test(glSrc) || /float gluFbmD\(/.test(glSrc))
+      no("initiative/gl.mjs still defines its own dying shader; there are two dying looks again.");
+    if (glMod.__err || glMod.FX_FRAG_DYING !== fxGlsl.FX_FRAG_DYING)
+      no("initiative/gl.mjs does not re-export core's FX_FRAG_DYING, which token-overlay.mjs and the card import from it.");
+    const barGlsls = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
+    if (!barGlsls.every((g) => /gluDyingField\(/.test(g)) || !/FX_GLSL_DYING_FIELD/.test(strip(shaderSrc)) || /float gluFbmD\(/.test(strip(shaderSrc)))
+      no("The bar's veins are not core/fx-glsl.mjs's field: a liquid does not call gluDyingField, or shader.mjs forks the noise.");
+  });
+
+  section("orchid, from the palette, on the bar and on the initiative tracker alike", () => {
+    if (!ramp.DYING_COLOR || ramp.DYING_COLOR !== PALETTE.orchid || ramp.DYING_HOT !== PALETTE.orchidHot)
+      no(`ramp.mjs's dying colours are ${ramp.DYING_COLOR} / ${ramp.DYING_HOT}, not PALETTE.orchid / PALETTE.orchidHot.`);
+    const r3 = (arr) => arr.map((c) => Math.round(c * 1000) / 1000).join(",");
+    for (const [name, hex, floats] of [
+      ["DYING_COLOR", ramp.DYING_COLOR, initConst.ACTIVE_SHADER_PALETTE.veinBase],
+      ["DYING_HOT", ramp.DYING_HOT, initConst.ACTIVE_SHADER_PALETTE.veinHot],
+    ]) if (!hex || r3(ramp.hexToFloat3(hex)) !== r3(floats))
+      no(`${name} (${hex}) is not the initiative tracker's vein colour (${floats}); one dying creature would be two orchids.`);
+    const css = tokensCss.match(/--gl-orchid:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase();
+    if (css !== String(PALETTE.orchid).toLowerCase()) no(`PALETTE.orchid (${PALETTE.orchid}) does not mirror --gl-orchid (${css}).`);
+    if (!/uDyingCol:\s*new Float32Array\(hexToFloat3\(DYING_COLOR\)\)/.test(h) || !/uDyingHot:\s*new Float32Array\(hexToFloat3\(DYING_HOT\)\)/.test(h))
+      no("host.mjs does not feed uDyingCol / uDyingHot from ramp.mjs's DYING_COLOR / DYING_HOT.");
+  });
+
+  section("the gauge's model: glides in and out, hit points wait underneath, the heartbeat crossfades, flatline stops, the shed freezes, motion none settles", () => {
+    const B = anim.BarAnim;
+    if (typeof B.prototype.setDying !== "function") { no("BarAnim has no setDying(); the gauge has no model."); return; }
+    for (const k of ["dyingInMs", "dyingOutMs", "dyingLevelMs", "flatlineMs"])
+      if (!(anim.TIMING[k] > 0)) no(`TIMING.${k} is missing; a dying duration outside TIMING ignores the motion tier.`);
+    const run = (bar, ms) => { for (let t = 0; t < ms; t += 16) bar.step(16); };
+    const settleMs = Math.max(anim.TIMING.fillMs, anim.TIMING.countMs, anim.TIMING.dyingInMs ?? 0, anim.TIMING.dyingOutMs ?? 0,
+      anim.TIMING.dyingLevelMs ?? 0, anim.TIMING.flatlineMs ?? 0) + 64;
+
+    const b = new B(0, { motionScale: 1 });
+    b.step(16);
+    b.setDying(state(1, 4));
+    b.step(16);
+    if (!b.dyingOn) no("setDying with dying 1 does not turn the gauge on.");
+    if (!(b.dying > 0 && b.dying < 1)) no("The orchid takeover does not fade in.");
+    if (b.hit || b.wave || b.chip || b.bloom || b.flash || b.popups.length)
+      no("Dying arriving fires a hit or heal reaction; the gauge taking over is a length change, not damage.");
+    run(b, settleMs);
+    if (b.frac !== 0.25 || b.num !== 0.25 || b.dying !== 1)
+      no(`Dying 1 of 4 does not settle on a quarter of the bar at full orchid (frac ${b.frac}, readout ${b.num}, dying ${b.dying}).`);
+    if (b.low !== 0) no("The low-health state still reads while dying; the gauge is not hit points, and the arterial red would fight the orchid.");
+    if (!b.hot) no("A dying bar goes cold, so its heartbeat stops while the creature is still dying.");
+    b.set(0.6, { max: 40 });
+    b.step(16);
+    if (b.frac !== 0.25 || b.popups.length || b.hit) no("A hit-point change while dying moves the gauge or reacts on it.");
+    const t0 = b.dyingT;
+    b.step(16);
+    if (!(b.dyingT > t0)) no("The dying clock does not advance.");
+
+    b.setDying(state(2, 4));
+    b.step(16);
+    if (!(b.dyingLevel > 0 && b.dyingLevel < 1)) no(`A new dying level snaps the heartbeat (level ${b.dyingLevel}) instead of crossfading it; the beat would jump.`);
+    run(b, settleMs);
+    if (b.dyingLevel !== 1 || b.frac !== 0.5) no(`Dying 2 of 4 does not settle at heartbeat level 1 and half the bar (level ${b.dyingLevel}, frac ${b.frac}).`);
+
+    b.setDying(state(4, 4));
+    run(b, settleMs);
+    if (!b.flatline || b.frac !== 1 || b.dyingPulse !== 0)
+      no(`At dying 4 of 4 the gauge does not lock full with the heartbeat stopped (flatline ${b.flatline}, frac ${b.frac}, pulse ${b.dyingPulse}).`);
+    const ft = b.dyingT, it = b.time;
+    run(b, 480);
+    if (b.dyingT !== ft || b.time !== it) no("A flatlined bar's veins or liquid still move.");
+    if (b.hot) no("A flatlined bar stays in the ticker with nothing left to animate.");
+    if (b.dying !== 1 || !b.dyingOn) no("Flatline fades the gauge out; the state holds.");
+
+    b.setDying(null);
+    b.step(16);
+    if (!(b.dying > 0 && b.dying < 1) || b.dyingOn) no("Clearing dying removes the orchid between two frames, or leaves the gauge on.");
+    run(b, settleMs);
+    if (b.dying !== 0 || b.frac !== 0.6 || b.num !== 0.6)
+      no(`Clearing dying does not glide back to the hit points that arrived underneath (frac ${b.frac}, readout ${b.num}, dying ${b.dying}).`);
+
+    const doom = new B(0, { motionScale: 1 });
+    doom.setDying(state(3, 3, 1), { silent: true });
+    if (doom.frac !== 0.75 || doom.dyingDead !== 1 || doom.dyingSlots !== 4 || doom.dyingMax !== 3 || !doom.flatline || doom.dying !== 1)
+      no(`Doomed 1 at dying 3 does not fill three live slots of four and mark the fourth dead (frac ${doom.frac}, dead ${doom.dyingDead}, slots ${doom.dyingSlots}).`);
+
+    const still = new B(0.5, { motionScale: 0 });
+    still.setDying(state(2, 4));
+    still.step(16);
+    const st = still.dyingT;
+    still.step(500);
+    if (still.dying !== 1 || still.frac !== 0.5 || still.dyingPulse !== 1 || still.hot || still.dyingT !== st)
+      no("At motion \"none\" the gauge is not already settled and still, or its clock moves.");
+
+    const shed = new B(0, { motionScale: 1 });
+    shed.setDying(state(2, 4), { silent: true });
+    shed.dyingFrozen = true;
+    const sT = shed.dyingT;
+    run(shed, 480);
+    if (shed.dyingT !== sT) no("dyingFrozen does not stop the dying clock, so shedding it saves nothing.");
+    if (!shed.dyingOn || shed.dying !== 1 || shed.frac !== 0.5) no("Shedding the dying motion removed the gauge. The shed gives up motion, never the state.");
+    if (shed.hot) no("A frozen dying bar still keeps itself in the ticker.");
+
+    const wrap = new B(0, { motionScale: 1 });
+    wrap.setDying(state(1, 4), { silent: true });
+    wrap.dyingT = anim.DYING_LOOP_S - 0.004;
+    wrap.step(16);
+    if (!(wrap.dyingT >= 0 && wrap.dyingT < 0.02)) no(`The dying clock does not wrap at ${anim.DYING_LOOP_S}s (it reads ${wrap.dyingT}).`);
+    if (anim.DYING_LOOP_S !== shader.IDLE_LOOP_S) no("The dying clock does not wrap at the loop the shader's LOOP_W is built on.");
+    const beats = shader.DYING_BEATS ?? [];
+    if (!beats.length || beats.some((k, i) => !Number.isInteger(k) || (i && k <= beats[i - 1])))
+      no(`DYING_BEATS (${beats}) is not a rising list of whole beats per loop; a fractional rate steps the heartbeat when its clock wraps, and a flat list never quickens.`);
+    if (anim.DYING_LEVELS !== beats.length) no(`anim.mjs crossfades ${anim.DYING_LEVELS} heartbeat levels but the shader draws ${beats.length}.`);
+
+    /* No length overshoots or recoils through any gauge transition. */
+    const glide = (label, scale, from, arrange, act, to) => {
+      const x = new B(from, { motionScale: scale });
+      arrange(x);
+      x.step(16);
+      const f0 = x.frac;
+      act(x);
+      const lo = Math.min(f0, to) - 1e-9, hi = Math.max(f0, to) + 1e-9, down = to < f0;
+      let pf = x.frac, pn = x.num;
+      for (let i = 0; i < 200; i++) {
+        x.step(16);
+        for (const [k, v, prev] of [["fill", x.frac, pf], ["readout", x.num, pn]]) {
+          if (v < lo || v > hi) { no(`${label} at motion ${scale}: the ${k} overshot (${v.toFixed(4)}).`); return; }
+          if (down ? v > prev + 1e-12 : v < prev - 1e-12) { no(`${label} at motion ${scale}: the ${k} recoiled.`); return; }
+        }
+        pf = x.frac; pn = x.num;
+      }
+      if (x.frac !== to || x.num !== to) no(`${label} at motion ${scale} does not come to rest on ${to} (fill ${x.frac}, readout ${x.num}).`);
+    };
+    for (const s of [1, 0.6]) {
+      glide("HP 0 → dying 1 of 4", s, 0, () => {}, (x) => x.setDying(state(1, 4)), 0.25);
+      glide("dying 3 → dying 1 of 4", s, 0, (x) => x.setDying(state(3, 4), { silent: true }), (x) => x.setDying(state(1, 4)), 0.25);
+      glide("dying 2 of 4 → cleared at 60% HP", s, 0.6, (x) => x.setDying(state(2, 4), { silent: true }), (x) => x.setDying(null), 0.6);
+      glide("90% HP → dying 1, doomed 1", s, 0.9, () => {}, (x) => x.setDying(state(1, 3, 1)), 0.25);
+    }
+  });
+
+  section("the gauge takes the primary bar over: orchid and calmer liquid, slot dividers, dead slots, a dying block apart from the break, the break hidden while dying", () => {
+    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse", "uDyingCol", "uDyingHot"])
+      if (!(u in shader.UNIFORMS)) no(`UNIFORMS does not list ${u}.`);
+    for (const liquid of shader.LIQUIDS) {
+      const g = strip(shader.fragmentShader(liquid));
+      const fillAt = g.indexOf("vec3 fillCol = vec3(0.0);");
+      const arterial = g.indexOf("base = mix(base, vec3(1.000, 0.106, 0.153)");
+      const tint = g.search(/base = mix\(base, uDyingCol \* mix\(vec3\(1\.0\), uDyingCol, DYING_DEPTH\), dyingOn\);/);
+      const calm = g.indexOf("bloodied = max(bloodied, dyingOn);");
+      if (tint < 0 || calm < 0 || tint > fillAt || calm > fillAt || tint < arterial)
+        no(`The ${liquid} liquid does not turn orchid and calm before it is poured (base → a tone derived from uDyingCol alone, after the arterial shift; bloodied raised by dyingOn).`);
+      const resat = g.indexOf("fillCol = rbSaturate(fillCol, DYING_SAT * dyingOn);");
+      if (resat < 0 || resat < g.indexOf("fillCol = base * (0.20 + 0.34 * depth);"))
+        no(`The ${liquid} gauge's colour is not restored after the pour, or is restored by something other than rbSaturate (same luma, never darker).`);
+      if (!/float segN = mix\(uSeg, uDyingSlots, step\(0\.5, uDying\) \* hero\);/.test(g) || !/\* segN\) \* segW;/.test(g))
+        no(`The ${liquid} bar does not divide the gauge into its slots while dying.`);
+      if (!/tickMark \*=[^;]*\(1\.0 - uDying\)/.test(g)) no(`The ${liquid} bar keeps the hit-point quarter marks under the dying gauge.`);
+      const brk = /if \(uBreak > 0\.001\) \{[\s\S]*?\n  \}/.exec(g);
+      const dy = /if \(uDying > 0\.001\) \{[\s\S]*?\n  \}/.exec(g);
+      if (!dy) { no(`The ${liquid} program has no dying block guarded by uDying, so every living bar would pay for the veins.`); continue; }
+      if (brk && dy.index > brk.index && dy.index < brk.index + brk[0].length) no(`The ${liquid} dying block sits inside the guard-break block.`);
+      if (/uDying/.test(brk?.[0] ?? "")) no(`The ${liquid} guard-break block reads the dying state; keep the two blocks apart.`);
+      const block = dy[0];
+      if (!/gluDyingField\(/.test(block) || !/\bmFill\b/.test(block) || !/\bmBody\b/.test(block))
+        no(`The ${liquid} dying block does not draw the shared veins, clipped to the bar's body.`);
+      if (/0\.299|LAVA_BREAK_CALM/.test(block)) no(`The ${liquid} dying block desaturates the bar or calms the lava through the break's lever; dying is paler and slower, never dimmer.`);
+      const writes = [...block.matchAll(/(?:^|[^\w.])C\s*([*+\-/]?=)(?!=)\s*([^;]*);/g)];
+      const darkens = writes.filter((m) => !(m[1] === "+=" || (m[1] === "=" && (/^rbLighten\(C,/.test(m[2]) || /^mix\(C, [^;]*\bmDead\b/.test(m[2])))));
+      if (darkens.length)
+        no(`The ${liquid} dying block writes C other than by adding light, rbLighten, or the dead-slot plate: ${darkens.map((m) => m[0].trim()).join(" | ")}`);
+      if (!/float mDead = [^;]*\(1\.0 - mFill\)/.test(block)) no(`The ${liquid} dead slots can paint over the liquid; they belong to the empty end of the bar.`);
+      const outside = g.replace(/float dyPhase\(float k\) \{[\s\S]*?\n\}/, "").replace(/uniform float uDyingT;/, "");
+      if (/\buDyingT\b/.test(outside)) no(`The ${liquid} program reads uDyingT outside dyPhase(); that term is not a whole number of turns and steps when the clock wraps.`);
+      const turns = [...g.matchAll(/\bdyPhase\(([^()]*)\)/g)].map((m) => m[1].trim()).filter((t) => t !== "float k" && t !== "k");
+      if (!turns.length || turns.some((t) => !/^\d+\.0$/.test(t))) no(`The ${liquid} program turns dyPhase by ${turns.join(", ") || "nothing"}; only whole numbers of turns wrap seamlessly.`);
+      const rates = [...g.matchAll(/\bdyBeat\(([^()]*)\)/g)].map((m) => m[1].trim()).filter((t) => t !== "float k");
+      if (rates.join(",") !== (shader.DYING_BEATS ?? []).map((k) => k.toFixed(1)).join(","))
+        no(`The ${liquid} heartbeat runs at ${rates.join(", ") || "nothing"} but DYING_BEATS is ${shader.DYING_BEATS}.`);
+    }
+    if (!/u\.uBreak\s*=\s*brk \? brk\.broken \* \(1 - brk\.dying\) : 0/.test(h))
+      no("host.mjs does not hide the guard-break fracture while dying; dying outranks break on the bar.");
+    if (!/const dy = role === "hero" \? a : null;/.test(h) || !/dy\.dyingFrozen = !this\.allows\("dyingFlow"\)/.test(h))
+      no("host.mjs does not write the dying state onto the primary bar only, behind the dyingFlow shed.");
+    for (const u of ["uDying", "uDyingT", "uDyingSlots", "uDyingDead", "uDyingLevel", "uDyingPulse"])
+      if (!new RegExp(`u\\.${u} = dy \\? dy\\.\\w+ : 0;`).test(h)) no(`host.mjs does not write ${u} from the primary bar's model (and a hard 0 on the rails).`);
+    const di = anim.SHED_ORDER.indexOf("dyingFlow");
+    if (di < 0 || di > anim.SHED_ORDER.indexOf("popups"))
+      no("SHED_ORDER does not list dyingFlow among the standing costs, ahead of the per-change effects.");
+    if (!/u\.uTemp = [^;]*dyingOn/.test(h)) no("Temp HP is still plated over the dying gauge, measured against hit points the gauge is not showing.");
+  });
+
+  section("the readout says dying/max in orchid behind the same gate; rb.dyingFx is PF2e's, world-wide, independent, and read outside the value diff", () => {
+    const wn = bodyOf(h, "writeNumbers(entry, r) {");
+    const gate = wn.indexOf("if (!show)");
+    if (!/const scale = gauge \? a\.dyingSlots : r\.hero\.max;/.test(wn) || !/const shownMax = gauge \? a\.dyingMax : r\.hero\.max;/.test(wn)
+      || !/text: String\(shownMax\)/.test(wn))
+      no("writeNumbers does not read the gauge as value/max (counted over the slots, labelled with the dying maximum); a dying creature still reads 0/45.");
+    else if (gate < 0 || wn.indexOf("dyingMax") < gate)
+      no("The dying readout is composed before the canViewNumbers gate.");
+    if (!/DYING_INK/.test(wn)) no("The dying readout is not drawn in orchid.");
+    if (constants.SETTINGS.dyingFx !== "rb.dyingFx") { no(`SETTINGS.dyingFx is ${constants.SETTINGS.dyingFx}, not rb.dyingFx.`); return; }
+    const reg = /world\(SETTINGS\.dyingFx,\s*\{([\s\S]*?)\}\);/.exec(idx)?.[1] ?? "";
+    if (!reg) no("rb.dyingFx is not registered as a world setting in index.mjs.");
+    else if (!/type:\s*Boolean/.test(reg) || !/default:\s*true/.test(reg)) no("rb.dyingFx is not a Boolean defaulting to on.");
+    else if (!/config:\s*game\.system\?\.id === "pf2e"/.test(reg)) no("rb.dyingFx is offered outside PF2e, where it can never do anything.");
+    for (const k of ["GLRB.Settings.DyingFx.Name", "GLRB.Settings.DyingFx.Hint"])
+      if (!(k in lang) || !reg.includes(k)) no(`${k} is not both referenced by the setting and present in lang/resource-bars.en.json.`);
+    const line = /dyingFx:[^\n]*/.exec(mainSrc)?.[0] ?? "";
+    if (!/SETTINGS\.dyingFx/.test(line) || !/"pf2e"/.test(line)) no("main.mjs does not resolve dyingFx from its setting and gate it on PF2e.");
+    if (/breakSourceActive|Suite\.enabled/.test(line)) no("dyingFx waits on another feature being enabled; the gauge reads PF2e's own condition and needs nothing else.");
+    const entryBody = h.slice(h.indexOf("class BarEntry"), h.indexOf("class BarHost"));
+    if (!/this\.readDying\(opts/.test(entryBody) || !/setDying\(opts\.dyingFx \? readDying\(this\.token\) : null/.test(entryBody))
+      no("BarEntry does not read dying beside the break, outside the value diff, gated on dyingFx.");
+    if (/dying/i.test(bodyOf(dataSrc, "export function sameReading")))
+      no("sameReading compares the dying state; a condition change with no hit points moving would then depend on the value diff.");
+    if (!/import \{ readPf2eDying \} from "\.\.\/\.\.\/core\/pf2e-dying\.mjs"/.test(dataSrc)) no("data.mjs does not read dying through the core reader.");
+    const rd = bodyOf(dataSrc, "export function readDying");
+    if (!rd) no("data.mjs has no readDying(token).");
+    else if (/canView|\.visible|isGM|ownership|permission/.test(rd))
+      no("readDying carries a visibility rule of its own; visibility.mjs has already decided whether this bar is seen, and a second rule drifts from it.");
+    else if (!/"pf2e"/.test(rd)) no("readDying does not gate on PF2e.");
+  });
+
+  if (!bad) ok("dying: every pin above holds");
 }
 
 /* ── 10. The shader compiles ────────────────────────────────────────────── */
