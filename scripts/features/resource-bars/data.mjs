@@ -7,7 +7,7 @@
  * and a raised shield — and is skipped entirely under any other system.
  */
 
-import { readPf2eDying } from "../../core/pf2e-dying.mjs";
+import { readPf2eDead, readPf2eDying } from "../../core/pf2e-dying.mjs";
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
@@ -23,6 +23,18 @@ const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 export function readDying(token) {
   if (globalThis.game?.system?.id !== "pf2e") return null;
   return readPf2eDying(token?.actor);
+}
+
+/**
+ * Whether the creature on a token is dead, for the bar's DEAD — read on the same
+ * road as dying and for the same reason: the dead status arrives as an effect,
+ * and a creature at its dying maximum has no hit points moving. `dying` is
+ * readDying's reading for the same token. No visibility rule: DEAD carries no
+ * number, and draws wherever the bar does.
+ */
+export function readDead(token, dying) {
+  if (globalThis.game?.system?.id !== "pf2e") return false;
+  return readPf2eDead(token?.actor, dying, { deadStatus: globalThis.CONFIG?.specialStatusEffects?.DEFEATED ?? "dead" });
 }
 
 /** A bar attribute reduced to what the renderer needs, or null. */

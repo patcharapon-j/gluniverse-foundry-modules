@@ -84,13 +84,12 @@ export const DYING_COLOR = PALETTE.orchid;
 export const DYING_HOT = PALETTE.orchidHot;
 
 /**
- * The dying readout's ink: orchid lifted halfway to its hot twin, both from the
- * palette. Plain orchid over a full orchid gauge is the same hue at nearly the
- * same lightness, and at flatline — the one reading that matters most — the
- * digits all but vanished into the fill. Derived once here, so the renderer and
- * the preview print the same colour.
+ * DEAD's steel: `--gl-text-dim`, the suite's quiet neutral. The flatline's line,
+ * DEAD's letters and the frame of a dead bar are drawn in it, and nothing else on
+ * a dead bar has a hue — the one state on the map that is not a colour is the
+ * one that is over.
  */
-export const DYING_INK = Object.freeze(hexToFloat3(DYING_COLOR).map((c, i) => c + (hexToFloat3(DYING_HOT)[i] - c) * 0.5));
+export const DEAD_STEEL = PALETTE.textDim;
 
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────
    Björn Ottosson's transform. Kept here rather than in core/theme.mjs because

@@ -40,17 +40,22 @@ const ROOT = new URL("../", import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?.split("=").slice(1).join("=");
 
 const {
-  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, UNIFORMS,
+  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, TICKER_BAND, UNIFORMS,
 } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
-const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DYING_INK, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
+const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 /* The bloom Foundry actually runs. The preview used to carry its own, gentler
    numbers (threshold 1.05, knee 0.55 on an unclamped float buffer), which
    flattered exactly the near-white peaks that bloom hardest on the table. */
 const { DEFAULT_THRESHOLD, DEFAULT_KNEE, DEFAULT_INTENSITY } = await import(new URL("scripts/core/bloom.mjs", ROOT).href);
 
 const template = await readFile(new URL("tools/templates/resource-bar-preview.html", ROOT), "utf8");
-const ANIM = new URL("scripts/features/resource-bars/anim.mjs", ROOT);
-const ANIM_NAMES = "BarAnim, RevealAnim, POPUP_LIFT, POPUP_RISE";
+/* The modules the page imports, and the names it takes from each. ticker.mjs is
+   the real strip layout and raster the host samples — the page only uploads the
+   canvases it returns, since its cache is PIXI's. */
+const ENTRIES = [
+  { url: new URL("scripts/features/resource-bars/anim.mjs", ROOT), names: "BarAnim, RevealAnim, POPUP_LIFT, POPUP_RISE, TICKER_FULL" },
+  { url: new URL("scripts/features/resource-bars/ticker.mjs", ROOT), names: "tickerParts, deadParts, rasterStrip" },
+];
 
 /* ── The linker, for --artifact ─────────────────────────────────────────── */
 
@@ -63,7 +68,7 @@ const EXPORT_DECL = /^export\s+((?:async\s+)?(?:const|let|var|function\*?|class)
 const pairs = (list) => list.split(",").map((s) => s.trim()).filter(Boolean)
   .map((s) => { const [from, to = from] = s.split(/\s+as\s+/).map((x) => x.trim()); return [from, to]; });
 
-async function bundle(entry) {
+async function bundle(entries) {
   const order = [];
   const index = new Map();
   async function visit(url) {
@@ -84,7 +89,9 @@ async function bundle(entry) {
     index.set(url.href, order.length);
     order.push({ url, text });
   }
-  await visit(entry);
+  /* Shared modules (theme.mjs, reached from both entries) are visited once and
+     inlined once. */
+  for (const entry of entries) await visit(entry.url);
 
   const id = (spec, from) => index.get(new URL(spec, from).href);
   const modules = order.map(({ url, text }, i) => {
@@ -103,7 +110,8 @@ async function bundle(entry) {
     const label = relative(fileURLToPath(ROOT), fileURLToPath(url)).split("\\").join("/");
     return `/* ── ${label} ── */\n__m[${i}] = (() => {\nconst __e = {};\n${body}\n${tail}\nreturn __e;\n})();`;
   });
-  return `const __m = [];\n${modules.join("\n\n")}\nconst { ${ANIM_NAMES} } = __m[${order.length - 1}];`;
+  const takes = entries.map((e) => `const { ${e.names} } = __m[${index.get(e.url.href)}];`).join("\n");
+  return `const __m = [];\n${modules.join("\n\n")}\n${takes}`;
 }
 
 /* ── The page ───────────────────────────────────────────────────────────── */
@@ -128,7 +136,9 @@ function page(animImport, root) {
     "/*__BREAK_HOT__*/": JSON.stringify(hexToFloat3(BREAK_HOT)),
     "/*__DYING_COL__*/": JSON.stringify(hexToFloat3(DYING_COLOR)),
     "/*__DYING_HOT__*/": JSON.stringify(hexToFloat3(DYING_HOT)),
-    "/*__DYING_INK__*/": JSON.stringify(Array.from(DYING_INK)),
+    "/*__DEAD_STEEL__*/": JSON.stringify(hexToFloat3(DEAD_STEEL)),
+    /* The ticker's band, for the offset host.mjs's writeWords computes from it. */
+    "/*__TICKER_BAND__*/": String(TICKER_BAND),
     "/*__READOUT_INSET__*/": String(READOUT_INSET),
     "/*__BLOOM_THRESHOLD__*/": String(DEFAULT_THRESHOLD),
     "/*__BLOOM_KNEE__*/": String(DEFAULT_KNEE),
@@ -150,16 +160,16 @@ if (outDest) {
   const rel = relative(dirname(resolve(outDest)), fileURLToPath(ROOT)).split("\\").join("/");
   const root = rel ? rel + "/" : "./";
   const body = '<!doctype html><meta charset="utf-8">\n'
-    + page(`import { ${ANIM_NAMES} } from "${root}scripts/features/resource-bars/anim.mjs";`, root);
+    + page(ENTRIES.map((e) => `import { ${e.names} } from "${root}${relative(fileURLToPath(ROOT), fileURLToPath(e.url)).split("\\").join("/")}";`).join("\n"), root);
   await writeFile(outDest, body);
   console.log("wrote  " + outDest + "  (" + (body.length / 1024).toFixed(1) + " KB) — serve the repo root: node tools/preview-server.mjs");
 }
 
 const artifactDest = arg("artifact");
 if (artifactDest) {
-  const body = page(await bundle(ANIM), "../");
+  const body = page(await bundle(ENTRIES), "../");
   await writeFile(artifactDest, body);
-  console.log("wrote  " + artifactDest + "  (" + (body.length / 1024).toFixed(1) + " KB, animation model and anime.js inlined)");
+  console.log("wrote  " + artifactDest + "  (" + (body.length / 1024).toFixed(1) + " KB, animation model, ticker strips and anime.js inlined)");
 }
 
 if (!outDest && !artifactDest) {

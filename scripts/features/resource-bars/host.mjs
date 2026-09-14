@@ -21,11 +21,12 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DYING_INK } from "./ramp.mjs";
-import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
+import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, TICKER_BAND, VERTEX_SHADER } from "./shader.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL } from "./ramp.mjs";
+import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER, TICKER_FULL } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
-import { readDying, readToken, sameReading } from "./data.mjs";
+import { readDead, readDying, readToken, sameReading } from "./data.mjs";
+import { acquireStrip, deadParts, onStripsChanged, releaseStrip, resetStrips, stripKey, tickerParts } from "./ticker.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
@@ -111,6 +112,11 @@ function makeBarMesh(role, opts) {
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uFlow: 1, uSurge: 0,
     uDying: 0, uDyingT: 0, uDyingSlots: 0, uDyingDead: 0, uDyingLevel: 0, uDyingPulse: 0,
+    /* The words. An empty texture until a creature is dying or dead: the rails
+       and every living bar run the same program and never sample them. */
+    uTickerTex: PIXI.Texture.EMPTY, uTickerAspect: 1, uTickerX: 0, uTickerIn: 0, uTickerStill: 0,
+    uDead: 0, uDeadTex: PIXI.Texture.EMPTY, uDeadAspect: 1,
+    uSteel: new Float32Array(hexToFloat3(DEAD_STEEL)),
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
@@ -177,6 +183,9 @@ class BarEntry {
   destroy() {
     this.label?.destroy();
     this.label = null;
+    releaseStrip(this.tickerStrip);
+    releaseStrip(this.deadStrip);
+    this.tickerStrip = this.deadStrip = null;
     this.group.destroy({ children: true });
   }
 
@@ -227,17 +236,23 @@ class BarEntry {
   }
 
   /**
-   * Carry PF2e's dying state onto the primary bar's model — the bar it takes
-   * over as the dying gauge. It reads the creature and writes only the model:
-   * nothing here touches the creature, and no visibility rule is added, because
-   * the gauge is drawn on a bar `visibility.mjs` has already decided about.
+   * Carry PF2e's dying and dead states onto the primary bar's model — the bar
+   * the ticker and the flatline take over. It reads the creature and writes only
+   * the model: nothing here touches the creature, and no visibility rule is added,
+   * because both are drawn on a bar `visibility.mjs` has already decided about
+   * (the ticker's number keeps its own gate, in writeTicker).
+   *
+   * Dying first, so a creature reaching its maximum has its gauge full before
+   * the flatline drains it.
    */
   syncDying(opts, { silent = false } = {}) {
     const bar = this.reading?.hero;
     if (!bar) return;
     const a = this.animFor("hero", bar.frac);
     a.motionScale = this.host.motionScale;
-    a.setDying(opts.dyingFx ? readDying(this.token) : null, { silent });
+    const dying = opts.dyingFx ? readDying(this.token) : null;
+    a.setDying(dying, { silent });
+    a.setDead(!!opts.dyingFx && readDead(this.token, dying), { silent });
   }
 
   /**
@@ -361,10 +376,16 @@ class BarHost {
     this.labels.zIndex = CONTAINER_Z;
     layer.addChild(this.labels);
     this.applyBloom();
+    /* The words are rasterised in the display face, a web font. If a strip was
+       drawn before it loaded, ticker.mjs redraws every strip in place once it
+       has, and a settled bar is not ticking to pick up the new aspect. */
+    onStripsChanged(() => this.refreshAll());
     this.refreshAll();
   }
 
   detach() {
+    onStripsChanged(null);
+    resetStrips();
     this.stopTicker();
     for (const entry of this.entries.values()) entry.destroy();
     this.entries.clear();
@@ -964,8 +985,9 @@ class BarHost {
       const liquid = role === "hero";
       u.uFlow = liquid && this.allows("flow") ? 1 : 0;
       u.uSurge = liquid && a && this.allows("surge") ? clamp(a.surge, -1, 1) : 0;
-      /* Temp HP is measured against hit points, which a dying gauge is not showing. */
-      u.uTemp = role === "hero" && !a?.dyingOn ? r.temp : 0;
+      /* Temp HP is measured against hit points, which neither the dying gauge nor
+         the flatline is showing. */
+      u.uTemp = role === "hero" && !a?.dyingOn && !a?.deadOn ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
       /* The fracture rides the primary bar and nothing else, so the rails get a
@@ -977,19 +999,19 @@ class BarHost {
       const brk = role === "hero" ? a : null;
       const flowing = this.allows("breakFlow");
       if (brk) brk.breakFrozen = !flowing;
-      /* Dying outranks a broken guard on the bar, as it does on the token: the
-         seams give way to the gauge as the orchid takes over, and come back if
-         dying clears while the guard is still broken. */
-      u.uBreak = brk ? brk.broken * (1 - brk.dying) : 0;
+      /* Dying and death outrank a broken guard on the bar, as they do on the
+         token: the seams give way as the orchid or the flatline takes over, and
+         come back if both clear while the guard is still broken. */
+      u.uBreak = brk ? brk.broken * (1 - Math.max(brk.dying, brk.dead)) : 0;
       u.uBreakT = brk ? brk.breakT : 0;
       u.uBreakX = brk ? brk.breakX : 0;
       u.uBreakFlow = brk && flowing ? 1 : 0;
 
-      /* The dying gauge, on the primary bar and nothing else — the rails get hard
-         zeros and skip the block. Its freeze (off screen, or shed) is decided in
-         tick() and cullEntry(), beside the idle clock's; frozen, the veins and
-         the heartbeat hold where they are and the orchid, the slots and the fill
-         stay. */
+      /* The ticker and the flatline, on the primary bar and nothing else — the
+         rails get hard zeros and skip both blocks. The dying freeze (off screen,
+         or shed) is decided in tick() and cullEntry(), beside the idle clock's;
+         frozen, the veins, the heartbeat and the ticker hold where they are and
+         the orchid, the words and the fill stay. */
       const dy = role === "hero" ? a : null;
       u.uDying = dy ? dy.dying : 0;
       u.uDyingT = dy ? dy.dyingT : 0;
@@ -997,6 +1019,8 @@ class BarHost {
       u.uDyingDead = dy ? dy.dyingDead : 0;
       u.uDyingLevel = dy ? dy.dyingLevel : 0;
       u.uDyingPulse = dy ? dy.dyingPulse : 0;
+      u.uDead = dy ? dy.dead : 0;
+      if (dy) this.writeWords(entry, u, dy, base);
 
       /* Nothing about the geometry is animated — not the mesh transform, not
          the fill's height. Every part of a change is light moving across a
@@ -1020,6 +1044,98 @@ class BarHost {
     const res = canvas.app?.renderer?.resolution ?? 1;
     const widthPx = Math.abs(scale) * res;
     return widthPx > 1 ? 1 / widthPx : 0;
+  }
+
+  /**
+   * The words on a dying or dead bar: which strip the shader samples, and where
+   * the ticker has got to.
+   *
+   * The number is gated here and nowhere else. A viewer the readout's gate
+   * refuses gets the word alone — `tickerParts` is handed a null value, so no
+   * digit is laid out, rasterised or cached on that client: a player who could not
+   * read a hostile's hit points cannot read its dying value either. The word
+   * itself, and DEAD, carry no number and draw wherever the bar does. Not shed
+   * under "numbers" either: the strip is already on the GPU, and a shed may give
+   * up motion, never what the bar says.
+   *
+   * Strips are acquired while their state is on screen and released once it has
+   * fully gone, so a creature that stabilises or is revived gives its texture back.
+   */
+  writeWords(entry, u, a, base) {
+    /* Localised once: this runs every frame for every dying bar. */
+    const words = this.words ??= {
+      dying: game.i18n.localize("GLRB.Dying.Ticker"),
+      dead: game.i18n.localize("GLRB.Dead.Label"),
+    };
+    const dyingNow = a.dyingOn || a.dying > 0;
+    if (dyingNow && a.dyingValue > 0) {
+      /* The readout's own gate, with one difference: "on hover" reads as
+         "always". While dying the words are the reading and the readout is not
+         drawn, so holding the value back until a hover hides the one thing the bar
+         says — and it reveals nothing a hover would not, because hover mode
+         already shows any viewer who can see the bar its numbers. A strip that
+         swapped on every hover would also jump the words, since its width is part
+         of the scroll. "Never", the viewer's or the GM's, still means never. */
+      const mode = this.opts.numbers === "never" ? "never" : "always";
+      const value = canViewNumbers(entry.token, mode) ? a.dyingValue : null;
+      this.swapStrip(entry, "tickerStrip", stripKey("ticker", words.dying + "|" + (value ?? "")),
+        () => tickerParts(words.dying, value), true);
+    } else if (!dyingNow) {
+      this.swapStrip(entry, "tickerStrip", null);
+    }
+    this.swapStrip(entry, "deadStrip", a.deadOn || a.dead > 0 ? stripKey("dead", words.dead) : null,
+      () => deadParts(words.dead), false);
+
+    const t = entry.tickerStrip;
+    u.uTickerTex = t?.texture ?? PIXI.Texture.EMPTY;
+    u.uTickerAspect = t?.aspect ?? 1;
+    const span = base.w / base.h;
+    /* The model slides the words in over the bar's own length, which only the
+       renderer knows. */
+    a.tickerSpan = span;
+    const period = TICKER_BAND * (t?.aspect ?? 1);
+    const still = !!t && this.motionScale === 0;
+    u.uTickerStill = still ? 1 : 0;
+    if (still) {
+      /* Motion "none": one repetition, parked with its lettering centred on the
+         bar; the shader masks the others. It puts strip position `centre` at
+         fx0 + centre × period − uTickerX, so the offset that lands it on 0 is
+         fx0 + centre × period, where fx0 is the fill's left end exactly as the
+         shader places it: half the aspect in, less the stroke (floored at a
+         device pixel and a bit), the air and the lip. uTexel is last frame's. */
+      const px = (u.uTexel || 0) * span;
+      const fx0 = -span * 0.5 + Math.max(0.030, px * 1.05) + 0.050;
+      u.uTickerX = (((fx0 + t.centre * period) % period) + period) % period;
+      u.uTickerIn = TICKER_FULL;
+    } else {
+      /* The cruise plus the slide in, seeded per token so two creatures going
+         down together do not scroll in lockstep. When the strip's width changes
+         — a new dying value, or the display face arriving — the phase inside the
+         repetition carries over, so the words move on rather than jumping. */
+      const run = a.ticker + a.tickerSlide + entry.seed;
+      if (entry.tickerPeriod && entry.tickerPeriod !== period) {
+        const was = entry.tickerPeriod;
+        const phase = ((((run + (entry.tickerShift ?? 0)) % was) + was) % was) / was;
+        entry.tickerShift = phase * period - run;
+      }
+      entry.tickerPeriod = period;
+      u.uTickerX = (((run + (entry.tickerShift ?? 0)) % period) + period) % period;
+      u.uTickerIn = a.tickerIn;
+    }
+    u.uDeadTex = entry.deadStrip?.texture ?? PIXI.Texture.EMPTY;
+    u.uDeadAspect = entry.deadStrip?.aspect ?? 1;
+  }
+
+  /**
+   * Point one of an entry's strip slots at `key` — or at nothing — acquiring the
+   * new strip before the old is released, so a strip both share is never dropped
+   * and rebuilt in between.
+   */
+  swapStrip(entry, slot, key, parts, repeat) {
+    if ((entry[slot]?.key ?? null) === key) return;
+    const next = key ? acquireStrip(key, parts(), repeat) : null;
+    releaseStrip(entry[slot]);
+    entry[slot] = next;
   }
 
   /**
@@ -1059,10 +1175,10 @@ class BarHost {
        readout that snaps is a number nobody saw move. It counts instead, which
        also means a burst of small hits reads as one continuous fall rather than
        as a digit flickering. */
-    /* Dying: the gauge's own reading, dying over its maximum, behind the same
-       gate as hit points; the atlas carries only digits and signs, so no
-       letters. The model decides which domain the number is in (readout), and
-       never counts one across into the other. */
+    /* Always hit points. While dying or dead the reading is the words the shader
+       draws (writeWords), and this fades out under them; what it prints on the
+       way out and back in is the hit points underneath, which the model snaps
+       rather than counting a gauge fraction across (readout). */
     const { value, max: shownMax } = a
       ? a.readout(r.hero.max)
       : { value: Math.round(r.hero.frac * r.hero.max), max: r.hero.max };
@@ -1086,12 +1202,19 @@ class BarHost {
       // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);
     }
-    /* The readout fades in and out with its bar, never ahead of it. */
+    /* The readout fades in and out with its bar, never ahead of it — and out
+       under the ticker or the flatline as either takes the bar over, because
+       there the words are the reading. The floating deltas below keep the bar's
+       own fade: a killing blow's delta is still the last thing worth reading. */
     const textAlpha = entry.vis.fade;
+    /* Gone within the first quarter of the takeover: the ticker's words slide in
+       from the right edge in their first few frames, and a readout still fading
+       there reads as one run with them ("1 0/58"). */
+    const readAlpha = textAlpha * Math.max(0, 1 - 4 * (a ? Math.max(a.dying, a.dead) : 0));
     if (entry.textMesh) {
       const punch = 1;
-      entry.textMesh.visible = true;
-      entry.textMesh.shader.uniforms.uOpacity = textAlpha;
+      entry.textMesh.visible = readAlpha > 0;
+      entry.textMesh.shader.uniforms.uOpacity = readAlpha;
       entry.textMesh.scale.set(punch);
       entry.textMesh.position.set(anchorX, anchorY);
 
@@ -1101,12 +1224,7 @@ class BarHost {
          length either way. */
       const heat = a && this.allows("punch") ? a.hit * 0.18 : 0;
       const to = a?.heal ? HEAL_INK : HIT_INK;
-      /* In orchid as the gauge takes over, and back to white as it leaves. */
-      const orchid = a ? a.dying : 0;
-      for (let i = 0; i < 3; i++) {
-        const rest = REST_INK[i] + (DYING_INK[i] - REST_INK[i]) * orchid;
-        entry._ink[i] = rest + (to[i] - rest) * heat;
-      }
+      for (let i = 0; i < 3; i++) entry._ink[i] = REST_INK[i] + (to[i] - REST_INK[i]) * heat;
     }
 
     /* Floating deltas. "The bar got shorter" is a magnitude you estimate;
