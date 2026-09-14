@@ -286,6 +286,33 @@ export const LIQUID_PEAK = Object.freeze({
  */
 export const HEAD_GLOW = Object.freeze({ tint: 0.25, tintBloom: 0.70, rest: 0.40, bloom: 1.25 });
 
+/**
+ * How pale a liquid's *body* is — the colour most of the bar is, away from its
+ * peaks — where that is a tuning knob rather than a fixed idiom.
+ *
+ * Mercury is the one that needs it. Its body is the health colour silvered a
+ * little and lifted towards a pale cool or warm pearl, and bloodied it softens
+ * towards grey and lifts towards a milk. At the numbers it first shipped with,
+ * that was a near-white bar at token size at every health — pale mint, pale
+ * sage, cream, pale peach, pale salmon — so the metal read as white liquid and
+ * the ramp stopped carrying the reading. Bloodied is still paler and gentler
+ * than hale (the rule every liquid keeps); it is paler *yellow*, not cream.
+ *
+ *   mercury.soften          how far the hale body moves towards an equal-luma grey
+ *   mercury.softenBloodied  …and the bloodied body
+ *   mercury.pearlTint       how far the pearl tints sit from the health colour
+ *                           towards their cool and warm silvers
+ *   mercury.pearl           how far the body lifts towards them
+ *   mercury.milk            how far the bloodied body lifts towards a pale tint
+ *
+ * `resource-bar-check` evaluates the body at the median of every field and holds
+ * it to a saturation floor, hale and bloodied, and pins each statement reading
+ * these the same way as LIQUID_PEAK.
+ */
+export const LIQUID_BODY = Object.freeze({
+  mercury: Object.freeze({ soften: 0.08, softenBloodied: 0.30, pearlTint: 0.25, pearl: 0.25, milk: 0.20 }),
+});
+
 const f4 = (n) => n.toFixed(4);
 const shadeConsts = (liquid) =>
   `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
@@ -295,6 +322,7 @@ const shadeConsts = (liquid) =>
 const constName = (s) => s.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase();
 const peakConsts = (liquid) =>
   [...Object.entries(LIQUID_PEAK[liquid]).map(([k, v]) => [liquid + "_" + k, v]),
+   ...Object.entries(LIQUID_BODY[liquid] ?? {}).map(([k, v]) => [liquid + "_" + k, v]),
    ...Object.entries(HEAD_GLOW).map(([k, v]) => ["head_" + k, v])]
     .map(([k, v]) => `const float ${constName(k)} = ${f4(v)};\n`).join("");
 
@@ -643,25 +671,27 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
   mercury: Object.freeze({
     functions: shadeConsts("mercury") + peakConsts("mercury"),
     fill: `
-    /* A pearly body — silvered a little and lifted towards pale cool and warm
-       tints that drift slowly along it — and one broad, soft, bright sheen
-       gliding the length of the bar, slanted with the tube's curve. The
-       travelling highlight is what reads as reflective. Bloodied, the sheen
-       slows to a third, spreads and fades, and the body goes milky. The surge
-       rolls the sheen along after a change. */
+    /* A body in the health colour — silvered a little and lifted slightly
+       towards cool and warm pearl tints that drift slowly along it — and one
+       broad, soft sheen gliding the length of the bar, slanted with the tube's
+       curve. The travelling highlight is what reads as reflective, so the body
+       does not have to be pale to read as metal (LIQUID_BODY). Bloodied, the
+       sheen slows to a third, spreads and fades, and the body goes a little
+       milkier while keeping its hue. The surge rolls the sheen along after a
+       change. */
     vec2 lqM = lq + vec2(uSurge * 0.40, 0.0);
     float glide = uFlow > 0.5 ? 1.0 : 0.0;
     fillCol = rbShade(base, 0.5 + 0.5 * fy, SHADE_LO, SHADE_HI);
-    fillCol = rbSoften(fillCol, mix(0.15, 0.75, bloodied));
+    fillCol = rbSoften(fillCol, mix(MERCURY_SOFTEN, MERCURY_SOFTEN_BLOODIED, bloodied));
     float pearl = 0.5 + 0.5 * sin(lqM.x * 0.9 + rbPhase(3.0) * glide + uSeed);
-    fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), 0.55),
-                                     mix(base, vec3(1.00, 0.95, 0.97), 0.55), pearl), 0.40);
+    fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), MERCURY_PEARL_TINT),
+                                     mix(base, vec3(1.00, 0.95, 0.97), MERCURY_PEARL_TINT), pearl), MERCURY_PEARL);
     float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);
     float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);
     float sheenQ = mix(quickS, slowS * 0.45, bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), MERCURY_SHEEN),
                         sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), MERCURY_MILK * bloodied + abs(uSurge) * 0.15);
 `,
     wave: `
   if (uWave > 0.001) {

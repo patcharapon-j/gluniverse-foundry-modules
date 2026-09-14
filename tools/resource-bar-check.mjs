@@ -1497,6 +1497,32 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
        whitening of it. */
     const HUE_FLOOR = { ink: 0.28, mercury: 0.20, lava: 0.28 };
 
+    /* The body, not only the peak: the colour most of the bar is. A bar whose
+       peaks are tinted and whose body is near-white still reads as white liquid
+       at 19px, which is exactly how mercury first shipped — pale mint to cream
+       at every health, its body keeping 0.61 of its colour's saturation hale and
+       0.35 bloodied (0.39 at 49%, [0.93, 0.87, 0.69]: cream, not yellow).
+
+       The body is the pixel at the median of every field, away from the edge
+       (no head glow): each field is a sine or a value noise whose phase sweeps
+       evenly, so 0.5 + 0.5 sin has median 0.5, its fourth power 0.0625 and its
+       square 0.25; the fill's height has median 0. It is evaluated hale and
+       bloodied on the *same* colour at every point of both ramps — stricter
+       than the shader, which only bloodies below half — so the two can be
+       compared directly.
+
+       Hale keeps at least 0.70: the body is the health colour, silvered a
+       little. Bloodied keeps at least 0.50: paler and gentler, but half the
+       colour is what still reads as yellow at 49% and orange at 40% rather than
+       cream. And bloodied must be at least 0.10 paler than hale on the same
+       colour, because "paler when bloodied" is a design rule, and a floor alone
+       would let a tune close that gap until bloodied stopped being legible. */
+    const BODY_FLOOR = { mercury: { hale: 0.70, bloodied: 0.50, paler: 0.10 } };
+    const BODY = shader.LIQUID_BODY ?? {};
+    const BODY_NAMES = {
+      mercury: { soften: "MERCURY_SOFTEN", softenBloodied: "MERCURY_SOFTEN_BLOODIED", pearlTint: "MERCURY_PEARL_TINT", pearl: "MERCURY_PEARL", milk: "MERCURY_MILK" },
+    };
+
     const PEAK_NAMES = {
       ink: { plume: "INK_PLUME", saturate: "INK_SATURATE" },
       mercury: { sheen: "MERCURY_SHEEN" },
@@ -1509,6 +1535,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     const MODEL = {
       ink: {
         domain: grid(100).map((fieldI) => ({ fieldI })),
+        median: { fieldI: 0.5 },
         steps: [
           ["float ampI = mix(1.0, 0.45, bloodied);", (s) => { s.ampI = mixf(1, 0.45, s.bloodied); }],
           ["fillCol = rbShade(base, mix(0.5, smoothstep(0.25, 0.60, fieldI), ampI), SHADE_LO, SHADE_HI);",
@@ -1532,19 +1559,21 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
            some moment, independently of the others. */
         domain: grid(10).flatMap((a) => grid(4).flatMap((pearl) => grid(10).flatMap((quickS) =>
           grid(4).map((slowS) => ({ fy: a * 2 - 1, pearl, quickS, slowS }))))),
+        median: { fy: 0, pearl: 0.5, quickS: 0.0625, slowS: 0.25 },
         steps: [
           ["fillCol = rbShade(base, 0.5 + 0.5 * fy, SHADE_LO, SHADE_HI);", (s) => { s.c = shadeJs(s.base, 0.5 + 0.5 * s.fy, ...s.shade); }],
-          ["fillCol = rbSoften(fillCol, mix(0.15, 0.75, bloodied));", (s) => { s.c = softenJs(s.c, mixf(0.15, 0.75, s.bloodied)); }],
+          ["fillCol = rbSoften(fillCol, mix(MERCURY_SOFTEN, MERCURY_SOFTEN_BLOODIED, bloodied));",
+            (s) => { s.c = softenJs(s.c, mixf(BODY.mercury.soften, BODY.mercury.softenBloodied, s.bloodied)); }],
           ["float pearl = 0.5 + 0.5 * sin(lqM.x * 0.9 + rbPhase(3.0) * glide + uSeed);"],
-          ["fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), 0.55), mix(base, vec3(1.00, 0.95, 0.97), 0.55), pearl), 0.40);",
-            (s) => { s.c = lightenJs(s.c, mix3(mix3(s.base, [0.90, 0.96, 1.00], 0.55), mix3(s.base, [1.00, 0.95, 0.97], 0.55), s.pearl), 0.40); }],
+          ["fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), MERCURY_PEARL_TINT), mix(base, vec3(1.00, 0.95, 0.97), MERCURY_PEARL_TINT), pearl), MERCURY_PEARL);",
+            (s) => { s.c = lightenJs(s.c, mix3(mix3(s.base, [0.90, 0.96, 1.00], BODY.mercury.pearlTint), mix3(s.base, [1.00, 0.95, 0.97], BODY.mercury.pearlTint), s.pearl), BODY.mercury.pearl); }],
           ["float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);"],
           ["float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);"],
           ["float sheenQ = mix(quickS, slowS * 0.45, bloodied);", (s) => { s.sheenQ = mixf(s.quickS, s.slowS * 0.45, s.bloodied); }],
           ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), MERCURY_SHEEN), sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);",
             (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, PEAK.mercury.sheen), s.sheenQ * (0.55 + 0.45 * ss(-0.6, 0.9, s.fy)) * 0.90); }],
-          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);",
-            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.55), 0.45 * s.bloodied + Math.abs(s.surge) * 0.15); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), MERCURY_MILK * bloodied + abs(uSurge) * 0.15);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.55), BODY.mercury.milk * s.bloodied + Math.abs(s.surge) * 0.15); }],
         ],
       },
       lava: {
@@ -1552,6 +1581,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
            the shimmer are 0.5 + 0.5 × a sine. calm is LAVA_BREAK_CALM × uBreak,
            pinned in (e), and uBreak is 0 at rest. */
         domain: grid(40).flatMap((heat) => grid(10).flatMap((pulse) => grid(4).map((shimmerL) => ({ heat, pulse, shimmerL })))),
+        median: { heat: 0.5, pulse: 0.5, shimmerL: 0.5 },
         also: ["calm"],
         steps: [
           ["heat = smoothstep(0.25, 0.85, heat);", (s) => { s.heat = ss(0.25, 0.85, s.heat); }],
@@ -1609,8 +1639,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       const have = Object.keys(PEAK[liquid] ?? {}).sort().join();
       if (have !== Object.keys(names).sort().join())
         pinFail(`LIQUID_PEAK.${liquid} carries ${have || "nothing"}, but this check evaluates ${Object.keys(names).join(", ")}; a peak magnitude it does not model is one it cannot hold under white.`);
+      const bodyNames = BODY_NAMES[liquid] ?? {};
+      const bodyHave = Object.keys(BODY[liquid] ?? {}).sort().join();
+      if (bodyHave !== Object.keys(bodyNames).sort().join())
+        pinFail(`LIQUID_BODY.${liquid} carries ${bodyHave || "nothing"}, but this check evaluates ${Object.keys(bodyNames).join(", ") || "nothing"}; a body magnitude it does not model is one it cannot hold to its hue.`);
       const exported = [
         ...Object.entries(names).map(([key, glsl]) => [glsl, PEAK[liquid]?.[key]]),
+        ...Object.entries(bodyNames).map(([key, glsl]) => [glsl, BODY[liquid]?.[key]]),
         ...Object.entries(GLOW_NAMES).map(([key, glsl]) => [glsl, GLOW[key]]),
       ];
       for (const [glsl, value] of exported)
@@ -1638,7 +1673,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
 
       /* The numbers are still worth evaluating when only a statement pin broke —
          they need the constants, not the pins. */
-      if (have === Object.keys(names).sort().join() && Object.keys(GLOW).sort().join() === Object.keys(GLOW_NAMES).sort().join())
+      if (have === Object.keys(names).sort().join() && bodyHave === Object.keys(bodyNames).sort().join()
+        && Object.keys(GLOW).sort().join() === Object.keys(GLOW_NAMES).sort().join())
         numeric.add(liquid);
       else if (pinned) pinFail(`HEAD_GLOW carries ${Object.keys(GLOW).join(", ") || "nothing"}, not ${Object.keys(GLOW_NAMES).join(", ")}.`);
     }
@@ -1668,6 +1704,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       if (!numeric.has(liquid) || !MODEL[liquid]) continue;
       const m = MODEL[liquid];
       let top = -Infinity, topAt = "", kept = Infinity, keptAt = "";
+      const body = { hale: Infinity, haleAt: "", bloodied: Infinity, bloodiedAt: "", gap: Infinity, gapAt: "" };
       for (const mode of Object.keys(ramp.RAMPS)) {
         const flat = Array.from(ramp.rampUniform(mode));
         const stops = [0, 1, 2, 3].map((i) => flat.slice(i * 3, i * 3 + 3));
@@ -1690,13 +1727,33 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
           const ref = liquid === "lava" ? warmJs(base, shader.LAVA_WARMTH) : base;
           const k = hsvSat(bright) / Math.max(hsvSat(ref), 1e-6);
           if (k < kept) { kept = k; keptAt = `${mode} ramp at ${Math.round(u * 100)}%, [${bright.map((v) => v.toFixed(3)).join(", ")}]`; }
+
+          /* The body at the median of every field, hale and bloodied, on this
+             same colour. */
+          const [hale, bled] = [0, 1].map((b) => {
+            const s = { base, bloodied: b, surge: 0, calm: 0, shade: shader.LIQUID_SHADE[liquid], c: null, ...m.median };
+            for (const [, run] of m.steps) run?.(s);
+            return { px: s.c, k: hsvSat(s.c) / Math.max(hsvSat(ref), 1e-6) };
+          });
+          const where = (px) => `${mode} ramp at ${Math.round(u * 100)}%, [${px.map((v) => v.toFixed(3)).join(", ")}]`;
+          if (hale.k < body.hale) { body.hale = hale.k; body.haleAt = where(hale.px); }
+          if (bled.k < body.bloodied) { body.bloodied = bled.k; body.bloodiedAt = where(bled.px); }
+          if (hale.k - bled.k < body.gap) { body.gap = hale.k - bled.k; body.gapAt = where(bled.px); }
         }
       }
+      const bf = BODY_FLOOR[liquid];
+      if (bf && !(body.hale >= bf.hale))
+        peakFail(`The ${liquid} liquid's body keeps ${body.hale.toFixed(3)} of its colour's saturation hale (${body.haleAt}), under its ${bf.hale} floor: most of the bar reads as white liquid, not as the health colour.`);
+      if (bf && !(body.bloodied >= bf.bloodied))
+        peakFail(`The ${liquid} liquid's bloodied body keeps ${body.bloodied.toFixed(3)} of its colour's saturation (${body.bloodiedAt}), under its ${bf.bloodied} floor: bloodied reads as cream rather than as a paler health colour.`);
+      if (bf && !(body.gap >= bf.paler))
+        peakFail(`The ${liquid} liquid's bloodied body is only ${body.gap.toFixed(3)} paler than its hale body on the same colour (${body.gapAt}); bloodied has to stay visibly paler and gentler, and under ${bf.paler} it stops being legible.`);
       if (!(top < 1.0))
         peakFail(`The ${liquid} liquid's brightest resting pixel reaches ${top.toFixed(3)} in one channel (${topAt}). Nothing in a liquid at rest may reach 1.0: a clipped channel is colour lost to white, it quietly breaks the luminance proof above, and the 8-bit bloom starts from it.`);
       if (!(kept >= HUE_FLOOR[liquid]))
         peakFail(`The ${liquid} liquid's brightest resting pixel keeps ${kept.toFixed(3)} of its colour's saturation (${keptAt}), under its ${HUE_FLOOR[liquid]} floor: its peak reads as white rather than as a lighter ${liquid}.`);
-      report.push(`${liquid} peak ${top.toFixed(3)}, saturation kept ${kept.toFixed(2)} (floor ${HUE_FLOOR[liquid]})`);
+      report.push(`${liquid} peak ${top.toFixed(3)}, saturation kept ${kept.toFixed(2)} (floor ${HUE_FLOOR[liquid]}), body ${body.hale.toFixed(2)} hale / ${body.bloodied.toFixed(2)} bloodied / ${body.gap.toFixed(2)} paler`
+        + (bf ? ` (floors ${bf.hale} / ${bf.bloodied} / ${bf.paler})` : ""));
     }
     if (!peakBad)
       ok(`every liquid's brightest resting light is a tint of it, never white — ${report.join("; ")} — with the head glow screened on at rest and every peak pinned to its constant`);

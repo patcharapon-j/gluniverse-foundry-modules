@@ -259,7 +259,7 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 | | |
 |---|---|
 | **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and plumes lifting to a pale tint of the health colour, blending as they move along the tube |
-| **Mercury** | a pearly, silvered body with a broad, soft sheen gliding the length of the bar — a lighter silvered tint of the health colour, reflective through a travelling highlight, never through dark bands |
+| **Mercury** | a body in the health colour, silvered a little and drifting between faint cool and warm pearl tints, with a broad, soft sheen gliding the length of the bar — a lighter silvered tint of the health colour, reflective through a travelling highlight, never through dark bands or a pale body |
 | **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it — golden, never past their gold — each slowly pulsing, and a faint rising heat shimmer |
 
 Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
@@ -404,7 +404,7 @@ arrives rather than snaps.
 | | |
 |---|---|
 | **Ink** | swirls slow to a quarter and fold less, contrast drops, and the ink goes pale and milky |
-| **Mercury** | the sheen slows to a third, spreads and fades, and the pearly body goes milkier |
+| **Mercury** | the sheen slows to a third, spreads and fades, and the body goes milkier while keeping its hue — a paler yellow at 49%, not cream |
 | **Lava** | pools slow to a third and soften, the pulse and the shimmer calm, and the glow loses its saturation and goes pale |
 
 ### The surge

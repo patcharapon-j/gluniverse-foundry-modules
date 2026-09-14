@@ -396,7 +396,9 @@ their dark. The ceiling is pinned as hard as the floor: a liquid's brightest
 named constant (`LIQUID_PEAK`, `HEAD_GLOW`), the head glow is screened on rather
 than added, and the check evaluates each liquid's brightest resting pixel and
 fails if a channel reaches 1.0 or it keeps too little of its colour's
-saturation. Transients (waves, impacts, the heal bloom) stay bright. Every idle term turns a whole number of times in the 64s idle loop,
+saturation; mercury's *body* (`LIQUID_BODY`) is held to a floor too, hale and
+bloodied, because a tinted peak on a near-white body still reads as white
+liquid. Transients (waves, impacts, the heal bloom) stay bright. Every idle term turns a whole number of times in the 64s idle loop,
 through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
 once a minute when the clock wraps. And the **only spring** in the feature is the
 `surge` through the liquid's texture and light after a change: no length — fill,
