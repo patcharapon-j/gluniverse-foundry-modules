@@ -81,8 +81,8 @@ export const TIMING = Object.freeze({
   surgeMs: 380,    // the surge through the liquid, perceived; the spring settles in about 3.5× this
   dyingInMs: 320,  // --gl-d-brisk   the orchid taking the bar over when dying lands
   dyingOutMs: 540, // --gl-d-glide   and handing it back when dying clears
-  dyingLevelMs: 900, // the heartbeat crossfading to a new dying level's rate
-  flatlineMs: 900, // the heartbeat dying away when the gauge reaches its maximum
+  dyingLevelMs: 920, // --gl-d-slow  the heartbeat crossfading to a new dying level's rate
+  flatlineMs: 920, // --gl-d-slow    the heartbeat dying away when the gauge reaches its maximum
 });
 
 /** Where the low-health state engages. Mirrored by ramp.mjs's LOW_HEALTH_AT. */
@@ -279,7 +279,8 @@ export class BarAnim {
     this.dyingSlots = 0;
     this.dyingDead = 0;
     this.flatline = false;
-    /** Set by the renderer from the shed budget: freeze the veins and the heartbeat, keep the gauge. */
+    /** Set by the renderer, on the idle clock's rule — off screen, or given up by
+     *  the shed: freeze the veins and the heartbeat, keep the gauge. */
     this.dyingFrozen = false;
 
     /** Floating deltas, newest last. Each is { text, heal, t } with t in 0..1. */
@@ -302,6 +303,8 @@ export class BarAnim {
 
     /* Live tweens, each { tw, at }: `at` is the `_live` time it started.
          _impact    one change's whole reaction — replaced by every set()
+         _count     the readout counting to a new value, in its own slot so a
+                    dying transition can drop it and leave the reaction running
          _drain     the chip trail's hold-and-drain, which a heal does not cancel
          _gauge     the fill gliding between hit points and the dying gauge
          _breakOut  the fracture fading when a break is cleared
@@ -310,6 +313,7 @@ export class BarAnim {
                     the orchid arriving or leaving, the heartbeat crossfading to
                     a new rate, and the heartbeat dying away at flatline */
     this._impact = null;
+    this._count = null;
     this._drain = null;
     this._gauge = null;
     this._breakOut = null;
@@ -322,6 +326,24 @@ export class BarAnim {
   /** True while the dying gauge owns the primary bar. */
   get dyingOn() {
     return this._dyingOn;
+  }
+
+  /**
+   * What the readout prints, as `{ value, max }`: hit points, or while dying the
+   * gauge's own reading — the count over the slots, labelled with the dying
+   * maximum (doomed already taken off, so doomed 1 at dying 2 reads 2/3).
+   *
+   * `num` is only ever counted inside one of those two domains. A dying
+   * transition snaps it into the new one (see `_toLength`) while the fill still
+   * glides, because a length means the same thing on both sides of the switch
+   * and a number does not: carried across, a gauge fraction prints as hit
+   * points counting to the real value, or hit points as a gauge. So every value
+   * this returns belongs to the domain its `max` names.
+   */
+  readout(hpMax) {
+    return this._dyingOn
+      ? { value: Math.round(this.num * this.dyingSlots), max: this.dyingMax }
+      : { value: Math.round(this.num * hpMax), max: hpMax };
   }
 
   /** A duration in TIMING, scaled by the user's motion tier. 0 disables motion. */
@@ -341,12 +363,37 @@ export class BarAnim {
     return local < end;
   }
 
+  /**
+   * Seek the tween in `this[slot]`; once it has finished, drop it and put
+   * `channel` exactly at `rest` — not within a float of it: `hot` and the
+   * tests compare.
+   */
+  _seekTo(slot, channel, rest) {
+    if (this[slot] && !this._seek(this[slot])) {
+      this[slot] = null;
+      this[channel] = rest;
+    }
+  }
+
+  /**
+   * Move one channel to `to` over TIMING[key] in its own slot — or, quiet, put
+   * it there at once and drop whatever that slot was running.
+   */
+  _channel(slot, channel, to, key, quiet) {
+    if (quiet) {
+      this[slot] = null;
+      this[channel] = to;
+    } else {
+      this[slot] = this._play(tween(this, { [channel]: [this[channel], to], duration: this._ms(key), ease: LINEAR }));
+    }
+  }
+
   /** Every length at its target, every reaction at rest, nothing running. */
   _settle() {
     this.frac = this.ghost = this.num = this.target;
     this.waveX = this.target;
     this._stop = 0;
-    this._impact = this._drain = this._gauge = null;
+    this._impact = this._count = this._drain = this._gauge = null;
     this.bloom = this.flash = this.hit = this.punch = this.chip = this.wave = this.surge = 0;
     this.popups.length = 0;
   }
@@ -362,8 +409,14 @@ export class BarAnim {
    * milliseconds earlier) is left to finish; this only takes over the length and
    * the count, and cuts the chip trail to the fill so it cannot draw a span of
    * hit points over the gauge.
+   *
+   * `across` is a change of domain — dying arriving or clearing. The fill still
+   * glides, but the count does not: the readout snaps to the new domain's value
+   * and whatever count was running (the killing blow's, counting hit points
+   * down) is dropped, so no number is ever printed in the wrong domain. A new
+   * dying level stays inside the gauge and counts.
    */
-  _toLength(next, quiet) {
+  _toLength(next, quiet, across = false) {
     const to = clamp01(next);
     this.target = to;
     if (quiet) {
@@ -372,9 +425,13 @@ export class BarAnim {
     }
     this._drain = null;
     this.ghost = this.frac;
-    this._gauge = this._play(timeline()
-      .add(this, { frac: [this.frac, to], duration: this._ms("fillMs"), ease: GLIDE }, 0)
-      .add(this, { num: [this.num, to], duration: this._ms("countMs"), ease: COUNT }, 0));
+    this._gauge = this._play(tween(this, { frac: [this.frac, to], duration: this._ms("fillMs"), ease: GLIDE }));
+    if (across) {
+      this._count = null;
+      this.num = to;
+    } else {
+      this._count = this._play(tween(this, { num: [this.num, to], duration: this._ms("countMs"), ease: COUNT }));
+    }
   }
 
   /**
@@ -400,8 +457,7 @@ export class BarAnim {
        the old heal origin: the fill stays wherever the glide had got to. The
        chip trail's drain is the one thing a heal leaves running — the span the
        last hit took is still lost. */
-    this._impact = null;
-    this._gauge = null;
+    this._impact = this._count = this._gauge = null;
     const damaged = next < this.target;
     const delta = next - this.target;
     this.target = next;
@@ -448,6 +504,9 @@ export class BarAnim {
     }
 
     this._impact = this._play(this._reaction(damaged));
+    /* The readout counts rather than snaps, in both directions — in a slot of
+       its own, so a dying transition can drop the count without the reaction. */
+    this._count = this._play(tween(this, { num: [this.num, this.target], duration: this._ms("countMs"), ease: COUNT }));
   }
 
   /**
@@ -480,9 +539,7 @@ export class BarAnim {
       .add(this, { hit: [1, 0], duration: ms("hitMs"), ease: FADE_OUT }, 0)
       .add(this, { punch: [0, PUNCH], duration: ms("punchMs"), ease: PUNCH_CURVE }, 0)
       .add(this, { flash: [1, 0], duration: ms("flashMs") }, 0)
-      /* The readout counts rather than snaps, in both directions. */
-      .add(this, { num: [this.num, this.target], duration: ms("countMs"), ease: COUNT }, 0)
-      /* It crosses at full strength and only then fades: a front that fades
+      /* The wave crosses at full strength and only then fades: a front that fades
          *while* it travels never arrives anywhere, and arriving is what reads. */
       .add(this, { waveX: [waveFrom, waveTo], duration: crossing, ease: TRAVEL }, 0)
       .add(this, { wave: [1, 0], duration: ms("waveMs") - crossing }, crossing)
@@ -558,13 +615,8 @@ export class BarAnim {
       this._dyingOn = false;
       this.flatline = false;
       this._dyingLevelTw = this._dyingPulseTw = null;
-      if (quiet) {
-        this._dyingFade = null;
-        this.dying = 0;
-      } else {
-        this._dyingFade = this._play(tween(this, { dying: [this.dying, 0], duration: this._ms("dyingOutMs"), ease: LINEAR }));
-      }
-      this._toLength(this.hp, quiet);
+      this._channel("_dyingFade", "dying", 0, "dyingOutMs", quiet);
+      this._toLength(this.hp, quiet, true);
       return;
     }
 
@@ -586,37 +638,14 @@ export class BarAnim {
       this._dyingLevelTw = this._dyingPulseTw = null;
       this.dyingLevel = level;
       this.dyingPulse = flat ? 0 : 1;
-      if (quiet) {
-        this._dyingFade = null;
-        this.dying = 1;
-      } else {
-        this._dyingFade = this._play(tween(this, { dying: [this.dying, 1], duration: this._ms("dyingInMs"), ease: LINEAR }));
-      }
+      this._channel("_dyingFade", "dying", 1, "dyingInMs", quiet);
     } else {
-      if (level !== this._levelTarget) {
-        if (quiet) {
-          this._dyingLevelTw = null;
-          this.dyingLevel = level;
-        } else {
-          this._dyingLevelTw = this._play(tween(this, {
-            dyingLevel: [this.dyingLevel, level], duration: this._ms("dyingLevelMs"), ease: LINEAR,
-          }));
-        }
-      }
-      if (flat !== this.flatline) {
-        if (quiet) {
-          this._dyingPulseTw = null;
-          this.dyingPulse = flat ? 0 : 1;
-        } else {
-          this._dyingPulseTw = this._play(tween(this, {
-            dyingPulse: [this.dyingPulse, flat ? 0 : 1], duration: this._ms(flat ? "flatlineMs" : "dyingInMs"), ease: LINEAR,
-          }));
-        }
-      }
+      if (level !== this._levelTarget) this._channel("_dyingLevelTw", "dyingLevel", level, "dyingLevelMs", quiet);
+      if (flat !== this.flatline) this._channel("_dyingPulseTw", "dyingPulse", flat ? 0 : 1, flat ? "flatlineMs" : "dyingInMs", quiet);
     }
     this._levelTarget = level;
     this.flatline = flat;
-    this._toLength(value / slots, quiet);
+    this._toLength(value / slots, quiet, arriving);
   }
 
   /** Hover / control state drives the gloss, and nothing else. */
@@ -685,15 +714,13 @@ export class BarAnim {
     if (this._impact && !this._seek(this._impact)) {
       this._impact = null;
       /* At rest exactly, not within a float of it: `hot` and the tests compare. */
-      this.frac = this.num = this.target;
+      this.frac = this.target;
       this.hit = this.punch = this.flash = this.chip = this.bloom = this.wave = this.surge = 0;
     }
-    /* After the reaction, so the gauge's glide owns the length and the count
-       while a killing blow's reaction plays out around it. */
-    if (this._gauge && !this._seek(this._gauge)) {
-      this._gauge = null;
-      this.frac = this.num = this.target;
-    }
+    /* After the reaction, so the gauge's glide owns the length while a killing
+       blow's reaction plays out around it. */
+    this._seekTo("_gauge", "frac", this.target);
+    this._seekTo("_count", "num", this.target);
 
     // The chip trail: hold, then drain to meet the fill; never below it.
     if (this._drain && !this._seek(this._drain)) this._drain = null;
@@ -714,26 +741,16 @@ export class BarAnim {
       this.broken = 0;
     }
 
-    /* The dying clock: the veins' orbits and the heartbeat. Real seconds, not
-       scaled by the motion tier the way the idle clock is — the heartbeat's rate
-       is part of the reading (it quickens as dying rises), and a tier that sped
-       it up would misreport. Frozen by the shed and by flatline; the gauge stays. */
-    if (this._dyingOn && !this.flatline && !this.dyingFrozen) {
-      this.dyingT += live / TIMING.clockMs;
-      if (this.dyingT >= DYING_LOOP_S) this.dyingT -= DYING_LOOP_S;
-    }
-    if (this._dyingFade && !this._seek(this._dyingFade)) {
-      this._dyingFade = null;
-      this.dying = this._dyingOn ? 1 : 0;
-    }
-    if (this._dyingLevelTw && !this._seek(this._dyingLevelTw)) {
-      this._dyingLevelTw = null;
-      this.dyingLevel = this._levelTarget;
-    }
-    if (this._dyingPulseTw && !this._seek(this._dyingPulseTw)) {
-      this._dyingPulseTw = null;
-      this.dyingPulse = this._dyingOn && !this.flatline ? 1 : 0;
-    }
+    /* The dying clock: the veins' orbits and the heartbeat, on the idle clock's
+       rule — scaled by the motion tier, and frozen by the renderer off screen or
+       under the shed. One scale for every rate, so the heartbeat still quickens
+       in order as dying rises; what the tier changes is how fast motion runs,
+       which is the user's explicit choice. Flatline stops it; the gauge stays. */
+    if (this._dyingOn && !this.flatline && !this.dyingFrozen)
+      this.dyingT = (this.dyingT + live / (TIMING.clockMs * s)) % DYING_LOOP_S;
+    this._seekTo("_dyingFade", "dying", this._dyingOn ? 1 : 0);
+    this._seekTo("_dyingLevelTw", "dyingLevel", this._levelTarget);
+    this._seekTo("_dyingPulseTw", "dyingPulse", this._dyingOn && !this.flatline ? 1 : 0);
 
     if (this._gloss && !this._seek(this._gloss)) this._gloss = null;
 
@@ -755,12 +772,12 @@ export class BarAnim {
     if (this.motionScale === 0) return false;
     if (this._stop > 0) return true;
     if (this._hover || this._gloss) return true;
-    if (this.ghost !== this.frac || this._impact || this._drain || this._gauge) return true;
+    if (this.ghost !== this.frac || this._impact || this._count || this._drain || this._gauge) return true;
     if (this.popups.length) return true;
     if (this._dyingFade || this._dyingLevelTw || this._dyingPulseTw) return true;
     /* A dying creature's heartbeat is the same standing cost as a broken one's
        fracture. A flatlined gauge has nothing left to animate, and a frozen one
-       has been given up by the shed. */
+       is off screen or has been given up by the shed. */
     if (this._dyingOn && !this.flatline && !this.dyingFrozen) return true;
     if (this.low > 0) return true; // the low-health pulse is continuous by design
     /* A settled fracture is still breathing, so a broken creature's bar stays

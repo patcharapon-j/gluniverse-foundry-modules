@@ -314,8 +314,8 @@ const BREAK_AMBER = /*__BREAK_AMBER__*/;
 const BREAK_HOT = /*__BREAK_HOT__*/;
 const DYING_COL = /*__DYING_COL__*/;
 const DYING_HOT = /*__DYING_HOT__*/;
-/* The dying readout's ink, as host.mjs derives it: orchid lifted halfway to its hot twin. */
-const DYING_INK = DYING_COL.map((c, i) => c + (DYING_HOT[i] - c) * 0.5);
+/* The dying readout's ink: ramp.mjs's DYING_INK, the one host.mjs prints. */
+const DYING_INK = /*__DYING_INK__*/;
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
@@ -874,7 +874,7 @@ for (const liquid of LIQUIDS) {
    `tick` cells are stepped every frame, so the heartbeat, the veins and the
    flatline are the model's own rather than a drawing of them. */
 const dyState = (value, max, doomed = 0) =>
-  ({ value, max, doomed, slots: max + doomed, doomedSlots: doomed, flatline: value >= max });
+  ({ value, max, doomed, slots: max + doomed, flatline: value >= max });
 const DYING_PLAN = [
   { title: "Dying 1", sub: "1/4", st: dyState(1, 4) },
   { title: "Dying 2, doomed 1", sub: "2/3 · one slot dead", st: dyState(2, 3, 1) },
@@ -1239,10 +1239,9 @@ function draw(now) {
          gives. It scales the delta too — they are one readout. */
       const ns = (s.numScale ?? 1) * punch;
       /* `num`, not `frac`: the fill snaps on impact and the readout counts.
-         While dying it reads the gauge, dying over its maximum, as host.mjs does. */
-      const gauge = !!a?.dyingOn;
-      const cur = Math.round((a ? a.num : frac) * (gauge ? a.dyingSlots : s.max));
-      const shownMax = gauge ? a.dyingMax : s.max;
+         While dying it reads the gauge, dying over its maximum — the model's own
+         readout(), which host.mjs prints too. */
+      const { value: cur, max: shownMax } = a ? a.readout(s.max) : { value: Math.round(frac * s.max), max: s.max };
       /* Colour follows the event and decays back to white. The maximum shares
          it and steps back by one notch of opacity — enough to rank the two,
          not enough to make the denominator something you go looking for. */

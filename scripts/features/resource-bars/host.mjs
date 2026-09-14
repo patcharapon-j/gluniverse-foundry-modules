@@ -22,7 +22,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT } from "./ramp.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DYING_INK } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readDying, readToken, sameReading } from "./data.mjs";
@@ -71,13 +71,6 @@ const ROLES = ["hero", "rail", "shield"];
 const REST_INK = [0.97, 0.99, 1.0];
 const HIT_INK = [1.0, 0.52, 0.48];
 const HEAL_INK = [0.62, 1.0, 0.78];
-/**
- * The dying readout's ink: orchid lifted halfway to its hot twin, both from the
- * palette. Plain orchid over a full orchid gauge is the same hue at nearly the
- * same lightness, and at flatline — the one reading that matters most — the
- * digits all but vanished into the fill.
- */
-const DYING_INK = hexToFloat3(DYING_COLOR).map((c, i) => c + (hexToFloat3(DYING_HOT)[i] - c) * 0.5);
 
 /**
  * A stable per-token seed for the guard-break fracture, in the 0..100 range the
@@ -230,16 +223,16 @@ class BarEntry {
     this.readBreak(opts);
     /* Dying rides the same road for the same reason: it arrives as a condition
        item with no hit points moving. */
-    this.readDying(opts, { silent: first || silent });
+    this.syncDying(opts, { silent: first || silent });
   }
 
   /**
-   * PF2e's dying state, onto the primary bar only — which it takes over as the
-   * dying gauge. A reader, as the break is: nothing here writes to the creature,
-   * and no visibility rule is added, because the gauge is drawn on a bar
-   * `visibility.mjs` has already decided about.
+   * Carry PF2e's dying state onto the primary bar's model — the bar it takes
+   * over as the dying gauge. It reads the creature and writes only the model:
+   * nothing here touches the creature, and no visibility rule is added, because
+   * the gauge is drawn on a bar `visibility.mjs` has already decided about.
    */
-  readDying(opts, { silent = false } = {}) {
+  syncDying(opts, { silent = false } = {}) {
     const bar = this.reading?.hero;
     if (!bar) return;
     const a = this.animFor("hero", bar.frac);
@@ -854,6 +847,12 @@ class BarHost {
     entry.group.renderable =
       !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
     entry.label?.setRenderable(entry.group.renderable);   // names share the stack's box
+    /* The dying clock freezes off screen, as the idle clock does — decided here
+       as well as in tick(), so a dying bar scrolled back into view is hot again
+       by the time syncTicker asks, rather than frozen until something else
+       wakes the ticker. */
+    const hero = entry.anims.hero;
+    if (hero) hero.dyingFrozen = !entry.group.renderable || !this.allows("dyingFlow");
   }
 
   syncTicker() {
@@ -907,6 +906,9 @@ class BarHost {
         const a = entry.anims[role];
         if (!a) continue;
         a.idleFrozen = !entry.group.renderable || !this.allows("sweep");
+        /* The dying veins and heartbeat on the same rule: off screen or shed,
+           the clock stops and the bar leaves the ticker; the gauge stays. */
+        a.dyingFrozen = !entry.group.renderable || !this.allows("dyingFlow");
         const wasHot = a.hot;
         if (a.step(dt) || wasHot) hot = true;
       }
@@ -984,10 +986,11 @@ class BarHost {
       u.uBreakFlow = brk && flowing ? 1 : 0;
 
       /* The dying gauge, on the primary bar and nothing else — the rails get hard
-         zeros and skip the block. Shedding freezes the veins and the heartbeat
-         where they are; the orchid, the slots and the fill stay. */
+         zeros and skip the block. Its freeze (off screen, or shed) is decided in
+         tick() and cullEntry(), beside the idle clock's; frozen, the veins and
+         the heartbeat hold where they are and the orchid, the slots and the fill
+         stay. */
       const dy = role === "hero" ? a : null;
-      if (dy) dy.dyingFrozen = !this.allows("dyingFlow");
       u.uDying = dy ? dy.dying : 0;
       u.uDyingT = dy ? dy.dyingT : 0;
       u.uDyingSlots = dy ? dy.dyingSlots : 0;
@@ -1056,14 +1059,13 @@ class BarHost {
        readout that snaps is a number nobody saw move. It counts instead, which
        also means a burst of small hits reads as one continuous fall rather than
        as a digit flickering. */
-    /* Dying: the gauge's own reading, dying over its maximum (doomed already
-       taken off, so doomed 1 at dying 2 reads 2/3), behind the same gate as hit
-       points. It counts over the slots, because that is the length the fill is
-       measured in; the atlas carries only digits and signs, so no letters. */
-    const gauge = !!a?.dyingOn;
-    const scale = gauge ? a.dyingSlots : r.hero.max;
-    const shownMax = gauge ? a.dyingMax : r.hero.max;
-    const value = Math.round((a ? a.num : r.hero.frac) * scale);
+    /* Dying: the gauge's own reading, dying over its maximum, behind the same
+       gate as hit points; the atlas carries only digits and signs, so no
+       letters. The model decides which domain the number is in (readout), and
+       never counts one across into the other. */
+    const { value, max: shownMax } = a
+      ? a.readout(r.hero.max)
+      : { value: Math.round(r.hero.frac * r.hero.max), max: r.hero.max };
     const label = value + "/" + shownMax;
 
     /* Cached against everything that shapes the run, not only its text. Size

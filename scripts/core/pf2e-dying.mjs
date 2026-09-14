@@ -25,16 +25,21 @@
  * this: `flatline` is a reading, not a verdict.
  */
 
-/** The dying maximum before doomed, and with Diehard. Fallback only. */
-export const DYING_BASE_MAX = 4;
-export const DYING_DIEHARD_MAX = 5;
+/* The dying maximum before doomed, and with Diehard. Fallback only. */
+const DYING_BASE_MAX = 4;
+const DYING_DIEHARD_MAX = 5;
 
 const finite = (v) => {
   const n = Number(v);
   return v !== null && v !== undefined && v !== "" && Number.isFinite(n) ? n : null;
 };
 
-function itemsOf(actor) {
+/**
+ * An actor's embedded items as a plain array, whichever shape the collection
+ * arrives in — a Foundry EmbeddedCollection, Map entries or a plain array.
+ * The initiative tracker reads items through this too.
+ */
+export function getActorItems(actor) {
   const items = actor?.items?.contents ?? actor?.items ?? [];
   try {
     return Array.from(items).map((entry) => (Array.isArray(entry) ? entry[1] : entry)).filter(Boolean);
@@ -43,8 +48,17 @@ function itemsOf(actor) {
   }
 }
 
-function slugOf(item) {
-  return String(item?.slug ?? item?.system?.slug ?? "").trim().toLowerCase();
+/**
+ * An item's slug, normalised: PF2e's own slug where there is one, else the tail
+ * of its compendium source id, else its name — lower-case and hyphenated. The
+ * initiative tracker matches conditions and guard-break effects by it.
+ */
+export function getItemSlug(item) {
+  return String(item?.slug ?? item?.system?.slug ?? item?.flags?.core?.sourceId ?? item?.name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^.*\./, "")
+    .replace(/\s+/g, "-");
 }
 
 /**
@@ -53,8 +67,8 @@ function slugOf(item) {
  * rather than the whole inventory; this runs on every read of every token.
  */
 function conditionValue(actor, slug) {
-  const pool = Array.isArray(actor?.itemTypes?.condition) ? actor.itemTypes.condition : itemsOf(actor);
-  const item = pool.find((i) => i?.type === "condition" && slugOf(i) === slug);
+  const pool = Array.isArray(actor?.itemTypes?.condition) ? actor.itemTypes.condition : getActorItems(actor);
+  const item = pool.find((i) => i?.type === "condition" && getItemSlug(i) === slug);
   if (!item) return null;
   for (const candidate of [item.system?.value?.value, item.system?.badge?.value, item.value]) {
     const n = finite(candidate);
@@ -73,12 +87,16 @@ function doomedOf(actor) {
 /**
  * The dying state of one actor, or null when it is not dying.
  *
- *   value        the dying value, capped at `max`
- *   max          PF2e's dying maximum, doomed already taken off
- *   doomed       the doomed value
- *   slots        `max + doomed` — the gauge's full length
- *   doomedSlots  how many of those, at the right end, doomed has taken
- *   flatline     `value >= max`
+ *   value     the dying value, capped at `max`, at least 1
+ *   max       PF2e's dying maximum, doomed already taken off, at least 1
+ *   doomed    the doomed value — the last `doomed` of the slots are dead
+ *   slots     `max + doomed` — the gauge's full length
+ *   flatline  `value >= max`
+ *
+ * Null too when doomed has taken the whole maximum. PF2e clamps dying to its
+ * max, so dying cannot be above 0 there, and a reading of max 0 is not a gauge:
+ * the bar would draw every slot dead at 0/0 while the initiative tracker drew
+ * nothing. Both show nothing instead, and the health bar carries on.
  *
  * Any actor type: characters and NPCs share CreaturePF2e's derived data, and a
  * GM who puts dying on an NPC means it.
@@ -94,9 +112,10 @@ export function readPf2eDying(actor) {
   const doomed = doomedOf(actor);
   const derivedMax = finite(derived && typeof derived === "object" ? derived.max : null);
   const fallbackMax = () =>
-    (itemsOf(actor).some((i) => slugOf(i) === "diehard") ? DYING_DIEHARD_MAX : DYING_BASE_MAX) - doomed;
-  const max = Math.max(0, Math.round(derivedMax ?? fallbackMax()));
+    (getActorItems(actor).some((i) => getItemSlug(i) === "diehard") ? DYING_DIEHARD_MAX : DYING_BASE_MAX) - doomed;
+  const max = Math.round(derivedMax ?? fallbackMax());
   const value = Math.min(Math.round(raw), max);
+  if (!(max > 0) || !(value > 0)) return null;
 
-  return { value, max, doomed, slots: max + doomed, doomedSlots: doomed, flatline: value >= max };
+  return { value, max, doomed, slots: max + doomed, flatline: value >= max };
 }

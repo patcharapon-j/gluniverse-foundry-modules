@@ -9,7 +9,7 @@ PORTRAIT_FRAME_DEFAULTS, PORTRAIT_FRAME_LIMITS } from "./constants.mjs";
 import { normalizeInitiativeNumber, getDisposition, formatRound, formatInitiative, 
 localize, formatLocalized, modulo, clamp, wait, escapeHTML, escapeAttr, escapeCSSIdentifier
 } from "./util.mjs";
-import { readPf2eDying } from "../../core/pf2e-dying.mjs";
+import { getActorItems, getItemSlug, readPf2eDying } from "../../core/pf2e-dying.mjs";
 
 // System-aware condition / dying / guard-break / break-gauge state readers
 // and their small HTML render helpers (PF2e + D&D5e aware, system-agnostic
@@ -20,20 +20,20 @@ import { readPf2eDying } from "../../core/pf2e-dying.mjs";
 // dying.max already has doomed taken off, and this used to subtract doomed a
 // second time (doomed 1 read "death at 2" where the book says 3); and any actor
 // carrying the condition counts, NPCs included, as it does on the health bar.
+// The reader owns Diehard (it is in PF2e's derived maximum) and returns null
+// when doomed has taken the whole maximum, so the tracker and the bar agree.
 export function getPF2eDyingState(combatant) {
   if (game.system?.id !== "pf2e") return null;
 
-  const actor = combatant?.actor;
-  const state = readPf2eDying(actor);
-  if (!state || state.value <= 0) return null;
+  const state = readPf2eDying(combatant?.actor);
+  if (!state) return null;
 
   const { value, doomed } = state;
-  const hasDiehard = hasActorItem(actor, "diehard");
-  const max = clamp(Math.max(1, state.max), 1, 9);
+  const max = clamp(state.max, 1, 9);
   const ratio = clamp(value / max, 0, 1.5);
   const severity = ratio >= 1 ? "critical" : ratio >= 0.67 ? "high" : "low";
 
-  return { kind: "dying", value, max, doomed, hasDiehard, severity };
+  return { kind: "dying", value, max, doomed, severity };
 }
 
 // D&D 5e death-save state, parallel to getPF2eDyingState. Triggers when a
@@ -69,39 +69,6 @@ export function getDnd5eDeathState(combatant) {
 // function self-gates by system id, so only one ever returns non-null.
 export function getDyingState(combatant) {
   return getPF2eDyingState(combatant) ?? getDnd5eDeathState(combatant);
-}
-
-export function getActorAttributeValue(actor, attribute, property = "value") {
-  const direct = actor?.system?.attributes?.[attribute]?.[property];
-  if (Number.isFinite(Number(direct))) return Number(direct);
-
-  const nested = actor?.system?.attributes?.[attribute]?.[property]?.value;
-  if (Number.isFinite(Number(nested))) return Number(nested);
-
-  return null;
-}
-
-export function getConditionValue(actor, slug) {
-  const condition = getActorItems(actor).find(item => item?.type === "condition" && getItemSlug(item) === slug);
-  if (!condition) return null;
-
-  const candidates = [
-    condition.system?.value?.value,
-    condition.system?.badge?.value,
-    condition.system?.value,
-    condition.value
-  ];
-
-  for (const candidate of candidates) {
-    const value = Number(candidate);
-    if (Number.isFinite(value)) return value;
-  }
-
-  return 1;
-}
-
-export function hasActorItem(actor, slug) {
-  return getActorItems(actor).some(item => getItemSlug(item) === slug);
 }
 
 // Condition slugs the overlay already represents through dedicated states, so
@@ -330,21 +297,6 @@ export function findPF2eGuardBreakEffects(actor) {
     item?.type === "effect" &&
     (item.getFlag?.(MODULE_ID, "init.guardBreak") === true || getItemSlug(item) === PF2E_GUARD_BREAK_EFFECT_SLUG)
   );
-}
-
-export function getActorItems(actor) {
-  const items = actor?.items?.contents ?? actor?.items ?? [];
-  return Array.from(items)
-    .map(entry => Array.isArray(entry) ? entry[1] : entry)
-    .filter(Boolean);
-}
-
-export function getItemSlug(item) {
-  return String(item?.slug ?? item?.system?.slug ?? item?.flags?.core?.sourceId ?? item?.name ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/^.*\./, "")
-    .replace(/\s+/g, "-");
 }
 
 export function renderDyingRepeatText(dying) {

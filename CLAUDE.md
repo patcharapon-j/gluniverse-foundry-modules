@@ -425,9 +425,12 @@ linear drift or the card and token overlay change while no bar is dying; the bar
 orbits the drift instead, on its own clock `uDyingT`, read only inside `dyPhase`
 with whole turns, and the heartbeat's `DYING_BEATS` are whole beats per loop
 crossfaded by level — a fractional rate steps once a minute. Dying outranks the
-break (`uBreak × (1 − dying)`), its block only adds light over the liquid,
-`dyingFlow` freezes the motion and keeps the gauge, and a flatline stops
-everything and writes nothing to the creature.
+break (`uBreak × (1 − dying)`); its block only lightens the liquid, to
+`DYING_PEAK`'s tint, because a beat loops and its peak is resting light; the dying
+clock follows the motion tier and freezes off screen or under `dyingFlow`,
+keeping the gauge; a dying transition snaps the readout rather than counting a
+number across domains (`BarAnim#readout`); and a flatline stops everything and
+writes nothing to the creature.
 
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
 a page that compiles all three liquids' real shaders in a real WebGL2 context and

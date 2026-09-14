@@ -83,6 +83,15 @@ export const BREAK_HOT = PALETTE.signalHot;
 export const DYING_COLOR = PALETTE.orchid;
 export const DYING_HOT = PALETTE.orchidHot;
 
+/**
+ * The dying readout's ink: orchid lifted halfway to its hot twin, both from the
+ * palette. Plain orchid over a full orchid gauge is the same hue at nearly the
+ * same lightness, and at flatline — the one reading that matters most — the
+ * digits all but vanished into the fill. Derived once here, so the renderer and
+ * the preview print the same colour.
+ */
+export const DYING_INK = Object.freeze(hexToFloat3(DYING_COLOR).map((c, i) => c + (hexToFloat3(DYING_HOT)[i] - c) * 0.5));
+
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────
    Björn Ottosson's transform. Kept here rather than in core/theme.mjs because
    theme.mjs's colour maths is deliberately the small set every feature needs;

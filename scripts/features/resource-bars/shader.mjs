@@ -300,6 +300,26 @@ export const DYING_SAT = 0.55;
 export const DYING_ORBIT = 0.30;
 
 /**
+ * How bright a dying gauge's veins and heartbeat get over the liquid — the
+ * gauge's LIQUID_PEAK. Each lightens the liquid towards a tint between the
+ * gauge's own deepened orchid and `--gl-orchid-hot`, and never adds light.
+ *
+ * The hot orchid is itself a near-white. Lightening the vein cores all the way
+ * to it and then adding a tenth of it on top reached past 1.0 in two channels:
+ * a white vein on every dying bar, which the bloom then lit. And the heartbeat
+ * loops for as long as the creature is dying, so the top of a beat is part of
+ * the resting look, not a moment — it is held to the same rule.
+ *
+ *   vein / veinTint   how far a vein's core lightens, and how far its target
+ *                     sits from the gauge's orchid towards the hot orchid
+ *   beat / beatTint   the same for the heartbeat
+ *
+ * `resource-bar-check` evaluates every liquid's brightest dying pixel from
+ * these, and pins the two statements that read them.
+ */
+export const DYING_PEAK = Object.freeze({ vein: 0.85, veinTint: 0.60, beat: 0.45, beatTint: 0.40 });
+
+/**
  * How bright each liquid's peaks get — its plumes, its sheen, its pools — as
  * named numbers rather than literals in the GLSL.
  *
@@ -375,11 +395,16 @@ const DYING_HEART = DYING_BEATS
   .join("\n             + ");
 const shadeConsts = (liquid) =>
   `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
-/* Every peak magnitude as a named GLSL const — LIQUID_PEAK.lava.saturateBloodied
-   is LAVA_SATURATE_BLOODIED, HEAD_GLOW.rest is HEAD_REST — so a statement reads
-   the name and resource-bar-check can hold the name to the export. */
+/* Every tuned magnitude as a named GLSL const — LIQUID_PEAK.lava.saturateBloodied
+   is LAVA_SATURATE_BLOODIED, LIQUID_BODY.mercury.pearl is MERCURY_PEARL,
+   HEAD_GLOW.rest is HEAD_REST, DYING_PEAK.veinTint is DYING_PEAK_VEIN_TINT — so a
+   statement reads the name and resource-bar-check can hold the name to the
+   export. A liquid's peaks, body and head glow go into its own chunk; the dying
+   peaks are the shared frame's. */
 const constName = (s) => s.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase();
-const peakConsts = (liquid) =>
+const dyingPeakConsts = Object.entries(DYING_PEAK)
+  .map(([k, v]) => `const float ${constName("dying_peak_" + k)} = ${f4(v)};\n`).join("");
+const tuningConsts = (liquid) =>
   [...Object.entries(LIQUID_PEAK[liquid]).map(([k, v]) => [liquid + "_" + k, v]),
    ...Object.entries(LIQUID_BODY[liquid] ?? {}).map(([k, v]) => [liquid + "_" + k, v]),
    ...Object.entries(HEAD_GLOW).map(([k, v]) => ["head_" + k, v])]
@@ -400,7 +425,7 @@ const float DYING_DENSE = ` + f4(DYING_DENSE) + `;
 const float DYING_ORBIT = ` + f4(DYING_ORBIT) + `;
 const float DYING_DEPTH = ` + f4(DYING_DEPTH) + `;
 const float DYING_SAT = ` + f4(DYING_SAT) + `;
-const float LOOP_W = ` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
+` + dyingPeakConsts + `const float LOOP_W =` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
 uniform float uTime;
@@ -660,7 +685,7 @@ export const LIQUID_CHUNKS = Object.freeze({
      three and the default, because a fill that is always quietly moving is still
      a fill that is mostly not asking to be looked at. */
   ink: Object.freeze({
-    functions: shadeConsts("ink") + peakConsts("ink") + `
+    functions: shadeConsts("ink") + tuningConsts("ink") + `
 float inkField(vec2 lq, float driftA, float driftB, float fold) {
   /* Fewer, larger plumes: about a bar height and a third per swirl along the
      bar and two-thirds of one across it, so a 19px bar holds two or three of
@@ -756,7 +781,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      read as liquid metal from its smoothness and its light, not from hard
      reflection bands. */
   mercury: Object.freeze({
-    functions: shadeConsts("mercury") + peakConsts("mercury"),
+    functions: shadeConsts("mercury") + tuningConsts("mercury"),
     fill: `
     /* A body in the health colour — silvered a little and lifted slightly
        towards cool and warm pearl tints that drift slowly along it — and one
@@ -833,7 +858,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      fracture — sharp gold lines — that it sometimes carries, and under a break it
      calms so that fracture is the only structure on the bar. */
   lava: Object.freeze({
-    functions: shadeConsts("lava") + peakConsts("lava") + `
+    functions: shadeConsts("lava") + tuningConsts("lava") + `
 float lavaField(vec2 lq, float drift) {
   /* Pools about a bar height across; drift must be whole turns of period 16,
      which the call sites guarantee (the finer octave takes twice as many). */
@@ -1256,19 +1281,26 @@ void main(void) {
     float mDead = mFillA * segMask * step(0.5, uDyingDead)
                 * rbEdge(deadX - px * 0.5, deadX + px * 0.5, p.x) * (1.0 - mFill);
     /* Each dead slot is crossed out: a dull plum plate with an X, which is the
-       one mark that reads as "taken" at the size a slot is drawn at. */
+       one mark that reads as "taken" at the size a slot is drawn at. The X is a
+       hairline, so it is sized in device pixels alone — a world-sized floor is
+       two pixels on a HiDPI display and a fraction of one on an ordinary one —
+       and rbBand already keeps it at least a pixel wide, so nothing gates it. */
     float slotU = (fract((p.x - fx0) / slotW) - 0.5) * slotW;
-    float crossW = max(px * 0.9, 0.032);
+    float crossW = px * 0.9;
     float cross = max(rbBand((slotU - fy * fh * 0.55) * 0.85, crossW),
                       rbBand((slotU + fy * fh * 0.55) * 0.85, crossW));
     C = mix(C, mix(troughCol, uDyingCol * 0.42, 0.62), mDead * uDying);
     C += uDyingCol * cross * mDead * uDying * 0.85;
 
-    C = rbLighten(C, uDyingHot, vein.x * mFill * amt * 0.45);
-    C += uDyingHot * vein.x * mFill * amt * 0.10;
+    /* Over the liquid the veins and the heartbeat lighten towards a tint of the
+       gauge's own orchid (DYING_PEAK), never towards the near-white hot orchid
+       and never by adding light: the heartbeat loops for as long as the
+       creature is dying, so its peak is the resting look, and it stays a
+       lighter orchid. Out in the trough and on the frame they add light. */
+    C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_VEIN_TINT), vein.x * mFill * amt * DYING_PEAK_VEIN);
     C += uDyingCol * (vein.x * 0.65 + vein.y * 0.12) * mTrough * (1.0 - mFill) * (1.0 - mDead) * amt * 0.40;
 
-    C = rbLighten(C, mix(uDyingCol, uDyingHot, 0.55), dyHeart * mFill * amt * 0.40);
+    C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_BEAT_TINT), dyHeart * mFill * amt * DYING_PEAK_BEAT);
     C += uDyingCol * dyHeart * mStroke * amt * 0.65;
   }
 
