@@ -391,7 +391,14 @@ liquid's identity therefore lives in how its light *moves* — ink's drifting
 plumes, mercury's gliding sheen, lava's pulsing pools — at a feature scale that
 survives a 19px bar; bloodied is slower, paler and gentler, never darker, and
 lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than dimming. The trough, dividers and fracture seams are not the liquid and keep
-their dark. Every idle term turns a whole number of times in the 64s idle loop,
+their dark. The ceiling is pinned as hard as the floor: a liquid's brightest
+*resting* light is a lighter tint of it, never white — every peak magnitude is a
+named constant (`LIQUID_PEAK`, `HEAD_GLOW`), the head glow is screened on rather
+than added, and the check evaluates each liquid's brightest resting pixel and
+fails if a channel reaches 1.0 or it keeps too little of its colour's
+saturation; mercury's *body* (`LIQUID_BODY`) is held to a floor too, hale and
+bloodied, because a tinted peak on a near-white body still reads as white
+liquid. Transients (waves, impacts, the heal bloom) stay bright. Every idle term turns a whole number of times in the 64s idle loop,
 through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
 once a minute when the clock wraps. And the **only spring** in the feature is the
 `surge` through the liquid's texture and light after a change: no length — fill,
