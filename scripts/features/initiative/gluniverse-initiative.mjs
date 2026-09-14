@@ -46,7 +46,7 @@ import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./to
  */
 import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
 import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
-import { getPF2eDyingState, getDnd5eDeathState, getDyingState, getActorAttributeValue, getConditionValue, hasActorItem, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getActorItems, getItemSlug, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
+import { getPF2eDyingState, getDnd5eDeathState, getDyingState, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
 
 
 // Exported as a live binding: token-overlay.mjs reads `overlay` (enabled state,

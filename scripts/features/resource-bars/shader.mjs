@@ -33,6 +33,11 @@
  *     worst loss is budgeted against the floor. No black, no INK, no
  *     darkening gradient. The trough, the dividers and the guard-break seams are
  *     not the liquid and keep their dark.
+ *   - **Its brightest light is a lighter tint of it, never white.** At rest no
+ *     channel of any liquid reaches 1.0 and its peaks keep the liquid's hue:
+ *     every peak magnitude is a named constant (LIQUID_PEAK, HEAD_GLOW) and the
+ *     head glow is screened on rather than added. Waves, impacts, the heal
+ *     flash and the temp-HP edge are moments, and stay bright.
  *
  * The rails and the shield rail keep a flat plate: a secondary resource is not
  * health, and giving it the same liquid would say it is.
@@ -57,7 +62,9 @@
  */
 
 import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
-import { FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_NOISE } from "../../core/fx-glsl.mjs";
+import {
+  FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_DYING_FIELD, FX_GLSL_DYING_NOISE, FX_GLSL_NOISE,
+} from "../../core/fx-glsl.mjs";
 
 /* Re-exported so this module stays the single import site for everything the
    feature compiles, as it was when it owned the constant. */
@@ -113,12 +120,21 @@ export const UNIFORMS = Object.freeze({
   uBreakFlow: "float", // the energy flowing along the seams, 0 once shed under load
   uSeed: "float",      // per-token seed, so two broken creatures shatter differently
 
+  uDying: "float",      // PF2e dying gauge's hold on the primary bar, 0..1 (0 = hit points); hero row only
+  uDyingT: "float",     // the veins' and the heartbeat's clock, seconds, wrapping at the idle loop
+  uDyingSlots: "float", // the gauge's slots: dying max + doomed
+  uDyingDead: "float",  // how many of them, at the right end, doomed has taken
+  uDyingLevel: "float", // heartbeat rate index into DYING_BEATS, fractional while it crossfades
+  uDyingPulse: "float", // heartbeat strength, 0 once flatlined
+
   uRamp: "vec3[4]",   // health ramp in OKLab, empty → full
   uTempCol: "vec3",   // temp-HP overlay colour, sRGB 0..1
   uShieldCol: "vec3", // shield rail colour, sRGB 0..1
   uRailCol: "vec3",   // secondary-rail colour, sRGB 0..1 (the suite accent)
   uBreakAmber: "vec3",// fracture seam gold, sRGB 0..1
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
+  uDyingCol: "vec3",  // --gl-orchid, sRGB 0..1
+  uDyingHot: "vec3",  // --gl-orchid-hot, sRGB 0..1
 });
 
 /** Frame shape and the numeric run's safe inset, in bar-height units.
@@ -199,14 +215,19 @@ export const IDLE_LOOP_S = 64;
  * does can only lighten or keep luminance. `resource-bar-check` evaluates the
  * helpers and the ranges numerically and refuses anything in a liquid chunk that
  * could darken.
+ *
+ * The range has a ceiling as well as a floor. Lightening is allowed, but only to
+ * a lighter tint of the liquid (LIQUID_PEAK), and the top of each shade range
+ * stays at the ramp colour itself: a ramp colour is already near 1.0 in its
+ * strongest channel, so a shade above it clips that channel at rest.
  */
 export const LIQUID_FLOOR = 0.8;
 
 /** Each liquid's `rbShade` range, [low, high], as multiples of its ramp colour. */
 export const LIQUID_SHADE = Object.freeze({
-  ink: Object.freeze([0.84, 1.10]),
-  mercury: Object.freeze([0.90, 1.05]),
-  lava: Object.freeze([0.92, 1.12]),
+  ink: Object.freeze([0.84, 1.00]),
+  mercury: Object.freeze([0.90, 1.00]),
+  lava: Object.freeze([0.92, 1.00]),
 });
 
 /**
@@ -236,9 +257,158 @@ export const LAVA_BREAK_CALM = 0.6;
  */
 export const LAVA_WARMTH = 0.35;
 
+/**
+ * The dying heartbeat's rates, in beats per idle loop (64s): dying 1, 2, 3, and
+ * 4 or more — 60, 75, 90 and 120 beats a minute. Whole numbers, so the heartbeat
+ * lands on the frame it left when its clock wraps; rising, so it quickens as the
+ * creature gets closer to death. The model crossfades between their indices
+ * (`uDyingLevel`), and each rate is written into the GLSL as its own literal,
+ * which `resource-bar-check` pins against this table.
+ */
+export const DYING_BEATS = Object.freeze([64, 80, 96, 128]);
+
+/**
+ * The veins' scale on a bar, as a multiplier on the bar's own p space before it
+ * reaches `gluDyingField`. The field was written for card and token quads,
+ * where uv runs 0..1 across the whole face; on a bar p runs a bar height per
+ * unit, so at 1.0 its finest ridges land about a device pixel apart on the 19px
+ * reference bar — the same fracture-is-grain trap BREAK_DENSE documents.
+ */
+export const DYING_DENSE = 0.42;
+
+/**
+ * How much deeper and more saturated than `--gl-orchid` the gauge's liquid is,
+ * 0..1. The token is a pastel, and the liquid then goes through bloodied's calm,
+ * which pales it further; at token size the result was a near-white bar that read
+ * as full health. The deeper tone is derived from the palette colour itself
+ * (orchid multiplied towards orchid squared) rather than from a second hex.
+ */
+export const DYING_DEPTH = 0.45;
+
+/**
+ * How far the poured liquid is pushed away from grey while dying, through
+ * `rbSaturate` — same luma, so it restores the orchid bloodied's calm took out
+ * without making anything darker.
+ */
+export const DYING_SAT = 0.55;
+
+/**
+ * How far the veins' two warp offsets swing, in field units. The initiative
+ * tracker slides them linearly; a bar's clock wraps, so here they go round
+ * closed orbits a whole number of times per loop, at about the same speed.
+ */
+export const DYING_ORBIT = 0.30;
+
+/**
+ * How bright a dying gauge's veins and heartbeat get over the liquid — the
+ * gauge's LIQUID_PEAK. Each lightens the liquid towards a tint between the
+ * gauge's own deepened orchid and `--gl-orchid-hot`, and never adds light.
+ *
+ * The hot orchid is itself a near-white. Lightening the vein cores all the way
+ * to it and then adding a tenth of it on top reached past 1.0 in two channels:
+ * a white vein on every dying bar, which the bloom then lit. And the heartbeat
+ * loops for as long as the creature is dying, so the top of a beat is part of
+ * the resting look, not a moment — it is held to the same rule.
+ *
+ *   vein / veinTint   how far a vein's core lightens, and how far its target
+ *                     sits from the gauge's orchid towards the hot orchid
+ *   beat / beatTint   the same for the heartbeat
+ *
+ * `resource-bar-check` evaluates every liquid's brightest dying pixel from
+ * these, and pins the two statements that read them.
+ */
+export const DYING_PEAK = Object.freeze({ vein: 0.85, veinTint: 0.60, beat: 0.45, beatTint: 0.40 });
+
+/**
+ * How bright each liquid's peaks get — its plumes, its sheen, its pools — as
+ * named numbers rather than literals in the GLSL.
+ *
+ * A peak is a lighter **tint** of the liquid, never white. The ramp colours
+ * already sit at about 0.97–0.99 in their strongest channel (every stop but the
+ * green has a channel at 1.0), so a peak drawn three-quarters of the way to
+ * white, or a saturation step on an already-bright pixel, clips: at token size a
+ * clipped peak is a white one, and the bloom pass then lights it.
+ *
+ *   ink.plume         how far towards white the plumes reach
+ *   ink.saturate      the body's saturation, eased off where the field brightens
+ *   mercury.sheen     how far towards white the sheen reaches; metal is allowed
+ *                     a little more than the other two
+ *   lava.pool         how far the pools lean towards their gold, never past 1.0
+ *   lava.saturate     lava's saturation, hale and bloodied, eased off where it
+ *   lava.saturateBloodied  is hottest
+ *
+ * `resource-bar-check` evaluates every liquid's brightest resting pixel from
+ * these, and pins each GLSL statement that reads them.
+ */
+export const LIQUID_PEAK = Object.freeze({
+  ink: Object.freeze({ plume: 0.50, saturate: 0.45 }),
+  mercury: Object.freeze({ sheen: 0.60 }),
+  lava: Object.freeze({ pool: 0.60, saturate: 0.35, saturateBloodied: 0.25 }),
+});
+
+/**
+ * The glow on the liquid just behind its leading edge.
+ *
+ * At rest it is a tint of the liquid (`tint` of the way to white) **screened**
+ * on at `rest`: it lightens towards that tint by the headroom left in each
+ * channel, so it can never reach 1.0 however bright the liquid under it already
+ * is. Added outright, it put a 60%-white on top of the brightest part of every
+ * fill and clipped it to pure white. A heal bloom still swells it — towards
+ * white by `tintBloom` and as added light past 1.0 by `bloom` — because that is
+ * a moment, and the bloom pass is meant to find it.
+ */
+export const HEAD_GLOW = Object.freeze({ tint: 0.25, tintBloom: 0.70, rest: 0.40, bloom: 1.25 });
+
+/**
+ * How pale a liquid's *body* is — the colour most of the bar is, away from its
+ * peaks — where that is a tuning knob rather than a fixed idiom.
+ *
+ * Mercury is the one that needs it. Its body is the health colour silvered a
+ * little and lifted towards a pale cool or warm pearl, and bloodied it softens
+ * towards grey and lifts towards a milk. At the numbers it first shipped with,
+ * that was a near-white bar at token size at every health — pale mint, pale
+ * sage, cream, pale peach, pale salmon — so the metal read as white liquid and
+ * the ramp stopped carrying the reading. Bloodied is still paler and gentler
+ * than hale (the rule every liquid keeps); it is paler *yellow*, not cream.
+ *
+ *   mercury.soften          how far the hale body moves towards an equal-luma grey
+ *   mercury.softenBloodied  …and the bloodied body
+ *   mercury.pearlTint       how far the pearl tints sit from the health colour
+ *                           towards their cool and warm silvers
+ *   mercury.pearl           how far the body lifts towards them
+ *   mercury.milk            how far the bloodied body lifts towards a pale tint
+ *
+ * `resource-bar-check` evaluates the body at the median of every field and holds
+ * it to a saturation floor, hale and bloodied, and pins each statement reading
+ * these the same way as LIQUID_PEAK.
+ */
+export const LIQUID_BODY = Object.freeze({
+  mercury: Object.freeze({ soften: 0.08, softenBloodied: 0.30, pearlTint: 0.25, pearl: 0.25, milk: 0.20 }),
+});
+
 const f4 = (n) => n.toFixed(4);
+
+/* The heartbeat at every level, crossfaded by uDyingLevel: one dyBeat per rate
+   in DYING_BEATS, each weighted by how close the level index is to it. */
+const DYING_HEART = DYING_BEATS
+  .map((k, i) => `dyBeat(${k.toFixed(1)}) * max(0.0, 1.0 - abs(lv - ${i.toFixed(1)}))`)
+  .join("\n             + ");
 const shadeConsts = (liquid) =>
   `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
+/* Every tuned magnitude as a named GLSL const — LIQUID_PEAK.lava.saturateBloodied
+   is LAVA_SATURATE_BLOODIED, LIQUID_BODY.mercury.pearl is MERCURY_PEARL,
+   HEAD_GLOW.rest is HEAD_REST, DYING_PEAK.veinTint is DYING_PEAK_VEIN_TINT — so a
+   statement reads the name and resource-bar-check can hold the name to the
+   export. A liquid's peaks, body and head glow go into its own chunk; the dying
+   peaks are the shared frame's. */
+const constName = (s) => s.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase();
+const dyingPeakConsts = Object.entries(DYING_PEAK)
+  .map(([k, v]) => `const float ${constName("dying_peak_" + k)} = ${f4(v)};\n`).join("");
+const tuningConsts = (liquid) =>
+  [...Object.entries(LIQUID_PEAK[liquid]).map(([k, v]) => [liquid + "_" + k, v]),
+   ...Object.entries(LIQUID_BODY[liquid] ?? {}).map(([k, v]) => [liquid + "_" + k, v]),
+   ...Object.entries(HEAD_GLOW).map(([k, v]) => ["head_" + k, v])]
+    .map(([k, v]) => `const float ${constName(k)} = ${f4(v)};\n`).join("");
 
 /* ── The shared frame ───────────────────────────────────────────────────── */
 
@@ -251,7 +421,11 @@ const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
 const float LAVA_BREAK_CALM = ` + f4(LAVA_BREAK_CALM) + `;
 const float LAVA_WARMTH = ` + f4(LAVA_WARMTH) + `;
-const float LOOP_W = ` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
+const float DYING_DENSE = ` + f4(DYING_DENSE) + `;
+const float DYING_ORBIT = ` + f4(DYING_ORBIT) + `;
+const float DYING_DEPTH = ` + f4(DYING_DEPTH) + `;
+const float DYING_SAT = ` + f4(DYING_SAT) + `;
+` + dyingPeakConsts + `const float LOOP_W =` + (Math.PI * 2 / IDLE_LOOP_S).toFixed(10) + `;` + `
 varying vec2 vTextureCoord;
 
 uniform float uTime;
@@ -281,18 +455,28 @@ uniform float uBreakT;
 uniform float uBreakX;
 uniform float uBreakFlow;
 uniform float uSeed;
+uniform float uDying;
+uniform float uDyingT;
+uniform float uDyingSlots;
+uniform float uDyingDead;
+uniform float uDyingLevel;
+uniform float uDyingPulse;
 uniform vec3  uRamp[4];
 uniform vec3  uTempCol;
 uniform vec3  uShieldCol;
 uniform vec3  uRailCol;
 uniform vec3  uBreakAmber;
 uniform vec3  uBreakHot;
+uniform vec3  uDyingCol;
+uniform vec3  uDyingHot;
 
 /* The guard-break fracture, shared verbatim with the initiative tracker's token
    overlay and card portraits and with the etched-chat crit crack. Only the field
    is shared; the colouring below is this shader's own, because that is the part
    that has to answer to what it is being drawn over. uSeed must be declared
-   before either chunk — both hash against it. */` + FX_GLSL_NOISE + FX_GLSL_BREAK_FIELD + FX_GLSL_BREAK_PULSE + `
+   before either chunk — both hash against it. The dying veins are shared the
+   same way, with the tracker's card and token overlay. */` + FX_GLSL_NOISE + FX_GLSL_BREAK_FIELD + FX_GLSL_BREAK_PULSE
+  + FX_GLSL_DYING_NOISE + FX_GLSL_DYING_FIELD + `
 
 /* One device pixel in p units. Set once in main(), read by the helpers below —
    GLSL ES 1.0 has no closures, so this is a global by necessity. */
@@ -412,6 +596,20 @@ float rbDrift(float k, float period) {
   return rbPhase(k) * period * 0.1591549431;
 }
 
+/* ── The dying clock ─────────────────────────────────────────────────────
+   The same rule on its own clock, uDyingT, which the model freezes at flatline
+   and under the shed without touching the liquid's idle loop. dyPhase(k) turns k
+   whole times per loop; pass whole numbers. dyBeat is one heartbeat, a lub and a
+   softer dub, at k beats per loop. */
+float dyPhase(float k) {
+  return uDyingT * LOOP_W * k;
+}
+
+float dyBeat(float k) {
+  float th = dyPhase(k);
+  return pow(0.5 + 0.5 * cos(th), 10.0) + 0.55 * pow(0.5 + 0.5 * cos(th - 0.95), 10.0);
+}
+
 /* Hash and value noise, periodic in x with the given lattice period so that a
    drift of whole periods is seamless. Seeded per token, so two creatures'
    liquids do not move in lockstep. */
@@ -487,7 +685,7 @@ export const LIQUID_CHUNKS = Object.freeze({
      three and the default, because a fill that is always quietly moving is still
      a fill that is mostly not asking to be looked at. */
   ink: Object.freeze({
-    functions: shadeConsts("ink") + `
+    functions: shadeConsts("ink") + tuningConsts("ink") + `
 float inkField(vec2 lq, float driftA, float driftB, float fold) {
   /* Fewer, larger plumes: about a bar height and a third per swirl along the
      bar and two-thirds of one across it, so a 19px bar holds two or three of
@@ -516,13 +714,17 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
     } else {
       fieldI = rbNoise(vec2(lqI.x * 0.75, lqI.y * 1.5), 12.0);
     }
-    /* High contrast between a vivid, saturated body and near-white plumes —
-       still only lighter, still blended over a wide soft band. */
+    /* High contrast between a vivid, saturated body and plumes that lift to a
+       lighter tint of the same hue — never white, still only lighter, still
+       blended over a wide soft band. The saturation lives in the body and eases
+       off where the field brightens: a ramp colour already sits near 1.0 in its
+       strongest channel, and saturating a bright pixel pushes that channel
+       past it. */
     float ampI = mix(1.0, 0.45, bloodied);
     fillCol = rbShade(base, mix(0.5, smoothstep(0.25, 0.60, fieldI), ampI), SHADE_LO, SHADE_HI);
-    fillCol = rbSaturate(fillCol, 0.60 * (1.0 - bloodied));
+    fillCol = rbSaturate(fillCol, INK_SATURATE * (1.0 - smoothstep(0.25, 0.60, fieldI)) * (1.0 - bloodied));
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(0.45, 0.70, fieldI) * 0.35 * ampI);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.78), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), INK_PLUME), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);
     fillCol = rbSoften(fillCol, 0.50 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), 0.30 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);
@@ -579,27 +781,29 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      read as liquid metal from its smoothness and its light, not from hard
      reflection bands. */
   mercury: Object.freeze({
-    functions: shadeConsts("mercury"),
+    functions: shadeConsts("mercury") + tuningConsts("mercury"),
     fill: `
-    /* A pearly body — silvered a little and lifted towards pale cool and warm
-       tints that drift slowly along it — and one broad, soft, bright sheen
-       gliding the length of the bar, slanted with the tube's curve. The
-       travelling highlight is what reads as reflective. Bloodied, the sheen
-       slows to a third, spreads and fades, and the body goes milky. The surge
-       rolls the sheen along after a change. */
+    /* A body in the health colour — silvered a little and lifted slightly
+       towards cool and warm pearl tints that drift slowly along it — and one
+       broad, soft sheen gliding the length of the bar, slanted with the tube's
+       curve. The travelling highlight is what reads as reflective, so the body
+       does not have to be pale to read as metal (LIQUID_BODY). Bloodied, the
+       sheen slows to a third, spreads and fades, and the body goes a little
+       milkier while keeping its hue. The surge rolls the sheen along after a
+       change. */
     vec2 lqM = lq + vec2(uSurge * 0.40, 0.0);
     float glide = uFlow > 0.5 ? 1.0 : 0.0;
     fillCol = rbShade(base, 0.5 + 0.5 * fy, SHADE_LO, SHADE_HI);
-    fillCol = rbSoften(fillCol, mix(0.15, 0.75, bloodied));
+    fillCol = rbSoften(fillCol, mix(MERCURY_SOFTEN, MERCURY_SOFTEN_BLOODIED, bloodied));
     float pearl = 0.5 + 0.5 * sin(lqM.x * 0.9 + rbPhase(3.0) * glide + uSeed);
-    fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), 0.55),
-                                     mix(base, vec3(1.00, 0.95, 0.97), 0.55), pearl), 0.40);
+    fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), MERCURY_PEARL_TINT),
+                                     mix(base, vec3(1.00, 0.95, 0.97), MERCURY_PEARL_TINT), pearl), MERCURY_PEARL);
     float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);
     float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);
     float sheenQ = mix(quickS, slowS * 0.45, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.85),
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), MERCURY_SHEEN),
                         sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), MERCURY_MILK * bloodied + abs(uSurge) * 0.15);
 `,
     wave: `
   if (uWave > 0.001) {
@@ -654,7 +858,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      fracture — sharp gold lines — that it sometimes carries, and under a break it
      calms so that fracture is the only structure on the bar. */
   lava: Object.freeze({
-    functions: shadeConsts("lava") + `
+    functions: shadeConsts("lava") + tuningConsts("lava") + `
 float lavaField(vec2 lq, float drift) {
   /* Pools about a bar height across; drift must be whole turns of period 16,
      which the call sites guarantee (the finer octave takes twice as many). */
@@ -692,9 +896,12 @@ float lavaField(vec2 lq, float drift) {
     fillCol = rbWarm(fillCol, LAVA_WARMTH);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.72, 0.30), 0.35), mix(0.40, 0.25, bloodied));
     float pools = smoothstep(0.45, 0.95, heat) * mix(0.55 + 0.45 * pulse, 0.60 + 0.15 * pulse, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), 0.60) * 1.20,
+    /* The pools lean towards their gold and no further — the target is never
+       past 1.0 — and the saturation eases off where it is hottest, where a
+       saturated amber would push red straight through its ceiling. */
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), LAVA_POOL),
                         pools * mix(1.0, 0.50, bloodied) * (1.0 - calm));
-    fillCol = rbSaturate(fillCol, mix(0.65, 0.30, bloodied));
+    fillCol = rbSaturate(fillCol, mix(LAVA_SATURATE, LAVA_SATURATE_BLOODIED, bloodied) * (1.0 - heat));
     float shimmerL = 0.0;
     if (uFlow > 0.5) shimmerL = 0.5 + 0.5 * sin(lqL.y * 7.0 - rbPhase(48.0) + 1.5 * sin(lqL.x * 2.2 + rbPhase(9.0)));
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), shimmerL * mix(0.14, 0.05, bloodied) * (1.0 - calm));
@@ -811,6 +1018,13 @@ void main(void) {
      ramp stop reaches. This is the one place the fill is allowed to editorialise,
      because "you are about to die" is not a shade of the same information. */
   base = mix(base, vec3(1.000, 0.106, 0.153), uLow * 0.55 * hero);
+  /* Dying takes the primary bar over: the liquid keeps its own motion but turns
+     orchid and goes calm the way bloodied does — slower, gentler, paler, never
+     darker — because the gauge is not hit points and must not read as a shade of
+     them. */
+  float dyingOn = uDying * hero;
+  base = mix(base, uDyingCol * mix(vec3(1.0), uDyingCol, DYING_DEPTH), dyingOn);
+  bloodied = max(bloodied, dyingOn);
 
   /* ── The trough ────────────────────────────────────────────────────────*/
   /* Flat and dark, with one shadow under the top edge. A well is not supposed
@@ -835,6 +1049,9 @@ void main(void) {
     fillCol += mix(base, vec3(1.0), 0.68) * rbBand(hb - 0.81, 0.035) * 0.65;
     fillCol += base * rbBand(hb + 0.83, 0.045) * 0.38;
   }
+  /* A dying gauge gets back the orchid bloodied's calm paled out of it — at the
+     same luma, so nothing the liquid did is made darker. */
+  fillCol = rbSaturate(fillCol, DYING_SAT * dyingOn);
   // The warning brightens the liquid on the breath's clock; it never dims it.
   fillCol += base * uLow * hero * (0.12 + 0.34 * breathe);
 
@@ -843,9 +1060,12 @@ void main(void) {
      bar. A groove says "one quantity, subdivided for counting"; a gap says
      "assembled from parts", which is what every game HUD in this idiom says. */
   float segMask = 1.0;
-  if (uSeg > 0.5) {
-    float segW = span / uSeg;
-    float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * uSeg) * segW;
+  /* The dying gauge is its slots, so it is divided into them whatever the
+     hit-point divisions are set to. */
+  float segN = mix(uSeg, uDyingSlots, step(0.5, uDying) * hero);
+  if (segN > 0.5) {
+    float segW = span / segN;
+    float sx = fract(clamp((p.x - fx0) / span, 0.0, 1.0) * segN) * segW;
     /* Sized in the *world*, so it scales with the canvas. uSegW arrives in bar
        heights: the host divides the setting ("pixels at 100% zoom") by the
        bar's own world height.
@@ -906,10 +1126,11 @@ void main(void) {
   float shimmer = 0.5 + 0.5 * sin(p.x * 5.5 - rbPhase(8.0));
 
   /* ── The leading edge's light ──────────────────────────────────────────
-     A glow *on* the liquid just behind the edge, added as light; it softens
-     nothing about the edge itself. */
+     A glow *on* the liquid just behind the edge; it softens nothing about the
+     edge itself. At rest it is a tint of the liquid screened on (HEAD_GLOW), so
+     it cannot reach white; only a heal bloom adds light past 1.0. */
   float headIn = rbGauss(p.x - fillX, 0.055 + 0.11 * uBloom) * mFill;
-  vec3 headCol = mix(base, vec3(1.0), 0.60 + 0.35 * uBloom);
+  vec3 headCol = mix(base, vec3(1.0), HEAD_TINT + HEAD_TINT_BLOOM * uBloom);
 
   /* ── Stroke ────────────────────────────────────────────────────────────
      The asymmetry that stops the bar reading as a form control comes from the
@@ -928,7 +1149,7 @@ void main(void) {
     tickMark += rbBand(p.x - tx, 0.022) * rbBand(p.y + bb.y + 0.085, 0.055);
   }
   /* They are divisions too, so they leave with the divisions. */
-  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg);
+  tickMark *= rbDetail(0.048) * hero * 0.20 * step(0.5, uSeg) * (1.0 - uDying);
 
   /* ── Compose ───────────────────────────────────────────────────────────*/
   vec3 C = vec3(0.0);
@@ -953,7 +1174,11 @@ void main(void) {
   C += uTempCol * rbBand(hb - 0.20, 0.045) * mTempArea * 0.85;
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
   C += uTempCol * rbGauss(p.x - tempX, 0.045) * mTempArea * 1.65;
-  C += headCol * headIn * (0.55 + 1.1 * uBloom);
+  /* Screened at rest: it takes a share of each channel's remaining headroom, so
+     it lightens towards its tint and stops short of 1.0. The heal bloom's share
+     is added outright, which is the point of it. */
+  C += max(vec3(1.0) - C, vec3(0.0)) * headCol * headIn * HEAD_REST;
+  C += headCol * headIn * HEAD_BLOOM * uBloom;
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));
@@ -1029,6 +1254,56 @@ void main(void) {
     A = max(A, min(lit * amt * 1.10, 1.0));
   }
 
+  /* ── Dying ─────────────────────────────────────────────────────────────
+     PF2e's dying gauge. The fill above is already the gauge — the host hands
+     uFrac the dying value over its slots, and the edge is the same straight line
+     — so this block only adds what says *dying*: the initiative tracker's
+     corruption veins, from the same field in core/fx-glsl.mjs; a heartbeat that
+     quickens with the dying level; and the slots doomed has taken, drawn dead at
+     the far end so the table can see why death comes sooner.
+
+     Over the liquid it only adds light. The dead slots are not liquid — the fill
+     can never reach them — and are a dull plate in the trough. uDying arrives 0
+     on the rails and on every living bar, so none of this is paid there; the
+     host also zeroes uBreak while dying, because dying outranks a broken guard. */
+  float dyHeart = 0.0;
+  if (uDying > 0.001) {
+    float lv = clamp(uDyingLevel, 0.0, ${(DYING_BEATS.length - 1).toFixed(1)});
+    dyHeart = (${DYING_HEART}) * uDyingPulse;
+    vec2 flowA = vec2(cos(dyPhase(2.0)), sin(dyPhase(2.0))) * DYING_ORBIT;
+    vec2 flowB = vec2(5.2, 0.0) + vec2(sin(dyPhase(3.0)), cos(dyPhase(3.0))) * DYING_ORBIT;
+    vec2 vein = gluDyingField(p * DYING_DENSE, flowA, flowB);
+    float amt = uDying * mBody;
+
+    float slotN = max(uDyingSlots, 1.0);
+    float slotW = span / slotN;
+    float deadX = mix(fx0, fx1, clamp((slotN - uDyingDead) / slotN, 0.0, 1.0));
+    float mDead = mFillA * segMask * step(0.5, uDyingDead)
+                * rbEdge(deadX - px * 0.5, deadX + px * 0.5, p.x) * (1.0 - mFill);
+    /* Each dead slot is crossed out: a dull plum plate with an X, which is the
+       one mark that reads as "taken" at the size a slot is drawn at. The X is a
+       hairline, so it is sized in device pixels alone — a world-sized floor is
+       two pixels on a HiDPI display and a fraction of one on an ordinary one —
+       and rbBand already keeps it at least a pixel wide, so nothing gates it. */
+    float slotU = (fract((p.x - fx0) / slotW) - 0.5) * slotW;
+    float crossW = px * 0.9;
+    float cross = max(rbBand((slotU - fy * fh * 0.55) * 0.85, crossW),
+                      rbBand((slotU + fy * fh * 0.55) * 0.85, crossW));
+    C = mix(C, mix(troughCol, uDyingCol * 0.42, 0.62), mDead * uDying);
+    C += uDyingCol * cross * mDead * uDying * 0.85;
+
+    /* Over the liquid the veins and the heartbeat lighten towards a tint of the
+       gauge's own orchid (DYING_PEAK), never towards the near-white hot orchid
+       and never by adding light: the heartbeat loops for as long as the
+       creature is dying, so its peak is the resting look, and it stays a
+       lighter orchid. Out in the trough and on the frame they add light. */
+    C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_VEIN_TINT), vein.x * mFill * amt * DYING_PEAK_VEIN);
+    C += uDyingCol * (vein.x * 0.65 + vein.y * 0.12) * mTrough * (1.0 - mFill) * (1.0 - mDead) * amt * 0.40;
+
+    C = rbLighten(C, mix(base, uDyingHot, DYING_PEAK_BEAT_TINT), dyHeart * mFill * amt * DYING_PEAK_BEAT);
+    C += uDyingCol * dyHeart * mStroke * amt * 0.65;
+  }
+
   /* ── Impact ────────────────────────────────────────────────────────────
      A bar that only changes length reports a number; the hit has to *land*.
      The envelope decays 1 → 0, so the reaction grows as its amplitude falls,
@@ -1074,6 +1349,10 @@ void main(void) {
   glow *= outMask * mix(0.45, 1.0, hero);
   outC += glowCol * glow * 0.75;
   outA += glow * 0.26;
+  /* The heartbeat carries past the body too, in orchid. */
+  float dyHalo = exp(-outside / 0.060) * outMask * dyHeart * uDying;
+  outC += uDyingCol * dyHalo * 0.50;
+  outA += dyHalo * 0.18;
 
   /* ── Fade ──────────────────────────────────────────────────────────────
      A bar appearing or a hover letting go is a plain fade, applied last to the

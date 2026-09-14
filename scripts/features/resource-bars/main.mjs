@@ -81,6 +81,8 @@ function currentOptions() {
        running, so the renderer never has to ask twice and a world without it
        does not pay for a flag read per token per refresh. */
     breakFx: !!get(SETTINGS.breakFx, true) && breakSourceActive(),
+    /* PF2e's own condition, so it needs PF2e and nothing else. */
+    dyingFx: !!get(SETTINGS.dyingFx, true) && game.system?.id === "pf2e",
     bloom: !!get(SETTINGS.bloom, true),
     offsetX: Number(get(SETTINGS.offsetX, 0)) || 0,
     offsetY: Number(get(SETTINGS.offsetY, 0)) || 0,

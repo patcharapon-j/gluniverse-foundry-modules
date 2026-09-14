@@ -22,10 +22,10 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT } from "./ramp.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DYING_INK } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
-import { readToken, sameReading } from "./data.mjs";
+import { readDying, readToken, sameReading } from "./data.mjs";
 import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
@@ -110,12 +110,15 @@ function makeBarMesh(role, opts) {
     uBreak: 0, uBreakT: 0, uBreakX: 1, uBreakFlow: 1, uSeed: opts.seed,
     uHit: 0, uHitX: 1, uHeal: 0, uSpark: 0, uChip: 0, uWave: 0, uWaveX: 1,
     uFlow: 1, uSurge: 0,
+    uDying: 0, uDyingT: 0, uDyingSlots: 0, uDyingDead: 0, uDyingLevel: 0, uDyingPulse: 0,
     uRamp: opts.ramp,
     uTempCol: new Float32Array(hexToFloat3(TEMP_COLOR)),
     uShieldCol: new Float32Array(hexToFloat3(SHIELD_COLOR)),
     uRailCol: new Float32Array(hexToFloat3(RAIL_COLOR)),
     uBreakAmber: new Float32Array(hexToFloat3(BREAK_AMBER)),
     uBreakHot: new Float32Array(hexToFloat3(BREAK_HOT)),
+    uDyingCol: new Float32Array(hexToFloat3(DYING_COLOR)),
+    uDyingHot: new Float32Array(hexToFloat3(DYING_HOT)),
   };
   /* One program per liquid, and only the world's liquid is ever compiled. The
      rails run it too — their flat plate is a branch inside it, not a fourth
@@ -218,6 +221,23 @@ class BarEntry {
        on its own, and hanging it off `changed` would leave a creature's bar
        intact until the next time something hit it. */
     this.readBreak(opts);
+    /* Dying rides the same road for the same reason: it arrives as a condition
+       item with no hit points moving. */
+    this.syncDying(opts, { silent: first || silent });
+  }
+
+  /**
+   * Carry PF2e's dying state onto the primary bar's model — the bar it takes
+   * over as the dying gauge. It reads the creature and writes only the model:
+   * nothing here touches the creature, and no visibility rule is added, because
+   * the gauge is drawn on a bar `visibility.mjs` has already decided about.
+   */
+  syncDying(opts, { silent = false } = {}) {
+    const bar = this.reading?.hero;
+    if (!bar) return;
+    const a = this.animFor("hero", bar.frac);
+    a.motionScale = this.host.motionScale;
+    a.setDying(opts.dyingFx ? readDying(this.token) : null, { silent });
   }
 
   /**
@@ -448,6 +468,7 @@ class BarHost {
       bothBars: this.opts.bothBars,
       pf2eLayers: this.opts.pf2eLayers,
       breakFx: this.opts.breakFx,
+      dyingFx: this.opts.dyingFx,
     }, { silent: !entry.vis.shown });
     /* A token with no readable bar still keeps its entry when it can show a
        name — a light, a marker or a loot pile gets `── NAME ──` in the slot. */
@@ -826,6 +847,12 @@ class BarHost {
     entry.group.renderable =
       !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
     entry.label?.setRenderable(entry.group.renderable);   // names share the stack's box
+    /* The dying clock freezes off screen, as the idle clock does — decided here
+       as well as in tick(), so a dying bar scrolled back into view is hot again
+       by the time syncTicker asks, rather than frozen until something else
+       wakes the ticker. */
+    const hero = entry.anims.hero;
+    if (hero) hero.dyingFrozen = !entry.group.renderable || !this.allows("dyingFlow");
   }
 
   syncTicker() {
@@ -879,6 +906,9 @@ class BarHost {
         const a = entry.anims[role];
         if (!a) continue;
         a.idleFrozen = !entry.group.renderable || !this.allows("sweep");
+        /* The dying veins and heartbeat on the same rule: off screen or shed,
+           the clock stops and the bar leaves the ticker; the gauge stays. */
+        a.dyingFrozen = !entry.group.renderable || !this.allows("dyingFlow");
         const wasHot = a.hot;
         if (a.step(dt) || wasHot) hot = true;
       }
@@ -934,7 +964,8 @@ class BarHost {
       const liquid = role === "hero";
       u.uFlow = liquid && this.allows("flow") ? 1 : 0;
       u.uSurge = liquid && a && this.allows("surge") ? clamp(a.surge, -1, 1) : 0;
-      u.uTemp = role === "hero" ? r.temp : 0;
+      /* Temp HP is measured against hit points, which a dying gauge is not showing. */
+      u.uTemp = role === "hero" && !a?.dyingOn ? r.temp : 0;
       u.uCracked = role === "shield" ? (r.shield?.broken ? 1 : 0) : 0;
 
       /* The fracture rides the primary bar and nothing else, so the rails get a
@@ -946,10 +977,26 @@ class BarHost {
       const brk = role === "hero" ? a : null;
       const flowing = this.allows("breakFlow");
       if (brk) brk.breakFrozen = !flowing;
-      u.uBreak = brk ? brk.broken : 0;
+      /* Dying outranks a broken guard on the bar, as it does on the token: the
+         seams give way to the gauge as the orchid takes over, and come back if
+         dying clears while the guard is still broken. */
+      u.uBreak = brk ? brk.broken * (1 - brk.dying) : 0;
       u.uBreakT = brk ? brk.breakT : 0;
       u.uBreakX = brk ? brk.breakX : 0;
       u.uBreakFlow = brk && flowing ? 1 : 0;
+
+      /* The dying gauge, on the primary bar and nothing else — the rails get hard
+         zeros and skip the block. Its freeze (off screen, or shed) is decided in
+         tick() and cullEntry(), beside the idle clock's; frozen, the veins and
+         the heartbeat hold where they are and the orchid, the slots and the fill
+         stay. */
+      const dy = role === "hero" ? a : null;
+      u.uDying = dy ? dy.dying : 0;
+      u.uDyingT = dy ? dy.dyingT : 0;
+      u.uDyingSlots = dy ? dy.dyingSlots : 0;
+      u.uDyingDead = dy ? dy.dyingDead : 0;
+      u.uDyingLevel = dy ? dy.dyingLevel : 0;
+      u.uDyingPulse = dy ? dy.dyingPulse : 0;
 
       /* Nothing about the geometry is animated — not the mesh transform, not
          the fill's height. Every part of a change is light moving across a
@@ -1012,8 +1059,14 @@ class BarHost {
        readout that snaps is a number nobody saw move. It counts instead, which
        also means a burst of small hits reads as one continuous fall rather than
        as a digit flickering. */
-    const value = Math.round((a ? a.num : r.hero.frac) * r.hero.max);
-    const label = value + "/" + r.hero.max;
+    /* Dying: the gauge's own reading, dying over its maximum, behind the same
+       gate as hit points; the atlas carries only digits and signs, so no
+       letters. The model decides which domain the number is in (readout), and
+       never counts one across into the other. */
+    const { value, max: shownMax } = a
+      ? a.readout(r.hero.max)
+      : { value: Math.round(r.hero.frac * r.hero.max), max: r.hero.max };
+    const label = value + "/" + shownMax;
 
     /* Cached against everything that shapes the run, not only its text. Size
        comes from the bar's height and the viewer's setting, and neither of
@@ -1027,7 +1080,7 @@ class BarHost {
       const geo = runGeometry([
         { text: String(value), size: h * 0.48 * numScale },
         { text: "/", size: h * 0.25 * numScale, dim: 0.52, bottom: true },
-        { text: String(r.hero.max), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
+        { text: String(shownMax), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
       ], { right, mid, center: false, maxWidth: Math.max(1, w - READOUT_INSET * h * 2), maxHeight: h * 0.70 });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       // The atlas run is centred on the same anchor as its mesh.
@@ -1048,7 +1101,12 @@ class BarHost {
          length either way. */
       const heat = a && this.allows("punch") ? a.hit * 0.18 : 0;
       const to = a?.heal ? HEAL_INK : HIT_INK;
-      for (let i = 0; i < 3; i++) entry._ink[i] = REST_INK[i] + (to[i] - REST_INK[i]) * heat;
+      /* In orchid as the gauge takes over, and back to white as it leaves. */
+      const orchid = a ? a.dying : 0;
+      for (let i = 0; i < 3; i++) {
+        const rest = REST_INK[i] + (DYING_INK[i] - REST_INK[i]) * orchid;
+        entry._ink[i] = rest + (to[i] - rest) * heat;
+      }
     }
 
     /* Floating deltas. "The bar got shorter" is a magnitude you estimate;

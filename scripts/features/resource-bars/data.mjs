@@ -7,7 +7,23 @@
  * and a raised shield — and is skipped entirely under any other system.
  */
 
+import { readPf2eDying } from "../../core/pf2e-dying.mjs";
+
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
+
+/**
+ * PF2e's dying state for the creature on a token, or null.
+ *
+ * Read beside the guard break rather than inside `readToken`, because it has to
+ * stay out of `sameReading`: dying arrives as a condition item change with no
+ * hit points moving, and hung off the value diff the gauge would never appear.
+ * No visibility test — `visibility.mjs` has already decided whether this client
+ * sees the bar the gauge is drawn on, and the digits keep their own gate.
+ */
+export function readDying(token) {
+  if (globalThis.game?.system?.id !== "pf2e") return null;
+  return readPf2eDying(token?.actor);
+}
 
 /** A bar attribute reduced to what the renderer needs, or null. */
 function readBar(token, name) {

@@ -105,9 +105,13 @@ front of something you click.
 `core/bloom.mjs` (shared with the token condition rail) runs threshold → blur H → blur V → composite. **PIXI's filter
 textures are 8-bit**, so everything the shader emits above 1.0 is clamped before
 the filter sees it; the threshold therefore sits below 1.0 and works on what
-survived. The preview harness renders to RGBA16F and can threshold above 1.0,
-so it is strictly more accurate than the shipped path. If a future Foundry
-offers a float filter target, raising the threshold is the only change needed.
+survived. The preview harness renders to RGBA16F but imports `DEFAULT_THRESHOLD`,
+`DEFAULT_KNEE` and `DEFAULT_INTENSITY` from `core/bloom.mjs` and clamps its scene
+to 1.0 before the bright-pass and the composite, so it blooms exactly as hard as
+the table does. It used to threshold its unclamped buffer at 1.05 with a wider
+knee, which flattered precisely the near-white peaks that bloom hardest in
+Foundry. If a future Foundry offers a float filter target, raising the threshold
+is the only change needed — in one place.
 
 ---
 
@@ -254,9 +258,9 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 
 | | |
 |---|---|
-| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and pale plumes of the health colour, blending as they move along the tube |
-| **Mercury** | a pearly, silvered body with a broad, soft, bright sheen gliding the length of the bar — reflective through a travelling highlight, never through dark bands |
-| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
+| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and plumes lifting to a pale tint of the health colour, blending as they move along the tube |
+| **Mercury** | a body in the health colour, silvered a little and drifting between faint cool and warm pearl tints, with a broad, soft sheen gliding the length of the bar — a lighter silvered tint of the health colour, reflective through a travelling highlight, never through dark bands or a pale body |
+| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it — golden, never past their gold — each slowly pulsing, and a faint rising heat shimmer |
 
 Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
 visible, low-frequency motion made only of lighter tints and saturation: features
@@ -273,7 +277,39 @@ blue lava on the colour-blind-safe ramp a warmer blue, and a nearly dead lava is
 still danger red, because the lean can never carry a hue across the ramp. It is
 bounded in the check (0.2–0.4), and it is the one colour step in any liquid that
 may cost luminance. Ink goes the other way: fewer, larger plumes, with the
-contrast between a vivid body and near-white peaks turned up.
+contrast between a saturated body and pale plumes turned up — pale as in a
+lighter tint of the ink, not white.
+
+### Peaks are a tint, never white
+
+The brightest light in any liquid at rest is a **lighter tint of that liquid**.
+The first liquids reached white: ink's plumes went 78% of the way there,
+mercury's sheen 85%, lava's pools overshot their own gold by ×1.20, and the
+glow at the fill's leading edge added a 60%-white on top of all three. So every
+liquid clipped to pure white at rest, the bloom lit the clip, and the one spot a
+player looks at stopped showing the health colour.
+
+Two facts shape the fix. The ramp colours already sit at about 0.97–0.99 in
+their strongest channel — every stop but the green has a channel at 1.0 — so
+the top of every `LIQUID_SHADE` range is the ramp colour itself, and saturation
+lives in the dim body and eases off where the liquid brightens, because
+saturating a bright pixel pushes that channel straight through its ceiling.
+And the head glow is **screened** on at rest rather than added: it takes a share
+of each channel's remaining headroom, so it lightens towards its tint (a
+quarter of the way to white) and stops short of 1.0 however bright the liquid
+under it is. A heal bloom still swells it towards white and past 1.0, because
+that is a moment.
+
+Every peak magnitude is a named constant — `LIQUID_PEAK` per liquid and
+`HEAD_GLOW` — reaching the GLSL as a `const float`. `resource-bar-check`
+restates each fill chain and the head glow on its helper mirrors, pins every
+statement it restates verbatim, and evaluates the brightest resting pixel of
+each liquid across both ramps, the whole HP range and every value its fields can
+take. It fails if any channel reaches 1.0, or if that pixel keeps too little of
+its colour's saturation (0.28 for ink, 0.20 for mercury, which reads as metal
+from a paler body, and 0.28 for lava measured against its own amber-leaned
+colour). Resting excludes what is meant to be loud — waves, impacts, the heal
+flash and bloom, the temp-HP edge, the contact glow — and the low-health breath.
 
 They replaced a refractive-glass material — travelling ribbons of caustic light
 with glints and a facet pattern — that did its job as *glass* and failed as
@@ -368,7 +404,7 @@ arrives rather than snaps.
 | | |
 |---|---|
 | **Ink** | swirls slow to a quarter and fold less, contrast drops, and the ink goes pale and milky |
-| **Mercury** | the sheen slows to a third, spreads and fades, and the pearly body goes milkier |
+| **Mercury** | the sheen slows to a third, spreads and fades, and the body goes milkier while keeping its hue — a paler yellow at 49%, not cream |
 | **Lava** | pools slow to a third and soften, the pulse and the shimmer calm, and the glow loses its saturation and goes pale |
 
 ### The surge
@@ -584,8 +620,9 @@ Under load, `SHED_ORDER` in `anim.mjs` gives effects up cheapest-first until the
 rolling frame time is back inside budget. Every animated behaviour must appear
 in that list; the check tool enforces it, so a new effect cannot be added that
 never degrades. The standing costs lead it — the idle clock (`sweep`), the
-liquid's `flow`, and a settled fracture's `breakFlow` — and everything after them
-is paid once per change, `surge` included.
+liquid's `flow`, a settled fracture's `breakFlow` and a dying gauge's
+`dyingFlow` — and everything after them is paid once per change, `surge`
+included.
 
 ---
 
@@ -721,6 +758,130 @@ permission story is built to avoid.
 `rb.breakFx` turns it off. World-scoped, because it is a fact about the creature
 that the whole table reads off the same bar rather than a preference about how
 much motion one screen shows; that lever already exists and is the motion tier.
+
+---
+
+## Dying (PF2e)
+
+While a creature carries PF2e's **Dying** condition, its primary bar stops
+measuring hit points and becomes the **dying gauge**. The trigger is the
+condition, not the hit points: a creature a GM has left dying above 0 HP still
+shows it, and one at 0 HP without the condition does not.
+
+| | |
+|---|---|
+| **Length** | `dying.value / slots`, ending in the same straight edge at the value the HP fill has |
+| **Slots** | `dying.max + doomed` plates, divided whatever `rb.dividers` says — the gauge *is* its slots |
+| **Dead slots** | the last `doomed` slots, a dull plum plate crossed out at the far end |
+| **Readout** | `dying/max` — `2/4`, or `2/3` at doomed 1 — in orchid |
+| **Setting** | `rb.dyingFx`, world, default on, offered only under PF2e |
+
+**Why dead slots.** PF2e's `dying.max` already has doomed taken off, so a gauge
+`max` slots long would say "death at 3" and nothing about why this party member
+dies a step before everyone else. Keeping the length the table knows — four, or
+five with Diehard — and drawing doomed's share dead at the end shows both.
+
+### The reader
+
+`core/pf2e-dying.mjs` is the suite's one reading of dying, and the initiative
+tracker uses it too. It is pure — no imports, no Foundry globals — so the check
+tools load it under plain Node. It prefers the derived
+`system.attributes.dying` PF2e recomputes before the item hooks fire (NPCs
+inherit it from `CreaturePF2e`, so any actor counts), uses the condition item
+only where that is missing, and subtracts doomed **once**, and only in that
+fallback. The tracker used to subtract it from the derived maximum a second time,
+so doomed 1 read "death at 2" where the book says 3. It returns null once doomed
+has taken the whole maximum: PF2e clamps dying to its max, so dying cannot be
+above 0 there, and a reading of max 0 would draw every slot dead at `0/0` while
+the tracker drew nothing. Both show nothing, and the hit-point bar carries on.
+
+Dying is read **outside the value diff**, beside the guard break. It arrives as
+`createItem`/`updateItem`/`deleteItem` with no hit points moving, so hung off
+`sameReading` the gauge would simply never appear. Hit-point changes that land
+while dying are remembered, not drawn — no reaction, no delta — and the fill
+glides back to them when dying clears.
+
+### The look
+
+The liquid keeps its own motion character — ink still swirls, mercury still
+glides, lava still pools — but turns orchid and goes calm by raising
+`bloodied`: slower, gentler, paler, **never darker**. `--gl-orchid` is a pastel
+and bloodied pales it further, which at token size came out as a near-white bar
+that read as full health, so the gauge's colour is deepened from the token itself
+(`DYING_DEPTH`, orchid towards orchid squared) and the poured liquid is pushed
+back away from grey through `rbSaturate` (`DYING_SAT`), at the same luma.
+
+The veins are the initiative tracker's, from the same field. `core/fx-glsl.mjs`
+now exports `FX_GLSL_DYING_FIELD` — `gluDyingField(uv, flowA, flowB)` — beside
+`FX_FRAG_DYING`, which calls it with exactly the linear drift it always had, so
+the card and the token overlay are pixel-identical to before. A bar cannot drift
+linearly: its clock wraps, and a slide through non-periodic noise would jump at
+the wrap. It moves both warp offsets round closed orbits a whole number of times
+per loop instead, at `DYING_DENSE` so the ridges are not a pixel apart.
+
+The **heartbeat** is a lub and a softer dub on the fill, the frame and just past
+the body. `DYING_BEATS` gives 64, 80, 96 and 128 beats per 64s loop — 60, 75, 90
+and 120 a minute — for dying 1, 2, 3 and 4 or more, each a whole number so the
+wrap is invisible. A new level crossfades between rates (`uDyingLevel` tweens
+through the indices) rather than jumping mid-beat. It runs on its own clock,
+`uDyingT`, on the idle loop's rule: scaled by the motion tier — one scale for
+every rate, so the beat still quickens in order as dying rises — and frozen off
+screen and under the shed.
+
+Over the liquid the dying block only **lightens**, and only to a tint: the vein
+cores and the top of each beat lighten towards a point between the gauge's own
+orchid and `--gl-orchid-hot` (`DYING_PEAK`), never to the hot orchid itself —
+a near-white — and never by adding light. The heartbeat loops for as long as the
+creature is dying, so the peak of a beat is resting light and is held to the rule
+`LIQUID_PEAK` keeps: no channel reaches 1.0 and the orchid keeps its hue. Out in
+the trough and on the frame the veins and the beat add light. The dead slots are
+not liquid — the fill can never reach them — and keep their dark, crossed out
+with a device-pixel hairline.
+
+**Dying outranks the guard break**, as it does on the token overlay: the host
+writes `uBreak × (1 − dying)`, so the seams give way as the orchid arrives and
+come back if dying clears on a creature still broken. Everything else measured
+in hit points is hidden while dying: the low-health arterial red and its breath
+(`low` is scaled by `1 − dying`), the temp-HP plate, and the quarter marks, which
+leave with the hit-point divisions — the gauge is divided into its own slots.
+
+### Arriving, leaving, flatline
+
+Arriving, a new level and clearing are all one glide of the fill and the count
+— the heal's quintic, no overshoot, no reaction of its own — in a slot of its
+own that is sought after the reaction timeline. That order matters: the blow that
+put the creature down usually lands a few milliseconds before dying does, and its
+hit still plays out around the glide instead of being cancelled by it. The
+orchid fades in over `dyingInMs` and out over `dyingOutMs`.
+
+**The fill glides; the number does not.** The readout counts `num` over the slots
+while dying and over the hit-point maximum otherwise (`BarAnim#readout`), so a
+count carried through the switch prints the wrong domain: clearing dying at 2/4
+over 60% HP read `29/58` and counted up to the real `35/58`, and a half-HP NPC
+going down read `2/4` counting to `1/4`. Arriving and clearing therefore snap the
+readout to the new domain's value and drop any count still running — the killing
+blow's included, which is why the count has a slot of its own rather than riding
+the reaction timeline. A new dying level stays inside the gauge and counts.
+
+At `value >= max` the gauge **flatlines**: the live slots lock full, the
+heartbeat dies away over `flatlineMs`, and the veins and the liquid stop. It is a
+reading, not a verdict. Nothing in this feature — or in the reader — marks a
+creature dead or defeated or writes anything to it; PF2e caps the value and
+leaves the rest to the table, and so does the bar.
+
+`dyingFlow` sits with the standing costs at the head of `SHED_ORDER`. Shed — or
+off screen, the idle clock's rule, decided in `tick` and again in `cullEntry` so a
+bar scrolled back into view wakes the ticker — the veins and the heartbeat freeze
+where they are and the bar leaves the ticker; the orchid, the slots and the fill
+stay. At motion "none" the gauge arrives settled
+and still.
+
+### Visibility
+
+No new rule. The gauge and its veins draw wherever the bar does
+(`canViewBars`), and the digits sit behind `canViewNumbers` exactly as hit points
+do — a player who could not read a hostile's hit points cannot read its dying
+value either.
 
 ---
 
@@ -1090,6 +1251,28 @@ a whole number of cycles of both moving terms, that the nucleation point is
 captured rather than followed, and that freezing the fracture stops its clock and
 releases the ticker **without losing the crack**.
 
+For dying it drives the reader with fake actors — the derived maximum used as
+it is, doomed as dead slots, Diehard, NPCs, the item fallback subtracting doomed
+once, the clamp, the flatline and null once doomed takes the whole maximum — and
+pins that it stays pure and writes nothing; that the initiative tracker reads
+through it, puts death at 3 under doomed 1 and agrees with it at max 0; that the
+veins are core's field and `FX_FRAG_DYING` still calls it with its old drift,
+statement for statement; that both features' orchids are the palette's, and the
+readout ink is ramp.mjs's; the model's glide in and out, the hit points waiting
+underneath, the heartbeat crossfade, the flatline, the shed, motion "none", the
+dying clock following the motion tier, the wrap, and no overshoot through any
+transition; that the readout never prints a value outside the domain it is
+labelled with through any transition, killing blow included; the orchid takeover
+before the pour, the slot dividers, the dead slots with a device-pixel X, a dying
+block apart from the break that only lightens the liquid, `uDyingT` read only
+inside `dyPhase` with whole turns, heartbeat rates equal to `DYING_BEATS`, the
+break hidden and temp HP dropped while dying; the dying clock frozen off screen in
+`tick` and `cullEntry`; the `dying/max` readout inside the gate; and
+`rb.dyingFx`'s registration, its PF2e gate and its independence from every other
+feature. Beside the liquids' peak model it evaluates each liquid's brightest dying
+pixel — veins at their core, the loudest beat, the head glow — against the same
+no-clip and saturation floors, pinned to `DYING_PEAK`.
+
 For the liquids it pins that `rb.liquid` offers exactly the programs the shader
 builds and recompiles the bars on the canvas when it changes; that each program
 carries only its own material and none carries the old ribbons; that every idle
@@ -1140,10 +1323,12 @@ rooted anywhere else cannot resolve the imports. `?liquid=mercury` opens it on
 that liquid. It has rows for each liquid down the health ladder, bloodied, the
 surge after a hit and a heal, each liquid's reactions, lava under a guard break
 and a shed bar, plus a liquid switcher on the live bar. `?sheet=ink` (or
-`mercury`, `lava`, `names`, `compare`) hides everything but one contact sheet — a
+`mercury`, `lava`, `names`, `compare`, `dying`) hides everything but one contact sheet — a
 liquid at 100/62/51/49/40/12% plus a hit and a heal, at token size and enlarged;
 the Names rows; or the three liquids side by side at token size at 100/62/49/12%,
-drawn twice 1.5s apart on one seed so a single still shows the motion — so a
+drawn twice 1.5s apart on one seed so a single still shows the motion; or every
+liquid's dying gauge at 1/4, 2/3 with a dead slot, 3/5 and 4/5 under Diehard and
+two flatlines, live on the real model — so a
 headless screenshot of the top of the page is the whole sheet.
 
 The model used to be pasted into the page verbatim, which stopped working the

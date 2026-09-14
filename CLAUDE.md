@@ -391,7 +391,14 @@ liquid's identity therefore lives in how its light *moves* — ink's drifting
 plumes, mercury's gliding sheen, lava's pulsing pools — at a feature scale that
 survives a 19px bar; bloodied is slower, paler and gentler, never darker, and
 lava *calms* under a guard break (`LAVA_BREAK_CALM`) rather than dimming. The trough, dividers and fracture seams are not the liquid and keep
-their dark. Every idle term turns a whole number of times in the 64s idle loop,
+their dark. The ceiling is pinned as hard as the floor: a liquid's brightest
+*resting* light is a lighter tint of it, never white — every peak magnitude is a
+named constant (`LIQUID_PEAK`, `HEAD_GLOW`), the head glow is screened on rather
+than added, and the check evaluates each liquid's brightest resting pixel and
+fails if a channel reaches 1.0 or it keeps too little of its colour's
+saturation; mercury's *body* (`LIQUID_BODY`) is held to a floor too, hale and
+bloodied, because a tinted peak on a near-white body still reads as white
+liquid. Transients (waves, impacts, the heal bloom) stay bright. Every idle term turns a whole number of times in the 64s idle loop,
 through `rbPhase(k)` / `rbDrift(k, period)` with integer `k`, or the liquid steps
 once a minute when the clock wraps. And the **only spring** in the feature is the
 `surge` through the liquid's texture and light after a change: no length — fill,
@@ -406,6 +413,24 @@ rest of the suite. A played animation would run on the engine's own frame loop,
 where the hitstop, the off-screen freeze and motion "none" cannot reach it — and
 it schedules `setImmediate` under Node, so the check tool also proves a process
 driving the model exits on its own.
+
+Under PF2e the **Dying** condition takes the primary bar over as a gauge, and the
+check pins what fails silently there. The reader is `core/pf2e-dying.mjs`, shared
+with the initiative tracker: PF2e's `dying.max` already has doomed taken off, and
+subtracting it again — which the tracker once did — says death comes a step early
+on every doomed creature. Dying is read beside the break, outside `sameReading`,
+because it arrives as a condition item with no hit points moving. The veins are
+`FX_GLSL_DYING_FIELD`, and `FX_FRAG_DYING` must keep calling it with its old
+linear drift or the card and token overlay change while no bar is dying; the bar
+orbits the drift instead, on its own clock `uDyingT`, read only inside `dyPhase`
+with whole turns, and the heartbeat's `DYING_BEATS` are whole beats per loop
+crossfaded by level — a fractional rate steps once a minute. Dying outranks the
+break (`uBreak × (1 − dying)`); its block only lightens the liquid, to
+`DYING_PEAK`'s tint, because a beat loops and its peak is resting light; the dying
+clock follows the motion tier and freezes off screen or under `dyingFlow`,
+keeping the gauge; a dying transition snaps the readout rather than counting a
+number across domains (`BarAnim#readout`); and a flatline stops everything and
+writes nothing to the creature.
 
 To see it, `node tools/resource-bar-preview.mjs --out=.preview/bars.html` writes
 a page that compiles all three liquids' real shaders in a real WebGL2 context and

@@ -71,6 +71,27 @@ export const RAIL_COLOR = PALETTE.accent;
 export const BREAK_AMBER = PALETTE.warn;
 export const BREAK_HOT = PALETTE.signalHot;
 
+/**
+ * The dying gauge's two orchids: `--gl-orchid`, which gl-tokens.css reserves for
+ * "dying / unstable", and its hot twin. They are the initiative tracker's vein
+ * colours (`veinBase` / `veinHot`), reached through the palette names they are,
+ * and `tools/resource-bar-check.mjs` pins the two features against each other
+ * for the break golds' reason: one dying creature, one orchid.
+ *
+ * Not ramp stops either. Dying is not a quantity of hit points.
+ */
+export const DYING_COLOR = PALETTE.orchid;
+export const DYING_HOT = PALETTE.orchidHot;
+
+/**
+ * The dying readout's ink: orchid lifted halfway to its hot twin, both from the
+ * palette. Plain orchid over a full orchid gauge is the same hue at nearly the
+ * same lightness, and at flatline — the one reading that matters most — the
+ * digits all but vanished into the fill. Derived once here, so the renderer and
+ * the preview print the same colour.
+ */
+export const DYING_INK = Object.freeze(hexToFloat3(DYING_COLOR).map((c, i) => c + (hexToFloat3(DYING_HOT)[i] - c) * 0.5));
+
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────
    Björn Ottosson's transform. Kept here rather than in core/theme.mjs because
    theme.mjs's colour maths is deliberately the small set every feature needs;

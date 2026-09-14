@@ -107,6 +107,76 @@ vec4 gluBreakField(vec2 q, vec2 imp, float time, float thick, float texel, float
 }
 `;
 
+/**
+ * The dying veins' noise: three octaves, lighter than FX_GLSL_NOISE's five, so
+ * the live per-frame token shader stays cheap. Requires `uSeed` in scope.
+ */
+export const FX_GLSL_DYING_NOISE = `
+float gluHashD(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7))+uSeed)*43758.5453); }
+float gluVNoiseD(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(gluHashD(i),gluHashD(i+vec2(1.0,0.0)),f.x),
+             mix(gluHashD(i+vec2(0.0,1.0)),gluHashD(i+vec2(1.0,1.0)),f.x), f.y); }
+float gluFbmD(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<3;i++){ s+=a*gluVNoiseD(p); p*=2.03; a*=0.5; } return s; }
+`;
+
+/**
+ * The corruption veins, as a field rather than as a whole shader — the dying
+ * look's equivalent of `gluBreakField`, split out for the same reason: the
+ * resource bar is one quad running one program, and its veins have to be
+ * clipped to the bar and composited with the gauge rather than laid over it.
+ * One dying creature's card, token overlay and health bar then carry one look.
+ *
+ * `uv` is in whatever isotropic units the caller likes. `flowA` and `flowB` are
+ * the offsets the two warp samples drift by — the only place time enters.
+ * FX_FRAG_DYING passes exactly the drift it always had,
+ * `vec2(0.0, uTime*0.05)` and `vec2(5.2, -uTime*0.04)`, so the extraction is an
+ * identity for the initiative tracker. A resource bar cannot drift linearly: its
+ * clock wraps, and a linear slide through non-periodic noise would jump at the
+ * wrap. It moves both offsets around closed orbits a whole number of times per
+ * loop instead.
+ *
+ * Requires FX_GLSL_DYING_NOISE ahead of it.
+ *
+ * @returns vec2(veins, halo) — the ridge core and its soft surround, unlit.
+ */
+export const FX_GLSL_DYING_FIELD = `
+vec2 gluDyingField(vec2 uv, vec2 flowA, vec2 flowB){
+  vec2 q=vec2(gluFbmD(uv*3.0+flowA), gluFbmD(uv*3.0+flowB));
+  float n=gluFbmD(uv*4.5+q*1.8);                        // domain-warped for organic, wandering veins
+  float ridge=1.0-abs(n*2.0-1.0);
+  return vec2(smoothstep(0.80,0.99,ridge), smoothstep(0.6,0.99,ridge));
+}
+`;
+
+/**
+ * Corruption veins, as a whole fragment shader: the initiative tracker's dying
+ * look on the card portrait and the token overlay. A domain-warped ridged-noise
+ * web of glowing orchid veins across the face, concentrated toward the edges,
+ * with a soft halo around the strongest ridges. uClipCircle masks the field to a
+ * disc for round token overlays.
+ */
+export const FX_FRAG_DYING = `
+varying vec2 vTextureCoord;
+uniform sampler2D uSampler;
+uniform float uTime, uSeed, uAspect, uClipCircle;
+uniform vec3 uVeinBase, uVeinHot;
+${FX_GLSL_DYING_NOISE}
+${FX_GLSL_DYING_FIELD}
+void main(void){
+  vec2 uv=vTextureCoord;
+  vec2 fld=gluDyingField(uv, vec2(0.0,uTime*0.05), vec2(5.2,-uTime*0.04));
+  float veins=fld.x;
+  float eb=max(smoothstep(0.55,0.0,uv.x),smoothstep(0.45,1.0,uv.x));
+  eb=max(eb,smoothstep(0.5,0.0,uv.y));
+  veins*=mix(0.25,1.0,eb);                              // present across the face, densest at the edges
+  float halo=fld.y*0.16*eb;                             // soft bloom around the strongest veins
+  vec3 violet=uVeinBase, vhot=uVeinHot;
+  vec3 col=mix(violet,vhot,veins);
+  float a=clamp(veins*0.9+halo,0.0,1.0);
+  if(uClipCircle>0.5){ vec2 cc=uv-vec2(0.5); cc.x*=uAspect; a*=smoothstep(0.5,0.47,length(cc)); }
+  gl_FragColor=vec4(col*a, a);
+}`;
+
 /** The fracture's own breathing, so every consumer pulses on one clock. */
 export const FX_GLSL_BREAK_PULSE = `float gluBreakPulse(float time){ return 0.62+0.38*sin(time*2.2); }`;
 

@@ -147,6 +147,19 @@ function registerSettings() {
     default: true,
   });
 
+  /* PF2e's dying condition, carried onto the bar as the dying gauge. World-scoped
+     for breakFx's reason: it is a fact about the creature the whole table reads
+     off the same bar. Only offered under PF2e (config is what the Control Center
+     lists), because it reads PF2e's own condition and is inert anywhere else —
+     and unlike breakFx it needs no other feature. */
+  world(SETTINGS.dyingFx, {
+    name: "GLRB.Settings.DyingFx.Name",
+    hint: "GLRB.Settings.DyingFx.Hint",
+    type: Boolean,
+    default: true,
+    config: game.system?.id === "pf2e",
+  });
+
   world(SETTINGS.bloom, {
     name: "GLRB.Settings.Bloom.Name",
     hint: "GLRB.Settings.Bloom.Hint",
