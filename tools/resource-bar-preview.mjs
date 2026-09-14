@@ -43,6 +43,10 @@ const {
   FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, UNIFORMS,
 } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
 const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
+/* The bloom Foundry actually runs. The preview used to carry its own, gentler
+   numbers (threshold 1.05, knee 0.55 on an unclamped float buffer), which
+   flattered exactly the near-white peaks that bloom hardest on the table. */
+const { DEFAULT_THRESHOLD, DEFAULT_KNEE, DEFAULT_INTENSITY } = await import(new URL("scripts/core/bloom.mjs", ROOT).href);
 
 const template = await readFile(new URL("tools/templates/resource-bar-preview.html", ROOT), "utf8");
 const ANIM = new URL("scripts/features/resource-bars/anim.mjs", ROOT);
@@ -123,6 +127,9 @@ function page(animImport, root) {
     "/*__BREAK_AMBER__*/": JSON.stringify(hexToFloat3(BREAK_AMBER)),
     "/*__BREAK_HOT__*/": JSON.stringify(hexToFloat3(BREAK_HOT)),
     "/*__READOUT_INSET__*/": String(READOUT_INSET),
+    "/*__BLOOM_THRESHOLD__*/": String(DEFAULT_THRESHOLD),
+    "/*__BLOOM_KNEE__*/": String(DEFAULT_KNEE),
+    "/*__BLOOM_INTENSITY__*/": String(DEFAULT_INTENSITY),
   };
   /* split/join rather than String#replace: the inlined sources contain `$`
      sequences that a replacement string would expand. */

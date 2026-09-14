@@ -33,6 +33,11 @@
  *     worst loss is budgeted against the floor. No black, no INK, no
  *     darkening gradient. The trough, the dividers and the guard-break seams are
  *     not the liquid and keep their dark.
+ *   - **Its brightest light is a lighter tint of it, never white.** At rest no
+ *     channel of any liquid reaches 1.0 and its peaks keep the liquid's hue:
+ *     every peak magnitude is a named constant (LIQUID_PEAK, HEAD_GLOW) and the
+ *     head glow is screened on rather than added. Waves, impacts, the heal
+ *     flash and the temp-HP edge are moments, and stay bright.
  *
  * The rails and the shield rail keep a flat plate: a secondary resource is not
  * health, and giving it the same liquid would say it is.
@@ -199,14 +204,19 @@ export const IDLE_LOOP_S = 64;
  * does can only lighten or keep luminance. `resource-bar-check` evaluates the
  * helpers and the ranges numerically and refuses anything in a liquid chunk that
  * could darken.
+ *
+ * The range has a ceiling as well as a floor. Lightening is allowed, but only to
+ * a lighter tint of the liquid (LIQUID_PEAK), and the top of each shade range
+ * stays at the ramp colour itself: a ramp colour is already near 1.0 in its
+ * strongest channel, so a shade above it clips that channel at rest.
  */
 export const LIQUID_FLOOR = 0.8;
 
 /** Each liquid's `rbShade` range, [low, high], as multiples of its ramp colour. */
 export const LIQUID_SHADE = Object.freeze({
-  ink: Object.freeze([0.84, 1.10]),
-  mercury: Object.freeze([0.90, 1.05]),
-  lava: Object.freeze([0.92, 1.12]),
+  ink: Object.freeze([0.84, 1.00]),
+  mercury: Object.freeze([0.90, 1.00]),
+  lava: Object.freeze([0.92, 1.00]),
 });
 
 /**
@@ -236,9 +246,57 @@ export const LAVA_BREAK_CALM = 0.6;
  */
 export const LAVA_WARMTH = 0.35;
 
+/**
+ * How bright each liquid's peaks get — its plumes, its sheen, its pools — as
+ * named numbers rather than literals in the GLSL.
+ *
+ * A peak is a lighter **tint** of the liquid, never white. The ramp colours
+ * already sit at about 0.97–0.99 in their strongest channel (every stop but the
+ * green has a channel at 1.0), so a peak drawn three-quarters of the way to
+ * white, or a saturation step on an already-bright pixel, clips: at token size a
+ * clipped peak is a white one, and the bloom pass then lights it.
+ *
+ *   ink.plume         how far towards white the plumes reach
+ *   ink.saturate      the body's saturation, eased off where the field brightens
+ *   mercury.sheen     how far towards white the sheen reaches; metal is allowed
+ *                     a little more than the other two
+ *   lava.pool         how far the pools lean towards their gold, never past 1.0
+ *   lava.saturate     lava's saturation, hale and bloodied, eased off where it
+ *   lava.saturateBloodied  is hottest
+ *
+ * `resource-bar-check` evaluates every liquid's brightest resting pixel from
+ * these, and pins each GLSL statement that reads them.
+ */
+export const LIQUID_PEAK = Object.freeze({
+  ink: Object.freeze({ plume: 0.50, saturate: 0.45 }),
+  mercury: Object.freeze({ sheen: 0.60 }),
+  lava: Object.freeze({ pool: 0.60, saturate: 0.35, saturateBloodied: 0.25 }),
+});
+
+/**
+ * The glow on the liquid just behind its leading edge.
+ *
+ * At rest it is a tint of the liquid (`tint` of the way to white) **screened**
+ * on at `rest`: it lightens towards that tint by the headroom left in each
+ * channel, so it can never reach 1.0 however bright the liquid under it already
+ * is. Added outright, it put a 60%-white on top of the brightest part of every
+ * fill and clipped it to pure white. A heal bloom still swells it — towards
+ * white by `tintBloom` and as added light past 1.0 by `bloom` — because that is
+ * a moment, and the bloom pass is meant to find it.
+ */
+export const HEAD_GLOW = Object.freeze({ tint: 0.25, tintBloom: 0.70, rest: 0.40, bloom: 1.25 });
+
 const f4 = (n) => n.toFixed(4);
 const shadeConsts = (liquid) =>
   `const float SHADE_LO = ${f4(LIQUID_SHADE[liquid][0])};\nconst float SHADE_HI = ${f4(LIQUID_SHADE[liquid][1])};\n`;
+/* Every peak magnitude as a named GLSL const — LIQUID_PEAK.lava.saturateBloodied
+   is LAVA_SATURATE_BLOODIED, HEAD_GLOW.rest is HEAD_REST — so a statement reads
+   the name and resource-bar-check can hold the name to the export. */
+const constName = (s) => s.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase();
+const peakConsts = (liquid) =>
+  [...Object.entries(LIQUID_PEAK[liquid]).map(([k, v]) => [liquid + "_" + k, v]),
+   ...Object.entries(HEAD_GLOW).map(([k, v]) => ["head_" + k, v])]
+    .map(([k, v]) => `const float ${constName(k)} = ${f4(v)};\n`).join("");
 
 /* ── The shared frame ───────────────────────────────────────────────────── */
 
@@ -487,7 +545,7 @@ export const LIQUID_CHUNKS = Object.freeze({
      three and the default, because a fill that is always quietly moving is still
      a fill that is mostly not asking to be looked at. */
   ink: Object.freeze({
-    functions: shadeConsts("ink") + `
+    functions: shadeConsts("ink") + peakConsts("ink") + `
 float inkField(vec2 lq, float driftA, float driftB, float fold) {
   /* Fewer, larger plumes: about a bar height and a third per swirl along the
      bar and two-thirds of one across it, so a 19px bar holds two or three of
@@ -516,13 +574,17 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
     } else {
       fieldI = rbNoise(vec2(lqI.x * 0.75, lqI.y * 1.5), 12.0);
     }
-    /* High contrast between a vivid, saturated body and near-white plumes —
-       still only lighter, still blended over a wide soft band. */
+    /* High contrast between a vivid, saturated body and plumes that lift to a
+       lighter tint of the same hue — never white, still only lighter, still
+       blended over a wide soft band. The saturation lives in the body and eases
+       off where the field brightens: a ramp colour already sits near 1.0 in its
+       strongest channel, and saturating a bright pixel pushes that channel
+       past it. */
     float ampI = mix(1.0, 0.45, bloodied);
     fillCol = rbShade(base, mix(0.5, smoothstep(0.25, 0.60, fieldI), ampI), SHADE_LO, SHADE_HI);
-    fillCol = rbSaturate(fillCol, 0.60 * (1.0 - bloodied));
+    fillCol = rbSaturate(fillCol, INK_SATURATE * (1.0 - smoothstep(0.25, 0.60, fieldI)) * (1.0 - bloodied));
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(0.45, 0.70, fieldI) * 0.35 * ampI);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.78), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), INK_PLUME), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);
     fillCol = rbSoften(fillCol, 0.50 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), 0.30 * bloodied);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);
@@ -579,7 +641,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      read as liquid metal from its smoothness and its light, not from hard
      reflection bands. */
   mercury: Object.freeze({
-    functions: shadeConsts("mercury"),
+    functions: shadeConsts("mercury") + peakConsts("mercury"),
     fill: `
     /* A pearly body — silvered a little and lifted towards pale cool and warm
        tints that drift slowly along it — and one broad, soft, bright sheen
@@ -597,7 +659,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
     float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);
     float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);
     float sheenQ = mix(quickS, slowS * 0.45, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.85),
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0), MERCURY_SHEEN),
                         sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);
 `,
@@ -654,7 +716,7 @@ float inkField(vec2 lq, float driftA, float driftB, float fold) {
      fracture — sharp gold lines — that it sometimes carries, and under a break it
      calms so that fracture is the only structure on the bar. */
   lava: Object.freeze({
-    functions: shadeConsts("lava") + `
+    functions: shadeConsts("lava") + peakConsts("lava") + `
 float lavaField(vec2 lq, float drift) {
   /* Pools about a bar height across; drift must be whole turns of period 16,
      which the call sites guarantee (the finer octave takes twice as many). */
@@ -692,9 +754,12 @@ float lavaField(vec2 lq, float drift) {
     fillCol = rbWarm(fillCol, LAVA_WARMTH);
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.72, 0.30), 0.35), mix(0.40, 0.25, bloodied));
     float pools = smoothstep(0.45, 0.95, heat) * mix(0.55 + 0.45 * pulse, 0.60 + 0.15 * pulse, bloodied);
-    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), 0.60) * 1.20,
+    /* The pools lean towards their gold and no further — the target is never
+       past 1.0 — and the saturation eases off where it is hottest, where a
+       saturated amber would push red straight through its ceiling. */
+    fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), LAVA_POOL),
                         pools * mix(1.0, 0.50, bloodied) * (1.0 - calm));
-    fillCol = rbSaturate(fillCol, mix(0.65, 0.30, bloodied));
+    fillCol = rbSaturate(fillCol, mix(LAVA_SATURATE, LAVA_SATURATE_BLOODIED, bloodied) * (1.0 - heat));
     float shimmerL = 0.0;
     if (uFlow > 0.5) shimmerL = 0.5 + 0.5 * sin(lqL.y * 7.0 - rbPhase(48.0) + 1.5 * sin(lqL.x * 2.2 + rbPhase(9.0)));
     fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), shimmerL * mix(0.14, 0.05, bloodied) * (1.0 - calm));
@@ -906,10 +971,11 @@ void main(void) {
   float shimmer = 0.5 + 0.5 * sin(p.x * 5.5 - rbPhase(8.0));
 
   /* ── The leading edge's light ──────────────────────────────────────────
-     A glow *on* the liquid just behind the edge, added as light; it softens
-     nothing about the edge itself. */
+     A glow *on* the liquid just behind the edge; it softens nothing about the
+     edge itself. At rest it is a tint of the liquid screened on (HEAD_GLOW), so
+     it cannot reach white; only a heal bloom adds light past 1.0. */
   float headIn = rbGauss(p.x - fillX, 0.055 + 0.11 * uBloom) * mFill;
-  vec3 headCol = mix(base, vec3(1.0), 0.60 + 0.35 * uBloom);
+  vec3 headCol = mix(base, vec3(1.0), HEAD_TINT + HEAD_TINT_BLOOM * uBloom);
 
   /* ── Stroke ────────────────────────────────────────────────────────────
      The asymmetry that stops the bar reading as a form control comes from the
@@ -953,7 +1019,11 @@ void main(void) {
   C += uTempCol * rbBand(hb - 0.20, 0.045) * mTempArea * 0.85;
   /* Leading edge, pushed above 1.0 so the bloom pass finds it. */
   C += uTempCol * rbGauss(p.x - tempX, 0.045) * mTempArea * 1.65;
-  C += headCol * headIn * (0.55 + 1.1 * uBloom);
+  /* Screened at rest: it takes a share of each channel's remaining headroom, so
+     it lightens towards its tint and stops short of 1.0. The heal bloom's share
+     is added outright, which is the point of it. */
+  C += max(vec3(1.0) - C, vec3(0.0)) * headCol * headIn * HEAD_REST;
+  C += headCol * headIn * HEAD_BLOOM * uBloom;
 
   C = mix(C, strokeCol, mStroke); A = mix(A, 1.0, mStroke);
   C += STEEL * tickMark * 0.85; A = max(A, min(tickMark * 0.9, 1.0));

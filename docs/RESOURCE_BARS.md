@@ -105,9 +105,13 @@ front of something you click.
 `core/bloom.mjs` (shared with the token condition rail) runs threshold → blur H → blur V → composite. **PIXI's filter
 textures are 8-bit**, so everything the shader emits above 1.0 is clamped before
 the filter sees it; the threshold therefore sits below 1.0 and works on what
-survived. The preview harness renders to RGBA16F and can threshold above 1.0,
-so it is strictly more accurate than the shipped path. If a future Foundry
-offers a float filter target, raising the threshold is the only change needed.
+survived. The preview harness renders to RGBA16F but imports `DEFAULT_THRESHOLD`,
+`DEFAULT_KNEE` and `DEFAULT_INTENSITY` from `core/bloom.mjs` and clamps its scene
+to 1.0 before the bright-pass and the composite, so it blooms exactly as hard as
+the table does. It used to threshold its unclamped buffer at 1.05 with a wider
+knee, which flattered precisely the near-white peaks that bloom hardest in
+Foundry. If a future Foundry offers a float filter target, raising the threshold
+is the only change needed — in one place.
 
 ---
 
@@ -254,9 +258,9 @@ The primary bar is filled with one of three liquids, chosen by the world setting
 
 | | |
 |---|---|
-| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and pale plumes of the health colour, blending as they move along the tube |
-| **Mercury** | a pearly, silvered body with a broad, soft, bright sheen gliding the length of the bar — reflective through a travelling highlight, never through dark bands |
-| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it, each slowly pulsing, and a faint rising heat shimmer |
+| **Ink** (default) | slow drifting swirls: a vivid body, a lighter mid tone and plumes lifting to a pale tint of the health colour, blending as they move along the tube |
+| **Mercury** | a pearly, silvered body with a broad, soft sheen gliding the length of the bar — a lighter silvered tint of the health colour, reflective through a travelling highlight, never through dark bands |
+| **Lava** | a warm, saturated glow in the health colour leaning amber, with brighter golden pools drifting through it — golden, never past their gold — each slowly pulsing, and a faint rising heat shimmer |
 
 Each is built to be recognisable **at token size** — a 19px bar at dpr 1 — from
 visible, low-frequency motion made only of lighter tints and saturation: features
@@ -273,7 +277,39 @@ blue lava on the colour-blind-safe ramp a warmer blue, and a nearly dead lava is
 still danger red, because the lean can never carry a hue across the ramp. It is
 bounded in the check (0.2–0.4), and it is the one colour step in any liquid that
 may cost luminance. Ink goes the other way: fewer, larger plumes, with the
-contrast between a vivid body and near-white peaks turned up.
+contrast between a saturated body and pale plumes turned up — pale as in a
+lighter tint of the ink, not white.
+
+### Peaks are a tint, never white
+
+The brightest light in any liquid at rest is a **lighter tint of that liquid**.
+The first liquids reached white: ink's plumes went 78% of the way there,
+mercury's sheen 85%, lava's pools overshot their own gold by ×1.20, and the
+glow at the fill's leading edge added a 60%-white on top of all three. So every
+liquid clipped to pure white at rest, the bloom lit the clip, and the one spot a
+player looks at stopped showing the health colour.
+
+Two facts shape the fix. The ramp colours already sit at about 0.97–0.99 in
+their strongest channel — every stop but the green has a channel at 1.0 — so
+the top of every `LIQUID_SHADE` range is the ramp colour itself, and saturation
+lives in the dim body and eases off where the liquid brightens, because
+saturating a bright pixel pushes that channel straight through its ceiling.
+And the head glow is **screened** on at rest rather than added: it takes a share
+of each channel's remaining headroom, so it lightens towards its tint (a
+quarter of the way to white) and stops short of 1.0 however bright the liquid
+under it is. A heal bloom still swells it towards white and past 1.0, because
+that is a moment.
+
+Every peak magnitude is a named constant — `LIQUID_PEAK` per liquid and
+`HEAD_GLOW` — reaching the GLSL as a `const float`. `resource-bar-check`
+restates each fill chain and the head glow on its helper mirrors, pins every
+statement it restates verbatim, and evaluates the brightest resting pixel of
+each liquid across both ramps, the whole HP range and every value its fields can
+take. It fails if any channel reaches 1.0, or if that pixel keeps too little of
+its colour's saturation (0.28 for ink, 0.20 for mercury, which reads as metal
+from a paler body, and 0.28 for lava measured against its own amber-leaned
+colour). Resting excludes what is meant to be loud — waves, impacts, the heal
+flash and bloom, the temp-HP edge, the contact glow — and the low-health breath.
 
 They replaced a refractive-glass material — travelling ribbons of caustic light
 with glints and a facet pattern — that did its job as *glass* and failed as

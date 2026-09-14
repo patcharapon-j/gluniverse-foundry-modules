@@ -1446,6 +1446,262 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail(`A liquid uses a hard-edged operation (${[...new Set(hard)].join(", ")}); the liquid, its bloodied look and its reactions must be soft and blended.`);
   else ok("no liquid chunk quantises, steps, or draws a crisp shape or thin band");
 
+  /* (d4) A liquid's brightest resting light is a lighter tint of it, never white.
+
+     The peaks used to reach white: ink's plumes went 78% of the way there,
+     mercury's sheen 85%, lava's pools overshot their own gold by ×1.20, and the
+     head glow at the edge added 0.55 of a 60%-white on top of all three — so
+     every liquid clipped to pure white at rest and the bloom pass lit the clip,
+     on every token on the map. Nothing errors; the bar just stops showing the
+     health colour at the exact spot a player's eye goes to.
+
+     So this evaluates the brightest *resting* pixel numerically. At rest means
+     what a bar shows with nothing happening to it: no wave, hit, flash, heal
+     bloom or surge, no temp-HP plate, no guard break, and no low-health breath —
+     those are loud on purpose and are left bright. It sweeps both ramps across
+     the whole HP range (bloodied following the value, as the shader has it) and
+     every value each liquid's fields can take, with the head glow at its
+     brightest (headIn = 1) over each of them.
+
+     The model is the fill chain and the head glow restated on the mirrors
+     above, and every GLSL statement it restates is pinned verbatim, in order,
+     with no other write to anything it reads: a literal nudged in the shader no
+     longer matches the model, and a constant moved in shader.mjs moves the
+     model with it. Every peak magnitude lives in LIQUID_PEAK / HEAD_GLOW and
+     reaches the GLSL as a named const, which is pinned to the export too. */
+  {
+    let peakBad = 0;
+    const peakFail = (m) => { fail(m); peakBad++; };
+    const norm = (s) => strip(s).replace(/\s+/g, " ").trim();
+    const W1 = [1, 1, 1];
+    const mixf = (x, y, t) => x + (y - x) * t;
+    const mix3 = (x, y, t) => x.map((v, i) => v + (y[i] - v) * t);
+    const ss = (e0, e1, x) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+    const grid = (n) => Array.from({ length: n + 1 }, (_, i) => i / n);
+    const PEAK = shader.LIQUID_PEAK ?? {};
+    const GLOW = shader.HEAD_GLOW ?? {};
+
+    /* The saturation floor, as HSV saturation kept by the brightest resting
+       pixel relative to the colour the liquid is *of*. White keeps 0. A lighten
+       all the way to mix(base, white, k) keeps (1 − k)(max − min) / (k + (1 − k)
+       max) of it — about half at k = 0.5 on the ramp's green, a fifth at 0.78 —
+       and the resting head glow and bloodied's milk take a little more on top.
+       0.28 sits clear of what a 78% plume kept even before the head glow was
+       added over it (0.24), with room under the tuned ink.
+
+       Mercury reads as metal from a paler, silvered body — softened and pearled
+       before its sheen arrives — so its floor is 0.20; its old 85% sheen kept
+       0.18 before the head glow. Lava is measured against rbWarm(base,
+       LAVA_WARMTH) rather than base, because leaning the blue colour-blind-safe
+       ramp amber takes chroma out on purpose: that is lava's hue, not a
+       whitening of it. */
+    const HUE_FLOOR = { ink: 0.28, mercury: 0.20, lava: 0.28 };
+
+    const PEAK_NAMES = {
+      ink: { plume: "INK_PLUME", saturate: "INK_SATURATE" },
+      mercury: { sheen: "MERCURY_SHEEN" },
+      lava: { pool: "LAVA_POOL", saturate: "LAVA_SATURATE", saturateBloodied: "LAVA_SATURATE_BLOODIED" },
+    };
+    const GLOW_NAMES = { tint: "HEAD_TINT", tintBloom: "HEAD_TINT_BLOOM", rest: "HEAD_REST", bloom: "HEAD_BLOOM" };
+
+    /* Each step is one GLSL statement, exactly as the fill writes it, and what
+       it does. A step with no run() is a field the domain sweeps instead. */
+    const MODEL = {
+      ink: {
+        domain: grid(100).map((fieldI) => ({ fieldI })),
+        steps: [
+          ["float ampI = mix(1.0, 0.45, bloodied);", (s) => { s.ampI = mixf(1, 0.45, s.bloodied); }],
+          ["fillCol = rbShade(base, mix(0.5, smoothstep(0.25, 0.60, fieldI), ampI), SHADE_LO, SHADE_HI);",
+            (s) => { s.c = shadeJs(s.base, mixf(0.5, ss(0.25, 0.60, s.fieldI), s.ampI), ...s.shade); }],
+          ["fillCol = rbSaturate(fillCol, INK_SATURATE * (1.0 - smoothstep(0.25, 0.60, fieldI)) * (1.0 - bloodied));",
+            (s) => { s.c = saturateJs(s.c, PEAK.ink.saturate * (1 - ss(0.25, 0.60, s.fieldI)) * (1 - s.bloodied)); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), smoothstep(0.45, 0.70, fieldI) * 0.35 * ampI);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.35), ss(0.45, 0.70, s.fieldI) * 0.35 * s.ampI); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), INK_PLUME), smoothstep(0.58, 0.85, fieldI) * 0.95 * ampI);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, PEAK.ink.plume), ss(0.58, 0.85, s.fieldI) * 0.95 * s.ampI); }],
+          ["fillCol = rbSoften(fillCol, 0.50 * bloodied);", (s) => { s.c = softenJs(s.c, 0.50 * s.bloodied); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), 0.30 * bloodied);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.40), 0.30 * s.bloodied); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.50), abs(uSurge) * 0.18);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.50), Math.abs(s.surge) * 0.18); }],
+        ],
+      },
+      mercury: {
+        /* fy is the fill's height (-1..1); pearl and both sheens are 0.5 + 0.5 × a
+           sine (the sheens raised to a power), so each spans 0..1 at some x and
+           some moment, independently of the others. */
+        domain: grid(10).flatMap((a) => grid(4).flatMap((pearl) => grid(10).flatMap((quickS) =>
+          grid(4).map((slowS) => ({ fy: a * 2 - 1, pearl, quickS, slowS }))))),
+        steps: [
+          ["fillCol = rbShade(base, 0.5 + 0.5 * fy, SHADE_LO, SHADE_HI);", (s) => { s.c = shadeJs(s.base, 0.5 + 0.5 * s.fy, ...s.shade); }],
+          ["fillCol = rbSoften(fillCol, mix(0.15, 0.75, bloodied));", (s) => { s.c = softenJs(s.c, mixf(0.15, 0.75, s.bloodied)); }],
+          ["float pearl = 0.5 + 0.5 * sin(lqM.x * 0.9 + rbPhase(3.0) * glide + uSeed);"],
+          ["fillCol = rbLighten(fillCol, mix(mix(base, vec3(0.90, 0.96, 1.00), 0.55), mix(base, vec3(1.00, 0.95, 0.97), 0.55), pearl), 0.40);",
+            (s) => { s.c = lightenJs(s.c, mix3(mix3(s.base, [0.90, 0.96, 1.00], 0.55), mix3(s.base, [1.00, 0.95, 0.97], 0.55), s.pearl), 0.40); }],
+          ["float quickS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(24.0) * glide), 4.0);"],
+          ["float slowS = pow(0.5 + 0.5 * cos(lqM.x * 2.1 - fy * 0.45 - rbPhase(8.0) * glide), 2.0);"],
+          ["float sheenQ = mix(quickS, slowS * 0.45, bloodied);", (s) => { s.sheenQ = mixf(s.quickS, s.slowS * 0.45, s.bloodied); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), MERCURY_SHEEN), sheenQ * (0.55 + 0.45 * smoothstep(-0.6, 0.9, fy)) * 0.90);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, PEAK.mercury.sheen), s.sheenQ * (0.55 + 0.45 * ss(-0.6, 0.9, s.fy)) * 0.90); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.55), 0.45 * bloodied + abs(uSurge) * 0.15);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.55), 0.45 * s.bloodied + Math.abs(s.surge) * 0.15); }],
+        ],
+      },
+      lava: {
+        /* heat arrives as lavaField (0.7 + 0.3 of two noises, so 0..1); pulse and
+           the shimmer are 0.5 + 0.5 × a sine. calm is LAVA_BREAK_CALM × uBreak,
+           pinned in (e), and uBreak is 0 at rest. */
+        domain: grid(40).flatMap((heat) => grid(10).flatMap((pulse) => grid(4).map((shimmerL) => ({ heat, pulse, shimmerL })))),
+        also: ["calm"],
+        steps: [
+          ["heat = smoothstep(0.25, 0.85, heat);", (s) => { s.heat = ss(0.25, 0.85, s.heat); }],
+          ["heat = mix(heat, 0.5, 0.40 * bloodied);", (s) => { s.heat = mixf(s.heat, 0.5, 0.40 * s.bloodied); }],
+          ["heat = mix(heat, 0.5, calm);", (s) => { s.heat = mixf(s.heat, 0.5, s.calm); }],
+          ["float pulse = mix(0.5 + 0.5 * sin(rbPhase(20.0) + heat * 3.0), 0.5 + 0.5 * sin(rbPhase(7.0) + heat * 3.0), bloodied);"],
+          ["fillCol = rbShade(base, heat, SHADE_LO, SHADE_HI);", (s) => { s.c = shadeJs(s.base, s.heat, ...s.shade); }],
+          ["fillCol = rbWarm(fillCol, LAVA_WARMTH);", (s) => { s.c = warmJs(s.c, shader.LAVA_WARMTH); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.72, 0.30), 0.35), mix(0.40, 0.25, bloodied));",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, [1.0, 0.72, 0.30], 0.35), mixf(0.40, 0.25, s.bloodied)); }],
+          ["float pools = smoothstep(0.45, 0.95, heat) * mix(0.55 + 0.45 * pulse, 0.60 + 0.15 * pulse, bloodied);",
+            (s) => { s.pools = ss(0.45, 0.95, s.heat) * mixf(0.55 + 0.45 * s.pulse, 0.60 + 0.15 * s.pulse, s.bloodied); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0, 0.86, 0.48), LAVA_POOL), pools * mix(1.0, 0.50, bloodied) * (1.0 - calm));",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, [1.0, 0.86, 0.48], PEAK.lava.pool), s.pools * mixf(1, 0.5, s.bloodied) * (1 - s.calm)); }],
+          ["fillCol = rbSaturate(fillCol, mix(LAVA_SATURATE, LAVA_SATURATE_BLOODIED, bloodied) * (1.0 - heat));",
+            (s) => { s.c = saturateJs(s.c, mixf(PEAK.lava.saturate, PEAK.lava.saturateBloodied, s.bloodied) * (1 - s.heat)); }],
+          ["float shimmerL = 0.0;"],
+          ["if (uFlow > 0.5) shimmerL = 0.5 + 0.5 * sin(lqL.y * 7.0 - rbPhase(48.0) + 1.5 * sin(lqL.x * 2.2 + rbPhase(9.0)));"],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.40), shimmerL * mix(0.14, 0.05, bloodied) * (1.0 - calm));",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.40), s.shimmerL * mixf(0.14, 0.05, s.bloodied) * (1 - s.calm)); }],
+          ["fillCol = rbSoften(fillCol, 0.20 * bloodied);", (s) => { s.c = softenJs(s.c, 0.20 * s.bloodied); }],
+          ["fillCol = rbLighten(fillCol, mix(base, vec3(1.0), 0.35), 0.18 * bloodied + abs(uSurge) * 0.18);",
+            (s) => { s.c = lightenJs(s.c, mix3(s.base, W1, 0.35), 0.18 * s.bloodied + Math.abs(s.surge) * 0.18); }],
+        ],
+      },
+    };
+
+    /* The shared frame the model stands on: how base is built for the primary
+       bar, the fill's height, the compose, and the head glow. */
+    const FRAME = [
+      "float bloodied = hero * (1.0 - smoothstep(0.485, 0.50, uFrac));",
+      "float rampT = clamp(uFrac / 0.72, 0.0, 1.0);",
+      "vec3 base = uRole < 0.5 ? rampAt(rampT) : (uRole < 1.5 ? uRailCol : uShieldCol);",
+      "base = mix(base, vec3(grey), mix(0.24, 0.06, hero));",
+      "base = mix(base, uTempCol, 0.16 * smoothstep(0.6, 1.0, uFrac) * hero);",
+      "float fy = clamp(p.y / fh, -1.0, 1.0);",
+      "C = mix(C, fillCol, mFill);",
+      "float headIn = rbGauss(p.x - fillX, 0.055 + 0.11 * uBloom) * mFill;",
+      "vec3 headCol = mix(base, vec3(1.0), HEAD_TINT + HEAD_TINT_BLOOM * uBloom);",
+      "C += max(vec3(1.0) - C, vec3(0.0)) * headCol * headIn * HEAD_REST;",
+      "C += headCol * headIn * HEAD_BLOOM * uBloom;",
+    ];
+
+    const constOf = (g, name) => Number(new RegExp(`const float ${name} = (-?[0-9.]+);`).exec(g)?.[1]);
+    const numeric = new Set();
+    for (const liquid of shader.LIQUIDS) {
+      const m = MODEL[liquid];
+      if (!m) { peakFail(`The ${liquid} liquid has no peak model here, so nothing checks that its brightest light stays a tint.`); continue; }
+      const g = strip(shader.fragmentShader(liquid));
+      const gn = norm(g);
+      let pinned = true;
+      const pinFail = (msg) => { peakFail(msg); pinned = false; };
+
+      const names = PEAK_NAMES[liquid];
+      const have = Object.keys(PEAK[liquid] ?? {}).sort().join();
+      if (have !== Object.keys(names).sort().join())
+        pinFail(`LIQUID_PEAK.${liquid} carries ${have || "nothing"}, but this check evaluates ${Object.keys(names).join(", ")}; a peak magnitude it does not model is one it cannot hold under white.`);
+      const exported = [
+        ...Object.entries(names).map(([key, glsl]) => [glsl, PEAK[liquid]?.[key]]),
+        ...Object.entries(GLOW_NAMES).map(([key, glsl]) => [glsl, GLOW[key]]),
+      ];
+      for (const [glsl, value] of exported)
+        if (!(Math.abs(constOf(g, glsl) - value) < 5e-5))
+          pinFail(`The ${liquid} program's ${glsl} is ${constOf(g, glsl)} but its export is ${value}; the GLSL and the constant this check evaluates have come apart.`);
+
+      for (const line of FRAME)
+        if (!gn.includes(line)) pinFail(`The ${liquid} program no longer contains \`${line}\`, which the peak model is built on.`);
+      if ((gn.match(/\bheadCol\b/g) || []).length !== 3 || (gn.match(/\bheadIn\b/g) || []).length !== 3)
+        pinFail(`The head glow is read somewhere besides its screened rest term and its bloom term, so the peak model no longer describes it.`);
+
+      /* The fill's statements from the first one the model restates onward:
+         every write to fillCol or to anything the model reads must be exactly
+         the model's own statements, in order. */
+      const pieces = norm(shader.LIQUID_CHUNKS[liquid].fill).split(";").map((p) => p.replace(/^[\s{}]+/, "").trim()).filter(Boolean).map((p) => p + ";");
+      const start = pieces.indexOf(m.steps[0][0]);
+      const tracked = new Set(["fillCol", ...(m.also ?? []), ...Object.keys(m.domain[0]),
+        ...m.steps.map(([s]) => /^(?:float |vec3 |if \([^)]*\) )?(\w+) =/.exec(s)?.[1]).filter(Boolean)]);
+      const writes = (p) => [...p.matchAll(/\b([A-Za-z_]\w*)\s*[*+\-/]?=(?!=)/g)].some((w) => tracked.has(w[1]));
+      const got = start < 0 ? [] : pieces.slice(start).filter(writes);
+      const want = m.steps.map(([s]) => s);
+      const at = want.findIndex((s, i) => got[i] !== s);
+      if (at >= 0 || got.length !== want.length)
+        pinFail(`The ${liquid} fill has moved away from the peak model at \`${want[at] ?? "(end)"}\` (the shader has \`${got[at >= 0 ? at : want.length] ?? "nothing"}\`). Change the model with it — or, if it was a peak being nudged, the constant.`);
+
+      /* The numbers are still worth evaluating when only a statement pin broke —
+         they need the constants, not the pins. */
+      if (have === Object.keys(names).sort().join() && Object.keys(GLOW).sort().join() === Object.keys(GLOW_NAMES).sort().join())
+        numeric.add(liquid);
+      else if (pinned) pinFail(`HEAD_GLOW carries ${Object.keys(GLOW).join(", ") || "nothing"}, not ${Object.keys(GLOW_NAMES).join(", ")}.`);
+    }
+
+    /* The ramp, restated: OKLab stops → sRGB, exactly as rampAt() and
+       oklabToSrgb() do it, then the primary bar's grey and temp-HP leans. */
+    const oklabToSrgbJs = ([L, A, B]) => {
+      const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+      const mm = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+      const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
+      return [4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s]
+        .map((v) => Math.max(v, 0)).map((v) => (v >= 0.0031308 ? 1.055 * Math.pow(v, 1 / 2.4) - 0.055 : v * 12.92));
+    };
+    const tempCol = ramp.hexToFloat3(ramp.TEMP_COLOR);
+    const baseAt = (u, stops) => {
+      const t = clamp01(u / 0.72) * 3, i = Math.min(Math.floor(t), 2);
+      let b = oklabToSrgbJs(mix3(stops[i], stops[i + 1], t - i));
+      b = mix3(b, [luma(b), luma(b), luma(b)], 0.06);
+      return mix3(b, tempCol, 0.16 * ss(0.6, 1.0, u));
+    };
+    const hsvSat = (c) => { const x = c.map((v) => Math.min(v, 1)); const hi = Math.max(...x); return hi > 0 ? (hi - Math.min(...x)) / hi : 0; };
+
+    const report = [];
+    for (const liquid of shader.LIQUIDS) {
+      if (!numeric.has(liquid) || !MODEL[liquid]) continue;
+      const m = MODEL[liquid];
+      let top = -Infinity, topAt = "", kept = Infinity, keptAt = "";
+      for (const mode of Object.keys(ramp.RAMPS)) {
+        const flat = Array.from(ramp.rampUniform(mode));
+        const stops = [0, 1, 2, 3].map((i) => flat.slice(i * 3, i * 3 + 3));
+        for (const u of grid(100)) {
+          const base = baseAt(u, stops);
+          const bloodied = 1 - ss(0.485, 0.50, u);
+          const glow = mix3(base, W1, GLOW.tint);          // uBloom = 0
+          let bright = null, brightL = -Infinity;
+          for (const d of m.domain) {
+            const s = { base, bloodied, surge: 0, calm: 0, shade: shader.LIQUID_SHADE[liquid], c: null, ...d };
+            for (const [, run] of m.steps) run?.(s);
+            const lit = s.c.map((v, i) => v + Math.max(1 - v, 0) * glow[i] * GLOW.rest);   // headIn = 1
+            for (const px of [s.c, lit]) {
+              const hi = Math.max(...px);
+              if (hi > top) { top = hi; topAt = `${mode} ramp at ${Math.round(u * 100)}%`; }
+            }
+            const l = luma(lit);
+            if (l > brightL) { brightL = l; bright = lit; }
+          }
+          const ref = liquid === "lava" ? warmJs(base, shader.LAVA_WARMTH) : base;
+          const k = hsvSat(bright) / Math.max(hsvSat(ref), 1e-6);
+          if (k < kept) { kept = k; keptAt = `${mode} ramp at ${Math.round(u * 100)}%, [${bright.map((v) => v.toFixed(3)).join(", ")}]`; }
+        }
+      }
+      if (!(top < 1.0))
+        peakFail(`The ${liquid} liquid's brightest resting pixel reaches ${top.toFixed(3)} in one channel (${topAt}). Nothing in a liquid at rest may reach 1.0: a clipped channel is colour lost to white, it quietly breaks the luminance proof above, and the 8-bit bloom starts from it.`);
+      if (!(kept >= HUE_FLOOR[liquid]))
+        peakFail(`The ${liquid} liquid's brightest resting pixel keeps ${kept.toFixed(3)} of its colour's saturation (${keptAt}), under its ${HUE_FLOOR[liquid]} floor: its peak reads as white rather than as a lighter ${liquid}.`);
+      report.push(`${liquid} peak ${top.toFixed(3)}, saturation kept ${kept.toFixed(2)} (floor ${HUE_FLOOR[liquid]})`);
+    }
+    if (!peakBad)
+      ok(`every liquid's brightest resting light is a tint of it, never white — ${report.join("; ")} — with the head glow screened on at rest and every peak pinned to its constant`);
+  }
+
   /* (e) The lava calms under a guard break — it never dims. */
   const lava = strip(shader.fragmentShader("lava"));
   const calmK = shader.LAVA_BREAK_CALM;

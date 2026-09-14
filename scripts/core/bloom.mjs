@@ -16,10 +16,11 @@
  *
  * PIXI's filter textures are 8-bit. Everything the shader writes above 1.0 is
  * therefore clamped before this filter ever sees it, so the threshold has to
- * sit *below* 1.0 and work on what survived the clamp. That is genuinely less
- * accurate than the preview harness, which renders to RGBA16F and can threshold
- * at 1.05 — highlights there bloom in proportion to how bright they actually
- * are, and here they all arrive at exactly 1.0.
+ * sit *below* 1.0 and work on what survived the clamp. Highlights here cannot
+ * bloom in proportion to how bright they actually are; they all arrive at
+ * exactly 1.0. The preview harness imports these constants and clamps its own
+ * scene to 1.0 before its bright-pass, so it blooms the way the table does
+ * rather than more flatteringly.
  *
  * The practical difference is that a merely-bright fill blooms a little when it
  * should not, which is why DEFAULT_THRESHOLD is as high as it is: the point is
@@ -36,6 +37,7 @@ import { PRECISION } from "./glsl.mjs";
 import { warn } from "./const.mjs";
 
 export const DEFAULT_THRESHOLD = 0.82;
+export const DEFAULT_KNEE = 0.28;
 export const DEFAULT_INTENSITY = 0.85;
 
 const VERT = `
@@ -110,7 +112,7 @@ void main(void) {
  */
 export function createBloomFilter({ threshold = DEFAULT_THRESHOLD, intensity = DEFAULT_INTENSITY } = {}) {
   try {
-    const bright = new PIXI.Filter(VERT, BRIGHT, { uThreshold: threshold, uKnee: 0.28 });
+    const bright = new PIXI.Filter(VERT, BRIGHT, { uThreshold: threshold, uKnee: DEFAULT_KNEE });
     const blur = new PIXI.Filter(VERT, BLUR, { uDir: new Float32Array([0, 0]) });
     /* The composite is this filter's own program: overriding `apply` replaces
        the single pass PIXI would have run, it does not add to it. */
