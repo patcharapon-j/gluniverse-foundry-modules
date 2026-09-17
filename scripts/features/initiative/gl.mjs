@@ -12,7 +12,7 @@
 // FX_FRAG_DYING (the corruption veins) moved there too, as a shared field plus
 // this whole-shader wrapper, so the resource bars draw the same veins on a dying
 // creature's health bar. The wrapper calls the field with exactly the drift it
-// always had, so the card and the token overlay are unchanged.
+// always had, so the tracker card is unchanged.
 import { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING } from "../../core/fx-glsl.mjs";
 export { FX_SUPERSAMPLE, FX_GLSL_NOISE, FX_FRAG_BREAK, FX_FRAG_DYING };
 

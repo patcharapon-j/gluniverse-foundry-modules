@@ -831,7 +831,7 @@ back away from grey through `rbSaturate` (`DYING_SAT`), at the same luma.
 The veins are the initiative tracker's, from the same field. `core/fx-glsl.mjs`
 exports `FX_GLSL_DYING_FIELD` — `gluDyingField(uv, flowA, flowB)` — beside
 `FX_FRAG_DYING`, which calls it with exactly the linear drift it always had, so
-the card and the token overlay are pixel-identical to before. A bar cannot drift
+the tracker card is pixel-identical to before. A bar cannot drift
 linearly: its clock wraps, and a slide through non-periodic noise would jump at
 the wrap. It moves both warp offsets round closed orbits a whole number of times
 per loop instead, at `DYING_DENSE` so the ridges are not a pixel apart.
@@ -889,7 +889,7 @@ body — type laid into the instrument, as the dividers are, not liquid. Out in 
 trough and on the frame the veins and the beat add light. The doomed zone is not
 liquid either and keeps its dark.
 
-**Dying and death outrank the guard break**, as they do on the token overlay: the
+**Dying and death outrank the guard break**, as they do on the tracker card: the
 host writes `uBreak × (1 − max(dying, dead))`, so the seams give way as the orchid
 or the flatline arrives and come back if both clear on a creature still broken.
 Everything else measured in hit points is hidden: the low-health arterial red and

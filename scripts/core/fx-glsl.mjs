@@ -124,7 +124,7 @@ float gluFbmD(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<3;i++){ s+=a*gluVNoiseD(
  * look's equivalent of `gluBreakField`, split out for the same reason: the
  * resource bar is one quad running one program, and its veins have to be
  * clipped to the bar and composited with the gauge rather than laid over it.
- * One dying creature's card, token overlay and health bar then carry one look.
+ * One dying creature's tracker card and health bar then carry one look.
  *
  * `uv` is in whatever isotropic units the caller likes. `flowA` and `flowB` are
  * the offsets the two warp samples drift by — the only place time enters.
@@ -150,10 +150,10 @@ vec2 gluDyingField(vec2 uv, vec2 flowA, vec2 flowB){
 
 /**
  * Corruption veins, as a whole fragment shader: the initiative tracker's dying
- * look on the card portrait and the token overlay. A domain-warped ridged-noise
+ * look on the card portrait. A domain-warped ridged-noise
  * web of glowing orchid veins across the face, concentrated toward the edges,
  * with a soft halo around the strongest ridges. uClipCircle masks the field to a
- * disc for round token overlays.
+ * disc (the token overlay once used it; the card passes 0).
  */
 export const FX_FRAG_DYING = `
 varying vec2 vTextureCoord;
