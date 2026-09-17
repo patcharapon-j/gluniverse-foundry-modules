@@ -3,6 +3,11 @@ export { animate } from "../vendor/animejs/animation/index.js";
 export { createTimeline } from "../vendor/animejs/timeline/index.js";
 export { stagger } from "../vendor/animejs/utils/stagger.js";
 export { eases, spring, cubicBezier } from "../vendor/animejs/easings/index.js";
+export { createTimer } from "../vendor/animejs/timer/timer.js";
+// Cancels every animation on a target. Prefer `createMotionOwner()` for a slot
+// you own; `remove` is for the case that has no owner — tearing down animations
+// on a node and its descendants at once.
+export { remove } from "../vendor/animejs/utils/target.js";
 import { scaledMs } from "./theme.mjs";
 
 /** Resolve the existing suite/feature motion tier without retiming game state. */

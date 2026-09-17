@@ -13,7 +13,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { CARDS_FEATURE_ID, CARDS_PREFIX, FEATURE_ID } from "../stream/constants.mjs";
+import { CARDS_FEATURE_ID, CARDS_PREFIX, FEATURE_ID } from "../stream/constants.js";
 
 Suite.register({
   id: CARDS_FEATURE_ID,

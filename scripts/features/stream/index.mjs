@@ -10,7 +10,9 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { FEATURE_ID, PREFIX } from "./constants.mjs";
+import { FEATURE_ID, PREFIX } from "./constants.js";
+import { onInit, onReady, registerSettings } from "./main.js";
+import { registerCardFeed, registerPanelSection, unregisterPanelSection } from "./extensions.mjs";
 
 Suite.register({
   id: FEATURE_ID,
@@ -23,9 +25,14 @@ Suite.register({
   core: false,
   defaultEnabled: false,
 
-  registerSettings() {},
-  onInit() {},
-  onReady() {},
+  registerSettings() { registerSettings(); },
+  onInit() { onInit(); },
+  onReady() { return onReady(); },
 
-  api: null,
+  /**
+   * The slots `stream-cards` and `stream-targets` fill. Exposed on the feature
+   * rather than imported by them so the dependency points one way only — this
+   * feature never reaches for a child.
+   */
+  api: { registerCardFeed, registerPanelSection, unregisterPanelSection },
 });

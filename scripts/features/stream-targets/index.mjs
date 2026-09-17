@@ -13,7 +13,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { TARGETS_FEATURE_ID, TARGETS_PREFIX } from "../stream/constants.mjs";
+import { TARGETS_FEATURE_ID, TARGETS_PREFIX } from "../stream/constants.js";
 
 Suite.register({
   id: TARGETS_FEATURE_ID,
