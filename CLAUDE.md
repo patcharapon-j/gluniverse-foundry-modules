@@ -430,7 +430,7 @@ the trough; the ticker's value is gated on `canViewNumbers` *before* it is laid
 out ("on hover" read as "always"), so it never reaches a raster it may not, and it
 is never shed. The veins are
 `FX_GLSL_DYING_FIELD`, and `FX_FRAG_DYING` must keep calling it with its old
-linear drift or the card and token overlay change while no bar is dying; the bar
+linear drift or the tracker card changes while no bar is dying; the bar
 orbits the drift instead, on its own clock `uDyingT`, read only inside `dyPhase`
 with whole turns, and the heartbeat's `DYING_BEATS` are whole beats per loop
 crossfaded by level — a fractional rate steps once a minute; the words run on the
@@ -457,6 +457,31 @@ cannot compile GLSL, but headless Chrome can: `chrome --headless=new
 --dump-dom <served page>` prints the page's `.err` panel if any program fails.
 See `docs/RESOURCE_BARS.md` for the pipeline, the liquids, the unit convention
 and the permission contract.
+
+**When touching the initiative tracker's turn change** (`animateTurnChange` and
+the magic-move helpers in `features/initiative/gluniverse-initiative.mjs`), keep
+the layers separate. The rail is rebuilt from markup, so the card taking the
+turn is a new element already at its active size; scaling that element from its
+old box (the obvious FLIP) squashes the portrait and the type and reads as a
+cross-fade. Instead the row is locked at its final height, the surface is lifted
+out of flow and its real width, height and offset are tweened, the art's crop,
+zoom and overhang are their own variables (`--gluni-portrait-x/-y/-scale`,
+`--gluni-card-overflow`, which every active-only offset reads rather than a
+literal 42px), and type is tweened as a font size. Snapshots pair by key and
+then by combatant id, because keys carry the round offset and the card that just
+acted always comes back under a new one. That card is the one exception to
+the morph: when the turn advances on the standard rail (stepping back only slides it
+down a slot) it leaves through the nearest screen edge and
+re-enters at its new slot, and every card that joins or leaves the rail does
+the same, so a card only ever appears or disappears at the edge of the screen
+(card mode keeps its deck collect and deal instead). Cleanup restores the primed inline
+values and flushes them *before* dropping `gluni-card--morphing`, or the
+surface's own `min-height` transition replays from the primed 0.
+`node tools/stage-initiative-motion-check.mjs` runs from the motion workshop page;
+to watch the move, `node tools/initiative-preview.mjs` and serve it
+(`node tools/preview-server.mjs`). The page exposes `__initiativeSeek(fraction)`,
+which pauses the live move so a frame can be inspected; the Browser pane
+throttles animation frames, so judge timing there by seeking, not by waiting.
 
 **When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
 `styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it
