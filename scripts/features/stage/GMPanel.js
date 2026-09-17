@@ -1,6 +1,7 @@
 import { MODULE_ID, getSetting, setSetting } from './settings.js';
 import { StageManager } from './StageManager.js';
 import { escapeHTML } from '../../core/util.mjs';
+import { frameImages } from '../../core/face-frame.mjs';
 
 const i18n = (key) => game.i18n.localize(`GLSTAGE.${key}`);
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
@@ -165,6 +166,10 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 this.render({ force: false });
             });
         });
+
+        // Portrait thumbnails: framed on the head once the suite has found it.
+        frameImages(el, '.glstage-actor-preview img, .glstage-slot-thumb, .glcomms-call-thumb', 'portrait-bust');
+        frameImages(el, '.glstage-measure-control-thumb', 'avatar-circle');
 
         // Actor tab listeners
         this._bindActorListeners(el);

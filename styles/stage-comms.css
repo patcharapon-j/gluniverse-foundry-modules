@@ -108,13 +108,15 @@
         drop-shadow(0 -1px 1px color-mix(in srgb, var(--comms-rim-color) 70%, transparent));
 }
 
+/* --gp-auto-pos / --gp-auto-scale frame the art on its detected head (set from
+   CommsOverlay); the GM's framing transform applies on top of them. */
 .glcomms-portrait {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: top center;
-    transform: var(--gp-transform, none);
-    transform-origin: center center;
+    object-position: var(--gp-auto-pos, top center);
+    transform: var(--gp-transform, translate(0, 0)) scale(var(--gp-auto-scale, 1));
+    transform-origin: var(--gp-auto-pos, center center);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -127,10 +129,10 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    transform: var(--gp-transform, none);
-    transform-origin: center center;
-    -webkit-mask: var(--portrait-src) top center / cover no-repeat;
-    mask: var(--portrait-src) top center / cover no-repeat;
+    transform: var(--gp-transform, translate(0, 0)) scale(var(--gp-auto-scale, 1));
+    transform-origin: var(--gp-auto-pos, center center);
+    -webkit-mask: var(--portrait-src) var(--gp-auto-pos, top center) / cover no-repeat;
+    mask: var(--portrait-src) var(--gp-auto-pos, top center) / cover no-repeat;
     background: linear-gradient(
         180deg,
         color-mix(in srgb, var(--comms-rim-color) 92%, white) 0%,
