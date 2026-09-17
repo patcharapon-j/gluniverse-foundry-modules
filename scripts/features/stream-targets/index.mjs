@@ -6,14 +6,27 @@
  *
  * A **sibling** of `stream`, not a child. The arcs draw on every client that
  * can see both tokens — a table with no capture login still wants them — so
- * this carries its own prefix and its own settings editor rather than nesting
- * under the stream rig. When `stream` *is* enabled its control panel shows the
- * same editor inline, and the "visible to" choice gains its stream-only
- * options; with `stream` off those options are absent rather than inert.
+ * this carries its own prefix, its own settings and its own editor rather than
+ * nesting under the stream rig. When `stream` *is* enabled, the same editor is
+ * contributed into its control panel so the arcs are configured beside the shot
+ * they appear in, and the "visible to" choice gains its stream-only options.
+ *
+ * It imports pure modules from `stream/` (constants, the motion wrapper, the
+ * token and combat helpers). That is a feature→feature import the contract
+ * allows: those modules have no import-time side effects, so they resolve
+ * whether or not `stream` is enabled, and nothing of `stream` *runs*.
  */
 
 import { Suite } from "../../core/registry.mjs";
+import { SUITE_ID } from "../../core/const.mjs";
 import { TARGETS_FEATURE_ID, TARGETS_PREFIX } from "../stream/constants.js";
+import { registerPanelSection } from "../stream/extensions.mjs";
+import { SETTINGS, registerSettings } from "./settings.js";
+import { TargetingEditorMenu } from "./editor.js";
+import { claimChange, renderSection } from "./panel.js";
+import { TargetLineController } from "./targeting/target-lines.js";
+
+let controller = null;
 
 Suite.register({
   id: TARGETS_FEATURE_ID,
@@ -26,9 +39,37 @@ Suite.register({
   core: false,
   defaultEnabled: false,
 
-  registerSettings() {},
-  onInit() {},
-  onReady() {},
+  registerSettings() {
+    registerSettings();
+    game.settings.registerMenu(SUITE_ID, `${TARGETS_PREFIX}editor`, {
+      name: "GLUNIVERSE_STREAM.settings.targetingSettings.name",
+      label: "GLUNIVERSE_STREAM.menu.targeting.label",
+      hint: "GLUNIVERSE_STREAM.settings.targetingSettings.hint",
+      icon: "fas fa-crosshairs",
+      type: TargetingEditorMenu,
+      restricted: true
+    });
+  },
 
-  api: null,
+  onInit() {},
+
+  onReady() {
+    controller = new TargetLineController();
+    controller.registerHooks();
+
+    // Contribute the editor into the stream control panel. The slot module is
+    // imported directly rather than reached through the suite api, which is
+    // only exposed *after* every onReady has run. It is a pure module, so the
+    // import resolves whether or not `stream` is enabled — and if it is
+    // disabled nothing ever renders the section, which is the intended no-op.
+    // The dependency still points one way: `stream` never knows this exists.
+    registerPanelSection({
+      id: TARGETS_FEATURE_ID,
+      order: 10,
+      render: renderSection,
+      change: claimChange
+    });
+  },
+
+  api: { get controller() { return controller; }, SETTINGS },
 });
