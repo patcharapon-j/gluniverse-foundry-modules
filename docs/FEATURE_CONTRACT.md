@@ -218,6 +218,12 @@ rather than at the end.
 | vr-chip-damage     | vr.chip                      | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-dents           | vr.dent                      | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-lasting-wounds  | vr.wound                     | pf2e              | ⤷ pf2e-variant-rules | off |
+| vr-boss-creatures  | vr.boss                      | pf2e              | ⤷ pf2e-variant-rules | off |
+| pf2e-arcane-surge  | surge.                       | pf2e              | —               | off     |
+| pf2e-creaturedex   | dex.                         | pf2e              | —               | off     |
+| stream             | stream.                      | null              | —               | off     |
+| stream-cards       | stream.card                  | pf2e              | ⤷ stream        | off     |
+| stream-targets     | tgt.                         | null              | —               | off     |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

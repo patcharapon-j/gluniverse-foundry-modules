@@ -1,0 +1,9 @@
+{
+  "GLS.feature.stream-targets.title": "Targeting Lines",
+  "GLS.feature.stream-targets.hint": "During combat, an etched glass arc runs from the combatant whose turn it is to each token it targets. Colours follow disposition, and each client only draws lines between tokens it can see.",
+  "GLUNIVERSE_STREAM.settings.targetingSettings.name": "Targeting Line Settings",
+  "GLUNIVERSE_STREAM.settings.targetingSettings.hint": "World-level combat targeting line settings.",
+  "GLUNIVERSE_STREAM.settings.showTargetLines.name": "Show Targeting Lines",
+  "GLUNIVERSE_STREAM.settings.showTargetLines.hint": "Draw combat targeting lines on this screen when the Stream Director has them enabled for you.",
+  "GLUNIVERSE_STREAM.menu.targeting.label": "Open editor"
+}

@@ -1083,6 +1083,68 @@ identifies the thing the party is looking at. Knowing a *lie* counts as knowing
 something there: a player told one cannot see that it is false, so refusing to
 open is the module losing the only thing they were given.
 
+**When touching the stream features** (`features/stream/`, `features/stream-cards/`,
+`features/stream-targets/`), re-run their consistency check. The standalone
+`gluniverse-stream` module became three features, and almost everything that
+seam can get wrong fails *silently*:
+
+```bash
+node tools/stream-check.mjs
+```
+
+Zero problems required, plus `node --test tests/*.test.mjs` (83 tests; Node's
+directory mode is not supported here, so name the glob).
+
+Four things are worth knowing before you change any of it.
+
+**`stream` must never import its children.** The chat overlay reaches PF2e roll
+cards through a slot in `extensions.mjs` that `stream-cards` fills, and the
+children reach back for pure modules only. Restore the direct import and the
+three-way split becomes a cycle. The slot is also why the feed factory is
+registered from `stream-cards`' **onInit**, not onReady: `stream` builds its
+`ChatOverlay` during its own onReady and the overlay asks for a feed in the
+constructor, so one phase later is forever — the overlay clones chat cards for
+the rest of the session with nothing reported.
+
+**The anime.js engine is not yours.** The standalone module set
+`engine.useDefaultMainLoop = false` and re-hosted anime's main loop on the PIXI
+ticker so canvas work could not drift a frame. In the suite that engine is
+shared with a dozen features, so the takeover would re-clock all of them and
+stall every one whenever no canvas exists. Canvas synchronisation is a ticker
+callback (`onCanvasFrame`) that reads tween state; the engine runs its own loop.
+Two anime modules (`utils/target.js`, `waapi/composition.js`) were added to the
+vendored closure so `remove` and `createTimer` come from the suite's single copy.
+
+**A director's authority comes from a User document, never from a payload.** The
+standalone module emitted `{userId, key, value}` over its own socket and a GM's
+client wrote it — forgeable, because Foundry's module sockets carry no attested
+identity, and `trustedDirectorUserIds` was itself in the allowlist, so one forged
+message made the forger a permanent director. Requests ride a flag on the
+requester's own User document now and the GM re-derives the author from the
+document it arrived on. `streamUserId` and `trustedDirectorUserIds` are never
+delegable. It fails closed: a refused self-flag write disables delegation rather
+than falling back to something weaker. Commands were forgeable the same way and
+travel the same channel.
+
+**The crit crack is composed from `core/fx-glsl.mjs`, not forked.** The
+standalone module shipped a verbatim fork — its own header said so — to make
+`dense`/`reach` uniforms and drop the circular clip. It needed neither:
+`gluBreakField` already takes both as arguments, and the clip is a branch a
+wrapper simply does not write. Gold lives in `FX_BREAK_COLORS` in core beside the
+shader, because a creature's Broken card, its ground marker and a stream
+critical have to be the same gold and three copies of a number that must agree
+is three chances to drift while every file looks right on its own.
+
+Two smaller ones. Hook names are built in one place per feature: under the suite
+id an un-namespaced `${MODULE_ID}.settingsChanged` is a name any feature could
+raise, and an emitter drifting from its listener just stops the camera reframing
+while every frame still draws. And `stream.card` must stay strictly longer than
+`stream.`, or the catalog's longest-first sort hands the child's keys to the
+parent and its Control Center group renders empty.
+
+See `docs/STREAM.md` for the camera modes, the targeting audiences and the
+migration.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

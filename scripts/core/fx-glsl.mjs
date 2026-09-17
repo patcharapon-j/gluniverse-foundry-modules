@@ -16,6 +16,24 @@
 // size, box-downsample on blit to de-alias the shader cracks).
 export const FX_SUPERSAMPLE = 1.25;
 
+/**
+ * Crack colours as `[base, hot]` linear RGB, fed to `uBreakAmber` / `uBreakHot`.
+ *
+ * `gold` is the Broken condition's amber — it lives here rather than in any one
+ * feature because a creature's broken card, its ground marker and a stream roll
+ * card's critical all have to be the *same* gold, and three copies of a number
+ * that must agree is three chances for one of them to drift while each file
+ * still looks right on its own.
+ *
+ * `red` and `violet` are the stream roll card's critical failure and blind
+ * roll; no other feature draws those yet.
+ */
+export const FX_BREAK_COLORS = Object.freeze({
+  gold: Object.freeze({ base: [1.0, 0.694, 0.176], hot: [1.0, 0.878, 0.439] }),
+  red: Object.freeze({ base: [1.0, 0.24, 0.28], hot: [1.0, 0.72, 0.74] }),
+  violet: Object.freeze({ base: [0.62, 0.45, 1.0], hot: [0.88, 0.83, 1.0] }),
+});
+
 // Shared value-noise helpers, interpolated into the fragment shaders below (and
 // into the other initiative FX shaders that re-import this binding).
 export const FX_GLSL_NOISE = `
