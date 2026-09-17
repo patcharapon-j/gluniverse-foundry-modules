@@ -137,6 +137,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _delveCtx = null;     // open delving context menu element, if any
   _delveCtxOff = null;  // teardown for the delving menu's window listeners
   _sig = null;          // signature of the last painted display values
+  _evSig = null;        // signature of the last painted event chips
   _peeking = false;     // mid value-flash (compact bar temporarily expanded)
   _peekShown = false;   // the open finished and the value change has been painted
   _peekShowT = null;    // pending "open done → animate the value change" timeout
@@ -679,6 +680,10 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._missReel = missHost ? this._buildMissReel(missHost) : [];
 
     this._built = true;
+    // The DOM the signatures describe has just been replaced; forget it, or the
+    // no-op gate in update() would skip the first paint and leave it blank.
+    this._sig = null;
+    this._evSig = null;
   }
 
   /** Build the mission countdown reel: 3 digit wheels, each a 0-9 strip. */
@@ -787,8 +792,15 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // ease in while the card is still sliding open; we skip the immediate paint
     // and let the peek schedule it once the bar has finished opening.
     const sig = this._displaySig(st);
-    const changed = this._sig !== null && sig !== this._sig;
+    // The event chips are not part of _displaySig, and must not be: a change
+    // there should repaint but must NOT pop the compact bar open the way a
+    // clock value change does.
+    const evSig = this._eventsSig(st);
+    const first = this._sig === null;
+    const changed = !first && sig !== this._sig;
+    const eventsChanged = this._evSig !== evSig;
     this._sig = sig;
+    this._evSig = evSig;
     // While glitched the readout is blurred into noise, so a value change has
     // nothing legible to flash — skip the compact peek (which would also pop the
     // bar wider) and just repaint underneath the overlay.
@@ -799,7 +811,24 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // peek's own scheduled paint catches up to the latest state once it opens.
     if (this._peeking && !this._peekShown) return;
 
+    // Nothing the HUD draws differs from what is already on screen. _paint() is
+    // a forced layout plus 42 SVG rect writes plus a chip rebuild, and it used
+    // to run on every refreshState() regardless — including once per combat turn
+    // and again on every world-time advance, on the frames that can least afford
+    // it. The first paint after a build always goes through (first === true).
+    if (!first && !changed && !eventsChanged) return;
+
     this._paint(st);
+  }
+
+  /** Signature of the event chips, which _displaySig deliberately leaves out.
+      Read from the already-resolved st.events — never from the ct.events
+      setting, which is the calendar's own store. */
+  _eventsSig(st) {
+    const ev = st.events ?? {};
+    const part = (list) => (list ?? []).map((e) => `${e.name}@${e.days ?? 0}`).join(",");
+    const next = ev.next ? `${ev.next.name}@${ev.next.days}` : "";
+    return `${part(ev.today)}|${part(ev.pinned)}|${next}`;
   }
 
   /** A compact signature of every value shown on the bar/pill, so update() can

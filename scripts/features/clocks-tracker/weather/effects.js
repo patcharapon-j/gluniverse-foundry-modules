@@ -560,7 +560,15 @@ export class WeatherEffect {
   resize() {
     const w = Math.max(8, this.host.clientWidth || 54), h = Math.max(8, this.host.clientHeight || 30);
     try {
-      this.app?.renderer?.resize(w, h);
+      // PIXI's ViewSystem.resize assigns canvas.width/height unconditionally, and
+      // assigning either RESETS the WebGL drawing buffer — the diorama is blank
+      // until its next ticker frame. Callers repaint on state changes that often
+      // do not move the host at all (a peek that reopens at the same width, a
+      // delving repaint), so a no-op resize would blink the field for no reason.
+      // Compare against renderer.screen, not canvas.width, which is screen x
+      // resolution.
+      const screen = this.app?.renderer?.screen;
+      if (!screen || screen.width !== w || screen.height !== h) this.app?.renderer?.resize(w, h);
       if (this.flash) { this.flash.width = w; this.flash.height = h; }
       // a large area change (chip ↔ full bar) warrants re-seeding the field density
       const next = clamp((w * h) / REF_AREA, 0.7, 6);

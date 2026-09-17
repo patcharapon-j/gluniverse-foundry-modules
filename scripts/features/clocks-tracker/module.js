@@ -103,11 +103,14 @@ function registerRuntimeHooks() {
   Hooks.on("renderChatMessageHTML", tagPoolMessage);   // Foundry v13+
   Hooks.on("renderChatMessage", tagPoolMessage);       // legacy fallback
 
-  // Combat awareness: reflect combat state on the HUD (no auto-advance — a combat
-  // round is far shorter than a stretch, so time only moves when the GM advances).
-  for (const hook of ["combatStart", "deleteCombat", "combatTurn", "combatRound"]) {
-    Hooks.on(hook, () => GlctHud.refreshState());
-  }
+  // No combat hooks here on purpose. These once called GlctHud.refreshState() on
+  // combatStart/deleteCombat/combatTurn/combatRound to "reflect combat state on
+  // the HUD", but nothing ever read it: TimeEngine computes state.inCombat and no
+  // template, stylesheet or painter consumes it. What the hooks did do was run a
+  // full _paint() — forced layout, 42 SVG rect writes, chip rebuild — on the same
+  // frame as the combat tracker's own turn-change work, which is exactly the
+  // frame that has none to spare. If a combat indicator is wanted later, give the
+  // HUD a setCombat(bool) that toggles one class and nothing else.
 
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
 }
@@ -276,5 +279,12 @@ function applySceneTint(state) {
     });
     (document.getElementById("board") ?? document.body).after(overlay);
   }
+  // Writing the same value back still invalidates style on a full-viewport
+  // soft-light layer, and this runs on every updateWorldTime — which in PF2e is
+  // every combat round. The tint only moves when the watch glow does, so the
+  // last applied value is cached on the element (its lifetime is exactly the
+  // cache's valid lifetime: the overlay is removed when the feature is off).
+  if (overlay.dataset.glctGlow === state.watch.glow) return;
+  overlay.dataset.glctGlow = state.watch.glow;
   overlay.style.background = `radial-gradient(120% 90% at 50% 0%, ${state.watch.glow}, transparent 70%)`;
 }

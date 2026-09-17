@@ -141,7 +141,13 @@ export class TokenOverlayManager {
     // Ground turn-markers (active ring / next ring / start echo + connector) live
     // in their own layer beneath the token art, separate from the above-token
     // status overlays in `_entries`.
-    this._markers = new Map();     // tokenId -> ground marker entry
+    // Keyed by ROLE ("active" / "next"), not by token id. A turn change swaps
+    // which token each role points at; keying by token made every turn destroy
+    // both markers (container, graphics, text raster, FX mesh) and build two
+    // new ones. Keyed by role they are re-targeted instead, and only redrawn
+    // when marker.key — which already encodes disposition, shape, size and the
+    // ring/start/origin flags — actually changes.
+    this._markers = new Map();     // role -> ground marker entry
     this._groundLayer = null;
     this._markerConnector = true;
   }
@@ -277,14 +283,16 @@ export class TokenOverlayManager {
     const targets = overlay?.getTurnMarkerTargets?.(combat) ?? { active: null, next: null };
     const origin = settings.start ? this._resolveStartOrigin(combat, targets.active) : null;
 
-    const wanted = new Map();   // tokenId -> { token, role, disposition, mystery, origin, showRing, showStart }
+    const wanted = new Map();   // role -> { token, role, disposition, mystery, origin, showRing, showStart }
+    let activeTokenId = null;
     // The active token hosts both the ring and the start echo, so it is wanted if
     // EITHER toggle is on; each piece is drawn independently.
     if ((settings.turn || settings.start) && targets.active) {
       const combatant = combat.combatants?.get?.(targets.active.combatantId);
       const token = combatant ? getCombatantTokenObject(combatant) : null;
       if (token && token.w && token.h && this._tokenVisible(token)) {
-        wanted.set(token.id, {
+        activeTokenId = token.id;
+        wanted.set("active", {
           token, role: "active", ...targets.active,
           origin, showRing: settings.turn, showStart: settings.start
         });
@@ -294,18 +302,18 @@ export class TokenOverlayManager {
       const combatant = combat.combatants?.get?.(targets.next.combatantId);
       const token = combatant ? getCombatantTokenObject(combatant) : null;
       // Never let the next ring land on the active token (e.g. odd wrap states).
-      if (token && token.w && token.h && this._tokenVisible(token) && !wanted.has(token.id)) {
-        wanted.set(token.id, {
+      if (token && token.w && token.h && this._tokenVisible(token) && token.id !== activeTokenId) {
+        wanted.set("next", {
           token, role: "next", ...targets.next,
           origin: null, showRing: true, showStart: false
         });
       }
     }
 
-    for (const tokenId of [...this._markers.keys()]) {
-      if (!wanted.has(tokenId)) this._removeMarker(tokenId);
+    for (const role of [...this._markers.keys()]) {
+      if (!wanted.has(role)) this._removeMarker(role);
     }
-    for (const [tokenId, state] of wanted) this._upsertMarker(state);
+    for (const state of wanted.values()) this._upsertMarker(state);
   }
 
   // True only when the token is genuinely visible to this client right now
@@ -332,11 +340,11 @@ export class TokenOverlayManager {
 
   _upsertMarker(state) {
     const { token, role, disposition, origin, showRing, showStart } = state;
-    let marker = this._markers.get(token.id);
-    if (marker && marker.root.destroyed) { this._markers.delete(token.id); marker = null; }
+    let marker = this._markers.get(role);
+    if (marker && marker.root.destroyed) { this._markers.delete(role); marker = null; }
     if (!marker) {
       marker = this._createMarker();
-      this._markers.set(token.id, marker);
+      this._markers.set(role, marker);
     }
 
     const layer = this._ensureGroundLayer();
@@ -682,8 +690,8 @@ export class TokenOverlayManager {
     }
   }
 
-  _removeMarker(tokenId) {
-    const marker = this._markers.get(tokenId);
+  _removeMarker(role) {
+    const marker = this._markers.get(role);
     if (!marker) return;
     if (!marker.root.destroyed) {
       try { if (marker.glow) marker.glow.filters = null; } catch {}
@@ -693,11 +701,11 @@ export class TokenOverlayManager {
       if (marker.root.parent) marker.root.parent.removeChild(marker.root);
       marker.root.destroy({ children: true });
     }
-    this._markers.delete(tokenId);
+    this._markers.delete(role);
   }
 
   _clearMarkers() {
-    for (const tokenId of [...this._markers.keys()]) this._removeMarker(tokenId);
+    for (const role of [...this._markers.keys()]) this._removeMarker(role);
     if (this._groundLayer && !this._groundLayer.destroyed) {
       try { this._groundLayer.destroy({ children: true }); } catch {}
     }
