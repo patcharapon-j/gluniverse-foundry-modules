@@ -50,7 +50,10 @@
     "styles/pf2e-arcane-surge.css",
     "styles/pf2e-variant-rules.css",
     "styles/pf2e-variant-rules-boss.css",
-    "styles/pf2e-creaturedex.css"
+    "styles/pf2e-creaturedex.css",
+    "styles/stream.css",
+    "styles/stream-cards.css",
+    "styles/stream-targets.css"
   ],
   "languages": [
     {
@@ -162,6 +165,21 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-creaturedex.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/stream.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/stream-cards.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/stream-targets.en.json"
     }
   ],
   "packs": [

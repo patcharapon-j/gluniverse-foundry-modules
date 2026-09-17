@@ -1,0 +1,4 @@
+{
+  "GLS.feature.stream.title": "Stream Client",
+  "GLS.feature.stream.hint": "A dedicated login for OBS or browser capture: hides Foundry's UI, frames the canvas camera, and shows chat and presentation overlays. A control panel drives the live shot."
+}
