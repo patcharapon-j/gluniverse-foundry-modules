@@ -1472,9 +1472,12 @@ export class GLUniverseInitiativeOverlay {
       this.closeInitiativeContextMenu();
       this.root.innerHTML = markup;
       this.lastMarkup = markup;
-      this.positionFloatingControls();
       this.reacquireCardDragAfterRender();
     }
+
+    // Measured before animateTurnChange and written after it, so its own read
+    // pass shares this layout instead of paying for a second one.
+    const controlPosition = markupChanged ? this.measureFloatingControls() : null;
 
     if (shouldAnimateTurnChange || shouldContinueMove) {
       this.animateTurnChange(oldRects, {
@@ -1487,6 +1490,7 @@ export class GLUniverseInitiativeOverlay {
         previousActiveInitiative
       });
     }
+    this.applyFloatingControls(controlPosition);
     if (cardSnapshot) {
       this.playCardModeMotion(cardSnapshot, { isReshuffle, edge: settings.edge });
     }
@@ -1543,28 +1547,42 @@ export class GLUniverseInitiativeOverlay {
     if (!this.root) return;
     if (!this._lastGaugeRatios) this._lastGaugeRatios = new Map();
     const seen = new Set();
-    this.root.querySelectorAll(".gluni-card[data-combatant-id]").forEach(cardEl => {
+    const changed = [];
+    for (const cardEl of this.root.querySelectorAll(".gluni-card[data-combatant-id]")) {
       const track = cardEl.querySelector(".gluni-break-gauge-track");
-      if (!track) return;
+      if (!track) continue;
       const id = cardEl.dataset.combatantId;
       const key = cardEl.dataset.gluniKey || id;
       seen.add(key);
       const ratio = clamp(Number(track.dataset.ratio) || 0, 0, 1);
       const prev = this._lastGaugeRatios.get(key);
       this._lastGaugeRatios.set(key, ratio);
-      if (prev === undefined || prev === ratio) return;
-      const fill = track.querySelector(".gluni-break-gauge-fill");
+      if (prev === undefined || prev === ratio) continue;
+      changed.push({ track, fill: track.querySelector(".gluni-break-gauge-fill"), prev, ratio });
+    }
+
+    // Both beats need the browser to see the old state before the new one — the
+    // fill so its width transition has something to travel from, the track so
+    // its flash keyframe restarts. The read that makes it do so is a layout of
+    // the whole document, so every bar is primed, ONE read flushes them all,
+    // and then every bar is handed its new state. A bar doing its own pair
+    // costs the rail two layouts per changed gauge, and a round that damages
+    // several creatures changes several at once.
+    for (const { track, fill, prev } of changed) {
       if (fill) {
         fill.style.transition = "none";
         fill.style.width = `${(clamp(prev, 0, 1) * 100).toFixed(2)}%`;
-        void fill.offsetWidth;                       // force reflow before re-enabling transition
+      }
+      track.classList.remove("gluni-break-gauge-track--down", "gluni-break-gauge-track--up");
+    }
+    if (changed.length) void this.root.offsetWidth;
+    for (const { track, fill, prev, ratio } of changed) {
+      if (fill) {
         fill.style.transition = "";
         fill.style.width = `${(ratio * 100).toFixed(2)}%`;
       }
-      track.classList.remove("gluni-break-gauge-track--down", "gluni-break-gauge-track--up");
-      void track.offsetWidth;                        // restart the flash keyframe
       track.classList.add(ratio < prev ? "gluni-break-gauge-track--down" : "gluni-break-gauge-track--up");
-    });
+    }
     for (const key of this._lastGaugeRatios.keys()) {
       if (!seen.has(key)) this._lastGaugeRatios.delete(key);
     }
@@ -2132,16 +2150,26 @@ export class GLUniverseInitiativeOverlay {
     `;
   }
 
-  positionFloatingControls() {
+  // Split in two so the turn change can take the measurement with the rest of
+  // its read pass and leave the write to its write pass. Measuring and writing
+  // together here put a style invalidation between the fresh markup and the
+  // move's own measurements, which cost the rail a second full layout on every
+  // turn — the controls sit on the active card, so this runs on exactly the
+  // renders that are already the most expensive.
+  measureFloatingControls() {
     const shell = this.root?.querySelector(".gluni-shell");
     const activeCard = this.root?.querySelector(".gluni-card--active");
     const controls = this.root?.querySelector(".gluni-floating-turn-controls");
-    if (!shell || !activeCard || !controls) return;
+    if (!shell || !activeCard || !controls) return null;
 
     const shellRect = shell.getBoundingClientRect();
     const cardRect = activeCard.getBoundingClientRect();
-    const top = Math.max(0, Math.round(cardRect.top - shellRect.top + 32));
-    shell.style.setProperty("--gluni-control-top", `${top}px`);
+    return { shell, top: Math.max(0, Math.round(cardRect.top - shellRect.top + 32)) };
+  }
+
+  applyFloatingControls(measurement) {
+    if (!measurement) return;
+    measurement.shell.style.setProperty("--gluni-control-top", `${measurement.top}px`);
   }
 
   renderGMVisibilityMarker(card) {
@@ -2243,6 +2271,11 @@ export class GLUniverseInitiativeOverlay {
     // Motion tier "none": the new layout is already the answer. Priming the old
     // one first would only paint it for a frame.
     if (duration <= 0) return;
+    // Resolved here, with the rest of the read pass: motionDuration() resolves
+    // `--gl-motion-scale` off the cascade, so one called from inside the write
+    // pass is another forced style recalculation. These two never vary per card.
+    const enterMs = motionDuration(MAGIC_ENTER_MS, this.root);
+    const rejoinMs = motionDuration(MAGIC_LEAVE_MS * 0.8, this.root);
     const items = Array.from(this.root.querySelectorAll("[data-gluni-key]"));
     const roundDelta = Number(options.roundDelta) || 0;
     const enterItems = [];
@@ -2310,43 +2343,70 @@ export class GLUniverseInitiativeOverlay {
       settled = true;
       this._magicLive = Math.max(0, (this._magicLive || 0) - 1);
       timeline.revert();
-      for (const fn of settles) fn();
+      // Every card hands its inline styles back first, then ONE layout read
+      // flushes them for the whole rail, then every card drops its morph class.
+      // The flush has to happen (see primeMagicMove) but it is a synchronous
+      // layout of the document, so a card doing its own would make the rail pay
+      // for one per card at the end of every move.
+      for (const entry of settles) entry.restore();
+      const flush = settles.find(entry => entry.commit);
+      if (flush) void (this.root ?? flush.node)?.offsetHeight;
+      for (const entry of settles) entry.commit?.();
       this._railMotion.forget(handle);
       if (this._magicTimeline === timeline) this._magicTimeline = null;
     };
     const handle = { revert: settle };
 
-    // Write pass.
-    for (const plan of plans) settles.push(applyMagicMove(timeline, plan, duration));
+    // Write pass, in two halves: every card primes its start state, and only
+    // then does anything queue a tween. Building a tween is not a pure write —
+    // anime.js reads the target's current value to pick up its unit, and for a
+    // custom property (`--gluni-flip-x`, `--gluni-card-overflow`, the portrait
+    // vars) an inline value is invisible through `element.style[prop]`, so it
+    // has to go to the cascade for it. Priming between two of those reads
+    // dirties style and the next read pays for a full recalculation of the
+    // document. Interleaved, that is one recalculation per animated custom
+    // property — the cost that made a turn change hitch, and it grows with the
+    // number of cards on the rail. Batched, the whole move pays for one.
+    for (const plan of plans) settles.push(primeMagicMove(plan));
 
-    let newcomer = 0;
     for (const { item, offset } of entries) {
-      item.classList.add("gluni-anime-motion");
-      settles.push(() => {
-        item.classList.remove("gluni-anime-motion");
-        item.style.removeProperty("opacity");
-        item.style.removeProperty("--gluni-flip-x");
-        item.style.removeProperty("--gluni-flip-y");
+      settles.push({
+        restore() {
+          item.classList.remove("gluni-anime-motion");
+          item.style.removeProperty("opacity");
+          item.style.removeProperty("--gluni-flip-x");
+          item.style.removeProperty("--gluni-flip-y");
+        }
       });
+      item.classList.add("gluni-anime-motion");
       if (options.cardMode) {
         // Dealt from the deck: a short rise rather than a trip across the screen.
         item.style.opacity = "0";
         item.style.setProperty("--gluni-flip-y", "16px");
+      } else {
+        item.style.setProperty("--gluni-flip-x", `${offset}px`);
+      }
+    }
+
+    for (const plan of plans) tweenMagicMove(timeline, plan, duration);
+
+    let newcomer = 0;
+    for (const { item, offset } of entries) {
+      if (options.cardMode) {
         timeline.add(item, {
           opacity: [0, 1], "--gluni-flip-y": ["16px", "0px"],
-          duration: motionDuration(MAGIC_ENTER_MS, this.root), ease: "outCubic"
+          duration: enterMs, ease: "outCubic"
         }, duration * 0.35 + motionDuration(Math.min(newcomer++, 6) * 40, this.root));
         continue;
       }
       // In from the nearest screen edge, parked off screen until its turn to
       // move. The card that just acted waits until it has cleared the screen.
       const start = rejoining.has(item)
-        ? motionDuration(MAGIC_LEAVE_MS * 0.8, this.root)
+        ? rejoinMs
         : duration * 0.3 + motionDuration(Math.min(newcomer++, 6) * 50, this.root);
-      item.style.setProperty("--gluni-flip-x", `${offset}px`);
       timeline.add(item, {
         "--gluni-flip-x": [`${offset}px`, "0px"],
-        duration: motionDuration(MAGIC_ENTER_MS, this.root), ease: MAGIC_ARRIVE_EASE
+        duration: enterMs, ease: MAGIC_ARRIVE_EASE
       }, start);
     }
 
@@ -2377,8 +2437,12 @@ export class GLUniverseInitiativeOverlay {
     if (!snapshots?.length) return;
     const layer = document.createElement("div");
     layer.className = `gluni-initiative gluni-initiative--${edge} gluni-card-ghost-layer gluni-card-ghost-layer--under`;
-    document.body.appendChild(layer);
+    // Filled while it is still detached and attached once, below: a layer that
+    // is already in the document pays a style invalidation per card cloned into
+    // it, and this runs at the end of the move's write pass where the next read
+    // would then have to flush them.
     this._collectLayers.add(layer);
+    const leaveMs = motionDuration(MAGIC_LEAVE_MS, this.root);
     const timeline = createTimeline({ autoplay: false, onComplete: () => {
       timeline.revert();
       this._collectMotion.forget(timeline);
@@ -2404,9 +2468,10 @@ export class GLUniverseInitiativeOverlay {
       layer.appendChild(ghost);
       timeline.add(ghost, {
         x: [0, edgeExitDistance(box, edge)],
-        duration: motionDuration(MAGIC_LEAVE_MS, this.root), ease: MAGIC_DEPART_EASE
+        duration: leaveMs, ease: MAGIC_DEPART_EASE
       }, 0);
     }
+    document.body.appendChild(layer);
     // Held for the preview harness, alongside the rail's own timeline.
     this._leaveTimeline = timeline;
     timeline.play();
@@ -2470,7 +2535,7 @@ export class GLUniverseInitiativeOverlay {
     // Carry the overlay's scoping classes so the cloned cards keep their styling,
     // but live on <body> so the shell's UI-scale transform doesn't double-apply.
     layer.className = `gluni-initiative gluni-initiative--${edge} gluni-initiative--card-mode gluni-card-ghost-layer`;
-    document.body.appendChild(layer);
+    const collectMs = motionDuration(480, this.root);
 
     const stubCx = stubRect.left + stubRect.width / 2;
     const stubCy = stubRect.top + stubRect.height / 2;
@@ -2499,9 +2564,11 @@ export class GLUniverseInitiativeOverlay {
       const dy = stubCy - (item.rect.top + item.rect.height / 2);
       timeline.add(ghost, {
         x: [0, dx], y: [0, dy], scale: [1, 0.14], rotateY: [0, 58],
-        opacity: [1, 0], duration: motionDuration(480, this.root), ease: "inOutCubic"
+        opacity: [1, 0], duration: collectMs, ease: "inOutCubic"
       }, motionDuration(stagger ? index * 45 : 0, this.root));
     });
+    // Attached once the clones are in it — see spawnLeaveGhosts.
+    document.body.appendChild(layer);
     timeline.play();
   }
 
@@ -4558,6 +4625,9 @@ const MAGIC_FONT_PARTS = [
 const MAGIC_ACTIVE_CHROME = [".gluni-active-tag", ".gluni-card-holo"];
 
 const PORTRAIT_VARS = ["--gluni-portrait-x", "--gluni-portrait-y", "--gluni-portrait-scale"];
+// Units for PORTRAIT_VARS, in the same order. Both halves of the write pass
+// state the same values, so they read them from one place.
+const PORTRAIT_UNITS = ["%", "%", ""];
 
 function readCssNumber(style, name) {
   const value = parseFloat(style.getPropertyValue(name));
@@ -4669,23 +4739,30 @@ function planMagicMove(item, from) {
   return plan;
 }
 
-// Write-only: primes the start state inline (so the first painted frame is
-// already the old layout), queues the tweens, and returns the cleanup that
-// hands the card back to the stylesheet. Cleanup runs after timeline.revert().
-function applyMagicMove(timeline, plan, duration) {
+// Write pass, part one: primes the start state inline (so the first painted
+// frame is already the old layout) and returns the card's cleanup.
+//
+// The cleanup is split in two because handing the stylesheet values back and
+// dropping `gluni-card--morphing` in the same style pass replays the surface's
+// own min-height transition from the 0 the move primed it with — a layout flush
+// has to sit between them. That flush is a synchronous layout of the whole
+// document, so the caller does it once for the rail rather than once per card.
+//
+// The tweens are queued separately (tweenMagicMove) once every card has primed:
+// see the write pass in animateTurnChange for why the two cannot interleave.
+function primeMagicMove(plan) {
   const { item } = plan;
-  const tween = (target, props, offset = 0, length = duration, ease = MAGIC_EASE) =>
-    timeline.add(target, { ...props, duration: length, ease }, offset);
 
   if (plan.kind === "shift") {
     item.classList.add("gluni-anime-motion");
     item.style.setProperty("--gluni-flip-x", `${plan.dx}px`);
     item.style.setProperty("--gluni-flip-y", `${plan.dy}px`);
-    tween(item, { "--gluni-flip-x": [`${plan.dx}px`, "0px"], "--gluni-flip-y": [`${plan.dy}px`, "0px"] });
-    return () => {
-      item.classList.remove("gluni-anime-motion");
-      item.style.removeProperty("--gluni-flip-x");
-      item.style.removeProperty("--gluni-flip-y");
+    return {
+      restore() {
+        item.classList.remove("gluni-anime-motion");
+        item.style.removeProperty("--gluni-flip-x");
+        item.style.removeProperty("--gluni-flip-y");
+      }
     };
   }
 
@@ -4710,6 +4787,55 @@ function applyMagicMove(timeline, plan, duration) {
   prime(surface, "width", `${plan.w0}px`);
   prime(surface, "height", `${plan.h0}px`);
   prime(surface, "transform", `translate(${plan.dx}px, ${plan.dy}px)`);
+
+  if (plan.overflow) {
+    const [a] = plan.overflow;
+    prime(item, "--gluni-card-overflow", `${a}px`);
+  }
+
+  if (plan.portrait) {
+    const [a] = plan.portrait;
+    PORTRAIT_VARS.forEach((name, i) => prime(item, name, `${a[i]}${PORTRAIT_UNITS[i]}`));
+  }
+
+  for (const { part, from } of plan.fonts) prime(part, "font-size", `${from}px`);
+
+  if (plan.labels) {
+    const { node, dx, dy } = plan.labels;
+    prime(node, "transform", `translate(${dx}px, ${dy}px)`);
+  }
+
+  for (const { node } of plan.chrome ?? []) prime(node, "opacity", "0");
+
+  return {
+    // The node the caller reads to flush layout, if this is the first card that
+    // needs one and the rail root has gone away.
+    node: item,
+    restore() {
+      for (const [node, prop, value, priority] of touched.reverse()) {
+        if (value) node.style.setProperty(prop, value, priority);
+        else node.style.removeProperty(prop);
+      }
+    },
+    // Runs after the caller's single layout flush, never before it.
+    commit() { item.classList.remove("gluni-card--morphing"); }
+  };
+}
+
+// Write pass, part two: queues the card's tweens. Runs only once every card has
+// primed, so the computed-value reads anime.js makes while it builds them all
+// land on the same style recalculation.
+function tweenMagicMove(timeline, plan, duration) {
+  const { item } = plan;
+  const tween = (target, props, offset = 0, length = duration, ease = MAGIC_EASE) =>
+    timeline.add(target, { ...props, duration: length, ease }, offset);
+
+  if (plan.kind === "shift") {
+    tween(item, { "--gluni-flip-x": [`${plan.dx}px`, "0px"], "--gluni-flip-y": [`${plan.dy}px`, "0px"] });
+    return;
+  }
+
+  const { surface } = plan;
   tween(surface, {
     x: [plan.dx, 0], y: [plan.dy, 0],
     width: [plan.w0, plan.w1], height: [plan.h0, plan.h1]
@@ -4717,7 +4843,6 @@ function applyMagicMove(timeline, plan, duration) {
 
   if (plan.overflow) {
     const [a, b] = plan.overflow;
-    prime(item, "--gluni-card-overflow", `${a}px`);
     // The art leaves the frame after the frame has started to grow, and is
     // back inside it before the frame finishes shrinking.
     const rising = b > a;
@@ -4727,28 +4852,23 @@ function applyMagicMove(timeline, plan, duration) {
 
   if (plan.portrait) {
     const [a, b] = plan.portrait;
-    const units = ["%", "%", ""];
     const props = {};
     PORTRAIT_VARS.forEach((name, i) => {
-      prime(item, name, `${a[i]}${units[i]}`);
-      props[name] = [`${a[i]}${units[i]}`, `${b[i]}${units[i]}`];
+      props[name] = [`${a[i]}${PORTRAIT_UNITS[i]}`, `${b[i]}${PORTRAIT_UNITS[i]}`];
     });
     tween(item, props);
   }
 
   for (const { part, from, to } of plan.fonts) {
-    prime(part, "font-size", `${from}px`);
     tween(part, { fontSize: [`${from}px`, `${to}px`] });
   }
 
   if (plan.labels) {
     const { node, dx, dy } = plan.labels;
-    prime(node, "transform", `translate(${dx}px, ${dy}px)`);
     tween(node, { x: [dx, 0], y: [dy, 0] });
   }
 
   for (const { node, opacity } of plan.chrome ?? []) {
-    prime(node, "opacity", "0");
     tween(node, { opacity: [0, opacity] }, duration * 0.45, duration * 0.55, "outCubic");
   }
 
@@ -4758,18 +4878,6 @@ function applyMagicMove(timeline, plan, duration) {
     tween(sheen, { opacity: [0, 1], scaleX: [0, 1] }, duration * 0.7, duration * 0.35, "outCubic");
     tween(sheen, { opacity: [1, 0] }, duration * 1.05, duration * 0.3, "inQuad");
   }
-
-  return () => {
-    for (const [node, prop, value, priority] of touched.reverse()) {
-      if (value) node.style.setProperty(prop, value, priority);
-      else node.style.removeProperty(prop);
-    }
-    // Commit the stylesheet values while transitions are still off. Handing
-    // them back in the same style pass would replay the surface's own
-    // min-height transition from the 0 the move primed it with.
-    void item.offsetHeight;
-    item.classList.remove("gluni-card--morphing");
-  };
 }
 
 // Strips a mid-move card clone back to its stylesheet look.
