@@ -71,5 +71,21 @@ Suite.register({
     });
   },
 
+  /**
+   * The targeting half of the standalone module's settings. No document sweep:
+   * this feature stores nothing on a document.
+   *
+   * `showTargetLines` was client-scoped and stays so. The migration engine reads
+   * the scope from the *new* registered setting and reaches into the right
+   * store for it, so both arrive from where they actually lived.
+   */
+  legacy: {
+    id: "gluniverse-stream",
+    settings: {
+      targetingSettings: SETTINGS.settings,
+      showTargetLines: SETTINGS.showLines,
+    },
+  },
+
   api: { get controller() { return controller; }, SETTINGS },
 });

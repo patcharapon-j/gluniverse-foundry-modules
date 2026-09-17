@@ -12,8 +12,8 @@
  * beneath — registration order is what drives that.
  *
  * The dependency points one way. `stream` never imports this feature; it
- * exposes a card-feed slot and a panel-section slot, which are filled here from
- * `onReady`. With this feature absent or disabled the overlay's feed is null and
+ * exposes a card-feed slot and a panel-section slot, which are filled here (the
+ * feed at init — see onInit). With this feature absent or disabled the overlay's feed is null and
  * it clones Foundry-rendered chat cards, which is the non-PF2e path and has
  * always worked.
  */
@@ -21,7 +21,8 @@
 import { Suite } from "../../core/registry.mjs";
 import { CARDS_FEATURE_ID, CARDS_PREFIX, FEATURE_ID } from "../stream/constants.js";
 import { registerCardFeed, registerPanelSection } from "../stream/extensions.mjs";
-import { SETTINGS, registerSettings } from "./settings.js";
+import { SUITE_ID, warn } from "../../core/const.mjs";
+import { CARD_FLAGS, SETTINGS, registerSettings } from "./settings.js";
 import { claimAction, claimChange, renderSection } from "./panel.js";
 import { registerFramingSheetHeader } from "./framing/sheet-header.js";
 import { RollCardFeed } from "./pf2e/roll-card-feed.js";
@@ -62,6 +63,41 @@ Suite.register({
       change: claimChange,
       action: claimAction
     });
+  },
+
+  /**
+   * The roll-card half of the standalone module's stored state.
+   *
+   * `portraitFocus` is a per-actor flag — a GM's hand-set framing for a
+   * specific picture — so it needs a sweep. World actors only: a compendium
+   * actor dragged onto the canvas becomes a world actor and is re-framed there,
+   * and unlinked token actors would mean walking every token on every scene for
+   * a framing that was almost certainly set on the base actor.
+   *
+   * The key is read from `CARD_FLAGS` rather than spelled again here. The
+   * standalone module spelled it in two places and this would have been the
+   * third; a migration that writes a key the reader does not read restores
+   * nothing, and looks like it worked.
+   */
+  legacy: {
+    id: "gluniverse-stream",
+    settings: {
+      defaultRollArt: SETTINGS.defaultRollArt,
+    },
+    migrate: async () => {
+      const OLD = "gluniverse-stream";
+      for (const actor of game.actors ?? []) {
+        const focus = actor.flags?.[OLD]?.portraitFocus;
+        if (focus === undefined) continue;
+        try {
+          if (actor.getFlag(SUITE_ID, CARD_FLAGS.portraitFocus) === undefined) {
+            await actor.setFlag(SUITE_ID, CARD_FLAGS.portraitFocus, focus);
+          }
+        } catch (e) {
+          warn(`Stream cards: portrait-framing migration failed for actor ${actor.id}:`, e);
+        }
+      }
+    },
   },
 
   api: { SETTINGS },

@@ -10,6 +10,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
+import { SUITE_ID, warn } from "../../core/const.mjs";
 import { FEATURE_ID, PREFIX } from "./constants.js";
 import { onInit, onReady, registerSettings } from "./main.js";
 import { registerCardFeed, registerPanelSection, unregisterPanelSection } from "./extensions.mjs";
@@ -28,6 +29,57 @@ Suite.register({
   registerSettings() { registerSettings(); },
   onInit() { onInit(); },
   onReady() { return onReady(); },
+
+  /**
+   * Settings carried over from the standalone `gluniverse-stream` module.
+   *
+   * Three of its ten keys are absent because they moved to the other two
+   * features, which carry their own `legacy` blocks for them. `defaultRollArt`
+   * → `stream-cards`; `targetingSettings` and `showTargetLines` →
+   * `stream-targets`. The engine only copies into a setting still at its
+   * default, so it never clobbers a value the GM has already set here.
+   *
+   * The old flags are deliberately **left in place** rather than unset. The
+   * standalone repo is being archived, but a GM who has not upgraded yet — or
+   * who rolls a world back — still has a working module, and copy-only-when-
+   * empty makes a re-run harmless either way.
+   */
+  legacy: {
+    id: "gluniverse-stream",
+    settings: {
+      streamUserId: "stream.streamUserId",
+      autoStartStreamUserIds: "stream.autoStartStreamUserIds",
+      trustedDirectorUserIds: "stream.trustedDirectorUserIds",
+      cameraSettings: "stream.cameraSettings",
+      chatSettings: "stream.chatSettings",
+      dialogSettings: "stream.dialogSettings",
+      uiRules: "stream.uiRules",
+    },
+
+    /**
+     * Tracked tokens are a per-scene flag, so they need a sweep rather than a
+     * settings remap.
+     *
+     * World scenes only. A compendium scene is normally locked and is re-imported
+     * rather than upgraded in place, and reaching into packs to rewrite flags is
+     * a far larger promise than this migration should make.
+     */
+    migrate: async () => {
+      const OLD = "gluniverse-stream";
+      const NEW = SUITE_ID;
+      for (const scene of game.scenes ?? []) {
+        const ids = scene.flags?.[OLD]?.trackedTokenIds;
+        if (ids === undefined) continue;
+        try {
+          if (scene.getFlag(NEW, "stream.trackedTokenIds") === undefined) {
+            await scene.setFlag(NEW, "stream.trackedTokenIds", ids);
+          }
+        } catch (e) {
+          warn(`Stream: tracked-token migration failed for scene ${scene.id}:`, e);
+        }
+      }
+    },
+  },
 
   /**
    * The slots `stream-cards` and `stream-targets` fill. Exposed on the feature
