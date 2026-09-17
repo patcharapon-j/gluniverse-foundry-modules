@@ -8,6 +8,7 @@ import {
 import { Suite } from "./registry.mjs";
 import { SuiteConfigApp } from "./suite-config-app.mjs";
 import { clamp } from "./util.mjs";
+import { registerFaceFrameSettings } from "./face-frame.mjs";
 
 /** Suite-wide interface-scale bounds (per-client preference). */
 export const UI_SCALE_MIN = 0.6;
@@ -87,6 +88,9 @@ export function registerCoreSettings() {
     default: false,
     onChange: (v) => applySheetHeaderIconOnly(!!v),
   });
+
+  // Face framing for portraits (initiative, stage, stream): GM choice, shared cache.
+  registerFaceFrameSettings();
 
   // The premium etched-glass Control Center. Unrestricted so players can open it
   // to tune their own per-client preferences; it renders a focused, read-only
