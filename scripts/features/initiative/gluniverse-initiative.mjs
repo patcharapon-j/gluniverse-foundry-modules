@@ -1216,7 +1216,37 @@ export class GLUniverseInitiativeOverlay {
     this.renderTimer = window.setTimeout(() => this.render(), 30);
   }
 
+  // True when an update carries nothing but the turnStart origin flag. The
+  // primary GM writes that flag every turn (captureTurnStartPosition), and
+  // Foundry echoes it back to every client as an updateCombat. Nothing on the rail reads
+  // that flag — only the ground markers do — so letting it through costs a second
+  // full render() (view model, markup, status scan, overlay refresh, FX re-sync)
+  // landing 50-200ms into a move that is still travelling. Deliberately narrow:
+  // it matches ONLY the turnStart key, so cardDeal and every real turn/round
+  // change still render. Anything that does not match exactly falls through.
+  isTurnStartEcho(changed) {
+    if (!changed) return false;
+    let flat;
+    try { flat = foundry.utils.flattenObject(changed); } catch { return false; }
+    const key = `flags.${MODULE_ID}.${FLAGS.turnStart}`;
+    const keys = Object.keys(flat).filter((k) => k !== "_id");
+    if (!keys.length) return false;
+    return keys.every((k) => (
+      k === key ||
+      k.startsWith(`${key}.`) ||
+      // unsetFlag arrives as a deletion key on either segment.
+      k === `flags.${MODULE_ID}.init.-=turnStart` ||
+      k === `flags.${MODULE_ID}.-=${FLAGS.turnStart}`
+    ));
+  }
+
   onCombatUpdate(combat, changed) {
+    if (this.isTurnStartEcho(changed)) {
+      // The markers are the only consumer; refresh them and skip the render.
+      tokenOverlays?.refresh();
+      return;
+    }
+
     if (changed?.started === true) {
       this.showRoundSplash(combat.round ?? 1);
     }
@@ -1508,7 +1538,7 @@ export class GLUniverseInitiativeOverlay {
     this.lastTurnOrdinal = turnOrdinal;
     if (isDelayReturn) this.pendingDelayReturnId = null;
     tokenOverlays?.refresh();
-    cardFX?.sync(this.root);
+    cardFX?.sync(this.root, this);
     this.animateGaugeChanges();
     this.updateAnnouncement(combat);
   }
@@ -2046,7 +2076,7 @@ export class GLUniverseInitiativeOverlay {
           : `<div class="gluni-card-portrait-wrap">
               ${card.mystery
                 ? `<div class="gluni-card-mystery-mark" aria-hidden="true">?</div>`
-                : `<img class="gluni-card-portrait" src="${escapeAttr(card.portrait)}" alt="" loading="lazy" decoding="async">`}
+                : `<img class="gluni-card-portrait" src="${escapeAttr(card.portrait)}" alt="" decoding="async">`}
               <div class="gluni-card-glass" aria-hidden="true"></div>
             </div>`}
         ${card.delayed
@@ -2100,7 +2130,7 @@ export class GLUniverseInitiativeOverlay {
           ${card.breakGauge ? renderBreakGaugeBar(card.breakGauge) : ""}
         </div>
         ${card.cardMode ? this.renderCardBadge(card) : `<span class="gluni-initiative-badge">${formatInitiative(card.initiative)}</span>`}
-        ${card.active ? `<div class="gluni-card-holo" aria-hidden="true"></div><div class="gluni-card-sheen" aria-hidden="true"></div>` : ""}
+        ${card.active ? `<div class="gluni-card-sheen" aria-hidden="true"></div>` : ""}
         ${card.canSwap ? this.renderCardSwapControl(card) : ""}
         ${game.user.isGM ? this.renderGMControls(card) : ""}
         ${card.cardMode ? `<div class="gluni-card-sliver-status" aria-hidden="true">${this.renderCardSliverStatus(card)}</div>` : ""}
@@ -4624,7 +4654,7 @@ const MAGIC_FONT_PARTS = [
 
 // Chrome only the active card carries. It fades in once the frame is on its
 // way, instead of already being there when the move starts.
-const MAGIC_ACTIVE_CHROME = [".gluni-active-tag", ".gluni-card-holo"];
+const MAGIC_ACTIVE_CHROME = [".gluni-active-tag"];
 
 // The mask pair always resolves (auto frames set it, others inherit the crop point), and must
 // travel with the art or an auto-framed boss's mask snaps ahead of its portrait.
@@ -6049,6 +6079,21 @@ class CardFXManager {
     this.entries = new Map();   // combatantId -> { canvas, ctx, mode, seed, impact, t0 }
     this.ticking = false;
     this.tickFn = this._tick.bind(this);
+    // The overlay that owns the rail, set on the first sync(). Read only for
+    // magicMoveLive, so the tick can tell a resting card from a morphing one.
+    this.host = null;
+    // Canvas -> its last laid-out CSS size, delivered by a ResizeObserver.
+    // Reading clientWidth/clientHeight in the tick instead would force a layout
+    // of the whole dirty rail once per FX card per tick, interleaved with the
+    // magic move's own writes. Observer callbacks run after layout, so they are
+    // free; the cost is that a brand-new canvas has no size for one frame.
+    this._sizes = new WeakMap();
+    // Canvases whose backing store this manager has actually sized. A fresh
+    // <canvas> reports 300x150, not 0, so there is no other way to tell an
+    // un-allocated one from a sized one — and a new FX card must still be
+    // allocated on its first tick even if a move is in flight.
+    this._allocated = new WeakSet();
+    this._ro = null;
     // These effects are slow (a break glow / a dying creep); 30fps is visually
     // identical to 60 and halves the per-frame PIXI render + canvas blit cost.
     this._frameMs = 1000 / 30;
@@ -6096,8 +6141,29 @@ class CardFXManager {
     return this.supported;
   }
 
+  _ensureObserver() {
+    if (this._ro || typeof ResizeObserver !== "function") return this._ro;
+    this._ro = new ResizeObserver((records) => {
+      for (const rec of records) {
+        const box = rec.contentRect;
+        this._sizes.set(rec.target, { cw: box.width, ch: box.height });
+      }
+    });
+    return this._ro;
+  }
+
+  _observe(canvas) {
+    try { this._ensureObserver()?.observe(canvas); } catch { /* observer optional */ }
+  }
+
+  _unobserve(canvas) {
+    if (!canvas) return;
+    try { this._ro?.unobserve(canvas); } catch { /* already gone */ }
+  }
+
   // Reconcile the live FX canvases in the DOM after each overlay render.
-  sync(root) {
+  sync(root, host) {
+    if (host) this.host = host;
     if (!this.supported || !root) { this.clear(); return; }
     const seen = new Set();
     root.querySelectorAll(".gluni-card-portrait-fx").forEach(cv => {
@@ -6110,13 +6176,33 @@ class CardFXManager {
       if (!key || !this.filters[mode]) return;
       seen.add(key);
       const prev = this.entries.get(key);
-      if (prev && prev.canvas === cv && prev.mode === mode) return;
+      if (prev && prev.canvas === cv && prev.mode === mode) {
+        prev.intensity = Number(cv.dataset.fxIntensity) || 1;
+        return;
+      }
       // New or replaced canvas (the rail rebuilds innerHTML each render): keep
       // the seed/impact stable so the effect doesn't re-randomize, and only
       // reset the clock when the effect type actually changed.
+      let canvas = cv;
+      let ctx;
+      if (prev && prev.mode === mode && prev.ctx) {
+        // Same card, same effect, new node. Put the OLD canvas back into the
+        // rebuilt card rather than adopting the new one: its 2D context, its
+        // allocated bitmap and its observed size all survive the rebuild, so
+        // the first tick after a turn change neither re-allocates a backing
+        // store nor draws a frame of nothing.
+        cv.replaceWith(prev.canvas);
+        canvas = prev.canvas;
+        ctx = prev.ctx;
+        canvas.dataset.fxIntensity = cv.dataset.fxIntensity ?? "1";
+      } else {
+        if (prev) this._unobserve(prev.canvas);
+        ctx = cv.getContext("2d");
+        this._observe(cv);
+      }
       this.entries.set(key, {
-        canvas: cv,
-        ctx: cv.getContext("2d"),
+        canvas,
+        ctx,
         mode,
         seed: prev?.seed ?? Math.random() * 100,
         intensity: Number(cv.dataset.fxIntensity) || 1,
@@ -6124,12 +6210,17 @@ class CardFXManager {
         t0: prev && prev.mode === mode ? prev.t0 : performance.now()
       });
     });
-    for (const id of [...this.entries.keys()]) if (!seen.has(id)) this.entries.delete(id);
+    for (const id of [...this.entries.keys()]) {
+      if (seen.has(id)) continue;
+      this._unobserve(this.entries.get(id)?.canvas);
+      this.entries.delete(id);
+    }
     if (this.entries.size && !this.ticking) this._start();
     else if (!this.entries.size) this._stop();
   }
 
   clear() {
+    for (const entry of this.entries.values()) this._unobserve(entry.canvas);
     this.entries.clear();
     this._stop();
   }
@@ -6155,18 +6246,28 @@ class CardFXManager {
     }
     this._lastDraw = now;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // While the magic move owns the rail the surfaces resize every frame, so
+    // honouring each new size would reallocate a backing store per card per
+    // tick for the length of the move. The CSS box stretches the existing
+    // bitmap instead; the size is picked up on the first tick after the settle.
+    const moveLive = !!this.host?.magicMoveLive;
     for (const entry of this.entries.values()) {
       const cv = entry.canvas;
       if (!cv.isConnected || !entry.ctx) continue;
-      const cw = cv.clientWidth, ch = cv.clientHeight;
+      const size = this._sizes.get(cv);
+      // No observation yet (a brand-new canvas, or no ResizeObserver): fall
+      // back to measuring, which is the pre-observer behaviour.
+      const cw = size ? size.cw : cv.clientWidth;
+      const ch = size ? size.ch : cv.clientHeight;
       if (!cw || !ch) continue;
       const pw = Math.max(1, Math.round(cw * dpr));
       const ph = Math.max(1, Math.round(ch * dpr));
-      if (cv.width !== pw || cv.height !== ph) {
+      if ((cv.width !== pw || cv.height !== ph) && !(moveLive && this._allocated.has(cv))) {
         // Resizing the backing store resets the 2D context to its defaults
         // (smoothing quality "low"), so reapply the high-quality downscale
         // filter every time we resize — including the first frame.
         cv.width = pw; cv.height = ph;
+        this._allocated.add(cv);
         entry.ctx.imageSmoothingEnabled = true;
         entry.ctx.imageSmoothingQuality = "high";
       }
@@ -6174,8 +6275,11 @@ class CardFXManager {
       // MSAA can't smooth shader-generated edges (the cracks), so this is what
       // actually de-aliases them; the cards are small so the extra fragments are
       // cheap. rw/rh are the true render resolution we sample the field at.
-      const rw = Math.max(1, Math.round(pw * FX_SUPERSAMPLE));
-      const rh = Math.max(1, Math.round(ph * FX_SUPERSAMPLE));
+      // Draw at whatever the backing store actually is: during a move that is
+      // the pre-move allocation, not pw/ph.
+      const bw = cv.width, bh = cv.height;
+      const rw = Math.max(1, Math.round(bw * FX_SUPERSAMPLE));
+      const rh = Math.max(1, Math.round(bh * FX_SUPERSAMPLE));
       try {
         // Grow the shared renderer to the largest entry only; never shrink it.
         // Differently-sized entries then render into the top-left corner and we
@@ -6195,8 +6299,8 @@ class CardFXManager {
         this.sprite.height = rh;
         this.sprite.filters = [filter];
         this.renderer.render(this.sprite);
-        entry.ctx.clearRect(0, 0, pw, ph);
-        entry.ctx.drawImage(this.renderer.view, 0, 0, rw, rh, 0, 0, pw, ph);
+        entry.ctx.clearRect(0, 0, bw, bh);
+        entry.ctx.drawImage(this.renderer.view, 0, 0, rw, rh, 0, 0, bw, bh);
       } catch { /* leave the canvas transparent; the portrait shows through */ }
     }
     if (this.ticking) requestAnimationFrame(this.tickFn);

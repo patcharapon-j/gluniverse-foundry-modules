@@ -1202,7 +1202,6 @@
 .gluni-active-tag {
   box-shadow:
     0 0 12px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent);
-  animation: gluni-active-tag-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .gluni-adhoc-tag {
@@ -1620,47 +1619,6 @@
   mask-image: linear-gradient(to top, #000 0%, rgb(var(--gl-tint-dark) / 0.82) 48%, transparent 100%);
 }
 
-.gluni-card--active .gluni-card-surface::after {
-  content: "";
-  position: absolute;
-  inset: calc(-1 * var(--gluni-card-overflow)) 0 0 0;
-  z-index: 3;
-  pointer-events: none;
-  background:
-    linear-gradient(
-      30deg,
-      transparent 0 48%,
-      color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 22%, transparent) 48% 49.5%,
-      transparent 49.5% 100%
-    ) 0 0 / 28px 24px,
-    linear-gradient(
-      150deg,
-      transparent 0 48%,
-      color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 16%, transparent) 48% 49.5%,
-      transparent 49.5% 100%
-    ) 14px 0 / 28px 24px,
-    linear-gradient(
-      180deg,
-      transparent 0 95.5%,
-      color-mix(in srgb, var(--gluni-white) 7%, transparent) 95.5% 100%
-    ) 0 0 / 28px 24px,
-    conic-gradient(
-      from 30deg at 50% 67%,
-      color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 8%, transparent) 0 60deg,
-      transparent 60deg 360deg
-    ) 0 0 / 28px 24px,
-    radial-gradient(
-      circle at 68% 26%,
-      color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 14%, transparent),
-      transparent 42%
-    );
-  opacity: 0.36;
-  transform: translate3d(0, 0, 0);
-  animation: gluni-active-triangle-field var(--gl-loop-sm) linear infinite;
-  -webkit-mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
-  mask-image: linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.86), rgb(var(--gl-tint-dark) / 0.42) 66%, transparent 100%);
-}
-
 .gluni-initiative--left .gluni-card--active .gluni-card-surface::before {
   background: linear-gradient(
     -95deg,
@@ -1668,10 +1626,6 @@
     color-mix(in srgb, var(--gl-ink-0) 42%, transparent) 68%,
     transparent
   );
-}
-
-.gluni-initiative--left .gluni-card--active .gluni-card-surface::after {
-  animation-name: gluni-active-triangle-field-left;
 }
 
 .gluni-card--active.gluni-card--adhoc {
@@ -1683,8 +1637,8 @@
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
 }
 
-.gluni-card--active.gluni-card--adhoc .gluni-card-adhoc-bg,
-.gluni-card--active.gluni-card--adhoc .gluni-card-surface::after {
+
+.gluni-card--active.gluni-card--adhoc .gluni-card-adhoc-bg {
   inset: 0;
 }
 
@@ -2918,10 +2872,6 @@
   will-change: transform, opacity;
 }
 
-.gluni-card--active .gluni-card-surface::after {
-  will-change: transform, opacity;
-}
-
 .gluni-card-sheen {
   position: absolute;
   top: 32%;
@@ -3110,80 +3060,7 @@
     radial-gradient(120% 60% at 20% 0%, rgb(var(--gl-tint-light) / 0.10), transparent 50%);
 }
 
-/* Holographic drift — mockup `.v4 .card.is-active::after`, but as its own element so it
-   stacks correctly UNDER nothing important and ABOVE status overlays. Hue from holo tokens. */
-.gluni-card-holo {
-  position: absolute;
-  /* Contain to the card BODY only — must not spill into the empty notch region above
-     the lifted active card. The actor reads ON TOP: the mask concentrates the shimmer
-     at the top/edges and clears the central face area, so it backs the card rather than
-     washing over the portrait. */
-  inset: 0;
-  z-index: 8;
-  pointer-events: none;
-  opacity: 0;
-  overflow: hidden;
-  mix-blend-mode: screen;
-  -webkit-mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgb(var(--gl-tint-dark) / 0.22) 46%, transparent 72%);
-  mask-image: radial-gradient(150% 78% at 50% 0%, #000 0%, rgb(var(--gl-tint-dark) / 0.22) 46%, transparent 72%);
-}
-
-/* The drifting gradient lives on an oversized child strip translated on the
-   compositor. Animating background-position instead would repaint the masked,
-   screen-blended card layer every frame for the whole fight — the single biggest
-   steady-state paint cost of the overlay. Geometry matches the old background
-   exactly: the gradient tile is 240% of the card (background-size 50% of the 480%
-   strip) and one cycle slides it 3.36 card-widths (70% of the strip), the same
-   offset the old 0% -> 240% background-position sweep covered. */
-.gluni-card-holo::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 480%;
-  height: 100%;
-  background:
-    linear-gradient(
-      115deg,
-      color-mix(in srgb, var(--gluni-holo-a) 0%, transparent) 0%,
-      color-mix(in srgb, var(--gluni-holo-a) 28%, transparent) 26%,
-      color-mix(in srgb, var(--gluni-holo-b) 28%, transparent) 44%,
-      color-mix(in srgb, var(--gluni-holo-c) 24%, transparent) 60%,
-      color-mix(in srgb, var(--gluni-holo-a) 0%, transparent) 80%
-    );
-  background-size: 50% 100%;
-  background-repeat: repeat-x;
-}
-
-.gluni-card--active .gluni-card-holo {
-  opacity: 0.5;
-}
-
-.gluni-card--active .gluni-card-holo::before {
-  animation: gluni-holo-drift var(--gl-drift) linear infinite;
-  will-change: transform;
-}
-
-.gluni-initiative--left .gluni-card--active .gluni-card-holo::before {
-  animation-name: gluni-holo-drift-left;
-}
-
-/* Adhoc active uses a hidden-overflow square silhouette already; pin holo to box. */
-.gluni-card--active.gluni-card--adhoc .gluni-card-holo {
-  inset: 0;
-}
-
-@keyframes gluni-holo-drift {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-70%); }
-}
-
-@keyframes gluni-holo-drift-left {
-  0%   { transform: translateX(-70%); }
-  100% { transform: translateX(0); }
-}
-
-/* Status overlays sit UNDER shimmer + dimmed when active so the shimmer reads. */
+/* Status overlays are dimmed on the active card so the portrait reads over them. */
 .gluni-card--active .gluni-card-dying-bg,
 .gluni-card--active .gluni-card-dying-repeat,
 .gluni-card--active .gluni-card-guard-break-bg,
@@ -3217,83 +3094,6 @@
   --gluni-holo-b: var(--gluni-break-hot);
   --gluni-holo-c: var(--gluni-break-deep);
 }
-
-/* Shockwave ring radiates from the active card edge. Mounted by createShockwave() into the
-   active card; absolutely positioned, never affects layout, never shakes the rail. */
-.gluni-card-shockwave {
-  position: absolute;
-  z-index: 10;
-  pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--gluni-holo-a) 70%, var(--gluni-white) 30%);
-  border-radius: 2px;
-  opacity: 0;
-  transform: scale(0.55);
-  box-shadow:
-    0 0 12px color-mix(in srgb, var(--gluni-holo-a) 52%, transparent),
-    inset 0 0 12px color-mix(in srgb, var(--gluni-holo-a) 26%, transparent);
-  will-change: transform, opacity;
-  animation: gluni-shockwave var(--gl-d-move) var(--gluni-ease) forwards;
-}
-
-@keyframes gluni-shockwave {
-  0%   { opacity: 0; transform: scale(0.55); }
-  20%  { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(1.6); }
-}
-
-/* Card-only impact shake — applied to the active card element ONLY (JS toggles the class),
-   decays over ~220ms. Composes with the live transform via an inner offset var so it does
-   not clobber flip/lift/scale: we shake a child instead. See .gluni-card-shaker below. */
-.gluni-card-shaker {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.gluni-card--impact-settle .gluni-card-content,
-.gluni-card--impact-settle .gluni-initiative-badge,
-.gluni-card--impact-settle .gluni-card-portrait-wrap {
-  animation: gluni-impact-shake var(--gl-d-brisk) var(--gluni-snap) both;
-}
-
-/* Gentle vertical settle on impact — NO side-to-side wobble (felt too jittery). The card
-   barely dips and eases back, reading as weight rather than a shake. */
-@keyframes gluni-impact-shake {
-  0%   { transform: translateY(1.5px); }
-  60%  { transform: translateY(-0.5px); }
-  100% { transform: translateY(0); }
-}
-
-/* Accent / holo flare on impact: brief brightness pop on the accent + holo. */
-.gluni-card--impact-settle .gluni-card-accent {
-  animation: gluni-impact-flare var(--gl-d-swift) var(--gluni-ease) both;
-}
-
-@keyframes gluni-impact-flare {
-  0%   { filter: brightness(2.2) saturate(1.4); }
-  100% { filter: brightness(1) saturate(1); }
-}
-
-/* Incoming active SLAM (impact beat) — overshoot into place. JS adds .gluni-card--impact. */
-.gluni-card--impact {
-  animation: gluni-active-slam var(--gl-d-quick) var(--gluni-snap) both;
-}
-
-/* Softer slam: a small scale overshoot that eases down to rest with NO sub-1.0 bounce-back
-   (the bounce read as "too much"). Reads as a confident settle, not a recoil. */
-@keyframes gluni-active-slam {
-  0%   { transform:
-           translate(var(--gluni-flip-x), calc(var(--gluni-flip-y) + var(--gluni-card-lift-y) - 3px))
-           translateX(var(--gluni-active-shift))
-           scale(calc(var(--gluni-card-scale) * 1.03)); }
-  100% { transform:
-           translate(var(--gluni-flip-x), calc(var(--gluni-flip-y) + var(--gluni-card-lift-y)))
-           translateX(var(--gluni-active-shift))
-           scale(var(--gluni-card-scale)); }
-}
-
-/* Anticipation: the outgoing ghost pulls back ~8px toward the rail before leaving. */
 
 /* =========================================================================
    Status tag chips — premium polish + on-trigger "stamp" entrance.
@@ -4595,46 +4395,6 @@
   animation: gluni-card-slide-in-left var(--gl-d-swift) var(--gluni-snap) both;
 }
 
-@keyframes gluni-active-triangle-field {
-  0% {
-    opacity: 0.28;
-    transform: translate3d(-6px, -3px, 0);
-  }
-
-  30% {
-    opacity: 0.44;
-  }
-
-  65% {
-    opacity: 0.32;
-  }
-
-  100% {
-    opacity: 0.28;
-    transform: translate3d(18px, 12px, 0);
-  }
-}
-
-@keyframes gluni-active-triangle-field-left {
-  0% {
-    opacity: 0.28;
-    transform: translate3d(6px, -3px, 0);
-  }
-
-  30% {
-    opacity: 0.44;
-  }
-
-  65% {
-    opacity: 0.32;
-  }
-
-  100% {
-    opacity: 0.28;
-    transform: translate3d(-18px, 12px, 0);
-  }
-}
-
 @keyframes gluni-adhoc-repeat-drift {
   0% {
     transform: translateX(-18px);
@@ -4708,17 +4468,6 @@
 
   100% {
     transform: translateX(22px);
-  }
-}
-
-@keyframes gluni-active-tag-pulse {
-  0%, 100% {
-    filter: brightness(1);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent);
-  }
-  50% {
-    filter: brightness(1.18);
-    box-shadow: 0 0 20px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 82%, transparent);
   }
 }
 
