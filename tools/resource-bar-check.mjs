@@ -2020,8 +2020,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
          status is an ActiveEffect, which no item or actor hook sees;
        - the ticker's value handed to the raster for a viewer who may not read
          numbers is a hostile's dying value on a player's screen, looking right;
-       - a veins shader forked rather than shared drifts from the card and the
-         token overlay, and an extraction that is not an identity changes both;
+       - a veins shader forked rather than shared drifts from the tracker card,
+         and an extraction that is not an identity changes it;
        - a heartbeat or a ticker that is not whole beats per loop, or that snaps
          between levels, steps once a minute or jumps mid-beat;
        - a shed that removes the words or the flatline instead of freezing them
@@ -2184,13 +2184,13 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       "returnvec2(smoothstep(0.80,0.99,ridge),smoothstep(0.6,0.99,ridge));",
     ]) if (!field.includes(s)) no("gluDyingField is no longer the extracted field: missing " + s);
     if (!frag.includes("vec2fld=gluDyingField(uv,vec2(0.0,uTime*0.05),vec2(5.2,-uTime*0.04));"))
-      no("FX_FRAG_DYING does not call gluDyingField with the drift it always had (vec2(0.0,uTime*0.05), vec2(5.2,-uTime*0.04)); the card and the token overlay would move differently from before.");
+      no("FX_FRAG_DYING does not call gluDyingField with the drift it always had (vec2(0.0,uTime*0.05), vec2(5.2,-uTime*0.04)); the tracker card would move differently from before.");
     for (const s of ["floatveins=fld.x;", "veins*=mix(0.25,1.0,eb);", "floathalo=fld.y*0.16*eb;", "vec3col=mix(violet,vhot,veins);", "floata=clamp(veins*0.9+halo,0.0,1.0);"])
       if (!frag.includes(s)) no("FX_FRAG_DYING's colouring changed in the move: missing " + s);
     if (/export const FX_FRAG_DYING\s*=/.test(glSrc) || /float gluFbmD\(/.test(glSrc))
       no("initiative/gl.mjs still defines its own dying shader; there are two dying looks again.");
     if (glMod.__err || glMod.FX_FRAG_DYING !== fxGlsl.FX_FRAG_DYING)
-      no("initiative/gl.mjs does not re-export core's FX_FRAG_DYING, which token-overlay.mjs and the card import from it.");
+      no("initiative/gl.mjs does not re-export core's FX_FRAG_DYING, which the tracker card imports from it.");
     const barGlsls = shader.LIQUIDS.map((l) => strip(shader.fragmentShader(l)));
     if (!barGlsls.every((g) => /gluDyingField\(/.test(g)) || !/FX_GLSL_DYING_FIELD/.test(strip(shaderSrc)) || /float gluFbmD\(/.test(strip(shaderSrc)))
       no("The bar's veins are not core/fx-glsl.mjs's field: a liquid does not call gluDyingField, or shader.mjs forks the noise.");

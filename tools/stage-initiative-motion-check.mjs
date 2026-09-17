@@ -58,6 +58,29 @@ export async function runStageInitiativeMotionChecks() {
     check(card.classList.contains('gluni-anime-motion'), 'Initiative FLIP owns the moving card');
     initiative.clearPresentationMotion();
     check(!card.style.getPropertyValue('--gluni-flip-x'), 'Initiative cancellation restores FLIP variables');
+    // Magic move: the frame travels as real geometry, the art on its own tweens,
+    // and nothing is left behind on the card once it lands.
+    initiative.root.innerHTML = '<div class="gluni-card" data-gluni-key="m" data-combatant-id="m"><div class="gluni-card-surface" style="min-height:0;height:40px"><h3>M</h3></div></div>';
+    const oldCard = initiative.root.firstElementChild;
+    const snapshots = initiative.captureItemRects();
+    check(snapshots.get("m")?.combatantId === "m" && snapshots.get("m")?.surface, "Initiative snapshots carry the surface and the combatant");
+    initiative.root.innerHTML = '<div class="gluni-card gluni-card--active" data-gluni-key="m:next" data-combatant-id="m"><div class="gluni-card-surface" style="min-height:0;height:120px"><h3>M</h3></div></div>';
+    const grown = initiative.root.firstElementChild;
+    const grownSurface = grown.firstElementChild;
+    initiative.animateTurnChange(snapshots);
+    initiative._magicTimeline?.pause();
+    initiative._magicTimeline?.seek(0);
+    check(grown.classList.contains("gluni-card--morphing") && Math.round(grownSurface.getBoundingClientRect().height) === 40,
+      "Initiative magic move pairs a re-keyed card by combatant and starts from its old frame");
+    check(grown.style.height && !oldCard.isConnected, "Initiative magic move locks the row while the frame travels");
+    initiative._magicTimeline?.seek(initiative._magicTimeline.duration);
+    check(!grown.classList.contains("gluni-card--morphing") && !grown.style.height && grownSurface.style.position !== "absolute"
+      && grownSurface.style.height === "120px" && !initiative.magicMoveLive,
+      "Initiative magic move hands the card back to the stylesheet when it lands");
+    initiative.root.style.setProperty("--gl-motion-scale", "0");
+    initiative.animateTurnChange(initiative.captureItemRects());
+    check(!grown.classList.contains("gluni-card--morphing"), "Initiative magic move stands down at motion tier none");
+    initiative.root.style.setProperty("--gl-motion-scale", "0.1");
     initiative.spawnCollectGhosts([{ html: '<div class="gluni-card" id="duplicate-id">A</div>', rect }], rect);
     check(document.querySelector('.gluni-card-ghost')?.inert && !document.querySelector('.gluni-card-ghost [id]'), 'Initiative collect ghosts are inert and have no duplicate IDs');
     initiative.clearPresentationMotion();

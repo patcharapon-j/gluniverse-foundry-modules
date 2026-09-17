@@ -1,4 +1,4 @@
-import { animate, createTimeline, stagger, createMotionOwner, motionDuration } from "../../core/motion.mjs";
+import { createTimeline, stagger, cubicBezier, createMotionOwner, motionDuration } from "../../core/motion.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { onThemeChange, scaledMs } from "../../core/theme.mjs";
 
@@ -1421,6 +1421,10 @@ export class GLUniverseInitiativeOverlay {
     const turnKey = view.normal.map(item => item.key ?? `${item.type}:${item.round}`).join("|");
     const isTurnChange = this.lastTurnKey && turnKey !== this.lastTurnKey;
     const previousRenderedRound = this.lastRenderedRound;
+    // Which way the turn moved. Only an advance sends the card that just acted
+    // out through the screen edge; stepping back just slides it down a slot.
+    const turnOrdinal = (Number(combat.round) || 0) * 100000 + (Number(combat.turn) || 0);
+    const turnAdvanced = !Number.isFinite(this.lastTurnOrdinal) || turnOrdinal > this.lastTurnOrdinal;
     const roundDelta = Number.isFinite(previousRenderedRound) ? Math.max(0, (combat.round ?? 1) - previousRenderedRound) : 0;
     const previousActiveKey = this.lastActiveKey;
     const previousActiveInitiative = this.lastActiveInitiative ?? null;
@@ -1444,7 +1448,11 @@ export class GLUniverseInitiativeOverlay {
     const markup = this.renderMarkup(combat, view, settings);
     const markupChanged = markup !== this.lastMarkup;
     const shouldAnimateTurnChange = isTurnChange && markupChanged;
-    const oldRects = shouldAnimateTurnChange ? this.captureItemRects() : new Map();
+    // A render that lands while a move is still travelling (an HP tick, a
+    // condition) re-plans from where every layer currently is, instead of
+    // snapping the half-grown card to its end state.
+    const shouldContinueMove = !shouldAnimateTurnChange && markupChanged && this.magicMoveLive;
+    const oldRects = (shouldAnimateTurnChange || shouldContinueMove) ? this.captureItemRects() : new Map();
     // Card mode collect/deal beats fly clones of the outgoing cards into (and new
     // cards out of) the deck stub, so snapshot the rail's current look + geometry
     // before the markup is swapped out.
@@ -1468,12 +1476,14 @@ export class GLUniverseInitiativeOverlay {
       this.reacquireCardDragAfterRender();
     }
 
-    if (shouldAnimateTurnChange) {
+    if (shouldAnimateTurnChange || shouldContinueMove) {
       this.animateTurnChange(oldRects, {
         previousActiveKey,
         isDelayReturn,
-        roundDelta,
+        roundDelta: shouldAnimateTurnChange ? roundDelta : 0,
         edge: settings.edge,
+        cardMode: isCardView,
+        turnAdvanced,
         previousActiveInitiative
       });
     }
@@ -1489,6 +1499,7 @@ export class GLUniverseInitiativeOverlay {
     this.lastActiveKey = view.activeKey;
     this.lastActiveInitiative = this.getActiveInitiative(view);
     this.lastRenderedRound = combat.round ?? null;
+    this.lastTurnOrdinal = turnOrdinal;
     if (isDelayReturn) this.pendingDelayReturnId = null;
     tokenOverlays?.refresh();
     cardFX?.sync(this.root);
@@ -2196,70 +2207,209 @@ export class GLUniverseInitiativeOverlay {
     `;
   }
 
+  // ---- Magic move -----------------------------------------------------------
+  //
+  // The rail is rebuilt from markup on every render, so a card that becomes the
+  // active turn is a brand-new element that already has its final, larger
+  // layout. Scaling that element from its old box to its new one (the obvious
+  // FLIP) squashes the portrait and the type along with it and reads as a
+  // cross-fade between two states. Instead every layer is carried separately:
+  //
+  //  - the card's row is locked at its final height, so the rail lays out once;
+  //  - the surface (the painted frame) is lifted out of flow and its real
+  //    width, height and offset travel from the old box to the new one, so the
+  //    content inside it re-lays out every frame rather than being stretched;
+  //  - the portrait is never scaled with the frame. Its crop, zoom and the
+  //    overhang above the frame (`--gluni-card-overflow`) are their own tweens,
+  //    so the art grows and rises out of the frame on its own path;
+  //  - type sizes tween as font sizes, which keeps the text sharp.
+  //
+  // Snapshots are visual (post-transform) rects, so a render that lands while a
+  // move is still in flight picks up from wherever each layer currently is.
+
   captureItemRects() {
-    const rects = new Map();
-    if (!this.root) return rects;
+    const snapshots = new Map();
+    if (!this.root) return snapshots;
 
     for (const item of this.root.querySelectorAll("[data-gluni-key]")) {
-      rects.set(item.dataset.gluniKey, item.getBoundingClientRect());
+      snapshots.set(item.dataset.gluniKey, captureMagicSnapshot(item));
     }
 
-    return rects;
+    return snapshots;
   }
 
-  animateTurnChange(oldRects, options = {}) {
+  animateTurnChange(snapshots, options = {}) {
+    const duration = motionDuration(MAGIC_MOVE_MS, this.root);
+    // Motion tier "none": the new layout is already the answer. Priming the old
+    // one first would only paint it for a frame.
+    if (duration <= 0) return;
     const items = Array.from(this.root.querySelectorAll("[data-gluni-key]"));
     const roundDelta = Number(options.roundDelta) || 0;
-    const enterItems = [];   // no continuity rect -> staggered entrance
-    const flipItems = [];     // { item, dx, dy, scaleX, scaleY }
-    const uiScale = this.root.offsetWidth ? this.root.getBoundingClientRect().width / this.root.offsetWidth : 1;
+    const enterItems = [];
+    const plans = [];
+    const matched = new Set();
 
-    // Read pass: measure every moved item's new rect up front. Interleaving these
-    // getBoundingClientRect() reads with the preflip class/style writes below
-    // forces a synchronous reflow per item (layout thrash) right as the turn
-    // animation starts — the classic FLIP stutter on initiative move. Batching all
-    // reads before any mutation collapses it to a single layout.
+    // Pair every new item with the snapshot it came from. Keys carry the round
+    // offset, so the card that just acted is a new key (its next-round copy)
+    // and a card returning from delay changes list; both are still the same
+    // combatant, and a second pass pairs leftovers by combatant id, in order.
+    const pairs = [];
+    const unpaired = [];
     for (const item of items) {
-      const isActive = item.classList.contains("gluni-card--active");
-      const oldRect = this.getContinuityRect(oldRects, item.dataset.gluniKey, roundDelta);
-      if (!oldRect) {
-        enterItems.push({ item, isActive });
-        continue;
+      const from = this.getContinuityRect(snapshots, item.dataset.gluniKey, roundDelta);
+      if (from && !matched.has(from)) {
+        matched.add(from);
+        pairs.push([item, from]);
+      } else {
+        unpaired.push(item);
       }
-
-      const newRect = item.getBoundingClientRect();
-      const dx = oldRect.left + oldRect.width / 2 - (newRect.left + newRect.width / 2);
-      const dy = oldRect.top + oldRect.height / 2 - (newRect.top + newRect.height / 2);
-      const scaleX = newRect.width ? oldRect.width / newRect.width : 1;
-      const scaleY = newRect.height ? oldRect.height / newRect.height : 1;
-      const moved = Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5;
-      const resized = Math.abs(scaleX - 1) >= 0.01 || Math.abs(scaleY - 1) >= 0.01;
-
-      if (moved || resized) flipItems.push({ item, dx: dx / (uiScale || 1), dy: dy / (uiScale || 1), scaleX, scaleY });
+    }
+    const spare = new Map();
+    for (const snapshot of snapshots.values()) {
+      if (matched.has(snapshot) || !snapshot.combatantId) continue;
+      if (!spare.has(snapshot.combatantId)) spare.set(snapshot.combatantId, []);
+      spare.get(snapshot.combatantId).push(snapshot);
+    }
+    for (const item of unpaired) {
+      const from = spare.get(item.dataset.combatantId)?.shift();
+      if (from) {
+        matched.add(from);
+        pairs.push([item, from]);
+      } else {
+        enterItems.push(item);
+      }
     }
 
-    // Animate only the FLIP variables, preserving hover, drag and UI-scale transforms.
-    const play = (item, properties, delay = 0) => {
-      item.classList.add("gluni-anime-motion");
-      const animation = animate(item, {
-        autoplay: false, ...properties, duration: motionDuration(620, this.root), delay,
-        ease: "outQuint", onComplete: () => {
-          animation.revert();
-          item.classList.remove("gluni-anime-motion");
-          this._railMotion.forget(animation);
-        }
-      });
-      this._railMotion.add(animation);
-      animation.play();
+    // When the turn advances, the card whose turn just ended does not slide
+    // down the rail: it leaves through the screen edge and comes back in at the
+    // bottom, the way a played card goes to the back of the queue. Stepping the
+    // turn back only moves it down a slot, so it morphs like any other card.
+    // Card mode collects it into the deck instead, so there it keeps its move.
+    const sendsActiveAround = !options.cardMode && options.turnAdvanced !== false;
+    const exiting = [];
+    const rejoining = new Set();
+    // Read pass. Every measurement happens before the first write so the move
+    // costs one layout rather than one per card.
+    for (const [item, from] of pairs) {
+      if (sendsActiveAround && from.active && from.node && !item.classList.contains("gluni-card--active")) {
+        exiting.push(from);
+        rejoining.add(item);
+        enterItems.push(item);
+        continue;
+      }
+      const plan = planMagicMove(item, from);
+      if (plan) plans.push(plan);
+    }
+    const entries = enterItems.map(item => ({ item, offset: options.cardMode ? 0 : edgeEntryOffset(item) }));
+
+    const settles = [];
+    const timeline = createTimeline({ autoplay: false, onComplete: () => settle() });
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      this._magicLive = Math.max(0, (this._magicLive || 0) - 1);
+      timeline.revert();
+      for (const fn of settles) fn();
+      this._railMotion.forget(handle);
+      if (this._magicTimeline === timeline) this._magicTimeline = null;
     };
-    enterItems.forEach(({ item, isActive }, index) => play(item, {
-      opacity: [0, 1], "--gluni-flip-y": [isActive ? "-18px" : "24px", "0px"],
-      "--gluni-flip-scale-x": [0.96, 1], "--gluni-flip-scale-y": [0.96, 1]
-    }, motionDuration(Math.min(index, 6) * 35, this.root)));
-    for (const { item, dx, dy, scaleX, scaleY } of flipItems) play(item, {
-      "--gluni-flip-x": [`${dx}px`, "0px"], "--gluni-flip-y": [`${dy}px`, "0px"],
-      "--gluni-flip-scale-x": [scaleX, 1], "--gluni-flip-scale-y": [scaleY, 1]
-    });
+    const handle = { revert: settle };
+
+    // Write pass.
+    for (const plan of plans) settles.push(applyMagicMove(timeline, plan, duration));
+
+    let newcomer = 0;
+    for (const { item, offset } of entries) {
+      item.classList.add("gluni-anime-motion");
+      settles.push(() => {
+        item.classList.remove("gluni-anime-motion");
+        item.style.removeProperty("opacity");
+        item.style.removeProperty("--gluni-flip-x");
+        item.style.removeProperty("--gluni-flip-y");
+      });
+      if (options.cardMode) {
+        // Dealt from the deck: a short rise rather than a trip across the screen.
+        item.style.opacity = "0";
+        item.style.setProperty("--gluni-flip-y", "16px");
+        timeline.add(item, {
+          opacity: [0, 1], "--gluni-flip-y": ["16px", "0px"],
+          duration: motionDuration(MAGIC_ENTER_MS, this.root), ease: "outCubic"
+        }, duration * 0.35 + motionDuration(Math.min(newcomer++, 6) * 40, this.root));
+        continue;
+      }
+      // In from the nearest screen edge, parked off screen until its turn to
+      // move. The card that just acted waits until it has cleared the screen.
+      const start = rejoining.has(item)
+        ? motionDuration(MAGIC_LEAVE_MS * 0.8, this.root)
+        : duration * 0.3 + motionDuration(Math.min(newcomer++, 6) * 50, this.root);
+      item.style.setProperty("--gluni-flip-x", `${offset}px`);
+      timeline.add(item, {
+        "--gluni-flip-x": [`${offset}px`, "0px"],
+        duration: motionDuration(MAGIC_ENTER_MS, this.root), ease: MAGIC_ARRIVE_EASE
+      }, start);
+    }
+
+    // Cards that left the rail, and the one whose turn just ended. Card mode
+    // flies its own into the deck stub; the standard rail sends them out
+    // through the screen edge rather than letting them vanish.
+    if (!options.cardMode) {
+      const leaving = [...exiting];
+      for (const snapshot of snapshots.values()) {
+        if (!matched.has(snapshot) && snapshot.node) leaving.push(snapshot);
+      }
+      this.spawnLeaveGhosts(leaving, options.edge ?? "right");
+    }
+
+    if (!plans.length && !entries.length) return;
+    this._magicLive = (this._magicLive || 0) + 1;
+    this._railMotion.add(handle);
+    // Held for the preview harness, which pauses and seeks it frame by frame.
+    this._magicTimeline = timeline;
+    timeline.play();
+  }
+
+  get magicMoveLive() {
+    return (this._magicLive || 0) > 0;
+  }
+
+  spawnLeaveGhosts(snapshots, edge = "right") {
+    if (!snapshots?.length) return;
+    const layer = document.createElement("div");
+    layer.className = `gluni-initiative gluni-initiative--${edge} gluni-card-ghost-layer gluni-card-ghost-layer--under`;
+    document.body.appendChild(layer);
+    this._collectLayers.add(layer);
+    const timeline = createTimeline({ autoplay: false, onComplete: () => {
+      timeline.revert();
+      this._collectMotion.forget(timeline);
+      this._collectLayers.delete(layer);
+      layer.remove();
+    }});
+    this._collectMotion.add(timeline);
+    for (const snapshot of snapshots) {
+      const ghost = document.createElement("div");
+      ghost.className = "gluni-card-ghost gluni-card-ghost--leave-rail";
+      ghost.setAttribute("aria-hidden", "true");
+      const clone = snapshot.node.cloneNode(true);
+      clearMagicStyles(clone);
+      clone.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
+      clone.querySelectorAll("canvas").forEach(node => node.remove());
+      ghost.appendChild(clone);
+      ghost.inert = true;
+      const box = snapshot.surface ?? snapshot.rect;
+      ghost.style.left = `${box.left}px`;
+      ghost.style.top = `${box.top}px`;
+      ghost.style.width = `${box.width}px`;
+      ghost.style.height = `${box.height}px`;
+      layer.appendChild(ghost);
+      timeline.add(ghost, {
+        x: [0, edgeExitDistance(box, edge)],
+        duration: motionDuration(MAGIC_LEAVE_MS, this.root), ease: MAGIC_DEPART_EASE
+      }, 0);
+    }
+    // Held for the preview harness, alongside the rail's own timeline.
+    this._leaveTimeline = timeline;
+    timeline.play();
   }
 
   // ---- Card-mode collect / deal / reshuffle motion --------------------------
@@ -4356,6 +4506,284 @@ export class GLUniverseInitiativeOverlay {
     this.lastBrokenIds = currentBroken;
     this.statusSnapshotInitialized = true;
   }
+}
+
+// ---- Magic move helpers (see GLUniverseInitiativeOverlay#animateTurnChange) ----
+
+// Stylesheet milliseconds; motionDuration() applies the motion tier.
+const MAGIC_MOVE_MS = 660;
+const MAGIC_ENTER_MS = 560;
+const MAGIC_LEAVE_MS = 380;
+// Screen-edge exits accelerate away; entries arrive fast and settle.
+const MAGIC_DEPART_EASE = cubicBezier(0.55, 0, 0.9, 0.4);
+const MAGIC_ARRIVE_EASE = cubicBezier(0.1, 0.6, 0.2, 1);
+// Clearance past the screen edge, so a card's glow is gone too.
+const EDGE_CLEARANCE = 24;
+
+function nearestEdge(rect, fallback) {
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  if (!width) return fallback;
+  return rect.left + rect.width / 2 < width / 2 ? "left" : "right";
+}
+
+// Visual px to leave the viewport from where the card is, through the nearer side.
+function edgeExitDistance(rect, fallback = "right") {
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  return nearestEdge(rect, fallback) === "left"
+    ? -(rect.right + EDGE_CLEARANCE)
+    : (width - rect.left + EDGE_CLEARANCE);
+}
+
+// Layout px (for --gluni-flip-x) that park a card just past the nearer edge.
+function edgeEntryOffset(item) {
+  const rect = item.getBoundingClientRect();
+  const k = item.offsetWidth && rect.width ? rect.width / item.offsetWidth : 1;
+  return edgeExitDistance(rect) / k;
+}
+// Eased at both ends, but not symmetrically: a short, soft departure and a long
+// arrival. The frame is seen to set off and then to settle, which is what makes
+// a resize read as the layout moving rather than two states swapping.
+const MAGIC_EASE = cubicBezier(0.45, 0, 0.12, 1);
+
+// Type that changes size between the resting and active card. Tweened as a
+// real font size, never as a transform, so it stays crisp and re-flows.
+const MAGIC_FONT_PARTS = [
+  ".gluni-card-content h3",
+  ".gluni-initiative-badge",
+  ".gluni-card-mystery-mark"
+];
+
+// Chrome only the active card carries. It fades in once the frame is on its
+// way, instead of already being there when the move starts.
+const MAGIC_ACTIVE_CHROME = [".gluni-active-tag", ".gluni-card-holo"];
+
+const PORTRAIT_VARS = ["--gluni-portrait-x", "--gluni-portrait-y", "--gluni-portrait-scale"];
+
+function readCssNumber(style, name) {
+  const value = parseFloat(style.getPropertyValue(name));
+  return Number.isFinite(value) ? value : null;
+}
+
+function readPortraitVars(style) {
+  const values = PORTRAIT_VARS.map(name => readCssNumber(style, name));
+  return values.every(value => value !== null) ? values : null;
+}
+
+function captureMagicSnapshot(item) {
+  const style = getComputedStyle(item);
+  const surface = item.querySelector(":scope > .gluni-card-surface");
+  const fonts = {};
+  if (surface) {
+    for (const selector of MAGIC_FONT_PARTS) {
+      const part = surface.querySelector(selector);
+      if (part) fonts[selector] = parseFloat(getComputedStyle(part).fontSize);
+    }
+  }
+  return {
+    node: item,
+    combatantId: item.dataset.combatantId ?? null,
+    rect: item.getBoundingClientRect(),
+    surface: surface?.getBoundingClientRect() ?? null,
+    labels: item.querySelector(":scope > .gluni-card-condition-labels")?.getBoundingClientRect() ?? null,
+    active: item.classList.contains("gluni-card--active"),
+    overflow: readCssNumber(style, "--gluni-card-overflow") ?? 0,
+    portrait: readPortraitVars(style),
+    fonts
+  };
+}
+
+const near = (a, b, epsilon) => Math.abs(a - b) < epsilon;
+
+// Read-only: everything a move needs, measured against the new layout.
+function planMagicMove(item, from) {
+  const to = item.getBoundingClientRect();
+  // Visual px per layout px — the UI-scale setting and the active card's own
+  // scale both sit on the transform chain above the surface.
+  const k = item.offsetWidth && to.width ? to.width / item.offsetWidth : 1;
+  const surface = item.querySelector(":scope > .gluni-card-surface");
+
+  if (!surface || !from.surface) {
+    const fromRect = from.rect ?? from;
+    const dx = (fromRect.left - to.left) / k;
+    const dy = (fromRect.top - to.top) / k;
+    if (near(dx, 0, 0.5) && near(dy, 0, 0.5)) return null;
+    return { kind: "shift", item, dx, dy };
+  }
+
+  const box = surface.getBoundingClientRect();
+  const plan = {
+    kind: "morph",
+    item,
+    surface,
+    rowHeight: item.offsetHeight,
+    left: surface.offsetLeft,
+    top: surface.offsetTop,
+    dx: (from.surface.left - box.left) / k,
+    dy: (from.surface.top - box.top) / k,
+    w0: from.surface.width / k,
+    h0: from.surface.height / k,
+    w1: surface.offsetWidth,
+    h1: surface.offsetHeight,
+    entering: item.classList.contains("gluni-card--active") && !from.active,
+    leavingTurn: Boolean(from.active) && !item.classList.contains("gluni-card--active")
+  };
+
+  const style = getComputedStyle(item);
+  const overflow = readCssNumber(style, "--gluni-card-overflow") ?? 0;
+  if (!near(overflow, from.overflow, 0.5)) plan.overflow = [from.overflow, overflow];
+
+  const portrait = readPortraitVars(style);
+  if (portrait && from.portrait && portrait.some((value, i) => !near(value, from.portrait[i], 0.01))) {
+    plan.portrait = [from.portrait, portrait];
+  }
+
+  plan.fonts = [];
+  for (const selector of MAGIC_FONT_PARTS) {
+    const part = surface.querySelector(selector);
+    const old = from.fonts?.[selector];
+    if (!part || !Number.isFinite(old)) continue;
+    const size = parseFloat(getComputedStyle(part).fontSize);
+    if (Number.isFinite(size) && !near(size, old, 0.25)) plan.fonts.push({ part, from: old, to: size });
+  }
+
+  const labels = item.querySelector(":scope > .gluni-card-condition-labels");
+  if (labels && from.labels) {
+    const now = labels.getBoundingClientRect();
+    const lx = (from.labels.left - now.left) / k;
+    const ly = (from.labels.top - now.top) / k;
+    if (!near(lx, 0, 0.5) || !near(ly, 0, 0.5)) plan.labels = { node: labels, dx: lx, dy: ly };
+  }
+
+  if (plan.entering) {
+    plan.chrome = [];
+    for (const selector of MAGIC_ACTIVE_CHROME) {
+      for (const node of surface.querySelectorAll(selector)) {
+        plan.chrome.push({ node, opacity: parseFloat(getComputedStyle(node).opacity) || 0 });
+      }
+    }
+  }
+
+  const still = near(plan.dx, 0, 0.5) && near(plan.dy, 0, 0.5)
+    && near(plan.w0, plan.w1, 0.5) && near(plan.h0, plan.h1, 0.5);
+  if (still && !plan.overflow && !plan.portrait && !plan.fonts.length && !plan.labels) return null;
+  return plan;
+}
+
+// Write-only: primes the start state inline (so the first painted frame is
+// already the old layout), queues the tweens, and returns the cleanup that
+// hands the card back to the stylesheet. Cleanup runs after timeline.revert().
+function applyMagicMove(timeline, plan, duration) {
+  const { item } = plan;
+  const tween = (target, props, offset = 0, length = duration, ease = MAGIC_EASE) =>
+    timeline.add(target, { ...props, duration: length, ease }, offset);
+
+  if (plan.kind === "shift") {
+    item.classList.add("gluni-anime-motion");
+    item.style.setProperty("--gluni-flip-x", `${plan.dx}px`);
+    item.style.setProperty("--gluni-flip-y", `${plan.dy}px`);
+    tween(item, { "--gluni-flip-x": [`${plan.dx}px`, "0px"], "--gluni-flip-y": [`${plan.dy}px`, "0px"] });
+    return () => {
+      item.classList.remove("gluni-anime-motion");
+      item.style.removeProperty("--gluni-flip-x");
+      item.style.removeProperty("--gluni-flip-y");
+    };
+  }
+
+  const { surface } = plan;
+  const touched = [];
+  const prime = (node, prop, value) => {
+    touched.push([node, prop, node.style.getPropertyValue(prop), node.style.getPropertyPriority(prop)]);
+    node.style.setProperty(prop, value);
+  };
+
+  item.classList.add("gluni-card--morphing");
+  prime(item, "height", `${plan.rowHeight}px`);
+  // The card taking the turn travels over its neighbours; the one giving it up
+  // slides behind them on its way down the rail rather than across their faces.
+  if (plan.entering) prime(item, "z-index", "60");
+  else if (plan.leavingTurn) prime(item, "z-index", "-1");
+
+  prime(surface, "position", "absolute");
+  prime(surface, "left", `${plan.left}px`);
+  prime(surface, "top", `${plan.top}px`);
+  prime(surface, "min-height", "0px");
+  prime(surface, "width", `${plan.w0}px`);
+  prime(surface, "height", `${plan.h0}px`);
+  prime(surface, "transform", `translate(${plan.dx}px, ${plan.dy}px)`);
+  tween(surface, {
+    x: [plan.dx, 0], y: [plan.dy, 0],
+    width: [plan.w0, plan.w1], height: [plan.h0, plan.h1]
+  });
+
+  if (plan.overflow) {
+    const [a, b] = plan.overflow;
+    prime(item, "--gluni-card-overflow", `${a}px`);
+    // The art leaves the frame after the frame has started to grow, and is
+    // back inside it before the frame finishes shrinking.
+    const rising = b > a;
+    tween(item, { "--gluni-card-overflow": [`${a}px`, `${b}px`] },
+      rising ? duration * 0.18 : 0, duration * 0.82);
+  }
+
+  if (plan.portrait) {
+    const [a, b] = plan.portrait;
+    const units = ["%", "%", ""];
+    const props = {};
+    PORTRAIT_VARS.forEach((name, i) => {
+      prime(item, name, `${a[i]}${units[i]}`);
+      props[name] = [`${a[i]}${units[i]}`, `${b[i]}${units[i]}`];
+    });
+    tween(item, props);
+  }
+
+  for (const { part, from, to } of plan.fonts) {
+    prime(part, "font-size", `${from}px`);
+    tween(part, { fontSize: [`${from}px`, `${to}px`] });
+  }
+
+  if (plan.labels) {
+    const { node, dx, dy } = plan.labels;
+    prime(node, "transform", `translate(${dx}px, ${dy}px)`);
+    tween(node, { x: [dx, 0], y: [dy, 0] });
+  }
+
+  for (const { node, opacity } of plan.chrome ?? []) {
+    prime(node, "opacity", "0");
+    tween(node, { opacity: [0, opacity] }, duration * 0.45, duration * 0.55, "outCubic");
+  }
+
+  // A thin light line draws across the card as it lands.
+  const sheen = plan.entering ? surface.querySelector(".gluni-card-sheen") : null;
+  if (sheen) {
+    tween(sheen, { opacity: [0, 1], scaleX: [0, 1] }, duration * 0.7, duration * 0.35, "outCubic");
+    tween(sheen, { opacity: [1, 0] }, duration * 1.05, duration * 0.3, "inQuad");
+  }
+
+  return () => {
+    for (const [node, prop, value, priority] of touched.reverse()) {
+      if (value) node.style.setProperty(prop, value, priority);
+      else node.style.removeProperty(prop);
+    }
+    // Commit the stylesheet values while transitions are still off. Handing
+    // them back in the same style pass would replay the surface's own
+    // min-height transition from the 0 the move primed it with.
+    void item.offsetHeight;
+    item.classList.remove("gluni-card--morphing");
+  };
+}
+
+// Strips a mid-move card clone back to its stylesheet look.
+function clearMagicStyles(card) {
+  card.classList.remove("gluni-card--morphing", "gluni-anime-motion");
+  for (const prop of ["height", "z-index", "opacity", "--gluni-card-overflow", "--gluni-flip-x", "--gluni-flip-y", ...PORTRAIT_VARS]) {
+    card.style.removeProperty(prop);
+  }
+  const surface = card.querySelector(":scope > .gluni-card-surface");
+  if (surface) surface.removeAttribute("style");
+  for (const selector of [...MAGIC_FONT_PARTS, ...MAGIC_ACTIVE_CHROME, ".gluni-card-sheen"]) {
+    card.querySelectorAll(selector).forEach(node => node.removeAttribute("style"));
+  }
+  card.querySelector(":scope > .gluni-card-condition-labels")?.removeAttribute("style");
 }
 
 function getPortrait(combatant) {

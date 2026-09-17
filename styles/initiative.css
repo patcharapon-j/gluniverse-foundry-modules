@@ -369,6 +369,14 @@
   --gluni-portrait-active-y: 12%;
   --gluni-portrait-active-scale: 1.2;
   --gluni-portrait-quality-cap: 1;
+  /* The live portrait crop and the art's overhang above the frame. Each state
+     points these at its own values; the turn-change magic move tweens them
+     inline, so the art travels on its own path instead of being stretched
+     with the frame. */
+  --gluni-portrait-x: var(--gluni-portrait-normal-x);
+  --gluni-portrait-y: var(--gluni-portrait-normal-y);
+  --gluni-portrait-scale: var(--gluni-portrait-normal-scale);
+  --gluni-card-overflow: 0px;
   position: relative;
   isolation: isolate;
   display: grid;
@@ -417,10 +425,24 @@
     inset 1px 0 0 rgb(var(--gl-tint-light) / 0.04),
     inset 0 0 0 1px var(--gluni-line),
     inset 0 0 28px rgb(var(--gl-tint-dark) / 0.4);
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  clip-path: polygon(
+    0 calc(-1 * var(--gluni-card-overflow)),
+    calc(100% - var(--gl-cut)) calc(-1 * var(--gluni-card-overflow)),
+    100% calc(var(--gl-cut) - var(--gluni-card-overflow)),
+    100% 100%,
+    0 100%
+  );
   transition:
     min-height var(--gluni-d-card) var(--gluni-ease),
     box-shadow var(--gluni-d-quick) var(--gluni-ease);
+}
+
+/* While the magic move owns a card, nothing inside it may transition: the
+   tweens change top, height, clip-path, object-position and font sizes every
+   frame, and a CSS transition on any of them would trail a frame behind. */
+.gluni-card--morphing,
+.gluni-card--morphing * {
+  transition: none !important;
 }
 
 .gluni-initiative--gm .gluni-rail .gluni-card {
@@ -493,7 +515,6 @@
   );
 }
 
-
 .gluni-card-accent {
   position: absolute;
   top: 0;
@@ -516,7 +537,8 @@
 
 .gluni-card-bracket {
   position: absolute;
-  top: 6px;
+  /* 6px at rest, -34px on the active card: rides the art's overhang. */
+  top: calc(6px - var(--gluni-card-overflow) * 40 / 42);
   z-index: 8;
   width: 8px;
   height: 8px;
@@ -539,6 +561,8 @@
 .gluni-card-portrait-wrap {
   position: absolute;
   inset: 0;
+  top: calc(-1 * var(--gluni-card-overflow));
+  height: calc(100% + var(--gluni-card-overflow));
   z-index: 1;
   overflow: hidden;
   contain: layout paint style;
@@ -555,9 +579,9 @@
   object-fit: cover;
   image-rendering: auto;
   image-rendering: smooth;
-  object-position: var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y);
-  transform-origin: var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y);
-  transform: scale(calc(var(--gluni-portrait-normal-scale) * var(--gluni-portrait-quality-cap)));
+  object-position: var(--gluni-portrait-x) var(--gluni-portrait-y);
+  transform-origin: var(--gluni-portrait-x) var(--gluni-portrait-y);
+  transform: scale(calc(var(--gluni-portrait-scale) * var(--gluni-portrait-quality-cap)));
   filter: contrast(1.08) saturate(1.06);
   transition:
     transform var(--gl-d-glide) var(--gluni-ease),
@@ -1098,7 +1122,7 @@
 }
 
 .gluni-card--active .gluni-card-adhoc-bg {
-  inset: -42px 0 0 0;
+  inset: calc(-1 * var(--gluni-card-overflow)) 0 0 0;
 }
 
 .gluni-card--active .gluni-card-dying-repeat {
@@ -1492,6 +1516,10 @@
 }
 
 .gluni-card--active {
+  --gluni-portrait-x: var(--gluni-portrait-active-x);
+  --gluni-portrait-y: var(--gluni-portrait-active-y);
+  --gluni-portrait-scale: var(--gluni-portrait-active-scale);
+  --gluni-card-overflow: 42px;
   --gluni-card-scale: 1.02;
   --gluni-card-lift-y: var(--gluni-active-lift-y);
   width: calc(100% + 12px);
@@ -1518,15 +1546,9 @@
     0 0 32px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 34%, transparent);
   /* Same chamfer as the resting card (--gl-cut), not the 14px it used to
      carry — the active card is the one every eye is on, and it was the one
-     card whose corner did not match the rest of the rail. The box starts at
-     -42px so the portrait can overflow above the content. */
-  clip-path: polygon(
-    0 -42px,
-    calc(100% - var(--gl-cut)) -42px,
-    100% calc(-42px + var(--gl-cut)),
-    100% 100%,
-    0 100%
-  );
+     card whose corner did not match the rest of the rail. The base polygon
+     starts at -var(--gluni-card-overflow), which is 42px here, so the portrait
+     can overflow above the content. */
 }
 
 .gluni-card--active .gluni-card-accent {
@@ -1543,7 +1565,6 @@
 }
 
 .gluni-card--active .gluni-card-bracket {
-  top: -34px;
   border-top-color: var(--gluni-accent, var(--gluni-cyan));
   border-left-color: var(--gluni-accent, var(--gluni-cyan));
 }
@@ -1569,8 +1590,6 @@
 }
 
 .gluni-card--active .gluni-card-portrait-wrap {
-  top: -42px;
-  height: calc(100% + 42px);
   clip-path: polygon(
     0 0,
     calc(100% - var(--gl-cut)) 0,
@@ -1578,12 +1597,6 @@
     100% 100%,
     0 100%
   );
-}
-
-.gluni-card--active .gluni-card-portrait {
-  object-position: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-  transform-origin: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-  transform: scale(calc(var(--gluni-portrait-active-scale) * var(--gluni-portrait-quality-cap)));
 }
 
 .gluni-card--active .gluni-card-surface::before {
@@ -1603,7 +1616,7 @@
 .gluni-card--active .gluni-card-surface::after {
   content: "";
   position: absolute;
-  inset: -42px 0 0 0;
+  inset: calc(-1 * var(--gluni-card-overflow)) 0 0 0;
   z-index: 3;
   pointer-events: none;
   background:
@@ -1654,13 +1667,13 @@
   animation-name: gluni-active-triangle-field-left;
 }
 
+.gluni-card--active.gluni-card--adhoc {
+  --gluni-card-overflow: 0px;
+}
+
 .gluni-card--active.gluni-card--adhoc .gluni-card-surface {
   overflow: hidden;
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-}
-
-.gluni-card--active.gluni-card--adhoc .gluni-card-bracket {
-  top: 6px;
 }
 
 .gluni-card--active.gluni-card--adhoc .gluni-card-adhoc-bg,
@@ -1672,7 +1685,6 @@
   font-size: 12px;
   opacity: 0.16;
 }
-
 
 .gluni-card--active .gluni-card-mystery-mark {
   color: var(--gluni-white);
@@ -2047,7 +2059,7 @@
  */
 .gluni-card--boss .gluni-card-portrait {
   -webkit-mask-image: radial-gradient(
-    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    46% 118% at var(--gluni-portrait-x) var(--gluni-portrait-y),
     #000 0%,
     #000 24%,
     rgb(0 0 0 / 0.52) 54%,
@@ -2055,7 +2067,7 @@
     transparent 96%
   );
   mask-image: radial-gradient(
-    46% 118% at var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y),
+    46% 118% at var(--gluni-portrait-x) var(--gluni-portrait-y),
     #000 0%,
     #000 24%,
     rgb(0 0 0 / 0.52) 54%,
@@ -2067,7 +2079,7 @@
 /* Active cards re-crop to the active focal point, so the mask follows it. */
 .gluni-card--active.gluni-card--boss .gluni-card-portrait {
   -webkit-mask-image: radial-gradient(
-    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    58% 112% at var(--gluni-portrait-x) var(--gluni-portrait-y),
     #000 0%,
     #000 30%,
     rgb(0 0 0 / 0.60) 58%,
@@ -2075,7 +2087,7 @@
     transparent 98%
   );
   mask-image: radial-gradient(
-    58% 112% at var(--gluni-portrait-active-x) var(--gluni-portrait-active-y),
+    58% 112% at var(--gluni-portrait-x) var(--gluni-portrait-y),
     #000 0%,
     #000 30%,
     rgb(0 0 0 / 0.60) 58%,
@@ -2895,44 +2907,6 @@
   left: auto;
 }
 
-.gluni-item--entering {
-  animation: gluni-card-enter var(--gluni-d-card) var(--gluni-snap) both;
-}
-
-.gluni-item--entering-bottom {
-  animation: gluni-card-enter-bottom var(--gl-d-swift) var(--gluni-ease) both;
-}
-
-/* ── FLIP transition override ─────────────────────────────────────────────
-   These two are the only load-bearing !important declarations on the rail, and
-   they earn it: a FLIP has to own `transition` outright for the duration of the
-   morph. The same element also matches .gluni-card (which transitions transform
-   on --gluni-d-card) and, when it is the active card, the turn-beat rules that
-   retime transform to --gluni-beat-anticipation. Those are equal-specificity
-   single-class selectors declared LATER in this file, so ordinary cascade order
-   loses — and a losing preflip means the card animates to its pre-flip offset
-   instead of snapping there, which reads as the rail lurching backwards before
-   every reorder.
-
-   Raising specificity instead would mean pinning these to .gluni-card, and the
-   flip classes are applied to whatever the row element is — deliberately
-   decoupled from the card's own class list. !important is the narrower tool. */
-.gluni-item--preflip {
-  /* Snap to the measured start offset with no interpolation — the "first" half
-     of the FLIP must be instantaneous or there is nothing to invert from. */
-  transition: none !important;
-}
-
-.gluni-item--flipping {
-  will-change: transform;
-  /* Magic-move morph: one smooth easeOut for both the shrinking outgoing card and the
-     growing incoming active card. Longer + softer than the default snap for a premium glide.
-     Paired with animMs(680) in the JS, which strips this class after the morph. */
-  transition: transform var(--gl-d-glide) var(--gluni-ease) !important;
-}
-
-.gluni-card--active-entering,
-.gluni-card--active-entering .gluni-card-portrait,
 .gluni-card-ghost {
   will-change: transform, opacity;
 }
@@ -3068,28 +3042,9 @@
   bottom: -4px;
 }
 
-.gluni-card--active-entering .gluni-card-sheen {
-  animation: gluni-card-sheen-draw var(--gl-d-swift) var(--gluni-ease) var(--gl-d-tap) both;
-}
-
-.gluni-card.gluni-item--entering.gluni-card--active-entering {
-  animation: gluni-card-enter var(--gluni-d-card) var(--gluni-snap) both;
-}
-
-.gluni-card--active-entering .gluni-card-portrait {
-  animation: gluni-active-portrait var(--gl-d-reveal) var(--gluni-snap) both;
-}
-
-.gluni-card--active-entering .gluni-card-mystery-mark {
-  animation: gluni-active-mystery var(--gl-d-reveal) var(--gluni-snap) both;
-}
-
-.gluni-card--active-entering .gluni-card-content {
-  animation: gluni-active-content var(--gl-d-glide) var(--gluni-ease) both;
-}
-
-/* The previously-active card now morphs back down to rail size via the FLIP transform
-   (magic move). A competing keyframe animation would override that transform, so disable it. */
+/* The card that just gave up the turn is mid magic move for a render or two: its
+   frame is shrinking back to rail size. A state pulse on the card itself would
+   fight that for attention, so it waits until the card has landed. */
 .gluni-card--outgoing-active {
   animation: none;
 }
@@ -3103,14 +3058,6 @@
   transform: translateX(0) scale(1);
   background: var(--gluni-ink);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 60%, var(--gluni-line) 40%);
-}
-
-.gluni-card-ghost--leave.gluni-card-ghost--left {
-  animation: gluni-active-exit-left var(--gl-d-glide) var(--gluni-exit) forwards;
-}
-
-.gluni-card-ghost--leave.gluni-card-ghost--right {
-  animation: gluni-active-exit-right var(--gl-d-glide) var(--gluni-exit) forwards;
 }
 
 /* Edge specular highlight sweep — mockup `.v4 .card::before`. Separate layer so the
@@ -3340,15 +3287,6 @@
 }
 
 /* Anticipation: the outgoing ghost pulls back ~8px toward the rail before leaving. */
-.gluni-card-ghost--anticipate.gluni-card-ghost--right {
-  transform: translateX(8px) scale(1);
-  transition: transform var(--gluni-beat-anticipation) var(--gluni-ease);
-}
-
-.gluni-card-ghost--anticipate.gluni-card-ghost--left {
-  transform: translateX(-8px) scale(1);
-  transition: transform var(--gluni-beat-anticipation) var(--gluni-ease);
-}
 
 /* =========================================================================
    Status tag chips — premium polish + on-trigger "stamp" entrance.
@@ -3682,11 +3620,6 @@
   transition-duration: var(--gl-d-splash);
 }
 
-.gluni-initiative--cinematic .gluni-card--active-entering .gluni-card-sheen {
-  animation-duration: var(--gl-d-glide);
-  animation-timing-function: var(--gluni-ease);
-}
-
 .gluni-initiative--cinematic .gluni-card-sheen::after {
   content: "";
   position: absolute;
@@ -3700,22 +3633,6 @@
     var(--gluni-accent, var(--gluni-cyan))
   );
   opacity: 0;
-}
-
-.gluni-initiative--cinematic .gluni-card--active-entering .gluni-card-sheen::after {
-  animation: gluni-card-sheen-flare var(--gl-d-glide) var(--gluni-ease) var(--gl-d-tap) both;
-}
-
-.gluni-initiative--cinematic .gluni-card-ghost--leave.gluni-card-ghost--left {
-  animation: gluni-active-exit-left-cinematic var(--gl-d-splash) var(--gluni-exit) forwards;
-}
-
-.gluni-initiative--cinematic .gluni-card-ghost--leave.gluni-card-ghost--right {
-  animation: gluni-active-exit-right-cinematic var(--gl-d-splash) var(--gluni-exit) forwards;
-}
-
-.gluni-initiative--cinematic .gluni-item--entering-bottom {
-  animation: gluni-card-enter-bottom-cinematic var(--gl-d-glide) var(--gluni-ease) both;
 }
 
 .gluni-initiative--cinematic .gluni-card:not(.gluni-card--active) .gluni-card-surface::after {
@@ -4671,68 +4588,6 @@
   animation: gluni-card-slide-in-left var(--gl-d-swift) var(--gluni-snap) both;
 }
 
-@keyframes gluni-card-enter {
-  from {
-    opacity: 0;
-    transform:
-      translate(var(--gluni-flip-x), var(--gluni-flip-y))
-      translateY(-12px)
-      translateX(var(--gluni-active-shift))
-      scaleX(var(--gluni-flip-scale-x))
-      scaleY(var(--gluni-flip-scale-y))
-      scale(0.97);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform:
-      translate(0, 0)
-      translateX(var(--gluni-active-shift))
-      scaleX(1)
-      scaleY(1)
-      scale(var(--gluni-card-scale));
-    filter: blur(0);
-  }
-}
-
-@keyframes gluni-card-enter-bottom {
-  from {
-    opacity: 0;
-    transform:
-      translate(var(--gluni-flip-x), var(--gluni-flip-y))
-      translateY(10px)
-      translateX(var(--gluni-active-shift))
-      scaleX(var(--gluni-flip-scale-x))
-      scaleY(var(--gluni-flip-scale-y))
-      scale(0.985);
-    filter: blur(2px);
-  }
-
-  to {
-    opacity: 1;
-    transform:
-      translate(0, 0)
-      translateX(var(--gluni-active-shift))
-      scaleX(1)
-      scaleY(1)
-      scale(var(--gluni-card-scale));
-    filter: blur(0);
-  }
-}
-
-@keyframes gluni-card-rejoin {
-  from {
-    opacity: 0;
-    transform: translateY(10px) translateX(var(--gluni-active-shift)) scale(0.97);
-    filter: blur(1.5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) translateX(var(--gluni-active-shift)) scale(var(--gluni-card-scale));
-    filter: blur(0);
-  }
-}
-
 @keyframes gluni-active-triangle-field {
   0% {
     opacity: 0.28;
@@ -5121,101 +4976,6 @@
   }
 }
 
-@keyframes gluni-card-sheen-draw {
-  0% {
-    opacity: 0;
-    transform: scaleX(0);
-  }
-  18% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: scaleX(1);
-  }
-}
-
-@keyframes gluni-active-portrait {
-  0% {
-    transform: translateY(3px) scale(var(--gluni-portrait-normal-scale));
-    object-position: var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y);
-    transform-origin: var(--gluni-portrait-normal-x) var(--gluni-portrait-normal-y);
-    filter: contrast(1.02) saturate(0.96) blur(1.2px);
-  }
-
-  48% {
-    transform: translateY(0) scale(var(--gluni-portrait-active-scale));
-    object-position: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-    transform-origin: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-    filter: contrast(1.14) saturate(1.16) blur(0);
-  }
-
-  100% {
-    transform: translateY(0) scale(var(--gluni-portrait-active-scale));
-    object-position: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-    transform-origin: var(--gluni-portrait-active-x) var(--gluni-portrait-active-y);
-    filter: contrast(1.08) saturate(1.06) blur(0);
-  }
-}
-
-@keyframes gluni-active-mystery {
-  0% {
-    opacity: 0.8;
-    transform: translateY(8px) scale(0.9);
-    filter: blur(1.5px);
-  }
-
-  48% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.08);
-    filter: blur(0);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(-4px) scale(1.06);
-    filter: blur(0);
-  }
-}
-
-@keyframes gluni-active-content {
-  0% {
-    opacity: 0.72;
-    transform: translateY(8px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes gluni-active-exit-left {
-  0% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-88px) scale(0.86);
-    filter: blur(8px);
-  }
-}
-
-@keyframes gluni-active-exit-right {
-  0% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(88px) scale(0.86);
-    filter: blur(8px);
-  }
-}
-
 @keyframes gluni-end-turn-shake {
   10%, 90% { transform: translateX(-1px); }
   20%, 80% { transform: translateX(2px); }
@@ -5334,56 +5094,6 @@
 @keyframes gluni-splash-shell-out {
   0% { opacity: 1; }
   100% { opacity: 0; }
-}
-
-@keyframes gluni-card-sheen-flare {
-  0% { opacity: 0; }
-  18% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes gluni-active-exit-left-cinematic {
-  0% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateX(-110px) scale(0.84); filter: blur(12px); }
-}
-
-@keyframes gluni-active-exit-right-cinematic {
-  0% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateX(110px) scale(0.84); filter: blur(12px); }
-}
-
-@keyframes gluni-card-enter-bottom-cinematic {
-  0% {
-    opacity: 0;
-    transform:
-      translate(var(--gluni-flip-x), var(--gluni-flip-y))
-      translateY(14px)
-      translateX(var(--gluni-active-shift))
-      scaleX(var(--gluni-flip-scale-x))
-      scaleY(var(--gluni-flip-scale-y))
-      scale(0.97);
-    filter: blur(3px);
-  }
-  60% {
-    opacity: 1;
-    transform:
-      translate(0, 0)
-      translateX(var(--gluni-active-shift))
-      scaleX(1)
-      scaleY(1)
-      scale(var(--gluni-card-scale));
-    filter: blur(0);
-  }
-  100% {
-    opacity: 1;
-    transform:
-      translate(0, 0)
-      translateX(var(--gluni-active-shift))
-      scaleX(1)
-      scaleY(1)
-      scale(var(--gluni-card-scale));
-    filter: blur(0);
-  }
 }
 
 @keyframes gluni-splash-digit-in-cinematic {
@@ -5900,7 +5610,6 @@
   100% { translate: 0 0; scale: 1; }
 }
 
-
 /* =====================================================================
    D&D 5e DEATH SAVES
    ---------------------------------------------------------------------
@@ -6136,7 +5845,6 @@
     0 0 14px color-mix(in srgb, var(--gluni-stable) 60%, transparent);
   animation: none;
 }
-
 
 /* ===================================================================== */
 /* CARD INITIATIVE MODE                                                   */
@@ -6547,35 +6255,6 @@
 }
 
 /* --- Deal-in: freshly dealt cards rise out of the deck and resolve ------- */
-.gluni-initiative--card-mode .gluni-item--entering,
-.gluni-initiative--card-mode .gluni-item--entering-bottom {
-  animation: gluni-card-deal-in var(--gl-d-move) var(--gluni-snap) both;
-}
-
-@keyframes gluni-card-deal-in {
-  from {
-    opacity: 0;
-    transform:
-      translate(var(--gluni-flip-x), calc(var(--gluni-flip-y) + 16px))
-      translateX(var(--gluni-active-shift))
-      scaleX(var(--gluni-flip-scale-x))
-      scaleY(var(--gluni-flip-scale-y))
-      scale(0.9)
-      rotateY(26deg);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform:
-      translate(0, 0)
-      translateX(var(--gluni-active-shift))
-      scaleX(1)
-      scaleY(1)
-      scale(var(--gluni-card-scale))
-      rotateY(0deg);
-    filter: blur(0);
-  }
-}
 
 /* --- Reshuffle flourish: a holo sweep + a brief flash of card-backs ------ */
 .gluni-initiative--reshuffling .gluni-rail {
@@ -6621,6 +6300,12 @@
   contain: strict;
 }
 
+/* Cards that simply left the rail slip away behind it: the card taking the turn
+   is often growing into the very space they are leaving. */
+.gluni-card-ghost-layer--under {
+  z-index: calc(var(--gl-z-hud) - 1);
+}
+
 .gluni-card-ghost {
   position: fixed;
   transform-origin: center;
@@ -6662,7 +6347,6 @@
 .gluni-initiative--card-mode .gluni-card--dragging {
   z-index: 60;
 }
-
 
 /* ---- Card deck config dialog --------------------------------------- */
 .gluni-card-config-form {
@@ -6731,7 +6415,6 @@
   font-family: var(--gluni-font-family);
 }
 
-
 /* ============================================================================
  * Alternate themes (core / fantasy / chronicle) used to live here — ~490 lines
  * re-painting every surface, plus their own serif @font-face declarations.
@@ -6741,7 +6424,6 @@
  * The matching `init.theme` setting and the four-way PALETTES table in
  * constants.mjs were removed with them.
  * ==========================================================================*/
-
 
 /* ============================================================================
  * Accessibility: high-contrast / reduced-transparency accommodation.
