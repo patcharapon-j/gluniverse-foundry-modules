@@ -3,6 +3,7 @@ import { animate, prefersCalmMotion, remove } from "./motion/engine.js";
 import { waitForDiceAnimation } from "./dice-wait.js";
 import { createCardFeed, hasCardFeed } from "./extensions.mjs";
 import { getChatSettings } from "./settings.js";
+import { frameImage } from "../../core/face-frame.mjs";
 
 /** Where cards slide in from and out to, per overlay corner, in pixels. */
 const CARD_OFFSETS = {
@@ -476,6 +477,7 @@ function ensureSpeakerImage(element, imageUrl) {
   const image = header.querySelector("img.avatar, img.message-avatar, img.gluniverse-stream-speaker-avatar, img");
   if (image) {
     if (!image.getAttribute("src")) image.setAttribute("src", imageUrl);
+    frameImage(image, "avatar-circle");
     return;
   }
   const avatar = document.createElement("img");
@@ -483,6 +485,8 @@ function ensureSpeakerImage(element, imageUrl) {
   avatar.src = imageUrl;
   avatar.alt = "";
   header.prepend(avatar);
+  // Full-body tokens are tiny in a 36px square; once the head is found, the avatar is cropped to it.
+  frameImage(avatar, "avatar-circle");
 }
 
 function getImageSource(img) {

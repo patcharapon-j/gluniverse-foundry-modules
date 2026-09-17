@@ -235,7 +235,7 @@ class PortraitFramingApp extends ApplicationV2 {
     const entry = this.current();
     if (!entry) return;
     ui.notifications?.info("Looking for a face… the first run loads the detector.");
-    portraitFramer.cache.delete(entry.src);
+    await portraitFramer.forget(entry.src);
     const focus = await portraitFramer.request(entry.src);
     if (this.current() !== entry) return;
     if (focus) this.setFocus(focus);
