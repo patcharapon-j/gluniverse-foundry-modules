@@ -30,6 +30,8 @@ scripts/
     theme.mjs               JS side of the design system: palette mirror, colour
                             maths, motion tiers, retheme hook (canvas/PIXI only)
     util.mjs                Shared pure helpers (clamp/toInt/hex6/escapeHTML/…)
+    face-frame.mjs          Shared head locator for portrait framing (docs/FACE_FRAME.md)
+    face-frame-math.mjs     Its pure crop/placement geometry
   features/
     index.mjs               Imports every adapter (import order = UI order)
     <featureId>/index.mjs   Adapter: Suite.register({...}) + the ported code
@@ -1092,7 +1094,7 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (83 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (103 tests; Node's
 directory mode is not supported here, so name the glob).
 
 Four things are worth knowing before you change any of it.

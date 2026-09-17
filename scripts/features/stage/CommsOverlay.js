@@ -1,5 +1,7 @@
 import { getSetting } from './settings.js';
 import { escapeHTML } from '../../core/util.mjs';
+import { faceLocator } from '../../core/face-frame.mjs';
+import { coverPlacement, cropFor } from '../../core/face-frame-math.mjs';
 
 const SHOW_DURATION = 350;
 const HIDE_DURATION = 300;
@@ -393,6 +395,33 @@ export class CommsOverlay {
     _applyPortraitVars(el, actor) {
         el.style.setProperty('--gp-transform', framingTransform(actor));
         el.style.setProperty('--portrait-src', `url("${actorImage(actor)}")`);
+        this._applyHeadFraming(el, actorImage(actor));
+    }
+
+    /**
+     * Bust framing on the head the suite found: `--gp-auto-pos` (object and mask position, and
+     * the origin the hand-set scale zooms about) and `--gp-auto-scale`. The GM's scale and offsets
+     * still apply on top. Until the art is analysed, and when no head is found, the card keeps its
+     * top-centre crop.
+     */
+    _applyHeadFraming(el, src) {
+        el.dataset.faceSrc = src;
+        const apply = (entry) => {
+            if (el.dataset.faceSrc !== src) return;
+            const crop = entry && cropFor(entry, 'portrait-bust');
+            if (!crop) {
+                el.style.removeProperty('--gp-auto-pos');
+                el.style.removeProperty('--gp-auto-scale');
+                return;
+            }
+            const p = coverPlacement(crop, entry.w, entry.h, 3, 4);
+            el.style.setProperty('--gp-auto-pos', `${p.x}% ${p.y}%`);
+            el.style.setProperty('--gp-auto-scale', String(p.scale));
+        };
+        const known = faceLocator.peek(src);
+        if (known !== undefined) return apply(known);
+        apply(null);
+        faceLocator.request(src).then(apply);
     }
 
     _updateCard(el, call) {

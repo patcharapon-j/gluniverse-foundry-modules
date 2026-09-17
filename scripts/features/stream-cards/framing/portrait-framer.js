@@ -1,9 +1,14 @@
 import { MODULE_ID } from "../../stream/constants.js";
-import { ART_ASPECT, cropForFace, pickFace, tileWindows, toFocus } from "./focus-math.js";
+import { faceLocator } from "../../../core/face-frame.mjs";
+import { cropFor } from "../../../core/face-frame-math.mjs";
+import { ART_ASPECT, CARD_HEAD_FRAME, clampCrop, cropForFace, pickFace, tileWindows, toFocus } from "./focus-math.js";
 
 const VENDOR = `modules/${MODULE_ID}/scripts/vendor`;
-const CACHE_KEY = `${MODULE_ID}.stream.card.portraitFocus.v1`;
+// v2: results from the suite head detector replace the MediaPipe-only ones.
+const CACHE_KEY = `${MODULE_ID}.stream.card.portraitFocus.v2`;
 const CACHE_LIMIT = 400;
+/** How long a card waits for the suite's head before falling back; a later head still replaces the fallback. */
+const HEAD_BUDGET_MS = 2500;
 /** Images are analysed at this size: plenty for a face, and it keeps each pass near 200 ms. */
 const ANALYSIS_PX = 512;
 const TILE_PX = 384;
@@ -11,9 +16,10 @@ const TILE_PX = 384;
 /**
  * Finds where to frame character art on the stream client.
  *
- * Each image is analysed once, in the background, one at a time: a face found by MediaPipe's
- * face detector (run on zoomed windows so small faces in full-body art are seen), otherwise
- * smartcrop's pick. Results are cached in memory and in this browser's storage, keyed by image path.
+ * Each image is analysed once, in the background, one at a time: the head found by the suite's
+ * face locator (anime, realistic and, when enabled, creature art), otherwise a face found by
+ * MediaPipe's face detector (run on zoomed windows so small faces in full-body art are seen; it
+ * works offline with no model download), otherwise smartcrop's pick. Results are cached in memory and in this browser's storage, keyed by image path.
  * `null` means "analysed, nothing better than the default crop".
  */
 export class PortraitFramer {
@@ -27,6 +33,19 @@ export class PortraitFramer {
     this.queue = [];
     this.draining = false;
     this.tools = null;
+    /** src -> Set of callbacks, for cards showing a fallback that a later head result replaces */
+    this.watchers = new Map();
+  }
+
+  /** Calls `callback(focus)` when `src`'s framing is replaced after the fact. Returns an unsubscribe function. */
+  watch(src, callback) {
+    if (!this.watchers.has(src)) this.watchers.set(src, new Set());
+    const set = this.watchers.get(src);
+    set.add(callback);
+    return () => {
+      set.delete(callback);
+      if (!set.size) this.watchers.delete(src);
+    };
   }
 
   /** The cached framing: a focus, null (default crop), or undefined when the image is not analysed yet. */
@@ -62,6 +81,8 @@ export class PortraitFramer {
         let persist = true;
         try {
           result = await this.analyse(src);
+          // A fallback chosen only because the head detector could not load must not outlive the session.
+          persist = !faceLocator.failedRecently(src);
         } catch (error) {
           // A load or CORS failure may not last; keep the default crop for this session only.
           persist = false;
@@ -79,6 +100,13 @@ export class PortraitFramer {
   }
 
   async analyse(src) {
+    // The locator may be downloading models or waiting on the GM. Give it a short budget, then
+    // frame with MediaPipe/smartcrop and let the head replace that result when it arrives.
+    const pending = this.locateHead(src);
+    const head = await Promise.race([pending, new Promise(r => setTimeout(() => r(undefined), HEAD_BUDGET_MS))]);
+    if (head) return head;
+    if (head === undefined) pending.then(late => this.upgrade(src, late));
+
     const image = await loadImage(src);
     const scale = Math.min(1, ANALYSIS_PX / Math.max(image.naturalWidth, image.naturalHeight));
     const width = Math.round(image.naturalWidth * scale);
@@ -103,6 +131,31 @@ export class PortraitFramer {
       if (topCrop) return { focus: toFocus(topCrop, width), method: "smart" };
     }
     return null;
+  }
+
+  /**
+   * The suite locator's head, placed like cropForFace places a face: the crop's height is set by the
+   * head, and the head sits a little left of centre. Null when the locator is off, failed, or found
+   * nothing; the MediaPipe and smartcrop passes then run as before.
+   */
+  async locateHead(src) {
+    if (!faceLocator.enabled) return null;
+    const entry = await faceLocator.request(src);
+    const crop = entry && cropFor(entry, CARD_HEAD_FRAME);
+    if (!crop) return null;
+    const shifted = clampCrop({ ...crop, x: crop.x + crop.width * (0.5 - CARD_HEAD_FRAME.headX) }, entry.w, entry.h);
+    return { focus: toFocus(shifted, entry.w), method: "head" };
+  }
+
+  /** A head that arrived after the fallback was chosen replaces it, on every card that shows it. */
+  upgrade(src, head) {
+    if (!head) {
+      // The fallback stands, but not past this session if the locator only failed to load.
+      if (faceLocator.failedRecently(src) && this.cache.has(src) && !this.unsaved.has(src)) this.remember(src, this.cache.get(src), { persist: false });
+      return;
+    }
+    this.remember(src, head);
+    for (const callback of this.watchers.get(src) ?? []) callback(head.focus);
   }
 
   /** MediaPipe and smartcrop, loaded on first use. Either may be missing; framing degrades, never breaks. */
@@ -144,6 +197,13 @@ export class PortraitFramer {
     } catch {
       // Storage full or blocked: the in-memory cache still serves this session.
     }
+  }
+
+  /** Forgets one image's framing, here and in the suite locator, so the next request analyses it again. */
+  async forget(src) {
+    this.cache.delete(src);
+    this.unsaved.delete(src);
+    await faceLocator.forget(src);
   }
 
   /** Forgets every cached framing, e.g. after art is replaced under the same path. */

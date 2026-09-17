@@ -264,15 +264,20 @@ export class RollCard {
    * default crop and glides to its framing when the analysis lands.
    */
   frameArt(img, manual) {
+    this.unwatchArt?.();
+    this.unwatchArt = null;
     this.artSrc = img ?? null;
     if (!img) return this.applyFocus(null);
     if (isFocus(manual)) return this.applyFocus(manual);
+    const update = (focus) => {
+      if (!this.destroyed && this.artSrc === img && !isFocus(this.model.actor?.focus)) this.applyFocus(focus);
+    };
+    // A fallback framing, cached or not, can be replaced by a late head result.
+    this.unwatchArt = this.framer?.watch?.(img, update) ?? null;
     const known = this.framer?.peek(img);
     if (known !== undefined) return this.applyFocus(known);
     this.applyFocus(null);
-    this.framer?.request(img).then((focus) => {
-      if (!this.destroyed && this.artSrc === img && !isFocus(this.model.actor?.focus)) this.applyFocus(focus);
-    });
+    this.framer?.request(img).then(update);
   }
 
   applyFocus(focus) {
@@ -666,6 +671,7 @@ export class RollCard {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.unwatchArt?.();
     this.version++;
     this.clearCrack();
     try {

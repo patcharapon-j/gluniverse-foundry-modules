@@ -9,6 +9,13 @@
 /** Width : height of the roll card's art area (8.2u x 4.4u). */
 export const ART_ASPECT = 8.2 / 4.4;
 
+/**
+ * How the card frames a head from the suite locator (a head box, hair included): the same shot as
+ * cropForFace gives a MediaPipe face box, which is about 1.35 times smaller than a head.
+ * headX is where the head's centre sits across the crop.
+ */
+export const CARD_HEAD_FRAME = Object.freeze({ aspect: ART_ASPECT, headRatio: 1.35 / 3.2, eyeLine: 0.42, eyeInHead: 0.55, headX: 0.4 });
+
 /** Zoomed detection windows, as fractions of the image's short side. */
 export const TILE_FRACTIONS = [0.6, 0.4];
 /** Windows only cover this much of the image from the top: faces in character art sit high. */

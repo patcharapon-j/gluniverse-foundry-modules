@@ -16,6 +16,7 @@ import { registerCoreSettings, applyUiScale, applySheetHeaderIconOnly } from "./
 import { buildCatalog } from "./core/catalog.mjs";
 import { initSocketDispatcher } from "./core/socket.mjs";
 import { runMigrations } from "./core/migration.mjs";
+import { initFaceFrameSocket } from "./core/face-frame.mjs";
 
 // Side-effecting import: every feature calls Suite.register(...) on load.
 import "./features/index.mjs";
@@ -37,6 +38,7 @@ Hooks.once("ready", async () => {
   // Reflect the GM's icon-only sheet-header-button choice on this client.
   applySheetHeaderIconOnly();
   initSocketDispatcher();
+  initFaceFrameSocket();
   await runMigrations();
   await Suite.runPhase("onReady");
 

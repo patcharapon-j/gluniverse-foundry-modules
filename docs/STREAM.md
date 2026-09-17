@@ -107,8 +107,8 @@ success. Damage merges under its attack, spells update in place, rerolls rewrite
 their card, and criticals crack in gold or red using the suite's Broken-condition
 shader.
 
-Character art is framed on the face automatically — MediaPipe's detector, with
-smartcrop as a fallback. A GM can set the framing by hand in the control panel's
+Character art is framed on the face automatically: the suite's head locator
+(see [FACE_FRAME.md](FACE_FRAME.md)), then MediaPipe's detector, then smartcrop. A GM can set the framing by hand in the control panel's
 **Frame Portraits**, or from any actor sheet's **Frame For Stream** header
 button. A GM roll with no art of its own can show a chosen picture, framed the
 same way.
@@ -149,7 +149,7 @@ left alone.
 
 ```bash
 node tools/stream-check.mjs          # source-shape invariants
-node --test tests/*.test.mjs         # 83 unit tests (directory mode is unsupported)
+node --test tests/*.test.mjs         # 103 unit tests (directory mode is unsupported)
 ```
 
 `stream-check` covers what a diff cannot show: import bindings across the
