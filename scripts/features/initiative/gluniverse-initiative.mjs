@@ -1,6 +1,8 @@
 import { createTimeline, stagger, cubicBezier, createMotionOwner, motionDuration } from "../../core/motion.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { onThemeChange, scaledMs } from "../../core/theme.mjs";
+import { faceLocator } from "../../core/face-frame.mjs";
+import { coverPlacement, cropFor, headBox, projectCover } from "../../core/face-frame-math.mjs";
 
 /**
  * Wall-clock for a timer that shadows a CSS animation on the rail.
@@ -1862,7 +1864,7 @@ export class GLUniverseInitiativeOverlay {
       initiative: combatant.initiative,
       portrait,
       portraitScaleCap: mystery || adhoc ? 1 : getPortraitScaleCap(portrait),
-      portraitFrame: mystery || adhoc ? null : getPortraitFrame(combatant.actor),
+      portraitFrame: mystery || adhoc ? null : getPortraitFrame(combatant.actor, portrait),
       canEndTurn: Boolean(options.active && !game.user.isGM && this.userOwnsCombatant(combatant, game.user))
     };
   }
@@ -4624,10 +4626,12 @@ const MAGIC_FONT_PARTS = [
 // way, instead of already being there when the move starts.
 const MAGIC_ACTIVE_CHROME = [".gluni-active-tag", ".gluni-card-holo"];
 
-const PORTRAIT_VARS = ["--gluni-portrait-x", "--gluni-portrait-y", "--gluni-portrait-scale"];
+// The mask pair always resolves (auto frames set it, others inherit the crop point), and must
+// travel with the art or an auto-framed boss's mask snaps ahead of its portrait.
+const PORTRAIT_VARS = ["--gluni-portrait-x", "--gluni-portrait-y", "--gluni-portrait-scale", "--gluni-portrait-mask-x", "--gluni-portrait-mask-y"];
 // Units for PORTRAIT_VARS, in the same order. Both halves of the write pass
 // state the same values, so they read them from one place.
-const PORTRAIT_UNITS = ["%", "%", ""];
+const PORTRAIT_UNITS = ["%", "%", "", "%", "%"];
 
 function readCssNumber(style, name) {
   const value = parseFloat(style.getPropertyValue(name));
@@ -5435,8 +5439,8 @@ function readCardConfigForm(html) {
 }
 
 function openPortraitConfigDialog(actor) {
-  const frame = getPortraitFrame(actor);
   const portrait = actor.img || FALLBACK_PORTRAIT;
+  const frame = getPortraitFrame(actor, portrait);
 
   const DialogV2 = foundry.applications?.api?.DialogV2;
   if (!DialogV2) return;
@@ -5907,8 +5911,56 @@ function readPortraitConfigForm(html) {
   return frame;
 }
 
-function getPortraitFrame(actor) {
-  return normalizePortraitFrame(actor?.getFlag?.(MODULE_ID, FLAGS.portraitFrame));
+/** A GM's hand-set frame for the actor; failing that, one framed on the detected head; failing that, the defaults. */
+function getPortraitFrame(actor, portrait = actor?.img) {
+  const stored = actor?.getFlag?.(MODULE_ID, FLAGS.portraitFrame);
+  if (stored && typeof stored === "object") return normalizePortraitFrame(stored);
+  const auto = autoPortraitFrame(portrait);
+  if (!auto) return normalizePortraitFrame(null);
+  return Object.assign(normalizePortraitFrame(auto), { mask: auto.mask });
+}
+
+/**
+ * The two card shapes the portrait fills (wrap width x height, overhang included) and how each
+ * frames a head: the resting strip is a band across the face, the active card a head-and-shoulders
+ * shot with the head up in the overhang.
+ */
+const AUTO_PORTRAIT_SHOTS = Object.freeze({
+  normal: { box: [188, PORTRAIT_MIN_PIXELS.normalHeight], frame: { aspect: 188 / PORTRAIT_MIN_PIXELS.normalHeight, headRatio: 0.72, eyeLine: 0.5 } },
+  expanded: { box: [200, PORTRAIT_MIN_PIXELS.activeHeight], frame: { aspect: 200 / PORTRAIT_MIN_PIXELS.activeHeight, headRatio: 0.42, eyeLine: 0.38 } }
+});
+const autoFramePending = new Set();
+
+/**
+ * A frame placed on the head the suite's face locator found, in the same x/y/scale terms as a
+ * hand-set one, plus where the head lands (the boss mask centres on it). Null until the image has
+ * been analysed; the tracker re-renders when that lands.
+ */
+function autoPortraitFrame(portrait) {
+  if (!portrait || portrait === FALLBACK_PORTRAIT) return null;
+  const entry = faceLocator.peek(portrait);
+  if (entry === undefined) {
+    if (!autoFramePending.has(portrait)) {
+      autoFramePending.add(portrait);
+      faceLocator.request(portrait).then(found => {
+        autoFramePending.delete(portrait);
+        if (found?.k === "s") overlay?.renderSoon();
+      });
+    }
+    return null;
+  }
+  const head = headBox(entry);
+  if (!head) return null;
+  const frame = { mask: {} };
+  for (const [mode, shot] of Object.entries(AUTO_PORTRAIT_SHOTS)) {
+    const crop = cropFor(entry, shot.frame);
+    const [boxW, boxH] = shot.box;
+    const placement = coverPlacement(crop, entry.w, entry.h, boxW, boxH);
+    const centre = projectCover(placement, head.x + head.width / 2, head.y + head.height / 2, entry.w, entry.h, boxW, boxH);
+    frame[mode] = placement;
+    frame.mask[mode] = { x: Math.round((centre.x / boxW) * 1000) / 10, y: Math.round((centre.y / boxH) * 1000) / 10 };
+  }
+  return frame;
 }
 
 function normalizePortraitFrame(value) {
@@ -5936,7 +5988,16 @@ function normalizePortraitValue(property, value) {
 
 function renderPortraitFrameStyle(frame) {
   const value = normalizePortraitFrame(frame);
+  const mask = frame?.mask?.normal && frame.mask.expanded
+    ? [
+      `--gluni-portrait-normal-mask-x: ${frame.mask.normal.x}%;`,
+      `--gluni-portrait-normal-mask-y: ${frame.mask.normal.y}%;`,
+      `--gluni-portrait-active-mask-x: ${frame.mask.expanded.x}%;`,
+      `--gluni-portrait-active-mask-y: ${frame.mask.expanded.y}%;`
+    ]
+    : [];
   return [
+    ...mask,
     `--gluni-portrait-normal-x: ${value.normal.x}%;`,
     `--gluni-portrait-normal-y: ${value.normal.y}%;`,
     `--gluni-portrait-normal-scale: ${value.normal.scale};`,

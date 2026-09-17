@@ -376,6 +376,11 @@
   --gluni-portrait-x: var(--gluni-portrait-normal-x);
   --gluni-portrait-y: var(--gluni-portrait-normal-y);
   --gluni-portrait-scale: var(--gluni-portrait-normal-scale);
+  /* Where the boss mask centres. A frame placed on a detected head does not put
+     the head at the crop point, so it says where the head landed; hand-set and
+     default frames leave these unset and the mask follows the crop point. */
+  --gluni-portrait-mask-x: var(--gluni-portrait-normal-mask-x, var(--gluni-portrait-x));
+  --gluni-portrait-mask-y: var(--gluni-portrait-normal-mask-y, var(--gluni-portrait-y));
   --gluni-card-overflow: 0px;
   position: relative;
   isolation: isolate;
@@ -1519,6 +1524,8 @@
   --gluni-portrait-x: var(--gluni-portrait-active-x);
   --gluni-portrait-y: var(--gluni-portrait-active-y);
   --gluni-portrait-scale: var(--gluni-portrait-active-scale);
+  --gluni-portrait-mask-x: var(--gluni-portrait-active-mask-x, var(--gluni-portrait-x));
+  --gluni-portrait-mask-y: var(--gluni-portrait-active-mask-y, var(--gluni-portrait-y));
   --gluni-card-overflow: 42px;
   --gluni-card-scale: 1.02;
   --gluni-card-lift-y: var(--gluni-active-lift-y);
@@ -2047,7 +2054,7 @@
  * the art it is a coloured film on somebody's face; under it, with the face
  * eaten away at the edges, the creature is standing in the thing.
  *
- * The ellipse is centred on --gluni-portrait-normal-x/-y, which is where the
+ * The ellipse is centred on --gluni-portrait-mask-x/-y, which is where the
  * crop puts the creature, not on the card. Its vertical radius overruns the card
  * and its horizontal radius does not, so the fade happens left and right — along
  * the card's long axis, which is where there is room for it — and the creature
@@ -2059,7 +2066,7 @@
  */
 .gluni-card--boss .gluni-card-portrait {
   -webkit-mask-image: radial-gradient(
-    46% 118% at var(--gluni-portrait-x) var(--gluni-portrait-y),
+    46% 118% at var(--gluni-portrait-mask-x) var(--gluni-portrait-mask-y),
     #000 0%,
     #000 24%,
     rgb(0 0 0 / 0.52) 54%,
@@ -2067,7 +2074,7 @@
     transparent 96%
   );
   mask-image: radial-gradient(
-    46% 118% at var(--gluni-portrait-x) var(--gluni-portrait-y),
+    46% 118% at var(--gluni-portrait-mask-x) var(--gluni-portrait-mask-y),
     #000 0%,
     #000 24%,
     rgb(0 0 0 / 0.52) 54%,
@@ -2079,7 +2086,7 @@
 /* Active cards re-crop to the active focal point, so the mask follows it. */
 .gluni-card--active.gluni-card--boss .gluni-card-portrait {
   -webkit-mask-image: radial-gradient(
-    58% 112% at var(--gluni-portrait-x) var(--gluni-portrait-y),
+    58% 112% at var(--gluni-portrait-mask-x) var(--gluni-portrait-mask-y),
     #000 0%,
     #000 30%,
     rgb(0 0 0 / 0.60) 58%,
@@ -2087,7 +2094,7 @@
     transparent 98%
   );
   mask-image: radial-gradient(
-    58% 112% at var(--gluni-portrait-x) var(--gluni-portrait-y),
+    58% 112% at var(--gluni-portrait-mask-x) var(--gluni-portrait-mask-y),
     #000 0%,
     #000 30%,
     rgb(0 0 0 / 0.60) 58%,
