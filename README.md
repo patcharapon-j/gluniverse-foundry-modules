@@ -33,6 +33,9 @@ flat native list — the Control Center is the single place to configure everyth
 | **Tidy 5e Inventory Slots** | D&D 5e + `tidy5e-sheet` | Slot encumbrance and wear-and-tear for the Tidy 5e sheet. |
 | **Flatten Proficiency** | PF2e | Proficiency Without Level variant automation. |
 | **Critical** | PF2e / D&D 5e | JRPG-style cinematic critical-hit / critical-success animations, from an image or a video clip. |
+| **Stream Client** | any | OBS/browser capture mode: hides Foundry UI on a dedicated login, frames the camera, chat & presentation overlays, control room. |
+| **Stream Roll Cards** | PF2e (needs Stream Client) | Compact roll cards in the stream overlay, with character art framed on the face. |
+| **Targeting Lines** | any | Combat targeting arcs from the active combatant to its targets. Works without the Stream Client. |
 
 ## Migrating from the standalone modules
 
