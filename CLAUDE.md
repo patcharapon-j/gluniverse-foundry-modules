@@ -495,7 +495,7 @@ its own odds** — the one thing that die exists to tell the truth about. It als
 pins band monotonicity and the tier windows the draft's tone rests on (Fraying
 reaches Major but never Catastrophic; inviting in Unraveling must actually be
 more dangerous than not inviting, or the temptation the whole mechanic is built
-on is false); the three-way uniform agreement across all *four* shader programs,
+on is false); the three-way uniform agreement across the *three* shader programs,
 where a uniform missing from one leaves every frame drawn at whatever value the
 driver happened to start with; `SHED_ORDER` completeness; the runtime-built
 `GLAS.level.*`, `GLAS.tier.*` and `GLAS.mode.*` key families, which nothing else
@@ -503,41 +503,76 @@ checks; the die's defensive claim on the global `CONFIG.Dice.terms` letter,
 where a collision silently breaks another module's die; and the two guards a
 double-fire would destroy — one casting one check, one card one roll.
 
-Two more it pins because this feature got both wrong on the way in. The
-stability cracks in the HUD must **not** run the shared glass fracture from
-`core/fx-glsl.mjs`: they are a fraying weave of their own, because a broken
-creature already carries that crack in three places and instability sharing it
-read as one more thing being broken. Their field also has a fixed CSS-pixel scale
-(`CRACK_FIELD_PX`), never the strip's height, or a shorter chip squashes them.
-And each level's hue must be a single statement: `palette.mjs`'s `LEVEL_KEYS`
-and the `.glas-level-*` accent remaps naming the same token, with no two levels
-naming the same one. `unbound` was on `--gl-holo-b`, which `gl-tokens.css`
-aliases to `--gl-violet`, so the ladder's two most dangerous rungs rendered in
-exactly the same colour and nothing said so:
+**The standing instability in the HUD chip is not a shader.** It was one, and the
+reason it stopped being one is worth knowing before you change it back: a WebGL
+context held open all session so a strip twenty pixels tall could draw four wavy
+lines needed a program warmed off-screen at load (drivers specialise on first
+draw, so the first level change of a session stuttered), a colour ramp pushed as
+uniforms because GLSL cannot read a custom property, a device-pixel size
+recomputed against `devicePixelRatio` *and* the suite's Interface Scale `zoom`,
+a `uTexel` uniform carrying one device pixel so a hairline could not vanish, and
+a warmed context kept alive even at Stable. It is four SVG paths moved by
+anime.js now (`weave-shape.mjs` — pure geometry; `weave-render.mjs` — the DOM
+and the tweens; `weave.mjs` — the half that reads the world), and none of that
+machinery has an equivalent: the colour is `--gl-accent` inherited from the chip
+so a level change and a retheme both arrive by themselves, a CSS pixel is a CSS
+pixel so a 1px stroke is a hairline everywhere, there is nothing to compile, and
+Stable costs literally nothing — no element, no timer, no tween. The check tool
+refuses a context creeping back into any of the three.
+
+What the check drives rather than reads: Stable is inert in every parameter,
+every rung of the ladder rises above the one below it, Fraying never sprouts
+torn fibres and Unraveling always does, and every dash array the ladder can
+produce is positive and sums to its thread's period — one negative entry makes
+the browser discard the whole attribute, and a thread that never parts is
+exactly what the feature not working looks like. Three structural ones beside
+them. The drift loop is a translation of exactly one wavelength, which is only
+seamless because every term of the wave is a whole harmonic of the fundamental:
+a non-harmonic term (1.87 is the obvious pick, because it makes a wave look less
+mechanical) renders beautifully and then snaps, once per loop, forever. The
+`--glas-bleed` in the CSS must equal `BLEED_PX` in the geometry, or the threads
+are laid out for a box that is not the one they are drawn in. And
+`weave-render.mjs` must hold no reference to `game`, because it is what the
+preview page drives — the moment it reads the world, the preview has to
+reimplement it, and a preview built on a second copy flatters whichever copy was
+touched last. Nothing here may touch the shared anime.js engine either: it
+already pauses itself on `document.hidden` (which is why there is no visibility
+handler), and a dozen features run on it.
+
+Two more it pins because this feature got both wrong on the way in. The weave
+must **not** run the shared glass fracture from `core/fx-glsl.mjs`: it is a
+fraying weave of its own, because a broken creature already carries that crack in
+three places and instability sharing it read as one more thing being broken. And
+each level's hue must be a single statement. It used to be two — `palette.mjs`'s
+`LEVEL_KEYS` feeding the shader, and the `.glas-level-*` accent remaps — and they
+drifted: `unbound` was on `--gl-holo-b`, which `gl-tokens.css` aliases to
+`--gl-violet`, so the ladder's two most dangerous rungs rendered in exactly the
+same colour and nothing said so. The CSS is now the only statement, and what is
+checked is four distinct tokens each paired with its own `-hot` sibling:
 
 ```bash
 node tools/arcane-surge-check.mjs
 ```
 
-Zero problems required. Two things it cannot do. It cannot compile a line of
-GLSL — and a shader that fails to compile degrades to *nothing drawn* rather
-than erroring — and it cannot prove the cracks are actually inert at Stable,
-only that their alpha is shaped so that they should be. Both need the
-browser-backed harness:
+Zero problems required. What it cannot do is compile a line of GLSL — and a
+shader that fails to compile degrades to *nothing drawn* rather than erroring —
+or tell you how any of it looks. Both need the browser-backed harness:
 
 ```bash
 node tools/arcane-surge-preview.mjs --out=.preview/surge.html
 ```
 
 **Serve it** (`node tools/preview-server.mjs`) — a `file://` page does not
-execute its module script, so the shaders never compile and you get an empty box
-rather than a failure. The crack row there is drawn at **shipping size** — a
-strip in a HUD bar — with a nearest-neighbour 4× mirror beside it, because the
-weave's threads are one device pixel wide and this is the smallest place any
-effect in the suite has been asked to land. Ignore that page's
-`ms/frame` readout: a dozen canvases and a throttled tab put it in the hundreds
-while the shader is doing nothing. The `ms/draw` figure beside it is the one
-that means something.
+execute its module scripts, so the shaders never compile, the weave's imports
+never resolve, and you get empty boxes rather than a failure. The weave rows
+there run the **shipped** `WeaveRenderer` against the **shipped** stylesheets,
+imported over that server rather than restated, at **shipping size** — a strip in
+a HUD bar, which is the smallest place any effect in the suite has been asked to
+land — with a 4× vector magnification beside it for the shape. Ignore that page's
+`ms/frame` readout: eight weaves and a dozen canvases on a throttled tab put it
+in the hundreds while nothing is doing any work. On the beats the `ms/draw`
+figure beside it is the one that means something; on the weave rows the shed
+state is.
 
 The die faces are generated, not drawn; re-bake and confirm coverage after any
 recipe change:

@@ -9,7 +9,7 @@
  *
  * The chip is also where the instability itself is DRAWN — a weave fraying
  * around the label that names it, coming further apart the worse the level gets. See
- * `cracks.mjs` for why that is here rather than over the board.
+ * `weave.mjs` for why that is here rather than over the board.
  *
  * The chip is a readout, not a control panel. Steady the Spell and Invite the
  * Surge live on the character sheet's spellcasting tab, where a player is
@@ -20,7 +20,7 @@
  * and told a GM what they already know — this is a switch that gets thrown mid
  * -sentence, not documentation. The prose still exists, on the chip's tooltip.
  *
- * Changing the level says nothing in chat: the cracks spread and the chip
+ * Changing the level says nothing in chat: the weave spreads and the chip
  * flashes, and the party notices the world getting worse rather than being told.
  * A line reading "Stability: Unraveling" is a stat readout, which is the
  * opposite of the point.
@@ -29,7 +29,7 @@
 import { escapeHTML } from "../../core/util.mjs";
 import { LEVELS } from "./constants.mjs";
 import { currentLevel, isConcealed, levelHint, levelLabel, setLevel, visibleLevel } from "./settings.mjs";
-import { syncCracks } from "./cracks.mjs";
+import { syncWeave } from "./weave.mjs";
 
 const SLOT_SELECTOR = "[data-stability]";
 const STANDALONE_ID = "glas-standalone";
@@ -72,8 +72,8 @@ export function paint() {
     host.innerHTML = "";
     lastPainted = null;
     // Still synced, not skipped: this is the path a GM takes when they conceal
-    // the level mid-session, and the cracks have to close on every screen.
-    syncCracks();
+    // the level mid-session, and the weave has to close on every screen.
+    syncWeave();
     return;
   }
 
@@ -82,10 +82,10 @@ export function paint() {
   wire(host);
   lastPainted = level;
 
-  /* The HUD rebuilds its own DOM on every clock tick, so the crack canvas is
-     re-parented into the chip that was just painted rather than recreated. The
-     context — and the program compiled into it at load — survives that. */
-  syncCracks(host.querySelector(".glas-stability"));
+  /* The HUD rebuilds its own DOM on every clock tick, so the weave's element is
+     re-parented into the chip that was just painted rather than rebuilt. Its
+     geometry and its running tweens survive that; only the parent changes. */
+  syncWeave(host.querySelector(".glas-stability"));
 }
 
 function render(level, flash) {
@@ -98,7 +98,11 @@ function render(level, flash) {
 
   const hint = game.user.isGM ? game.i18n.localize("GLAS.hud.gmHint") : levelHint(level);
 
-  return `<div class="glas-stability">
+  /* The level's accent remap is on the WRAPPER as well as the chip, because the
+     weave is the chip's sibling and takes its colour — and its hot variant —
+     straight from --gl-accent. That is the whole of the colour handling now:
+     there is no palette mirror to push and a retheme arrives by itself. */
+  return `<div class="glas-stability glas-level-${level}">
     <button type="button" class="${classes}" data-glas-chip
             title="${escapeHTML(hint)}" aria-label="${escapeHTML(levelLabel(level))}">
       <span class="glas-chip-mark" aria-hidden="true"></span>
@@ -199,7 +203,7 @@ function position(picker, anchor) {
 
 /** Called from the level setting's onChange, on every client. */
 export function onLevelChanged() {
-  // `paint()` re-attaches and re-syncs the cracks, so the level's new colour
+  // `paint()` re-attaches and re-syncs the weave, so the level's new colour
   // and reach arrive with the label that names it rather than a frame later.
   paint();
 }

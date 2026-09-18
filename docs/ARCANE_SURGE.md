@@ -57,12 +57,14 @@ about its own probability.
 die whose result is predetermined would misrepresent the odds the die exists to
 show. The banner reads INVITED and goes straight to the burst.
 
-**Stable produces nothing at all** — no die, no banner, no card, no cracks. The
+**Stable produces nothing at all** — no die, no banner, no card, no weave. The
 die's *appearance* is therefore itself the sign that the party is somewhere
-unstable, which is step one of the draft's procedure for free. The crack shader
-is inert at chaos 0 in the GLSL, not merely skipped by the host: an invariant
-that holds only because of the code that avoids exercising it is not an
-invariant, and every level change cross-fades straight through chaos 0.
+unstable, which is step one of the draft's procedure for free. The weave is
+inert at chaos 0 in its own parameters, not merely skipped by the host: an
+invariant that holds only because of the code that avoids exercising it is not
+an invariant, and every level change fades straight through chaos 0. It is the
+check tool that evaluates `weaveParams(0)` and insists every term of it is
+zero.
 
 **One casting, one check.** A PF2e spell can post a cast card, an attack roll and
 a damage roll, and every one of them reaches `createChatMessage` on every
@@ -103,7 +105,7 @@ receiving verdicts from it.
 
 The **stability chip** is a readout under the weather in the time-tracker HUD's
 date cell (the bar's height is fixed, so the pair is sized to fit it), and
-it is also where the instability is *drawn* — see the crack layer below. A GM
+it is also where the instability is *drawn* — see the weave below. A GM
 clicking it gets a level picker: four names and four markers, nothing else.
 Descriptions under them made the popover taller than the HUD it hangs off and
 told a GM what they already know; the prose lives on the hover instead. The
@@ -141,29 +143,62 @@ so the table can tell a ruling from a roll.
 
 ## The three visual layers
 
-They have very different budgets and that difference is the whole design.
+They have very different budgets and that difference is the whole design. Two of
+them are shaders; the third deliberately is not.
 
-**Cracks** run for hours, inside the stability chip. A weave of threads running
-through the label that names the level: loosening at Fraying, parting at Unbound,
+**The weave** runs for hours, inside the stability chip. Threads running through
+the label that names the level: loosening at Fraying, parting at Unbound,
 snapping into splayed fibres at Unraveling, reaching further around the label as
 it worsens. It is **deliberately not** the suite's glass fracture from
 `core/fx-glsl.mjs`. It ran that field once, and a world coming apart then read as
 one more thing being broken, since a broken creature's token, its initiative card
-and its health bar all carry that crack. Pauses on `document.hidden`. Under load it sheds `drift`, which stops
-the clock and leaves the cracks — what degrades must be the motion, never the
-state. Measured cost at chip size: **0.001 ms per draw**.
+and its health bar all carry that crack. Under load it sheds `drift`, which stops
+the motion and leaves the weave — what degrades must be the animation, never the
+state.
 
-Three things about it are load-bearing and none are obvious:
+It is four SVG paths moved by anime.js (`weave-shape.mjs`, `weave-render.mjs`,
+`weave.mjs`), and it used to be a fragment shader. **Why it stopped being one is
+the useful part**, because the shader was not badly written — it was the wrong
+shape of thing for the job. A WebGL context held open all evening so a strip
+twenty pixels tall can draw four wavy lines carries:
+
+| The shader needed | The weave needs |
+|---|---|
+| A program warmed off-screen at load, or the first level change of the session stutters — drivers specialise on first draw | Nothing. There is nothing to compile |
+| A colour ramp pushed as uniforms, because GLSL cannot read a custom property — so a level change and a retheme both had to be *told* | `--gl-accent`, inherited from the chip. Both arrive by themselves |
+| A device-pixel size recomputed against `devicePixelRatio` **and** the suite's Interface Scale `zoom`, and a `uTexel` uniform carrying one device pixel in field units so a hairline could not vanish | CSS pixels. A 1px stroke is a hairline on every display, by construction |
+| A warmed context kept alive at Stable, because tearing it down handed the stutter back | Nothing at all at Stable: no element, no timer, no tween |
+| A draw per frame | One compositor transform per thread |
+
+Four things about it are load-bearing and none are obvious:
 
 - **The weave is centred on the label.** Anchored on the level marker, at the
   left, the falloff left a splat over one end of the word and a dark tail at the
   other, because one end of a wide strip is much further away than the other.
 - **Chaos is spent on spread and looseness, not on thread size.** The strip is a
   couple of dozen pixels tall; finer threads there buy mush. The threads are one
-  device pixel wide at every level.
-- **The field has a fixed CSS-pixel scale** (`CRACK_FIELD_PX`), never the
-  strip's own height. Tied to the height, a shorter chip shrinks the weave with
-  it and the pattern reads as squashed. A smaller chip shows less of it instead.
+  CSS pixel wide at every level; what climbs the ladder is how far the weave
+  reaches, how far the threads wander, how much of them is missing, and how far
+  the torn halves splay.
+- **Every length is a fixed CSS-pixel count**, never a fraction of the strip's
+  own height. Tied to the height, a shorter chip shrinks the weave with it and
+  the pattern reads as squashed. A smaller chip shows less of it instead. (This
+  is `CRACK_FIELD_PX`'s rule surviving the move — it costs nothing now, because
+  the geometry simply *is* CSS pixels.)
+- **The drift loop is a translation of exactly one wavelength**, which is only
+  seamless because every term of the wave is a harmonic of the fundamental. A
+  non-harmonic term — the obvious way to make a wave look less mechanical —
+  renders beautifully and then snaps, once per loop, forever. The check tool
+  refuses one.
+
+Two smaller ones. The motion runs on the suite's **shared** anime.js engine,
+which already pauses itself while the document is hidden — so the layer costs
+nothing in a background tab and carries no visibility handler of its own; and
+nothing here may touch that engine's speed or its main loop, because a dozen
+other features are on it. And `weave-render.mjs` holds no reference to `game`,
+which is what lets `tools/arcane-surge-preview.mjs` drive the **real** renderer
+against the **real** stylesheet instead of a copy — a preview built on a second
+copy flatters whichever copy was touched last.
 
 ### Why this is not a full-screen veil any more
 
@@ -175,8 +210,9 @@ was something a GM had to look through all evening. Neither is a setting you can
 tune your way out of.
 
 The state belongs where the state is **named**. The chip already says
-"Unraveling"; cracking the glass around that word says the same thing, is never
-between a GM and a token, and costs about a thousandth of the fill rate.
+"Unraveling"; fraying the weave around that word says the same thing, is never
+between a GM and a token, and costs about a thousandth of the fill rate — and
+once it is that small, it stops needing to be a shader at all.
 
 **Surge** runs for 1.8 seconds, **live**, at full device resolution, composed at
 2× and box-averaged down. A vortex tearing open: spiral arms curved by a `log(r)`
@@ -287,17 +323,33 @@ Zero problems required. It pins the odds↔glyph-count↔bands agreement, band
 monotonicity and the tier windows the draft's tone depends on (Fraying reaches
 Major but never Catastrophic; inviting in Unraveling must actually be more
 dangerous than not inviting), the exposure rules, hostile-config repair, the
-three-way uniform agreement across all four shader programs, `SHED_ORDER`
-bidirectional completeness, the JS↔CSS duration mirrors, the z-band and
-pointer-events of both drawn layers, every runtime-built i18n key, the die's
+three-way uniform agreement across the three remaining shader programs,
+`SHED_ORDER` bidirectional completeness, the JS↔CSS duration mirrors, the z-band
+and pointer-events of both drawn layers, every runtime-built i18n key, the die's
 defensive registration, and the one-casting-one-check / one-card-one-roll
-guards. Two of its sections exist for things this pass got wrong on the way in:
-the cracks must *not* run the shared break fracture, and each
-stability level's hue must be one statement — `LEVEL_KEYS` and the
-`.glas-level-*` accent remaps naming the same token, with no two levels naming
-the same one. The first draft had `unbound` on `--gl-holo-b`, which
-`gl-tokens.css` aliases to `--gl-violet`, so the ladder's two most dangerous
-rungs rendered in exactly the same colour.
+guards.
+
+It also drives the weave's own numbers rather than reading its source: Stable is
+inert in every parameter, every rung of the ladder rises above the one below it,
+Fraying never sprouts torn fibres and Unraveling always does, every dash array
+the ladder can produce is positive and sums to its thread's period (one negative
+entry makes the browser discard the whole attribute, and a thread that never
+parts looks exactly like the feature not working), the `--glas-bleed` in the CSS
+equals the `BLEED_PX` the geometry is built for, and every term of the wave is a
+whole harmonic. It refuses a WebGL context creeping back into any of the three
+weave modules, a `game` reference creeping into the renderer, and anything
+touching the shared anime.js engine.
+
+Two of its sections exist for things this pass got wrong on the way in: the weave
+must *not* run the shared break fracture, and each stability level's hue must be
+**one** statement. That second one used to be two — a `LEVEL_KEYS` table feeding
+the shader's uniforms and a `.glas-level-*` accent remap for the chip's marker
+two pixels away — and they drifted immediately: `unbound` sat on `--gl-holo-b`,
+which `gl-tokens.css` aliases to `--gl-violet`, so the ladder's two most
+dangerous rungs rendered in exactly the same colour and both files looked
+correct. The weave inherits `--gl-accent` now, so the CSS is the only statement
+and the drift is gone by construction; what is left to check is four distinct
+tokens, each paired with its own `-hot` sibling.
 
 ```bash
 node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
@@ -435,8 +487,9 @@ make three of them necessary.
 
 For scale, on the same machine the feature's own full-screen shaders measure
 **0.89 ms** (surge) and **0.37 ms** (verdict) per frame at their worst shipping
-size — 5120×2880, the supersampler's top rung — and the HUD crack strip 0.010 ms.
-The live beats are not where the time goes.
+size — 5120×2880, the supersampler's top rung. The live beats are not where the
+time goes. (The HUD strip measured 0.010 ms per draw when it was one; it issues
+no draws at all now.)
 
 ### A d20 face is not centred in its texture tile
 

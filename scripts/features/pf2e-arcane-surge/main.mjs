@@ -12,7 +12,7 @@
 
 import { log } from "../../core/const.mjs";
 import { onSocket } from "../../core/socket.mjs";
-import { destroyCracks, syncCracks, warmCracks } from "./cracks.mjs";
+import { destroyWeave, syncWeave } from "./weave.mjs";
 import { registerBanner } from "./banner.mjs";
 import { destroyBurst, playBurst, warmBurst } from "./burst.mjs";
 import { registerCheck } from "./check.mjs";
@@ -59,24 +59,26 @@ export async function onReady() {
     validate: (payload) => payload?.type === "surge" && isLevel(payload.level),
   });
 
-  // paint() attaches the crack canvas to the chip it just drew and syncs it.
+  // paint() attaches the weave to the chip it just drew and syncs it.
   paint();
 
-  /* Warm every shader at load, off-screen.
+  /* Warm the burst's shaders at load, off-screen.
    *
-   * Every pass runs LIVE now, and a GL program is not really
-   * compiled when `linkProgram` returns — drivers specialize on first draw. Left
-   * cold, the first surge of a session pays for that mid-animation, which is the
-   * one moment a stutter is unmissable. This is deferred past the ready frame so
-   * it never lengthens world load itself; `requestIdleCallback` where it exists,
-   * a short timeout where it does not (Safari).
+   * The beats run LIVE, and a GL program is not really compiled when
+   * `linkProgram` returns — drivers specialize on first draw. Left cold, the
+   * first surge of a session pays for that mid-animation, which is the one
+   * moment a stutter is unmissable. This is deferred past the ready frame so it
+   * never lengthens world load itself; `requestIdleCallback` where it exists, a
+   * short timeout where it does not (Safari).
+   *
+   * The standing weave is not on this list and needs nothing like it: it is SVG
+   * and CSS moved by anime.js, so there is no program to compile and no context
+   * to hold open between level changes. That is most of why it stopped being a
+   * shader — an ambient layer that has to be warmed off-screen at load so its
+   * FIRST appearance does not stutter is a lot of machinery for four lines.
    */
-  const warmAll = () => {
-    warmBurst();
-    warmCracks();
-  };
-  if (typeof requestIdleCallback === "function") requestIdleCallback(warmAll, { timeout: 4000 });
-  else setTimeout(warmAll, 1200);
+  if (typeof requestIdleCallback === "function") requestIdleCallback(() => warmBurst(), { timeout: 4000 });
+  else setTimeout(() => warmBurst(), 1200);
 
   // An armed choice must not survive a scene change: a "next cast" a player set
   // an hour ago in a different room is a trap, not a declaration.
@@ -90,9 +92,9 @@ export async function onReady() {
 
 /** Torn down when the feature is disabled live from the Control Center. */
 export function teardown() {
-  destroyCracks();
+  destroyWeave();
   destroyBurst();
   destroyHud();
 }
 
-export const api = { paint, syncCracks, playBurst, teardown };
+export const api = { paint, syncWeave, playBurst, teardown };
