@@ -14,12 +14,18 @@
  * so a uniform added to the GLSL and forgotten in the host cannot be quietly
  * fed here either.
  *
- * What it is for: the crack strip has a frame budget it must live inside for
- * hours AND a per-pixel question no diff can answer — it runs the suite's
- * weave at twenty-odd device pixels tall with one-pixel threads, which is far
- * and away the smallest place any effect in the suite has been asked to land. It is therefore drawn
- * here at SHIPPING SIZE, over a real label, at the real device-pixel ratio.
- * The beats are here at full size beside it, with a frame-time readout.
+ * The standing weave is not a shader and is not inlined at all: the page IMPORTS
+ * `weave-render.mjs` and the shipped stylesheets over this server, so what it
+ * draws is the shipped renderer against the shipped CSS. That is only possible
+ * because the renderer holds no reference to `game` — the check tool pins that,
+ * because the moment it does this page has to reimplement it, and a preview
+ * built on a second copy flatters whichever copy was touched last.
+ *
+ * What it is for: the weave has a frame budget it must live inside for hours AND
+ * a question no diff can answer — it runs at twenty-odd pixels tall, which is
+ * far and away the smallest place any effect in the suite has been asked to
+ * land. It is therefore drawn here at SHIPPING SIZE, over a real label. The
+ * beats are here at full size beside it, with a frame-time readout.
  *
  * What it cannot tell you: how any of it reads over real map art, at a real
  * table, on somebody else's monitor. That needs a session.
@@ -51,26 +57,21 @@ const animSource = read(`${FEATURE}/anim.mjs`)
 const template = read("tools/templates/arcane-surge-preview.html");
 
 const tierRgb = Object.fromEntries(constants.TIERS.map((tier) => [tier, palette.tierFloats(tier)]));
-const levelRgb = Object.fromEntries(constants.LEVELS.map((level) => [level, palette.levelFloats(level).mid]));
 
 const page = template
-  .replace("/*__VERT__*/", JSON.stringify(shader.VERT))
-  .replace("/*__CRACK_FRAG__*/", JSON.stringify(shader.CRACK_FRAG))
-  .replace("/*__CRACK_FIELD_PX__*/", JSON.stringify(shader.CRACK_FIELD_PX))
-  .replace("/*__BURST_FRAG__*/", JSON.stringify(shader.BURST_FRAG))
-  .replace("/*__SEVERITY_FRAG__*/", JSON.stringify(shader.SEVERITY_FRAG))
-  .replace("/*__SEVERITY_UNIFORMS__*/", JSON.stringify(shader.SEVERITY_UNIFORMS))
-  .replace("/*__TIERS__*/", JSON.stringify(constants.TIERS))
-  .replace("/*__TIER_RGB__*/", JSON.stringify(tierRgb))
-  .replace("/*__LEVEL_RGB__*/", JSON.stringify(levelRgb))
-  .replace("/*__BURST_SECONDS__*/", String(shader.BURST_SECONDS))
-  .replace("/*__SEVERITY_SECONDS__*/", String(shader.SEVERITY_SECONDS))
-  .replace("/*__BLIT_FRAG__*/", JSON.stringify(shader.BLIT_FRAG))
-  .replace("/*__CRACK_UNIFORMS__*/", JSON.stringify(shader.CRACK_UNIFORMS))
-  .replace("/*__BURST_UNIFORMS__*/", JSON.stringify(shader.BURST_UNIFORMS))
-  .replace("/*__BLIT_UNIFORMS__*/", JSON.stringify(shader.BLIT_UNIFORMS))
-  .replace("/*__LEVELS__*/", JSON.stringify(constants.LEVELS))
-  .replace("/*__ANIM_SRC__*/", animSource);
+  .replaceAll("/*__VERT__*/", JSON.stringify(shader.VERT))
+  .replaceAll("/*__BURST_FRAG__*/", JSON.stringify(shader.BURST_FRAG))
+  .replaceAll("/*__SEVERITY_FRAG__*/", JSON.stringify(shader.SEVERITY_FRAG))
+  .replaceAll("/*__SEVERITY_UNIFORMS__*/", JSON.stringify(shader.SEVERITY_UNIFORMS))
+  .replaceAll("/*__TIERS__*/", JSON.stringify(constants.TIERS))
+  .replaceAll("/*__TIER_RGB__*/", JSON.stringify(tierRgb))
+  .replaceAll("/*__BURST_SECONDS__*/", String(shader.BURST_SECONDS))
+  .replaceAll("/*__SEVERITY_SECONDS__*/", String(shader.SEVERITY_SECONDS))
+  .replaceAll("/*__BLIT_FRAG__*/", JSON.stringify(shader.BLIT_FRAG))
+  .replaceAll("/*__BURST_UNIFORMS__*/", JSON.stringify(shader.BURST_UNIFORMS))
+  .replaceAll("/*__BLIT_UNIFORMS__*/", JSON.stringify(shader.BLIT_UNIFORMS))
+  .replaceAll("/*__LEVELS__*/", JSON.stringify(constants.LEVELS))
+  .replaceAll("/*__ANIM_SRC__*/", animSource);
 
 // A placeholder left unsubstituted is a syntax error in the page, which shows up
 // as a blank box rather than as a failure. Catch it here instead.

@@ -1,7 +1,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Arcane Surge — shader preview</title>
+<title>Arcane Surge — effects preview</title>
+<!-- The weave is DOM, so it is judged against the SHIPPED stylesheets rather
+     than a copy of them: the hairline widths, the layer weights and every
+     level's hue live in pf2e-arcane-surge.css and in the token file under it.
+     They resolve because preview-server.mjs is rooted at the repository. -->
+<link rel="stylesheet" href="/styles/gl-fonts.css" />
+<link rel="stylesheet" href="/styles/gl-tokens.css" />
+<link rel="stylesheet" href="/styles/gl-motion.css" />
+<link rel="stylesheet" href="/styles/pf2e-arcane-surge.css" />
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #06090f; color: #eef1f7; font: 13px/1.5 "Bahnschrift", Consolas, monospace; }
@@ -21,36 +29,31 @@
       radial-gradient(circle at 32% 38%, #2b3a54, #0d1420 70%);
   }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  /* The crack row is drawn at SHIPPING SIZE. A strip in a HUD bar, with the
+  /* The weave row is drawn at SHIPPING SIZE. A strip in a HUD bar, with the
      level's own name sitting on it, because the only question that matters here
-     is whether the fracture reads at twenty-odd pixels tall without eating the
-     word underneath it. A 16:10 stage would flatter it into meaninglessness. */
+     is whether it reads at twenty-odd pixels tall without eating the word
+     underneath it. A 16:10 stage would flatter it into meaninglessness.
+
+     Nothing here styles the weave or the chip. Both come from the real
+     stylesheet linked above; this only builds a HUD-sized hole to put them in. */
   .strips { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
   .strips .stage {
     aspect-ratio: auto; height: 54px; display: grid; place-items: center;
     background: linear-gradient(180deg, #141a26, #0d121c);
   }
-  /* The canvas overhangs the CHIP, exactly as it does in the HUD — that bleed
-     is what lets the fracture leave the label's box instead of being clipped
-     to four straight lines. */
-  .strips .chipwrap { position: relative; }
-  .strips .chip {
-    position: relative; z-index: 1; padding: 2px 7px;
-    border: 1px solid rgb(255 255 255 / 0.08);
-    font: 700 10px/1.2 "Bahnschrift", Consolas, monospace;
-    letter-spacing: 0.04em; text-transform: capitalize; color: #eef1f7;
-  }
-  .strips canvas {
-    inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px);
-    z-index: 0; mix-blend-mode: screen;
-  }
-  /* The same canvas, at the same device resolution, blown up with no filtering.
-     Every question this row answers — does a hairline survive, does a thread
-     land on a pixel centre, does the word stay readable through it — is a
-     question about individual pixels, and none of them can be seen at 1×. */
-  .zoomed .stage { height: 190px; }
-  .zoomed .chipwrap { transform: scale(4); transform-origin: center; }
-  .zoomed canvas { image-rendering: pixelated; }
+  /* The chip is sized the way the time-tracker HUD sizes it — this is the one
+     dimension the feature does not own, and the whole question is whether the
+     weave survives it. */
+  .strips .glas-chip { font-size: 10px; padding: 2px 7px; }
+  /* The same weave at 4×. It is VECTOR, so this is not the shipped rasterisation
+     magnified — it is the shape, which is what the question now is: do the holes
+     read as holes, do the torn fibres read as fibres, does the word stay
+     legible through it. The hairline question the shader row existed to answer
+     is gone: a stroke stated in CSS pixels cannot go sub-pixel. */
+  /* The magnified weave overhangs its own cell by design — that bleed is the
+     feature. The CELL clips it here so four of them can sit side by side. */
+  .zoomed .stage { height: 190px; overflow: hidden; }
+  .zoomed .glas-stability { transform: scale(4); transform-origin: center; }
   .readout { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; font-size: 11px; color: #98a2b6; border-top: 1px solid rgb(255 255 255 / 0.06); }
   .bad { color: #ff4a52; }
   .controls { padding: 0 18px 18px; }
@@ -61,21 +64,23 @@
 <body>
 
 <header>
-  <h1>Arcane Surge — shader preview</h1>
-  <p>The real shaders, compiled in a real WebGL context, driven by the real animation model.
-     Everything here runs LIVE — nothing is baked. The crack row is the standing cost, and it is
-     drawn at the size it actually ships at: a strip in the time-tracker HUD, not a full screen.
-     That size is the whole test — the weave's threads are one device pixel wide and this is
-     the smallest place any effect in the suite has been asked to land. The beats are
-     one-shots; they render supersampled and average down, which is what keeps the rings and
+  <h1>Arcane Surge — effects preview</h1>
+  <p>Two very different things on one page. The <b>weave</b> is the standing cost — it runs for
+     as long as the party is somewhere unstable — and it is not a shader: it is four SVG paths
+     out of <code>weave-shape.mjs</code>, built by the shipped <code>WeaveRenderer</code> and
+     moved by the suite's own anime.js, against the shipped stylesheet. Nothing about it is
+     reimplemented here, which is the point: a preview built on a second copy flatters whichever
+     copy somebody last touched. It is drawn at the size it ships at, a strip in the time-tracker
+     HUD. The <b>beats</b> below are the real shaders in a real WebGL context, running LIVE —
+     nothing is baked — supersampled and averaged down, which is what keeps the rings and
      filaments from crawling.</p>
 </header>
 
-<h2 class="sec">Cracks · runs for hours · at HUD size</h2>
-<div class="grid strips" id="cracks"></div>
+<h2 class="sec">Weave · runs for hours · at HUD size · SVG + anime.js</h2>
+<div class="grid strips" id="weave"></div>
 
-<h2 class="sec">Cracks · the same pixels at 4× · nearest-neighbour</h2>
-<div class="grid strips zoomed" id="cracksZoom"></div>
+<h2 class="sec">Weave · the same geometry at 4× · vector, not the shipped pixels</h2>
+<div class="grid strips zoomed" id="weaveZoom"></div>
 
 <h2 class="sec">Beats · live one-shots</h2>
 <div class="controls">
@@ -86,16 +91,84 @@
 
 <pre id="errors"></pre>
 
+<!-- The weave, driven by the SHIPPED renderer.
+     A module script, and therefore the reason this page has to be served: the
+     imports below resolve against the repository root that preview-server.mjs
+     exposes, and a file:// page does not execute a module script at all. -->
+<script type="module">
+import { WeaveRenderer } from "/scripts/features/pf2e-arcane-surge/weave-render.mjs";
+import { weaveParams } from "/scripts/features/pf2e-arcane-surge/weave-shape.mjs";
+import { chaosFor } from "/scripts/features/pf2e-arcane-surge/levels.mjs";
+
+const LEVELS = /*__LEVELS__*/;
+const errors = document.getElementById("errors");
+
+/* A chip-shaped cell: a real .glas-stability with a real .glas-chip in it, at
+   the size the time-tracker HUD lays one out at. The renderer attaches itself
+   to the wrapper exactly as it does in a session. */
+function makeStrip(hostId, level) {
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  cell.innerHTML =
+    "<h3>weave · " + level + "</h3>" +
+    "<div class='stage'>" +
+      "<div class='glas-stability glas-level-" + level + " gl-type'>" +
+        "<button type='button' class='glas-chip glas-level-" + level + "'>" +
+          "<span class='glas-chip-mark' aria-hidden='true'></span>" +
+          "<span class='glas-chip-level'>" + level + "</span>" +
+        "</button>" +
+      "</div>" +
+    "</div>" +
+    "<div class='readout'><span class='ms'>—</span><span class='note'>—</span></div>";
+  document.getElementById(hostId).appendChild(cell);
+  return {
+    wrap: cell.querySelector(".glas-stability"),
+    ms: cell.querySelector(".ms"),
+    note: cell.querySelector(".note"),
+  };
+}
+
+const live = [];
+
+for (const level of LEVELS) {
+  for (const [hostId, label] of [["weave", "1×"], ["weaveZoom", "4×"]]) {
+    const strip = makeStrip(hostId, level);
+    try {
+      // A fixed seed per row so the 1x and 4x views are the SAME weave, not two
+      // draws of one recipe — the magnified row is only useful as a reading of
+      // the row above it.
+      const renderer = new WeaveRenderer({ seed: 17 + LEVELS.indexOf(level) * 9 });
+      renderer.attach(strip.wrap);
+      renderer.render(weaveParams(chaosFor(level)));
+      live.push({ renderer, strip, level, label });
+    } catch (err) {
+      errors.textContent += "weave(" + level + "): " + err.message + "\n";
+    }
+  }
+}
+
+/* The readout is the budget the SHIPPED layer runs on, read off the shipped
+   FrameBudget. Take the ms/frame figure with the same salt as the beats': a
+   page holding eight weaves and half a dozen WebGL canvases reports a number
+   that says nothing about one strip in a HUD. What it is here for is the shed
+   state — whether the drift has given way, and whether it comes back. */
+setInterval(() => {
+  for (const { renderer, strip, level, label } of live) {
+    strip.ms.textContent = label + " · " + renderer.budget.frameMs.toFixed(0) + " ms/frame";
+    strip.note.textContent = renderer.budget.shed
+      ? "shed " + renderer.budget.shed
+      : "chaos " + chaosFor(level).toFixed(2) + " · no shed";
+  }
+}, 500);
+</script>
+
 <script>
 /*__ANIM_SRC__*/
 
 const VERT = /*__VERT__*/;
-const CRACK_FRAG = /*__CRACK_FRAG__*/;
-const CRACK_FIELD_PX = /*__CRACK_FIELD_PX__*/;
 const BURST_FRAG = /*__BURST_FRAG__*/;
 const SEVERITY_FRAG = /*__SEVERITY_FRAG__*/;
 const BLIT_FRAG = /*__BLIT_FRAG__*/;
-const CRACK_UNIFORMS = /*__CRACK_UNIFORMS__*/;
 const BURST_UNIFORMS = /*__BURST_UNIFORMS__*/;
 const SEVERITY_UNIFORMS = /*__SEVERITY_UNIFORMS__*/;
 const BLIT_UNIFORMS = /*__BLIT_UNIFORMS__*/;
@@ -106,9 +179,10 @@ const SEVERITY_SECONDS = /*__SEVERITY_SECONDS__*/;
 
 /* Injected from palette.mjs at generation time rather than restated here. The
    earlier version was a hand-copied literal, which is a drift risk this page
-   does not need to carry: the generator can resolve the module, so it does. */
+   does not need to carry: the generator can resolve the module, so it does.
+   The weave needs no equivalent — it inherits --gl-accent from the chip, out of
+   the stylesheet linked at the top of this page. */
 const TIER_RGB = /*__TIER_RGB__*/;
-const LEVEL_RGB = /*__LEVEL_RGB__*/;
 
 const errors = document.getElementById("errors");
 const fail = (msg) => { errors.textContent += msg + "\n"; };
@@ -170,123 +244,6 @@ function fit(canvas) {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 }
-
-/* The crack strip is the one thing here whose whole question is per-pixel, so
-   it is sized in DEVICE pixels the way the shipped host sizes it. At dpr 1 a
-   crawl that every retina user sees is simply invisible. */
-function fitDpr(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-}
-
-/* ── Cracks ────────────────────────────────────────────────────────── */
-
-/* A chip-shaped cell: the canvas overhangs a real label at a real size, on a
-   real device-pixel ratio, which is the only configuration in which the
-   question "do the threads crawl?" has a meaningful answer. */
-function makeStrip(host, level) {
-  const cell = document.createElement("div");
-  cell.className = "cell";
-  cell.innerHTML = "<h3>cracks · " + level + "</h3>" +
-    "<div class='stage'><div class='chipwrap'><canvas></canvas>" +
-    "<span class='chip'>" + level + "</span></div></div>" +
-    "<div class='readout'><span class='ms'>—</span><span class='note'>—</span></div>";
-  host.appendChild(cell);
-  return { canvas: cell.querySelector("canvas"), ms: cell.querySelector(".ms"), note: cell.querySelector(".note") };
-}
-
-/* The magnified row is a 2D MIRROR of the 1x one, not a second renderer.
-   Browsers cap simultaneous WebGL contexts at about sixteen; a second context
-   per level took this page over the line, and what you got was every panel on
-   it — the beats included — dropping to 120ms frames and reporting a load
-   problem that only the preview had. Copying the drawn buffer costs one
-   drawImage and shows exactly the same pixels, which is the point. */
-function runCrack(hostId, level, mirrorId) {
-  const cell = makeStrip(document.getElementById(hostId), level);
-  const mirror = mirrorId ? makeStrip(document.getElementById(mirrorId), level) : null;
-  const mirrorCtx = mirror ? mirror.canvas.getContext("2d") : null;
-  const gl = cell.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true });
-  if (!gl) { fail("no webgl for " + level); return; }
-
-  const program = build(gl, VERT, CRACK_FRAG, "cracks(" + level + ")");
-  if (!program) return;
-  quad(gl, program);
-  const u = locations(gl, program, CRACK_UNIFORMS, "cracks");
-
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.useProgram(program);
-  // The LEVEL's own hue, not the fixed ramp: the cracks and the chip's marker
-  // are two statements of one colour, so the preview has to show which one.
-  const ramp = LEVEL_RGB[level];
-  gl.uniform3fv(u.uDeep, RAMP.deep);
-  gl.uniform3fv(u.uMid, ramp);
-  gl.uniform3fv(u.uHot, RAMP.hot);
-
-  const budget = new FrameBudget();
-  const start = performance.now();
-  const seed = Math.random() * 100;
-  let last = start;
-  let frames = 0;
-  let drawMs = null;
-
-  /* THE COST OF ONE DRAW, measured directly.
-     The rAF delta is not a usable number for this row: a page with a dozen
-     canvases on it, or a tab the browser has throttled, reports hundreds of
-     milliseconds while the shader itself is doing nothing at all — which reads
-     as a performance problem in the feature and is not one. This times the draw
-     the feature actually issues, which is the question a layer that runs for
-     hours has to answer. */
-  const timeDraw = () => {
-    const N = 120;
-    gl.finish();
-    const t0 = performance.now();
-    for (let i = 0; i < N; i++) { gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3); }
-    gl.finish();
-    return (performance.now() - t0) / N;
-  };
-
-  (function frame() {
-    const now = performance.now();
-    budget.sample(now - last);
-    last = now;
-    fitDpr(cell.canvas);
-    gl.viewport(0, 0, cell.canvas.width, cell.canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(program);
-    gl.uniform1f(u.uTime, (now - start) / 1000);
-    gl.uniform2f(u.uRes, cell.canvas.width, cell.canvas.height);
-    gl.uniform1f(u.uChaos, chaosFor(level));
-    gl.uniform1f(u.uDrift, budget.allows("drift") ? 1 : 0);
-    gl.uniform1f(u.uFade, 1);
-    gl.uniform1f(u.uSeed, seed);
-    // The field's scale, as the host sets it: a fixed CSS size, not the strip's height.
-    gl.uniform1f(u.uTexel, cell.canvas.clientHeight / (Math.max(1, cell.canvas.height) * CRACK_FIELD_PX));
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    /* Copied in the SAME frame callback: a WebGL canvas is cleared when the
-       compositor takes it, so a mirror pulled a tick later is always blank. */
-    if (mirrorCtx) {
-      fitDpr(mirror.canvas);
-      mirrorCtx.clearRect(0, 0, mirror.canvas.width, mirror.canvas.height);
-      mirrorCtx.imageSmoothingEnabled = false;
-      mirrorCtx.drawImage(cell.canvas, 0, 0, mirror.canvas.width, mirror.canvas.height);
-      mirror.ms.textContent = "mirror of the 1× buffer";
-      mirror.note.textContent = cell.canvas.width + "×" + cell.canvas.height + " device px";
-    }
-
-    if (frames++ % 180 === 0) drawMs = timeDraw();
-    cell.ms.textContent = (drawMs === null ? "—" : drawMs.toFixed(3) + " ms/draw");
-    cell.note.textContent = (budget.shed ? "shed: " + SHED_ORDER.slice(0, budget.shed).join(", ") : "shed: none")
-      + " · " + budget.frameMs.toFixed(0) + " ms/frame";
-    requestAnimationFrame(frame);
-  })();
-}
-
-for (const level of LEVELS) runCrack("cracks", level, "cracksZoom");
 
 /* ── Beats ─────────────────────────────────────────────────────────── */
 

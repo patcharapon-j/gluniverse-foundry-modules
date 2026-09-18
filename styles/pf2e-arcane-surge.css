@@ -20,21 +20,26 @@
   --glas-seam: rgb(var(--gl-tint-light) / 0.08);
 }
 
-/* Level identity. One remap each; everything derived follows.
+/* Level identity. One remap each; everything derived follows — the chip's
+   marker, and the weave fraying around it, which is its sibling and inherits
+   this accent rather than being handed a colour by JS. These four rules are now
+   the ONLY statement of a rung's hue anywhere in the feature; the shader-era
+   `LEVEL_KEYS` mirror in palette.mjs is gone.
 
-   These four must stay in step with `palette.mjs`'s LEVEL_KEYS: the chip's
-   marker is coloured here and the cracks growing out of it by the shader, and
-   the two sit two pixels apart. The check tool holds them together.
+   `--glas-hot` is the pale variant the energy running along a thread tears
+   toward. It cannot be derived from --gl-accent with color-mix toward white:
+   at these hues that washes to the same near-white for all four, and the token
+   file already ships a tuned pale for each. Every rung must have one.
 
    `unbound` used --gl-holo-b, which gl-tokens.css aliases to --gl-violet, so
    the ladder's two most dangerous rungs rendered in exactly the same colour —
    the one place on it where telling them apart matters. Orchid is the token
    file's documented "dying / unstable" hue and is deliberately distinct from
    violet. */
-.glas-level-stable      { --gl-accent: var(--gl-teal); }
-.glas-level-fraying     { --gl-accent: var(--gl-cyan); }
-.glas-level-unbound     { --gl-accent: var(--gl-violet); }
-.glas-level-unraveling  { --gl-accent: var(--gl-orchid); }
+.glas-level-stable      { --gl-accent: var(--gl-teal);   --glas-hot: var(--gl-teal-hot); }
+.glas-level-fraying     { --gl-accent: var(--gl-cyan);   --glas-hot: var(--gl-cyan-hot); }
+.glas-level-unbound     { --gl-accent: var(--gl-violet); --glas-hot: var(--gl-violet-hot); }
+.glas-level-unraveling  { --gl-accent: var(--gl-orchid); --glas-hot: var(--gl-orchid-hot); }
 
 /* Severity identity, on the card only. */
 .glas-tier-minor        { --gl-accent: var(--gl-cyan); }
@@ -43,23 +48,78 @@
 .glas-tier-breach       { --gl-accent: var(--gl-hazard); }
 
 /* ══════════════════════════════════════════════════════════════════════
-   The crack layer
+   The weave layer
    ══════════════════════════════════════════════════════════════════════
    The standing instability, drawn INSIDE the stability chip rather than over
    the board. A session-long full-screen veil competes with the map for exactly
    the space the play happens in; this never leaves the HUD.
 
-   `inset`, `width` and `height` are written from JS, because the canvas has to
-   overhang its own container by a fixed number of CSS pixels — that overhang is
-   what lets the fracture break OUT of the label instead of being clipped to
-   four straight lines. It is behind the chip's own content (z-index 0 against
-   the chip's 1), so the level's name stays readable at Unraveling. */
+   It was a WebGL canvas and is four SVG paths now. The geometry is built in
+   weave-shape.mjs and moved by anime.js; everything visible about it — the
+   hue, the hairline widths, the layer weights — is here, which is the point:
+   the shader had to be handed a colour ramp as uniforms and could not follow a
+   retheme without being told.
 
-.glas-cracks {
+   The overhang is a fixed number of CSS pixels on every side, and it is what
+   lets the weave break OUT of the label instead of being clipped to the chip's
+   four straight lines. It is stated as a percentage of the chip plus that
+   bleed, never as a measured pixel count: the suite's Interface Scale is a CSS
+   `zoom` on the HUD, and a measured length written back is zoomed a second
+   time. --glas-bleed must equal BLEED_PX in weave-shape.mjs, which builds the
+   viewBox to match; the check tool holds the two together.
+
+   Behind the chip's own content (z-index 0 against the chip's 1), so the
+   level's name stays readable at Unraveling. */
+
+.glas-weave {
+  --glas-bleed: 10px;
   position: absolute;
   z-index: 0;
+  left: calc(-1 * var(--glas-bleed));
+  top: calc(-1 * var(--glas-bleed));
+  width: calc(100% + 2 * var(--glas-bleed));
+  height: calc(100% + 2 * var(--glas-bleed));
   pointer-events: none;
   mix-blend-mode: screen;
+  fill: none;
+  /* Butt caps everywhere but the flow: a round cap adds half a stroke width at
+     both ends of every dash, which on a one-pixel hairline is the difference
+     between a thread parting cleanly and a hole that never quite opens. */
+  stroke-linecap: butt;
+}
+
+/* The light a thread throws. A wide dim stroke rather than a blur filter: a
+   filtered group re-rasterises on every frame of the drift, and this layer runs
+   for hours. */
+.glas-weave-halo {
+  stroke: var(--gl-accent);
+  stroke-width: 3;
+  opacity: 0.13;
+}
+
+/* The thread itself. One CSS pixel at every level — chaos is spent on spread
+   and looseness, never on finer threads, because the strip is a couple of dozen
+   pixels tall and finer there buys mush. */
+.glas-weave-line {
+  stroke: var(--gl-accent);
+  stroke-width: 1;
+}
+
+/* The torn ends of each hole, pulled apart above and below the thread's path.
+   Thinner and dimmer than the thread they came off. */
+.glas-weave-fibre {
+  stroke: var(--gl-accent);
+  stroke-width: 0.75;
+  opacity: 0.7;
+}
+
+/* The energy running along a thread, against the drift and much faster. The
+   only place the pale variant is used, and the only round cap. */
+.glas-weave-flow {
+  stroke: var(--glas-hot, var(--gl-accent));
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  opacity: 0.85;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -346,21 +406,21 @@
    The stability chip
    ══════════════════════════════════════════════════════════════════════
    In the HUD bar it sits under the weather readout: one line, one marker, one
-   word. The crack canvas is sized to this box but draws its field at a fixed
-   CSS-pixel scale (`CRACK_FIELD_PX`), so a smaller chip shows less of the
-   weave rather than a squashed copy of it.
+   word. The weave is sized to this box but lays its threads out at a fixed
+   CSS-pixel scale, so a smaller chip shows less of the weave rather than a
+   squashed copy of it.
 
    The chip itself is deliberately UNFILLED. A panel background would sit on top
    of the weave and leave only the ten-pixel bleed showing; with nothing but a
    hairline the threads read as running through the label rather than behind a
-   card. `position: relative` is load-bearing twice over: it is the crack
-   canvas's containing block, and it is what puts the text above it. */
+   card. `position: relative` is load-bearing twice over: it is the weave's
+   containing block, and it is what puts the text above it. */
 
 .glas-stability {
   position: relative;
   display: flex;
   align-items: center;
-  /* Never clip the canvas: the whole point of the bleed is to escape this box. */
+  /* Never clip the weave: the whole point of the bleed is to escape this box. */
   overflow: visible;
 }
 
@@ -433,7 +493,7 @@
 
 /* Standalone panel, used only when the time-tracker HUD is not running.
    Padded generously on purpose: its `clip-path` clips descendants, so the
-   crack bleed needs room INSIDE the panel or the fracture is cut off square. */
+   weave's bleed needs room INSIDE the panel or it is cut off square. */
 .glas-standalone {
   position: fixed;
   top: 8px;
@@ -759,8 +819,8 @@
   display: none;
 }
 
-/* The bleed has to be allowed out of the slot, or the cracks are clipped by the
-   HUD's own layout box the moment they leave the chip. */
+/* The bleed has to be allowed out of the slot, or the weave is clipped by the
+   HUD's own layout box the moment it leaves the chip. */
 #glct-hud .glas-slot {
   display: flex;
   overflow: visible;
@@ -771,8 +831,8 @@
    level's name flush with the weather's own text. The icon is 18px with a 6px
    gap, so a 6px marker with 6px either side lands the name on the same column.
    Sized in px like the rest of the bar, not in rem, so the fit does not depend
-   on the page's root font size. The crack canvas still bleeds past this box,
-   over the weather text, which sits above it. */
+   on the page's root font size. The weave still bleeds past this box, over
+   the weather text, which sits above it. */
 #glct-hud .glas-chip {
   gap: 6px;
   padding: 0;

@@ -4,7 +4,9 @@
  * WebGL cannot read a CSS custom property, so shader colours have to come from
  * the JS palette mirror in `core/theme.mjs` — never from hexes written out
  * again here. This module is the one place that conversion happens, so a
- * retheme reaches both the veil and the burst.
+ * retheme reaches the beats and the dice. The standing weave is not on that
+ * list any more: it is DOM, it reads the tokens directly, and it needs nothing
+ * from here.
  *
  * `anim.mjs` carries a literal copy of these floats because it must stay
  * dependency-free (the preview page inlines it as source, with no module
@@ -17,7 +19,7 @@ import { PALETTE, hexToRgbFloat } from "../../core/theme.mjs";
 /**
  * The teal→cyan arcane ramp, as GLSL float triples.
  *
- * `deep` is the near-black the veil sits over, `mid` the stabilised teal the
+ * `deep` is the near-black the beats sit over, `mid` the stabilised teal the
  * suite already uses to mean "held", `hot` the cyan it tears toward.
  */
 export function rampFloats() {
@@ -53,41 +55,22 @@ export function tierFloats(tier) {
   return hexToRgbFloat(PALETTE[key]);
 }
 
-/**
- * Each stability level's hue, as palette keys.
+/* THE STABILITY LEVELS' HUES ARE NOT HERE, and that is the point of this note.
  *
- * These MUST match the `.glas-level-*` accent remaps in
- * `styles/pf2e-arcane-surge.css`: the chip's marker is coloured by the CSS and
- * the cracks growing out of it by the shader, and the two sit two pixels apart.
- * The check tool asserts the two lists agree.
+ * They used to be — a `LEVEL_KEYS` table feeding `levelFloats()`, because the
+ * weave was a shader and a shader cannot read a CSS custom property. So each
+ * rung's colour was stated twice, once here and once as a `.glas-level-*`
+ * accent remap, and the check tool existed to hold the two together. They drifted
+ * anyway: `unbound` sat on `--gl-holo-b`, which `gl-tokens.css` aliases to
+ * `--gl-violet`, so the ladder's two most dangerous rungs rendered in exactly
+ * the same colour and every file involved looked correct.
  *
- * `unbound` deliberately does NOT use `--gl-holo-b`, which the token file
- * aliases to `--gl-violet` — the ladder's two most dangerous rungs were
- * rendering in exactly the same colour, which is the one place on it where
- * telling them apart matters.
+ * The weave is DOM now and takes `--gl-accent` straight from the chip it grows
+ * out of, so the four remaps in `styles/pf2e-arcane-surge.css` are the only
+ * statement of that colour and there is nothing left to drift. The check tool
+ * still reads them — four distinct tokens, each with a `-hot` sibling for the
+ * energy running along a thread — it just reads them in one place now.
  */
-export const LEVEL_KEYS = Object.freeze({
-  stable: "teal",
-  fraying: "cyan",
-  unbound: "violet",
-  unraveling: "orchid",
-});
-
-/**
- * One level's crack colour as a GLSL ramp.
- *
- * `deep` stays the near-black bed every arcane surface sits over; `mid` is the
- * level's own hue and `hot` its pale variant, which is what the energy running
- * along a crack tears toward.
- */
-export function levelFloats(level) {
-  const key = LEVEL_KEYS[level] ?? LEVEL_KEYS.stable;
-  return {
-    deep: hexToRgbFloat(PALETTE.ink2),
-    mid: hexToRgbFloat(PALETTE[key]),
-    hot: hexToRgbFloat(PALETTE[`${key}Hot`] ?? PALETTE[key]),
-  };
-}
 
 /**
  * The 3D dice: the glass, and the mark burning inside it.

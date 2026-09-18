@@ -15,7 +15,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
-import { syncCracks } from "./cracks.mjs";
+import { syncWeave } from "./weave.mjs";
 import { ArcaneSurgeConfigApp } from "./config-app.mjs";
 import { DEFAULT_ELIGIBILITY, FEATURE_ID, LEVELS, PREFIX, SETTINGS } from "./constants.mjs";
 import { onLevelChanged, paint } from "./hud.mjs";
@@ -62,7 +62,7 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: false,
-    // paint() re-syncs the cracks, so concealing closes them on every screen.
+    // paint() re-syncs the weave, so concealing closes it on every screen.
     onChange: () => paint(),
   });
 
@@ -76,7 +76,7 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: true,
-    onChange: () => syncCracks(),
+    onChange: () => syncWeave(),
   });
 
   game.settings.register(SUITE_ID, SETTINGS.dieVisibility, {

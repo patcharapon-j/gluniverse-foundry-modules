@@ -29,6 +29,10 @@ export function createMotionOwner() {
       return animation;
     },
     forget(animation) { animations.delete(animation); },
+    /** The animations currently owned, as a snapshot. For the case that has to
+     *  reach them all — pausing a whole layer under load, say — without each
+     *  caller keeping a second list of its own beside this one. */
+    list() { return [...animations]; },
     clear() {
       const previous = [...animations];
       animations.clear();

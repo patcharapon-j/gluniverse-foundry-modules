@@ -1,15 +1,16 @@
 /**
  * GLUniverse Suite — Arcane Surge GLSL.
  *
- * Three programs, three budgets:
- *
- *   CRACK runs for HOURS, but only inside the stability chip — a strip a couple
- *   of dozen pixels tall in the time-tracker HUD. It is a fraying WEAVE, and
- *   deliberately not the suite's glass fracture: instability is the world
- *   coming apart, not one more thing being broken, and the two must not share
- *   a look. What rises with the stability level is how far the weave REACHES
- *   and how badly it has come apart — not how fine the threads are, because at
- *   this size finer is mush.
+ * Two programs — both of them BEATS, and that is the whole of what is left
+ * here. There was a third that ran for hours: the standing weave in the
+ * stability chip. It is SVG and anime.js now (`weave.mjs`), because a strip
+ * twenty pixels tall drawing four wavy lines was paying for a context held open
+ * all session, a program warmed off-screen at load, a colour ramp pushed as
+ * uniforms because GLSL cannot read a CSS custom property, and a device-pixel
+ * size recomputed against both `devicePixelRatio` and the suite's Interface
+ * Scale. A one-shot beat over the whole screen earns all of that; an ambient
+ * hairline does not. What is left runs for two seconds at a time, at full
+ * screen, where a shader is the only reasonable answer.
  *
  *   BURST fires on a surge, live and full-screen. It is deliberately nothing
  *   like the suite's golden glass fracture: no Voronoi, no crack lines. This is
@@ -23,7 +24,9 @@
  *
  * Colour never appears here as a literal. The ramp arrives as uniforms, derived
  * by `palette.mjs` from `theme.mjs`'s palette mirror, because WebGL cannot read
- * a CSS custom property.
+ * a CSS custom property. (The weave, being DOM, simply reads `--gl-accent` and
+ * follows a retheme by itself — which is one of the things that made it worth
+ * moving.)
  *
  * The uniform tables are the contract `tools/arcane-surge-check.mjs` enforces:
  * every name must be declared in the GLSL AND written from the host. A uniform
@@ -82,154 +85,6 @@ float glasRidge2(vec2 p) {
    then never sampled, and a helper whose one call site discards its return
    value is a helper that has quietly stopped existing. Doing it inline puts the
    shear next to the angles it shears. */
-
-/* ══════════════════════════════════════════════════════════════════════
-   Crack — the standing state, around the label that names it
-   ══════════════════════════════════════════════════════════════════════
-   This used to be a full-screen veil hugging the edges of the viewport. It is
-   not any more, and the reason is worth keeping: a session-long layer over the
-   board competes with the map for exactly the space the play happens in, and
-   the only way to make it read as a threat was to make it loud enough to be in
-   the way. The state belongs where the state is NAMED — a few pixels of weave
-   fraying around the word "Unraveling" says the same thing, costs a
-   thousandth of the fill rate, and never once sits between a GM and a token.
-
-   It is deliberately NOT the suite's glass fracture (`core/fx-glsl.mjs`). It
-   ran that field once, and a world coming apart then read as one more thing
-   being broken: a broken creature's token, its initiative card and its health
-   bar all carry that crack. Instability is its own picture — threads running
-   through the label that loosen at Fraying, part at Unbound and snap into
-   splayed fibres at Unraveling, which is the ladder's own vocabulary drawn. */
-
-/**
- * One field unit, in CSS pixels. The weave's lane spacing, wobble and reach
- * are tuned in these units, and pinning the unit here keeps that look whatever
- * size the chip is laid out at. The host derives `uTexel` from it; nothing may
- * derive it from the canvas's own height again.
- */
-export const CRACK_FIELD_PX = 42;
-
-export const CRACK_FRAG = `
-precision mediump float;
-varying vec2 vUv;
-
-uniform float uTime;
-uniform vec2  uRes;
-uniform float uChaos;   // 0 at Stable, 1 at Unraveling
-uniform float uDrift;   // 1 = animating, 0 = shed (frozen in place)
-uniform float uFade;    // level cross-fade envelope, 0..1
-uniform float uSeed;    // per-world phase, so no two worlds fray identically
-uniform float uTexel;   // one device pixel in field units — the hairline width
-uniform vec3  uDeep;
-uniform vec3  uMid;     // the LEVEL's own hue, matching the chip's marker
-uniform vec3  uHot;
-
-${NOISE}
-
-void main() {
-  /* Field space: isotropic, and at a FIXED scale — uTexel is one device pixel in
-     field units, pinned by the host to CRACK_FIELD_PX rather than to the strip's
-     own height. A non-uniform mapping bends every wave out of true; and a unit
-     tied to the strip's height shrinks the weave with the chip, so the same
-     pattern reads as crushed flat in a shorter slot. A smaller chip shows less
-     of the weave, never a smaller one.
-
-     CENTRED ON THE LABEL. Anchored at one end, the pattern's falloff leaves a
-     splat over one end of the word and a dark tail at the other. */
-  vec2 centre = 0.5 * uRes * uTexel;
-  vec2 p = vUv * uRes * uTexel - centre;
-
-  // When drift is shed the clock stops rather than the weave vanishing: what
-  // degrades under load is the motion, never the state.
-  float t = uTime * uDrift;
-
-  // Bounded: glasHash multiplies its input by ~300, and a mediump context is
-  // entitled to lose that in the fraction.
-  float seed = fract(uSeed * 0.137) * 10.0;
-
-  /* Chaos is spent on SPREAD and LOOSENESS, not on finer threads. The strip is
-     a couple of dozen pixels tall: finer buys mush, while how far the weave
-     reaches and how badly it has come apart are legible across the table.
-
-     Reach is measured against HALF THE STRIP's long axis, so the ladder means
-     the same thing on a chip that says "Fraying" and one that says
-     "Unraveling" — which are visibly different widths. Both ends feather out:
-     the canvas edge is four straight lines, and a thread cut by one reads as a
-     clipped texture rather than something coming loose. */
-  float span = centre.x;
-  float reach = mix(0.50, 1.05, uChaos) * span;
-  float spread = smoothstep(reach, reach * 0.55, abs(p.x));
-  float feather = smoothstep(centre.y, centre.y - 0.12, abs(p.y));
-
-  float strand = 0.0;
-  float halo = 0.0;
-  float flow = 0.0;
-  for (int i = 0; i < 4; i++) {
-    float fi = float(i);
-    float lane = (fi - 1.5) * 0.085;
-
-    /* LOOSENESS grows with chaos and toward the ends, so the weave stays
-       tightest over the word and frays outward from it. */
-    float amp = (0.012 + 0.09 * uChaos) * (0.35 + abs(p.x) / max(span, 0.001));
-    float freq = 5.0 + fi * 1.9;
-    float phase = p.x * freq + t * (0.5 + 0.2 * fi) + fi * 2.3 + seed;
-    float y = lane + amp * sin(phase)
-      + (glasNoise(vec2(p.x * 3.0 + t * 0.25, fi * 7.1 + seed)) * 2.0 - 1.0) * amp * 0.7;
-
-    // Distance to the curve, not to its height: without the slope term a thread
-    // thins to nothing on every steep stretch of its own wave.
-    float slope = amp * freq * cos(phase);
-    float norm = inversesqrt(1.0 + slope * slope);
-    float off = abs(p.y - y);
-    float d = off * norm;
-
-    /* PARTING. Stretches of each thread go missing, more of them the worse the
-       level; the gaps crawl slowly so the weave is visibly still giving way.
-       Below zero at Stable-adjacent chaos, so Fraying barely parts at all. */
-    float parted = mix(-0.05, 0.42, uChaos);
-    float gap = smoothstep(parted + 0.05, parted - 0.05, glasNoise(vec2(p.x * 2.4 + t * 0.04, fi * 13.7 + seed)));
-    float line = (1.0 - smoothstep(0.5 * uTexel, 1.5 * uTexel, d)) * (1.0 - gap);
-
-    /* FIBRES. Where a thread parts it splits in two and the halves pull apart:
-       |off - splay| is a pair of hairlines either side of the thread's path.
-       gap * (1 - gap) peaks at the edges of each gap, so the fibres live at the
-       torn ends and are gone by the middle of the hole. */
-    float splay = gap * (0.03 + 0.05 * uChaos);
-    float fibre = (1.0 - smoothstep(0.35 * uTexel, 1.1 * uTexel, abs(off - splay) * norm)) * gap * (1.0 - gap) * 4.0;
-
-    // Over-under: a woven thread dips behind its neighbours at a regular beat.
-    float weave = 0.7 + 0.3 * step(0.0, sin(p.x * 16.0 + fi * 3.14159));
-    float thread = max(line * weave, fibre);
-
-    strand = max(strand, thread);
-    halo = max(halo, (1.0 - smoothstep(0.0, 0.045, d)) * (1.0 - gap) * 0.35);
-    flow = max(flow, thread * pow(0.5 + 0.5 * sin(p.x * 8.0 - t * (1.8 + 0.35 * fi) + fi * 2.7), 8.0));
-  }
-
-  vec3 col = mix(uDeep, uMid, clamp(strand * 1.20 + halo * 0.75, 0.0, 1.0));
-  col = mix(col, uHot, clamp(flow * 1.40, 0.0, 1.0));
-  col = mix(col, vec3(1.0), clamp(flow * flow * 0.65, 0.0, 1.0));
-
-  float body = clamp(strand * 1.30 + halo + flow * 0.65, 0.0, 1.0) * spread * feather;
-
-  /* Multiplied by chaos, not offset by it, so Stable is exactly inert. The host
-     also stops drawing there, but an invariant that only holds because the code
-     avoids the case is not an invariant — and every level change cross-fades
-     straight through chaos 0.
-
-     The coefficient is deliberately above 1 at the top of the ladder: the first
-     rung has to be VISIBLE on a bright HUD, and a scale that reaches Unraveling
-     at a comfortable opacity leaves Fraying as a rumour. Clamped after, because
-     the output is premultiplied and an alpha over 1 is not a colour. */
-  float alpha = uChaos * (1.10 + 0.25 * uChaos) * uFade * body;
-  alpha = min(alpha, 1.0);
-  gl_FragColor = vec4(col * alpha, alpha);
-}
-`;
-
-export const CRACK_UNIFORMS = Object.freeze([
-  "uTime", "uRes", "uChaos", "uDrift", "uFade", "uSeed", "uTexel", "uDeep", "uMid", "uHot",
-]);
 
 /* ══════════════════════════════════════════════════════════════════════
    Burst — the surge itself, live

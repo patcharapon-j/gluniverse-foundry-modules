@@ -48,6 +48,7 @@ const constants = await import(`../${FEATURE}/constants.mjs`);
 const levels = await import(`../${FEATURE}/levels.mjs`);
 const shader = await import(`../${FEATURE}/shader.mjs`);
 const anim = await import(`../${FEATURE}/anim.mjs`);
+const weave = await import(`../${FEATURE}/weave-shape.mjs`);
 
 const {
   DEFAULT_LEVEL_CONFIG,
@@ -216,7 +217,6 @@ for (const row of ROWS) {
    context — the effect renders, just frozen, and nothing reports it. */
 
 for (const [label, frag, uniforms, hostRel] of [
-  ["cracks", shader.CRACK_FRAG, shader.CRACK_UNIFORMS, `${FEATURE}/cracks.mjs`],
   ["burst", shader.BURST_FRAG, shader.BURST_UNIFORMS, `${FEATURE}/burst.mjs`],
   // The verdict is an entirely separate program from the surge, and shares no
   // uniform block with it.
@@ -247,135 +247,237 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!/COMPILE_STATUS/.test(glHost) || !/LINK_STATUS/.test(glHost)) {
     fail("gl-host.mjs", "does not check both compile and link status — a broken shader would fail silently");
   }
-  for (const rel of [`${FEATURE}/cracks.mjs`, `${FEATURE}/burst.mjs`]) {
-    if (!/buildProgram\s*\(/.test(read(rel))) {
-      fail(rel, "does not build through gl-host.mjs, so it may not be checking compile/link status");
-    }
+  if (!/buildProgram\s*\(/.test(read(`${FEATURE}/burst.mjs`))) {
+    fail("burst.mjs", "does not build through gl-host.mjs, so it may not be checking compile/link status");
   }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   5b. Stable is inert in the SHADER, not only in the host
+   5b. The standing weave is not WebGL, and the ladder is still a ladder
    ══════════════════════════════════════════════════════════════════════
-   `chaosFor("stable")` is 0 and the host stops drawing there, so a shader that
-   still painted at chaos 0 would never be seen in a session — until a
-   cross-fade passes through it, or somebody reuses the shader somewhere that
-   does not stop. This is a source-shape proxy for a render the pure-Node tool
-   cannot perform: the alpha must be MULTIPLIED by uChaos, not offset by it.
-   `tools/arcane-surge-preview.mjs` is where it can actually be measured. */
+   The instability ran as a fragment shader for a while. It does not any more —
+   it is four SVG paths moved by anime.js — and most of what used to be checked
+   here checked things that only a shader can get wrong. What replaced them are
+   the things only THIS can get wrong, and every one of them renders.
+
+   The first is the reversal itself. A GL context reintroduced here reads as a
+   quality improvement in its own diff and brings back everything the move was
+   for: a program to warm off-screen at load, a colour ramp to push by hand
+   because GLSL cannot read a custom property, and a device-pixel size to
+   recompute against both devicePixelRatio and the suite's Interface Scale zoom. */
 
 {
-  if (levels.chaosFor("stable") !== 0) fail("cracks", "chaosFor('stable') is not 0");
-  const alphaLine = shader.CRACK_FRAG.match(/float\s+alpha\s*=\s*([^;]+);/);
-  if (!alphaLine) fail("crack shader", "no alpha expression found");
-  else if (!/\buChaos\s*\*/.test(alphaLine[1])) {
-    fail("crack shader", "alpha is not scaled by uChaos — the cracks are still drawn at Stable");
+  const shape = read(`${FEATURE}/weave-shape.mjs`);
+  const weaveFiles = ["weave.mjs", "weave-render.mjs", "weave-shape.mjs"];
+
+  for (const rel of weaveFiles) {
+    const body = stripComments(read(`${FEATURE}/${rel}`));
+    for (const pattern of [/getContext\s*\(/, /buildProgram\s*\(/, /mountCanvas\s*\(/, /\bWebGL/]) {
+      if (pattern.test(body)) fail(rel, `reaches for WebGL (${pattern}) — the standing layer is DOM on purpose`);
+    }
+  }
+  // And the crack program must stay gone from the shader module with it.
+  for (const name of ["CRACK_FRAG", "CRACK_UNIFORMS", "CRACK_FIELD_PX"]) {
+    if (name in shader) fail("shader.mjs", `still exports ${name} — the standing weave is not a shader any more`);
+  }
+
+  /* THE ENGINE IS NOT THIS FEATURE'S. anime.js's main loop is shared with a
+     dozen features; re-hosting it, or changing its speed or its
+     pauseOnDocumentHidden, silently re-clocks every one of them. (The suite
+     relies on that default: it is what stops this layer costing anything in a
+     background tab, and it is why there is no visibilitychange handler here.) */
+  for (const rel of weaveFiles) {
+    if (/\bengine\b|useDefaultMainLoop|pauseOnDocumentHidden/.test(stripComments(read(`${FEATURE}/${rel}`)))) {
+      fail(rel, "touches the shared anime.js engine — that would re-clock every other feature");
+    }
+  }
+
+  /* THE RENDERER MUST NOT READ THE WORLD. It is what the preview page drives,
+     and it can only do that while it holds no reference to `game`: the moment
+     it does, the preview has to reimplement it, and a preview built on a second
+     copy flatters whichever copy somebody last touched. */
+  for (const rel of ["weave-render.mjs", "weave-shape.mjs"]) {
+    const body = stripComments(read(`${FEATURE}/${rel}`));
+    if (/\bgame\.|\bHooks\b|\bcanvas\.|game\.settings/.test(body)) {
+      fail(rel, "reads Foundry state — the renderer has to stay drivable from the preview page");
+    }
+  }
+
+  /* STABLE RENDERS NOTHING. Not a very faint something: the chip at rest is a
+     word and a marker, and anything drawn under it at Stable is the feature
+     telling the table the world is unstable when it is not. */
+  const rest = weave.weaveParams(0);
+  if (levels.chaosFor("stable") !== 0) fail("weave", "chaosFor('stable') is not 0");
+  for (const key of ["amplitude", "opacity", "splay", "gapFraction"]) {
+    if (rest[key] !== 0) fail("weave-shape.mjs", `weaveParams(0).${key} is ${rest[key]}, not 0 — Stable would draw`);
+  }
+
+  /* THE LADDER HAS TO CLIMB. Every rung of it is a separate reading — how far
+     the weave reaches, how far the threads wander, how much of them is missing,
+     how far the torn halves pull apart — and a term that stopped rising with
+     chaos renders a perfectly good weave that says the same thing at every
+     level, which is the one thing this layer exists not to do. */
+  const rungs = LEVELS.map((level) => ({ level, p: weave.weaveParams(levels.chaosFor(level)) }));
+  for (let i = 2; i < rungs.length; i++) {
+    for (const key of ["amplitude", "gapFraction", "splay", "reach", "opacity"]) {
+      if (!(rungs[i].p[key] > rungs[i - 1].p[key])) {
+        fail("weave-shape.mjs", `"${key}" does not rise from ${rungs[i - 1].level} to ${rungs[i].level} — the two rungs are indistinguishable`);
+      }
+    }
+  }
+
+  /* AND IT HAS TO CLIMB IN THE LADDER'S OWN VOCABULARY: loosening at Fraying,
+     parting at Unbound, splayed fibres at Unraveling. The fibres are the torn
+     ENDS of a hole, so a hole too narrow to hold two of them has none — which
+     is what keeps Fraying reading as "loosening" rather than "coming apart",
+     and it is a property of the numbers rather than of a special case. */
+  for (const { level, p: params } of rungs) {
+    const fibred = Array.from({ length: weave.THREADS }, (_, i) => !!weave.dashPattern(i, params).fibre);
+    const any = fibred.some(Boolean);
+    if ((level === "stable" || level === "fraying") && any) {
+      fail("weave-shape.mjs", `"${level}" sprouts torn fibres — that rung is meant to loosen, not come apart`);
+    }
+    if (level === "unraveling" && !fibred.every(Boolean)) {
+      fail("weave-shape.mjs", "Unraveling does not splay every thread into fibres — that is the top rung's whole picture");
+    }
+  }
+
+  /* A DASH ARRAY WITH A NEGATIVE OR NaN ENTRY IS DISCARDED WHOLE by the
+     browser, and a thread whose dash array was discarded simply never parts.
+     That is the look of the feature not working, on every rung at once, with
+     nothing reported — so every pattern the ladder can produce is evaluated. */
+  for (const { level, p: params } of rungs) {
+    for (let i = 0; i < weave.THREADS; i++) {
+      const dash = weave.dashPattern(i, params);
+      for (const [name, pattern] of [["line", dash.line], ["fibre", dash.fibre], ["flow", weave.flowDash()]]) {
+        if (!pattern) continue;
+        for (const n of pattern) {
+          if (!Number.isFinite(n) || n < 0) fail("weave-shape.mjs", `${level} thread ${i}: ${name} dash array has an invalid entry (${n})`);
+        }
+        const total = pattern.reduce((a, b) => a + b, 0);
+        if (!(total > 0)) fail("weave-shape.mjs", `${level} thread ${i}: ${name} dash array sums to ${total}`);
+      }
+      // The two must share one period or they drift out of register and the
+      // fibres end up in the middle of the thread instead of at a torn end.
+      if (dash.fibre) {
+        const linePeriod = dash.line[0] + dash.line[1];
+        const fibrePeriod = dash.fibre.reduce((a, b) => a + b, 0);
+        if (Math.abs(linePeriod - fibrePeriod) > 0.05) {
+          fail("weave-shape.mjs", `${level} thread ${i}: the fibres' period (${fibrePeriod}) is not the thread's (${linePeriod})`);
+        }
+      }
+    }
+  }
+
+  /* THE DRIFT IS A TRANSLATION OF EXACTLY ONE WAVELENGTH, which is only
+     seamless because every term of the wave is a harmonic of the fundamental.
+     A non-harmonic term (the obvious way to make a wave look less mechanical)
+     renders beautifully and then snaps, once per loop, forever. */
+  const path = weave.threadPath(0, { width: 200, height: 40, amplitude: 3, seed: 7 });
+  if (!/^M/.test(path) || !/C/.test(path)) fail("weave-shape.mjs", "threadPath does not emit a cubic path");
+  if (/NaN|Infinity|undefined/.test(path)) fail("weave-shape.mjs", "threadPath emitted a non-finite coordinate");
+  const HARMONIC = /^\s*(?:(\d+)\s*\*\s*)?k\s*\*\s*x\s*\+\s*p\d+\s*$/;
+  for (const [, arg] of stripComments(shape).matchAll(/Math\.(?:sin|cos)\(([^)]*)\)/g)) {
+    const harmonic = arg.match(HARMONIC);
+    // A whole-number multiple of k, or none at all. Anything else — 1.87 is the
+    // obvious pick, because it makes the wave look less mechanical — has a
+    // period the translation is not a multiple of, so the loop snaps once per
+    // wavelength, forever, and looks entirely correct in between.
+    if (!harmonic || (harmonic[1] !== undefined && !Number.isInteger(Number(harmonic[1])))) {
+      fail("weave-shape.mjs", `the wave has a term that is not a whole harmonic of k ("${arg.trim()}") — the drift loop would snap once per wavelength`);
+    }
+  }
+
+  /* EVERY LENGTH IS A FIXED CSS PIXEL COUNT, never a fraction of the chip.
+     This is the shader's `CRACK_FIELD_PX` rule surviving the move: tied to the
+     strip's height, a shorter chip shrinks the weave with it and the same
+     pattern reads as crushed. A smaller chip must show LESS of the weave. */
+  if (/height\s*\*/.test(stripComments(shape).replace(/height \/ 2/g, ""))) {
+    fail("weave-shape.mjs", "scales a length by the container's height — a shorter chip would crush the weave rather than show less of it");
+  }
+  if (!/BLEED_PX/.test(shape)) fail("weave-shape.mjs", "no BLEED_PX — the weave would be clipped to the chip's four straight lines");
+
+  /* THE BLEED IS STATED TWICE, in the CSS that positions the element and in the
+     viewBox the geometry is built against. They must agree exactly or the
+     threads are laid out for a box that is not the one they are drawn in — a
+     stretch nothing reports. */
+  {
+    const css = read("styles/pf2e-arcane-surge.css");
+    const declared = css.match(/--glas-bleed:\s*(\d+(?:\.\d+)?)px/);
+    if (!declared) fail("css", ".glas-weave declares no --glas-bleed");
+    else if (Number(declared[1]) !== weave.BLEED_PX) {
+      fail("css", `--glas-bleed is ${declared[1]}px but weave-shape.mjs builds its viewBox for ${weave.BLEED_PX}px`);
+    }
+    if (!/offsetWidth \+ BLEED_PX \* 2/.test(read(`${FEATURE}/weave-render.mjs`))) {
+      fail("weave-render.mjs", "does not build its viewBox from the container plus BLEED_PX — the CSS box and the geometry would disagree");
+    }
   }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
    5c. Instability is its OWN pattern, not the break fracture
    ══════════════════════════════════════════════════════════════════════
-   The HUD cracks once ran the suite's shared glass fracture out of
-   `core/fx-glsl.mjs`. They do not any more, on purpose: a broken creature's
+   The HUD weave once ran the suite's shared glass fracture out of
+   `core/fx-glsl.mjs`. It does not any more, on purpose: a broken creature's
    token, its initiative card and its health bar all carry that crack, and a
    world coming apart then read as one more thing being broken. Re-importing
    the shared field reads as tidying in its own diff and puts the two states
-   back into one look, so it is refused. */
+   back into one look, so it is refused — from the shader module it was removed
+   from, and from the DOM layer that replaced it. */
 
 {
-  const src = read(`${FEATURE}/shader.mjs`);
-  if (/^\s*import\b[^;]*core\/fx-glsl\.mjs/m.test(src)) {
-    fail("shader.mjs", "imports core/fx-glsl.mjs — instability must not share the break fracture's look");
-  }
-  if (/gluBreakField|gluVoroEdge/.test(shader.CRACK_FRAG)) {
-    fail("crack shader", "runs the glass break fracture — instability is its own pattern");
-  }
-  /* The weave needs both: uTexel is the hairline width (without it the threads
-     are either mush or sub-pixel and deleted), uSeed is the per-world phase. */
-  for (const name of ["uSeed", "uTexel"]) {
-    if (!shader.CRACK_UNIFORMS.includes(name)) fail("crack shader", `the weave needs "${name}"`);
-  }
-  /* The ladder is drawn as the threads PARTING. A gap term that stopped
-     depending on uChaos would render a weave that loosens and never comes
-     apart, which reads as Fraying at every level. */
-  const parted = shader.CRACK_FRAG.match(/float\s+parted\s*=\s*([^;]+);/);
-  if (!parted || !/uChaos/.test(parted[1])) {
-    fail("crack shader", "the threads' parting is not driven by uChaos — every level would fray the same");
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   5e. Nothing in a shader is computed and thrown away
-   ══════════════════════════════════════════════════════════════════════
-   A GLSL local that is assigned and never sampled compiles clean, costs
-   nothing, and silently deletes whatever it was supposed to contribute. The
-   burst shipped for a while with its entire swirl in one: a `vec2 sp =
-   glasSwirl(...)` under a comment reading "everything is dragged around the
-   centre", never read again — so the one term that made the surge rotate was
-   doing nothing at all, and what played was a detailed still image being faded
-   out. No compiler warns, no uniform check catches it (the uniforms were all
-   there and all written), and it looks plausible in a diff.
-
-   These shaders are small and their declarations are uniform in shape, so a
-   count of each local's occurrences is enough. */
-
-{
-  const bodies = {
-    CRACK_FRAG: shader.CRACK_FRAG,
-    BURST_FRAG: shader.BURST_FRAG,
-    SEVERITY_FRAG: shader.SEVERITY_FRAG,
-    BLIT_FRAG: shader.BLIT_FRAG,
-  };
-  for (const [name, glsl] of Object.entries(bodies)) {
-    // Comment-stripped: a local named in prose must not count as a use of it.
-    const code = stripComments(glsl);
-    const declared = [...code.matchAll(/^\s*(?:float|vec[234]|int|bool|mat[234])\s+(\w+)\s*=/gm)];
-    for (const [, local] of declared) {
-      const uses = code.match(new RegExp(`\\b${local}\\b`, "g"))?.length ?? 0;
-      // One occurrence is the declaration itself and nothing else.
-      if (uses < 2) {
-        fail("shader.mjs", `${name} computes "${local}" and never reads it — whatever that term was meant to contribute is silently absent`);
-      }
+  for (const rel of ["shader.mjs", "weave.mjs", "weave-render.mjs", "weave-shape.mjs"]) {
+    if (/^\s*import\b[^;]*core\/fx-glsl\.mjs/m.test(read(`${FEATURE}/${rel}`))) {
+      fail(rel, "imports core/fx-glsl.mjs — instability must not share the break fracture's look");
     }
   }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   5d. The level's colour is one statement, not two
+   5d. A stability level's colour is ONE statement
    ══════════════════════════════════════════════════════════════════════
-   The chip's marker is coloured by CSS and the cracks growing out of it by a
-   uniform, and the two sit two pixels apart. They must name the same token, and
-   no two rungs of the ladder may name the SAME one — the first version had
-   `unbound` on --gl-holo-b, which gl-tokens.css aliases to --gl-violet, so the
-   two most dangerous levels rendered identically. */
+   It used to be two: a `LEVEL_KEYS` table in palette.mjs feeding the shader's
+   uniforms, and a `.glas-level-*` accent remap for the chip's marker two
+   pixels away. They drifted immediately — `unbound` sat on --gl-holo-b, which
+   gl-tokens.css aliases to --gl-violet, so the ladder's two most dangerous
+   rungs rendered in exactly the same colour and both files looked correct.
+
+   The weave is DOM now and inherits --gl-accent, so the CSS is the only
+   statement and the drift is gone by construction. What is left to check is
+   what the CSS alone can still get wrong: a rung with no rule, two rungs on one
+   token, or a rung with no pale variant behind --glas-hot, which is the one
+   colour the token file does not derive and cannot be mixed to. */
 
 {
-  const palette = await import(`../${FEATURE}/palette.mjs`);
   const css = read("styles/pf2e-arcane-surge.css");
-  const theme = read("scripts/core/theme.mjs");
+  const tokens = read("styles/gl-tokens.css");
   const seen = new Map();
 
   for (const level of LEVELS) {
-    const key = palette.LEVEL_KEYS[level];
-    if (!key) {
-      fail("palette.mjs", `LEVEL_KEYS has no entry for level "${level}"`);
+    const rule = css.match(new RegExp(`\\.glas-level-${level}\\s*\\{([^}]*)\\}`));
+    if (!rule) {
+      fail("css", `no .glas-level-${level} accent remap`);
       continue;
     }
-    if (!new RegExp(`\\b${key}:\\s*"#[0-9a-fA-F]{6}"`).test(theme)) {
-      fail("palette.mjs", `LEVEL_KEYS names "${key}", which is not a colour in theme.mjs's PALETTE`);
+    const accent = rule[1].match(/--gl-accent:\s*var\((--gl-[a-z0-9-]+)\)/);
+    const hot = rule[1].match(/--glas-hot:\s*var\((--gl-[a-z0-9-]+)\)/);
+    if (!accent) {
+      fail("css", `.glas-level-${level} routes no --gl-accent`);
+      continue;
     }
-    const token = `--gl-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`;
-    const rule = css.match(new RegExp(`\\.glas-level-${level}\\s*\\{([^}]*)\\}`));
-    if (!rule) fail("css", `no .glas-level-${level} accent remap`);
-    else if (!rule[1].includes(token)) {
-      fail("css", `.glas-level-${level} does not use ${token} — the chip's marker and its cracks would disagree`);
+    if (!hot) fail("css", `.glas-level-${level} sets no --glas-hot — the energy running along its threads would fall back to the thread's own colour`);
+    else if (hot[1] !== `${accent[1]}-hot`) {
+      fail("css", `.glas-level-${level} pairs ${accent[1]} with ${hot[1]} — the pale variant must be that hue's own`);
     }
-    if (seen.has(key)) fail("palette.mjs", `"${level}" and "${seen.get(key)}" share the colour "${key}" — the two levels are indistinguishable`);
-    seen.set(key, level);
-  }
-  for (const level of Object.keys(palette.LEVEL_KEYS)) {
-    if (!LEVELS.includes(level)) fail("palette.mjs", `LEVEL_KEYS has a dead entry "${level}"`);
+    for (const token of [accent[1], hot?.[1]].filter(Boolean)) {
+      if (!new RegExp(`\\s${token}:\\s*`).test(tokens)) {
+        fail("css", `.glas-level-${level} names ${token}, which gl-tokens.css does not declare`);
+      }
+    }
+    if (seen.has(accent[1])) {
+      fail("css", `"${level}" and "${seen.get(accent[1])}" share ${accent[1]} — the two rungs are indistinguishable`);
+    }
+    seen.set(accent[1], level);
   }
 }
 
@@ -386,7 +488,7 @@ for (const [label, frag, uniforms, hostRel] of [
 {
   const order = anim.SHED_ORDER;
   if (!Array.isArray(order) || !order.length) fail("anim.mjs", "SHED_ORDER is empty");
-  const hosts = [read(`${FEATURE}/cracks.mjs`), read(`${FEATURE}/burst.mjs`)].join("\n");
+  const hosts = [read(`${FEATURE}/weave-render.mjs`), read(`${FEATURE}/burst.mjs`)].join("\n");
   const gated = new Set([...hosts.matchAll(/allows\(\s*["'](\w+)["']\s*\)/g)].map((m) => m[1]));
   for (const name of gated) {
     if (!order.includes(name)) fail("anim.mjs", `"${name}" is gated on but missing from SHED_ORDER — it never degrades`);
@@ -427,41 +529,50 @@ for (const [label, frag, uniforms, hostRel] of [
   if (!/@keyframes\s+glas-strike/.test(css)) fail("css", "the struck word has no glas-strike keyframes");
   // A bare `gl-` keyframe name would silently override another feature's.
   if (/@keyframes\s+gl-(?!as-)/.test(css)) fail("css", "declares an unprefixed gl- keyframe, which is a global name");
-  /* The cracks are a LOCAL layer now: absolute, inside the chip, and under the
-     chip's own content so the level's name stays readable at Unraveling. If
-     this ever goes back to `position: fixed` it is a full-screen veil again,
-     which is the thing it was replaced for being. */
+  /* The weave is a LOCAL layer: absolute, inside the chip, and under the chip's
+     own content so the level's name stays readable at Unraveling. If this ever
+     goes back to `position: fixed` it is a full-screen veil again, which is the
+     thing it was replaced for being. */
   {
-    const block = css.match(/\.glas-cracks\b[^{]*\{([^}]*)\}/s);
-    if (!block) fail("css", "no .glas-cracks rule — the crack canvas would be unpositioned");
+    const block = css.match(/\.glas-weave\s*\{([^}]*)\}/s);
+    if (!block) fail("css", "no .glas-weave rule — the weave would be unpositioned");
     else {
-      if (!/position:\s*absolute/.test(block[1])) fail("css", ".glas-cracks must be absolute inside the chip, not fixed to the viewport");
-      if (!/z-index:\s*0/.test(block[1])) fail("css", ".glas-cracks must sit under the chip's text");
+      if (!/position:\s*absolute/.test(block[1])) fail("css", ".glas-weave must be absolute inside the chip, not fixed to the viewport");
+      if (!/z-index:\s*0/.test(block[1])) fail("css", ".glas-weave must sit under the chip's text");
+      /* An SVG with no `fill: none` fills every path black. The paths are open
+         curves, so what that draws is a solid wedge under the label — and it is
+         the DEFAULT, so it arrives the moment somebody restates this rule. */
+      if (!/fill:\s*none/.test(block[1])) fail("css", ".glas-weave must set fill: none, or every thread fills black under the label");
     }
     // The bleed is only a bleed if nothing clips it.
     if (!/#glct-hud \.glas-slot\s*\{[^}]*overflow:\s*visible/s.test(css)) {
-      fail("css", "the HUD's stability slot clips its contents — the cracks would be cut off at the chip's edge");
+      fail("css", "the HUD's stability slot clips its contents — the weave would be cut off at the chip's edge");
     }
   }
-  /* The field's scale is a fixed CSS size. Derived from the canvas height it
-     shrinks every shard with the chip, so the same fracture reads as crushed
-     in a shorter slot — and nothing errors, it just looks worse. */
-  {
-    const host = read(`${FEATURE}/cracks.mjs`);
-    const texel = [...host.matchAll(/uniform1f\(this\.uniforms\.uTexel,\s*([^;]+)\);/g)].map((m) => m[1]);
-    if (!texel.length) fail("cracks.mjs", "never writes uTexel");
-    for (const expr of texel) {
-      if (!/CRACK_FIELD_PX/.test(expr)) fail("cracks.mjs", `uTexel is not derived from CRACK_FIELD_PX: ${expr}`);
+  /* Every stroke in the weave is a hairline stated in CSS pixels, which is the
+     whole reason this is cheaper than the shader was: a CSS pixel is never
+     sub-pixel, so nothing has to be recomputed against devicePixelRatio or the
+     suite's Interface Scale zoom to survive a HiDPI display. A stroke width
+     given as a percentage or an em would scale with the host's type instead. */
+  for (const layer of ["halo", "line", "fibre", "flow"]) {
+    const block = css.match(new RegExp(`\\.glas-weave-${layer}\\s*\\{([^}]*)\\}`, "s"));
+    if (!block) {
+      fail("css", `no .glas-weave-${layer} rule — that layer would draw with the inherited stroke`);
+      continue;
     }
-    if (!(shader.CRACK_FIELD_PX > 0)) fail("crack shader", "CRACK_FIELD_PX must be a positive CSS size");
-    if (/\baspect\b/.test(shader.CRACK_FRAG) || !/vUv\s*\*\s*uRes\s*\*\s*uTexel/.test(shader.CRACK_FRAG)) {
-      fail("crack shader", "field space must be vUv * uRes * uTexel — a height-relative mapping scales the shards with the chip");
+    const width = block[1].match(/stroke-width:\s*([^;]+);/);
+    if (!width) fail("css", `.glas-weave-${layer} states no stroke-width`);
+    else if (!/^\s*[\d.]+(px)?\s*$/.test(width[1])) {
+      fail("css", `.glas-weave-${layer} sizes its stroke as "${width[1].trim()}" — a hairline has to be a fixed CSS pixel count`);
+    }
+    if (!/stroke:\s*var\(--gl/.test(block[1])) {
+      fail("css", `.glas-weave-${layer} does not route its colour through a token — the weave would stop following the level and a retheme`);
     }
   }
   if (!/\.glas-burst\b[^}]*z-index:\s*var\(--gl-z-splash\)/s.test(css)) {
     fail("css", ".glas-burst must use --gl-z-splash");
   }
-  for (const cls of ["glas-cracks", "glas-burst"]) {
+  for (const cls of ["glas-weave", "glas-burst"]) {
     const block = css.match(new RegExp(`\\.${cls}\\b[^{]*\\{([^}]*)\\}`, "s"));
     if (!block || !/pointer-events:\s*none/.test(block[1])) {
       fail("css", `.${cls} must set pointer-events: none or it will eat clicks`);
@@ -582,7 +693,7 @@ for (const [label, frag, uniforms, hostRel] of [
   }
 
   // No feature file may restate a suite colour as a hex of its own.
-  for (const rel of ["cracks.mjs", "burst.mjs", "shader.mjs", "anim.mjs"]) {
+  for (const rel of ["weave.mjs", "weave-render.mjs", "weave-shape.mjs", "burst.mjs", "shader.mjs", "anim.mjs"]) {
     const src = read(`${FEATURE}/${rel}`);
     const hexes = [...src.matchAll(/#[0-9a-fA-F]{6}\b/g)].map((m) => m[0]);
     // Hexes inside comments are documentation of where a value came from.
@@ -677,17 +788,12 @@ for (const [label, frag, uniforms, hostRel] of [
 
 {
   const burstSrc = read(`${FEATURE}/burst.mjs`);
-  const cracksSrc = read(`${FEATURE}/cracks.mjs`);
   const mainSrc = stripComments(read(`${FEATURE}/main.mjs`));
 
-  for (const [label, src] of [["burst.mjs", burstSrc], ["cracks.mjs", cracksSrc]]) {
-    if (!/\bwarm\s*\(\s*\)\s*\{/.test(src)) fail(label, "has no warm() — its shader compiles on first use, mid-animation");
-    // A warm-up that never reaches the GPU is not a warm-up.
-    if (!/gl\.finish\s*\(/.test(src)) fail(label, "warm() does not gl.finish(), so the work stays queued behind the first real frame");
-  }
-  for (const fn of ["warmBurst", "warmCracks"]) {
-    if (!mainSrc.includes(fn)) fail("main.mjs", `never calls ${fn}() — that layer compiles on first use`);
-  }
+  if (!/\bwarm\s*\(\s*\)\s*\{/.test(burstSrc)) fail("burst.mjs", "has no warm() — its shader compiles on first use, mid-animation");
+  // A warm-up that never reaches the GPU is not a warm-up.
+  if (!/gl\.finish\s*\(/.test(burstSrc)) fail("burst.mjs", "warm() does not gl.finish(), so the work stays queued behind the first real frame");
+  if (!mainSrc.includes("warmBurst")) fail("main.mjs", "never calls warmBurst() — the beats compile on first use");
 
   // Baking is gone on purpose; a reintroduced frame set would silently make the
   // effect a filmstrip again.
