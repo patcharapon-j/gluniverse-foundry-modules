@@ -13,21 +13,37 @@
 
 import { featurePath } from "../../core/const.mjs";
 import { CARDS_FEATURE_ID } from "../stream/constants.js";
-import { getDefaultRollArt, setDefaultRollArt } from "./settings.js";
+import { STATUS_LIFETIME_RANGE, getDefaultRollArt, getStatusSettings, setDefaultRollArt, setStatusSettings } from "./settings.js";
 import { openPortraitFramingApp } from "./framing/portrait-framing-app.js";
 
 export async function renderSection() {
   return foundry.applications.handlebars.renderTemplate(
     featurePath(CARDS_FEATURE_ID, "templates/section.hbs"),
-    { defaultRollArt: getDefaultRollArt(), canEdit: Boolean(game.user?.isGM) }
+    {
+      defaultRollArt: getDefaultRollArt(),
+      status: getStatusSettings(),
+      statusLifetime: { ...STATUS_LIFETIME_RANGE, percent: Math.round(getStatusSettings().lifetimeFactor * 100) },
+      canEdit: Boolean(game.user?.isGM)
+    }
   );
 }
 
-/** Claim the one field this feature owns in the host panel. */
+/**
+ * Claim the fields this feature owns in the host panel.
+ *
+ * `statusUpdates.*` is written as a patch through this feature's own sanitizer rather than as a whole
+ * object, so two switches flipped in quick succession cannot overwrite each other with a stale copy.
+ */
 export async function claimChange(name, value) {
-  if (name !== "defaultRollArt.src") return false;
-  await setArt(String(value ?? ""));
-  return true;
+  if (name === "defaultRollArt.src") {
+    await setArt(String(value ?? ""));
+    return true;
+  }
+  if (name.startsWith("statusUpdates.")) {
+    await setStatusSettings({ [name.slice("statusUpdates.".length)]: value });
+    return true;
+  }
+  return false;
 }
 
 /** Claim the three actions this feature owns. */

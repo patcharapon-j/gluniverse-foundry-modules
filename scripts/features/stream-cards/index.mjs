@@ -26,6 +26,7 @@ import { CARD_FLAGS, SETTINGS, registerSettings } from "./settings.js";
 import { claimAction, claimChange, renderSection } from "./panel.js";
 import { registerFramingSheetHeader } from "./framing/sheet-header.js";
 import { RollCardFeed } from "./pf2e/roll-card-feed.js";
+import { registerStatusHooks } from "./pf2e/status-watch.js";
 
 Suite.register({
   id: CARDS_FEATURE_ID,
@@ -56,6 +57,12 @@ Suite.register({
   },
 
   onReady() {
+    // Status cards. These hooks are the feature's, not an overlay's: the overlay is rebuilt every time
+    // stream mode is toggled, so listeners owned by a feed instance would pile up one set per toggle.
+    // They are pointed at whichever feed is current and are inert until one exists, so registering here
+    // — after `stream`'s onReady has built the overlay and its feed — is the whole wiring.
+    registerStatusHooks();
+
     registerPanelSection({
       id: CARDS_FEATURE_ID,
       order: 20,

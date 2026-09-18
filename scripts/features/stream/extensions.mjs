@@ -26,6 +26,14 @@ const panelSections = [];
  * The feed's contract, as the chat overlay uses it: `handleCreate(message)`
  * (async), `handleDelete(message) → boolean`, `forget(record)`, `prescan()`,
  * `clear()`.
+ *
+ * A record the feed pushes onto `overlay.cards` may carry a `card` — anything
+ * with `element`, `exit()` and `destroy()`. The overlay then lets that object
+ * animate itself off the stack and calls `forget(record)` so the feed can drop
+ * the message ids, timers and framing watches behind it. A record without one
+ * (a cloned chat card) is animated by the overlay itself. That property name is
+ * the whole seam: spelled differently on the two sides, the card still
+ * disappears on cue and everything it was holding leaks for the session.
  */
 export function registerCardFeed(factory) {
   cardFeedFactory = typeof factory === "function" ? factory : null;

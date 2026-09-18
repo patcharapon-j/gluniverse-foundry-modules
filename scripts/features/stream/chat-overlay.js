@@ -318,9 +318,13 @@ export class ChatOverlay {
         this.cardsByMessageId.delete(record.messageId);
       }
       this.cards.splice(index, 1);
-      if (record.rollCard) {
+      // A card the feed built (a roll card, a status card) animates itself out and reports back, so the
+      // feed can drop the message ids, timers and framing watches it was holding. The property is the
+      // whole contract: rename it on one side and the card still disappears, while everything behind it
+      // leaks for the rest of the session.
+      if (record.card) {
         this.feed?.forget(record);
-        record.rollCard.exit();
+        record.card.exit();
         return;
       }
     }
@@ -353,9 +357,9 @@ export class ChatOverlay {
       window.clearTimeout(record.timeout);
       record.resizeObserver?.disconnect();
       record.mirrorObserver?.disconnect();
-      if (record.rollCard) {
+      if (record.card) {
         this.feed?.forget(record);
-        record.rollCard.destroy();
+        record.card.destroy();
       }
     }
     this.cards = [];

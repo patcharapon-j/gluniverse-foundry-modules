@@ -1,6 +1,20 @@
-import { animate, cubicBezier, remove } from "../../stream/motion/engine.js";
+import { cubicBezier, remove } from "../../stream/motion/engine.js";
 import { crackRenderer } from "../fx/crack-renderer.js";
 import { isFocus, placement } from "../framing/focus-math.js";
+import {
+  CSS_SNAP,
+  CSS_UNFOLD,
+  EASE_EXIT,
+  EASE_OUT,
+  EASE_POP,
+  EASE_SNAP,
+  countUp,
+  el,
+  scramble,
+  tween,
+  waapi,
+  wait
+} from "./card-motion.js";
 
 /**
  * The PF2e roll card ("Hairline"), as approved in the design mockup.
@@ -17,17 +31,8 @@ import { isFocus, placement } from "../framing/focus-math.js";
  * row drop), the result divider's ::before pseudo-element, and the scan line's `top` sweep.
  */
 
-const EASE_OUT = cubicBezier(0.16, 1, 0.3, 1);
-const EASE_SNAP = cubicBezier(1, 0, 0.7, 1);
-const EASE_POP = cubicBezier(0.34, 1.56, 0.5, 1);
-const EASE_EXIT = cubicBezier(0.55, 0, 0.84, 0);
-const CSS_EASE_OUT = "cubic-bezier(.16,1,.3,1)";
-const CSS_UNFOLD = "cubic-bezier(.7,0,.2,1)";
-const CSS_SNAP = "cubic-bezier(1,0,.7,1)";
-
 const STRIP_CLIP = "polygon(0 0,calc(100% - .65*var(--u)) 0,100% calc(.65*var(--u)),100% 100%,0 100%)";
 const STRIP_CLIP_FOLDED = "polygon(0 0,calc(100% - .65*var(--u)) 0,100% calc(.65*var(--u)),100% 0%,0 0%)";
-const SCRAMBLE_GLYPHS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 
 const DEGREE_TONES = ["crit-failure", "failure", "success", "crit-success"];
 const DEGREE_LABEL_KEYS = ["CritFailure", "Failure", "Success", "CritSuccess"];
@@ -56,15 +61,23 @@ const DEFAULT_LABELS = {
   Success: "Success",
   Failure: "Failure",
   CritFailure: "Critical Failure",
-  Result: "Result",
-  Natural20: "Natural 20",
-  Natural1: "Natural 1",
   NPC: "NPC",
   Blind: "Blind",
   Reroll: "Reroll",
   Damage: "Damage",
   CritDouble: "Crit ×2",
   DC: "DC",
+  // Fallbacks for a check whose chat flavor carries no heading to read — an inline @Check link, a flat
+  // check off a condition card. The reader hands over a key, never PF2e's raw context type, or the
+  // stream's headline reads "flat-check".
+  AttackRoll: "Attack",
+  SkillCheck: "Skill Check",
+  SavingThrow: "Saving Throw",
+  PerceptionCheck: "Perception",
+  FlatCheck: "Flat Check",
+  Initiative: "Initiative",
+  CounteractCheck: "Counteract",
+  Check: "Check",
   SpellAttack: "Spell attack",
   Versus: "vs",
   CastsSpell: "Casts a spell",
@@ -90,34 +103,6 @@ const D20_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
   <polygon class="glus-rc-die-facet" points="50,24 77,70 23,70"/>
   <path class="glus-rc-die-facet" d="M50 3L50 24M91 26.5L77 70M91 73.5L77 70M50 97L77 70M50 97L23 70M9 73.5L23 70M9 26.5L23 70M9 26.5L50 24M91 26.5L50 24"/>
 </svg>`;
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = String(text);
-  return node;
-}
-
-/** anime.js animation as a promise that also settles if the animation is cancelled. */
-function tween(target, params) {
-  if (!target) return Promise.resolve();
-  return new Promise((resolve) => {
-    animate(target, { ...params, onComplete: resolve });
-    setTimeout(resolve, (params.duration ?? 400) + (params.delay ?? 0) + 120);
-  });
-}
-
-/** Web Animations call for the cases anime.js cannot drive; always settles. */
-function waapi(target, keyframes, options) {
-  if (!target?.animate) return Promise.resolve();
-  try {
-    return target.animate(keyframes, { fill: "both", easing: CSS_EASE_OUT, ...options }).finished.catch(() => {});
-  } catch (_error) {
-    return Promise.resolve();
-  }
-}
 
 function damageIcon(type) {
   const configured = globalThis.CONFIG?.PF2E?.damageTypes?.[type];
@@ -228,7 +213,7 @@ export class RollCard {
     const action = this.q(".glus-rc-action");
     const isCast = model.kind === "cast" && model.spell && !model.roll;
     const isAction = model.kind === "action";
-    const actionLabel = isCast ? this.label("CastsSpell") : isAction ? this.label("UsesAction") : model.action?.label ?? "";
+    const actionLabel = isCast ? this.label("CastsSpell") : isAction ? this.label("UsesAction") : this.checkLabel(model.action);
     const actionSub = isCast ? this.castDetail(model.spell) : model.action?.sub;
     const sub = [actionSub, model.target?.name ? `${this.label("Versus")} ${model.target.name}` : null]
       .filter(Boolean)
@@ -244,7 +229,8 @@ export class RollCard {
     } else if (isAction) {
       result.append(this.buildAction(model.action));
     } else if (model.roll) {
-      result.append(this.buildDegree(model.roll));
+      const degree = this.buildDegree(model.roll);
+      if (degree) result.append(degree);
       if (Number.isFinite(model.roll.natural)) result.append(this.buildDie(model.roll.natural));
       result.append(el("div", "glus-rc-total", "0"));
     } else if (model.damage) {
@@ -257,6 +243,10 @@ export class RollCard {
       result.append(degree, el("div", "glus-rc-total", "0"));
       if (model.damage.crit) root.dataset.tone = "crit-success";
     }
+    // No outcome box: the result column shrinks to the die and the total, and the padding it was
+    // holding for a degree label goes to the identity column. Set as an attribute rather than matched
+    // with :has(), which older OBS browser sources lack.
+    root.toggleAttribute("data-lean", !result.querySelector(".glus-rc-degree"));
   }
 
   /**
@@ -294,14 +284,30 @@ export class RollCard {
     frame.setAttribute("data-framed", "");
   }
 
+  /** The headline for a check: PF2e's own heading if it had one, else the check type's label. */
+  checkLabel(action) {
+    const text = action?.label?.trim();
+    if (text) return text;
+    return action?.labelKey ? this.label(action.labelKey) : "";
+  }
+
+  /**
+   * The outcome box, or null when there is nothing to say.
+   *
+   * A roll PF2e resolved against no DC has no degree, and the card says *nothing* about it: the
+   * standing "Result", "Natural 20" and "Natural 1" labels only restated the number already drawn
+   * large on the die beside them, in the widest type on the card, and the room they took came out of
+   * the skill, spell, action or target on the left — which is the line a viewer cannot reconstruct
+   * from anything else on screen. The natural die keeps its gold and red tint, so a 20 and a 1 still
+   * announce themselves.
+   */
   buildDegree(roll) {
+    const key = Number.isInteger(roll.degree) ? DEGREE_LABEL_KEYS[roll.degree] : null;
+    const hasDc = roll.dcVisible && Number.isFinite(roll.dc);
+    if (!key && !hasDc) return null;
     const degree = el("div", "glus-rc-degree");
-    let key = "Result";
-    if (Number.isInteger(roll.degree)) key = DEGREE_LABEL_KEYS[roll.degree] ?? "Result";
-    else if (roll.natural === 20) key = "Natural20";
-    else if (roll.natural === 1) key = "Natural1";
-    degree.append(el("span", "glus-rc-degree-label", this.label(key)));
-    if (roll.dcVisible && Number.isFinite(roll.dc)) {
+    if (key) degree.append(el("span", "glus-rc-degree-label", this.label(key)));
+    if (hasDc) {
       const meta = el("span", "glus-rc-degree-meta", this.label("DC"));
       meta.append(el("b", "glus-rc-big-number", roll.dc));
       degree.append(meta);
@@ -682,43 +688,4 @@ export class RollCard {
     }
     this.element.remove();
   }
-}
-
-function scramble(node, text, duration = 400, delay = 0) {
-  const target = String(text ?? "");
-  const id = (node._scramble = (node._scramble ?? 0) + 1);
-  const t0 = performance.now() + delay;
-  const frame = (now) => {
-    if (node._scramble !== id) return;
-    const p = Math.max(0, Math.min(1, (now - t0) / duration));
-    node.textContent = [...target]
-      .map((ch, i) => (ch === " " || i / target.length < p ? ch : SCRAMBLE_GLYPHS[Math.floor(Math.random() * SCRAMBLE_GLYPHS.length)]))
-      .join("");
-    if (p < 1) requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-  setTimeout(() => {
-    if (node._scramble === id) node.textContent = target;
-  }, delay + duration + 80);
-}
-
-function countUp(node, to, duration = 520) {
-  if (!Number.isFinite(to)) {
-    node.textContent = to ?? "";
-    return;
-  }
-  const current = Number(node.textContent);
-  const from = Number.isFinite(current) && current >= 0 && current <= 9999 ? current : 0;
-  const id = (node._count = (node._count ?? 0) + 1);
-  const t0 = performance.now();
-  const frame = (now) => {
-    if (node._count !== id) return;
-    const p = Math.max(0, Math.min(1, (now - t0) / duration));
-    node.textContent = Math.round(from + (to - from) * (1 - (1 - p) ** 4));
-    if (p < 1) requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-  setTimeout(() => {
-    if (node._count === id) node.textContent = to;
-  }, duration + 80);
 }
