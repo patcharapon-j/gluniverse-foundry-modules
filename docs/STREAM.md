@@ -117,6 +117,84 @@ Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
 scales the overlay, which the stream client owns.
 
+## Status cards
+
+A creature gaining or losing a condition gets its own card in the overlay: the
+creature, and one row per condition with its value and which way it moved.
+
+It is the **damage row's** size, not the roll card's, and that is the point. A
+condition is a consequence; drawn at the same weight as the roll that caused it,
+it reads as a second roll and the two compete for the same glance. Same `--u`,
+same hairline, same glass, same framed art — the roll card's own framing
+re-struck as a square, so the head is in the frame rather than pushed left by a
+crop shaped for an 8.2:4.4 box.
+
+**One card per creature.** Everything that lands while a card is up folds into
+it: frightened arriving and then ticking to 2 is one row reading "Frightened 2",
+not two rows disagreeing about the same creature, and a condition that arrives
+and ends inside one card's life is dropped rather than shown twice — the viewer
+saw nothing happen, because nothing did.
+
+Amber is pressure arriving, jade is pressure letting go. Nothing here tries to
+decide whether a condition is *good* for the creature: PF2e does not say, and a
+guess would be wrong about quickened or about a GM's own homebrew.
+
+### What the GM chooses, and what they do not
+
+In the Control Room, beside the shot: conditions, effects (off by default — there
+are a great many), value moves, endings, player characters, visible creatures,
+and how long a card stays up as a share of the chat overlay's lifetime. Every row
+is read before a model is built, so a row that is off costs nothing.
+
+**Observability is not one of those switches.** A condition is a document change
+every client is told about, hidden token or not, so a status card about a
+creature no player can see would be a leak that looks entirely correct on the
+GM's own screen. A player-owned actor is always the party's business; anything
+else is drawn only while it has a token on the scene that the GM has not hidden.
+That is deliberately not a *sight* test — vision is per-player and per-token, and
+would make the stream's answer depend on which login happens to be connected.
+PF2e's own "players cannot see this creature's name" answer is honoured exactly
+as the roll cards honour it: the art stays, the name goes.
+
+### Why the value has to be remembered
+
+Foundry's `updateItem` hook hands over the new values only, and `preUpdateItem`
+fires solely on the client that made the change — never the stream client. So the
+feed remembers each condition's value and primes itself from every observable
+creature when stream mode starts. Without that, a frightened 2 ticking down to 1
+cannot be told from one rising to 2, and every tick reads as an arrival.
+
+## Flat checks
+
+PF2e resolves a check's outcome itself and records it on the message *and* on the
+roll; where it puts the DC is its own business. The card used to require a DC in
+the message context before it would show a degree at all, and a flat check — the
+DC 11 off a Concealed card, the DC 5 off Stupefied, a recovery check — is exactly
+where the two part company. Every flat check on the stream therefore had no
+Success and no Failure on it, while the card rendered perfectly.
+
+The outcome PF2e recorded is read first now. Where a DC and a total are known but
+the system reported no outcome, a flat check is still answerable, because the
+rules give it no critical degrees, so the comparison is the whole answer. **No
+other check type is guessed at**: the ±10 bands and the natural-20 shift are the
+system's to apply, and inventing them here would put a degree on the stream that
+the player's own chat card does not carry.
+
+## What the roll card does not say
+
+"Result", "Natural 20" and "Natural 1" are gone from the outcome box. They
+restated the number already drawn on the die beside them, in the widest type on
+the card, and the room they held came out of the skill, spell, action and target
+on the left — the one line a viewer cannot reconstruct from anything else on
+screen. The die keeps its gold and red tint, so a 20 and a 1 still announce
+themselves; a card with no degree and no DC to show simply has no outcome box,
+and the identity column takes the space.
+
+A check whose chat flavor carries no heading (an inline `@Check` link, a
+macro-rolled check) also stops headlining with PF2e's raw context type. The
+reader is pure, so it cannot localise: it hands over a label key and the card
+resolves it. A raw system identifier is not a phrase to put on a stream.
+
 ## Motion
 
 Everything animates on the suite's shared anime.js engine. **Nothing here
@@ -149,7 +227,7 @@ left alone.
 
 ```bash
 node tools/stream-check.mjs          # source-shape invariants
-node --test tests/*.test.mjs         # 103 unit tests (directory mode is unsupported)
+node --test tests/*.test.mjs         # 122 unit tests (directory mode is unsupported)
 ```
 
 `stream-check` covers what a diff cannot show: import bindings across the
@@ -159,6 +237,14 @@ phase too late, the crack re-forking from core, shader uniforms declared and
 never written, legacy remaps pointing at unregistered keys, the two settings
 that must never be delegable, raw socket use, the engine takeover, OS
 reduced-motion creeping back, runtime-built i18n keys, and the usual CSS drift.
+
+For the cards it additionally pins the things above that a diff cannot show: the
+three restated labels staying gone, the degree of success never being re-gated on
+a DC in the message context, every status row having a reader *and* a control
+*and* a label, observability never becoming a setting, `preUpdateItem` staying
+out, the status hooks staying out of the per-overlay feed, the square framing on
+the thumbnail, the managed-card property agreeing across the overlay and both
+feeds, and the status strip staying smaller than the roll card's.
 
 Neither tool can show you how any of this **looks**. The camera flights, the
 targeting arcs and the roll cards need a real session.

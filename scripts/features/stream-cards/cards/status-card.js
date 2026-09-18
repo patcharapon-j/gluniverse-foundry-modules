@@ -16,6 +16,7 @@
 import { remove } from "../../stream/motion/engine.js";
 import { isFocus, placement, squareFocus } from "../framing/focus-math.js";
 import { CSS_SNAP, EASE_EXIT, EASE_OUT, EASE_POP, EASE_SNAP, el, tween, waapi } from "./card-motion.js";
+import { statusTone } from "../pf2e/read-status.js";
 
 const DEFAULT_LABELS = {
   Gained: "gained",
@@ -88,7 +89,7 @@ export class StatusCard {
   render(model) {
     this.model = model;
     const root = this.element;
-    root.dataset.tone = model.changes.some((c) => !c.eased) ? "applied" : "cleared";
+    root.dataset.tone = statusTone(model.changes);
     root.toggleAttribute("data-npc", !!model.actor?.isNpc);
 
     const art = this.q(".glus-sc-art");

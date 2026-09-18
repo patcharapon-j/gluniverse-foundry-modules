@@ -1094,10 +1094,10 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (103 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (122 tests; Node's
 directory mode is not supported here, so name the glob).
 
-Four things are worth knowing before you change any of it.
+Six things are worth knowing before you change any of it.
 
 **`stream` must never import its children.** The chat overlay reaches PF2e roll
 cards through a slot in `extensions.mjs` that `stream-cards` fills, and the
@@ -1137,6 +1137,41 @@ shader, because a creature's Broken card, its ground marker and a stream
 critical have to be the same gold and three copies of a number that must agree
 is three chances to drift while every file looks right on its own.
 
+**A status card must never announce a creature no player can see.** A roll card
+exists because somebody posted to chat, so its audience test is the message's own.
+A condition carries no message: it is a document change every client is told
+about, GM-hidden token or not, so a card about the ambusher nobody has seen yet
+looks completely ordinary on the GM's own screen. `read-status.js` decides it
+once and fails closed — a player-owned actor always, anything else only while it
+has a token on the scene that is not hidden — and that test is deliberately *not*
+a panel switch, because it is not a preference. It is also deliberately not a
+sight test: vision is per-player and per-token, so the stream's answer would
+depend on which login happened to be connected. The gates that *are* settings
+(conditions, effects, value moves, endings, players, visible creatures) are read
+before a model is built, so a row that is off costs nothing, and the check tool
+requires every row to have a reader, a control and a label — a row missing any
+one of the three is respectively a switch that does nothing, a setting reachable
+only from the console, and `undefined` in the GM's panel.
+
+The **previous** value of a condition has to be remembered. Foundry's
+`updateItem` hands over new values only, and `preUpdateItem` fires solely on the
+client that made the change, which is never the stream client — so a frightened 2
+ticking to 1 cannot be told from one rising to 2, and every tick reads as an
+arrival with an arrow that may point the wrong way. The feed keeps the values and
+primes them when stream mode starts. Its hooks belong to the *feature*, not to a
+feed instance: the overlay is rebuilt on every stream-mode toggle, so listeners
+owned by a feed accumulate one set per toggle.
+
+**The degree of success is not gated on a DC.** PF2e records the outcome it
+resolved on the message and on the roll; where it puts the DC is its own
+business, and a flat check is where the two part company. Requiring
+`context.dc` left every flat check on the stream with no Success and no Failure
+on it — the one thing a flat check has to say — while the card rendered
+perfectly. Deriving a degree from a comparison is for flat checks *alone*, which
+have no critical degrees; every other type's ±10 bands and natural-20 shift are
+the system's to apply, and a guess here puts a degree on the stream that the
+player's own chat card does not carry.
+
 Two smaller ones. Hook names are built in one place per feature: under the suite
 id an un-namespaced `${MODULE_ID}.settingsChanged` is a name any feature could
 raise, and an emitter drifting from its listener just stops the camera reframing
@@ -1144,8 +1179,16 @@ while every frame still draws. And `stream.card` must stay strictly longer than
 `stream.`, or the catalog's longest-first sort hands the child's keys to the
 parent and its Control Center group renders empty.
 
-See `docs/STREAM.md` for the camera modes, the targeting audiences and the
-migration.
+Two more that are invisible in a diff. A status card is the **damage row's**
+size, not the roll card's: a consequence drawn at the weight of its cause reads
+as a second roll and the two compete for one glance, so `stream-check` measures
+both strips. And its thumbnail must place `squareFocus(focus)`, never the card's
+own focus — that focus is struck for an 8.2:4.4 art box, and in a square it shows
+a face pushed left and a lot of shoulder, which reads as the framing being broken
+rather than as the wrong box.
+
+See `docs/STREAM.md` for the camera modes, the targeting audiences, the status
+cards and the migration.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

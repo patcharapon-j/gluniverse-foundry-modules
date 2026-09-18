@@ -139,21 +139,24 @@ export class StatusCardFeed {
   }
 
   /**
-   * Remembers every observable creature's condition values, so the first tick after stream mode starts
-   * already knows which way it went. Also frames their art ahead of the first card.
+   * Remembers the condition values of every creature that could produce a card, so the first tick after
+   * stream mode starts already knows which way it went rather than reading as an arrival.
+   *
+   * Exactly the two sets `readStatusChange` can say yes to: player-owned actors, wherever they are, and
+   * whatever is standing on the scene. Walking every actor in the world instead would be a pass over
+   * every item of every bestiary entry a GM has ever duplicated, to remember values for creatures that
+   * can never be drawn.
    */
   prime() {
     this.values.clear();
     if (!getStatusSettings().enabled) return;
-    for (const actor of game.actors ?? []) {
-      for (const item of actor.items ?? []) {
-        if (item.type === "condition" && item.id) this.values.set(item.id, valueOf(item));
-      }
-    }
-    for (const token of canvas?.tokens?.placeables ?? []) {
-      for (const item of token.actor?.items ?? []) {
-        if (item.type === "condition" && item.id) this.values.set(item.id, valueOf(item));
-      }
+    for (const actor of game.actors ?? []) if (actor.hasPlayerOwner) this.remember(actor);
+    for (const token of canvas?.tokens?.placeables ?? []) this.remember(token.actor);
+  }
+
+  remember(actor) {
+    for (const item of actor?.items ?? []) {
+      if (item.type === "condition" && item.id) this.values.set(item.id, valueOf(item));
     }
   }
 

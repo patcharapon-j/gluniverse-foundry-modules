@@ -498,7 +498,18 @@
  * What was genuinely this feature's are the roles below, which name suite
  * tokens rather than restating their values.
  */
-.glus-rc {
+/*
+ * The status card is in this selector for one role only: --glus-rc-text-shadow.
+ * A custom property is substituted where it is *declared*, so a status card that
+ * merely referenced a role declared on .glus-rc alone would resolve it to the
+ * guaranteed-invalid value and silently inherit whatever text-shadow the overlay
+ * happened to carry — legible on a dark shot and gone over a bright one. The
+ * degree and tradition roles come along unused, which is the cheaper of the two
+ * mistakes available here; the alternative is a second copy of the shadow, and
+ * two copies of one value is two chances for the cards to stop matching.
+ */
+.glus-rc,
+.glus-sc {
   --glus-rc-deg-crit-success: var(--gl-signal);
   --glus-rc-deg-success: var(--gl-good);
   --glus-rc-deg-failure: var(--gl-text-dim);
