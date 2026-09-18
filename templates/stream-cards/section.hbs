@@ -11,3 +11,23 @@
     <button type="button" data-action="portrait-framing" title="Choose how each character's picture is framed on PF2e roll cards"><i class="fas fa-crop-simple"></i> Frame Portraits</button>
   </div>
 </section>
+
+
+<section class="gluniverse-stream-panel">
+  <h2>Status Updates</h2>
+  <p class="gluniverse-stream-form-hint"><small>A small card, the size of the damage row, when a creature gains or loses a condition. An NPC also has to be standing somewhere a player could see it — a token on the scene that is not hidden — whatever is ticked here.</small></p>
+  <div class="gluniverse-stream-user-list">
+    <label title="Draw status cards at all."><input type="checkbox" name="statusUpdates.enabled" {{#if status.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.enabled"}}</label>
+    <label title="PF2e condition items: frightened, prone, dying, persistent damage."><input type="checkbox" name="statusUpdates.conditions" {{#if status.conditions}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.conditions"}}</label>
+    <label title="PF2e effect items: spell effects, stances, feat effects. There are a great many of these."><input type="checkbox" name="statusUpdates.effects" {{#if status.effects}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.effects"}}</label>
+    <label title="A condition's value moving, such as frightened 1 rising to 2 or ticking back down."><input type="checkbox" name="statusUpdates.valueChanges" {{#if status.valueChanges}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.valueChanges"}}</label>
+    <label title="A condition ending."><input type="checkbox" name="statusUpdates.removals" {{#if status.removals}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.removals"}}</label>
+    <label title="Player characters and their familiars."><input type="checkbox" name="statusUpdates.players" {{#if status.players}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.players"}}</label>
+    <label title="Creatures the GM runs, while a player can see them."><input type="checkbox" name="statusUpdates.npcs" {{#if status.npcs}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.npcs"}}</label>
+  </div>
+  <div class="gluniverse-stream-number-grid">
+    <label class="gluniverse-stream-range">{{localize "GLUNIVERSE_STREAM.statusCard.settings.lifetimeFactor"}} <output data-for="statusUpdates.lifetimeFactor">{{statusLifetime.percent}}%</output>
+      <input type="range" name="statusUpdates.lifetimeFactor" value="{{status.lifetimeFactor}}" min="{{statusLifetime.min}}" max="{{statusLifetime.max}}" step="{{statusLifetime.step}}" title="How long a status card stays up, as a share of the chat overlay's lifetime." {{#unless canEdit}}disabled{{/unless}}>
+    </label>
+  </div>
+</section>

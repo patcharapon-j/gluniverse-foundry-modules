@@ -317,6 +317,206 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
 }
 
+/* --------------------------------------------------- the roll card's headline */
+// The die is already drawn with its natural result on it in the widest type on
+// the card. "Result", "Natural 20" and "Natural 1" restated that number beside
+// it, in the room the skill, spell, action and target on the left had to give
+// up — and that left-hand line is the one thing a viewer cannot reconstruct from
+// anything else on screen. They are gone; nothing here would notice them coming
+// back, because a card with a redundant label in it renders perfectly.
+{
+  const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+  for (const gone of ["Result", "Natural20", "Natural1"]) {
+    if (new RegExp(`["'\`]${gone}["'\`]`).test(card)) {
+      fail(`stream-cards/cards/roll-card.js: the "${gone}" label is back — the die beside it already says the number, and the room it takes comes out of the skill/spell/action line`);
+    }
+  }
+  const lang = JSON.parse(read("lang/stream-cards.en.json"));
+  for (const gone of ["Result", "Natural20", "Natural1"]) {
+    if (`GLUNIVERSE_STREAM.rollCard.${gone}` in lang) {
+      fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${gone} is back — nothing renders it, and a label nothing renders is an invitation to render it`);
+    }
+  }
+  // A check with no heading in its flavor falls back to a key, not to PF2e's raw
+  // context type: "flat-check" is an identifier, not a phrase to put on a stream.
+  const reader = strip(read("scripts/features/stream-cards/pf2e/read-message.js"));
+  const keys = reader.match(/CHECK_TYPE_KEYS = Object\.freeze\(\{([\s\S]*?)\}\)/);
+  if (!keys) fail("stream-cards/pf2e/read-message.js: could not find CHECK_TYPE_KEYS");
+  else {
+    const names = [...keys[1].matchAll(/:\s*"([A-Za-z]+)"/g)].map((m) => m[1]);
+    if (!names.length) fail("read-message.js: CHECK_TYPE_KEYS is empty — every accepted check type needs a label behind it");
+    for (const name of names) {
+      // Built at runtime from the model, so nothing else catches a missing one.
+      if (!(`GLUNIVERSE_STREAM.rollCard.${name}` in lang)) {
+        fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${name} is not defined — a check with no heading would headline with the key itself`);
+      }
+      if (!new RegExp(`\\b${name}:`).test(card)) {
+        fail(`roll-card.js: DEFAULT_LABELS has no ${name} — the English fallback is what a world with no translation loaded shows`);
+      }
+    }
+  }
+  if (/label:\s*isSpellAttack \? derived\.item\.name : heading \?\? context\.type/.test(reader)) {
+    fail("read-message.js: a check's headline falls back to PF2e's raw context type — hand over a CHECK_TYPE_KEYS key instead");
+  }
+}
+
+/* ------------------------------------------- the degree is not gated on a DC */
+// PF2e resolves the outcome itself and records it on the message and on the roll;
+// where it puts the DC is its own business. A flat check — the DC 11 off a
+// Concealed card, the DC 5 off Stupefied, a recovery check — is the case where
+// the two part company, so requiring `context.dc` before reading the outcome left
+// every flat check on the stream with no Success and no Failure on it while the
+// card rendered perfectly.
+{
+  const reader = strip(read("scripts/features/stream-cards/pf2e/read-message.js"));
+  const check = reader.match(/function readCheck\([\s\S]*?\n\}/);
+  if (!check) fail("stream-cards/pf2e/read-message.js: could not find readCheck");
+  else {
+    if (/dcValue === null \?\s*null\s*:/.test(check[0])) {
+      fail("read-message.js: the degree of success is gated on a DC being in the message context — that silences every flat check");
+    }
+    if (!/degreeOf\(/.test(check[0])) {
+      fail("read-message.js: readCheck must resolve its degree through degreeOf, which reads PF2e's own outcome first");
+    }
+  }
+  const degree = reader.match(/export function degreeOf\([\s\S]*?\n\}/);
+  if (!degree) fail("read-message.js: could not find degreeOf");
+  else if (!/context\?\.outcome/.test(degree[0]) || !/degreeOfSuccess/.test(degree[0])) {
+    fail("read-message.js: degreeOf must read the outcome PF2e recorded, on the message and on the roll, before anything else");
+  }
+  // Deriving a degree is for flat checks alone: they have no critical degrees, so
+  // the comparison is the whole answer. Every other type's ±10 bands and its
+  // natural-20 shift are the system's to apply, and a guess here would put a
+  // degree on the stream that the player's own chat card does not carry.
+  else if (!/flat-check/.test(degree[0])) {
+    fail("read-message.js: degreeOf derives a degree without naming flat-check — no other check type may be guessed at");
+  }
+}
+
+/* ------------------------------------------------------------ status cards -- */
+// Everything below fails silently: a gate nobody reads is a switch that does
+// nothing, a switch with no control is a setting reachable only from the console,
+// and a status card that announces a creature no player can see looks entirely
+// correct on the GM's own screen.
+{
+  const settings = strip(read("scripts/features/stream-cards/settings.js"));
+  const block = settings.match(/DEFAULT_STATUS_UPDATES = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
+  if (!block) fail("stream-cards/settings.js: could not find DEFAULT_STATUS_UPDATES");
+  else {
+    const rows = [...block[1].matchAll(/^\s{2}([A-Za-z0-9_]+):/gm)].map((m) => m[1]);
+    const lang = JSON.parse(read("lang/stream-cards.en.json"));
+    const consumers = ["scripts/features/stream-cards/pf2e/read-status.js", "scripts/features/stream-cards/pf2e/status-feed.js"]
+      .map((f) => strip(read(f)))
+      .join("\n");
+    const form = read("templates/stream-cards/section.hbs");
+    for (const row of rows) {
+      if (!new RegExp(`["'\\[.]${row}\\b`).test(consumers)) {
+        fail(`stream-cards: status setting "${row}" is registered but nothing reads it — a switch that does nothing`);
+      }
+      if (!form.includes(`name="statusUpdates.${row}"`)) {
+        fail(`templates/stream-cards/section.hbs: no control for status setting "${row}" — a GM could only reach it from the console`);
+      }
+      const key = `GLUNIVERSE_STREAM.statusCard.settings.${row}`;
+      if (!(key in lang)) fail(`lang/stream-cards.en.json: runtime-built i18n key ${key} is not defined`);
+    }
+    // The panel's form parser builds a nested patch from the dotted name only.
+    for (const m of form.matchAll(/name="statusUpdates\.([A-Za-z0-9_]+)"/g)) {
+      if (!rows.includes(m[1])) {
+        fail(`templates/stream-cards/section.hbs: control for statusUpdates.${m[1]}, which no setting row backs — the panel would save a key the sanitizer drops`);
+      }
+    }
+    // No row may be a way to switch observability off. It is not an audience
+    // preference: a card about a creature the GM has hidden is a leak, and the one
+    // test that stops it has to be unreachable from the panel.
+    for (const forbidden of ["observable", "hidden", "showHidden", "includeHidden", "offScene"]) {
+      if (rows.includes(forbidden)) {
+        fail(`stream-cards/settings.js: status setting "${forbidden}" would let a GM switch off the observability test — that test is not a preference`);
+      }
+    }
+  }
+
+  const reader = strip(read("scripts/features/stream-cards/pf2e/read-status.js"));
+  if (!/actor\.observable/.test(reader)) {
+    fail("stream-cards/pf2e/read-status.js: the observability test is gone — a condition is a document change every client is told about, hidden token or not");
+  }
+  const snapshot = strip(read("scripts/features/stream-cards/pf2e/status-snapshot.js"));
+  if (!/hidden/.test(snapshot)) {
+    fail("stream-cards/pf2e/status-snapshot.js: observability no longer consults a token's hidden state");
+  }
+
+  // `preUpdateItem` fires only on the client that made the change, which is never
+  // the stream client. Relying on it leaves every value change reading as an
+  // arrival, with an arrow that may point the wrong way.
+  const watch = strip(read("scripts/features/stream-cards/pf2e/status-watch.js"));
+  if (/preUpdateItem/.test(watch)) {
+    fail("stream-cards/pf2e/status-watch.js: preUpdateItem only fires on the acting client, never the stream — remember the previous value in the feed instead");
+  }
+  if (!/Hooks\.on\("updateItem"/.test(watch)) {
+    fail("stream-cards/pf2e/status-watch.js: no updateItem listener — a condition's value could never be seen to move");
+  }
+  // The overlay is rebuilt every time stream mode is toggled, so listeners owned
+  // by a feed instance pile up one set per toggle.
+  if (/Hooks\.on\(/.test(strip(read("scripts/features/stream-cards/pf2e/status-feed.js")))) {
+    fail("stream-cards/pf2e/status-feed.js: registers a hook — the feed is rebuilt per overlay, so its listeners would accumulate one set per stream-mode toggle");
+  }
+  const adapter = strip(read("scripts/features/stream-cards/index.mjs"));
+  if (!/registerStatusHooks\(\)/.test(adapter)) {
+    fail("stream-cards/index.mjs: registerStatusHooks is never called — status cards would have nothing to listen to");
+  }
+
+  // A card focus is struck for the roll card's 8.2:4.4 art box. Handed straight to
+  // a square thumbnail it shows a face pushed left and a lot of shoulder, which
+  // reads as the framing not working rather than as the wrong box.
+  const card = strip(read("scripts/features/stream-cards/cards/status-card.js"));
+  if (!/placement\(squareFocus\(/.test(card)) {
+    fail("stream-cards/cards/status-card.js: the thumbnail must place squareFocus(focus), not the card's own focus — that focus is shaped for a 8.2:4.4 box");
+  }
+}
+
+/* ------------------------------------------ the overlay's managed-card seam -- */
+// A record the feed pushes onto the stack may carry a card that animates itself
+// off it and reports back so the feed can drop the message ids, timers and
+// framing watches behind it. Spelled differently on the two sides the card still
+// disappears on cue, and everything it was holding leaks for the session.
+{
+  const overlay = strip(read("scripts/features/stream/chat-overlay.js"));
+  if (!/record\.card\b/.test(overlay) || !/record\.card\.exit\(\)/.test(overlay) || !/record\.card\.destroy\(\)/.test(overlay)) {
+    fail("stream/chat-overlay.js: the managed-card property is not `record.card` — the feeds push that name");
+  }
+  if (/record\.rollCard/.test(overlay)) {
+    fail("stream/chat-overlay.js: still reaches for `record.rollCard` — status cards travel the same path and would never be torn down");
+  }
+  const feed = strip(read("scripts/features/stream-cards/pf2e/roll-card-feed.js"));
+  if (!/\bcard,/.test(feed) || /rollCard:/.test(feed)) {
+    fail("stream-cards/pf2e/roll-card-feed.js: the record's card must be pushed as `card`, the name the overlay reads");
+  }
+  if (!/statusKey !== undefined/.test(feed)) {
+    fail("stream-cards/pf2e/roll-card-feed.js: forget() no longer routes status records to the status feed — it would walk a roll card's message ids on a record that has none");
+  }
+}
+
+/* ------------------------------------------- the status card stays secondary */
+// A condition is a consequence. At the roll card's weight it reads as a second
+// roll, and the two cards then compete for the same glance. The damage row is the
+// size that says "this belongs to what you just saw".
+{
+  const css = read("styles/stream-cards.css");
+  const heightOf = (selector) => {
+    const rule = css.match(new RegExp(`\\${selector} \\{([\\s\\S]*?)\\n\\}`));
+    const height = rule?.[1].match(/height: calc\(([0-9.]+) \* var\(--u\)\)/);
+    return height ? Number(height[1]) : null;
+  };
+  const main = heightOf(".glus-rc-main");
+  const damage = heightOf(".glus-rc-damage");
+  const status = heightOf(".glus-sc-strip");
+  if (main === null || damage === null || status === null) {
+    fail("styles/stream-cards.css: could not read the strip heights (.glus-rc-main, .glus-rc-damage, .glus-sc-strip)");
+  } else {
+    if (status >= main) fail(`styles/stream-cards.css: the status strip (${status}u) is not smaller than the roll card's (${main}u) — a consequence at the same weight as its cause reads as a second roll`);
+    if (status > damage * 1.25) fail(`styles/stream-cards.css: the status strip (${status}u) has grown well past the damage row it is sized against (${damage}u)`);
+  }
+}
+
 /* ------------------------------------------------------------------ report -- */
 if (problems.length) {
   console.error(`stream-check: ${problems.length} problem${problems.length === 1 ? "" : "s"}\n`);

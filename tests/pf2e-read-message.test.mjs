@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { readMessage, headingText, fxOf, visibilityOf } from "../scripts/features/stream-cards/pf2e/read-message.js";
+import { CHECK_TYPE_KEYS, readMessage, headingText, degreeOf, fxOf, visibilityOf } from "../scripts/features/stream-cards/pf2e/read-message.js";
 
 const load = name => JSON.parse(readFileSync(new URL(`./fixtures/pf2e/${name}`, import.meta.url), "utf8"));
 /** Captured on the GM client and on a non-GM client (the stream's point of view). */
@@ -224,6 +224,42 @@ describe("rules", () => {
     assert.equal(fxOf(null, 20), "gold");
     assert.equal(fxOf(null, 1), "red");
     assert.equal(fxOf(null, 12), null);
+  });
+
+  test("a flat check shows success and failure — its degree is never gated on a DC in the context", () => {
+    // PF2e records the outcome it resolved on the message and on the roll. Where it puts the DC is its
+    // own business, and a flat check is the case where the two part company: gating the degree on
+    // `context.dc` left every flat check on the stream with no Success and no Failure on it.
+    const roll = { total: 14, d20Results: [{ result: 14, active: true }], degreeOfSuccess: null };
+    assert.equal(degreeOf({ type: "flat-check", outcome: "success" }, roll, null), 2);
+    assert.equal(degreeOf({ type: "flat-check" }, { ...roll, degreeOfSuccess: 1 }, null), 1);
+    // Outcome absent, DC known: a flat check has no critical degrees, so the comparison is the answer.
+    assert.equal(degreeOf({ type: "flat-check" }, roll, 11), 2);
+    assert.equal(degreeOf({ type: "flat-check" }, roll, 15), 1);
+    assert.equal(degreeOf({ type: "flat-check" }, roll, null), null, "no DC and no outcome says nothing");
+    // Every other check keeps PF2e's own bands: guessing them here would put a degree on the stream
+    // that the player's chat card does not carry.
+    assert.equal(degreeOf({ type: "skill-check" }, roll, 11), null);
+    assert.equal(degreeOf({ type: "saving-throw" }, roll, 11), null);
+  });
+
+  test("a check with no heading to read hands over a label key, never PF2e's raw type", () => {
+    const flat = structuredClone(captures.player.messages.find(m => m.label === "skill-nodc"));
+    flat.raw.flags.pf2e.context.type = "flat-check";
+    flat.raw.flags.pf2e.context.dc = { value: 11 };
+    flat.raw.flavor = "<p>no heading here</p>";
+    const card = readMessage(flat);
+    assert.equal(card.action.label, null, "a raw context type is not a phrase to put on a stream");
+    assert.equal(card.action.labelKey, "FlatCheck");
+    assert.equal(card.roll.degree, card.roll.total >= 11 ? 2 : 1);
+    // A heading, where PF2e gives one, still wins: it names the actual skill or strike.
+    assert.equal(readMessage(captures.player.messages.find(m => m.label === "skill-nodc")).action.labelKey, null);
+  });
+
+  test("every check type the reader accepts has a label key behind it", () => {
+    for (const [type, key] of Object.entries(CHECK_TYPE_KEYS)) {
+      assert.ok(key && /^[A-Za-z]+$/.test(key), `${type} -> ${key}`);
+    }
   });
 
   test("headingText strips markup and action glyphs", () => {

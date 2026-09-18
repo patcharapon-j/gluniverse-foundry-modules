@@ -106,6 +106,30 @@ export function fromFocus(focus, width, height, aspect = ART_ASPECT) {
   return clampCrop({ x: focus.x * width, y: focus.y * width, width: w, height: w / aspect }, width, height);
 }
 
+/**
+ * The same framing, as a square: what the status card's thumbnail shows.
+ *
+ * A card focus is shaped for the roll card's 8.2:4.4 art box, so handing it straight to a square
+ * thumbnail would show a face pushed left and a lot of shoulder. The head sits at a known place inside
+ * that crop — `CARD_HEAD_FRAME.headX` across it, `eyeLine` down it — so the square is re-struck about
+ * that point instead, its side the crop's own height, with the head a little above centre so the
+ * shoulders close the bottom of the frame rather than the chin.
+ *
+ * Still in image widths, so `placement()` takes it unchanged. `y` may exceed 1 on tall art: it is
+ * measured in widths, like the focus it came from.
+ */
+export function squareFocus(focus) {
+  const height = focus.w / ART_ASPECT;
+  const side = Math.min(1, height);
+  const cx = focus.x + focus.w * CARD_HEAD_FRAME.headX;
+  const cy = focus.y + height * CARD_HEAD_FRAME.eyeLine;
+  return {
+    x: round(Math.max(0, Math.min(1 - side, cx - side / 2))),
+    y: round(Math.max(0, cy - side * 0.42)),
+    w: round(side)
+  };
+}
+
 export function isFocus(value) {
   return !!value && [value.x, value.y, value.w].every(Number.isFinite) && value.w > 0 && value.w <= 1.0001;
 }

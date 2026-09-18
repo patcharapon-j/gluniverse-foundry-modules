@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  ART_ASPECT, cropForFace, defaultCrop, fromFocus, isFocus, pickFace, placement, tileWindows, toFocus
+  ART_ASPECT, CARD_HEAD_FRAME, cropForFace, defaultCrop, fromFocus, isFocus, pickFace, placement, squareFocus, tileWindows, toFocus
 } from "../scripts/features/stream-cards/framing/focus-math.js";
 
 const det = (score, x, y, size = 40) => ({ score, box: { x, y, width: size, height: size } });
@@ -73,4 +73,36 @@ test("tile windows cover the upper image at two zoom levels", () => {
   assert.ok(windows.length > 10);
   assert.ok(windows.every(w => w.y + w.size <= 512 * 0.75 + 1 && w.x + w.size <= 374 + 1));
   assert.equal(new Set(windows.map(w => Math.round(w.size))).size, 2);
+});
+
+describe("squareFocus: the same framing for a square thumbnail", () => {
+  test("the square is the card crop's height and stays inside the image", () => {
+    for (const focus of [{ x: 0, y: 0, w: 1 }, { x: 0.2, y: 0.1, w: 0.5 }, { x: 0.55, y: 0.9, w: 0.45 }]) {
+      const square = squareFocus(focus);
+      assert.ok(isFocus(square), JSON.stringify(focus));
+      assert.ok(Math.abs(square.w - Math.min(1, focus.w / ART_ASPECT)) < 1e-3, 'side is the crop height');
+      assert.ok(square.x >= 0 && square.x + square.w <= 1.0001, 'inside the image across');
+      assert.ok(square.y >= 0, 'never above the top edge');
+    }
+  });
+
+  test("it centres on the head the card crop was struck around", () => {
+    const focus = { x: 0.2, y: 0.1, w: 0.6 };
+    const square = squareFocus(focus);
+    const cropHeight = focus.w / ART_ASPECT;
+    const headX = focus.x + focus.w * CARD_HEAD_FRAME.headX;
+    const headY = focus.y + cropHeight * CARD_HEAD_FRAME.eyeLine;
+    assert.ok(Math.abs(square.x + square.w / 2 - headX) < 1e-3, 'head is centred across');
+    // A little above centre, so shoulders close the bottom of the frame rather than the chin.
+    assert.ok(headY > square.y, 'head is inside the square');
+    assert.ok(headY < square.y + square.w / 2, 'head sits above the middle');
+  });
+
+  test("placement takes it unchanged, so the thumbnail and the card share one geometry", () => {
+    const square = squareFocus({ x: 0.1, y: 0.05, w: 0.6 });
+    const { scale, left, top } = placement(square);
+    assert.ok(Math.abs(scale - 1 / square.w) < 1e-9);
+    assert.ok(Math.abs(left + square.x / square.w) < 1e-9);
+    assert.ok(Math.abs(top + square.y / square.w) < 1e-9);
+  });
 });

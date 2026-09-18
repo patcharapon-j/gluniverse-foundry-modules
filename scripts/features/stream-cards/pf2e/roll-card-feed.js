@@ -5,6 +5,8 @@ import { getDefaultRollArt } from "../settings.js";
 import { portraitFramer } from "../framing/portrait-framer.js";
 import { artFor, readMessage } from "./read-message.js";
 import { snapshotMessage } from "./snapshot.js";
+import { StatusCardFeed } from "./status-feed.js";
+import { bindStatusSink } from "./status-watch.js";
 
 /** Damage merges into the card its attack or cast made, if that card is this recent and still up. */
 export const MERGE_WINDOW_MS = 60_000;
@@ -22,6 +24,13 @@ const REROLL_GRACE_MS = 2_000;
 export class RollCardFeed {
   constructor(overlay) {
     this.overlay = overlay;
+    /**
+     * Condition and effect cards for this overlay. It is owned here rather than beside the roll cards
+     * in `stream` because the overlay reaches this feature through one slot: a second slot would be a
+     * second thing for `stream` to know about a child it must not import.
+     */
+    this.status = new StatusCardFeed(overlay);
+    bindStatusSink(this.status);
     /** messageId -> record, for the message each card currently shows (and every message merged into it). */
     this.byMessageId = new Map();
     /** rerollKey -> record, for check cards whose message was just deleted. */
@@ -100,7 +109,7 @@ export class RollCardFeed {
     const card = new RollCard(model, { label: localizeLabel, framer: portraitFramer });
     const record = {
       element: card.element,
-      rollCard: card,
+      card,
       messageId,
       messageIds: new Set([messageId]),
       model,
@@ -124,13 +133,13 @@ export class RollCardFeed {
     record.model = { ...model, damage: null };
     record.rerollKey = rerollKey ?? record.rerollKey;
     this.touch(record, model.fx);
-    await record.rollCard.update(record.model, { reroll });
+    await record.card.update(record.model, { reroll });
   }
 
   async mergeDamage(record, messageId, model) {
     this.adopt(record, messageId, { keepPrimary: true });
     this.touch(record, record.model.fx);
-    await record.rollCard.addDamage(model.damage);
+    await record.card.addDamage(model.damage);
   }
 
   /** Points the card at a new message. A merged damage message keeps the card's own message primary. */
@@ -158,8 +167,12 @@ export class RollCardFeed {
     this.overlay.removeCard(record.element);
   }
 
-  /** Called by the overlay once a roll card leaves the stack, however it left. */
+  /**
+   * Called by the overlay once one of this feature's cards leaves the stack, however it left. Status
+   * cards travel the same path — the overlay holds one feed, so this is where they are handed on.
+   */
   forget(record) {
+    if (record.statusKey !== undefined) return this.status.forget(record);
     record.exiting = true;
     window.clearTimeout(record.timeout);
     window.clearTimeout(record.rerollTimer);
@@ -183,12 +196,14 @@ export class RollCardFeed {
       add(actor, combatant.token, !actor?.hasPlayerOwner);
     }
     portraitFramer.prescan(sources.filter(Boolean));
+    this.status.prime();
   }
 
   clear() {
     for (const record of this.awaitingReroll.values()) window.clearTimeout(record.rerollTimer);
     this.awaitingReroll.clear();
     this.byMessageId.clear();
+    this.status.clear();
   }
 }
 

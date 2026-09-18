@@ -9,16 +9,26 @@ import { isFocus } from "../framing/focus-math.js";
 
 export const DEGREES = ["criticalFailure", "failure", "success", "criticalSuccess"];
 
-const CHECK_TYPES = new Set([
-  "attack-roll",
-  "skill-check",
-  "saving-throw",
-  "perception-check",
-  "flat-check",
-  "initiative",
-  "counteract-check",
-  "check"
-]);
+/**
+ * The check types the stream draws, each with the label key the card falls back to.
+ *
+ * A check whose chat flavor carries no heading — an inline `@Check[flat|dc:11]` off a condition card,
+ * a macro-rolled check — used to headline with PF2e's raw context type, so the stream read
+ * "flat-check" in the card's second-largest type. The reader hands over a *key* instead: it is pure,
+ * so it cannot localise, and a raw system identifier is not a phrase to put on a stream.
+ */
+export const CHECK_TYPE_KEYS = Object.freeze({
+  "attack-roll": "AttackRoll",
+  "skill-check": "SkillCheck",
+  "saving-throw": "SavingThrow",
+  "perception-check": "PerceptionCheck",
+  "flat-check": "FlatCheck",
+  initiative: "Initiative",
+  "counteract-check": "CounteractCheck",
+  check: "Check"
+});
+
+const CHECK_TYPES = new Set(Object.keys(CHECK_TYPE_KEYS));
 
 const DEFAULT_TOKEN_ICON = /(^|\/)(icons\/svg\/mystery-man\.svg|systems\/pf2e\/icons\/default-icons\/)/;
 
@@ -63,6 +73,7 @@ export function readMessage(snapshot) {
     ...base,
     action: {
       label: derived.item?.name ?? headingText(raw.content) ?? "",
+      labelKey: null,
       sub: null,
       map: 0,
       cost: cost ? { type: cost.type ?? "action", value: cost.value ?? null } : null
@@ -91,13 +102,14 @@ function readCheck(raw, context, derived) {
   const roll = derived.rolls[0] ?? {};
   const natural = naturalOf(roll);
   const dcValue = Number.isFinite(context.dc?.value) ? context.dc.value : null;
-  const degree = dcValue === null ? null : degreeIndex(context.outcome ?? roll.degreeOfSuccess);
+  const degree = degreeOf(context, roll, dcValue);
   const heading = headingText(raw.flavor);
   const isSpellAttack = context.type === "attack-roll" && derived.item?.type === "spell";
   const map = mapOf(context.options);
   return {
     action: {
-      label: isSpellAttack ? derived.item.name : heading ?? context.type,
+      label: isSpellAttack ? derived.item.name : heading ?? null,
+      labelKey: isSpellAttack || heading ? null : CHECK_TYPE_KEYS[context.type] ?? null,
       sub: isSpellAttack ? heading : null,
       map
     },
@@ -119,7 +131,7 @@ function readDamage(raw, derived) {
     .map((i) => ({ type: i.type ?? "untyped", amount: i.total ?? 0, persistent: !!i.persistent }));
   const crit = roll.degreeOfSuccess === 3;
   return {
-    action: { label: headingText(raw.flavor) ?? derived.item?.name ?? "", sub: null, map: 0 },
+    action: { label: headingText(raw.flavor) ?? derived.item?.name ?? "", labelKey: null, sub: null, map: 0 },
     damage: { total: roll.total ?? 0, parts, crit },
     fx: crit ? "pop" : null
   };
@@ -131,7 +143,7 @@ function readCast(pf2e, derived) {
   const save = defense.save ?? null;
   const isAttack = !save && defense.passive?.statistic === "ac";
   return {
-    action: { label: item.name ?? "", sub: null, map: 0 },
+    action: { label: item.name ?? "", labelKey: null, sub: null, map: 0 },
     spell: {
       name: item.name ?? "",
       tradition: pf2e.casting?.tradition ?? null,
@@ -150,6 +162,28 @@ export function naturalOf(roll) {
   if (!Array.isArray(results)) return null;
   const active = results.filter((r) => r.active !== false);
   return active.length ? active[active.length - 1].result : null;
+}
+
+/**
+ * The degree of success the card shows, or null when PF2e resolved none.
+ *
+ * It is deliberately **not** gated on a DC being in the message's context. PF2e resolves the outcome
+ * itself and records it on the message and on the roll; where it puts the DC is its own business, and
+ * a flat check — the DC 11 off a Concealed card, the DC 5 off Stupefied, a recovery check — is the
+ * case where the two part company. Requiring `context.dc` there left every flat check on the stream
+ * with no Success and no Failure on it, which is the one thing a flat check has to say, while the card
+ * rendered perfectly.
+ *
+ * With a DC and a total but no outcome from the system, a **flat check** is still answerable: the
+ * rules give it no critical degrees, so the comparison is the whole answer. Every other check type is
+ * left alone — PF2e's ±10 bands and its natural-20 shift are the system's to apply, and guessing them
+ * here would put a degree on the stream that the player's own chat card does not carry.
+ */
+export function degreeOf(context, roll, dcValue) {
+  const resolved = degreeIndex(context?.outcome ?? roll?.degreeOfSuccess);
+  if (resolved !== null) return resolved;
+  if (context?.type !== "flat-check" || dcValue === null || !Number.isFinite(roll?.total)) return null;
+  return roll.total >= dcValue ? 2 : 1;
 }
 
 export function degreeIndex(value) {
@@ -261,7 +295,7 @@ function decodeEntities(text) {
  * @property {{name: string|null, isNpc: boolean, img: string|null, imgKind: "token"|"portrait", focus: {x: number, y: number, w: number}|null}} actor
  * @property {{name: string}|null} player
  * @property {{name: string|null}|null} target
- * @property {{label: string, sub: string|null, map: number, cost?: {type: string, value: number|null}|null}|null} action
+ * @property {{label: string|null, labelKey: string|null, sub: string|null, map: number, cost?: {type: string, value: number|null}|null}|null} action
  * @property {{natural: number|null, total: number|null, dc: number|null, dcVisible: boolean, degree: 0|1|2|3|null}|null} roll
  * @property {{name: string, tradition: string|null, rank: number|null, isCantrip: boolean, dc: number|null, save: {statistic: string, basic: boolean}|null, attackBonus: number|null}|null} spell
  * @property {{total: number, parts: {type: string, amount: number, persistent: boolean}[], crit: boolean}|null} damage

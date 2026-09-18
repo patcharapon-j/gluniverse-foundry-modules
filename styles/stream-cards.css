@@ -199,6 +199,15 @@
   gap: calc(0.7 * var(--u));
   padding: 0 calc(1 * var(--u)) 0 calc(0.9 * var(--u));
 }
+/*
+ * data-lean: the outcome box is absent, because PF2e resolved no degree and no DC is on show. The
+ * standing "Result", "Natural 20" and "Natural 1" labels that used to fill it only restated the number
+ * already drawn on the die beside them, so the room they were holding goes to the identity column,
+ * where the skill, spell, action and target live and where nothing else on screen says the same thing.
+ * An attribute rather than :has(), which older OBS browser sources lack.
+ */
+.glus-rc[data-lean] .glus-rc-result { padding-left: calc(0.45 * var(--u)); gap: calc(0.5 * var(--u)); }
+.glus-rc[data-lean] .glus-rc-text { padding-right: calc(0.4 * var(--u)); }
 .glus-rc-result::before {
   content: "";
   position: absolute;
@@ -489,7 +498,18 @@
  * What was genuinely this feature's are the roles below, which name suite
  * tokens rather than restating their values.
  */
-.glus-rc {
+/*
+ * The status card is in this selector for one role only: --glus-rc-text-shadow.
+ * A custom property is substituted where it is *declared*, so a status card that
+ * merely referenced a role declared on .glus-rc alone would resolve it to the
+ * guaranteed-invalid value and silently inherit whatever text-shadow the overlay
+ * happened to carry — legible on a dark shot and gone over a bright one. The
+ * degree and tradition roles come along unused, which is the cheaper of the two
+ * mistakes available here; the alternative is a second copy of the shadow, and
+ * two copies of one value is two chances for the cards to stop matching.
+ */
+.glus-rc,
+.glus-sc {
   --glus-rc-deg-crit-success: var(--gl-signal);
   --glus-rc-deg-success: var(--gl-good);
   --glus-rc-deg-failure: var(--gl-text-dim);
@@ -505,4 +525,190 @@
   --glus-rc-text-shadow: 0 1px 0 rgb(var(--gl-tint-dark)), 0 2px 2px rgb(var(--gl-tint-dark)),
     0 0 3px rgb(var(--gl-tint-dark)), 0 0 8px rgb(var(--gl-tint-dark) / 0.95),
     0 0 18px rgb(var(--gl-tint-dark) / 0.8);
+}
+
+/*
+ * GLUniverse Stream: PF2e status card.
+ *
+ * Deliberately the damage row's size, not the roll card's: a condition is a consequence, and a
+ * consequence that arrives at the same weight as the roll that caused it reads as a second roll. Same
+ * --u, so it scales with the overlay; same hairline, same framed art, same glass.
+ *
+ * State lives in data attributes on the root:
+ *   data-tone    applied (pressure arriving) | cleared (pressure letting go) | none
+ *   data-npc     a creature the GM runs
+ *   data-no-art  no usable picture: a monogram holds the thumbnail's place
+ *
+ * Roles below name suite tokens rather than restating their values, exactly as the roll card's do.
+ */
+.glus-sc {
+  --u: calc(var(--glus-rc-scale, 1) * 19.2px);
+  --glus-sc-applied: var(--gl-warn);
+  --glus-sc-cleared: var(--gl-jade);
+  --glus-sc-tone: var(--gl-text-dim);
+  position: relative;
+  display: grid;
+  width: calc(22 * var(--u));
+  margin-left: calc(2.4 * var(--u));
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  filter: drop-shadow(0 calc(0.2 * var(--u)) calc(0.6 * var(--u)) rgb(var(--gl-tint-dark) / 0.5));
+  pointer-events: none;
+}
+.glus-sc[data-tone="applied"] { --glus-sc-tone: var(--glus-sc-applied); }
+.glus-sc[data-tone="cleared"] { --glus-sc-tone: var(--glus-sc-cleared); }
+
+.glus-sc-strip {
+  position: relative;
+  height: calc(2.6 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(0.5 * var(--u));
+  padding: 0 calc(0.9 * var(--u)) 0 calc(0.5 * var(--u));
+  background: color-mix(in srgb, var(--gl-ink-2) 90%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--gl-etch-soft);
+  /* The damage row's chamfer, mirrored: that row hangs off an attack above it, this card stands alone. */
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 0.5 * var(--u)), calc(100% - 0.5 * var(--u)) 100%, 0 100%);
+  overflow: hidden;
+  text-shadow: var(--glus-rc-text-shadow);
+}
+
+/* Thumbnail: the roll card's framing re-struck as a square (focus-math's squareFocus). */
+.glus-sc-art-frame {
+  --glus-sc-art-w: calc(1.9 * var(--u));
+  position: relative;
+  flex: none;
+  width: var(--glus-sc-art-w);
+  height: var(--glus-sc-art-w);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--glus-sc-tone) 40%, transparent);
+  transition: border-color 0.35s;
+}
+.glus-sc-art {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 16%;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    top 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glus-sc-art-frame[data-framed] .glus-sc-art {
+  height: auto;
+  width: calc(var(--glus-sc-art-w) * var(--glus-sc-art-scale));
+  left: calc(var(--glus-sc-art-w) * var(--glus-sc-art-left));
+  top: calc(var(--glus-sc-art-w) * var(--glus-sc-art-top));
+  object-fit: fill;
+}
+.glus-sc-art-frame[data-kind="token"]:not([data-framed]) .glus-sc-art { object-position: 50% 50%; }
+.glus-sc[data-no-art] .glus-sc-art-frame { display: none; }
+.glus-sc-monogram { display: none; }
+.glus-sc[data-no-art] .glus-sc-monogram {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: calc(1.9 * var(--u));
+  height: calc(1.9 * var(--u));
+  font-weight: 700;
+  font-size: calc(1.1 * var(--u));
+  color: color-mix(in srgb, var(--glus-sc-tone) 55%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--glus-sc-tone) 16%, transparent), transparent);
+}
+
+.glus-sc-name {
+  font-family: var(--gl-tech);
+  font-size: calc(0.62 * var(--u));
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gl-text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(6.5 * var(--u));
+  flex: none;
+}
+.glus-sc[data-npc] .glus-sc-name { color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-text-bright)); }
+
+/* Chips: the conditions themselves. The row scrolls nothing — it ends in an ellipsis like the card above. */
+.glus-sc-chips {
+  display: flex;
+  align-items: center;
+  gap: calc(0.45 * var(--u));
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.glus-sc-chip {
+  --glus-sc-chip-tone: var(--glus-sc-applied);
+  display: flex;
+  align-items: center;
+  gap: calc(0.22 * var(--u));
+  flex: none;
+  padding: calc(0.12 * var(--u)) calc(0.42 * var(--u));
+  background: color-mix(in srgb, var(--glus-sc-chip-tone) 16%, transparent);
+  border-left: max(1px, calc(0.06 * var(--u))) solid var(--glus-sc-chip-tone);
+  white-space: nowrap;
+}
+.glus-sc-chip[data-direction="lowered"],
+.glus-sc-chip[data-direction="lost"] { --glus-sc-chip-tone: var(--glus-sc-cleared); }
+/* An effect is quieter than a condition: it is bookkeeping the table opted into seeing. */
+.glus-sc-chip[data-kind="effect"] { background: color-mix(in srgb, var(--glus-sc-chip-tone) 8%, transparent); }
+.glus-sc-chip-icon {
+  width: calc(0.9 * var(--u));
+  height: calc(0.9 * var(--u));
+  border: 0;
+  object-fit: contain;
+  flex: none;
+}
+.glus-sc-chip-mark {
+  font-family: var(--gl-tech);
+  font-size: calc(0.55 * var(--u));
+  line-height: 1;
+  color: var(--glus-sc-chip-tone);
+}
+.glus-sc-chip-name {
+  font-weight: 600;
+  font-size: calc(0.72 * var(--u));
+  color: var(--gl-text-bright);
+}
+.glus-sc-chip-value {
+  font-weight: 700;
+  font-size: calc(1 * var(--u));
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--glus-sc-chip-tone);
+}
+.glus-sc-chip-state {
+  font-family: var(--gl-tech);
+  font-size: calc(0.46 * var(--u));
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+/*
+ * A value says which way it went on its own, so the word beside it would be saying it twice. Marked on
+ * the chip rather than matched with :has(), which older OBS browser sources lack — there the rule would
+ * simply not apply and every frightened chip would read "2 RAISED".
+ */
+.glus-sc-chip[data-valued] .glus-sc-chip-state { display: none; }
+
+.glus-sc-hair {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: max(1px, calc(0.09 * var(--u)));
+  transform-origin: left;
+  background: var(--glus-sc-tone);
+  box-shadow: 0 0 calc(0.4 * var(--u)) var(--glus-sc-tone);
+  transition: background-color 0.35s, box-shadow 0.35s;
+  pointer-events: none;
 }
