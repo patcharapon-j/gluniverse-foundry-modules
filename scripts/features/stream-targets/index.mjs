@@ -67,7 +67,12 @@ Suite.register({
       id: TARGETS_FEATURE_ID,
       order: 10,
       render: renderSection,
-      change: claimChange
+      change: claimChange,
+      // This feature has no delegated write path, and `settings.js` says so:
+      // `setTargetingSettings` returns the stored value for a non-GM rather
+      // than throwing. Declaring it lets the panel disable the section for a
+      // trusted director instead of showing them controls that discard edits.
+      gmOnly: true
     });
   },
 

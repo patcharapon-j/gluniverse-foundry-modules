@@ -72,6 +72,43 @@ export const DELEGABLE_SCENE_FLAGS = Object.freeze(new Set([FLAGS.trackedTokenId
 /** Set once Foundry refuses a self-flag write on this client. */
 let delegationRefused = false;
 
+/**
+ * Pull one of this module's flags out of an `updateUser` change.
+ *
+ * Both halves of this are load-bearing, and both used to fail *silently* —
+ * which is what "trusted directors do nothing at all" looked like from the
+ * outside, with no error on any console.
+ *
+ * **The keys contain a dot.** `REQUEST_FLAG` is `stream.request`, and Foundry
+ * does not agree with itself about the shape such a key takes: `setFlag` sends
+ * `{flags: {scope: {"stream.request": …}}}`, while `getFlag` reads it with
+ * `getProperty` and `unsetFlag` deletes it at the nested path
+ * `flags.scope.stream.-=request`. So a bracket lookup of the literal dotted key
+ * matches under one shape and matches nothing under the other, and which one a
+ * given build produces is not something this code should be betting the whole
+ * channel on. Both are accepted here.
+ *
+ * **A change is a diff, not the value.** Pressing the same button twice sends
+ * the same `{command, payload}` with a new `at`, so the second change can carry
+ * `at` alone — `message.command` is then `undefined` and the command is
+ * dropped. The change therefore only decides *that* the flag moved; the value
+ * is read back off the document, where it is always whole.
+ */
+function flagFromChange(user, changes, flagKey) {
+  const scoped = changes?.flags?.[SUITE_ID];
+  if (!scoped || typeof scoped !== "object") return undefined;
+  const changed = (flagKey in scoped) ? scoped[flagKey] : foundry.utils.getProperty(scoped, flagKey);
+  if (changed === undefined) return undefined;
+  let value;
+  try {
+    value = user.getFlag(SUITE_ID, flagKey);
+  } catch {
+    /* fall back to the change itself below */
+  }
+  if (!value || typeof value !== "object") value = changed;
+  return (value && typeof value === "object") ? value : undefined;
+}
+
 /** True if this user is a GM, or a player the GM appointed as a director. */
 export function isDirectorUser(user = game.user, trustedIds = null) {
   if (!user) return false;
@@ -196,6 +233,10 @@ export async function requestCommand(command, payload = {}) {
     await game.user.setFlag(SUITE_ID, COMMAND_FLAG, { command, payload, at: Date.now() });
     return true;
   } catch (error) {
+    // A command rides the same self-flag write a setting request does, so a
+    // refusal here is the same refusal — record it, or the panel goes on
+    // claiming it can edit while every button is inert.
+    if (!game.user?.isGM) delegationRefused = true;
     warn("Stream: could not send a director command.", error);
     return false;
   }
@@ -207,8 +248,8 @@ export async function requestCommand(command, payload = {}) {
  */
 export function installCommandListener(handler) {
   Hooks.on("updateUser", async (user, changes) => {
-    const message = changes?.flags?.[SUITE_ID]?.[COMMAND_FLAG];
-    if (!message || typeof message !== "object") return;
+    const message = flagFromChange(user, changes, COMMAND_FLAG);
+    if (!message?.command) return;
     if (!isDirectorUser(user)) return;
     try {
       await handler(message.command, message.payload ?? {});
@@ -231,8 +272,8 @@ export function installDirectorRelay(sanitize) {
     if (!game.user?.isGM) return;
     if (game.users?.activeGM !== game.user) return;
 
-    const request = changes?.flags?.[SUITE_ID]?.[REQUEST_FLAG];
-    if (!request || typeof request !== "object") return;
+    const request = flagFromChange(user, changes, REQUEST_FLAG);
+    if (!request?.kind) return;
 
     // `user` is the document the flag lives on, so this *is* the author. No id
     // is read out of the request itself.

@@ -73,6 +73,13 @@ export function createCardFeed(overlay) {
  *        its own prefix and its own sanitizers.
  * @param {(action: string, element: HTMLElement) => Promise<boolean>|boolean} [section.action]
  *        the same for `[data-action]` clicks.
+ * @param {boolean} [section.gmOnly] true when the feature's writers refuse a
+ *        non-GM. Both children do — the attested channel carries this feature's
+ *        allow-listed keys and widening it would put a child's rules in the
+ *        parent — and their setters return the stored value rather than
+ *        throwing, so without this a trusted director got live-looking controls
+ *        that discarded every edit without a word. Declared by the section
+ *        because only it knows whether it has a delegated path.
  */
 export function registerPanelSection(section) {
   if (!section?.id || typeof section.render !== "function") return;
@@ -100,9 +107,16 @@ export function getPanelSections() {
  */
 export async function renderPanelSections() {
   const out = [];
+  const isGM = Boolean(game.user?.isGM);
   for (const section of getPanelSections()) {
     try {
-      out.push(String((await section.render()) ?? ""));
+      const html = String((await section.render()) ?? "");
+      if (!html) continue;
+      // Shown, not hidden: a director should still be able to read what the
+      // cards and the arcs are set to while looking at the shot they affect.
+      out.push(section.gmOnly && !isGM
+        ? `<fieldset class="gluniverse-stream-controls" disabled>${html}</fieldset>`
+        : html);
     } catch (error) {
       console.error(`GLUniverse Suite | Stream: panel section "${section.id}" failed to render.`, error);
     }

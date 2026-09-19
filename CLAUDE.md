@@ -1129,10 +1129,45 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (122 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (131 tests; Node's
 directory mode is not supported here, so name the glob).
 
-Six things are worth knowing before you change any of it.
+Seven things are worth knowing before you change any of it.
+
+**A director's authority is useless unless every road in opens for one**, and
+every road failed *silently* on the way in — the GM's own screen was correct in
+all of them. The channel itself rides flags whose keys contain a dot
+(`stream.request`, `stream.command`), and Foundry does not agree with itself
+about the shape such a key takes: `setFlag` sends the literal dotted key inside
+`flags[scope]`, while `getFlag` reads it with `getProperty` and `unsetFlag`
+deletes it at the nested path. Bracketing the dotted key off an `updateUser`
+change therefore matches under one shape and matches *nothing* under the other,
+which is the entire feature doing nothing with no error anywhere. The change is
+only used to decide that the flag moved now; the value is read back off the
+document, which also fixes the second half — a change is a **diff**, so pressing
+the same button twice carries `at` and no `command` at all.
+`tests/stream-director-auth.test.mjs` drives both shapes and the partial diff.
+Around it: the Control Center shows a non-GM no editors and no world settings, so
+the scene control is a director's only way in, and a `button` tool resolves
+through `onChange`, which fires only when the active tool *changes* — without
+`bindSuiteToolClicks` it opens once per session at best; the control-room
+settings menu's `type` must be a real ApplicationV2 subclass, because
+`registerMenu` rejects anything else and `Suite.registerAllSettings` catches the
+throw, leaving a Control Center section with no settings (every key here is
+`config: false`) and no button; the token-HUD tracking button is a *director's*,
+since tracked tokens are a scene flag with a delegated write path of its own; and
+appointing one has to re-render the appointee's scene controls, which were built
+while they were not a director. `stream-check` pins all of it.
+
+**A panel that cannot save has to say so and stop pretending.** `canEdit` was
+computed and used nowhere, so a director whose delegated channel Foundry refused
+— or who is simply alone in the world, the common case, which had no message at
+all — got a full panel of live-looking controls that discarded every edit. The
+form is wrapped in one `fieldset` now. The sections `stream-cards` and
+`stream-targets` contribute are the same failure one level down: their setters
+return the stored value for a non-GM rather than throwing, so a section declares
+`gmOnly` and the panel disables it rather than widening the attested channel to
+carry a child's keys.
 
 **`stream` must never import its children.** The chat overlay reaches PF2e roll
 cards through a slot in `extensions.mjs` that `stream-cards` fills, and the

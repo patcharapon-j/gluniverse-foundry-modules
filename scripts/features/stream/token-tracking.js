@@ -1,5 +1,6 @@
 import { getActiveSceneCombat, getCombatants } from "./combat-utils.js";
 import { FLAGS, HOOKS, MODULE_ID } from "./constants.js";
+import { canEditDirectorSettings } from "./settings.js";
 import { requestSceneFlag } from "./director-auth.mjs";
 
 export class TokenTracking {
@@ -56,7 +57,12 @@ export class TokenTracking {
   }
 
   addHudButton(hud, html) {
-    if (!game.user?.isGM) return;
+    // Not `isGM`. Tracked tokens are a scene flag with a delegated write path of
+    // its own (`requestSceneFlag` allows exactly this flag), so a trusted
+    // director is who this button is for. Gated on the GM, a director could see
+    // the tracking list in the panel and had no way to add to it from the
+    // canvas — the one place a director actually picks a token.
+    if (!canEditDirectorSettings()) return;
     const element = getElement(html);
     const token = hud?.object;
     if (!element || !token?.document) return;

@@ -34,5 +34,6 @@
   "GLUNIVERSE_STREAM.menu.controlRoom.name": "Stream Control Room",
   "GLUNIVERSE_STREAM.menu.controlRoom.label": "Open Control Room",
   "GLUNIVERSE_STREAM.menu.controlRoom.hint": "Start and stop the stream, frame the camera, and set the chat, dialog and UI rules for the capture client.",
-  "GLUNIVERSE_STREAM.notifications.readOnly": "Your changes cannot be saved: this world does not allow a non-GM director to send them. Ask a GM to make the change, or to run the stream themselves."
+  "GLUNIVERSE_STREAM.notifications.readOnly": "Your changes cannot be saved: this world does not allow a non-GM director to send them. Ask a GM to make the change, or to run the stream themselves.",
+  "GLUNIVERSE_STREAM.notifications.readOnlyNoGm": "Your changes cannot be saved while no GM is connected: a director's edits are applied by a GM's client. This panel starts saving again as soon as one signs in."
 }

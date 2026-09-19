@@ -1,5 +1,6 @@
 <div class="gluniverse-stream-director-body">
-{{#if readOnlyNotice}}<p class="gluniverse-stream-form-hint gluniverse-stream-readonly"><strong>{{localize "GLUNIVERSE_STREAM.notifications.readOnly"}}</strong></p>{{/if}}
+{{#if readOnly}}<p class="gluniverse-stream-form-hint gluniverse-stream-readonly"><strong>{{readOnlyMessage}}</strong></p>{{/if}}
+<fieldset class="gluniverse-stream-controls" {{#if readOnly}}disabled{{/if}}>
 <section class="gluniverse-stream-panel">
   <h2>Status</h2>
   <div class="form-group">
@@ -153,5 +154,6 @@
     {{/each}}
   </ul>
 </section>
+</fieldset>
 
 </div>
