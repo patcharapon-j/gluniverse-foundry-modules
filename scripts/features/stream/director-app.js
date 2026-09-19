@@ -55,16 +55,23 @@ export function renderDirectorApp() {
   if (instance?.rendered) instance.renderPreservingScroll();
 }
 
+/** Scene-control tool name; shared with `main.js`, which binds its clicks. */
+export const CONTROL_ROOM_TOOL = "stream-control-room";
+
 /**
  * The standalone module created its own top-level scene-control group. In the
  * suite every feature's tool goes in the one shared `gluniverse` group — gate
  * first, then `ensureSuiteGroup`, per the feature contract.
+ *
+ * The tool name is exported because `main.js` has to bind its clicks directly:
+ * a `button` tool resolves through `onChange`, which fires only when the active
+ * tool changes, so repeat clicks are swallowed.
  */
 export function addStreamSceneControl(controls) {
   if (!isDirectorUser()) return;
   const group = ensureSuiteGroup(controls);
-  group.tools["stream-control-room"] = {
-    name: "stream-control-room",
+  group.tools[CONTROL_ROOM_TOOL] = {
+    name: CONTROL_ROOM_TOOL,
     title: game.i18n.localize("GLUNIVERSE_STREAM.controls.director"),
     icon: "fas fa-broadcast-tower",
     button: true,
@@ -110,6 +117,10 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const trusted = new Set(getSetting("trustedDirectorUserIds") ?? []);
     const streamConnected = Boolean(streamUserId && game.users?.get(streamUserId)?.active);
     const streamActive = Boolean(status?.active);
+    // Reading the panel and editing it are different questions: a director
+    // whose delegated channel Foundry refused, or who is alone in the world,
+    // still sees the live shot.
+    const canEdit = canEditDirectorSettings();
     return {
       ...(await super._prepareContext(options)),
       status: {
@@ -145,11 +156,15 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       // Empty when neither is enabled, which is what makes this panel work with
       // `stream` alone installed.
       extraSections: await renderPanelSections(),
-      // Reading the panel and editing it are different questions: a director
-      // whose delegated channel Foundry refused still sees the live shot.
-      canEdit: canEditDirectorSettings(),
+      canEdit,
       canEditAdmin: canEditStreamAdmin(),
-      readOnlyNotice: !canEditDirectorSettings() && delegationUnavailable(),
+      // `canEdit` used to be computed here and used nowhere, so a director who
+      // could not save anything got a panel of live-looking controls that threw
+      // their edits away in silence. It disables the form now, and the notice
+      // says which of the two reasons applies — the "no GM connected" one is
+      // the common case and had no message at all.
+      readOnly: !canEdit,
+      readOnlyMessage: readOnlyMessage(),
       tokenRows: services.tokenTracking?.getTokenRows() ?? [],
       combatRows: getCombatRows(),
       detectedUi: services.uiDetector?.getEntries() ?? [],
@@ -330,6 +345,16 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     else ids.delete(streamUserId);
     await setSetting("autoStartStreamUserIds", Array.from(ids));
   }
+}
+
+/**
+ * Why this client cannot save. Delegation refused is the world's own
+ * permission answer and cannot be waited out; no connected GM is temporary and
+ * fixes itself, so the two must not read the same.
+ */
+function readOnlyMessage() {
+  if (delegationUnavailable()) return game.i18n.localize("GLUNIVERSE_STREAM.notifications.readOnly");
+  return game.i18n.localize("GLUNIVERSE_STREAM.notifications.readOnlyNoGm");
 }
 
 function getCombatRows() {

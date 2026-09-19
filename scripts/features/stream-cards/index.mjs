@@ -68,7 +68,12 @@ Suite.register({
       order: 20,
       render: renderSection,
       change: claimChange,
-      action: claimAction
+      action: claimAction,
+      // This feature has no delegated write path, and `settings.js` says so:
+      // its setters return the stored value for a non-GM rather than throwing.
+      // Declaring it lets the panel disable the section for a trusted director
+      // instead of showing them live controls that discard every edit.
+      gmOnly: true
     });
   },
 

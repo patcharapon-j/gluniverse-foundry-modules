@@ -343,6 +343,26 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding-inline-end: 0.25rem;
 }
 
+/* Read-only for a director who cannot save: one `disabled` on the wrapper
+   disables every control inside it, including the sections sibling features
+   contribute. `display: contents` keeps the fieldset out of the layout — a
+   fieldset is a block box with its own default border, padding and min-width,
+   none of which the panel is drawn for. */
+.gluniverse-stream-director .gluniverse-stream-controls {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Specificity beats the generic form-hint rule further down, which dims to
+   0.75 — the one hint in this panel that must not read as an aside. */
+.gluniverse-stream-director .gluniverse-stream-form-hint.gluniverse-stream-readonly {
+  color: var(--gl-warn);
+  opacity: 1;
+}
+
 .gluniverse-stream-director section.gluniverse-stream-panel {
   border: 1px solid var(--stream-border);
   border-radius: 6px;

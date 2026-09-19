@@ -241,6 +241,65 @@ for (const f of FEATURES) {
   if (!/delegationRefused\s*=\s*true/.test(s)) {
     fail("director-auth.mjs: no fail-closed path — a refused self-flag write must disable delegation, not fall back to something weaker");
   }
+
+  // The whole channel rides flags whose keys contain a dot (`stream.request`).
+  // Foundry does not agree with itself about the shape such a key arrives in —
+  // `setFlag` sends the literal dotted key, `getFlag`/`unsetFlag` treat it as a
+  // nested path — so bracketing it off `changes` matches under one shape and
+  // matches nothing under the other. That is the entire feature doing nothing,
+  // with no error on any console, which is exactly how it shipped.
+  if (/changes\s*\??\.\s*flags\s*\??\.\s*\[\s*SUITE_ID\s*\]\s*\??\.\s*\[\s*(?:REQUEST_FLAG|COMMAND_FLAG)\s*\]/.test(s)) {
+    fail("director-auth.mjs: a flag is bracketed off the change by its dotted key — accept both shapes and read the value off the document");
+  }
+  // And a change is a diff: the same command twice differs only in `at`, so the
+  // second one carries no `command` at all. The value has to come off the
+  // document, where it is whole.
+  if (!/getFlag\(SUITE_ID,\s*flagKey\)/.test(s)) {
+    fail("director-auth.mjs: the flag value is not read back off the User document — a repeat request arrives as a partial diff and is dropped");
+  }
+}
+
+/* ------------------------------------------- what a trusted director can reach -- */
+// Appointing a director does nothing unless every road in opens for one. Each of
+// these fails silently: the GM's own screen is correct in all of them.
+{
+  // The Control Center shows no editors and no world settings to a non-GM, so
+  // the scene control is a director's only way in — and a `button` tool resolves
+  // through `onChange`, which fires only when the active tool *changes*.
+  const main = strip(read("scripts/features/stream/main.js"));
+  if (!/bindSuiteToolClicks\(/.test(main)) {
+    fail("stream/main.js: the control-room scene tool binds no click handler — a `button` tool swallows repeat clicks and the panel opens once per session at best");
+  }
+  // A settings menu whose `type` is not an Application subclass is rejected by
+  // `registerMenu`, and `Suite.registerAllSettings` catches the throw. Every
+  // setting this feature owns is `config: false`, so the cost is a Control
+  // Center section with no settings and no button: a feature with no way in.
+  if (/type:\s*StreamControlRoomShim\b/.test(main)) {
+    fail("stream/main.js: the control-room menu type is a bare class — `registerMenu` rejects anything that is not a FormApplication/ApplicationV2 subclass, and the throw is swallowed");
+  }
+  // Tracked tokens are a scene flag with a delegated write path of its own, so
+  // the canvas button that sets them is a director's, not the GM's alone.
+  const tracking = strip(read("scripts/features/stream/token-tracking.js"));
+  if (/addHudButton\([^)]*\)\s*\{\s*if\s*\(\s*!\s*game\.user\s*\??\.\s*isGM\s*\)/.test(tracking)) {
+    fail("stream/token-tracking.js: the token-HUD tracking button is gated on isGM — a director can see the tracking list and not add to it");
+  }
+  // Editing and reading are different questions, and the panel used to compute
+  // the answer and never use it: a director who could not save got live-looking
+  // controls that threw every edit away without a word.
+  const panel = read("templates/stream/director.hbs");
+  if (!/\{\{#if readOnly\}\}/.test(panel) || !/<fieldset[^>]*\{\{#if readOnly\}\}disabled/.test(panel)) {
+    fail("templates/stream/director.hbs: the panel is not disabled when this client cannot save — an edit permission computed and not used is an edit that vanishes silently");
+  }
+  // A section whose feature refuses a non-GM has to say so, or it is the same
+  // silent discard one level down.
+  for (const [feature, setter] of [["stream-cards", "setDefaultRollArt"], ["stream-targets", "setTargetingSettings"]]) {
+    const index = strip(read(`scripts/features/${feature}/index.mjs`));
+    const settings = strip(read(`scripts/features/${feature}/settings.js`));
+    if (!new RegExp(`${setter}[\\s\\S]{0,200}isGM`).test(settings)) continue; // gained a delegated path
+    if (!/registerPanelSection\(\{[\s\S]*?gmOnly:\s*true/.test(index)) {
+      fail(`${feature}/index.mjs: its panel section does not declare gmOnly, but its setters refuse a non-GM — a director's edits there disappear in silence`);
+    }
+  }
 }
 
 // No feature may open a raw socket: the suite multiplexes one channel.
