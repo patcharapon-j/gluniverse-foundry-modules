@@ -1,10 +1,14 @@
 /**
  * GLUniverse Suite — Clocks & Tracker feature adapter.
  *
- * The base / core feature of the suite (always enabled, system-agnostic). It
- * keeps its own internal feature-toggle tree (see ./features.js, backed by the
- * `ct.moduleConfig` world setting and the Module Configuration editor) which
- * governs its sub-features (timeHud / trackers / weather / delving).
+ * The suite's time engine (system-agnostic, on by default). A campaign that
+ * tracks no in-game time can switch it off entirely from the Control Center:
+ * the toggle is an ordinary one, so the calendar, the time HUD and every
+ * sub-feature below it go quiet and `ct.*` world data is left untouched for a
+ * world that turns it back on. It keeps its own internal feature-toggle tree
+ * (see ./features.js, backed by the `ct.moduleConfig` world setting and the
+ * Module Configuration editor) which governs its sub-features (timeHud /
+ * trackers / weather / delving).
  * That internal system is intact; this adapter only wires the suite lifecycle.
  *
  * The ported entry module (./module.js) exposes:
@@ -69,7 +73,12 @@ Suite.register({
   settingPrefix: "ct.",
   system: null,
   requires: [],
-  core: true,
+  // Not `core`: a campaign with no in-game clock has nothing to gain from the
+  // engine, and the three promoted sub-features below gate on it via
+  // `requiresFeature`, so turning it off takes the whole tree offline. It stays
+  // ON by default, and the stored toggle is absent in every existing world, so
+  // `defaultEnabled` is what those worlds keep reading.
+  core: false,
   defaultEnabled: true,
 
   registerSettings() {

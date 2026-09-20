@@ -224,6 +224,32 @@ Zero failures required. Minted ids must stay **deterministic** — the id a row
 renders with has to be the id its click resolves, including on a client that
 never wrote the repair back.
 
+**The time engine is switch-off-able, and both halves of that fail silently.**
+`clocks-tracker` is an ordinary feature — a campaign that tracks no in-game time
+turns it off in the Control Center and the calendar, the HUD, the trackers, the
+weather walk and the delve go with it. Restoring `core: true` on the adapter is
+not an error: the Control Center just draws a "Core" chip where the switch was,
+and the feature is undisableable again with nothing said. And `registerSettings()`
+runs disabled or not, with side-effecting onChange handlers behind several of
+those keys — the engine's internal `timeHud` node is a `ct.moduleConfig` key
+rather than one of the three promoted sub-features, so nothing but the gate in
+`Features.on` (`features.js`) resolves it through the registry. Without it, a GM
+opening Module Configuration in a world that turned the engine off flips
+`timeHud`, `applyModuleConfig()` opens a time HUD, and that HUD has no calendar
+installed behind it and no runtime hooks feeding it. The gate fails **open** on
+an unregistered roster (a check tool importing these modules directly), and
+`Features.self()` is deliberately *not* gated, because that is what the Module
+Configuration editor draws its rows from:
+
+```bash
+node tools/clocks-tracker-toggle-check.mjs
+```
+
+Zero failures required. It drives the real registry and the real bridge rather
+than reading them, and also pins that switching off writes no `ct.*` data — a
+world that turns the engine back on finds its calendar, trackers and weather
+exactly as they were.
+
 **When touching Stream Pacer's safety lights or its exempt-users form**
 (`features/stream-pacer/`, `templates/stream-pacer/`), re-run the exemption
 check. A safety-exempt user is normally the login whose screen is being captured,
