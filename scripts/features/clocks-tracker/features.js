@@ -4,9 +4,10 @@
  * Every module and sub-module the package ships is described once in
  * FEATURE_TREE, and the rest of the codebase asks `Features.on("path.to.feature")`
  * to decide whether to render / wire / open it. This lets a GM trim the module
- * down to exactly what their game needs — drop the whole time tracker, the
- * resource tracker, or just an individual piece of either — from one place
- * (the Module Configuration menu).
+ * down to exactly what their game needs — drop the resource tracker, or just an
+ * individual piece of it — from one place (the Module Configuration menu).
+ * Dropping the whole time engine is the feature's own Control Center toggle,
+ * which `on()` reads first (see engineEnabled below).
  *
  * Backing store:
  *   • Most toggles live in a single world-scoped Object setting (moduleConfig),
@@ -34,6 +35,35 @@ const PROMOTED = {
   weather: "clocks-weather",
   delving: "clocks-delving",
 };
+
+/**
+ * The suite feature this engine is registered as. Its Control Center toggle is
+ * the master switch the internal tree never had, and `on()` is gated on it.
+ *
+ * The gate is load-bearing rather than belt-and-braces: `onInit`/`onReady` are
+ * already skipped for a disabled feature, but `registerSettings()` always runs
+ * and several of those settings carry side-effecting onChange handlers. The
+ * moduleConfig blob's own `timeHud` key is NOT a promoted sub-feature, so
+ * nothing else resolves it through the registry — a GM opening Module
+ * Configuration in a world that turned the engine off would otherwise flip it
+ * and have `applyModuleConfig()` open a time HUD with no calendar installed and
+ * no runtime hooks behind it.
+ */
+const ENGINE_FEATURE = "clocks-tracker";
+
+/** Whether the engine itself is enabled. Fails OPEN: before the registry is
+ *  ready (or off a Foundry client entirely, e.g. the check tools) the engine
+ *  behaves exactly as it did when it could not be switched off. */
+function engineEnabled() {
+  try {
+    // Unregistered means the roster was never built (a check tool importing one
+    // of these modules directly), not that a GM said no.
+    if (!Suite.get(ENGINE_FEATURE)) return true;
+    return Suite.enabled(ENGINE_FEATURE);
+  } catch {
+    return true;
+  }
+}
 
 /**
  * The enable/disable tree. Node shape:
@@ -157,8 +187,9 @@ export const Features = {
     return path in blob ? !!blob[path] : !!node.default;
   },
 
-  /** True only when this node AND every ancestor are enabled. */
+  /** True only when the engine, this node AND every ancestor are enabled. */
   on(path) {
+    if (!engineEnabled()) return false;
     let cur = "";
     for (const part of path.split(".")) {
       cur = cur ? `${cur}.${part}` : part;

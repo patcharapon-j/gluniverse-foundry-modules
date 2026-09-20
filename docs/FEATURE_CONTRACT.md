@@ -96,8 +96,11 @@ Suite.register({
                            //   promoted sub-features to gate on their parent
                            //   engine. Cyclic or unknown ids are rejected by
                            //   Suite.validate() at init.
-  core: false,             // true only for clocks-tracker
-  defaultEnabled: false,   // opt-in by default; only clocks-tracker (core) and
+  core: false,             // true pins the toggle ON and hides it behind a
+                           //   "Core" chip. NO feature declares it: clocks-tracker
+                           //   used to, and a campaign that tracks no in-game time
+                           //   had no way to switch the calendar off.
+  defaultEnabled: false,   // opt-in by default; only clocks-tracker and
                            //   clocks-trackers ship enabled
 
   // Always called at init. Register ALL of the feature's settings/menus here so
@@ -191,7 +194,7 @@ rather than at the end.
 
 | featureId          | prefix                       | system            | requires        | default |
 |--------------------|------------------------------|-------------------|-----------------|---------|
-| clocks-tracker     | ct.                          | null              | —               | core ON |
+| clocks-tracker     | ct.                          | null              | —               | ON      |
 | clocks-trackers    | ct.tracker, ct.sheetTrackers | null              | ⤷ clocks-tracker | ON     |
 | clocks-weather     | ct.weather                   | null              | ⤷ clocks-tracker | off    |
 | clocks-delving     | ct.delving                   | null              | ⤷ clocks-tracker | off    |

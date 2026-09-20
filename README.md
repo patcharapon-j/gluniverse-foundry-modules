@@ -18,7 +18,7 @@ flat native list — the Control Center is the single place to configure everyth
 
 | Feature | System | Notes |
 |---|---|---|
-| **Clocks & Tracker** *(core, always on)* | any | Core engine: in-game calendar & time HUD. |
+| **Clocks & Tracker** *(on by default)* | any | Time engine: in-game calendar & time HUD. Off takes its sub-features with it. |
 | **Resource Trackers** | any (needs Clocks & Tracker) | GM-managed clocks, points, pools and hazard trackers in a dockable HUD. |
 | **Weather** | any (needs Clocks & Tracker) | Hex Flower weather engine with a calendar-driven forecast. |
 | **Delving Mode** | any (needs Clocks & Tracker) | Turn-driven dungeon delve with a degrading resource HUD. |
@@ -50,7 +50,8 @@ The suite is one package (`gluniverse-foundry-modules`); each former module live
 `scripts/features/<id>/` and registers itself with a small core framework:
 
 - **`scripts/core/registry.mjs`** — feature definitions, system/dependency
-  auto-gating, and enable/disable resolution (core-on, everything else opt-in).
+  auto-gating, and enable/disable resolution (every feature can be switched off;
+  clocks-tracker and clocks-trackers are the two that ship on).
 - **`scripts/core/socket.mjs`** — one multiplexed socket channel shared by all
   features (payloads tagged per feature), since only the installed package id routes.
 - **`scripts/core/settings.mjs` + `suite-config-app.mjs`** — the Feature Manager UI.

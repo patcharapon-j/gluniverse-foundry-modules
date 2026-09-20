@@ -327,6 +327,53 @@ export class SuiteConfigApp extends ApplicationV2 {
 
   /* -------------------------------- handlers -------------------------------- */
 
+  /**
+   * Re-sync the sections of every feature that gates on `id` via
+   * `requiresFeature`. Their availability changes the instant the parent flips,
+   * but the sections around it were built before it did — and this window never
+   * re-renders, so a child left looking live is a switch whose next click the
+   * guard in `_onToggle` refuses with nothing shown for it. Mirrors what
+   * `#featureSection` would have drawn: the lock line, the dimming, and a body
+   * that an unavailable feature is not offered at all.
+   */
+  #syncDependents(id) {
+    const root = this.element;
+    if (!root) return;
+    for (const def of Suite.all()) {
+      if (!Suite._list(def.requiresFeature).includes(id)) continue;
+      const section = root.querySelector(`.gls-fm-section[data-feature="${CSS.escape(def.id)}"]`);
+      if (!section) continue;
+
+      const available = Suite.available(def);
+      const on = available && Suite._stored(def.id);
+      section.classList.toggle("is-locked", !available);
+      section.classList.toggle("is-on", on);
+
+      const sw = section.querySelector(".gls-fm-ctl .gls-switch");
+      if (sw) {
+        sw.disabled = !available;
+        sw.classList.toggle("is-on", on);
+        sw.setAttribute("aria-pressed", String(on));
+      }
+
+      const body = section.querySelector(".gls-sec-body");
+      if (body) body.hidden = !available;
+
+      const meta = section.querySelector(".gls-fm-meta");
+      const reason = Suite.unavailableReason(def);
+      const lock = meta?.querySelector(".gls-fm-lock");
+      if (!reason) lock?.remove();
+      else if (meta) {
+        const el = lock ?? meta.appendChild(document.createElement("div"));
+        el.className = "gls-fm-lock";
+        el.innerHTML = `<i class="fa-solid fa-lock"></i> ${reason}`;
+      }
+
+      // A dependent may itself have dependents.
+      this.#syncDependents(def.id);
+    }
+  }
+
   static async _onToggle(event, target) {
     const id = target.dataset.feature;
     if (!id) return;
@@ -339,6 +386,7 @@ export class SuiteConfigApp extends ApplicationV2 {
     target.classList.toggle("is-on", next);
     target.setAttribute("aria-pressed", String(next));
     target.closest(".gls-fm-section")?.classList.toggle("is-on", next);
+    this.#syncDependents(id);
     if (!Suite.appliesLive(id)) {
       this.#needsReload = true;
       this.element?.classList.add("gls-needs-reload");
