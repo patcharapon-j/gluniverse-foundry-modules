@@ -44,37 +44,57 @@ function ensureWeatherStyles() { ensureFeatureStyle("weather"); }
 function ensureDelvingStyles() { ensureFeatureStyle("delving"); }
 function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
 
-/**
- * Init lifecycle (called by the suite adapter only when the feature is enabled).
+/* ---------------------------------------------------------------------------
+ * Lifecycle.
+ *
+ * This file backs TWO independently switchable suite features: the time engine
+ * (`clocks-tracker` — calendar, time HUD, scene tint) and Resource Trackers
+ * (`clocks-trackers` — the dock and the PF2e sheet tab). Either can run with
+ * the other switched off, so each has its own pair of lifecycle functions and
+ * the pieces they SHARE — the scene-control group, the chat tagging, the
+ * keybindings — are wired once by whichever of the two initialises first.
+ *
+ * Weather and Delving are not in that position: a delve is drawn inside the
+ * time HUD and a weather walk is stepped by the engine's `updateWorldTime`
+ * hook, so both still declare `requiresFeature: "clocks-tracker"` and ride the
+ * engine's half below.
+ *
  * Settings registration is NOT done here — the adapter wires `registerSettings`
- * separately so toggles/menus exist even when the feature is off. This wires the
- * stylesheets, the PF2e sheet tab, the calendar, keybindings, the runtime Foundry
- * hooks, and publishes the public API. Nothing runs at import time.
- */
+ * separately so toggles/menus exist even when both features are off. Nothing
+ * runs at import time.
+ * ------------------------------------------------------------------------ */
+
+/** Wired exactly once, by whichever half initialises first. */
+let sharedWired = false;
+function wireShared() {
+  if (sharedWired) return;
+  sharedWired = true;
+  // `game.keybindings.register` throws on a duplicate key and the scene-control
+  // hook would do its work twice, so both halves route through this latch. Each
+  // individual tool and binding is gated on its own feature when it fires, which
+  // is what lets one registration serve either half.
+  registerKeybindings();
+  Hooks.on("renderChatMessageHTML", tagPoolMessage);   // Foundry v13+
+  Hooks.on("renderChatMessage", tagPoolMessage);       // legacy fallback
+  Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
+}
+
+/** Init lifecycle for the TIME ENGINE (only when `clocks-tracker` is enabled). */
 export function onInit() {
   ensureHudStyles();
   ensureWeatherStyles();
   ensureDelvingStyles();
-  ensureSheetTrackerStyles();
-  // PF2e per-PC private trackers: wire the character-sheet tab (no-op off-PF2e).
-  TrackerSheet.register();
   // Install the active calendar before GameTime is constructed.
   applyCalendar();
-  registerKeybindings();
+  wireShared();
   registerRuntimeHooks();
 
   return getApi();
 }
 
-/** Ready lifecycle (called by the suite adapter only when the feature is enabled). */
+/** Ready lifecycle for the TIME ENGINE (only when `clocks-tracker` is enabled). */
 export async function onReady() {
-  // Wire GM-side pool-roll persistence *first*, before anything that awaits or
-  // can throw (opening a HUD, the weather walk). Otherwise a hiccup earlier in
-  // this hook could leave a GM without the handler while their own HUD still
-  // works — which would stop players' pool rolls from updating the shared count.
-  TrackerStore.registerHandlers();
   if (Features.on("timeHud") && (game.user.isGM || setting(SETTINGS.hudVisibleToPlayers, true))) await GlctHud.open();
-  if (Features.on("trackers.dock") && !setting(SETTINGS.trackerHudHidden, false)) await TrackerHud.open();
   applySceneTint(TimeEngine.getState());
 
   // Seed/sync the weather walk once on load (GM only; no-op when disabled).
@@ -83,14 +103,49 @@ export async function onReady() {
   // from the scene controls / macro when you want it.
 }
 
-/** The public API object exposed via the suite (game.modules…api.features[id]). */
+/**
+ * Init lifecycle for RESOURCE TRACKERS (only when `clocks-trackers` is enabled).
+ * The dock wears the same stylesheet as the time HUD, so it ensures that sheet
+ * itself rather than relying on the engine having been here first.
+ */
+export function onTrackersInit() {
+  ensureHudStyles();
+  ensureSheetTrackerStyles();
+  // PF2e per-PC private trackers: wire the character-sheet tab (no-op off-PF2e).
+  TrackerSheet.register();
+  wireShared();
+
+  return getTrackersApi();
+}
+
+/** Ready lifecycle for RESOURCE TRACKERS (only when `clocks-trackers` is enabled). */
+export async function onTrackersReady() {
+  // Wire GM-side pool-roll persistence *first*, before anything that awaits or
+  // can throw (opening the dock). Otherwise a hiccup later in this function
+  // could leave a GM without the handler while their own dock still works —
+  // which would stop players' pool rolls from updating the shared count.
+  TrackerStore.registerHandlers();
+  if (Features.on("trackers.dock") && !setting(SETTINGS.trackerHudHidden, false)) await TrackerHud.open();
+}
+
+/** The time engine's public API (game.modules…api.features["clocks-tracker"]). */
 export function getApi() {
   return { TimeEngine, GlctHud, TrackerHud, TrackerStore, TrackerSheet, WeatherEngine, WeatherStore, WeatherHud, DelvingStore, HOOKS };
 }
 
 /**
- * Register the feature's runtime Foundry hooks. Called from onInit so they only
- * attach when the feature is enabled — nothing is registered at import time.
+ * Resource Trackers' own public API (…api.features["clocks-trackers"]), so a
+ * macro that only wants the dock still has a published entry point in a world
+ * where the time engine is switched off and `getApi()` above never ran.
+ */
+export function getTrackersApi() {
+  return { TrackerStore, TrackerHud, TrackerSheet, HOOKS };
+}
+
+/**
+ * Register the TIME ENGINE's runtime Foundry hooks. Called from its onInit so
+ * they only attach when it is enabled — nothing is registered at import time.
+ * The hooks both halves share are in `wireShared()` above instead.
  */
 function registerRuntimeHooks() {
   Hooks.on("updateWorldTime", () => {
@@ -100,9 +155,6 @@ function registerRuntimeHooks() {
     WeatherEngine.evaluate();
   });
 
-  Hooks.on("renderChatMessageHTML", tagPoolMessage);   // Foundry v13+
-  Hooks.on("renderChatMessage", tagPoolMessage);       // legacy fallback
-
   // No combat hooks here on purpose. These once called GlctHud.refreshState() on
   // combatStart/deleteCombat/combatTurn/combatRound to "reflect combat state on
   // the HUD", but nothing ever read it: TimeEngine computes state.inCombat and no
@@ -111,8 +163,6 @@ function registerRuntimeHooks() {
   // frame as the combat tracker's own turn-change work, which is exactly the
   // frame that has none to spare. If a combat indicator is wanted later, give the
   // HUD a setCombat(bool) that toggles one class and nothing else.
-
-  Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
 }
 
 // Tag our resource-pool roll messages so the chat card can take over the whole
@@ -161,6 +211,13 @@ function mountDelveTumble(message, el) {
   settle();
 }
 // v13+ scene controls: controls/tools are keyed objects; handlers use onChange.
+//
+// Every branch asks `Features.on(...)`, never a store's own `enabled` getter.
+// Those getters read their world setting directly, and this hook is registered
+// by whichever half initialises — so in a world running Resource Trackers with
+// the time engine off, `WeatherStore.enabled` is still true and would put a
+// weather button on the scene controls for a feature that is not running. The
+// button looks completely ordinary and opens a Hex Flower nothing is stepping.
 function onGetSceneControlButtons(controls) {
   // Suite tools live under the suite's own top-level group; `ensureSuiteGroup` is
   // called inside each enabled-branch so the group only appears when a tool does.
@@ -182,7 +239,7 @@ function onGetSceneControlButtons(controls) {
       onChange: () => toggleTrackerHud()
     };
   }
-  if (WeatherStore.enabled) {
+  if (Features.on("weather")) {
     ensureSuiteGroup(controls).tools["glct-weather-toggle"] = {
       name: "glct-weather-toggle",
       title: "GLCT.keybindings.toggleWeather",
@@ -191,7 +248,7 @@ function onGetSceneControlButtons(controls) {
       onChange: () => WeatherHud.toggle()
     };
   }
-  if (DelvingStore.enabled && game.user.isGM) {
+  if (Features.on("delving") && game.user.isGM) {
     ensureSuiteGroup(controls).tools["glct-delving-toggle"] = {
       name: "glct-delving-toggle",
       title: "GLCT.keybindings.toggleDelving",
@@ -234,21 +291,21 @@ function registerKeybindings() {
   game.keybindings.register(MODULE_ID, "ct.toggleWeather", {
     name: "GLCT.keybindings.toggleWeather",
     editable: [{ key: "KeyW", modifiers: ["Alt"] }],
-    onDown: () => { if (WeatherStore.enabled) WeatherHud.toggle(); return true; },
+    onDown: () => { if (Features.on("weather")) WeatherHud.toggle(); return true; },
     restricted: false
   });
 
   game.keybindings.register(MODULE_ID, "ct.toggleDelving", {
     name: "GLCT.keybindings.toggleDelving",
     editable: [{ key: "KeyG", modifiers: ["Alt"] }],
-    onDown: () => { if (game.user.isGM && DelvingStore.enabled) DelvingStore.setActive(!DelvingStore.active); return true; },
+    onDown: () => { if (game.user.isGM && Features.on("delving")) DelvingStore.setActive(!DelvingStore.active); return true; },
     restricted: true
   });
 
   game.keybindings.register(MODULE_ID, "ct.passTurn", {
     name: "GLCT.keybindings.passTurn",
     editable: [{ key: "Period", modifiers: ["Alt"] }],
-    onDown: () => { if (game.user.isGM && DelvingStore.active) DelvingStore.advanceTurn(); return true; },
+    onDown: () => { if (game.user.isGM && Features.on("delving") && DelvingStore.active) DelvingStore.advanceTurn(); return true; },
     restricted: true
   });
 }

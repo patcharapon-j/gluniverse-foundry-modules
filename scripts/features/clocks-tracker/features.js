@@ -6,8 +6,9 @@
  * to decide whether to render / wire / open it. This lets a GM trim the module
  * down to exactly what their game needs — drop the resource tracker, or just an
  * individual piece of it — from one place (the Module Configuration menu).
- * Dropping the whole time engine is the feature's own Control Center toggle,
- * which `on()` reads first (see engineEnabled below).
+ * Dropping a whole top-level module is its own Control Center toggle: the time
+ * engine's for `timeHud` (which `on()` reads first — see engineEnabled below),
+ * and each promoted sub-feature's own for trackers / weather / delving.
  *
  * Backing store:
  *   • Most toggles live in a single world-scoped Object setting (moduleConfig),
@@ -37,8 +38,9 @@ const PROMOTED = {
 };
 
 /**
- * The suite feature this engine is registered as. Its Control Center toggle is
- * the master switch the internal tree never had, and `on()` is gated on it.
+ * The suite feature the TIME ENGINE is registered as. Its Control Center toggle
+ * is the master switch the internal tree never had, and `on()` is gated on it —
+ * but only for the engine's OWN nodes.
  *
  * The gate is load-bearing rather than belt-and-braces: `onInit`/`onReady` are
  * already skipped for a disabled feature, but `registerSettings()` always runs
@@ -48,6 +50,13 @@ const PROMOTED = {
  * Configuration in a world that turned the engine off would otherwise flip it
  * and have `applyModuleConfig()` open a time HUD with no calendar installed and
  * no runtime hooks behind it.
+ *
+ * A PROMOTED node is exempt, because its answer is its own suite feature's (see
+ * `self()`): Resource Trackers runs with the engine off, and Weather and Delving
+ * come back false anyway because they declare `requiresFeature: "clocks-tracker"`
+ * and the registry resolves that for them. Gating every path on the engine here
+ * would silence the dock in a world that deliberately runs only the trackers,
+ * with the Control Center still showing the feature switched on.
  */
 const ENGINE_FEATURE = "clocks-tracker";
 
@@ -187,9 +196,11 @@ export const Features = {
     return path in blob ? !!blob[path] : !!node.default;
   },
 
-  /** True only when the engine, this node AND every ancestor are enabled. */
+  /** True only when this node, every ancestor AND the feature that owns the
+   *  top of the path are enabled. */
   on(path) {
-    if (!engineEnabled()) return false;
+    const top = path.split(".")[0];
+    if (!(top in PROMOTED) && !engineEnabled()) return false;
     let cur = "";
     for (const part of path.split(".")) {
       cur = cur ? `${cur}.${part}` : part;

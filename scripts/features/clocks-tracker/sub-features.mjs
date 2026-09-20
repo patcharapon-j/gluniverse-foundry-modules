@@ -3,8 +3,25 @@
  *
  * Trackers, Weather and Delving were previously buried inside
  * clocks-tracker's internal FEATURE_TREE. They are now first-class suite features
- * with their own enable/disable toggle and settings group in the Control Center,
- * gated on the core clocks-tracker engine via `requiresFeature`.
+ * with their own enable/disable toggle and settings group in the Control Center.
+ *
+ * Resource Trackers stands ALONE: the dock, its store and the PF2e sheet tab
+ * import nothing from the calendar, the time HUD or TimeEngine, so a table that
+ * wants GM clocks, points and pools without an in-game clock runs it with the
+ * engine switched off. It carries its own `onInit`/`onReady` for that — the
+ * registry only runs a feature's own lifecycle, so a sub-feature whose wiring
+ * lives in its parent's is a feature that cannot be enabled by itself.
+ *
+ * Weather and Delving do NOT stand alone and keep `requiresFeature`: a delve is
+ * drawn inside the time HUD (`GlctHud._paintDelving`) and reads day and month
+ * names off `TimeEngine.calendar`, and a weather walk is stepped by the engine's
+ * `updateWorldTime` hook. Dropping their gate would leave both enabled in the
+ * Control Center with nothing drawing and nothing walking.
+ *
+ * This module must stay importable under plain Node: the check tools load it to
+ * drive the registry, and `./module.js` reaches `foundry.applications.api` at
+ * module scope through the HUDs. So Resource Trackers' lifecycle is INJECTED by
+ * the adapter (which imports module.js anyway) rather than imported here.
  *
  * Each one's enable state is *setting-backed*: it reads/writes the same world
  * setting (or moduleConfig blob entry) the engine already reacts to, so flipping
@@ -17,6 +34,7 @@
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
 import { SETTINGS } from "./const.js";
+import { warn } from "../../core/const.mjs";
 
 const getSetting = (key, fallback) => {
   try {
@@ -54,15 +72,33 @@ function blobBacked(path, dflt) {
  * adapter *after* the core feature registers, so the core appears first in the
  * Control Center with its children grouped immediately below it.
  */
-export function registerSubFeatures() {
+export function registerSubFeatures({ onTrackersInit, onTrackersReady } = {}) {
+  // A missing lifecycle is a feature that registers, shows a live toggle and
+  // then does nothing at all, so it is reported rather than silently accepted.
+  if (typeof onTrackersInit !== "function" || typeof onTrackersReady !== "function") {
+    warn("registerSubFeatures: Resource Trackers was given no lifecycle; its dock and sheet tab will not run.");
+  }
+
   Suite.register({
     id: "clocks-trackers",
     title: "GLS.feature.clocks-trackers.title",
     hint: "GLS.feature.clocks-trackers.hint",
     icon: "fa-solid fa-list-check",
     settingPrefix: ["ct.tracker", "ct.sheetTrackers"],
-    requiresFeature: "clocks-tracker",
+    // Deliberately NO requiresFeature — see the header.
     defaultEnabled: true,
+
+    onInit() {
+      this.api = onTrackersInit?.() ?? null;
+    },
+
+    async onReady() {
+      await onTrackersReady?.();
+    },
+
+    // Set during onInit. Declared here for documentation.
+    api: null,
+
     ...blobBacked("trackers", true),
   });
 

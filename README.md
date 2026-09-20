@@ -18,7 +18,7 @@ flat native list — the Control Center is the single place to configure everyth
 
 | Feature | System | Notes |
 |---|---|---|
-| **Clocks & Tracker** *(on by default)* | any | Time engine: in-game calendar & time HUD. Off takes its sub-features with it. |
+| **Clocks & Tracker** *(on by default)* | any | Time engine: in-game calendar & time HUD. Off takes Weather and Delving with it; Resource Trackers runs either way. |
 | **Resource Trackers** | any (needs Clocks & Tracker) | GM-managed clocks, points, pools and hazard trackers in a dockable HUD. |
 | **Weather** | any (needs Clocks & Tracker) | Hex Flower weather engine with a calendar-driven forecast. |
 | **Delving Mode** | any (needs Clocks & Tracker) | Turn-driven dungeon delve with a degrading resource HUD. |

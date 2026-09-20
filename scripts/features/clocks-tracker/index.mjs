@@ -3,23 +3,31 @@
  *
  * The suite's time engine (system-agnostic, on by default). A campaign that
  * tracks no in-game time can switch it off entirely from the Control Center:
- * the toggle is an ordinary one, so the calendar, the time HUD and every
- * sub-feature below it go quiet and `ct.*` world data is left untouched for a
- * world that turns it back on. It keeps its own internal feature-toggle tree
- * (see ./features.js, backed by the `ct.moduleConfig` world setting and the
- * Module Configuration editor) which governs its sub-features (timeHud /
- * trackers / weather / delving).
+ * the toggle is an ordinary one, so the calendar, the time HUD, the weather
+ * walk and the delve go quiet and `ct.*` world data is left untouched for a
+ * world that turns it back on.
+ *
+ * Resource Trackers is the exception and does NOT go with it. The dock, its
+ * store and the PF2e sheet tab import nothing from the calendar, the time HUD
+ * or TimeEngine, so a table that wants GM clocks, points and pools without an
+ * in-game clock runs it alone. It is registered from ./sub-features.mjs with a
+ * lifecycle of its own, handed over from here.
+ *
+ * The engine keeps its internal feature-toggle tree (see ./features.js, backed
+ * by the `ct.moduleConfig` world setting and the Module Configuration editor)
+ * which governs its sub-features (timeHud / trackers / weather / delving).
  * That internal system is intact; this adapter only wires the suite lifecycle.
  *
  * The ported entry module (./module.js) exposes:
  *   - registerSettings()  — register every setting + menu (runs unconditionally)
- *   - onInit()            — wire styles, sheet tab, calendar, keybindings, hooks
+ *   - onInit() / onReady()               — the time engine's own lifecycle
+ *   - onTrackersInit() / onTrackersReady() — Resource Trackers' own lifecycle
  *   - onReady()           — open HUDs, register GM persistence handlers
  *   - getApi()            — the public API object for macros / other modules
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { registerSettings, onInit, onReady, getApi } from "./module.js";
+import { registerSettings, onInit, onReady, getApi, onTrackersInit, onTrackersReady } from "./module.js";
 import { registerSubFeatures } from "./sub-features.mjs";
 
 const OLD_ID = "gluniverse-clocks-and-tracker";
@@ -74,10 +82,10 @@ Suite.register({
   system: null,
   requires: [],
   // Not `core`: a campaign with no in-game clock has nothing to gain from the
-  // engine, and the three promoted sub-features below gate on it via
-  // `requiresFeature`, so turning it off takes the whole tree offline. It stays
-  // ON by default, and the stored toggle is absent in every existing world, so
-  // `defaultEnabled` is what those worlds keep reading.
+  // engine. Weather and Delving gate on it via `requiresFeature` and go with
+  // it; Resource Trackers deliberately does not (see ./sub-features.mjs). It
+  // stays ON by default, and the stored toggle is absent in every existing
+  // world, so `defaultEnabled` is what those worlds keep reading.
   core: false,
   defaultEnabled: true,
 
@@ -125,5 +133,8 @@ Suite.register({
 });
 
 // Promote the engine's sub-features to first-class suite features, registered
-// *after* the core above so they group beneath it in the Control Center.
-registerSubFeatures();
+// *after* the engine above so they group beneath it in the Control Center.
+// Resource Trackers runs with the engine off and so has a lifecycle of its own;
+// it is handed over from here because `sub-features.mjs` must stay loadable
+// under plain Node, where module.js's HUDs cannot be (see that file's header).
+registerSubFeatures({ onTrackersInit, onTrackersReady });
