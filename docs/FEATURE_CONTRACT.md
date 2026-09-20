@@ -195,7 +195,7 @@ rather than at the end.
 | featureId          | prefix                       | system            | requires        | default |
 |--------------------|------------------------------|-------------------|-----------------|---------|
 | clocks-tracker     | ct.                          | null              | —               | ON      |
-| clocks-trackers    | ct.tracker, ct.sheetTrackers | null              | ⤷ clocks-tracker | ON     |
+| clocks-trackers    | ct.tracker, ct.sheetTrackers | null              | —               | ON      |
 | clocks-weather     | ct.weather                   | null              | ⤷ clocks-tracker | off    |
 | clocks-delving     | ct.delving                   | null              | ⤷ clocks-tracker | off    |
 | initiative         | init.                        | null              | —               | off     |

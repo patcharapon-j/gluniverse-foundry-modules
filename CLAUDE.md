@@ -224,10 +224,45 @@ Zero failures required. Minted ids must stay **deterministic** — the id a row
 renders with has to be the id its click resolves, including on a client that
 never wrote the repair back.
 
-**The time engine is switch-off-able, and both halves of that fail silently.**
-`clocks-tracker` is an ordinary feature — a campaign that tracks no in-game time
-turns it off in the Control Center and the calendar, the HUD, the trackers, the
-weather walk and the delve go with it. Restoring `core: true` on the adapter is
+**This folder ships two independently switchable features, and everything about
+that seam fails silently.** `clocks-tracker` is the time engine — a campaign that
+tracks no in-game time turns it off in the Control Center and the calendar, the
+time HUD, the weather walk and the delve go with it. `clocks-trackers` (Resource
+Trackers) does **not** go with it: the dock, its store and the PF2e sheet tab
+import nothing from the calendar, the time HUD or TimeEngine, so a table that
+wants GM clocks, points and pools without an in-game clock runs it alone.
+
+Four things hold that split up, none of which reports anything when it breaks.
+The registry runs a feature's **own** lifecycle and nothing else, so Resource
+Trackers carries its own `onInit`/`onReady` — a sub-feature wired from its
+parent's resolves on, shows a live toggle and never initialises. The engine gate
+in `Features.on` must **exempt promoted nodes** (`!(top in PROMOTED)`), or the
+dock goes dark in a trackers-only world while the Control Center still shows the
+feature switched on. Weather and Delving must **keep** `requiresFeature`: a delve
+is drawn inside the time HUD and reads day and month names off
+`TimeEngine.calendar`, and a weather walk is stepped by the engine's
+`updateWorldTime` hook, so ungating them leaves both enabled with nothing drawing
+and nothing walking. And the scene-control group, the chat tagging and the
+keybindings are **shared**, so `wireShared()` in `module.js` latches them to one
+pass however many halves are enabled and in whichever order —
+`game.keybindings.register` throws on a duplicate key, which would abort the
+second half's init.
+
+Inside that shared hook, every branch asks `Features.on(...)` and never a store's
+own `enabled` getter. Those getters read `ct.weatherEnabled` / `ct.delvingEnabled`
+directly, which a GM who switched the engine off never touched — so in a
+trackers-only world they still say yes and put a weather button on the scene
+controls for a feature that is not running, opening a Hex Flower nothing is
+stepping.
+
+`sub-features.mjs` must stay importable under plain Node — the check tools load
+it to drive the registry, and `module.js` reaches `foundry.applications.api` at
+module scope through the HUDs. That is why Resource Trackers' lifecycle is
+**injected** by the adapter (`registerSubFeatures({ onTrackersInit,
+onTrackersReady })`) rather than imported there; the same trap is documented for
+`pf2e-variant-rules` below.
+
+Restoring `core: true` on the adapter is
 not an error: the Control Center just draws a "Core" chip where the switch was,
 and the feature is undisableable again with nothing said. And `registerSettings()`
 runs disabled or not, with side-effecting onChange handlers behind several of
@@ -248,7 +283,11 @@ node tools/clocks-tracker-toggle-check.mjs
 Zero failures required. It drives the real registry and the real bridge rather
 than reading them, and also pins that switching off writes no `ct.*` data — a
 world that turns the engine back on finds its calendar, trackers and weather
-exactly as they were.
+exactly as they were. Its second half executes `module.js` itself in a `vm` with
+the imports stripped and the collaborators injected (the technique
+`tools/clocks-pacer-motion-check.mjs` uses on this same feature), because none
+of the wiring above can be proved by reading the file: it drives a trackers-only
+world, then both halves in **both orders**, and asks what was actually wired.
 
 **When touching Stream Pacer's safety lights or its exempt-users form**
 (`features/stream-pacer/`, `templates/stream-pacer/`), re-run the exemption
