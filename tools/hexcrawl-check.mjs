@@ -271,6 +271,17 @@ ok("autoRevealPatch never lowers a state (and always enters)", lowered === 0, `$
   const patch = M.autoRevealPatch(map, { entered: ["0,0"], seen: new Set(["0,0", "0,1"]) });
   ok("seen hexes are masked with the live sight preset", patch["0,1"]?.st === "masked" && patch["0,1"]?.mk?.p === C.SIGHT_PRESET);
 }
+{
+  // A hex the GM masked with a thinner preset (a silhouette) still gains what sight shows,
+  // and keeps anything its own mask showed that sight does not: the field-wise union.
+  const map = M.normalizeMap({ config: { sightState: "masked", sightFields: C.MASK_PRESETS.glimpsed }, hexes: { "0,1": { st: "masked", mk: { p: "silhouette" } }, "0,2": { st: "masked", mk: { p: "rumoured" } }, "0,3": { st: "masked", mk: { p: "glimpsed" } } } });
+  const patch = M.autoRevealPatch(map, { entered: ["0,0"], seen: new Set(["0,0", "0,1", "0,2", "0,3"]) });
+  const f1 = patch["0,1"] && M.maskFields(map, patch["0,1"]), f2 = patch["0,2"] && M.maskFields(map, patch["0,2"]);
+  const sight = map.config.sightFields, had2 = M.maskFields(map, map.hexes["0,2"]);
+  ok("sight raises an already-masked silhouette to the sight fields", !!f1 && C.MASK_FIELDS.every((k) => f1[k] === sight[k]));
+  ok("raising a mask is a union: nothing the old mask showed is lost", !!f2 && C.MASK_FIELDS.every((k) => f2[k] === (sight[k] || had2[k])));
+  ok("a mask already showing everything sight shows is left alone", !("0,3" in patch));
+}
 
 ok("brushPatch erase → null", M.brushPatch(m0, ["1,1"], { tool: "erase" })["1,1"] === null);
 ok("brushPatch state:hidden on a blank hex → null", M.brushPatch(m0, ["9,9"], { tool: "state", value: "hidden" })["9,9"] === null);

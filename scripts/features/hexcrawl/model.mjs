@@ -526,15 +526,24 @@ export function brushPatch(map, keys, brush) {
 
 /* ── Auto-reveal ────────────────────────────────────────────────────────── */
 
-const raise = (cur, sightState) => {
+const raise = (map, cur, sightState) => {
   // Returns the new hex, or null when nothing would rise. Never lowers.
   const st = cur.st ?? "hidden";
   if (sightState === "revealed") {
     if (STATE_RANK[st] >= STATE_RANK.revealed) return null;
     const n = { ...cur, st: "revealed" }; delete n.mk; return n;
   }
-  if (STATE_RANK[st] >= STATE_RANK.masked) return null;
-  return { ...cur, st: "masked", mk: { p: SIGHT_PRESET, f: {} } };
+  if (STATE_RANK[st] >= STATE_RANK.revealed) return null;
+  if (st !== "masked") return { ...cur, st: "masked", mk: { p: SIGHT_PRESET, f: {} } };
+  // Already masked (a GM's silhouette, say): sight still shows what it shows.
+  // The result is the field-wise union — the sight preset, plus per-hex
+  // overrides for anything the old mask showed that sight does not — so a
+  // shape-only hex gains terrain and difficulty and loses nothing.
+  const had = maskFields(map, cur), sight = presetFields(map, SIGHT_PRESET);
+  if (MASK_FIELDS.every((f) => had[f] || !sight[f])) return null;
+  const f = {};
+  for (const k of MASK_FIELDS) if (had[k] && !sight[k]) f[k] = true;
+  return { ...cur, st: "masked", mk: { p: SIGHT_PRESET, f } };
 };
 
 /**
@@ -551,7 +560,7 @@ export function autoRevealPatch(map, { entered = [], seen = new Set() } = {}) {
   for (const k of seen) {
     if (enteredSet.has(k)) continue;
     const cur = map.hexes[k] ?? { st: "hidden" };
-    const n = raise(cur, preset);
+    const n = raise(map, cur, preset);
     if (n) patch[k] = n;
   }
   for (const k of enteredSet) {
