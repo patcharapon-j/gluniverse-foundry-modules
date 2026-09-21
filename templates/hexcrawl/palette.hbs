@@ -1,0 +1,155 @@
+{{!-- Hexcrawl — GM brush palette. Every string localized; glyph SVG built from constants. --}}
+<div class="glhex-root glhex-pal gl-type">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
+{{else}}
+  <nav class="glhex-tools" aria-label="{{localize "GLHEX.app.palette.tools"}}">
+    {{#each tools}}
+      <button type="button" class="glhex-tool {{#if active}}is-active{{/if}}" data-action="tool" data-tool="{{id}}"
+        data-tooltip="{{label}}" aria-label="{{label}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">
+        <i class="{{icon}}"></i>
+      </button>
+    {{/each}}
+  </nav>
+
+  <div class="glhex-pal-head">
+    <span class="glhex-pal-tool gl-tech-label">{{toolLabel}}</span>
+    <span class="gl-rule"></span>
+  </div>
+
+  <section class="glhex-pal-value">
+    {{#if is.select}}
+      <p class="glhex-note">{{toolHint}}</p>
+    {{/if}}
+
+    {{#if is.terrain}}
+      <div class="glhex-swatches">
+        <button type="button" class="glhex-swatch glhex-swatch--inherit {{#if terrainInherit}}is-active{{/if}}"
+          data-action="terrain" data-value="" data-tooltip="{{localize "GLHEX.app.palette.terrainInherit"}}"
+          aria-label="{{localize "GLHEX.app.palette.terrainInherit"}}">
+          <i class="fa-solid fa-link"></i>
+        </button>
+        {{#each terrains}}
+          <button type="button" class="glhex-swatch {{#if active}}is-active{{/if}} {{#if custom}}is-custom{{/if}}"
+            style="--glhex-sw: {{color}}" data-action="terrain" data-value="{{id}}"
+            data-tooltip="{{label}}" aria-label="{{label}}">{{{svg}}}</button>
+        {{/each}}
+      </div>
+      <button type="button" class="glhex-link-btn" data-action="manageTerrains">
+        <i class="fa-solid fa-swatchbook"></i> {{localize "GLHEX.app.palette.manageTerrains"}}
+      </button>
+    {{/if}}
+
+    {{#if is.rating}}
+      <div class="glhex-ratings">
+        {{#each ratings}}
+          <button type="button" class="glhex-rating {{#if active}}is-active{{/if}}" data-action="rating" data-value="{{n}}" data-glhex-rating="{{n}}"
+            data-tooltip="{{label}}" aria-label="{{label}}">
+            <span class="glhex-pips">{{#each pips}}<span class="glhex-pip {{#if on}}is-on{{/if}}"></span>{{/each}}</span>
+            <span class="glhex-rating-name">{{label}}</span>
+          </button>
+        {{/each}}
+      </div>
+      <button type="button" class="glhex-link-btn {{#if ratingClear}}is-active{{/if}}" data-action="rating" data-value="">
+        <i class="fa-solid fa-xmark"></i> {{localize "GLHEX.app.palette.clearRating"}}
+      </button>
+    {{/if}}
+
+    {{#if is.state}}
+      <div class="glhex-states">
+        {{#each states}}
+          <button type="button" class="glhex-state {{#if active}}is-active{{/if}} {{#if masked}}is-masked{{/if}}"
+            data-action="state" data-value="{{value}}">
+            <i class="{{icon}}"></i><span>{{label}}</span>
+          </button>
+        {{/each}}
+      </div>
+      <button type="button" class="glhex-link-btn" data-action="settings"><i class="fa-solid fa-pen"></i> {{localize "GLHEX.app.palette.editPresets"}}</button>
+    {{/if}}
+
+    {{#if is.blight}}
+      <div class="glhex-onoff">
+        <button type="button" class="glhex-seg {{#if toggleOn}}is-active{{/if}}" data-action="toggle" data-value="1">{{localize "GLHEX.app.common.on"}}</button>
+        <button type="button" class="glhex-seg {{#unless toggleOn}}is-active{{/unless}}" data-action="toggle" data-value="0">{{localize "GLHEX.app.common.off"}}</button>
+      </div>
+      <p class="glhex-note">{{toolHint}}</p>
+    {{/if}}
+
+    {{#if is.visited}}
+      <div class="glhex-onoff">
+        <button type="button" class="glhex-seg {{#if toggleOn}}is-active{{/if}}" data-action="toggle" data-value="1">{{localize "GLHEX.app.common.on"}}</button>
+        <button type="button" class="glhex-seg {{#unless toggleOn}}is-active{{/unless}}" data-action="toggle" data-value="0">{{localize "GLHEX.app.common.off"}}</button>
+      </div>
+      <p class="glhex-note">{{toolHint}}</p>
+    {{/if}}
+
+    {{#if is.region}}
+      <p class="glhex-note">{{toolHint}}</p>
+    {{/if}}
+
+    {{#if is.erase}}
+      <p class="glhex-note">{{toolHint}}</p>
+    {{/if}}
+  </section>
+
+  <section class="glhex-regions {{#if is.region}}is-picking{{/if}}">
+    <div class="glhex-pal-head">
+      <span class="gl-tech-label">{{localize "GLHEX.app.palette.regions"}}</span>
+      <span class="gl-rule"></span>
+      <button type="button" class="glhex-mini" data-action="newRegion" data-tooltip="{{localize "GLHEX.app.palette.newRegion"}}"
+        aria-label="{{localize "GLHEX.app.palette.newRegion"}}"><i class="fa-solid fa-plus"></i></button>
+    </div>
+    {{#if showFilter}}
+      <input type="search" class="glhex-filter gl-field" data-region-filter value="{{filter}}"
+        placeholder="{{localize "GLHEX.app.palette.filter"}}" aria-label="{{localize "GLHEX.app.palette.filter"}}">
+    {{/if}}
+    <ol class="glhex-region-list gl-scroll">
+      {{#if is.region}}
+        <li class="glhex-region-row glhex-region-row--none {{#if regionNone}}is-active{{/if}}" data-action="regionClear">
+          <span class="glhex-chip glhex-chip--none"></span>
+          <span class="glhex-region-name">{{localize "GLHEX.app.palette.noRegion"}}</span>
+        </li>
+      {{/if}}
+      {{#each regions}}
+        <li class="glhex-region-row {{#if active}}is-active{{/if}}" data-id="{{id}}" data-search="{{search}}"
+          data-action="region" style="--glhex-sw: {{color}}">
+          <span class="glhex-chip {{#if blight}}is-blight{{/if}}"></span>
+          <span class="glhex-region-main">
+            <span class="glhex-region-name">{{name}}{{#if nameHidden}} <i class="fa-solid fa-eye-slash glhex-name-hidden" data-tooltip="{{localize "GLHEX.app.palette.nameHidden"}}"></i>{{/if}}</span>
+            <span class="glhex-region-sub">{{terrain}}</span>
+          </span>
+          <span class="glhex-pips" data-tooltip="{{ratingTitle}}" {{#if rating}}data-glhex-rating="{{rating}}"{{/if}}>{{#each pips}}<span class="glhex-pip {{#if on}}is-on{{/if}}"></span>{{/each}}</span>
+          <span class="glhex-count gl-numeric" data-tooltip="{{localize "GLHEX.app.palette.hexCount"}}">{{count}}</span>
+          <button type="button" class="glhex-mini glhex-row-edit" data-action="editRegion"
+            data-tooltip="{{localize "GLHEX.app.common.edit"}}" aria-label="{{localize "GLHEX.app.common.edit"}}"><i class="fa-solid fa-pen"></i></button>
+        </li>
+      {{else}}
+        <li class="glhex-empty-row">{{localize "GLHEX.app.palette.noRegions"}}</li>
+      {{/each}}
+    </ol>
+  </section>
+
+  <footer class="glhex-pal-foot">
+    <div class="glhex-foot-row">
+      <button type="button" class="glhex-toggle {{#if stage}}is-on{{/if}}" data-action="stage" aria-pressed="{{#if stage}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLHEX.app.palette.stageHint"}}">
+        <span class="glhex-switch"></span>{{localize "GLHEX.app.palette.stage"}}
+      </button>
+      <button type="button" class="gl-btn glhex-btn glhex-reveal {{#unless staged}}is-idle{{/unless}}" data-action="reveal">
+        <i class="fa-solid fa-sun"></i> {{stagedLabel}}
+      </button>
+    </div>
+    <div class="glhex-foot-row">
+      <button type="button" class="glhex-toggle {{#if viewAsPlayers}}is-on{{/if}}" data-action="viewPlayers" aria-pressed="{{#if viewAsPlayers}}true{{else}}false{{/if}}">
+        <span class="glhex-switch"></span>{{localize "GLHEX.app.palette.viewAsPlayers"}}
+      </button>
+      <span class="glhex-foot-icons">
+        <button type="button" class="glhex-mini" data-action="undo" data-tooltip="{{localize "GLHEX.app.palette.undo"}}" aria-label="{{localize "GLHEX.app.palette.undo"}}"><i class="fa-solid fa-rotate-left"></i></button>
+        <button type="button" class="glhex-mini" data-action="importJson" data-tooltip="{{localize "GLHEX.app.importJson"}}" aria-label="{{localize "GLHEX.app.importJson"}}"><i class="fa-solid fa-file-import"></i></button>
+        <button type="button" class="glhex-mini" data-action="settings" data-tooltip="{{localize "GLHEX.app.palette.sceneSettings"}}" aria-label="{{localize "GLHEX.app.palette.sceneSettings"}}"><i class="fa-solid fa-sliders"></i></button>
+      </span>
+    </div>
+    <p class="glhex-hint"><i class="fa-solid fa-computer-mouse"></i> {{localize "GLHEX.app.palette.rightClickHint"}}</p>
+  </footer>
+{{/if}}
+</div>

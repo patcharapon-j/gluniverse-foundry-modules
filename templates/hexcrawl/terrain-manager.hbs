@@ -1,0 +1,72 @@
+{{!-- Hexcrawl — custom terrain manager. Edits write live on change. --}}
+<div class="glhex-root glhex-ed gl-type">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
+{{else}}
+  <div class="glhex-body gl-scroll">
+    <div class="glhex-pal-head">
+      <span class="gl-tech-label">{{localize "GLHEX.app.terrains.builtin"}}</span>
+      <span class="gl-rule"></span>
+    </div>
+    <ul class="glhex-builtins">
+      {{#each builtins}}
+        <li class="glhex-builtin {{#if shadowed}}is-shadowed{{/if}}" style="--glhex-sw: {{color}}">
+          <span class="glhex-swatch glhex-swatch--static">{{{svg}}}</span>
+          <span>{{label}}</span>
+        </li>
+      {{/each}}
+    </ul>
+
+    <div class="glhex-pal-head">
+      <span class="gl-tech-label">{{localize "GLHEX.app.terrains.custom"}}</span>
+      <span class="gl-rule"></span>
+      <button type="button" class="glhex-mini" data-action="add" data-tooltip="{{localize "GLHEX.app.terrains.add"}}" aria-label="{{localize "GLHEX.app.terrains.add"}}"><i class="fa-solid fa-plus"></i></button>
+    </div>
+
+    <ol class="glhex-custom-list">
+      {{#each custom}}
+        <li class="glhex-custom {{#if active}}is-active{{/if}}" data-id="{{id}}" style="--glhex-sw: {{color}}">
+          <div class="glhex-custom-row" data-action="select">
+            <span class="glhex-swatch glhex-swatch--static">{{{svg}}}</span>
+            <span class="glhex-region-main">
+              <span class="glhex-region-name">{{name}}</span>
+              <span class="glhex-region-sub">{{glyphLabel}}</span>
+            </span>
+            <i class="fa-solid fa-chevron-down glhex-caret"></i>
+            <button type="button" class="glhex-mini glhex-danger" data-action="remove" data-tooltip="{{localize "GLHEX.app.common.delete"}}" aria-label="{{localize "GLHEX.app.common.delete"}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{#if active}}
+            <div class="glhex-custom-edit">
+              <div class="glhex-grid2">
+                <label class="glhex-field">
+                  <span class="gl-tech-label">{{localize "GLHEX.app.terrains.name"}}</span>
+                  <input type="text" class="gl-field" data-field="name" value="{{../sel.name}}">
+                </label>
+                <label class="glhex-field">
+                  <span class="gl-tech-label">{{localize "GLHEX.app.terrains.color"}}</span>
+                  <span class="glhex-color is-custom"><input type="color" data-field="color" value="{{../sel.color}}"></span>
+                </label>
+              </div>
+              <span class="gl-tech-label">{{localize "GLHEX.app.terrains.icon"}}</span>
+              <div class="glhex-link">
+                <i class="fa-solid fa-image"></i>
+                <input type="text" class="gl-field" data-field="icon" value="{{../sel.icon}}" placeholder="{{localize "GLHEX.app.terrains.iconPlaceholder"}}">
+                <button type="button" class="glhex-mini" data-pick="image" data-target="icon" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+              </div>
+              <span class="gl-tech-label">{{localize "GLHEX.app.terrains.glyph"}}</span>
+              <div class="glhex-glyph-grid">
+                {{#each ../glyphs}}
+                  <button type="button" class="glhex-swatch {{#if active}}is-active{{/if}}" data-action="glyph" data-glyph="{{id}}"
+                    data-tooltip="{{label}}" aria-label="{{label}}">{{{svg}}}</button>
+                {{/each}}
+              </div>
+            </div>
+          {{/if}}
+        </li>
+      {{else}}
+        <li class="glhex-empty-row">{{localize "GLHEX.app.terrains.none"}}</li>
+      {{/each}}
+    </ol>
+  </div>
+{{/if}}
+</div>

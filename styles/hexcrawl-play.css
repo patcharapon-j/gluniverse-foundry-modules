@@ -1,0 +1,231 @@
+/* Hexcrawl — play surfaces (tooltip, arrival card, token HUD, scene dialog).
+   Prefix glhex-. Etched Glass tokens only. Terrain colours arrive inline as
+   DATA (a forest is green whatever the accent), never from this sheet. */
+
+/* ── Hover tooltip ─────────────────────────────────────────────────────── */
+
+.glhex-tooltip {
+  --gl-accent: var(--gl-cyan);
+  position: fixed;
+  z-index: var(--gl-z-tooltip);
+  min-width: 12rem;
+  max-width: 20rem;
+  padding: var(--gl-sp-3) var(--gl-sp-4);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);   /* the interface-scale zoom (gl-tokens.css roster) sizes it */
+  line-height: var(--gl-lh-snug);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(var(--gl-sp-1));
+  transition: opacity var(--gl-d-quick) var(--gl-ease), transform var(--gl-d-quick) var(--gl-ease);
+}
+.glhex-tooltip.is-visible { opacity: 1; transform: none; }
+.glhex-tooltip.is-pinned { pointer-events: auto; border-color: var(--gl-accent); box-shadow: var(--gl-etch), var(--gl-ring); }
+
+.glhex-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gl-sp-3);
+  margin-bottom: var(--gl-sp-2);
+  padding-bottom: var(--gl-sp-2);
+  border-bottom: 1px solid var(--gl-hair);
+}
+.glhex-tip-name {
+  color: var(--gl-text-bright);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-md);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glhex-tip-state {
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glhex-tip-state.is-revealed { color: var(--gl-good); }
+.glhex-tip-state.is-masked { color: var(--gl-warn); }
+.glhex-tip-state.is-hidden { color: var(--gl-text-faint); }
+
+.glhex-tip-line {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  margin: var(--gl-sp-1) 0;
+}
+.glhex-tip-line .is-dim, .glhex-tip-line.is-dim { color: var(--gl-text-dim); }
+.glhex-tip-cost { margin-left: auto; color: var(--gl-text-bright); }
+.glhex-tip-blight {
+  margin-left: auto;
+  color: var(--gl-violet);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glhex-tip-rumor { align-items: flex-start; color: var(--gl-text); font-style: italic; }
+.glhex-tip-rumor i { margin-top: 0.2em; color: var(--gl-text-dim); }
+
+/* An image icon, tinted by the terrain colour through a mask (the art is white on transparency). */
+.glhex-tip-icon {
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  background: currentColor;
+  -webkit-mask: var(--glhex-icon) center / contain no-repeat;
+  mask: var(--glhex-icon) center / contain no-repeat;
+}
+
+.glhex-glyph {
+  flex: none;
+  width: 1.35em;
+  height: 1.35em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Difficulty is a colour as well as a count: one ramp, stated once, read by the
+   tooltip, the arrival card and the palette (styles/hexcrawl.css). Fixed
+   semantic hues, not the accent — "extreme" reads as danger in every campaign. */
+[data-glhex-rating="1"] { --glhex-rating: var(--gl-good); }
+[data-glhex-rating="2"] { --glhex-rating: var(--gl-signal); }
+[data-glhex-rating="3"] { --glhex-rating: var(--gl-warn-deep); }
+[data-glhex-rating="4"] { --glhex-rating: var(--gl-hazard); }
+.glhex-rating-word { color: var(--glhex-rating, inherit); }
+
+.glhex-pips { display: inline-flex; gap: 3px; }
+.glhex-pip {
+  width: 0.55em;
+  height: 0.55em;
+  transform: rotate(45deg);
+  border: 1px solid var(--gl-line-strong);
+  background: transparent;
+}
+.glhex-pip.is-on {
+  border-color: var(--glhex-rating, var(--gl-accent));
+  background: var(--glhex-rating, var(--gl-accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--glhex-rating, var(--gl-accent)) 55%, transparent);
+}
+.glhex-pips.is-masked .glhex-pip { border-style: dashed; }
+
+.glhex-tip-landmarks { margin: var(--gl-sp-2) 0 0; padding: 0; list-style: none; }
+.glhex-tip-landmarks li { display: flex; align-items: center; gap: var(--gl-sp-2); margin: var(--gl-sp-1) 0; }
+.glhex-tip-lm { display: inline-flex; align-items: center; gap: var(--gl-sp-2); color: var(--gl-text); }
+.glhex-tip-lm i { width: 1.1em; color: var(--gl-signal); text-align: center; }
+.glhex-tip-lm.is-link { cursor: pointer; text-decoration: underline dotted var(--gl-line-strong); }
+.glhex-tip-lm.is-link:hover { color: var(--gl-text-bright); text-decoration-color: var(--gl-accent); }
+.glhex-tip-tag {
+  margin-left: auto;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+/* GM-only block: set apart so nobody reads it out by accident. */
+.glhex-tip-gm {
+  --gl-accent: var(--gl-violet);
+  margin-top: var(--gl-sp-3);
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border-left: 2px solid var(--gl-accent);
+  background: rgb(var(--gl-tint-light) / 0.04);
+}
+.glhex-tip-gm-label { margin-bottom: var(--gl-sp-1); color: var(--gl-violet); font-size: var(--gl-fs-3xs); }
+.glhex-tip-k { flex: none; color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
+.glhex-tip-gm .glhex-tip-line { align-items: flex-start; }
+.glhex-tip-note { color: var(--gl-text-dim); white-space: pre-wrap; }
+
+/* ── Arrival card + encounter roll (chat, whispered to GMs) ────────────── */
+
+/* The card carries its own dark glass: a system's chat theme (dnd5e's is light
+   parchment) otherwise sits under text struck for ink, and the card reads grey
+   on white — correct in the file, illegible at the table. */
+.glhex-card {
+  --gl-accent: var(--gl-cyan);
+  margin: calc(var(--gl-sp-1) * -1) 0;
+  padding: var(--gl-sp-3);
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-sm);
+  box-shadow: inset 0 1px 0 var(--gl-hair);
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-snug);
+}
+.glhex-card-head { display: flex; align-items: center; gap: var(--gl-sp-3); margin-bottom: var(--gl-sp-2); }
+.glhex-card-head > i { color: var(--gl-accent); font-size: var(--gl-fs-xl); }
+.glhex-card-kicker { font-size: var(--gl-fs-2xs); }
+.glhex-card-title {
+  color: var(--gl-text-bright);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-lg);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glhex-card-line { display: flex; align-items: center; gap: var(--gl-sp-2); margin: var(--gl-sp-1) 0; }
+.glhex-card-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--gl-sp-1) var(--gl-sp-3);
+  margin: var(--gl-sp-2) 0;
+  padding: var(--gl-sp-2) 0;
+  border-block: 1px solid var(--gl-hair);
+}
+.glhex-card-facts dt { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
+.glhex-card-facts dd { margin: 0; color: var(--gl-text-bright); }
+.glhex-card-note { color: var(--gl-text-dim); font-style: italic; }
+.glhex-card-section { margin: var(--gl-sp-2) 0; }
+.glhex-card-section .gl-tech-label { font-size: var(--gl-fs-2xs); margin-bottom: var(--gl-sp-1); }
+.glhex-card-section p { margin: 0 0 var(--gl-sp-1); }
+.glhex-card-meta { margin-top: var(--gl-sp-1); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+.glhex-card-actions { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); margin-top: var(--gl-sp-3); }
+.glhex-card-hint { margin-top: var(--gl-sp-2); color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); }
+
+/* .gl-btn declares no font-size: a chat log would hand it 14px. Size it here. */
+.glhex-card .gl-btn,
+.glhex-card-btn {
+  flex: 1 1 auto;
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+  padding: 0.55em 0.9em;
+}
+.glhex-card-btn i { margin-right: 0.35em; }
+
+.glhex-dice { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); margin: var(--gl-sp-2) 0; }
+.glhex-die {
+  display: grid;
+  place-items: center;
+  min-width: 2em;
+  height: 2em;
+  border: 1px solid var(--gl-edge);
+  background: var(--gl-ink-2);
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-md);
+  font-variant-numeric: tabular-nums;
+}
+.glhex-die.is-hit { border-color: var(--gl-hazard); color: var(--gl-hazard-hot); box-shadow: 0 0 8px color-mix(in srgb, var(--gl-hazard) 50%, transparent); }
+.glhex-roll.is-triggered { --gl-accent: var(--gl-hazard); }
+.glhex-roll.is-triggered .glhex-card-title { color: var(--gl-hazard-hot); }
+.glhex-roll.is-quiet { --gl-accent: var(--gl-good); }
+
+/* ── Token HUD ─────────────────────────────────────────────────────────── */
+
+#token-hud .glhex-hud.active { border-color: var(--gl-cyan); color: var(--gl-cyan-hot); box-shadow: 0 0 8px color-mix(in srgb, var(--gl-cyan) 55%, transparent); }
+#token-hud .glhex-hud:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Scene dialog + sight prompt ───────────────────────────────────────── */
+
+.glhex-scene-dialog, .glhex-sight-dialog { font-family: var(--gl-tech); font-size: var(--gl-fs-sm); }
+.glhex-scene-status { margin: 0 0 var(--gl-sp-3); color: var(--gl-text-dim); }
+.glhex-scene-new { display: grid; gap: var(--gl-sp-2); border: 1px solid var(--gl-hair); padding: var(--gl-sp-3); }
+.glhex-scene-new label, .glhex-sight-dialog label { display: grid; gap: var(--gl-sp-1); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+.glhex-scene-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gl-sp-2); }
+.glhex-dialog .form-footer button { font-size: var(--gl-fs-xs); }

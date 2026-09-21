@@ -1,0 +1,14 @@
+/* Hexcrawl — JSON import / export window. Prefix glhex-import. */
+.glhex-import .window-content { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.glhex-import-hint { margin: 0; font-size: 12px; color: var(--gl-text-dim); line-height: 1.45; }
+.glhex-import-text { min-height: 240px; resize: vertical; font-family: var(--gl-tech); font-size: 11px; line-height: 1.5; white-space: pre; }
+.glhex-import-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.glhex-import-spacer { flex: 1; }
+.glhex-import .glhex-import-btn { font-size: 12px; padding: 5px 10px; }
+.glhex-import .glhex-import-primary { --gl-accent: var(--gl-cyan); border-color: var(--gl-accent); color: var(--gl-text-bright); }
+.glhex-import-commit { justify-content: flex-end; padding-top: 4px; border-top: 1px solid var(--gl-hair); }
+.glhex-import-summary { padding: 8px 10px; font-size: 12px; color: var(--gl-text); display: flex; flex-direction: column; gap: 4px; }
+.glhex-import-warnings summary { cursor: pointer; color: var(--gl-warn); }
+.glhex-import-warnings ul { margin: 4px 0 0; padding-left: 18px; max-height: 160px; overflow-y: auto; color: var(--gl-text-dim); }
+.glhex-import-ok { color: var(--gl-good); }
+.glhex-import-error { font-size: 12px; color: var(--gl-hazard); }

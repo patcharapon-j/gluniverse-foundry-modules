@@ -34,3 +34,4 @@ import "./pf2e-creaturedex/index.mjs";
 import "./stream/index.mjs";
 import "./stream-cards/index.mjs";
 import "./stream-targets/index.mjs";
+import "./hexcrawl/index.mjs";

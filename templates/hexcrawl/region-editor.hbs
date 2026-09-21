@@ -1,0 +1,120 @@
+{{!-- Hexcrawl — region editor. Dotted names (enc.text, rumor.truth) nest through Foundry's form parser. --}}
+<div class="glhex-root glhex-ed gl-type">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLHEX.app.region.gone"}}</p>
+{{else}}
+  <div class="glhex-body gl-scroll">
+    <label class="glhex-field">
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.name"}}</span>
+      <input type="text" name="name" class="gl-field glhex-title-input" value="{{d.name}}" placeholder="{{localize "GLHEX.app.region.defaultName"}}">
+    </label>
+    <label class="glhex-check"><input type="checkbox" name="nk" {{#if d.nk}}checked{{/if}}><span>{{localize "GLHEX.app.region.nameKnown"}}</span></label>
+    <p class="glhex-note">{{localize "GLHEX.app.region.nameKnownHint"}}</p>
+
+    <div class="glhex-grid2">
+      <label class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.region.terrain"}}</span>
+        <select name="t" class="gl-field">
+          {{#each terrains}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>
+      <label class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.region.rating"}}</span>
+        <select name="rt" class="gl-field">
+          {{#each ratings}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>
+      <div class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.region.color"}}</span>
+        <span class="glhex-color {{#if colorCustom}}is-custom{{/if}}">
+          <input type="color" value="{{colorShown}}" data-color-picker aria-label="{{localize "GLHEX.app.region.color"}}">
+          <input type="hidden" name="color" value="{{d.color}}">
+          <span class="glhex-color-state">{{#if colorCustom}}{{localize "GLHEX.app.region.colorCustom"}}{{else}}{{localize "GLHEX.app.region.colorTerrain"}}{{/if}}</span>
+          <button type="button" class="glhex-mini" data-action="clearColor" data-tooltip="{{localize "GLHEX.app.region.colorClear"}}" aria-label="{{localize "GLHEX.app.region.colorClear"}}"><i class="fa-solid fa-rotate-left"></i></button>
+        </span>
+      </div>
+      <div class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.region.hexes"}}</span>
+        <label class="glhex-check"><input type="checkbox" name="bl" {{#if d.bl}}checked{{/if}}><span>{{localize "GLHEX.app.region.blight"}}</span></label>
+        <span class="glhex-dim gl-numeric">{{localize "GLHEX.app.region.hexCount" n=count}}</span>
+      </div>
+    </div>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.region.art"}}</legend>
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.icons"}}</span>
+      {{#each iconRows}}
+        <div class="glhex-link">
+          <i class="fa-solid fa-image"></i>
+          <input type="text" name="icon.{{i}}" class="gl-field" value="{{src}}" placeholder="{{localize "GLHEX.app.region.iconPlaceholder" n=n}}">
+          <button type="button" class="glhex-mini" data-pick="image" data-target="icon.{{i}}" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+        </div>
+      {{/each}}
+      <p class="glhex-note">{{localize "GLHEX.app.region.iconsHint"}}</p>
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.texture"}}</span>
+      <div class="glhex-link">
+        <i class="fa-solid fa-panorama"></i>
+        <input type="text" name="tex.src" class="gl-field" value="{{d.tex.src}}" placeholder="{{localize "GLHEX.app.region.texturePlaceholder"}}">
+        <button type="button" class="glhex-mini" data-pick="image" data-target="tex.src" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+      </div>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.region.texMode"}}</span>
+          <select name="tex.mode" class="gl-field">
+            {{#each texModes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.region.texScale"}}</span>
+          <input type="number" name="tex.scale" class="gl-field gl-numeric" min="0.25" max="40" step="0.25" value="{{d.tex.scale}}">
+        </label>
+      </div>
+      <label class="glhex-check"><input type="checkbox" name="tex.pixel" {{#if d.tex.pixel}}checked{{/if}}><span>{{localize "GLHEX.app.region.texPixel"}}</span></label>
+      <p class="glhex-note">{{localize "GLHEX.app.region.textureHint"}}</p>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.region.encounter"}}</legend>
+      <textarea name="enc.text" class="gl-field" rows="3" placeholder="{{localize "GLHEX.app.region.encounterPlaceholder"}}">{{d.enc.text}}</textarea>
+      <div class="glhex-link">
+        <i class="fa-solid fa-table-list"></i>
+        <input type="text" name="enc.table" class="gl-field" value="{{d.enc.table}}" data-uuid-drop="RollTable" placeholder="{{localize "GLHEX.app.region.tableDrop"}}">
+        <button type="button" class="glhex-mini" data-action="openLink" data-tooltip="{{localize "GLHEX.app.common.open"}}" aria-label="{{localize "GLHEX.app.common.open"}}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+        <button type="button" class="gl-btn glhex-btn glhex-btn-sm" data-action="rollEnc"><i class="fa-solid fa-dice"></i> {{localize "GLHEX.app.common.roll"}}</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.region.rumor"}}</legend>
+      <textarea name="rumor.text" class="gl-field" rows="2" placeholder="{{localize "GLHEX.app.region.rumorPlaceholder"}}">{{d.rumor.text}}</textarea>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.region.truth"}}</span>
+          <select name="rumor.truth" class="gl-field">
+            {{#each truths}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label class="glhex-check glhex-check--end"><input type="checkbox" name="rumor.known" {{#if d.rumor.known}}checked{{/if}}><span>{{localize "GLHEX.app.region.known"}}</span></label>
+      </div>
+      <div class="glhex-link">
+        <i class="fa-solid fa-table-list"></i>
+        <input type="text" name="rumor.table" class="gl-field" value="{{d.rumor.table}}" data-uuid-drop="RollTable" placeholder="{{localize "GLHEX.app.region.tableDrop"}}">
+        <button type="button" class="glhex-mini" data-action="openLink" data-tooltip="{{localize "GLHEX.app.common.open"}}" aria-label="{{localize "GLHEX.app.common.open"}}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+        <button type="button" class="gl-btn glhex-btn glhex-btn-sm" data-action="rollRumor"><i class="fa-solid fa-dice"></i> {{localize "GLHEX.app.common.roll"}}</button>
+      </div>
+    </fieldset>
+
+    <label class="glhex-field">
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.notes"}}</span>
+      <textarea name="notes" class="gl-field" rows="3" placeholder="{{localize "GLHEX.app.hex.notesPlaceholder"}}">{{d.notes}}</textarea>
+    </label>
+  </div>
+
+  <footer class="glhex-ed-foot">
+    <button type="button" class="gl-btn glhex-btn glhex-btn-danger" data-action="delete"><i class="fa-solid fa-trash"></i> {{localize "GLHEX.app.common.delete"}}</button>
+    <span class="glhex-spacer"></span>
+    <button type="button" class="gl-btn glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
+    <button type="submit" class="gl-btn gl-btn-accent glhex-btn"><i class="fa-solid fa-check"></i> {{localize "GLHEX.app.common.save"}}</button>
+  </footer>
+{{/if}}
+</div>

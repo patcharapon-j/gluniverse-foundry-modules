@@ -227,6 +227,7 @@ rather than at the end.
 | stream             | stream.                      | null              | —               | off     |
 | stream-cards       | stream.card                  | pf2e              | ⤷ stream        | off     |
 | stream-targets     | tgt.                         | null              | —               | off     |
+| hexcrawl           | hex.                         | null              | —               | off     |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

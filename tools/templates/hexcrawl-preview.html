@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hexcrawl renderer preview</title>
+<link rel="stylesheet" href="__ROOT__/styles/gl-fonts.css">
+<link rel="stylesheet" href="__ROOT__/styles/gl-tokens.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(120% 90% at 30% 0%, #111826 0%, #080b11 55%, #02070b 100%);
+    color: #eef1f7; font-family: "Oxanium", sans-serif; overflow: hidden;
+  }
+  .bar {
+    position: fixed; inset: 0 0 auto 0; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+    padding: 10px 16px; background: rgba(11, 15, 23, 0.82); border-bottom: 1px solid rgba(152, 162, 182, 0.18);
+    font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; z-index: 2; backdrop-filter: blur(6px);
+  }
+  .bar label { display: inline-flex; gap: 6px; align-items: center; color: #98a2b6; }
+  .bar select, .bar button, .bar input[type=range] { font: inherit; color: #eef1f7; }
+  .bar select, .bar button {
+    background: #161d2c; border: 1px solid rgba(107, 134, 214, 0.45); padding: 4px 9px; border-radius: 2px;
+    text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
+  }
+  .bar button:hover { border-color: #6b86d6; background: #1c2538; }
+  .bar .title { color: #eef1f7; font-weight: 600; letter-spacing: 0.18em; margin-right: 6px; }
+  .readout { margin-left: auto; font-family: "JetBrains Mono", monospace; color: #98a2b6; text-transform: none; letter-spacing: 0; }
+  #stage { position: fixed; inset: 0; }
+  .err { position: fixed; bottom: 12px; left: 16px; right: 16px; color: #ff4a52; font-family: monospace; white-space: pre-wrap; z-index: 3; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="title">Hexcrawl</span>
+  <label>Grid <select id="grid">
+    <option value="2">2 · odd-R</option><option value="3">3 · even-R</option>
+    <option value="4" selected>4 · odd-Q</option><option value="5">5 · even-Q</option>
+  </select></label>
+  <label>View <select id="view">
+    <option value="gm">GM</option><option value="vap">GM · as players</option><option value="player" selected>Player</option>
+  </select></label>
+  <label>Render <select id="mode">
+    <option value="tiles">tiles</option><option value="tint">tint</option><option value="outlines">outlines</option>
+  </select></label>
+  <label>Zoom <input id="zoom" type="range" min="0.4" max="2.6" step="0.05" value="1"></label>
+  <label><input id="motion" type="checkbox" checked> Motion</label>
+  <button id="move">Move party</button>
+  <button id="ring">Reveal ring</button>
+  <button id="hide">Hide all</button>
+  <button id="stage-btn">Stage + commit</button>
+  <span class="readout" id="readout">—</span>
+</div>
+<div id="stage"></div>
+<div class="err" id="err"></div>
+<script type="module">
+const errBox = document.getElementById("err");
+const fail = (e) => { errBox.textContent += (e?.stack || e) + "\n"; console.error(e); };
+window.addEventListener("error", (e) => fail(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => fail(e.reason));
+
+const ROOT = "__ROOT__";
+const { HexRenderer } = await import(`${ROOT}/scripts/features/hexcrawl/render/renderer.mjs`);
+const HM = await import(`${ROOT}/scripts/features/hexcrawl/hex-math.mjs`);
+const M = await import(`${ROOT}/scripts/features/hexcrawl/model.mjs`);
+const { PALETTE } = await import(`${ROOT}/scripts/core/theme.mjs`);
+const { resolveIcon } = await import(`${ROOT}/scripts/features/hexcrawl/icons.mjs`);
+const IMP = await import(`${ROOT}/scripts/features/hexcrawl/import.mjs`);
+const PIXI = window.PIXI;
+
+const params = new URLSearchParams(location.search);
+const $ = (id) => document.getElementById(id);
+if (params.get("grid")) $("grid").value = params.get("grid");
+if (params.get("view")) $("view").value = params.get("view");
+if (params.get("mode")) $("mode").value = params.get("mode");
+if (params.get("zoom")) $("zoom").value = params.get("zoom");
+if (params.get("motion") === "0") $("motion").checked = false;
+const BIG = params.get("big") === "1";
+
+/* ?import=<url of an import JSON> draws that map with its art instead of the
+   sample (relative art paths resolve against the JSON's own folder unless it
+   sets assetBase); &reveal=all shows every hex, for reviewing the art. */
+let IMPORTED = null;
+if (params.get("import")) {
+  const url = new URL(params.get("import"), location.href);
+  const parsed = IMP.parseImport(await (await fetch(url)).text());
+  if (!parsed.map.assetBase) parsed.map.assetBase = new URL(".", url).href;
+  if (params.get("reveal") === "all") for (const h of Object.values(parsed.map.hexes)) { h.st = "revealed"; delete h.mk; }
+  IMPORTED = parsed;
+  $("grid").value = String(parsed.scene.gridType);
+  if (parsed.warnings.length) console.warn("import warnings", parsed.warnings);
+}
+
+await Promise.all([
+  document.fonts.load('600 16px "Oxanium"'),
+  document.fonts.load('900 16px "Font Awesome 6 Free"'),
+]).catch(() => {});
+
+/* resolveIcon — the SHIPPED resolver (icons.mjs), never a copy. */
+
+/* A stand-in landmark image, painted on a canvas so the page needs no asset. */
+const SHRINE_IMG = (() => {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 128;
+  const c = cv.getContext("2d");
+  const g = c.createLinearGradient(0, 0, 128, 128); g.addColorStop(0, "#2a3b66"); g.addColorStop(1, "#6b86d6");
+  c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+  c.fillStyle = "#eef1f7"; c.beginPath(); c.arc(70, 58, 30, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#2a3b66"; c.beginPath(); c.arc(84, 50, 26, 0, Math.PI * 2); c.fill();
+  return cv.toDataURL("image/png");
+})();
+
+/* ── Sample map ─────────────────────────────────────────────────────── */
+const ROWS = IMPORTED ? IMPORTED.scene.rows : BIG ? 40 : 10, COLS = IMPORTED ? IMPORTED.scene.cols : BIG ? 60 : 14;
+const REGIONS = {
+  verdant: { name: "Verdant Reach", t: "grassland", rt: 1, seed: [2, 2], alt: "rolling", nk: true },
+  thorn: { name: "Thornwood", t: "forest", rt: 2, seed: [6, 3], alt: "tropical", nk: true },
+  // Same biome as Thornwood, right beside it: the fused rims have to tell them apart.
+  elder: { name: "Elderholt", t: "forest", rt: 3, seed: [4, 6], alt: "forest", color: "#e8b04a" },
+  mire: { name: "Mirefen", t: "wetland", rt: 3, seed: [8, 8], alt: "aquatic" },
+  ash: { name: "Ashen Barrens", t: "badlands", rt: 3, seed: [2, 8], alt: "drylands", bl: true },
+  grey: { name: "Greyspine", t: "mountain", rt: 4, seed: [5, 12], alt: "frozen", color: "#b9c6ff" },
+  coast: { name: "Sunken Coast", t: "ocean", rt: 2, seed: [9, 1], alt: "aquatic" },
+};
+function buildMap(adapter) {
+  const map = M.emptyMap();
+  for (const [id, r] of Object.entries(REGIONS)) {
+    map.regions[id] = M.normalizeRegion({ id, name: r.name, nk: !!r.nk, t: r.t, rt: r.rt, bl: !!r.bl, color: r.color ?? null }, id);
+  }
+  const seeds = Object.entries(REGIONS).map(([id, r]) => ({ id, key: HM.key(r.seed[0] * ROWS / 10 | 0, r.seed[1] * COLS / 14 | 0) }));
+  let h = 7;
+  const rnd = () => ((h = (h * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) {
+    const k = HM.key(i, j);
+    let best = null, bd = Infinity;
+    for (const s of seeds) {
+      const d = HM.distance(adapter, k, s.key) + rnd() * 1.4;
+      if (d < bd) { bd = d; best = s.id; }
+    }
+    const hex = { rg: best, st: "hidden" };
+    const x = rnd();
+    if (x < 0.22) hex.t = REGIONS[best].alt;
+    map.hexes[k] = hex;
+  }
+  // Every built-in terrain appears somewhere.
+  const put = (k, t) => { if (map.hexes[k]) map.hexes[k].t = t; };
+  put("4,11", "underground"); put("1,5", "drylands"); put("7,6", "tropical");
+  put("0,0", "rolling"); put("8,12", "frozen"); put("3,0", "aquatic");
+  // Per-hex rating overrides.
+  map.hexes["4,5"].rt = 4; map.hexes["6,9"].rt = 1;
+  // Landmarks.
+  map.hexes["4,6"].lm = [{ id: "a", icon: "fa-solid fa-tower-observation", label: "Old Watchtower", vis: "visible" }];
+  map.hexes["3,10"].lm = [{ id: "b", icon: "fa-solid fa-dungeon", label: "Sunken Gate", vis: "follow" }];
+  map.hexes["6,2"].lm = [{ id: "c", icon: "fa-solid fa-campground", label: "Ranger Camp", vis: "follow" }];
+  map.hexes["2,7"].lm = [{ id: "d", icon: "fa-solid fa-skull", label: "Bone Field", vis: "follow" },
+                          { id: "e", icon: "fa-solid fa-dungeon", label: "Crypt", vis: "follow" }];
+  // An image landmark (exercises loadTexture + the diamond mask).
+  map.hexes["6,5"].lm = [{ id: "f", img: SHRINE_IMG, label: "Moon Shrine", vis: "follow" }];
+  // Visibility: a walked corridor, some glimpses, the rest uncharted.
+  const revealed = ["5,4", "5,3", "4,3", "4,4", "6,4", "6,3", "5,5", "4,5", "3,4", "3,5", "4,6", "5,2", "6,2", "4,2", "2,4", "2,5", "3,6", "2,6", "2,7", "5,6", "6,5"];
+  const masked = { "3,7": "glimpsed", "4,7": "glimpsed", "5,7": "silhouette", "6,6": "rumoured", "7,4": "glimpsed", "7,3": "silhouette", "1,5": "glimpsed", "3,3": "rumoured", "7,5": "glimpsed" };
+  for (const k of revealed) if (map.hexes[k]) map.hexes[k].st = "revealed";
+  for (const [k, p] of Object.entries(masked)) if (map.hexes[k]) { map.hexes[k].st = "masked"; map.hexes[k].mk = { p, f: {} }; }
+  for (const k of ["5,3", "5,4", "4,4", "4,5", "5,5"]) if (map.hexes[k]) map.hexes[k].vs = true;
+  if (BIG) for (const k of Object.keys(map.hexes)) if ((k.length * 7 + k.charCodeAt(0)) % 3 === 0) map.hexes[k].st = "revealed";
+  return M.normalizeMap(map);
+}
+
+/* ── Stage ───────────────────────────────────────────────────────────── */
+const host = $("stage");
+const app = new PIXI.Application({
+  resizeTo: host, antialias: true, backgroundAlpha: 0,
+  resolution: window.devicePixelRatio || 1, autoDensity: true,
+});
+host.appendChild(app.view);
+const world = new PIXI.Container();
+app.stage.addChild(world);
+
+// A stand-in for scene background art (visible in "tint" / "outlines").
+const art = new PIXI.Container();
+world.addChild(art);
+function drawArt(w, h) {
+  art.removeChildren().forEach((c) => c.destroy());
+  const cv = document.createElement("canvas");
+  cv.width = 512; cv.height = 512 * h / w;
+  const c2 = cv.getContext("2d");
+  const grd = c2.createLinearGradient(0, 0, cv.width, cv.height);
+  grd.addColorStop(0, "#3d4a2c"); grd.addColorStop(0.45, "#5b5a3a"); grd.addColorStop(1, "#2c3f4f");
+  c2.fillStyle = grd; c2.fillRect(0, 0, cv.width, cv.height);
+  for (let n = 0; n < 40; n++) {
+    const x = (n * 97) % cv.width, y = (n * 61) % cv.height, r = 30 + (n * 13) % 70;
+    const g = c2.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, n % 2 ? "rgba(180,160,110,0.35)" : "rgba(40,70,60,0.4)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    c2.fillStyle = g; c2.fillRect(0, 0, cv.width, cv.height);
+  }
+  const sp = new PIXI.Sprite(PIXI.Texture.from(cv));
+  sp.width = w; sp.height = h;
+  art.addChild(sp);
+}
+
+const state = { adapter: null, keys: [], map: null, r: null, party: [], trail: [], staged: new Set(), stagedArmed: false };
+
+function viewOpts() {
+  const v = $("view").value;
+  return { asGM: v !== "player", viewAsPlayers: v === "vap" };
+}
+
+function build() {
+  state.r?.destroy();
+  const type = Number($("grid").value);
+  state.adapter = HM.pureAdapter({ type, size: 100, bounds: { rows: ROWS, cols: COLS } });
+  state.keys = [];
+  for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) state.keys.push(HM.key(i, j));
+  const map = IMPORTED ? M.normalizeMap(structuredClone(IMPORTED.map)) : buildMap(state.adapter);
+  map.config.render = $("mode").value;
+  state.map = map;
+  const r = new HexRenderer({
+    PIXI, adapter: state.adapter, keys: state.keys, palette: PALETTE, resolveIcon,
+    loadTexture: (src) => PIXI.Assets.load(src),
+    terrainName: (id) => id.charAt(0).toUpperCase() + id.slice(1),
+    resolution: window.devicePixelRatio || 1,
+    assetRoot: `${ROOT}/assets/hexcrawl/`,
+  });
+  state.r = r;
+  world.addChild(r.root);
+  const last = state.adapter.center(HM.key(ROWS - 1, COLS - 1));
+  state.size = { w: last.x + state.adapter.width, h: last.y + state.adapter.height };
+  drawArt(state.size.w, state.size.h);
+  art.visible = map.config.render !== "tiles";
+  const start = IMPORTED?.start ?? "5,4";
+  state.party = [{ key: start, sight: map.config.sight }];
+  state.trail = IMPORTED ? [] : ["5,2", "5,3", "4,4", "5,4"];
+  state.staged = new Set();
+  applyZoom();
+  r.setMotionScale($("motion").checked ? 1 : 0);
+  r.setMap(map, { ...viewOpts(), animate: false });
+  r.setParty(state.party);
+  r.setTrail(state.trail);
+  r.setStaged(state.staged);
+}
+
+function applyZoom() {
+  const z = Number($("zoom").value);
+  world.scale.set(z);
+  const W = host.clientWidth, H = host.clientHeight;
+  const focus = params.get("focus");
+  if (focus && state.adapter) {
+    const c = state.adapter.center(focus);
+    world.position.set(W / 2 - c.x * z, (H + 56) / 2 - c.y * z);
+  } else world.position.set((W - state.size.w * z) / 2, 56 + (H - 56 - state.size.h * z) / 2);
+  state.r?.setZoom(z);
+}
+
+function commit(map, animate = true) {
+  state.map = map;
+  state.r.setMap(map, { ...viewOpts(), animate });
+}
+
+$("grid").onchange = build;
+$("view").onchange = () => { state.r.setMap(state.map, { ...viewOpts(), animate: false }); state.r.setStaged(state.staged); };
+$("mode").onchange = () => {
+  const map = { ...state.map, config: { ...state.map.config, render: $("mode").value } };
+  art.visible = map.config.render !== "tiles";
+  commit(map, false);
+};
+$("zoom").oninput = applyZoom;
+$("motion").onchange = () => state.r.setMotionScale($("motion").checked ? 1 : 0);
+window.addEventListener("resize", () => setTimeout(applyZoom, 0));
+
+function moveParty() {
+  const a = state.adapter;
+  const cur = state.party[0].key;
+  const opts = HM.neighbors(a, cur).filter((k) => a.inBounds(k));
+  const next = opts[Math.floor(Math.random() * opts.length)];
+  const party = [{ key: next, sight: state.map.config.sight }];
+  const patch = M.autoRevealPatch(state.map, { entered: [next], seen: HM.unionRange(a, party) });
+  state.party = party;
+  state.trail = [...state.trail, next].slice(-12);
+  state.r.setParty(party);
+  commit(M.applyPatch(state.map, patch));
+  state.r.setTrail(state.trail);
+}
+function revealRing() {
+  const a = state.adapter, c = state.party[0].key;
+  const inner = new Set(HM.range(a, c, 1));
+  const patch = {};
+  for (const k of HM.range(a, c, 2)) if (!inner.has(k)) patch[k] = { ...(state.map.hexes[k] ?? {}), st: "revealed", mk: undefined };
+  commit(M.applyPatch(state.map, patch));
+}
+function hideAll() {
+  const patch = {};
+  for (const [k, h] of Object.entries(state.map.hexes)) patch[k] = { ...h, st: "hidden", mk: undefined };
+  commit(M.applyPatch(state.map, patch));
+}
+function stageCommit() {
+  if (!state.stagedArmed) {
+    const hidden = state.keys.filter((k) => (state.map.hexes[k]?.st ?? "hidden") === "hidden");
+    const seed = hidden[Math.floor(Math.random() * hidden.length)];
+    state.staged = new Set(HM.range(state.adapter, seed, 1).filter((k) => (state.map.hexes[k]?.st ?? "hidden") !== "revealed"));
+    state.stagedArmed = true;
+    $("stage-btn").textContent = "Commit staged";
+    state.r.setStaged(state.staged);
+    return;
+  }
+  const patch = {};
+  for (const k of state.staged) patch[k] = { ...(state.map.hexes[k] ?? {}), st: "revealed", mk: undefined };
+  state.staged = new Set();
+  state.stagedArmed = false;
+  $("stage-btn").textContent = "Stage + commit";
+  state.r.setStaged(state.staged);
+  commit(M.applyPatch(state.map, patch));
+}
+$("move").onclick = moveParty;
+$("ring").onclick = revealRing;
+$("hide").onclick = hideAll;
+$("stage-btn").onclick = stageCommit;
+
+app.view.addEventListener("pointermove", (e) => {
+  const rect = app.view.getBoundingClientRect();
+  const z = world.scale.x;
+  const p = { x: (e.clientX - rect.left - world.position.x) / z, y: (e.clientY - rect.top - world.position.y) / z };
+  const k = state.adapter.keyAt(p);
+  state.r.setHover(state.adapter.inBounds(k) ? k : null);
+});
+app.view.addEventListener("pointerleave", () => state.r.setHover(null));
+
+/* ── Clock & readout ─────────────────────────────────────────────────── */
+let paused = false, ema = 0;
+app.ticker.add(() => {
+  if (paused) return;
+  const t0 = performance.now();
+  state.r.update(app.ticker.deltaMS);
+  const cost = performance.now() - t0;
+  ema = ema ? ema * 0.92 + cost * 0.08 : cost;
+});
+setInterval(() => {
+  const s = state.r.stats;
+  $("readout").textContent = `update ${ema.toFixed(2)} ms/frame · static ${s.staticMs.toFixed(1)} ms / ${s.staticHexes} hex · anim ${s.animating} · ${state.keys.length} hexes`;
+}, 250);
+
+/** Pause the live clock and advance the renderer by `ms` (for stills). */
+const step = (ms) => { for (let t = 0; t < ms; t += 16) state.r.update(Math.min(16, ms - t)); };
+window.__hexcrawlSeek = (ms) => { paused = true; step(ms); return state.r.stats; };
+window.__hexcrawlResume = () => { paused = false; };
+window.__hexcrawl = { app, state, moveParty, revealRing, hideAll, stageCommit, build };
+
+{
+  // Timing of the initial static build, including the first render (PIXI
+  // triangulates Graphics lazily, so the draw calls alone understate it).
+  const t0 = performance.now();
+  build();
+  const t1 = performance.now();
+  app.renderer.render(app.stage);
+  const t2 = performance.now();
+  document.body.dataset.timing = `setMap ${(t1 - t0).toFixed(1)} ms + first render ${(t2 - t1).toFixed(1)} ms for ${state.keys.length} hexes`;
+  console.log("hexcrawl timing:", document.body.dataset.timing);
+}
+const act = params.get("act");
+if (act) {
+  paused = true;
+  for (const a of act.split(",")) ({ move: moveParty, ring: revealRing, hide: hideAll, stage: stageCommit })[a]?.();
+  const seek = Number(params.get("seek") ?? 0);
+  if (seek) step(seek);
+  if (params.get("hover")) state.r.setHover(params.get("hover"));
+}
+document.body.dataset.ready = "1";
+</script>
+</body>
+</html>
