@@ -11,6 +11,7 @@ import { escapeHTML } from '../../core/util.mjs';
  *
  * Spec:
  *   tone     'amber' | 'cyan' | 'hazard' | 'green' | 'ember'
+ *   icon     optional Font Awesome class for the header strip
  *   label    header strip text ("Ready check")
  *   code     mono header code ("SIG-02 // GM") — typed in on arrival
  *   kicker   mono line above the title — typed in on arrival
@@ -57,12 +58,16 @@ export class DossierCard {
         ${a.icon ? `<i class="${escapeHTML(a.icon)}" aria-hidden="true"></i>` : ''}<span>${escapeHTML(a.label)}</span>
       </button>`).join('');
 
+    // Each pip carries a status badge, so the answer reads from the icon alone
+    // (a tick, a hand, or still waiting) and never from colour by itself.
     const tally = (spec.tally || []).map(p => {
       const state = p.isReady ? 'is-ready' : p.isHand ? 'is-hand' : 'is-waiting';
+      const badge = p.isReady ? 'fa-check' : p.isHand ? 'fa-hand' : 'fa-ellipsis';
       const face = p.avatar
         ? `<img src="${escapeHTML(p.avatar)}" alt="">`
         : `<span>${escapeHTML(p.initials)}</span>`;
-      return `<span class="sp-dz-pip ${state}" title="${escapeHTML(p.name)}">${face}</span>`;
+      return `<span class="sp-dz-pip ${state}" title="${escapeHTML(p.name)}">${face}`
+        + `<i class="sp-dz-pip-badge fa-solid ${badge}" aria-hidden="true"></i></span>`;
     }).join('');
 
     const footer = spec.footer
@@ -71,7 +76,7 @@ export class DossierCard {
 
     this.card.innerHTML = `
       <header class="sp-dz-hd">
-        <span class="sp-dz-hd-label">${escapeHTML(spec.label)}</span>
+        <span class="sp-dz-hd-label">${spec.icon ? `<i class="${escapeHTML(spec.icon)}" aria-hidden="true"></i>` : ''}${escapeHTML(spec.label)}</span>
         ${typed('sp-dz-hd-code', spec.code)}
       </header>
       <div class="sp-dz-hazard" aria-hidden="true"></div>

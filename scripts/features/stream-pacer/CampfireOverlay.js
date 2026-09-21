@@ -78,6 +78,7 @@ export class CampfireOverlay {
     const remaining = PacerManager.getCampfireRemaining();
     this._card.render({
       tone: 'ember',
+      icon: 'fa-solid fa-fire',
       label: game.i18n.localize('STREAM_PACER.Panel.Campfire.Label'),
       code: game.i18n.localize('STREAM_PACER.Panel.Campfire.Code'),
       kicker: game.i18n.localize('STREAM_PACER.Panel.Campfire.Kicker'),

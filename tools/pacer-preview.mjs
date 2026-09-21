@@ -97,11 +97,16 @@ const { PacerManager } = await import('/scripts/features/stream-pacer/PacerManag
 const { PacerOverlay } = await import('/scripts/features/stream-pacer/PacerOverlay.js');
 const { CampfireOverlay } = await import('/scripts/features/stream-pacer/CampfireOverlay.js');
 const { CueAudio } = await import('/scripts/features/stream-pacer/CueAudio.js');
+const { SafetyRequestOverlay } = await import('/scripts/features/stream-pacer/SafetyRequestOverlay.js');
+const { SafetyAlertOverlay } = await import('/scripts/features/stream-pacer/SafetyAlertOverlay.js');
 const { PLAYER_STATUS } = await import('/scripts/features/stream-pacer/settings.js');
 
 PacerManager.onAllReady(() => CueAudio.playAllReady());
 new PacerOverlay().initialize();
 new CampfireOverlay().initialize();
+// Each gates itself on role: the ask is player-only, the alert GM-only.
+new SafetyRequestOverlay().initialize();
+new SafetyAlertOverlay().initialize();
 
 // A GM drives the manager directly; a player's screen receives what a GM sent.
 const drive = {
@@ -113,7 +118,9 @@ const drive = {
   campfireOff: () => role === 'gm' ? PacerManager.dismissCampfire() : PacerManager.receiveCampfireDismiss(),
   answer: (id, status) => PacerManager.receivePlayerStatusChange(id, PLAYER_STATUS[status] ?? status),
   late: (sig) => PacerManager.receiveSyncState({ gmSignal: sig, readyCheckId: 'late', countdownEnd: Date.now() + 40000, playerStates: {} }),
-  safety: () => document.body.classList.toggle('sp-safety-request')
+  safety: () => PacerManager.getState().safetyRequest.active ? PacerManager.receiveSafetyRequestStop() : PacerManager.receiveSafetyRequestStart(foundry.utils.randomID()),
+  light: (status) => PacerManager.setSafetyLight(me.id, status),
+  raise: (id, status) => PacerManager.receiveSafetyLight(id, status)
 };
 window.__pacer = drive;
 
@@ -132,7 +139,9 @@ for (const u of users.filter(u => !u.isGM && u.id !== me.id)) {
   add(u.name.split(' ')[0] + ' hand', () => drive.answer(u.id, 'HAND_RAISED'));
 }
 add('Late join (countdown)', () => drive.late('countdown'));
-add('Toggle safety banner', drive.safety);
+add('Toggle safety check', drive.safety);
+if (role === 'player') for (const st of ['green', 'yellow', 'red']) add('My light ' + st, () => drive.light(st));
+else { add('Mirel yellow', () => drive.raise('p2', 'yellow')); add('Rook red', () => drive.raise('p3', 'red')); add('All green', () => { drive.raise('p2', 'green'); drive.raise('p3', 'green'); }); }
 add(role === 'gm' ? 'View as player' : 'View as GM', () => { location.search = role === 'gm' ? '?role=player' : '?role=gm'; });
 
 // ?demo=<scenario> sets a scene up on load, for headless contact sheets
@@ -150,7 +159,11 @@ if (demo) {
     countdown: () => drive.countdown(75),
     critical: () => drive.countdown(9),
     campfire: () => drive.campfire(90),
-    safety: () => { drive.safety(); drive.ready(); }
+    safety: () => { drive.safety(); drive.ready(); },
+    ask: () => drive.safety(),
+    asked: () => { drive.safety(); drive.light('yellow'); },
+    alert: () => { drive.raise('p2', 'yellow'); drive.raise('p3', 'red'); },
+    alertYellow: () => drive.raise('p2', 'yellow')
   };
   scenarios[demo]?.();
 }

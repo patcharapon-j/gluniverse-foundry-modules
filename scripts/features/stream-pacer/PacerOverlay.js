@@ -15,6 +15,17 @@ const ARRIVAL_SETTLE_MS = 1400;
 const CRITICAL_AT = 10;
 const TICK_FROM = 5;
 
+// One icon per meaning, used by both the card's header and the dock's tag, so
+// a docked pill is recognisable from its icon before its text is read.
+const ICON = {
+  soft: 'fa-solid fa-hourglass-half',
+  countdown: 'fa-solid fa-stopwatch',
+  ready: 'fa-solid fa-list-check',
+  allReady: 'fa-solid fa-circle-check',
+  youReady: 'fa-solid fa-circle-check',
+  hand: 'fa-solid fa-hand'
+};
+
 const L = (key) => game.i18n.localize(`STREAM_PACER.Panel.${key}`);
 const F = (key, data) => game.i18n.format(`STREAM_PACER.Panel.${key}`, data);
 
@@ -216,6 +227,7 @@ export class PacerOverlay {
     if (signal === GM_SIGNAL.SOFT) {
       return {
         tone: 'amber',
+        icon: ICON.soft,
         label: L('Soft.Label'),
         code: L('Soft.Code'),
         kicker: L('Soft.Kicker'),
@@ -228,6 +240,7 @@ export class PacerOverlay {
       const remaining = state.countdownRemaining;
       return {
         tone: remaining !== null && remaining <= CRITICAL_AT ? 'hazard' : 'cyan',
+        icon: ICON.countdown,
         label: L('Countdown.Label'),
         code: L('Countdown.Code'),
         kicker: L('Countdown.Kicker'),
@@ -248,6 +261,7 @@ export class PacerOverlay {
       const done = tally.allReady;
       return {
         tone: 'green',
+        icon: done ? ICON.allReady : ICON.ready,
         label: done ? L('Ready.AllLabel') : L('Ready.Label'),
         code: L('Ready.Code'),
         kicker: done ? L('Ready.AllKicker') : L('Ready.GmKicker'),
@@ -266,6 +280,7 @@ export class PacerOverlay {
     const hand = `<em>${escapeHTML(L('Ready.HandWord'))}</em>`;
     return {
       tone: 'green',
+      icon: ICON.ready,
       label: L('Ready.Label'),
       code: L('Ready.Code'),
       kicker: L('Ready.Kicker'),
@@ -287,11 +302,12 @@ export class PacerOverlay {
     let dock;
 
     if (signal === GM_SIGNAL.SOFT) {
-      dock = { tone: 'amber', tag: L('Soft.Tag'), text: game.i18n.localize('STREAM_PACER.SoftSignalMessage') };
+      dock = { tone: 'amber', icon: ICON.soft, tag: L('Soft.Tag'), text: game.i18n.localize('STREAM_PACER.SoftSignalMessage') };
     } else if (signal === GM_SIGNAL.COUNTDOWN) {
       const remaining = state.countdownRemaining;
       dock = {
         tone: remaining !== null && remaining <= CRITICAL_AT ? 'hazard' : 'cyan',
+        icon: ICON.countdown,
         tag: L('Countdown.Tag'),
         text: L('Countdown.Title'),
         clock: formatClock(remaining)
@@ -301,6 +317,7 @@ export class PacerOverlay {
       if (game.user.isGM) {
         dock = {
           tone: 'green',
+          icon: tally.allReady ? ICON.allReady : ICON.ready,
           tag: L('Ready.Tag'),
           text: tally.allReady
             ? L('Ready.AllTitle')
@@ -308,9 +325,9 @@ export class PacerOverlay {
           button: { id: 'expand', label: L('Ready.Expand') }
         };
       } else if (this._answered === PLAYER_STATUS.HAND_RAISED) {
-        dock = { tone: 'amber', tag: L('Ready.HandTag'), text: L('Ready.HandWaiting'), button: { id: 'undo', label: L('Ready.LowerHand') } };
+        dock = { tone: 'amber', icon: ICON.hand, confirm: true, tag: L('Ready.HandTag'), text: L('Ready.HandWaiting'), button: { id: 'undo', label: L('Ready.LowerHand') } };
       } else {
-        dock = { tone: 'green', tag: L('Ready.YouTag'), text: L('Ready.YouWaiting'), button: { id: 'undo', label: L('Ready.Undo') } };
+        dock = { tone: 'green', icon: ICON.youReady, confirm: true, tag: L('Ready.YouTag'), text: L('Ready.YouWaiting'), button: { id: 'undo', label: L('Ready.Undo') } };
       }
     } else {
       return;
@@ -323,7 +340,7 @@ export class PacerOverlay {
     this._dock.dataset.tone = dock.tone;
     this._dock.classList.toggle('is-critical', dock.tone === 'hazard');
     this._dock.innerHTML = `
-      <span class="sp-dz-dock-tag">${escapeHTML(dock.tag)}</span>
+      <span class="sp-dz-dock-tag">${dock.icon ? `<i class="${escapeHTML(dock.icon)} sp-dz-dock-icon${dock.confirm ? ' is-confirm' : ''}" aria-hidden="true"></i>` : ''}${escapeHTML(dock.tag)}</span>
       <span class="sp-dz-dock-text">${escapeHTML(dock.text)}</span>
       ${dock.clock ? `<span class="sp-dz-dock-clock">${escapeHTML(dock.clock)}</span>` : ''}
       ${dock.button ? `<button type="button" class="sp-dz-dock-btn" data-dock-action="${escapeHTML(dock.button.id)}">${escapeHTML(dock.button.label)}</button>` : ''}`;

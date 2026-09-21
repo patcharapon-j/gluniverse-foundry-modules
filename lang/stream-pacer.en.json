@@ -149,8 +149,16 @@
       "LightGroupLabel": "Your safety light",
       "Readout": "Your light: {status}",
       "RequestPrompt": "Set your light",
-      "BannerMessage": "SAFETY CHECK — THE GM IS CHECKING IN — SET YOUR LIGHT",
-      "BannerAcknowledged": "SAFETY CHECK — YOUR LIGHT IS WITH THE GM — CHANGE IT ANY TIME",
+      "Card": {
+        "Label": "Safety check",
+        "Code": "SC // GM",
+        "Title": "Set your light",
+        "Guide": "The GM is checking in. Press a light on your panel — you can change it any time.",
+        "GuideNoHud": "The GM is checking in. Press a light below — you can change it any time.",
+        "AckLabel": "Light set",
+        "AckTitle": "Your light is with the GM",
+        "AckGuide": "Only the GM sees it. Change it any time."
+      },
       "PointerLabel": "Press your light",
       "green": "Green — continue",
       "yellow": "Yellow — slow down and check in",

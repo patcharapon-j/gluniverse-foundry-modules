@@ -32,7 +32,7 @@ export class SafetyAlertOverlay {
 
     this._element = document.createElement('aside');
     this._element.id = 'stream-pacer-safety-alert';
-    this._element.className = 'stream-pacer-safety-alert';
+    this._element.className = 'stream-pacer-safety-alert gl-type';
     this._element.setAttribute('role', 'status');
     this._element.setAttribute('aria-live', 'polite');
     this._element.setAttribute('aria-hidden', 'true');
@@ -80,8 +80,10 @@ export class SafetyAlertOverlay {
       const chip = document.createElement('span');
       chip.className = `sp-sa-chip is-${p.status}`;
 
+      // The same icon per light as the player's own lamps.
       const icon = document.createElement('i');
       icon.className = p.isRed ? 'fa-solid fa-hand' : 'fa-solid fa-triangle-exclamation';
+      icon.setAttribute('aria-hidden', 'true');
 
       // Player names are untrusted strings — textContent only.
       const name = document.createElement('span');
