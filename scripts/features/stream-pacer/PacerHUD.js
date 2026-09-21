@@ -140,7 +140,8 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
       gmSignal: state.gmSignal,
       isSoftSignal: state.gmSignal === GM_SIGNAL.SOFT,
       isCountdown: state.gmSignal === GM_SIGNAL.COUNTDOWN,
-      isFloorOpen: state.gmSignal === GM_SIGNAL.FLOOR_OPEN,
+      isReadyCheck: state.gmSignal === GM_SIGNAL.READY_CHECK,
+      readyTallyLabel: state.gmSignal === GM_SIGNAL.READY_CHECK ? PacerHUD._readyTallyLabel() : '',
       hasActiveSignal: state.gmSignal !== GM_SIGNAL.NONE,
       formattedCountdown,
       countdownUrgency,
@@ -203,6 +204,15 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   // m:ss formatter shared by the template context and the in-place tick path.
+  /** "3 / 5 ready · 1 hand" for the HUD's signal line during a ready check. */
+  static _readyTallyLabel() {
+    const tally = PacerManager.getReadyTally();
+    const ready = game.i18n.format('STREAM_PACER.Panel.Ready.CountReady', { ready: tally.ready, total: tally.total });
+    return tally.hands
+      ? `${ready} · ${game.i18n.format('STREAM_PACER.Panel.Ready.CountHands', { n: tally.hands })}`
+      : ready;
+  }
+
   static _formatDuration(totalSeconds) {
     const s = Math.max(0, Math.floor(totalSeconds));
     const minutes = Math.floor(s / 60);
@@ -440,8 +450,8 @@ export class PacerHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         case 'start-countdown':
           if (game.user.isGM) this._showCountdownDialog();
           break;
-        case 'open-floor':
-          if (game.user.isGM) PacerManager.openFloor();
+        case 'ready-check':
+          if (game.user.isGM) PacerManager.startReadyCheck();
           break;
         case 'cancel-signal':
           if (game.user.isGM) PacerManager.cancelSignal();

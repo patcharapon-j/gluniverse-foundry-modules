@@ -7,7 +7,7 @@ const EVENTS = {
   PLAYER_STATUS_CHANGE: 'playerStatusChange',
   GM_SOFT_SIGNAL: 'gmSoftSignal',
   GM_HARD_COUNTDOWN: 'gmHardCountdown',
-  GM_FLOOR_OPEN: 'gmFloorOpen',
+  GM_READY_CHECK: 'gmReadyCheck',
   GM_CANCEL_SIGNAL: 'gmCancelSignal',
   REQUEST_STATE: 'requestState',
   SYNC_STATE: 'syncState',
@@ -85,9 +85,9 @@ class SocketHandlerClass {
         PacerManager.receiveGmHardCountdown(payload.countdownEnd);
         break;
 
-      case EVENTS.GM_FLOOR_OPEN:
+      case EVENTS.GM_READY_CHECK:
         if (!senderIsGM) break;
-        PacerManager.receiveGmFloorOpen();
+        PacerManager.receiveGmReadyCheck(payload.readyCheckId);
         break;
 
       case EVENTS.GM_CANCEL_SIGNAL:
@@ -199,8 +199,8 @@ class SocketHandlerClass {
     this._emit(EVENTS.GM_HARD_COUNTDOWN, { countdownEnd });
   }
 
-  emitGmFloorOpen() {
-    this._emit(EVENTS.GM_FLOOR_OPEN);
+  emitGmReadyCheck(readyCheckId) {
+    this._emit(EVENTS.GM_READY_CHECK, { readyCheckId });
   }
 
   emitGmCancelSignal() {
@@ -227,6 +227,7 @@ class SocketHandlerClass {
       state: {
         playerStates: state.playerStates,
         gmSignal: state.gmSignal,
+        readyCheckId: state.readyCheckId,
         countdownEnd: state.countdownEnd,
         direPerilActive: state.direPerilActive,
         campfireActive: state.campfireActive,

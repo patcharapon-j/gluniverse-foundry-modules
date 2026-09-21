@@ -13,6 +13,7 @@ import { SocketHandler } from './socket-handler.js';
 import { PacerHUD } from './PacerHUD.js';
 import { PacerOverlay } from './PacerOverlay.js';
 import { AudioManager } from './AudioManager.js';
+import { CueAudio } from './CueAudio.js';
 import { HandRaiseSidebar } from './HandRaiseSidebar.js';
 import { PerilOverlay } from './PerilOverlay.js';
 import { CampfireOverlay } from './CampfireOverlay.js';
@@ -173,6 +174,10 @@ export function onReady() {
     PacerManager.onHandRaise((userId) => {
       audioManager.playHandRaiseChime(userId);
     });
+
+    // Ready check: one chime when the last counted player turns Ready. The
+    // check stays open — closing it (or moving on) is the GM's call.
+    PacerManager.onAllReady(() => CueAudio.playAllReady());
 
     // Hand raise sidebar (GM-only prominent notification)
     handRaiseSidebar = new HandRaiseSidebar();

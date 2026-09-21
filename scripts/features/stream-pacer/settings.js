@@ -19,8 +19,30 @@ export const GM_SIGNAL = {
   NONE: 'none',
   SOFT: 'soft',
   COUNTDOWN: 'countdown',
-  FLOOR_OPEN: 'floor_open'
+  // Replaced "open the floor": the GM asks whether the table is ready to move
+  // on, and each player answers Ready or raises a hand.
+  READY_CHECK: 'ready_check'
 };
+
+/**
+ * Coerce a stored or received signal onto the live set. A world saved while
+ * the retired 'floor_open' signal was up (or any value this build does not
+ * know) loads as no signal rather than as a state nothing can render or clear.
+ */
+export function normalizeSignal(signal) {
+  return Object.values(GM_SIGNAL).includes(signal) ? signal : GM_SIGNAL.NONE;
+}
+
+/**
+ * Is this user hidden from the general pacer UI (the bars and signal panels)?
+ * Read live, like isSafetyExempt: the GM asks it about other people while
+ * building the ready-check tally, and a capture login that never sees the
+ * panel can never answer it, so it must not be counted as someone to wait on.
+ */
+export function isBarsExempt(userId) {
+  const list = game.settings.get(MODULE_ID, 'sp.exemptUsers');
+  return Array.isArray(list) && list.includes(userId);
+}
 
 // A short-lived, GM-initiated table check-in. These values deliberately live
 // outside the normal pacing statuses: they are private, session-only safety
@@ -387,6 +409,33 @@ export function registerSettings() {
     config: true,
     type: Boolean,
     default: true
+  });
+
+  // Signal cues — the sound a player hears when a pacing signal arrives (wrap
+  // up, countdown and its last ticks, ready check, campfire). Client-scoped:
+  // each player owns their own ears. The GM never hears these; their side has
+  // the hand-raise chime and the "everyone is ready" chime below.
+  game.settings.register(MODULE_ID, 'sp.cueAudioEnabled', {
+    name: 'STREAM_PACER.Settings.CueAudioEnabled',
+    hint: 'STREAM_PACER.Settings.CueAudioEnabledHint',
+    scope: 'client',
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
+  game.settings.register(MODULE_ID, 'sp.cueAudioVolume', {
+    name: 'STREAM_PACER.Settings.CueAudioVolume',
+    hint: 'STREAM_PACER.Settings.CueAudioVolumeHint',
+    scope: 'client',
+    config: true,
+    type: Number,
+    default: 0.5,
+    range: {
+      min: 0,
+      max: 1,
+      step: 0.1
+    }
   });
 
   // Hand raise audio volume (0-1)

@@ -4,12 +4,19 @@ import { SAFETY_STATUS } from './settings.js';
 /** The player's traffic light, docked to the flank of the Pacer HUD. */
 const LIGHT_SELECTOR = '#stream-pacer-safety-light.is-mounted';
 
+/** One icon per light, shared with the GM's alert chips. */
+const LIGHT_ICON = {
+  [SAFETY_STATUS.GREEN]: 'fa-solid fa-check',
+  [SAFETY_STATUS.YELLOW]: 'fa-solid fa-triangle-exclamation',
+  [SAFETY_STATUS.RED]: 'fa-solid fa-hand'
+};
+
 /**
  * Player-side surface for a GM safety request.
  *
  * Two pieces, both non-blocking:
- *   - a reduced-opacity banner running across the middle of the screen, so the
- *     ask is visible without stealing the table's attention or the pointer;
+ *   - a solid card sitting just above the centre line (the pacing panels'
+ *     Dossier style), which never takes the pointer except on its own lamps;
  *   - an arrow anchored beside the traffic light in the Pacer HUD, telling the
  *     player exactly where to answer.
  *
@@ -20,9 +27,10 @@ export class SafetyRequestOverlay {
   constructor() {
     this._element = null;
     this._pointerEl = null;
-    this._trackEl = null;
-    this._messageEls = [];
+    this._cardEl = null;
     this._lampsEl = null;
+    this._lampButtons = new Map();
+    this._light = null;
     this._unsubscribe = null;
     this._active = false;
     this._acknowledged = false;
@@ -43,19 +51,25 @@ export class SafetyRequestOverlay {
   _createElements() {
     this._element = document.createElement('aside');
     this._element.id = 'stream-pacer-safety-request';
-    this._element.className = 'stream-pacer-safety-request';
+    this._element.className = 'stream-pacer-safety-request gl-type';
     this._element.setAttribute('role', 'status');
     this._element.setAttribute('aria-live', 'polite');
     this._element.setAttribute('aria-hidden', 'true');
 
-    const band = document.createElement('div');
-    band.className = 'sp-sr-band';
-
-    this._trackEl = document.createElement('div');
-    this._trackEl.className = 'sp-sr-track';
-    // Two identical halves so a -50% scroll loops seamlessly.
-    for (let i = 0; i < 12; i++) this._trackEl.appendChild(this._createSegment());
-    band.appendChild(this._trackEl);
+    // Static markup, localised text only — no player names are ever drawn here.
+    this._cardEl = document.createElement('div');
+    this._cardEl.className = 'sp-sr-card';
+    this._cardEl.innerHTML = `
+      <header class="sp-sr-hd">
+        <span class="sp-sr-hd-label"><i class="sp-sr-hd-icon" aria-hidden="true"></i><span class="sp-sr-label"></span></span>
+        <span class="sp-sr-code"></span>
+      </header>
+      <div class="sp-sr-hazard" aria-hidden="true"></div>
+      <div class="sp-sr-bd">
+        <div class="sp-sr-title"></div>
+        <div class="sp-sr-guide"></div>
+      </div>`;
+    this._cardEl.querySelector('.sp-sr-code').textContent = game.i18n.localize('STREAM_PACER.SafetyCheck.Card.Code');
 
     // Fallback answer surface for players with no HUD to point at.
     this._lampsEl = document.createElement('div');
@@ -69,44 +83,35 @@ export class SafetyRequestOverlay {
       lamp.className = `sp-sr-lamp lamp-${status}`;
       lamp.dataset.light = status;
       lamp.setAttribute('aria-label', label);
+      lamp.setAttribute('aria-pressed', 'false');
       lamp.title = label;
+      const icon = document.createElement('i');
+      icon.className = LIGHT_ICON[status];
+      icon.setAttribute('aria-hidden', 'true');
+      const word = document.createElement('span');
+      word.textContent = game.i18n.localize(`STREAM_PACER.SafetyCheck.Word.${status}`);
+      lamp.append(icon, word);
       this._lampsEl.appendChild(lamp);
+      this._lampButtons.set(status, lamp);
     }
-    band.appendChild(this._lampsEl);
-    this._element.appendChild(band);
+    this._cardEl.appendChild(this._lampsEl);
+    this._element.appendChild(this._cardEl);
     this._element.addEventListener('click', this._clickHandler);
     document.body.appendChild(this._element);
 
     this._pointerEl = document.createElement('div');
-    this._pointerEl.className = 'stream-pacer-safety-pointer';
+    this._pointerEl.className = 'stream-pacer-safety-pointer gl-type';
     this._pointerEl.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
     label.className = 'sp-sp-label';
     label.textContent = game.i18n.localize('STREAM_PACER.SafetyCheck.PointerLabel');
+    const light = document.createElement('i');
+    light.className = 'fa-solid fa-traffic-light sp-sp-icon';
+    light.setAttribute('aria-hidden', 'true');
     const arrow = document.createElement('i');
     arrow.className = 'fa-solid fa-arrow-right-long sp-sp-arrow';
-    this._pointerEl.append(label, arrow);
+    this._pointerEl.append(light, label, arrow);
     document.body.appendChild(this._pointerEl);
-
-    // Player names are never rendered here, so textContent-only is enough.
-    this._messageEls = [...this._trackEl.querySelectorAll('.sp-sr-message')];
-  }
-
-  _createSegment() {
-    const segment = document.createElement('span');
-    segment.className = 'sp-sr-segment';
-
-    const icon = document.createElement('i');
-    icon.className = 'fa-solid fa-traffic-light sp-sr-icon';
-
-    const message = document.createElement('span');
-    message.className = 'sp-sr-message';
-
-    const sep = document.createElement('span');
-    sep.className = 'sp-sr-sep';
-
-    segment.append(icon, message, sep);
-    return segment;
   }
 
   _onClick(event) {
@@ -130,6 +135,16 @@ export class SafetyRequestOverlay {
       this._applyMessage();
     }
 
+    // The fallback lamps show which light is standing, as the HUD fixture does.
+    if (state.mySafetyLight !== this._light) {
+      this._light = state.mySafetyLight;
+      for (const [status, lamp] of this._lampButtons) {
+        const lit = status === this._light;
+        lamp.classList.toggle('is-lit', lit);
+        lamp.setAttribute('aria-pressed', lit ? 'true' : 'false');
+      }
+    }
+
     this._element.classList.toggle('active', active);
     this._element.classList.toggle('is-acknowledged', acknowledged);
     this._element.setAttribute('aria-hidden', active ? 'false' : 'true');
@@ -148,15 +163,25 @@ export class SafetyRequestOverlay {
   /** Banner lamps appear only when there is no docked light to point at. */
   _syncHudPresence() {
     const hasLight = !!document.querySelector(LIGHT_SELECTOR);
-    this._element?.classList.toggle('no-hud', !hasLight);
+    if (this._element && this._element.classList.contains('no-hud') === hasLight) {
+      this._element.classList.toggle('no-hud', !hasLight);
+      this._applyMessage();
+    }
     return hasLight;
   }
 
+  /** Amber "Set your light" until answered, then green "Light set". */
   _applyMessage() {
-    const text = this._acknowledged
-      ? game.i18n.localize('STREAM_PACER.SafetyCheck.BannerAcknowledged')
-      : game.i18n.localize('STREAM_PACER.SafetyCheck.BannerMessage');
-    this._messageEls.forEach(el => { el.textContent = text; });
+    if (!this._cardEl) return;
+    const t = (key) => game.i18n.localize(`STREAM_PACER.SafetyCheck.Card.${key}`);
+    const ack = this._acknowledged;
+    const noHud = this._element.classList.contains('no-hud');
+    this._element.dataset.tone = ack ? 'green' : 'amber';
+    this._cardEl.querySelector('.sp-sr-hd-icon').className =
+      `sp-sr-hd-icon fa-solid ${ack ? 'fa-circle-check' : 'fa-traffic-light'}`;
+    this._cardEl.querySelector('.sp-sr-label').textContent = t(ack ? 'AckLabel' : 'Label');
+    this._cardEl.querySelector('.sp-sr-title').textContent = t(ack ? 'AckTitle' : 'Title');
+    this._cardEl.querySelector('.sp-sr-guide').textContent = t(ack ? 'AckGuide' : noHud ? 'GuideNoHud' : 'Guide');
   }
 
   // --- Arrow anchoring ---
@@ -232,9 +257,9 @@ export class SafetyRequestOverlay {
       this._pointerEl.remove();
       this._pointerEl = null;
     }
-    this._trackEl = null;
+    this._cardEl = null;
     this._lampsEl = null;
-    this._messageEls = [];
+    this._lampButtons.clear();
     document.body.classList.remove('sp-safety-request');
   }
 }

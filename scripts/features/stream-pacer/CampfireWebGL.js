@@ -1,165 +1,131 @@
 import { ThemeManager } from './ThemeManager.js';
 
 /**
- * Premium WebGL fire for the Campfire bottom bar.
+ * Stylised WebGL fire for the Campfire bottom bar.
  *
- * Replaces the old masked-gradient "flame tongues" with a procedural fragment
- * shader: a domain-warped rising flame field anchored to the bar's top edge,
- * a hot glowing rim, drifting embers/sparks, and a warm under-glow that seeps
- * up behind the bar's text. Colors come from the campfire palette via
- * ThemeManager so the WebGL and CSS stay in sync.
+ * Cel-shaded, not simulated: discrete flame tongues with hard edges, each one
+ * three flat bands (ember orange, amber, pale core) over a darker, taller back
+ * row, with crisp diamond embers rising off it. Everything is laid out in CSS
+ * pixels at a fixed pitch, so a tongue is the same shape on a 1280px screen and
+ * on a 3440px one; the old noise field was scaled by the canvas aspect and
+ * smeared sideways on anything wide. Edges are antialiased over one device
+ * pixel and nothing is blurred: it should read as a clean graphic, like the
+ * panels around it, not as smoke.
  *
- * Unlike PerilWebGL (a timed cinematic burst) this runs as a calm, sustained
- * loop for the whole scene. The single canvas + GL context is created lazily
- * and re-parented into each freshly rendered bar, so the context survives the
- * overlay's innerHTML swaps instead of being rebuilt every reveal.
- *
- * Self-contained: owns its canvas, RAF loop, and resize wiring; degrades to a
- * no-op (leaving the CSS fallback flames) when WebGL is unavailable.
+ * Runs as a calm, sustained loop for the whole scene. The single canvas + GL
+ * context is created lazily and re-parented into each freshly rendered bar, so
+ * the context survives the overlay's innerHTML swaps. Colours come from the
+ * suite palette via ThemeManager. Degrades to a no-op (leaving the CSS
+ * fallback flames) when WebGL is unavailable.
  */
 
 const VERT = `
 attribute vec2 a_pos;
-varying vec2 v_uv;
 void main() {
-  v_uv = a_pos * 0.5 + 0.5;
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }
 `;
 
 const FRAG = `
 precision highp float;
-varying vec2 v_uv;
 uniform float u_time;
-uniform vec2  u_res;       // drawing-buffer size (px)
+uniform vec2  u_res;       // drawing-buffer size (device px)
+uniform float u_dpr;       // device px per CSS px
 uniform float u_base;      // flame baseline as a 0..1 fraction from the bottom
-uniform float u_intensity; // 0..1 warmth/height boost (lifts in the final stretch)
-uniform vec3  u_deep;
-uniform vec3  u_mid;
-uniform vec3  u_hot;
+uniform float u_intensity; // 0..1 — taller and livelier in the final stretch
+uniform vec3  u_deep;      // back row
+uniform vec3  u_mid;       // outer band
+uniform vec3  u_amber;     // middle band
+uniform vec3  u_hot;       // core + embers
 
-float hash(vec2 p){
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
+float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+float vnoise(float x) {
+  float i = floor(x);
+  float f = fract(x);
+  return mix(hash1(i), hash1(i + 1.0), f * f * (3.0 - 2.0 * f));
 }
 
-float noise(vec2 p){
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash(i);
-  float b = hash(i + vec2(1.0, 0.0));
-  float c = hash(i + vec2(0.0, 1.0));
-  float d = hash(i + vec2(1.0, 1.0));
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm(vec2 p){
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) {
-    v += a * noise(p);
-    p = p * 2.02 + vec2(7.1, 3.7);
-    a *= 0.5;
+// A row of tongues at a fixed pitch. Returns, for the outer, middle and core
+// bands, how far (CSS px) this point sits inside the nearest tongue: positive
+// inside, negative outside, so coverage is one clamp away.
+vec3 tongues(vec2 p, float pitch, float hMin, float hMax, float seed, float t) {
+  vec3 v = vec3(-1000.0);
+  float cell = floor(p.x / pitch);
+  for (int k = -1; k <= 1; k++) {
+    float i = cell + float(k);
+    float r1 = hash1(i * 1.37 + seed);
+    float r2 = hash1(i * 2.71 + seed * 3.1);
+    float cx = (i + 0.5) * pitch + (r1 - 0.5) * pitch * 0.4;
+    // Height breathes slowly per tongue, with a quicker flick on the tip.
+    float h = mix(hMin, hMax, vnoise(i * 0.73 + t * (0.45 + 0.3 * r2) + seed));
+    h *= 0.9 + 0.2 * vnoise(t * 2.6 + i * 5.3 + seed);
+    // A fixed build per tongue, so the row has a few tall ones and some stubs
+    // instead of an even picket.
+    h *= 0.6 + 0.7 * hash1(i * 3.97 + seed * 1.7);
+    float halfW = pitch * (0.5 + 0.18 * r2);
+    float yn = clamp(p.y / h, 0.0, 1.0);
+    // The tip leans; the root stays put.
+    float lean = sin(t * 1.15 + r1 * 6.2831) * pitch * 0.24 * yn * yn;
+    float d = abs(p.x - cx - lean);
+    for (int b = 0; b < 3; b++) {
+      float sh = b == 0 ? 1.0 : (b == 1 ? 0.64 : 0.34);   // band height
+      float sw = b == 0 ? 1.0 : (b == 1 ? 0.6 : 0.3);     // band width
+      float y = p.y / (h * sh);
+      float w = halfW * sw * pow(max(1.0 - y, 0.0), 0.72);
+      float inside = (y < 1.0 && p.y >= 0.0) ? w - d : -1000.0;
+      if (b == 0) v.x = max(v.x, inside);
+      else if (b == 1) v.y = max(v.y, inside);
+      else v.z = max(v.z, inside);
+    }
   }
   return v;
 }
 
-// Ridged turbulence — stacked abs(noise) gives the sharp, wispy filaments that
-// read as licking flame tongues rather than soft blobs.
-float turb(vec2 p){
-  float v = 0.0;
-  float a = 0.55;
-  for (int i = 0; i < 6; i++) {
-    v += a * abs(noise(p) * 2.0 - 1.0);
-    p = p * 2.0 + vec2(3.1, 1.7);
-    a *= 0.5;
-  }
-  return v;
-}
-
-// Blackbody-style ramp through the themed palette: dim ember -> deep -> mid ->
-// hot -> a white-hot core at the densest, hottest part of the flame.
-vec3 fireColor(float h, vec3 deep, vec3 mid, vec3 hot){
-  vec3 c = mix(deep * 0.22, deep, smoothstep(0.0, 0.2, h));
-  c = mix(c, mid, smoothstep(0.18, 0.5, h));
-  c = mix(c, hot, smoothstep(0.48, 0.82, h));
-  c = mix(c, vec3(1.0, 0.96, 0.86), smoothstep(0.85, 1.0, h));
-  return c;
-}
-
-void main(){
-  vec2 uv = v_uv;
+void main() {
   float t = u_time;
-  float aspect = u_res.x / u_res.y;
+  vec2 px = gl_FragCoord.xy / u_dpr;               // CSS px
+  float basePx = u_base * u_res.y / u_dpr;
+  vec2 p = vec2(px.x, px.y - basePx);              // height above the bar
 
-  // Local flame coordinate: 0 at the baseline (bar top edge), 1 at canvas top.
-  float span = max(1.0 - u_base, 0.001);
-  float fy = (uv.y - u_base) / span;   // negative inside the bar
-  float fx = uv.x;
+  if (p.y < 0.0) { gl_FragColor = vec4(0.0); return; }
 
-  float boost = 0.4 + 0.35 * u_intensity;
-  float h = clamp(fy, 0.0, 1.0);
+  // Tallest possible back tongue: 64 × 1.1 × 1.3 × 1.15 ≈ 105px, inside OVERHANG_PX.
+  float lift = 1.0 + 0.15 * u_intensity;
+  float pace = t * (1.0 + 0.4 * u_intensity);
+  // One device pixel of antialiasing on every edge.
+  vec3 back = clamp(tongues(p, 62.0, 26.0 * lift, 64.0 * lift, 11.0, pace * 0.8) * u_dpr + 0.5, 0.0, 1.0);
+  vec3 front = clamp(tongues(p + vec2(17.0, 0.0), 34.0, 14.0 * lift, 50.0 * lift, 3.0, pace) * u_dpr + 0.5, 0.0, 1.0);
 
-  // --- Rising flame field ---
-  // Slow, gently advected turbulence with balanced vertical detail so the
-  // tongues read as flame rather than smearing into tall vertical streaks.
-  // A soft, height-scaled sway lets them lean a touch without sliding sideways.
-  float rise = t * (0.26 + 0.1 * boost);
-  float sway = (fbm(vec2(uv.x * aspect * 1.6, fy * 2.0 - rise * 0.7)) - 0.5) * (0.05 + 0.16 * h);
-  vec2 fp = vec2((uv.x * aspect + sway) * 3.2, fy * 3.0 - rise);
-  float detail = turb(fp);
+  // Back row: one dark band cut by a fine scanline, so it reads as a panel
+  // texture behind the bright row rather than as a second fire.
+  float scan = mod(floor(px.y), 3.0) < 1.0 ? 0.72 : 1.0;
+  vec3 col = u_deep * scan;
+  float alpha = back.x;
+  col = mix(col, mix(u_deep, u_mid, 0.45) * scan, back.y);
 
-  // Flame body: turbulent detail eaten away with height; kept short and sparse
-  // so the effect stays a calm hearth glow rather than a bonfire.
-  float body = detail * (0.85 + 0.35 * boost) - fy * 1.5 + 0.04;
-  float flame = smoothstep(0.0, 0.5, body) * step(0.0, fy);
+  // Front row: three flat bands.
+  col = mix(col, u_mid, front.x);
+  alpha = max(alpha, front.x);
+  col = mix(col, u_amber, front.y);
+  col = mix(col, u_hot, front.z);
 
-  // Mostly warm amber, with only a soft highlight at the hottest base.
-  float heat = clamp(flame * (0.55 + 0.4 * boost) * (1.0 - 0.4 * h), 0.0, 1.0);
-  vec3 col = fireColor(heat, u_deep, u_mid, u_hot) * smoothstep(0.0, 0.05, flame);
-  float alpha = smoothstep(0.02, 0.22, flame) * 0.7;
-
-  // Soft warm rim hugging the baseline edge — the gentle glow of the coals.
-  float edge = exp(-abs(fy) * 9.0) * step(-0.08, fy);
-  col += mix(u_mid, u_hot, 0.5) * edge * (0.45 + 0.3 * boost);
-  alpha += edge * 0.4;
-
-  // Warm under-glow inside the bar (fy < 0): low, fading downward so the
-  // text stays readable while the bar feels lit from its own fire.
-  float belowT = clamp(-fy / 0.85, 0.0, 1.0);
-  float glow = (1.0 - belowT) * step(fy, 0.0);
-  col += u_deep * glow * 0.2 * boost;
-  alpha += glow * 0.1 * boost;
-
-  // --- Drifting embers / sparks (few, slow, dim) ---
-  float sparks = 0.0;
-  for (int i = 0; i < 9; i++) {
-    float fi = float(i);
-    float seed = hash(vec2(fi, 7.0));
-    float speed = 0.04 + seed * 0.07;             // very slow drift
-    float life = fract(t * speed + seed);
-    float baseX = hash(vec2(fi, 3.0));
-    float sx = baseX + sin(life * 5.0 + seed * 30.0) * 0.03;
-    float sy = u_base + life * (1.0 - u_base) * 1.05;
-    vec2 dpx = (uv - vec2(sx, sy)) * u_res;
-    float r = length(dpx);
-    float br = smoothstep(2.0, 0.0, r) + smoothstep(5.5, 0.0, r) * 0.25;
-    br *= (1.0 - life);                   // burn out as it climbs
-    br *= smoothstep(0.0, 0.12, life);    // fade in at birth
-    br *= 0.65 + 0.35 * sin(t * 3.5 + seed * 50.0); // slow twinkle
-    sparks += br;
+  // Diamond embers: hard-edged, rising and drifting, one chance per cell.
+  float ember = 0.0;
+  float cell = floor(px.x / 46.0);
+  for (int k = -1; k <= 1; k++) {
+    float i = cell + float(k);
+    float r = hash1(i * 4.13 + 1.7);
+    float life = fract(t * (0.12 + 0.1 * r) + r * 7.0);
+    vec2 e = vec2((i + 0.5) * 46.0 + sin(life * 6.0 + r * 20.0) * 7.0, life * 80.0 * lift);
+    float size = 2.6 * (1.0 - 0.6 * life);
+    vec2 q = abs(p - e);
+    float c = clamp((size - (q.x + q.y)) * u_dpr + 0.5, 0.0, 1.0);
+    ember = max(ember, c * step(0.45, r) * (1.0 - life) * smoothstep(0.0, 0.08, life));
   }
-  sparks = clamp(sparks, 0.0, 1.0);
-  col += mix(vec3(1.0, 0.93, 0.78), u_hot, 0.5) * sparks * 0.6;
-  alpha += sparks * 0.6;
+  col = mix(col, u_hot, ember);
+  alpha = max(alpha, ember);
 
-  // Subtle, slow whole-field flicker.
-  col *= 0.96 + 0.04 * sin(t * 2.2 + uv.x * 5.0);
-
-  alpha = clamp(alpha, 0.0, 1.0);
-  // Premultiplied-alpha output for clean glow compositing.
+  // Premultiplied output.
   gl_FragColor = vec4(col * alpha, alpha);
 }
 `;
@@ -167,7 +133,7 @@ void main(){
 // Pixels of flame allowed to rise above the bar's top edge (CSS px). Kept low
 // so the fire stays a calm strip rather than towering over the bar. Must match
 // the canvas `top` offset in stream-pacer.css.
-const OVERHANG_PX = 85;
+const OVERHANG_PX = 110;
 
 export class CampfireWebGL {
   constructor() {
@@ -180,6 +146,7 @@ export class CampfireWebGL {
     this._running = false;
     this._supported = null;
     this._base = 0.3;
+    this._dpr = 1;
     this._intensity = 0;       // eased toward target
     this._intensityTarget = 0; // 0 normal, 1 ending stretch
     this._onResize = () => this._resize();
@@ -203,7 +170,7 @@ export class CampfireWebGL {
     canvas.className = 'stream-pacer-campfire-webgl';
     this.canvas = canvas;
 
-    const opts = { alpha: true, premultipliedAlpha: true, antialias: true };
+    const opts = { alpha: true, premultipliedAlpha: true, antialias: false };
     const gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
     if (!gl) {
       this.canvas = null;
@@ -235,15 +202,18 @@ export class CampfireWebGL {
       time: gl.getUniformLocation(program, 'u_time'),
       res: gl.getUniformLocation(program, 'u_res'),
       base: gl.getUniformLocation(program, 'u_base'),
+      dpr: gl.getUniformLocation(program, 'u_dpr'),
       intensity: gl.getUniformLocation(program, 'u_intensity'),
       deep: gl.getUniformLocation(program, 'u_deep'),
       mid: gl.getUniformLocation(program, 'u_mid'),
+      amber: gl.getUniformLocation(program, 'u_amber'),
       hot: gl.getUniformLocation(program, 'u_hot')
     };
 
     const colors = ThemeManager.getCampfireWebGLColors();
     gl.uniform3fv(this.uniforms.deep, colors.deep);
     gl.uniform3fv(this.uniforms.mid, colors.mid);
+    gl.uniform3fv(this.uniforms.amber, colors.amber);
     gl.uniform3fv(this.uniforms.hot, colors.hot);
 
     window.addEventListener('resize', this._onResize);
@@ -281,6 +251,7 @@ export class CampfireWebGL {
     const cssW = this.canvas.clientWidth || window.innerWidth;
     const cssH = this.canvas.clientHeight || OVERHANG_PX;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this._dpr = dpr;
     const w = Math.max(1, Math.floor(cssW * dpr));
     const h = Math.max(1, Math.floor(cssH * dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -329,6 +300,7 @@ export class CampfireWebGL {
     gl.useProgram(this.program);
     gl.uniform1f(this.uniforms.time, elapsed);
     gl.uniform2f(this.uniforms.res, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uniforms.dpr, this._dpr);
     gl.uniform1f(this.uniforms.base, this._base);
     gl.uniform1f(this.uniforms.intensity, this._intensity);
     gl.clear(gl.COLOR_BUFFER_BIT);

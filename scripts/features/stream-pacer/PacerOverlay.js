@@ -1,241 +1,389 @@
-import { MODULE_ID, GM_SIGNAL } from './settings.js';
+import { GM_SIGNAL, PLAYER_STATUS } from './settings.js';
 import { PacerManager } from './PacerManager.js';
+import { DossierCard } from './DossierCard.js';
+import { CueAudio } from './CueAudio.js';
+import { escapeHTML } from '../../core/util.mjs';
 
+// How long a wrap-up or countdown holds the centre before it docks at the top.
+// Long enough to read the title and hear the cue, short enough that the card
+// is gone before it gets in the way of the scene it is wrapping up.
+const ARRIVAL_HOLD_MS = 4000;
+// After this the arrival keyframes have all finished; the class is dropped so
+// a later redraw (a tally change) does not replay them.
+const ARRIVAL_SETTLE_MS = 1400;
+// Countdown thresholds: the card turns hazard-red at 10s, ticks the last 5.
+const CRITICAL_AT = 10;
+const TICK_FROM = 5;
+
+// One icon per meaning, used by both the card's header and the dock's tag, so
+// a docked pill is recognisable from its icon before its text is read.
+const ICON = {
+  soft: 'fa-solid fa-hourglass-half',
+  countdown: 'fa-solid fa-stopwatch',
+  ready: 'fa-solid fa-list-check',
+  allReady: 'fa-solid fa-circle-check',
+  youReady: 'fa-solid fa-circle-check',
+  hand: 'fa-solid fa-hand'
+};
+
+const L = (key) => game.i18n.localize(`STREAM_PACER.Panel.${key}`);
+const F = (key, data) => game.i18n.format(`STREAM_PACER.Panel.${key}`, data);
+
+function formatClock(seconds) {
+  const s = Math.max(0, seconds ?? 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * The pacing signals — wrap-up, countdown and the ready check — drawn as a
+ * solid Dossier card in the middle of the screen, with a compact pill docked
+ * at top-centre once the card has made its point.
+ *
+ *   wrap-up / countdown  arrive centred with a cue, hold, then dock
+ *   ready check          stays centred until the player answers; the answer
+ *                        docks it as an undoable "You're ready" pill
+ *   late join / reload   no reveal and no sound — straight to where it rests
+ *
+ * Not constructed at all for a bars-exempt login (see module.js), which is
+ * what keeps every panel and every cue off a stream capture.
+ */
 export class PacerOverlay {
   constructor() {
-    this._element = null;
-    this._auraEl = null;
-    this._contentEl = null;
+    this._card = null;
+    this._dock = null;
     this._unsubscribe = null;
-    this._resizeObserver = null;
-    this._segmentCount = 8;
-    // Cached NodeLists; invalidated on every _rebuildSegments().
-    this._messageEls = null;
-    this._countdownEls = null;
-    this._iconEls = null;
-    this._ixEls = null;
-    // Tracks the applied urgency tier so we only touch classList when it
-    // actually changes. Re-adding the class every tick restarts the CSS
-    // pulse/glow animations, making them stutter once per second.
-    this._urgency = null;
+    this._key = null;
+    this._holdTimer = null;
+    this._settleTimer = null;
+    this._lastRender = null;
+    this._lastDock = null;
+    this._lastTick = null;
+    // GM only: the ready-check card tucked into the dock by choice.
+    this._minimised = false;
+    // Player only: "answered" as last drawn, so a change is noticed once.
+    this._answered = null;
   }
 
   initialize() {
-    this._createElement();
+    this._card = new DossierCard({ onAction: (id) => this._onAction(id) });
 
-    this._unsubscribe = PacerManager.subscribe((state) => {
-      this._update(state);
+    this._dock = document.createElement('div');
+    this._dock.className = 'sp-dz-dock gl-type';
+    this._dock.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-dock-action]');
+      if (button) this._onAction(button.dataset.dockAction);
     });
+    document.body.appendChild(this._dock);
 
-    // Watch for resize to adjust segment count
-    this._resizeObserver = new ResizeObserver(() => {
-      this._adjustSegments();
-    });
-    this._resizeObserver.observe(document.body);
-
+    this._unsubscribe = PacerManager.subscribe((state) => this._update(state));
     this._update(PacerManager.getState());
   }
 
-  /**
-   * The ticker is ambient scenery, not UI: it belongs directly above the
-   * canvas and below every other module's interface. Mounting it as the
-   * canvas's next sibling puts it exactly there without an arms race over
-   * z-index values — Foundry's own layers (HUD, controls, sidebar) come later
-   * in the same parent and keep painting on top.
-   */
-  _mountAboveCanvas(element, after = null) {
-    const board = document.getElementById('board');
-    const parent = board?.parentElement;
-    // A transformed/filtered ancestor would become the containing block for
-    // our fixed positioning and clip the band; in that case fall back to the
-    // body, where the stylesheet keeps the old just-above-the-canvas z-index.
-    if (!parent || this._createsFixedContainingBlock(parent)) {
-      document.body.appendChild(element);
-      return element;
-    }
-    element.classList.add('above-canvas');
-    parent.insertBefore(element, (after ?? board).nextSibling);
-    return element;
-  }
-
-  _createsFixedContainingBlock(element) {
-    const style = getComputedStyle(element);
-    return style.transform !== 'none'
-      || style.filter !== 'none'
-      || style.perspective !== 'none'
-      || style.contain.includes('paint');
-  }
-
-  _createElement() {
-    // Aura sibling — a soft halo around the centred ticker. Lives as a sibling
-    // so it can extend past the ticker's overflow-hidden box.
-    this._auraEl = document.createElement('div');
-    this._auraEl.className = 'stream-pacer-bar-aura aura-centre';
-    this._mountAboveCanvas(this._auraEl);
-
-    this._element = document.createElement('div');
-    this._element.id = 'stream-pacer-overlay';
-    this._element.className = 'stream-pacer-overlay';
-
-    const tint = document.createElement('div');
-    tint.className = 'sp-tint';
-    this._element.appendChild(tint);
-
-    const rail = document.createElement('div');
-    rail.className = 'sp-rail';
-    this._element.appendChild(rail);
-
-    this._contentEl = document.createElement('div');
-    this._contentEl.className = 'overlay-content';
-    this._element.appendChild(this._contentEl);
-
-    // Directly after the aura, so the ticker paints over its own halo.
-    this._mountAboveCanvas(this._element, this._auraEl);
-
-    // Initial segment creation
-    this._adjustSegments();
-  }
-
-  /**
-   * Mirror a subset of the bar's classes onto the aura so the aura picks up
-   * signal tint + urgency without separate state plumbing.
-   */
-  _syncAura() {
-    if (!this._auraEl || !this._element) return;
-    const classes = ['active', 'soft-signal', 'countdown-signal', 'floor-open-signal', 'urgency-warning', 'urgency-critical'];
-    classes.forEach(c => {
-      this._auraEl.classList.toggle(c, this._element.classList.contains(c));
-    });
-  }
-
-  _adjustSegments() {
-    if (!this._contentEl) return;
-
-    // Calculate how many segments needed to fill 2x viewport width (for seamless loop)
-    const viewportWidth = window.innerWidth;
-    const segmentWidth = 350; // Approximate width of one segment
-    const neededSegments = Math.ceil((viewportWidth * 2.5) / segmentWidth);
-
-    // Only rebuild if count changed significantly
-    if (Math.abs(neededSegments - this._segmentCount) > 2) {
-      this._segmentCount = Math.max(6, neededSegments);
-      this._rebuildSegments();
-    }
-  }
-
-  _rebuildSegments() {
-    if (!this._contentEl) return;
-
-    let html = '';
-    for (let i = 0; i < this._segmentCount; i++) {
-      html += this._createTickerSegment();
-    }
-    this._contentEl.innerHTML = html;
-
-    // Refresh cached element references after DOM replacement.
-    this._messageEls = this._element.querySelectorAll('.overlay-message');
-    this._countdownEls = this._element.querySelectorAll('.overlay-countdown');
-    this._iconEls = this._element.querySelectorAll('.overlay-icon i');
-    this._ixEls = this._element.querySelectorAll('.overlay-ix');
-
-    // Re-apply current state
-    this._update(PacerManager.getState());
-  }
-
-  _createTickerSegment() {
-    return `
-      <span class="ticker-segment">
-        <span class="overlay-ix"></span>
-        <span class="overlay-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
-        <span class="overlay-message"></span>
-        <span class="overlay-countdown"></span>
-      </span>
-      <span class="ticker-separator"></span>
-    `;
-  }
+  // --- State → presentation --------------------------------------------------
 
   _update(state) {
-    if (!this._element) return;
+    const signal = state.gmSignal;
+    const key = signal === GM_SIGNAL.NONE
+      ? 'none'
+      : `${signal}|${state.readyCheckId ?? ''}|${signal === GM_SIGNAL.COUNTDOWN ? state.countdownEnd : ''}`;
 
-    const messageEls = this._messageEls ?? this._element.querySelectorAll('.overlay-message');
-    const countdownEls = this._countdownEls ?? this._element.querySelectorAll('.overlay-countdown');
-    const iconEls = this._iconEls ?? this._element.querySelectorAll('.overlay-icon i');
-    const ixEls = this._ixEls ?? this._element.querySelectorAll('.overlay-ix');
-
-    if (state.gmSignal === GM_SIGNAL.SOFT) {
-      this._element.classList.add('active', 'soft-signal');
-      this._element.classList.remove('countdown-signal', 'floor-open-signal');
-      this._setUrgency(null);
-
-      iconEls.forEach(el => el.className = 'fa-solid fa-triangle-exclamation');
-      messageEls.forEach(el => el.textContent = game.i18n.localize('STREAM_PACER.SoftSignalMessage'));
-      countdownEls.forEach(el => el.textContent = '');
-      ixEls.forEach(el => el.textContent = game.i18n.format('STREAM_PACER.TickerIndex', { n: '01' }));
-    } else if (state.gmSignal === GM_SIGNAL.FLOOR_OPEN) {
-      this._element.classList.add('active', 'floor-open-signal');
-      this._element.classList.remove('soft-signal', 'countdown-signal');
-      this._setUrgency(null);
-
-      iconEls.forEach(el => el.className = 'fa-solid fa-microphone');
-      messageEls.forEach(el => el.textContent = game.i18n.localize('STREAM_PACER.FloorOpenMessage'));
-      countdownEls.forEach(el => el.textContent = '');
-      ixEls.forEach(el => el.textContent = game.i18n.format('STREAM_PACER.TickerIndex', { n: '02' }));
-    } else if (state.gmSignal === GM_SIGNAL.COUNTDOWN) {
-      this._element.classList.add('active', 'countdown-signal');
-      this._element.classList.remove('soft-signal', 'floor-open-signal');
-
-      iconEls.forEach(el => el.className = 'fa-solid fa-clock');
-      messageEls.forEach(el => el.textContent = game.i18n.localize('STREAM_PACER.CountdownMessage'));
-      ixEls.forEach(el => el.textContent = game.i18n.format('STREAM_PACER.TickerIndex', { n: '03' }));
-
-      const remaining = state.countdownRemaining;
-      if (remaining !== null) {
-        const minutes = Math.floor(remaining / 60);
-        const seconds = remaining % 60;
-        countdownEls.forEach(el => el.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`);
-
-        const urgency = remaining <= 10 ? 'critical' : remaining <= 30 ? 'warning' : null;
-        this._setUrgency(urgency);
-      }
+    if (key !== this._key) {
+      this._key = key;
+      this._enter(state);
     } else {
-      this._element.classList.remove('active', 'soft-signal', 'countdown-signal', 'floor-open-signal');
-      this._setUrgency(null);
+      this._refresh(state);
     }
-
-    this._syncAura();
   }
 
-  // Applies the urgency tier without restarting the CSS animation when the
-  // tier is unchanged. Only the actual transition between tiers touches the
-  // classList, so the pulse/glow keeps a continuous cycle while counting down.
-  _setUrgency(urgency) {
-    if (urgency === this._urgency) return;
-    this._element.classList.remove('urgency-warning', 'urgency-critical');
-    if (urgency === 'critical') {
-      this._element.classList.add('urgency-critical');
-    } else if (urgency === 'warning') {
-      this._element.classList.add('urgency-warning');
+  /** A different signal (or a new instance of one) has arrived. */
+  _enter(state) {
+    clearTimeout(this._holdTimer);
+    this._holdTimer = null;
+    this._minimised = false;
+    this._answered = null;
+    this._lastTick = null;
+    this._lastRender = null;
+    this._lastDock = null;
+
+    const signal = state.gmSignal;
+    if (signal === GM_SIGNAL.NONE) {
+      this._card.close();
+      this._hideDock();
+      return;
     }
-    this._urgency = urgency;
+
+    const live = state.signalLive === true;
+    this._render(state);
+
+    if (live) CueAudio.play(signal === GM_SIGNAL.READY_CHECK ? 'readyCheck' : signal === GM_SIGNAL.SOFT ? 'soft' : 'countdown');
+
+    if (signal === GM_SIGNAL.READY_CHECK) {
+      // A player who has already answered this check (a reload, or an answer
+      // that landed in the same frame as the check) goes straight to the pill.
+      this._answered = this._myAnswer(state);
+      if (this._answered) this._toDock(state);
+      else this._toCentre({ animate: live });
+      return;
+    }
+
+    // Wrap-up and countdown.
+    if (live) {
+      this._toCentre({ animate: true });
+      this._holdTimer = setTimeout(() => {
+        this._holdTimer = null;
+        this._toDock(PacerManager.getState());
+      }, ARRIVAL_HOLD_MS);
+    } else {
+      this._toDock(state);
+    }
+  }
+
+  /** Same signal, new detail: a tick, a tally change, a player's answer. */
+  _refresh(state) {
+    const signal = state.gmSignal;
+    if (signal === GM_SIGNAL.NONE) return;
+
+    if (signal === GM_SIGNAL.COUNTDOWN) {
+      const remaining = state.countdownRemaining;
+      const clock = formatClock(remaining);
+      this._card.setTimer(clock);
+      const dockClock = this._dock.querySelector('.sp-dz-dock-clock');
+      if (dockClock) dockClock.textContent = clock;
+      this._setCritical(remaining !== null && remaining <= CRITICAL_AT);
+
+      if (remaining !== null && remaining >= 1 && remaining <= TICK_FROM && remaining !== this._lastTick) {
+        this._lastTick = remaining;
+        CueAudio.play(remaining === 1 ? 'tickFinal' : 'tick');
+      }
+      return;
+    }
+
+    if (signal === GM_SIGNAL.READY_CHECK) {
+      this._render(state);
+      if (game.user.isGM) return;
+
+      const answered = this._myAnswer(state);
+      if (answered === this._answered) return;
+      const wasAnswered = !!this._answered;
+      this._answered = answered;
+      if (answered) this._toDock(state);
+      else if (wasAnswered) this._toCentre({ animate: true });
+    }
+  }
+
+  _myAnswer(state) {
+    if (game.user.isGM) return null;
+    const status = state.playerStates[game.user.id];
+    return status === PLAYER_STATUS.READY || status === PLAYER_STATUS.HAND_RAISED ? status : null;
+  }
+
+  _toCentre({ animate }) {
+    this._hideDock();
+    this._card.open({ animate });
+    clearTimeout(this._settleTimer);
+    if (animate) {
+      this._settleTimer = setTimeout(() => this._card.card.classList.remove('is-arriving'), ARRIVAL_SETTLE_MS);
+    }
+  }
+
+  _toDock(state) {
+    this._card.dock();
+    this._renderDock(state);
+    this._dock.classList.add('is-open');
+  }
+
+  _hideDock() {
+    this._dock.classList.remove('is-open');
+  }
+
+  _setCritical(on) {
+    const tone = on ? 'hazard' : 'cyan';
+    if (this._card.card.dataset.tone !== tone) this._card.card.dataset.tone = tone;
+    if (this._dock.dataset.tone !== tone) this._dock.dataset.tone = tone;
+    this._card.setFlag('is-critical', on);
+    this._dock.classList.toggle('is-critical', on);
+  }
+
+  // --- Drawing ---------------------------------------------------------------
+
+  _render(state) {
+    const spec = this._spec(state);
+    // Only touch the DOM when something visible changed, so an unrelated
+    // subscriber tick (a spotlight timer, a safety light) never flickers it.
+    const signature = JSON.stringify(spec);
+    if (signature !== this._lastRender) {
+      this._lastRender = signature;
+      this._card.render(spec);
+    }
+    if (state.gmSignal === GM_SIGNAL.READY_CHECK) {
+      this._card.setFlag('is-all-ready', game.user.isGM && PacerManager.getReadyTally().allReady);
+      if (this._dock.classList.contains('is-open')) this._renderDock(state);
+    }
+  }
+
+  _spec(state) {
+    const signal = state.gmSignal;
+
+    if (signal === GM_SIGNAL.SOFT) {
+      return {
+        tone: 'amber',
+        icon: ICON.soft,
+        label: L('Soft.Label'),
+        code: L('Soft.Code'),
+        kicker: L('Soft.Kicker'),
+        title: game.i18n.localize('STREAM_PACER.SoftSignalMessage'),
+        guide: escapeHTML(L('Soft.Guide'))
+      };
+    }
+
+    if (signal === GM_SIGNAL.COUNTDOWN) {
+      const remaining = state.countdownRemaining;
+      return {
+        tone: remaining !== null && remaining <= CRITICAL_AT ? 'hazard' : 'cyan',
+        icon: ICON.countdown,
+        label: L('Countdown.Label'),
+        code: L('Countdown.Code'),
+        kicker: L('Countdown.Kicker'),
+        title: L('Countdown.Title'),
+        timer: formatClock(remaining),
+        guide: escapeHTML(L('Countdown.Guide'))
+      };
+    }
+
+    // Ready check.
+    const tally = PacerManager.getReadyTally();
+    const footer = [
+      F('Ready.CountReady', { ready: tally.ready, total: tally.total }),
+      tally.hands ? F('Ready.CountHands', { n: tally.hands }) : ''
+    ];
+
+    if (game.user.isGM) {
+      const done = tally.allReady;
+      return {
+        tone: 'green',
+        icon: done ? ICON.allReady : ICON.ready,
+        label: done ? L('Ready.AllLabel') : L('Ready.Label'),
+        code: L('Ready.Code'),
+        kicker: done ? L('Ready.AllKicker') : L('Ready.GmKicker'),
+        title: done ? L('Ready.AllTitle') : L('Ready.Title'),
+        guide: escapeHTML(tally.total ? L('Ready.GmGuide') : L('Ready.NoPlayers')),
+        actions: [
+          { id: 'minimise', label: L('Ready.Minimise'), icon: 'fa-solid fa-down-left-and-up-right-to-center', variant: 'ghost' },
+          { id: 'close', label: L('Ready.Close'), icon: 'fa-solid fa-xmark', variant: done ? 'go' : 'ghost' }
+        ],
+        tally: tally.players,
+        footer
+      };
+    }
+
+    const ready = `<em>${escapeHTML(L('Ready.ReadyWord'))}</em>`;
+    const hand = `<em>${escapeHTML(L('Ready.HandWord'))}</em>`;
+    return {
+      tone: 'green',
+      icon: ICON.ready,
+      label: L('Ready.Label'),
+      code: L('Ready.Code'),
+      kicker: L('Ready.Kicker'),
+      title: L('Ready.Title'),
+      // The two <em> words are pre-escaped markup; the sentence around them is
+      // localised text, escaped piecewise so a translation cannot inject HTML.
+      guide: `${escapeHTML(L('Ready.GuideDone'))} ${escapeHTML(L('Ready.GuidePress'))} ${ready}.<br>`
+        + `${escapeHTML(L('Ready.GuideMore'))} ${escapeHTML(L('Ready.GuideSay'))} ${hand}.`,
+      actions: [
+        { id: 'ready', label: L('Ready.ReadyButton'), icon: 'fa-solid fa-check', variant: 'go' },
+        { id: 'hand', label: L('Ready.HandButton'), icon: 'fa-solid fa-hand', variant: 'hand' }
+      ],
+      footer
+    };
+  }
+
+  _renderDock(state) {
+    const signal = state.gmSignal;
+    let dock;
+
+    if (signal === GM_SIGNAL.SOFT) {
+      dock = { tone: 'amber', icon: ICON.soft, tag: L('Soft.Tag'), text: game.i18n.localize('STREAM_PACER.SoftSignalMessage') };
+    } else if (signal === GM_SIGNAL.COUNTDOWN) {
+      const remaining = state.countdownRemaining;
+      dock = {
+        tone: remaining !== null && remaining <= CRITICAL_AT ? 'hazard' : 'cyan',
+        icon: ICON.countdown,
+        tag: L('Countdown.Tag'),
+        text: L('Countdown.Title'),
+        clock: formatClock(remaining)
+      };
+    } else if (signal === GM_SIGNAL.READY_CHECK) {
+      const tally = PacerManager.getReadyTally();
+      if (game.user.isGM) {
+        dock = {
+          tone: 'green',
+          icon: tally.allReady ? ICON.allReady : ICON.ready,
+          tag: L('Ready.Tag'),
+          text: tally.allReady
+            ? L('Ready.AllTitle')
+            : `${F('Ready.CountReady', { ready: tally.ready, total: tally.total })}${tally.hands ? ` · ${F('Ready.CountHands', { n: tally.hands })}` : ''}`,
+          button: { id: 'expand', label: L('Ready.Expand') }
+        };
+      } else if (this._answered === PLAYER_STATUS.HAND_RAISED) {
+        dock = { tone: 'amber', icon: ICON.hand, confirm: true, tag: L('Ready.HandTag'), text: L('Ready.HandWaiting'), button: { id: 'undo', label: L('Ready.LowerHand') } };
+      } else {
+        dock = { tone: 'green', icon: ICON.youReady, confirm: true, tag: L('Ready.YouTag'), text: L('Ready.YouWaiting'), button: { id: 'undo', label: L('Ready.Undo') } };
+      }
+    } else {
+      return;
+    }
+
+    const signature = JSON.stringify(dock);
+    if (signature === this._lastDock) return;
+    this._lastDock = signature;
+
+    this._dock.dataset.tone = dock.tone;
+    this._dock.classList.toggle('is-critical', dock.tone === 'hazard');
+    this._dock.innerHTML = `
+      <span class="sp-dz-dock-tag">${dock.icon ? `<i class="${escapeHTML(dock.icon)} sp-dz-dock-icon${dock.confirm ? ' is-confirm' : ''}" aria-hidden="true"></i>` : ''}${escapeHTML(dock.tag)}</span>
+      <span class="sp-dz-dock-text">${escapeHTML(dock.text)}</span>
+      ${dock.clock ? `<span class="sp-dz-dock-clock">${escapeHTML(dock.clock)}</span>` : ''}
+      ${dock.button ? `<button type="button" class="sp-dz-dock-btn" data-dock-action="${escapeHTML(dock.button.id)}">${escapeHTML(dock.button.label)}</button>` : ''}`;
+  }
+
+  // --- Actions ---------------------------------------------------------------
+
+  _onAction(id) {
+    const me = game.user.id;
+    switch (id) {
+      case 'ready':
+        PacerManager.setPlayerStatus(me, PLAYER_STATUS.READY);
+        break;
+      case 'hand':
+        PacerManager.setPlayerStatus(me, PLAYER_STATUS.HAND_RAISED);
+        break;
+      case 'undo':
+        PacerManager.setPlayerStatus(me, PLAYER_STATUS.ENGAGED);
+        break;
+      case 'minimise':
+        if (!game.user.isGM) break;
+        this._minimised = true;
+        this._toDock(PacerManager.getState());
+        break;
+      case 'expand':
+        if (!game.user.isGM) break;
+        this._minimised = false;
+        this._toCentre({ animate: false });
+        break;
+      case 'close':
+        if (game.user.isGM) PacerManager.cancelSignal();
+        break;
+    }
   }
 
   destroy() {
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
-    if (this._unsubscribe) {
-      this._unsubscribe();
-      this._unsubscribe = null;
-    }
-    if (this._element) {
-      this._element.remove();
-      this._element = null;
-      this._contentEl = null;
-    }
-    if (this._auraEl) {
-      this._auraEl.remove();
-      this._auraEl = null;
-    }
+    clearTimeout(this._holdTimer);
+    clearTimeout(this._settleTimer);
+    this._unsubscribe?.();
+    this._unsubscribe = null;
+    this._card?.destroy();
+    this._card = null;
+    this._dock?.remove();
+    this._dock = null;
   }
 }
