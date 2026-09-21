@@ -50,7 +50,7 @@
   --sp-amber-glow: color-mix(in srgb, var(--gl-signal) 40%, transparent);
 
   /* Status colors */
-  --sp-cyan: #47c8ff;      /* GM badge, floor open */
+  --sp-cyan: #47c8ff;      /* GM badge */
   --sp-blue: #5aa3f0;      /* hand raised */
   --sp-purple: #a684ff;    /* need time */
   --sp-green: #64c08f;     /* ready */
@@ -569,12 +569,12 @@
   box-shadow: 0 0 12px rgba(239, 100, 100, 0.35);
 }
 
-#stream-pacer-container .gm-btn.floor-open-btn:hover,
-#stream-pacer-container .gm-btn.floor-open-btn.active {
-  color: var(--sp-cyan);
-  border-color: var(--sp-cyan);
-  background: linear-gradient(180deg, rgba(71, 200, 255, 0.2), rgba(71, 200, 255, 0.06));
-  box-shadow: 0 0 12px rgba(71, 200, 255, 0.35);
+#stream-pacer-container .gm-btn.ready-check-btn:hover,
+#stream-pacer-container .gm-btn.ready-check-btn.active {
+  color: var(--gl-good);
+  border-color: var(--gl-good);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-good) 20%, transparent), color-mix(in srgb, var(--gl-good) 6%, transparent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-good) 35%, transparent);
 }
 
 #stream-pacer-container .gm-btn.cancel-btn:hover {
@@ -632,15 +632,15 @@
   flex-shrink: 0;
 }
 
-#stream-pacer-container .pacer-signal.floor-open-signal {
-  border-top-color: rgba(71, 200, 255, 0.28);
-  border-bottom-color: rgba(71, 200, 255, 0.28);
-  background: linear-gradient(90deg, rgba(71, 200, 255, 0.18), rgba(71, 200, 255, 0.04));
-  color: var(--sp-cyan);
+#stream-pacer-container .pacer-signal.ready-check-signal {
+  border-top-color: color-mix(in srgb, var(--gl-good) 28%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--gl-good) 28%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-good) 18%, transparent), color-mix(in srgb, var(--gl-good) 4%, transparent));
+  color: var(--gl-good);
 }
 
-#stream-pacer-container .pacer-signal.floor-open-signal i {
-  filter: drop-shadow(0 0 6px rgba(71, 200, 255, 0.6));
+#stream-pacer-container .pacer-signal.ready-check-signal i {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gl-good) 60%, transparent));
 }
 
 #stream-pacer-container .pacer-signal.hard-signal {
@@ -834,212 +834,410 @@
 }
 
 /* ========================================
-   Centre Ticker — Arcane Glass
-   Ambient scenery, not UI. The element is mounted directly after the canvas
-   (see PacerOverlay._mountAboveCanvas), so it paints just above the scene and
-   below every interface layer — z-index here only orders it against its own
-   aura. It runs at reduced opacity across the middle of the screen so it
-   never competes with what the table is actually looking at.
+   Dossier — the pacing signal panel
+   Wrap-up, countdown, the ready check and the campfire's arrival are one solid
+   card in the middle of the screen: an opaque ink body with a cut corner, a
+   solid accent header strip, a hazard band, and mono labels that type in. No
+   glass, no blur, no reduced opacity — it is meant to be read at a glance.
+   Wrap-up and countdown hold the centre and then dock at top-centre as a
+   compact pill; the ready check stays until the player answers.
+
+   Identity is routed through --gl-accent per tone. The accent-derived :root
+   tokens (--gl-glow, --gl-accent-soft …) do not follow a scoped remap, so
+   every derived colour below is struck with color-mix() instead.
    ======================================== */
 
-.stream-pacer-overlay {
-  /* Feature-local knobs — nudged aside when the safety banner owns the centre. */
-  --sp-ticker-shift: 0px;
-  --sp-ticker-opacity: 0.32;
+.sp-dz,
+.sp-dz-dock {
+  --gl-accent: var(--gl-signal);
+  --sp-dz-mono: "JetBrains Mono", var(--gl-tech);
+}
+.sp-dz[data-tone="amber"],  .sp-dz-dock[data-tone="amber"]  { --gl-accent: var(--gl-signal); }
+.sp-dz[data-tone="cyan"],   .sp-dz-dock[data-tone="cyan"]   { --gl-accent: var(--gl-cyan); }
+.sp-dz[data-tone="hazard"], .sp-dz-dock[data-tone="hazard"] { --gl-accent: var(--gl-hazard); }
+.sp-dz[data-tone="green"],  .sp-dz-dock[data-tone="green"]  { --gl-accent: var(--gl-good); }
+.sp-dz[data-tone="ember"],  .sp-dz-dock[data-tone="ember"]  { --gl-accent: var(--gl-warn-deep); }
+
+/* ---- Stage: a full-screen, click-through centring frame ---- */
+.sp-dz-stage {
+  /* Nudged below the safety banner while a check-in owns the centre line. */
+  --sp-dz-shift: 0px;
   position: fixed;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 34px;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  pointer-events: none;
+  visibility: hidden;
+  /* The drop shadow lives here because the card's clip-path would cut it. */
+  filter: drop-shadow(0 18px 42px rgb(var(--gl-tint-dark) / 0.6));
+  transition: visibility 0s linear var(--gl-d-glide);
+}
+.sp-dz-stage.is-open {
+  visibility: visible;
+  transition: none;
+}
+body.sp-safety-request .sp-dz-stage { --sp-dz-shift: 180px; }
+
+/* ---- Card ---- */
+.sp-dz {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  background: var(--gl-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(var(--sp-dz-shift) + 14px)) scale(0.97);
+  transition:
+    opacity var(--gl-d-swift) var(--gl-ease),
+    transform var(--gl-d-swift) var(--gl-ease);
+}
+.sp-dz-stage.is-open .sp-dz {
+  opacity: 1;
+  transform: translateY(var(--sp-dz-shift));
+}
+/* Wrap-up / countdown: shrink up into the top-centre dock. */
+.sp-dz-stage.is-docking .sp-dz {
+  transform: translateY(calc(-50vh + 80px)) scale(0.34);
+  transition:
+    opacity var(--gl-d-glide) var(--gl-ease-sharp),
+    transform var(--gl-d-glide) var(--gl-ease-sharp);
+}
+/* Campfire: drop into its bottom bar. */
+.sp-dz-stage.is-sinking .sp-dz {
+  transform: translateY(calc(50vh - 60px)) scale(0.5);
+  transition:
+    opacity var(--gl-d-glide) var(--gl-ease-sharp),
+    transform var(--gl-d-glide) var(--gl-ease-sharp);
+}
+
+.sp-dz-hd {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 18px;
+  background: var(--gl-accent);
+  color: var(--gl-ink-0);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: background var(--gl-d-brisk) var(--gl-ease);
+}
+.sp-dz-hd-code {
+  font-family: var(--sp-dz-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.sp-dz-hazard {
+  height: 8px;
+  background: repeating-linear-gradient(-45deg, var(--gl-accent) 0 6px, var(--gl-ink-2) 6px 12px);
+}
+
+.sp-dz-bd { padding: 22px 26px 6px; }
+
+.sp-dz-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--gl-accent);
+  font-family: var(--sp-dz-mono);
+  font-size: 11px;
+  letter-spacing: 0.26em;
+}
+
+.sp-dz-title {
+  color: var(--gl-text-bright);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.sp-dz-timer {
+  margin-top: 8px;
+  color: var(--gl-accent);
+  font-family: var(--sp-dz-mono);
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-dz-guide {
+  margin-top: 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--gl-accent);
+  color: var(--gl-text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.sp-dz-guide em {
+  color: var(--gl-text-bright);
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* ---- Actions ---- */
+.sp-dz-acts {
+  display: flex;
+  gap: 12px;
+  padding: 18px 26px 22px;
+}
+/* Sized here, not inherited: a button's type otherwise comes from wherever it
+   is mounted, and Foundry's own button rules set a height and a border. */
+.sp-dz-stage .sp-dz-btn {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  background: var(--gl-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background var(--gl-d-quick) var(--gl-ease),
+    color var(--gl-d-quick) var(--gl-ease),
+    transform var(--gl-d-tap) var(--gl-ease);
+}
+.sp-dz-stage .sp-dz-btn i { font-size: 15px; }
+.sp-dz-stage .sp-dz-btn:active { transform: translateY(1px); }
+.sp-dz-stage .sp-dz-btn:focus-visible { outline: 2px solid var(--gl-text-bright); outline-offset: -4px; }
+
+.sp-dz-stage .sp-dz-btn--go {
+  flex-grow: 1.4;
+  background: var(--gl-good);
+  box-shadow: none;
+  color: var(--gl-ink-0);
+}
+.sp-dz-stage .sp-dz-btn--go:hover { background: color-mix(in srgb, var(--gl-good) 78%, var(--gl-text-bright)); }
+
+.sp-dz-stage .sp-dz-btn--hand { color: var(--gl-signal); }
+.sp-dz-stage .sp-dz-btn--hand:hover { background: color-mix(in srgb, var(--gl-ink-3) 78%, var(--gl-signal)); }
+
+.sp-dz-stage .sp-dz-btn--ghost:hover { background: color-mix(in srgb, var(--gl-ink-3) 80%, var(--gl-accent)); }
+
+/* ---- GM tally ---- */
+.sp-dz-tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 26px 18px;
+}
+.sp-dz-pip {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--gl-ink-3);
+  border-bottom: 3px solid var(--gl-edge);
+  color: var(--gl-text-dim);
+  font-size: 11px;
+  font-weight: 700;
+}
+.sp-dz-pip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 0;
+}
+.sp-dz-pip.is-waiting img { filter: grayscale(1) brightness(0.6); }
+.sp-dz-pip.is-ready { border-bottom-color: var(--gl-good); color: var(--gl-good); }
+.sp-dz-pip.is-hand { border-bottom-color: var(--gl-signal); color: var(--gl-signal); }
+
+.sp-dz-ft {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  font-family: var(--sp-dz-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ---- States ---- */
+.sp-dz.is-critical .sp-dz-timer,
+.sp-dz-dock.is-critical .sp-dz-dock-clock {
+  animation: sp-dz-critical var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+.sp-dz.is-all-ready .sp-dz-hd {
+  animation: sp-dz-flare var(--gl-d-cinematic) var(--gl-ease-inout) 2;
+}
+
+/* ---- Arrival: header wipes in, body drops open, mono lines type ---- */
+.sp-dz.is-arriving .sp-dz-hd {
+  animation: sp-dz-wipe var(--gl-d-brisk) var(--gl-ease-sharp) both;
+}
+.sp-dz.is-arriving .sp-dz-hazard {
+  animation: sp-dz-wipe var(--gl-d-brisk) var(--gl-ease-sharp) var(--gl-d-flash) both;
+}
+.sp-dz.is-arriving :is(.sp-dz-bd, .sp-dz-acts, .sp-dz-tally, .sp-dz-ft) {
+  animation: sp-dz-drop var(--gl-d-swift) var(--gl-ease) var(--gl-d-brisk) both;
+}
+.sp-dz.is-arriving .sp-dz-title {
+  animation: sp-dz-title var(--gl-d-swift) var(--gl-ease) var(--gl-d-swift) both;
+}
+.sp-dz-typed {
+  display: inline-block;
+  white-space: nowrap;
+}
+.sp-dz.is-arriving .sp-dz-typed {
+  animation: sp-dz-type var(--gl-d-reveal) steps(var(--sp-dz-chars, 12), end) var(--gl-d-quick) both;
+}
+.sp-dz.is-arriving .sp-dz-kicker { animation-delay: var(--gl-d-brisk); }
+
+/* ---- Dock: the compact top-centre pill ---- */
+.sp-dz-dock {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  /* Under Foundry's application windows (and the safety banner), over the
+     canvas: it is a reminder, never something in the way of a sheet. */
+  z-index: 60;
+  display: flex;
+  align-items: stretch;
+  max-width: calc(100vw - 32px);
+  height: 42px;
+  background: var(--gl-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  color: var(--gl-text);
+  font-family: var(--gl-display);
   pointer-events: none;
-  /* Fallback value, used only when the band could not be mounted next to the
-     canvas and lives on <body> instead: as low as it can go while still
-     clearing the (opaque) scene. The .above-canvas variant drops to 0. */
-  z-index: 10;
   opacity: 0;
   visibility: hidden;
-  overflow: hidden;
-  transform: translateY(calc(-50% + var(--sp-ticker-shift))) scaleY(0.55);
+  transform: translate(-50%, -10px);
   transition:
-    opacity var(--gl-d-move) var(--sp-ease-glass),
-    visibility var(--gl-d-move) var(--sp-ease-glass),
-    transform var(--gl-d-move) var(--sp-ease-glass);
-  color: var(--sp-text);
-  font-family: var(--sp-clock-font);
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 62%),
-    linear-gradient(90deg, transparent 0%, rgb(var(--gl-tint-dark) / 0.28) 12%, rgb(var(--gl-tint-dark) / 0.44) 50%, rgb(var(--gl-tint-dark) / 0.28) 88%, transparent 100%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.07),
-    inset 0 -1px 0 rgb(var(--gl-tint-light) / 0.05);
+    opacity var(--gl-d-brisk) var(--gl-ease),
+    transform var(--gl-d-brisk) var(--gl-ease),
+    visibility 0s linear var(--gl-d-brisk);
 }
-
-.stream-pacer-overlay.active {
-  opacity: var(--sp-ticker-opacity);
+.sp-dz-dock.is-open {
+  opacity: 1;
   visibility: visible;
-  transform: translateY(calc(-50% + var(--sp-ticker-shift))) scaleY(1);
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--gl-d-brisk) var(--gl-ease) var(--gl-d-quick),
+    transform var(--gl-d-brisk) var(--gl-ease) var(--gl-d-quick);
 }
-
-/* Mounted as the canvas's next sibling — the floor of the interface stack. */
-.stream-pacer-overlay.above-canvas,
-.stream-pacer-bar-aura.aura-centre.above-canvas { z-index: 0; }
-
-/* The safety banner takes the centre line; the ticker steps below it. */
-body.sp-safety-request .stream-pacer-overlay,
-body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
-  --sp-ticker-shift: 76px;
+/* The wipe rides the children: on the pill itself its end frame would replace
+   the pill's own cut-corner clip-path. */
+.sp-dz-dock.is-open > :not(.sp-dz-dock-btn) {
+  animation: sp-dz-wipe var(--gl-d-swift) var(--gl-ease-sharp) var(--gl-d-quick) both;
 }
-
-/* Tint overlay — signal-colored band */
-.stream-pacer-overlay .sp-tint {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(228, 176, 85, 0.14) 10%, rgba(228, 176, 85, 0.06) 50%, rgba(228, 176, 85, 0.14) 90%, transparent 97%, transparent 100%);
-  z-index: 1;
-  transition: background var(--gl-d-move) ease;
-}
-
-/* Top rail — signal-colored glowing hairline */
-.stream-pacer-overlay .sp-rail {
-  position: absolute;
-  top: 0;
-  left: 3%;
-  right: 3%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--sp-amber), transparent);
-  box-shadow: 0 0 10px var(--sp-amber-glow);
-  z-index: 4;
-}
-
-.stream-pacer-overlay.countdown-signal .sp-tint {
-  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(239, 100, 100, 0.16) 10%, rgba(239, 100, 100, 0.07) 50%, rgba(239, 100, 100, 0.16) 90%, transparent 97%, transparent 100%);
-}
-.stream-pacer-overlay.countdown-signal .sp-rail {
-  background: linear-gradient(90deg, transparent, var(--sp-red), transparent);
-  box-shadow: 0 0 10px rgba(239, 100, 100, 0.6);
-}
-
-.stream-pacer-overlay.floor-open-signal .sp-tint {
-  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(71, 200, 255, 0.16) 10%, rgba(71, 200, 255, 0.07) 50%, rgba(71, 200, 255, 0.16) 90%, transparent 97%, transparent 100%);
-}
-.stream-pacer-overlay.floor-open-signal .sp-rail {
-  background: linear-gradient(90deg, transparent, var(--sp-cyan), transparent);
-  box-shadow: 0 0 10px rgba(71, 200, 255, 0.6);
-}
-
-.stream-pacer-overlay.urgency-warning .sp-tint {
-  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(240, 168, 80, 0.2) 10%, rgba(240, 168, 80, 0.1) 50%, rgba(240, 168, 80, 0.2) 90%, transparent 97%, transparent 100%);
-}
-
-.stream-pacer-overlay.urgency-critical .sp-tint {
-  background: linear-gradient(90deg, transparent 0%, transparent 3%, rgba(245, 60, 60, 0.24) 10%, rgba(245, 60, 60, 0.12) 50%, rgba(245, 60, 60, 0.24) 90%, transparent 97%, transparent 100%);
-  animation: sp-ticker-glow var(--gl-d-slow) var(--gl-ease-inout) infinite;
-}
-
-/* Scrolling body with edge-fade mask */
-.stream-pacer-overlay .overlay-content {
-  position: relative;
-  z-index: 5;
+.sp-dz-dock-tag {
   display: flex;
   align-items: center;
+  padding: 0 14px;
+  background: var(--gl-accent);
+  color: var(--gl-ink-0);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
   white-space: nowrap;
-  animation: sp-ticker-scroll var(--gl-loop-xl) linear infinite;
-  -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
-          mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
 }
-
-@keyframes sp-ticker-scroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-@keyframes sp-ticker-glow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.82; }
-}
-
-.stream-pacer-overlay .ticker-segment {
-  display: inline-flex;
+.sp-dz-dock-text {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 22px;
-}
-
-.stream-pacer-overlay .overlay-ix {
-  font-family: var(--sp-clock-font);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  color: var(--sp-amber);
-  opacity: 0.9;
+  min-width: 0;
+  padding: 0 14px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
-
-.stream-pacer-overlay.countdown-signal .overlay-ix { color: var(--sp-red); }
-.stream-pacer-overlay.floor-open-signal .overlay-ix { color: var(--sp-cyan); }
-
-.stream-pacer-overlay .overlay-icon {
-  display: inline-flex;
+.sp-dz-dock-clock {
+  display: flex;
   align-items: center;
-  font-size: 14px;
-  color: var(--sp-amber);
-  filter: drop-shadow(0 0 6px var(--sp-amber-glow));
-}
-
-.stream-pacer-overlay.countdown-signal .overlay-icon {
-  color: var(--sp-red);
-  filter: drop-shadow(0 0 6px rgba(239, 100, 100, 0.7));
-}
-
-.stream-pacer-overlay.floor-open-signal .overlay-icon {
-  color: var(--sp-cyan);
-  filter: drop-shadow(0 0 6px rgba(71, 200, 255, 0.7));
-}
-
-.stream-pacer-overlay .overlay-message {
-  font-family: var(--sp-clock-font);
-  font-size: 12.5px;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--sp-text);
-  text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.6);
-}
-
-.stream-pacer-overlay .overlay-countdown {
-  font-family: var(--sp-clock-font);
-  font-size: 15px;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.06em;
+  padding: 0 16px 0 2px;
+  color: var(--gl-accent);
+  font-family: var(--sp-dz-mono);
+  font-size: 22px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--sp-red);
-  text-shadow: 0 0 8px rgba(239, 100, 100, 0.5);
+}
+.sp-dz-dock .sp-dz-dock-btn {
+  align-self: center;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0 10px 0 0;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  background: var(--gl-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease);
+}
+.sp-dz-dock .sp-dz-dock-btn:hover {
+  background: var(--gl-accent);
+  color: var(--gl-ink-0);
 }
 
-.stream-pacer-overlay.urgency-critical .overlay-countdown {
-  animation: sp-flash-critical var(--gl-d-glide) var(--gl-ease-inout) infinite;
+/* Feature-local keyframes — prefixed, so none of them can shadow the pool. */
+@keyframes sp-dz-wipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
 }
-
-/* Diamond separator */
-.stream-pacer-overlay .ticker-separator {
-  width: 6px;
-  height: 6px;
-  background: var(--sp-amber);
-  transform: rotate(45deg);
-  display: inline-block;
-  flex-shrink: 0;
-  box-shadow: 0 0 8px var(--sp-amber-glow);
+@keyframes sp-dz-drop {
+  from { clip-path: inset(0 0 100% 0); transform: translateY(-8px); }
+  to   { clip-path: inset(0 0 0 0);   transform: translateY(0); }
 }
-
-.stream-pacer-overlay.countdown-signal .ticker-separator {
-  background: var(--sp-red);
-  box-shadow: 0 0 8px rgba(239, 100, 100, 0.6);
+@keyframes sp-dz-title {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-
-.stream-pacer-overlay.floor-open-signal .ticker-separator {
-  background: var(--sp-cyan);
-  box-shadow: 0 0 8px rgba(71, 200, 255, 0.6);
+@keyframes sp-dz-type {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@keyframes sp-dz-critical {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.45); }
+}
+@keyframes sp-dz-flare {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.3) saturate(1.2); }
 }
 
 /* ========================================
@@ -1853,27 +2051,20 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
 .stream-pacer-campfire-bar {
   position: relative;
   width: 100%;
-  min-height: 58px;
-  padding: 11px 26px;
+  /* Dossier family: a solid ink slab with an ember tag block, matching the
+     pacing panels. The fire above it is the campfire's own identity. */
+  --gl-accent: var(--gl-warn-deep);
+  min-height: 54px;
+  padding: 0 22px 0 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: rgb(var(--gl-tint-light));
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 18px;
+  color: var(--gl-text);
   font-family: var(--gl-display);
   overflow: visible;
-
-  background:
-    radial-gradient(140% 200% at 50% 142%, rgba(255, 150, 60, 0.14), transparent 62%),
-    linear-gradient(180deg, rgba(46, 22, 7, 0.9) 0%, rgba(20, 9, 3, 0.985) 100%);
-  -webkit-backdrop-filter: blur(3px) saturate(1.08);
-          backdrop-filter: blur(3px) saturate(1.08);
-  border-top: 2px solid var(--sp-campfire-ember);
-  box-shadow:
-    0 -5px 20px var(--sp-campfire-glow),
-    inset 0 1px 0 rgba(255, 205, 150, 0.2),
-    inset 0 -16px 30px -24px rgba(255, 120, 40, 0.22);
-  animation: sp-campfire-bar-pulse var(--gl-loop-sm) var(--gl-ease-inout) infinite;
+  background: var(--gl-ink-2);
+  border-top: 3px solid var(--gl-accent);
 }
 
 /* Keep the bar's text + controls above the WebGL fire canvas. */
@@ -1889,7 +2080,7 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   position: absolute;
   left: 0;
   right: 0;
-  top: -85px;
+  top: -110px;
   bottom: 0;
   width: 100%;
   z-index: 0;
@@ -1928,7 +2119,6 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   background: linear-gradient(180deg, transparent, var(--sp-campfire) 55%, var(--sp-campfire-ember));
   -webkit-mask-image: repeating-linear-gradient(90deg, transparent 0 5px, #000 9px, transparent 13px 19px);
           mask-image: repeating-linear-gradient(90deg, transparent 0 5px, #000 9px, transparent 13px 19px);
-  filter: blur(2px);
   transform-origin: bottom;
   opacity: 0.9;
   animation: sp-campfire-flames var(--gl-d-slow) var(--gl-ease-inout) infinite alternate;
@@ -1940,48 +2130,55 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   100% { opacity: 0.7; transform: scaleY(0.95) translateX(-3px); }
 }
 
+.stream-pacer-campfire-bar .cf-bar-tag {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px 0 26px;
+  background: var(--gl-accent);
+  color: var(--gl-ink-0);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+}
+
 .stream-pacer-campfire-bar .cf-bar-icon {
-  font-size: 22px;
-  color: var(--sp-campfire-bright);
-  text-shadow: 0 0 12px var(--sp-campfire-glow), 0 0 26px var(--sp-campfire-ember-glow);
+  font-size: 20px;
   animation: cf-flicker var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 .stream-pacer-campfire-bar .cf-bar-title {
   font-weight: var(--gl-weight-bold);
-  font-size: 17px;
-  letter-spacing: 4px;
+  font-size: 16px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgb(var(--gl-tint-light));
-  text-shadow: 0 0 14px var(--sp-campfire-glow), 0 2px 6px rgb(var(--gl-tint-dark));
+  white-space: nowrap;
 }
 
-.stream-pacer-campfire-bar .cf-bar-sep {
-  width: 6px;
-  height: 6px;
+.stream-pacer-campfire-bar .cf-bar-hazard {
+  align-self: center;
+  width: 36px;
+  height: 10px;
   flex: 0 0 auto;
-  transform: rotate(45deg);
-  background: var(--sp-campfire-ember);
-  box-shadow: 0 0 8px var(--sp-campfire-ember-glow);
+  background: repeating-linear-gradient(-45deg, var(--gl-accent) 0 5px, transparent 5px 10px);
 }
 
 .stream-pacer-campfire-bar .cf-bar-sub {
-  font-family: var(--gl-tech);
-  font-size: 12px;
-  letter-spacing: 2px;
+  align-self: center;
+  font-size: 14px;
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--sp-campfire-bright);
-  opacity: 0.92;
+  color: var(--gl-text-bright);
+  margin-right: auto;
 }
 
 .stream-pacer-campfire-bar .cf-bar-timer-wrap {
+  align-self: center;
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-left: 6px;
   padding: 4px 12px;
-  color: var(--sp-campfire-bright);
-  border: 1px solid color-mix(in srgb, var(--sp-campfire) 45%, transparent);
+  color: var(--gl-accent);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 55%, transparent);
   clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   background: rgba(255, 140, 50, 0.08);
 }
@@ -1992,8 +2189,8 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
 }
 
 .stream-pacer-campfire-bar .cf-bar-timer {
-  font-family: var(--gl-tech);
-  font-size: 16px;
+  font-family: "JetBrains Mono", var(--gl-tech);
+  font-size: 20px;
   font-weight: var(--gl-weight-bold);
   font-variant-numeric: tabular-nums;
   letter-spacing: 1.5px;
@@ -2013,6 +2210,7 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
 }
 
 .stream-pacer-campfire-bar .cf-bar-dismiss {
+  align-self: center;
   margin-left: 8px;
   width: 26px;
   height: 26px;
@@ -2034,16 +2232,6 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   background: rgba(255, 140, 50, 0.14);
 }
 
-@keyframes sp-campfire-bar-pulse {
-  0%, 100% {
-    box-shadow: 0 -5px 18px var(--sp-campfire-glow), inset 0 1px 0 rgba(255, 205, 150, 0.18);
-    border-top-color: var(--sp-campfire);
-  }
-  50% {
-    box-shadow: 0 -6px 26px var(--sp-campfire-ember-glow), inset 0 1px 0 rgba(255, 220, 170, 0.26);
-    border-top-color: var(--sp-campfire-ember);
-  }
-}
 
 
 /* ========================================
@@ -2149,17 +2337,6 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   will-change: opacity, transform;
 }
 
-/* Aura sits one layer below its bar so the bar always reads in front, but
-   above the scene canvas so it isn't washed out by terrain. */
-/* Hidden state: parked just off-screen past the bar's edge, so the aura
-   slides into place together with its bar instead of merely cross-fading. */
-.stream-pacer-bar-aura.aura-centre {
-  /* Sits with the ticker at the bottom of the stack; DOM order (aura first)
-     keeps the band itself in front. The 9 is the <body> fallback value, one
-     below the ticker's own fallback. */
-  z-index: 9;
-  transform: translateY(calc(-50% + var(--sp-ticker-shift, 0px))) scaleY(0.4);
-}
 .stream-pacer-bar-aura.aura-top {
   z-index: 99;
   transform: translateY(-100%);
@@ -2173,28 +2350,6 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   transform: translateY(0);
 }
 
-/* Centre aura — a symmetric halo bleeding out of the centred ticker. */
-.stream-pacer-bar-aura.aura-centre {
-  top: 50%;
-  height: 120px;
-  opacity: 0;
-  background:
-    linear-gradient(to bottom,
-      transparent 0%,
-      var(--sp-aura-mid) 34%,
-      var(--sp-aura-color) 50%,
-      var(--sp-aura-mid) 66%,
-      transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
-          mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
-  animation: sp-aura-breath var(--gl-dread) var(--gl-ease-inout) infinite;
-}
-
-/* Muted to match the ticker's ambient weight — it sits behind play, not over it. */
-.stream-pacer-bar-aura.aura-centre.active {
-  opacity: 0.26;
-  transform: translateY(calc(-50% + var(--sp-ticker-shift, 0px))) scaleY(1);
-}
 
 /* Top-anchored aura — sits directly below the hand-raise bar, slides down. */
 .stream-pacer-bar-aura.aura-top {
@@ -2218,38 +2373,11 @@ body.sp-safety-request .stream-pacer-bar-aura.aura-centre {
   50%      { filter: brightness(1.12); }
 }
 
-/* Signal-colour mapping for the aura — mirrors the bar's signal classes. */
-.stream-pacer-bar-aura.soft-signal {
-  --sp-aura-color: rgba(228, 176, 85, 0.42);
-  --sp-aura-mid:   rgba(228, 176, 85, 0.16);
-}
-
-.stream-pacer-bar-aura.countdown-signal {
-  --sp-aura-color: rgba(239, 100, 100, 0.42);
-  --sp-aura-mid:   rgba(239, 100, 100, 0.16);
-}
-
-.stream-pacer-bar-aura.floor-open-signal {
-  --sp-aura-color: rgba(71, 200, 255, 0.42);
-  --sp-aura-mid:   rgba(71, 200, 255, 0.16);
-}
-
 .stream-pacer-bar-aura.hand-raise {
   --sp-aura-color: rgba(90, 163, 240, 0.48);
   --sp-aura-mid:   rgba(90, 163, 240, 0.18);
 }
 
-.stream-pacer-bar-aura.urgency-warning {
-  --sp-aura-color: rgba(240, 168, 80, 0.5);
-  --sp-aura-mid:   rgba(240, 168, 80, 0.2);
-  animation-duration: var(--gl-d-cinematic);
-}
-
-.stream-pacer-bar-aura.urgency-critical {
-  --sp-aura-color: rgba(245, 60, 60, 0.58);
-  --sp-aura-mid:   rgba(245, 60, 60, 0.24);
-  animation-duration: var(--gl-d-slow);
-}
 
 /* ========================================
    Spotlight Tracker (GM only)

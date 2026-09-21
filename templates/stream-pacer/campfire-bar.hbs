@@ -1,8 +1,10 @@
 <div class="stream-pacer-campfire-bar{{#if hasTimer}} has-timer{{/if}}">
   <div class="cf-bar-flames" aria-hidden="true"></div>
-  <span class="cf-bar-icon" aria-hidden="true"><i class="fa-solid fa-fire"></i></span>
-  <span class="cf-bar-title">{{title}}</span>
-  <span class="cf-bar-sep" aria-hidden="true"></span>
+  <span class="cf-bar-tag">
+    <span class="cf-bar-icon" aria-hidden="true"><i class="fa-solid fa-fire"></i></span>
+    <span class="cf-bar-title">{{title}}</span>
+  </span>
+  <span class="cf-bar-hazard" aria-hidden="true"></span>
   <span class="cf-bar-sub">{{subtitle}}</span>
   {{#if hasTimer}}
   <span class="cf-bar-timer-wrap">

@@ -38,9 +38,64 @@
     "Start": "Start",
     "Minutes": "minutes",
 
-    "FloorOpen": "Open Floor",
-    "FloorOpenTooltip": "Open the floor for player actions - raise your hand",
-    "FloorOpenMessage": "Floor is open - raise your hand",
+    "ReadyCheck": "Ready Check",
+    "ReadyCheckTooltip": "Ask the table if they're ready to move on — players press Ready, or raise a hand if they still have something to do",
+    "ReadyCheckMessage": "Ready check:",
+
+    "Panel": {
+      "Soft": {
+        "Label": "Wrap-up",
+        "Code": "SIG-01 // GM",
+        "Kicker": "// PACING NOTICE",
+        "Guide": "Start bringing what you're doing to a close.",
+        "Tag": "01 · WRAP-UP"
+      },
+      "Ready": {
+        "Label": "Ready check",
+        "Code": "SIG-02 // GM",
+        "Kicker": "// GM IS CHECKING IN",
+        "GmKicker": "// WAITING ON THE TABLE",
+        "Title": "Ready to move on?",
+        "GuideDone": "Done with this scene?",
+        "GuidePress": "Press",
+        "ReadyWord": "Ready",
+        "GuideMore": "Still something to do?",
+        "GuideSay": "Say it out loud, or",
+        "HandWord": "raise your hand",
+        "ReadyButton": "Ready",
+        "HandButton": "Raise hand",
+        "GmGuide": "Players press Ready when they're done with the scene, or raise a hand if they still have something to do.",
+        "NoPlayers": "No players are connected to answer.",
+        "CountReady": "{ready} / {total} ready",
+        "CountHands": "{n} hand up",
+        "Minimise": "Minimise",
+        "Close": "Close check",
+        "Expand": "Open",
+        "AllLabel": "All ready",
+        "AllKicker": "// ALL PLAYERS READY",
+        "AllTitle": "The table is ready",
+        "Tag": "02 · READY CHECK",
+        "YouTag": "02 · READY",
+        "YouWaiting": "You're ready — waiting on the table",
+        "Undo": "Undo",
+        "HandTag": "02 · HAND UP",
+        "HandWaiting": "Hand raised — tell the GM what you need",
+        "LowerHand": "Lower hand"
+      },
+      "Countdown": {
+        "Label": "Countdown",
+        "Code": "SIG-03 // GM",
+        "Kicker": "// SCENE CLOCK",
+        "Title": "Scene ending in",
+        "Guide": "Finish what you're doing — the scene moves on when the clock runs out.",
+        "Tag": "03 · COUNTDOWN"
+      },
+      "Campfire": {
+        "Label": "Campfire",
+        "Code": "SIG-04 // GM",
+        "Kicker": "// SLOW DOWN"
+      }
+    },
 
     "Cancel": "Cancel",
     "CancelTooltip": "Cancel the current signal",
@@ -49,7 +104,6 @@
     "Reset": "Reset",
     "ResetTooltip": "Reset all player statuses",
 
-    "TickerIndex": "NOTICE / {n}",
     "PriorityIndex": "PRIORITY / {n}",
     "HandRaisedTag": "// HAND RAISED",
 
@@ -143,7 +197,11 @@
       "SafetyExemptUsers": "Safety Light Exempt Users",
       "SafetyExemptUsersHint": "Select users who see no part of the traffic-light safety tool — no check-in ask, no lights, no GM alert or board — and who are left out of the GM's safety roster and its response count. Intended for capture and overlay logins: exempting a real person removes their only way to signal distress.",
       "HandRaiseAudioEnabled": "Hand Raise Audio Notification",
-      "HandRaiseAudioEnabledHint": "Play a chime sound when a player raises their hand (GM only)",
+      "HandRaiseAudioEnabledHint": "Play a chime when a player raises their hand, and when every player answers Ready to a ready check (GM only)",
+      "CueAudioEnabled": "Scene Signal Sounds",
+      "CueAudioEnabledHint": "Play a short sound when the GM sends a pacing signal — wrap-up, countdown (and its last five seconds), ready check, or campfire",
+      "CueAudioVolume": "Scene Signal Volume",
+      "CueAudioVolumeHint": "Volume for the pacing signal sounds (0 = mute, 1 = full volume)",
       "HandRaiseAudioVolume": "Hand Raise Audio Volume",
       "HandRaiseAudioVolumeHint": "Volume level for the hand raise notification chime (0 = mute, 1 = full volume)",
       "SafetyAudioEnabled": "Safety Light Audio Alert",

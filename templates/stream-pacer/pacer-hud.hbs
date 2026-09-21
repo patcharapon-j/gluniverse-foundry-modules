@@ -65,13 +65,14 @@
 
   {{!-- GM Signal Display --}}
   {{#if hasActiveSignal}}
-  <div class="pacer-signal {{#if isSoftSignal}}soft-signal{{else if isFloorOpen}}floor-open-signal{{else}}hard-signal{{/if}}">
+  <div class="pacer-signal {{#if isSoftSignal}}soft-signal{{else if isReadyCheck}}ready-check-signal{{else}}hard-signal{{/if}}">
     {{#if isSoftSignal}}
     <i class="fa-solid fa-triangle-exclamation"></i>
     <span>{{localize "STREAM_PACER.SoftSignalMessage"}}</span>
-    {{else if isFloorOpen}}
-    <i class="fa-solid fa-microphone"></i>
-    <span>{{localize "STREAM_PACER.FloorOpenMessage"}}</span>
+    {{else if isReadyCheck}}
+    <i class="fa-solid fa-list-check"></i>
+    <span>{{localize "STREAM_PACER.ReadyCheckMessage"}}</span>
+    <span class="countdown-timer">{{readyTallyLabel}}</span>
     {{else}}
     <i class="fa-solid fa-clock"></i>
     <span>{{localize "STREAM_PACER.CountdownMessage"}}</span>
@@ -94,10 +95,10 @@
               title="{{localize 'STREAM_PACER.CountdownTooltip'}}">
         <i class="fa-solid fa-clock"></i>
       </button>
-      <button type="button" class="gm-btn floor-open-btn {{#if isFloorOpen}}active{{/if}}"
-              data-action="open-floor"
-              title="{{localize 'STREAM_PACER.FloorOpenTooltip'}}">
-        <i class="fa-solid fa-microphone"></i>
+      <button type="button" class="gm-btn ready-check-btn {{#if isReadyCheck}}active{{/if}}"
+              data-action="ready-check"
+              title="{{localize 'STREAM_PACER.ReadyCheckTooltip'}}">
+        <i class="fa-solid fa-list-check"></i>
       </button>
       <button type="button" class="gm-btn dire-peril-btn {{#if direPerilActive}}disabled{{/if}}"
               data-action="declare-peril"

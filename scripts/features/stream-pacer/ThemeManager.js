@@ -130,6 +130,7 @@ class ThemeManagerClass {
     return {
       deep: hexToRgbFloat(darken(PALETTE.warnDeep, 0.62)),
       mid: hexToRgbFloat(PALETTE.warnDeep),
+      amber: hexToRgbFloat(PALETTE.signal),
       hot: hexToRgbFloat(PALETTE.signalPale),
     };
   }

@@ -2,8 +2,15 @@ import { FEATURE_ID } from './settings.js';
 import { PacerManager } from './PacerManager.js';
 import { CampfireWebGL } from './CampfireWebGL.js';
 import { featurePath } from '../../core/const.mjs';
+import { escapeHTML } from '../../core/util.mjs';
+import { DossierCard } from './DossierCard.js';
+import { CueAudio } from './CueAudio.js';
 
 const BAR_TEMPLATE = featurePath(FEATURE_ID, 'templates/campfire-bar.hbs');
+
+// A freshly lit campfire holds the centre this long, then sinks into its bar.
+// Matches the pacing signals' hold so every arrival reads with the same beat.
+const ARRIVAL_HOLD_MS = 4000;
 
 function renderHbs(path, ctx) {
   return foundry.applications.handlebars.renderTemplate(path, ctx);
@@ -35,6 +42,9 @@ export class CampfireOverlay {
     // Bumped whenever the scene ends; in-flight async renders check this token
     // before writing DOM so a dismiss can cancel a pending show.
     this._token = 0;
+    // The centred arrival card — only ever shown for a live declare.
+    this._card = null;
+    this._holdTimer = null;
   }
 
   initialize() {
@@ -42,8 +52,14 @@ export class CampfireOverlay {
 
     // The bar always slides in the same way, so the reveal-vs-late-join
     // distinction the manager passes doesn't change anything here.
-    this._unsubscribe = PacerManager.onCampfire(({ active }) => {
-      if (active) this._show();
+    this._card = new DossierCard();
+    this._card.stage.classList.add('sp-dz-stage--campfire');
+
+    // A live declare arrives centred (with its cue) and then sinks into the
+    // bar; a late join or reload goes straight to the bar, silently.
+    this._unsubscribe = PacerManager.onCampfire(({ active, animate }) => {
+      if (active && animate) this._arrive();
+      else if (active) this._show();
       else this._hide();
     });
   }
@@ -55,6 +71,29 @@ export class CampfireOverlay {
   showIndicatorOnly() {
     if (this._barEl?.classList.contains('visible')) return;
     this._show();
+  }
+
+  _arrive() {
+    clearTimeout(this._holdTimer);
+    const remaining = PacerManager.getCampfireRemaining();
+    this._card.render({
+      tone: 'ember',
+      label: game.i18n.localize('STREAM_PACER.Panel.Campfire.Label'),
+      code: game.i18n.localize('STREAM_PACER.Panel.Campfire.Code'),
+      kicker: game.i18n.localize('STREAM_PACER.Panel.Campfire.Kicker'),
+      title: game.i18n.localize('STREAM_PACER.Campfire.Title'),
+      timer: remaining !== null ? formatRemaining(remaining) : null,
+      guide: escapeHTML(game.i18n.localize('STREAM_PACER.Campfire.Subtitle'))
+    });
+    this._card.open({ animate: true });
+    CueAudio.play('campfire');
+
+    this._holdTimer = setTimeout(() => {
+      this._holdTimer = null;
+      this._card.sink();
+      this._card.card.classList.remove('is-arriving');
+      this._show();
+    }, ARRIVAL_HOLD_MS);
   }
 
   _createBar() {
@@ -132,6 +171,9 @@ export class CampfireOverlay {
   }
 
   _hide() {
+    clearTimeout(this._holdTimer);
+    this._holdTimer = null;
+    this._card?.close();
     this._token++;
     this._stopTicking();
     this._webgl.stop();
@@ -146,6 +188,9 @@ export class CampfireOverlay {
   }
 
   destroy() {
+    clearTimeout(this._holdTimer);
+    this._card?.destroy();
+    this._card = null;
     this._stopTicking();
     this._webgl.destroy();
     if (this._unsubscribe) {

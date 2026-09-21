@@ -1,4 +1,4 @@
-import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS, isSafetyExempt, isLocallySafetyExempt } from './settings.js';
+import { MODULE_ID, PLAYER_STATUS, GM_SIGNAL, SAFETY_STATUS, isSafetyExempt, isLocallySafetyExempt, isBarsExempt, normalizeSignal } from './settings.js';
 import { SocketHandler } from './socket-handler.js';
 
 class PacerManagerClass {
@@ -7,6 +7,17 @@ class PacerManagerClass {
     this._gmSignal = GM_SIGNAL.NONE;
     this._countdownEnd = null;
     this._countdownInterval = null;
+    // Whether the current signal arrived live (a GM just pressed it) rather
+    // than being restored — a late join, a reload, a state sync. Only a live
+    // arrival plays the centre reveal and its sound; a restored one goes
+    // straight to its resting place, so reconnecting never re-alarms a player.
+    this._signalLive = false;
+    // Ready check: an id per check, so a status answered for an earlier check
+    // can never read as an answer to this one, and the GM's "everyone is
+    // ready" chime fires once per check rather than on every later change.
+    this._readyCheckId = null;
+    this._allReadyFiredFor = null;
+    this._allReadyCallbacks = new Set();
     this._direPerilActive = false;
     // Campfire Scene: a calm, GM-declared "relax and roleplay" interlude. Like
     // Dire Peril it's a sticky boolean reveal, but it also carries an optional
@@ -81,6 +92,32 @@ class PacerManagerClass {
         callback(userId);
       } catch (e) {
         console.error(`${MODULE_ID} | Hand raise callback error:`, e);
+      }
+    }
+  }
+
+  /**
+   * Register a callback for the moment every counted player has answered Ready
+   * during a ready check. Fires once per check.
+   * @param {Function} callback - Called with the tally
+   * @returns {Function} Unsubscribe function
+   */
+  onAllReady(callback) {
+    this._allReadyCallbacks.add(callback);
+    return () => this._allReadyCallbacks.delete(callback);
+  }
+
+  _checkAllReady() {
+    if (this._gmSignal !== GM_SIGNAL.READY_CHECK || !this._readyCheckId) return;
+    if (this._allReadyFiredFor === this._readyCheckId) return;
+    const tally = this.getReadyTally();
+    if (!tally.allReady) return;
+    this._allReadyFiredFor = this._readyCheckId;
+    for (const callback of this._allReadyCallbacks) {
+      try {
+        callback(tally);
+      } catch (e) {
+        console.error(`${MODULE_ID} | All-ready callback error:`, e);
       }
     }
   }
@@ -176,6 +213,8 @@ class PacerManagerClass {
     return {
       playerStates: { ...this._playerStates },
       gmSignal: this._gmSignal,
+      signalLive: this._signalLive,
+      readyCheckId: this._readyCheckId,
       countdownEnd: this._countdownEnd,
       countdownRemaining: this.getCountdownRemaining(),
       handRaisedCount,
@@ -226,6 +265,38 @@ class PacerManagerClass {
     return states;
   }
 
+  /**
+   * Who the ready check is waiting on: every active player who can see the
+   * panel. A bars-exempt login (the stream capture account) never sees it and
+   * so could never answer; counting it would hold every check open forever.
+   */
+  getReadyTally() {
+    const players = [];
+    for (const user of game.users) {
+      if (user.isGM || !user.active) continue;
+      if (isBarsExempt(user.id)) continue;
+      const status = this.getPlayerStatus(user.id);
+      players.push({
+        userId: user.id,
+        name: user.name,
+        avatar: user.avatar || null,
+        initials: user.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?',
+        status,
+        isReady: status === PLAYER_STATUS.READY,
+        isHand: status === PLAYER_STATUS.HAND_RAISED
+      });
+    }
+    const ready = players.filter(p => p.isReady).length;
+    const hands = players.filter(p => p.isHand).length;
+    return {
+      players,
+      total: players.length,
+      ready,
+      hands,
+      allReady: players.length > 0 && ready === players.length
+    };
+  }
+
   getCountdownRemaining() {
     if (!this._countdownEnd) return null;
     const remaining = Math.max(0, Math.ceil((this._countdownEnd - Date.now()) / 1000));
@@ -253,6 +324,7 @@ class PacerManagerClass {
       SocketHandler.emitPlayerStatusChange(userId, status);
     }
 
+    this._checkAllReady();
     this._notifySubscribers();
     this._saveToSettings();
   }
@@ -398,6 +470,8 @@ class PacerManagerClass {
     if (!game.user.isGM && broadcast) return;
 
     this._gmSignal = GM_SIGNAL.SOFT;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._clearCountdownInterval();
 
@@ -414,6 +488,8 @@ class PacerManagerClass {
 
     const countdownDuration = duration || game.settings.get(MODULE_ID, 'sp.defaultCountdown');
     this._gmSignal = GM_SIGNAL.COUNTDOWN;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = Date.now() + (countdownDuration * 1000);
 
     this._clearCountdownInterval();
@@ -427,25 +503,41 @@ class PacerManagerClass {
     this._saveToSettings();
   }
 
-  openFloor(broadcast = true) {
+  /**
+   * GM: ask the table whether it is ready to move on. Every player is put back
+   * to Engaged first, so a Ready left over from earlier in the scene does not
+   * count as an answer to this question.
+   */
+  startReadyCheck(broadcast = true) {
     if (!game.user.isGM && broadcast) return;
 
-    this._gmSignal = GM_SIGNAL.FLOOR_OPEN;
-    this._countdownEnd = null;
-    this._clearCountdownInterval();
+    const id = foundry.utils.randomID();
+    this._applyReadyCheck(id, true);
 
     if (broadcast) {
-      SocketHandler.emitGmFloorOpen();
+      SocketHandler.emitGmReadyCheck(id);
     }
 
     this._notifySubscribers();
     this._saveToSettings();
   }
 
+  _applyReadyCheck(id, live) {
+    this._gmSignal = GM_SIGNAL.READY_CHECK;
+    this._signalLive = live;
+    this._readyCheckId = id;
+    this._allReadyFiredFor = null;
+    this._playerStates = {};
+    this._countdownEnd = null;
+    this._clearCountdownInterval();
+  }
+
   cancelSignal(broadcast = true) {
     if (!game.user.isGM && broadcast) return;
 
     this._gmSignal = GM_SIGNAL.NONE;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._clearCountdownInterval();
 
@@ -462,6 +554,8 @@ class PacerManagerClass {
 
     this._playerStates = {};
     this._gmSignal = GM_SIGNAL.NONE;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._direPerilActive = false;
     this._campfireActive = false;
@@ -834,6 +928,7 @@ class PacerManagerClass {
       this._notifyHandRaise(userId);
     }
 
+    this._checkAllReady();
     this._notifySubscribers();
     if (game.user.isGM) {
       this._saveToSettings();
@@ -842,6 +937,8 @@ class PacerManagerClass {
 
   receiveGmSoftSignal() {
     this._gmSignal = GM_SIGNAL.SOFT;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._clearCountdownInterval();
     this._notifySubscribers();
@@ -849,6 +946,8 @@ class PacerManagerClass {
 
   receiveGmHardCountdown(countdownEnd) {
     this._gmSignal = GM_SIGNAL.COUNTDOWN;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = countdownEnd;
 
     this._clearCountdownInterval();
@@ -858,21 +957,26 @@ class PacerManagerClass {
 
   receiveGmCancelSignal() {
     this._gmSignal = GM_SIGNAL.NONE;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._clearCountdownInterval();
     this._notifySubscribers();
   }
 
-  receiveGmFloorOpen() {
-    this._gmSignal = GM_SIGNAL.FLOOR_OPEN;
-    this._countdownEnd = null;
-    this._clearCountdownInterval();
+  receiveGmReadyCheck(id) {
+    if (typeof id !== 'string' || !id) return;
+    if (this._gmSignal === GM_SIGNAL.READY_CHECK && this._readyCheckId === id) return;
+    this._applyReadyCheck(id, true);
     this._notifySubscribers();
+    if (game.user.isGM) this._saveToSettings();
   }
 
   receiveResetAll() {
     this._playerStates = {};
     this._gmSignal = GM_SIGNAL.NONE;
+    this._signalLive = true;
+    this._readyCheckId = null;
     this._countdownEnd = null;
     this._direPerilActive = false;
     this._campfireActive = false;
@@ -935,7 +1039,14 @@ class PacerManagerClass {
 
   receiveSyncState(state) {
     this._playerStates = state.playerStates || {};
-    this._gmSignal = state.gmSignal || GM_SIGNAL.NONE;
+    this._gmSignal = normalizeSignal(state.gmSignal);
+    this._signalLive = false;
+    this._readyCheckId = this._gmSignal === GM_SIGNAL.READY_CHECK && typeof state.readyCheckId === 'string'
+      ? state.readyCheckId
+      : null;
+    if (this._gmSignal === GM_SIGNAL.READY_CHECK && !this._readyCheckId) this._gmSignal = GM_SIGNAL.NONE;
+    // A check restored already complete must not ring the GM a second time.
+    this._allReadyFiredFor = this._readyCheckId && this.getReadyTally().allReady ? this._readyCheckId : null;
     this._countdownEnd = state.countdownEnd || null;
     this._direPerilActive = state.direPerilActive === true;
     this._campfireActive = state.campfireActive === true;
@@ -1003,8 +1114,15 @@ class PacerManagerClass {
       const saved = game.settings.get(MODULE_ID, 'sp.pacerState');
       if (saved) {
         this._playerStates = saved.playerStates || {};
-        this._gmSignal = saved.gmSignal || GM_SIGNAL.NONE;
-        this._countdownEnd = saved.countdownEnd || null;
+        this._gmSignal = normalizeSignal(saved.gmSignal);
+        this._signalLive = false;
+        this._readyCheckId = this._gmSignal === GM_SIGNAL.READY_CHECK && typeof saved.readyCheckId === 'string'
+          ? saved.readyCheckId
+          : null;
+        // A check with no id (hand-edited, or saved mid-upgrade) has nothing a
+        // player's answer can attach to; drop it rather than show a dead panel.
+        if (this._gmSignal === GM_SIGNAL.READY_CHECK && !this._readyCheckId) this._gmSignal = GM_SIGNAL.NONE;
+        this._allReadyFiredFor = this._readyCheckId;
         this._direPerilActive = saved.direPerilActive === true;
         this._campfireActive = saved.campfireActive === true;
         this._campfireEnd = saved.campfireEnd || null;
@@ -1046,6 +1164,7 @@ class PacerManagerClass {
       game.settings.set(MODULE_ID, 'sp.pacerState', {
         playerStates: this._playerStates,
         gmSignal: this._gmSignal,
+        readyCheckId: this._readyCheckId,
         countdownEnd: this._countdownEnd,
         direPerilActive: this._direPerilActive,
         campfireActive: this._campfireActive,
