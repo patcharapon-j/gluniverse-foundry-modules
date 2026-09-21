@@ -1325,6 +1325,77 @@ rather than as the wrong box.
 See `docs/STREAM.md` for the camera modes, the targeting audiences, the status
 cards and the migration.
 
+**When touching the hexcrawl** (`features/hexcrawl/`, `styles/hexcrawl*.css`,
+`templates/hexcrawl/`), re-run its check. Everything it covers fails silently:
+
+```bash
+node tools/hexcrawl-check.mjs
+```
+
+Zero problems required. The load-bearing ones:
+
+**`viewFor()` is the only thing between a masked hex and a player.** The
+renderer, the tooltip and anything else a player sees must ask it with
+`asGM: isGM && !store.viewAsPlayers` and print only what comes back; a field
+read straight off `map.hexes`/`map.regions` for a player renders perfectly on
+the GM's screen and names the masked hex on every other one. The check walks
+every state × mask preset × rumour-known combination. It is still not a
+secrecy boundary — scene flags reach every client — so the docs say so.
+
+**Every map write is a FORCED replacement.** A plain nested scene update
+*merges*, so a hex that loses `bl`, a region that loses its colour or a config
+that loses a key keeps the old value forever, while the write "succeeds". Write
+through `store.mjs` (`hexPatchUpdate` / `forceSet` / `forceDelete`: v14
+`foundry.data.operators`, v13 `==`/`-=` keys), never `model.patchToUpdate()` or a
+bare `scene.update`. The check runs the store against a fake Scene that merges
+like Foundry does, and requires undo to unwind to the exact starting map. Read
+the map back off the document after `updateScene`, never out of the diff.
+
+**Auto-reveal only raises; move undo only clears `vs`.** Nothing on the travel
+path may lower a state — a GM's hand-revealed hex re-hidden by a party walking
+past is the bug. The active GM (`game.users.activeGM`) is the single writer for
+anything a token move triggers; the moving client only tags the update
+(`options.glhex = { travel, from, undo }`), because it is the only client that
+still has the old position.
+
+**A token's hex comes from `_source`, never `doc.x`/`doc.y`.** Under v14's
+movement API the prepared position is the *animated* one, so inside the very
+`updateToken` hook that moved the party it still names the hex being left: the
+move reveals nothing, records nothing and posts no card, with no error anywhere.
+`party.mjs` `tokenCenter()` is the one place positions are read; found only in a
+live session, and pinned structurally by the check.
+
+**Import coordinates are not Foundry offsets.** Foundry centres the higher class
+of columns (rows, for pointy grids) *on* the canvas edge, so row 0 of that class
+is half off a padding-less scene. `hex-math` `gridOrigin()` finds the first
+whole hex — moving the shifted axis only by an even amount, or an "odd-q" map
+lands on an even-q grid — and `hexSceneDims()` sizes a new scene around it. The
+import dialog adds the origin, export subtracts it; `pureAdapter` lays the grid
+out exactly as Foundry's `getCenterPoint` does, which the check compares
+formula for formula. Only whole hexes are map (`keysInRect`, `inBounds`).
+
+**Layering.** The map is a container in `canvas.primary` at `TILES − 1` with the
+background's elevation (beneath tiles and token art); the paint capture is in
+`canvas.interface` at a high zIndex (above token hit-testing). Swap them and
+either the map covers the tokens or a paint stroke drags one.
+
+Also pinned: renderer purity (no `game`/`canvas`/`foundry`/`ui`/`Hooks` under
+`render/`, or the preview page reimplements it), apps and every runtime module
+importable under plain Node, no literal durations in the renderer or apps
+(`TIMING`), every dynamic i18n family (`GLHEX.terrain/rating/state/mask/field/
+unit/truth/tool/render/glyph/landmarkVis.*`) and every literal key, the `hex.`
+setting prefix, the WAV assets (`node tools/gen-hexcrawl-sounds.mjs`), the chat
+card sizing its `.gl-btn`, and the JSON import round trip — the import format is
+documented in `docs/HEXCRAWL_IMPORT.md` and parsed by `import.mjs`. To see the
+renderer: `node tools/hexcrawl-preview.mjs --out=.preview/hexcrawl.html && node
+tools/preview-server.mjs` (serve it; `file://` does not run the module). Nothing
+here proves the token-move pipeline, the chat card or the canvas layering; those
+need a live session — a scratch data folder holding only this module (junction),
+one system and a throwaway `world.json`, launched with `node main.mjs
+--dataPath=<scratch> --port=30017 --world=<id>`, is enough, and keeps a broken
+unrelated package in the real data folder from stopping the server. See
+`docs/HEXCRAWL.md`.
+
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,
 a raw `rgba(255,255,255,…)` veil, a network `@import`, a second `@font-face`, a

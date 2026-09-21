@@ -53,7 +53,10 @@
     "styles/pf2e-creaturedex.css",
     "styles/stream.css",
     "styles/stream-cards.css",
-    "styles/stream-targets.css"
+    "styles/stream-targets.css",
+    "styles/hexcrawl.css",
+    "styles/hexcrawl-play.css",
+    "styles/hexcrawl-import.css"
   ],
   "languages": [
     {
@@ -180,6 +183,21 @@
       "lang": "en",
       "name": "English",
       "path": "lang/stream-targets.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/hexcrawl.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/hexcrawl-apps.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/hexcrawl-import.en.json"
     }
   ],
   "packs": [

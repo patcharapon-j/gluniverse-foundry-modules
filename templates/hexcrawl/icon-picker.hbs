@@ -1,0 +1,30 @@
+{{!-- Hexcrawl — landmark icon picker. Search results are painted by JS into [data-results]. --}}
+<div class="glhex-root glhex-ed glhex-picker gl-type">
+  <div class="glhex-picker-top">
+    <input type="search" class="gl-field glhex-filter" data-icon-search placeholder="{{localize "GLHEX.app.icon.search"}}" aria-label="{{localize "GLHEX.app.icon.search"}}">
+    <button type="button" class="gl-btn glhex-btn glhex-btn-sm" data-action="image"><i class="fa-solid fa-image"></i> {{localize "GLHEX.app.icon.image"}}</button>
+  </div>
+  <div class="glhex-body gl-scroll">
+    <div data-curated>
+      <div class="glhex-pal-head">
+        <span class="gl-tech-label">{{localize "GLHEX.app.icon.curated"}}</span>
+        <span class="gl-rule"></span>
+      </div>
+      <div class="glhex-icon-grid">
+        {{#each curated}}
+          <button type="button" class="glhex-icon {{#if active}}is-active{{/if}}" data-action="choose" data-icon="{{name}}"
+            data-tooltip="{{name}}" aria-label="{{name}}"><i class="{{cls}}"></i></button>
+        {{/each}}
+      </div>
+      {{#if currentImg}}
+        <p class="glhex-note glhex-current-img"><img src="{{currentImg}}" alt=""> {{localize "GLHEX.app.icon.currentImage"}}</p>
+      {{/if}}
+    </div>
+    <div class="glhex-icon-grid" data-results hidden></div>
+    <p class="glhex-note" data-result-note></p>
+  </div>
+  <footer class="glhex-ed-foot">
+    <span class="glhex-spacer"></span>
+    <button type="button" class="gl-btn glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
+  </footer>
+</div>

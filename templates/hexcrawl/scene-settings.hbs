@@ -1,0 +1,110 @@
+{{!-- Hexcrawl — scene settings. Dotted names (dice.perRating.0, cost.table.3) nest through Foundry's form parser. --}}
+<div class="glhex-root glhex-ed gl-type">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
+{{else}}
+  <div class="glhex-body gl-scroll">
+    <p class="glhex-lead"><i class="fa-solid fa-map"></i> {{sceneName}}</p>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.sightGroup"}}</legend>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.sight"}}</span>
+          <input type="number" name="sight" class="gl-field gl-numeric" min="0" max="6" step="1" value="{{c.sight}}">
+        </label>
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.autoPreset"}}</span>
+          <select name="autoPreset" class="gl-field">
+            {{#each autoPresets}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+      </div>
+      <p class="glhex-note">{{localize "GLHEX.app.scene.sightHint"}}</p>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.displayGroup"}}</legend>
+      <label class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.scene.render"}}</span>
+        <select name="render" class="gl-field">
+          {{#each renders}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>
+      <div class="glhex-checks glhex-checks--col">
+        <label class="glhex-check"><input type="checkbox" name="alwaysPips" {{#if c.alwaysPips}}checked{{/if}}><span>{{localize "GLHEX.app.scene.alwaysPips"}}</span></label>
+        <label class="glhex-check"><input type="checkbox" name="trail" {{#if c.trail}}checked{{/if}}><span>{{localize "GLHEX.app.scene.trail"}}</span></label>
+        <label class="glhex-check"><input type="checkbox" name="playersMove" {{#if c.playersMove}}checked{{/if}}><span>{{localize "GLHEX.app.scene.playersMove"}}</span></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.diceGroup"}}</legend>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.die"}}</span>
+          <select name="dice.die" class="gl-field">
+            {{#each dies}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.trigger"}}</span>
+          <input type="number" name="dice.trigger" class="gl-field gl-numeric" min="1" max="20" step="1" value="{{c.dice.trigger}}">
+        </label>
+      </div>
+      <p class="glhex-note">{{localize "GLHEX.app.scene.triggerHint" n=c.dice.trigger}}</p>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.costGroup"}}</legend>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.unit"}}</span>
+          <select name="cost.unit" class="gl-field">
+            {{#each units}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label class="glhex-field" data-watch-row {{#unless watches}}hidden{{/unless}}>
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.watchHours"}}</span>
+          <input type="number" name="cost.watchHours" class="gl-field gl-numeric" min="0.25" step="0.25" value="{{c.cost.watchHours}}">
+        </label>
+      </div>
+    </fieldset>
+
+    <table class="glhex-table">
+      <thead>
+        <tr>
+          <th class="gl-tech-label">{{localize "GLHEX.app.scene.ratingCol"}}</th>
+          <th class="gl-tech-label">{{localize "GLHEX.app.scene.diceCol"}}</th>
+          <th class="gl-tech-label">{{localize "GLHEX.app.scene.costCol"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each rows}}
+          <tr>
+            <th scope="row"><span class="gl-numeric glhex-rownum">{{n}}</span> {{label}}</th>
+            <td><input type="number" name="dice.perRating.{{i}}" class="gl-field gl-numeric" min="0" max="20" step="1" value="{{dice}}"></td>
+            <td><input type="number" name="cost.table.{{i}}" class="gl-field gl-numeric" min="0" step="any" value="{{cost}}"></td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.automationGroup"}}</legend>
+      <div class="glhex-checks glhex-checks--col">
+        <label class="glhex-check"><input type="checkbox" name="advanceTime" {{#if c.advanceTime}}checked{{/if}}><span>{{localize "GLHEX.app.scene.advanceTime"}}</span></label>
+        <label class="glhex-check"><input type="checkbox" name="arrivalCard" {{#if c.arrivalCard}}checked{{/if}}><span>{{localize "GLHEX.app.scene.arrivalCard"}}</span></label>
+      </div>
+    </fieldset>
+
+    <p class="glhex-warn"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "GLHEX.app.scene.gridWarning"}}</p>
+  </div>
+
+  <footer class="glhex-ed-foot">
+    <span class="glhex-spacer"></span>
+    <button type="button" class="gl-btn glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
+    <button type="submit" class="gl-btn gl-btn-accent glhex-btn"><i class="fa-solid fa-check"></i> {{localize "GLHEX.app.common.save"}}</button>
+  </footer>
+{{/if}}
+</div>
