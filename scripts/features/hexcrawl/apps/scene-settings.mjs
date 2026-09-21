@@ -73,6 +73,8 @@ function SceneSettingsApp() {
         sightFields: MASK_FIELDS.map((key) => ({ key, icon: FIELD_ICONS[key], label: L(`GLHEX.field.${key}`), on: !!c.sightFields[key] })),
         fieldCols: fieldCols(),
         presets: Object.entries(this.map.presets).map(([id, p]) => presetRow(id, p)),
+        texPct: Math.round((c.texStrength ?? 0) * 100),
+        assetBase: this.map.assetBase ?? "",
         renders: optionList(RENDER_MODES, (m) => L(`GLHEX.render.${m}`), c.render),
         dies: optionList(DIE_SIZES, (d) => `d${d}`, c.dice.die),
         units: optionList(Object.keys(COST_UNITS), (u) => L(`GLHEX.unit.${u}`), c.cost.unit),
@@ -89,6 +91,8 @@ function SceneSettingsApp() {
       const state = this.element.querySelector("select[name='sightState']");
       const checks = this.element.querySelector("[data-sight-fields]");
       state?.addEventListener("change", () => { if (checks) checks.hidden = state.value !== "masked"; });
+      const tex = this.element.querySelector("[data-tex-strength]"), out = this.element.querySelector("[data-tex-out]");
+      tex?.addEventListener("input", () => { if (out) out.textContent = `${Math.round(Number(tex.value) * 100)}%`; });
     }
 
     /** A new, empty preset row (DOM only; Save writes it). */
@@ -153,7 +157,8 @@ function SceneSettingsApp() {
         },
         advanceTime: !!f.advanceTime,
         arrivalCard: !!f.arrivalCard,
-      }, { presets });
+        texStrength: num(f.texStrength, c.texStrength),
+      }, { presets, assetBase: String(f.assetBase ?? "").trim() });
     }
   };
 

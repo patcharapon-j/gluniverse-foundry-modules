@@ -98,6 +98,8 @@ export function parseImport(input) {
   const sc = isObj(doc.scene) ? doc.scene : {};
   const map = emptyMap();
   map.config = normalizeConfig(isObj(doc.config) ? doc.config : {});
+  // Relative icon/texture paths are joined to this (e.g. an S3 bucket URL) at draw time.
+  if (typeof doc.assetBase === "string") map.assetBase = doc.assetBase.trim();
 
   /* ── Mask presets (absent → the seed set; given → exactly these) ── */
   if (doc.presets != null) {
@@ -165,7 +167,10 @@ export function parseImport(input) {
       enc: { text: str(raw.encounter?.text ?? raw.encounter), table: str(raw.encounterTable ?? raw.encounter?.table) || null },
       rumor: { text: str(rumor.text), truth: rumor.truth, known: !!rumor.known, table: str(rumor.table ?? raw.rumorTable) || null },
       notes: str(raw.notes),
+      icon: raw.icon ?? raw.icons ?? [],
+      tex: raw.texture ?? raw.tex ?? null,
     }, id);
+    if ((raw.texture ?? raw.tex) && !map.regions[id].tex) warn(`${where}: texture has no "src" — ignored.`);
     if (raw.color && !/^#[0-9a-f]{6}$/i.test(String(raw.color))) warn(`${where}: colour "${raw.color}" is not #rrggbb — ignored.`);
     regionByNorm.set(norm(id), id);
     if (raw.name) regionByNorm.set(norm(raw.name), id);
@@ -383,15 +388,18 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
       cols: cols ?? maxCol + 1, rows: rows ?? maxRow + 1,
       ...(background ? { background } : {}),
     },
+    ...(map.assetBase ? { assetBase: map.assetBase } : {}),
     config: map.config,
     presets: Object.entries(map.presets).map(([id, p]) => ({ id, ...(p.name ? { name: p.name } : {}), fields: { ...p.f } })),
-    terrains: Object.values(map.terrains).map((t) => ({ id: t.id, name: t.name, color: t.color, glyph: t.glyph })),
+    terrains: Object.values(map.terrains).map((t) => ({ id: t.id, name: t.name, color: t.color, glyph: t.glyph, ...(t.icon ? { icon: t.icon } : {}) })),
     regions: Object.values(map.regions).map((r) => ({
       id: r.id, name: r.name, ...(r.nk ? { nameKnown: true } : {}), terrain: r.t, rating: r.rt,
       ...(r.color ? { color: r.color } : {}), ...(r.bl ? { blight: true } : {}),
       ...(r.enc.text ? { encounter: r.enc.text } : {}), ...(r.enc.table ? { encounterTable: r.enc.table } : {}),
       ...(r.rumor.text || r.rumor.known ? { rumor: { text: r.rumor.text, truth: r.rumor.truth, known: r.rumor.known, ...(r.rumor.table ? { table: r.rumor.table } : {}) } } : {}),
       ...(r.notes ? { notes: r.notes } : {}),
+      ...(r.icon.length ? { icon: r.icon.length === 1 ? r.icon[0] : [...r.icon] } : {}),
+      ...(r.tex ? { texture: { ...r.tex } } : {}),
       hexes: (regionHexes[r.id] ?? []).sort((a, b) => a[1] - b[1] || a[0] - b[0]),
     })),
     hexes,

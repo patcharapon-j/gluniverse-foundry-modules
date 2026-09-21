@@ -323,7 +323,7 @@ export class HexStore {
    * edits both at once. Presets are replaced whole, never merged: a deleted
    * preset has to stay deleted.
    */
-  async setConfig(partial, { presets } = {}) {
+  async setConfig(partial, { presets, assetBase } = {}) {
     if (!this._gmOnly()) return;
     const merged = normalizeConfig(deepMerge(structuredClone(this._base.config), partial ?? {}));
     const ops = [{ kind: "config", prev: this._base.config }];
@@ -331,6 +331,10 @@ export class HexStore {
     if (presets !== undefined) {
       ops.push({ kind: "presets", prev: this._base.presets });
       forceSet(upd, `${MAP_PATH}.presets`, normalizePresets(presets));
+    }
+    if (assetBase !== undefined && assetBase !== this._base.assetBase) {
+      ops.push({ kind: "assetBase", prev: this._base.assetBase ?? "" });
+      forceSet(upd, `${MAP_PATH}.assetBase`, String(assetBase));
     }
     this._push({ label: "config", ops });
     await this._write(upd);
@@ -362,6 +366,7 @@ export class HexStore {
         if (op.prev) forceSet(upd, p, op.prev); else forceDelete(upd, p);
       } else if (op.kind === "config") forceSet(upd, `${MAP_PATH}.config`, op.prev);
       else if (op.kind === "presets") forceSet(upd, `${MAP_PATH}.presets`, op.prev);
+      else if (op.kind === "assetBase") forceSet(upd, `${MAP_PATH}.assetBase`, op.prev);
     }
     await this._write(upd);
     return true;

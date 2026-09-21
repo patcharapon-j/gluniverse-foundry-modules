@@ -85,55 +85,6 @@ export function drawTrail(g, ctx, keys) {
   }
 }
 
-/**
- * Blight veins: 2–3 organic curves per hex, deterministic from the key, all
- * inside the hex's incircle. The whole layer pulses by alpha.
- */
-export function veinPaths(ctx, key, { rim = false } = {}) {
-  const rnd = seeded(`vein:${key}`);
-  const R = ctx.R;
-  const c = ctx.adapter.center(key);
-  const n = 2 + (rnd() < 0.5 ? 1 : 0);
-  const out = [];
-  const base = rnd() * Math.PI * 2;
-  for (let i = 0; i < n; i++) {
-    const a0 = base + (i * Math.PI * 2) / n + (rnd() - 0.5) * 0.7;
-    const r0 = R * (0.68 + rnd() * 0.08);
-    const a1 = a0 + Math.PI * (rim ? 0.28 + rnd() * 0.16 : 0.55 + rnd() * 0.5) * (rnd() < 0.5 ? -1 : 1);
-    // On a landmark hex the veins hug the rim and leave the badge clear.
-    const r1 = R * (rim ? 0.5 + rnd() * 0.1 : 0.12 + rnd() * 0.22);
-    const p0 = { x: c.x + Math.cos(a0) * r0, y: c.y + Math.sin(a0) * r0 };
-    const p2 = { x: c.x + Math.cos(a1) * r1, y: c.y + Math.sin(a1) * r1 };
-    const am = (a0 + a1) / 2, rm = R * (rim ? 0.62 + rnd() * 0.08 : 0.3 + rnd() * 0.3);
-    const p1 = { x: c.x + Math.cos(am) * rm, y: c.y + Math.sin(am) * rm };
-    // A short branch off the midpoint of the curve.
-    const mx = 0.25 * p0.x + 0.5 * p1.x + 0.25 * p2.x, my = 0.25 * p0.y + 0.5 * p1.y + 0.25 * p2.y;
-    const ab = Math.atan2(my - c.y, mx - c.x) + (rnd() - 0.5) * 1.6;
-    const lb = R * (0.12 + rnd() * 0.12) * (rim ? 0.5 : 1);
-    out.push({ p0, p1, p2, branch: { a: { x: mx, y: my }, b: { x: mx + Math.cos(ab) * lb, y: my + Math.sin(ab) * lb } } });
-  }
-  return out;
-}
-
-export function drawVeins(g, ctx, keys) {
-  g.clear();
-  const R = ctx.R;
-  const all = [];
-  // keys: offset keys, or { key, rim } for a hex whose centre must stay clear.
-  for (const k of keys) all.push(...(typeof k === "string" ? veinPaths(ctx, k) : veinPaths(ctx, k.key, { rim: k.rim })));
-  const pass = (width, color, alpha, round) => {
-    g.lineStyle(round ? { width, color, alpha, cap: ROUND } : { width, color, alpha });
-    for (const v of all) {
-      g.moveTo(v.p0.x, v.p0.y);
-      g.quadraticCurveTo(v.p1.x, v.p1.y, v.p2.x, v.p2.y);
-      g.moveTo(v.branch.a.x, v.branch.a.y);
-      g.lineTo(v.branch.b.x, v.branch.b.y);
-    }
-  };
-  pass(GEO.veinGlow * R, ctx.colors.violet, 0.16, false);
-  pass(GEO.veinWidth * R, ctx.colors.violet, 0.95, true);
-}
-
 /** Hover: a brighter bevel and a faint veil. */
 export function drawHover(g, ctx, key, view, fog) {
   g.clear();

@@ -12,7 +12,7 @@ import { escapeHTML } from "../../../core/util.mjs";
 import { BUILTIN_TERRAIN_IDS, BUILTIN_TERRAINS, GLYPH_IDS } from "../constants.mjs";
 import { newId } from "../model.mjs";
 import { StoreAppBase } from "./base.mjs";
-import { L, confirmDialog, currentStore, glyphSvg, tpl } from "./shared.mjs";
+import { L, bindFilePickers, confirmDialog, currentStore, glyphSvg, tpl } from "./shared.mjs";
 
 export const TERRAIN_MANAGER_ID = "glhex-terrains";
 
@@ -69,6 +69,7 @@ function TerrainManagerApp() {
       for (const input of this.element.querySelectorAll("[data-field]")) {
         input.addEventListener("change", () => this.#write({ [input.dataset.field]: input.value }));
       }
+      bindFilePickers(this.element);
     }
 
     _onStoreChange() { this._scheduleRender(); }

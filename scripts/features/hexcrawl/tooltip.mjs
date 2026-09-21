@@ -14,7 +14,9 @@
 import { escapeHTML } from "../../core/util.mjs";
 import { MASK_FIELDS, RATING_MAX } from "./constants.mjs";
 import { glyphSvgPath } from "./glyphs.mjs";
-import { effectiveTerrainId, encounterDice, getHex, getRegion, maskFields, travelCost, viewFor } from "./model.mjs";
+import { effectiveTerrainId, encounterDice, getHex, getRegion, maskFields, resolveAsset, travelCost, viewFor, visualFor } from "./model.mjs";
+import { featurePath } from "../../core/const.mjs";
+import { FEATURE_ID } from "./constants.mjs";
 import { L, costLabel, presetName, ratingName, terrainName, tooltipDelay } from "./labels.mjs";
 import { host } from "./host.mjs";
 import { HexStore } from "./store.mjs";
@@ -69,7 +71,13 @@ export function tooltipHTML(store, key) {
 
   if (v.terrain) {
     const tid = v.terrain.id ?? effectiveTerrainId(map, key);
-    rows.push(`<div class="glhex-tip-line glhex-tip-terrain">${glyphSvg(v.terrain.glyph, v.terrain.color)}`
+    // The same art the map draws (a region variant, else the terrain icon), tinted by CSS mask.
+    const icon = visualFor(map, key, v).icon;
+    const url = icon ? resolveAsset(icon, { assetBase: map.assetBase, builtinRoot: featurePath(FEATURE_ID, "assets/x").slice(0, -1) }) : null;
+    const mark = url
+      ? `<span class="glhex-tip-icon" style="color:${escapeHTML(v.terrain.color)};--glhex-icon:url(&quot;${escapeHTML(url)}&quot;)" aria-hidden="true"></span>`
+      : glyphSvg(v.terrain.glyph, v.terrain.color);
+    rows.push(`<div class="glhex-tip-line glhex-tip-terrain">${mark}`
       + `<span>${escapeHTML(terrainName(map, tid))}</span>`
       + (v.blight ? `<span class="glhex-tip-blight">${escapeHTML(L("GLHEX.tooltip.blight"))}</span>` : "")
       + `</div>`);

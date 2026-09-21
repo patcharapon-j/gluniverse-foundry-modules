@@ -46,6 +46,15 @@ export const GEO = Object.freeze({
   labelLmName: 0.155,
   labelIcon: 0.24,
   fogQSize: 0.36,        // the fog "?" — region-label face, font size in R
+  iconSize: 0.8,         // an image icon's longer side, in R
+  // An icon's two baked shadows (blur radius in SOURCE-image px, offset down in R):
+  // a tight contact shadow that grounds it and a wide ambient one that lifts it
+  // off a busy texture. Soft, never a hard offset copy — that reads as clip-art.
+  iconContactBlur: 5,
+  iconContactDrop: 0.012,
+  iconAmbientBlur: 26,
+  iconAmbientDrop: 0.045,
+  blightPixel: 22,       // blight overlay: pixel-art cells per hex radius
 });
 
 /** Device-pixel counts for hairlines. */
@@ -69,6 +78,11 @@ export const ALPHA = Object.freeze({
   maskSeam: 0.45,
   rim: 0.95,
   maskRim: 0.6,
+  iconContact: 0.55,
+  iconAmbient: 0.7,
+  maskIcon: 0.78,
+  blight: 0.95,
+  maskBlight: 0.6,
   maskDash: 0.28,
   hatchVeilHidden: 0.42,
   hatchVeilMasked: 0.16,
@@ -150,6 +164,7 @@ export function makeColors(palette) {
     warnLift: hexToInt(lighten(palette.warn, 0.4)),
     violet: hexToInt(palette.violet),
     violetHot: hexToInt(palette.violetHot ?? lighten(palette.violet, 0.5)),
+    bruise: hexToInt(mix(palette.violet, ink, 0.72)),
     trace: hexToInt(mix(palette.text, palette.accent, 0.35)),
     hatch: hexToInt(mix(palette.textDim, ink, 0.35)),
     regionBorder: (hex) => hexToInt(hex ? lighten(hex, 0.25) : palette.text),

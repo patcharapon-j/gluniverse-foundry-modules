@@ -1374,6 +1374,17 @@ import dialog adds the origin, export subtracts it; `pureAdapter` lays the grid
 out exactly as Foundry's `getCenterPoint` does, which the check compares
 formula for formula. Only whole hexes are map (`keysInRect`, `inBounds`).
 
+**Art arrives asynchronously.** Region textures and image icons load after
+the first draw, so a hex's signature (`_sig`) must carry its art state, or a
+texture that lands never thins the fill and an icon that fails never gives the
+glyph back — the map simply looks untextured. Art visibility is `visualFor()`
+(a silhouette shows no texture: it would name the place); paths resolve only
+through `resolveAsset()` (`glhex:` = the module's assets, relative = the map's
+`assetBase`, e.g. an S3 bucket). A fit texture is laid over the region's WHOLE
+bounding box from `map.hexes`, not the visible hexes, or it slides as the party
+reveals more. Blight is a Mesh + shader layer (`render/blight.mjs`), never a
+filter; the check pins its uniforms and layer order.
+
 **Layering.** The map is a container in `canvas.primary` at `TILES − 1` with the
 background's elevation (beneath tiles and token art); the paint capture is in
 `canvas.interface` at a high zIndex (above token hit-testing). Swap them and

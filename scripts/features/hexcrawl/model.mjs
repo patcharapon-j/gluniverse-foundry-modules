@@ -13,6 +13,7 @@
  *   terrains: { [id]: CustomTerrain },   // GM-defined; built-ins live in constants
  *   config:   SceneConfig,               // see DEFAULT_CONFIG
  *   presets:  { [id]: MaskPreset },      // GM-editable; seeded from MASK_PRESETS
+ *   assetBase: string,                   // prefix for relative art paths ("" = Foundry Data)
  *   origin:   { i, j } | null,           // Foundry offset of import coordinate (0,0);
  *                                        // set by the JSON import so re-import/export line up
  * }
@@ -33,7 +34,13 @@
  *           rumor: { text, truth: RUMOR_TRUTH, known: bool, table: uuid|null },
  *           notes }
  *
- * CustomTerrain: { id, name, color: "#rrggbb", glyph: GLYPH_IDS }
+ * CustomTerrain: { id, name, color: "#rrggbb", glyph: GLYPH_IDS, icon: path|null }
+ *
+ * Region art (optional): icon: [path, …] (≤ MAX_ICON_VARIANTS; each hex picks one
+ *   by a stable hash of its key), tex: { src, mode: TEX_MODES, scale, pixel?: true } | null.
+ * Paths are resolved by resolveAsset(): absolute URLs and Foundry paths stay as
+ * they are, "glhex:…" is the module's own assets, and anything else relative is
+ * joined to map.assetBase (e.g. an S3 bucket URL) when one is set.
  *
  * MaskPreset: { name: string ("" → GLHEX.mask.<id>), f: { [MASK_FIELDS]: boolean } }
  *
@@ -47,6 +54,7 @@ import {
   LANDMARK_VIS, MASK_FIELDS, MASK_PRESETS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN,
   RENDER_MODES, RUMOR_TRUTH, STATE_RANK, STATES, DIE_SIZES, GLYPH_IDS,
   DEFAULT_SIGHT_FIELDS, RESERVED_PRESET_IDS, SIGHT_PRESET, SIGHT_STATES,
+  ASSET_SCHEME, BUILTIN_ICON, MAX_ICON_VARIANTS, TEX_MODES,
 } from "./constants.mjs";
 
 const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -57,7 +65,7 @@ const clampInt = (v, lo, hi, fb) => { const n = int(v, fb); return n == null ? f
 const str = (v) => (typeof v === "string" ? v : "");
 
 export function emptyMap() {
-  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), presets: defaultPresets(), origin: null };
+  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), presets: defaultPresets(), assetBase: "", origin: null };
 }
 
 /** A full mask-field set: every MASK_FIELDS key a boolean, missing ones from `fb`. */
@@ -117,7 +125,29 @@ export function normalizeConfig(c) {
     },
     advanceTime: typeof c.advanceTime === "boolean" ? c.advanceTime : d.advanceTime,
     arrivalCard: typeof c.arrivalCard === "boolean" ? c.arrivalCard : d.arrivalCard,
+    texStrength: Math.max(0, Math.min(1, num(c.texStrength, d.texStrength))),
   };
+}
+
+/** An art path as stored: trimmed, or null. */
+const artPath = (v) => { const t = str(v).trim(); return t && t.length <= 2048 ? t : null; };
+
+/** A region texture as stored, or null. */
+export function normalizeTex(t) {
+  if (typeof t === "string") t = { src: t };
+  if (!isObj(t)) return null;
+  const src = artPath(t.src);
+  if (!src) return null;
+  const out = { src, mode: TEX_MODES.includes(t.mode) ? t.mode : "fit", scale: Math.max(0.25, Math.min(40, num(t.scale, 4))) };
+  // Pixel art: sampled nearest-neighbour, so its pixel clusters stay crisp instead of blurring.
+  if (t.pixel) out.pixel = true;
+  return out;
+}
+
+/** Region icon variants as stored: [] when none. */
+export function normalizeIcons(v) {
+  const list = Array.isArray(v) ? v : v == null ? [] : [v];
+  return list.map(artPath).filter(Boolean).slice(0, MAX_ICON_VARIANTS);
 }
 
 export function normalizeLandmark(l, idx = 0) {
@@ -152,6 +182,8 @@ export function normalizeRegion(r, id) {
       table: str(rumor.table) || null,
     },
     notes: str(r.notes),
+    icon: normalizeIcons(r.icon),
+    tex: normalizeTex(r.tex),
   };
 }
 
@@ -162,6 +194,7 @@ export function normalizeTerrain(t, id) {
     name: str(t.name) || id,
     color: hex6(t.color, BLANK_TERRAIN.color),
     glyph: GLYPH_IDS.includes(t.glyph) ? t.glyph : "none",
+    icon: artPath(t.icon),
   };
 }
 
@@ -198,6 +231,7 @@ export function normalizeMap(m) {
   if (isObj(m.terrains)) for (const [id, t] of Object.entries(m.terrains)) if (t) out.terrains[id] = normalizeTerrain(t, id);
   out.config = normalizeConfig(m.config);
   out.presets = normalizePresets(m.presets);
+  out.assetBase = artPath(m.assetBase) ?? "";
   const oi = Number(m.origin?.i), oj = Number(m.origin?.j);
   out.origin = Number.isInteger(oi) && Number.isInteger(oj) ? { i: oi, j: oj } : null;
   return out;
@@ -212,10 +246,50 @@ export const getRegion = (map, k) => { const rg = map.hexes[k]?.rg; return rg ? 
 export function terrainDef(map, id) {
   if (!id) return null;
   const c = map.terrains?.[id];
-  if (c) return { id, name: c.name, color: c.color, glyph: c.glyph, custom: true };
   const b = BUILTIN_TERRAINS[id];
-  if (b) return { id, name: null, color: b.color, glyph: b.glyph, custom: false };
+  // A custom terrain shadowing a built-in keeps the shipped icon unless it names its own.
+  if (c) return { id, name: c.name, color: c.color, glyph: c.glyph, icon: c.icon ?? (b ? BUILTIN_ICON(id) : null), custom: true };
+  if (b) return { id, name: null, color: b.color, glyph: b.glyph, icon: BUILTIN_ICON(id), custom: false };
   return null;
+}
+
+/* ── Art ────────────────────────────────────────────────────────────────── */
+
+/**
+ * Where an art path points. Absolute URLs (http:, https:, data:, blob:) and
+ * rooted paths stay; "glhex:x" becomes `builtinRoot + x`; any other relative
+ * path is joined to map.assetBase when there is one, else left for Foundry to
+ * resolve against its Data folder.
+ */
+export function resolveAsset(src, { assetBase = "", builtinRoot = "" } = {}) {
+  if (!src) return null;
+  if (src.startsWith(ASSET_SCHEME)) return builtinRoot + src.slice(ASSET_SCHEME.length);
+  if (/^([a-z][a-z0-9+.-]*:|\/)/i.test(src) || !assetBase) return src;
+  return assetBase.replace(/\/+$/, "") + "/" + src.replace(/^\.?\//, "");
+}
+
+/** A stable, well-spread small integer from a hex key (variant picking). */
+export function keyHash(k) {
+  let h = 2166136261;
+  for (let n = 0; n < k.length; n++) { h ^= k.charCodeAt(n); h = Math.imul(h, 16777619); }
+  return (h >>> 0);
+}
+
+/**
+ * The art a viewer sees on hex k, given that viewer's `view` (from viewFor):
+ *   icon: art path | null   — a region variant, else the terrain's icon
+ *   tex:  { src, mode, scale, region } | null
+ * Art DEPICTS the terrain, so nothing shows unless the view shows the terrain;
+ * region art additionally needs the region shape (a withheld region falls back
+ * to the plain terrain icon, and shows no texture).
+ */
+export function visualFor(map, k, view) {
+  if (!view?.terrain) return { icon: null, tex: null };
+  const region = view.regionId ? map.regions[view.regionId] ?? null : null;
+  const icons = region?.icon ?? [];
+  const icon = icons.length ? icons[keyHash(k) % icons.length] : view.terrain.icon ?? null;
+  const tex = region?.tex ? { ...region.tex, region: region.id } : null;
+  return { icon, tex };
 }
 
 export function effectiveTerrainId(map, k) {

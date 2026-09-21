@@ -177,6 +177,38 @@ Landmarks (at most 3 per hex): `icon` is a Font Awesome 6 name, with or without
 `visible` (known to players — intel — shown even while its hex is masked or hidden: the tower on the horizon), `hidden` (GM
 only: the book's hidden point of interest). `journal` takes a Journal UUID.
 
+### Art: icons and ground textures (optional)
+
+Every built-in terrain ships with an image icon (`assets/hexcrawl/icons/<id>.webp`,
+white on transparency, tinted by the terrain colour). A custom terrain may name
+its own, and a region may carry icon **variants** and a **ground texture**:
+
+```json
+"assetBase": "https://my-bucket.s3.eu-central-1.amazonaws.com/assets/dead-zone/",
+"terrains": [ { "id": "ashfield", "name": "Ash Field", "color": "#7a6f66", "icon": "icons/ashfield.webp" } ],
+"regions": [
+  { "name": "Hästmark", "terrain": "grassland",
+    "icon": ["icons/dz-c-1.webp", "icons/dz-c-2.webp", "icons/dz-c-3.webp"],
+    "texture": { "src": "textures/dz-c.webp", "mode": "fit" } }
+]
+```
+
+- `icon` — one path or up to 4. Each hex picks one variant by a stable hash of
+  its position, so a region does not repeat one stamp. Icons are white shapes on
+  transparency; the map tints them.
+- `texture` — a path, or `{ src, mode, scale }`. `mode: "fit"` (default) lays
+  ONE image over the region's whole bounding box: every hex shows a different
+  part of it, nothing repeats, and neighbouring hexes continue it without a
+  seam. `mode: "tile"` repeats a seamless image every `scale` hexes. How much
+  shows through the glass is `config.texStrength` (0–1, default 0.55).
+- `assetBase` — relative art paths are joined to it (an S3 bucket, a CDN, a
+  world folder). Absolute URLs and paths starting with `/` are left alone.
+  Without it, relative paths are Foundry Data paths.
+
+Art follows visibility: a hex shows its icon and texture only when players may
+see its terrain, and region art only when they may also see its region. A
+silhouette shows neither.
+
 ### Layout (optional ASCII painting)
 
 Quick for big areas; each character is one hex, row by row from the top.
@@ -218,7 +250,8 @@ Every field optional; defaults follow the book.
   "dice": { "die": 6, "perRating": [1, 2, 3, 4], "trigger": 1 },   // encounter check: N dX, a result ≤ trigger triggers
   "cost": { "unit": "days", "table": [1, 2, 3, 4], "watchHours": 4 }, // unit: minutes | hours | watches | days
   "advanceTime": false,          // advance world time by the cost (needs the Clocks time engine)
-  "arrivalCard": false           // whisper an arrival card to the GM on each move
+  "arrivalCard": false,          // whisper an arrival card to the GM on each move
+  "texStrength": 0.55            // how much of a region texture shows through (0–1)
 }
 ```
 

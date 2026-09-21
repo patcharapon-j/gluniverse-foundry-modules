@@ -68,6 +68,16 @@
 .glhex-tip-rumor { align-items: flex-start; color: var(--gl-text); font-style: italic; }
 .glhex-tip-rumor i { margin-top: 0.2em; color: var(--gl-text-dim); }
 
+/* An image icon, tinted by the terrain colour through a mask (the art is white on transparency). */
+.glhex-tip-icon {
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  background: currentColor;
+  -webkit-mask: var(--glhex-icon) center / contain no-repeat;
+  mask: var(--glhex-icon) center / contain no-repeat;
+}
+
 .glhex-glyph {
   flex: none;
   width: 1.35em;

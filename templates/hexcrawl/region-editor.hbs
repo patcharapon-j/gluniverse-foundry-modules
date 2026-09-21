@@ -41,6 +41,39 @@
     </div>
 
     <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.region.art"}}</legend>
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.icons"}}</span>
+      {{#each iconRows}}
+        <div class="glhex-link">
+          <i class="fa-solid fa-image"></i>
+          <input type="text" name="icon.{{i}}" class="gl-field" value="{{src}}" placeholder="{{localize "GLHEX.app.region.iconPlaceholder" n=n}}">
+          <button type="button" class="glhex-mini" data-pick="image" data-target="icon.{{i}}" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+        </div>
+      {{/each}}
+      <p class="glhex-note">{{localize "GLHEX.app.region.iconsHint"}}</p>
+      <span class="gl-tech-label">{{localize "GLHEX.app.region.texture"}}</span>
+      <div class="glhex-link">
+        <i class="fa-solid fa-panorama"></i>
+        <input type="text" name="tex.src" class="gl-field" value="{{d.tex.src}}" placeholder="{{localize "GLHEX.app.region.texturePlaceholder"}}">
+        <button type="button" class="glhex-mini" data-pick="image" data-target="tex.src" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+      </div>
+      <div class="glhex-grid2">
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.region.texMode"}}</span>
+          <select name="tex.mode" class="gl-field">
+            {{#each texModes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label class="glhex-field">
+          <span class="gl-tech-label">{{localize "GLHEX.app.region.texScale"}}</span>
+          <input type="number" name="tex.scale" class="gl-field gl-numeric" min="0.25" max="40" step="0.25" value="{{d.tex.scale}}">
+        </label>
+      </div>
+      <label class="glhex-check"><input type="checkbox" name="tex.pixel" {{#if d.tex.pixel}}checked{{/if}}><span>{{localize "GLHEX.app.region.texPixel"}}</span></label>
+      <p class="glhex-note">{{localize "GLHEX.app.region.textureHint"}}</p>
+    </fieldset>
+
+    <fieldset class="glhex-block">
       <legend class="gl-tech-label">{{localize "GLHEX.app.region.encounter"}}</legend>
       <textarea name="enc.text" class="gl-field" rows="3" placeholder="{{localize "GLHEX.app.region.encounterPlaceholder"}}">{{d.enc.text}}</textarea>
       <div class="glhex-link">

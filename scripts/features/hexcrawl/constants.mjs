@@ -102,6 +102,19 @@ export const BUILTIN_TERRAINS = Object.freeze({
 });
 export const BUILTIN_TERRAIN_IDS = Object.freeze(Object.keys(BUILTIN_TERRAINS));
 
+/** Shipped terrain icon for a built-in id. The "glhex:" scheme is the module's own
+ *  assets folder (assets/hexcrawl/…); the host resolves it, the preview maps it. */
+export const BUILTIN_ICON = (id) => `glhex:icons/${id}.webp`;
+export const ASSET_SCHEME = "glhex:";
+
+/** Region texture layouts. i18n: GLHEX.texMode.<key>
+ *  fit  — one image stretched (cover) over the region's whole bounding box:
+ *         every hex shows a different part of it, nothing repeats, no seams
+ *  tile — repeated in world space at `scale` hexes per image (needs a seamless image) */
+export const TEX_MODES = Object.freeze(["fit", "tile"]);
+/** Region icon variants: at most this many; each hex picks one by a stable hash. */
+export const MAX_ICON_VARIANTS = 4;
+
 /** A hex with no terrain and no region draws as blank survey ground. */
 export const BLANK_TERRAIN = Object.freeze({ color: "#5b6478", glyph: "none" });
 
@@ -152,6 +165,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   cost: Object.freeze({ unit: "days", table: Object.freeze([1, 2, 3, 4]), watchHours: 4 }),
   advanceTime: false,
   arrivalCard: false,
+  texStrength: 0.55,   // how much of a region texture shows through the glass (0–1)
 });
 
 /** Zoom (canvas.stage.scale.x) above which per-hex pips always draw. */

@@ -288,6 +288,68 @@ ok("cost 0 is a real override", M.normalizeHex({ st: "revealed", cost: 0 }).cost
 const dice = M.encounterDice(m0, "1,2");
 ok("encounterDice follows the scene config", dice.formula === "3d6" && dice.trigger === 1);
 
+/* ── art: icons and region textures ─────────────────────────────────────
+   Art DEPICTS terrain, so it must follow the same visibility as the terrain:
+   a silhouette that showed its region's texture would name the place. Paths
+   resolve through one function; a texture must stay put as more is revealed. */
+head("art");
+{
+  ok("resolveAsset: absolute URLs stay", M.resolveAsset("https://x/y.webp", { assetBase: "https://b/" }) === "https://x/y.webp");
+  ok("resolveAsset: relative joins assetBase (one slash)", M.resolveAsset("./dz/a.webp", { assetBase: "https://b/p/" }) === "https://b/p/dz/a.webp");
+  ok("resolveAsset: no assetBase leaves a Foundry Data path", M.resolveAsset("worlds/w/a.webp") === "worlds/w/a.webp");
+  ok("resolveAsset: glhex: is the module's own assets", M.resolveAsset("glhex:icons/forest.webp", { builtinRoot: "modules/m/assets/hexcrawl/" }) === "modules/m/assets/hexcrawl/icons/forest.webp");
+  ok("normalizeTex: a bare string is a fit texture", JSON.stringify(M.normalizeTex("t.webp")) === JSON.stringify({ src: "t.webp", mode: "fit", scale: 4 }));
+  ok("normalizeTex: no src → null", M.normalizeTex({ mode: "tile" }) === null);
+  ok("normalizeIcons: capped, blanks dropped", M.normalizeIcons(["a", "", "b", "c", "d", "e"]).length === C.MAX_ICON_VARIANTS && !M.normalizeIcons(["a", ""]).includes(""));
+  ok("a built-in terrain carries its shipped icon", M.terrainDef(M.emptyMap(), "forest").icon === C.BUILTIN_ICON("forest"));
+  ok("a custom terrain shadowing a built-in keeps the shipped icon unless it names one",
+    M.terrainDef(M.normalizeMap({ terrains: { forest: { name: "F", color: "#123456" } } }), "forest").icon === C.BUILTIN_ICON("forest")
+    && M.terrainDef(M.normalizeMap({ terrains: { forest: { name: "F", icon: "my.webp" } } }), "forest").icon === "my.webp");
+  const art = M.normalizeMap({
+    regions: { r: { name: "W", t: "forest", icon: ["a.webp", "b.webp", "c.webp"], tex: "t.webp" } },
+    presets: { shape: { f: { region: true } }, terr: { f: { terrain: true } } },
+    hexes: {
+      rev: { rg: "r", st: "revealed" }, sil: { rg: "r", st: "masked", mk: { p: "shape" } },
+      ter: { rg: "r", st: "masked", mk: { p: "terr" } }, hid: { rg: "r", st: "hidden" },
+    },
+  });
+  const vis = (k) => M.visualFor(art, k, M.viewFor(art, k));
+  ok("revealed hex: a region icon variant and the region texture", art.regions.r.icon.includes(vis("rev").icon) && vis("rev").tex?.src === "t.webp");
+  ok("silhouette: no art at all (it would name the place)", vis("sil").icon === null && vis("sil").tex === null);
+  ok("terrain shown, region withheld: the plain terrain icon, no region texture", vis("ter").icon === C.BUILTIN_ICON("forest") && vis("ter").tex === null);
+  ok("hidden hex: no art", vis("hid").icon === null && vis("hid").tex === null);
+  const picks = new Set(); for (let i = 0; i < 40; i++) picks.add(M.visualFor(art, `${i},${i * 3}`, { terrain: { icon: null }, regionId: "r" }).icon);
+  ok("variants are spread across hexes (stable hash, all used)", picks.size === 3);
+  ok("variant choice is stable per hex", M.keyHash("3,4") === M.keyHash("3,4"));
+  ok("config.texStrength clamps to 0–1 with a default", M.normalizeConfig({ texStrength: 3 }).texStrength === 1 && M.normalizeConfig({}).texStrength === C.DEFAULT_CONFIG.texStrength);
+
+  const rs = readFileSync(join(FEAT, "render", "renderer.mjs"), "utf8");
+  const ts = readFileSync(join(FEAT, "render", "tiles.mjs"), "utf8");
+  const order = [...rs.matchAll(/(\w+): layer\("(\w+)"\)/g)].map((m) => m[2]);
+  ok("texture layer draws beneath the tiles", order.indexOf("tex") >= 0 && order.indexOf("tex") < order.indexOf("tiles"));
+  ok("a fit texture is laid over the region's WHOLE bounding box (stable as hexes reveal)", /_regionBox\(id\)[\s\S]{0,400}Object\.entries\(this\._map\.hexes\)/.test(rs));
+  ok("the tile fill thins by the scene's texture strength", /1 - texShown/.test(ts));
+  ok("an image icon replaces the vector glyph", /!art\?\.icon\)/.test(ts));
+  ok("art state is part of the hex signature (async loads redraw)", /\|\$\{artSig\}`/.test(rs) && /\|\$\{tex\}\|\$\{art\?\.icon \? 1 : 0\}`/.test(ts));
+  ok("art paths resolve through resolveAsset only", /resolveAsset\(a\.icon, opts\)/.test(rs) && /resolveAsset\(a\.tex\.src, opts\)/.test(rs));
+  // Blight: a Mesh + shader layer over the ground (a filter would bring back the
+  // filter-resolution trap), every uniform declared in GLSL is written from JS, and the
+  // layer sits above the texture and tiles but beneath the icons.
+  const bs = readFileSync(join(FEAT, "render", "blight.mjs"), "utf8");
+  const declared = [...bs.matchAll(/uniform\s+\w+\s+(u\w+)/g)].map((m) => m[1]);
+  const written = new Set([...bs.matchAll(/\b(u[A-Z]\w*):/g)].map((m) => m[1]));
+  ok("blight: every shader uniform is written from JS", declared.length > 0 && declared.every((u) => written.has(u)), declared.filter((u) => !written.has(u)).join(","));
+  ok("blight: a Mesh with a Shader, not a filter", /new PIXI\.Mesh\(blightGeometry/.test(rs) && !/\.filters\s*=/.test(rs));
+  ok("blight layer: above tex and tiles, beneath icons", order.indexOf("blight") > order.indexOf("tiles") && order.indexOf("blight") < order.indexOf("icons"));
+  ok("blight: time wraps on the loop (whole turns, no jump)", /uTime = \(this\._time % BLIGHT_LOOP\) \/ BLIGHT_LOOP/.test(rs) && /sin\(t \* 4\.0\)/.test(bs));
+  ok("blight: snapped to a pixel grid, world-anchored", /floor\(vPos \/ uR \* uPixel\)/.test(bs));
+  ok("icons sit on SOFT baked shadows (contact + ambient), never hard offset copies", /_iconShadow\(a\.icon, img\.tex, GEO\.iconAmbientBlur\)/.test(rs) && /_iconShadow\(a\.icon, img\.tex, GEO\.iconContactBlur\)/.test(rs) && /filter = .blur/.test(rs) && !/iconHalo|iconLift/.test(rs));
+  for (const id of C.BUILTIN_TERRAIN_IDS) {
+    const f = join(ROOT, "assets", "hexcrawl", "icons", `${id}.webp`);
+    ok(`shipped icon exists: ${id}`, existsSync(f));
+  }
+}
+
 /* ── glyphs ─────────────────────────────────────────────────────────────── */
 head("glyphs");
 ok("every GLYPH_ID has a path", G.glyphIdsCovered());
@@ -505,7 +567,7 @@ if (renderFiles.length) {
   const rendSrc = stripComments(readFileSync(join(FEAT, "render", "renderer.mjs"), "utf8"));
   ok("the fog look draws no vector \"?\" (it is text in the label face)", !/look === "fog"[\s\S]{0,900}?drawQuestion\(/.test(tilesSrc));
   ok("the fog \"?\" rasterises once in the label face and is shared", /new this\.PIXI\.Text\("\?"[\s\S]{0,160}fontFamily: this\.fontFamily/.test(rendSrc) && /new this\.PIXI\.Sprite\(tex\)/.test(rendSrc));
-  ok("a hex's signature carries its boundary mask (a neighbour's region change redraws it)", /_boundary\(k\)[\s\S]{0,200}\|\$\{edge\}`/.test(rendSrc));
+  ok("a hex's signature carries its boundary mask (a neighbour's region change redraws it)", /_boundary\(k\)[\s\S]{0,700}\|\$\{edge\}/.test(rendSrc));
 }
 
 head("durations");

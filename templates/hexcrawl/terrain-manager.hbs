@@ -47,6 +47,12 @@
                   <span class="glhex-color is-custom"><input type="color" data-field="color" value="{{../sel.color}}"></span>
                 </label>
               </div>
+              <span class="gl-tech-label">{{localize "GLHEX.app.terrains.icon"}}</span>
+              <div class="glhex-link">
+                <i class="fa-solid fa-image"></i>
+                <input type="text" class="gl-field" data-field="icon" value="{{../sel.icon}}" placeholder="{{localize "GLHEX.app.terrains.iconPlaceholder"}}">
+                <button type="button" class="glhex-mini" data-pick="image" data-target="icon" data-tooltip="{{localize "GLHEX.app.common.browse"}}" aria-label="{{localize "GLHEX.app.common.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+              </div>
               <span class="gl-tech-label">{{localize "GLHEX.app.terrains.glyph"}}</span>
               <div class="glhex-glyph-grid">
                 {{#each ../glyphs}}

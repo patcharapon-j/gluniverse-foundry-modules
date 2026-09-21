@@ -16,9 +16,9 @@
  * whose base is not 0 still puts the map on its floor.
  */
 
-import { SUITE_ID, warn } from "../../core/const.mjs";
+import { SUITE_ID, featurePath, warn } from "../../core/const.mjs";
 import { PALETTE, motionScale, onThemeChange } from "../../core/theme.mjs";
-import { FLAGS } from "./constants.mjs";
+import { FEATURE_ID, FLAGS } from "./constants.mjs";
 import { foundryAdapter, keysInRect } from "./hex-math.mjs";
 import { partyCentres } from "./party.mjs";
 import { terrainName } from "./labels.mjs";
@@ -107,6 +107,8 @@ class Host {
       resolveIcon,
       palette: PALETTE,
       terrainName: (id) => terrainName(this.store?.map, id),
+      // "glhex:icons/x.webp" → the module's assets/hexcrawl/icons/x.webp
+      assetRoot: featurePath(FEATURE_ID, "assets/x").slice(0, -1),
     });
     layer.addChild(this.renderer.root);
     this.renderer.setZoom(canvas.stage.scale.x);

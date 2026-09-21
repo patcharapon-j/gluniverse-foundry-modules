@@ -138,7 +138,10 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
   const terrain = view.terrain ?? { ...BLANK_TERRAIN, id: null };
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? null : null;
   const col = colors.tile(terrain.color, { blight: !!view.blight, region, masked });
-  const fillAlpha = mode === "outlines" ? 0 : mode === "tint" ? ALPHA.tintFill : 1;
+  // A region texture shows through the glass: the fill thins by the scene's strength.
+  const art = ctx.art ? ctx.art(key) : null;
+  const texShown = art?.tex ? Math.max(0, Math.min(1, ctx.map.config?.texStrength ?? 0)) : 0;
+  const fillAlpha = (mode === "outlines" ? 0 : mode === "tint" ? ALPHA.tintFill : 1) * (1 - texShown);
   // Fused: hexes of one region are one shape. Only boundary edges (another
   // region, fog, the map edge) get the dark channel and the region's rim; an
   // interior edge is a faint seam — solid when revealed, dashed when masked.
@@ -168,8 +171,9 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
   }
 
   // Glyph (suppressed on the region's label hex — the label names the terrain).
+  // An image icon replaces it; the renderer's icon layer draws that as a Sprite.
   const glyph = terrain.glyph ?? "none";
-  if (!isLabel && glyph !== "none") {
+  if (!isLabel && glyph !== "none" && !art?.icon) {
     const gy = cy + (lmN ? GEO.lmGlyphY : GEO.glyphY) * R;
     const gs = GEO.glyphScale * R * (lmN ? GEO.lmGlyphScale : 1);
     glyphLine(g, GEO.glyphWidth * R * (lmN ? 0.8 : 1), col.glyph, masked ? 0.75 : 1);
@@ -207,7 +211,9 @@ export function stampKey(ctx, key, view, look) {
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? "" : "";
   const pips = view.rating != null ? (ctx.showPips(view) ? view.rating : 0) : 0;
   const withheld = look === "masked" && view.rating == null && effectiveRating(ctx.map, key) != null ? 1 : 0;
-  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${label}|${pips}|${withheld}|${boundaryMask(ctx, key)}`;
+  const art = ctx.art ? ctx.art(key) : null;
+  const tex = art?.tex ? ctx.map.config?.texStrength ?? 0 : "";
+  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${label}|${pips}|${withheld}|${boundaryMask(ctx, key)}|${tex}|${art?.icon ? 1 : 0}`;
 }
 
 /** The GM hatch over a hex players cannot fully see. kind: "hidden" | "masked". */

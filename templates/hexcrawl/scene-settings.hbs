@@ -77,6 +77,15 @@
           {{#each renders}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
         </select>
       </label>
+      <label class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.scene.texStrength"}} <span class="gl-numeric" data-tex-out>{{texPct}}%</span></span>
+        <input type="range" name="texStrength" min="0" max="1" step="0.05" value="{{c.texStrength}}" data-tex-strength>
+      </label>
+      <label class="glhex-field">
+        <span class="gl-tech-label">{{localize "GLHEX.app.scene.assetBase"}}</span>
+        <input type="text" name="assetBase" class="gl-field" value="{{assetBase}}" placeholder="https://your-bucket.s3.amazonaws.com/">
+      </label>
+      <p class="glhex-note">{{localize "GLHEX.app.scene.assetBaseHint"}}</p>
       <div class="glhex-checks glhex-checks--col">
         <label class="glhex-check"><input type="checkbox" name="alwaysPips" {{#if c.alwaysPips}}checked{{/if}}><span>{{localize "GLHEX.app.scene.alwaysPips"}}</span></label>
         <label class="glhex-check"><input type="checkbox" name="trail" {{#if c.trail}}checked{{/if}}><span>{{localize "GLHEX.app.scene.trail"}}</span></label>

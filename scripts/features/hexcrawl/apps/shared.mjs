@@ -109,6 +109,30 @@ export function optionalNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/* ── File pickers ───────────────────────────────────────────────────────── */
+
+/**
+ * Wire every `[data-pick="image"]` button under `root`: it opens Foundry's
+ * FilePicker (S3 included, where the world is set up for it) and writes the
+ * chosen path into the input named by `data-target`, firing `change` so the
+ * owning app sees it exactly as if it had been typed.
+ */
+export function bindFilePickers(root) {
+  for (const btn of root.querySelectorAll("[data-pick]")) {
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const input = root.querySelector(`[name="${btn.dataset.target}"], [data-field="${btn.dataset.target}"]`);
+      const FP = globalThis.foundry?.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+      if (!input || !FP) return;
+      new FP({
+        type: btn.dataset.pick || "image",
+        current: input.value || "",
+        callback: (path) => { input.value = path; input.dispatchEvent(new Event("change", { bubbles: true })); },
+      }).render(true);
+    });
+  }
+}
+
 /* ── Document links ─────────────────────────────────────────────────────── */
 
 function textEditor() {

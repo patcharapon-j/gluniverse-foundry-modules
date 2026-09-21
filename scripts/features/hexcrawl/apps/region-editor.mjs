@@ -11,11 +11,11 @@
  */
 
 import { escapeHTML } from "../../../core/util.mjs";
-import { BLANK_TERRAIN, RATING_MAX, RATING_MIN, RUMOR_TRUTH } from "../constants.mjs";
+import { BLANK_TERRAIN, RATING_MAX, RATING_MIN, RUMOR_TRUTH, MAX_ICON_VARIANTS, TEX_MODES } from "../constants.mjs";
 import { StoreAppBase } from "./base.mjs";
 import {
   L, bindUuidDrops, confirmDialog, currentStore, drawTableText, openUuid, optionList, ratingLabel,
-  readForm, terrainChoices, tpl,
+  readForm, terrainChoices, tpl, bindFilePickers,
 } from "./shared.mjs";
 
 const appId = (id) => `glhex-region-${String(id).replace(/[^0-9a-z-]/gi, "_")}`;
@@ -36,6 +36,8 @@ function draftFrom(r) {
       table: r.rumor?.table ?? "",
     },
     notes: r.notes ?? "",
+    icon: Array.from({ length: MAX_ICON_VARIANTS }, (_, i) => r.icon?.[i] ?? ""),
+    tex: { src: r.tex?.src ?? "", mode: r.tex?.mode ?? "fit", scale: r.tex?.scale ?? 4, pixel: !!r.tex?.pixel },
   };
 }
 
@@ -91,6 +93,9 @@ function RegionEditorApp() {
       return {
         ...context,
         empty: false,
+        iconRows: d.icon.map((src, i) => ({ i, src, n: i + 1 })),
+        texModes: TEX_MODES.map((m) => ({ value: m, label: L(`GLHEX.texMode.${m}`), selected: m === d.tex.mode })),
+        texTile: d.tex.mode === "tile",
         d,
         count,
         terrains: [
@@ -109,6 +114,7 @@ function RegionEditorApp() {
       await super._onRender(context, options);
       const root = this.element;
       bindUuidDrops(root);
+      bindFilePickers(root);
       const picker = root.querySelector("[data-color-picker]");
       const hidden = root.querySelector("input[name='color']");
       picker?.addEventListener("input", () => {
@@ -136,6 +142,8 @@ function RegionEditorApp() {
         table: (f.rumor?.table ?? "").trim(),
       };
       d.notes = f.notes ?? "";
+      d.icon = Array.from({ length: MAX_ICON_VARIANTS }, (_, i) => String(f.icon?.[i] ?? "").trim());
+      d.tex = { src: String(f.tex?.src ?? "").trim(), mode: TEX_MODES.includes(f.tex?.mode) ? f.tex.mode : "fit", scale: Number(f.tex?.scale) || 4, pixel: !!f.tex?.pixel };
     }
 
     static async #save() {
@@ -154,6 +162,8 @@ function RegionEditorApp() {
         enc: { text: d.enc.text, table: d.enc.table || null },
         rumor: { text: d.rumor.text, truth: d.rumor.truth, known: d.rumor.known, table: d.rumor.table || null },
         notes: d.notes,
+        icon: d.icon.filter(Boolean),
+        tex: d.tex.src ? { ...d.tex } : null,
       });
     }
 

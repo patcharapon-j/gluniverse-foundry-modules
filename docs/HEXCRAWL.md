@@ -138,6 +138,19 @@ players cannot see; otherwise it draws exactly the player view.
   `fused(mask)`, where a rim leaving one hex meets its neighbour's exactly
   (pinned by the check); the boundary mask is part of each hex's signature, so
   a region change next door redraws it.
+- Art (review 3): terrain icons are **images** (`assets/hexcrawl/icons/<id>.webp`,
+  white on transparency, tinted per terrain, embossed with a halo, drop shadow
+  and highlight so they sit ON a textured ground); the vector glyph is only the
+  fallback while an icon is missing or failed. A region may carry a **ground
+  texture** (`fit`: one image over the region's whole bounding box, stable as
+  hexes reveal; `tile`: repeated; `pixel`: nearest-neighbour for pixel art),
+  shown through the glass by `config.texStrength`. Region icon variants exist
+  in the model but are not the default: landmarks carry points of interest, the
+  hex icon says what KIND of ground it is. Art follows `visualFor()` — nothing
+  unless the terrain shows, region art only when the region does.
+- Blight is its own layer: one Mesh + shader (`render/blight.mjs`) over every
+  blighted hex body — crawling pixel-snapped violet veins with an edge glow,
+  above the ground and fill, beneath icons. Not a filter (no resolution trap).
 - Region names: a region's name reaches players only once the GM ticks
   *Name known to players* (`region.nk`); until then `viewFor` returns
   `nameUnknown` and the label and tooltip print **???**.

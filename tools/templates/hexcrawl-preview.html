@@ -66,6 +66,7 @@ const HM = await import(`${ROOT}/scripts/features/hexcrawl/hex-math.mjs`);
 const M = await import(`${ROOT}/scripts/features/hexcrawl/model.mjs`);
 const { PALETTE } = await import(`${ROOT}/scripts/core/theme.mjs`);
 const { resolveIcon } = await import(`${ROOT}/scripts/features/hexcrawl/icons.mjs`);
+const IMP = await import(`${ROOT}/scripts/features/hexcrawl/import.mjs`);
 const PIXI = window.PIXI;
 
 const params = new URLSearchParams(location.search);
@@ -76,6 +77,20 @@ if (params.get("mode")) $("mode").value = params.get("mode");
 if (params.get("zoom")) $("zoom").value = params.get("zoom");
 if (params.get("motion") === "0") $("motion").checked = false;
 const BIG = params.get("big") === "1";
+
+/* ?import=<url of an import JSON> draws that map with its art instead of the
+   sample (relative art paths resolve against the JSON's own folder unless it
+   sets assetBase); &reveal=all shows every hex, for reviewing the art. */
+let IMPORTED = null;
+if (params.get("import")) {
+  const url = new URL(params.get("import"), location.href);
+  const parsed = IMP.parseImport(await (await fetch(url)).text());
+  if (!parsed.map.assetBase) parsed.map.assetBase = new URL(".", url).href;
+  if (params.get("reveal") === "all") for (const h of Object.values(parsed.map.hexes)) { h.st = "revealed"; delete h.mk; }
+  IMPORTED = parsed;
+  $("grid").value = String(parsed.scene.gridType);
+  if (parsed.warnings.length) console.warn("import warnings", parsed.warnings);
+}
 
 await Promise.all([
   document.fonts.load('600 16px "Oxanium"'),
@@ -96,7 +111,7 @@ const SHRINE_IMG = (() => {
 })();
 
 /* ── Sample map ─────────────────────────────────────────────────────── */
-const ROWS = BIG ? 40 : 10, COLS = BIG ? 60 : 14;
+const ROWS = IMPORTED ? IMPORTED.scene.rows : BIG ? 40 : 10, COLS = IMPORTED ? IMPORTED.scene.cols : BIG ? 60 : 14;
 const REGIONS = {
   verdant: { name: "Verdant Reach", t: "grassland", rt: 1, seed: [2, 2], alt: "rolling", nk: true },
   thorn: { name: "Thornwood", t: "forest", rt: 2, seed: [6, 3], alt: "tropical", nk: true },
@@ -196,7 +211,7 @@ function build() {
   state.adapter = HM.pureAdapter({ type, size: 100, bounds: { rows: ROWS, cols: COLS } });
   state.keys = [];
   for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) state.keys.push(HM.key(i, j));
-  const map = buildMap(state.adapter);
+  const map = IMPORTED ? M.normalizeMap(structuredClone(IMPORTED.map)) : buildMap(state.adapter);
   map.config.render = $("mode").value;
   state.map = map;
   const r = new HexRenderer({
@@ -204,6 +219,7 @@ function build() {
     loadTexture: (src) => PIXI.Assets.load(src),
     terrainName: (id) => id.charAt(0).toUpperCase() + id.slice(1),
     resolution: window.devicePixelRatio || 1,
+    assetRoot: `${ROOT}/assets/hexcrawl/`,
   });
   state.r = r;
   world.addChild(r.root);
@@ -211,8 +227,9 @@ function build() {
   state.size = { w: last.x + state.adapter.width, h: last.y + state.adapter.height };
   drawArt(state.size.w, state.size.h);
   art.visible = map.config.render !== "tiles";
-  state.party = [{ key: "5,4", sight: map.config.sight }];
-  state.trail = ["5,2", "5,3", "4,4", "5,4"];
+  const start = IMPORTED?.start ?? "5,4";
+  state.party = [{ key: start, sight: map.config.sight }];
+  state.trail = IMPORTED ? [] : ["5,2", "5,3", "4,4", "5,4"];
   state.staged = new Set();
   applyZoom();
   r.setMotionScale($("motion").checked ? 1 : 0);
