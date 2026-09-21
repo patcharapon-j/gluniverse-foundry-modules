@@ -64,6 +64,7 @@
           </button>
         {{/each}}
       </div>
+      <button type="button" class="glhex-link-btn" data-action="settings"><i class="fa-solid fa-pen"></i> {{localize "GLHEX.app.palette.editPresets"}}</button>
     {{/if}}
 
     {{#if is.blight}}
@@ -114,7 +115,7 @@
           data-action="region" style="--glhex-sw: {{color}}">
           <span class="glhex-chip {{#if blight}}is-blight{{/if}}"></span>
           <span class="glhex-region-main">
-            <span class="glhex-region-name">{{name}}</span>
+            <span class="glhex-region-name">{{name}}{{#if nameHidden}} <i class="fa-solid fa-eye-slash glhex-name-hidden" data-tooltip="{{localize "GLHEX.app.palette.nameHidden"}}"></i>{{/if}}</span>
             <span class="glhex-region-sub">{{terrain}}</span>
           </span>
           <span class="glhex-pips" data-tooltip="{{ratingTitle}}" {{#if rating}}data-glhex-rating="{{rating}}"{{/if}}>{{#each pips}}<span class="glhex-pip {{#if on}}is-on{{/if}}"></span>{{/each}}</span>

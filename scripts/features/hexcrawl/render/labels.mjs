@@ -13,6 +13,7 @@ import { diamond, landmarkSlots } from "./geom.mjs";
 
 const PIP = "◆"; // ◆
 const DOT = "·"; // ·
+export const UNKNOWN_NAME = "???";
 
 /**
  * Where each region's label goes, and what it says, for this viewer.
@@ -24,7 +25,7 @@ export function regionLabels(ctx, views, terrainName) {
   for (const [k, v] of views) {
     // A region's SHAPE may be visible without its name (mask field "region"):
     // only hexes that show the name may place — or even count toward — a label.
-    if (!v.regionId || !v.name) continue;
+    if (!v.regionId || !(v.name || v.nameUnknown)) continue;
     let g = groups.get(v.regionId);
     if (!g) groups.set(v.regionId, (g = []));
     g.push([k, v]);
@@ -58,7 +59,9 @@ export function regionLabels(ctx, views, terrainName) {
     if (tid && terrainSeen) parts.push(String(terrainName(tid) ?? tid).toUpperCase());
     if (region.rt && ratingSeen) parts.push(PIP.repeat(region.rt));
     placed.push(ctx.adapter.center(best));
-    out.push({ id, key: best, name: region.name.toUpperCase(), sub: parts.join(`  ${DOT}  `) });
+    // Players see "???" until the GM marks the name known (viewFor: nameUnknown).
+    const known = members.some(([, v]) => v.name);
+    out.push({ id, key: best, name: known ? region.name.toUpperCase() : UNKNOWN_NAME, sub: parts.join(`  ${DOT}  `) });
   }
   return out;
 }

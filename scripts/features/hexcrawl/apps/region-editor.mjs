@@ -23,6 +23,7 @@ const appId = (id) => `glhex-region-${String(id).replace(/[^0-9a-z-]/gi, "_")}`;
 function draftFrom(r) {
   return {
     name: r.name ?? "",
+    nk: !!r.nk,
     t: r.t ?? "",
     rt: r.rt ?? 2,
     color: r.color ?? "",
@@ -122,6 +123,7 @@ function RegionEditorApp() {
       const f = readForm(this.element);
       const d = this.draft;
       d.name = f.name ?? "";
+      d.nk = !!f.nk;
       d.t = f.t ?? "";
       d.rt = Number(f.rt) || 2;
       d.color = /^#[0-9a-f]{6}$/i.test(f.color ?? "") ? f.color : "";
@@ -144,6 +146,7 @@ function RegionEditorApp() {
       await store.setRegion(this.regionId, {
         id: this.regionId,
         name: d.name.trim(),
+        nk: d.nk,
         t: d.t || null,
         rt: d.rt,
         color: d.color || null,

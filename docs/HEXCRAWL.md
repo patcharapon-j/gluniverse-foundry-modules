@@ -74,7 +74,7 @@ await store.setRegion(id, data)        // create/replace; returns id (newId("r")
 await store.deleteRegion(id)           // also strips rg from its hexes
 await store.setTerrain(id, data)       // custom terrain create/replace
 await store.deleteTerrain(id)
-await store.setConfig(partial)         // merged + normalized
+await store.setConfig(partial, { presets })  // merged + normalized; presets (optional) REPLACE map.presets, same write + undo step
 await store.undo()                     // GM edit history (in-memory, per session)
 store.brush            // { tool, value, stage: boolean } — the palette writes it
 store.staged           // Set<key> — hexes marked for a staged reveal (GM client only)
@@ -127,10 +127,28 @@ players cannot see; otherwise it draws exactly the player view.
 
 ## Rendering decisions (from the design review)
 
-- Tiles: **Etched glass** — dark glass tinted by terrain, lit inner bevel,
-  bright terrain glyph; region borders as a light hairline.
+- Tiles: **Etched glass**, **fused by region** (review 2: *twin rims*) — dark
+  glass tinted by terrain with a bright terrain glyph. Hexes of one region join
+  into one shape: interior edges are a faint seam (dashed while masked), and
+  only boundary edges — another region, fog, the map edge — get a dark channel
+  and the region's rim, in the region's colour (neutral on a silhouette; the
+  terrain's lit colour when the region has none). So two regions of the same
+  habitat side by side, or two silhouettes, still read as two shapes. A masked
+  hex that withholds its region is its own island. Geometry: `template.mjs`
+  `fused(mask)`, where a rim leaving one hex meets its neighbour's exactly
+  (pinned by the check); the boundary mask is part of each hex's signature, so
+  a region change next door redraws it.
+- Region names: a region's name reaches players only once the GM ticks
+  *Name known to players* (`region.nk`); until then `viewFor` returns
+  `nameUnknown` and the label and tooltip print **???**.
+- Sight: hexes in sight rise to `config.sightState`; when masked, they use the
+  reserved preset `"sight"`, resolved live from `config.sightFields` (default:
+  region shape, terrain, difficulty, name). Mask presets are the map's own
+  (`map.presets`, seeded from `MASK_PRESETS`), edited in scene settings; a hex
+  on a deleted preset falls back to the sight checklist.
 - Fog: **Uncharted** — a hidden hex is blank ink with a dashed survey outline
-  and a faint "?". A reveal draws the outline in, then the terrain inks in,
+  and a faint "?" in the region-label face (one rasterised Text shared by a
+  Sprite per fog hex, not text per hex). A reveal draws the outline in, then the terrain inks in,
   sweeping outward from the party.
 - Masked: tile dimmed, withheld rating shown as a dashed "?" diamond.
 - Rating pips: **count only**, drawn per hex only where the hex overrides its
@@ -184,7 +202,9 @@ token layer's hit-testing, so it lives in `canvas.interface` at a high zIndex.
    the palette commits in one go.
 4. Drop a token, open its HUD → **Party token** (right-click that button to
    override its sight radius). Everything within sight rises to the scene's
-   auto-reveal state; the hex it stands on is revealed and visited.
+   sight state (masked with the sight checklist, or revealed); the hex it
+   stands on is revealed and visited. Mask presets and the sight checklist
+   are in the palette's scene settings.
 5. Hover a hex for its tooltip; click to pin it (Esc or a click elsewhere
    unpins). GMs see a violet GM-only block; "view as players" hides it.
 
@@ -211,7 +231,7 @@ applies an encounter, a consequence or a rule.
 | `hex.volume` | client | 0–1 |
 | `hex.tooltipDelay` | client | ms before the hover tooltip opens (default `TIMING.tooltipDelay`) |
 
-Per-scene options (sight, auto-reveal state, render mode, pips, trail, players
+Per-scene options (sight, sight state and checklist, mask presets, render mode, pips, trail, players
 may move, dice, cost, advance time, arrival card) live in the map's `config`
 and are edited in the palette's scene settings.
 

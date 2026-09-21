@@ -55,6 +55,8 @@
   "GLHEX.tooltip.encounter": "Encounter",
   "GLHEX.tooltip.rumor": "Rumour",
   "GLHEX.tooltip.known": "known to the party",
+  "GLHEX.tooltip.unknownName": "???",
+  "GLHEX.tooltip.nameHidden": "Name hidden from players",
   "GLHEX.tooltip.unknown": "not yet heard",
   "GLHEX.tooltip.nothingShown": "nothing shown",
   "GLHEX.card.speaker": "Hexcrawl",

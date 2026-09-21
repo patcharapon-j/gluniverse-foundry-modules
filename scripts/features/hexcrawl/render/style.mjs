@@ -13,7 +13,11 @@ import { hexToInt, lighten, mix } from "../../../core/theme.mjs";
 
 /** Proportions of R. */
 export const GEO = Object.freeze({
-  gutter: 0.045,       // gap between neighbouring tiles (each side)
+  gutter: 0.045,       // gap between neighbouring fog tiles (each side)
+  channel: 0.04,       // half the dark channel between two regions (each side, from the edge)
+  rimInset: 0.1,       // a region's rim runs this far inside its outline (line centre)
+  regionRim: 0.05,     // region rim width
+  seamWidth: 0.014,    // the faint seam between two hexes of one region
   bevel: 0.14,         // inset of the lit inner bevel from the hex edge
   rimWidth: 0.022,
   bevelWidth: 0.034,
@@ -41,6 +45,7 @@ export const GEO = Object.freeze({
   labelSub: 0.155,
   labelLmName: 0.155,
   labelIcon: 0.24,
+  fogQSize: 0.36,        // the fog "?" — region-label face, font size in R
 });
 
 /** Device-pixel counts for hairlines. */
@@ -59,7 +64,11 @@ export const ALPHA = Object.freeze({
   maskBevel: 0.35,
   border: 0.45,
   fogDash: 0.45,
-  fogQ: 0.2,
+  fogQ: 0.17,
+  seam: 0.55,
+  maskSeam: 0.45,
+  rim: 0.95,
+  maskRim: 0.6,
   maskDash: 0.28,
   hatchVeilHidden: 0.42,
   hatchVeilMasked: 0.16,
@@ -144,6 +153,8 @@ export function makeColors(palette) {
     trace: hexToInt(mix(palette.text, palette.accent, 0.35)),
     hatch: hexToInt(mix(palette.textDim, ink, 0.35)),
     regionBorder: (hex) => hexToInt(hex ? lighten(hex, 0.25) : palette.text),
+    /** A region rim whose colour is withheld (silhouette): neutral. */
+    silRim: hexToInt(mix(palette.textDim, ink, 0.25)),
     css: {
       text: palette.text,
       textDim: palette.textDim,

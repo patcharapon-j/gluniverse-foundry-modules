@@ -616,6 +616,18 @@
 .glhex-check input { margin: 0; accent-color: var(--gl-accent); }
 .glhex-check.is-custom span::after { content: " •"; color: var(--gl-violet); }
 .glhex-check--end { align-self: end; min-height: var(--gl-sp-10); }
+.glhex-check > i { width: 1.1em; color: var(--gl-text-dim); text-align: center; }
+.glhex-checks--grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gl-sp-3) var(--gl-sp-6); }
+.glhex-sight-fields { display: grid; gap: var(--gl-sp-3); margin-top: var(--gl-sp-4); }
+.glhex-sight-fields[hidden] { display: none; }
+
+/* Mask presets: a name column and one narrow tick column per field. */
+.glhex-presets td:nth-child(n) { width: auto; }
+.glhex-presets td:first-child { width: 100%; }
+.glhex-presets .glhex-presets-col { padding: 0 var(--gl-sp-1); color: var(--gl-text-dim); text-align: center; }
+.glhex-presets .glhex-presets-col input { margin: 0; accent-color: var(--gl-accent); }
+.glhex-presets .glhex-presets-act { display: flex; gap: var(--gl-sp-1); padding-right: 0; white-space: nowrap; }
+.glhex-name-hidden { margin-left: var(--gl-sp-1); color: var(--gl-text-faint); font-size: 0.8em; }
 
 .glhex-warn {
   margin: 0;

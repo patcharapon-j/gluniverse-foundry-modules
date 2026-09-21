@@ -19,7 +19,7 @@ import { SUITE_ID, warn } from "../../core/const.mjs";
 import { FLAGS, BUILTIN_TERRAINS } from "./constants.mjs";
 import {
   applyPatch as applyPatchToMap, brushPatch, invertPatch, isBlankHex, newId,
-  normalizeConfig, normalizeHex, normalizeMap, normalizeRegion, normalizeTerrain, stateDiff,
+  normalizeConfig, normalizeHex, normalizeMap, normalizePresets, normalizeRegion, normalizeTerrain, stateDiff,
 } from "./model.mjs";
 
 /** Fired with (store|null) whenever HexStore.current changes. Namespaced. */
@@ -317,11 +317,23 @@ export class HexStore {
     await this._write(upd);
   }
 
-  async setConfig(partial) {
+  /**
+   * Merge into the scene config; `presets` (optional) REPLACES the map's mask
+   * presets in the same write and the same undo step — the scene settings form
+   * edits both at once. Presets are replaced whole, never merged: a deleted
+   * preset has to stay deleted.
+   */
+  async setConfig(partial, { presets } = {}) {
     if (!this._gmOnly()) return;
     const merged = normalizeConfig(deepMerge(structuredClone(this._base.config), partial ?? {}));
-    this._push({ label: "config", ops: [{ kind: "config", prev: this._base.config }] });
-    await this._write(forceSet({}, `${MAP_PATH}.config`, merged));
+    const ops = [{ kind: "config", prev: this._base.config }];
+    const upd = forceSet({}, `${MAP_PATH}.config`, merged);
+    if (presets !== undefined) {
+      ops.push({ kind: "presets", prev: this._base.presets });
+      forceSet(upd, `${MAP_PATH}.presets`, normalizePresets(presets));
+    }
+    this._push({ label: "config", ops });
+    await this._write(upd);
   }
 
   /** Reveal every staged hex in one write, then clear the set. */
@@ -349,6 +361,7 @@ export class HexStore {
         const p = `${MAP_PATH}.terrains.${op.id}`;
         if (op.prev) forceSet(upd, p, op.prev); else forceDelete(upd, p);
       } else if (op.kind === "config") forceSet(upd, `${MAP_PATH}.config`, op.prev);
+      else if (op.kind === "presets") forceSet(upd, `${MAP_PATH}.presets`, op.prev);
     }
     await this._write(upd);
     return true;

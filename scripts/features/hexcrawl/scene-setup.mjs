@@ -58,7 +58,9 @@ export async function createHexcrawlScene({
     width: dims.width,
     height: dims.height,
     padding: 0,
-    grid: { type: gridType, size },
+    // The map draws its own hex edges; Foundry's grid lines over it would cut every
+    // fused region back into single hexes. A GM can turn them back on in Scene Config.
+    grid: { type: gridType, size, alpha: 0 },
     backgroundColor: PALETTE.ink1,
     tokenVision: false,
     fog: fogOff(),
@@ -66,6 +68,15 @@ export async function createHexcrawlScene({
   };
   if (background) data.background = { src: background };
   const scene = await Scene.create(data);
+  // v14 moved the background onto the scene's Levels and drops the legacy
+  // fields without a word: the scene comes out Foundry grey, which shows in
+  // every channel between regions. Restate them on the initial Level.
+  const level = scene?.levels?.contents?.[0] ?? null;
+  if (level) {
+    const upd = { "background.color": PALETTE.ink1 };
+    if (background && !level.background?.src) upd["background.src"] = background;
+    await level.update(upd);
+  }
   if (scene) await scene.view();
   return scene;
 }

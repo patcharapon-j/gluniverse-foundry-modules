@@ -32,6 +32,14 @@ export function StoreAppBase() {
       this._hookId = Hooks.on(STORE_HOOK, (s) => this._onStoreSwitch(s ?? null));
     }
 
+    /** The frame is drawn before the store binds, so a title read off the map
+     *  ("Region: King's Road") first comes out blank; restate it once bound. */
+    async _onRender(context, options) {
+      await super._onRender(context, options);
+      const el = this.window?.title;
+      if (el && el.textContent !== this.title) el.textContent = this.title;
+    }
+
     /** Bind (or rebind) to a store. Idempotent. */
     _bindStore(store) {
       if (this.store === store) return;

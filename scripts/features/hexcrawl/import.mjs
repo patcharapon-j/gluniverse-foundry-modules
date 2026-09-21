@@ -16,12 +16,13 @@
  */
 
 import {
-  BUILTIN_TERRAIN_IDS, DEFAULT_MASK_PRESET, GLYPH_IDS, LANDMARK_VIS, MASK_FIELDS,
-  MASK_PRESETS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN, RUMOR_TRUTH,
+  BUILTIN_TERRAIN_IDS, GLYPH_IDS, LANDMARK_VIS, MASK_FIELDS,
+  MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN, RUMOR_TRUTH, SIGHT_PRESET,
 } from "./constants.mjs";
 import { HEX_TYPES, key as offKey, parseKey } from "./hex-math.mjs";
 import {
-  emptyMap, isBlankHex, normalizeConfig, normalizeHex, normalizeMap, normalizeRegion, normalizeTerrain,
+  emptyMap, isBlankHex, normalizeConfig, normalizeFields, normalizeHex, normalizeMap, normalizeRegion,
+  normalizeTerrain, validPresetId,
 } from "./model.mjs";
 
 export const IMPORT_FORMAT = "glhex-map";
@@ -98,6 +99,21 @@ export function parseImport(input) {
   const map = emptyMap();
   map.config = normalizeConfig(isObj(doc.config) ? doc.config : {});
 
+  /* ── Mask presets (absent → the seed set; given → exactly these) ── */
+  if (doc.presets != null) {
+    const list = Array.isArray(doc.presets) ? doc.presets
+      : isObj(doc.presets) ? Object.entries(doc.presets).map(([id, v]) => ({ id, ...(isObj(v) ? v : {}) })) : [];
+    map.presets = {};
+    for (const [n, raw] of list.entries()) {
+      if (!isObj(raw)) { warn(`presets[${n}] is not an object — skipped.`); continue; }
+      const id = slug(raw.id) || slug(raw.name);
+      if (!validPresetId(id)) { warn(`presets[${n}]: id "${raw.id ?? raw.name}" is missing or reserved (hidden/masked/revealed/sight) — skipped.`); continue; }
+      const fields = isObj(raw.fields) ? raw.fields : raw;
+      map.presets[id] = { name: str(raw.name), f: normalizeFields(fields, {}) };
+    }
+  }
+  const presetId = (v) => { const id = slug(v); return id === SIGHT_PRESET || map.presets[id] ? id : null; };
+
   /* ── Terrains ── */
   const customByNorm = new Map();
   for (const [n, raw] of (Array.isArray(doc.terrains) ? doc.terrains : []).entries()) {
@@ -144,7 +160,7 @@ export function parseImport(input) {
     if (rumor.truth && !RUMOR_TRUTH.includes(rumor.truth)) warn(`${where}: rumour truth "${rumor.truth}" is not one of ${RUMOR_TRUTH.join("/")} — using "true".`);
     const rating = ratingOf(raw.rating ?? raw.terrainRating, where, warn);
     map.regions[id] = normalizeRegion({
-      id, name: str(raw.name) || id, t: t.id, rt: rating,
+      id, name: str(raw.name) || id, nk: !!(raw.nameKnown ?? raw.known), t: t.id, rt: rating,
       color: raw.color ?? null, bl: !!(raw.blight || t.blight),
       enc: { text: str(raw.encounter?.text ?? raw.encounter), table: str(raw.encounterTable ?? raw.encounter?.table) || null },
       rumor: { text: str(rumor.text), truth: rumor.truth, known: !!rumor.known, table: str(rumor.table ?? raw.rumorTable) || null },
@@ -261,14 +277,14 @@ export function parseImport(input) {
   function applyState(h, state, mask, where) {
     const s = norm(state);
     if (s === "hidden" || s === "revealed") { h.st = s; delete h.mk; return; }
-    if (s === "masked" || MASK_PRESETS[s]) {
-      const p = MASK_PRESETS[s] ? s : (isObj(mask) && MASK_PRESETS[mask.preset] ? mask.preset : DEFAULT_MASK_PRESET);
+    if (s === "masked" || presetId(s)) {
+      const p = presetId(s) ?? (isObj(mask) ? presetId(mask.preset) : null) ?? SIGHT_PRESET;
       const f = {};
       if (isObj(mask)) for (const k of MASK_FIELDS) if (typeof mask[k] === "boolean") f[k] = mask[k];
       h.st = "masked"; h.mk = { p, f };
       return;
     }
-    warn(`${where}: state "${state}" is not hidden/revealed/masked/${Object.keys(MASK_PRESETS).join("/")} — left hidden.`);
+    warn(`${where}: state "${state}" is not hidden/revealed/masked/${[SIGHT_PRESET, ...Object.keys(map.presets)].join("/")} — left hidden.`);
   }
 
   // Commit hexes.
@@ -345,7 +361,7 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
     if (h.t) e.terrain = h.t;
     if (h.rg && !map.regions[h.rg]) e.region = h.rg;
     if (h.rt) e.rating = h.rt;
-    if (h.st && h.st !== "hidden") e.state = h.st === "masked" ? h.mk?.p ?? DEFAULT_MASK_PRESET : h.st;
+    if (h.st && h.st !== "hidden") e.state = h.st === "masked" ? h.mk?.p ?? SIGHT_PRESET : h.st;
     if (h.st === "masked" && h.mk?.f && Object.keys(h.mk.f).length) e.mask = { ...h.mk.f };
     if (h.vs) e.visited = true;
     if (h.bl) e.blight = true;
@@ -368,9 +384,10 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
       ...(background ? { background } : {}),
     },
     config: map.config,
+    presets: Object.entries(map.presets).map(([id, p]) => ({ id, ...(p.name ? { name: p.name } : {}), fields: { ...p.f } })),
     terrains: Object.values(map.terrains).map((t) => ({ id: t.id, name: t.name, color: t.color, glyph: t.glyph })),
     regions: Object.values(map.regions).map((r) => ({
-      id: r.id, name: r.name, terrain: r.t, rating: r.rt,
+      id: r.id, name: r.name, ...(r.nk ? { nameKnown: true } : {}), terrain: r.t, rating: r.rt,
       ...(r.color ? { color: r.color } : {}), ...(r.bl ? { blight: true } : {}),
       ...(r.enc.text ? { encounter: r.enc.text } : {}), ...(r.enc.table ? { encounterTable: r.enc.table } : {}),
       ...(r.rumor.text || r.rumor.known ? { rumor: { text: r.rumor.text, truth: r.rumor.truth, known: r.rumor.known, ...(r.rumor.table ? { table: r.rumor.table } : {}) } } : {}),
@@ -387,11 +404,14 @@ export function exampleImport() {
     format: IMPORT_FORMAT,
     version: IMPORT_VERSION,
     scene: { name: "The Long Road North", grid: { orientation: "flat", offset: "odd", size: 100 }, cols: 8, rows: 6 },
-    config: { sight: 1, autoPreset: "glimpsed", cost: { unit: "days", table: [1, 2, 3, 4] }, dice: { die: 6, perRating: [1, 2, 3, 4], trigger: 1 } },
+    config: {
+      sight: 1, sightState: "masked",
+      sightFields: { region: true, terrain: true, rating: true, name: true, landmarks: false, rumor: false },
+      cost: { unit: "days", table: [1, 2, 3, 4] }, dice: { die: 6, perRating: [1, 2, 3, 4], trigger: 1 } },
     terrains: [{ id: "ashfield", name: "Ash Field", color: "#7a6f66", glyph: "lava" }],
     regions: [
       {
-        id: "whisperwood", name: "The Whispering Wood", terrain: "forest", rating: 3,
+        id: "whisperwood", name: "The Whispering Wood", nameKnown: true, terrain: "forest", rating: 3,
         encounter: "A pack of hungry wolves shadows the party.",
         rumor: { text: "The trees remember the old road.", truth: "partial", known: true },
         hexes: [[1, 1], [2, 1], [1, 2], [2, 2]],

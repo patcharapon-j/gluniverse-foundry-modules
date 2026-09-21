@@ -98,8 +98,10 @@ const SHRINE_IMG = (() => {
 /* ── Sample map ─────────────────────────────────────────────────────── */
 const ROWS = BIG ? 40 : 10, COLS = BIG ? 60 : 14;
 const REGIONS = {
-  verdant: { name: "Verdant Reach", t: "grassland", rt: 1, seed: [2, 2], alt: "rolling" },
-  thorn: { name: "Thornwood", t: "forest", rt: 2, seed: [6, 3], alt: "tropical" },
+  verdant: { name: "Verdant Reach", t: "grassland", rt: 1, seed: [2, 2], alt: "rolling", nk: true },
+  thorn: { name: "Thornwood", t: "forest", rt: 2, seed: [6, 3], alt: "tropical", nk: true },
+  // Same biome as Thornwood, right beside it: the fused rims have to tell them apart.
+  elder: { name: "Elderholt", t: "forest", rt: 3, seed: [4, 6], alt: "forest", color: "#e8b04a" },
   mire: { name: "Mirefen", t: "wetland", rt: 3, seed: [8, 8], alt: "aquatic" },
   ash: { name: "Ashen Barrens", t: "badlands", rt: 3, seed: [2, 8], alt: "drylands", bl: true },
   grey: { name: "Greyspine", t: "mountain", rt: 4, seed: [5, 12], alt: "frozen", color: "#b9c6ff" },
@@ -108,7 +110,7 @@ const REGIONS = {
 function buildMap(adapter) {
   const map = M.emptyMap();
   for (const [id, r] of Object.entries(REGIONS)) {
-    map.regions[id] = M.normalizeRegion({ id, name: r.name, t: r.t, rt: r.rt, bl: !!r.bl, color: r.color ?? null }, id);
+    map.regions[id] = M.normalizeRegion({ id, name: r.name, nk: !!r.nk, t: r.t, rt: r.rt, bl: !!r.bl, color: r.color ?? null }, id);
   }
   const seeds = Object.entries(REGIONS).map(([id, r]) => ({ id, key: HM.key(r.seed[0] * ROWS / 10 | 0, r.seed[1] * COLS / 14 | 0) }));
   let h = 7;

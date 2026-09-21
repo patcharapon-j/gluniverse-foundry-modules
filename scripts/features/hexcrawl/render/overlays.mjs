@@ -15,38 +15,6 @@ import { hexPolys } from "./tiles.mjs";
 
 const ROUND = "round";
 
-/**
- * Region borders: an edge between two drawn hexes whose visible region
- * differs. Against fog nothing is drawn — the survey outline is that edge.
- * `views` is Map<key, view>; `drawn(view)` says whether a side shows; `nbr`
- * is the renderer's neighbour table (key → the key across each edge). Each
- * shared edge is visited once, from the side that owns edges 0–2.
- */
-export function drawRegionBorders(g, ctx, views, width, drawn, nbr) {
-  const rel = ctx.tpl.rel;
-  let style; // undefined until the first edge: null is a real value (no region colour)
-  for (const [k, v] of views) {
-    if (!drawn(v)) continue;
-    const across = nbr.get(k);
-    if (!across) continue;
-    for (let e = 0; e < 3; e++) {
-      const n = across[e];
-      if (!n) continue;
-      const w = views.get(n);
-      if (!w || !drawn(w) || (w.regionId ?? null) === (v.regionId ?? null)) continue;
-      if (!v.regionId && !w.regionId) continue;
-      const hue = ctx.map.regions[v.regionId]?.color ?? ctx.map.regions[w.regionId]?.color ?? null;
-      if (style !== hue) {
-        style = hue;
-        g.lineStyle({ width, color: ctx.colors.regionBorder(hue), alpha: hue ? 0.7 : 0.45 });
-      }
-      const c = ctx.adapter.center(k), a = rel[e], b = rel[(e + 1) % rel.length];
-      g.moveTo(c.x + a.x, c.y + a.y);
-      g.lineTo(c.x + b.x, c.y + b.y);
-    }
-  }
-}
-
 /** Sight boundary: dashed outline of the union of the party's sight ranges. */
 export function sightEdges(adapter, party) {
   if (!party?.length) return [];
@@ -171,7 +139,7 @@ export function drawHover(g, ctx, key, view, fog) {
   g.clear();
   if (!key || !view) return;
   const R = ctx.R;
-  const { outer, bevel } = hexPolys(ctx, key);
+  const { outer } = hexPolys(ctx, key);
   g.lineStyle(0);
   g.beginFill(ctx.colors.text, 0.05);
   g.drawPolygon(flat(outer));
@@ -184,5 +152,5 @@ export function drawHover(g, ctx, key, view, fog) {
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? null : null;
   const col = ctx.colors.tile(view.terrain?.color ?? BLANK_TERRAIN.color, { blight: !!view.blight, region });
   g.lineStyle({ width: GEO.bevelWidth * R * 1.35, color: col.hover, alpha: 0.95, join: ROUND });
-  g.drawPolygon(flat(bevel));
+  g.drawPolygon(flat(outer));
 }

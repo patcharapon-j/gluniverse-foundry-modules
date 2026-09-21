@@ -11,13 +11,12 @@
  */
 
 import {
-  DEFAULT_MASK_PRESET, LANDMARK_VIS, MASK_FIELDS, MASK_PRESETS, MAX_LANDMARKS_PER_HEX,
-  RATING_MAX, RATING_MIN, STATES,
+  LANDMARK_VIS, MASK_FIELDS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN, SIGHT_PRESET, STATES,
 } from "../constants.mjs";
-import { isBlankHex, maskFields, newId, normalizeHex } from "../model.mjs";
+import { isBlankHex, isMaskPreset, maskFields, newId, normalizeHex, presetFields } from "../model.mjs";
 import { StoreAppBase } from "./base.mjs";
 import {
-  L, bindUuidDrops, currentStore, indexedList, openUuid, optionalNumber, optionList, ratingLabel,
+  L, bindUuidDrops, currentStore, indexedList, openUuid, optionalNumber, optionList, presetChoices, ratingLabel,
   readForm, terrainChoices, terrainLabel, tpl,
 } from "./shared.mjs";
 import { pickIcon } from "./icon-picker.mjs";
@@ -31,8 +30,8 @@ function draftFrom(map, key) {
     rg: h.rg ?? "",
     rt: h.rt ?? "",
     st: h.st ?? "hidden",
-    mkP: h.mk?.p && MASK_PRESETS[h.mk.p] ? h.mk.p : DEFAULT_MASK_PRESET,
-    mkF: maskFields(h),
+    mkP: isMaskPreset(map, h.mk?.p) ? h.mk.p : SIGHT_PRESET,
+    mkF: maskFields(map, h),
     vs: !!h.vs,
     bl: !!h.bl,
     cost: h.cost ?? null,
@@ -90,7 +89,7 @@ function HexEditorApp() {
       const effRating = d.rt !== "" && d.rt != null ? Number(d.rt) : region?.rt ?? null;
       const tableCost = effRating != null ? map.config.cost.table[effRating - 1] ?? 0 : 0;
 
-      const preset = MASK_PRESETS[d.mkP] ?? MASK_PRESETS[DEFAULT_MASK_PRESET];
+      const preset = presetFields(map, d.mkP);
       return {
         ...context,
         empty: false,
@@ -113,7 +112,7 @@ function HexEditorApp() {
         ],
         states: optionList(STATES, (s) => L(`GLHEX.state.${s}`), d.st),
         masked: d.st === "masked",
-        presets: optionList(Object.keys(MASK_PRESETS), (p) => L(`GLHEX.mask.${p}`), d.mkP),
+        presets: presetChoices(map).map((c) => ({ value: c.id, label: c.label, selected: c.id === d.mkP })),
         fields: MASK_FIELDS.map((f) => ({
           key: f, label: L(`GLHEX.field.${f}`), on: !!d.mkF[f], custom: !!d.mkF[f] !== !!preset[f],
         })),
@@ -136,7 +135,7 @@ function HexEditorApp() {
       for (const el of root.querySelectorAll("[data-rerender]")) {
         el.addEventListener("change", () => {
           this.#syncDraft();
-          if (el.name === "mk.p") this.draft.mkF = { ...(MASK_PRESETS[this.draft.mkP] ?? {}) };
+          if (el.name === "mk.p") this.draft.mkF = { ...presetFields(this.map, this.draft.mkP) };
           this.render();
         });
       }
@@ -177,10 +176,11 @@ function HexEditorApp() {
       set("rt", d.rt === "" || d.rt == null ? null : Number(d.rt));
       hex.st = d.st;
       if (d.st === "masked") {
-        const preset = MASK_PRESETS[d.mkP] ?? MASK_PRESETS[DEFAULT_MASK_PRESET];
+        const p = isMaskPreset(this.map, d.mkP) ? d.mkP : SIGHT_PRESET;
+        const preset = presetFields(this.map, p);
         const f = {};
         for (const k of MASK_FIELDS) if (!!d.mkF[k] !== !!preset[k]) f[k] = !!d.mkF[k];
-        hex.mk = { p: MASK_PRESETS[d.mkP] ? d.mkP : DEFAULT_MASK_PRESET, f };
+        hex.mk = { p, f };
       } else delete hex.mk;
       set("vs", d.vs || null);
       set("bl", d.bl || null);

@@ -15,7 +15,7 @@ import { escapeHTML } from "../../core/util.mjs";
 import { MASK_FIELDS, RATING_MAX } from "./constants.mjs";
 import { glyphSvgPath } from "./glyphs.mjs";
 import { effectiveTerrainId, encounterDice, getHex, getRegion, maskFields, travelCost, viewFor } from "./model.mjs";
-import { L, costLabel, ratingName, terrainName, tooltipDelay } from "./labels.mjs";
+import { L, costLabel, presetName, ratingName, terrainName, tooltipDelay } from "./labels.mjs";
 import { host } from "./host.mjs";
 import { HexStore } from "./store.mjs";
 
@@ -59,7 +59,8 @@ export function tooltipHTML(store, key) {
   if (!gm && hidden && !v.landmarks.length) return null;
 
   const rows = [];
-  const title = v.name || (v.terrain && !hidden ? terrainName(map, v.terrain.id) : "") || L("GLHEX.tooltip.uncharted");
+  const title = v.name || (v.nameUnknown ? L("GLHEX.tooltip.unknownName") : "")
+    || (v.terrain && !hidden ? terrainName(map, v.terrain.id) : "") || L("GLHEX.tooltip.uncharted");
   rows.push(`<header class="glhex-tip-head"><span class="glhex-tip-name">${escapeHTML(title)}</span>`
     + (gm ? `<span class="glhex-tip-state is-${v.state}">${escapeHTML(L(`GLHEX.state.${v.state}`))}</span>` : "")
     + `</header>`);
@@ -102,10 +103,13 @@ export function tooltipHTML(store, key) {
     const h = getHex(map, key), region = getRegion(map, key);
     const gmRows = [];
     if (v.state === "masked") {
-      const f = maskFields(h);
+      const f = maskFields(map, h);
       const shown = MASK_FIELDS.filter((x) => f[x]).map((x) => L(`GLHEX.field.${x}`));
-      gmRows.push(`<div class="glhex-tip-line"><span class="glhex-tip-k">${escapeHTML(L(`GLHEX.mask.${h.mk?.p ?? "glimpsed"}`))}</span>`
+      gmRows.push(`<div class="glhex-tip-line"><span class="glhex-tip-k">${escapeHTML(presetName(map, h.mk?.p))}</span>`
         + `<span>${escapeHTML(shown.join(" · ") || L("GLHEX.tooltip.nothingShown"))}</span></div>`);
+    }
+    if (region?.name && !region.nk) {
+      gmRows.push(`<div class="glhex-tip-line is-dim"><i class="fa-solid fa-eye-slash"></i><span>${escapeHTML(L("GLHEX.tooltip.nameHidden"))}</span></div>`);
     }
     if (region?.enc?.text) {
       const dice = encounterDice(map, key);

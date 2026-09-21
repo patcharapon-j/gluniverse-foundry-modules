@@ -4,7 +4,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { BUILTIN_TERRAINS, RATING_NAMES, SETTINGS } from "./constants.mjs";
+import { BUILTIN_TERRAINS, MASK_PRESETS, RATING_NAMES, SETTINGS, SIGHT_PRESET } from "./constants.mjs";
 
 export const L = (key) => game.i18n.localize(key);
 export const F = (key, data) => game.i18n.format(key, data);
@@ -20,6 +20,14 @@ export function terrainName(map, id) {
   if (custom?.name) return custom.name;
   if (Object.hasOwn(BUILTIN_TERRAINS, id)) return L(`GLHEX.terrain.${id}`);
   return id;
+}
+
+/** A mask preset's display name: the GM's own, else the seed's GLHEX.mask.<id>, else the id. */
+export function presetName(map, id) {
+  if (!id || id === SIGHT_PRESET) return L("GLHEX.mask.sight");
+  const own = map?.presets?.[id]?.name;
+  if (own) return own;
+  return Object.hasOwn(MASK_PRESETS, id) ? L(`GLHEX.mask.${id}`) : id;
 }
 
 export const ratingName = (n) => (RATING_NAMES[n] ? L(`GLHEX.rating.${n}`) : "");

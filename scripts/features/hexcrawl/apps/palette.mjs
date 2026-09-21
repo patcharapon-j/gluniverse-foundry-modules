@@ -10,9 +10,9 @@
  * when the viewed scene stops being a hexcrawl.
  */
 
-import { BLANK_TERRAIN, BRUSH_TOOLS, MASK_PRESETS, RATING_MAX, RATING_MIN } from "../constants.mjs";
+import { BLANK_TERRAIN, BRUSH_TOOLS, RATING_MAX, RATING_MIN } from "../constants.mjs";
 import { StoreAppBase } from "./base.mjs";
-import { L, currentStore, glyphSvg, pips, ratingLabel, terrainChoices, terrainLabel, tpl } from "./shared.mjs";
+import { L, currentStore, glyphSvg, pips, presetChoices, ratingLabel, terrainChoices, terrainLabel, tpl } from "./shared.mjs";
 import { openRegionEditor } from "./region-editor.mjs";
 import { openSceneSettings } from "./scene-settings.mjs";
 import { openTerrainManager } from "./terrain-manager.mjs";
@@ -33,7 +33,6 @@ const TOOL_ICONS = Object.freeze({
 const STATE_VALUES = Object.freeze([
   { value: "hidden", icon: "fa-solid fa-eye-slash", key: "GLHEX.state.hidden" },
   { value: "revealed", icon: "fa-solid fa-eye", key: "GLHEX.state.revealed" },
-  ...Object.keys(MASK_PRESETS).map((p) => ({ value: p, icon: "fa-solid fa-mask", key: `GLHEX.mask.${p}` })),
 ]);
 
 /** The last value used per tool, so switching tools and back keeps your pick. */
@@ -105,6 +104,7 @@ function PaletteApp() {
           return {
             id: r.id,
             name: r.name || L("GLHEX.app.common.unnamed"),
+            nameHidden: !r.nk,
             terrain: terrainLabel(map, r.t) || L("GLHEX.app.common.noTerrain"),
             color: r.color || t?.color || BLANK_TERRAIN.color,
             pips: pips(r.rt),
@@ -137,10 +137,11 @@ function PaletteApp() {
           return { n, label: ratingLabel(n), pips: pips(n), active: tool === "rating" && brush.value === n };
         }),
         ratingClear: tool === "rating" && brush.value == null,
-        states: STATE_VALUES.map((s) => ({
-          ...s, label: L(s.key), masked: !!MASK_PRESETS[s.value],
-          active: tool === "state" && brush.value === s.value,
-        })),
+        // The map's own presets (GM-editable in scene settings), after the two plain states.
+        states: [
+          ...STATE_VALUES.map((s) => ({ ...s, label: L(s.key), masked: false })),
+          ...presetChoices(map).map((c) => ({ value: c.id, icon: c.id === "sight" ? "fa-solid fa-binoculars" : "fa-solid fa-mask", label: c.label, masked: true })),
+        ].map((s) => ({ ...s, active: tool === "state" && brush.value === s.value })),
         toggleOn: brush.value === true,
         regions,
         regionNone: tool === "region" && !brush.value,

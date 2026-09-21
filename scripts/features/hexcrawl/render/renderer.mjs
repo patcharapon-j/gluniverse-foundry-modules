@@ -17,10 +17,11 @@
  *   tiles      chunked static Graphics, rebuilt per chunk when a hex in it changes
  *              (each chunk also owns one Graphics in the veins and hatch layers)
  *   anim       transient per-hex containers while a hex reveals / masks / hides
+ *   qmarks     the fog "?" — one Sprite per fog hex, all sharing ONE rasterised
+ *              Text in the region-label face (text per hex would be thousands)
  *   veins      blight veins (pulse by alpha)
  *   hover
  *   hatch      GM view of what players cannot see (hairline, redrawn on zoom settle)
- *   borders    region borders (hairline)
  *   trail
  *   staged     GM staged outlines (hairline, pulse by alpha)
  *   sight      party sight boundary (hairline, dash drifts)
@@ -38,10 +39,10 @@ import { dur, makeHexAnim, pulse, staggerDelays, easeOutCubic, clamp01 } from ".
 import { tracePoly } from "./geom.mjs";
 import { eachText, makeLandmarkNode, makeRegionLabel, regionLabels } from "./labels.mjs";
 import {
-  drawHover, drawParty, drawRegionBorders, drawSight, drawStaged, drawTrail, drawVeins, sightEdges,
+  drawHover, drawParty, drawSight, drawStaged, drawTrail, drawVeins, sightEdges,
 } from "./overlays.mjs";
 import {
-  ANIM_CAP, CHUNK, GEO, HAIR, TEXT_RES_DRIFT, TEXT_RES_MAX, ZOOM_SETTLE_MS, hairline, makeColors,
+  ALPHA, ANIM_CAP, CHUNK, GEO, HAIR, TEXT_RES_DRIFT, TEXT_RES_MAX, ZOOM_SETTLE_MS, hairline, makeColors,
 } from "./style.mjs";
 import { MeshPen } from "./pen.mjs";
 import { makeTemplate } from "./template.mjs";
@@ -98,13 +99,13 @@ export class HexRenderer {
     this.root.sortableChildren = false;
     const layer = (name) => { const c = new PIXI.Container(); c.name = `glhex-${name}`; this.root.addChild(c); return c; };
     this.L = {
-      tiles: layer("tiles"), anim: layer("anim"), veins: layer("veins"), hover: layer("hover"),
-      hatch: layer("hatch"), borders: layer("borders"), trail: layer("trail"), staged: layer("staged"),
+      tiles: layer("tiles"), anim: layer("anim"), qmarks: layer("qmarks"), veins: layer("veins"), hover: layer("hover"),
+      hatch: layer("hatch"), trail: layer("trail"), staged: layer("staged"),
       sight: layer("sight"), party: layer("party"), marks: layer("marks"), labels: layer("labels"),
     };
     const g = (parent) => parent.addChild(new PIXI.Graphics());
     this.G = {
-      hover: g(this.L.hover), borders: g(this.L.borders),
+      hover: g(this.L.hover),
       trail: g(this.L.trail), staged: g(this.L.staged), sight: g(this.L.sight), party: g(this.L.party),
     };
 
@@ -140,6 +141,8 @@ export class HexRenderer {
     this._labelKeys = new Set();
     this._labels = new Map();   // region id → { node, sig }
     this._marks = new Map();    // key → { node, sig }
+    this._qmarks = new Map();   // fog key → Sprite
+    this._qText = null;         // the one rasterised "?" every qmark Sprite shows
     this._fades = [];           // { obj, t, D }
     this._anims = new Map();    // key → record
     this._animT = 0;
@@ -218,6 +221,7 @@ export class HexRenderer {
     drawTrail(this.G.trail, ctx, map.config?.trail ? this._trail : []);
     this._syncLabels(ctx, labels, !!prev && animate && this._motion > 0);
     this._syncMarks(ctx, animKeys, prevViews);
+    this._syncQmarks(animKeys);
     this._redrawHover();
   }
 
@@ -285,6 +289,8 @@ export class HexRenderer {
     this._anims.clear();
     this._fades = [];
     this.root.destroy({ children: true });
+    this._qText?.destroy(true);
+    this._qText = null;
   }
 
   /* ── Internals: context & signatures ─────────────────────────────────── */
@@ -315,6 +321,7 @@ export class HexRenderer {
     return {
       adapter: this.adapter, tpl: this.tpl, R: this.R, colors: this.colors, map,
       fogEdge: (k, e) => e < 3 || !this._staticFog(this._nbr.get(k)?.[e]),
+      boundary: (k) => this._boundary(k),
       mode: map?.config?.render ?? "tiles", fontFamily: this.fontFamily,
       labelKeys: this._labelKeys,
       showPips: (v) => !!(v.ratingOverridden || lod || map?.config?.alwaysPips),
@@ -330,6 +337,27 @@ export class HexRenderer {
   _hair(n) { return hairline(n, this._hairZoom, this.dpr); }
   _targetRes() { return Math.max(0.5, Math.min(TEXT_RES_MAX, this._zoom * this.dpr)); }
 
+  /** Which region a drawn hex belongs to, as far as this viewer can tell: a masked
+   *  hex withholding its region is its own island (no neighbour fuses with it). */
+  _group(k, v) {
+    return v.regionId ?? (v.regionWithheld ? `?${k}` : "");
+  }
+
+  /** Boundary edges of hex k (bit e): the map edge, fog, or a different region across it. */
+  _boundary(k) {
+    const v = this._views.get(k);
+    const across = this._nbr.get(k);
+    if (!v || !across) return 63;
+    const mine = this._group(k, v);
+    let mask = 0;
+    for (let e = 0; e < 6; e++) {
+      const n = across[e];
+      const w = n ? this._views.get(n) : null;
+      if (!w || lookFor(w, this._full) === "fog" || this._group(n, w) !== mine) mask |= 1 << e;
+    }
+    return mask;
+  }
+
   _sig(k, v, ctx) {
     const look = lookFor(v, this._full);
     const rc = v.regionId ? ctx.map.regions[v.regionId]?.color ?? "" : "";
@@ -337,7 +365,9 @@ export class HexRenderer {
     const pips = v.rating != null && ctx.showPips(v) ? v.rating : 0;
     const withheld = look === "masked" && v.rating == null && effectiveRating(ctx.map, k) != null ? 1 : 0;
     const hatch = this._full ? v.playerState : "";
-    return `${look}|${v.terrain?.color ?? ""}|${v.terrain?.glyph ?? ""}|${pips}|${withheld}|${v.blight ? 1 : 0}|${v.regionId ?? ""}|${rc}|${lm}|${this._labelKeys.has(k) ? 1 : 0}|${hatch}`;
+    // The boundary mask is a fact about the NEIGHBOURS: a region change next door redraws this hex.
+    const edge = look === "fog" ? "" : this._boundary(k);
+    return `${look}|${v.terrain?.color ?? ""}|${v.terrain?.glyph ?? ""}|${pips}|${withheld}|${v.blight ? 1 : 0}|${v.regionId ?? ""}|${rc}|${lm}|${this._labelKeys.has(k) ? 1 : 0}|${hatch}|${edge}`;
   }
 
   /* ── Static layer ───────────────────────────────────────────────────── */
@@ -411,17 +441,6 @@ export class HexRenderer {
 
   /** Every device-pixel-sized element, at the current settled zoom. */
   _drawHairlines(ctx) {
-    // The borders cover the whole map, so they redraw only when what they
-    // outline, or the zoom they are sized for, actually changed.
-    const drawn = (v) => this._full || v.drawn;
-    let borderSig = `${this._hairZoom}|`;
-    for (const [k, v] of this._views) if (v.regionId && drawn(v)) borderSig += `${k}=${v.regionId};`;
-    for (const r of Object.values(ctx.map.regions ?? {})) borderSig += `${r.id}:${r.color};`;
-    if (borderSig !== this._borderSig) {
-      this._borderSig = borderSig;
-      this.G.borders.clear();
-      drawRegionBorders(this.G.borders, ctx, this._views, this._hair(HAIR.border), drawn, this._nbr);
-    }
     drawStaged(this.G.staged, ctx, this._asGM ? [...this._staged] : [], this._hair(HAIR.staged));
     drawParty(this.G.party, ctx, this._party, this._hair(HAIR.party));
     this._sightPhase = -1;
@@ -466,6 +485,7 @@ export class HexRenderer {
       const apply = (t) => { t.resolution = res; };
       eachText(this.L.labels, apply);
       eachText(this.L.marks, apply);
+      if (this._qText) { this._qText.resolution = res; this._qText.updateText(true); }
     }
   }
 
@@ -517,6 +537,52 @@ export class HexRenderer {
       if (keep.has(k)) continue;
       cur.node.destroy({ children: true });
       this._marks.delete(k);
+    }
+  }
+
+  /** The shared "?" raster: the region-label face, small and dim. */
+  _qTexture() {
+    if (!this._qText) {
+      const size = GEO.fogQSize * this.R;
+      this._qText = new this.PIXI.Text("?", new this.PIXI.TextStyle({
+        fontFamily: this.fontFamily, fontSize: size, fontWeight: "500", fill: this.colors.css.textDim,
+      }));
+      this._qText.resolution = this._textRes;
+      this._qText.updateText(true);
+    }
+    return this._qText.texture;
+  }
+
+  /**
+   * One "?" per fog hex without a landmark. A hex animating INTO fog gets a
+   * fresh Sprite that fades in with the animation; one animating OUT of fog
+   * keeps its old Sprite, fading it out, until the animation bakes.
+   */
+  _syncQmarks(animKeys) {
+    const want = new Set();
+    if (!this._full) {
+      for (const [k, v] of this._views) if (lookFor(v, false) === "fog" && !v.landmarks?.length) want.add(k);
+    }
+    for (const [k, sp] of this._qmarks) {
+      if (want.has(k)) continue;
+      this._qmarks.delete(k);
+      const rec = this._anims.get(k);
+      if (rec && animKeys.has(k)) { rec.qOut = sp; continue; }
+      sp.destroy();
+    }
+    if (!want.size) return;
+    const tex = this._qTexture();
+    for (const k of want) {
+      if (this._qmarks.has(k)) continue;
+      const sp = new this.PIXI.Sprite(tex);
+      sp.anchor.set(0.5);
+      const c = this.adapter.center(k);
+      sp.position.set(c.x, c.y);
+      sp.alpha = ALPHA.fogQ;
+      this.L.qmarks.addChild(sp);
+      this._qmarks.set(k, sp);
+      const rec = this._anims.get(k);
+      if (rec && animKeys.has(k)) { sp.alpha = 0; rec.qIn = sp; }
     }
   }
 
@@ -578,6 +644,8 @@ export class HexRenderer {
       rec.toWrap.alpha = s.to;
       rec.toWrap.scale.set(s.scale);
       if (rec.marks && !rec.marks.destroyed) rec.marks.alpha = s.to;
+      if (rec.qIn && !rec.qIn.destroyed) rec.qIn.alpha = ALPHA.fogQ * s.to;
+      if (rec.qOut && !rec.qOut.destroyed) rec.qOut.alpha = ALPHA.fogQ * s.from;
       if (rec.anim.kind === "reveal") {
         if (s.trace !== rec.lastTrace) {
           rec.lastTrace = s.trace;
@@ -599,7 +667,11 @@ export class HexRenderer {
   /** Finish every animation: fold the animated hexes into the static layer. */
   _bake() {
     const keys = [...this._anims.keys()];
-    for (const rec of this._anims.values()) if (rec.marks && !rec.marks.destroyed) rec.marks.alpha = 1;
+    for (const rec of this._anims.values()) {
+      if (rec.marks && !rec.marks.destroyed) rec.marks.alpha = 1;
+      if (rec.qIn && !rec.qIn.destroyed) rec.qIn.alpha = ALPHA.fogQ;
+      if (rec.qOut && !rec.qOut.destroyed) rec.qOut.destroy();
+    }
     this._anims.clear();
     for (const ch of this.L.anim.removeChildren()) ch.destroy({ children: true });
     this.stats = { ...this.stats, animating: 0 };

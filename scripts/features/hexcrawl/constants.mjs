@@ -45,7 +45,9 @@ export const STATE_RANK = Object.freeze({ hidden: 0, masked: 1, revealed: 2 });
  *  rumor     — the region's rumour, when the party knows it */
 export const MASK_FIELDS = Object.freeze(["region", "terrain", "rating", "name", "landmarks", "rumor"]);
 
-/** Named mask presets. i18n: GLHEX.mask.<key> */
+/** The mask presets a new map starts with. A map carries its OWN presets
+ *  (map.presets, GM-editable: renamed, re-ticked, deleted, added to); these are
+ *  only the seed. A seeded preset with a blank name shows GLHEX.mask.<key>. */
 export const MASK_PRESETS = Object.freeze({
   // The shape of the region, and nothing about it.
   silhouette: Object.freeze({ region: true, terrain: false, rating: false, name: false, landmarks: false, rumor: false }),
@@ -53,6 +55,17 @@ export const MASK_PRESETS = Object.freeze({
   rumoured: Object.freeze({ region: true, terrain: false, rating: false, name: true, landmarks: false, rumor: true }),
 });
 export const DEFAULT_MASK_PRESET = "glimpsed";
+
+/** Reserved preset id: "whatever the scene's sight reveals" (config.sightFields),
+ *  resolved LIVE, so re-ticking the scene's checklist re-masks every hex the
+ *  party has only seen. Never a key of map.presets. */
+export const SIGHT_PRESET = "sight";
+/** Ids a GM preset may never take: the brush's state values and the sight preset. */
+export const RESERVED_PRESET_IDS = Object.freeze(["hidden", "masked", "revealed", SIGHT_PRESET]);
+/** What the party learns about a hex it can only see (not stand on), by default. */
+export const DEFAULT_SIGHT_FIELDS = Object.freeze({ region: true, terrain: true, rating: true, name: true, landmarks: false, rumor: false });
+/** How a seen hex rises: to masked-with-sightFields, or all the way to revealed. i18n: GLHEX.sightState.<key> */
+export const SIGHT_STATES = Object.freeze(["masked", "revealed"]);
 
 /** Landmark visibility. i18n: GLHEX.landmarkVis.<key>
  *  follow  — shown when its hex shows landmarks (revealed, or masked with the landmarks field)
@@ -129,7 +142,8 @@ export const RUMOR_TRUTH = Object.freeze(["true", "partial", "false"]);
  *  rating-many d6, a 1 triggers, 1/2/3/4 days. */
 export const DEFAULT_CONFIG = Object.freeze({
   sight: 1,
-  autoPreset: DEFAULT_MASK_PRESET,
+  sightState: "masked",
+  sightFields: DEFAULT_SIGHT_FIELDS,
   render: "tiles",
   alwaysPips: false,
   trail: true,

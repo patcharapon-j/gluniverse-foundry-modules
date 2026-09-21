@@ -8,7 +8,9 @@
 
 import { featurePath } from "../../../core/const.mjs";
 import { escapeHTML } from "../../../core/util.mjs";
-import { BUILTIN_TERRAIN_IDS, BUILTIN_TERRAINS, FEATURE_ID, RATING_MAX, RATING_MIN } from "../constants.mjs";
+import {
+  BUILTIN_TERRAIN_IDS, BUILTIN_TERRAINS, FEATURE_ID, MASK_PRESETS, RATING_MAX, RATING_MIN, SIGHT_PRESET,
+} from "../constants.mjs";
 import { glyphSvgPath } from "../glyphs.mjs";
 
 export const tpl = (name) => featurePath(FEATURE_ID, `templates/${name}.hbs`);
@@ -35,6 +37,19 @@ export function terrainLabel(map, id) {
   if (c) return c.name || id;
   if (BUILTIN_TERRAINS[id]) return L(`GLHEX.terrain.${id}`);
   return id;
+}
+
+/** A mask preset's display name: the GM's own, else the seed's GLHEX.mask.<id>, else the id. */
+export function presetLabel(map, id) {
+  if (!id || id === SIGHT_PRESET) return L("GLHEX.mask.sight");
+  const own = map?.presets?.[id]?.name;
+  if (own) return own;
+  return Object.hasOwn(MASK_PRESETS, id) ? L(`GLHEX.mask.${id}`) : id;
+}
+
+/** Every preset a hex can be masked with: the live "sight" preset first, then the map's own. */
+export function presetChoices(map) {
+  return [SIGHT_PRESET, ...Object.keys(map?.presets ?? {})].map((id) => ({ id, label: presetLabel(map, id) }));
 }
 
 /** Every terrain a GM can pick, built-ins first (a custom shadowing a built-in wins). */

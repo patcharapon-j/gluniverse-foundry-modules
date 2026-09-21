@@ -88,9 +88,10 @@ ruins crystal fungus lava star none`.
   {
     "id": "whisperwood",                 // optional; derived from name
     "name": "The Whispering Wood",
+    "nameKnown": false,                  // players see "???" until true (default false)
     "terrain": "forest",                 // default terrain for its hexes
     "rating": 3,                         // terrain rating 1–4 (Optimal/Fair/Rough/Extreme)
-    "color": "#6aa37d",                  // optional tint for its border/bevel
+    "color": "#6aa37d",                  // optional: the colour of its rim on the map
     "blight": false,
     "encounter": "A pack of hungry wolves shadows the party.",   // GM-only
     "encounterTable": "RollTable.abc123", // optional RollTable UUID
@@ -105,6 +106,11 @@ ruins crystal fungus lava star none`.
 rumour text only when `known` is true. Hexes reference regions by `id` or by
 `name`.
 
+A region's **name** reaches players only when `nameKnown` is true — on revealed
+hexes too. Until then, wherever the name would show (the map label, the
+tooltip), players see **???**. The GM ticks *Name known to players* in the
+region editor.
+
 ### Hexes
 
 ```json
@@ -113,7 +119,7 @@ rumour text only when `known` is true. Hexes reference regions by `id` or by
     "terrain": "forest",          // overrides the region's terrain
     "region": "whisperwood",      // id or name
     "rating": 4,                  // overrides the region's rating
-    "state": "revealed",          // hidden (default) | revealed | glimpsed | silhouette | rumoured | masked
+    "state": "revealed",          // hidden (default) | revealed | masked | sight | any preset id
     "mask": { "name": true },     // with a masked state: per-field overrides (region,terrain,rating,name,landmarks,rumor)
     "visited": true,
     "blight": true,
@@ -135,14 +141,34 @@ Visibility states: **hidden** is fog; **revealed** shows everything; a
 | `region` | the region's **shape** (its border) — nothing else about it |
 | `terrain` | the terrain type (tile colour and glyph) |
 | `rating` | the difficulty (terrain-rating pips) |
-| `name` | the region / hex name (implies the shape) |
+| `name` | the region / hex name (implies the shape; still **???** until the region's `nameKnown`) |
 | `landmarks` | landmarks set to `follow` |
 | `rumor` | the region's rumour, when `known` |
 
-Presets: **silhouette** (region shape only), **glimpsed** (shape + terrain +
-rating + landmarks), **rumoured** (shape + name + known rumour). Write a preset
-as the `state`, then adjust any field with `mask` — e.g. `"state": "silhouette",
-"mask": { "rating": true }` is the shape and the difficulty, nothing else.
+Write a preset id as the `state`, then adjust any field with `mask` — e.g.
+`"state": "silhouette", "mask": { "rating": true }` is the shape and the
+difficulty, nothing else. `"masked"` alone (or `"sight"`) uses the scene's sight
+checklist (`config.sightFields`), resolved live: re-tick it and every such hex
+follows.
+
+### Mask presets (optional)
+
+A map carries its own presets, which the GM can rename, re-tick, delete and add
+to in the scene settings. Omit `presets` and a map starts with three:
+**silhouette** (region shape only), **glimpsed** (shape + terrain + rating +
+landmarks), **rumoured** (shape + name + known rumour). Give `presets` and the
+map gets exactly those instead:
+
+```json
+"presets": [
+  { "id": "scouted", "name": "Scouted", "fields": { "region": true, "terrain": true, "rating": true } },
+  { "id": "silhouette", "fields": { "region": true } }
+]
+```
+
+A field left out is off. `name` is optional (a seed id shows its built-in name).
+The ids `hidden`, `masked`, `revealed` and `sight` are reserved. A hex whose
+preset no longer exists falls back to the sight checklist.
 
 Landmarks (at most 3 per hex): `icon` is a Font Awesome 6 name, with or without
 `fa-`/`fa-solid` (`"tower-observation"`, `"dungeon"`, `"campground"`,
@@ -182,7 +208,9 @@ Every field optional; defaults follow the book.
 ```json
 "config": {
   "sight": 1,                    // hexes the party sees around itself (0–6)
-  "autoPreset": "glimpsed",      // what sighted hexes become: glimpsed | silhouette | rumoured | revealed
+  "sightState": "masked",        // what hexes in sight become: masked | revealed (never lowered)
+  "sightFields": { "region": true, "terrain": true, "rating": true, "name": true, "landmarks": false, "rumor": false },
+                                 // with "masked": what players learn about them (the live "sight" preset)
   "render": "tiles",             // tiles | tint (over background art) | outlines
   "alwaysPips": false,
   "trail": true,
@@ -193,6 +221,8 @@ Every field optional; defaults follow the book.
   "arrivalCard": false           // whisper an arrival card to the GM on each move
 }
 ```
+
+An older `"autoPreset"` (one preset id) is still read, as that preset's ticks.
 
 ## Placement
 
@@ -214,10 +244,11 @@ The window's **Copy example** button puts this on the clipboard
 {
   "format": "glhex-map", "version": 1,
   "scene": { "name": "The Long Road North", "grid": { "orientation": "flat", "offset": "odd", "size": 100 }, "cols": 8, "rows": 6 },
-  "config": { "sight": 1, "autoPreset": "glimpsed" },
+  "config": { "sight": 1, "sightState": "masked",
+              "sightFields": { "region": true, "terrain": true, "rating": true, "name": true, "landmarks": false, "rumor": false } },
   "terrains": [{ "id": "ashfield", "name": "Ash Field", "color": "#7a6f66", "glyph": "lava" }],
   "regions": [
-    { "id": "whisperwood", "name": "The Whispering Wood", "terrain": "forest", "rating": 3,
+    { "id": "whisperwood", "name": "The Whispering Wood", "nameKnown": true, "terrain": "forest", "rating": 3,
       "encounter": "A pack of hungry wolves shadows the party.",
       "rumor": { "text": "The trees remember the old road.", "truth": "partial", "known": true },
       "hexes": [[1, 1], [2, 1], [1, 2], [2, 2]] },

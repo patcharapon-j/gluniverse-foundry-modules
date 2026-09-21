@@ -15,7 +15,8 @@
 import { BLANK_TERRAIN } from "../constants.mjs";
 import { effectiveRating } from "../model.mjs";
 import { ALPHA, GEO, HATCH } from "./style.mjs";
-import { QMARK_DOT, diamond, hatchPoly, landmarkSlots } from "./geom.mjs";
+import { QMARK_DOT, dashSegment, diamond, hatchPoly, landmarkSlots } from "./geom.mjs";
+import { FOG_DASH } from "./template.mjs";
 import { at, strokeDashes, strokeLines } from "./template.mjs";
 
 const ROUND = "round";
@@ -87,6 +88,18 @@ function drawBadges(g, n, cx, cy, R, colors) {
   }
 }
 
+/** Boundary edges of a drawn hex (bit e = edge e): the renderer's answer, or all six. */
+export const boundaryMask = (ctx, key) => (ctx.boundary ? ctx.boundary(key) : 63);
+
+/** The region rim: the region's colour; a neutral line when the terrain is withheld
+ *  (a silhouette shows the shape, not the colour); the terrain's own lit colour
+ *  when the region has none. */
+function rimColor(ctx, view, col, masked) {
+  if (masked && !view.terrain) return ctx.colors.silRim;
+  const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? null : null;
+  return region ? ctx.colors.regionBorder(region) : col.bevel;
+}
+
 /** look: "tile" (full), "masked" (player view of a masked hex), "fog" (hidden). */
 export function lookFor(view, asGMFull) {
   if (asGMFull) return "tile";
@@ -116,8 +129,8 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
     // and each shared edge is drawn by exactly one of the two (fogEdge).
     g.lineStyle({ width: GEO.fogDashWidth * R, color: colors.textDim, alpha: ALPHA.fogDash });
     for (let e = 0; e < 6; e++) if (!ctx.fogEdge || ctx.fogEdge(key, e)) strokeDashes(g, tpl.fogDash[e], cx, cy);
+    // The "?" is text in the region-label face, drawn by the renderer's qmark layer.
     if (lmN) drawBadges(g, lmN, cx, cy, R, colors);
-    else drawQuestion(g, tpl, R, cx, cy - R * 0.04, colors.textDim, ALPHA.fogQ, GEO.fogDashWidth * R * 1.4);
     return;
   }
 
@@ -126,29 +139,32 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? null : null;
   const col = colors.tile(terrain.color, { blight: !!view.blight, region, masked });
   const fillAlpha = mode === "outlines" ? 0 : mode === "tint" ? ALPHA.tintFill : 1;
-  const outer = at(tpl.outer, cx, cy);
+  // Fused: hexes of one region are one shape. Only boundary edges (another
+  // region, fog, the map edge) get the dark channel and the region's rim; an
+  // interior edge is a faint seam — solid when revealed, dashed when masked.
+  const F = tpl.fused(boundaryMask(ctx, key));
 
   // Body.
   g.lineStyle(0);
   if (fillAlpha > 0) {
     g.beginFill(col.fill, fillAlpha);
-    g.drawPolygon(outer);
+    g.drawPolygon(at(F.body, cx, cy));
     g.endFill();
-    if (!masked && tpl.sheen) {
-      // Glass sheen: the upper half of the bevel a shade lighter — light from above.
-      g.beginFill(col.sheen, fillAlpha * 0.55);
-      g.drawPolygon(at(tpl.sheen, cx, cy));
-      g.endFill();
+  }
+  if (F.seams.length) {
+    g.lineStyle({ width: GEO.seamWidth * R, color: col.rim, alpha: masked ? ALPHA.maskSeam : ALPHA.seam });
+    for (const [a, b] of F.seams) {
+      if (masked) dashSegment(g, a, b, FOG_DASH.period * R, FOG_DASH.duty, 0, -cx, -cy);
+      else { g.moveTo(a.x + cx, a.y + cy); g.lineTo(b.x + cx, b.y + cy); }
     }
   }
-  // Rim + lit bevel.
-  g.lineStyle({ width: GEO.rimWidth * R, color: col.rim, alpha: masked ? 0.7 : 0.95, join: MITER });
-  g.drawPolygon(outer);
-  g.lineStyle({ width: GEO.bevelWidth * R, color: col.bevel, alpha: masked ? ALPHA.maskBevel : ALPHA.bevel, join: MITER });
-  g.drawPolygon(at(tpl.bevel, cx, cy));
-  if (masked) {
-    g.lineStyle({ width: GEO.fogDashWidth * R, color: colors.textDim, alpha: ALPHA.maskDash });
-    for (let e = 0; e < 6; e++) strokeDashes(g, tpl.maskDash[e], cx, cy);
+  if (F.rims.length) {
+    g.lineStyle({ width: GEO.regionRim * R, color: rimColor(ctx, view, col, masked), alpha: masked ? ALPHA.maskRim : ALPHA.rim, join: MITER });
+    for (const r of F.rims) {
+      if (r.closed) { g.drawPolygon(at(r.pts, cx, cy)); continue; }
+      g.moveTo(r.pts[0].x + cx, r.pts[0].y + cy);
+      for (let n = 1; n < r.pts.length; n++) g.lineTo(r.pts[n].x + cx, r.pts[n].y + cy);
+    }
   }
 
   // Glyph (suppressed on the region's label hex — the label names the terrain).
@@ -191,7 +207,7 @@ export function stampKey(ctx, key, view, look) {
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? "" : "";
   const pips = view.rating != null ? (ctx.showPips(view) ? view.rating : 0) : 0;
   const withheld = look === "masked" && view.rating == null && effectiveRating(ctx.map, key) != null ? 1 : 0;
-  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${label}|${pips}|${withheld}`;
+  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${label}|${pips}|${withheld}|${boundaryMask(ctx, key)}`;
 }
 
 /** The GM hatch over a hex players cannot fully see. kind: "hidden" | "masked". */

@@ -14,13 +14,59 @@
           <input type="number" name="sight" class="gl-field gl-numeric" min="0" max="6" step="1" value="{{c.sight}}">
         </label>
         <label class="glhex-field">
-          <span class="gl-tech-label">{{localize "GLHEX.app.scene.autoPreset"}}</span>
-          <select name="autoPreset" class="gl-field">
-            {{#each autoPresets}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          <span class="gl-tech-label">{{localize "GLHEX.app.scene.sightState"}}</span>
+          <select name="sightState" class="gl-field">
+            {{#each sightStates}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
           </select>
         </label>
       </div>
+      <div class="glhex-sight-fields" data-sight-fields {{#unless sightMasked}}hidden{{/unless}}>
+        <span class="gl-tech-label">{{localize "GLHEX.app.scene.sightFields"}}</span>
+        <div class="glhex-checks glhex-checks--grid">
+          {{#each sightFields}}
+            <label class="glhex-check"><input type="checkbox" name="sightFields.{{key}}" {{#if on}}checked{{/if}}><i class="{{icon}}"></i><span>{{label}}</span></label>
+          {{/each}}
+        </div>
+      </div>
       <p class="glhex-note">{{localize "GLHEX.app.scene.sightHint"}}</p>
+    </fieldset>
+
+    <fieldset class="glhex-block">
+      <legend class="gl-tech-label">{{localize "GLHEX.app.scene.presetsGroup"}}</legend>
+      <p class="glhex-note">{{localize "GLHEX.app.scene.presetsHint"}}</p>
+      <table class="glhex-table glhex-presets">
+        <thead>
+          <tr>
+            <th class="gl-tech-label">{{localize "GLHEX.app.scene.presetName"}}</th>
+            {{#each fieldCols}}<th class="glhex-presets-col" data-tooltip="{{label}}" aria-label="{{label}}"><i class="{{icon}}"></i></th>{{/each}}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody data-preset-rows>
+          {{#each presets}}
+            <tr data-preset="{{id}}">
+              <td><input type="text" name="presets.{{id}}.name" class="gl-field" value="{{name}}" placeholder="{{placeholder}}"></td>
+              {{#each fields}}<td class="glhex-presets-col"><input type="checkbox" name="presets.{{../id}}.f.{{key}}" aria-label="{{label}}" {{#if on}}checked{{/if}}></td>{{/each}}
+              <td class="glhex-presets-act">
+                <button type="button" class="glhex-mini" data-action="fillSight" data-tooltip="{{localize "GLHEX.app.scene.fillSight"}}" aria-label="{{localize "GLHEX.app.scene.fillSight"}}"><i class="fa-solid fa-binoculars"></i></button>
+                <button type="button" class="glhex-mini glhex-danger" data-action="removePreset" data-tooltip="{{localize "GLHEX.app.scene.removePreset"}}" aria-label="{{localize "GLHEX.app.scene.removePreset"}}"><i class="fa-solid fa-trash"></i></button>
+              </td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+      <p class="glhex-note" data-preset-empty {{#if presets.length}}hidden{{/if}}>{{localize "GLHEX.app.scene.noPresets"}}</p>
+      <button type="button" class="glhex-link-btn" data-action="addPreset"><i class="fa-solid fa-plus"></i> {{localize "GLHEX.app.scene.addPreset"}}</button>
+      <template data-preset-proto>
+            <tr data-preset="__ID__">
+              <td><input type="text" name="presets.__ID__.name" class="gl-field" value="" placeholder="{{localize "GLHEX.app.scene.presetName"}}"></td>
+              {{#each fieldCols}}<td class="glhex-presets-col"><input type="checkbox" name="presets.__ID__.f.{{key}}" aria-label="{{label}}"></td>{{/each}}
+              <td class="glhex-presets-act">
+                <button type="button" class="glhex-mini" data-action="fillSight" data-tooltip="{{localize "GLHEX.app.scene.fillSight"}}" aria-label="{{localize "GLHEX.app.scene.fillSight"}}"><i class="fa-solid fa-binoculars"></i></button>
+                <button type="button" class="glhex-mini glhex-danger" data-action="removePreset" data-tooltip="{{localize "GLHEX.app.scene.removePreset"}}" aria-label="{{localize "GLHEX.app.scene.removePreset"}}"><i class="fa-solid fa-trash"></i></button>
+              </td>
+            </tr>
+      </template>
     </fieldset>
 
     <fieldset class="glhex-block">

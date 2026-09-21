@@ -16,6 +16,27 @@ import { QMARK, inset } from "./geom.mjs";
 /** Dash period along an edge, in R (the fog survey line and the mask line). */
 export const FOG_DASH = Object.freeze({ period: 0.34, duty: 0.52 });
 const CURVE_STEPS = 8;
+const SIN60 = Math.sqrt(3) / 2;
+
+/**
+ * One point per vertex of a hex whose boundary edges (bit e of `mask` = edge e,
+ * rel[e] → rel[e+1]) are pushed `d` inwards. Vertex i sits between edge i-1 and
+ * edge i: both boundary → the inset corner; one boundary → the point on the
+ * OTHER (interior) edge at distance d from the boundary line, which is exactly
+ * where the neighbour in the same region puts its own point, so outlines and
+ * rims run on across hexes without a join.
+ */
+function offsetPoints(rel, mask, d) {
+  const t = d / SIN60;
+  return rel.map((V, i) => {
+    const bPrev = (mask >> ((i + 5) % 6)) & 1, bNext = (mask >> i) & 1;
+    if (!bPrev && !bNext) return { x: V.x, y: V.y };
+    if (bPrev && bNext) { const L = Math.hypot(V.x, V.y); return { x: V.x - (V.x / L) * t, y: V.y - (V.y / L) * t }; }
+    const o = bPrev ? rel[(i + 1) % 6] : rel[(i + 5) % 6];
+    const dx = o.x - V.x, dy = o.y - V.y, L = Math.hypot(dx, dy);
+    return { x: V.x + (dx / L) * t, y: V.y + (dy / L) * t };
+  });
+}
 
 /** Glyph-syntax path → polylines [[x0,y0,x1,y1,…], …] at `scale`, centred on 0,0. */
 export function flattenPath(d, scale, dx = 0, dy = 0) {
@@ -58,6 +79,7 @@ export function makeTemplate(adapter, R, sampleKey) {
   const sheen = top.length >= 2 ? [{ x: top[0].x, y: 0 }, ...top, { x: top[top.length - 1].x, y: 0 }] : null;
   const edgeDash = (poly) => poly.map((a, e) => dashes(a, poly[(e + 1) % poly.length], FOG_DASH.period * R, FOG_DASH.duty));
   const glyphCache = new Map();
+  const fusedCache = new Map();
   return {
     rel, outer, bevel, sheen,
     /** Offsets from a centre to the neighbour across each edge (edge e ↔ its (e+3)%6). */
@@ -65,6 +87,35 @@ export function makeTemplate(adapter, R, sampleKey) {
     fogDash: edgeDash(rel),
     maskDash: edgeDash(outer),
     qmark: flattenPath(QMARK, GEO.qScale * R),
+    /**
+     * The fused look of a hex, by boundary mask (bit e set = edge e borders
+     * another region, fog or the map's edge):
+     *   body   the fill polygon, pulled back from boundary edges by the channel
+     *   rims   polylines of the region rim (closed: all six edges are boundary)
+     *   seams  [a, b] per interior edge this hex OWNS (e < 3), cut at the rim line
+     */
+    fused(mask) {
+      let f = fusedCache.get(mask);
+      if (f) return f;
+      const body = offsetPoints(rel, mask, GEO.channel * R);
+      const q = offsetPoints(rel, mask, (GEO.channel + GEO.rimInset) * R);
+      const rims = [];
+      if (mask === 63) rims.push({ pts: q, closed: true });
+      else if (mask) {
+        for (let e = 0; e < 6; e++) {
+          if (!((mask >> e) & 1) || ((mask >> ((e + 5) % 6)) & 1)) continue; // start of a run
+          const pts = [q[e]];
+          let k = e;
+          while ((mask >> k) & 1) { k = (k + 1) % 6; pts.push(q[k]); if (k === e) break; }
+          rims.push({ pts, closed: false });
+        }
+      }
+      const seams = [];
+      for (let e = 0; e < 3; e++) if (!((mask >> e) & 1)) seams.push([q[e], q[(e + 1) % 6]]);
+      f = { body, rims, seams };
+      fusedCache.set(mask, f);
+      return f;
+    },
     glyph(id, scale) {
       const k = `${id}|${scale}`;
       let g = glyphCache.get(k);

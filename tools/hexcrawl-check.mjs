@@ -127,7 +127,8 @@ head("mask fields");
   ok("silhouette: no name, terrain, rating or rumour", v0.name == null && v0.terrain == null && v0.rating == null && v0.rumor == null);
   ok("silhouette + rating: difficulty without terrain or name", v1.rating === 3 && v1.terrain == null && v1.name == null);
   const lab = readFileSync(join(FEAT, "render", "labels.mjs"), "utf8");
-  ok("region labels require the viewer to see the name", /!v\.regionId\s*\|\|\s*!v\.name/.test(lab));
+  ok("region labels require the viewer to see the name (or to be owed a ???)", /!v\.regionId\s*\|\|\s*!\(v\.name\s*\|\|\s*v\.nameUnknown\)/.test(lab));
+  ok("a label prints the region's name only when a member shows it, else ???", /members\.some\(\(\[, v\]\) => v\.name\)/.test(lab) && lab.includes('UNKNOWN_NAME = "???"'));
   ok("MASK_FIELDS carries the region shape", C.MASK_FIELDS.includes("region"));
 }
 
@@ -152,6 +153,12 @@ head("token position");
    a reload (found only in a live session). */
 head("scene controls");
 {
+  // v14 moved a scene's background onto its Levels and silently drops the legacy
+  // backgroundColor: a new hexcrawl came out Foundry grey, showing in every channel
+  // between regions, and Foundry's grid lines cut the fused regions back into hexes.
+  const setup = readFileSync(join(FEAT, "scene-setup.mjs"), "utf8");
+  ok("a new scene restates its background on the initial Level (v14)", /levels\?\.contents\?\.\[0\][\s\S]{0,200}"background\.color"/.test(setup));
+  ok("a new scene hides Foundry's grid lines (the map draws its own edges)", /grid:\s*\{[^}]*alpha:\s*0/.test(setup));
   const src = readFileSync(join(FEAT, "main.mjs"), "utf8");
   ok("store changes rebuild the controls with reset: true", /ui\.controls\?*\.render\(\{\s*reset:\s*true\s*\}\)/.test(src));
   ok("no bare ui.controls.render() in the feature", !/ui\.controls\?*\.render\(\s*\)/.test(src));
@@ -180,28 +187,61 @@ ok("normalizeMap accepts garbage", !!M.normalizeMap(null).config && !!M.normaliz
 // viewFor never leaks to players — every state × every mask preset × region rumour known/unknown.
 const withheld = ["terrain", "name", "rating", "rumor"];
 for (const known of [false, true]) {
+  for (const nk of [false, true]) {
   for (const st of C.STATES) {
-    for (const preset of Object.keys(C.MASK_PRESETS)) {
-      const map = M.normalizeMap({ ...m0, regions: { r1: { ...m0.regions.r1, rumor: { ...m0.regions.r1.rumor, known } } },
+    for (const preset of [C.SIGHT_PRESET, ...Object.keys(C.MASK_PRESETS)]) {
+      const map = M.normalizeMap({ ...m0, regions: { r1: { ...m0.regions.r1, nk, rumor: { ...m0.regions.r1.rumor, known } } },
         hexes: { k: { ...m0.hexes["1,1"], rt: 3, nm: "Named", st, mk: { p: preset, f: {} } } } });
       const v = M.viewFor(map, "k", { asGM: false });
-      const f = st === "masked" ? M.maskFields(map.hexes.k) : null;
-      const tag = `${st}/${preset}/known=${known}`;
+      const f = st === "masked" ? M.maskFields(map, map.hexes.k) : null;
+      const tag = `${st}/${preset}/known=${known}/nk=${nk}`;
+      // A region's name reaches players only once the GM marks it known; until then "???".
+      const nameOk = (shown) => (shown ? (nk ? v.name != null && !v.nameUnknown : v.name == null && v.nameUnknown) : v.name == null && !v.nameUnknown);
       ok(`${tag}: GM-hidden landmarks never reach players`, !v.landmarks.some((l) => l.vis === "hidden"));
       if (st === "hidden") {
         ok(`${tag}: hidden hex withholds everything`, withheld.every((x) => v[x] == null) && v.landmarks.every((l) => l.vis === "visible") && !v.blight && !v.visited && v.regionId == null);
       } else if (st === "masked") {
         ok(`${tag}: terrain follows the mask`, f.terrain ? v.terrain != null : v.terrain == null && !v.blight);
-        ok(`${tag}: name follows the mask`, f.name ? v.name != null : v.name == null);
+        ok(`${tag}: name follows the mask and the region's name-known`, nameOk(!!f.name));
         ok(`${tag}: region shape follows the mask (the name implies it)`, f.region || f.name ? v.regionId != null : v.regionId == null);
         ok(`${tag}: rating follows the mask`, f.rating ? v.rating != null : v.rating == null);
         ok(`${tag}: rumour needs the field AND known`, (f.rumor && known) ? v.rumor != null : v.rumor == null);
         ok(`${tag}: landmarks follow the mask`, f.landmarks ? true : v.landmarks.every((l) => l.vis === "visible"));
       } else {
         ok(`${tag}: rumour only when known`, known ? v.rumor != null : v.rumor == null);
+        ok(`${tag}: revealed name still needs name-known`, nameOk(true));
       }
     }
   }
+  }
+}
+ok("a hex outside any region shows its own name", M.viewFor(M.normalizeMap({ hexes: { k: { st: "revealed", nm: "Lone" } } }), "k").name === "Lone");
+
+/* Mask presets are the map's own: seeded, editable, deletable; "sight" is live. */
+{
+  const seed = M.normalizeMap({});
+  ok("an absent preset set is the seed", canon(Object.keys(seed.presets)) === canon(Object.keys(C.MASK_PRESETS)));
+  ok("an EMPTY preset set stays empty (a GM may delete them all)", Object.keys(M.normalizeMap({ presets: {} }).presets).length === 0);
+  const odd = M.normalizePresets({ hidden: { f: {} }, sight: { f: {} }, "bad id!": { f: {} }, scouted: { name: " Scouted ", f: { terrain: true } } });
+  ok("reserved and malformed preset ids are dropped", canon(Object.keys(odd)) === canon(["scouted"]));
+  ok("a preset's fields are all booleans and its name trimmed", odd.scouted.name === "Scouted" && C.MASK_FIELDS.every((k) => typeof odd.scouted.f[k] === "boolean") && odd.scouted.f.terrain && !odd.scouted.f.name);
+  const base = { regions: { r: { name: "Wood", t: "forest", rt: 2 } }, presets: { scouted: { name: "", f: { terrain: true } } } };
+  const own = M.normalizeMap({ ...base, hexes: { k: { rg: "r", st: "masked", mk: { p: "scouted" } } } });
+  ok("a GM preset masks with its own ticks", M.viewFor(own, "k").terrain != null && M.viewFor(own, "k").rating == null);
+  const gone = M.normalizeMap({ ...base, presets: {}, config: { sightFields: { region: true, terrain: false, rating: true, name: false, landmarks: false, rumor: false } }, hexes: { k: { rg: "r", st: "masked", mk: { p: "scouted" } } } });
+  ok("a deleted preset's hexes fall back to the sight checklist", M.viewFor(gone, "k").rating === 2 && M.viewFor(gone, "k").terrain == null);
+  const live = (fields) => M.viewFor(M.normalizeMap({ ...base, config: { sightFields: fields }, hexes: { k: { rg: "r", st: "masked", mk: { p: C.SIGHT_PRESET } } } }), "k");
+  ok("the sight preset is resolved LIVE from config.sightFields", live({ rating: true }).rating === 2 && live({ rating: false }).rating == null);
+  ok("brushPatch accepts a map preset and the sight preset", M.brushPatch(own, ["9,9"], { tool: "state", value: "scouted" })["9,9"]?.mk?.p === "scouted"
+    && M.brushPatch(own, ["9,9"], { tool: "state", value: C.SIGHT_PRESET })["9,9"]?.mk?.p === C.SIGHT_PRESET);
+  ok("brushPatch ignores a preset the map does not have", !M.brushPatch(own, ["9,9"], { tool: "state", value: "nope" })["9,9"]);
+  const legacy = M.normalizeConfig({ autoPreset: "rumoured" });
+  ok("an old autoPreset reads as its checklist", legacy.sightState === "masked" && canon(legacy.sightFields) === canon(C.MASK_PRESETS.rumoured));
+  ok("an old autoPreset 'revealed' reads as sightState revealed", M.normalizeConfig({ autoPreset: "revealed" }).sightState === "revealed");
+  ok("default sight shows shape, terrain, difficulty and name", canon(M.normalizeConfig({}).sightFields) === canon(C.DEFAULT_SIGHT_FIELDS)
+    && C.DEFAULT_SIGHT_FIELDS.region && C.DEFAULT_SIGHT_FIELDS.terrain && C.DEFAULT_SIGHT_FIELDS.rating && C.DEFAULT_SIGHT_FIELDS.name);
+  const wr = M.normalizeMap({ regions: { r: { name: "W", t: "forest" } }, presets: { blind: { f: { terrain: true } } }, hexes: { k: { rg: "r", st: "masked", mk: { p: "blind" } } } });
+  ok("a masked hex hiding its region says so (renderer: an island, not fused)", M.viewFor(wr, "k").regionWithheld === true && M.viewFor(wr, "k").regionId == null);
 }
 ok("GM view draws everything", M.viewFor(m0, "1,3", { asGM: true }).drawn === true);
 
@@ -215,8 +255,8 @@ for (let n = 0; n < 60; n++) {
     const st = C.STATES[Math.floor(rnd() * 3)];
     hexes[H.key(i, j)] = st === "masked" ? { st, mk: { p: "rumoured" } } : { st };
   }
-  for (const autoPreset of ["revealed", ...Object.keys(C.MASK_PRESETS)]) {
-    const map = M.normalizeMap({ hexes, config: { autoPreset } });
+  for (const sightState of C.SIGHT_STATES) {
+    const map = M.normalizeMap({ hexes, config: { sightState } });
     const at = H.key(Math.floor(rnd() * 10), Math.floor(rnd() * 10));
     const patch = M.autoRevealPatch(map, { entered: [at], seen: H.unionRange(a0, [{ key: at, sight: 2 }]) });
     for (const [k, h] of Object.entries(patch)) {
@@ -226,6 +266,11 @@ for (let n = 0; n < 60; n++) {
   }
 }
 ok("autoRevealPatch never lowers a state (and always enters)", lowered === 0, `${lowered} bad`);
+{
+  const map = M.normalizeMap({ config: { sightState: "masked" } });
+  const patch = M.autoRevealPatch(map, { entered: ["0,0"], seen: new Set(["0,0", "0,1"]) });
+  ok("seen hexes are masked with the live sight preset", patch["0,1"]?.st === "masked" && patch["0,1"]?.mk?.p === C.SIGHT_PRESET);
+}
 
 ok("brushPatch erase → null", M.brushPatch(m0, ["1,1"], { tool: "erase" })["1,1"] === null);
 ok("brushPatch state:hidden on a blank hex → null", M.brushPatch(m0, ["9,9"], { tool: "state", value: "hidden" })["9,9"] === null);
@@ -305,6 +350,9 @@ await store.deleteRegion("r1");
 ok("deleteRegion strips rg from its hexes", !Object.values(store.map.hexes).some((h) => h.rg === "r1"));
 await store.setConfig({ sight: 4, dice: { die: 8 } });
 ok("setConfig merges and normalizes", store.map.config.sight === 4 && store.map.config.dice.die === 8 && store.map.config.cost.unit === "watches");
+await store.setConfig({ sightFields: { name: false } }, { presets: { scouted: { name: "Scouted", f: { terrain: true } } } });
+ok("setConfig with presets REPLACES them (a deleted preset stays deleted)", canon(Object.keys(store.map.presets)) === canon(["scouted"]), Object.keys(store.map.presets).join(","));
+ok("…in the same write as the config", !store.map.config.sightFields.name);
 await store.setTerrain("custom1", { name: "Renamed", color: "#123456", glyph: "star" });
 await store.deleteTerrain("custom1");
 ok("deleteTerrain clears hexes that used it", !Object.values(store.map.hexes).some((h) => h.t === "custom1"));
@@ -333,6 +381,13 @@ if (existsSync(join(FEAT, "import.mjs"))) {
     const back = I.parseImport(I.exportMap(p.map, p.scene));
     ok("export → import round-trips the map", canon(back.map.hexes) === canon(p.map.hexes) && canon(back.map.regions) === canon(p.map.regions),
       diffStr({ hexes: p.map.hexes, regions: p.map.regions }, { hexes: back.map.hexes, regions: back.map.regions }));
+    ok("the example marks a region's name known", Object.values(p.map.regions).some((r) => r.nk) && Object.values(p.map.regions).some((r) => !r.nk));
+    const custom = I.parseImport(JSON.stringify({ ...ex, presets: [{ id: "scouted", name: "Scouted", fields: { terrain: true } }, { id: "sight" }],
+      hexes: [{ col: 5, row: 5, state: "scouted" }, { col: 6, row: 5, state: "masked", mask: { preset: "sight" } }] }));
+    ok("imported presets replace the seed; reserved ids are refused with a warning", canon(Object.keys(custom.map.presets)) === canon(["scouted"]) && custom.warnings.some((w) => w.includes("reserved")));
+    ok("a hex state may name an imported preset or the sight preset", Object.values(custom.map.hexes).some((h) => h.mk?.p === "scouted") && Object.values(custom.map.hexes).some((h) => h.mk?.p === C.SIGHT_PRESET));
+    const again = I.parseImport(I.exportMap(custom.map, custom.scene));
+    ok("export → import round-trips the presets", canon(again.map.presets) === canon(custom.map.presets), diffStr(custom.map.presets, again.map.presets));
   } catch (e) { ok("import round trip runs", false, e.message); }
 } else console.log("  (import.mjs not present — skipped)");
 
@@ -353,7 +408,8 @@ const need = [];
 for (const id of C.BUILTIN_TERRAIN_IDS) need.push(`GLHEX.terrain.${id}`);
 for (const n of Object.keys(C.RATING_NAMES)) need.push(`GLHEX.rating.${n}`);
 for (const s of C.STATES) need.push(`GLHEX.state.${s}`);
-for (const s of Object.keys(C.MASK_PRESETS)) need.push(`GLHEX.mask.${s}`);
+for (const s of [...Object.keys(C.MASK_PRESETS), C.SIGHT_PRESET]) need.push(`GLHEX.mask.${s}`);
+for (const s of C.SIGHT_STATES) need.push(`GLHEX.sightState.${s}`);
 for (const s of C.MASK_FIELDS) need.push(`GLHEX.field.${s}`);
 for (const s of Object.keys(C.COST_UNITS)) need.push(`GLHEX.unit.${s}`);
 for (const s of Object.keys(C.COST_UNITS)) for (const n of ["one", "other"]) need.push(`GLHEX.unitCount.${s}.${n}`);
@@ -417,6 +473,39 @@ if (renderFiles.length) {
       ok(`HexRenderer#${m}`, typeof R.HexRenderer.prototype[m] === "function");
     }
   } catch (e) { ok("renderer imports under plain Node", false, e.message); }
+
+  /* Fused regions: a rim that leaves one hex must arrive in the next exactly, or
+     the region outline is a row of broken dashes. Walk every mask pair that two
+     neighbours in one region can have and compare the shared end points. */
+  try {
+    const T = await imp("scripts/features/hexcrawl/render/template.mjs");
+    for (const type of [2, 4]) {
+      const ad = H.pureAdapter({ type, size: 100, bounds: { rows: 6, cols: 6 } });
+      const R = ad.radius ?? ad.size / Math.sqrt(3);
+      const tpl = T.makeTemplate(ad, R, "2,2");
+      ok(`type ${type}: all-interior hex has no rim and three seams`, tpl.fused(0).rims.length === 0 && tpl.fused(0).seams.length === 3);
+      ok(`type ${type}: an island is one closed rim`, tpl.fused(63).rims.length === 1 && tpl.fused(63).rims[0].closed);
+      // Hex A and the neighbour B across A's edge e share A's vertices e and e+1.
+      // Put the third hex at A's vertex e+1 (across A's edge e+1 = B's edge e+2... ) in another region.
+      let bad = 0;
+      for (let e = 0; e < 6; e++) {
+        const maskA = 1 << ((e + 1) % 6);          // A borders the other region across edge e+1 only
+        const eB = (e + 3) % 6;                      // B's edge back to A
+        const maskB = 1 << ((eB + 5) % 6);           // …and B borders it across the edge before that
+        const a = tpl.fused(maskA), b = tpl.fused(maskB);
+        const off = tpl.across[e];                  // B's centre relative to A's
+        const endA = a.rims[0]?.pts[0];             // A's rim starts on the shared edge
+        const endB = b.rims[0]?.pts.at(-1);         // B's rim ends on it
+        if (!endA || !endB || Math.hypot(endA.x - (endB.x + off.x), endA.y - (endB.y + off.y)) > 1e-6) bad++;
+      }
+      ok(`type ${type}: region rims meet across neighbouring hexes`, bad === 0, `${bad} of 6 corners`);
+    }
+  } catch (e) { ok("fused geometry runs", false, e.message); }
+  const tilesSrc = stripComments(readFileSync(join(FEAT, "render", "tiles.mjs"), "utf8"));
+  const rendSrc = stripComments(readFileSync(join(FEAT, "render", "renderer.mjs"), "utf8"));
+  ok("the fog look draws no vector \"?\" (it is text in the label face)", !/look === "fog"[\s\S]{0,900}?drawQuestion\(/.test(tilesSrc));
+  ok("the fog \"?\" rasterises once in the label face and is shared", /new this\.PIXI\.Text\("\?"[\s\S]{0,160}fontFamily: this\.fontFamily/.test(rendSrc) && /new this\.PIXI\.Sprite\(tex\)/.test(rendSrc));
+  ok("a hex's signature carries its boundary mask (a neighbour's region change redraws it)", /_boundary\(k\)[\s\S]{0,200}\|\$\{edge\}`/.test(rendSrc));
 }
 
 head("durations");

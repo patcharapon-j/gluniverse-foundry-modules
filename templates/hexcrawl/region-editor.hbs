@@ -8,6 +8,8 @@
       <span class="gl-tech-label">{{localize "GLHEX.app.region.name"}}</span>
       <input type="text" name="name" class="gl-field glhex-title-input" value="{{d.name}}" placeholder="{{localize "GLHEX.app.region.defaultName"}}">
     </label>
+    <label class="glhex-check"><input type="checkbox" name="nk" {{#if d.nk}}checked{{/if}}><span>{{localize "GLHEX.app.region.nameKnown"}}</span></label>
+    <p class="glhex-note">{{localize "GLHEX.app.region.nameKnownHint"}}</p>
 
     <div class="glhex-grid2">
       <label class="glhex-field">

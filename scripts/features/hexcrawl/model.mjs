@@ -12,25 +12,30 @@
  *   regions:  { [id]: Region },
  *   terrains: { [id]: CustomTerrain },   // GM-defined; built-ins live in constants
  *   config:   SceneConfig,               // see DEFAULT_CONFIG
+ *   presets:  { [id]: MaskPreset },      // GM-editable; seeded from MASK_PRESETS
  *   origin:   { i, j } | null,           // Foundry offset of import coordinate (0,0);
  *                                        // set by the JSON import so re-import/export line up
  * }
  *
  * Hex (every field optional; an absent hex is a hidden blank hex):
  * { t: terrainId, rg: regionId, rt: 1..4 (overrides the region), st: STATES,
- *   mk: { p: presetId, f: { [field]: boolean } } (only meaningful while masked),
+ *   mk: { p: presetId|"sight", f: { [field]: boolean } } (only meaningful while masked;
+ *         "sight" resolves live to config.sightFields; an unknown id falls back to it),
  *   vs: true (visited), bl: true (blight), cost: number (overrides the table),
  *   lm: Landmark[], nm: name override, nt: GM notes }
  *
  * Landmark: { id, icon: "fa-solid fa-…"|null, img: path|null, label, journal: uuid|null,
  *             vis: LANDMARK_VIS }
  *
- * Region: { id, name, t: terrainId, rt: 1..4, color: "#rrggbb"|null, bl: bool,
+ * Region: { id, name, nk: bool (name known to players), t: terrainId, rt: 1..4,
+ *           color: "#rrggbb"|null, bl: bool,
  *           enc: { text, table: uuid|null },
  *           rumor: { text, truth: RUMOR_TRUTH, known: bool, table: uuid|null },
  *           notes }
  *
  * CustomTerrain: { id, name, color: "#rrggbb", glyph: GLYPH_IDS }
+ *
+ * MaskPreset: { name: string ("" → GLHEX.mask.<id>), f: { [MASK_FIELDS]: boolean } }
  *
  * KNOWN LIMITATION: a scene flag is sent to every client. A player with the
  * console open can read the hidden map, exactly as they can read a hidden
@@ -38,9 +43,10 @@
  */
 
 import {
-  BLANK_TERRAIN, BUILTIN_TERRAINS, COST_UNITS, DEFAULT_CONFIG, DEFAULT_MASK_PRESET,
+  BLANK_TERRAIN, BUILTIN_TERRAINS, COST_UNITS, DEFAULT_CONFIG,
   LANDMARK_VIS, MASK_FIELDS, MASK_PRESETS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN,
   RENDER_MODES, RUMOR_TRUTH, STATE_RANK, STATES, DIE_SIZES, GLYPH_IDS,
+  DEFAULT_SIGHT_FIELDS, RESERVED_PRESET_IDS, SIGHT_PRESET, SIGHT_STATES,
 } from "./constants.mjs";
 
 const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -51,7 +57,35 @@ const clampInt = (v, lo, hi, fb) => { const n = int(v, fb); return n == null ? f
 const str = (v) => (typeof v === "string" ? v : "");
 
 export function emptyMap() {
-  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), origin: null };
+  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), presets: defaultPresets(), origin: null };
+}
+
+/** A full mask-field set: every MASK_FIELDS key a boolean, missing ones from `fb`. */
+export function normalizeFields(f, fb = DEFAULT_SIGHT_FIELDS) {
+  const out = {};
+  for (const k of MASK_FIELDS) out[k] = isObj(f) && typeof f[k] === "boolean" ? f[k] : !!fb?.[k];
+  return out;
+}
+
+/** The seed presets (blank names: the UI shows GLHEX.mask.<id>). */
+export function defaultPresets() {
+  const out = {};
+  for (const [id, f] of Object.entries(MASK_PRESETS)) out[id] = { name: "", f: normalizeFields(f) };
+  return out;
+}
+
+/** A preset id a GM may use: word characters, not reserved. */
+export const validPresetId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(id) && !RESERVED_PRESET_IDS.includes(id);
+
+/** Absent → the seed; present (even empty — a GM may delete them all) → as given. */
+export function normalizePresets(p) {
+  if (!isObj(p)) return defaultPresets();
+  const out = {};
+  for (const [id, v] of Object.entries(p)) {
+    if (!validPresetId(id) || !isObj(v)) continue;
+    out[id] = { name: str(v.name).trim().slice(0, 60), f: normalizeFields(v.f, {}) };
+  }
+  return out;
 }
 
 /* ── Normalisation ──────────────────────────────────────────────────────── */
@@ -64,7 +98,9 @@ export function normalizeConfig(c) {
   const table4 = (arr, def, lo, hi) => [0, 1, 2, 3].map((i) => clampInt(arr?.[i], lo, hi, def[i]));
   return {
     sight: clampInt(c.sight, 0, 6, d.sight),
-    autoPreset: c.autoPreset === "revealed" || MASK_PRESETS[c.autoPreset] ? c.autoPreset : d.autoPreset,
+    // Older maps stored one preset id (autoPreset); read it as the equivalent checklist.
+    sightState: SIGHT_STATES.includes(c.sightState) ? c.sightState : c.autoPreset === "revealed" ? "revealed" : d.sightState,
+    sightFields: normalizeFields(isObj(c.sightFields) ? c.sightFields : MASK_PRESETS[c.autoPreset] ?? d.sightFields, d.sightFields),
     render: RENDER_MODES.includes(c.render) ? c.render : d.render,
     alwaysPips: typeof c.alwaysPips === "boolean" ? c.alwaysPips : d.alwaysPips,
     trail: typeof c.trail === "boolean" ? c.trail : d.trail,
@@ -103,6 +139,7 @@ export function normalizeRegion(r, id) {
   return {
     id: str(r.id) || id,
     name: str(r.name),
+    nk: !!r.nk,
     t: str(r.t) || null,
     rt: clampInt(r.rt, RATING_MIN, RATING_MAX, null),
     color: hex6(r.color, null),
@@ -137,7 +174,8 @@ export function normalizeHex(h) {
   if (rt != null && h.rt != null) out.rt = rt;
   out.st = STATES.includes(h.st) ? h.st : "hidden";
   if (isObj(h.mk)) {
-    const p = MASK_PRESETS[h.mk.p] ? h.mk.p : DEFAULT_MASK_PRESET;
+    // Any id is kept: presets are per map, so it is resolved (and falls back) at read time.
+    const p = str(h.mk.p) || SIGHT_PRESET;
     const f = {};
     if (isObj(h.mk.f)) for (const k of MASK_FIELDS) if (typeof h.mk.f[k] === "boolean") f[k] = h.mk.f[k];
     out.mk = { p, f };
@@ -159,6 +197,7 @@ export function normalizeMap(m) {
   if (isObj(m.regions)) for (const [id, r] of Object.entries(m.regions)) if (r) out.regions[id] = normalizeRegion(r, id);
   if (isObj(m.terrains)) for (const [id, t] of Object.entries(m.terrains)) if (t) out.terrains[id] = normalizeTerrain(t, id);
   out.config = normalizeConfig(m.config);
+  out.presets = normalizePresets(m.presets);
   const oi = Number(m.origin?.i), oj = Number(m.origin?.j);
   out.origin = Number.isInteger(oi) && Number.isInteger(oj) ? { i: oi, j: oj } : null;
   return out;
@@ -208,11 +247,19 @@ export function displayName(map, k) {
   return map.hexes[k]?.nm || getRegion(map, k)?.name || "";
 }
 
-/** Mask fields in force for a masked hex: preset, then per-hex overrides. */
-export function maskFields(hex) {
-  const p = MASK_PRESETS[hex?.mk?.p] ?? MASK_PRESETS[DEFAULT_MASK_PRESET];
-  return { ...p, ...(hex?.mk?.f ?? {}) };
+/** Fields of a preset id on this map: "sight" (or an id the GM has since deleted) → the scene's sight checklist. */
+export function presetFields(map, id) {
+  const p = id && id !== SIGHT_PRESET ? map?.presets?.[id] : null;
+  return p ? p.f : map?.config?.sightFields ?? DEFAULT_SIGHT_FIELDS;
 }
+
+/** Mask fields in force for a masked hex: its preset, then per-hex overrides. */
+export function maskFields(map, hex) {
+  return { ...presetFields(map, hex?.mk?.p), ...(hex?.mk?.f ?? {}) };
+}
+
+/** Does the preset value name something a hex can be masked with? */
+export const isMaskPreset = (map, id) => id === SIGHT_PRESET || !!(validPresetId(id) && map?.presets?.[id]);
 
 /** Cost of ENTERING hex k: per-hex override, else the table at its rating. */
 export function travelCost(map, k) {
@@ -249,6 +296,9 @@ export function encounterDice(map, k) {
  *   key, state, visited, blight,
  *   terrain: {id,name,color,glyph,custom}|null,
  *   name: string|null, regionId: string|null, rating: number|null,
+ *   nameUnknown: boolean,           // players: the name WOULD show, but the GM has not
+ *                                   // marked the region's name known — draw "???"
+ *   regionWithheld: boolean,        // players: a masked hex hiding which region it is in
  *   ratingOverridden: boolean,
  *   landmarks: Landmark[],          // only the ones this viewer may see
  *   rumor: string|null,             // players: only when region rumour is known AND field shown
@@ -266,8 +316,16 @@ export function viewFor(map, k, { asGM = false } = {}) {
     blight: effectiveBlight(map, k),
     regionId: region?.id ?? null,
     ratingOverridden: ratingOverridden(map, k),
+    nameUnknown: false, regionWithheld: false,
   };
   const lms = h.lm ?? [];
+  // A region's name reaches players only once the GM marks it known (region.nk).
+  // A hex outside any region has only its own name, which follows its state.
+  const nameFor = (shown) => {
+    if (!shown) return { name: null, nameUnknown: false };
+    if (region && !region.nk) return { name: null, nameUnknown: true };
+    return { name: displayName(map, k) || null, nameUnknown: false };
+  };
 
   if (asGM) {
     return {
@@ -281,22 +339,24 @@ export function viewFor(map, k, { asGM = false } = {}) {
 
   if (state === "revealed") {
     return {
-      ...base, terrain, name: displayName(map, k) || null, rating: effectiveRating(map, k),
+      ...base, terrain, ...nameFor(true), rating: effectiveRating(map, k),
       landmarks: visibleLandmarks(true),
       rumor: region?.rumor?.known ? region.rumor.text || null : null, drawn: true,
     };
   }
   if (state === "masked") {
-    const f = maskFields(h);
+    const f = maskFields(map, h);
+    const regionShown = !!(f.region || f.name);
     return {
       ...base,
       blight: f.terrain ? base.blight : false,
       terrain: f.terrain ? terrain : null,
-      name: f.name ? displayName(map, k) || null : null,
+      ...nameFor(!!f.name),
       rating: f.rating ? effectiveRating(map, k) : null,
       ratingOverridden: f.rating ? base.ratingOverridden : false,
       // The region's shape (its border) is its own field; the name implies it.
-      regionId: f.region || f.name ? base.regionId : null,
+      regionId: regionShown ? base.regionId : null,
+      regionWithheld: !regionShown && !!base.regionId,
       landmarks: visibleLandmarks(!!f.landmarks),
       rumor: f.rumor && region?.rumor?.known ? region.rumor.text || null : null,
       drawn: true,
@@ -378,7 +438,7 @@ export function brushPatch(map, keys, brush) {
       case "rating": if (brush.value) next.rt = brush.value; else delete next.rt; break;
       case "state":
         if (brush.value === "hidden" || brush.value === "revealed") { next.st = brush.value; delete next.mk; }
-        else if (MASK_PRESETS[brush.value]) { next.st = "masked"; next.mk = { p: brush.value, f: {} }; }
+        else if (isMaskPreset(map, brush.value)) { next.st = "masked"; next.mk = { p: brush.value, f: {} }; }
         break;
       case "blight": if (brush.value) next.bl = true; else delete next.bl; break;
       case "visited": if (brush.value) next.vs = true; else delete next.vs; break;
@@ -392,26 +452,27 @@ export function brushPatch(map, keys, brush) {
 
 /* ── Auto-reveal ────────────────────────────────────────────────────────── */
 
-const raise = (cur, preset) => {
+const raise = (cur, sightState) => {
   // Returns the new hex, or null when nothing would rise. Never lowers.
   const st = cur.st ?? "hidden";
-  if (preset === "revealed") {
+  if (sightState === "revealed") {
     if (STATE_RANK[st] >= STATE_RANK.revealed) return null;
     const n = { ...cur, st: "revealed" }; delete n.mk; return n;
   }
   if (STATE_RANK[st] >= STATE_RANK.masked) return null;
-  return { ...cur, st: "masked", mk: { p: preset, f: {} } };
+  return { ...cur, st: "masked", mk: { p: SIGHT_PRESET, f: {} } };
 };
 
 /**
  * The patch for the party standing on `entered` with sight hexes `seen`
  * (a Set from hex-math unionRange). The entered hexes become revealed and
- * visited; every other seen hex rises to config.autoPreset. Nothing is lowered —
+ * visited; every other seen hex rises to config.sightState — masked with the
+ * live "sight" preset (config.sightFields), or revealed. Nothing is lowered —
  * the GM's hand-set states always survive.
  */
 export function autoRevealPatch(map, { entered = [], seen = new Set() } = {}) {
   const patch = {};
-  const preset = map.config.autoPreset;
+  const preset = map.config.sightState;
   const enteredSet = new Set(entered);
   for (const k of seen) {
     if (enteredSet.has(k)) continue;
