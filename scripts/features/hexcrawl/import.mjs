@@ -16,12 +16,12 @@
  */
 
 import {
-  BUILTIN_TERRAIN_IDS, GLYPH_IDS, LANDMARK_VIS, MASK_FIELDS,
+  BUILTIN_TERRAIN_IDS, GLYPH_IDS, LANDMARK_SIZE_DEFAULT, LANDMARK_SIZE_MAX, LANDMARK_SIZE_MIN, LANDMARK_VIS, MASK_FIELDS,
   MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN, RUMOR_TRUTH, SIGHT_PRESET,
 } from "./constants.mjs";
 import { HEX_TYPES, key as offKey, parseKey } from "./hex-math.mjs";
 import {
-  emptyMap, isBlankHex, normalizeConfig, normalizeFields, normalizeHex, normalizeMap, normalizeRegion,
+  emptyMap, isBlankHex, landmarkSize, normalizeConfig, normalizeFields, normalizeHex, normalizeMap, normalizeRegion,
   normalizeTerrain, validPresetId,
 } from "./model.mjs";
 
@@ -270,10 +270,16 @@ export function parseImport(input) {
         if (!LANDMARK_VIS.includes(vis)) warn(`${where}: landmark visibility "${vis}" is not one of ${LANDMARK_VIS.join("/")} — using "follow".`);
         const icon = normalizeIcon(L.icon);
         if (L.icon && !icon) warn(`${where}: landmark icon "${L.icon}" is not a Font Awesome name — dropped.`);
+        const color = /^#[0-9a-f]{6}$/i.test(String(L.color ?? "")) ? String(L.color).toLowerCase() : null;
+        if (L.color && !color) warn(`${where}: landmark colour "${L.color}" is not #rrggbb — the default badge colour is used.`);
+        const size = L.size == null || L.size === "" ? LANDMARK_SIZE_DEFAULT : Number(L.size);
+        if (!Number.isFinite(size)) warn(`${where}: landmark size "${L.size}" is not a number — 1 is used.`);
+        else if (landmarkSize(size) !== size) warn(`${where}: landmark size ${size} is outside ${LANDMARK_SIZE_MIN}–${LANDMARK_SIZE_MAX} — clamped.`);
         return {
           id: `lm${n}`, icon: L.img ? null : icon ?? (L.img ? null : "fa-solid fa-location-dot"),
           img: str(L.img) || null, label: str(L.label ?? L.name), journal: str(L.journal) || null,
           vis: LANDMARK_VIS.includes(vis) ? vis : "follow",
+          color, size: landmarkSize(size),
         };
       });
     }
@@ -376,6 +382,7 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
     if (h.lm?.length) e.landmarks = h.lm.map((l) => ({
       ...(l.icon ? { icon: l.icon } : {}), ...(l.img ? { img: l.img } : {}),
       label: l.label, ...(l.journal ? { journal: l.journal } : {}), ...(l.vis !== "follow" ? { visibility: l.vis } : {}),
+      ...(l.color ? { color: l.color } : {}), ...(l.size !== LANDMARK_SIZE_DEFAULT ? { size: l.size } : {}),
     }));
     if (Object.keys(e).length > 2) hexes.push(e);
   }
@@ -431,7 +438,10 @@ export function exampleImport() {
       rows: ["....^^~~", "....^^~~", "...a..~~", "...aa...", "........", "........"],
     },
     hexes: [
-      { col: 2, row: 1, state: "revealed", landmarks: [{ icon: "tower-observation", label: "Old Watchtower", visibility: "visible" }] },
+      {
+        col: 2, row: 1, state: "revealed",
+        landmarks: [{ icon: "tower-observation", label: "Old Watchtower", visibility: "visible", color: "#8ad8ff", size: 1.25 }],
+      },
       { col: 4, row: 3, terrain: "shadowblighted", rating: 4, name: "The Grey Scar" },
     ],
     start: { col: 0, row: 0 },

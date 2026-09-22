@@ -103,6 +103,9 @@ export function hatchPoly(g, pts, step, ox = 0, oy = 0) {
 /** A filled or stroked diamond (square rotated 45°) of half-diagonal `s`. */
 export const diamond = (x, y, s) => [x, y - s, x + s, y, x, y + s, x - s, y];
 
+/** The same diamond as points, for the helpers that take a polygon. */
+export const diamondPts = (x, y, s) => [{ x, y: y - s }, { x: x + s, y }, { x, y: y + s }, { x: x - s, y }];
+
 /** The survey "?" in glyph units (the dot is drawn separately as a disc). */
 export const QMARK = "M-3.4 -3.6 Q-3.4 -8 0.2 -8 Q3.8 -8 3.8 -4.4 Q3.8 -1.8 0.9 -0.6 Q0 -0.1 0 2.2";
 export const QMARK_DOT = { x: 0, y: 5.6, r: 0.95 };
@@ -120,9 +123,41 @@ export function seeded(str) {
   };
 }
 
-/** Landmark badge centres for n (1..3) landmarks, relative to the hex centre, in R. */
-export function landmarkSlots(n) {
-  if (n <= 1) return [{ x: 0, y: 0 }];
-  if (n === 2) return [{ x: -0.25, y: 0 }, { x: 0.25, y: 0 }];
-  return [{ x: -0.46, y: 0.06 }, { x: 0, y: -0.04 }, { x: 0.46, y: 0.06 }];
+/** The lift of each badge in a three-badge row (the middle one sits higher). */
+const LM_ROW_Y = Object.freeze([0.06, -0.04, 0.06]);
+/** Gap between two badges, and the widest a whole cluster may be, in R. */
+const LM_GAP = 0.03;
+const LM_MAX_WIDTH = 1.5;
+
+/**
+ * Landmark badge placement, relative to the hex centre, in R: [{x, y, s}].
+ * `radii` are the badges' half-diagonals (in R), one per landmark, each already
+ * carrying that landmark's own size.
+ *
+ * The row is CENTRED and laid out from the radii themselves, so badges of any
+ * sizes sit side by side without overlapping, and the whole row is scaled down
+ * when it would grow wider than a hex — a badge past its own hex has stopped
+ * saying which hex it is on. At the shipped size it reproduces the fixed slots
+ * it replaces for one and two badges (0, ±0.25) and draws three a little
+ * tighter (±0.42 rather than ±0.46), which is the gap they always needed.
+ */
+export function landmarkLayout(radii) {
+  const n = radii.length;
+  if (!n) return [];
+  const gaps = LM_GAP * (n - 1);
+  const width = (rr) => rr.reduce((s, x) => s + 2 * x, 0) + gaps;
+  let r = radii;
+  // Only the badges shrink — scaling the gaps too would leave the row a hair
+  // over the limit, which is exactly the kind of near-miss nobody sees.
+  if (width(r) > LM_MAX_WIDTH) {
+    const k = Math.max(0, LM_MAX_WIDTH - gaps) / Math.max(1e-9, width(r) - gaps);
+    r = r.map((x) => x * k);
+  }
+  const out = [];
+  let x = -width(r) / 2;
+  for (let i = 0; i < n; i++) {
+    out.push({ x: x + r[i], y: n >= 3 ? LM_ROW_Y[i] ?? 0 : 0, s: r[i] });
+    x += 2 * r[i] + LM_GAP;
+  }
+  return out;
 }

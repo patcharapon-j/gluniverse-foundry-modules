@@ -71,16 +71,30 @@
 
     <fieldset class="glhex-block">
       <legend class="gl-tech-label">{{localize "GLHEX.app.hex.landmarks"}} <span class="gl-numeric glhex-dim">{{landmarks.length}}/{{maxLandmarks}}</span></legend>
+      <p class="glhex-note">{{lmSeenHint}}</p>
       {{#each landmarks}}
-        <div class="glhex-lm" data-index="{{i}}">
-          <button type="button" class="glhex-lm-icon" data-action="pickIcon" data-tooltip="{{localize "GLHEX.app.hex.pickIcon"}}" aria-label="{{localize "GLHEX.app.hex.pickIcon"}}">
+        <div class="glhex-lm {{#if seen}}is-seen{{else}}is-unseen{{/if}}" data-index="{{i}}">
+          <button type="button" class="glhex-lm-icon" data-action="pickIcon" style="--glhex-lm-color: {{colorShown}}" data-tooltip="{{localize "GLHEX.app.hex.pickIcon"}}" aria-label="{{localize "GLHEX.app.hex.pickIcon"}}">
             {{#if img}}<img src="{{img}}" alt="">{{else}}<i class="{{#if icon}}{{icon}}{{else}}fa-solid fa-landmark{{/if}}"></i>{{/if}}
           </button>
           <input type="text" name="lm.{{i}}.label" class="gl-field" value="{{label}}" placeholder="{{localize "GLHEX.app.hex.landmarkLabel"}}">
-          <select name="lm.{{i}}.vis" class="gl-field glhex-lm-vis" aria-label="{{localize "GLHEX.app.hex.landmarkVis"}}">
+          <select name="lm.{{i}}.vis" class="gl-field glhex-lm-vis" data-rerender aria-label="{{localize "GLHEX.app.hex.landmarkVis"}}">
             {{#each vis}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
           </select>
           <button type="button" class="glhex-mini glhex-danger" data-action="removeLandmark" data-tooltip="{{localize "GLHEX.app.common.remove"}}" aria-label="{{localize "GLHEX.app.common.remove"}}"><i class="fa-solid fa-trash"></i></button>
+          {{!-- What the party sees of THIS badge right now: the same answer the map draws. --}}
+          <span class="glhex-lm-seen">
+            <i class="fa-solid {{#if seen}}fa-eye{{else}}fa-eye-slash{{/if}}"></i>
+            <span>{{#if seen}}{{localize "GLHEX.app.hex.lmSeen"}}{{else}}{{localize "GLHEX.app.hex.lmUnseen"}}{{/if}}</span>
+          </span>
+          <span class="glhex-color glhex-lm-color {{#if colorCustom}}is-custom{{/if}}">
+            <input type="color" value="{{colorShown}}" data-color-picker aria-label="{{localize "GLHEX.app.hex.landmarkColor"}}">
+            <input type="hidden" name="lm.{{i}}.color" value="{{color}}">
+            <button type="button" class="glhex-mini" data-action="clearLandmarkColor" data-tooltip="{{localize "GLHEX.app.hex.landmarkColorClear"}}" aria-label="{{localize "GLHEX.app.hex.landmarkColorClear"}}"><i class="fa-solid fa-rotate-left"></i></button>
+          </span>
+          <select name="lm.{{i}}.size" class="gl-field glhex-lm-size gl-numeric" aria-label="{{localize "GLHEX.app.hex.landmarkSize"}}" data-tooltip="{{localize "GLHEX.app.hex.landmarkSize"}}">
+            {{#each sizes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
           <div class="glhex-link glhex-lm-link">
             <i class="fa-solid fa-book-open"></i>
             <input type="text" name="lm.{{i}}.journal" class="gl-field" value="{{journal}}" data-uuid-drop="JournalEntry,JournalEntryPage"

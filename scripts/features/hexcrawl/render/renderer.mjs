@@ -51,7 +51,7 @@ import {
 import { MeshPen } from "./pen.mjs";
 import { BLIGHT_LOOP, blightGeometry, blightShader } from "./blight.mjs";
 import { makeTemplate } from "./template.mjs";
-import { drawHatch, drawHex, hexPolys, lookFor, stampKey } from "./tiles.mjs";
+import { badgeSig, drawHatch, drawHex, hexPolys, lookFor, stampKey } from "./tiles.mjs";
 
 const now = () => (globalThis.performance?.now?.() ?? Date.now());
 
@@ -385,7 +385,7 @@ export class HexRenderer {
   _sig(k, v, ctx) {
     const look = lookFor(v, this._full);
     const rc = v.regionId ? ctx.map.regions[v.regionId]?.color ?? "" : "";
-    const lm = v.landmarks?.length ? v.landmarks.map((l) => `${l.id}:${l.icon}:${l.img}:${l.label}`).join("|") : "";
+    const lm = v.landmarks?.length ? v.landmarks.map(badgeSig).join("|") : "";
     const pips = v.rating != null && ctx.showPips(v) ? v.rating : 0;
     const withheld = look === "masked" && v.rating == null && effectiveRating(ctx.map, k) != null ? 1 : 0;
     const hatch = this._full ? v.playerState : "";
@@ -541,7 +541,7 @@ export class HexRenderer {
     for (const [k, v] of this._views) {
       if (!v.landmarks?.length) continue;
       keep.add(k);
-      const sig = v.landmarks.map((l) => `${l.id}:${l.icon}:${l.img}:${l.label}`).join("|");
+      const sig = v.landmarks.map(badgeSig).join("|");
       const cur = this._marks.get(k);
       let node = cur?.node;
       if (cur?.sig !== sig) {

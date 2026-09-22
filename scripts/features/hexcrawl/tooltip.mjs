@@ -97,9 +97,18 @@ export function tooltipHTML(store, key) {
 
   if (v.landmarks.length) {
     const items = v.landmarks.map((lm) => {
-      const icon = lm.icon ? `<i class="${escapeHTML(lm.icon)}"></i>` : `<i class="fa-solid fa-diamond"></i>`;
+      // The badge's own colour, so the row and the mark on the map match.
+      const style = lm.color ? ` style="color:${escapeHTML(lm.color)}"` : "";
+      const icon = lm.icon ? `<i class="${escapeHTML(lm.icon)}"${style}></i>` : `<i class="fa-solid fa-diamond"${style}></i>`;
       const label = escapeHTML(lm.label || L("GLHEX.tooltip.landmark"));
-      const gmTag = gm && lm.vis !== "follow" ? `<span class="glhex-tip-tag">${escapeHTML(L(`GLHEX.landmarkVis.${lm.vis}`))}</span>` : "";
+      // GM only: whether the party can see this badge right now (viewFor's `seen`),
+      // and the rule behind it. Players are handed nothing they cannot see.
+      const gmTag = gm
+        ? `<span class="glhex-tip-tag ${lm.seen ? "is-seen" : "is-unseen"}">`
+          + `<i class="fa-solid ${lm.seen ? "fa-eye" : "fa-eye-slash"}"></i>`
+          + `${escapeHTML(L(lm.seen ? "GLHEX.tooltip.lmSeen" : "GLHEX.tooltip.lmUnseen"))}`
+          + ` · ${escapeHTML(L(`GLHEX.landmarkVis.${lm.vis}`))}</span>`
+        : "";
       return canView(lm.journal)
         ? `<li><a class="glhex-tip-lm is-link" data-uuid="${escapeHTML(lm.journal)}">${icon}<span>${label}</span></a>${gmTag}</li>`
         : `<li><span class="glhex-tip-lm">${icon}<span>${label}</span></span>${gmTag}</li>`;

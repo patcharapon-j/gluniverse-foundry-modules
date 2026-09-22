@@ -170,6 +170,20 @@ players cannot see; otherwise it draws exactly the player view.
 - Region label: **two-tier** — the name in spaced caps, terrain and rating
   pips beneath, placed once per region at the hex nearest its centroid.
 - Landmark: **diamond badge** with the Font Awesome icon (or image) and a label.
+  A landmark carries its own `color` (null → the signal hue every badge used to
+  draw in) and `size` (a multiplier on the badge, its mark and where its caption
+  sits, 0.6–2). Badges are laid out from their radii (`geom.landmarkLayout`), so
+  two of any sizes sit side by side without overlapping and a row is scaled down
+  rather than growing past its hex; captions are one Text per landmark, stacked.
+- **What the party sees of a badge** is drawn, in the GM view only: `viewFor`'s
+  GM branch marks every landmark `seen` (the same answer, landmark for landmark,
+  that a player's `viewFor` produces — pinned by the check), and one the party
+  cannot see yet is drawn **hatched behind a dashed rim** with its mark and
+  caption dimmed. That is the language the hex hatch already uses, so "hatched"
+  means one thing on this map. The hover tooltip tags each landmark the same way
+  (eye / eye-slash), and the hex editor shows the same chip per row plus a line
+  saying whether the hex shows its landmarks at all. Players are never handed a
+  landmark they cannot see, so an unseen badge can only ever appear to a GM.
 - Party: **sight boundary** — a dashed outline around the union of the party's
   sight ranges, and a solid outline on the occupied hex.
 - Blight: **violet veins** pulsing slowly over a violet-leaned tile.

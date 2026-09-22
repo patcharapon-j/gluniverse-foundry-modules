@@ -26,7 +26,8 @@
  *   lm: Landmark[], nm: name override, nt: GM notes }
  *
  * Landmark: { id, icon: "fa-solid fa-…"|null, img: path|null, label, journal: uuid|null,
- *             vis: LANDMARK_VIS }
+ *             vis: LANDMARK_VIS, color: "#rrggbb"|null (null = the signal hue),
+ *             size: number (a multiplier on the shipped badge, 1 = as shipped) }
  *
  * Region: { id, name, nk: bool (name known to players), t: terrainId, rt: 1..4,
  *           color: "#rrggbb"|null, bl: bool,
@@ -51,6 +52,7 @@
 
 import {
   BLANK_TERRAIN, BUILTIN_TERRAINS, COST_UNITS, DEFAULT_CONFIG,
+  LANDMARK_COLOR_DEFAULT, LANDMARK_SIZE_DEFAULT, LANDMARK_SIZE_MAX, LANDMARK_SIZE_MIN,
   LANDMARK_VIS, MASK_FIELDS, MASK_PRESETS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN,
   RENDER_MODES, RUMOR_TRUTH, STATE_RANK, STATES, DIE_SIZES, GLYPH_IDS,
   DEFAULT_SIGHT_FIELDS, RESERVED_PRESET_IDS, SIGHT_PRESET, SIGHT_STATES,
@@ -150,6 +152,12 @@ export function normalizeIcons(v) {
   return list.map(artPath).filter(Boolean).slice(0, MAX_ICON_VARIANTS);
 }
 
+/** A landmark's badge size: a finite multiplier inside the clamp, else the default. */
+export function landmarkSize(v) {
+  const n = num(v, LANDMARK_SIZE_DEFAULT);
+  return Math.max(LANDMARK_SIZE_MIN, Math.min(LANDMARK_SIZE_MAX, n));
+}
+
 export function normalizeLandmark(l, idx = 0) {
   l = isObj(l) ? l : {};
   return {
@@ -159,6 +167,8 @@ export function normalizeLandmark(l, idx = 0) {
     label: str(l.label),
     journal: str(l.journal) || null,
     vis: LANDMARK_VIS.includes(l.vis) ? l.vis : "follow",
+    color: hex6(l.color, LANDMARK_COLOR_DEFAULT),
+    size: landmarkSize(l.size),
   };
 }
 
@@ -332,6 +342,22 @@ export function maskFields(map, hex) {
   return { ...presetFields(map, hex?.mk?.p), ...(hex?.mk?.f ?? {}) };
 }
 
+/**
+ * Does this hex show its landmarks to players right now? (Revealed always; a
+ * masked hex only with the `landmarks` field; fog never.) The one place that
+ * question is answered, so the GM's badge, the tooltip tag and the editor's
+ * chip can never disagree with what viewFor hands a player.
+ */
+export function landmarksShown(map, hex) {
+  const st = hex?.st ?? "hidden";
+  if (st === "revealed") return true;
+  if (st === "masked") return !!maskFields(map, hex).landmarks;
+  return false;
+}
+
+/** Can players see this one landmark right now? `shown` is landmarksShown(). */
+export const landmarkSeen = (lm, shown) => lm?.vis === "visible" || (lm?.vis === "follow" && !!shown);
+
 /** Does the preset value name something a hex can be masked with? */
 export const isMaskPreset = (map, id) => id === SIGHT_PRESET || !!(validPresetId(id) && map?.presets?.[id]);
 
@@ -374,7 +400,9 @@ export function encounterDice(map, k) {
  *                                   // marked the region's name known — draw "???"
  *   regionWithheld: boolean,        // players: a masked hex hiding which region it is in
  *   ratingOverridden: boolean,
- *   landmarks: Landmark[],          // only the ones this viewer may see
+ *   landmarks: Landmark[],          // only the ones this viewer may see; in the GM
+ *                                   // view every landmark, each with `seen`: whether
+ *                                   // the party can see that badge right now
  *   rumor: string|null,             // players: only when region rumour is known AND field shown
  *   drawn: boolean,                 // anything to draw beyond the fog?
  *   playerState: state              // what players see (== state)
@@ -402,14 +430,18 @@ export function viewFor(map, k, { asGM = false } = {}) {
   };
 
   if (asGM) {
+    // GM-only hint, like playerState: which of these badges the party can
+    // actually see right now. Players never carry it (nothing they are handed
+    // is unseen), so `seen === false` anywhere downstream means "GM view".
+    const shown = landmarksShown(map, h);
     return {
       ...base, terrain, name: displayName(map, k) || null, rating: effectiveRating(map, k),
-      landmarks: lms, rumor: region?.rumor?.text || null, drawn: true,
+      landmarks: lms.map((l) => ({ ...l, seen: landmarkSeen(l, shown) })),
+      rumor: region?.rumor?.text || null, drawn: true,
     };
   }
 
-  const visibleLandmarks = (fieldShown) => lms.filter((l) =>
-    l.vis === "visible" || (l.vis === "follow" && fieldShown));
+  const visibleLandmarks = (fieldShown) => lms.filter((l) => landmarkSeen(l, fieldShown));
 
   if (state === "revealed") {
     return {

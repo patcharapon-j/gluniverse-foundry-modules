@@ -8,8 +8,9 @@
  */
 
 import { neighbors } from "../hex-math.mjs";
-import { GEO } from "./style.mjs";
-import { diamond, landmarkSlots } from "./geom.mjs";
+import { ALPHA, GEO } from "./style.mjs";
+import { diamond } from "./geom.mjs";
+import { badgeLayout } from "./tiles.mjs";
 
 const PIP = "◆"; // ◆
 const DOT = "·"; // ·
@@ -113,10 +114,12 @@ export function makeLandmarkNode(PIXI, ctx, key, landmarks, res, { resolveIcon, 
   const node = new PIXI.Container();
   node.position.set(c.x, c.y);
   const n = landmarks.length;
-  const s = GEO.lmBadge * R * (n >= 3 ? 0.82 : 1);
-  const slots = landmarkSlots(n);
+  const slots = badgeLayout(landmarks, R);
+  // A landmark only the GM can see is dimmed here and hatched in its badge
+  // (tiles.mjs) — players are never handed one, so this is a GM-only state.
+  const dim = (lm) => (lm.seen === false ? ALPHA.lmUnseenMark : 1);
   landmarks.forEach((lm, i) => {
-    const x = slots[i].x * R, y = (GEO.lmBadgeY + slots[i].y) * R;
+    const { s, x, y } = slots[i];
     const icon = lm.icon ? resolveIcon?.(lm.icon) : null;
     if (lm.img && loadTexture) {
       Promise.resolve(loadTexture(lm.img)).then((tex) => {
@@ -126,6 +129,7 @@ export function makeLandmarkNode(PIXI, ctx, key, landmarks, res, { resolveIcon, 
         const side = s * 1.45;
         sp.scale.set(side / Math.max(1, Math.min(tex.width, tex.height)));
         sp.position.set(x, y);
+        sp.alpha = dim(lm);
         const mask = new PIXI.Graphics();
         mask.beginFill(0xffffff, 1);
         mask.drawPolygon(diamond(x, y, s * 0.86));
@@ -136,26 +140,38 @@ export function makeLandmarkNode(PIXI, ctx, key, landmarks, res, { resolveIcon, 
     } else if (icon?.char) {
       const t = text(PIXI, icon.char, {
         fontFamily: icon.fontFamily, fontWeight: String(icon.fontWeight ?? "900"),
-        fontSize: GEO.labelIcon * R * (n >= 3 ? 0.82 : 1), fill: ctx.colors.css.warnLift,
+        // Sized off the badge actually drawn, so a clamped cluster keeps its marks inside.
+        fontSize: (GEO.labelIcon / GEO.lmBadge) * s,
+        fill: ctx.colors.landmark(lm.color).css,
       }, res);
       t.position.set(x, y);
+      t.alpha = dim(lm);
       node.addChild(t);
     }
   });
-  const labels = landmarks.map((l) => l.label).filter(Boolean);
-  if (labels.length) {
-    const size = GEO.labelLmName * R;
-    const str = n === 1 ? labels[0].toUpperCase() : labels.map((l) => l.toUpperCase()).join("\n");
-    const t = text(PIXI, str, {
+  // One caption per landmark, stacked: they can differ in whether the party
+  // sees them, and a single joined Text could only be dimmed as a block.
+  const size = GEO.labelLmName * R;
+  const line = size * 1.18;
+  const maxW = R * 2.4;
+  // Captions clear the badges: a bigger badge pushes its caption down rather
+  // than being written over (the shipped placement at size 1 is unchanged).
+  const bottom = Math.max(...slots.map((p) => p.y + p.s)) + size * 0.35;
+  const top = Math.max((GEO.lmLabelY + (n >= 3 ? 0.02 : 0)) * R, bottom);
+  let row = 0;
+  for (const lm of landmarks) {
+    if (!lm.label) continue;
+    const t = text(PIXI, lm.label.toUpperCase(), {
       fontFamily: ctx.fontFamily, fontSize: size, fontWeight: "600", align: "center",
-      fill: ctx.colors.css.text, letterSpacing: size * 0.16, lineHeight: size * 1.18,
+      fill: ctx.colors.css.text, letterSpacing: size * 0.16, lineHeight: line,
       stroke: ctx.colors.css.ink0, strokeThickness: size * 0.36, lineJoin: "round",
     }, res);
     t.anchor.set(0.5, 0);
-    t.y = (GEO.lmLabelY + (n >= 3 ? 0.02 : 0)) * R;
-    const maxW = R * 2.4;
+    t.y = top + row * line;
+    t.alpha = dim(lm);
     if (t.width > maxW) t.scale.set(maxW / t.width);
     node.addChild(t);
+    row++;
   }
   return node;
 }
