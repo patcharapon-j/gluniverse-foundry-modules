@@ -27,7 +27,7 @@ import { SUITE_ID, warn } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { FLAGS, MOVE_HISTORY_CAP } from "./constants.mjs";
 import { distance, foundryAdapter, isHexType, line, unionRange } from "./hex-math.mjs";
-import { autoRevealPatch, costSeconds, travelCost } from "./model.mjs";
+import { autoRevealPatch, costSeconds, isBorder, travelCost } from "./model.mjs";
 import { L } from "./labels.mjs";
 import { isParty, partyCentres, positionForKey, tokenKey } from "./party.mjs";
 import { hexPatchUpdate, isHexcrawlScene, readMap } from "./store.mjs";
@@ -79,7 +79,9 @@ export function onPreUpdateToken(doc, changes, options, userId) {
       ui.notifications.warn(L("GLHEX.notify.playersCannotMove"));
       return false;
     }
-    if (!adapter.inBounds(to)) {
+    // Off the scene and off the map are the same refusal to a player: a border
+    // hex is not somewhere they were told they could not go, it is not a place.
+    if (!adapter.inBounds(to) || isBorder(map, to)) {
       ui.notifications.warn(L("GLHEX.notify.offMap"));
       return false;
     }
@@ -158,7 +160,9 @@ async function processMove(scene, doc, tag) {
   if (!adapter) return;
   const map = readMap(scene);
   const to = tokenKey(adapter, doc);          // off the DOCUMENT: its x/y is already the destination
-  if (!adapter.inBounds(to)) return;
+  // A GM may reposition the party onto the black (nothing stops a GM drag), but
+  // nothing follows from it: no reveal, no cost, no record, no arrival card.
+  if (!adapter.inBounds(to) || isBorder(map, to)) return;
   const from = typeof tag.from === "string" ? tag.from : null;
   const centres = partyCentres(scene, adapter, map);
   const patch = autoRevealPatch(map, { entered: [to], seen: unionRange(adapter, centres) });

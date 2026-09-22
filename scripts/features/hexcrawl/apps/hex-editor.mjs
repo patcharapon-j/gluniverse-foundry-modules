@@ -15,7 +15,8 @@ import {
   RATING_MAX, RATING_MIN, SIGHT_PRESET, STATES,
 } from "../constants.mjs";
 import {
-  isBlankHex, isMaskPreset, landmarkSeen, landmarkSize, landmarksShown, maskFields, newId, normalizeHex, presetFields,
+  borderFlagFor, isBlankHex, isBorder, isMaskPreset, landmarkSeen, landmarkSize, landmarksShown, maskFields, newId,
+  normalizeHex, presetFields,
 } from "../model.mjs";
 import { PALETTE } from "../../../core/theme.mjs";
 import { StoreAppBase } from "./base.mjs";
@@ -56,6 +57,9 @@ function draftFrom(map, key) {
     mkF: maskFields(map, h),
     vs: !!h.vs,
     bl: !!h.bl,
+    // The resolved answer, not the stored flag: the checkbox says what this hex
+    // IS, so a padding hex opens already ticked and unticking it means something.
+    bd: isBorder(map, key),
     cost: h.cost ?? null,
     nm: h.nm ?? "",
     nt: h.nt ?? "",
@@ -197,6 +201,7 @@ function HexEditorApp() {
       if (f.mk?.f) for (const k of MASK_FIELDS) if (k in f.mk.f) d.mkF[k] = !!f.mk.f[k];
       d.vs = !!f.vs;
       d.bl = !!f.bl;
+      d.bd = !!f.bd;
       d.cost = optionalNumber(f.cost);
       d.nm = f.nm ?? "";
       d.nt = f.nt ?? "";
@@ -230,6 +235,10 @@ function HexEditorApp() {
       } else delete hex.mk;
       set("vs", d.vs || null);
       set("bl", d.bl || null);
+      // Only stored where it disagrees with the map's extent (borderFlagFor), so
+      // a padding hex left alone writes nothing and keeps following the extent.
+      const bd = borderFlagFor(this.map, this.hexKey, d.bd);
+      if (bd == null) delete hex.bd; else hex.bd = bd;
       // Blank CLEARS the override. normalizeHex would read "" as 0 (Number("") === 0),
       // which would make the hex free to enter — so a blank never reaches it.
       if (d.cost == null) delete hex.cost; else hex.cost = Math.max(0, d.cost);

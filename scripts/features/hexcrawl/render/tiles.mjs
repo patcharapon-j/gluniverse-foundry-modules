@@ -141,8 +141,11 @@ function rimColor(ctx, view, col, masked) {
   return region ? ctx.colors.regionBorder(region) : col.bevel;
 }
 
-/** look: "tile" (full), "masked" (player view of a masked hex), "fog" (hidden). */
+/** look: "border" (not in play), "tile" (full), "masked" (player view of a
+ *  masked hex), "fog" (hidden). Border comes first and ignores `asGMFull`: it is
+ *  the one look that is the same on every screen in the world. */
 export function lookFor(view, asGMFull) {
+  if (view.border) return "border";
   if (asGMFull) return "tile";
   if (view.state === "revealed") return "tile";
   if (view.state === "masked") return "masked";
@@ -160,6 +163,18 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
   const cx = c.x - ox, cy = c.y - oy;
   const lmN = view.landmarks?.length ?? 0;
   const isLabel = ctx.labelKeys?.has(key) && !lmN;
+
+  // Border: flat black, edge to edge. Drawn on the TRUE hex edge rather than
+  // the gutter-inset outline every other look uses, so a run of border hexes is
+  // one unbroken field with no seams — it has to read as "off the map", not as
+  // a row of very dark tiles. Nothing else is drawn on it, ever.
+  if (look === "border") {
+    g.lineStyle(0);
+    g.beginFill(colors.border, 1);
+    g.drawPolygon(at(tpl.rel, cx, cy));
+    g.endFill();
+    return;
+  }
 
   if (look === "fog") {
     g.lineStyle(0);
@@ -246,6 +261,8 @@ export function stampKey(ctx, key, view, look) {
   // so two hexes only share a stamp when their badges agree on all three.
   const lm = lmN ? view.landmarks.map(badgeSig).join(",") : "";
   const label = ctx.labelKeys?.has(key) && !lmN ? 1 : 0;
+  // Every border hex draws the same black hexagon, so they all share one stamp.
+  if (look === "border") return "b";
   if (look === "fog") {
     let mask = 0;
     for (let e = 0; e < 6; e++) if (!ctx.fogEdge || ctx.fogEdge(key, e)) mask |= 1 << e;

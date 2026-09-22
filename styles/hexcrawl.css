@@ -654,6 +654,19 @@
 .glhex-link .gl-field { flex: 1 1 auto; font-family: var(--gl-tech); font-size: var(--gl-fs-2xs); }
 .glhex-link.is-drop { border-color: var(--gl-accent); background: var(--gl-accent-faint); }
 
+/* Border: the one control that decides whether the rest of the hex applies. */
+.glhex-border-row {
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+}
+.glhex-border-row.is-on {
+  border-color: color-mix(in srgb, var(--gl-text-faint) 55%, transparent);
+  background: var(--gl-ink-0);
+  color: var(--gl-text-dim);
+}
+
 /* Landmarks */
 .glhex-lm {
   display: grid;

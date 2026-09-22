@@ -15,7 +15,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
 import { FLAGS } from "./constants.mjs";
 import { foundryAdapter, gridOrigin, hexSceneDims, key as offKey, parseKey, pureAdapter, range } from "./hex-math.mjs";
-import { applyPatch, autoRevealPatch, normalizeMap, shiftKeys } from "./model.mjs";
+import { applyPatch, autoRevealPatch, inExtent, normalizeMap, shiftKeys } from "./model.mjs";
 import { exampleImport, exportMap, parseImport } from "./import.mjs";
 
 /** Blank hexes framing an imported map (hex-math hexSceneDims; even along the shifted axis). */
@@ -36,8 +36,9 @@ export function placeOnGrid(parsed, origin) {
   const s = parseKey(parsed.start);
   const start = offKey(s.i + origin.i, s.j + origin.j);
   const adapter = pureAdapter({ type: scene.gridType, size: scene.size });
-  const inMap = (k) => { const { i, j } = parseKey(k); return i >= origin.i && j >= origin.j && i < origin.i + scene.rows && j < origin.j + scene.cols; };
-  const seen = new Set(range(adapter, start, map.config.sight).filter(inMap));
+  // The map's own extent (shifted with the hexes) decides what is map: the frame
+  // of padding hexes around it is border, and the party sees nothing in it.
+  const seen = new Set(range(adapter, start, map.config.sight).filter((k) => inExtent(map, k)));
   return applyPatch(map, autoRevealPatch(map, { entered: [start], seen }));
 }
 

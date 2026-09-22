@@ -243,11 +243,16 @@ export class HexRenderer {
     this._redrawHover();
   }
 
+  /** The sight boundary, re-cut against the current views (border moves it). */
+  _recutSight() {
+    this._sightEdges = sightEdges(this.adapter, this._party, (k) => !!this._views.get(k)?.border);
+    this._sightPhase = -1;
+  }
+
   setParty(list) {
     this._party = (list ?? []).filter((p) => p?.key && this.keySet.has(p.key))
       .map((p) => ({ key: p.key, sight: Math.max(0, Number(p.sight) || 0) }));
-    this._sightEdges = sightEdges(this.adapter, this._party);
-    this._sightPhase = -1;
+    this._recutSight();
     if (!this._map) return;
     const ctx = this._ctx();
     drawParty(this.G.party, ctx, this._party, this._hair(HAIR.party));
@@ -364,6 +369,9 @@ export class HexRenderer {
   /** Which region a drawn hex belongs to, as far as this viewer can tell: a masked
    *  hex withholding its region is its own island (no neighbour fuses with it). */
   _group(k, v) {
+    // Border is nothing's region: a hex beside one always gets its own boundary
+    // edge, so the map's rim is drawn where the black starts.
+    if (v.border) return `!${k}`;
     return v.regionId ?? (v.regionWithheld ? `?${k}` : "");
   }
 
@@ -446,7 +454,11 @@ export class HexRenderer {
     if (!this._full) { ch.h.commit(); return; }
     for (const k of ch.keys) {
       if (this._skip?.has(k) || this._anims.has(k)) continue;
-      const st = this._views.get(k)?.playerState;
+      const v = this._views.get(k);
+      // Border is not "hidden from players" — it is not map, so nothing is
+      // withheld there and there is nothing to hatch.
+      if (v?.border) continue;
+      const st = v?.playerState;
       if (st !== "hidden" && st !== "masked") continue;
       // Hatch is stamped per hex (anchored to the hex, not the world); the
       // gutter between tiles hides where one hex's lines meet the next's.
@@ -468,7 +480,9 @@ export class HexRenderer {
   _drawHairlines(ctx) {
     drawStaged(this.G.staged, ctx, this._asGM ? [...this._staged] : [], this._hair(HAIR.staged));
     drawParty(this.G.party, ctx, this._party, this._hair(HAIR.party));
-    this._sightPhase = -1;
+    // The map decides the boundary as much as the party does: bordering a hex
+    // inside the party's range has to pull the sight ring in with it.
+    this._recutSight();
     this._drawSightNow(ctx);
   }
 
@@ -586,6 +600,8 @@ export class HexRenderer {
   _syncQmarks(animKeys) {
     const want = new Set();
     if (!this._full) {
+      // A border hex is not uncharted — there is nothing there to survey — so it
+      // never takes a "?". lookFor answers "border" before "fog" for that reason.
       for (const [k, v] of this._views) if (lookFor(v, false) === "fog" && !v.landmarks?.length) want.add(k);
     }
     for (const [k, sp] of this._qmarks) {

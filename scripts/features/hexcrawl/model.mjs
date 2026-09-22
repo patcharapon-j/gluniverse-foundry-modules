@@ -16,6 +16,10 @@
  *   assetBase: string,                   // prefix for relative art paths ("" = Foundry Data)
  *   origin:   { i, j } | null,           // Foundry offset of import coordinate (0,0);
  *                                        // set by the JSON import so re-import/export line up
+ *   bounds:   { i, j, rows, cols } | null, // the map's own EXTENT in Foundry offsets.
+ *                                        // A hex outside it is BORDER — out of play, black —
+ *                                        // unless a hex record says otherwise (`bd`). Null
+ *                                        // means "no extent declared": every hex is in play.
  * }
  *
  * Hex (every field optional; an absent hex is a hidden blank hex):
@@ -23,6 +27,7 @@
  *   mk: { p: presetId|"sight", f: { [field]: boolean } } (only meaningful while masked;
  *         "sight" resolves live to config.sightFields; an unknown id falls back to it),
  *   vs: true (visited), bl: true (blight), cost: number (overrides the table),
+ *   bd: 1 (border: out of play) | 0 (in play), absent = follow map.bounds,
  *   lm: Landmark[], nm: name override, nt: GM notes }
  *
  * Landmark: { id, icon: "fa-solid fa-…"|null, img: path|null, label, journal: uuid|null,
@@ -67,7 +72,7 @@ const clampInt = (v, lo, hi, fb) => { const n = int(v, fb); return n == null ? f
 const str = (v) => (typeof v === "string" ? v : "");
 
 export function emptyMap() {
-  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), presets: defaultPresets(), assetBase: "", origin: null };
+  return { v: 1, hexes: {}, regions: {}, terrains: {}, config: normalizeConfig({}), presets: defaultPresets(), assetBase: "", origin: null, bounds: null };
 }
 
 /** A full mask-field set: every MASK_FIELDS key a boolean, missing ones from `fb`. */
@@ -225,6 +230,10 @@ export function normalizeHex(h) {
   }
   if (h.vs) out.vs = true;
   if (h.bl) out.bl = true;
+  // Tri-state on purpose: absent is "follow the map's extent", so a GM can say
+  // "this padding hex IS in play" (0) as well as "this one is not" (1). Storing
+  // only `true` would leave no way to bring a hex outside the extent back.
+  if (h.bd != null && h.bd !== "") out.bd = h.bd ? 1 : 0;
   if (h.cost != null && h.cost !== "" && Number.isFinite(Number(h.cost))) out.cost = Math.max(0, Number(h.cost));
   if (Array.isArray(h.lm) && h.lm.length) out.lm = h.lm.slice(0, MAX_LANDMARKS_PER_HEX).map(normalizeLandmark);
   if (str(h.nm)) out.nm = h.nm;
@@ -244,10 +253,62 @@ export function normalizeMap(m) {
   out.assetBase = artPath(m.assetBase) ?? "";
   const oi = Number(m.origin?.i), oj = Number(m.origin?.j);
   out.origin = Number.isInteger(oi) && Number.isInteger(oj) ? { i: oi, j: oj } : null;
+  out.bounds = normalizeBounds(m.bounds);
   return out;
 }
 
+/** The map's extent as stored, or null. A degenerate rect is no extent at all —
+ *  0 rows would put the whole map out of play, which looks like a black scene. */
+export function normalizeBounds(b) {
+  if (!isObj(b)) return null;
+  const i = int(b.i, null), j = int(b.j, null);
+  const rows = int(b.rows, null), cols = int(b.cols, null);
+  if (i == null || j == null || !(rows > 0) || !(cols > 0)) return null;
+  return { i, j, rows, cols };
+}
+
 /* ── Resolution ─────────────────────────────────────────────────────────── */
+
+/* ── Border: the hexes that are not part of the map ─────────────────────── */
+
+/** "i,j" → { i, j }. (hex-math owns the grid; this is only the key's shape.) */
+const offsetOf = (k) => { const [i, j] = String(k).split(",").map(Number); return { i, j }; };
+
+/** Is hex k inside the map's declared extent? No extent → everything is. */
+export function inExtent(map, k) {
+  const b = map?.bounds;
+  if (!b) return true;
+  const { i, j } = offsetOf(k);
+  return i >= b.i && j >= b.j && i < b.i + b.rows && j < b.j + b.cols;
+}
+
+/**
+ * Is hex k BORDER — not in play at all?
+ *
+ * A border hex is drawn as flat black for everyone, the party can neither see
+ * nor enter it, and nothing on it is ever revealed. Two ways a hex becomes one:
+ * the map's extent (the padding a scene carries around an imported map is
+ * border by itself, with nothing written), or a GM's own brush. The hex record
+ * always wins, in BOTH directions, so a GM can carve a border out of the map
+ * and bring a padding hex into play.
+ *
+ * Everything that draws or walks the map asks this one function; a second
+ * reading of `bd` or of `bounds` is how the map and the rules start disagreeing.
+ */
+export function isBorder(map, k) {
+  const bd = map?.hexes?.[k]?.bd;
+  if (bd != null) return !!bd;
+  return !inExtent(map, k);
+}
+
+/**
+ * What `bd` a hex needs to be border (or not): 1, 0, or null to store nothing
+ * because the map's extent already says so. The brush and the hex editor both
+ * go through this, so neither can write a flag that says what the extent says.
+ */
+export function borderFlagFor(map, k, want) {
+  return !!want === !inExtent(map, k) ? null : (want ? 1 : 0);
+}
 
 export const getHex = (map, k) => map.hexes[k] ?? { st: "hidden" };
 export const getRegion = (map, k) => { const rg = map.hexes[k]?.rg; return rg ? map.regions[rg] ?? null : null; };
@@ -400,6 +461,7 @@ export function encounterDice(map, k) {
  *                                   // marked the region's name known — draw "???"
  *   regionWithheld: boolean,        // players: a masked hex hiding which region it is in
  *   ratingOverridden: boolean,
+ *   border: boolean,                // not in play at all: flat black, nothing else
  *   landmarks: Landmark[],          // only the ones this viewer may see; in the GM
  *                                   // view every landmark, each with `seen`: whether
  *                                   // the party can see that badge right now
@@ -418,8 +480,19 @@ export function viewFor(map, k, { asGM = false } = {}) {
     blight: effectiveBlight(map, k),
     regionId: region?.id ?? null,
     ratingOverridden: ratingOverridden(map, k),
-    nameUnknown: false, regionWithheld: false,
+    nameUnknown: false, regionWithheld: false, border: false,
   };
+
+  // Border outranks everything, the GM view included: a hex that is not in play
+  // has nothing to show, and drawing its terrain to the GM alone would make the
+  // one thing this mark means — "this is not map" — the one thing they cannot see.
+  if (isBorder(map, k)) {
+    return {
+      ...base, border: true, visited: false, blight: false, terrain: null, name: null,
+      rating: null, ratingOverridden: false, regionId: null, landmarks: [], rumor: null,
+      drawn: false,
+    };
+  }
   const lms = h.lm ?? [];
   // A region's name reaches players only once the GM marks it known (region.nk).
   // A hex outside any region has only its own name, which follows its state.
@@ -529,9 +602,11 @@ export function isBlankHex(h) {
  *   region   value: regionId|null
  *   rating   value: 1..4|null     (null clears the override)
  *   state    value: "hidden"|"revealed"|<presetId> (a preset means masked with it)
+ *   border   value: boolean        (out of play; stores nothing where the extent agrees)
  *   blight   value: boolean
  *   visited  value: boolean
- *   erase    — clears the whole hex back to hidden blank
+ *   erase    — clears the whole hex back to hidden blank (border included: the
+ *              hex goes back to following the map's extent)
  */
 export function brushPatch(map, keys, brush) {
   const patch = {};
@@ -546,6 +621,11 @@ export function brushPatch(map, keys, brush) {
         if (brush.value === "hidden" || brush.value === "revealed") { next.st = brush.value; delete next.mk; }
         else if (isMaskPreset(map, brush.value)) { next.st = "masked"; next.mk = { p: brush.value, f: {} }; }
         break;
+      case "border": {
+        const flag = borderFlagFor(map, k, brush.value);
+        if (flag == null) delete next.bd; else next.bd = flag;
+        break;
+      }
       case "blight": if (brush.value) next.bl = true; else delete next.bl; break;
       case "visited": if (brush.value) next.vs = true; else delete next.vs; break;
       case "erase": next = { st: "hidden" }; break;
@@ -588,9 +668,12 @@ const raise = (map, cur, sightState) => {
 export function autoRevealPatch(map, { entered = [], seen = new Set() } = {}) {
   const patch = {};
   const preset = map.config.sightState;
-  const enteredSet = new Set(entered);
+  // A border hex is not map: the party neither sees into it nor stands on it,
+  // so travel never writes one. Without this a walk along the edge quietly
+  // marks the padding visited, and the frame stops being uniformly black.
+  const enteredSet = new Set([...entered].filter((k) => !isBorder(map, k)));
   for (const k of seen) {
-    if (enteredSet.has(k)) continue;
+    if (enteredSet.has(k) || isBorder(map, k)) continue;
     const cur = map.hexes[k] ?? { st: "hidden" };
     const n = raise(map, cur, preset);
     if (n) patch[k] = n;
@@ -627,7 +710,11 @@ export function shiftKeys(map, di, dj) {
     const [i, j] = k.split(",").map(Number);
     hexes[`${i + di},${j + dj}`] = h;
   }
-  return { ...map, hexes };
+  // The extent is addressed in the same offsets, so it travels with them —
+  // left behind, it would put the map itself outside its own bounds and black
+  // out every hex that just moved.
+  const bounds = map.bounds ? { ...map.bounds, i: map.bounds.i + di, j: map.bounds.j + dj } : null;
+  return { ...map, hexes, bounds };
 }
 
 /* ── Ids ────────────────────────────────────────────────────────────────── */

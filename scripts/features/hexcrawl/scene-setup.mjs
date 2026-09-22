@@ -53,6 +53,12 @@ export async function createHexcrawlScene({
   cols = Math.max(1, Math.min(200, Math.round(Number(cols) || 20)));
   rows = Math.max(1, Math.min(200, Math.round(Number(rows) || 14)));
   const dims = hexSceneDimensions({ gridType, size, cols, rows, pad });
+  // A scene created with padding holds a frame of hexes the map does not: the
+  // map's extent says so, and the renderer draws that frame as border. Without
+  // this the frame is ordinary uncharted ground the party can walk into, which
+  // is exactly what it was put there to stop.
+  const placed = normalizeMap(map ?? emptyMap());
+  if (!placed.bounds) placed.bounds = { i: dims.origin.i, j: dims.origin.j, rows, cols };
   const data = {
     name: name || L("GLHEX.scene.defaultName"),
     width: dims.width,
@@ -64,7 +70,7 @@ export async function createHexcrawlScene({
     backgroundColor: PALETTE.ink1,
     tokenVision: false,
     fog: fogOff(),
-    flags: { [SUITE_ID]: { hex: { enabled: true, map: normalizeMap(map ?? emptyMap()) } } },
+    flags: { [SUITE_ID]: { hex: { enabled: true, map: placed } } },
   };
   if (background) data.background = { src: background };
   const scene = await Scene.create(data);

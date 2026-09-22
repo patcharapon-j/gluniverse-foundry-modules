@@ -67,15 +67,8 @@
       <button type="button" class="glhex-link-btn" data-action="settings"><i class="fa-solid fa-pen"></i> {{localize "GLHEX.app.palette.editPresets"}}</button>
     {{/if}}
 
-    {{#if is.blight}}
-      <div class="glhex-onoff">
-        <button type="button" class="glhex-seg {{#if toggleOn}}is-active{{/if}}" data-action="toggle" data-value="1">{{localize "GLHEX.app.common.on"}}</button>
-        <button type="button" class="glhex-seg {{#unless toggleOn}}is-active{{/unless}}" data-action="toggle" data-value="0">{{localize "GLHEX.app.common.off"}}</button>
-      </div>
-      <p class="glhex-note">{{toolHint}}</p>
-    {{/if}}
-
-    {{#if is.visited}}
+    {{!-- Every boolean brush (blight, visited, border) draws the same segment. --}}
+    {{#if isToggle}}
       <div class="glhex-onoff">
         <button type="button" class="glhex-seg {{#if toggleOn}}is-active{{/if}}" data-action="toggle" data-value="1">{{localize "GLHEX.app.common.on"}}</button>
         <button type="button" class="glhex-seg {{#unless toggleOn}}is-active{{/unless}}" data-action="toggle" data-value="0">{{localize "GLHEX.app.common.off"}}</button>

@@ -250,6 +250,79 @@ ok("a hex outside any region shows its own name", M.viewFor(M.normalizeMap({ hex
     M.normalizeMap({ hexes: { k: { st: "revealed", lm: [{ id: "a", color: "#112233", size: 1.5 }] } } }).hexes.k.lm[0].color === "#112233");
 }
 
+/* ── Border: the hexes that are not map ──────────────────────────────────
+   A border hex is flat black for everyone and out of play. Everything here is
+   silent when it breaks: a viewFor that answers for the GM alone makes the one
+   thing the mark means invisible to the one person who set it; an extent that
+   does not travel with the hexes blacks out the map itself; an auto-reveal that
+   writes into the frame turns the padding back into ground the party can walk. */
+head("border");
+{
+  const withBounds = (extra = {}) => M.normalizeMap({
+    bounds: { i: 0, j: 0, rows: 3, cols: 3 },
+    regions: { r: { name: "Wood", t: "forest", rt: 2, nk: true, rumor: { text: "x", known: true } } },
+    hexes: {
+      "1,1": { rg: "r", st: "revealed", vs: true, bl: true, lm: [{ id: "a", label: "Tower", vis: "visible" }] },
+      ...extra,
+    },
+  });
+  const map = withBounds();
+  ok("a hex inside the extent is map", !M.isBorder(map, "1,1") && M.inExtent(map, "1,1"));
+  ok("a hex outside the extent is border with nothing written", M.isBorder(map, "5,5") && !M.inExtent(map, "5,5"));
+  ok("no extent means every hex is in play", !M.isBorder(M.normalizeMap({}), "99,99"));
+  // The record wins BOTH ways, or a GM can carve a border out of the map but
+  // never bring one padding hex back in — and the brush would look broken.
+  const carved = withBounds({ "1,1": { st: "revealed", bd: 1 }, "5,5": { bd: 0 } });
+  ok("a hex record borders a hex inside the extent", M.isBorder(carved, "1,1"));
+  ok("a hex record brings one outside the extent back into play", !M.isBorder(carved, "5,5"));
+  ok("the flag is stored as 1/0 and survives normalisation",
+    carved.hexes["1,1"].bd === 1 && carved.hexes["5,5"].bd === 0
+    && M.normalizeHex({ bd: true }).bd === 1 && M.normalizeHex({ bd: false }).bd === 0
+    && M.normalizeHex({}).bd === undefined);
+  // borderFlagFor writes only a disagreement, so the map carries no flag saying
+  // what its own extent says — and erase (a blank hex) always means "follow it".
+  ok("a flag is stored only where it disagrees with the extent",
+    M.borderFlagFor(map, "1,1", false) === null && M.borderFlagFor(map, "1,1", true) === 1
+    && M.borderFlagFor(map, "5,5", true) === null && M.borderFlagFor(map, "5,5", false) === 0);
+  const painted = M.brushPatch(map, ["1,1", "5,5"], { tool: "border", value: true });
+  ok("the border brush borders a hex and leaves the extent's own alone",
+    painted["1,1"]?.bd === 1 && (painted["5,5"] == null || painted["5,5"].bd === undefined));
+  ok("the border brush keeps everything else on the hex",
+    painted["1,1"].rg === "r" && painted["1,1"].st === "revealed");
+  ok("erase clears the flag back to the extent", M.brushPatch(carved, ["1,1"], { tool: "erase" })["1,1"] == null
+    || M.brushPatch(carved, ["1,1"], { tool: "erase" })["1,1"].bd === undefined);
+
+  // The view: nothing, for anybody. The GM included — a border hex drawn as
+  // ordinary ground on the GM's screen hides the one fact the mark states.
+  for (const asGM of [false, true]) {
+    const v = M.viewFor(carved, "1,1", { asGM });
+    const tag = asGM ? "GM" : "player";
+    ok(`${tag}: a border hex says so`, v.border === true);
+    ok(`${tag}: a border hex shows nothing`, v.terrain == null && v.name == null && v.rating == null
+      && v.regionId == null && v.rumor == null && !v.landmarks.length && !v.visited && !v.blight);
+    ok(`${tag}: a border hex is not drawn`, v.drawn === false);
+  }
+  ok("every other hex carries border: false", M.viewFor(map, "1,1", { asGM: true }).border === false);
+
+  // Travel: the party neither enters the black nor sees into it.
+  const walked = M.autoRevealPatch(carved, { entered: ["1,1"], seen: new Set(["1,1", "0,0"]) });
+  ok("auto-reveal never enters a hex the GM bordered", !("1,1" in walked));
+  const seenOut = M.autoRevealPatch(map, { entered: ["1,1"], seen: new Set(["5,5", "0,0"]) });
+  ok("auto-reveal never raises a hex outside the extent", !("5,5" in seenOut));
+  ok("auto-reveal still writes the map beside it", !!walked["0,0"] && !!seenOut["0,0"]);
+  ok("a hex brought back into play is revealed normally",
+    !!M.autoRevealPatch(carved, { entered: ["5,5"], seen: new Set() })["5,5"]);
+
+  // The extent is addressed in offsets, so it moves with them.
+  const moved = M.shiftKeys(withBounds(), 2, 3);
+  ok("shiftKeys carries the extent with the hexes",
+    canon(moved.bounds) === canon({ i: 2, j: 3, rows: 3, cols: 3 })
+    && !M.isBorder(moved, "3,4") && M.isBorder(moved, "1,1"));
+  ok("a degenerate extent is no extent (a 0-row rect would black out the map)",
+    M.normalizeMap({ bounds: { i: 0, j: 0, rows: 0, cols: 5 } }).bounds === null
+    && M.normalizeMap({ bounds: "nope" }).bounds === null);
+}
+
 /* Mask presets are the map's own: seeded, editable, deletable; "sight" is live. */
 {
   const seed = M.normalizeMap({});
@@ -491,6 +564,40 @@ if (existsSync(join(FEAT, "import.mjs"))) {
     const custom = I.parseImport(JSON.stringify({ ...ex, presets: [{ id: "scouted", name: "Scouted", fields: { terrain: true } }, { id: "sight" }],
       hexes: [{ col: 5, row: 5, state: "scouted" }, { col: 6, row: 5, state: "masked", mask: { preset: "sight" } }] }));
     ok("imported presets replace the seed; reserved ids are refused with a warning", canon(Object.keys(custom.map.presets)) === canon(["scouted"]) && custom.warnings.some((w) => w.includes("reserved")));
+
+    /* The frame of blank hexes a scene carries around an imported map is BORDER,
+       with nothing written per hex: the map's extent says so. This is the whole
+       point of the mark — without it that frame is ordinary uncharted ground a
+       party can walk into, and it looks exactly like map. Driven through the
+       real sizing, the real placement and the real key set. */
+    const D = await imp("scripts/features/hexcrawl/import-dialog.mjs");
+    ok("a parsed map declares its own extent", canon(p.map.bounds) === canon({ i: 0, j: 0, rows: ex.scene.rows, cols: ex.scene.cols }));
+    for (const type of [2, 4]) {
+      const sc = { ...p.scene, gridType: type };
+      const { origin, width, height } = H.hexSceneDims({ type, size: sc.size, cols: sc.cols, rows: sc.rows, pad: D.IMPORT_PAD });
+      const placed = M.normalizeMap(D.placeOnGrid({ ...p, scene: sc }, origin));
+      const ad = H.pureAdapter({ type, size: sc.size });
+      const keys = H.keysInRect(ad, { x: 0, y: 0, width, height });
+      let pad = 0, padMap = 0, inside = 0, insideBorder = 0;
+      for (const k of keys) {
+        const { i, j } = H.parseKey(k);
+        const isMap = i >= origin.i && j >= origin.j && i < origin.i + sc.rows && j < origin.j + sc.cols;
+        if (isMap) { inside++; if (M.isBorder(placed, k)) insideBorder++; }
+        else { pad++; if (!M.isBorder(placed, k)) padMap++; }
+      }
+      ok(`type ${type}: the imported map is padded with hexes`, pad > 0 && inside === sc.rows * sc.cols, `${pad} pad, ${inside} map`);
+      ok(`type ${type}: every padding hex is border`, padMap === 0, `${padMap} of ${pad} still in play`);
+      ok(`type ${type}: no hex of the map is`, insideBorder === 0, `${insideBorder} of ${inside} blacked out`);
+      ok(`type ${type}: the frame costs no hex records`, !Object.keys(placed.hexes).some((k) => placed.hexes[k].bd != null));
+    }
+    const bordered = I.parseImport(JSON.stringify({ ...ex, hexes: [{ col: 0, row: 0, border: true }, { col: 1, row: 0, border: false }] }));
+    ok("a document can border a hex and un-border one",
+      bordered.map.hexes["0,0"].bd === 1 && bordered.map.hexes["0,1"].bd === 0);
+    const bback = I.parseImport(I.exportMap(bordered.map, bordered.scene));
+    ok("border round-trips through export", canon(bback.map.hexes) === canon(bordered.map.hexes),
+      diffStr(bordered.map.hexes, bback.map.hexes));
+    ok("the extent round-trips through export (scene cols/rows)", canon(bback.map.bounds) === canon(bordered.map.bounds),
+      diffStr(bordered.map.bounds, bback.map.bounds));
     ok("a hex state may name an imported preset or the sight preset", Object.values(custom.map.hexes).some((h) => h.mk?.p === "scouted") && Object.values(custom.map.hexes).some((h) => h.mk?.p === C.SIGHT_PRESET));
     const again = I.parseImport(I.exportMap(custom.map, custom.scene));
     ok("export → import round-trips the presets", canon(again.map.presets) === canon(custom.map.presets), diffStr(custom.map.presets, again.map.presets));
@@ -666,6 +773,22 @@ if (renderFiles.length) {
     ok("a cluster never grows past its hex", spill === 0, `${spill} rows`);
     const big = T.badgeLayout([{ size: 2 }], 100), small = T.badgeLayout([{ size: 0.6 }], 100);
     ok("a landmark's size reaches the badge it draws", big[0].s > small[0].s * 3 - 1e-9);
+
+    /* Border is the one look that is the same on every screen in the world, so
+       it is answered before `asGMFull` — behind it, a GM sees the ground under
+       the black and cannot tell a bordered hex from an ordinary one. */
+    const border = { border: true, state: "revealed", landmarks: [] };
+    ok("border outranks every state, the GM view included",
+      T.lookFor(border, true) === "border" && T.lookFor(border, false) === "border"
+      && T.lookFor({ ...border, border: false }, true) === "tile");
+    ok("every border hex shares one stamp",
+      T.stampKey({}, "0,0", border, "border") === T.stampKey({}, "9,9", { ...border, state: "hidden" }, "border"));
+    ok("a border hex draws flat black and nothing else (its own colour, not the fog's ink)",
+      /look === "border"[\s\S]{0,400}?colors\.border/.test(tilesSrc)
+      && /look === "border"[\s\S]{0,400}?return;/.test(tilesSrc)
+      && /border:\s*0x000000/.test(stripComments(readFileSync(join(FEAT, "render", "style.mjs"), "utf8"))));
+    ok("nothing else is drawn on a border hex: no \"?\", no hatch, no sight ring",
+      /border\)?\s*continue|\?\.border\) continue/.test(rendSrc) && /skip\)/.test(stripComments(readFileSync(join(FEAT, "render", "overlays.mjs"), "utf8"))));
   } catch (e) { ok("landmark badges run", false, e.message); }
 }
 
@@ -693,6 +816,20 @@ ok("apps/ exists", appFiles.length > 0);
   for (const [what, re] of [["colour", /name="lm\.\{\{i\}\}\.color"/], ["size", /name="lm\.\{\{i\}\}\.size"/], ["seen chip", /glhex-lm-seen/]]) {
     ok(`the landmark row carries its ${what}`, re.test(hbs));
   }
+  // Border: a GM needs both roads to it, and the editor's tick has to be the
+  // RESOLVED answer — a checkbox reading the raw flag opens unticked on every
+  // padding hex, which says that black frame is ordinary ground.
+  ok("the hex editor offers border, resolved and written through borderFlagFor",
+    /name="bd"/.test(hbs) && /isBorder\(map, key\)/.test(ed) && /borderFlagFor\(/.test(ed));
+  ok("the palette carries a border brush", C.BRUSH_TOOLS.includes("border")
+    && /border:/.test(stripComments(readFileSync(join(FEAT, "apps", "palette.mjs"), "utf8"))));
+  // The party must not walk into the black, and a move that lands there must
+  // reveal, cost and record nothing — both guards, in both clients.
+  const mv = stripComments(readFileSync(join(FEAT, "movement.mjs"), "utf8"));
+  ok("movement refuses a border hex on the moving client and writes nothing on the GM's",
+    (mv.match(/isBorder\(map, to\)/g) ?? []).length >= 2);
+  const tipSrc = stripComments(readFileSync(join(FEAT, "tooltip.mjs"), "utf8"));
+  ok("the tooltip tells a player nothing about a border hex", /v\.border[\s\S]{0,200}?if \(!gm\) return null;/.test(tipSrc));
 }
 delete globalThis.game; delete globalThis.Hooks;
 for (const f of appFiles) {

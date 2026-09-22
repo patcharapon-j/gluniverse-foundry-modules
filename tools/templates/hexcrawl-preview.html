@@ -146,6 +146,13 @@ function buildMap(adapter) {
   const put = (k, t) => { if (map.hexes[k]) map.hexes[k].t = t; };
   put("4,11", "underground"); put("1,5", "drylands"); put("7,6", "tropical");
   put("0,0", "rolling"); put("8,12", "frozen"); put("3,0", "aquatic");
+  // The map's own extent: one hex in from the drawn grid on every side, which is
+  // the frame a scene carries around an imported map. Everything outside it is
+  // border — flat black, out of play — with nothing written per hex.
+  if (!IMPORTED && !BIG) map.bounds = { i: 1, j: 1, rows: ROWS - 2, cols: COLS - 2 };
+  // And one border hex carved out of the map itself (the GM's brush): a chasm
+  // the party cannot cross, drawn exactly like the frame.
+  if (map.hexes["6,7"]) map.hexes["6,7"].bd = 1;
   // Per-hex rating overrides.
   map.hexes["4,5"].rt = 4; map.hexes["6,9"].rt = 1;
   // Landmarks.
