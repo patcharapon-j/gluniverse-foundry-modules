@@ -81,6 +81,12 @@ const DEFAULT_LABELS = {
   SpellAttack: "Spell attack",
   Versus: "vs",
   CastsSpell: "Casts a spell",
+  // A plain roll and a line somebody typed. The reader hands over a key for each, never the raw
+  // chat style, for the same reason a check with no heading does.
+  PlainRoll: "Roll",
+  Says: "Says",
+  Emotes: "Emotes",
+  OutOfCharacter: "Out of character",
   UsesAction: "Takes an action",
   Action: "Action",
   Actions: "Actions",
@@ -181,6 +187,7 @@ export class RollCard {
   render(model) {
     this.model = model;
     const root = this.element;
+    root.dataset.kind = model.kind;
     root.dataset.tone = toneFor(model);
     root.toggleAttribute("data-blind", model.visibility === "ownBlind");
     root.toggleAttribute("data-npc", !!model.actor?.isNpc);
@@ -213,6 +220,8 @@ export class RollCard {
     const action = this.q(".glus-rc-action");
     const isCast = model.kind === "cast" && model.spell && !model.roll;
     const isAction = model.kind === "action";
+    const isText = model.kind === "text";
+    const isPlainRoll = model.kind === "roll";
     const actionLabel = isCast ? this.label("CastsSpell") : isAction ? this.label("UsesAction") : this.checkLabel(model.action);
     const actionSub = isCast ? this.castDetail(model.spell) : model.action?.sub;
     const sub = [actionSub, model.target?.name ? `${this.label("Versus")} ${model.target.name}` : null]
@@ -224,12 +233,14 @@ export class RollCard {
 
     const result = this.q(".glus-rc-result");
     result.replaceChildren();
-    if (isCast) {
+    if (isText) {
+      result.append(this.buildQuote(model.text));
+    } else if (isCast) {
       result.append(this.buildSpell(model.spell));
     } else if (isAction) {
       result.append(this.buildAction(model.action));
     } else if (model.roll) {
-      const degree = this.buildDegree(model.roll);
+      const degree = isPlainRoll ? this.buildFormula(model.roll) : this.buildDegree(model.roll);
       if (degree) result.append(degree);
       if (Number.isFinite(model.roll.natural)) result.append(this.buildDie(model.roll.natural));
       result.append(el("div", "glus-rc-total", "0"));
@@ -313,6 +324,36 @@ export class RollCard {
       degree.append(meta);
     }
     return degree;
+  }
+
+  /**
+   * A plain roll's box: what was rolled, beside the total it produced.
+   *
+   * It takes the outcome box's place rather than adding one, so the card keeps its shape. There is no
+   * degree in it because PF2e resolved none — the card stays silent about outcome rather than inventing
+   * one, exactly as a check made against no DC does.
+   */
+  buildFormula(roll) {
+    if (!roll?.formula) return null;
+    const box = el("div", "glus-rc-degree");
+    // The formula alone, with no word over it. "Roll" is already the headline on the left when the
+    // roll carried no flavour of its own, and a label that restates it costs the column the one thing
+    // a viewer cannot reconstruct from the die and the total beside it: the modifier.
+    box.append(el("span", "glus-rc-degree-meta", roll.formula));
+    return box;
+  }
+
+  /**
+   * What somebody typed.
+   *
+   * Set as text, never as HTML: the body is arbitrary markup from any client in the world, and the
+   * stream is the one screen in a session nobody is watching. The reader has already flattened it.
+   */
+  buildQuote(text) {
+    const quote = el("div", "glus-rc-quote");
+    quote.dataset.style = text?.style ?? "speech";
+    quote.textContent = text?.body ?? "";
+    return quote;
   }
 
   buildDie(natural) {
@@ -436,6 +477,7 @@ export class RollCard {
       { duration: 520, delay: 260, easing: "cubic-bezier(.2,.8,.2,1)" }
     );
     tween(this.q(".glus-rc-spell-line"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 380, ease: EASE_OUT });
+    tween(this.q(".glus-rc-quote"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 420, delay: 300, ease: EASE_OUT });
 
     this.rollDie(160);
     const total = this.q(".glus-rc-total");

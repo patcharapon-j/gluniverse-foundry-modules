@@ -576,6 +576,111 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
 }
 
+/* ------------------------------------------------ plain rolls and chat text -- */
+// In a PF2e world the overlay hands every new message to this feed and clones no
+// chat card at all, so a plain `/r 2d6+3` and a line somebody typed reach the
+// stream through this reader or not at all — and "not at all" looks exactly like
+// the overlay being switched off. Everything below fails in that same silence.
+{
+  const reader = strip(read("scripts/features/stream-cards/pf2e/read-message.js"));
+  const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+  const lang = JSON.parse(read("lang/stream-cards.en.json"));
+  const form = read("templates/stream-cards/section.hbs");
+  const panel = strip(read("scripts/features/stream-cards/panel.js"));
+
+  // The defaults are one statement. Stated again in settings.js they would drift,
+  // and a row whose default says "off" only on the side that reads it is a
+  // feature nobody switched off silently not existing.
+  const settings = strip(read("scripts/features/stream-cards/settings.js"));
+  if (/DEFAULT_BASIC_CARDS\s*=\s*Object\.freeze/.test(settings)) {
+    fail("stream-cards/settings.js: DEFAULT_BASIC_CARDS is declared here as well as in the reader — one of the two will drift, and the reader is the only thing that consults a row");
+  }
+  if (!/import\s*\{[^}]*DEFAULT_BASIC_CARDS[^}]*\}\s*from\s*"\.\/pf2e\/read-message\.js"/.test(settings)) {
+    fail("stream-cards/settings.js: DEFAULT_BASIC_CARDS must be imported from the reader it gates");
+  }
+
+  const defaults = reader.match(/DEFAULT_BASIC_CARDS = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
+  if (!defaults) fail("stream-cards/pf2e/read-message.js: could not find DEFAULT_BASIC_CARDS");
+  else {
+    const rows = [...defaults[1].matchAll(/^\s{2}([A-Za-z0-9_]+):/gm)].map((m) => m[1]);
+    if (!rows.length) fail("read-message.js: DEFAULT_BASIC_CARDS is empty");
+    for (const row of rows) {
+      if (!new RegExp(`["'\\[.]${row}\\b`).test(reader)) {
+        fail(`stream-cards: basic-card setting "${row}" is registered but the reader never consults it — a switch that does nothing`);
+      }
+      if (!form.includes(`name="basicCards.${row}"`)) {
+        fail(`templates/stream-cards/section.hbs: no control for basic-card setting "${row}" — a GM could only reach it from the console`);
+      }
+      const key = `GLUNIVERSE_STREAM.basicCard.settings.${row}`;
+      if (!(key in lang)) fail(`lang/stream-cards.en.json: runtime-built i18n key ${key} is not defined`);
+    }
+    for (const m of form.matchAll(/name="basicCards\.([A-Za-z0-9_]+)"/g)) {
+      if (!rows.includes(m[1])) {
+        fail(`templates/stream-cards/section.hbs: control for basicCards.${m[1]}, which no setting row backs — the panel would save a key the sanitizer drops`);
+      }
+    }
+  }
+  if (!/name\.startsWith\("basicCards\."\)/.test(panel)) {
+    fail("stream-cards/panel.js: the panel does not claim basicCards.* — every switch in that section would be offered to the host and dropped");
+  }
+
+  // Style is the whole test for a chat card. Style OTHER (0) is the default every
+  // ChatMessage carries — every roll, every PF2e item card, every module's
+  // summary — so accepting it puts a whole session's chat traffic on the stream
+  // at roll-card weight, which renders perfectly and cannot be switched off row
+  // by row.
+  const styles = reader.match(/TEXT_STYLES = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
+  if (!styles) fail("read-message.js: could not find TEXT_STYLES");
+  else {
+    if (/^\s*0\s*:/m.test(styles[1])) {
+      fail("read-message.js: TEXT_STYLES accepts style 0 (OTHER) — that is the default every roll and every system card carries, not a line somebody typed");
+    }
+    for (const m of styles[1].matchAll(/key:\s*"([A-Za-z]+)"/g)) {
+      // Built at runtime from the model, so nothing else catches a missing one.
+      if (!(`GLUNIVERSE_STREAM.rollCard.${m[1]}` in lang)) {
+        fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${m[1]} is not defined — a chat card would headline with the key itself`);
+      }
+      if (!new RegExp(`\\b${m[1]}:`).test(card)) {
+        fail(`roll-card.js: DEFAULT_LABELS has no ${m[1]} — the English fallback is what a world with no translation loaded shows`);
+      }
+    }
+  }
+  for (const key of ["PlainRoll"]) {
+    if (!(`GLUNIVERSE_STREAM.rollCard.${key}` in lang)) fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${key} is not defined`);
+    if (!new RegExp(`\\b${key}:`).test(card)) fail(`roll-card.js: DEFAULT_LABELS has no ${key}`);
+  }
+
+  // A message body is arbitrary HTML from any client in the world. The card sets
+  // it through textContent and the reader flattens it first; innerHTML anywhere
+  // on that path is a script tag on the one screen in a session nobody watches.
+  if (/innerHTML/.test(reader)) {
+    fail("read-message.js: touches innerHTML — the reader is pure and flattens chat HTML to text");
+  }
+  const quote = card.match(/\n  buildQuote\([\s\S]*?\n  \}/);
+  if (!quote) fail("roll-card.js: could not find buildQuote");
+  else if (/innerHTML/.test(quote[0]) || !/textContent/.test(quote[0])) {
+    fail("roll-card.js: the quote is not set through textContent — a chat message is arbitrary markup from any client in the world");
+  }
+
+  // The natural die is drawn only for a roll that has one. A 10d20 has no
+  // "natural", and a d20 drawn with one of its ten results on it is a lie about
+  // the roll that renders perfectly.
+  const single = reader.match(/export function singleD20Of\([\s\S]*?\n\}/);
+  if (!single) fail("read-message.js: could not find singleD20Of");
+  else if (!/length !== 1/.test(single[0])) {
+    fail("read-message.js: singleD20Of does not require exactly one d20 rolling exactly once — any other shape has no natural to draw");
+  }
+
+  // The plain roll's box says the formula and nothing else: the die beside it
+  // already carries the natural and the total is drawn in the widest type on the
+  // card, so a word over it costs the column the one thing neither of them says.
+  const formula = card.match(/\n  buildFormula\([\s\S]*?\n  \}/);
+  if (!formula) fail("roll-card.js: could not find buildFormula");
+  else if (/glus-rc-degree-label/.test(formula[0])) {
+    fail("roll-card.js: the plain roll's box carries a label as well as its formula — \"Roll\" is already the headline on the left");
+  }
+}
+
 /* ------------------------------------------------------------------ report -- */
 if (problems.length) {
   console.error(`stream-check: ${problems.length} problem${problems.length === 1 ? "" : "s"}\n`);

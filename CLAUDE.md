@@ -1194,7 +1194,7 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (131 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (147 tests; Node's
 directory mode is not supported here, so name the glob).
 
 Seven things are worth knowing before you change any of it.
@@ -1306,6 +1306,25 @@ perfectly. Deriving a degree from a comparison is for flat checks *alone*, which
 have no critical degrees; every other type's ±10 bands and natural-20 shift are
 the system's to apply, and a guess here puts a degree on the stream that the
 player's own chat card does not carry.
+
+**In a PF2e world the overlay clones nothing.** `usesRollCards()` routes every new
+message to the feed, so a message this reader returns null for reaches the stream
+as nothing at all — which looks exactly like the overlay being switched off, not
+like a message being filtered. That is why a plain `/r 2d6+3` and a line somebody
+typed are card kinds of their own (`roll`, `text`). Four things there fail
+silently. Chat cards are keyed on Foundry's chat **style**, and style OTHER is
+refused: OTHER is the default every ChatMessage carries, so accepting it puts
+every roll, every PF2e item card and every module's status summary on the stream
+at roll-card weight. The plain roll's d20 is drawn only when the roll has exactly
+one d20 rolling exactly once — any other shape has no natural, and a die showing
+one of ten results is a lie about the roll that renders perfectly. A message body
+is arbitrary markup from any client in the world, so it is flattened in the pure
+reader and set through `textContent`, never `innerHTML`. And `DEFAULT_BASIC_CARDS`
+is **one statement**, in the reader beside the gates that consult it: restated in
+`settings.js` it drifts, and a row whose default says off only on the reading
+side is a feature nobody switched off silently not existing — which is also why an
+absent `basicCards` (the fixtures, the check tools) reads as the shipped defaults
+rather than as a row of `undefined`.
 
 Two smaller ones. Hook names are built in one place per feature: under the suite
 id an un-namespaced `${MODULE_ID}.settingsChanged` is a name any feature could

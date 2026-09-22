@@ -13,7 +13,15 @@
 
 import { featurePath } from "../../core/const.mjs";
 import { CARDS_FEATURE_ID } from "../stream/constants.js";
-import { STATUS_LIFETIME_RANGE, getDefaultRollArt, getStatusSettings, setDefaultRollArt, setStatusSettings } from "./settings.js";
+import {
+  STATUS_LIFETIME_RANGE,
+  getBasicCardSettings,
+  getDefaultRollArt,
+  getStatusSettings,
+  setBasicCardSettings,
+  setDefaultRollArt,
+  setStatusSettings
+} from "./settings.js";
 import { openPortraitFramingApp } from "./framing/portrait-framing-app.js";
 
 export async function renderSection() {
@@ -22,6 +30,7 @@ export async function renderSection() {
     {
       defaultRollArt: getDefaultRollArt(),
       status: getStatusSettings(),
+      basic: getBasicCardSettings(),
       statusLifetime: { ...STATUS_LIFETIME_RANGE, percent: Math.round(getStatusSettings().lifetimeFactor * 100) },
       canEdit: Boolean(game.user?.isGM)
     }
@@ -37,6 +46,10 @@ export async function renderSection() {
 export async function claimChange(name, value) {
   if (name === "defaultRollArt.src") {
     await setArt(String(value ?? ""));
+    return true;
+  }
+  if (name.startsWith("basicCards.")) {
+    await setBasicCardSettings({ [name.slice("basicCards.".length)]: value });
     return true;
   }
   if (name.startsWith("statusUpdates.")) {
