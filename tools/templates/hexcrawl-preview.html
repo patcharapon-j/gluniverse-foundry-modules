@@ -149,11 +149,18 @@ function buildMap(adapter) {
   // Per-hex rating overrides.
   map.hexes["4,5"].rt = 4; map.hexes["6,9"].rt = 1;
   // Landmarks.
-  map.hexes["4,6"].lm = [{ id: "a", icon: "fa-solid fa-tower-observation", label: "Old Watchtower", vis: "visible" }];
+  // A big one in its own colour — the size and colour a landmark carries itself.
+  map.hexes["4,6"].lm = [{ id: "a", icon: "fa-solid fa-tower-observation", label: "Old Watchtower", vis: "visible", color: "#8ad8ff", size: 1.5 }];
   map.hexes["3,10"].lm = [{ id: "b", icon: "fa-solid fa-dungeon", label: "Sunken Gate", vis: "follow" }];
-  map.hexes["6,2"].lm = [{ id: "c", icon: "fa-solid fa-campground", label: "Ranger Camp", vis: "follow" }];
+  map.hexes["6,2"].lm = [{ id: "c", icon: "fa-solid fa-campground", label: "Ranger Camp", vis: "follow", color: "#5fdb92", size: 0.8 }];
+  // Two badges the party has, one only the GM has (hatched, dashed, dimmed in
+  // the GM view; simply absent in the player and view-as-players ones).
   map.hexes["2,7"].lm = [{ id: "d", icon: "fa-solid fa-skull", label: "Bone Field", vis: "follow" },
-                          { id: "e", icon: "fa-solid fa-dungeon", label: "Crypt", vis: "follow" }];
+                          { id: "e", icon: "fa-solid fa-dungeon", label: "Crypt", vis: "follow", size: 1.25 },
+                          { id: "g", icon: "fa-solid fa-gem", label: "Hoard", vis: "hidden", color: "#d18aff" }];
+  // A "with its hex" landmark on a silhouette: nothing about the hex is shown,
+  // so this badge is the GM's alone until the mask or the state changes.
+  map.hexes["5,7"].lm = [{ id: "h", icon: "fa-solid fa-chess-rook", label: "Watchpost", vis: "follow" }];
   // An image landmark (exercises loadTexture + the diamond mask).
   map.hexes["6,5"].lm = [{ id: "f", img: SHRINE_IMG, label: "Moon Shrine", vis: "follow" }];
   // Visibility: a walked corridor, some glimpses, the rest uncharted.

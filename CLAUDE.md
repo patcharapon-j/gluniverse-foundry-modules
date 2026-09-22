@@ -1342,6 +1342,20 @@ the GM's screen and names the masked hex on every other one. The check walks
 every state × mask preset × rumour-known combination. It is still not a
 secrecy boundary — scene flags reach every client — so the docs say so.
 
+**A landmark's `seen` is a claim about the player's screen, made on the GM's.**
+The GM view marks every landmark with whether the party can see that badge right
+now, and draws the ones they cannot hatched behind a dashed rim (the hex hatch's
+own language); the tooltip and the hex editor tag the same answer. All three
+must take it from the model — `landmarksShown()` / `landmarkSeen()` — and the
+check compares the GM's flags landmark for landmark against what a player's
+`viewFor` actually returns, because a hint that drifts from the truth is worse
+than no hint: the GM stops checking. A landmark also carries its own `color` and
+`size`, and all three are DRAWN, so all three ride `badgeSig` into the chunk
+signature and the icon layer's — an unsigned recolour keeps the old badge on
+every hex sharing that stamp, forever, with nothing reported. Badges are placed
+by one function from their radii (`landmarkLayout`), so sizes can never make two
+overlap or push a row past its hex.
+
 **Every map write is a FORCED replacement.** A plain nested scene update
 *merges*, so a hex that loses `bl`, a region that loses its colour or a config
 that loses a key keeps the old value forever, while the write "succeeds". Write

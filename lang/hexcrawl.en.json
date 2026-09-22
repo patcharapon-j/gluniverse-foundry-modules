@@ -51,6 +51,8 @@
   "GLHEX.tooltip.blight": "Blighted",
   "GLHEX.tooltip.ratingUnknown": "Going unknown",
   "GLHEX.tooltip.landmark": "Landmark",
+  "GLHEX.tooltip.lmSeen": "Players see it",
+  "GLHEX.tooltip.lmUnseen": "GM only",
   "GLHEX.tooltip.gmOnly": "GM only",
   "GLHEX.tooltip.encounter": "Encounter",
   "GLHEX.tooltip.rumor": "Rumour",

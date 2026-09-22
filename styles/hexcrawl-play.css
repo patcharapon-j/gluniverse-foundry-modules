@@ -120,12 +120,19 @@
 .glhex-tip-lm.is-link { cursor: pointer; text-decoration: underline dotted var(--gl-line-strong); }
 .glhex-tip-lm.is-link:hover { color: var(--gl-text-bright); text-decoration-color: var(--gl-accent); }
 .glhex-tip-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-1);
   margin-left: auto;
   color: var(--gl-text-faint);
   font-size: var(--gl-fs-3xs);
   letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
+  white-space: nowrap;
 }
+/* GM only: whether the party can see this badge right now. */
+.glhex-tip-tag.is-seen { color: var(--gl-good); }
+.glhex-tip-tag.is-unseen { color: var(--gl-text-dim); }
 
 /* GM-only block: set apart so nobody reads it out by accident. */
 .glhex-tip-gm {

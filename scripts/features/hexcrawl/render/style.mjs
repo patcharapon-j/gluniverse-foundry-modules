@@ -33,8 +33,10 @@ export const GEO = Object.freeze({
   lmGlyphScale: 0.52,
   lmPipY: -0.68,
   lmBadgeY: 0.12,
-  lmBadge: 0.235,        // half-diagonal of a landmark diamond
+  lmBadge: 0.235,        // half-diagonal of a landmark diamond, before its own size
   lmBadgeWidth: 0.028,
+  lmUnseenDash: 0.42,    // dash period of a GM-only badge's rim, in badge half-diagonals
+  lmUnseenHatch: 0.3,    // hatch spacing inside one, same units
   lmLabelY: 0.42,
   veinWidth: 0.026,
   veinGlow: 0.085,
@@ -88,6 +90,12 @@ export const ALPHA = Object.freeze({
   hatchVeilMasked: 0.16,
   hatchHidden: 0.55,
   hatchMasked: 0.32,
+  // A landmark the party cannot see yet, in the GM view: the same language as
+  // the hex hatch, so "hatched = mine alone" means one thing on this map.
+  lmUnseenBody: 0.72,
+  lmUnseenRim: 0.7,
+  lmUnseenHatch: 0.38,
+  lmUnseenMark: 0.5,     // its icon and caption
 });
 
 /** Mix amounts. */
@@ -150,8 +158,21 @@ export function makeColors(palette) {
     cache.set(id, c);
     return c;
   };
+  // A landmark's own colour (null → the signal hue every badge used to draw in).
+  const lmCache = new Map();
+  const landmark = (color) => {
+    const id = color ?? "";
+    let c = lmCache.get(id);
+    if (c) return c;
+    const base = color || palette.warn;
+    const lift = lighten(base, 0.4);
+    c = { rim: hexToInt(base), lift: hexToInt(lift), css: lift };
+    lmCache.set(id, c);
+    return c;
+  };
   return {
     tile,
+    landmark,
     ink0: hexToInt(palette.ink0),
     ink1: hexToInt(palette.ink1),
     ink2: hexToInt(ink),

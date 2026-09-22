@@ -13,9 +13,9 @@
  */
 
 import { BLANK_TERRAIN } from "../constants.mjs";
-import { effectiveRating } from "../model.mjs";
+import { effectiveRating, landmarkSize } from "../model.mjs";
 import { ALPHA, GEO, HATCH } from "./style.mjs";
-import { QMARK_DOT, dashSegment, diamond, hatchPoly, landmarkSlots } from "./geom.mjs";
+import { QMARK_DOT, dashPoly, dashSegment, diamond, diamondPts, hatchPoly, landmarkLayout } from "./geom.mjs";
 import { FOG_DASH } from "./template.mjs";
 import { at, strokeDashes, strokeLines } from "./template.mjs";
 
@@ -70,22 +70,63 @@ function drawWithheldRating(g, tpl, x, y, R, color) {
   drawQuestion(g, tpl, R, x, y - s * 0.05, color, 0.75, GEO.fogDashWidth * R * 0.8, (s * 0.075) / (GEO.qScale * R));
 }
 
-function drawBadges(g, n, cx, cy, R, colors) {
-  const s = GEO.lmBadge * R * (n >= 3 ? 0.82 : 1);
-  for (const slot of landmarkSlots(n)) {
-    const x = cx + slot.x * R, y = cy + (GEO.lmBadgeY + slot.y) * R;
+/**
+ * Everything about one landmark that is DRAWN — its mark, its label, its own
+ * colour and size, and (GM view only) whether the party can see it. The badges,
+ * the icon layer and the chunk signature all sign with this one function, so a
+ * landmark edit can never redraw one of the three and leave the others stale.
+ */
+export const badgeSig = (l) =>
+  `${l.id}:${l.icon}:${l.img}:${l.label}:${l.color ?? ""}:${landmarkSize(l.size)}:${l.seen === false ? 0 : 1}`;
+
+/**
+ * Where a hex's landmark badges sit and how big each is, in world units:
+ * the shipped badge, thinned when three share a hex, times each landmark's own
+ * size, laid out by `landmarkLayout`. The badges (here) and their icons and
+ * captions (labels.mjs) both place with this one function, so a mark can never
+ * drift out of the diamond under it.
+ */
+export function badgeLayout(landmarks, R) {
+  const n = landmarks.length;
+  const base = GEO.lmBadge * (n >= 3 ? 0.82 : 1);
+  return landmarkLayout(landmarks.map((lm) => base * landmarkSize(lm?.size)))
+    .map((p) => ({ x: p.x * R, y: (GEO.lmBadgeY + p.y) * R, s: p.s * R }));
+}
+
+/**
+ * The landmark diamonds. Each carries its own colour and size, and — in the GM
+ * view only — a `seen: false` landmark is drawn hatched behind a dashed rim,
+ * the same language as the hatch over a hex players cannot see. Players are
+ * never handed an unseen landmark, so this can only ever appear to a GM.
+ */
+function drawBadges(g, landmarks, cx, cy, R, colors) {
+  const slots = badgeLayout(landmarks, R);
+  landmarks.forEach((lm, i) => {
+    const { s } = slots[i];
+    const x = cx + slots[i].x, y = cy + slots[i].y;
+    const col = colors.landmark(lm.color);
+    const unseen = lm.seen === false;
     // A soft ink halo so the badge sits above the tile rather than on it.
     g.lineStyle(0);
     g.beginFill(colors.ink0, 0.55);
     g.drawPolygon(diamond(x, y, s * 1.22));
     g.endFill();
-    g.lineStyle({ width: GEO.lmBadgeWidth * R, color: colors.warn, alpha: 1, join: MITER });
-    g.beginFill(colors.ink1, 0.96);
+    g.beginFill(colors.ink1, unseen ? ALPHA.lmUnseenBody : 0.96);
     g.drawPolygon(diamond(x, y, s));
     g.endFill();
-    g.lineStyle({ width: GEO.lmBadgeWidth * R * 0.5, color: colors.warn, alpha: 0.35, join: MITER });
+    if (unseen) {
+      const pts = diamondPts(x, y, s);
+      g.lineStyle({ width: GEO.lmBadgeWidth * R * 0.5, color: colors.hatch, alpha: ALPHA.lmUnseenHatch });
+      hatchPoly(g, pts, GEO.lmUnseenHatch * s);
+      g.lineStyle({ width: GEO.lmBadgeWidth * R, color: col.rim, alpha: ALPHA.lmUnseenRim, join: MITER });
+      dashPoly(g, pts, GEO.lmUnseenDash * s, 0.55);
+      return;
+    }
+    g.lineStyle({ width: GEO.lmBadgeWidth * R, color: col.rim, alpha: 1, join: MITER });
+    g.drawPolygon(diamond(x, y, s));
+    g.lineStyle({ width: GEO.lmBadgeWidth * R * 0.5, color: col.rim, alpha: 0.35, join: MITER });
     g.drawPolygon(diamond(x, y, s * 0.72));
-  }
+  });
 }
 
 /** Boundary edges of a drawn hex (bit e = edge e): the renderer's answer, or all six. */
@@ -130,7 +171,7 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
     g.lineStyle({ width: GEO.fogDashWidth * R, color: colors.textDim, alpha: ALPHA.fogDash });
     for (let e = 0; e < 6; e++) if (!ctx.fogEdge || ctx.fogEdge(key, e)) strokeDashes(g, tpl.fogDash[e], cx, cy);
     // The "?" is text in the region-label face, drawn by the renderer's qmark layer.
-    if (lmN) drawBadges(g, lmN, cx, cy, R, colors);
+    if (lmN) drawBadges(g, view.landmarks, cx, cy, R, colors);
     return;
   }
 
@@ -190,7 +231,7 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
     }
   }
 
-  if (lmN) drawBadges(g, lmN, cx, cy, R, colors);
+  if (lmN) drawBadges(g, view.landmarks, cx, cy, R, colors);
 }
 
 /**
@@ -201,11 +242,14 @@ export function drawHex(g, ctx, key, view, look, ox = 0, oy = 0) {
  */
 export function stampKey(ctx, key, view, look) {
   const lmN = view.landmarks?.length ?? 0;
+  // A badge's colour, size and (GM view) whether players see it are all drawn,
+  // so two hexes only share a stamp when their badges agree on all three.
+  const lm = lmN ? view.landmarks.map(badgeSig).join(",") : "";
   const label = ctx.labelKeys?.has(key) && !lmN ? 1 : 0;
   if (look === "fog") {
     let mask = 0;
     for (let e = 0; e < 6; e++) if (!ctx.fogEdge || ctx.fogEdge(key, e)) mask |= 1 << e;
-    return `f|${mask}|${lmN}`;
+    return `f|${mask}|${lmN}|${lm}`;
   }
   const t = view.terrain;
   const region = view.regionId ? ctx.map.regions[view.regionId]?.color ?? "" : "";
@@ -213,7 +257,7 @@ export function stampKey(ctx, key, view, look) {
   const withheld = look === "masked" && view.rating == null && effectiveRating(ctx.map, key) != null ? 1 : 0;
   const art = ctx.art ? ctx.art(key) : null;
   const tex = art?.tex ? ctx.map.config?.texStrength ?? 0 : "";
-  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${label}|${pips}|${withheld}|${boundaryMask(ctx, key)}|${tex}|${art?.icon ? 1 : 0}`;
+  return `${look}|${ctx.mode}|${t?.color ?? ""}|${t?.glyph ?? ""}|${view.blight ? 1 : 0}|${region}|${lmN}|${lm}|${label}|${pips}|${withheld}|${boundaryMask(ctx, key)}|${tex}|${art?.icon ? 1 : 0}`;
 }
 
 /** The GM hatch over a hex players cannot fully see. kind: "hidden" | "masked". */

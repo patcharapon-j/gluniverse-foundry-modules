@@ -74,6 +74,21 @@ export const SIGHT_STATES = Object.freeze(["masked", "revealed"]);
 export const LANDMARK_VIS = Object.freeze(["follow", "visible", "hidden"]);
 export const MAX_LANDMARKS_PER_HEX = 3;
 
+/** A landmark's own badge colour: null takes the suite's signal hue, which is
+ *  what every landmark drew before. A colour is DATA (a GM's mark on their own
+ *  map), not theme — a retheme must not repaint it. */
+export const LANDMARK_COLOR_DEFAULT = null;
+
+/** A landmark's badge size, as a multiplier on the shipped badge (and its icon
+ *  and caption). Clamped: a badge far past its hex stops reading as belonging
+ *  to one, and one far below stops being hittable at map zoom. */
+export const LANDMARK_SIZE_MIN = 0.6;
+export const LANDMARK_SIZE_MAX = 2;
+export const LANDMARK_SIZE_DEFAULT = 1;
+/** The steps the editor offers. A stored size off this ladder (an import, a
+ *  hand-edited flag) is kept as it is and shown alongside them. */
+export const LANDMARK_SIZE_STEPS = Object.freeze([0.6, 0.8, 1, 1.25, 1.5, 2]);
+
 /* ── Terrain ────────────────────────────────────────────────────────────── */
 
 /** Glyph ids the renderer can draw (glyphs.mjs). i18n: GLHEX.glyph.<key> */

@@ -198,6 +198,20 @@ for (const known of [false, true]) {
       // A region's name reaches players only once the GM marks it known; until then "???".
       const nameOk = (shown) => (shown ? (nk ? v.name != null && !v.nameUnknown : v.name == null && v.nameUnknown) : v.name == null && !v.nameUnknown);
       ok(`${tag}: GM-hidden landmarks never reach players`, !v.landmarks.some((l) => l.vis === "hidden"));
+      // The GM's badge says whether the party can see it (drawn hatched when not).
+      // That hint is only worth anything while it agrees, landmark for landmark,
+      // with what viewFor actually hands a player — a hint that drifts is worse
+      // than none, because the GM stops checking.
+      {
+        const gv = M.viewFor(map, "k", { asGM: true });
+        const seenByPlayer = new Set(v.landmarks.map((l) => l.id));
+        ok(`${tag}: the GM view carries every landmark`, gv.landmarks.length === map.hexes.k.lm.length);
+        ok(`${tag}: each GM \`seen\` is exactly what the player view holds`,
+          gv.landmarks.every((l) => l.seen === seenByPlayer.has(l.id)));
+        ok(`${tag}: players are never handed a landmark marked unseen`, v.landmarks.every((l) => l.seen !== false));
+        ok(`${tag}: landmarksShown answers for the hex`,
+          M.landmarksShown(map, map.hexes.k) === (st === "revealed" || (st === "masked" && !!f.landmarks)));
+      }
       if (st === "hidden") {
         ok(`${tag}: hidden hex withholds everything`, withheld.every((x) => v[x] == null) && v.landmarks.every((l) => l.vis === "visible") && !v.blight && !v.visited && v.regionId == null);
       } else if (st === "masked") {
@@ -216,6 +230,25 @@ for (const known of [false, true]) {
   }
 }
 ok("a hex outside any region shows its own name", M.viewFor(M.normalizeMap({ hexes: { k: { st: "revealed", nm: "Lone" } } }), "k").name === "Lone");
+
+/* A landmark's own colour and size. Both are DATA a GM set on their map, so a
+   value that fails to normalise must fall back to the shipped badge — never to
+   black (a colour nobody can see against the tile) or to 0 (a badge nobody can
+   hit), both of which render perfectly happily. */
+{
+  const lm = (o) => M.normalizeLandmark(o);
+  ok("a landmark colour is #rrggbb, lower-cased, else the default badge (null)",
+    lm({ color: "#AABBCC" }).color === "#aabbcc" && lm({ color: "red" }).color === null
+    && lm({ color: "" }).color === null && lm({}).color === null);
+  ok("a landmark size defaults to 1 and clamps into its range",
+    lm({}).size === C.LANDMARK_SIZE_DEFAULT && lm({ size: "" }).size === C.LANDMARK_SIZE_DEFAULT
+    && lm({ size: "nope" }).size === C.LANDMARK_SIZE_DEFAULT
+    && lm({ size: 99 }).size === C.LANDMARK_SIZE_MAX && lm({ size: 0 }).size === C.LANDMARK_SIZE_MIN);
+  ok("every size the editor offers survives normalisation unchanged",
+    C.LANDMARK_SIZE_STEPS.every((s) => M.landmarkSize(s) === s && lm({ size: s }).size === s));
+  ok("colour and size survive a map round trip",
+    M.normalizeMap({ hexes: { k: { st: "revealed", lm: [{ id: "a", color: "#112233", size: 1.5 }] } } }).hexes.k.lm[0].color === "#112233");
+}
 
 /* Mask presets are the map's own: seeded, editable, deletable; "sight" is live. */
 {
@@ -491,9 +524,16 @@ for (const s of C.BRUSH_TOOLS) need.push(`GLHEX.tool.${s}`);
 for (const s of C.RENDER_MODES) need.push(`GLHEX.render.${s}`);
 for (const s of C.GLYPH_IDS) need.push(`GLHEX.glyph.${s}`);
 for (const s of C.LANDMARK_VIS) need.push(`GLHEX.landmarkVis.${s}`);
-// Every literal key the runtime (this folder, not apps/) passes to localize/format.
-for (const f of readdirSync(FEAT).filter((f) => f.endsWith(".mjs"))) {
-  const src = readFileSync(join(FEAT, f), "utf8");
+// Every literal key the runtime, the GM apps and their templates pass to
+// localize/format. A key only a template names resolves to the raw key on
+// screen, which no other check here would catch.
+const langSources = [
+  ...readdirSync(FEAT).filter((f) => f.endsWith(".mjs")).map((f) => join(FEAT, f)),
+  ...readdirSync(join(FEAT, "apps")).filter((f) => f.endsWith(".mjs")).map((f) => join(FEAT, "apps", f)),
+  ...readdirSync(join(ROOT, "templates", "hexcrawl")).filter((f) => f.endsWith(".hbs")).map((f) => join(ROOT, "templates", "hexcrawl", f)),
+];
+for (const f of langSources) {
+  const src = readFileSync(f, "utf8");
   for (const m of src.matchAll(/["'`](GLHEX\.[A-Za-z0-9_.]+[A-Za-z0-9_])["'`]/g)) need.push(m[1]);
   for (const m of src.matchAll(/["'`](GLS\.feature\.hexcrawl\.[a-z]+)["'`]/g)) need.push(m[1]);
 }
@@ -579,6 +619,54 @@ if (renderFiles.length) {
   ok("the fog look draws no vector \"?\" (it is text in the label face)", !/look === "fog"[\s\S]{0,900}?drawQuestion\(/.test(tilesSrc));
   ok("the fog \"?\" rasterises once in the label face and is shared", /new this\.PIXI\.Text\("\?"[\s\S]{0,160}fontFamily: this\.fontFamily/.test(rendSrc) && /new this\.PIXI\.Sprite\(tex\)/.test(rendSrc));
   ok("a hex's signature carries its boundary mask (a neighbour's region change redraws it)", /_boundary\(k\)[\s\S]{0,700}\|\$\{edge\}/.test(rendSrc));
+
+  /* Landmark badges: colour, size, and the GM's "can the party see this?".
+     All three are DRAWN, so all three have to reach the signature the chunked
+     static layer and the icon layer key on — a badge recoloured or resized and
+     not signed keeps the old look on every hex that shares its stamp, forever,
+     with nothing reported. */
+  try {
+    const T = await imp("scripts/features/hexcrawl/render/tiles.mjs");
+    const G2 = await imp("scripts/features/hexcrawl/render/geom.mjs");
+    const { GEO } = await imp("scripts/features/hexcrawl/render/style.mjs");
+    const GEOBASE = (n) => GEO.lmBadge * (n >= 3 ? 0.82 : 1);
+    const base = { id: "a", icon: "fa-solid fa-x", img: null, label: "A", vis: "follow", color: null, size: 1 };
+    const sig = (o) => T.badgeSig({ ...base, ...o });
+    ok("a badge's signature separates colour, size and seen",
+      new Set([sig({}), sig({ color: "#ff0000" }), sig({ size: 1.5 }), sig({ seen: false })]).size === 4);
+    ok("the signature is stable for the same badge", sig({ color: "#ff0000" }) === sig({ color: "#ff0000" }));
+    ok("the renderer and the static layer sign with that one function",
+      rendSrc.includes("badgeSig") && !/l\.id\}:\$\{l\.icon\}/.test(rendSrc)
+      && /badgeSig/.test(tilesSrc) && /\$\{lm\}/.test(tilesSrc));
+    ok("the icon layer places with the badges' own layout (a mark cannot leave its diamond)",
+      stripComments(readFileSync(join(FEAT, "render", "labels.mjs"), "utf8")).includes("badgeLayout("));
+
+    // The row is laid out from the radii, so badges of ANY sizes sit side by
+    // side: two overlapping diamonds read as one broken mark, and a cluster
+    // wider than its hex stops saying which hex it is on.
+    ok("one shipped badge sits at the hex centre",
+      Math.abs(G2.landmarkLayout([GEO.lmBadge])[0].x) < 1e-9 && G2.landmarkLayout([GEO.lmBadge])[0].s === GEO.lmBadge);
+    const two = G2.landmarkLayout([GEO.lmBadge, GEO.lmBadge]);
+    ok("two shipped badges keep the slots they always had (±0.25)",
+      Math.abs(two[0].x + 0.25) < 1e-9 && Math.abs(two[1].x - 0.25) < 1e-9);
+    let overlap = 0, spill = 0;
+    const steps = [...C.LANDMARK_SIZE_STEPS];
+    for (const a of steps) for (const b of steps) for (const c of steps) {
+      for (const sizes of [[a], [a, b], [a, b, c]]) {
+        const n = sizes.length;
+        const R = GEOBASE(n);
+        const row = G2.landmarkLayout(sizes.map((s) => R * s));
+        for (let i = 1; i < row.length; i++) {
+          if (row[i].x - row[i - 1].x < row[i].s + row[i - 1].s - 1e-9) overlap++;
+        }
+        if (row.some((p) => Math.abs(p.x) + p.s > 0.75 + 1e-9)) spill++;
+      }
+    }
+    ok("badges of any sizes never overlap", overlap === 0, `${overlap} pairs`);
+    ok("a cluster never grows past its hex", spill === 0, `${spill} rows`);
+    const big = T.badgeLayout([{ size: 2 }], 100), small = T.badgeLayout([{ size: 0.6 }], 100);
+    ok("a landmark's size reaches the badge it draws", big[0].s > small[0].s * 3 - 1e-9);
+  } catch (e) { ok("landmark badges run", false, e.message); }
 }
 
 head("durations");
@@ -592,6 +680,20 @@ for (const f of durationFiles) {
 head("apps");
 const appFiles = walk(join(FEAT, "apps"));
 ok("apps/ exists", appFiles.length > 0);
+{
+  // The GM is told what the party sees of a landmark in three places — the map,
+  // the tooltip and the hex editor. All three must take that answer from the
+  // model; one re-deriving it from `vis` alone stops agreeing the moment a hex's
+  // mask changes, and the GM's own screen looks perfectly correct either way.
+  const tip = stripComments(readFileSync(join(FEAT, "tooltip.mjs"), "utf8"));
+  ok("the tooltip's landmark tag reads viewFor's `seen`", /lm\.seen/.test(tip));
+  const ed = stripComments(readFileSync(join(FEAT, "apps", "hex-editor.mjs"), "utf8"));
+  ok("the hex editor's chip asks the model, from the draft", /landmarkSeen\(/.test(ed) && /landmarksShown\(/.test(ed));
+  const hbs = readFileSync(join(ROOT, "templates", "hexcrawl", "hex-editor.hbs"), "utf8");
+  for (const [what, re] of [["colour", /name="lm\.\{\{i\}\}\.color"/], ["size", /name="lm\.\{\{i\}\}\.size"/], ["seen chip", /glhex-lm-seen/]]) {
+    ok(`the landmark row carries its ${what}`, re.test(hbs));
+  }
+}
 delete globalThis.game; delete globalThis.Hooks;
 for (const f of appFiles) {
   try { await import(pathToFileURL(f).href); } catch (e) { ok(`${relative(ROOT, f)} imports without foundry at module scope`, false, e.message); }

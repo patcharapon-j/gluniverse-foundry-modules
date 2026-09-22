@@ -127,7 +127,13 @@ region editor.
     "name": "The Grey Scar",      // overrides the region name for this hex
     "notes": "GM notes",
     "landmarks": [
-      { "icon": "tower-observation", "label": "Old Watchtower", "visibility": "visible" }
+      {
+        "icon": "tower-observation",   // or "img": a path to an image
+        "label": "Old Watchtower",
+        "visibility": "visible",       // follow (default) | visible | hidden
+        "color": "#8ad8ff",            // optional #rrggbb; omit for the default badge colour
+        "size": 1.25                   // optional badge size, 0.6–2 (default 1); out of range is clamped
+      }
     ]
   }
 ]
@@ -176,6 +182,13 @@ Landmarks (at most 3 per hex): `icon` is a Font Awesome 6 name, with or without
 `visibility`: `follow` (default — shown when its hex shows landmarks),
 `visible` (known to players — intel — shown even while its hex is masked or hidden: the tower on the horizon), `hidden` (GM
 only: the book's hidden point of interest). `journal` takes a Journal UUID.
+`color` (`#rrggbb`) paints that badge, its mark and its row in the GM's editor;
+leave it out for the default badge colour. `size` scales the badge and its mark
+(0.6–2, default 1) — anything outside that is clamped, and badges sharing a hex
+are spread and, if need be, scaled down together so none overlaps or leaves its
+hex. In the GM's own view a landmark the party cannot see yet is drawn hatched
+behind a dashed rim, so `hidden` (and `follow` on a hex that hides its
+landmarks) is visible as such at a glance.
 
 ### Art: icons and ground textures (optional)
 
@@ -292,7 +305,7 @@ The window's **Copy example** button puts this on the clipboard
     "rows": ["....^^~~", "....^^~~", "...a..~~", "...aa...", "........", "........"]
   },
   "hexes": [
-    { "col": 2, "row": 1, "state": "revealed", "landmarks": [{ "icon": "tower-observation", "label": "Old Watchtower", "visibility": "visible" }] },
+    { "col": 2, "row": 1, "state": "revealed", "landmarks": [{ "icon": "tower-observation", "label": "Old Watchtower", "visibility": "visible", "color": "#8ad8ff", "size": 1.25 }] },
     { "col": 4, "row": 3, "terrain": "shadowblighted", "rating": 4, "name": "The Grey Scar" }
   ],
   "start": { "col": 0, "row": 0 }

@@ -11,9 +11,13 @@
  */
 
 import {
-  LANDMARK_VIS, MASK_FIELDS, MAX_LANDMARKS_PER_HEX, RATING_MAX, RATING_MIN, SIGHT_PRESET, STATES,
+  LANDMARK_SIZE_DEFAULT, LANDMARK_SIZE_STEPS, LANDMARK_VIS, MASK_FIELDS, MAX_LANDMARKS_PER_HEX,
+  RATING_MAX, RATING_MIN, SIGHT_PRESET, STATES,
 } from "../constants.mjs";
-import { isBlankHex, isMaskPreset, maskFields, newId, normalizeHex, presetFields } from "../model.mjs";
+import {
+  isBlankHex, isMaskPreset, landmarkSeen, landmarkSize, landmarksShown, maskFields, newId, normalizeHex, presetFields,
+} from "../model.mjs";
+import { PALETTE } from "../../../core/theme.mjs";
 import { StoreAppBase } from "./base.mjs";
 import {
   L, bindUuidDrops, currentStore, indexedList, openUuid, optionalNumber, optionList, presetChoices, ratingLabel,
@@ -22,6 +26,24 @@ import {
 import { pickIcon } from "./icon-picker.mjs";
 
 const appId = (key) => `glhex-hex-${String(key).replace(/[^0-9a-z-]/gi, "_")}`;
+
+/** What the colour well shows for a landmark with no colour of its own: the
+ *  hue the renderer actually draws it in. Never a literal — a suite colour in
+ *  JS comes from the palette (docs/DESIGN_SYSTEM.md). */
+const DEFAULT_LM_COLOR = PALETTE.warn;
+
+/** The size ladder, plus the landmark's own size when it is off it (an import
+ *  or a hand-edited flag) — a value the editor could not show would be silently
+ *  replaced the next time the GM saved. */
+function sizeChoices(size) {
+  const cur = landmarkSize(size);
+  const steps = LANDMARK_SIZE_STEPS.includes(cur) ? LANDMARK_SIZE_STEPS : [...LANDMARK_SIZE_STEPS, cur].sort((a, b) => a - b);
+  return steps.map((value) => ({
+    value,
+    label: `${Math.round(value * 100)}%`,
+    selected: value === cur,
+  }));
+}
 
 function draftFrom(map, key) {
   const h = map.hexes[key] ?? { st: "hidden" };
@@ -57,6 +79,7 @@ function HexEditorApp() {
       actions: {
         addLandmark: HexEditor.#onAddLandmark,
         removeLandmark: HexEditor.#onRemoveLandmark,
+        clearLandmarkColor: HexEditor.#onClearLandmarkColor,
         pickIcon: HexEditor.#onPickIcon,
         openLink: HexEditor.#onOpenLink,
         cancel: function () { this.close(); },
@@ -90,6 +113,8 @@ function HexEditorApp() {
       const tableCost = effRating != null ? map.config.cost.table[effRating - 1] ?? 0 : 0;
 
       const preset = presetFields(map, d.mkP);
+      // Read off the DRAFT, so the chips answer for the hex the GM is about to save.
+      const lmShown = landmarksShown(map, { st: d.st, ...(d.st === "masked" ? { mk: { p: d.mkP, f: d.mkF } } : {}) });
       return {
         ...context,
         empty: false,
@@ -119,10 +144,18 @@ function HexEditorApp() {
         costPlaceholder: L("GLHEX.app.hex.costTable", { n: tableCost, unit: L(`GLHEX.unit.${map.config.cost.unit}`) }),
         cost: d.cost ?? "",
         namePlaceholder: region?.name || L("GLHEX.app.hex.namePlaceholder"),
+        // Whether the party would see each badge once this draft is saved —
+        // the same question the map and the tooltip ask (model.landmarksShown),
+        // so a GM can tell a hidden point of interest from a shown one here.
         landmarks: d.lm.map((l, i) => ({
           ...l, i,
           vis: optionList(LANDMARK_VIS, (v) => L(`GLHEX.landmarkVis.${v}`), l.vis ?? "follow"),
+          sizes: sizeChoices(l.size),
+          colorShown: l.color || DEFAULT_LM_COLOR,
+          colorCustom: !!l.color,
+          seen: landmarkSeen(l, lmShown),
         })),
+        lmSeenHint: L(lmShown ? "GLHEX.app.hex.lmHexShows" : "GLHEX.app.hex.lmHexHides"),
         canAddLandmark: d.lm.length < MAX_LANDMARKS_PER_HEX,
         maxLandmarks: MAX_LANDMARKS_PER_HEX,
       };
@@ -132,6 +165,16 @@ function HexEditorApp() {
       await super._onRender(context, options);
       const root = this.element;
       bindUuidDrops(root);
+      // A colour well writes into the hidden field the form reads, so "no colour"
+      // stays expressible: the well always has a value, the hidden field may be blank.
+      for (const picker of root.querySelectorAll("[data-color-picker]")) {
+        const hidden = picker.parentElement?.querySelector("input[type='hidden']");
+        picker.addEventListener("input", () => {
+          if (!hidden) return;
+          hidden.value = picker.value;
+          picker.closest(".glhex-color")?.classList.add("is-custom");
+        });
+      }
       for (const el of root.querySelectorAll("[data-rerender]")) {
         el.addEventListener("change", () => {
           this.#syncDraft();
@@ -163,6 +206,9 @@ function HexEditorApp() {
         label: rows[i]?.label ?? l.label ?? "",
         journal: rows[i]?.journal || null,
         vis: LANDMARK_VIS.includes(rows[i]?.vis) ? rows[i].vis : l.vis ?? "follow",
+        // A blank colour is "the default badge hue", never a stored black.
+        color: /^#[0-9a-f]{6}$/i.test(rows[i]?.color ?? "") ? rows[i].color.toLowerCase() : null,
+        size: landmarkSize(rows[i]?.size ?? l.size),
       }));
     }
 
@@ -191,7 +237,11 @@ function HexEditorApp() {
       set("nt", d.nt);
       const lm = d.lm
         .filter((l) => l.label?.trim() || l.icon || l.img || l.journal)
-        .map((l) => ({ id: l.id, icon: l.icon || null, img: l.img || null, label: l.label?.trim() ?? "", journal: l.journal || null, vis: l.vis ?? "follow" }));
+        .map((l) => ({
+          id: l.id, icon: l.icon || null, img: l.img || null, label: l.label?.trim() ?? "",
+          journal: l.journal || null, vis: l.vis ?? "follow",
+          color: l.color || null, size: landmarkSize(l.size),
+        }));
       if (lm.length) hex.lm = lm; else delete hex.lm;
       return hex;
     }
@@ -208,7 +258,17 @@ function HexEditorApp() {
     static #onAddLandmark() {
       this.#syncDraft();
       if (this.draft.lm.length >= MAX_LANDMARKS_PER_HEX) return;
-      this.draft.lm.push({ id: newId("lm"), icon: "fa-solid fa-landmark", img: null, label: "", journal: null, vis: "follow" });
+      this.draft.lm.push({
+        id: newId("lm"), icon: "fa-solid fa-landmark", img: null, label: "", journal: null,
+        vis: "follow", color: null, size: LANDMARK_SIZE_DEFAULT,
+      });
+      this.render();
+    }
+
+    static #onClearLandmarkColor(event, target) {
+      this.#syncDraft();
+      const i = Number(target.closest("[data-index]")?.dataset.index);
+      if (this.draft.lm[i]) this.draft.lm[i].color = null;
       this.render();
     }
 
