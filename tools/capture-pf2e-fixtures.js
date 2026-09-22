@@ -17,6 +17,10 @@
     return {
       className: roll.constructor?.name ?? null,
       formula: roll.formula,
+      dice: (roll.dice ?? []).map((die) => ({
+        faces: die.faces ?? null,
+        results: (die.results ?? []).filter((r) => r.active !== false).map((r) => r.result)
+      })),
       total: roll.total ?? null,
       d20Results: d20 ? d20.results.map((r) => ({ result: r.result, active: r.active !== false })) : null,
       degreeOfSuccess: roll.options?.degreeOfSuccess ?? null,

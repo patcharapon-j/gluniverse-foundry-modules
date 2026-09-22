@@ -117,6 +117,47 @@ Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
 scales the overlay, which the stream client owns.
 
+## Plain rolls and chat text
+
+In a PF2e world the overlay clones no chat card at all — every new message goes
+through the roll-card feed. So before these two kinds existed, a `/r 2d6+3` and a
+line somebody typed reached the stream as *nothing*: the reader returned null, no
+card was built, and the result is indistinguishable from the overlay being
+switched off.
+
+Both are cards now, in the same stack, under the same lifetime, with the same
+hairline and the same framed art.
+
+**A plain roll** is anything carrying dice that PF2e did not claim as a check, a
+damage roll or a cast: `/r 2d6+3`, a macro roll, a system PF2e has no context
+type for. It says the three things such a roll has to say and nothing else — what
+was rolled, what each die came up, and the total. There is no degree of success,
+because PF2e resolved none; the card is deliberately silent about outcome rather
+than inventing one, exactly as [a check made against no DC](#what-the-roll-card-does-not-say)
+is. The d20 is drawn only for a roll with exactly one d20 rolling exactly once
+(the classic `1d20+N`) — a `10d20` has no natural, and a die showing one of its
+ten results would be a lie about the roll. A natural 20 or 1 still cracks gold or
+red, the same rule a check with no DC follows.
+
+**A chat card** is something a person typed. Foundry's chat *style* is the whole
+test: in character, an emote, or out of character. Style OTHER is refused, and
+that refusal is the load-bearing part — OTHER is the default every ChatMessage
+carries, so every roll, every PF2e item card and every module's status summary
+would otherwise land on the stream at roll-card weight, with nothing to switch
+off but the feature. The body is flattened to plain text in the reader and set
+through `textContent` in the card: a message is arbitrary markup from any client
+in the world, and the stream is the one screen in a session nobody is watching.
+It is cut to three lines, so an arriving card cannot grow and move the stack
+under it.
+
+Six switches in the panel's **Rolls & Chat** section: the feature, plain rolls,
+speech, emotes, out-of-character, and messages the GM typed. All on by default.
+The reader consults them before it builds a model, so a row that is off costs
+nothing. Their defaults are declared once, beside the gates that read them in
+`pf2e/read-message.js`, and re-exported by `settings.js` — stated twice they
+would drift, and a row whose default said off only on the side that reads it is
+a feature nobody switched off silently not existing.
+
 ## Status cards
 
 A creature gaining or losing a condition gets its own card in the overlay: the

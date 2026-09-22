@@ -6,7 +6,7 @@
  */
 
 import { MODULE_ID } from "../../stream/constants.js";
-import { CARD_FLAGS, getDefaultRollArt } from "../settings.js";
+import { CARD_FLAGS, getBasicCardSettings, getDefaultRollArt } from "../settings.js";
 
 export function snapshotMessage(message) {
   const source = message._source ?? message.toObject?.() ?? {};
@@ -19,6 +19,9 @@ export function snapshotMessage(message) {
       speaker: { ...(message.speaker ?? {}) },
       flavor: message.flavor ?? "",
       content: message.content ?? "",
+      // Foundry's chat style (OTHER/OOC/IC/EMOTE). It is what tells a line somebody typed from the
+      // default every roll and every system card also carries — see TEXT_STYLES in read-message.js.
+      style: message.style ?? 0,
       flags: source.flags ?? {}
     },
     derived: {
@@ -32,6 +35,7 @@ export function snapshotMessage(message) {
       target: targetOf(message),
       item: itemOf(message),
       defaultArt: getDefaultRollArt(),
+      basicCards: getBasicCardSettings(),
       nameVisibilitySetting: !!game.pf2e?.settings?.tokens?.nameVisibility
     }
   };
@@ -41,6 +45,13 @@ function summarizeRoll(roll) {
   const d20 = roll.dice?.find((die) => die.faces === 20);
   return {
     total: roll.total ?? null,
+    formula: roll.formula ?? null,
+    // Every die group, not just the d20: a plain roll prints what each die came up, and a `2d6` has no
+    // d20 to be summarised through.
+    dice: (roll.dice ?? []).map((die) => ({
+      faces: die.faces ?? null,
+      results: (die.results ?? []).filter((r) => r.active !== false).map((r) => r.result)
+    })),
     d20Results: d20 ? d20.results.map((r) => ({ result: r.result, active: r.active !== false })) : null,
     degreeOfSuccess: roll.options?.degreeOfSuccess ?? null,
     instances: Array.isArray(roll.instances)

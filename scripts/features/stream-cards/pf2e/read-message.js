@@ -30,6 +30,55 @@ export const CHECK_TYPE_KEYS = Object.freeze({
 
 const CHECK_TYPES = new Set(Object.keys(CHECK_TYPE_KEYS));
 
+/**
+ * The two kinds of message that are not PF2e's: a plain dice roll and something a person typed.
+ *
+ * In a PF2e world the overlay hands *every* new message to this feed and never clones a chat card, so
+ * a `/r 2d6+3` and a line of speech used to reach the stream as nothing at all — the reader returned
+ * null and no card was built, which looks exactly like the overlay being switched off. They are cards
+ * now, behind these switches.
+ *
+ * The defaults live here, beside the gates that read them, rather than in `settings.js`: the reader is
+ * the only thing that consults a row, and a row whose default said one thing here and another there
+ * would be a switch that reads as off in a world that never stored it. `settings.js` re-exports this
+ * object and its sanitizer rebuilds from these keys.
+ */
+export const DEFAULT_BASIC_CARDS = Object.freeze({
+  /** Draw either kind at all. */
+  enabled: true,
+  /** A plain dice roll: `/r 2d6+3`, a macro roll, anything PF2e did not claim as a check or damage. */
+  rolls: true,
+  /** In-character speech. */
+  speech: true,
+  /** `/emote`. */
+  emotes: true,
+  /** Out-of-character chatter. */
+  ooc: true,
+  /** Messages the GM typed. Their own switch: a table may want the narration and not the table talk. */
+  gm: true
+});
+
+/**
+ * Foundry's chat styles, and the label each one headlines with.
+ *
+ * Only these three become cards. Style OTHER (0) is the default every *document* carries — every roll,
+ * every PF2e item card, every module's status summary — so accepting it would put the whole of a PF2e
+ * session's chat traffic on the stream, at roll-card weight, with nothing to switch off but the
+ * feature. A message someone typed carries IC, EMOTE or OOC, and that is the whole test.
+ */
+export const TEXT_STYLES = Object.freeze({
+  1: { gate: "ooc", key: "OutOfCharacter", name: "ooc" },
+  2: { gate: "speech", key: "Says", name: "speech" },
+  3: { gate: "emotes", key: "Emotes", name: "emote" }
+});
+
+/** A quote longer than this is cut: the card is a glance, and it has three lines to give. */
+const MAX_QUOTE = 240;
+/** A formula longer than this is cut: it sits on one line in the result column beside the total. */
+const MAX_FORMULA = 22;
+/** Individual dice shown under a plain roll before the rest are summarised away. */
+const MAX_DICE_SHOWN = 8;
+
 const DEFAULT_TOKEN_ICON = /(^|\/)(icons\/svg\/mystery-man\.svg|systems\/pf2e\/icons\/default-icons\/)/;
 
 /**
@@ -46,7 +95,8 @@ export function readMessage(snapshot) {
 
   const pf2e = raw.flags?.pf2e ?? {};
   const context = pf2e.context ?? null;
-  const kind = kindOf(pf2e, context, derived);
+  const gates = gatesOf(derived);
+  const kind = kindOf(pf2e, context, derived, raw, gates);
   if (!kind) return null;
 
   const base = {
@@ -62,12 +112,15 @@ export function readMessage(snapshot) {
     roll: null,
     spell: null,
     damage: null,
+    text: null,
     fx: null
   };
 
   if (kind === "check") return { ...base, ...readCheck(raw, context, derived) };
   if (kind === "damage") return { ...base, ...readDamage(raw, derived) };
   if (kind === "cast") return { ...base, ...readCast(pf2e, derived) };
+  if (kind === "roll") return { ...base, ...readPlainRoll(raw, derived) };
+  if (kind === "text") return { ...base, ...readText(raw, derived, base) };
   const cost = derived.item?.actionCost ?? null;
   return {
     ...base,
@@ -89,13 +142,136 @@ export function visibilityOf(raw, derived) {
   return "public";
 }
 
-function kindOf(pf2e, context, derived) {
+/**
+ * The switches, with the defaults standing in for a snapshot that carries none.
+ *
+ * The fixtures were captured before these existed and the check tools drive the reader directly, so an
+ * absent `basicCards` must read as the shipped defaults rather than as an object of `undefined` — every
+ * gate below would read that as off, which is the feature silently not existing.
+ */
+function gatesOf(derived) {
+  const stored = derived?.basicCards;
+  return stored && typeof stored === "object" ? { ...DEFAULT_BASIC_CARDS, ...stored } : DEFAULT_BASIC_CARDS;
+}
+
+function kindOf(pf2e, context, derived, raw, gates) {
   const type = context?.type;
   if (type && CHECK_TYPES.has(type)) return derived.rollCount > 0 ? "check" : null;
   if (type === "damage-roll") return derived.rollCount > 0 ? "damage" : null;
   if (type === "spell-cast" || pf2e.casting) return "cast";
   if (!type && pf2e.origin && derived.rollCount === 0 && /^(action|feat)$/.test(pf2e.origin.type ?? "")) return "action";
-  return null;
+  // Anything left that carries dice is a plain roll: `/r 2d6+3`, a macro, a system PF2e has no context
+  // type for. Anything left that carries none is a card only if a person typed it.
+  if (derived.rollCount > 0) return gates.enabled && gates.rolls ? "roll" : null;
+  return textKind(raw, derived, gates);
+}
+
+/** A typed message, or null. Style is the whole test — see TEXT_STYLES. */
+function textKind(raw, derived, gates) {
+  if (!gates.enabled) return null;
+  const style = TEXT_STYLES[raw.style];
+  if (!style || !gates[style.gate]) return null;
+  if (derived.authorIsGM && !gates.gm) return null;
+  return plainText(raw.content) ? "text" : null;
+}
+
+/**
+ * A plain dice roll.
+ *
+ * It says the three things such a roll has to say and nothing else: what was rolled (the formula), what
+ * each die came up (the faces), and the total. There is no degree of success because PF2e resolved
+ * none — the card is deliberately silent about outcome rather than inventing one, exactly as a check
+ * against no DC is.
+ *
+ * The natural d20 is shown only when the roll has exactly one d20 rolling exactly once, i.e. the
+ * classic `1d20+N`. A `10d20` has no "natural" and a die drawn with one of its ten results on it would
+ * be a lie about the roll.
+ */
+function readPlainRoll(raw, derived) {
+  const roll = derived.rolls[0] ?? {};
+  const natural = singleD20Of(roll);
+  const heading = headingText(raw.flavor) || plainText(raw.flavor) || null;
+  return {
+    action: { label: heading, labelKey: heading ? null : "PlainRoll", sub: diceFaces(roll), map: 0 },
+    roll: {
+      natural,
+      total: Number.isFinite(roll.total) ? roll.total : null,
+      dc: null,
+      dcVisible: false,
+      degree: null,
+      // Only a plain roll carries this. A check's `roll` keeps the shape PF2e gives it, and the card
+      // draws the formula box from this field's presence alone.
+      formula: shorten(roll.formula, MAX_FORMULA)
+    },
+    fx: fxOf(null, natural)
+  };
+}
+
+/**
+ * Something a person typed.
+ *
+ * The body is plain text, extracted here rather than in the card, because the card renders it through
+ * `textContent`: a message is arbitrary HTML from any client in the world, and the stream is the one
+ * screen in a session nobody is watching for a script tag.
+ *
+ * A speaker with no actor behind it — a player typing with nothing selected — still has a name, so the
+ * identity falls back to the speaker's alias and then to the author. A name the GM has hidden stays
+ * hidden: `actorOf` answers null there and nothing below may fill it back in.
+ */
+function readText(raw, derived, base) {
+  const style = TEXT_STYLES[raw.style];
+  const alias = typeof raw.speaker?.alias === "string" ? raw.speaker.alias.trim() : "";
+  const actor = base.actor.name === null
+    ? base.actor
+    : { ...base.actor, name: base.actor.name || alias || derived.authorName || "" };
+  return {
+    actor,
+    action: { label: null, labelKey: style.key, sub: null, map: 0 },
+    text: { body: plainText(raw.content), style: style.name },
+    fx: null
+  };
+}
+
+/** The d20 a plain `1d20+N` came up, or null when the roll is not that shape. */
+export function singleD20Of(roll) {
+  const d20s = (roll?.dice ?? []).filter((d) => d.faces === 20 && Array.isArray(d.results));
+  if (d20s.length !== 1 || d20s[0].results.length !== 1) return null;
+  const result = d20s[0].results[0];
+  return Number.isFinite(result) ? result : null;
+}
+
+/** "4 · 6 · 3" — what each die actually came up, under the headline. */
+export function diceFaces(roll) {
+  const faces = [];
+  for (const die of roll?.dice ?? []) {
+    for (const result of die?.results ?? []) {
+      if (!Number.isFinite(result)) continue;
+      if (faces.length >= MAX_DICE_SHOWN) return `${faces.join(" · ")} …`;
+      faces.push(String(result));
+    }
+  }
+  return faces.length ? faces.join(" · ") : null;
+}
+
+/** Plain text out of chat HTML, collapsed and cut to length. Never returns null; "" means nothing to show. */
+export function plainText(html) {
+  if (typeof html !== "string") return "";
+  const text = decodeEntities(
+    html
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<\/(p|div|li|tr|h[1-6])>/gi, " ")
+      .replace(/<[^>]+>/g, "")
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  return shorten(text, MAX_QUOTE) ?? "";
+}
+
+function shorten(value, max) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
 function readCheck(raw, context, derived) {
@@ -288,7 +464,7 @@ function decodeEntities(text) {
 /**
  * @typedef {object} RollCardModel
  * @property {string} id
- * @property {"check"|"damage"|"cast"|"action"} kind
+ * @property {"check"|"damage"|"cast"|"action"|"roll"|"text"} kind
  * @property {string|null} originKey
  * @property {boolean} isReroll
  * @property {"public"|"ownBlind"} visibility
@@ -296,8 +472,9 @@ function decodeEntities(text) {
  * @property {{name: string}|null} player
  * @property {{name: string|null}|null} target
  * @property {{label: string|null, labelKey: string|null, sub: string|null, map: number, cost?: {type: string, value: number|null}|null}|null} action
- * @property {{natural: number|null, total: number|null, dc: number|null, dcVisible: boolean, degree: 0|1|2|3|null}|null} roll
+ * @property {{natural: number|null, total: number|null, dc: number|null, dcVisible: boolean, degree: 0|1|2|3|null, formula?: string|null}|null} roll
  * @property {{name: string, tradition: string|null, rank: number|null, isCantrip: boolean, dc: number|null, save: {statistic: string, basic: boolean}|null, attackBonus: number|null}|null} spell
  * @property {{total: number, parts: {type: string, amount: number, persistent: boolean}[], crit: boolean}|null} damage
+ * @property {{body: string, style: "speech"|"emote"|"ooc"}|null} text
  * @property {"gold"|"red"|"pop"|null} fx
  */

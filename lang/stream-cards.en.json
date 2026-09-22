@@ -54,5 +54,17 @@
   "GLUNIVERSE_STREAM.statusCard.settings.removals": "When they end",
   "GLUNIVERSE_STREAM.statusCard.settings.players": "Player characters",
   "GLUNIVERSE_STREAM.statusCard.settings.npcs": "Visible creatures",
-  "GLUNIVERSE_STREAM.statusCard.settings.lifetimeFactor": "Status card lifetime"
+  "GLUNIVERSE_STREAM.statusCard.settings.lifetimeFactor": "Status card lifetime",
+  "GLUNIVERSE_STREAM.settings.basicCards.name": "Plain rolls and chat",
+  "GLUNIVERSE_STREAM.settings.basicCards.hint": "Which plain dice rolls and typed chat messages become stream cards.",
+  "GLUNIVERSE_STREAM.basicCard.settings.enabled": "Show plain rolls and chat",
+  "GLUNIVERSE_STREAM.basicCard.settings.rolls": "Plain dice rolls",
+  "GLUNIVERSE_STREAM.basicCard.settings.speech": "In-character speech",
+  "GLUNIVERSE_STREAM.basicCard.settings.emotes": "Emotes",
+  "GLUNIVERSE_STREAM.basicCard.settings.ooc": "Out-of-character chat",
+  "GLUNIVERSE_STREAM.basicCard.settings.gm": "Messages the GM typed",
+  "GLUNIVERSE_STREAM.rollCard.PlainRoll": "Roll",
+  "GLUNIVERSE_STREAM.rollCard.Says": "Says",
+  "GLUNIVERSE_STREAM.rollCard.Emotes": "Emotes",
+  "GLUNIVERSE_STREAM.rollCard.OutOfCharacter": "Out of character"
 }

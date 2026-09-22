@@ -712,3 +712,47 @@
   transition: background-color 0.35s, box-shadow 0.35s;
   pointer-events: none;
 }
+
+/*
+ * ── Plain rolls and chat ──────────────────────────────────────────────────────
+ *
+ * In a PF2e world the overlay clones no chat cards at all, so a `/r 2d6+3` and a line somebody typed
+ * are drawn here too. Both keep the roll card's shape: same strip, same hairline, same framed art.
+ */
+
+/* A plain roll's formula sits where a degree's meta line does, so the column keeps its rhythm; it is
+ * the only thing on the card the die and the total do not already say. */
+.glus-rc[data-kind="roll"] .glus-rc-degree-meta {
+  max-width: calc(8 * var(--u));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/*
+ * A chat message is words, and words need width. The result column gives up its `auto` sizing and
+ * takes the larger share of the strip; both tracks stay shrinkable, so a long name cannot push the
+ * quote out of the card.
+ */
+.glus-rc[data-kind="text"] .glus-rc-main {
+  grid-template-columns: calc(5 * var(--u)) minmax(0, 11fr) minmax(0, 17fr);
+}
+.glus-rc-quote {
+  min-width: 0;
+  font-size: calc(0.92 * var(--u));
+  line-height: 1.3;
+  color: var(--gl-text-bright);
+  /* Three lines, then it is cut — the card is a glance, and a growing card moves the stack under it. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.glus-rc-quote[data-style="emote"] {
+  font-style: italic;
+  color: var(--gl-text);
+}
+.glus-rc-quote[data-style="ooc"] {
+  color: var(--gl-text-dim);
+}

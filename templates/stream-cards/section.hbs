@@ -31,3 +31,17 @@
     </label>
   </div>
 </section>
+
+
+<section class="gluniverse-stream-panel">
+  <h2>Rolls &amp; Chat</h2>
+  <p class="gluniverse-stream-form-hint"><small>In a PF2e world every message goes through these cards, so a plain dice roll and a line somebody typed get one too. Only messages a person typed count as chat — in character, an emote, or out of character — never a system card that happens to carry text.</small></p>
+  <div class="gluniverse-stream-user-list">
+    <label title="Draw cards for plain rolls and chat at all."><input type="checkbox" name="basicCards.enabled" {{#if basic.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.enabled"}}</label>
+    <label title="A plain dice roll: /r 2d6+3, a macro roll, anything PF2e did not claim as a check or damage."><input type="checkbox" name="basicCards.rolls" {{#if basic.rolls}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.rolls"}}</label>
+    <label title="In-character speech."><input type="checkbox" name="basicCards.speech" {{#if basic.speech}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.speech"}}</label>
+    <label title="Emotes, posted with /emote."><input type="checkbox" name="basicCards.emotes" {{#if basic.emotes}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.emotes"}}</label>
+    <label title="Out-of-character chatter: table talk, and anything typed with no character speaking."><input type="checkbox" name="basicCards.ooc" {{#if basic.ooc}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.ooc"}}</label>
+    <label title="Messages the GM typed, in or out of character."><input type="checkbox" name="basicCards.gm" {{#if basic.gm}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.basicCard.settings.gm"}}</label>
+  </div>
+</section>

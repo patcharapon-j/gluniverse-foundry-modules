@@ -26,10 +26,17 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { CARDS_PREFIX, DEFAULT_ROLL_ART } from "../stream/constants.js";
 import { isFocus } from "./framing/focus-math.js";
+// The defaults live beside the gates that read them, in the pure reader. Re-exported here so the
+// panel, the sanitizer and the reader can never disagree about what a row means when a world has
+// never stored it — which would read as a switch nobody can find in the off position.
+import { DEFAULT_BASIC_CARDS } from "./pf2e/read-message.js";
+
+export { DEFAULT_BASIC_CARDS };
 
 export const SETTINGS = {
   defaultRollArt: `${CARDS_PREFIX}.defaultRollArt`,
-  statusUpdates: `${CARDS_PREFIX}.statusUpdates`
+  statusUpdates: `${CARDS_PREFIX}.statusUpdates`,
+  basicCards: `${CARDS_PREFIX}.basicCards`
 };
 
 /**
@@ -90,6 +97,16 @@ export function registerSettings() {
     onChange: () => Hooks.callAll(CARDS_HOOKS.settingsChanged)
   });
 
+  game.settings.register(SUITE_ID, SETTINGS.basicCards, {
+    name: game.i18n.localize("GLUNIVERSE_STREAM.settings.basicCards.name"),
+    hint: game.i18n.localize("GLUNIVERSE_STREAM.settings.basicCards.hint"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: foundry.utils.deepClone(DEFAULT_BASIC_CARDS),
+    onChange: () => Hooks.callAll(CARDS_HOOKS.settingsChanged)
+  });
+
   game.settings.register(SUITE_ID, SETTINGS.statusUpdates, {
     name: game.i18n.localize("GLUNIVERSE_STREAM.settings.statusUpdates.name"),
     hint: game.i18n.localize("GLUNIVERSE_STREAM.settings.statusUpdates.hint"),
@@ -116,6 +133,34 @@ export async function setDefaultRollArt(value) {
   const next = sanitizeDefaultRollArt(value);
   await game.settings.set(SUITE_ID, SETTINGS.defaultRollArt, next);
   return next;
+}
+
+/**
+ * Which plain rolls and typed messages the stream draws.
+ *
+ * Read once per message, into the snapshot, so the pure reader can consult it without reaching for
+ * `game`. A row that is off costs nothing beyond this read.
+ */
+export function getBasicCardSettings() {
+  return sanitizeBasicCards(game.settings.get(SUITE_ID, SETTINGS.basicCards));
+}
+
+/** GM-only, for the same reason `setDefaultRollArt` is: this feature has no delegated write path. */
+export async function setBasicCardSettings(patch) {
+  if (!game.user?.isGM) return getBasicCardSettings();
+  const next = sanitizeBasicCards({ ...getBasicCardSettings(), ...patch });
+  await game.settings.set(SUITE_ID, SETTINGS.basicCards, next);
+  return next;
+}
+
+/** Rebuilt from the defaults' keys, for the reason `sanitizeStatusUpdates` is. */
+export function sanitizeBasicCards(value) {
+  const source = (value && typeof value === "object") ? value : {};
+  const out = {};
+  for (const [key, fallback] of Object.entries(DEFAULT_BASIC_CARDS)) {
+    out[key] = key in source ? Boolean(source[key]) : fallback;
+  }
+  return out;
 }
 
 /** Which status changes the stream draws. */
