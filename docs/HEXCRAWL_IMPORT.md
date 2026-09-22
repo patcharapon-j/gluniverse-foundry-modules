@@ -40,7 +40,10 @@ A coordinate may be written `{ "col": 3, "row": 4 }`, `[3, 4]` (col first), or
   "scene": {
     "name": "The Long Road North",
     "grid": { "orientation": "flat", "offset": "odd", "size": 100 },  // size = px between hex centres
-    "cols": 24, "rows": 16,          // optional: defaults to the furthest hex used
+    "cols": 24, "rows": 16,          // optional: defaults to the furthest hex used.
+                                     // This is the map's EXTENT: the scene is created a
+                                     // hex larger on every side, and that frame is drawn
+                                     // as border — flat black, out of play (see below)
     "background": "worlds/x/maps/north.webp"   // optional scene background image
   },
 
@@ -123,6 +126,9 @@ region editor.
     "mask": { "name": true },     // with a masked state: per-field overrides (region,terrain,rating,name,landmarks,rumor)
     "visited": true,
     "blight": true,
+    "border": true,               // out of play: flat black, no sight, no entry.
+                                  // Omit it and the hex follows scene.cols/rows;
+                                  // `false` brings a hex outside them into play.
     "cost": 1,                    // travel cost override, in the scene's unit
     "name": "The Grey Scar",      // overrides the region name for this hex
     "notes": "GM notes",
@@ -138,6 +144,19 @@ region editor.
   }
 ]
 ```
+
+### Border: what is not map
+
+A scene is created one hex larger than `scene.cols` × `scene.rows` on every
+side, so the map never runs off its own canvas. That frame is **border**: flat
+black on every screen, no survey outline and no "?", and the party can neither
+see into it nor walk into it. It costs nothing to say — the map's extent is
+`scene.cols`/`scene.rows`, and every hex outside it is border by itself.
+
+Per hex, `"border": true` marks one *inside* the extent (a chasm, a cliff, a
+wall of sea), and `"border": false` brings one *outside* it back into play. Omit
+the field and the hex follows the extent; a GM can do the same from the palette's
+Border brush or the hex editor's tick, and Erase puts a hex back to following it.
 
 Visibility states: **hidden** is fog; **revealed** shows everything; a
 **masked** hex shows players only the fields its mask allows, each independent:

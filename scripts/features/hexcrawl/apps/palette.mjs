@@ -27,8 +27,12 @@ const TOOL_ICONS = Object.freeze({
   state: "fa-solid fa-eye",
   blight: "fa-solid fa-virus",
   visited: "fa-solid fa-shoe-prints",
+  border: "fa-solid fa-ban",
   erase: "fa-solid fa-eraser",
 });
+
+/** The brushes that paint a boolean: one on/off segment, one hint. */
+const TOGGLE_TOOLS = Object.freeze(["blight", "visited", "border"]);
 
 const STATE_VALUES = Object.freeze([
   { value: "hidden", icon: "fa-solid fa-eye-slash", key: "GLHEX.state.hidden" },
@@ -36,7 +40,7 @@ const STATE_VALUES = Object.freeze([
 ]);
 
 /** The last value used per tool, so switching tools and back keeps your pick. */
-const lastValue = { terrain: "grassland", rating: 2, state: "revealed", blight: true, visited: true };
+const lastValue = { terrain: "grassland", rating: 2, state: "revealed", blight: true, visited: true, border: true };
 let lastPosition = null;
 const REGION_FILTER_MIN = 8;
 
@@ -143,6 +147,7 @@ function PaletteApp() {
           ...presetChoices(map).map((c) => ({ value: c.id, icon: c.id === "sight" ? "fa-solid fa-binoculars" : "fa-solid fa-mask", label: c.label, masked: true })),
         ].map((s) => ({ ...s, active: tool === "state" && brush.value === s.value })),
         toggleOn: brush.value === true,
+        isToggle: TOGGLE_TOOLS.includes(tool),
         regions,
         regionNone: tool === "region" && !brush.value,
         showFilter: regions.length > REGION_FILTER_MIN,
@@ -239,7 +244,7 @@ function PaletteApp() {
 
     static #onToggle(event, target) {
       const tool = this.brush.tool;
-      if (tool !== "blight" && tool !== "visited") return;
+      if (!TOGGLE_TOOLS.includes(tool)) return;
       this.#setBrush({ tool, value: target.dataset.value === "1" });
     }
 

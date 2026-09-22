@@ -15,10 +15,17 @@ import { hexPolys } from "./tiles.mjs";
 
 const ROUND = "round";
 
-/** Sight boundary: dashed outline of the union of the party's sight ranges. */
-export function sightEdges(adapter, party) {
+/**
+ * Sight boundary: dashed outline of the union of the party's sight ranges,
+ * minus anything `skip` rejects — border hexes are not map, so the party cannot
+ * see into them and the boundary has to stop at the black rather than drawing a
+ * ring around ground nobody will ever be shown.
+ */
+export function sightEdges(adapter, party, skip = null) {
   if (!party?.length) return [];
-  return boundaryEdges(adapter, unionRange(adapter, party));
+  let keys = unionRange(adapter, party);
+  if (skip) keys = new Set([...keys].filter((k) => !skip(k)));
+  return boundaryEdges(adapter, keys);
 }
 
 export function drawSight(g, ctx, edges, width, phase) {

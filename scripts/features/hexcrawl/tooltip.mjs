@@ -57,6 +57,13 @@ export function tooltipHTML(store, key) {
   const map = store.map;
   const gm = !!game.user.isGM && !store.viewAsPlayers;
   const v = viewFor(map, key, { asGM: gm });
+  // Border is not map: players are told nothing, and the GM is told only that,
+  // so a tooltip can never describe ground the black is covering.
+  if (v.border) {
+    if (!gm) return null;
+    return `<header class="glhex-tip-head"><span class="glhex-tip-name">${escapeHTML(L("GLHEX.tooltip.border"))}</span></header>`
+      + `<div class="glhex-tip-line is-dim">${escapeHTML(L("GLHEX.tooltip.borderHint"))}</div>`;
+  }
   const hidden = v.state === "hidden";
   if (!gm && hidden && !v.landmarks.length) return null;
 

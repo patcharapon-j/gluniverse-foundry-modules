@@ -4,6 +4,13 @@
   <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
 {{else}}
   <div class="glhex-body gl-scroll">
+    {{!-- Border first: it decides whether anything below this line applies. --}}
+    <label class="glhex-check glhex-border-row {{#if d.bd}}is-on{{/if}}">
+      <input type="checkbox" name="bd" {{#if d.bd}}checked{{/if}} data-rerender>
+      <span>{{localize "GLHEX.app.hex.border"}}</span>
+    </label>
+    {{#if d.bd}}<p class="glhex-note">{{localize "GLHEX.app.hex.borderHint"}}</p>{{/if}}
+
     <div class="glhex-grid2">
       <label class="glhex-field">
         <span class="gl-tech-label">{{localize "GLHEX.app.hex.terrain"}}</span>

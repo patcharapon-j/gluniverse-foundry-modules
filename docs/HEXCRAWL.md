@@ -159,6 +159,23 @@ players cannot see; otherwise it draws exactly the player view.
   region shape, terrain, difficulty, name). Mask presets are the map's own
   (`map.presets`, seeded from `MASK_PRESETS`), edited in scene settings; a hex
   on a deleted preset falls back to the sight checklist.
+- **Border** — a hex that is not part of the map at all: flat black, edge to
+  edge, on every screen in the world (the GM's included), with no survey
+  outline, no "?", no hatch, no landmark and no tooltip beyond the word. Drawn
+  on the hex's TRUE edge rather than the gutter-inset outline every other look
+  uses, so a run of them is one unbroken field and reads as *off the map* rather
+  than as very dark ground. The party can neither see into one nor enter it, and
+  nothing on one is ever revealed. Two ways a hex becomes one, both answered by
+  `model.isBorder()`:
+  - **The map's extent** (`map.bounds`, in Foundry offsets). A scene created for
+    an imported map is a hex wider and taller than the map on every side
+    (`IMPORT_PAD`); that frame is border by itself, with nothing written per hex.
+  - **The GM's brush** (`border`) or the hex editor's tick, stored per hex as
+    `bd: 1` / `bd: 0`. The record wins in *both* directions — carve a border out
+    of the middle of the map (a chasm, a wall) or bring one padding hex back into
+    play — and `borderFlagFor()` stores a flag only where it disagrees with the
+    extent, so nothing is written to say what the extent already says. Erase
+    clears it back to following the extent.
 - Fog: **Uncharted** — a hidden hex is blank ink with a dashed survey outline
   and a faint "?" in the region-label face (one rasterised Text shared by a
   Sprite per fog hex, not text per hex). A reveal draws the outline in, then the terrain inks in,
@@ -266,9 +283,13 @@ and are edited in the palette's scene settings.
 
 - **Players** (on the moving client, `preUpdateToken`): refused outright when
   the scene's *players may move* is off; otherwise the destination must be on
-  the map and at most one hex away. Snapping is Foundry's.
+  the map and at most one hex away. A **border** hex is off the map in exactly
+  the sense the scene edge is, and is refused with the same message. Snapping is
+  Foundry's.
 - **GM**: a drag is a *reposition* (reveal, no time, no record); hold **Alt**
-  while dropping to make it *travel*.
+  while dropping to make it *travel*. Nothing stops a GM dragging the party onto
+  the black, but nothing follows from it either: no reveal, no cost, no record,
+  no arrival card.
 - **Travel** (active GM only): reveal around every party token; cost = the
   entered hex's travel cost; if *advance time* is on **and** the Clocks &
   Tracker engine is enabled, `game.time.advance(seconds)`; a MoveRecord is

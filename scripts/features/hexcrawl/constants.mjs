@@ -160,7 +160,7 @@ export const RENDER_MODES = Object.freeze(["tiles", "tint", "outlines"]);
 
 /** Brush tools. i18n: GLHEX.tool.<key> */
 export const BRUSH_TOOLS = Object.freeze([
-  "select", "terrain", "region", "rating", "state", "blight", "visited", "erase",
+  "select", "terrain", "region", "rating", "state", "border", "blight", "visited", "erase",
 ]);
 
 /** Rumour truth notes. i18n: GLHEX.truth.<key> */

@@ -48,6 +48,8 @@
   "GLHEX.hud.save": "Save",
   "GLHEX.tooltip.uncharted": "Uncharted",
   "GLHEX.tooltip.blank": "Unmapped ground",
+  "GLHEX.tooltip.border": "Border",
+  "GLHEX.tooltip.borderHint": "Not part of the map. Players see only black here.",
   "GLHEX.tooltip.blight": "Blighted",
   "GLHEX.tooltip.ratingUnknown": "Going unknown",
   "GLHEX.tooltip.landmark": "Landmark",

@@ -254,6 +254,9 @@ export function parseImport(input) {
     if (raw.rating != null) { const r = ratingOf(raw.rating, where, warn); if (r) h.rt = r; }
     if (raw.blight != null) { if (raw.blight) h.bl = true; else delete h.bl; }
     if (raw.visited != null) { if (raw.visited) h.vs = true; else delete h.vs; }
+    // Border is a THREE-state field: absent follows the map's extent, so writing
+    // `false` is how a document says "this one padding hex is in play".
+    if (raw.border != null && raw.border !== "") h.bd = raw.border ? 1 : 0;
     if (raw.cost != null && raw.cost !== "") {
       const c = Number(raw.cost);
       if (Number.isFinite(c) && c >= 0) h.cost = c; else warn(`${where}: cost "${raw.cost}" is not a number ≥ 0 — ignored.`);
@@ -319,6 +322,11 @@ export function parseImport(input) {
     if (p) start = offKey(p.row, p.col);
   }
 
+  // The document's own extent, in IMPORT coordinates (placeOnGrid shifts it onto
+  // the scene with the hexes). Everything outside it is border, which is what
+  // makes the frame of padding hexes a scene carries black by itself.
+  map.bounds = { i: 0, j: 0, rows, cols };
+
   return {
     scene: {
       name: str(sc.name) || str(doc.name) || "Hexcrawl",
@@ -376,6 +384,9 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
     if (h.st === "masked" && h.mk?.f && Object.keys(h.mk.f).length) e.mask = { ...h.mk.f };
     if (h.vs) e.visited = true;
     if (h.bl) e.blight = true;
+    // Only where the hex disagrees with the extent, so a re-import reproduces
+    // the same map without a `border: false` on every hex inside it.
+    if (h.bd != null) e.border = !!h.bd;
     if (h.cost != null) e.cost = h.cost;
     if (h.nm) e.name = h.nm;
     if (h.nt) e.notes = h.nt;
@@ -387,12 +398,18 @@ export function exportMap(map, { name = "Hexcrawl", gridType = HEX_TYPES.HEXODDQ
     if (Object.keys(e).length > 2) hexes.push(e);
   }
   hexes.sort((a, b) => a.row - b.row || a.col - b.col);
+  // The map's declared extent is what `cols`/`rows` mean on the way back in, so
+  // it is preferred over the furthest hex — a map whose bottom row is all blank
+  // would otherwise come back one row smaller and border its own last row.
+  // Only when it sits at the origin: the caller shifts a placed map back to its
+  // own (0,0) before exporting, and a rect elsewhere would describe another map.
+  const extent = map.bounds?.i === 0 && map.bounds?.j === 0 ? map.bounds : null;
   return {
     format: IMPORT_FORMAT,
     version: IMPORT_VERSION,
     scene: {
       name, grid: { ...gridFromType(gridType), size },
-      cols: cols ?? maxCol + 1, rows: rows ?? maxRow + 1,
+      cols: cols ?? extent?.cols ?? maxCol + 1, rows: rows ?? extent?.rows ?? maxRow + 1,
       ...(background ? { background } : {}),
     },
     ...(map.assetBase ? { assetBase: map.assetBase } : {}),

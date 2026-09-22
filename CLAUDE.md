@@ -1356,6 +1356,25 @@ every hex sharing that stamp, forever, with nothing reported. Badges are placed
 by one function from their radii (`landmarkLayout`), so sizes can never make two
 overlap or push a row past its hex.
 
+**Border is "not map", and every road onto a hex has to agree.** A border hex is
+flat black for everyone — the GM included, because drawing the ground under it
+to the one person who marked it hides the only thing the mark says — and the
+party can neither see into it nor enter it. It comes from two places and
+`model.isBorder()` is the only reading of either: the map's **extent**
+(`map.bounds`, which is why the frame of padding hexes a scene carries around an
+imported map is black with nothing written per hex), and the hex's own `bd`,
+which wins in **both** directions so a GM can carve a chasm out of the map or
+bring one padding hex back into play. `borderFlagFor()` is the only writer, so
+no flag is ever stored saying what the extent already says. `shiftKeys` must
+carry `bounds` with the hexes — left behind it puts the map outside its own
+bounds and blacks out everything that just moved. `lookFor` answers "border"
+before it looks at `asGMFull`; `autoRevealPatch` writes no border hex, entered
+or seen; the movement guards sit on both clients (a player is refused, a GM's
+drag reveals, costs and records nothing); and the sight ring is re-cut against
+the views, so bordering a hex the party is standing next to pulls the boundary
+in. The check drives all of it, including that every hex of the padded frame an
+import produces is border and no hex of the map is.
+
 **Every map write is a FORCED replacement.** A plain nested scene update
 *merges*, so a hex that loses `bl`, a region that loses its colour or a config
 that loses a key keeps the old value forever, while the write "succeeds". Write

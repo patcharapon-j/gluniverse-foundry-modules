@@ -173,6 +173,10 @@ export function makeColors(palette) {
   return {
     tile,
     landmark,
+    // Border hexes are BLACK, not the ink the fog is painted in: "off the map"
+    // must not be mistakable for "unexplored", which is the darkest thing on
+    // the map that is still somewhere the party can go.
+    border: 0x000000,
     ink0: hexToInt(palette.ink0),
     ink1: hexToInt(palette.ink1),
     ink2: hexToInt(ink),
