@@ -1059,31 +1059,36 @@ void main(void) {
      searches — and only the ground and the shade use it. Three of four passes
      used to pay for it and throw it away. */
   float fill = 0.46, turb = 0.46, detail = 0.0, sheen = 0.0;
-  if (onGround || onShade) {
-    fill = archFill(p, t);
-    /* The atlas is a DETAIL texture: it tiles at two rotated scales so the
-       repeat never lines up with the lattice, and its channels are read for
-       what they are — a body variation, a structure mask and the crests. Half
-       a texel inside the tile so linear filtering never leaks a neighbour. */
-    vec2 inset = vec2(ATLAS_INSET);
-    vec2 span = uAtlasRect.zw - inset * 2.0;
-    vec2 uvA = uAtlasRect.xy + inset + fract(p * ATLAS_SCALE_A + vec2(uSeed * 0.13, 0.0)) * span;
-    vec2 pr = vec2(p.x * 0.866 - p.y * 0.5, p.x * 0.5 + p.y * 0.866);
-    vec2 uvB = uAtlasRect.xy + inset + fract(pr * ATLAS_SCALE_B + vec2(0.0, uSeed * 0.07)) * span;
-    vec4 tA = texture2D(uAtlas, uvA);
-    vec4 tB = texture2D(uAtlas, uvB);
-    float bodyVar = mix(tA.r, tB.r, 0.5);
-    float structure = max(tA.g, tB.g * 0.8);
-    float crest = max(tA.b, tB.b * 0.7);
-    float surfaced = fill * (0.74 + bodyVar * 0.34) + structure * 0.26 + crest * 0.36;
-    fill = mix(fill, surfaced, clamp(uAtlasReady, 0.0, 1.0) * 0.62);
-    turb = mix(0.46, fill * chTurb, uFx.w);
-    detail = smoothstep(0.52, 1.10, fill);
-    sheen = detail * detail * covered * inkFill * 0.34;
+  /* Every consumer of the fill, turb and sheen below is multiplied by
+     inside * inkFill, so outside the area (most of the padded quad) they were
+     computed only to be zeroed. Skipping them there is exact. */
+  if (inside * inkFill > 0.0) {
+    if (onGround || onShade) {
+      fill = archFill(p, t);
+      /* The atlas is a DETAIL texture: it tiles at two rotated scales so the
+         repeat never lines up with the lattice, and its channels are read for
+         what they are — a body variation, a structure mask and the crests. Half
+         a texel inside the tile so linear filtering never leaks a neighbour. */
+      vec2 inset = vec2(ATLAS_INSET);
+      vec2 span = uAtlasRect.zw - inset * 2.0;
+      vec2 uvA = uAtlasRect.xy + inset + fract(p * ATLAS_SCALE_A + vec2(uSeed * 0.13, 0.0)) * span;
+      vec2 pr = vec2(p.x * 0.866 - p.y * 0.5, p.x * 0.5 + p.y * 0.866);
+      vec2 uvB = uAtlasRect.xy + inset + fract(pr * ATLAS_SCALE_B + vec2(0.0, uSeed * 0.07)) * span;
+      vec4 tA = texture2D(uAtlas, uvA);
+      vec4 tB = texture2D(uAtlas, uvB);
+      float bodyVar = mix(tA.r, tB.r, 0.5);
+      float structure = max(tA.g, tB.g * 0.8);
+      float crest = max(tA.b, tB.b * 0.7);
+      float surfaced = fill * (0.74 + bodyVar * 0.34) + structure * 0.26 + crest * 0.36;
+      fill = mix(fill, surfaced, clamp(uAtlasReady, 0.0, 1.0) * 0.62);
+      turb = mix(0.46, fill * chTurb, uFx.w);
+      detail = smoothstep(0.52, 1.10, fill);
+      sheen = detail * detail * covered * inkFill * 0.34;
+    }
   }
 
   float topology = 0.0;
-  if (onGround || (onEdge && abs(uFunction - 3.0) < 0.5)) {
+  if ((onGround || (onEdge && abs(uFunction - 3.0) < 0.5)) && covered * inkFill > 0.0) {
     topology = semanticTopology(p, sdf, t) * covered * inkFill
              * (1.0 + step(0.0, uSecondary) * 0.08);
   }
@@ -1142,22 +1147,32 @@ void main(void) {
      an opacity slider wearing a hat. */
   float air = 0.0, mote = 0.0;
   if (onAir) {
-    mote = archMotes(p, t) * covered * inkFill * uFx.x * chMotes * 1.15;
-    mote *= glDetail(MOTE_RISE / MOTE_DENSITY);
+    float moteGate = covered * inkFill * uFx.x * chMotes;
+    if (moteGate > 0.0) {
+      mote = archMotes(p, t) * moteGate * 1.15;
+      mote *= glDetail(MOTE_RISE / MOTE_DENSITY);
+    }
 
     /* A soft column standing off the plate: unstructured, drifting upward, with
        none of the ground plane's grid discipline. Two generations through a
        warped domain: the warp gives it eddies and folds. */
-    vec2 wq = gluWarp(p * 0.62, vec2(0.0, -t * 0.24), 0.85);
-    float colA = aoeFbm(wq + vec2(0.0, -t * 0.30));
-    float colB = aoeFbm(wq * 2.15 + vec2(t * 0.10, -t * 0.55));
-    float colN = colA * (0.55 + 0.65 * colB);
-
     /* Concentrated toward the boundary rather than spread evenly over the
        plate: that is what makes the air read as a column standing on the area
        instead of a second, brighter copy of the ground. */
     float lift = pow(clamp(1.0 + sdf / 2.2, 0.0, 1.0), 1.7);
-    float haze = covered * inkFill * (0.08 + colN * 0.58) * lift * 0.34;
+    float hazeGate = covered * inkFill * lift;
+    /* Sixteen gradient-noise taps per pixel, and the haze is zero outside the
+       covered set and deeper than 2.2 squares inside it — so they only run
+       where they land. Under the turbulence shed (uFx.w) the column collapses
+       to its mean, the same flat-plate fallback the ground fill takes. */
+    float colN = 0.44;
+    if (hazeGate > 0.0 && uFx.w > 0.5) {
+      vec2 wq = gluWarp(p * 0.62, vec2(0.0, -t * 0.24), 0.85);
+      float colA = aoeFbm(wq + vec2(0.0, -t * 0.30));
+      float colB = aoeFbm(wq * 2.15 + vec2(t * 0.10, -t * 0.55));
+      colN = colA * (0.55 + 0.65 * colB);
+    }
+    float haze = hazeGate * (0.08 + colN * 0.58) * 0.34;
 
     /* A wide, dim inner glow pooled well inside the boundary — the volume's
        core, so the area has a middle instead of being uniform out to the edge. */

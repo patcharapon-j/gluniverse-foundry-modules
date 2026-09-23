@@ -9,7 +9,7 @@ import { addSpellglassSceneControl, bindSpellglassSceneControl } from "./control
 import { inferredLabel } from "./data.mjs";
 import { migrateLegacyPresentations } from "./migration-runtime.mjs";
 import { compactPresentation } from "./schema.mjs";
-import { host } from "./host.mjs";
+import { canRenderEffectRegion, host } from "./host.mjs";
 import {
   registerProfile, resolveProfile as resolveSourceProfile, unregisterProfiles,
 } from "./profiles.mjs";
@@ -134,40 +134,63 @@ export async function onReady() {
   on("refreshRegion", (region, flags = {}) => {
     /* Attached Regions receive a geometry refresh on every token animation
        frame. Rebuilding four meshes and a coverage texture there is the exact
-       hot path core itself warns about; the committed Token/Region update that
-       follows refreshes us once at the final position. */
+       hot path core itself warns about; the host rebuilds the mask once the
+       move has been quiet for a moment. */
     if (region?.document?.attachment?.token && (flags.refreshGeometry || flags.refreshShapes)) {
       if (!host.reposition(region)) host.refresh(region);
       return;
     }
+    /* Hover and control raise refreshState -> refreshVisibility only. Those
+       change nothing we draw except the label's inspected state, unless the
+       Region's visibility actually flipped. */
+    const structural = flags.redraw || flags.refresh || flags.refreshShapes || flags.refreshGeometry
+      || flags.refreshBorder || flags.refreshMeasurements;
+    if (!structural && host.entries.has(region?.id) === canRenderEffectRegion(region)) {
+      host.touch(region?.id);
+      return;
+    }
     host.refresh(region);
   });
+  on("hoverRegion", (region) => host.touch(region?.id));
+  on("controlRegion", (region) => host.touch(region?.id));
+  on("canvasPan", () => host.onView());
   on("destroyRegion", (region) => host.remove(region?.id));
   on("createRegion", (document) => { void freezePlacement(document); refreshSoon(); });
-  on("updateRegion", refreshSoon);
+  on("updateRegion", (document) => {
+    /* A live entry refreshes in place; anything else may be joining the set
+       under the concurrency cap, which is refreshAll's decision. */
+    const region = document?.object;
+    if (region && host.entries.has(region.id)) host.tryRefresh(region);
+    else refreshSoon();
+  });
   on("deleteRegion", (document) => host.remove(document?.id, { release: true }));
   on("updateScene", refreshSoon);
 
-  /* Token image/size/visibility changes only rebuild the lightweight edge
-     overlays; Region geometry itself is unchanged. Coalescing all three hooks
-     prevents one token update from rebuilding the scene three times. */
-  let tokenEdgesQueued = false;
-  const refreshTokenEdges = () => {
-    if (tokenEdgesQueued) return;
-    tokenEdgesQueued = true;
-    queueMicrotask(() => {
-      tokenEdgesQueued = false;
-      host.refreshAll();
-      host.refreshTokenEdges();
-    });
-  };
-  on("drawToken", refreshTokenEdges);
-  on("refreshToken", (_token, flags = {}) => {
-    if (flags.refreshEffects || flags.refreshVisibility) refreshTokenEdges();
+  /* Region geometry never depends on a Token except through an attachment,
+     and attached Regions follow through refreshRegion above. So a Token change
+     only reconciles that Token's PF2e auras and the edge lights near it; it
+     never rebuilds a Region. refreshVisibility fires on every frame of a
+     moving Token, which is why the host coalesces and filters these. */
+  on("drawToken", (token) => host.markTokens([token?.id], { rebuild: true }));
+  on("refreshToken", (token, flags = {}) => {
+    if (flags.refreshEffects || flags.refreshVisibility) host.markTokens([token?.id]);
   });
-  on("updateToken", refreshTokenEdges);
-  on("destroyToken", refreshTokenEdges);
-  on("updateActor", refreshSoon);
+  on("updateToken", (document) => host.markTokens([document?.id], { rebuild: true }));
+  on("destroyToken", (token) => host.markTokens([token?.id]));
+  /* An actor change can add, drop or resize its tokens' auras, and can change
+     what an effect it cast resolves to. Nothing else on the Scene cares. */
+  on("updateActor", (actor) => {
+    let tokens = [];
+    try { tokens = actor?.getActiveTokens?.(false, false) ?? []; } catch { tokens = []; }
+    host.markTokens(tokens.map((token) => token?.id), { rebuild: true });
+    const uuid = actor?.uuid;
+    if (!uuid) return;
+    host.refreshWhere((region) => {
+      const origin = region?.document?.flags?.pf2e?.origin;
+      const source = origin?.uuid ?? origin?.itemUuid;
+      return origin?.actor === uuid || (typeof source === "string" && source.startsWith(`${uuid}.`));
+    });
+  });
 
   on("renderApplicationV2", (app, element) => injectRegionStyle(app, element));
   on("renderApplicationV2", (app, element) => injectScenePresentation(app, element));

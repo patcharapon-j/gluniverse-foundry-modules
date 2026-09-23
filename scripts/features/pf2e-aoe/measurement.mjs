@@ -88,7 +88,12 @@ export function createMeasurementPresenter(region, style, geometry) {
   root.addChild(backing, title, detail);
   root.glAoeDetail = detail;
   root.glAoeSummary = summary;
-  root.setInspected = (inspected) => { detail.visible = Boolean(summary && inspected && region.document?.displayMeasurements); };
+  /* The host keeps a plate across in-place refreshes and re-points this at the
+     live Region, so the closure must not pin the one it was built from. */
+  root.glAoeRegion = region;
+  root.setInspected = (inspected) => {
+    detail.visible = Boolean(summary && inspected && root.glAoeRegion?.document?.displayMeasurements);
+  };
   root.setInspected(Boolean(region?.hover || region?.controlled));
   return root;
 }
