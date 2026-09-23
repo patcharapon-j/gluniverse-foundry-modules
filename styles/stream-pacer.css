@@ -353,13 +353,37 @@
   box-shadow:
     0 0 14px rgba(90, 163, 240, 0.4),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.15);
-  animation: sp-hand-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+  /* The breathing halo lives outside the chip; the name clips itself. */
+  overflow: visible;
 }
 
+/* Glow chip — the swell rides a pseudo-element's opacity (compositor-only)
+   instead of animating box-shadow, which repainted the HUD's frosted glass
+   every frame. The chip keeps the resting shadow; this adds the crest. */
+#stream-pacer-container .player-status.status-hand-raised::after,
+#stream-pacer-container .player-status.light-yellow::after,
+#stream-pacer-container .player-status.light-red::after,
+#stream-pacer-container .safety-response.is-red::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#stream-pacer-container .player-status.status-hand-raised::after {
+  box-shadow:
+    0 0 22px rgba(90, 163, 240, 0.65),
+    0 0 40px rgba(90, 163, 240, 0.2);
+  animation: sp-glow-swell var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+}
+
+/* Held at the midpoint of its old 4-8px breath: a filter animation that moves
+   pixels cannot run on the compositor, and the chip's halo breathes for it. */
 #stream-pacer-container .player-status.status-hand-raised i {
   color: var(--sp-blue);
-  filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.9));
-  animation: sp-hand-icon-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+  filter: drop-shadow(0 0 6px rgba(90, 163, 240, 0.95));
 }
 
 #stream-pacer-container .no-players {
@@ -368,23 +392,13 @@
   font-size: 8.5px;
 }
 
-@keyframes sp-hand-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 14px rgba(90, 163, 240, 0.4),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.15);
-  }
-  50% {
-    box-shadow:
-      0 0 22px rgba(90, 163, 240, 0.65),
-      0 0 40px rgba(90, 163, 240, 0.2),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.25);
-  }
-}
-
-@keyframes sp-hand-icon-pulse {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(90, 163, 240, 0.9)); }
-  50% { filter: drop-shadow(0 0 8px rgba(90, 163, 240, 1)); }
+/* The suite's glow-pulse, done cheaply: a pseudo-element carries the crest
+   shadow and only its opacity animates, so the swell composites on the GPU
+   instead of repainting the element (and any frosted glass behind it) every
+   frame. Feature-prefixed: keyframe names are global. */
+@keyframes sp-glow-swell {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 /* ========================================
@@ -523,11 +537,26 @@
   border-color: var(--sp-blue);
   background: linear-gradient(180deg, #6fb0f5, var(--sp-blue));
   box-shadow:
-    0 0 16px rgba(90, 163, 240, 0.6),
-    0 0 32px rgba(90, 163, 240, 0.3),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.35);
-  animation: sp-hand-btn-pulse var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
-  overflow: hidden;
+    0 0 15px rgba(90, 163, 240, 0.5),
+    0 0 30px rgba(90, 163, 240, 0.2),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2);
+}
+
+#stream-pacer-container .status-btn.status-hand-raised.active::after,
+#stream-pacer-container .gm-btn.soft-signal-btn.active::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#stream-pacer-container .status-btn.status-hand-raised.active::after {
+  box-shadow:
+    0 0 20px rgba(90, 163, 240, 0.7),
+    0 0 40px rgba(90, 163, 240, 0.35);
+  animation: sp-glow-swell var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .status-btn.status-hand-raised.active i {
@@ -557,8 +586,9 @@
   box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1);
 }
 
-#stream-pacer-container .gm-btn.soft-signal-btn.active {
-  animation: sp-btn-pulse-amber var(--gl-breathe) var(--gl-ease-inout) infinite;
+#stream-pacer-container .gm-btn.soft-signal-btn.active::after {
+  box-shadow: 0 0 18px rgba(228, 176, 85, 0.5);
+  animation: sp-glow-swell var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .gm-btn.countdown-btn:hover,
@@ -582,25 +612,7 @@
   border-color: var(--sp-red);
 }
 
-@keyframes sp-hand-btn-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 15px rgba(90, 163, 240, 0.5),
-      0 0 30px rgba(90, 163, 240, 0.2),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2);
-  }
-  50% {
-    box-shadow:
-      0 0 20px rgba(90, 163, 240, 0.7),
-      0 0 40px rgba(90, 163, 240, 0.35),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3);
-  }
-}
 
-@keyframes sp-btn-pulse-amber {
-  0%, 100% { box-shadow: 0 0 12px rgba(228, 176, 85, 0.35), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.1); }
-  50% { box-shadow: 0 0 18px rgba(228, 176, 85, 0.5), inset 0 1px 0 rgb(var(--gl-tint-light) / 0.15); }
-}
 
 /* ========================================
    Active signal band
@@ -623,7 +635,18 @@
   position: relative;
   z-index: 2;
   overflow: hidden;
-  animation: sp-signal-glow var(--gl-dread) var(--gl-ease-inout) infinite;
+  box-shadow: inset 0 0 20px rgb(var(--gl-tint-light) / 0.04);
+}
+
+/* Inner glow crest — opacity on a pseudo-element, not an animated inset shadow. */
+#stream-pacer-container .pacer-signal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 30px rgb(var(--gl-tint-light) / 0.08);
+  opacity: 0;
+  animation: sp-glow-swell var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .pacer-signal i {
@@ -665,9 +688,17 @@
   text-shadow: 0 0 8px var(--sp-amber-glow);
 }
 
-/* Urgency escalation */
+/* Urgency escalation.
+   The panel carries a blur(16px) backdrop-filter, so animating its own
+   box-shadow re-rasterised and re-blurred it every frame. It now holds the
+   resting shadow, and the swell is drawn by the app window's pseudo-elements
+   (a sibling layer, sized to the panel) whose opacity alone animates. The
+   window clips to its own box exactly as it clipped the panel's shadow. */
 #stream-pacer-container.countdown-active.urgency-warning {
-  animation: sp-pulse-warning var(--gl-breathe) var(--gl-ease-inout) infinite;
+  box-shadow:
+    0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
+    0 0 20px rgba(240, 168, 80, 0.25),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
 }
 #stream-pacer-container.countdown-active.urgency-warning .pacer-signal {
   color: var(--sp-warn);
@@ -678,7 +709,10 @@
 }
 
 #stream-pacer-container.countdown-active.urgency-critical {
-  animation: sp-pulse-critical var(--gl-d-slow) var(--gl-ease-inout) infinite;
+  box-shadow:
+    0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
+    0 0 22px rgba(239, 100, 100, 0.3),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
 }
 #stream-pacer-container.countdown-active.urgency-critical .pacer-signal {
   color: var(--sp-red);
@@ -689,39 +723,43 @@
   animation: sp-flash-critical var(--gl-d-glide) var(--gl-ease-inout) infinite;
 }
 
-@keyframes sp-signal-glow {
-  0%, 100% { box-shadow: inset 0 0 20px rgb(var(--gl-tint-light) / 0.04); }
-  50% { box-shadow: inset 0 0 30px rgb(var(--gl-tint-light) / 0.08); }
+
+/* Swell layers for the panel. The app window is at least 200px wide while the
+   panel is 188px (196px for players), so they are sized to the panel, not to
+   the window. ::before carries the urgency glow (painted under the panel);
+   ::after the red safety rim (painted over the panel's own border). */
+#stream-pacer-hud {
+  --sp-panel-w: 188px;
+  --sp-panel-r: 12px;
+}
+#stream-pacer-hud:has(#stream-pacer-container.is-player) {
+  --sp-panel-w: 196px;
+  --sp-panel-r: 11px;
 }
 
-@keyframes sp-pulse-warning {
-  0%, 100% {
-    box-shadow:
-      0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
-      0 0 20px rgba(240, 168, 80, 0.25),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
-  }
-  50% {
-    box-shadow:
-      0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
-      0 0 32px rgba(240, 168, 80, 0.4),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
-  }
+#stream-pacer-hud:has(#stream-pacer-container.countdown-active.urgency-warning)::before,
+#stream-pacer-hud:has(#stream-pacer-container.countdown-active.urgency-critical)::before,
+#stream-pacer-hud:has(#stream-pacer-container.safety-alert-red)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sp-panel-w);
+  box-sizing: border-box;
+  border-radius: var(--sp-panel-r);
+  pointer-events: none;
+  opacity: 0;
 }
 
-@keyframes sp-pulse-critical {
-  0%, 100% {
-    box-shadow:
-      0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
-      0 0 22px rgba(239, 100, 100, 0.3),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
-  }
-  50% {
-    box-shadow:
-      0 22px 60px rgb(var(--gl-tint-dark) / 0.6),
-      0 0 36px rgba(239, 100, 100, 0.5),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16);
-  }
+#stream-pacer-hud:has(#stream-pacer-container.countdown-active.urgency-warning)::before {
+  box-shadow: 0 0 32px rgba(240, 168, 80, 0.4);
+  animation: sp-glow-swell var(--gl-breathe) var(--gl-ease-inout) infinite;
+}
+
+#stream-pacer-hud:has(#stream-pacer-container.countdown-active.urgency-critical)::before {
+  box-shadow: 0 0 36px rgba(239, 100, 100, 0.5);
+  animation: sp-glow-swell var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 @keyframes sp-flash-critical {
@@ -1960,7 +1998,8 @@
   opacity: 0;
   transform: translateY(8px);
   transition: opacity var(--gl-d-move) var(--gl-ease), transform var(--gl-d-move) var(--gl-ease);
-  animation: sp-peril-ind-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
+  /* No shadow pulse: clip-path clips an element's own box-shadow, so the one
+     that used to breathe here was repainted every frame and never seen. */
 }
 
 .stream-pacer-peril-indicator::before {
@@ -2036,18 +2075,6 @@
   border-color: var(--sp-peril);
 }
 
-@keyframes sp-peril-ind-pulse {
-  0%, 100% {
-    box-shadow: 0 8px 22px rgb(var(--gl-tint-dark) / 0.55), 0 0 24px var(--sp-peril-glow);
-  }
-  50% {
-    box-shadow:
-      0 8px 22px rgb(var(--gl-tint-dark) / 0.55),
-      0 0 34px rgba(175, 45, 185, 0.7),
-      0 0 48px var(--sp-peril-red-glow);
-  }
-}
-
 @keyframes sp-peril-ind-bar {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
@@ -2118,6 +2145,10 @@
   top: -110px;
   bottom: 0;
   width: 100%;
+  /* Explicit, or a canvas takes its height from its drawing buffer's aspect
+     ratio (top/bottom do not size a replaced element): it ran at width / 2,
+     shading hundreds of rows below the bottom of the screen. */
+  height: calc(100% + 110px);
   z-index: 0;
   pointer-events: none;
   opacity: 0;
@@ -2236,12 +2267,8 @@
   border-color: var(--sp-campfire-ember);
   color: rgb(var(--gl-tint-light));
   background: rgba(255, 90, 30, 0.2);
-  animation: sp-campfire-timer-warn var(--gl-d-slow) var(--gl-ease-inout) infinite;
-}
-
-@keyframes sp-campfire-timer-warn {
-  0%, 100% { box-shadow: 0 0 0 transparent; }
-  50% { box-shadow: 0 0 14px var(--sp-campfire-ember-glow); }
+  /* No shadow pulse: the chip's clip-path clips its own box-shadow, so it was
+     repainted every frame without ever being visible. */
 }
 
 .stream-pacer-campfire-bar .cf-bar-dismiss {
@@ -2390,22 +2417,44 @@
 .stream-pacer-bar-aura.aura-top {
   top: 44px; /* equals hand-bar height */
   height: 138px; /* ~3x */
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+}
+
+/* Breath. It used to be an infinite filter: brightness(0.92 -> 1.12) on the
+   whole full-width band, running even while the aura sat hidden at opacity 0.
+   It is now the band painted twice: ::before at a fixed 0.92 and ::after
+   swelling 0 -> 0.2 over it, so the pair spans the same 0.92-1.12 of the
+   band's light and only a compositor opacity moves. The element's own opacity
+   is untouched, so the .active fade stays in step with the bar, and the
+   breath only runs while the aura is shown. */
+.stream-pacer-bar-aura::before,
+.stream-pacer-bar-aura::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stream-pacer-bar-aura.aura-top::before,
+.stream-pacer-bar-aura.aura-top::after {
   background:
     linear-gradient(to bottom,
       var(--sp-aura-color) 0%,
       var(--sp-aura-mid) 32%,
       transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
-          mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
-  animation: sp-aura-breath var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
-/* Breath pulses brightness only — never opacity. Animating opacity here would
-   override the .active fade transition and desync the aura from the bar on
-   show/dismiss. The dim rest frame fakes a subtle opacity dip. */
-@keyframes sp-aura-breath {
-  0%, 100% { filter: brightness(0.92); }
-  50%      { filter: brightness(1.12); }
+.stream-pacer-bar-aura::before { opacity: 0.92; }
+.stream-pacer-bar-aura::after { opacity: 0; }
+
+.stream-pacer-bar-aura.active::after {
+  animation: sp-aura-swell var(--gl-dread) var(--gl-ease-inout) infinite;
+}
+
+@keyframes sp-aura-swell {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 0.2; }
 }
 
 .stream-pacer-bar-aura.hand-raise {
@@ -3113,27 +3162,30 @@
 }
 
 /* An open GM ask makes the whole light pulse — the arrow points right here.
-   Its own keyframe, so the housing keeps its depth while the halo breathes. */
+   The housing holds its depth and the resting halo; the crest is the
+   .sp-sl-halo layer, whose opacity alone animates, because the housing is
+   frosted glass (backdrop-filter) and an animated shadow re-blurred it every
+   frame. */
 .stream-pacer-safety-light.is-asking {
   border-color: color-mix(in srgb, var(--gl-signal) 52%, transparent);
-  animation: sp-safety-light-ask var(--gl-breathe) var(--gl-ease-inout) infinite;
+  box-shadow:
+    0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
+    0 0 10px color-mix(in srgb, var(--gl-signal) 22%, transparent),
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
+    inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
 }
 
-@keyframes sp-safety-light-ask {
-  0%, 100% {
-    box-shadow:
-      0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
-      0 0 10px color-mix(in srgb, var(--gl-signal) 22%, transparent),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
-      inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
-  }
-  50% {
-    box-shadow:
-      0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
-      0 0 20px color-mix(in srgb, var(--gl-signal) 40%, transparent),
-      inset 0 1px 0 rgb(var(--gl-tint-light) / 0.22),
-      inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
-  }
+.stream-pacer-safety-light .sp-sl-halo {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--gl-signal) 40%, transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.stream-pacer-safety-light.is-asking .sp-sl-halo {
+  animation: sp-glow-swell var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
 /* Gentle on purpose: the player already knows they raised it. */
@@ -3183,16 +3235,27 @@
 #stream-pacer-container .player-status.light-yellow {
   border-color: var(--gl-signal);
   background: linear-gradient(180deg, color-mix(in srgb, var(--gl-signal) 22%, transparent), color-mix(in srgb, var(--gl-signal) 5%, transparent));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-signal) 30%, transparent);
-  animation: sp-safety-chip-yellow var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gl-signal) 24%, transparent);
+  overflow: visible;
+}
+
+#stream-pacer-container .player-status.light-yellow::after {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--gl-signal) 46%, transparent);
+  animation: sp-glow-swell var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
 }
 
 #stream-pacer-container .player-status.light-red {
   border-color: var(--gl-hazard);
   color: var(--gl-hazard-hot);
   background: linear-gradient(180deg, color-mix(in srgb, var(--gl-hazard) 34%, transparent), color-mix(in srgb, var(--gl-hazard) 8%, transparent));
-  box-shadow: 0 0 16px color-mix(in srgb, var(--gl-hazard) 44%, transparent);
-  animation: sp-safety-chip-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 38%, transparent);
+  overflow: visible;
+}
+
+#stream-pacer-container .player-status.light-red::after,
+#stream-pacer-container .safety-response.is-red::after {
+  box-shadow: 0 0 26px color-mix(in srgb, var(--gl-hazard) 70%, transparent);
+  animation: sp-glow-swell var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 /* Still owes the GM an answer to an open ask. */
@@ -3203,15 +3266,6 @@
   animation: sp-safety-ask-blink var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
 
-@keyframes sp-safety-chip-yellow {
-  0%, 100% { box-shadow: 0 0 10px color-mix(in srgb, var(--gl-signal) 24%, transparent); }
-  50% { box-shadow: 0 0 18px color-mix(in srgb, var(--gl-signal) 46%, transparent); }
-}
-
-@keyframes sp-safety-chip-red {
-  0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 38%, transparent); }
-  50% { box-shadow: 0 0 26px color-mix(in srgb, var(--gl-hazard) 70%, transparent); }
-}
 
 /* The panel itself carries the loudest colour on the table. */
 #stream-pacer-container.safety-alert-yellow {
@@ -3223,13 +3277,14 @@
 #stream-pacer-container.safety-alert-red {
   --sp-glow: color-mix(in srgb, var(--gl-hazard) 52%, transparent);
   --sp-glow-soft: color-mix(in srgb, var(--gl-hazard) 22%, transparent);
-  border-color: color-mix(in srgb, var(--gl-hazard) 62%, transparent);
-  animation: sp-safety-panel-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+  /* The resting rim; the swell to 92% is the window's ::after (see the
+     urgency block), so the frosted panel itself never repaints for it. */
+  border-color: color-mix(in srgb, var(--gl-hazard) 48%, transparent);
 }
 
-@keyframes sp-safety-panel-red {
-  0%, 100% { border-color: color-mix(in srgb, var(--gl-hazard) 48%, transparent); }
-  50% { border-color: color-mix(in srgb, var(--gl-hazard) 92%, transparent); }
+#stream-pacer-hud:has(#stream-pacer-container.safety-alert-red)::after {
+  border: 1px solid color-mix(in srgb, var(--gl-hazard) 92%, transparent);
+  animation: sp-glow-swell var(--gl-d-slow) var(--gl-ease-inout) infinite;
 }
 
 /* Board tiers — the results section inherits the same escalation. */
@@ -3252,7 +3307,8 @@
 }
 
 #stream-pacer-container .safety-response.is-red {
-  animation: sp-safety-chip-red var(--gl-d-slow) var(--gl-ease-inout) infinite;
+  position: relative;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 38%, transparent);
 }
 
 /* ========================================
@@ -3596,6 +3652,17 @@ body.sp-safety-request .sp-dz-stage {
   opacity: 1;
   visibility: visible;
   animation: sp-safety-vignette-breathe var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+/* Hidden surfaces keep no clock. Each of these fades out with a transition,
+   so their loops are paused (frozen mid-motion for the fade) rather than
+   removed, which would snap them back to frame 0 while still visible. */
+.stream-pacer-overlay:not(.active) :is(.overlay-content, .sp-tint, .overlay-countdown),
+.stream-pacer-hand-bar:not(.active) .hb-icon,
+.stream-pacer-safety-request:not(.active) .sp-sr-track,
+.stream-pacer-safety-pointer:not(.active) .sp-sp-arrow,
+.stream-pacer-peril-indicator-wrap:not(.visible) .stream-pacer-peril-indicator::after {
+  animation-play-state: paused;
 }
 
 @keyframes sp-safety-vignette-breathe {

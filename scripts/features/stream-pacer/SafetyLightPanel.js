@@ -48,6 +48,13 @@ export class SafetyLightPanel {
     this._element.setAttribute('role', 'group');
     this._element.setAttribute('aria-label', game.i18n.localize('STREAM_PACER.SafetyCheck.LightGroupLabel'));
 
+    // The GM-ask swell: a layer whose opacity breathes, so the frosted housing
+    // itself never has to repaint its shadow while an ask is open.
+    const halo = document.createElement('span');
+    halo.className = 'sp-sl-halo';
+    halo.setAttribute('aria-hidden', 'true');
+    this._element.appendChild(halo);
+
     const hood = document.createElement('span');
     hood.className = 'sp-sl-hood';
     hood.setAttribute('aria-hidden', 'true');

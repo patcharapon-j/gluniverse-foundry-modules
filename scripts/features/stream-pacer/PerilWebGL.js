@@ -144,6 +144,19 @@ void main(){
 }
 `;
 
+// Internal resolution. The field is soft noise under a translucent wash and
+// the kinetic lettering, so it is rendered at half the device resolution and
+// never more than MAX_EDGE_PX on its long edge, then scaled up by the browser.
+// A 4K display at full DPR would otherwise shade ~8M pixels per frame for a
+// 4-second burst.
+const RENDER_SCALE = 0.5;
+const MAX_EDGE_PX = 1280;
+
+/** Release a context now rather than whenever the GC gets to it. */
+function loseContext(gl) {
+  try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch (e) { /* already gone */ }
+}
+
 export class PerilWebGL {
   constructor() {
     this.canvas = null;
@@ -162,7 +175,10 @@ export class PerilWebGL {
     if (this._supported !== null) return this._supported;
     try {
       const c = document.createElement('canvas');
-      this._supported = !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+      const probe = c.getContext('webgl') || c.getContext('experimental-webgl');
+      this._supported = !!probe;
+      // The probe is a real context; free it instead of leaving it for the GC.
+      loseContext(probe);
     } catch (e) {
       this._supported = false;
     }
@@ -245,8 +261,11 @@ export class PerilWebGL {
   _resize() {
     if (!this.gl || !this.canvas) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.floor(window.innerWidth * dpr);
-    const h = Math.floor(window.innerHeight * dpr);
+    const cssW = window.innerWidth;
+    const cssH = window.innerHeight;
+    const scale = Math.min(dpr * RENDER_SCALE, MAX_EDGE_PX / Math.max(cssW, cssH, 1));
+    const w = Math.max(1, Math.round(cssW * scale));
+    const h = Math.max(1, Math.round(cssH * scale));
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
@@ -319,6 +338,7 @@ export class PerilWebGL {
   destroy() {
     this.stop();
     window.removeEventListener('resize', this._onResize);
+    loseContext(this.gl);
     if (this.canvas) {
       this.canvas.remove();
       this.canvas = null;
