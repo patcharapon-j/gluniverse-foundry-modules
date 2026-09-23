@@ -74,12 +74,14 @@ const BLUR = PRECISION + `
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
 uniform vec2 uDir;
+uniform vec2 uScale;
 void main(void) {
-  vec4 c = texture2D(uSampler, vTextureCoord) * 0.227027;
+  vec2 uv = vTextureCoord * uScale;
+  vec4 c = texture2D(uSampler, uv) * 0.227027;
   vec2 o1 = uDir * 1.3846153846;
   vec2 o2 = uDir * 3.2307692308;
-  c += (texture2D(uSampler, vTextureCoord + o1) + texture2D(uSampler, vTextureCoord - o1)) * 0.3162162162;
-  c += (texture2D(uSampler, vTextureCoord + o2) + texture2D(uSampler, vTextureCoord - o2)) * 0.0702702703;
+  c += (texture2D(uSampler, uv + o1) + texture2D(uSampler, uv - o1)) * 0.3162162162;
+  c += (texture2D(uSampler, uv + o2) + texture2D(uSampler, uv - o2)) * 0.0702702703;
   gl_FragColor = c;
 }`;
 
@@ -87,10 +89,11 @@ const COMPOSITE = PRECISION + `
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
 uniform sampler2D uBloom;
+uniform vec2 uScale;
 uniform float uIntensity;
 void main(void) {
   vec4 s = texture2D(uSampler, vTextureCoord);
-  vec4 b = texture2D(uBloom, vTextureCoord) * uIntensity;
+  vec4 b = texture2D(uBloom, vTextureCoord * uScale) * uIntensity;
   vec3 c = s.rgb + b.rgb;
   /* Roll off only what is over the knee. A plain Reinhard compresses the whole
      range, so every fill below 1.0 — which is all of them — comes back darker
@@ -113,15 +116,32 @@ void main(void) {
 export function createBloomFilter({ threshold = DEFAULT_THRESHOLD, intensity = DEFAULT_INTENSITY } = {}) {
   try {
     const bright = new PIXI.Filter(VERT, BRIGHT, { uThreshold: threshold, uKnee: DEFAULT_KNEE });
-    const blur = new PIXI.Filter(VERT, BLUR, { uDir: new Float32Array([0, 0]) });
+    const blur = new PIXI.Filter(VERT, BLUR, { uDir: new Float32Array([0, 0]), uScale: new Float32Array([1, 1]) });
     /* The composite is this filter's own program: overriding `apply` replaces
        the single pass PIXI would have run, it does not add to it. */
-    const filter = new PIXI.Filter(VERT, COMPOSITE, { uBloom: PIXI.Texture.EMPTY, uIntensity: intensity });
+    const filter = new PIXI.Filter(VERT, COMPOSITE, { uBloom: PIXI.Texture.EMPTY, uScale: new Float32Array([1, 1]), uIntensity: intensity });
 
     filter.apply = function (fm, input, output, clear) {
       const half = fm.getFilterTexture(input, 0.5);
       const half2 = fm.getFilterTexture(input, 0.5);
       try {
+        /* vTextureCoord is normalised against the *input's* pooled texture, and
+           the pool rounds each request up to a power of two in device pixels.
+           The half-resolution textures therefore only share the input's size
+           in CSS pixels when the resolution is itself a power of two; at 1.25,
+           1.5, a browser zoom, or a full-screen filterArea (which skips the
+           rounding for the input but not for these) they do not, and sampling
+           them with the input's coordinates draws the bloom as a scaled,
+           offset copy of everything under the filter. Rescale into the half
+           texture's own space before every read of it. */
+        const inputSize = fm.globalUniforms?.uniforms?.inputSize;
+        const inW = inputSize?.[0] || input.width;
+        const inH = inputSize?.[1] || input.height;
+        const sx = inW / half.width;
+        const sy = inH / half.height;
+        blur.uniforms.uScale[0] = sx; blur.uniforms.uScale[1] = sy;
+        this.uniforms.uScale[0] = sx; this.uniforms.uScale[1] = sy;
+
         bright.uniforms.uThreshold = this.threshold;
         fm.applyFilter(bright, input, half, PIXI.CLEAR_MODES.CLEAR);
 
