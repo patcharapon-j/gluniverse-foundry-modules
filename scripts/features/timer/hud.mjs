@@ -19,6 +19,7 @@ import {
 import * as Audio from "./audio.mjs";
 import { TimerMotion } from "./motion.mjs";
 import { TimerPanel } from "./panel.mjs";
+import { warn } from "../../core/const.mjs";
 
 /** Split a remaining-ms into the large main field and the small fractional tail. */
 function formatParts(remMs) {
@@ -125,10 +126,23 @@ class TimerHUDClass {
     if (!next.expired) { this._firedExpire = false; this._gmExpiredSent = false; }
     if (isLive(next)) this._lastCheckpoint = Date.now();
     if (!next.active) this._motion?.clear();
+    // The loop sleeps while no timer exists; new state wakes it. The pass runs
+    // now rather than on the next frame: a browser that has had nothing
+    // scheduled can take a while to hand out that first frame, and the plaque
+    // should show the new value the moment it arrives. An inactive state still
+    // gets this one pass, which is what hides the plaque.
+    if (!this.el) return;
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = null;
+    try { this._loop(); } catch (e) { warn("Timer | HUD update failed:", e); }
   }
 
+  /* Runs only while a timer is active. It keeps ticking through a pause (local
+     `game.paused` resumes without any new state arriving), but with no timer
+     at all it stops rather than waking sixty times a second for a whole
+     session to confirm there is still nothing to show. */
   _loop() {
-    this._raf = requestAnimationFrame(() => this._loop());
+    this._raf = null;
     const el = this.el;
     if (!el) return;
     const s = this._state || (this._state = getState());
@@ -145,6 +159,8 @@ class TimerHUDClass {
       }
       return;
     }
+    // Scheduled before any work, so a throw below cannot stop the countdown.
+    this._raf = requestAnimationFrame(() => this._loop());
     if (el.style.display === "none") {
       el.style.display = "";
       this._motion?.reveal();

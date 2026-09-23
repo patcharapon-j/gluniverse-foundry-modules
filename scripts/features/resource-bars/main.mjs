@@ -223,7 +223,25 @@ export function onReady() {
      has queued the render flags for whatever changed without applying them, so
      any visibility answer read here is the previous one; the refreshToken pass
      that follows is the one that knows. */
-  const full = (token) => host.refreshToken(token, { decide: false });
+  /* One document update fires several of these at once (the actor, its items,
+     its effects, the combatant), and each would re-read and re-lay the same
+     token. Collect them and read each token once, in a microtask: that still
+     lands before Foundry's next render pass, so the refreshToken hook that
+     decides visibility sees the new reading exactly as before. */
+  const pending = new Map();
+  let flushQueued = false;
+  const full = (token) => {
+    if (!token?.id) return;
+    pending.set(token.id, token);
+    if (flushQueued) return;
+    flushQueued = true;
+    queueMicrotask(() => {
+      flushQueued = false;
+      const tokens = [...pending.values()];
+      pending.clear();
+      for (const t of tokens) if (!t.destroyed) host.refreshToken(t, { decide: false });
+    });
+  };
   on("updateToken", (doc) => doc.object && full(doc.object));
   on("updateActor", (actor) => { for (const t of actor.getActiveTokens()) full(t); });
   on("updateItem", (item) => { for (const t of item.actor?.getActiveTokens?.() ?? []) full(t); });

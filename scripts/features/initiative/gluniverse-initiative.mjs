@@ -69,8 +69,10 @@ export { registerSettings };
 
 export function onReady() {
   overlay = new GLUniverseInitiativeOverlay();
+  // The card FX renderer is a whole second WebGL context. It is built lazily —
+  // warmed at idle once a combat is on screen (see render), or on the first
+  // card that needs an effect — rather than at ready in every session.
   cardFX = new CardFXManager();
-  cardFX.ensureRenderer();
   overlay.mount();
   overlay.render();
   overlay.maybeRedealCards();
@@ -1442,14 +1444,18 @@ export class GLUniverseInitiativeOverlay {
       }
       this.lastRootClassName = this.root.className;
       this.clearAnnouncement();
+      this.releaseHeldRender();
       tokenOverlays?.refresh();
       cardFX?.clear();
       return;
     }
 
+    // An FX context is only worth having once there is a fight to draw; build it
+    // while the browser is idle rather than on the first card that needs it.
+    cardFX?.warmSoon();
+
     const settings = this.getRenderSettings();
     const view = this.buildViewModel(combat, settings);
-    this.detectStatusTransitions();
     const turnKey = view.normal.map(item => item.key ?? `${item.type}:${item.round}`).join("|");
     const isTurnChange = this.lastTurnKey && turnKey !== this.lastTurnKey;
     const previousRenderedRound = this.lastRenderedRound;
@@ -1480,8 +1486,18 @@ export class GLUniverseInitiativeOverlay {
     const markup = this.renderMarkup(combat, view, settings);
     const markupChanged = markup !== this.lastMarkup;
     const shouldAnimateTurnChange = isTurnChange && markupChanged;
-    // A render that lands while a move is still travelling (an HP tick, a
-    // condition) re-plans from where every layer currently is, instead of
+    // A turn change arrives with a tail of renders that are not turn changes:
+    // the turn-start flag echo, effects expiring at the start of the turn, a
+    // face-locator result for a portrait just dealt in. Each would rebuild the
+    // rail mid-move and re-plan every card from wherever it is, which is a
+    // second full rebuild + two layouts in the middle of the move. They wait
+    // for the move to land instead (flushed from its settle) and then render
+    // once. Nothing below this line has run, so the held render has no effect.
+    if (!shouldAnimateTurnChange && markupChanged && this.holdRenderForMove()) return;
+    this.releaseHeldRender();
+    this.detectStatusTransitions();
+    // A render that lands while a move is still travelling for longer than the
+    // hold allows re-plans from where every layer currently is, instead of
     // snapping the half-grown card to its end state.
     const shouldContinueMove = !shouldAnimateTurnChange && markupChanged && this.magicMoveLive;
     const oldRects = (shouldAnimateTurnChange || shouldContinueMove) ? this.captureItemRects() : new Map();
@@ -1537,10 +1553,56 @@ export class GLUniverseInitiativeOverlay {
     this.lastRenderedRound = combat.round ?? null;
     this.lastTurnOrdinal = turnOrdinal;
     if (isDelayReturn) this.pendingDelayReturnId = null;
-    tokenOverlays?.refresh();
+    // On a turn change the canvas markers move too (ring, next ring, start
+    // echo). That work is PIXI geometry and text, and it does not need to share
+    // a task with the rebuild and the move's two layouts: the canvas draws on its
+    // own frame, so it is handed the change once this frame has gone out.
+    if (shouldAnimateTurnChange) this.refreshTokenOverlaysAfterFrame();
+    else tokenOverlays?.refresh();
     cardFX?.sync(this.root, this);
     this.animateGaugeChanges();
     this.updateAnnouncement(combat);
+  }
+
+  refreshTokenOverlaysAfterFrame() {
+    if (this._overlayRefreshFrame) return;
+    this._overlayRefreshFrame = requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        this._overlayRefreshFrame = null;
+        tokenOverlays?.refresh();
+      }, 0);
+    });
+  }
+
+  // Holds a render that is not a turn change while the magic move is live.
+  // Returns true when the caller should stop; the held render is flushed when
+  // the move settles, or after MOVE_HOLD_MAX_MS if it never does (a hidden tab
+  // pauses the engine), at which point the render re-plans the move as before.
+  holdRenderForMove() {
+    if (!this.magicMoveLive) return false;
+    const now = performance.now();
+    this._heldSince ||= now;
+    const left = MOVE_HOLD_MAX_MS - (now - this._heldSince);
+    if (left <= 0) return false;
+    this._renderHeld = true;
+    window.clearTimeout(this._heldTimer);
+    this._heldTimer = window.setTimeout(() => this.flushHeldRender(), left + 16);
+    return true;
+  }
+
+  // Called by every render that goes ahead: it draws the latest state, so
+  // whatever was held is now on screen.
+  releaseHeldRender() {
+    this._renderHeld = false;
+    this._heldSince = 0;
+    window.clearTimeout(this._heldTimer);
+    this._heldTimer = null;
+  }
+
+  flushHeldRender() {
+    window.clearTimeout(this._heldTimer);
+    this._heldTimer = null;
+    if (this._renderHeld) this.renderSoon();
   }
 
   // Announce the current round + active combatant to assistive tech through the
@@ -2028,7 +2090,7 @@ export class GLUniverseInitiativeOverlay {
     // a glitch scramble over the "?"; portrait cards get break/dying (the
     // persistent states). Falls back to the CSS background when WebGL is
     // unsupported.
-    const fxReady = !card.adhoc && cardFX?.supported;
+    const fxReady = !card.adhoc && cardFX?.available;
     // A boss yields to break and dying. Those are states of this fight, and a
     // boss in one of them is a boss in trouble — the more urgent thing for the
     // card to be saying. Dread is what a boss looks like when nothing else is
@@ -2386,6 +2448,8 @@ export class GLUniverseInitiativeOverlay {
       for (const entry of settles) entry.commit?.();
       this._railMotion.forget(handle);
       if (this._magicTimeline === timeline) this._magicTimeline = null;
+      // Anything that arrived mid-move renders now, once, on the landed rail.
+      if (!this.magicMoveLive) this.flushHeldRender();
     };
     const handle = { revert: settle };
 
@@ -4613,6 +4677,9 @@ export class GLUniverseInitiativeOverlay {
 const MAGIC_MOVE_MS = 660;
 const MAGIC_ENTER_MS = 560;
 const MAGIC_LEAVE_MS = 380;
+// Longest a non-turn-change render waits for a live move before it re-plans it
+// instead (see holdRenderForMove). A default move lands in ~1.1s.
+const MOVE_HOLD_MAX_MS = 1500;
 // Screen-edge exits accelerate away; entries arrive fast and settle.
 const MAGIC_DEPART_EASE = cubicBezier(0.55, 0, 0.9, 0.4);
 const MAGIC_ARRIVE_EASE = cubicBezier(0.1, 0.6, 0.2, 1);
@@ -6098,11 +6165,36 @@ class CardFXManager {
     // identical to 60 and halves the per-frame PIXI render + canvas blit cost.
     this._frameMs = 1000 / 30;
     this._lastDraw = 0;
+    this._warmHandle = null;
+  }
+
+  // Whether cards should carry an FX canvas at all. True until the renderer has
+  // been tried and failed, so markup does not depend on whether it exists yet.
+  get available() {
+    if (this._initTried) return this.supported;
+    return Boolean(globalThis.PIXI?.Renderer && globalThis.PIXI?.Filter && globalThis.PIXI?.Sprite);
+  }
+
+  // Builds the renderer (and compiles its four programs) at the next idle
+  // moment instead of on the frame that first needs it — that frame is usually
+  // a guard break or a turn change, the two moments least able to absorb a
+  // context creation and a synchronous GLSL compile.
+  warmSoon() {
+    if (this._initTried || this._warmHandle || !this.available) return;
+    const run = () => { this._warmHandle = null; this.ensureRenderer(); };
+    this._warmHandle = typeof requestIdleCallback === "function"
+      ? { idle: requestIdleCallback(run, { timeout: 4000 }) }
+      : { timer: window.setTimeout(run, 1500) };
   }
 
   ensureRenderer() {
     if (this._initTried) return this.supported;
     this._initTried = true;
+    if (this._warmHandle) {
+      if (this._warmHandle.idle) cancelIdleCallback(this._warmHandle.idle);
+      else window.clearTimeout(this._warmHandle.timer);
+      this._warmHandle = null;
+    }
     try {
       if (!globalThis.PIXI?.Renderer || !globalThis.PIXI?.Filter || !globalThis.PIXI?.Sprite) return false;
       this.renderer = new PIXI.Renderer({ width: 256, height: 160, backgroundAlpha: 0, antialias: true });
@@ -6164,9 +6256,25 @@ class CardFXManager {
   // Reconcile the live FX canvases in the DOM after each overlay render.
   sync(root, host) {
     if (host) this.host = host;
-    if (!this.supported || !root) { this.clear(); return; }
+    if (!root || !this.available) { this.clear(); return; }
+    const canvases = root.querySelectorAll(".gluni-card-portrait-fx");
+    if (!canvases.length) { this.clear(); return; }
+    // First card that needs an effect before the idle warm-up got to it. The
+    // context and its compiles are paid after this frame has gone out rather
+    // than inside the render that is putting the card on screen; the canvas is
+    // transparent until then, so the card shows its portrait for that frame.
+    if (!this._initTried) {
+      this._pendingSync ||= requestAnimationFrame(() => window.setTimeout(() => {
+        this._pendingSync = null;
+        // Could not make a context: re-render so the cards take the CSS
+        // fallback (they were drawn expecting a canvas).
+        if (this.ensureRenderer()) this.sync(root, host);
+        else overlay?.renderSoon();
+      }, 0));
+      return;
+    }
     const seen = new Set();
-    root.querySelectorAll(".gluni-card-portrait-fx").forEach(cv => {
+    canvases.forEach(cv => {
       const card = cv.closest(".gluni-card");
       // Key by the per-card rail key, not the combatant id: the same combatant
       // can appear on more than one card (e.g. the active turn plus a next-round

@@ -135,6 +135,15 @@ void main() {
 // the canvas `top` offset in stream-pacer.css.
 const OVERHANG_PX = 110;
 
+// A calm hearth does not need the display's refresh rate. 30fps is the ceiling;
+// the rAF still fires every frame but returns before touching GL.
+const FRAME_MS = 1000 / 30;
+
+/** Release a context now rather than whenever the GC gets to it. */
+function loseContext(gl) {
+  try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch (e) { /* already gone */ }
+}
+
 export class CampfireWebGL {
   constructor() {
     this.canvas = null;
@@ -143,20 +152,28 @@ export class CampfireWebGL {
     this.uniforms = {};
     this._raf = null;
     this._start = 0;
-    this._running = false;
+    this._lastDraw = 0;
+    this._running = false;   // the scene wants fire
+    this._inView = true;     // IntersectionObserver verdict for the canvas
+    this._intersection = null;
     this._supported = null;
     this._base = 0.3;
     this._dpr = 1;
     this._intensity = 0;       // eased toward target
     this._intensityTarget = 0; // 0 normal, 1 ending stretch
     this._onResize = () => this._resize();
+    this._onVisibility = () => this._syncLoop();
+    this._frame = now => this._loop(now);
   }
 
   isSupported() {
     if (this._supported !== null) return this._supported;
     try {
       const c = document.createElement('canvas');
-      this._supported = !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+      const probe = c.getContext('webgl') || c.getContext('experimental-webgl');
+      this._supported = !!probe;
+      // The probe is a real context; free it instead of leaving it for the GC.
+      loseContext(probe);
     } catch (e) {
       this._supported = false;
     }
@@ -217,6 +234,19 @@ export class CampfireWebGL {
     gl.uniform3fv(this.uniforms.hot, colors.hot);
 
     window.addEventListener('resize', this._onResize);
+    document.addEventListener('visibilitychange', this._onVisibility);
+
+    // Pause while the bar is off screen (slid out, or its host detached by an
+    // innerHTML swap) and resume the moment it is back.
+    if (typeof IntersectionObserver === 'function') {
+      this._intersection = new IntersectionObserver(entries => {
+        const entry = entries[entries.length - 1];
+        this._inView = !!entry?.isIntersecting;
+        if (this._inView) this._resize();
+        this._syncLoop();
+      });
+      this._intersection.observe(canvas);
+    }
     return true;
   }
 
@@ -279,8 +309,9 @@ export class CampfireWebGL {
     if (!this._running) {
       this._running = true;
       this._start = performance.now();
-      this._loop();
+      this._lastDraw = 0;
     }
+    this._syncLoop();
     return true;
   }
 
@@ -289,13 +320,37 @@ export class CampfireWebGL {
     this._intensityTarget = ending ? 1 : 0;
   }
 
-  _loop() {
-    if (!this._running || !this.gl) return;
-    const gl = this.gl;
-    const elapsed = (performance.now() - this._start) / 1000;
+  /** Run the frame loop only while the fire is wanted AND can be seen. */
+  _syncLoop() {
+    const live = this._running && this._inView && !document.hidden && !!this.gl;
+    if (live && this._raf === null) {
+      this._raf = requestAnimationFrame(this._frame);
+    } else if (!live && this._raf !== null) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
+  }
 
-    // Ease intensity toward its target so the ending boost ramps smoothly.
-    this._intensity += (this._intensityTarget - this._intensity) * 0.04;
+  _loop(now) {
+    this._raf = null;
+    if (!this._running || !this.gl) return;
+    this._raf = requestAnimationFrame(this._frame);
+
+    // 30fps ceiling. The 2ms slack keeps a 60Hz display on every other frame
+    // rather than letting timer jitter push some draws a whole frame late.
+    const since = now - this._lastDraw;
+    if (since < FRAME_MS - 2) return;
+    // Clamp so a resume after a pause does not snap the intensity ease.
+    const dt = Math.min(since, 100) / 1000;
+    this._lastDraw = now;
+
+    const gl = this.gl;
+    const elapsed = (now - this._start) / 1000;
+
+    // Ease intensity toward its target so the ending boost ramps smoothly —
+    // time-based, so the ramp takes as long at 30fps as it did at 60.
+    const ease = 1 - Math.pow(1 - 0.04, dt * 60);
+    this._intensity += (this._intensityTarget - this._intensity) * ease;
 
     gl.useProgram(this.program);
     gl.uniform1f(this.uniforms.time, elapsed);
@@ -305,16 +360,11 @@ export class CampfireWebGL {
     gl.uniform1f(this.uniforms.intensity, this._intensity);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    this._raf = requestAnimationFrame(() => this._loop());
   }
 
   stop() {
     this._running = false;
-    if (this._raf) {
-      cancelAnimationFrame(this._raf);
-      this._raf = null;
-    }
+    this._syncLoop();
     if (this.canvas) this.canvas.classList.remove('visible');
     this._intensity = 0;
     this._intensityTarget = 0;
@@ -323,6 +373,10 @@ export class CampfireWebGL {
   destroy() {
     this.stop();
     window.removeEventListener('resize', this._onResize);
+    document.removeEventListener('visibilitychange', this._onVisibility);
+    this._intersection?.disconnect();
+    this._intersection = null;
+    loseContext(this.gl);
     if (this.canvas) {
       this.canvas.remove();
       this.canvas = null;

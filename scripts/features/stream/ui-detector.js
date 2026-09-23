@@ -1,6 +1,13 @@
 import { CLASSES, CORE_UI_SELECTORS, HOOKS, MODULE_ID } from "./constants.js";
 import { getUiRules, setSetting } from "./settings.js";
 
+/**
+ * Subtrees whose mutations this detector ignores: the suite's own stream overlay (roll cards spin their numbers
+ * every 50ms, chat cards re-clone) and the Director window, whose own re-render is what `uiDetectedChanged` asks
+ * for — watching it would feed every re-render back in as a new batch, forever.
+ */
+const IGNORED_SUBTREES = `#gluniverse-stream-overlay, #${MODULE_ID}-stream-control-room`;
+
 export class UiDetector {
   constructor(streamMode) {
     this.streamMode = streamMode;
@@ -8,6 +15,8 @@ export class UiDetector {
     this.observer = null;
     this.warnedSelectors = new Set();
     this.appliedZIndex = new Map();
+    this.pendingNodes = new Set();
+    this.frame = null;
   }
 
   registerHooks() {
@@ -19,23 +28,40 @@ export class UiDetector {
     Hooks.on("renderApplication", (app, html) => this.trackApplication(app, html));
   }
 
+  /* The observer only collects: batches are coalesced into one pass per animation frame, mutations inside
+     IGNORED_SUBTREES never schedule one, and the Director is asked to re-render only when that pass found an
+     element it had not seen before. */
   start() {
     this.scan();
     this.observer ??= new MutationObserver(mutations => {
       for (const mutation of mutations) {
+        if (mutation.target instanceof Element && mutation.target.closest(IGNORED_SUBTREES)) continue;
         for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement) this.trackElement(node);
+          if (node instanceof HTMLElement && !node.closest(IGNORED_SUBTREES)) this.pendingNodes.add(node);
         }
       }
-      this.applyRules();
-      Hooks.callAll(HOOKS.uiDetectedChanged);
+      if (this.pendingNodes.size && this.frame === null) this.frame = window.requestAnimationFrame(() => this.#flush());
     });
     this.observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  #flush() {
+    this.frame = null;
+    const nodes = Array.from(this.pendingNodes);
+    this.pendingNodes.clear();
+    if (!this.observer) return;
+    const known = this.entries.size;
+    for (const node of nodes) this.trackElement(node);
+    this.applyRules();
+    if (this.entries.size !== known) Hooks.callAll(HOOKS.uiDetectedChanged);
   }
 
   stop() {
     this.observer?.disconnect();
     this.observer = null;
+    if (this.frame !== null) window.cancelAnimationFrame(this.frame);
+    this.frame = null;
+    this.pendingNodes.clear();
     document.querySelectorAll(`.${CLASSES.blockedUi}, .${CLASSES.allowedUi}`).forEach(element => {
       element.classList.remove(CLASSES.blockedUi, CLASSES.allowedUi);
     });

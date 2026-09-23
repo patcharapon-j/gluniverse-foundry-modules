@@ -356,15 +356,20 @@ async function syncSpellcasting(actor, config) {
 async function cleanup(actor) {
   const ids = ownedItems(actor).map((item) => item.id);
   if (ids.length) await actor.deleteEmbeddedDocuments("Item", ids, { render: false });
+  return ids.length > 0;
 }
 
 export async function syncActor(actor, { render = true } = {}) {
   if (game.system?.id !== "pf2e" || actor?.type !== "character" || syncing.has(actor.id)) return;
   if (!actor.canUserModify?.(game.user, "update")) return;
   syncing.add(actor.id);
+  /* Every PF2e character passes through here on every updateActor, and almost
+     none of them are level 0. Re-rendering their sheet after a cleanup that
+     removed nothing redraws an open sheet on every HP tick for no reason. */
+  let changed = true;
   try {
     if (!isLevelZeroActor(actor)) {
-      await cleanup(actor);
+      changed = await cleanup(actor);
       return;
     }
     const config = getConfig(actor);
@@ -376,7 +381,7 @@ export async function syncActor(actor, { render = true } = {}) {
     ui.notifications.error(game.i18n.format("GL0.error.sync", { message: error?.message ?? String(error) }));
   } finally {
     syncing.delete(actor.id);
-    if (render) actor.sheet?.render?.();
+    if (render && changed) actor.sheet?.render?.();
   }
 }
 

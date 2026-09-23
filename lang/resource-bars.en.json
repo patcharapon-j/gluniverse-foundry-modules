@@ -41,7 +41,7 @@
   "GLRB.Dying.Ticker": "DYING",
   "GLRB.Dead.Label": "DEAD",
   "GLRB.Settings.Bloom.Name": "Bloom",
-  "GLRB.Settings.Bloom.Hint": "Let highlights and impacts cast light past the edge of the bar. Costs one extra render pass over all bars together. Turn it off if the canvas struggles.",
+  "GLRB.Settings.Bloom.Hint": "Let highlights and impacts cast a soft halo of light past the edge of the bar. Costs four extra render passes over all bars together on every frame, so leave it off if the canvas struggles.",
   "GLRB.Settings.MotionTier.Name": "Motion",
   "GLRB.Settings.MotionTier.Hint": "How much the bars animate on your screen. This is your choice alone and does not affect anyone else at the table.",
   "GLRB.Settings.MotionTier.Full": "Full",

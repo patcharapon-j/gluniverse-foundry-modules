@@ -70,10 +70,26 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await super._onRender(context, options);
     this._rows.clear();
     this._sig = null;
+    this._frameDock();
     this._applyPosition();
     this._wireViewportClamp();
     this._wireDockChrome();
     this.update();
+  }
+
+  /**
+   * Wrap the dock in .trk-dock-frame, whose ::before carries the dock's outer
+   * shadow — kept off the dock itself because hazard rows animate inside it
+   * forever, and a filter on the dock re-ran its blurs on every one of those
+   * frames. The frame shrink-wraps the dock. Idempotent; runs on each fresh DOM.
+   */
+  _frameDock() {
+    const dock = this.element?.querySelector("[data-dock]");
+    if (!dock || dock.parentElement?.classList.contains("trk-dock-frame")) return;
+    const frame = document.createElement("div");
+    frame.className = "trk-dock-frame";
+    dock.before(frame);
+    frame.appendChild(dock);
   }
 
   async _onClose(options) {
@@ -166,7 +182,8 @@ export class TrackerHud extends HandlebarsApplicationMixin(ApplicationV2) {
     row.dataset.id = t.id;
     if (t.prominent && t.type !== "separator") row.classList.add("prominent");
     if (isGM && !t.visibleToPlayers) row.classList.add("hiddenfromplayers");
-    if (t.type === "hazard" || badClock) row.appendChild(this._el("div", "haz-scan"));
+    // the dread pulse (an opacity-only layer, see .haz-dread) + drifting scanlines
+    if (t.type === "hazard" || badClock) row.append(this._el("div", "haz-dread"), this._el("div", "haz-scan"));
 
     if (isGM) {
       const grip = this._el("div", "grip");

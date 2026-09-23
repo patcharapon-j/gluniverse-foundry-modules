@@ -2,7 +2,8 @@ import { PacerManager } from './PacerManager.js';
 import { SAFETY_STATUS } from './settings.js';
 
 /** The player's traffic light, docked to the flank of the Pacer HUD. */
-const LIGHT_SELECTOR = '#stream-pacer-safety-light.is-mounted';
+const LIGHT_ID = 'stream-pacer-safety-light';
+const LIGHT_SELECTOR = `#${LIGHT_ID}.is-mounted`;
 
 /** One icon per light, shared with the GM's alert chips. */
 const LIGHT_ICON = {
@@ -34,10 +35,15 @@ export class SafetyRequestOverlay {
     this._unsubscribe = null;
     this._active = false;
     this._acknowledged = false;
+    this._anchoring = false;
     this._anchorFrame = null;
+    this._lightObserver = null;
+    this._lightResizeObserver = null;
+    this._bodyObserver = null;
+    this._observedLight = null;
     this._lastAnchor = '';
     this._clickHandler = this._onClick.bind(this);
-    this._boundSyncAnchor = () => this._syncAnchor();
+    this._boundScheduleSync = () => this._scheduleSync();
   }
 
   initialize() {
@@ -186,29 +192,72 @@ export class SafetyRequestOverlay {
 
   // --- Arrow anchoring ---
 
+  /**
+   * Keep the arrow on the light without a permanent frame loop. The light is
+   * the only thing the arrow tracks, and SafetyLightPanel moves it by writing
+   * its inline `style` (and its dock/mount classes) whenever the HUD is dragged,
+   * re-rendered or resized — so watching those attributes, its box and the
+   * window catches every move. Bursts coalesce into one read per frame.
+   */
   _startAnchor() {
-    if (this._anchorFrame !== null) return;
-    window.addEventListener('resize', this._boundSyncAnchor);
-    const tick = () => {
-      this._syncAnchor();
-      this._anchorFrame = requestAnimationFrame(tick);
-    };
-    this._anchorFrame = requestAnimationFrame(tick);
+    if (this._anchoring) return;
+    this._anchoring = true;
+    window.addEventListener('resize', this._boundScheduleSync);
+    // The light is created by its own panel and may not exist yet; watch the
+    // body's direct children until it does.
+    this._bodyObserver = new MutationObserver(() => this._observeLight());
+    this._bodyObserver.observe(document.body, { childList: true });
+    this._observeLight();
+    this._syncAnchor();
+  }
+
+  /** (Re)attach the attribute and size watchers to the current light element. */
+  _observeLight() {
+    const light = document.getElementById(LIGHT_ID);
+    if (light === this._observedLight) return;
+    this._lightObserver?.disconnect();
+    this._lightResizeObserver?.disconnect();
+    this._observedLight = light;
+    if (light) {
+      this._lightObserver ??= new MutationObserver(this._boundScheduleSync);
+      this._lightObserver.observe(light, { attributes: true, attributeFilter: ['style', 'class'] });
+      this._lightResizeObserver ??= new ResizeObserver(this._boundScheduleSync);
+      this._lightResizeObserver.observe(light);
+    }
+    this._scheduleSync();
+  }
+
+  _scheduleSync() {
+    if (!this._anchoring || this._anchorFrame !== null) return;
+    this._anchorFrame = requestAnimationFrame(() => {
+      this._anchorFrame = null;
+      if (this._anchoring) this._syncAnchor();
+    });
   }
 
   _stopAnchor() {
-    if (this._anchorFrame === null) return;
-    cancelAnimationFrame(this._anchorFrame);
-    this._anchorFrame = null;
-    window.removeEventListener('resize', this._boundSyncAnchor);
+    if (!this._anchoring) return;
+    this._anchoring = false;
+    if (this._anchorFrame !== null) {
+      cancelAnimationFrame(this._anchorFrame);
+      this._anchorFrame = null;
+    }
+    window.removeEventListener('resize', this._boundScheduleSync);
+    this._bodyObserver?.disconnect();
+    this._bodyObserver = null;
+    this._lightObserver?.disconnect();
+    this._lightObserver = null;
+    this._lightResizeObserver?.disconnect();
+    this._lightResizeObserver = null;
+    this._observedLight = null;
     this._pointerEl?.classList.remove('active');
     this._lastAnchor = '';
   }
 
   /**
-   * Park the arrow beside the traffic light. The HUD it docks to is draggable,
-   * so this runs on a frame loop while the ask is open — cheap, and it keeps
-   * the arrow glued to the light wherever the player parked the panel.
+   * Park the arrow beside the traffic light. The HUD it docks to is draggable;
+   * the observers in `_startAnchor` call back here whenever the light moves, so
+   * the arrow stays glued to it wherever the player parked the panel.
    */
   _syncAnchor() {
     if (!this._pointerEl) return;

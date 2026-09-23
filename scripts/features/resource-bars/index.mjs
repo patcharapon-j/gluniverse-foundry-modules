@@ -161,11 +161,15 @@ function registerSettings() {
     config: game.system?.id === "pf2e",
   });
 
+  /* Off by default. The filter is four passes over the rectangle that holds
+     every visible bar, re-run on every canvas frame whether or not anything is
+     changing, and what it adds at rest is a halo around light the liquid is
+     already drawing — the shader keeps its own contact glow either way. */
   world(SETTINGS.bloom, {
     name: "GLRB.Settings.Bloom.Name",
     hint: "GLRB.Settings.Bloom.Hint",
     type: Boolean,
-    default: true,
+    default: false,
   });
 
   /* The world default placement. Per-token overrides live on the TokenDocument

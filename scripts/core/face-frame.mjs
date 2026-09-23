@@ -19,12 +19,20 @@
  * Models and onnxruntime's WebAssembly load from `Data/face-frame-models/` first and
  * fall back to Hugging Face and jsDelivr, so an offline world only needs that folder
  * (see scripts/vendor/face-frame/README.md). Nothing loads until a feature asks.
+ *
+ * Detection runs in a dedicated module worker (`face-frame-worker.mjs`): fetching and
+ * decoding the art, the pixel scans and both model runs stay off the main thread. Where
+ * a module worker with OffscreenCanvas is unavailable, the same runtime runs here
+ * instead, started in idle time and yielding between stages.
+ *
+ * Persistence is batched: this browser's storage and the world cache are each written
+ * once activity settles (see LOCAL_WRITE / WORLD_WRITE), not once per result.
  */
 
-import { SUITE_ID, suitePath, warn } from "./const.mjs";
+import { SUITE_ID, warn } from "./const.mjs";
 import { emitSocket, onSocket } from "./socket.mjs";
-import * as lib from "../vendor/face-frame/face-frame.mjs";
-import { compactResult, coverPlacement, cropFor, isFaceEntry, PRESETS, viewBoxStyle } from "./face-frame-math.mjs";
+import { analyseUrl, createFramer } from "./face-frame-runtime.mjs";
+import { coverPlacement, cropFor, isFaceEntry, PRESETS, viewBoxStyle } from "./face-frame-math.mjs";
 
 export const SETTING_FACE_FRAME = "core.faceFrame";
 export const SETTING_FACE_FRAME_CACHE = "core.faceFrameCache";
@@ -35,10 +43,15 @@ export const FACE_FRAME_MODES = Object.freeze({ off: "off", heads: "heads", crea
 const LOCAL_KEY = `${SUITE_ID}.faceFrame.v1`;
 const LOCAL_LIMIT = 400;
 const WORLD_LIMIT = 800;
-const WORLD_WRITE_DELAY = 4000;
+/**
+ * Write batching (ms). A write waits until results have stopped arriving for `quiet`, but
+ * never longer than `max` after the first unwritten one. The world cache is also written
+ * at once when a result arrives after a quiet spell, so a lone analysis reaches the other
+ * clients without delay.
+ */
+const LOCAL_WRITE = { quiet: 2000, max: 10000 };
+const WORLD_WRITE = { quiet: 3000, max: 12000, leading: true };
 const MODELS_DIR = "face-frame-models";
-const ORT_VERSION = "1.30.0";
-const ORT_PROBE = "ort-wasm-simd-threaded.asyncify.wasm";
 const SOCKET_TAG = "core.faceFrame";
 /** How long a player waits for the GM's result before analysing an image itself. */
 const GM_WAIT_MS = 45000;
@@ -110,8 +123,10 @@ export class FaceLocator {
     this.unsaved = new Set();
     this.queue = [];
     this.draining = false;
-    this.framerPromise = null;
-    this.worldTimer = null;
+    /** Where detection runs: a WorkerBackend, or a MainThreadBackend. Created on first use. */
+    this.backend = null;
+    this.localWrites = new Batcher(() => this.writeLocal(), LOCAL_WRITE);
+    this.worldWrites = new Batcher(() => this.share(), WORLD_WRITE);
     this.listeners = new Set();
     this.warned = false;
     /** src -> resolver, for player requests waiting on the GM */
@@ -120,7 +135,6 @@ export class FaceLocator {
     this.replied = new Map();
     /** src -> the world entry a player forgot, ignored until the world cache changes it */
     this.ignored = new Map();
-    this.sharePending = false;
   }
 
   get mode() {
@@ -270,7 +284,7 @@ export class FaceLocator {
 
   /** Drops the loaded models (the detection mode changed) and every session-only failure. */
   reset() {
-    this.framerPromise = null;
+    this.backend?.reset();
     this.warned = false;
     for (const src of this.unsaved) this.local.delete(src);
     this.unsaved.clear();
@@ -346,28 +360,26 @@ export class FaceLocator {
     }
   }
 
+  /** Analyses one image (in the worker when possible). Throws on load, CORS or model failures. */
   async analyse(src) {
     const mode = this.mode;
-    const framer = await this.framer();
-    const px = await lib.loadPixels(new URL(src, document.baseURI).href);
-    return { ...compactResult(await framer.detect(px)), m: mode };
-  }
-
-  framer() {
-    this.framerPromise ??= (async () => {
-      const models = route(MODELS_DIR);
-      const wasmPaths = await resolveWasmPaths(`${models}/ort/`);
-      return lib.createWebFramer({
-        sources: [lib.localSource(models), lib.remoteSource],
-        wasmPaths,
-        loadOrt: () => import(route(suitePath("scripts/vendor/face-frame/ort.webgpu.min.mjs"))),
-        // Creatures need OWLv2, which is only practical on WebGPU; the library keeps it off otherwise.
-        ...(this.mode === FACE_FRAME_MODES.creatures ? {} : { tier2: false })
-      });
-    })();
-    // A failed load (offline, no models) is retried on the next request after a reset, not per image.
-    this.framerPromise.catch(() => {});
-    return this.framerPromise;
+    const url = new URL(src, document.baseURI).href;
+    const config = {
+      modelsUrl: new URL(route(MODELS_DIR), document.baseURI).href.replace(/\/+$/, ""),
+      creatures: mode === FACE_FRAME_MODES.creatures
+    };
+    this.backend ??= WorkerBackend.supported() ? new WorkerBackend() : new MainThreadBackend();
+    let entry;
+    try {
+      entry = await this.backend.detect(url, config);
+    } catch (error) {
+      if (!(error instanceof WorkerStartError)) throw error;
+      // The worker could not start here (blocked, or no module workers): stay on this thread.
+      warn("Face framing worker unavailable; analysing on the main thread in idle time", error.cause);
+      this.backend = new MainThreadBackend();
+      entry = await this.backend.detect(url, config);
+    }
+    return { ...entry, m: mode };
   }
 
   remember(src, entry, persist) {
@@ -383,7 +395,12 @@ export class FaceLocator {
     if (entry && game.user?.isGM) this.shareSoon();
   }
 
+  /** Schedules a write of this browser's cache (batched, see LOCAL_WRITE). */
   saveLocal() {
+    this.localWrites.schedule();
+  }
+
+  writeLocal() {
     try {
       const saved = [...this.local].filter(([key]) => !this.unsaved.has(key));
       localStorage.setItem(LOCAL_KEY, JSON.stringify(saved));
@@ -392,19 +409,9 @@ export class FaceLocator {
     }
   }
 
-  /** Writes this GM's new results to the world cache now, then at most once per WORLD_WRITE_DELAY. */
+  /** Schedules a write of this GM's new results to the world cache (batched, see WORLD_WRITE). */
   shareSoon() {
-    if (this.worldTimer) {
-      this.sharePending = true;
-      return;
-    }
-    this.share();
-    this.worldTimer = setTimeout(() => {
-      this.worldTimer = null;
-      if (!this.sharePending) return;
-      this.sharePending = false;
-      this.shareSoon();
-    }, WORLD_WRITE_DELAY);
+    this.worldWrites.schedule();
   }
 
   async share() {
@@ -464,15 +471,190 @@ export function frameImages(root, selector, frame) {
 
 const VIEW_BOX = globalThis.CSS?.supports?.("object-view-box", "inset(0% 0% 0% 0%)") ?? false;
 
-/** onnxruntime's WebAssembly from the local models folder when it is there, else the CDN. */
-async function resolveWasmPaths(local) {
-  try {
-    const res = await fetch(`${local}${ORT_PROBE}`, { method: "HEAD" });
-    if (res.ok) return local;
-  } catch {
-    // Not served locally.
+/** The worker could not be started; the locator moves to the main thread for the session. */
+class WorkerStartError extends Error {}
+
+/**
+ * Detection in `face-frame-worker.mjs`. One job at a time (the locator's queue is serial).
+ * `reset()` retires the worker once it is idle, which frees its models, and a later
+ * request starts a fresh one.
+ */
+class WorkerBackend {
+  static supported() {
+    return typeof Worker === "function";
   }
-  return `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+
+  constructor() {
+    this.started = null;
+    this.worker = null;
+    /** id -> {resolve, reject} */
+    this.jobs = new Map();
+    this.nextId = 1;
+    this.retiring = false;
+  }
+
+  detect(url, config) {
+    const id = this.nextId++;
+    const done = new Promise((resolve, reject) => this.jobs.set(id, { resolve, reject }));
+    // Registered before the worker is awaited, so a reset meanwhile cannot retire it under us.
+    this.start().then(
+      worker => worker.postMessage({ type: "detect", id, url, config }),
+      error => this.settle(id, error)
+    );
+    return done;
+  }
+
+  start() {
+    this.started ??= new Promise((resolve, reject) => {
+      let worker;
+      try {
+        worker = new Worker(new URL("./face-frame-worker.mjs", import.meta.url), { type: "module", name: "GLUniverse face framing" });
+      } catch (error) {
+        reject(new WorkerStartError("face-frame worker could not be created", { cause: error }));
+        return;
+      }
+      let ready = false;
+      worker.addEventListener("message", ({ data }) => {
+        if (data?.type === "ready") {
+          if (!data.ok) {
+            worker.terminate();
+            reject(new WorkerStartError("face-frame worker cannot decode images (no OffscreenCanvas)"));
+            return;
+          }
+          ready = true;
+          this.worker = worker;
+          resolve(worker);
+        } else if (data?.type === "result") {
+          this.settle(data.id, "error" in data ? new Error(data.error) : null, data.entry);
+        }
+      });
+      worker.addEventListener("error", event => {
+        event.preventDefault?.();
+        const cause = event.error ?? new Error(event.message || "face-frame worker failed to load");
+        if (!ready) {
+          worker.terminate();
+          reject(new WorkerStartError("face-frame worker could not start", { cause }));
+          return;
+        }
+        // Crashed mid-session: fail what it held; the next request starts a fresh worker.
+        this.discard(cause);
+      });
+    });
+    return this.started;
+  }
+
+  settle(id, error, entry) {
+    const job = this.jobs.get(id);
+    if (!job) return;
+    this.jobs.delete(id);
+    if (error) job.reject(error);
+    else job.resolve(entry);
+    if (this.retiring && !this.jobs.size) this.discard();
+  }
+
+  /** Mode changed: drop the loaded models once the current image is done. */
+  reset() {
+    this.retiring = true;
+    if (!this.jobs.size) this.discard();
+  }
+
+  discard(error) {
+    this.worker?.terminate();
+    this.worker = null;
+    this.started = null;
+    this.retiring = false;
+    const jobs = [...this.jobs.values()];
+    this.jobs.clear();
+    for (const job of jobs) job.reject(error ?? new Error("face-frame worker stopped"));
+  }
+}
+
+/**
+ * Detection on this thread, where the worker cannot run (no module workers, no OffscreenCanvas
+ * in workers, or blocked from loading). Each image starts in idle time, and every heavy stage
+ * (decode, each model run) is its own task.
+ */
+class MainThreadBackend {
+  constructor() {
+    this.framerKey = null;
+    this.framerPromise = null;
+  }
+
+  async detect(url, config) {
+    const key = JSON.stringify(config);
+    if (key !== this.framerKey) {
+      this.framerKey = key;
+      this.framerPromise = createFramer(config, { pause: yieldToMain });
+      // A failed load (offline, no models) is retried after a reset, not per image.
+      this.framerPromise.catch(() => {});
+    }
+    const framer = await this.framerPromise;
+    await whenIdle();
+    return analyseUrl(framer, url, { pause: yieldToMain });
+  }
+
+  reset() {
+    this.framerKey = null;
+    this.framerPromise = null;
+  }
+}
+
+function yieldToMain() {
+  if (globalThis.scheduler?.yield) return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function whenIdle() {
+  if (typeof requestIdleCallback !== "function") return new Promise(resolve => setTimeout(resolve, 50));
+  return new Promise(resolve => requestIdleCallback(() => resolve(), { timeout: 2000 }));
+}
+
+/**
+ * Runs `fn` once calls have stopped for `quiet` ms, and at the latest `max` ms after the first
+ * unrun call. With `leading`, a call after a quiet spell runs at once. Pending runs are flushed
+ * when the page is hidden or closed, so a batch is not lost with the tab.
+ */
+class Batcher {
+  constructor(fn, { quiet, max, leading = false }) {
+    Object.assign(this, { fn, quiet, max, leading });
+    this.timer = null;
+    this.firstPending = 0;
+    this.lastRun = -Infinity;
+    this.hooked = false;
+  }
+
+  schedule() {
+    const now = Date.now();
+    if (this.leading && !this.timer && now - this.lastRun >= this.quiet) {
+      this.run();
+      return;
+    }
+    this.firstPending ||= now;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.run(), Math.max(0, Math.min(this.quiet, this.firstPending + this.max - now)));
+    this.hookUnload();
+  }
+
+  flush() {
+    if (this.timer) this.run();
+  }
+
+  run() {
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.firstPending = 0;
+    this.lastRun = Date.now();
+    this.fn();
+  }
+
+  hookUnload() {
+    if (this.hooked || typeof globalThis.addEventListener !== "function") return;
+    this.hooked = true;
+    globalThis.addEventListener("pagehide", () => this.flush());
+    globalThis.document?.addEventListener?.("visibilitychange", () => {
+      if (document.visibilityState === "hidden") this.flush();
+    });
+  }
 }
 
 function route(path) {

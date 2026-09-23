@@ -21,6 +21,14 @@ const HEAD_FADE_FROM = 0.82;
 /** The sweep's white hairline covers its leading part only. */
 const SWEEP_LEAD_FROM = 0.55;
 const TAU = Math.PI * 2;
+/** The body halo's alpha runs LOW..LOW+SWING with the pulse; PEAK is the top of that range. */
+const HALO_BODY_LOW = 0.16;
+const HALO_BODY_SWING = 0.08;
+const HALO_BODY_PEAK = HALO_BODY_LOW + HALO_BODY_SWING;
+/** The same for the reticle's halo. */
+const HALO_RING_LOW = 0.22;
+const HALO_RING_SWING = 0.1;
+const HALO_RING_PEAK = HALO_RING_LOW + HALO_RING_SWING;
 
 /** One lineStyle options object reused for every stroke; PIXI copies what it needs out of it. */
 const LINE = { width: 1, color: WHITE, alpha: 1, cap: "round", join: "round", native: false };
@@ -36,6 +44,13 @@ const LINE = { width: 1, color: WHITE, alpha: 1, cap: "round", join: "round", na
  *
  * Graphics: `halo` sits in the controller's shared blurred ADD container, `core` draws normally (the etched rim
  * would vanish under ADD), and `glint` adds the sweep's light on top.
+ *
+ * While a line holds, three loops run forever — sweep, spin, pulse — and rebuilding every stroke of every line
+ * for them each frame is the whole of this feature's CPU cost. So each loop reaches the screen through the
+ * cheapest thing that can carry it: the pulse is the alpha of the two halo Graphics (split so each keeps its own
+ * exact pulse range), the spin is the rotation of the quadrant marks' own Graphics, and only the sweep, which
+ * travels a curve, is re-stroked, on `glint` alone. Everything else is rebuilt only when an input to its shape
+ * changes (`#shapeKey`), which on a held line whose tokens are still is never.
  */
 export class TargetLine {
   state = { reach: 0, body: 1, headOut: 1, ringAlpha: 0, ringScale: 1, sweep: 0, spin: 0, pulse: 0.5 };
@@ -48,6 +63,9 @@ export class TargetLine {
   path = createPath();
   #point = { x: 0, y: 0, tx: 1, ty: 0 };
   #geometry = { from: null, to: null, sourceSize: 0, targetSize: 0, gridSize: 100 };
+  /** Every input the static shape depends on, as last drawn; NaN forces the next render to redraw. */
+  #shapeKey = new Float64Array(22).fill(NaN);
+  #sweepDrawn = NaN;
 
   constructor({ sourceId, targetId, halo, core, glint, style, calm, onGone }) {
     this.sourceId = sourceId;
@@ -55,7 +73,9 @@ export class TargetLine {
     this.calm = calm;
     this.onGone = onGone;
     this.haloGraphics = halo.addChild(new PIXI.Graphics());
+    this.haloRingGraphics = halo.addChild(new PIXI.Graphics());
     this.coreGraphics = core.addChild(new PIXI.Graphics());
+    this.spinGraphics = core.addChild(new PIXI.Graphics());
     this.glintGraphics = glint.addChild(new PIXI.Graphics());
     this.glintGraphics.blendMode = PIXI.BLEND_MODES.ADD;
     this.setStyle(style);
@@ -99,6 +119,7 @@ export class TargetLine {
   setStyle(style) {
     this.style = style;
     this.bright = mixColor(Number(style?.color) || 0, WHITE, 0.65);
+    this.#shapeKey.fill(NaN);
   }
 
   /**
@@ -220,20 +241,24 @@ export class TargetLine {
     for (const loop of this.loops) loop?.cancel?.();
     this.loops = [];
     remove(this.state);
-    if (!this.haloGraphics.destroyed) this.haloGraphics.destroy();
-    if (!this.coreGraphics.destroyed) this.coreGraphics.destroy();
-    if (!this.glintGraphics.destroyed) this.glintGraphics.destroy();
+    for (const graphics of [this.haloGraphics, this.haloRingGraphics, this.coreGraphics, this.spinGraphics, this.glintGraphics]) {
+      if (!graphics.destroyed) graphics.destroy();
+    }
     this.onGone?.(this);
   }
 
   render({ source, target, scale, gridSize, resolution = 1 }) {
     const halo = this.haloGraphics;
+    const haloRing = this.haloRingGraphics;
     const core = this.coreGraphics;
+    const spinMarks = this.spinGraphics;
     const glint = this.glintGraphics;
-    halo.clear();
-    core.clear();
-    glint.clear();
-    if (this.destroyed || !source?.document || !target?.document) return;
+    if (this.destroyed || !source?.document || !target?.document) {
+      for (const graphics of [halo, haloRing, core, spinMarks, glint]) graphics.clear();
+      this.#shapeKey.fill(NaN);
+      this.#sweepDrawn = NaN;
+      return;
+    }
 
     const state = this.state;
     const color = this.color;
@@ -247,62 +272,100 @@ export class TargetLine {
     const body = clamp01(state.body);
     const reach = clamp01(state.reach);
     const to = target.center;
+    const from = source.center;
     const targetSize = Math.max(target.w, target.h);
     const point = this.#point;
+    const drawsBody = !this.isSelfTarget && reach > 0.001 && body > 0.001;
+    const holding = drawsBody && this.#holding(reach);
 
-    if (!this.isSelfTarget && reach > 0.001 && body > 0.001) {
-      const input = this.#geometry;
-      input.from = source.center;
-      input.to = to;
-      input.sourceSize = Math.max(source.w, source.h);
-      input.targetSize = targetSize;
-      input.gridSize = gridSize;
-      const path = lineGeometry(input, this.path);
-      const end = path.length * reach;
+    // The pulse, as the halo's alpha: each halo is drawn at the top of its range and scaled down into it, which
+    // is exactly the per-stroke alpha it replaces.
+    const bodyGain = (HALO_BODY_LOW + (HALO_BODY_SWING * pulse)) / HALO_BODY_PEAK;
+    halo.alpha = bodyGain;
+    haloRing.alpha = (HALO_RING_LOW + (HALO_RING_SWING * pulse)) / HALO_RING_PEAK;
+    // The spin, as a rotation about the target's centre.
+    spinMarks.x = to.x;
+    spinMarks.y = to.y;
+    spinMarks.rotation = this.calm ? 0 : Number(state.spin) || 0;
 
-      strokePath(halo, path, 0, end, 14 * u, color, (0.16 + (0.08 * pulse)) * body, point);
-      strokePath(core, path, 0, end, (5 * u) + (2 * hl), INK, 0.5 * body, point);
-      strokePath(core, path, 0, end, 5 * u, color, 0.3 * body, point);
-      strokePath(core, path, 0, end, 2 * u, color, 0.85 * body, point);
-      strokePath(core, path, 0, end, hl, bright, 0.95 * body, point);
+    const key = this.#shapeKey;
+    const shapeChanged = updateKey(key, from.x, from.y, source.w, source.h, to.x, to.y, target.w, target.h, gridSize, u,
+      hl, color, bright, body, reach, state.headOut, state.ringAlpha, state.ringScale, this.calm ? 1 : 0,
+      this.leaving ? 1 : 0, this.nextSourceId == null ? 0 : 1, this.isSelfTarget ? 1 : 0);
 
-      pointAt(path, 0, point);
-      strokeCircle(core, point.x, point.y, 3 * u, 2 * hl, INK, 0.5 * body);
-      fillCircle(core, point.x, point.y, 2.4 * u, bright, 0.95 * body);
+    if (shapeChanged) {
+      halo.clear();
+      haloRing.clear();
+      core.clear();
+      spinMarks.clear();
+      if (drawsBody) {
+        const path = this.#layout(from, to, source, targetSize, gridSize);
+        const end = path.length * reach;
 
-      if (this.#holding(reach)) {
+        strokePath(halo, path, 0, end, 14 * u, color, HALO_BODY_PEAK * body, point);
+        strokePath(core, path, 0, end, (5 * u) + (2 * hl), INK, 0.5 * body, point);
+        strokePath(core, path, 0, end, 5 * u, color, 0.3 * body, point);
+        strokePath(core, path, 0, end, 2 * u, color, 0.85 * body, point);
+        strokePath(core, path, 0, end, hl, bright, 0.95 * body, point);
+
+        pointAt(path, 0, point);
+        strokeCircle(core, point.x, point.y, 3 * u, 2 * hl, INK, 0.5 * body);
+        fillCircle(core, point.x, point.y, 2.4 * u, bright, 0.95 * body);
+
+        pointAt(path, end, point);
+        const headIn = clamp01((reach - HEAD_FADE_FROM) / (1 - HEAD_FADE_FROM));
+        const headAlpha = headIn * clamp01(state.headOut) * body;
+        if (headAlpha > 0.001) {
+          drawHead(core, point, HEAD_LENGTH_SQUARES * gridSize, HEAD_HALF_WIDTH_SQUARES * gridSize, hl, color, bright, headAlpha);
+        }
+        if (!this.calm && reach < 0.98) {
+          // Unpulsed, so drawn against the gain the halo carries this frame; reach is moving here, so it is
+          // redrawn every frame this is on screen.
+          fillCircle(halo, point.x, point.y, 9 * u, color, Math.min(1, (0.7 * body) / bodyGain));
+          fillCircle(core, point.x, point.y, 3 * u, bright, body);
+        }
+      }
+
+      const ringAlpha = clamp01(state.ringAlpha);
+      if (ringAlpha > 0.001) {
+        const radius = ringRadius(targetSize) * Math.max(0, Number(state.ringScale) || 0);
+        strokeCircle(haloRing, to.x, to.y, radius, 8 * u, color, HALO_RING_PEAK * ringAlpha);
+        strokeCircle(core, to.x, to.y, radius, 3 * hl, INK, 0.45 * ringAlpha);
+        strokeCircle(core, to.x, to.y, radius, hl, color, 0.7 * ringAlpha);
+        for (let i = 0; i < 4; i++) {
+          const start = (i * Math.PI / 2) - (QUADRANT_SPAN / 2);
+          strokeArc(spinMarks, 0, 0, radius, start, start + QUADRANT_SPAN, 3 * u, color, 0.95 * ringAlpha);
+          strokeArc(spinMarks, 0, 0, radius, start, start + QUADRANT_SPAN, hl, bright, 0.95 * ringAlpha);
+        }
+      }
+    }
+
+    // The sweep travels a curve, so it is the one loop that has to be re-stroked — on its own Graphics only.
+    const sweep = holding ? clamp01(state.sweep) : -1;
+    if (shapeChanged || sweep !== this.#sweepDrawn) {
+      this.#sweepDrawn = sweep;
+      glint.clear();
+      if (holding) {
+        // Holding implies the body was laid out by the last shape pass, from these same inputs.
+        const path = this.path;
         const length = SWEEP_LENGTH_SQUARES * gridSize;
-        const head = (clamp01(state.sweep) * (path.length + length)) - length;
+        const head = (sweep * (path.length + length)) - length;
         const stop = Math.min(path.length, head + length);
         strokePath(glint, path, Math.max(0, head), stop, 3 * u, bright, 0.35 * body, point);
         strokePath(glint, path, Math.max(0, head + (length * SWEEP_LEAD_FROM)), stop, 2 * hl, WHITE, 0.6 * body, point);
       }
-
-      pointAt(path, end, point);
-      const headIn = clamp01((reach - HEAD_FADE_FROM) / (1 - HEAD_FADE_FROM));
-      const headAlpha = headIn * clamp01(state.headOut) * body;
-      if (headAlpha > 0.001) {
-        drawHead(core, point, HEAD_LENGTH_SQUARES * gridSize, HEAD_HALF_WIDTH_SQUARES * gridSize, hl, color, bright, headAlpha);
-      }
-      if (!this.calm && reach < 0.98) {
-        fillCircle(halo, point.x, point.y, 9 * u, color, 0.7 * body);
-        fillCircle(core, point.x, point.y, 3 * u, bright, body);
-      }
     }
+  }
 
-    const ringAlpha = clamp01(state.ringAlpha);
-    if (ringAlpha > 0.001) {
-      const radius = ringRadius(targetSize) * Math.max(0, Number(state.ringScale) || 0);
-      const spin = this.calm ? 0 : Number(state.spin) || 0;
-      strokeCircle(halo, to.x, to.y, radius, 8 * u, color, (0.22 + (0.1 * pulse)) * ringAlpha);
-      strokeCircle(core, to.x, to.y, radius, 3 * hl, INK, 0.45 * ringAlpha);
-      strokeCircle(core, to.x, to.y, radius, hl, color, 0.7 * ringAlpha);
-      for (let i = 0; i < 4; i++) {
-        const start = spin + (i * Math.PI / 2) - (QUADRANT_SPAN / 2);
-        strokeArc(core, to.x, to.y, radius, start, start + QUADRANT_SPAN, 3 * u, color, 0.95 * ringAlpha);
-        strokeArc(core, to.x, to.y, radius, start, start + QUADRANT_SPAN, hl, bright, 0.95 * ringAlpha);
-      }
-    }
+  /** The body's path for these endpoints, into the reused buffer. */
+  #layout(from, to, source, targetSize, gridSize) {
+    const input = this.#geometry;
+    input.from = from;
+    input.to = to;
+    input.sourceSize = Math.max(source.w, source.h);
+    input.targetSize = targetSize;
+    input.gridSize = gridSize;
+    return lineGeometry(input, this.path);
   }
 
   /** The sweep only runs down a body that is fully drawn and staying. */
@@ -387,6 +450,19 @@ export class OriginRing {
     if (!this.graphics.destroyed) this.graphics.destroy();
     this.onGone?.(this);
   }
+}
+
+/** Write the values into `key`, returning whether any differed from what it held. */
+function updateKey(key, ...values) {
+  let changed = false;
+  for (let i = 0; i < values.length; i++) {
+    const value = Number(values[i]);
+    if (key[i] !== value) {
+      key[i] = value;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 /** One device pixel in world units, at this zoom and renderer resolution. */

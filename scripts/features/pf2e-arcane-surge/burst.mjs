@@ -102,7 +102,9 @@ class BeatHost {
    *  much larger the field is composed before being averaged onto it. */
   _resize() {
     sizeToViewport(this.canvas, this.gl, 1);
-    this.sampler?.ensure();
+    // Only re-allocate the scratch while a beat is using it; between beats it
+    // is released and a window resize must not quietly bring it back.
+    if (this.sampler?.texture) this.sampler.ensure();
   }
 
   /**
@@ -156,6 +158,9 @@ class BeatHost {
     // Force execution rather than leaving the work queued behind the first
     // real frame, which would defeat the point.
     gl.finish();
+    // The programs are what warming is for; the scratch is re-allocated at the
+    // first beat and need not sit in VRAM until then.
+    this.sampler.release();
     return true;
   }
 
@@ -190,6 +195,7 @@ class BeatHost {
   _run(program, uniforms, seconds, write) {
     this._stopLoop();
     this._resize();
+    this.sampler.ensure();
     this.canvas.classList.add("glas-visible");
 
     const gl = this.gl;
@@ -221,6 +227,7 @@ class BeatHost {
       if (progress >= 1) {
         this.canvas.classList.remove("glas-visible");
         this._clearWord();
+        this.sampler.release();
         this._raf = null;
         return;
       }

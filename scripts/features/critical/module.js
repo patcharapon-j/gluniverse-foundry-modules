@@ -111,13 +111,17 @@ function mountOverlay() {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | PIXI not available on globalThis; image cinematics disabled.`);
     return;
   }
+  // A second WebGL context for the whole session, so it is kept lean: nothing
+  // drawn here has an edge MSAA would help (a full-screen rect, an axis-aligned
+  // rect mask, and a sprite that samples its own texture), and past 1.5x the
+  // backbuffer grows quadratically for a photo that is already being scaled.
   app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundAlpha: 0,
-    antialias: true,
+    antialias: false,
     autoDensity: true,
-    resolution: window.devicePixelRatio || 1
+    resolution: Math.min(window.devicePixelRatio || 1, 1.5)
   });
   container.appendChild(app.view);
   app.stop();
@@ -428,6 +432,10 @@ async function runImageCinematic(event) {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | could not load image:`, event.imagePath);
     return;
   }
+  // Upload the portrait before the clock starts. Left to the first render, a
+  // large image's texImage2D lands on frame one of the cut-in, exactly where a
+  // hitch reads as the effect stuttering.
+  try { app2.renderer.texture.bind(texture); } catch { /* best-effort: first render uploads it */ }
   const stage = new PIXI.Container();
   app2.stage.addChild(stage);
   const { sw, sh } = screenSize();
@@ -449,9 +457,14 @@ async function runImageCinematic(event) {
   const mask = new PIXI.Graphics();
   stage.addChild(mask);
   sprite.mask = mask;
+  // The wipe only moves for part of the beat; redrawing an unchanged rect
+  // every frame rebuilds its geometry for nothing.
+  let maskH = -1;
   const drawMask = (frac) => {
     const clamped = Math.max(0, Math.min(1, frac));
     const h = fitH * clamped;
+    if (h === maskH) return;
+    maskH = h;
     const x = sw * 0.5 - fitW * 0.5;
     const y = sh * 0.5 - h * 0.5;
     mask.clear().beginFill(16777215, 1).drawRect(x, y, fitW, h).endFill();
