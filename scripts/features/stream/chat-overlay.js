@@ -211,6 +211,7 @@ export class ChatOverlay {
     if (!latest) return;
     if (latest !== record.mirrorSource) this.mirrorLiveSource(record, latest, message);
     const newClone = this.buildClone(latest, message);
+    record.mirrorHtml = latest.outerHTML;
     const oldClone = card.querySelector(".gluniverse-stream-chat-message-clone");
     if (oldClone) oldClone.replaceWith(newClone);
     else card.prepend(newClone);
@@ -263,18 +264,27 @@ export class ChatOverlay {
   // clone can therefore capture an empty pre-processed husk and never recover.
   // Watching the live element and re-cloning on change keeps the stream card
   // pixel-identical to what a player sees in their chat log.
+  //
+  // Re-cloning is not free (clone, image normalising, a height re-measure and
+  // ease), so it happens at most once a frame, never for Foundry's relative
+  // timestamp ticking over (the clone's own timestamp is set from the message),
+  // and not at all when the source has come back to exactly what was last
+  // cloned — a class toggled and back, a module re-rendering identical markup.
   mirrorLiveSource(record, source, message) {
     record.mirrorObserver?.disconnect();
     record.mirrorSource = source instanceof HTMLElement ? source : null;
     if (!record.mirrorSource || typeof MutationObserver !== "function") return;
+    record.mirrorHtml = record.mirrorSource.outerHTML;
     let scheduled = false;
-    const observer = new MutationObserver(() => {
-      if (scheduled) return;
+    const observer = new MutationObserver(mutations => {
+      if (scheduled || !mutations.some(changesContent)) return;
       scheduled = true;
       window.requestAnimationFrame(() => {
         scheduled = false;
         if (!record.element?.isConnected || record.phase === "exiting") return;
-        this.refreshCardContents(record, message, record.mirrorSource);
+        const live = record.mirrorSource;
+        if (live?.isConnected && live.outerHTML === record.mirrorHtml) return;
+        this.refreshCardContents(record, message, live);
       });
     });
     observer.observe(record.mirrorSource, { childList: true, subtree: true, attributes: true, characterData: true });
@@ -557,4 +567,10 @@ function getElement(html) {
   if (html?.[0] instanceof HTMLElement) return html[0];
   if (html?.element instanceof HTMLElement) return html.element;
   return null;
+}
+
+/** Whether a mutation on a mirrored chat card could change what the clone shows. */
+function changesContent(mutation) {
+  const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+  return !target?.closest?.(".message-timestamp");
 }
