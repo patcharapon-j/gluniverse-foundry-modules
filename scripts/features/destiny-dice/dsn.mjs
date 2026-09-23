@@ -38,5 +38,14 @@ export function registerDiceSoNice(dice3d) {
     system: DSN_NAMESPACE,
   });
 
+  // DSN fetches a preset's images inside create(), at the first throw, one
+  // await per face per map: sixty serial round-trips in the middle of the
+  // animation unless the user happens to have this system selected. DSN 6.2.9+
+  // exposes preloadPresets for exactly this; arcane-surge warms its own the same way.
+  if (typeof dice3d.preloadPresets === "function") {
+    Promise.resolve(dice3d.preloadPresets(DSN_NAMESPACE))
+      .catch((e) => console.warn("GLUniverse Destiny Dice | could not warm the Dice So Nice preset:", e));
+  }
+
   console.log(`GLUniverse Destiny Dice | Dice So Nice preset registered (1d${FATE_DIE_DENOMINATION}, ${preset.dsn.material})`);
 }
