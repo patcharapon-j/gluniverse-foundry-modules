@@ -37,10 +37,11 @@ the creature pass stays off.
   world uses: socket senders are not attested, so a player must not be able to
   make the GM's browser fetch arbitrary URLs. A forged `result` can at worst
   misframe a portrait on the client that asked, for one session.
-- GM writes are throttled: the first result is written at once, then at most one
-  write every 4 s.
-- Each browser also keeps its own results in `localStorage`. Failures (network,
-  CORS, models) are kept for the session only.
+- GM writes are batched: a result after a quiet spell is written at once, then
+  later results wait for 3 s of quiet (12 s at most).
+- Each browser also keeps its own results in `localStorage`, written after 2 s
+  of quiet (10 s at most) and flushed when the page is hidden. Failures
+  (network, CORS, models) are kept for the session only.
 - Entries record the mode they were found in. After switching to creatures,
   art where the head pass found nothing is analysed again.
 - Turning the setting off drops queued work without caching anything.
@@ -49,6 +50,18 @@ the creature pass stays off.
   player it hides the world entry locally and asks the GM to analyse again.
 - The roll cards give the locator 2.5 s, then frame with MediaPipe/smartcrop; a
   head that arrives later replaces that framing on the cards showing it.
+
+## Threading
+
+Fetching, decoding and inference run in a module worker
+(`scripts/core/face-frame-worker.mjs`), so a burst of new portraits at combat
+start does not block the canvas. The worker and the main thread share
+`scripts/core/face-frame-runtime.mjs`, which resolves onnxruntime's paths from
+`import.meta.url` and builds the result entry, so both paths return identical
+entries. If a worker or `OffscreenCanvas` is unavailable, the locator falls back
+to the main thread for the session, running in idle time and yielding between
+stages; a single WASM model run still blocks there. The worker must never be
+listed in `module.json`'s `esmodules`, or Foundry runs it on the main thread.
 
 ## Offline worlds
 

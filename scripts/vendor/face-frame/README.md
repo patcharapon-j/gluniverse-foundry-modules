@@ -1,6 +1,7 @@
 GLUniverse face-frame 0.1.0 (core build) and onnxruntime-web 1.30.0 (`ort.webgpu.min.mjs`, MIT, Microsoft).
 
-Head detection for portrait framing, used by `scripts/core/face-frame.mjs`: two YOLOv11
+Head detection for portrait framing, used by `scripts/core/face-frame-runtime.mjs` (in the
+locator's worker, `face-frame-worker.mjs`, or on the main thread as a fallback): two YOLOv11
 head detectors (anime and realistic art) and, for creatures, OWLv2 on WebGPU.
 
 Files:
@@ -29,4 +30,4 @@ Unlike `../mediapipe`, the ORT loader needs no patch: its Emscripten glue is bui
 ES module factory and never reads or writes the global `Module` that Foundry defines.
 
 Update: rebuild in the face-frame repo, copy both files, bump the versions above, and
-keep `ORT_VERSION` in `scripts/core/face-frame.mjs` equal to the bundled onnxruntime-web.
+keep `ORT_VERSION` in `scripts/core/face-frame-runtime.mjs` equal to the bundled onnxruntime-web.
