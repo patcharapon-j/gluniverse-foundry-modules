@@ -28,7 +28,12 @@ export function webglSupported() {
   if (supported !== null) return supported;
   try {
     const probe = document.createElement("canvas");
-    supported = !!(probe.getContext("webgl") || probe.getContext("experimental-webgl"));
+    const gl = probe.getContext("webgl") || probe.getContext("experimental-webgl");
+    supported = !!gl;
+    // Release the probe's context now rather than whenever GC gets to it: the
+    // browser caps live contexts (~16) and evicts the OLDEST first, which is
+    // Foundry's own canvas, not this throwaway.
+    try { gl?.getExtension("WEBGL_lose_context")?.loseContext(); } catch { /* best-effort */ }
   } catch {
     supported = false;
   }
@@ -241,6 +246,20 @@ export class SuperSampler {
     } else {
       this.slowFrames = 0;
     }
+  }
+
+  /**
+   * Free the scratch between beats, keeping the framebuffer object and the
+   * rung. At 2× on a 2560px viewport the scratch is ~59MB of VRAM, and a beat
+   * lasts a second or two in a session of hours; holding it idle buys nothing
+   * that `ensure()` does not re-buy in one allocation at the next beat. What
+   * makes a first frame smooth is the compiled programs, which are not touched.
+   */
+  release() {
+    const gl = this.gl;
+    try { if (this.texture) gl.deleteTexture(this.texture); } catch { /* best-effort */ }
+    this.texture = null;
+    this.size = [0, 0];
   }
 
   destroy() {
