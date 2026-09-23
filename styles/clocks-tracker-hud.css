@@ -54,9 +54,11 @@
 
 /* ========== BAR: stacked rows for player/GM consistency ========== */
 /* Etched Glass chamfer: three soft corners + one 14px diagonal cut top-right
-   (the family signature, docs/design-language.md §4.1). clip-path would clip
-   outer box-shadows, so the drop + bloom move to filter:drop-shadow — filters
-   apply after clipping, so the shadow follows the chamfered silhouette. */
+   (the family signature, docs/design-language.md §4.1). The outer drop + bloom
+   are NOT on .bar: a filter there re-rasterises the whole blurred shadow every
+   frame anything inside the bar paints (the weather/delving dioramas, the
+   mission breathe, the reels), forever. They live on .bar-frame::before — a
+   static layer beneath the bar (see below). */
 #glct-hud .bar{position:relative;border-radius:15px;overflow:hidden;isolation:isolate;
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
   background:linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
@@ -64,9 +66,27 @@
     linear-gradient(98deg, var(--tint2), var(--gl-ink-1) 64%);
   border:1px solid var(--edge);
   box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .16), inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38);
-  filter:drop-shadow(0 18px 32px rgb(var(--gl-tint-dark) / .55)) drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / .4)) drop-shadow(0 0 23px var(--glowsoft));
   backdrop-filter:blur(16px) saturate(1.15);
-  transition:background var(--gl-d-slow) ease, box-shadow var(--gl-d-slow) ease, filter var(--gl-d-slow) ease, width var(--gl-d-swift) var(--gl-ease-inout);}
+  transition:background var(--gl-d-slow) ease, box-shadow var(--gl-d-slow) ease, width var(--gl-d-swift) var(--gl-ease-inout);}
+/* The bar's shadow caster. JS (GlctHud._frameBar) wraps .bar in .bar-frame; the
+   frame shrink-wraps the bar, so ::before is exactly the bar's box. It is the
+   same shadow the bar used to carry as filter:drop-shadow ×3, restated as
+   box-shadow on an opaque-bar silhouette. Two conversions: Chromium treats a
+   drop-shadow's blur as the Gaussian's standard deviation, i.e. twice a
+   box-shadow blur of the same length (measured: drop-shadow 32px ≡ box-shadow
+   64px); and each chained drop-shadow also shadowed the ones before it, hence
+   the extra "of the drop" layers (B of A at 0.4×0.55; the bloom of A at 55% of
+   --glowsoft, blurred by √(64²+46²)≈79px). The bar's
+   own clip-path used to clip that filter to the bar's box — only the rounded
+   corners ever showed it — so the frame repeats the clip, and drops it for the
+   pill exactly where the bar does. */
+#glct-hud .bar-frame{position:relative;display:flex;flex-direction:column}
+#glct-hud .bar-frame::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:15px;
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  box-shadow:0 18px 64px rgb(var(--gl-tint-dark) / .55), 0 2px 0 rgb(var(--gl-tint-dark) / .4), 0 20px 64px rgb(var(--gl-tint-dark) / .22),
+    0 0 46px var(--glowsoft), 0 18px 79px color-mix(in srgb, var(--glowsoft) 55%, transparent);
+  transition:box-shadow var(--gl-d-slow) ease}
+#glct-hud .bar-frame:has(> .bar.collapsed)::before{clip-path:none}
 /* the collapsed pill is too small to carry the cut cleanly — full radius there */
 #glct-hud .bar.collapsed{clip-path:none}
 #glct-hud .bar.collapsed .main::after{display:none}
@@ -224,7 +244,14 @@
   grid-template-columns:auto auto;grid-template-areas:"ico reel" "chip chip";
   align-items:center;column-gap:10px;row-gap:3px}
 #glct-hud .missline .mc-ico{grid-area:ico;display:grid;place-items:center;color:var(--mission);animation:glct-mbreathe var(--gl-dread) var(--gl-ease-inout) infinite}
-#glct-hud .missline .mc-ico i{font-size:15px}
+#glct-hud .missline .mc-ico i{font-size:15px;grid-area:1 / 1}
+/* The breathing halo is a glyph-shaped copy of the icon (.mc-glow, cloned in by
+   GlctHud._cloneMissionGlow) whose text-shadow is static and whose OPACITY
+   breathes — animating filter:drop-shadow on the icon repainted it, and the bar
+   around it, every frame for as long as a mission ran. (14px text-shadow ≡ the
+   old 7px drop-shadow: Chromium reads a drop-shadow blur as the std deviation.) */
+#glct-hud .missline .mc-ico .mc-glow{color:transparent;-webkit-text-fill-color:transparent;text-shadow:0 0 14px var(--missionsoft);
+  opacity:0;animation:glct-mglow var(--gl-dread) var(--gl-ease-inout) infinite}
 /* glow as a drop-shadow on this un-clipped wrapper (never a text-shadow on the
    overflow-hidden reel, which would clip the halo into a square). */
 #glct-hud .missline .mc-reelwrap{grid-area:reel;display:inline-flex;align-items:baseline;gap:5px;
@@ -241,7 +268,8 @@
   font-size:9.5px;font-weight: var(--gl-weight-bold);letter-spacing:.02em;white-space:nowrap;padding:0;background:none;border:none;
   color:color-mix(in srgb,var(--mission) 62%,rgb(var(--gl-tint-light)))}
 #glct-hud .missline .mc-chip i{font-size:9px}
-@keyframes glct-mbreathe{0%,100%{opacity:.82;filter:drop-shadow(0 0 0 transparent)}50%{opacity:1;filter:drop-shadow(0 0 7px var(--missionsoft))}}
+@keyframes glct-mbreathe{0%,100%{opacity:.82}50%{opacity:1}}
+@keyframes glct-mglow{0%,100%{opacity:0}50%{opacity:1}}
 
 /* GOAL arrival: a quiet green confirmation (no stamp in the subtle profile) */
 #glct-hud .hud-root.mission.mreached:not(.kind-deadline) .mc-reel{color:#8af0bd}
@@ -577,8 +605,9 @@
 .glct-trk-skin .glct-trk-root{pointer-events:none}
 .glct-trk-skin .glct-trk-root > *{pointer-events:auto}
 
-/* Etched Glass chamfer (12px cut, top-right) — outer shadows ride on
-   filter:drop-shadow so they follow the cut silhouette (see .bar above). */
+/* Etched Glass chamfer (12px cut, top-right). The outer shadow rides on the
+   static .trk-dock-frame::before beneath the dock, not on the dock — the hazard
+   rows animate inside it forever (see .bar above for the full story). */
 .glct-trk-skin .trk-dock{min-width:168px;width:max-content;max-width:calc(100vw - 28px);
   border-radius:11px;overflow:hidden;isolation:isolate;position:relative;
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
@@ -586,8 +615,15 @@
     linear-gradient(180deg,rgb(var(--gl-tint-light) / .02),rgb(var(--gl-tint-dark) / .22)),linear-gradient(160deg,var(--gl-ink-3),var(--gl-ink-1) 72%);
   border:1px solid var(--edge);
   box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .15),inset 0 -12px 26px rgb(var(--gl-tint-dark) / .36);
-  filter:drop-shadow(0 16px 28px rgb(var(--gl-tint-dark) / .55)) drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / .4));
   backdrop-filter:blur(16px) saturate(1.15);transition:min-width var(--gl-d-swift) ease}
+/* JS (TrackerHud._frameDock) wraps the dock; the frame shrink-wraps it. Same
+   drop-shadow ×2 as box-shadow (blur doubled, + the second drop's shadow of the
+   first — see .bar-frame), clipped
+   to the chamfer exactly as the dock's own clip-path clipped the filter. */
+.glct-trk-skin .trk-dock-frame{position:relative;display:flex;flex-direction:column;width:fit-content;max-width:calc(100vw - 28px)}
+.glct-trk-skin .trk-dock-frame::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:11px;
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  box-shadow:0 16px 56px rgb(var(--gl-tint-dark) / .55), 0 2px 0 rgb(var(--gl-tint-dark) / .4), 0 18px 56px rgb(var(--gl-tint-dark) / .22)}
 .glct-trk-skin .trk-head{display:flex;align-items:center;gap:5px;height:18px;padding:0 4px 0 7px;position:relative;z-index:5;
   border-bottom:1px solid var(--hair);cursor:grab;user-select:none}
 .glct-trk-skin .dh-grip{display:flex;gap:3px}
@@ -743,30 +779,68 @@
 @keyframes glct-boxpop{0%{transform:scale(.5);box-shadow:0 0 16px rgb(var(--gl-tint-light))}55%{transform:scale(1.22)}100%{transform:scale(1)}}
 
 /* HAZARD overrides — red, persistent dread */
-.glct-trk-skin .trow.hazard{--tint:var(--danger);--glow:var(--dangerglow);--glowsoft:var(--dangersoft);animation:glct-dread var(--gl-dread) var(--gl-ease-inout) infinite}
-@keyframes glct-dread{0%,100%{box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--gl-hazard) 0%,transparent)}50%{box-shadow:inset 0 0 20px color-mix(in srgb,var(--gl-hazard) 16%,transparent)}}
+.glct-trk-skin .trow.hazard{--tint:var(--danger);--glow:var(--dangerglow);--glowsoft:var(--dangersoft)}
+/* The dread pulse lives on .haz-dread (added by TrackerHud._buildRow), whose
+   layers only change OPACITY. It used to be box-shadow keyframes on the row,
+   which repainted the row — and re-ran the dock's filters — every frame, forever.
+   Same look: the old keyframes tweened an inset shadow's spread 9999px → 0, so
+   for all but the last instant of each swell it was a whole-row hazard wash
+   whose alpha rose 0 → 16%; that wash is ::after. z-index -1 keeps it where an
+   inset box-shadow paints: over the row's background, under its ::before. */
+.glct-trk-skin .haz-dread{position:absolute;inset:0;z-index:-1;pointer-events:none;border-radius:inherit}
+.glct-trk-skin .haz-dread::before,
+.glct-trk-skin .haz-dread::after{content:"";position:absolute;inset:0;border-radius:inherit}
+.glct-trk-skin .haz-dread::after{background:color-mix(in srgb,var(--gl-hazard) 16%,transparent);opacity:0;
+  animation:glct-dread var(--gl-dread) var(--gl-ease-inout) infinite}
+@keyframes glct-dread{0%,100%{opacity:0}50%{opacity:1}}
 .glct-trk-skin .trow.hazard::before{background:linear-gradient(90deg,color-mix(in srgb,var(--gl-hazard) 22%,transparent),transparent 62%);opacity:.7}
 .glct-trk-skin .trow.hazard .nm{color:#e8a39d}
 .glct-trk-skin .trow.hazard .tt{background:none!important;color:#ffd9d4!important;-webkit-text-fill-color:#ffd9d4;text-shadow:0 0 12px var(--dangersoft)}
 .glct-trk-skin .trow.hazard .st{color:#c98e89}
-.glct-trk-skin .haz-scan{position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--gl-hazard) 06%,transparent) 0 2px,transparent 2px 5px);mix-blend-mode:screen;opacity:.55;animation:glct-scan var(--gl-loop-sm) linear infinite}
-@keyframes glct-scan{0%{background-position:0 0}100%{background-position:0 50px}}
+/* The scanlines drift by TRANSFORM on an over-tall ::before (50px = ten 5px
+   periods, so the loop is seamless and the phase matches the old
+   background-position drift) — a composited move instead of a repaint a frame. */
+.glct-trk-skin .haz-scan{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;mix-blend-mode:screen;opacity:.55}
+.glct-trk-skin .haz-scan::before{content:"";position:absolute;left:0;right:0;top:-50px;bottom:0;
+  background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--gl-hazard) 06%,transparent) 0 2px,transparent 2px 5px);
+  animation:glct-scan var(--gl-loop-sm) linear infinite}
+@keyframes glct-scan{0%{transform:translateY(0)}100%{transform:translateY(50px)}}
 .glct-trk-skin .haz .box{border-color:color-mix(in srgb,var(--gl-hazard) 45%,transparent)}
-/* Solid danger fill (no gradient) with a calendar-style glow + dread flicker. */
-.glct-trk-skin .haz .box.fill{background:var(--danger);border-color:transparent;
-  box-shadow:0 0 9px var(--dangerglow),inset 0 1px 0 rgb(var(--gl-tint-light) / .25);
+/* Solid danger fill (no gradient) with a calendar-style glow + dread flicker.
+   The flicker was filter:brightness(.92 ↔ 1.4) keyframes — a repaint per box per
+   frame. Now the box is painted statically at the trough (fill and glow mixed
+   toward black by 8%: an exact ×.92 — the glow keeps its .55 alpha, as a
+   brightness filter would) and a copy of the undimmed fill + glow (::after) is
+   ADDED over it (plus-lighter) at opacity 0 ↔ .48: .92 + .48 = 1.4, clamped the
+   same way. The emberbox animation also used to shadow .justfill's pop on these
+   boxes, so that stays off. */
+.glct-trk-skin .haz .box.fill{background:color-mix(in srgb,var(--danger) 92%,black);border-color:transparent;
+  border-width:0;padding:1.25px;   /* the border was transparent: drop it so ::after at inset 0 IS the border box */
+  box-shadow:0 0 9px color-mix(in srgb,var(--dangerglow) 92%,rgb(0 0 0 / .55)),inset 0 1px 0 rgb(var(--gl-tint-light) / .25);
+  animation:none}
+.glct-trk-skin .haz .box.fill::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:var(--danger);box-shadow:0 0 9px var(--dangerglow);mix-blend-mode:plus-lighter;opacity:0;
   animation:glct-emberbox var(--gl-breathe) var(--gl-ease-inout) infinite}
-@keyframes glct-emberbox{0%,100%{filter:brightness(.92)}50%{filter:brightness(1.4)}}
-.glct-trk-skin .haz .box.head{animation:glct-hazhead var(--gl-d-slow) var(--gl-ease-inout) infinite}
-@keyframes glct-hazhead{0%,100%{box-shadow:0 0 7px var(--dangerglow)}50%{box-shadow:0 0 18px #ff9a8f}}
-.glct-trk-skin .trow.hazard.full{animation:glct-dreadfull var(--gl-d-slow) var(--gl-ease-inout) infinite}
-@keyframes glct-dreadfull{0%,100%{box-shadow:inset 0 0 26px color-mix(in srgb,var(--gl-hazard) 32%,transparent)}50%{box-shadow:inset 0 0 46px color-mix(in srgb,var(--gl-hazard) 60%,transparent)}}
+@keyframes glct-emberbox{0%,100%{opacity:0}50%{opacity:.48}}
+/* The head's glow swelled 7px → 18px as box-shadow keyframes (which also
+   replaced the fill's glow and highlight, and its flicker): the 7px trough is
+   now static and the 18px swell is ::after fading in over it. */
+.glct-trk-skin .haz .box.head{background:var(--danger);box-shadow:0 0 7px var(--dangerglow)}
+.glct-trk-skin .haz .box.head::after{background:none;mix-blend-mode:normal;box-shadow:0 0 18px #ff9a8f;
+  animation:glct-hazhead var(--gl-d-slow) var(--gl-ease-inout) infinite}
+@keyframes glct-hazhead{0%,100%{opacity:0}50%{opacity:1}}
+/* Full hazard: the inset vignette breathed 26px/32% ↔ 46px/60%. The trough is
+   the static ::before; ::after is a 46px layer whose alpha (41%) composites over
+   it to the old 60% at the edge, faded in and out. */
+.glct-trk-skin .trow.hazard.full .haz-dread::before{box-shadow:inset 0 0 26px color-mix(in srgb,var(--gl-hazard) 32%,transparent)}
+.glct-trk-skin .trow.hazard.full .haz-dread::after{background:none;box-shadow:inset 0 0 46px color-mix(in srgb,var(--gl-hazard) 41%,transparent);
+  animation:glct-dreadfull var(--gl-d-slow) var(--gl-ease-inout) infinite}
+@keyframes glct-dreadfull{0%,100%{opacity:0}50%{opacity:1}}
 
 /* BAD CLOCK — an ominous clock whose completion is bad news. Wears the same
    hazard-red identity: the pie fills red (segments already use --tint), the row
    simmers with dread, and a scan line drifts across it. */
-.glct-trk-skin .trow.badclock{--tint:var(--danger);--glow:var(--dangerglow);--glowsoft:var(--dangersoft);animation:glct-dread var(--gl-dread) var(--gl-ease-inout) infinite}
+.glct-trk-skin .trow.badclock{--tint:var(--danger);--glow:var(--dangerglow);--glowsoft:var(--dangersoft)}
 .glct-trk-skin .trow.badclock::before{background:linear-gradient(90deg,color-mix(in srgb,var(--gl-hazard) 22%,transparent),transparent 62%);opacity:.7}
 .glct-trk-skin .trow.badclock .nm{color:#e8a39d}
 .glct-trk-skin .trow.badclock .t-clock .pie .ring{stroke:color-mix(in srgb,var(--gl-hazard) 40%,transparent)}
@@ -824,6 +898,12 @@
   box-shadow:0 14px 32px rgb(var(--gl-tint-dark) / .6),0 0 28px var(--glow)}
 .glct-trk-skin .trk-dock.compact .trow.expanded > *:not(.tmini){opacity:1;pointer-events:auto;transition:opacity var(--gl-d-brisk) ease var(--gl-d-tap)}
 .glct-trk-skin .trk-dock.compact .trow.expanded .tmini{opacity:0;pointer-events:none}
+/* The dread used to be the row's own box-shadow, so the compact card kept it:
+   exempt its layer from the "hide everything but the mini face" rule above. And
+   because those keyframes owned box-shadow, a hazard/bad-clock row never showed
+   the prominent accent, the compact card drop or the drag lift — keep it so. */
+.glct-trk-skin .trk-dock.compact .trow > .haz-dread{opacity:1}
+.glct-trk-skin .trk-dock .trow:is(.hazard,.badclock){box-shadow:none}
 
 /* Card face. */
 .glct-trk-skin .tmini{position:absolute;inset:0;z-index:8;flex-direction:column;align-items:center;justify-content:center;

@@ -128,8 +128,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _dialPtr = null;
   _dialRot = 0;
   _barMotion = createMotionOwner();
-  _wx = null;           // WeatherEffect (chip Pixi diorama), lazily created
-  _dx = null;           // delving featured-stage diorama (Pixi), lazily created
+  _wx = null;           // WeatherEffect (full-bar Canvas2D diorama), lazily created
+  _dx = null;           // delving featured-stage diorama (Canvas2D), lazily created
   _prevTurn = null;     // last painted turns-elapsed (for the tick animation)
   _seenRollSeq = null;  // last roll sequence whose card animation has finalised
   _rollSafety = null;   // safety timer that releases a held roll if no card settles
@@ -185,6 +185,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._dx?.destroy(); this._dx = null;   // delving diorama host is recreated too
     this._prevTurn = null;
     clearTimeout(this._rollSafety); this._rollSafety = null; this._rollSafetySeq = null;
+    this._frameBar();
+    this._cloneMissionGlow();
     this._buildDynamic();
     this._applyFeatureGates();
     this._applyPosition();
@@ -195,6 +197,36 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._paintWeather();
     this._paintDelving();
     this._applyGlitch();   // re-engage the distortion if a client renders mid-glitch
+  }
+
+  /**
+   * Wrap the bar in .bar-frame, whose ::before carries the bar's outer shadow.
+   * The shadow cannot stay on .bar: as a filter it re-ran its blurs every frame
+   * anything inside the bar painted, and a pseudo-element of .bar is clipped by
+   * the bar's own overflow/clip-path. The frame shrink-wraps the bar, so layout
+   * and every .bar selector are unchanged. Idempotent; runs on each fresh DOM.
+   */
+  _frameBar() {
+    const bar = this.element?.querySelector("[data-bar]");
+    if (!bar || bar.parentElement?.classList.contains("bar-frame")) return;
+    const frame = document.createElement("div");
+    frame.className = "bar-frame";
+    bar.before(frame);
+    frame.appendChild(bar);
+  }
+
+  /**
+   * Give each mission-readout glyph a glyph-shaped halo twin (.mc-glow) whose
+   * static text-shadow breathes by opacity alone, replacing a drop-shadow filter
+   * animation that repainted the icon — and the bar — every frame.
+   */
+  _cloneMissionGlow() {
+    this.element?.querySelectorAll(".missline .mc-ico > i:not(.mc-glow)").forEach(icon => {
+      const glow = icon.cloneNode(false);
+      glow.classList.add("mc-glow");
+      glow.setAttribute("aria-hidden", "true");
+      icon.before(glow);
+    });
   }
 
   /**
