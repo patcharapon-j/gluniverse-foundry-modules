@@ -1199,6 +1199,11 @@
   clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
 }
 
+/* The pulse is brightness only. The tag used to breathe an outer box-shadow
+   too, but its own clip-path (above) cuts every outer shadow at the border box,
+   so that glow was never drawn — while animating box-shadow still repainted the
+   tag on every frame for the whole combat, and kept this animation (which the
+   compositor can run on its own as a filter) on the main thread. */
 .gluni-active-tag {
   box-shadow:
     0 0 12px color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, transparent);
@@ -1427,11 +1432,16 @@
   box-shadow: 0 0 7px var(--gluni-break-hot);
 }
 
-/* slow looping highlight sweep so the bar reads as "live" energy */
+/* slow looping highlight sweep so the bar reads as "live" energy.
+   The sweep is the same 220%-wide gradient it always was, moved as a layer
+   instead of re-painted at a new background-position every frame: offset x of
+   a 220% image at position p is -1.2p of the bar, i.e. -(1.2p / 2.2) of the
+   layer, so 130% -> -70.909% and -30% -> 16.364%. The bar clips it. */
 .gluni-break-gauge-sheen {
   position: absolute;
   z-index: 2;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 220%;
   pointer-events: none;
   background: linear-gradient(
     100deg,
@@ -1439,14 +1449,13 @@
     rgb(var(--gl-tint-light) / 0.22) 50%,
     transparent 65%
   );
-  background-size: 220% 100%;
-  background-position: 120% 0;
+  transform: translateX(-54.545%);
   animation: gluni-gauge-sheen var(--gl-dread) var(--gl-ease-inout) infinite;
 }
 
 @keyframes gluni-gauge-sheen {
-  0%, 12% { background-position: 130% 0; }
-  60%, 100% { background-position: -30% 0; }
+  0%, 12% { transform: translateX(-70.909%); }
+  60%, 100% { transform: translateX(16.364%); }
 }
 
 .gluni-break-gauge-track--seg {
