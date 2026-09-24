@@ -1,4 +1,6 @@
 import { ThemeManager } from './ThemeManager.js';
+import { Surfaces } from '../../core/gl-surfaces.mjs';
+import { Budget } from '../../core/budget.mjs';
 
 /**
  * Stylised WebGL fire for the Campfire bottom bar.
@@ -17,6 +19,13 @@ import { ThemeManager } from './ThemeManager.js';
  * the context survives the overlay's innerHTML swaps. Colours come from the
  * suite palette via ThemeManager. Degrades to a no-op (leaving the CSS
  * fallback flames) when WebGL is unavailable.
+ *
+ * The context is a suite Surface (core/gl-surfaces.mjs): the registry pauses
+ * the loop while the canvas is off screen (slid out, or its host detached by an
+ * innerHTML swap) and, under a Performance policy, frees the context once the
+ * fire has sat unused. A released fire keeps its canvas in the bar — blank, as a
+ * lost context draws nothing — so the observer still has something to watch;
+ * the next frame builds a fresh canvas and swaps it into the same spot.
  */
 
 const VERT = `
@@ -154,8 +163,9 @@ export class CampfireWebGL {
     this._start = 0;
     this._lastDraw = 0;
     this._running = false;   // the scene wants fire
-    this._inView = true;     // IntersectionObserver verdict for the canvas
-    this._intersection = null;
+    this._paused = false;    // the surface registry's verdict (off screen, hidden)
+    this._surface = null;
+    this._released = false;  // context freed by the registry; rebuilt on next use
     this._supported = null;
     this._base = 0.3;
     this._dpr = 1;
@@ -163,7 +173,7 @@ export class CampfireWebGL {
     this._intensityTarget = 0; // 0 normal, 1 ending stretch
     this._onResize = () => this._resize();
     this._onVisibility = () => this._syncLoop();
-    this._frame = now => this._loop(now);
+    this._frame = Budget.measure('stream-pacer.campfire', now => this._loop(now));
   }
 
   isSupported() {
@@ -183,16 +193,21 @@ export class CampfireWebGL {
   _ensureContext() {
     if (this.gl) return true;
 
+    // After a release the old canvas still sits in the bar holding its lost
+    // context (one canvas never yields a second context); take its place.
+    const stale = this.canvas;
     const canvas = document.createElement('canvas');
-    canvas.className = 'stream-pacer-campfire-webgl';
+    canvas.className = stale?.className || 'stream-pacer-campfire-webgl';
     this.canvas = canvas;
 
     const opts = { alpha: true, premultipliedAlpha: true, antialias: false };
     const gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
     if (!gl) {
-      this.canvas = null;
+      this.canvas = stale;
       return false;
     }
+    if (stale?.parentElement) stale.replaceWith(canvas);
+    this._released = false;
     this.gl = gl;
 
     const program = this._buildProgram(gl, VERT, FRAG);
@@ -237,17 +252,41 @@ export class CampfireWebGL {
     document.addEventListener('visibilitychange', this._onVisibility);
 
     // Pause while the bar is off screen (slid out, or its host detached by an
-    // innerHTML swap) and resume the moment it is back.
-    if (typeof IntersectionObserver === 'function') {
-      this._intersection = new IntersectionObserver(entries => {
-        const entry = entries[entries.length - 1];
-        this._inView = !!entry?.isIntersecting;
-        if (this._inView) this._resize();
-        this._syncLoop();
+    // innerHTML swap) and resume the moment it is back. The registry owns that
+    // observer, so it follows the canvas across a release and rebuild too.
+    if (!this._surface) {
+      this._surface = Surfaces.register({
+        id: 'stream-pacer.campfire',
+        element: () => this.canvas,
+        pause: () => { this._paused = true; this._syncLoop(); },
+        resume: () => { this._paused = false; this._resize(); this._syncLoop(); },
+        release: () => this._releaseContext(),
+        restore: () => this._restoreContext()
       });
-      this._intersection.observe(canvas);
+    } else {
+      this._surface.observe();
     }
     return true;
+  }
+
+  /** Free the GL context, keeping the scene state, the listeners (the loop
+   *  still has to wake on a tab switch to rebuild) and the canvas slot in the
+   *  bar, so the fire comes back exactly where it was. */
+  _releaseContext() {
+    if (!this.gl) return;
+    loseContext(this.gl);
+    this.gl = null;
+    this.program = null;
+    this.uniforms = {};
+    this._released = true;
+    this._syncLoop();
+  }
+
+  /** Rebuild after a release, called from the surface's `use()`. */
+  _restoreContext() {
+    if (this.gl || !this._released) return;
+    if (!this._ensureContext()) return;
+    this._resize();
   }
 
   _buildProgram(gl, vsrc, fsrc) {
@@ -299,6 +338,7 @@ export class CampfireWebGL {
    */
   mount(hostEl) {
     if (!this.isSupported() || !hostEl) return false;
+    this._surface?.touch();
     if (!this._ensureContext()) return false;
 
     if (this.canvas.parentElement !== hostEl) hostEl.appendChild(this.canvas);
@@ -320,9 +360,10 @@ export class CampfireWebGL {
     this._intensityTarget = ending ? 1 : 0;
   }
 
-  /** Run the frame loop only while the fire is wanted AND can be seen. */
+  /** Run the frame loop only while the fire is wanted AND can be seen. A
+   *  released context still runs the loop: its first frame rebuilds it. */
   _syncLoop() {
-    const live = this._running && this._inView && !document.hidden && !!this.gl;
+    const live = this._running && !this._paused && !document.hidden && (!!this.gl || this._released);
     if (live && this._raf === null) {
       this._raf = requestAnimationFrame(this._frame);
     } else if (!live && this._raf !== null) {
@@ -333,13 +374,16 @@ export class CampfireWebGL {
 
   _loop(now) {
     this._raf = null;
-    if (!this._running || !this.gl) return;
+    if (!this._running || (!this.gl && !this._released)) return;
     this._raf = requestAnimationFrame(this._frame);
 
     // 30fps ceiling. The 2ms slack keeps a 60Hz display on every other frame
     // rather than letting timer jitter push some draws a whole frame late.
     const since = now - this._lastDraw;
     if (since < FRAME_MS - 2) return;
+    // Rebuilds a released context; false while nobody can see the fire.
+    if (this._surface && !this._surface.use()) return;
+    if (!this.gl) return;
     // Clamp so a resume after a pause does not snap the intensity ease.
     const dt = Math.min(since, 100) / 1000;
     this._lastDraw = now;
@@ -374,8 +418,10 @@ export class CampfireWebGL {
     this.stop();
     window.removeEventListener('resize', this._onResize);
     document.removeEventListener('visibilitychange', this._onVisibility);
-    this._intersection?.disconnect();
-    this._intersection = null;
+    this._surface?.dispose();
+    this._surface = null;
+    this._paused = false;
+    this._released = false;
     loseContext(this.gl);
     if (this.canvas) {
       this.canvas.remove();

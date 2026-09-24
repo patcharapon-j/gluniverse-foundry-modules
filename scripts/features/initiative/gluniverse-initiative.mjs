@@ -3,6 +3,8 @@ import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { onThemeChange, scaledMs } from "../../core/theme.mjs";
 import { faceLocator } from "../../core/face-frame.mjs";
 import { coverPlacement, cropFor, headBox, projectCover } from "../../core/face-frame-math.mjs";
+import { Budget, supersampleFloor } from "../../core/budget.mjs";
+import { Surfaces } from "../../core/gl-surfaces.mjs";
 
 /**
  * Wall-clock for a timer that shadows a CSS animation on the rail.
@@ -550,6 +552,12 @@ void main() { gl_FragColor = texture2D(u_src, v_uv); }`;
 // Supersampling is adaptive rather than fixed: it opens at 2× (matching the old
 // bake's anti-aliasing) and steps down only if this machine actually misses
 // frames. Full fidelity by default; degraded only on evidence.
+//
+// The rung it OPENS at rides the suite's shared budget (core/budget.mjs):
+// `supersampleFloor()` is 0 unless the `perf` feature's tier says otherwise, so
+// a Performance table starts one rung down and a Potato one at 1×. The floor and
+// the slow-frame reflex below are separate: the floor follows the policy both
+// ways, while rungs the reflex dropped on evidence stay dropped for the session.
 const SPLASH_SS_LADDER = [2, 1.5, 1];
 // Above this the scratch texture gets impractical on mid-tier GPUs regardless of
 // the ladder, so the long edge is clamped before supersampling is applied.
@@ -560,11 +568,16 @@ const SPLASH_SLOW_MS = 26;
 // One persistent renderer is reused across every guard break. It owns its
 // canvas, its own RAF loop, and one scratch texture; if a GL context cannot be
 // created the splash falls back to the CSS-only presentation.
+//
+// Its context is registered with the suite's surface registry
+// (core/gl-surfaces.mjs). A splash plays for about a second in a whole session,
+// so under a policy with a `glRelease` limit the context is freed while idle and
+// rebuilt by `play()` — through `surface.use()` — before the next break draws.
+// That rebuild pays the compile `warm()` exists to avoid, which is the price the
+// policy chose; with the `perf` feature off nothing is ever released.
 class BreakSplashGL {
   constructor() {
-    this.canvas = document.createElement("canvas");
-    this.canvas.className = "gluni-break-splash-gl";
-    this.canvas.setAttribute("aria-hidden", "true");
+    this.canvas = this.makeCanvas();
     this.lifeMs = 1050;
     this.raf = 0;
     this.start = 0;
@@ -579,17 +592,59 @@ class BreakSplashGL {
     this.fbo = null;
     this.buffer = null;
     this.seed = Math.random() * 100;
-    this.ssIndex = 0;
+    // The rung the slow-frame reflex has stepped down to on evidence. The rung
+    // actually drawn is `ssIndex`, which never sits above the policy's floor.
+    this.ssReflex = 0;
     this.slowFrames = 0;
     this.warmed = false;
     this.onResize = () => this.resize();
+    this.surface = null;
+    this.offBudget = null;
 
     this.colors = {
       break: [...ACTIVE_SHADER_PALETTE.splashHot],
       hot:   [...ACTIVE_SHADER_PALETTE.splashGlow]
     };
 
-    this.init();
+    // Only a renderer that got a context joins the registry and the budget:
+    // one that failed is discarded by getBreakSplashRenderer(), and would
+    // otherwise stay registered for the rest of the session.
+    if (this.init()) this.attachBudget();
+  }
+
+  makeCanvas() {
+    const canvas = document.createElement("canvas");
+    canvas.className = "gluni-break-splash-gl";
+    canvas.setAttribute("aria-hidden", "true");
+    return canvas;
+  }
+
+  // The supersample rung in force: whichever is cheaper of what the reflex has
+  // earned on this machine and where the policy says the ladder may start.
+  get ssIndex() {
+    const last = SPLASH_SS_LADDER.length - 1;
+    return Math.min(last, Math.max(this.ssReflex, supersampleFloor(SPLASH_SS_LADDER.length)));
+  }
+
+  // One registration and one policy listener for the renderer's lifetime (it is
+  // a session singleton), both dropped by destroy(). A policy change re-sizes
+  // the scratch at once, so dropping to Potato frees the 2× texture now rather
+  // than at the next guard break; ensureScratch() is a no-op when nothing moved
+  // and when the context has been released.
+  attachBudget() {
+    this.surface = Surfaces.register({
+      id: "initiative-break-splash",
+      // The splash element while one is playing, else nothing — a detached
+      // canvas would read as off-screen and pause the next break's first frames.
+      element: () => this.host,
+      pause: () => this.pause(),
+      resume: () => this.resume(),
+      release: () => this.release(),
+      restore: () => this.restore()
+    });
+    this.offBudget = Budget.onChange(why => {
+      if (why === "policy") this.ensureScratch();
+    });
   }
 
   // Palette changes are now free: the field is evaluated live, so the new colours
@@ -788,11 +843,21 @@ class BreakSplashGL {
   // A second guard break that lands mid-cycle steals the canvas from the previous
   // splash (whose CSS text/deck keep animating without the GL layer).
   play(host, { lifeMs = 1050 } = {}) {
-    if (!this.available || !host) return false;
+    if (!host) return false;
     if (this.raf) window.cancelAnimationFrame(this.raf);
+    this.raf = 0;
     this.detach();
 
     this.host = host;
+    // Rebuilds a context the registry released while idle, BEFORE anything asks
+    // whether one exists — otherwise the first break after a release would read
+    // as "no WebGL" and fall back to the CSS splash. Also points the visibility
+    // observer at this splash rather than the last one.
+    this.surface?.use();
+    if (!this.available) {
+      this.host = null;
+      return false;
+    }
     this.lifeMs = Math.max(400, lifeMs);
     // A fresh seed per break: the fracture is live now, so no two guard breaks
     // have to look identical the way a shared filmstrip forced them to.
@@ -869,12 +934,48 @@ class BreakSplashGL {
   // Drop one rung of the supersampling ladder. Called only when this machine has
   // actually missed frames twice running, so a capable GPU never loses quality
   // and a struggling one recovers within a few frames of a one-second beat.
+  // Steps from the rung in force, so a policy floor is never counted twice.
   degrade() {
-    if (this.ssIndex >= SPLASH_SS_LADDER.length - 1) return false;
-    this.ssIndex++;
+    const current = this.ssIndex;
+    if (current >= SPLASH_SS_LADDER.length - 1) return false;
+    this.ssReflex = current + 1;
     this.slowFrames = 0;
     this.ensureScratch();
     return true;
+  }
+
+  // Registry: nobody can see the splash (the page is hidden under a policy that
+  // pauses hidden surfaces). The cycle keeps its wall clock, so a resume that
+  // lands after the beat simply ends it on the next frame.
+  pause() {
+    if (this.raf) window.cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
+
+  resume() {
+    if (!this.host || this.raf || !this.gl) return;
+    // The gap was a pause, not a slow frame; do not let it count against the ladder.
+    this.lastFrameAt = performance.now();
+    this.raf = window.requestAnimationFrame(() => this.frame());
+  }
+
+  // Registry: idle past the policy's limit. Frees the context outright; the
+  // canvas it belonged to is discarded with it, because a lost context stays
+  // lost on its canvas and restoreContext() only comes back asynchronously.
+  release() {
+    this.stop();
+    window.removeEventListener("resize", this.onResize);
+    this.freeContext();
+    this.warmed = false;
+  }
+
+  // Registry: the next use() after a release. A fresh canvas and a fresh
+  // context, compiled and warmed now — this runs from play(), one frame before
+  // the fracture's first draw, so the compile is paid here rather than inside it.
+  restore() {
+    if (this.gl) return;
+    this.canvas = this.makeCanvas();
+    if (this.init()) this.warm();
   }
 
   frame() {
@@ -887,7 +988,9 @@ class BreakSplashGL {
     const elapsed = now - this.start;
     const progress = elapsed / this.lifeMs;
 
-    if (this.renderField(Math.min(progress, 1.05), elapsed / 1000)) this.blit();
+    // A surface that should not draw (hidden under the policy) skips the GPU
+    // work but keeps the beat's clock and its end.
+    if (this.surface?.use() !== false && this.renderField(Math.min(progress, 1.05), elapsed / 1000)) this.blit();
 
     // Adaptive quality: two slow frames in a row and the ladder steps down. The
     // first frame after a resize or attach is always slow, so a single spike is
@@ -906,24 +1009,40 @@ class BreakSplashGL {
     this.raf = window.requestAnimationFrame(() => this.frame());
   }
 
-  destroy() {
-    if (this.raf) window.cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    this.detach();
-    window.removeEventListener("resize", this.onResize);
+  // Drop the context and everything that lived in it. Every handle is nulled so
+  // `available` reads false until init() builds a new set.
+  freeContext() {
     const gl = this.gl;
     this.gl = null;
     if (gl) {
       try { if (this.scratch) gl.deleteTexture(this.scratch); } catch { /* best-effort cleanup */ }
       try { if (this.fbo) gl.deleteFramebuffer(this.fbo); } catch { /* best-effort cleanup */ }
-      this.scratch = null;
-      this.fbo = null;
       try {
         gl.getExtension("WEBGL_lose_context")?.loseContext();
       } catch {
         /* best-effort cleanup */
       }
     }
+    this.scratch = null;
+    this.scratchSize = [0, 0];
+    this.fbo = null;
+    this.buffer = null;
+    this.fieldProgram = null;
+    this.blitProgram = null;
+    this.fieldUniforms = {};
+    this.blitUniforms = {};
+  }
+
+  destroy() {
+    if (this.raf) window.cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.detach();
+    window.removeEventListener("resize", this.onResize);
+    this.offBudget?.();
+    this.offBudget = null;
+    this.surface?.dispose();
+    this.surface = null;
+    this.freeContext();
   }
 }
 
@@ -6145,7 +6264,10 @@ class CardFXManager {
     this.filters = {};
     this.entries = new Map();   // combatantId -> { canvas, ctx, mode, seed, impact, t0 }
     this.ticking = false;
-    this.tickFn = this._tick.bind(this);
+    // Runs for as long as any card is broken or dying, often a whole combat, so
+    // its time is attributed to this feature in the perf overlay. The wrapper
+    // only measures; the 30fps cap and the rAF cadence are unchanged.
+    this.tickFn = Budget.measure("initiative", this._tick.bind(this));
     // The overlay that owns the rail, set on the first sync(). Read only for
     // magicMoveLive, so the tick can tell a resting card from a morphing one.
     this.host = null;
@@ -6166,6 +6288,80 @@ class CardFXManager {
     this._frameMs = 1000 / 30;
     this._lastDraw = 0;
     this._warmHandle = null;
+    // The renderer's context is registered with the suite's surface registry
+    // (core/gl-surfaces.mjs) once it exists. `_held` is the registry's pause:
+    // while set, nothing restarts the loop but resume(). `_root` is the rail
+    // the FX canvases live in, which is what the registry watches.
+    this.surface = null;
+    this._held = false;
+    this._root = null;
+    this._watched = null;
+  }
+
+  // The element whose visibility gates the loop: the rail holding the FX
+  // canvases while any card carries an effect, else nothing. Not one card's
+  // canvas — a single card scrolled off the rail would freeze every other one.
+  _surfaceElement() {
+    return this.entries.size && this._root?.isConnected ? this._root : null;
+  }
+
+  _attachSurface() {
+    if (this.surface) return;
+    this.surface = Surfaces.register({
+      id: "initiative-card-fx",
+      element: () => this._surfaceElement(),
+      pause: () => { this._held = true; this._stop(); },
+      resume: () => { this._held = false; if (this.entries.size) this._start(); },
+      release: () => this._release(),
+      restore: () => this._restore()
+    });
+  }
+
+  // One PIXI renderer (its own canvas and context), with every filter program
+  // compiled into it by a throwaway draw. The filters and the sprite are not
+  // tied to a context, so a restore after a release rebuilds only this.
+  _buildRenderer() {
+    this.renderer = new PIXI.Renderer({ width: 256, height: 160, backgroundAlpha: 0, antialias: true });
+    // Force each filter's GLSL program to compile now. Otherwise the program
+    // compiles lazily on the first frame a card is broken/dying/mystery, stalling
+    // the main thread exactly when the break/dying transition should be smooth.
+    try {
+      this.sprite.width = 4;
+      this.sprite.height = 4;
+      for (const f of Object.values(this.filters)) {
+        this.sprite.filters = [f];
+        this.renderer.render(this.sprite);
+      }
+      this.sprite.filters = null;
+    } catch { /* compiles on demand if the warm-up render fails */ }
+  }
+
+  // Registry: no FX tick has used the context for the policy's `glRelease`
+  // seconds. Free it outright; `supported` stays true, so cards keep their FX
+  // canvases and the next tick's use() rebuilds behind them.
+  _release() {
+    this._stop();
+    const renderer = this.renderer;
+    this.renderer = null;
+    if (!renderer) return;
+    const gl = renderer.gl;
+    try { renderer.destroy(true); } catch { /* best-effort cleanup */ }
+    try { if (gl && !gl.isContextLost?.()) gl.getExtension("WEBGL_lose_context")?.loseContext(); } catch { /* best-effort cleanup */ }
+  }
+
+  // Registry: the first use() after a release, from inside the tick about to
+  // draw. A context that cannot come back sends the cards to the CSS fallback.
+  _restore() {
+    if (this.renderer || !this.supported) return;
+    try {
+      this._buildRenderer();
+    } catch (err) {
+      console.warn(`${MODULE_ID} | Card portrait FX could not be rebuilt, falling back to CSS`, err);
+      this.renderer = null;
+      this.supported = false;
+      this.clear();
+      overlay?.renderSoon();
+    }
   }
 
   // Whether cards should carry an FX canvas at all. True until the renderer has
@@ -6197,7 +6393,6 @@ class CardFXManager {
     }
     try {
       if (!globalThis.PIXI?.Renderer || !globalThis.PIXI?.Filter || !globalThis.PIXI?.Sprite) return false;
-      this.renderer = new PIXI.Renderer({ width: 256, height: 160, backgroundAlpha: 0, antialias: true });
       this.sprite = new PIXI.Sprite(PIXI.Texture.WHITE);
       const S = ACTIVE_SHADER_PALETTE;
       const mk = (frag, extra) => {
@@ -6212,19 +6407,9 @@ class CardFXManager {
         scramble: mk(FX_FRAG_SCRAMBLE, { uMysteryA:   [...S.mysteryA],   uMysteryB: [...S.mysteryB] }),
         dread:    mk(FX_FRAG_TYRANT,    { uTyrantBase:  [...S.tyrantBase],  uTyrantMid: [...S.tyrantMid], uTyrantHot: [...S.tyrantHot], uIntensity: 1 })
       };
-      // Force each filter's GLSL program to compile now. Otherwise the program
-      // compiles lazily on the first frame a card is broken/dying/mystery, stalling
-      // the main thread exactly when the break/dying transition should be smooth.
-      try {
-        this.sprite.width = 4;
-        this.sprite.height = 4;
-        for (const f of Object.values(this.filters)) {
-          this.sprite.filters = [f];
-          this.renderer.render(this.sprite);
-        }
-        this.sprite.filters = null;
-      } catch { /* compiles on demand if the warm-up render fails */ }
+      this._buildRenderer();
       this.supported = true;
+      this._attachSurface();
     } catch (err) {
       console.warn(`${MODULE_ID} | Card portrait FX unavailable, falling back to CSS`, err);
       this.supported = false;
@@ -6256,6 +6441,7 @@ class CardFXManager {
   // Reconcile the live FX canvases in the DOM after each overlay render.
   sync(root, host) {
     if (host) this.host = host;
+    if (root) this._root = root;
     if (!root || !this.available) { this.clear(); return; }
     const canvases = root.querySelectorAll(".gluni-card-portrait-fx");
     if (!canvases.length) { this.clear(); return; }
@@ -6323,18 +6509,34 @@ class CardFXManager {
       this._unobserve(this.entries.get(id)?.canvas);
       this.entries.delete(id);
     }
+    this._repointSurface();
     if (this.entries.size && !this.ticking) this._start();
     else if (!this.entries.size) this._stop();
+  }
+
+  // Point the registry at the rail when effects appear, and at nothing once
+  // they are gone — left on a rail that is then torn down, the observer would
+  // report it off-screen and pause the next effect's first frames.
+  _repointSurface() {
+    if (!this.surface) return;
+    const el = this._surfaceElement();
+    if (el === this._watched) return;
+    this._watched = el;
+    this.surface.observe();
   }
 
   clear() {
     for (const entry of this.entries.values()) this._unobserve(entry.canvas);
     this.entries.clear();
     this._stop();
+    this._repointSurface();
   }
 
   _start() {
     if (this.ticking) return;
+    // A hold the registry has already lifted (visible and not paused) is stale.
+    if (this._held && this.surface && !this.surface.paused && this.surface.visible) this._held = false;
+    if (this._held) return;
     this.ticking = true;
     requestAnimationFrame(this.tickFn);
   }
@@ -6353,6 +6555,15 @@ class CardFXManager {
       return;
     }
     this._lastDraw = now;
+    // Rebuilds a context the registry released while no effect was drawing, so
+    // an effect that arrives after a release still renders. False means nobody
+    // can see the rail: stop, and let the registry's resume() restart the loop.
+    if (this.surface && !this.surface.use()) {
+      this._held = true;
+      this.ticking = false;
+      return;
+    }
+    if (!this.renderer) { this.ticking = false; return; }
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     // While the magic move owns the rail the surfaces resize every frame, so
     // honouring each new size would reallocate a backing store per card per
@@ -6432,6 +6643,8 @@ class CardFXManager {
 
   destroy() {
     this.clear();
+    this.surface?.dispose();
+    this.surface = null;
     try { this.renderer?.destroy(); } catch {}
     this.renderer = null;
     this.supported = false;

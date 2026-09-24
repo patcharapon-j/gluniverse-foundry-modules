@@ -91,6 +91,15 @@ export const Perf = {
     return get(patchWorldKey(id), true) !== false && get(patchClientKey(id), true) !== false;
   },
 
+  /**
+   * The resolved state, resolving now if nothing has yet. The canvas is
+   * configured during game setup, before `ready` starts the runtime, and the
+   * patches that run then still need a tier to read.
+   */
+  ensure() {
+    return _state ?? this.resolve("early");
+  },
+
   /** Re-read the settings and fan out. */
   resolve(why = "settings") {
     const choice = get(SETTINGS.tier, DEFAULT_TIER);
@@ -121,6 +130,10 @@ export const Perf = {
       shedFloor: resolved.values.shedFloor,
       supersampleFloor: resolved.values.supersampleFloor,
       ambient: resolved.values.ambient,
+      glRelease: resolved.values.glRelease,
+      // Quality is the identity: nothing pauses that did not already. A capture
+      // client never pauses on hidden — its window is hidden while it records.
+      pauseHidden: resolved.values.ambient !== "always" && !_state.capture,
     });
 
     for (const fn of _listeners) {

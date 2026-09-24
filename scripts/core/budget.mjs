@@ -67,6 +67,10 @@ export const LOCAL_POLICY = Object.freeze({
   supersampleFloor: 0,
   /** Whether ambient loops may run while the view is still. */
   ambient: "always",
+  /** Seconds an unused suite WebGL surface may hold its context (0 = forever). */
+  glRelease: 0,
+  /** Whether a surface pauses while the page is hidden. */
+  pauseHidden: false,
 });
 
 /**
@@ -144,6 +148,8 @@ let _profiling = false;
 const _listeners = new Set();
 /** @type {Set<Ladder>} */
 const _ladders = new Set();
+/** Ids currently claiming continuous canvas motion. */
+const _motion = new Set();
 
 function emit(reason) {
   for (const fn of _listeners) {
@@ -373,6 +379,23 @@ export const Budget = {
     emit("ambient");
   },
 
+  /* ── Continuous motion ──────────────────────────────────────────────
+     A feature that animates ON THE CANVAS without anything moving — an idle
+     liquid flowing, an area's turbulence — claims motion while it does. The
+     `perf` feature's idle-rate drop reads this: at Balanced, whose promise is
+     "no visible change", a canvas with anything still animating on it is not
+     idle, because a lower rate would be visible on exactly that thing. */
+
+  /** @param {string} id  @param {boolean} on */
+  claimMotion(id, on) {
+    if (on) _motion.add(id);
+    else _motion.delete(id);
+  },
+
+  get motionClaimed() {
+    return _motion.size > 0;
+  },
+
   /* ── Change notification ─────────────────────────────────────────── */
 
   /**
@@ -448,6 +471,7 @@ export const Budget = {
     _profiling = false;
     _ladders.clear();
     _listeners.clear();
+    _motion.clear();
   },
 };
 

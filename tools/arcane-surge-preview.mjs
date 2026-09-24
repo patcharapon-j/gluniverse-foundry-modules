@@ -46,6 +46,11 @@ const constants = await import(`../${FEATURE}/constants.mjs`);
    this generator is a Node process that can just import the real thing — so the
    tier and level hues arrive from `palette.mjs` and cannot drift from it. */
 const palette = await import(`../${FEATURE}/palette.mjs`);
+/* The beats' "over budget" colouring used to read SHED_AT out of the inlined
+   anim.mjs. Shedding rides core/budget.mjs now, so the threshold is resolved
+   from there — at the LOCAL_POLICY target, the one a world without the perf
+   feature runs. */
+const budget = await import("../scripts/core/budget.mjs");
 
 /* `anim.mjs` is dependency-free by contract precisely so it can be inlined here
    as source. The export keywords are stripped so it can live inside a plain
@@ -71,6 +76,7 @@ const page = template
   .replaceAll("/*__BURST_UNIFORMS__*/", JSON.stringify(shader.BURST_UNIFORMS))
   .replaceAll("/*__BLIT_UNIFORMS__*/", JSON.stringify(shader.BLIT_UNIFORMS))
   .replaceAll("/*__LEVELS__*/", JSON.stringify(constants.LEVELS))
+  .replaceAll("/*__SHED_AT__*/", String(budget.thresholdsFor(budget.LOCAL_POLICY.targetFps).shedAt))
   .replaceAll("/*__ANIM_SRC__*/", animSource);
 
 // A placeholder left unsubstituted is a syntax error in the page, which shows up

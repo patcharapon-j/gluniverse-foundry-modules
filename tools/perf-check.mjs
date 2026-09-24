@@ -242,7 +242,7 @@ await section("every core patch is gated on generation and on the method it was 
     ok(found.length === 1, "patches", `core patch "${id}" is defined ${found.length} times (want exactly 1)`);
     for (const [f, body] of found) {
       ok(/target:\s*"[\w.]+"/.test(body), f, `"${id}" has no dotted target`);
-      ok(/signature:\s*"[^"]{8,}"/.test(body), f, `"${id}" has no integrity signature (≥ 8 chars) — it would install over anything`);
+      ok(/signature:\s*("[^"]{8,}"|'[^']{8,}')/.test(body), f, `"${id}" has no integrity signature (≥ 8 chars) — it would install over anything`);
     }
   }
   for (const [f, body] of defines) {
@@ -266,6 +266,36 @@ await section("every core patch is gated on generation and on the method it was 
   ok(Patches._evaluate({ ...def, overlaps: ["overlapping-module"] })[0] === "conflict", "patches.mjs", "ignored an overlapping module");
   delete globalThis.game;
   delete globalThis.__glperfProbe;
+});
+
+await section("the suite sheds on one clock and holds no idle GPU context", () => {
+  const featureSrc = walk("scripts/features").filter((f) => /\.(m?js)$/.test(f) && !f.startsWith("scripts/features/perf/"));
+  // A private rolling frame-time average is a second clock: it sheds on its own
+  // schedule while the overlay (and a GM's floor) say something else.
+  const ema = /(\b[\w.]+)\s*=\s*\1\s*\*\s*0?\.\d+\s*\+\s*(\w*(?:dt|ms|frame|delta)\w*)\s*\*\s*0?\.\d+/i;
+  for (const f of featureSrc) {
+    const src = stripComments(read(f));
+    const m = ema.exec(src);
+    ok(!m, f, `keeps a private frame-time average (\`${m?.[0]}\`) — shed through Budget.ladder() in core/budget.mjs`);
+    ok(!/\b(?:SHED_AT|UNSHED_AT)\b/.test(src) || f.endsWith("tools"), f, "defines its own shed thresholds; they come from the budget's policy");
+  }
+  // Every shed order is bound to the shared budget somewhere in its feature.
+  const byFeature = new Map();
+  for (const f of featureSrc) {
+    const dir = f.split("/").slice(0, 3).join("/");
+    if (!byFeature.has(dir)) byFeature.set(dir, []);
+    byFeature.get(dir).push(stripComments(read(f)));
+  }
+  for (const [dir, srcs] of byFeature) {
+    const all = srcs.join("\n");
+    if (/export const SHED_ORDER/.test(all)) {
+      ok(/Budget\.ladder\(/.test(all), dir, "exports a SHED_ORDER that nothing binds to Budget.ladder() — it never sheds");
+    }
+    const contexts = /getContext\(\s*["'`]webgl|new PIXI\.Application\(/.test(all);
+    if (contexts) {
+      ok(/Surfaces\.register\(/.test(all), dir, "creates its own WebGL context but never registers it with Surfaces — it is never paused or released");
+    }
+  }
 });
 
 await section("every runtime-built GLPERF key exists", () => {

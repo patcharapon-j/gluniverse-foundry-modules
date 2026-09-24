@@ -9,6 +9,7 @@
  * somewhere unstable, which can be a whole session. Under pressure it has to
  * give way to the things people are actually playing with, and it has to give
  * way in a defined order rather than by whoever notices the frame budget first.
+ * The order is stated here; the measuring is the suite's (see `ladder.mjs`).
  */
 
 /**
@@ -22,43 +23,13 @@
  */
 export const SHED_ORDER = Object.freeze(["flourish", "drift"]);
 
-/** Frame time above which the budget is considered exceeded (~45fps). */
-export const SHED_AT = 22;
-/** Frame time below which shed effects are taken back. The gap is hysteresis:
- *  without it the overlay oscillates on and off at the threshold. */
-export const UNSHED_AT = 15;
-
-/**
- * Rolling frame-cost tracker.
- *
- * One instance per host. `sample(dt)` on every frame, `allows(name)` to gate a
- * behaviour. The shed level walks one step per frame rather than jumping, so a
- * single slow frame (a scene load, a dialog opening) never strips the overlay.
- */
-export class FrameBudget {
-  constructor() {
-    this.frameMs = 16;
-    this.shed = 0;
-  }
-
-  sample(dt) {
-    if (!Number.isFinite(dt) || dt <= 0) return;
-    this.frameMs = this.frameMs * 0.9 + dt * 0.1;
-    if (this.frameMs > SHED_AT) this.shed = Math.min(SHED_ORDER.length, this.shed + 1);
-    else if (this.frameMs < UNSHED_AT) this.shed = Math.max(0, this.shed - 1);
-  }
-
-  /** True while `name` may still run. Unlisted names always run. */
-  allows(name) {
-    const i = SHED_ORDER.indexOf(name);
-    return i < 0 || i >= this.shed;
-  }
-
-  reset() {
-    this.frameMs = 16;
-    this.shed = 0;
-  }
-}
+/* The thresholds and the rolling average that used to sit here are gone.
+   Shedding rides `core/budget.mjs` now, through the one ladder `ladder.mjs`
+   binds to this order: the shared reflex measures the frame (22/15 ms at the
+   default 60 fps target, the pair this file shipped with), and a Performance
+   tier can start the ladder shed. This file keeps only WHAT is shed and in which
+   order, which is the one part that is this feature's to decide — and it stays
+   dependency-free, because the preview inlines it verbatim. */
 
 /**
  * The teal→cyan arcane ramp, as float triples for GLSL.

@@ -14,9 +14,20 @@
  * Raw WebGL rather than PIXI: this file then depends on nothing but the browser,
  * so it is immune to PIXI API churn across Foundry releases. `CampfireWebGL.js`
  * in stream-pacer sets the same precedent.
+ *
+ * The context is a suite Surface (core/gl-surfaces.mjs) with no element and no
+ * loop: the canvas never enters the DOM, and a render is an event, so there is
+ * nothing to pause and a render is never skipped (a skipped one would leave a
+ * slot stale until something else changed). What the registry can do is free
+ * the context once the stage has sat unrendered past the Performance policy's
+ * limit; the next `prepare()` rebuilds it and re-uploads art on demand. Every
+ * prepared handle carries the generation of the context its textures live in,
+ * and `draw` refuses one from an older context rather than binding a texture
+ * the new context has never seen.
  */
 
 import { loadPixelImage, markTainted } from "./asset.mjs";
+import { Surfaces } from "../../../core/gl-surfaces.mjs";
 
 const VERT = `
 attribute vec2 a_pos;
@@ -828,6 +839,8 @@ export class StageGL {
     this._nrmTextures = new Map(); // src → tex
     this._supported = null;
     this._lost = false;
+    this._surface = null;
+    this._generation = 0; // bumped per context; see the header
     this._onLost = (event) => {
       event.preventDefault();
       this._lost = true;
@@ -839,7 +852,10 @@ export class StageGL {
     if (this._supported !== null) return this._supported;
     try {
       const probe = document.createElement("canvas");
-      this._supported = !!(probe.getContext("webgl") || probe.getContext("experimental-webgl"));
+      const ctx = probe.getContext("webgl") || probe.getContext("experimental-webgl");
+      this._supported = !!ctx;
+      // The probe is a real context; free it instead of leaving it for the GC.
+      try { ctx?.getExtension("WEBGL_lose_context")?.loseContext(); } catch (_e) { /* already gone */ }
     } catch (_e) {
       this._supported = false;
     }
@@ -850,7 +866,7 @@ export class StageGL {
    *  disabled or unopened stage costs nothing. */
   _ensureContext() {
     if (this.gl && !this._lost) return true;
-    if (this._lost) this.destroy();
+    if (this._lost) this._freeContext();
     if (!this.isSupported()) return false;
 
     const canvas = document.createElement("canvas");
@@ -892,6 +908,14 @@ export class StageGL {
     this.program = program;
     this._lost = false;
     this._buffer = buffer;
+    this._generation++;
+    if (!this._surface) {
+      this._surface = Surfaces.register({
+        id: "stage.postfx",
+        element: () => null,
+        release: () => this._freeContext(),
+      });
+    }
     // Resolved once per context rather than per render, so the art textures and
     // the viewport can never be sized against different values.
     this._renderDim = renderDim();
@@ -1009,6 +1033,12 @@ export class StageGL {
     const gl = this.gl;
     const img = await loadPixelImage(src);
     const fitted = await fitForUpload(img, this._renderDim);
+    // Released or lost while decoding: a texture made on that context would be
+    // cached into the next one's map and bound there as garbage.
+    if (this.gl !== gl || this._lost) {
+      if (fitted.close) fitted.source.close();
+      return null;
+    }
 
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -1080,7 +1110,11 @@ export class StageGL {
    */
   async prepare(src, normal) {
     if (!normal || !src) return null;
+    // Rebuilds a released context. The visibility answer is ignored on purpose:
+    // there is no loop to catch up on a skipped render.
+    this._surface?.use();
     if (!this._ensureContext()) return null;
+    const generation = this._generation;
 
     let art;
     try {
@@ -1091,10 +1125,11 @@ export class StageGL {
       if (err?.name === "SecurityError") markTainted(src);
       return null;
     }
-    // The context can be lost while the art texture is in flight.
-    if (!this.gl || this._lost) return null;
+    // The context can be lost (or released) while the art texture is in flight.
+    if (!art || !this.gl || this._lost || this._generation !== generation) return null;
 
     return {
+      generation,
       src,
       art,
       nrmTex: this._normalTexture(src, normal),
@@ -1118,7 +1153,8 @@ export class StageGL {
    * @returns {HTMLCanvasElement|null} null when shading isn't possible.
    */
   draw(prepared, params) {
-    if (!prepared || !this.gl || this._lost) return null;
+    if (!prepared || !this.gl || this._lost || prepared.generation !== this._generation) return null;
+    this._surface?.touch();
 
     const gl = this.gl;
     const { art, nrmTex } = prepared;
@@ -1217,6 +1253,14 @@ export class StageGL {
 
   /** Release the context. Without this a module reload leaks one per cycle. */
   destroy() {
+    this._freeContext();
+    this._surface?.dispose();
+    this._surface = null;
+  }
+
+  /** Free the context and every texture in it. Rebuildable: the next
+   *  `prepare()` makes a new one. Also the surface registry's release. */
+  _freeContext() {
     const gl = this.gl;
     this._dropTextures();
     if (gl) {

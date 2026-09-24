@@ -99,6 +99,7 @@
 import { WeaveRenderer } from "/scripts/features/pf2e-arcane-surge/weave-render.mjs";
 import { weaveParams } from "/scripts/features/pf2e-arcane-surge/weave-shape.mjs";
 import { chaosFor } from "/scripts/features/pf2e-arcane-surge/levels.mjs";
+import { Budget } from "/scripts/core/budget.mjs";
 
 const LEVELS = /*__LEVELS__*/;
 const errors = document.getElementById("errors");
@@ -147,16 +148,19 @@ for (const level of LEVELS) {
   }
 }
 
-/* The readout is the budget the SHIPPED layer runs on, read off the shipped
-   FrameBudget. Take the ms/frame figure with the same salt as the beats': a
-   page holding eight weaves and half a dozen WebGL canvases reports a number
-   that says nothing about one strip in a HUD. What it is here for is the shed
-   state — whether the drift has given way, and whether it comes back. */
+/* The readout is the budget the SHIPPED layer runs on: the suite's shared
+   clock (core/budget.mjs) and the feature's one ladder, which every renderer
+   on this page holds a reference to. Take the ms/frame figure with the same
+   salt as the beats': a page holding eight weaves and half a dozen WebGL
+   canvases reports a number that says nothing about one strip in a HUD. What
+   it is here for is the shed state — whether the drift has given way, and
+   whether it comes back. */
 setInterval(() => {
   for (const { renderer, strip, level, label } of live) {
-    strip.ms.textContent = label + " · " + renderer.budget.frameMs.toFixed(0) + " ms/frame";
-    strip.note.textContent = renderer.budget.shed
-      ? "shed " + renderer.budget.shed
+    strip.ms.textContent = label + " · " + Budget.frameMs.toFixed(0) + " ms/frame";
+    const shed = renderer.budget ? renderer.budget.level : 0;
+    strip.note.textContent = shed
+      ? "shed " + shed
       : "chaos " + chaosFor(level).toFixed(2) + " · no shed";
   }
 }, 500);
@@ -164,6 +168,10 @@ setInterval(() => {
 
 <script>
 /*__ANIM_SRC__*/
+
+/* The shed threshold at the budget's default 60 fps target, resolved from
+   core/budget.mjs at generation time — anim.mjs no longer states one. */
+const SHED_AT = /*__SHED_AT__*/;
 
 const VERT = /*__VERT__*/;
 const BURST_FRAG = /*__BURST_FRAG__*/;

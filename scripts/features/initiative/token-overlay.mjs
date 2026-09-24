@@ -14,6 +14,7 @@ FX_FRAG_TURN, FX_FRAG_TURN_BAKE, FX_FRAG_TURN_PLAY, FX_FRAG_DOWNSAMPLE, rgbFloat
 FX_VERT_MESH, makeFxMesh, setFxMeshQuad, destroyFxMesh } from "./gl.mjs";
 import { overlay, getCombatantTokenObject } from "./gluniverse-initiative.mjs";
 import { getGuardBreakState, getBreakGaugeState } from "./conditions.mjs";
+import { Budget } from "../../core/budget.mjs";
 
 // Ground turn-markers + above-token status overlays drawn with PIXI/WebGL.
 
@@ -136,7 +137,10 @@ export class TokenOverlayManager {
   constructor() {
     this._entries = new Map();
     this._ticking = false;
-    this._tickFn = this._onTick.bind(this);
+    // Rides Foundry's canvas ticker, so its time is attributed to this feature
+    // in the perf overlay. Kept as one stable function: the ticker removes by
+    // identity.
+    this._tickFn = Budget.measure("initiative", this._onTick.bind(this));
     this._time = 0;
     // Ground turn-markers (active ring / next ring / start echo + connector) live
     // in their own layer beneath the token art, separate from the above-token
