@@ -13,6 +13,8 @@
  *   overlay.mjs      the per-client measurement overlay
  *   report.mjs       snapshots, the 30 s benchmark, GM report pulls
  *   floor-app.mjs    the GM's floor sheet
+ *   canvas.mjs       performance mode, resolution, sight throttle, idle rate,
+ *                    texture loading
  */
 
 import { Suite } from "../../core/registry.mjs";
@@ -24,6 +26,9 @@ import { Patches } from "./patches.mjs";
 import { Overlay } from "./overlay.mjs";
 import { wireSocket } from "./report.mjs";
 import { FloorApp } from "./floor-app.mjs";
+// canvas.mjs defines its core patches on import; installAll()
+// (onInit) is what actually wraps anything.
+import { initCanvasTuning, startCanvasTuning } from "./canvas.mjs";
 
 const reresolve = () => {
   if (Suite.enabled(FEATURE_ID) && Perf.state) Perf.resolve("settings");
@@ -133,11 +138,15 @@ Suite.register({
 
   onInit() {
     Patches.configure({ isOn: (id) => Perf.patchOn(id) });
+    // Wraps go on at init: the canvas is configured during setup, before ready.
+    Patches.installAll();
+    initCanvasTuning();
   },
 
   async onReady() {
     wireSocket();
     await Perf.start();
+    startCanvasTuning();
     Overlay.sync();
   },
 

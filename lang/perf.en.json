@@ -1,18 +1,15 @@
 {
   "GLPERF.title": "Performance",
   "GLPERF.hint": "Makes Foundry and the suite cheaper to run on every machine at the table, without changing a single Foundry setting. Pick a tier per client (or let Auto choose), set a floor for the table, and measure the difference with the overlay and the 30-second benchmark.",
-
   "GLPERF.tier.auto": "Auto",
   "GLPERF.tier.quality": "Quality",
   "GLPERF.tier.balanced": "Balanced",
   "GLPERF.tier.performance": "Performance",
   "GLPERF.tier.potato": "Potato",
-
   "GLPERF.target.display": "Display refresh (max 60)",
   "GLPERF.target.30": "30 fps",
   "GLPERF.target.45": "45 fps",
   "GLPERF.target.60": "60 fps",
-
   "GLPERF.setting.tier.name": "Performance tier",
   "GLPERF.setting.tier.hint": "Quality changes nothing. Balanced (the default) makes no visible change: a still canvas is redrawn less often, sight is recomputed less often during a move, and effects nobody can see stop costing anything. Performance renders below retina resolution, lightens the glass and snaps sight at the end of a move. Potato drops Foundry to Low and turns every ambient effect off. Auto moves between Balanced and Potato to hold your target frame rate. The GM may set a floor you cannot go above. Affects only this machine.",
   "GLPERF.setting.targetFps.name": "Target frame rate",
@@ -21,7 +18,6 @@
   "GLPERF.setting.overlay.hint": "A small readout of frame time, where the frame goes, what is being shed, and which Foundry values this feature is overriding. Includes a 30-second benchmark that saves a report.",
   "GLPERF.setting.preload.name": "Preload navigation scenes",
   "GLPERF.setting.preload.hint": "When the GM switches scene, every client preloads the other scenes in the navigation bar. Faster switches, at the cost of bandwidth and video memory on every client, which can make a weak machine slower. Off by default.",
-
   "GLPERF.patchClientHint": "Your own switch for this optimisation. It only runs when both this and the GM's switch are on.",
   "GLPERF.patch.perfMode.name": "Canvas quality overrides (table)",
   "GLPERF.patch.perfMode.clientName": "Canvas quality overrides (this machine)",
@@ -44,7 +40,6 @@
   "GLPERF.patch.chatPrune.name": "Trim the rendered chat log (table)",
   "GLPERF.patch.chatPrune.clientName": "Trim the rendered chat log (this machine)",
   "GLPERF.patch.chatPrune.hint": "While you are at the bottom of the chat log, only the newest 200 messages stay on the page. Scrolling up loads older ones exactly as before. No message is deleted.",
-
   "GLPERF.patchState.active": "On",
   "GLPERF.patchState.off": "Switched off",
   "GLPERF.patchState.idle": "Not in use",
@@ -52,7 +47,6 @@
   "GLPERF.patchState.conflict": "Conflict — stood down",
   "GLPERF.patchState.missing": "Not found in this Foundry",
   "GLPERF.patchState.error": "Failed to install",
-
   "GLPERF.overlay.title": "Performance",
   "GLPERF.overlay.close": "Hide overlay",
   "GLPERF.overlay.auto": "Auto · {tier}",
@@ -70,19 +64,16 @@
   "GLPERF.overlay.record": "Record 30 s",
   "GLPERF.overlay.recording": "Recording… {pct}%",
   "GLPERF.overlay.save": "Save report",
-
   "GLPERF.probe.canvas": "Canvas (total)",
   "GLPERF.probe.placeables": "Placeables",
   "GLPERF.probe.perception": "Sight & lighting",
   "GLPERF.probe.render": "Render",
-
   "GLPERF.override.perfMode": "Performance mode",
   "GLPERF.override.resolution": "Canvas resolution",
   "GLPERF.override.maxFps": "Canvas rate",
   "GLPERF.override.vision": "Sight during moves",
   "GLPERF.override.zoomBlur": "Soft shadows while zooming",
   "GLPERF.override.textureLoad": "Texture loading",
-
   "GLPERF.floor.title": "Performance — Table Floor",
   "GLPERF.floor.menuName": "Table floor & reports",
   "GLPERF.floor.menuLabel": "Open floor",
@@ -99,5 +90,13 @@
   "GLPERF.floor.request": "Pull a report",
   "GLPERF.floor.requestAll": "Pull from everyone",
   "GLPERF.floor.download": "Save this report",
-  "GLPERF.floor.save": "Save floor"
+  "GLPERF.floor.save": "Save floor",
+  "GLPERF.value.unknown": "Unknown",
+  "GLPERF.value.visionSnap": "Once, when the move lands",
+  "GLPERF.value.visionEvery": "Every {n} frames",
+  "GLPERF.value.visionFull": "every frame",
+  "GLPERF.value.idleFps": "{fps} fps while idle",
+  "GLPERF.value.uncapped": "uncapped",
+  "GLPERF.value.concurrent": "{n} at a time",
+  "GLPERF.value.allAtOnce": "all at once"
 }
