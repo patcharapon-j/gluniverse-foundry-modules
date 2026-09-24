@@ -15,6 +15,7 @@
  *   floor-app.mjs    the GM's floor sheet
  *   canvas.mjs       performance mode, resolution, sight throttle, idle rate,
  *                    texture loading
+ *   ui.mjs           render merging, directory batching, chat trimming
  */
 
 import { Suite } from "../../core/registry.mjs";
@@ -26,9 +27,10 @@ import { Patches } from "./patches.mjs";
 import { Overlay } from "./overlay.mjs";
 import { wireSocket } from "./report.mjs";
 import { FloorApp } from "./floor-app.mjs";
-// canvas.mjs defines its core patches on import; installAll()
+// canvas.mjs and ui.mjs define their core patches on import; installAll()
 // (onInit) is what actually wraps anything.
 import { initCanvasTuning, startCanvasTuning } from "./canvas.mjs";
+import { startUiTuning } from "./ui.mjs";
 
 const reresolve = () => {
   if (Suite.enabled(FEATURE_ID) && Perf.state) Perf.resolve("settings");
@@ -147,6 +149,7 @@ Suite.register({
     wireSocket();
     await Perf.start();
     startCanvasTuning();
+    startUiTuning();
     Overlay.sync();
   },
 
