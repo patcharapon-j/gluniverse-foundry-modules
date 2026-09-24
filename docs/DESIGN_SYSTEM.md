@@ -277,6 +277,19 @@ import { PALETTE, hexToRgbFloat, cssVar, applyMotionTier } from "../../core/them
 > change in `theme.mjs` too. The same applies to the initiative feature's
 > `constants.mjs` palettes, whose per-line comments name the token they mirror.
 
+### 9. A backdrop blur follows the glass level
+
+Every `backdrop-filter` blur is written against the tokens, never as bare
+pixels: `blur(var(--gl-blur)) saturate(var(--gl-saturation))` for the house
+glass, or `blur(calc(10px * var(--gl-glass-k)))` for a feature's own radius.
+The Performance feature writes `data-gl-perf` on `<html>` (`full` / `light` /
+`none`) from the client's tier, and the rules at the top of `gl-tokens.css` do
+the rest: `light` shrinks every blur, `none` drops every backdrop filter on
+the page. A backdrop blur is re-rendered from the pixels behind it on every
+frame anything behind it moves — over the canvas, every frame of a pan — so one
+written as `blur(10px)` keeps costing on a player's laptop after they chose
+Potato, and looks correct doing it. `tools/perf-check.mjs` refuses one.
+
 ---
 
 ## Retheming
