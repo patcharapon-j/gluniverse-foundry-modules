@@ -56,7 +56,8 @@
     "styles/stream-targets.css",
     "styles/hexcrawl.css",
     "styles/hexcrawl-play.css",
-    "styles/hexcrawl-import.css"
+    "styles/hexcrawl-import.css",
+    "styles/perf.css"
   ],
   "languages": [
     {
@@ -198,6 +199,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/hexcrawl-import.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/perf.en.json"
     }
   ],
   "packs": [

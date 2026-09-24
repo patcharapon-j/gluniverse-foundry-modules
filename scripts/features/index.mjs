@@ -35,3 +35,5 @@ import "./stream/index.mjs";
 import "./stream-cards/index.mjs";
 import "./stream-targets/index.mjs";
 import "./hexcrawl/index.mjs";
+// Cross-cutting: tunes the canvas, the suite's own effects and Foundry's UI.
+import "./perf/index.mjs";
