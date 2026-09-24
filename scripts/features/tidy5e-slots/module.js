@@ -4,6 +4,7 @@ import { TidyIntegration } from './TidyIntegration.js';
 import { NotchCalculator } from './NotchCalculator.js';
 import { AmmoDiceCalculator } from './AmmoDiceCalculator.js';
 import { DicePoolCalculator } from './DicePoolCalculator.js';
+import { registerWrapper, WRAPPER } from '../../core/wrapper.mjs';
 
 export { registerSettings };
 
@@ -25,9 +26,6 @@ export const api = {
     rollDicePool: (item) => DicePoolCalculator.rollPool(item),
     getPoolSummary: (item) => DicePoolCalculator.getPoolSummary(item),
 };
-
-const WRAPPED = Symbol.for(`${MODULE_ID}.tidy.prepareDerivedData.wrapped`);
-const ORIGINAL = Symbol.for(`${MODULE_ID}.tidy.prepareDerivedData.original`);
 
 /**
  * Init phase (run only when the feature is enabled & available).
@@ -78,15 +76,18 @@ export function onReady() {
  * Wrap Actor.prepareDerivedData for AC penalty from notched armor.
  * Wrap Item.prepareDerivedData for weapon damage degradation from notches.
  * These run during data preparation, so rolls and displays use degraded values.
+ * Registered through the suite's shared patch layer so libWrapper sees them.
  */
+let derivedDataWrapped = false;
+
 function wrapPrepareDerivedData() {
+    if (derivedDataWrapped) return;
+    derivedDataWrapped = true;
+
     // --- Actor: AC penalty from notched armor ---
-    const ActorClass = CONFIG.Actor?.documentClass;
-    if (ActorClass && !ActorClass.prototype[WRAPPED]) {
-        const origActorPrep = ActorClass.prototype.prepareDerivedData;
-        Object.defineProperty(ActorClass.prototype, ORIGINAL, { value: origActorPrep, configurable: true });
-        ActorClass.prototype.prepareDerivedData = function (...args) {
-            const result = origActorPrep.call(this, ...args);
+    if (CONFIG.Actor?.documentClass) {
+        registerWrapper('CONFIG.Actor.documentClass.prototype.prepareDerivedData', function (wrapped, ...args) {
+            const result = wrapped(...args);
             try {
                 if (!getSetting('enableWearAndTear')) return result;
                 if (this.type !== 'character' && this.type !== 'npc') return result;
@@ -97,17 +98,13 @@ function wrapPrepareDerivedData() {
                 }
             } catch { /* fail silently if data not yet available */ }
             return result;
-        };
-        Object.defineProperty(ActorClass.prototype, WRAPPED, { value: true, configurable: true });
+        }, WRAPPER);
     }
 
     // --- Item: weapon damage degradation from notches ---
-    const ItemClass = CONFIG.Item?.documentClass;
-    if (ItemClass && !ItemClass.prototype[WRAPPED]) {
-        const origItemPrep = ItemClass.prototype.prepareDerivedData;
-        Object.defineProperty(ItemClass.prototype, ORIGINAL, { value: origItemPrep, configurable: true });
-        ItemClass.prototype.prepareDerivedData = function (...args) {
-            const result = origItemPrep.call(this, ...args);
+    if (CONFIG.Item?.documentClass) {
+        registerWrapper('CONFIG.Item.documentClass.prototype.prepareDerivedData', function (wrapped, ...args) {
+            const result = wrapped(...args);
             try {
                 if (!getSetting('enableWearAndTear')) return result;
                 if (this.type !== 'weapon') return result;
@@ -150,19 +147,7 @@ function wrapPrepareDerivedData() {
                 }
             } catch { /* fail silently */ }
             return result;
-        };
-        Object.defineProperty(ItemClass.prototype, WRAPPED, { value: true, configurable: true });
-    }
-}
-
-/** Restore Foundry document methods for hot-reload/diagnostic teardown. */
-export function teardownPrepareDerivedData() {
-    for (const DocClass of [CONFIG.Actor?.documentClass, CONFIG.Item?.documentClass]) {
-        const proto = DocClass?.prototype;
-        if (!proto?.[WRAPPED] || typeof proto[ORIGINAL] !== 'function') continue;
-        proto.prepareDerivedData = proto[ORIGINAL];
-        delete proto[WRAPPED];
-        delete proto[ORIGINAL];
+        }, WRAPPER);
     }
 }
 
