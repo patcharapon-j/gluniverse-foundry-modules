@@ -13,6 +13,7 @@
  *   overlay.mjs      the per-client measurement overlay
  *   report.mjs       snapshots, the 30 s benchmark, GM report pulls
  *   floor-app.mjs    the GM's floor sheet
+ *   audit-app.mjs    the GM's texture audit (rules in audit-rules.mjs)
  *   canvas.mjs       performance mode, resolution, sight throttle, idle rate,
  *                    texture loading
  *   ui.mjs           render merging, directory batching, chat trimming
@@ -28,6 +29,7 @@ import { Patches } from "./patches.mjs";
 import { Overlay } from "./overlay.mjs";
 import { wireSocket } from "./report.mjs";
 import { FloorApp } from "./floor-app.mjs";
+import { AuditApp } from "./audit-app.mjs";
 // canvas.mjs and ui.mjs define their core patches on import; installAll()
 // (onInit) is what actually wraps anything.
 import { initCanvasTuning, startCanvasTuning } from "./canvas.mjs";
@@ -136,6 +138,15 @@ Suite.register({
       hint: "GLPERF.floor.menuHint",
       icon: "fa-solid fa-gauge-high",
       type: FloorApp(),
+      restricted: true,
+    });
+
+    game.settings.registerMenu(SUITE_ID, MENUS.audit, {
+      name: "GLPERF.audit.menuName",
+      label: "GLPERF.audit.menuLabel",
+      hint: "GLPERF.audit.menuHint",
+      icon: "fa-solid fa-images",
+      type: AuditApp(),
       restricted: true,
     });
   },

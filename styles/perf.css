@@ -224,3 +224,84 @@
 :root[data-gl-perf] .app.minimized .window-content * {
   animation-play-state: paused !important;
 }
+
+/* ── The texture audit ───────────────────────────────────────────────── */
+.glperf-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  font-size: var(--gl-fs-md);
+}
+
+.glperf-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.glperf-audit-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glperf-audit-total { color: var(--gl-text); }
+
+.glperf-audit-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.glperf-audit-row {
+  padding: 6px 8px;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+}
+
+.glperf-audit-row.is-flagged { border-color: color-mix(in srgb, var(--gl-warn) 45%, transparent); }
+
+.glperf-audit-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.glperf-audit-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gl-text-bright);
+}
+
+.glperf-audit-meta {
+  flex: none;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+}
+
+.glperf-audit-flags {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--gl-fs-sm);
+  color: var(--gl-text-dim);
+}
+
+.glperf-audit-flag strong { color: var(--gl-warn); }
+.glperf-audit-flag.is-huge strong { color: var(--gl-hazard); }
+
+.glperf-audit .gl-btn {
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-tight);
+}

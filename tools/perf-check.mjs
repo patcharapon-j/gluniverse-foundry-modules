@@ -324,6 +324,27 @@ await section("every backdrop blur follows the glass level", () => {
   }
 });
 
+await section("the texture audit flags what it says and every flag reads", async () => {
+  const { audit, flagsFor, estimateBytes, FLAGS, AUDIT } = await load("scripts/features/perf/audit-rules.mjs");
+  ok(estimateBytes(8192, 8192) === Math.round(8192 * 8192 * 4 * 4 / 3), "audit-rules.mjs", "the VRAM estimate is not RGBA8 plus mipmaps");
+  const f = (row) => flagsFor({ kind: "level", ...row });
+  ok(f({ src: "a.png", width: 10000, height: 4000 }).includes("huge"), "audit-rules.mjs", "a 10000 px texture is not flagged huge");
+  ok(!f({ src: "a.png", width: 10000, height: 4000 }).includes("large"), "audit-rules.mjs", "huge and large must not both fire");
+  ok(f({ src: "a.webp", width: 6000, height: 6000 }).includes("large") && !f({ src: "a.webp", width: 6000, height: 6000 }).includes("uncompressed"),
+    "audit-rules.mjs", "a WebP must never be told to become WebP");
+  ok(f({ src: "a.png", width: 4000, height: 4000 }).includes("uncompressed"), "audit-rules.mjs", "a 4000² PNG (~85 MB) is not flagged uncompressed");
+  ok(flagsFor({ src: "t.png", kind: "token", width: 2048, height: 2048 }).includes("tokenArt"), "audit-rules.mjs", "2048 px token art is not flagged");
+  ok(f({ src: "b.webm?x=1", width: 1920, height: 1080 }).includes("video"), "audit-rules.mjs", "a video with a query string is not recognised");
+  ok(f({ src: "a.png", width: 512, height: 512 }).length === 0, "audit-rules.mjs", "a small PNG was flagged");
+  const r = audit([{ src: "x.png", kind: "tile", width: 100, height: 100 }, { src: "x.png", kind: "tile", width: 100, height: 100 }, { src: "big.png", kind: "level", width: 9000, height: 9000 }]);
+  ok(r.rows.length === 2 && r.rows[0].src === "big.png" && r.rows[1].uses === 2, "audit-rules.mjs", "audit() must dedupe by source and sort heaviest first");
+  for (const id of FLAGS) {
+    ok(`GLPERF.audit.flag.${id}` in LANG && `GLPERF.audit.advice.${id}` in LANG, "lang/perf.en.json", `audit flag "${id}" has no label or advice`);
+  }
+  for (const kind of ["level", "tile", "token", "other"]) ok(`GLPERF.audit.kind.${kind}` in LANG, "lang/perf.en.json", `audit kind "${kind}" has no label`);
+  ok(AUDIT.hugeEdge > AUDIT.largeEdge, "audit-rules.mjs", "thresholds out of order");
+});
+
 await section("every runtime-built GLPERF key exists", () => {
   const { TIERS, AUTO } = tiersMod;
   const { PATCHES, TARGETS } = constMod;
@@ -359,6 +380,7 @@ await section("settings, form names and sizing", () => {
   for (const key of Object.values(constMod.SETTINGS)) ok(key.startsWith(constMod.PREFIX), "constants.mjs", `"${key}" does not carry the perf. prefix`);
   ok(/settingPrefix:\s*"perf\."/.test(index), "index.mjs", "settingPrefix must be \"perf.\" or the Control Center cannot route the settings");
   ok(/registerMenu\(SUITE_ID,\s*MENUS\.floor/.test(index), "index.mjs", "the floor sheet has no menu — a GM could only reach it from the console");
+  ok(/registerMenu\(SUITE_ID,\s*MENUS\.audit/.test(index), "index.mjs", "the texture audit has no menu — a GM could only reach it from the console");
 
   const form = read("templates/perf/floor.hbs");
   ok(/name="users\.\{\{id\}\}\.max"/.test(form) && /name="users\.\{\{id\}\}\.capture"/.test(form), "floor.hbs",
