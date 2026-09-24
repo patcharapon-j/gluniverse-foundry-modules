@@ -52,6 +52,10 @@ function isAmbient(animation) {
 
 function hold() {
   if (typeof document.getAnimations !== "function") return;
+  // An element removed from the page does not cancel its animation, and a held
+  // reference would keep both alive for as long as the tier stays "off" — the
+  // whole session, on Potato. Forget them; there is nothing to resume.
+  for (const a of _held) if (!a.effect?.target?.isConnected) _held.delete(a);
   for (const a of document.getAnimations()) {
     if (!isAmbient(a)) continue;
     try { a.pause(); _held.add(a); } catch { /* removed mid-sweep */ }
