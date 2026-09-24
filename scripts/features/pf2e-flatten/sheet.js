@@ -1,5 +1,6 @@
 import { MODIFIER_LABEL, MODIFIER_SLUG, MODULE_ID } from "./constants.js";
 import { getFlatteningValue, hasModifier, isUpdatable } from "./flatten.js";
+import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
 /** Whether a modifier entry is this module's (active) flattening modifier. */
 const isFlattenModifier = (modifier) =>
@@ -59,29 +60,45 @@ function rebaseAdjustedFlags(actor, context) {
 
 const patched = new WeakSet();
 
-/** Wraps a sheet class's getData() to rebase its adjustment colouring. */
-function patchSheetClass(cls) {
+/**
+ * Wraps a registered sheet class's getData() to rebase its adjustment
+ * colouring. Goes through the suite's patch layer so libWrapper sees it; the
+ * class is addressed by its sheet-registry key, which contains a dot.
+ */
+function patchSheetClass(type, className) {
+	const found = findSheetClass(type, className);
+	if (!found) return;
+	const { key, cls } = found;
 	if (!cls?.prototype || patched.has(cls)) return;
-	const original = cls.prototype.getData;
-	if (typeof original !== "function") return;
+	if (typeof cls.prototype.getData !== "function") return;
 
-	cls.prototype.getData = async function (...args) {
-		const context = await original.apply(this, args);
-		try {
-			rebaseAdjustedFlags(this.actor, context);
-		} catch (error) {
-			console.error(`${MODULE_ID} | Failed to rebase sheet colouring`, error);
-		}
-		return context;
-	};
+	const index = key.replace(/["\\]/g, "\\$&");
+	try {
+		registerWrapper(
+			`CONFIG.Actor.sheetClasses.${type}["${index}"].cls.prototype.getData`,
+			async function (wrapped, ...args) {
+				const context = await wrapped(...args);
+				try {
+					rebaseAdjustedFlags(this.actor, context);
+				} catch (error) {
+					console.error(`${MODULE_ID} | Failed to rebase sheet colouring`, error);
+				}
+				return context;
+			},
+			WRAPPER,
+		);
+	} catch (error) {
+		console.error(`${MODULE_ID} | Failed to patch ${className}`, error);
+		return;
+	}
 	patched.add(cls);
 }
 
 /** Finds a registered actor sheet class for a type by its constructor name. */
 function findSheetClass(type, className) {
 	const registered = CONFIG.Actor?.sheetClasses?.[type] ?? {};
-	for (const entry of Object.values(registered)) {
-		if (entry?.cls?.name === className) return entry.cls;
+	for (const [key, entry] of Object.entries(registered)) {
+		if (entry?.cls?.name === className) return { key, cls: entry.cls };
 	}
 	return null;
 }
@@ -91,6 +108,6 @@ function findSheetClass(type, className) {
  * statistics red. Safe to call once the system has registered its sheets.
  */
 export function patchActorSheets() {
-	patchSheetClass(findSheetClass("npc", "NPCSheetPF2e"));
-	patchSheetClass(findSheetClass("npc", "SimpleNPCSheet"));
+	patchSheetClass("npc", "NPCSheetPF2e");
+	patchSheetClass("npc", "SimpleNPCSheet");
 }
