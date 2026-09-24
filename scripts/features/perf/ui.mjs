@@ -144,7 +144,9 @@ export function prune() {
   if (!Perf.patchOn("chatPrune")) return 0;
   const log = ui.chat;
   if (!log?.rendered || !log.isAtBottom || typeof log.deleteMessage !== "function") return 0;
-  const rows = log.element?.querySelectorAll(".chat-log > .message[data-message-id]");
+  // A row already on its way out (Foundry animates the removal) is not counted
+  // twice, or a second prune before the first finished would remove twice as many.
+  const rows = log.element?.querySelectorAll(".chat-log > .message[data-message-id]:not(.deleting)");
   if (!rows || rows.length <= CHAT_KEEP + CHAT_SLACK) return 0;
   const drop = rows.length - CHAT_KEEP;
   // Oldest first: ChatLog#deleteMessage moves its "oldest rendered" pointer to

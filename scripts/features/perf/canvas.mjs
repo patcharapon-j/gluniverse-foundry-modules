@@ -223,7 +223,9 @@ function computeSceneMotion() {
   try {
     const scene = canvas?.scene;
     if (!scene) return false;
-    if (scene.weather || canvas.weather?.children?.length) return true;
+    // The weather layer always holds its (empty) containers; what moves is the
+    // particle effects inside weatherEffects.
+    if (scene.weather || canvas.weather?.weatherEffects?.children?.length) return true;
     const VH = foundry.helpers.media?.VideoHelper;
     const isVideo = (src) => !!src && !!VH?.hasVideoExtension?.(src);
     for (const lt of scene._configureLevelTextures?.() ?? []) if (isVideo(lt.src)) return true;

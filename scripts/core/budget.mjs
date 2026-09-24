@@ -213,8 +213,15 @@ export class Ladder {
 
 function loop(now) {
   if (!_running) return;
-  if (_last) sample(now - _last);
-  _last = now;
+  // A hidden page's frames are throttled by the browser (an occluded window can
+  // still run at ~5 fps), which says nothing about what this machine can do.
+  // Fed to the reflex they would shed every effect the moment a player
+  // alt-tabs, so a hidden page measures nothing and restarts its interval.
+  if (globalThis.document?.hidden) _last = 0;
+  else {
+    if (_last) sample(now - _last);
+    _last = now;
+  }
   _raf = globalThis.requestAnimationFrame(loop);
 }
 
