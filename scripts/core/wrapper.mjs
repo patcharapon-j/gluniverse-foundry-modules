@@ -19,9 +19,44 @@ export function hasLibWrapper() {
   return !!globalThis.libWrapper && globalThis.libWrapper.is_fallback !== true;
 }
 
-/** Resolve a dotted target path into the owning object and the property name. */
+/**
+ * Split a target path into its segments, accepting libWrapper's string indexing
+ * (`a.b["c.d"].e`): a single ' or " quoted key, with \ escaping the next character.
+ */
+function splitTarget(target) {
+  const parts = [];
+  let current = "";
+  for (let i = 0; i < target.length; i++) {
+    const ch = target[i];
+    if (ch === ".") {
+      parts.push(current);
+      current = "";
+    } else if (ch === "[") {
+      const quote = target[i + 1];
+      if (quote !== '"' && quote !== "'") throw new Error(`libWrapper integration: invalid index in target '${target}'.`);
+      if (current) parts.push(current);
+      current = "";
+      let j = i + 2;
+      for (; j < target.length && target[j] !== quote; j++) {
+        if (target[j] === "\\") j++;
+        current += target[j] ?? "";
+      }
+      if (target[j + 1] !== "]") throw new Error(`libWrapper integration: invalid index in target '${target}'.`);
+      parts.push(current);
+      current = "";
+      i = j + 1;
+      if (target[i + 1] === ".") i++;
+    } else {
+      current += ch;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+/** Resolve a target path into the owning object and the property name. */
 function resolveTarget(target) {
-  const parts = target.split(".");
+  const parts = splitTarget(target);
   const key = parts.pop();
   let obj = globalThis;
   for (const part of parts) obj = obj?.[part];
