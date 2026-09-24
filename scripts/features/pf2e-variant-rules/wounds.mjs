@@ -303,18 +303,16 @@ export function readyWounds() {
     warn("pf2e-variant-rules | game.pf2e.Check.roll is unavailable; the Medicine penalty stands down.");
   }
 
-  // Rest. This one is a plain property on a Collection rather than a prototype
-  // method, so libWrapper may decline it; a direct patch is a correct fallback
-  // because nothing else in the system shares the reference.
+  // Rest. PF2e assigns this as a plain property on the actions Collection, so
+  // it is configurable and both libWrapper and the fallback wrap it. If that
+  // ever changes, the rule stands down rather than patching around libWrapper,
+  // where no other module's conflict detection could see it.
   const actions = game.pf2e?.actions;
   if (typeof actions?.restForTheNight === "function") {
     try {
       registerWrapper("game.pf2e.actions.restForTheNight", onRest, WRAPPER);
-    } catch {
-      const original = actions.restForTheNight;
-      actions.restForTheNight = function (...args) {
-        return onRest.call(this, original.bind(this), ...args);
-      };
+    } catch (error) {
+      warn("pf2e-variant-rules | could not wrap restForTheNight; rest blocking stands down.", error);
     }
   } else {
     warn("pf2e-variant-rules | restForTheNight is unavailable; rest blocking stands down.");
