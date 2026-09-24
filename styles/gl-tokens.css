@@ -107,6 +107,29 @@
   --gl-holo-c: #ff66b3;
 }
 
+/* ── Glass levels (Performance feature) ─────────────────────────────────
+   `data-gl-perf` on <html> is written by the Performance feature from the
+   client's tier and nothing else. A backdrop blur is re-rendered from the
+   pixels behind it on every frame that anything behind it moves — over the
+   canvas, that is every frame of a pan. Most suite glass is opaque by the end
+   of its gradient, so "none" is visually close to free; it drops the blur
+   everywhere on the page, Foundry's own windows included, which is what
+   Foundry's own Low mode does to its apps too. */
+:root[data-gl-perf="light"] {
+  --gl-blur: 6px;
+  --gl-glass-k: 0.4;
+}
+:root[data-gl-perf="none"] {
+  --gl-blur: 0px;
+  --gl-glass-k: 0;
+}
+:root[data-gl-perf="none"] *,
+:root[data-gl-perf="none"] *::before,
+:root[data-gl-perf="none"] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* ════════════════════════════════════════════════════════════════════════
    L1 — THEME CONTRACT
    The complete set of tokens a theme may override. Nothing outside this block
@@ -126,6 +149,11 @@
   --gl-surface-inset-mix: 4%;
   --gl-blur: 16px;
   --gl-saturation: 1.15;
+  /* Multiplier on every backdrop blur a feature states in pixels
+     (`blur(calc(10px * var(--gl-glass-k)))`). 1 here; the Performance feature's
+     glass levels below lower it. A backdrop blur written as a bare pixel value
+     ignores the tier the player chose. */
+  --gl-glass-k: 1;
 
   /* ── Typography ── faces are declared once in gl-fonts.css ── */
   --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;

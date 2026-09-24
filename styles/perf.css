@@ -215,3 +215,12 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ── Minimised windows ───────────────────────────────────────────────────
+   A minimised window still carries its rendered content, and an infinite loop
+   inside it keeps compositing for a panel nobody can see. Only while the
+   Performance feature is running (it writes data-gl-perf). */
+:root[data-gl-perf] .application.minimized .window-content *,
+:root[data-gl-perf] .app.minimized .window-content * {
+  animation-play-state: paused !important;
+}

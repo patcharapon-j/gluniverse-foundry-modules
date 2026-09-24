@@ -16,6 +16,7 @@
  *   canvas.mjs       performance mode, resolution, sight throttle, idle rate,
  *                    texture loading
  *   ui.mjs           render merging, directory batching, chat trimming
+ *   ambient.mjs      glass level, ambient loops held while panning, zoom blur
  */
 
 import { Suite } from "../../core/registry.mjs";
@@ -31,6 +32,7 @@ import { FloorApp } from "./floor-app.mjs";
 // (onInit) is what actually wraps anything.
 import { initCanvasTuning, startCanvasTuning } from "./canvas.mjs";
 import { startUiTuning } from "./ui.mjs";
+import { startAmbient } from "./ambient.mjs";
 
 const reresolve = () => {
   if (Suite.enabled(FEATURE_ID) && Perf.state) Perf.resolve("settings");
@@ -150,6 +152,7 @@ Suite.register({
     await Perf.start();
     startCanvasTuning();
     startUiTuning();
+    startAmbient();
     Overlay.sync();
   },
 

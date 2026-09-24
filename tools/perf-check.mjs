@@ -298,6 +298,32 @@ await section("the suite sheds on one clock and holds no idle GPU context", () =
   }
 });
 
+await section("every backdrop blur follows the glass level", () => {
+  const tokens = read("styles/gl-tokens.css");
+  ok(/--gl-glass-k:\s*1;/.test(tokens), "gl-tokens.css", "--gl-glass-k is not declared at :root");
+  for (const level of ["light", "none"]) {
+    ok(new RegExp(`:root\\[data-gl-perf="${level}"\\]\\s*\\{[^}]*--gl-glass-k`).test(tokens), "gl-tokens.css", `glass level "${level}" does not set --gl-glass-k`);
+  }
+  ok(/:root\[data-gl-perf="none"\] \*[\s\S]*?backdrop-filter:\s*none !important/.test(tokens), "gl-tokens.css",
+    "glass level \"none\" must drop every backdrop filter on the page, not just the suite's");
+  for (const f of walk("styles").filter((x) => x.endsWith(".css") && !x.endsWith("gl-tokens.css"))) {
+    const css = read(f);
+    for (const m of css.matchAll(/(?:-webkit-)?backdrop-filter:\s*([^;}]*)/g)) {
+      const blurs = [...m[1].matchAll(/blur\(([^()]*(?:\([^()]*\))?[^()]*)\)/g)].map((b) => b[1]);
+      for (const b of blurs) {
+        ok(/var\(--gl-blur\)|var\(--gl-glass-k\)/.test(b), f,
+          `backdrop blur(${b}) ignores the player's tier — write it as var(--gl-blur) or calc(Npx * var(--gl-glass-k))`);
+      }
+    }
+  }
+  const { TIER_TABLE } = tiersMod;
+  const runtime = read("scripts/features/perf/ambient.mjs");
+  ok(/dataset\.glPerf\s*=/.test(runtime), "ambient.mjs", "nothing writes data-gl-perf; every glass level is dead");
+  for (const row of Object.values(TIER_TABLE)) {
+    if (row.glass !== "full") ok(new RegExp(`data-gl-perf="${row.glass}"`).test(tokens), "gl-tokens.css", `tier glass "${row.glass}" has no rule`);
+  }
+});
+
 await section("every runtime-built GLPERF key exists", () => {
   const { TIERS, AUTO } = tiersMod;
   const { PATCHES, TARGETS } = constMod;

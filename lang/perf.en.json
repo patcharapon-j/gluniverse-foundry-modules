@@ -98,5 +98,7 @@
   "GLPERF.value.idleFps": "{fps} fps while idle",
   "GLPERF.value.uncapped": "uncapped",
   "GLPERF.value.concurrent": "{n} at a time",
-  "GLPERF.value.allAtOnce": "all at once"
+  "GLPERF.value.allAtOnce": "all at once",
+  "GLPERF.value.zoomBlurOff": "off while zooming",
+  "GLPERF.value.on": "on"
 }

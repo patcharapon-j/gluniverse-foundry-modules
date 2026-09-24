@@ -313,7 +313,10 @@ export class WeaveRenderer {
   }
 
   _applyShed() {
-    const allowed = this.budget?.allows("drift") ?? true;
+    /* The drift is ambient motion — the weave's STATE is its shape, which stays.
+       It holds while the budget says ambient motion should (a pan in progress,
+       or a Performance tier that turns ambient loops off) as well as when shed. */
+    const allowed = (this.budget?.allows("drift") ?? true) && Budget.ambientAllowed;
     if (allowed === this._drifting) return;
     this._drifting = allowed;
     for (const animation of this.motion.list()) allowed ? animation.play() : animation.pause();

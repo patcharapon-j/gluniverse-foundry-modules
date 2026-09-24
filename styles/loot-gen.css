@@ -87,7 +87,7 @@
     inset 0 1px 0 rgb(var(--gl-tint-light) / .16),
     inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38),
     0 0 46px var(--gl-bloom);
-  backdrop-filter:blur(16px) saturate(1.15);
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 #gllg-auditor .window-header{
   background:linear-gradient(180deg, rgb(var(--gl-tint-light) / .06), rgb(var(--gl-tint-light) / 0));
@@ -550,7 +550,7 @@
     linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:0 26px 70px rgb(var(--gl-tint-dark) / .6), inset 0 1px 0 rgb(var(--gl-tint-light) / .16), 0 0 50px var(--gl-bloom);
-  backdrop-filter:blur(16px) saturate(1.15);
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 .application.gllg-generate .window-header{
   background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / 0));
@@ -620,7 +620,7 @@ textarea.gllg-settings-textarea{width:100%;min-height:7.5em;resize:vertical;
     linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
     linear-gradient(98deg, color-mix(in srgb, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
   box-shadow:0 26px 70px rgb(var(--gl-tint-dark) / .6),inset 0 1px 0 rgb(var(--gl-tint-light) / .16);
-  backdrop-filter:blur(16px) saturate(1.15);
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 .application.gllg-llm-log .window-header{background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .06),rgb(var(--gl-tint-light) / 0));border-bottom:1px solid var(--gl-hair)}
 .application.gllg-llm-log .window-header .window-title{font-family:var(--gl-tech);font-weight: var(--gl-weight-bold);letter-spacing:.12em;text-transform:uppercase;font-size:11px;color:var(--gl-text)}

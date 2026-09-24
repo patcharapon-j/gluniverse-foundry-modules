@@ -10,6 +10,7 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
+import { coalescePan } from "../../core/pan.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { isHexType } from "./hex-math.mjs";
 import { HexStore, HOOK_STORE_CHANGED, isHexcrawlScene } from "./store.mjs";
@@ -91,7 +92,7 @@ export function onReady() {
   Hooks.on("createToken", partyRefresh);
   Hooks.on("deleteToken", partyRefresh);
 
-  Hooks.on("canvasPan", (_c, pos) => host.setZoom(pos?.scale ?? canvas.stage.scale.x));
+  Hooks.on("canvasPan", coalescePan((_c, pos) => host.setZoom(pos?.scale ?? canvas.stage.scale.x)));
   Hooks.on("renderTokenHUD", onRenderTokenHUD);
   Hooks.on("renderChatMessageHTML", onRenderChatMessage);
 

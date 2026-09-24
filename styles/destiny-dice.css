@@ -247,7 +247,7 @@
     drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / 0.4))
     drop-shadow(0 0 26px color-mix(in oklab, var(--gl-accent) 18%, transparent));
 
-  backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 
 /* Inner radial light catch (§3.1 ::before) */
