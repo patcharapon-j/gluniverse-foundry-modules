@@ -139,7 +139,7 @@
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
     inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38),
     0 0 40px var(--sp-glow-soft);
-  backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   transition: box-shadow var(--gl-d-reveal) ease, border-color var(--gl-d-reveal) ease;
 }
 
@@ -1336,7 +1336,7 @@
     0 8px 30px rgb(var(--gl-tint-dark) / 0.5),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.2),
     0 0 36px rgba(90, 163, 240, 0.3);
-  backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(calc(14px * var(--gl-glass-k))) saturate(1.15);
   opacity: 0;
   visibility: hidden;
   transform: translateY(-100%);
@@ -2918,7 +2918,7 @@
     0 10px 26px rgb(var(--gl-tint-dark) / 0.5),
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
     inset 0 -10px 20px rgb(var(--gl-tint-dark) / 0.34);
-  backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
   pointer-events: auto;
   transition: border-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }

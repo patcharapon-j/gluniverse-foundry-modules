@@ -1,0 +1,72 @@
+<div class="glperf-floor gl-type">
+  <p class="glperf-note">{{localize "GLPERF.floor.hint"}}</p>
+
+  <label class="glperf-field">
+    <span class="gl-tech-label">{{localize "GLPERF.floor.worldMax"}}</span>
+    <select name="max" class="gl-field">
+      {{#each tiers}}
+      <option value="{{id}}" {{#if (eq id @root.max)}}selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <table class="glperf-table">
+    <thead>
+      <tr>
+        <th>{{localize "GLPERF.floor.user"}}</th>
+        <th>{{localize "GLPERF.floor.userMax"}}</th>
+        <th>{{localize "GLPERF.floor.capture"}}</th>
+        <th>{{localize "GLPERF.floor.report"}}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each users}}
+      <tr data-user-id="{{id}}" class="{{#unless active}}is-away{{/unless}}">
+        <td class="glperf-user">
+          <span class="glperf-dot {{#if active}}is-on{{/if}}"></span>{{name}}{{#if isGM}} <span class="glperf-gm">GM</span>{{/if}}
+        </td>
+        <td>
+          <select name="users.{{id}}.max" class="gl-field">
+            <option value="" {{#unless max}}selected{{/unless}}>{{localize "GLPERF.floor.worldDefault"}}</option>
+            {{#each @root.tiers}}
+            <option value="{{this.id}}" {{#if (eq this.id ../max)}}selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+          </select>
+        </td>
+        <td class="glperf-center">
+          <input type="checkbox" name="users.{{id}}.capture" {{#if capture}}checked{{/if}}
+                 data-tooltip="{{localize "GLPERF.floor.captureHint"}}">
+        </td>
+        <td class="glperf-report gl-numeric">
+          {{#if report}}
+          <span data-tooltip="{{report.gpu}}">{{report.fps}} fps · p95 {{report.p95}} ms · {{report.tier}}{{#if report.bench}} · {{localize "GLPERF.floor.bench"}}{{/if}}</span>
+          <span class="glperf-when">{{report.when}}</span>
+          {{else}}
+          <span class="glperf-when">—</span>
+          {{/if}}
+        </td>
+        <td class="glperf-actions">
+          <button type="button" class="gl-btn glperf-icon" data-action="request" {{#unless active}}disabled{{/unless}}
+                  data-tooltip="{{localize "GLPERF.floor.request"}}" aria-label="{{localize "GLPERF.floor.request"}}">
+            <i class="fa-solid fa-satellite-dish"></i>
+          </button>
+          <button type="button" class="gl-btn glperf-icon" data-action="download" {{#unless report}}disabled{{/unless}}
+                  data-tooltip="{{localize "GLPERF.floor.download"}}" aria-label="{{localize "GLPERF.floor.download"}}">
+            <i class="fa-solid fa-download"></i>
+          </button>
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <footer class="glperf-footer">
+    <button type="button" class="gl-btn" data-action="requestAll">
+      <i class="fa-solid fa-satellite-dish"></i> {{localize "GLPERF.floor.requestAll"}}
+    </button>
+    <button type="submit" class="gl-btn">
+      <i class="fa-solid fa-floppy-disk"></i> {{localize "GLPERF.floor.save"}}
+    </button>
+  </footer>
+</div>

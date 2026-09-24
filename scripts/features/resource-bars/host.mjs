@@ -31,6 +31,7 @@ import { canViewBars, canViewNumbers } from "./visibility.mjs";
 import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "../../core/bloom.mjs";
+import { Budget } from "../../core/budget.mjs";
 /* ── Names ── */
 import { HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
 import { cipherSeed, decideLabel, invalidateKnowledge, labelContext, labelReserved, reserveFacts, tokenFacts } from "./mystify.mjs";
@@ -278,11 +279,16 @@ class BarHost {
     /** Names: the unfiltered layer the labels live on. */
     this.labels = null;
     this.ticking = false;
-    this.frameMs = 16;
-    this.shed = 0;
+    /* The shed rides the suite's shared frame budget (core/budget.mjs), which
+       owns the frame clock and the hysteresis; this host only asks the ladder.
+       Bound in attach(), not here — the host is a module-scope singleton and a
+       ladder starts the budget's frame loop, which must not happen at import. */
+    this.ladder = null;
+    this._unbudget = null;
     this.opts = {};
     this.liquid = DEFAULT_LIQUID;
-    this._tick = this.tick.bind(this);
+    /* Stable reference: the ticker removes by identity. */
+    this._tick = Budget.measure("resource-bars", this.tick.bind(this));
     this._lastTime = 0;
   }
 
@@ -366,6 +372,12 @@ class BarHost {
        on top anyway — both paths land above the token furniture. */
     this.container.zIndex = CONTAINER_Z;
     layer.addChild(this.container);
+    this.ladder = Budget.ladder("resource-bars", SHED_ORDER);
+    /* Shedding "flow" takes idle bars out of the ticker, and a stopped ticker
+       used to be the only thing that could give it back. The budget recovers on
+       its own clock now, so a level change re-asks whether anything wants
+       frames; a running tick already reads the new level every frame. */
+    this._unbudget = Budget.onChange(() => { if (this.container && !this.ticking) this.syncTicker(); });
     /* ── Names ── A second container at the same depth, *unfiltered*. The bloom
        is for light the bar emits; a white label inside it haloes every name on
        the map, and widens the filter's measured bounds by a row per token. Added
@@ -387,6 +399,10 @@ class BarHost {
     onStripsChanged(null);
     resetStrips();
     this.stopTicker();
+    this._unbudget?.();
+    this._unbudget = null;
+    this.ladder?.dispose();
+    this.ladder = null;
     for (const entry of this.entries.values()) entry.destroy();
     this.entries.clear();
     try {
@@ -887,6 +903,9 @@ class BarHost {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
       this._lastTime = performance.now();
+      /* A ticking bar is moving on its own; the Performance feature's idle-rate
+         drop must not slow it. */
+      Budget.claimMotion("resource-bars", true);
     } else if (!wanted && this.ticking) {
       this.stopTicker();
     }
@@ -896,19 +915,16 @@ class BarHost {
     if (!this.ticking) return;
     canvas.app?.ticker?.remove(this._tick);
     this.ticking = false;
+    Budget.claimMotion("resource-bars", false);
   }
 
   tick() {
     const now = performance.now();
     const dt = Math.min(50, now - this._lastTime);
     this._lastTime = now;
-
-    /* A rolling frame time drives the shed. Effects are given up in
-       SHED_ORDER, cheapest first, until we are back inside budget — a bar that
-       degrades is better than a canvas that stutters. */
-    this.frameMs = this.frameMs * 0.9 + dt * 0.1;
-    const over = this.frameMs > 22;
-    this.shed = clamp(this.shed + (over ? 1 : -1), 0, SHED_ORDER.length);
+    /* dt steps the animation only. The shed is not measured here: effects are
+       given up in SHED_ORDER, cheapest first, by the shared budget's ladder —
+       a bar that degrades is better than a canvas that stutters. */
 
     let anyHot = false;
     for (const entry of this.entries.values()) {
@@ -943,10 +959,10 @@ class BarHost {
     if (!anyHot) this.stopTicker();
   }
 
-  /** True while an effect is still inside the shed budget. */
+  /** True while an effect is still inside the shed budget. Unattached (no
+   *  ladder yet) nothing is shed. */
   allows(effect) {
-    const i = SHED_ORDER.indexOf(effect);
-    return i < 0 || i >= this.shed;
+    return this.ladder ? this.ladder.allows(effect) : true;
   }
 
   writeUniforms(entry, time) {

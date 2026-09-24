@@ -22,7 +22,9 @@ export const TIMING = Object.freeze({
 
 /**
  * Everything animated, cheapest to shed first. The host drops behaviours off
- * the front of this list as frame time climbs.
+ * the front of this list as frame time climbs. When, and how far, is not
+ * decided here: the host binds this order to the suite's shared frame budget
+ * (`core/budget.mjs`), which owns the clock and the hysteresis.
  *
  * Two entries are deliberately ABSENT and must stay absent: the rules lattice
  * and the boundary rim. Readability is not a quality tier — a player must be
@@ -35,11 +37,6 @@ export const SHED_ORDER = Object.freeze([
   "skirt",     // the fake vertical
   "turbulence" // the archetype fill collapses to a flat lit plate
 ]);
-
-/** Hysteresis, ms of rolling frame time. Shedding at the same threshold it
- *  unsheds at makes the whole set flicker on and off at the boundary. */
-export const SHED_AT = 22;
-export const UNSHED_AT = 15;
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 

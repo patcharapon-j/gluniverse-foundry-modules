@@ -2,6 +2,8 @@ import { createCinematicMotion } from "./motion.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
+import { Surfaces } from "../../core/gl-surfaces.mjs";
+import { Budget } from "../../core/budget.mjs";
 
 const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "critical";
@@ -94,6 +96,14 @@ const DND5E_PERCEPTION_SKILL_ID = "prc";
 let app = null;
 let container = null;
 let resizeHandler = null;
+// The app is a suite Surface (core/gl-surfaces.mjs). Its ticker only runs for
+// the length of an image cut-in, so between crits the context is pure overhead:
+// under a Performance policy the registry destroys the app once it has sat
+// idle, and the next cut-in rebuilds it through `use()` before loading its art.
+let surface = null;
+// True while an image cut-in owns the ticker: a registry resume must restart
+// it only then, and an idle release must never land mid-beat.
+let cinematicLive = false;
 function mountOverlay() {
   if (container) return;
   container = document.createElement("div");
@@ -111,6 +121,25 @@ function mountOverlay() {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | PIXI not available on globalThis; image cinematics disabled.`);
     return;
   }
+  createApp();
+  resizeHandler = () => {
+    if (!app) return;
+    app.renderer.resize(window.innerWidth, window.innerHeight);
+  };
+  window.addEventListener("resize", resizeHandler);
+  surface = Surfaces.register({
+    id: "critical.overlay",
+    element: () => app?.view ?? null,
+    pause: () => app?.stop(),
+    resume: () => {
+      if (cinematicLive) app?.start();
+    },
+    release: releaseApp,
+    restore: createApp
+  });
+}
+function createApp() {
+  if (app || !container) return;
   // A second WebGL context for the whole session, so it is kept lean: nothing
   // drawn here has an edge MSAA would help (a full-screen rect, an axis-aligned
   // rect mask, and a sprite that samples its own texture), and past 1.5x the
@@ -125,11 +154,25 @@ function mountOverlay() {
   });
   container.appendChild(app.view);
   app.stop();
-  resizeHandler = () => {
-    if (!app) return;
-    app.renderer.resize(window.innerWidth, window.innerHeight);
-  };
-  window.addEventListener("resize", resizeHandler);
+  surface?.observe();
+}
+/**
+ * Destroy the app and its context. The portraits come from Foundry's texture
+ * cache and are shared with the scene renderer, so only this renderer's GPU
+ * copies go — never the textures themselves — and each is unhooked from its
+ * base texture first, or a later dispose from Foundry would call into a
+ * renderer that no longer exists.
+ */
+function releaseApp() {
+  if (!app || cinematicLive) return;
+  const textures = app.renderer?.texture;
+  try {
+    for (const base of [...(textures?.managedTextures ?? [])]) textures.destroyTexture(base);
+  } catch (err) {
+    console.debug(`${MODULE_ID} | ${FEATURE_ID} | texture release:`, err);
+  }
+  app.destroy(true, { children: true, texture: false, baseTexture: false });
+  app = null;
 }
 function getOverlayApp() {
   return app;
@@ -422,6 +465,8 @@ async function runCinematic(event) {
   return runImageCinematic(event);
 }
 async function runImageCinematic(event) {
+  // Rebuilds the app if the registry released it while no crit was playing.
+  surface?.use();
   const app2 = getOverlayApp();
   if (!app2) {
     console.warn(`${MODULE_ID} | ${FEATURE_ID} | no overlay app; skipping cinematic`);
@@ -471,7 +516,8 @@ async function runImageCinematic(event) {
   };
   drawMask(0);
   playSfx(event.isPC ? "pc" : "gm");
-  app2.start();
+  cinematicLive = true;
+  if (!surface?.paused) app2.start();
   const start = performance.now();
   const motion = createCinematicMotion(event.durationMs, { scale: motionScale(container) });
   await new Promise((resolve) => {
@@ -484,8 +530,9 @@ async function runImageCinematic(event) {
       motion.destroy();
       resolve();
     };
-    const tick = () => {
+    const tick = Budget.measure("critical", () => {
       if (done) return;
+      surface?.touch();
       const elapsed = performance.now() - start;
       const frame = motion.sample(elapsed);
       backdrop.alpha = frame.bgAlpha;
@@ -494,7 +541,7 @@ async function runImageCinematic(event) {
       sprite.position.y = sh * 0.5 + frame.lift;
       drawMask(frame.wipe);
       if (elapsed >= event.durationMs) finish();
-    };
+    });
     // A hidden tab must not hold every later queued cinematic hostage.
     const watchdog = setTimeout(finish, event.durationMs + VIDEO_WATCHDOG_SLACK_MS);
     app2.ticker.add(tick);
@@ -506,7 +553,9 @@ async function runImageCinematic(event) {
   backdrop.destroy?.({ children: true });
   mask.destroy?.({ children: true });
   stage.destroy?.({ children: true });
+  cinematicLive = false;
   app2.stop();
+  surface?.touch();
 }
 
 /**

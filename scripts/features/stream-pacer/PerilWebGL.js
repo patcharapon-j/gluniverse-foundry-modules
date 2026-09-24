@@ -1,4 +1,6 @@
 import { ThemeManager } from './ThemeManager.js';
+import { Surfaces } from '../../core/gl-surfaces.mjs';
+import { Budget } from '../../core/budget.mjs';
 
 /**
  * Full-screen WebGL backdrop for the Dire Peril reveal.
@@ -12,6 +14,13 @@ import { ThemeManager } from './ThemeManager.js';
  * the existing translucent wash and lettering composite on top of it. The
  * class is self-contained: it owns its canvas, manages its own RAF loop, and
  * degrades to a no-op (leaving the CSS fallback) when WebGL is unavailable.
+ *
+ * The context is a suite Surface (core/gl-surfaces.mjs). A burst lasts a few
+ * seconds and the context then sits idle until the next declare, so under a
+ * Performance policy the registry frees it between bursts; `play()` rebuilds
+ * it lazily exactly as it does the first time. The loop is wall-clock driven,
+ * so a pause (hidden page under that policy) only skips frames — the burst
+ * still ends on time.
  */
 
 const VERT = `
@@ -168,7 +177,9 @@ export class PerilWebGL {
     this._duration = 0;
     this._running = false;
     this._supported = null;
+    this._surface = null;
     this._onResize = () => this._resize();
+    this._frame = Budget.measure('stream-pacer.peril', () => this._loop());
   }
 
   isSupported() {
@@ -229,7 +240,38 @@ export class PerilWebGL {
 
     this._resize();
     window.addEventListener('resize', this._onResize);
+
+    if (!this._surface) {
+      this._surface = Surfaces.register({
+        id: 'stream-pacer.peril',
+        element: () => this.canvas,
+        pause: () => {
+          if (this._raf) cancelAnimationFrame(this._raf);
+          this._raf = null;
+        },
+        resume: () => {
+          if (this._running && !this._raf) this._loop();
+        },
+        release: () => this._releaseContext(),
+        // Nothing to do eagerly: `play()` rebuilds through _ensureContext.
+        restore: () => {}
+      });
+    } else {
+      this._surface.observe();
+    }
     return true;
+  }
+
+  /** Free the context between bursts. Never mid-burst: the loop marks the
+   *  surface used every frame, so an idle release cannot land on one. */
+  _releaseContext() {
+    if (this._running || !this.gl) return;
+    window.removeEventListener('resize', this._onResize);
+    loseContext(this.gl);
+    this.canvas?.remove();
+    this.canvas = null;
+    this.gl = null;
+    this.program = null;
   }
 
   _buildProgram(gl, vsrc, fsrc) {
@@ -278,6 +320,7 @@ export class PerilWebGL {
    */
   play(durationMs = 4200) {
     if (!this.isSupported()) return;
+    this._surface?.use();
     if (!this._ensureContext()) return;
 
     this._duration = durationMs;
@@ -299,6 +342,7 @@ export class PerilWebGL {
 
   _loop() {
     if (!this._running || !this.gl) return;
+    this._surface?.touch();
     const gl = this.gl;
     const elapsed = (performance.now() - this._start) / 1000;
     const dur = this._duration / 1000;
@@ -323,7 +367,7 @@ export class PerilWebGL {
       this._raf = null;
       return;
     }
-    this._raf = requestAnimationFrame(() => this._loop());
+    this._raf = requestAnimationFrame(this._frame);
   }
 
   stop() {
@@ -338,6 +382,8 @@ export class PerilWebGL {
   destroy() {
     this.stop();
     window.removeEventListener('resize', this._onResize);
+    this._surface?.dispose();
+    this._surface = null;
     loseContext(this.gl);
     if (this.canvas) {
       this.canvas.remove();

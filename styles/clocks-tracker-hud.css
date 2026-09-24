@@ -66,7 +66,7 @@
     linear-gradient(98deg, var(--tint2), var(--gl-ink-1) 64%);
   border:1px solid var(--edge);
   box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .16), inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38);
-  backdrop-filter:blur(16px) saturate(1.15);
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
   transition:background var(--gl-d-slow) ease, box-shadow var(--gl-d-slow) ease, width var(--gl-d-swift) var(--gl-ease-inout);}
 /* The bar's shadow caster. JS (GlctHud._frameBar) wraps .bar in .bar-frame; the
    frame shrink-wraps the bar, so ::before is exactly the bar's box. It is the
@@ -304,7 +304,7 @@
   background:linear-gradient(180deg,color-mix(in srgb,var(--gl-signal) 16%,transparent),color-mix(in srgb,var(--gl-signal) 5%,transparent));
   border:1px solid color-mix(in srgb,var(--gl-signal) 30%,transparent);border-radius:99px;padding:4px 9px;display:inline-flex;gap:5px;align-items:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
-  box-shadow:0 6px 16px rgb(var(--gl-tint-dark) / .4),inset 0 1px 0 rgb(var(--gl-tint-light) / .1);backdrop-filter:blur(8px)}
+  box-shadow:0 6px 16px rgb(var(--gl-tint-dark) / .4),inset 0 1px 0 rgb(var(--gl-tint-light) / .1);backdrop-filter:blur(calc(8px * var(--gl-glass-k)))}
 #glct-hud .event .dot{width:5px;height:5px;border-radius:99px;background:var(--gl-signal);box-shadow:0 0 9px var(--gl-signal);flex:none}
 #glct-hud .event span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #glct-hud .event.today{background:linear-gradient(180deg,color-mix(in srgb,var(--gl-signal) 26%,transparent),color-mix(in srgb,var(--gl-signal) 9%,transparent));
@@ -317,7 +317,7 @@
 #glct-hud .gmdock{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:2px;margin:7px auto 0;padding:3px;border-radius:10px;max-width:min(96vw,720px);
   background:linear-gradient(180deg,rgba(22,27,37,.92),rgba(14,18,26,.92));
   border:1px solid var(--hair);box-shadow:0 8px 22px rgb(var(--gl-tint-dark) / .5),inset 0 1px 0 rgb(var(--gl-tint-light) / .08);
-  backdrop-filter:blur(10px);transition:opacity var(--gl-d-swift) ease}
+  backdrop-filter:blur(calc(10px * var(--gl-glass-k)));transition:opacity var(--gl-d-swift) ease}
 #glct-hud .gmwrap{display:flex;justify-content:center}
 #glct-hud .c{font-size:10.5px;font-weight: var(--gl-weight-bold);padding:4px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;user-select:none;
   appearance:none;font-family:inherit;margin:0;
@@ -615,7 +615,7 @@
     linear-gradient(180deg,rgb(var(--gl-tint-light) / .02),rgb(var(--gl-tint-dark) / .22)),linear-gradient(160deg,var(--gl-ink-3),var(--gl-ink-1) 72%);
   border:1px solid var(--edge);
   box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .15),inset 0 -12px 26px rgb(var(--gl-tint-dark) / .36);
-  backdrop-filter:blur(16px) saturate(1.15);transition:min-width var(--gl-d-swift) ease}
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));transition:min-width var(--gl-d-swift) ease}
 /* JS (TrackerHud._frameDock) wraps the dock; the frame shrink-wraps it. Same
    drop-shadow ×2 as box-shadow (blur doubled, + the second drop's shadow of the
    first — see .bar-frame), clipped
@@ -675,7 +675,7 @@
   border-radius:9px;border:1px solid var(--edge);
   background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .08),rgb(var(--gl-tint-light) / 0) 26%),linear-gradient(160deg,#1a2233,#0a0e16 78%);
   box-shadow:0 18px 44px rgb(var(--gl-tint-dark) / .62),inset 0 1px 0 rgb(var(--gl-tint-light) / .12);
-  backdrop-filter:blur(16px) saturate(1.15);
+  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
   opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top left;
   transition:opacity var(--gl-d-tap) ease,transform var(--gl-d-tap) var(--gl-pop)}
 .glct-trk-skin .trk-ctx.show{opacity:1;transform:none}
@@ -691,7 +691,7 @@
 .glct-trk-skin .trk-ctx .ctx-sep{height:1px;margin:4px 6px;background:var(--hair)}
 
 .glct-trk-skin .rovl{position:absolute;inset:0;z-index:6;display:grid;place-items:center;pointer-events:none;opacity:0;
-  transition:opacity var(--gl-d-move) ease;backdrop-filter:blur(1px)}
+  transition:opacity var(--gl-d-move) ease;backdrop-filter:blur(calc(1px * var(--gl-glass-k)))}
 .glct-trk-skin .rovl.show{opacity:1}
 .glct-trk-skin .rovl .ot{font-family:var(--clock-font);font-weight: var(--gl-weight-heavy);letter-spacing:.2em;font-size:13px;text-transform:uppercase;
   transform:scale(.7);transition:transform var(--gl-d-move) var(--gl-pop)}

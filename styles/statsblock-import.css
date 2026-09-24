@@ -38,7 +38,7 @@
     inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
     inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38),
     0 0 46px color-mix(in srgb, var(--gl-accent) 18%, transparent);
-  backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
 }
 
 .gluniverse-pf2e-importer .window-header {

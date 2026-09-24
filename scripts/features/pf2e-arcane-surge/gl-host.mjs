@@ -19,6 +19,7 @@
  * completely silent, and a silently missing overlay reads as a design choice.
  */
 
+import { Budget, supersampleFloor } from "../../core/budget.mjs";
 import { warn } from "../../core/const.mjs";
 
 /** Cached across hosts: whether this browser can give us a context at all. */
@@ -33,11 +34,23 @@ export function webglSupported() {
     // Release the probe's context now rather than whenever GC gets to it: the
     // browser caps live contexts (~16) and evicts the OLDEST first, which is
     // Foundry's own canvas, not this throwaway.
-    try { gl?.getExtension("WEBGL_lose_context")?.loseContext(); } catch { /* best-effort */ }
+    loseContext(gl);
   } catch {
     supported = false;
   }
   return supported;
+}
+
+/**
+ * Hand a context back to the browser NOW.
+ *
+ * Dropping the last reference frees nothing until GC runs, and until then the
+ * context still counts against the browser's cap — which evicts the oldest
+ * context first, and that is Foundry's own canvas. Best-effort: a context that
+ * is already lost, or a browser without the extension, is simply left to GC.
+ */
+export function loseContext(gl) {
+  try { gl?.getExtension("WEBGL_lose_context")?.loseContext(); } catch { /* best-effort */ }
 }
 
 /**
@@ -143,6 +156,20 @@ export function uniformLocations(gl, program, names) {
  * struggling one recovers within a few frames of a beat that only lasts one or
  * two seconds. Full fidelity by default; degraded on evidence, never on
  * assumption.
+ *
+ * The one exception is a GM's own statement about the table, which is evidence
+ * of a different kind: the policy's supersample floor (`core/budget.mjs`). A
+ * Performance tier opens this ladder at 1.5× and Potato at 1×, and the reflex
+ * then works downward from THAT rung, never above it. The floor is followed live
+ * — a GM changing tier mid-session reaches the next beat — through one budget
+ * listener per sampler, which `destroy()` gives back so a rebuilt context does
+ * not leave the old sampler subscribed. With the `perf` feature off the floor
+ * is 0 and this behaves exactly as it shipped.
+ *
+ * The two-strike reflex stays here rather than moving to the shared ladder on
+ * purpose: it is a per-beat judgement about THIS pass's cost at THIS size, made
+ * in the two seconds a beat lasts, where the shared reflex's rolling average
+ * would not have moved yet.
  */
 export const SS_LADDER = Object.freeze([2, 1.5, 1]);
 /** Beyond this the scratch allocation stops being reasonable on mid-tier GPUs. */
@@ -158,8 +185,32 @@ export class SuperSampler {
     this.texture = null;
     this.size = [0, 0];
     this.fbo = gl.createFramebuffer();
-    this.rung = 0;
+    this.floor = supersampleFloor(SS_LADDER.length);
+    this.rung = this.floor;
     this.slowFrames = 0;
+    this._unwatch = Budget.onChange((why) => {
+      if (why === "policy") this._followFloor();
+    });
+  }
+
+  /**
+   * Re-read the policy's floor after a policy change.
+   *
+   * A raised floor pulls the rung down to it at once; a lowered one gives the
+   * quality back, because a GM moving the table to a better tier has said the
+   * machine can take it, and strikes counted under the old tier were judged
+   * against a different ask. An unchanged floor is a no-op, so a governor that
+   * re-pushes the same policy never undoes the reflex's evidence.
+   */
+  _followFloor() {
+    const floor = supersampleFloor(SS_LADDER.length);
+    if (floor === this.floor) return;
+    this.rung = floor > this.floor ? Math.max(this.rung, floor) : floor;
+    this.floor = floor;
+    this.slowFrames = 0;
+    // Only while a beat holds the scratch: between beats it is released, and a
+    // policy change must not quietly bring it back.
+    if (this.texture) this.ensure();
   }
 
   /** Composition size before supersampling, clamped on the long edge. */
@@ -263,6 +314,8 @@ export class SuperSampler {
   }
 
   destroy() {
+    this._unwatch?.();
+    this._unwatch = null;
     const gl = this.gl;
     try { if (this.texture) gl.deleteTexture(this.texture); } catch { /* best-effort */ }
     try { if (this.fbo) gl.deleteFramebuffer(this.fbo); } catch { /* best-effort */ }

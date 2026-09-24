@@ -48,7 +48,7 @@
   display: grid;
   grid-template-columns: calc(5 * var(--u)) minmax(0, 1fr) auto;
   background: color-mix(in srgb, var(--gl-surface) 88%, transparent);
-  backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k))) saturate(1.15);
   box-shadow: var(--gl-etch);
   clip-path: polygon(0 0, calc(100% - 0.65 * var(--u)) 0, 100% calc(0.65 * var(--u)), 100% 100%, 0 100%);
   overflow: hidden;
@@ -424,7 +424,7 @@
   gap: calc(0.6 * var(--u));
   padding: 0 calc(1 * var(--u)) 0 calc(0.8 * var(--u));
   background: color-mix(in srgb, var(--gl-ink-2) 90%, transparent);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   border-top: 1px solid var(--gl-hair);
   clip-path: polygon(0 0, 100% 0, 100% 100%, calc(0.5 * var(--u)) 100%, 0 calc(100% - 0.5 * var(--u)));
   overflow: hidden;
@@ -566,7 +566,7 @@
   gap: calc(0.5 * var(--u));
   padding: 0 calc(0.9 * var(--u)) 0 calc(0.5 * var(--u));
   background: color-mix(in srgb, var(--gl-ink-2) 90%, transparent);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   box-shadow: var(--gl-etch-soft);
   /* The damage row's chamfer, mirrored: that row hangs off an attack above it, this card stands alone. */
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 0.5 * var(--u)), calc(100% - 0.5 * var(--u)) 100%, 0 100%);

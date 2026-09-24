@@ -18,10 +18,18 @@
  * on it. It already pauses itself while the document is hidden, which is why
  * this layer costs nothing in a background tab and carries no visibility
  * handler of its own.
+ *
+ * SHEDDING RIDES `core/budget.mjs`. The renderer used to time its own frames
+ * on a one-second anime timer to feed a private rolling average; the suite's
+ * shared reflex already measures every frame, so this layer now only LISTENS
+ * for the feature's ladder (`ladder.mjs`) to change and pauses or plays the
+ * drift when it does. That import is still drivable from the preview: the
+ * budget is dependency-free and reads nothing of Foundry's.
  */
 
-import { animate, createMotionOwner, createTimer } from "../../core/motion.mjs";
-import { FrameBudget } from "./anim.mjs";
+import { Budget } from "../../core/budget.mjs";
+import { animate, createMotionOwner } from "../../core/motion.mjs";
+import { acquireLadder, releaseLadder } from "./ladder.mjs";
 import {
   BLEED_PX,
   FLOW_PERIOD_PX,
@@ -37,12 +45,6 @@ import {
 /** How long the weave takes to spread or close when the level changes.
  *  A cut would announce the change; a spread lets people notice it. */
 export const FADE_MS = 1100;
-
-/** A frame gap longer than this is a tab coming back, not a slow machine. The
- *  shared engine stops while the document is hidden, so the first tick after a
- *  return carries the whole absence with it — fed to the budget it sheds the
- *  drift on a machine that is doing nothing at all. */
-const RESUME_GAP_MS = 200;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -63,7 +65,7 @@ const reshapes = (a, b) =>
 export class WeaveRenderer {
   constructor({ seed = Math.random() * 100 } = {}) {
     this.seed = seed;
-    this.budget = new FrameBudget();
+    this.budget = acquireLadder();
     this.motion = createMotionOwner();
     /** The live, animated state — the only two things `_paint()` writes. */
     this.state = { opacity: 0, reach: 0.5 };
@@ -75,9 +77,8 @@ export class WeaveRenderer {
     this._built = null;
     this._wanted = null;
     this._fade = null;
-    this._clock = null;
+    this._unwatch = null;
     this._drifting = false;
-    this._last = 0;
     this._box = null;
     this._observer = null;
     this._build();
@@ -293,31 +294,29 @@ export class WeaveRenderer {
       }));
     }
     this._drifting = true;
-    this._ensureClock();
+    this._watchBudget();
+    this._applyShed();
   }
 
   /**
-   * The load-shedding clock.
+   * Follow the shared budget.
    *
    * `drift` stops the weave's MOTION and leaves the weave: what degrades under
    * load must be the animation, never the state — a player whose machine is
    * struggling should not stop being able to see that the world is unstable.
-   * The clock keeps ticking while the drift is shed, which is the only reason
-   * the shed can ever be taken back.
+   * The shed can be taken back because the budget's own loop keeps measuring
+   * while the drift is frozen, and says so here when its level moves. One
+   * listener per renderer, given back in `destroy()`.
    */
-  _ensureClock() {
-    if (this._clock) return;
-    this._last = 0;
-    this._clock = createTimer({ duration: 1000, loop: true, onUpdate: () => this._tick() });
+  _watchBudget() {
+    this._unwatch ??= Budget.onChange(() => this._applyShed());
   }
 
-  _tick() {
-    const now = performance.now();
-    const dt = this._last ? now - this._last : 0;
-    this._last = now;
-    if (dt > 0 && dt < RESUME_GAP_MS) this.budget.sample(dt);
-
-    const allowed = this.budget.allows("drift");
+  _applyShed() {
+    /* The drift is ambient motion — the weave's STATE is its shape, which stays.
+       It holds while the budget says ambient motion should (a pan in progress,
+       or a Performance tier that turns ambient loops off) as well as when shed. */
+    const allowed = (this.budget?.allows("drift") ?? true) && Budget.ambientAllowed;
     if (allowed === this._drifting) return;
     this._drifting = allowed;
     for (const animation of this.motion.list()) allowed ? animation.play() : animation.pause();
@@ -362,8 +361,8 @@ export class WeaveRenderer {
   destroy() {
     this._fade?.cancel();
     this._fade = null;
-    this._clock?.cancel();
-    this._clock = null;
+    this._unwatch?.();
+    this._unwatch = null;
     this.motion.clear();
     this._observer?.disconnect();
     this._observer = null;
@@ -376,6 +375,7 @@ export class WeaveRenderer {
     this._wanted = null;
     this._box = null;
     this._drifting = false;
-    this.budget.reset();
+    if (this.budget) releaseLadder();
+    this.budget = null;
   }
 }

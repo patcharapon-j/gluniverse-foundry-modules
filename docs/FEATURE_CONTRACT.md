@@ -100,8 +100,8 @@ Suite.register({
                            //   "Core" chip. NO feature declares it: clocks-tracker
                            //   used to, and a campaign that tracks no in-game time
                            //   had no way to switch the calendar off.
-  defaultEnabled: false,   // opt-in by default; only clocks-tracker and
-                           //   clocks-trackers ship enabled
+  defaultEnabled: false,   // opt-in by default; only clocks-tracker,
+                           //   clocks-trackers and perf ship enabled
 
   // Always called at init. Register ALL of the feature's settings/menus here so
   // the toggles exist even when the feature is disabled.
@@ -228,6 +228,7 @@ rather than at the end.
 | stream-cards       | stream.card                  | pf2e              | ⤷ stream        | off     |
 | stream-targets     | tgt.                         | null              | —               | off     |
 | hexcrawl           | hex.                         | null              | —               | off     |
+| perf               | perf.                        | null              | —               | ON      |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

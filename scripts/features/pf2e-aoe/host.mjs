@@ -1,10 +1,11 @@
 /** PF2e AoE — layered PIXI host for Region effects. */
 
 import { createBloomFilter } from "../../core/bloom.mjs";
+import { Budget } from "../../core/budget.mjs";
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { PRECISION } from "../../core/glsl.mjs";
 import { TREATMENTS } from "./constants.mjs";
-import { AoeAnim, SHED_AT, SHED_ORDER, UNSHED_AT } from "./anim.mjs";
+import { AoeAnim, SHED_ORDER } from "./anim.mjs";
 import { auraNativeNodes, auraRegionFor, auraRegions } from "./aura.mjs";
 import { cellStateAt, regionCells, regionGeometry, seedFor, isEffectRegion } from "./data.mjs";
 import { presentationStyle } from "./presentation.mjs";
@@ -316,14 +317,20 @@ class AoeHost {
   constructor() {
     this.entries = new Map();
     this.options = { motionScale: 1, maxConcurrent: 24, quality: "auto" };
-    this.shed = 0;
-    this.frameAvg = 16;
-    this.coolFrames = 0;
     this.auraNative = new Map();
     this.errors = new Set();
     this.minShed = 0;
+    /* Shedding rides the suite's shared frame budget (core/budget.mjs): the
+       ladder's level is the max of this feature's quality floor, the policy's
+       tier floor and the shared reflex, so there is no private frame average
+       here any more. Bound in attach(), not here — this host is a module-scope
+       singleton, and a ladder starts the budget's frame loop, which must not
+       happen at import time. */
+    this.ladder = null;
+    this._unbudget = null;
     this._last = 0;
-    this._tick = this.tick.bind(this);
+    /* Stable reference: the ticker removes by identity. */
+    this._tick = Budget.measure("pf2e-aoe", this.tick.bind(this));
     this._ticking = false;
     /* tokenId -> whether its aura entries need a full rebuild, not just edges. */
     this._dirtyTokens = new Map();
@@ -337,7 +344,6 @@ class AoeHost {
   configure(options = {}) {
     this.options = { ...this.options, ...options };
     this.minShed = { high: 0, medium: 2, low: 4 }[this.options.quality] ?? 0;
-    this.shed = Math.max(this.shed, this.minShed);
     for (const entry of this.entries.values()) entry.anim.motionScale = this.options.motionScale;
     this.updateActivity();
   }
@@ -345,6 +351,11 @@ class AoeHost {
   attach() {
     this.detach();
     if (!canvas?.ready || !PIXI?.Container) return;
+    this.ladder = Budget.ladder("pf2e-aoe", SHED_ORDER, { minShed: () => this.minShed });
+    /* The level can move while the tick is stopped (motion "none", a tier
+       change from the Performance feature), and nothing else would write the
+       gates until the next pan. The tick writes every frame when it runs. */
+    this._unbudget = Budget.onChange(() => { if (!this._ticking) this.writeAll(); });
     this.ground = new PIXI.Container();
     this.ground.name = "gl-aoe-ground";
     this.ground.sortableChildren = true;
@@ -397,6 +408,15 @@ class AoeHost {
     try { this.bloom?.destroy?.(); } catch { /* noop */ }
     this.bloom = null;
     this.restoreAuraNative();
+    this._unbudget?.();
+    this._unbudget = null;
+    this.ladder?.dispose();
+    this.ladder = null;
+  }
+
+  /** Behaviours shed off the front of SHED_ORDER right now. */
+  get shedLevel() {
+    return this.ladder ? this.ladder.level : this.minShed;
   }
 
   /** True while some entry needs a frame it will not be given by an event. */
@@ -430,6 +450,9 @@ class AoeHost {
       ticker?.remove(this._tick);
       this._ticking = false;
     }
+    /* While this host wants frames something on the canvas is moving on its
+       own, so the Performance feature's idle-rate drop must not slow it. */
+    Budget.claimMotion("pf2e-aoe", this._ticking);
   }
 
   refreshAll() {
@@ -690,7 +713,7 @@ class AoeHost {
       entry.edges = new PIXI.Container();
       entry.edges.eventMode = "none";
       entry.edges.zIndex = 0;
-      entry.edges.renderable = this.shed < 1;
+      entry.edges.renderable = this.shedLevel < 1;
       this.spectacle?.addChild(entry.edges);
     }
     const have = new Set();
@@ -816,7 +839,8 @@ class AoeHost {
   }
 
   write(entry) {
-    const fx = [this.shed < 2 ? 1 : 0, this.shed < 3 ? 1 : 0, this.shed < 4 ? 1 : 0, this.shed < 5 ? 1 : 0];
+    const shed = this.shedLevel;
+    const fx = [shed < 2 ? 1 : 0, shed < 3 ? 1 : 0, shed < 4 ? 1 : 0, shed < 5 ? 1 : 0];
     for (const mesh of entry.meshes) {
       const u = mesh.shader?.uniforms;
       if (!u) continue;
@@ -834,7 +858,7 @@ class AoeHost {
       const pixels = mesh.glAoeQuadPx * scale * resolution;
       u.uTexel = pixels > 0 ? mesh.glAoeGridSpan / pixels : 0;
     }
-    if (entry.edges) entry.edges.renderable = this.shed < 1;
+    if (entry.edges) entry.edges.renderable = this.shedLevel < 1;
     if (entry.label) {
       const zoom = Math.abs(canvas.stage?.scale?.x ?? 1) || 1;
       const scale = clamp(1 / zoom, 0.78, 1.35);
@@ -848,12 +872,6 @@ class AoeHost {
     const now = performance.now();
     const dt = this._last ? Math.min(100, now - this._last) : 16;
     this._last = now;
-    this.frameAvg = this.frameAvg * 0.94 + dt * 0.06;
-    if (this.frameAvg > SHED_AT && this.shed < SHED_ORDER.length) {
-      this.shed += 1; this.coolFrames = 0;
-    } else if (this.frameAvg < UNSHED_AT && this.shed > this.minShed) {
-      if (++this.coolFrames > 120) { this.shed -= 1; this.coolFrames = 0; }
-    } else this.coolFrames = 0;
 
     const settled = [];
     for (const [id, entry] of this.entries) {

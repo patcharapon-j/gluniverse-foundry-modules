@@ -1,0 +1,31 @@
+<div class="glperf-audit gl-type">
+  <header class="glperf-audit-head">
+    <div class="glperf-audit-summary">
+      <span class="gl-tech-label">{{scene}}</span>
+      <span class="glperf-audit-total gl-numeric">{{localize "GLPERF.audit.summary" count=count total=total flagged=flagged}}</span>
+    </div>
+    <button type="button" class="gl-btn" data-action="refresh">
+      <i class="fa-solid fa-rotate"></i> {{localize "GLPERF.audit.refresh"}}
+    </button>
+  </header>
+  <p class="glperf-note">{{localize "GLPERF.audit.hint"}}</p>
+  <div class="glperf-audit-list">
+    {{#each rows}}
+    <article class="glperf-audit-row {{#if flags.length}}is-flagged{{/if}}">
+      <div class="glperf-audit-main">
+        <span class="glperf-audit-name" data-tooltip="{{src}}">{{name}}</span>
+        <span class="glperf-audit-meta gl-numeric">{{kind}} · {{size}} · {{mb}} MB{{#if (gt uses 1)}} · ×{{uses}}{{/if}}</span>
+      </div>
+      {{#if flags.length}}
+      <ul class="glperf-audit-flags">
+        {{#each flags}}
+        <li class="glperf-audit-flag is-{{id}}"><strong>{{label}}</strong> {{advice}}</li>
+        {{/each}}
+      </ul>
+      {{/if}}
+    </article>
+    {{else}}
+    <p class="glperf-note">{{localize "GLPERF.audit.empty"}}</p>
+    {{/each}}
+  </div>
+</div>

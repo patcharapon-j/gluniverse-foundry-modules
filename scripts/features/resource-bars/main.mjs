@@ -9,6 +9,7 @@
  */
 
 import { SUITE_ID, log, warn } from "../../core/const.mjs";
+import { coalescePan } from "../../core/pan.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 import { DIVIDER, READOUT, SETTINGS } from "./constants.mjs";
@@ -165,7 +166,7 @@ export function onReady() {
 
   /* Pan and zoom change which bars are on screen, and the filtered container is
      measured from the ones that are. */
-  on("canvasPan", () => host.cull());
+  on("canvasPan", coalescePan(() => host.cull()));
 
   /* A drag preview is a clone that carries the real token's id. Every hook here
      refuses one: bound to a preview, the real token's bar follows the ghost

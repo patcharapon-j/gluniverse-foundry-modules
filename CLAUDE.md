@@ -30,6 +30,8 @@ scripts/
     theme.mjs               JS side of the design system: palette mirror, colour
                             maths, motion tiers, retheme hook (canvas/PIXI only)
     util.mjs                Shared pure helpers (clamp/toInt/hex6/escapeHTML/…)
+    budget.mjs              The one frame clock; every SHED_ORDER binds here
+    gl-surfaces.mjs         Pause/release lifecycle for suite WebGL contexts
     face-frame.mjs          Shared head locator for portrait framing (docs/FACE_FRAME.md)
     face-frame-math.mjs     Its pure crop/placement geometry
   features/
@@ -49,6 +51,7 @@ assets/<featureId>/         Images, sounds
 docs/DESIGN_SYSTEM.md       The token pool, the theme contract, retheming
 docs/FEATURE_CONTRACT.md    Binding contract for porting/adding a feature
 docs/PORTING_GUIDE.md       How a standalone module was migrated in
+docs/PERFORMANCE.md         The perf feature: tiers, governor, core patches
 ```
 
 The three `gl-*.css` files load first, in that order, so every feature sheet can
@@ -1458,6 +1461,59 @@ one system and a throwaway `world.json`, launched with `node main.mjs
 --dataPath=<scratch> --port=30017 --world=<id>`, is enough, and keeps a broken
 unrelated package in the real data folder from stopping the server. See
 `docs/HEXCRAWL.md`.
+
+**When touching the Performance feature, the shared frame budget or any
+feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
+`core/pan.mjs`, any `SHED_ORDER`, any suite WebGL context, any backdrop blur),
+re-run its check. Everything it covers fails silently:
+
+```bash
+node tools/perf-check.mjs
+```
+
+Zero problems required. Five things are worth knowing before you change any of it.
+
+**There is one frame clock.** Shedding is `Budget.ladder(id, SHED_ORDER)` in
+`core/budget.mjs`, never a private rolling average. A second clock sheds on its
+own schedule while the overlay and the GM's floor say the table is fine, and the
+check refuses `x = x * 0.9 + dt * 0.1` in any feature. The budget is always
+imported and always works: with `perf` off it runs the shipped 22/15 ms policy.
+Never make a feature ask "is perf on?"; the feature only changes the POLICY.
+
+**The feature never writes a core setting.** Performance mode, resolution, the
+ticker rate and sight during moves are runtime overrides. Choosing Quality or
+switching the feature off must restore the user's own Foundry exactly, which a
+write cannot. Every override is listed in the overlay beside the user's own value
+(`overrides.mjs`), because a Foundry setting that appears to do nothing is
+otherwise a bug report.
+
+**Core patches are generation-gated AND integrity-checked.** Each
+`Patches.define()` names a `signature`, a fragment of the pristine method's
+source. A patch whose target no longer contains it (core changed it, or another
+module replaced it) stands down with "Conflict" instead of guessing. When
+Foundry updates, re-read each target, update the signature, and extend
+`VERIFIED_GENERATIONS`. Do not loosen the check.
+
+**Balanced promises no visible change.** The idle-rate drop must not slow
+anything that moves on its own. A suite feature that animates on the canvas
+without input calls `Budget.claimMotion(id, true)` while it does (resource
+bars and PF2e areas already do), or Balanced visibly stutters on exactly that
+thing. Every visual trade belongs at Performance or below, and the check pins
+Quality as the identity row.
+
+**A WebGL context the suite owns is registered with `Surfaces`,** and the
+feature calls `use()` before each draw so a context released while idle is
+rebuilt first. A lost context stays lost on its canvas, so a rebuild needs a new
+canvas. Every backdrop blur is written against `--gl-blur` / `--gl-glass-k`
+(DESIGN_SYSTEM.md rule 9). A bare-pixel blur ignores the player's tier. The
+check requires both.
+
+`node tools/perf-bench.mjs` drives a stress page of real glass and ambient
+loops through Playwright or a local headless Chrome and prints frame intervals
+per glass level. It runs uncapped, so it shows main-thread cost; a backdrop
+blur's GPU cost only shows as dropped frames in the in-session overlay. See
+`docs/PERFORMANCE.md` for the tier table, the governor and the live-session
+checklist.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

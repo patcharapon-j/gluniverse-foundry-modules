@@ -1,0 +1,307 @@
+/* ════════════════════════════════════════════════════════════════════════
+   GLUniverse Suite — Performance feature
+   The measurement overlay and the GM's floor sheet. Deliberately the cheapest
+   surface in the suite: no backdrop blur, no ambient loop, no shadow that
+   animates. An overlay that measures frame time must not be one of the things
+   costing it.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── The overlay ─────────────────────────────────────────────────────── */
+#glperf-overlay {
+  position: fixed;
+  /* Clear of the scene controls on the left and of every top-centre HUD in the
+     suite (time, timer, trackers). The header drags it anywhere; the spot a
+     player leaves it in is remembered per browser. */
+  top: 96px;
+  left: 72px;
+  z-index: var(--gl-z-hud);
+  width: 272px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  font-size: var(--gl-fs-sm);
+  --gl-accent: var(--gl-cyan);
+  /* The one glass surface that must never blur the canvas behind it. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--gl-surface-raised);
+  pointer-events: auto;
+}
+
+#glperf-overlay[data-tier="performance"] { --gl-accent: var(--gl-warn); }
+#glperf-overlay[data-tier="potato"] { --gl-accent: var(--gl-hazard); }
+
+.glperf-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.glperf-head.is-dragging { cursor: grabbing; }
+
+.glperf-title {
+  flex: 1;
+  color: var(--gl-text-bright);
+}
+
+.glperf-chip {
+  padding: 1px 8px;
+  border-radius: var(--gl-r-pill);
+  border: 1px solid var(--gl-accent);
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glperf-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glperf-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  line-height: var(--gl-lh-snug);
+}
+
+.glperf-k {
+  color: var(--gl-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glperf-v {
+  color: var(--gl-text);
+  font-family: var(--gl-tech);
+  white-space: nowrap;
+}
+
+.glperf-row.is-over .glperf-v,
+.glperf-row.is-conflict .glperf-v,
+.glperf-row.is-error .glperf-v,
+.glperf-row.is-version .glperf-v { color: var(--gl-hazard); }
+.glperf-row.is-warn .glperf-v,
+.glperf-row.is-missing .glperf-v { color: var(--gl-warn); }
+.glperf-row.is-off .glperf-v,
+.glperf-row.is-idle .glperf-v { color: var(--gl-text-faint); }
+
+.glperf-sub {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--gl-hair);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-xs);
+}
+
+.glperf-foot {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* .gl-btn declares no font-size and pads in em; size it here or it inherits
+   whatever the host is (see CLAUDE.md). */
+#glperf-overlay .gl-btn,
+.glperf-floor .gl-btn {
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-tight);
+}
+
+.glperf-foot .gl-btn { flex: 1; }
+
+.glperf-icon.gl-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+
+/* ── The floor sheet ─────────────────────────────────────────────────── */
+.glperf-floor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--gl-fs-md);
+}
+
+.glperf-note {
+  margin: 0;
+  color: var(--gl-text-dim);
+  line-height: var(--gl-lh-normal);
+}
+
+.glperf-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.glperf-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.glperf-table th {
+  text-align: left;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--gl-edge);
+}
+
+.glperf-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--gl-hair);
+  vertical-align: middle;
+}
+
+.glperf-table tr.is-away { opacity: 0.6; }
+
+.glperf-user { white-space: nowrap; }
+
+.glperf-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--gl-text-faint);
+}
+
+.glperf-dot.is-on { background: var(--gl-good); }
+
+.glperf-gm {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-signal);
+}
+
+.glperf-center { text-align: center; }
+
+.glperf-report {
+  font-size: var(--gl-fs-sm);
+  color: var(--gl-text);
+}
+
+.glperf-when {
+  display: block;
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-faint);
+}
+
+.glperf-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.glperf-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Minimised windows ───────────────────────────────────────────────────
+   A minimised window still carries its rendered content, and an infinite loop
+   inside it keeps compositing for a panel nobody can see. Only while the
+   Performance feature is running (it writes data-gl-perf). */
+:root[data-gl-perf] .application.minimized .window-content *,
+:root[data-gl-perf] .app.minimized .window-content * {
+  animation-play-state: paused !important;
+}
+
+/* ── The texture audit ───────────────────────────────────────────────── */
+.glperf-audit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  font-size: var(--gl-fs-md);
+}
+
+.glperf-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.glperf-audit-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glperf-audit-total { color: var(--gl-text); }
+
+.glperf-audit-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.glperf-audit-row {
+  padding: 6px 8px;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+}
+
+.glperf-audit-row.is-flagged { border-color: color-mix(in srgb, var(--gl-warn) 45%, transparent); }
+
+.glperf-audit-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.glperf-audit-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gl-text-bright);
+}
+
+.glperf-audit-meta {
+  flex: none;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+}
+
+.glperf-audit-flags {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--gl-fs-sm);
+  color: var(--gl-text-dim);
+}
+
+.glperf-audit-flag strong { color: var(--gl-warn); }
+.glperf-audit-flag.is-huge strong { color: var(--gl-hazard); }
+
+.glperf-audit .gl-btn {
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-tight);
+}

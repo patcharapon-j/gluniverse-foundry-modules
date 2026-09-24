@@ -192,7 +192,7 @@
   position:fixed; min-width:180px; padding:5px; border-radius:10px; opacity:0; transform:scale(.96);
   background:linear-gradient(180deg, rgba(28,30,40,.98), rgba(18,20,28,.98));
   border:1px solid rgb(var(--gl-tint-light) / .12); box-shadow:0 12px 36px rgb(var(--gl-tint-dark) / .55);
-  transition:opacity var(--gl-d-tap) ease, transform var(--gl-d-tap) ease; backdrop-filter:blur(6px);
+  transition:opacity var(--gl-d-tap) ease, transform var(--gl-d-tap) ease; backdrop-filter:blur(calc(6px * var(--gl-glass-k)));
 }
 .glct-delve-ctx.show{ opacity:1; transform:none; }
 .glct-delve-ctx .ctx-item{
