@@ -64,6 +64,8 @@ export function seedFromSample(sample, base) {
   // The light's colour is the background's where the light appears to be.
   const key = columnAt(sample, sample.centroid?.[0] ?? 0.5);
   g.gradient.color = toHex(toKeyLight(key));
+  // The rim is the same lamp seen at a grazing angle: its colour, but hotter.
+  g.rim.color = toHex(mix(toKeyLight(key), [1, 1, 1], 0.5));
   if (!sample.degraded && sample.centroid) {
     g.light.angle = lightAngleFrom(sample.centroid, sample.aspect);
   }

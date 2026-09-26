@@ -64,6 +64,10 @@ const dial = (min, max, step, dflt, neutral) =>
 //              side, soft-light blended
 //   wash       the room's colour over the whole figure, as a luminance-neutral
 //              cast; and how far the figure darkens with Foundry's scene darkness
+//   rim        light catching the edge that faces the lamp: the silhouette,
+//              shifted toward the light and blurred, cut out of itself — the
+//              inner-shadow model — screened on in the rim's colour
+//   backShadow the side turned away from the lamp, darkened
 //
 // `light` is not a layer: it is the one light the scene has, shared by every
 // layer that has a direction, so every character is lit from the same side.
@@ -83,17 +87,28 @@ export const SECTIONS = Object.freeze({
     /** Direction from the character toward the light, degrees: 0 right, 90 up,
      *  180 left, -90 down. */
     angle: dial(-180, 180, 1, 90),
+    /** How much of the figure the light's falloff spans: 0 is a hard
+     *  terminator across the middle, 100 a ramp from edge to edge. Shared by the
+     *  gradient and the back shadow, which are the two sides of one falloff. */
+    softness: dial(0, 100, 1, 70),
   }),
   gradient: Object.freeze({
     amount: dial(0, 100, 1, 35, 0),
-    /** How much of the figure the ramp spans: 0 is a hard terminator across the
-     *  middle, 100 a ramp from edge to edge. */
-    softness: dial(0, 100, 1, 70),
   }),
   wash: Object.freeze({
     amount: dial(0, 100, 1, 30, 0),
     /** How far the figure dims at full scene darkness. */
     darkness: dial(0, 100, 1, 65, 0),
+  }),
+  rim: Object.freeze({
+    amount: dial(0, 100, 1, 60, 0),
+    /** How far in from the edge the rim reaches ("light depth"). */
+    width: dial(0, 100, 1, 30),
+    /** How soft the rim's inner edge is. */
+    softness: dial(0, 100, 1, 40),
+  }),
+  backShadow: Object.freeze({
+    amount: dial(0, 100, 1, 35, 0),
   }),
   skin: Object.freeze({
     guard: dial(0, 100, 1, 50),
@@ -104,7 +119,22 @@ export const SECTIONS = Object.freeze({
 export const COLORS = Object.freeze({
   gradient: Object.freeze({ color: "#ffe6c4" }),
   wash: Object.freeze({ color: "#808080" }),
+  rim: Object.freeze({ color: "#fff4e6" }),
 });
+
+/** Rim reach at `width` 100, as a fraction of the art's height. */
+export const RIM_MAX_WIDTH = 0.06;
+
+/** How far the back shadow darkens the far side at `amount` 100, in linear
+ *  light. Never to black: a figure's shadow side still has the room in it. */
+export const BACK_SHADOW_MAX = 0.7;
+
+/** Taps on the ring the rim's blur samples, plus one at the centre. */
+export const RIM_TAPS = 8;
+
+/** How quickly the rim reaches full strength across its edge. The directional
+ *  difference it is built from rarely reaches 1 inside a soft rim. */
+export const RIM_GAIN = 1.5;
 
 // Kept as named exports because the actor trim and the check tool speak in
 // basic-correction terms.
@@ -308,17 +338,31 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
     cast = cast.map((x) => 1 + (x - 1) * k);
   }
 
+  const asp = Math.max(Number(aspect) || 0.5, 0.05);
+  // Image space: +Y is down, so "up" is a negative Y.
+  const dir = [Math.cos(rad), -Math.sin(rad)];
+
+  // The rim, in the art's uv. Lengths are measured in units of the art's
+  // height and divided by the aspect on x, so the rim is as wide on the side of
+  // a tall portrait as it is on top of it. A rim with no reach is no rim.
+  const reach = (g.rim.width / 100) * RIM_MAX_WIDTH;
+  const blur = reach * (0.25 + g.rim.softness / 100);
+
   return {
     ...basicParams(g.basic, trim),
-    aspect: Math.max(Number(aspect) || 0.5, 0.05),
-    // Image space: +Y is down, so "up" is a negative Y.
-    lightDir: [Math.cos(rad), -Math.sin(rad)],
+    aspect: asp,
+    lightDir: dir,
+    lightSoft: 0.08 + 0.92 * (g.light.softness / 100),
     gradAmount: g.gradient.amount / 100,
-    gradSoft: 0.08 + 0.92 * (g.gradient.softness / 100),
     gradColor: hexToRgb(g.gradient.color),
     washAmount: g.wash.amount / 100,
     washCast: cast,
     darkGain: 1 - Math.min(Math.max(Number(darkness) || 0, 0), 1) * (g.wash.darkness / 100),
+    rimAmount: reach > 0 ? g.rim.amount / 100 : 0,
+    rimOffset: [(dir[0] * reach) / asp, dir[1] * reach],
+    rimRadius: [blur / asp, blur],
+    rimColor: hexToRgb(g.rim.color),
+    backAmount: (g.backShadow.amount / 100) * BACK_SHADOW_MAX,
     skin: g.skin.guard / 100,
   };
 }
@@ -569,7 +613,41 @@ export function litWeight(uv, p) {
   const dy = p.lightDir[1];
   const half = 0.5 * (Math.abs(dx) * p.aspect + Math.abs(dy));
   const t = (px * dx + py * dy) / Math.max(half, 1e-6);
-  return smoothstep(-p.gradSoft, p.gradSoft, t);
+  return smoothstep(-p.lightSoft, p.lightSoft, t);
+}
+
+/** The blurred silhouette around a point: the centre and a ring of taps. */
+export function ringAlpha(cx, cy, p, alphaAt) {
+  let sum = alphaAt(cx, cy);
+  for (let i = 0; i < RIM_TAPS; i++) {
+    const a = (i * 2 * Math.PI) / RIM_TAPS;
+    sum += alphaAt(cx + Math.cos(a) * p.rimRadius[0], cy + Math.sin(a) * p.rimRadius[1]);
+  }
+  return sum / (RIM_TAPS + 1);
+}
+
+/**
+ * How much rim light lands on a point: the inner-shadow model, made
+ * directional.
+ *
+ * The blurred silhouette here, minus the blurred silhouette shifted toward the
+ * light, is high exactly where moving toward the lamp leaves the figure — the
+ * edge that faces it. Using the shifted silhouette alone (the plain inner
+ * shadow) also lights every edge the blur reaches, including ones that run
+ * parallel to the light, which reads as an outline rather than a rim. Where the
+ * art is cut off by its own frame, coverage clamps at the border, so a cropped
+ * bust gets no false rim along the crop. `alphaAt(u, v)` samples the art's
+ * coverage — the shader's texture, or the harness's copy of it.
+ */
+export function rimMask(uv, alpha, p, alphaAt) {
+  const here = ringAlpha(uv[0], uv[1], p, alphaAt);
+  const shifted = ringAlpha(uv[0] + p.rimOffset[0], uv[1] + p.rimOffset[1], p, alphaAt);
+  return alpha * Math.min(Math.max((here - shifted) * RIM_GAIN, 0), 1);
+}
+
+/** Screen, per channel, on encoded values. */
+export function screen(b, s) {
+  return 1 - (1 - b) * (1 - s);
 }
 
 /** W3C soft-light, per channel, on encoded values. */
@@ -610,8 +688,9 @@ export function basicCorrect(lin, p) {
 
 /**
  * The whole stack for one pixel. `srgb` is the original art's encoded colour,
- * `uv` its position in the art. Returns encoded colour, before master
- * intensity.
+ * `uv` its position in the art, `alpha` its coverage, and `alphaAt(u, v)`
+ * samples coverage anywhere in the art (the rim needs its neighbourhood).
+ * Returns encoded colour, before master intensity.
  *
  * The result is formed as `input + (out − in)` in encoded space, with both
  * encodes taken from the same expression. With every layer neutral the linear
@@ -620,7 +699,7 @@ export function basicCorrect(lin, p) {
  * identity. Every layer is skipped outright at its neutral value for the same
  * reason.
  */
-export function shadePixel(srgb, uv, p) {
+export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1) {
   const lin = srgb.map(toLinear);
   const guard = p.skin * skinMask(srgb);
 
@@ -646,6 +725,22 @@ export function shadePixel(srgb, uv, p) {
   }
   // …and the room's darkness, which is level only — skin takes it in full.
   if (p.darkGain !== 1) c = c.map((x) => x * p.darkGain);
+
+  // Rim: the edge facing the lamp, screened on in the rim's colour. It is
+  // light, not pigment, so skin takes it as it is.
+  if (p.rimAmount > 0 && alphaAt) {
+    const w = p.rimAmount * rimMask(uv, alpha, p, alphaAt);
+    if (w > 0) {
+      const e = c.map(toSRGB);
+      c = e.map((x, i) => toLinear(x + (screen(Math.min(Math.max(x, 0), 1), p.rimColor[i]) - x) * w));
+    }
+  }
+
+  // Back shadow: the side turned away from the lamp, darker. Level only.
+  if (p.backAmount > 0) {
+    const k = 1 - p.backAmount * (1 - litWeight(uv, p));
+    if (k !== 1) c = c.map((x) => x * k);
+  }
 
   c = gamutFit(c);
   return srgb.map((x, i) => Math.min(Math.max(x + (toSRGB(c[i]) - toSRGB(lin[i])), 0), 1));

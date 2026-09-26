@@ -91,6 +91,10 @@ export function cssFallbackFor(grade, trim, intensity, darkness = 0) {
       opacity: p.gradAmount * k,
     },
     wash: { color: washTint, opacity: p.washAmount * k },
+    // The back shadow is the same ramp from the other side. The rim has no
+    // honest CSS equivalent — an inner edge light needs the art's pixels — so
+    // the fallback leaves it out rather than faking it with an outer glow.
+    shade: { angle: cssGradientAngle(g.light.angle + 180), opacity: p.backAmount * k },
   };
 }
 
@@ -370,7 +374,10 @@ export class StagePostFX {
       layer = document.createElement("div");
       layer.className = "glstage-pp-fallback";
       layer.setAttribute("aria-hidden", "true");
-      layer.innerHTML = '<span class="glstage-pp-wash"></span><span class="glstage-pp-gradient"></span>';
+      layer.innerHTML =
+        '<span class="glstage-pp-wash"></span>' +
+        '<span class="glstage-pp-gradient"></span>' +
+        '<span class="glstage-pp-shade"></span>';
       wrap.appendChild(layer);
       state.overlay = layer;
     }
@@ -383,6 +390,8 @@ export class StagePostFX {
     set("--glstage-pp-grad-opacity", css.gradient.opacity.toFixed(4));
     set("--glstage-pp-wash-color", css.wash.color);
     set("--glstage-pp-wash-opacity", css.wash.opacity.toFixed(4));
+    set("--glstage-pp-shade-angle", `${css.shade.angle}deg`);
+    set("--glstage-pp-shade-opacity", css.shade.opacity.toFixed(4));
 
     state.mode = "css";
     wrap.classList.add("glstage-pp-on", "glstage-pp-css");

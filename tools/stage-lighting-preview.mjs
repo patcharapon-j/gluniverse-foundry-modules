@@ -53,12 +53,15 @@ const TESTS = [
   { label: "saturation -100", grade: { basic: { saturation: -100 } } },
   { label: "hue +90", grade: { basic: { hue: 90 } } },
   { label: "basic, everything", grade: { basic: { exposure: 0.4, brightness: 10, gamma: 1.2, contrast: 25, saturation: 30, hue: -40 } } },
-  { label: "gradient, light right", grade: { light: { angle: 0 }, gradient: { amount: 80, softness: 50, color: "#ffd9a0" } } },
-  { label: "gradient, light above-left", grade: { light: { angle: 135 }, gradient: { amount: 80, softness: 70, color: "#a8c8ff" } } },
+  { label: "gradient, light right", grade: { light: { angle: 0, softness: 50 }, gradient: { amount: 80, color: "#ffd9a0" } } },
+  { label: "gradient, light above-left", grade: { light: { angle: 135, softness: 70 }, gradient: { amount: 80, color: "#a8c8ff" } } },
   { label: "wash, blue room", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 0 } } },
   { label: "wash, blue, skin guarded", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 100 } } },
   { label: "darkness 0.6 at dial 65", grade: { wash: { darkness: 65 } }, darkness: 0.6 },
-  { label: "default grade, warm room", grade: { light: { angle: 120 }, gradient: { amount: 35, softness: 70, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, skin: { guard: 50 } }, darkness: 0.2 },
+  { label: "rim, light right", grade: { light: { angle: 0 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
+  { label: "rim, light above-left", grade: { light: { angle: 135 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
+  { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
+  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, gradient: { amount: 35, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 60, width: 30, softness: 40, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
 ];
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
@@ -163,12 +166,25 @@ window.run = async () => {
   const zero = drift(shoot(TESTS[TESTS.length - 1], 0).data);
 
   // The shader samples at pixel centres; so does the reference.
+  // Coverage anywhere in the art, sampled the way the GPU samples the
+  // texture: bilinear between texel centres, clamped at the edges.
+  const alphaAt = (u, v) => {
+    const tx = Math.min(Math.max(u * W - 0.5, 0), W - 1);
+    const ty = Math.min(Math.max(v * H - 0.5, 0), H - 1);
+    const x0 = Math.floor(tx), y0 = Math.floor(ty);
+    const x1 = Math.min(x0 + 1, W - 1), y1 = Math.min(y0 + 1, H - 1);
+    const fx = tx - x0, fy = ty - y0;
+    const a = (x, y) => artPx[(y * W + x) * 4 + 3] / 255;
+    return (a(x0, y0) * (1 - fx) + a(x1, y0) * fx) * (1 - fy) + (a(x0, y1) * (1 - fx) + a(x1, y1) * fx) * fy;
+  };
   const reference = (test) => {
     const p = paramsFor(test);
     return (i, x, y) => shadePixel(
       [artPx[i] / 255, artPx[i + 1] / 255, artPx[i + 2] / 255],
       [(x + 0.5) / W, (y + 0.5) / H],
       p,
+      alphaAt,
+      artPx[i + 3] / 255,
     ).map((v) => Math.round(v * 255));
   };
 

@@ -93,6 +93,18 @@
     opacity: var(--glstage-pp-grad-opacity, 0);
 }
 
+/* Back shadow: the side turned away from the light, darkened. */
+.glstage-pp-shade {
+    background: linear-gradient(
+        var(--glstage-pp-shade-angle, 0deg),
+        rgb(var(--gl-tint-dark) / 1) 0%,
+        rgb(var(--gl-tint-dark) / 0.4) 35%,
+        transparent 75%
+    );
+    mix-blend-mode: multiply;
+    opacity: var(--glstage-pp-shade-opacity, 0);
+}
+
 /* ── GM panel controls ── */
 
 .glstage-field-check {

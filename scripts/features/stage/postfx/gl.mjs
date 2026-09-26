@@ -41,6 +41,8 @@ import {
   GAMUT_KNEE,
   SKIN_CENTRE,
   SKIN_RADIUS,
+  RIM_TAPS,
+  RIM_GAIN,
 } from "./grade-model.mjs";
 
 // ── Constants, written into the GLSL from the model's own statement of them ──
@@ -89,16 +91,25 @@ uniform vec2  u_hue;          // (cos, sin) of the hue rotation
 // ── The scene light ── (shared by every layer with a direction)
 uniform float u_aspect;       // art width / height, so directions are isotropic
 uniform vec2  u_lightDir;     // unit vector toward the light, image space (+Y down)
+uniform float u_lightSoft;    // falloff half-width, in units of the art's half-extent
 
 // ── Layer 2: gradient ──
 uniform float u_gradAmount;   // 0..1
-uniform float u_gradSoft;     // ramp half-width, in units of the art's half-extent
 uniform vec3  u_gradColor;    // the light's colour, encoded
 
 // ── Layer 3: wash ──
 uniform float u_washAmount;   // 0..1
 uniform vec3  u_washCast;     // the room's colour at unit luminance, linear
 uniform float u_darkGain;     // level from the scene's darkness, 1 = untouched
+
+// ── Layer 4: rim ──
+uniform float u_rimAmount;    // 0..1
+uniform vec2  u_rimOffset;    // the silhouette's shift toward the light, uv
+uniform vec2  u_rimRadius;    // the shifted silhouette's blur radius, uv
+uniform vec3  u_rimColor;     // encoded
+
+// ── Layer 5: back shadow ──
+uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MAX
 
 uniform float u_skin;         // how hard skin holds back colour changes, 0..1
 
@@ -113,6 +124,7 @@ const mat3 OK_FROM_LMS = ${mat3(OKLAB.fromLms)};
 const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
 const float GAMUT_REACH = ${f(GAMUT_REACH)};
 const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
+const float RIM_GAIN = ${f(RIM_GAIN)};
 const vec2 SKIN_CENTRE = vec2(${SKIN_CENTRE.map(f).join(", ")});
 const vec2 SKIN_RADIUS = vec2(${SKIN_RADIUS.map(f).join(", ")});
 
@@ -246,7 +258,28 @@ float litWeight(vec2 uv) {
   vec2 p = vec2((uv.x - 0.5) * u_aspect, uv.y - 0.5);
   float half_ = 0.5 * (abs(u_lightDir.x) * u_aspect + abs(u_lightDir.y));
   float t = dot(p, u_lightDir) / max(half_, 1e-6);
-  return smoothstep(-u_gradSoft, u_gradSoft, t);
+  return smoothstep(-u_lightSoft, u_lightSoft, t);
+}
+
+// ringAlpha / rimMask in grade-model.mjs: the blurred silhouette here, minus
+// the blurred silhouette shifted toward the light — the edge that faces it.
+float ringAlpha(vec2 c) {
+  float sum = texture2D(u_art, c).a;
+  for (int i = 0; i < ${RIM_TAPS}; i++) {
+    float a = float(i) * 6.283185307179586 / ${f(RIM_TAPS)};
+    sum += texture2D(u_art, c + vec2(cos(a), sin(a)) * u_rimRadius).a;
+  }
+  return sum / ${f(RIM_TAPS + 1)};
+}
+
+float rimMask(vec2 uv, float alpha) {
+  float here = ringAlpha(uv);
+  float shifted = ringAlpha(uv + u_rimOffset);
+  return alpha * clamp((here - shifted) * RIM_GAIN, 0.0, 1.0);
+}
+
+vec3 screen(vec3 b, vec3 s) {
+  return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
 }
 
 // W3C soft-light, on encoded values.
@@ -286,6 +319,21 @@ void main() {
   }
   if (u_darkGain != 1.0) lin *= u_darkGain;
 
+  // ── Layer 4: rim ──
+  if (u_rimAmount > 0.0) {
+    float w = u_rimAmount * rimMask(v_uv, art.a);
+    if (w > 0.0) {
+      vec3 e = toSRGB(lin);
+      lin = toLinear(e + (screen(clamp(e, 0.0, 1.0), u_rimColor) - e) * w);
+    }
+  }
+
+  // ── Layer 5: back shadow ──
+  if (u_backAmount > 0.0) {
+    float k = 1.0 - u_backAmount * (1.0 - litWeight(v_uv));
+    if (k != 1.0) lin *= k;
+  }
+
   lin = gamutFit(lin);
 
   // Formed as a difference from the input so an untouched pixel is exactly the
@@ -316,11 +364,16 @@ export const UNIFORMS = Object.freeze([
   "aspect",
   "lightDir",
   "gradAmount",
-  "gradSoft",
   "gradColor",
   "washAmount",
   "washCast",
   "darkGain",
+  "lightSoft",
+  "rimAmount",
+  "rimOffset",
+  "rimRadius",
+  "rimColor",
+  "backAmount",
   "skin",
 ]);
 
@@ -651,11 +704,16 @@ export class StageGL {
     gl.uniform1f(u.aspect, params.aspect);
     gl.uniform2fv(u.lightDir, params.lightDir);
     gl.uniform1f(u.gradAmount, params.gradAmount);
-    gl.uniform1f(u.gradSoft, params.gradSoft);
+    gl.uniform1f(u.lightSoft, params.lightSoft);
     gl.uniform3fv(u.gradColor, params.gradColor);
     gl.uniform1f(u.washAmount, params.washAmount);
     gl.uniform3fv(u.washCast, params.washCast);
     gl.uniform1f(u.darkGain, params.darkGain);
+    gl.uniform1f(u.rimAmount, params.rimAmount);
+    gl.uniform2fv(u.rimOffset, params.rimOffset);
+    gl.uniform2fv(u.rimRadius, params.rimRadius);
+    gl.uniform3fv(u.rimColor, params.rimColor);
+    gl.uniform1f(u.backAmount, params.backAmount);
     gl.uniform1f(u.skin, params.skin);
 
     gl.clear(gl.COLOR_BUFFER_BIT);

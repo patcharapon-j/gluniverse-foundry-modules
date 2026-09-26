@@ -230,7 +230,8 @@ section("identity: every dial neutral returns the art bit for bit");
   // Every layer's amount at 0, with every shaping setting and colour at its
   // most extreme, is still the identity: shaping settings cannot leak.
   const loud = M.normalizeGrade({
-    light: { angle: 37 }, gradient: { softness: 0, color: "#ff0000" },
+    light: { angle: 37, softness: 0 }, gradient: { color: "#ff0000" },
+    rim: { width: 100, softness: 100, color: "#00ff00" },
     wash: { color: "#0000ff" }, skin: { guard: 100 },
   }, M.NEUTRAL_GRADE);
   const LP = M.stackParams(loud, M.DEFAULT_TRIM, { aspect: 0.4, darkness: 0.8 });
@@ -369,8 +370,9 @@ section("shader wiring");
     ok(same(nums(glName, "mat3"), colMajor(M.OKLAB[key])), `GLSL ${glName} is OKLAB.${key}, column-major`);
   }
   ok(FRAG.includes(`i < ${M.GAMUT_STEPS}; i++`), "the GLSL gamut search runs GAMUT_STEPS bisections");
+  ok(FRAG.includes(`i < ${M.RIM_TAPS}; i++`) && FRAG.includes(`/ ${M.RIM_TAPS + 1}.0`), "the GLSL rim samples RIM_TAPS + 1 taps, like the model");
   ok(same(nums("SKIN_CENTRE", "vec2"), M.SKIN_CENTRE) && same(nums("SKIN_RADIUS", "vec2"), M.SKIN_RADIUS), "GLSL skin ellipse is the model's");
-  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)"]) {
+  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)", "u_rimAmount > 0.0", "u_backAmount > 0.0", "if (k != 1.0)"]) {
     ok(FRAG.includes(guard), `the shader skips a layer at neutral: ${guard}`);
   }
   ok(FRAG.includes("if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);"),
@@ -382,7 +384,7 @@ section("shader wiring");
     ok(FRAG.includes(guard), `the shader keeps its neutral guard: ${guard}`);
   }
   ok(/art\.rgb \+ \(toSRGB\(lin\) - toSRGB\(linIn\)\)/.test(FRAG), "the shader forms its output as a difference from the input");
-  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE]]) {
+  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_GAIN", M.RIM_GAIN]]) {
     const m = FRAG.match(new RegExp(`const float ${name} = ([\\d.]+);`));
     ok(!!m && Number(m[1]) === value, `GLSL ${name} is the model's`, m?.[1]);
   }
@@ -420,7 +422,7 @@ section("gradient: the light's colour, ramping from the lit side");
 {
   const at = (dials, uv, px = [0.5, 0.45, 0.42], ctx = { aspect: 0.6 }) =>
     M.shadePixel(px, uv, M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, ctx));
-  const warm = { light: { angle: 0 }, gradient: { amount: 80, softness: 40, color: "#fff0d8" } };
+  const warm = { light: { angle: 0, softness: 40 }, gradient: { amount: 80, color: "#fff0d8" } };
   const right = at(warm, [0.95, 0.5]);
   const left = at(warm, [0.05, 0.5]);
   ok(Y(right) > Y([0.5, 0.45, 0.42]) * 1.05, "a light on the right brightens the right edge", `${Y(right).toFixed(4)}`);
@@ -431,7 +433,7 @@ section("gradient: the light's colour, ramping from the lit side");
   ok(Y(at(up, [0.5, 0.05])) > Y(at(up, [0.5, 0.95])), "a light above lights the top (+Y is down in art space)");
 
   // 45° on a tall portrait has to be 45° in pixels, not in uv.
-  const diag = { ...warm, light: { angle: 45 }, gradient: { ...warm.gradient, softness: 0 } };
+  const diag = { ...warm, light: { angle: 45, softness: 0 } };
   const tall = { aspect: 0.5 };
   // A point on the terminator for a true 45° line through the centre, in
   // isotropic units: moving right by d and down by d stays on it.
@@ -490,6 +492,53 @@ section("skin: holds back colour, never level");
   const dim = M.normalizeGrade({ wash: { darkness: 100 }, skin: { guard: 100 } }, M.NEUTRAL_GRADE);
   const d = M.shadePixel(skin, [0.5, 0.5], M.stackParams(dim, M.DEFAULT_TRIM, { darkness: 0.5 }));
   ok(Y(d) < yS * 0.6, "skin darkens in a dark room in full", `${Y(d).toFixed(4)} vs ${yS.toFixed(4)}`);
+}
+
+section("rim: the edge that faces the lamp");
+{
+  // A disc of coverage, with clamp-to-edge sampling like a texture's.
+  const aspect = 0.5;
+  const disc = (u, v) => {
+    const cu = Math.min(Math.max(u, 0), 1);
+    const cv = Math.min(Math.max(v, 0), 1);
+    return Math.hypot((cu - 0.5) * aspect, cv - 0.5) < 0.2 ? 1 : 0;
+  };
+  const px = [0.3, 0.3, 0.3];
+  const shade = (dials, uv) => M.shadePixel(px, uv, M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect }), disc, disc(...uv));
+  const rim = (angle, extra = {}) => ({ light: { angle }, rim: { amount: 100, width: 60, softness: 30, ...extra } });
+  // Disc edges, in uv: x = 0.5 ± 0.4, y = 0.5 ± 0.2.
+  const rightEdge = [0.87, 0.5];
+  const leftEdge = [0.13, 0.5];
+  ok(Y(shade(rim(0), rightEdge)) > Y(px) * 2, "a light on the right rims the right edge", Y(shade(rim(0), rightEdge)).toFixed(4));
+  ok(shade(rim(0), leftEdge).every((x, i) => x === px[i]), "…and leaves the left edge untouched");
+  ok(Y(shade(rim(180), leftEdge)) > Y(px) * 2, "turning the light round moves the rim to the left edge");
+  ok(Y(shade(rim(90), [0.5, 0.31])) > Y(px) * 2 && shade(rim(90), [0.5, 0.69]).every((x, i) => x === px[i]), "a light above rims the top, not the bottom");
+  ok(shade(rim(0), [0.5, 0.5]).every((x, i) => x === px[i]), "the middle of the figure gets no rim");
+  // The bottom of the disc runs parallel to a light from the right: an outline
+  // there is the failure the directional mask exists to prevent.
+  ok(Y(shade(rim(0), [0.5, 0.69])) < Y(px) * 1.02, "an edge parallel to the light gets no rim", Y(shade(rim(0), [0.5, 0.69])).toFixed(4));
+  const reachAt = (width) => Y(shade(rim(0, { width }), [0.78, 0.5]));
+  ok(reachAt(90) > reachAt(20), "a wider rim reaches further in", `${reachAt(90).toFixed(4)} vs ${reachAt(20).toFixed(4)}`);
+  ok(M.stackParams(M.normalizeGrade(rim(0, { width: 0 }), M.NEUTRAL_GRADE)).rimAmount === 0, "a rim with no width is no rim");
+  const warm = shade(rim(0, { color: "#ffb060" }), rightEdge);
+  ok(warm[0] > warm[2], "the rim takes its colour", String(warm));
+  // Isotropic: the same width reaches the same distance on the side of a tall
+  // portrait as on its top, measured in isotropic units.
+  const side = M.stackParams(M.normalizeGrade(rim(0), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect });
+  ok(Math.abs(side.rimOffset[0] * aspect - M.stackParams(M.normalizeGrade(rim(-90), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect }).rimOffset[1]) < 1e-12,
+    "the rim's reach is isotropic on a tall portrait");
+}
+
+section("back shadow: the far side, level only");
+{
+  const g = M.normalizeGrade({ light: { angle: 0, softness: 30 }, backShadow: { amount: 100 } }, M.NEUTRAL_GRADE);
+  const P = M.stackParams(g, M.DEFAULT_TRIM, { aspect: 0.6 });
+  const far = M.shadePixel(MUTED[0], [0.03, 0.5], P);
+  const near = M.shadePixel(MUTED[0], [0.97, 0.5], P);
+  ok(Y(far) < Y(MUTED[0]) * 0.5, "the side away from the light darkens", Y(far).toFixed(4));
+  ok(near.every((x, i) => x === MUTED[0][i]), "…and the lit side is untouched");
+  ok(sameRatios(far, MUTED[0], 1e-6), "…in level only, never chromaticity");
+  ok(Y(far) > 0.2 * Y(MUTED[0]), "…and never to black (BACK_SHADOW_MAX)");
 }
 
 section("seeding: proposals from the background, never amounts");
