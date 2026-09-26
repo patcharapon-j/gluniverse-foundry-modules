@@ -1,5 +1,5 @@
 /**
- * Stage post-processing — the shading pass.
+ * Stage character grade — the GPU pass.
  *
  * One WebGL context for the whole feature, deliberately *not* Foundry's. A
  * cosmetic overlay has no business being able to corrupt renderer state the
@@ -12,8 +12,7 @@
  * on a per-frame ticker.
  *
  * Raw WebGL rather than PIXI: this file then depends on nothing but the browser,
- * so it is immune to PIXI API churn across Foundry releases. `CampfireWebGL.js`
- * in stream-pacer sets the same precedent.
+ * so it is immune to PIXI API churn across Foundry releases.
  *
  * The context is a suite Surface (core/gl-surfaces.mjs) with no element and no
  * loop: the canvas never enters the DOM, and a render is an event, so there is
@@ -24,10 +23,47 @@
  * prepared handle carries the generation of the context its textures live in,
  * and `draw` refuses one from an older context rather than binding a texture
  * the new context has never seen.
+ *
+ * The fragment shader is organised as the layer stack in grade-model.mjs. Each
+ * layer is its own block, applied in stack order, and each is an exact no-op at
+ * its neutral values. The whole pass is a line-for-line transcription of
+ * `shadePixel` in grade-model.mjs; the browser harness compares the two.
  */
 
 import { loadPixelImage, markTainted } from "./asset.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
+import {
+  LUMA,
+  OKLAB,
+  TONE_RATIO_CAP,
+  GAMUT_STEPS,
+  GAMUT_REACH,
+  GAMUT_KNEE,
+  SKIN_CENTRE,
+  SKIN_RADIUS,
+  RIM_TAPS,
+  RIM_GAIN,
+  GLOW_KNEE,
+  GLOW_GAIN,
+  DOWN_TAPS,
+  bloomSizes,
+  bloomWeights,
+  MAX_LOOKS,
+} from "./grade-model.mjs";
+
+// ── Constants, written into the GLSL from the model's own statement of them ──
+// A number copied by hand into a shader is a number that drifts; these are
+// emitted from grade-model.mjs, so the shader and gradePixel cannot disagree
+// about them.
+
+/** A float literal GLSL will accept (always carries a decimal point). */
+const f = (n) => {
+  const s = String(n);
+  return /[.eE]/.test(s) ? s : `${s}.0`;
+};
+
+/** A row-major 3×3 as a GLSL mat3, which is column-major. */
+const mat3 = (rows) => `mat3(${[0, 1, 2].map((c) => rows.map((r) => f(r[c])).join(", ")).join(", ")})`;
 
 const VERT = `
 attribute vec2 a_pos;
@@ -38,9 +74,7 @@ void main() {
 }
 `;
 
-const FRAG = `
-// highp where it exists. The shading ramp here is very smooth and very wide,
-// which is exactly the case mediump's ~10-bit mantissa bands on.
+export const FRAG = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -49,735 +83,448 @@ precision mediump float;
 
 varying vec2 v_uv;
 
-uniform sampler2D u_art;      // the character art
-uniform sampler2D u_nrm;      // rg = normal xy, b = thickness, a = alpha
-uniform vec2      u_nrmSize;  // normal-map dimensions, for the smooth fetch
-
-uniform vec3  u_ambient;      // scene ambient colour
-uniform vec3  u_bounce;       // colour of light bounced back from the far side
-uniform vec3  u_key;          // key light colour
-uniform vec3  u_shadowColor;  // colour a dimmed character recedes toward
+uniform sampler2D u_art;      // the character art, uploaded premultiplied
 uniform float u_intensity;    // master strength, 0..1
-uniform float u_rim;          // rim strength
-uniform float u_rimEdge;      // absolute strength of the tight core (not scaled
-                              // by u_rim — it is added past the dial's crossfade)
-uniform float u_glow;         // light spilling past the outline, 0..1-ish
-uniform float u_contour;      // interior contour highlight strength
-uniform float u_spec;         // tight specular strength
-uniform float u_sheen;        // broad specular lobe
-uniform float u_exposure;     // darkness-derived exposure, already linear
-uniform float u_night;        // scotopic desaturation, 0..1
-uniform float u_shadow;       // dim amount, 0..1
-uniform float u_lift;         // highlight boost, 0..1
 
-// ── The reference match ──
-// Four corrections carrying the room's measured colour onto the character's
-// measured colour, worked out in tally.mjs and arriving here already weighted.
-// Each is its own identity when its dial is at zero — cast (1,1,1), gain 1,
-// bright 1, sat 1 — so the whole block is a no-op for a world that has never
-// touched it, which is the same contract u_cel and u_rimOnly hold to.
-//
-// They are separate uniforms rather than one combined matrix for the reason set
-// out in matchGrade: a GM who dislikes the result has to be able to find which
-// part they dislike, and a matrix cannot be asked that question. Two of the four
-// are chromatic and are what the skin guard below holds back; the other two move
-// level and contrast, which skin is supposed to receive in full.
-uniform vec3  u_mCast;        // per-channel hue correction, luma-normalised
-uniform float u_mGain;        // contrast about u_mPivot
-uniform float u_mPivot;       // the subject's own mean luma
-uniform float u_mBright;      // level correction
-uniform float u_mSat;         // chroma correction
-uniform float u_skin;         // how hard skin resists the two chromatic terms
+// ── Layer 1: basic correction ── (see BASIC_DIALS in grade-model.mjs)
+uniform float u_gain;         // exposure, as a linear gain
+uniform float u_lift;         // brightness, as a black lift in encoded light
+uniform float u_gamma;        // midtone power
+uniform float u_contrast;     // S-curve exponent about mid-grey
+uniform float u_sat;          // chroma scale
+uniform vec2  u_hue;          // (cos, sin) of the hue rotation
 
-// ── Light wrap ──
-// The room's own colour, arriving *inward* over the silhouette edge. The spill
-// term already carries the character's light outward into the air; this is the
-// other half of the same physical story and the one that actually makes a
-// cut-out sit in a plate.
-uniform float u_wrap;
-uniform vec3  u_wrapColor;
+// ── The scene light ── (shared by every layer with a direction)
+uniform float u_aspect;       // art width / height, so directions are isotropic
+uniform vec2  u_lightDir;     // unit vector toward the light, image space (+Y down)
+uniform float u_lightSoft;    // falloff half-width, in units of the art's half-extent
 
-// ── The light kit ──
-uniform float u_backlight;    // broad transmission through thin regions
-uniform vec3  u_backColor;
-uniform float u_fill;         // how far the shadow side goes to the bounce hue
-uniform float u_glowRadius;   // spill reach multiplier
-uniform float u_glowSense;    // luma the art must reach just inside to glow
-uniform float u_halation;     // warm bleed in the outer spill
-uniform vec3  u_halationColor;
+// ── Layer 2: gradient ──
+uniform float u_gradAmount;   // 0..1
+uniform vec3  u_gradColor;    // the light's colour, encoded
 
-// ── Style ──
-// 0 = the semi-realistic model, 1 = cel/anime. Every banded term below is a
-// crossfade against its continuous twin rather than a branch, so 0 is the old
-// shader term for term. That is the same property the strength dial has, and it
-// is what makes a second style safe to add: nothing here can quietly rebalance
-// the look every existing world is already using.
-uniform float u_cel;
+// ── Layer 3: wash ──
+uniform float u_washAmount;   // 0..1
+uniform vec3  u_washCast;     // the room's colour at unit luminance, linear
+uniform float u_darkGain;     // level from the scene's darkness, 1 = untouched
 
-// ── Rim-only ──
-// 0 = the key lights the figure, 1 = it only touches the outline.
-//
-// The scene's *colour* still grades the art under this — that is the pass's
-// first job and it is not a light, it is what makes a character standing in a
-// green room look like they are in one. What goes is every term that puts a
-// gradient on the body from the lamp's direction, leaving the rim and the spill
-// as the only things the key draws. Same crossfade discipline as u_cel: at 0
-// this is the model untouched, term for term.
-uniform float u_rimOnly;
+// ── Layer 4: rim ──
+uniform float u_rimAmount;    // 0..1
+uniform vec2  u_rimOffset;    // the silhouette's shift toward the light, uv
+uniform vec2  u_rimRadius;    // the shifted silhouette's blur radius, uv
+uniform vec3  u_rimColor;     // encoded
 
-// ── Light placement ──
-// The key light is a point in the art's own space rather than one direction
-// shared by the whole figure. On a full-body pose the head and the shins are a
-// long way apart, and a lamp in the room does not shine on both from the same
-// angle — the head should catch a rim the legs do not. Feeding a position makes
-// that fall out per fragment instead of being faked.
-uniform vec2  u_lightP;       // light position, aspect-corrected art space
-uniform float u_lightZ;       // how far in front of the art plane it sits
-uniform float u_refDist;      // light-to-figure-centre distance, for falloff
-uniform vec2  u_uvScale;      // (artAspect, 1.0) — makes art space isotropic
+// ── Layer 5: back shadow ──
+uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MAX
 
-// ── Framing ──
-// Where the silhouette starts and ends vertically, and how much of a whole body
-// that represents. A knee-up crop has no floor in frame, so it must not get a
-// grounding shadow smeared across its bottom edge.
-uniform float u_figTop;
-uniform float u_figBottom;
-uniform float u_ground;       // grounding shadow strength, 0..1
+// ── Layer 6: glow ──
+uniform float u_glowAmount;   // 0..1
+uniform sampler2D u_bloom;    // the finished bloom pyramid, premultiplied
 
-const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+// ── Layer 7: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
+${Array.from({ length: MAX_LOOKS }, (_, i) => `uniform sampler2D u_lut${i};`).join("\n")}
+uniform vec4  u_lookAmount;   // opacity of each slot, 0..1
+uniform vec4  u_lookSize;     // grid size N of each slot's LUT
 
-// Where the highlight roll-off starts. Below this the tone curve is the exact
-// identity, so midtones keep whatever exposure the lighting model computed.
-const float KNEE = 0.72;
+uniform float u_skin;         // how hard skin holds back colour changes, 0..1
 
-// Colour vision falls away in the dark and what is left drifts blue (the
-// Purkinje shift). Weighted against LUMA these sum to 1.0, so the tint recolours
-// without also dimming — darkness already has u_exposure for that.
-const vec3 NIGHT = vec3(0.88, 1.00, 1.32);
+const vec3 LUMA = vec3(${LUMA.map(f).join(", ")});
 
-// ── sRGB ⇄ linear ──
-// Every value sampled out of an image or a CSS colour is gamma-encoded, and the
-// operations that matter here behave differently on encoded numbers: adding two
-// lights saturates early, mixing two colours passes through a muddy midpoint,
-// and clamping a highlight shifts its hue instead of rolling it off. So the pass
-// works in linear light and encodes once, at the end.
-//
-// The one deliberate exception is the diffuse *multiplier* below. A multiplier
-// is a ratio, and a ratio means the same thing in either space provided it is
-// raised to the same power the values were — so it is converted rather than
-// re-derived, which is what keeps the shading contrast exactly as it was tuned
-// while everything genuinely additive moves to linear.
+// OKLab — see the note above linearToOklab in grade-model.mjs.
+const mat3 OK_TO_LMS = ${mat3(OKLAB.toLms)};
+const mat3 OK_TO_LAB = ${mat3(OKLAB.toLab)};
+const mat3 OK_FROM_LAB = ${mat3(OKLAB.fromLab)};
+const mat3 OK_FROM_LMS = ${mat3(OKLAB.fromLms)};
+
+const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
+const float GAMUT_REACH = ${f(GAMUT_REACH)};
+const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
+const float RIM_GAIN = ${f(RIM_GAIN)};
+const float GLOW_GAIN = ${f(GLOW_GAIN)};
+const vec2 SKIN_CENTRE = vec2(${SKIN_CENTRE.map(f).join(", ")});
+const vec2 SKIN_RADIUS = vec2(${SKIN_RADIUS.map(f).join(", ")});
+
 vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
 vec3 toSRGB(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
+float toLinear1(float c) { return pow(max(c, 0.0), 2.2); }
+float toSRGB1(float c) { return pow(max(c, 0.0), 1.0 / 2.2); }
 
-// ── Skin ──
-// A blue night exterior is a correct measurement of a blue night exterior, and
-// applying it honestly turns every face in the cast blue. Nobody reads that as
-// "lit by moonlight"; they read it as broken, because a viewer's tolerance for a
-// shifted skin tone is far narrower than for any other colour in the frame —
-// it is the one hue everyone has a lifetime of reference for.
-//
-// So skin resists the *chromatic* half of the match and takes the achromatic
-// half in full. A face in a dark room gets darker and loses contrast along with
-// everything else; what it does not do is change hue. That asymmetry is the
-// whole trick, and it is why matchGrade keeps the four components separable —
-// if level and hue arrived as one matrix there would be nothing here to split.
-//
-// Detection is a soft ellipse in chroma, which is where skin actually clusters:
-// across every human complexion the Cb/Cr pair moves far less than luma does,
-// which is exactly why video codecs have subsampled it since the 1950s. Working
-// in chroma rather than in RGB is what makes one ellipse cover the whole range
-// of real complexions instead of matching only the pale end of it.
-const vec2 SKIN_CENTRE = vec2(0.395, 0.598);   // Cb, Cr, offset to 0..1
-const vec2 SKIN_RADIUS = vec2(0.105, 0.078);
-
-// Evaluated on *encoded* colour, because that is the space the chroma cluster
-// was ever measured in — linearising first moves the ellipse off the data.
-float skinMask(vec3 srgb) {
-  float cb = -0.169 * srgb.r - 0.331 * srgb.g + 0.500 * srgb.b + 0.5;
-  float cr =  0.500 * srgb.r - 0.419 * srgb.g - 0.081 * srgb.b + 0.5;
-  vec2 d = (vec2(cb, cr) - SKIN_CENTRE) / SKIN_RADIUS;
-  float inside = 1.0 - smoothstep(0.70, 1.30, length(d));
-
-  // Chroma is meaningless at both ends of the range: near black it is
-  // quantisation, near white it is a blown highlight. Both would otherwise
-  // "read as skin", and the second one matters — a white shirt sits a long way
-  // up the Cr axis and protecting it would leave a pale patch the grade never
-  // reached in the middle of an otherwise corrected figure.
-  float l = dot(srgb, LUMA);
-  return inside * smoothstep(0.06, 0.18, l) * (1.0 - smoothstep(0.86, 0.98, l));
-}
-
-/**
- * Apply the reference match to linear art.
- *
- * Level and contrast ride on a *ratio* applied to the whole triplet, so they
- * move brightness without touching hue — the same reasoning that keeps the
- * diffuse multiplier a ratio rather than a re-derived pair of lights. Only the
- * last two steps are allowed to move colour, and they are the two keep holds
- * back over skin.
- */
-vec3 gradeMatch(vec3 lin, float keep) {
-  float l = max(dot(lin, LUMA), 1e-4);
-  // Contrast about the subject's own mean, so this cannot also move the mean.
-  float toned = (l - u_mPivot) * u_mGain + u_mPivot;
-  // …and level, which is the only term that may.
-  toned *= u_mBright;
-  vec3 outc = lin * (max(toned, 0.0) / l);
-
-  // Hue. Luma-normalised upstream, so it re-tints without re-exposing.
-  outc *= mix(vec3(1.0), u_mCast, keep);
-
-  // Chroma, about the pixel's own level.
-  float l2 = dot(outc, LUMA);
-  return mix(vec3(l2), outc, mix(1.0, u_mSat, keep));
-}
-
-// The normal field is prepassed small and stretched across a render several
-// times its size. Plain bilinear is only C0, so on a shading ramp this smooth
-// the texel lattice shows up as faint diamond creases. Smoothstepping the
-// interpolant makes the reconstruction look C1 for four extra instructions.
-// How far apart the contour taps sit, in uv. Expressed as a fraction of the
-// frame rather than in texels so it means the same thing at any art resolution —
-// and, more importantly, so it always straddles a drawn line rather than landing
-// inside one. See the contour term in main().
-const float CONTOUR_STEP = 0.004;
-
-// Radius of the tight silhouette probe, in uv — see nearAlpha().
-const float EDGE_RING = 0.004;
-
-// How fast the light wrap falls away going inward. Low on purpose: this is the
-// one edge term meant to be a *wash* rather than a line. The rim's exponents run
-// from 3.5 to 22 and every one of them is trying to find an outline; if this one
-// did too there would be three lines on the same edge, and the wrap would read
-// as a second rim in the wrong colour instead of as the room bleeding round the
-// figure.
-const float WRAP_FALLOFF = 1.7;
-
-// Transmission through thin regions — hair, a cloak's hem, a sleeve seen edge
-// on. Applied to the *unrescaled* field, which is what separates it from the
-// rim: the rim normalises against the half of its ramp that is inside the figure
-// so that it can make a line, and this deliberately does not, so it stays broad
-// and reaches well inside wherever the art is thin.
-const float BACK_FALLOFF = 1.4;
-
-// How far inward the rind guard looks, in uv. The near tap has to clear a matte
-// a few pixels thick; the far one has to still be on the same garment, or the
-// guard starts reading a lapel as an outline. See the guard in main().
-const float RIND_STEP = 0.012;
-
-// ── Cel banding ──
-// Cel art is not a softer version of a smooth ramp; it is a different signal. A
-// few flat tones separated by a drawn terminator, and the highlights and the rim
-// as discrete *shapes* rather than falloffs. So every continuous term in the
-// model below has a banded twin and u_cel mixes between them.
-//
-// The terminators keep a texel or two of softness rather than being a true
-// step(). These ramps are shallow — a hard threshold on one crawls a jagged
-// staircase across the figure, and nothing here is supersampled.
-
-/** A terminator: flat below, flat above, w of softness across. */
-float celStep(float x, float t, float w) {
-  return smoothstep(t - w, t + w, x);
-}
-
-// Three flat tones and the two terminators between them, replacing the diffuse
-// ramp. The levels bracket the ramp rather than sitting under it: averaged over
-// the ramp this is within a couple of percent of the continuous term, so
-// switching styles changes the *shape* of the shading and not the exposure of
-// the stage. Everything it does gain is contrast at the two terminators, which
-// is the entire point.
-const float CEL_T0 = 0.30, CEL_T1 = 0.62;              // terminator positions
-const float CEL_D0 = 0.14, CEL_D1 = 0.45, CEL_D2 = 0.85; // the three tones
-const float CEL_TERM = 0.035;                          // terminator half-width
-
-float celShade(float d) {
-  return CEL_D0
-       + (CEL_D1 - CEL_D0) * celStep(d, CEL_T0, CEL_TERM)
-       + (CEL_D2 - CEL_D1) * celStep(d, CEL_T1, CEL_TERM);
-}
-
-// ── Rim-only ──
-// What the key contributes when it is not allowed to shade anything.
-//
-// Not zero, and that is the whole design of this mode. Dropping the key term
-// outright would darken every stage by however much it was carrying, so a GM
-// switching styles would have to go and re-tune the strength dial and the grade
-// would stop matching the room. Instead the lamp stops being a *direction* and
-// becomes an *exposure*: one flat number, sitting at the diffuse term's own mean
-// over a figure, so the art keeps the brightness it had and loses only the
-// gradient. Same property the cel tones were picked for, checked the same way —
-// the preview harness measures mean luminance across all three styles.
-const float KEY_FLAT = 0.5;
-
-// How far inward the rim reaches when it is the only thing the key draws.
-//
-// The prepass field is blurred wide on purpose — it is inventing a rounded
-// surface, and a rounded surface needs a shading ramp several percent of the
-// frame across. That ramp is the halo's width, and the width is the entire
-// complaint this mode answers, so the exponent is the handle. It is a large
-// number because the field it is raising sits at 0.5 right on the outline and
-// climbs slowly: nothing gentler than this actually bites.
-//
-// The value is measured, not chosen. tools/stage-lighting-preview differences
-// the render against the same render with the rim switched off, which isolates
-// the light from the art underneath it, and reports how far in it survives: 3.5
-// (the semi-realistic exponent) reaches 11.8% of the figure's width, 9.0 reaches
-// 6.0%, and this reaches 3.2% — a line on the outline rather than a wash over
-// the ribs. Past here it stops paying: the remaining width is the tight core,
-// which is a line already.
-const float RIM_ONLY_FALLOFF = 22.0;
-
-/**
- * How much of a small ring around this point is inside the figure.
- *
- * The prepass field cannot answer this. It is blurred deliberately wide, because
- * the job it was built for is inventing a *surface* — a rounded one, whose
- * shading ramp runs several percent of the frame. A rim core taken from it is a
- * soft band no matter how hard the exponent is raised, and a soft band is an
- * airbrushed edge, not a lit one.
- *
- * So the core gets its own measurement, from the art's own alpha at full render
- * resolution: eight taps on a ring, which is just a very small blur. Deep inside
- * it reads 1, on the outline it reads about a half, and a ring-radius out it
- * reads 0 — a distance field tight enough that what comes out of it is a line.
- */
-float nearAlpha(vec2 uv, vec2 r) {
-  vec2 d = r * 0.70710678;
-  return 0.125 * (
-      texture2D(u_art, uv + vec2( r.x, 0.0)).a
-    + texture2D(u_art, uv + vec2(-r.x, 0.0)).a
-    + texture2D(u_art, uv + vec2(0.0,  r.y)).a
-    + texture2D(u_art, uv + vec2(0.0, -r.y)).a
-    + texture2D(u_art, uv + vec2( d.x,  d.y)).a
-    + texture2D(u_art, uv + vec2(-d.x,  d.y)).a
-    + texture2D(u_art, uv + vec2( d.x, -d.y)).a
-    + texture2D(u_art, uv + vec2(-d.x, -d.y)).a);
-}
-
-/**
- * The art, with the upload's premultiply divided back out.
- *
- * Everything downstream wants the colour the artist painted, not that colour
- * faded toward black by its own coverage — a half-covered pixel of white hair is
- * white hair, and shading it as mid-grey is what makes an edge look grubby. The
- * floor on the divisor is a hair under one 8-bit step: below that there is no
- * colour left to recover, only quantisation noise to amplify.
- */
+// The art with the upload's premultiply divided back out. Everything below wants
+// the colour the artist painted, not that colour faded toward black by its own
+// coverage. The floor is a hair under one 8-bit step.
 vec4 artAt(vec2 uv) {
   vec4 t = texture2D(u_art, uv);
   return vec4(t.rgb / max(t.a, 0.0039), t.a);
 }
 
-vec4 sampleField(vec2 uv) {
-  vec2 p = uv * u_nrmSize - 0.5;
-  vec2 i = floor(p);
-  vec2 f = p - i;
-  f = f * f * (3.0 - 2.0 * f);
-  return texture2D(u_nrm, (i + f + 0.5) / u_nrmSize);
+// Each step is skipped at its neutral value rather than evaluated there: pow(t,
+// 1.0) is exp2(log2(t)) on a GPU and is not exactly t.
+float toneCurve(float y) {
+  float t = y;
+  if (u_lift != 0.0) t = clamp(t + u_lift * (1.0 - t), 0.0, 1.0);
+  if (u_gamma != 1.0) t = pow(t, 1.0 / u_gamma);
+  if (u_contrast != 1.0) {
+    t = clamp(t, 0.0, 1.0);
+    t = t < 0.5 ? 0.5 * pow(2.0 * t, u_contrast)
+                : 1.0 - 0.5 * pow(2.0 - 2.0 * t, u_contrast);
+  }
+  return t;
+}
+
+// How far toward grey one channel needs pulling to land back in [0, 1].
+float fitScale(float x, float Y) {
+  if (x > 1.0) return (1.0 - Y) / (x - Y);
+  if (x < 0.0) return Y / (Y - x);
+  return 1.0;
+}
+
+vec3 gamutFit(vec3 c) {
+  float Y = dot(c, LUMA);
+  if (Y >= 1.0) return vec3(1.0);
+  if (Y <= 0.0) return vec3(0.0);
+  float k = min(min(fitScale(c.r, Y), fitScale(c.g, Y)), fitScale(c.b, Y));
+  if (k >= 1.0) return c;
+  return vec3(Y) + (c - vec3(Y)) * k;
+}
+
+vec3 linearToOklab(vec3 c) {
+  vec3 lms = OK_TO_LMS * max(c, 0.0);
+  return OK_TO_LAB * pow(lms, vec3(1.0 / 3.0));
+}
+
+vec3 oklabToLinear(vec3 o) {
+  vec3 lms = OK_FROM_LAB * o;
+  return OK_FROM_LMS * (lms * lms * lms);
+}
+
+bool inGamut(vec3 c) {
+  return all(greaterThanEqual(c, vec3(0.0))) && all(lessThanEqual(c, vec3(1.0)));
+}
+
+// chromaAdjust in grade-model.mjs: rotate and scale the OKLab chroma vector,
+// then compress it softly against the most chroma this hue can display.
+vec3 chromaAdjust(vec3 c) {
+  vec3 lab = linearToOklab(c);
+  vec2 ab = vec2(lab.y * u_hue.x - lab.z * u_hue.y, lab.y * u_hue.y + lab.z * u_hue.x) * u_sat;
+  if (length(ab) < 1e-7) return clamp(oklabToLinear(vec3(lab.x, 0.0, 0.0)), 0.0, 1.0);
+
+  float lo = 0.0;
+  float hi = GAMUT_REACH;
+  if (inGamut(oklabToLinear(vec3(lab.x, ab * hi)))) {
+    lo = hi;
+  } else {
+    for (int i = 0; i < ${GAMUT_STEPS}; i++) {
+      float mid = (lo + hi) * 0.5;
+      if (inGamut(oklabToLinear(vec3(lab.x, ab * mid)))) lo = mid;
+      else hi = mid;
+    }
+  }
+
+  float knee = GAMUT_KNEE * lo;
+  float k = 1.0;
+  if (k > knee) {
+    float width = lo - knee;
+    float excess = k - knee;
+    k = width > 0.0 ? knee + excess / (1.0 + excess / width) : lo;
+  }
+  return clamp(oklabToLinear(vec3(lab.x, ab * k)), 0.0, 1.0);
+}
+
+vec3 basicCorrection(vec3 lin) {
+  vec3 c = lin * u_gain;
+
+  float y = dot(c, LUMA);
+  float ye = toSRGB1(y);
+  float yt = toneCurve(ye);
+  if (yt != ye) {
+    float Yt = toLinear1(yt);
+    float Yl = toLinear1(ye);
+    float r = Yl > 1e-9 ? min(Yt / Yl, TONE_RATIO_CAP) : 0.0;
+    c = c * r + vec3(max(Yt - Yl * r, 0.0));
+  }
+
+  c = gamutFit(c);
+
+  // Skipped at neutral: the OKLab round trip is not exact, and the identity is.
+  if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);
+  return c;
+}
+
+// skinMask in grade-model.mjs — on the original art's encoded colour.
+float skinMask(vec3 srgb) {
+  float cb = -0.169 * srgb.r - 0.331 * srgb.g + 0.5 * srgb.b + 0.5;
+  float cr = 0.5 * srgb.r - 0.419 * srgb.g - 0.081 * srgb.b + 0.5;
+  float d = length((vec2(cb, cr) - SKIN_CENTRE) / SKIN_RADIUS);
+  float inside = 1.0 - smoothstep(0.7, 1.3, d);
+  float l = dot(srgb, LUMA);
+  return inside * smoothstep(0.06, 0.18, l) * (1.0 - smoothstep(0.86, 0.98, l));
+}
+
+// guardSkin: keep the layer's change of level, hold back its change of colour.
+vec3 guardSkin(vec3 before, vec3 after, float k) {
+  if (k <= 0.0) return after;
+  float Yb = dot(before, LUMA);
+  if (Yb <= 1e-9) return after;
+  float r = dot(after, LUMA) / Yb;
+  return after + (before * r - after) * k;
+}
+
+// litWeight: 1 on the lit side of the art, 0 on the far side.
+float litWeight(vec2 uv) {
+  vec2 p = vec2((uv.x - 0.5) * u_aspect, uv.y - 0.5);
+  float half_ = 0.5 * (abs(u_lightDir.x) * u_aspect + abs(u_lightDir.y));
+  float t = dot(p, u_lightDir) / max(half_, 1e-6);
+  return smoothstep(-u_lightSoft, u_lightSoft, t);
+}
+
+// ringAlpha / rimMask in grade-model.mjs: the blurred silhouette here, minus
+// the blurred silhouette shifted toward the light — the edge that faces it.
+float ringAlpha(vec2 c) {
+  float sum = texture2D(u_art, c).a;
+  for (int i = 0; i < ${RIM_TAPS}; i++) {
+    float a = float(i) * 6.283185307179586 / ${f(RIM_TAPS)};
+    sum += texture2D(u_art, c + vec2(cos(a), sin(a)) * u_rimRadius).a;
+  }
+  return sum / ${f(RIM_TAPS + 1)};
+}
+
+float rimMask(vec2 uv, float alpha) {
+  float here = ringAlpha(uv);
+  float shifted = ringAlpha(uv + u_rimOffset);
+  return alpha * clamp((here - shifted) * RIM_GAIN, 0.0, 1.0);
+}
+
+vec3 screen(vec3 b, vec3 s) {
+  return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
+}
+
+// sampleStrip in lut.mjs: bilinear inside blue tiles b and b+1, at texel
+// centres so a tile never bleeds into its neighbour, then mixed — trilinear.
+vec3 lutSample(sampler2D lut, float N, vec3 c) {
+  vec3 p = clamp(c, 0.0, 1.0) * (N - 1.0);
+  float b0 = floor(p.b);
+  float fb = p.b - b0;
+  float b1 = min(b0 + 1.0, N - 1.0);
+  float y = (p.g + 0.5) / N;
+  vec3 s0 = texture2D(lut, vec2((b0 * N + p.r + 0.5) / (N * N), y)).rgb;
+  vec3 s1 = texture2D(lut, vec2((b1 * N + p.r + 0.5) / (N * N), y)).rgb;
+  return mix(s0, s1, fb);
+}
+
+vec3 applyLook(vec3 lin, sampler2D lut, float N, float w, float guard) {
+  vec3 e = clamp(toSRGB(lin), 0.0, 1.0);
+  vec3 graded = lutSample(lut, N, e);
+  return guardSkin(lin, toLinear(e + (graded - e) * w), guard);
+}
+
+// glowFrom in grade-model.mjs: the finished bloom, scaled, dimmed by the
+// room's darkness like everything else the light does.
+vec3 glowAt(vec2 uv) {
+  return clamp(texture2D(u_bloom, uv).rgb * (u_glowAmount * GLOW_GAIN * u_darkGain), 0.0, 1.0);
+}
+
+// W3C soft-light, on encoded values.
+float softLight1(float b, float s) {
+  if (s <= 0.5) return b - (1.0 - 2.0 * s) * b * (1.0 - b);
+  float d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b);
+  return b + (2.0 * s - 1.0) * (d - b);
+}
+
+vec3 softLight(vec3 b, vec3 s) {
+  return vec3(softLight1(b.r, s.r), softLight1(b.g, s.g), softLight1(b.b, s.b));
 }
 
 void main() {
   vec4 art = artAt(v_uv);
-  vec4 nm = sampleField(v_uv);
-  vec2 n2 = nm.rg * 2.0 - 1.0;
-  float thick = nm.b;
 
-  // Vector to the light from *this* point on the figure.
-  vec3 toLight = vec3(u_lightP - v_uv * u_uvScale, u_lightZ);
-  float dist = max(length(toLight), 0.0001);
-  vec3 L = toLight / dist;
+  // ── Layer 6: glow ── computed first, because it is the one layer that draws
+  // outside the art's coverage.
+  vec3 G = vec3(0.0);
+  bool glowing = u_glowAmount > 0.0;
+  if (glowing) G = glowAt(v_uv);
 
-  // ── The rim's own light ──
-  // A rim light is a light *behind* the subject. The key cannot be: it has to
-  // sit in front or nothing would be diffusely lit at all. So the rim borrows
-  // the key's bearing across the frame and throws its depth away.
-  //
-  // This is not a detail. With the full 3D key, u_lightZ dominates the dot
-  // product — the light is roughly half a body-height in front of the art plane,
-  // so almost every outward-facing normal scores the same — and the rim comes
-  // out even the whole way round the outline. That reads as a sticker cut from
-  // white paper, not as a backlight.
-  vec2 lBearing = length(L.xy) > 1e-4 ? normalize(L.xy) : vec2(0.0, -1.0);
-
-  // Wrapped rather than clipped at 90°: a rim that stops dead at the tangent
-  // looks severed. This keeps a trace most of the way round and concentrates the
-  // heat on the lamp's side.
-  float facingRaw = max(dot(normalize(n2 + vec2(1e-6)), lBearing) * 0.5 + 0.5, 0.0);
-  // Cel wants the opposite of that trace: an anime rim *ends*, it does not thin.
-  // The arc it sweeps is a decision the artist made, so it terminates.
-  float facing = mix(pow(facingRaw, 2.2), celStep(facingRaw, 0.56, 0.09), u_cel);
-
-  // Isotropic in pixels: uv.x spans the width and uv.y the height, so a step in
-  // x has to be divided by the aspect to cover the same distance.
-  vec2 ring = vec2(EDGE_RING / max(u_uvScale.x, 0.0001), EDGE_RING);
-  float tight = nearAlpha(v_uv, ring);
-
-  // ── The dark-rind guard ──
-  // Cut-out character art very often carries a dark rind around its silhouette:
-  // an authored outline stroke, or the residue of a matte lifted off a black
-  // background. A hot core painted along one of those is exactly what turns a rim
-  // into a halo — the eye reads the bright line, then the dark band immediately
-  // behind it, and the pair together look like a sticker pasted onto the scene.
-  //
-  // Real backlight consumes an outline rather than tracing it, and this pass
-  // cannot repaint the asset's own pixels, so the honest move is to stand down:
-  // where the boundary is markedly darker than the body a few pixels inside it,
-  // every term that draws on the edge backs off — hardest for the core and the
-  // contour, which are the two that make a line, and least for the wide halo,
-  // which is soft enough to read as light wherever it lands.
-  //
-  // Both taps run inward along the field normal, which is the one direction that
-  // means "into the figure" at every point on the outline. Taking the darker of
-  // the near tap and this pixel is what makes the test work from either side of
-  // the boundary: outside, this pixel is empty and the near tap lands on the
-  // rind; inside, this pixel *is* the rind. A transparent tap scores 1.0 rather
-  // than 0.0, so a thin limb — where the far tap has left the figure entirely —
-  // disables the guard instead of triggering it at full strength.
-  vec2 inward = -normalize(n2 + vec2(1e-6));
-  vec2 rstep = vec2(RIND_STEP / max(u_uvScale.x, 0.0001), RIND_STEP);
-  vec4 rindNear = artAt(v_uv + inward * rstep * 0.4);
-  vec4 rindBody = artAt(v_uv + inward * rstep * 1.6);
-  float rindLuma = min(mix(1.0, dot(art.rgb, LUMA), step(0.02, art.a)),
-                       mix(1.0, dot(rindNear.rgb, LUMA), step(0.02, rindNear.a)));
-  // Two conditions, and both have to hold. Relative darkness alone is not enough
-  // to tell a matte from a navy coat with a pale lining, so the boundary also has
-  // to be near black in absolute terms — which a matte lifted off black always is
-  // and a garment essentially never is. Requiring both is also what keeps the
-  // guard off a character dressed head to foot in black: there the body inside is
-  // no brighter than the outline, so the first condition fails and the rim stays.
-  float rind = rindBody.a
-             * smoothstep(0.04, 0.20, dot(rindBody.rgb, LUMA) - rindLuma)
-             * (1.0 - smoothstep(0.03, 0.14, rindLuma));
-
-  // ── Outside the silhouette: the spill ──
-  // What separates an edge that is *outlined* from one that is *lit* is that a
-  // lit edge does not stop at the outline — light spills past it and blooms into
-  // the air. That normally means an extra blur pass and a second render target.
-  // It doesn't here: the normal-map prepass blurs the alpha channel, so the
-  // field it hands over already extends a blur-radius beyond the silhouette,
-  // already shaped like a falloff. This branch is that falloff, drawn.
-  if (art.a <= 0.003) {
-    // Two scales, which is what bloom is: a hot band hugging the outline, and a
-    // wide soft halo behind it. The tight probe supplies the first, the prepass
-    // field the second. Using only the wide one — the obvious thing, since it is
-    // already there — spreads the spill into a fog bank with no edge in it.
-    float hot = smoothstep(0.0, 0.5, tight);
-    // Radius rides on the exponent rather than on the probe. The falloff here is
-    // the prepass's blurred alpha and its width was fixed at prepass time, so how
-    // fast we descend it is the only thing left to move.
-    float wide = pow(smoothstep(0.0, 0.5, thick), 3.5 / max(u_glowRadius, 0.25));
-    float reach = clamp(hot * 0.85 + wide * 0.4, 0.0, 1.0);
-    // Cel keeps the spill but not the haze: it tightens to a band following the
-    // silhouette, which is how the style draws light escaping past a contour.
-    // Most of the wide lobe goes; enough stays to keep the band off the outline.
-    reach = mix(reach, clamp(celStep(hot, 0.30, 0.22) * 0.9 + wide * 0.2, 0.0, 1.0), u_cel);
-    // Which parts of the figure are bright enough to throw light at all. The
-    // sample is the rind guard's inner tap, which is already the art a few pixels
-    // inside this point — and out here that is the only colour reading there is,
-    // since this fragment's own art is transparent by definition. At sense 0 this
-    // clears everything but true black, so the dial starts inert.
-    float sense = smoothstep(-0.02, 0.35, dot(rindBody.rgb, LUMA) - u_glowSense);
-    float a = reach * facing * u_glow * u_intensity * sense
-            * mix(1.0, 0.30, rind)         // not against the asset's own outline
-            * mix(1.0, 0.22, u_shadow)     // a dimmed character does not glow
-            * mix(0.4, 1.0, u_exposure)    // nor does one in a dark room, much
-            * (1.0 + u_lift * 0.6);        // a spotlit one glows harder
-    a = clamp(a, 0.0, 1.0);
-    // Hot toward the outline, the lamp's colour further out — a blown highlight
-    // loses its hue before it loses its brightness. Halation then carries the
-    // *outer* end further still: real lens and emulsion bleed runs red, because
-    // long wavelengths scatter furthest through a medium, and it is the single
-    // cue that most reliably reads as photographed rather than composited.
-    vec3 spill = mix(u_key, vec3(1.0), 0.6 * reach);
-    spill = mix(spill, u_halationColor, u_halation * (1.0 - reach) * 0.75);
-    gl_FragColor = vec4(spill * a, a);
+  if (art.a <= 0.0) {
+    // Premultiplied emission: colour G at coverage max(G), whose premultiplied
+    // value is G itself. Zero, exactly, whenever the glow is off.
+    float ga = max(max(G.r, G.g), G.b);
+    gl_FragColor = glowing ? vec4(G, ga) * u_intensity : vec4(0.0);
     return;
   }
 
-  // Invented surface: faces the viewer deep inside the silhouette, rolls away
-  // toward the edges. Thin regions get a shallower Z so they catch more rim.
-  vec3 N = normalize(vec3(n2, mix(0.35, 1.0, thick)));
+  vec3 linIn = toLinear(art.rgb);
+  float guard = u_skin * skinMask(art.rgb);
 
-  // ── The grade ──
-  // The room's measurement applied to the art's, before a single light touches
-  // it. This half of the feature is a statement about *pigment* — what colour
-  // the character is painted in — and the lighting below is a statement about
-  // illumination; keeping them in that order is what lets a rim land on already
-  // corrected skin rather than on the original art with a correction over it.
-  //
-  // Skin holds back the two chromatic terms and takes level and contrast in
-  // full, so a face in a blue room gets darker without going blue. See skinMask.
-  float keep = 1.0 - skinMask(art.rgb) * u_skin;
-  vec3 base = gradeMatch(toLinear(art.rgb), keep);
-  vec3 keyL = toLinear(u_key);
+  // ── Layer 1: basic correction ──
+  vec3 lin = basicCorrection(linIn);
 
-  // Falloff normalised at the figure's centre, so overall exposure is unchanged
-  // and only the gradient across the body is added. A distant light flattens to
-  // 1.0 everywhere by itself — no special case needed.
-  // Bounded: a light placed almost on top of the figure would otherwise blow
-  // the near end out and crush the far one.
-  float atten = clamp(u_refDist / dist, 0.65, 1.45);
+  // ── Layer 2: gradient ──
+  if (u_gradAmount > 0.0) {
+    float w = u_gradAmount * litWeight(v_uv);
+    if (w > 0.0) {
+      vec3 e = toSRGB(lin);
+      vec3 lit = e + (softLight(clamp(e, 0.0, 1.0), u_gradColor) - e) * w;
+      lin = guardSkin(lin, toLinear(lit), guard);
+    }
+  }
 
-  // Cel: the terms that *add* light — rim, contour, the two speculars — take a
-  // flattened version of that falloff. They are flat shapes now, and a
-  // continuous gain multiplied over a flat shape puts back exactly the gradient
-  // the banding just took out of it; the sheen lobe is broad enough to do that
-  // across half a garment. Distance still decides where those shapes fall, which
-  // is where it belongs — it is in the N·L that positions them. A third of the
-  // falloff is kept so a lamp across the room is still weaker than one beside it.
-  float attenAdd = mix(atten, mix(1.0, atten, 0.35), u_cel);
+  // ── Layer 3: wash ──
+  if (u_washAmount > 0.0) {
+    lin = guardSkin(lin, lin * (vec3(1.0) + (u_washCast - vec3(1.0)) * u_washAmount), guard);
+  }
+  if (u_darkGain != 1.0) lin *= u_darkGain;
 
-  // Half-Lambert wrap blended with true Lambert: pure Lambert crushes the
-  // unlit side to black, which looks wrong on stylised art.
-  float ndl = dot(N, L);
-  float lambert = max(ndl, 0.0);
-  float wrapped = ndl * 0.5 + 0.5;
-  // The one term that decides which style you are looking at. Everything else
-  // below is detail on top of the answer this gives: a continuous ramp, or three
-  // flat tones with a drawn line between them.
-  //
-  // Banded *after* the distance falloff, not before, and that ordering is the
-  // whole difference between flat tones and nearly-flat ones: fold a continuous
-  // attenuation into a quantised tone and every fill acquires a slow gradient
-  // again, which is the one thing this style cannot have. Applied afterwards,
-  // the lamp's distance moves the terminator instead of shading the fill — a
-  // shape, which is how the style expresses it anyway.
-  float shade = mix(wrapped, lambert, 0.5) * atten;
-  float diffuse = mix(shade, celShade(shade), u_cel);
-  // Rim-only: the one line that stops the key reaching the body at all. Every
-  // gradient the lamp draws across the figure — N·L, the wrap, the distance
-  // falloff, all of it — collapses into a single flat exposure, and what is
-  // left of the key is the edge terms below.
-  diffuse = mix(diffuse, KEY_FLAT, u_rimOnly);
+  // ── Layer 4: rim ──
+  if (u_rimAmount > 0.0) {
+    float w = u_rimAmount * rimMask(v_uv, art.a);
+    if (w > 0.0) {
+      vec3 e = toSRGB(lin);
+      lin = toLinear(e + (screen(clamp(e, 0.0, 1.0), u_rimColor) - e) * w);
+    }
+  }
 
-  // Cheap occlusion — the silhouette edge sits slightly in its own shadow.
-  float ao = mix(0.78, 1.0, thick);
-  // Cel: contact darkening is a gradient, and a gradient is the one thing this
-  // style does not have. Flattened rather than dropped — remove it entirely and
-  // the silhouette stops sitting in the room at all.
-  ao = mix(ao, mix(0.90, 1.0, celStep(thick, 0.30, 0.16)), u_cel);
-  // Rim-only: dropped outright, and here that is right where it was wrong for
-  // cel. This term darkens exactly the band the rim is about to be drawn on, so
-  // leaving it in would put a grey lip immediately inside the light — which is
-  // the reading this mode exists to avoid.
-  ao = mix(ao, 1.0, u_rimOnly);
+  // ── Layer 5: back shadow ──
+  if (u_backAmount > 0.0) {
+    float k = 1.0 - u_backAmount * (1.0 - litWeight(v_uv));
+    if (k != 1.0) lin *= k;
+  }
 
-  // Ambient is not one flat wash. Light that misses the key side arrives having
-  // bounced off the room, and it arrives from the *other* side, carrying the
-  // room's colour rather than the lamp's. That split is most of what separates a
-  // figure that reads as lit from one that reads as tinted — and because the two
-  // colours are luminance-matched it costs no exposure to add.
-  float bounceRaw = dot(N, normalize(vec3(-L.x, -L.y, 0.6))) * 0.5 + 0.5;
-  // Cel takes the same separation as a fill with an edge on it: the shadow side
-  // is a colour the art is *painted* in, not a hue creeping across the figure.
-  float bounce = mix(bounceRaw, celStep(bounceRaw, 0.50, 0.10), u_cel);
-  // Rim-only: the split is a *direction* — one hue on the lamp's side, the
-  // room's on the other — so it goes the same way the diffuse did. The colours
-  // stay, at the midpoint: the character is still lit by this room, just not
-  // from anywhere in it.
-  bounce = mix(bounce, 0.5, u_rimOnly);
-  // u_fill is how far the shadow side is allowed to travel toward the bounce
-  // hue. It was a literal 0.7; a GM whose room is lit by one saturated source
-  // wants more separation than one standing in overcast daylight, and that is a
-  // property of the scene rather than of the model.
-  vec3 amb = mix(u_ambient, u_bounce, bounce * u_fill) * ao;
+  lin = gamutFit(lin);
 
-  // ── Rim, in two lobes ──
-  // Neither lobe alone is the effect. A wide falloff on its own is a soft wash
-  // with no edge in it; a tight one on its own is a drawn outline with no light
-  // in it. Together they are a hot core sitting inside a halo, which is what a
-  // backlit edge actually looks like — and what every one of the reference
-  // stills has in common.
-  //
-  // Both ride the same wrapped bearing as the spill, so the rim sweeps the parts
-  // of the outline actually turned toward the lamp — the lit shoulder and jaw
-  // under a high lamp, not the whole perimeter.
-  // Both are normalised against the half of their ramp that is inside the figure.
-  // A blurred step edge reads 0.5 *at* the outline and climbs to 1.0 going in, so
-  // a bare 1.0 - thick tops out at 0.5 on the outermost real pixel — and any
-  // exponent sharp enough to make a line out of it annihilates the term instead
-  // (0.5 to the 11th is 0.0005). Rescaling so the outline reads 1.0 is what lets
-  // a core exist at all.
-  //
-  // Under cel both lobes stop being falloffs and become strips of constant
-  // brightness: the halo is the wide band drawn along a backlit contour, the
-  // core the hard line inside it. Their widths still come from the two ramps'
-  // own scales — the wide prepass field and the tight alpha ring — so they stay
-  // in proportion on art of any resolution, which is the same reason the
-  // exponents they replace were picked rather than a fixed number of texels.
-  float edge = clamp((1.0 - thick) * 2.0, 0.0, 1.0);
-  float edgeTight = clamp((1.0 - tight) * 2.0, 0.0, 1.0);
-  // Rim-only tightens the halo rather than removing it. The core alone is a
-  // drawn line with no light in it — the same failure the two lobes exist to
-  // avoid — so what this mode wants is both lobes, pulled in against the
-  // outline instead of one of them washing inward.
-  float haloShape = mix(pow(edge, 3.5), pow(edge, RIM_ONLY_FALLOFF), u_rimOnly);
-  float rimHalo = mix(haloShape, celStep(edge, 0.62, 0.06), u_cel)
-                * facing * attenAdd * mix(1.0, 0.5, rind);
-  float rimCore = mix(pow(edgeTight, 2.0), celStep(edgeTight, 0.55, 0.08), u_cel)
-                * facing * attenAdd * mix(1.0, 0.15, rind);
+  // ── Layer 7: looks ── in order, each at its own opacity; skipped at 0.
+${Array.from({ length: MAX_LOOKS }, (_, i) => {
+  const c = "xyzw"[i];
+  return `  if (u_lookAmount.${c} > 0.0) lin = applyLook(lin, u_lut${i}, u_lookSize.${c}, u_lookAmount.${c}, guard);`;
+}).join("\n")}
 
-  // ── Interior contours ──
-  // The alpha silhouette knows about exactly one edge: the outside one. Every
-  // fold the art draws *inside* its own outline — a lapel over a shirt, a collar,
-  // an arm crossing hair — is invisible to it, and gets no light off it at all.
-  // The art's own luminance does know where those are, and which side of one
-  // faces the lamp is just the sign of its gradient against L.
-  //
-  // The taps straddle a drawn line rather than landing inside it, which is what
-  // makes this pick out form edges and not lineart: across a thin dark line both
-  // neighbours sit on the light side and the difference cancels, while across a
-  // garment edge it survives. Dotting with L unnormalised is deliberate too — it
-  // fades the whole term out as the lamp swings head-on, where there is no side
-  // for a contour to catch.
-  vec2 tx = vec2(CONTOUR_STEP / max(u_uvScale.x, 0.0001), CONTOUR_STEP);
-  vec2 grad = vec2(
-    dot(artAt(v_uv + vec2(tx.x, 0.0)).rgb, LUMA)
-      - dot(artAt(v_uv - vec2(tx.x, 0.0)).rgb, LUMA),
-    dot(artAt(v_uv + vec2(0.0, tx.y)).rgb, LUMA)
-      - dot(artAt(v_uv - vec2(0.0, tx.y)).rgb, LUMA)
-  );
-  float gradLen = max(length(grad), 1e-5);
-  // Guarded too, and this is the term the guard buys the most from. A matte rind
-  // is the largest tonal step anywhere in the asset — black against whatever the
-  // character is wearing — so the contour term reads its inner boundary as the
-  // strongest form edge in the picture and draws a second bright line just inside
-  // the first. That pair is most of what makes a halo look like a halo.
-  // Cel gives this a threshold instead of a ramp, which is what turns it from
-  // "form edges catch a little light" into a drawn line along them — the closest
-  // thing in the model to the ink an artist would have put there.
-  float contour = mix(smoothstep(0.05, 0.4, gradLen), celStep(gradLen, 0.11, 0.045), u_cel)
-                * max(dot(grad / gradLen, L.xy), 0.0)
-                * thick * attenAdd * u_contour * mix(1.0, 0.15, rind);
+  // Formed as a difference from the input so an untouched pixel is exactly the
+  // input: both encodes come from the same expression and cancel.
+  vec3 graded = clamp(art.rgb + (toSRGB(lin) - toSRGB(linIn)), 0.0, 1.0);
+  if (glowing) graded = screen(clamp(graded, 0.0, 1.0), G);
+  vec3 outc = art.rgb + (graded - art.rgb) * u_intensity;
 
-  // ── Specular, two lobes as well ──
-  // Both gated on thickness (never on the antialiased fringe) and on how bright
-  // the art already is there: a highlight belongs on a pauldron or a cheekbone,
-  // never on black cloth that would have swallowed it.
-  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-  float ndh = max(dot(N, H), 0.0);
-  float gate = thick * attenAdd * smoothstep(0.18, 0.7, dot(base, LUMA));
-  float specLobe = pow(ndh, 28.0);
-  // The tight lobe alone puts a dot on a pauldron and nothing anywhere else. The
-  // broad one is sheen — what separates satin from wool, and what gives hair its
-  // band rather than a speck.
-  float sheenLobe = pow(ndh, 5.0);
-  // Under cel a highlight is a shape with an edge, not a peak with a falloff.
-  // The threshold is taken on the lobe rather than on N·H, so what comes out is
-  // a hard-edged version of exactly where the smooth highlight already was —
-  // its own contour, following the invented surface, rather than a disc.
-  float spec = mix(specLobe, celStep(specLobe, 0.22, 0.09), u_cel) * u_spec * gate;
-  float sheen = mix(sheenLobe, celStep(sheenLobe, 0.45, 0.07), u_cel) * u_sheen * gate;
-
-  // The diffuse shading is a multiplier and is converted, not re-derived — see
-  // the note on toLinear. Everything else here is light *arriving*, so it adds in
-  // linear, where two highlights overlapping no longer pin at white.
-  //
-  // The core is not in here — see the note where it is added, below the dial.
-  vec3 lit = base * toLinear(amb + u_key * diffuse)
-           + keyL * (rimHalo * u_rim + spec + sheen + contour);
-
-  // ── Light wrap ──
-  // The spill above carries the character's light outward into the air. This is
-  // the other direction of the same exchange: the room is *behind* the figure,
-  // so its light arrives round every edge and lands a short way inside. It is
-  // the cheapest thing in compositing that makes a cut-out stop looking cut out,
-  // and the reason is that a real edge is never a step — there is always some
-  // background in the outermost millimetre of a foreground subject.
-  //
-  // Unlike every other edge term here it takes no facing. The rim is one lamp
-  // and sweeps only the part of the outline turned toward it; the wrap is the
-  // whole room and arrives from all of it at once. Gating it on the lamp's
-  // bearing would turn the room back into a second key, which is precisely the
-  // reading it exists to break.
-  float wrapShape = mix(pow(edge, WRAP_FALLOFF), celStep(edge, 0.34, 0.10), u_cel);
-  lit += toLinear(u_wrapColor) * (wrapShape * u_wrap * attenAdd * mix(1.0, 0.55, rind));
-
-  // ── Backlight ──
-  // Light coming *through* the figure rather than round it: hair, a cloak's hem,
-  // a sleeve seen edge on. The unrescaled field is what makes it distinct from
-  // the rim — the rim normalises against the inside half of its ramp so that it
-  // can resolve a line, and this does not, so it stays broad and reaches deep
-  // wherever the art is genuinely thin. On anything solid it is nearly absent,
-  // which is correct: that is what solid means.
-  float backShape = mix(pow(1.0 - thick, BACK_FALLOFF), celStep(1.0 - thick, 0.52, 0.12), u_cel);
-  lit += toLinear(u_backColor) * (backShape * facing * u_backlight * attenAdd);
-
-  // Grounding: light reaching the floor is blocked by the figure itself, so the
-  // lowest part of a full body sits darker. Confined to the bottom of the
-  // silhouette by the cube, and scaled to nothing when the feet are out of frame.
-  // Cel draws it as a shadow with a boundary instead — same placement, same
-  // framing scaling, but a shape rather than a fade.
-  float fy = clamp((v_uv.y - u_figTop) / max(u_figBottom - u_figTop, 0.0001), 0.0, 1.0);
-  // Rim-only drops it: it is the last gradient the lamp puts on the body, and
-  // the strength for it arrives from the framing measurement rather than from a
-  // style table, so it has to be switched off here or nowhere.
-  float groundShape = mix(fy * fy * fy, celStep(fy, 0.78, 0.05) * 0.85, u_cel);
-  lit *= mix(1.0 - groundShape * u_ground, 1.0, u_rimOnly);
-
-  // Highlighted characters step forward into the light.
-  lit *= (1.0 + u_lift * 0.9);
-
-  // Scene darkness pulls exposure down for everyone, and deep darkness takes the
-  // colour with it.
-  lit *= u_exposure;
-  lit = mix(lit, vec3(dot(lit, LUMA)) * NIGHT, u_night);
-
-  // Dimmed characters recede into the room's shadow rather than fading out.
-  float lum = dot(lit, LUMA);
-  vec3 receded = mix(vec3(lum), toLinear(u_shadowColor), 0.55) * 0.45;
-  lit = mix(lit, receded, u_shadow);
-
-  // Shoulder, not a clip. Clamping each channel independently is what turns a
-  // warm-lit face magenta at the highlight: red pins at 1.0 while green and blue
-  // keep climbing. Rolling luminance and rescaling keeps the hue, and the last
-  // step lets only the very top desaturate, the way film and sensors do.
-  float l = max(dot(lit, LUMA), 0.0001);
-  float over = max(l - KNEE, 0.0);
-  float mapped = min(l, KNEE) + (1.0 - KNEE) * over / (over + (1.0 - KNEE));
-  lit *= mapped / l;
-  lit = mix(lit, vec3(mapped), smoothstep(KNEE, 1.0, mapped) * 0.45);
-
-  // Encode first, then blend. u_intensity is a strength dial a GM drags, not a
-  // light quantity: blending in linear makes the same slider position deliver
-  // visibly less effect in a dark room than a bright one, because a linear
-  // crossfade between a bright and a dark value re-encodes brighter than a
-  // perceptual one. Blending after the encode also makes strength 0 exactly the
-  // original pixels and strength 1 exactly the model, with nothing in between
-  // that the dial does not account for.
-  vec3 outc = mix(art.rgb, toSRGB(lit), u_intensity);
-
-  // ── The edge core, added after the dial rather than inside it ──
-  // Every other term crossfades with u_intensity, which is the right answer for
-  // anything that *modifies* pixels: the dial mixes the original art back in.
-  // It is the wrong answer for the rim, and the arithmetic is unforgiving —
-  // mixing 40% of the flat art back over a lit edge caps the core at 0.72 over
-  // dark art at the default strength, however hard it is driven. A rim that
-  // cannot reach white is not a rim; it is a lighter edge.
-  //
-  // So the core scales with the dial instead of crossfading with it, exactly as
-  // the outward spill already does. Zero is still exactly the original pixels,
-  // which is the property that actually mattered.
-  outc += mix(u_key, vec3(1.0), 0.72)
-        * min(rimCore * u_rimEdge, 1.3)
-        * u_intensity
-        * mix(1.0, 0.25, u_shadow)
-        * (1.0 + u_lift * 0.5);
-
-  // The output is 8-bit and most of this image is a very slow ramp, which is the
-  // one thing 8 bits cannot hold — the banding would be the most obvious artefact
-  // in the whole effect. A sub-LSB dither costs three instructions and removes it
-  // completely. (Interleaved gradient noise: no texture, no visible pattern.)
-  // Scaled by intensity, because the ramp it is breaking up is: at strength zero
-  // this pass must hand back the original pixels untouched, noise included.
-  float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-  outc = clamp(outc + (d - 0.5) * u_intensity / 255.0, 0.0, 1.0);
+  // On a partly covered edge pixel the glow also lands on what is behind it.
+  if (glowing && art.a < 1.0) {
+    float ga = max(max(G.r, G.g), G.b) * u_intensity;
+    gl_FragColor = vec4(outc * art.a + G * u_intensity * (1.0 - art.a), art.a + ga * (1.0 - art.a));
+    return;
+  }
 
   // Premultiplied — the context is created with premultipliedAlpha.
   gl_FragColor = vec4(outc * art.a, art.a);
 }
 `;
+
+// ── The bloom pyramid ── (see "Bloom" in grade-model.mjs)
+
+const PRECISION = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+`;
+
+/**
+ * The bloom passes' vertex shader. Unlike the main pass it does not flip Y:
+ * a render target stores its rows bottom-up, so a pass that wrote at the
+ * flipped coordinate would mirror the image, and every pass after it would
+ * mirror it back. Kept unflipped, every level holds image row y at texture
+ * coordinate y — the same convention as the art texture, which is what lets the
+ * main pass sample the finished bloom at its own v_uv.
+ */
+const BLOOM_VERT = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
+
+/** Down: the four-tap box; on the first level, the bright pass per tap. */
+export const BLOOM_DOWN_FRAG = `${PRECISION}
+varying vec2 v_uv;
+uniform sampler2D u_src;
+uniform vec2  u_srcTexel;     // one texel of the source, uv
+uniform float u_bright;       // 1 on the first level: apply the bright pass
+uniform float u_threshold;
+
+const vec3 LUMA = vec3(${LUMA.map(f).join(", ")});
+const float GLOW_KNEE = ${f(GLOW_KNEE)};
+
+vec4 tap(vec2 uv) {
+  vec4 t = texture2D(u_src, uv);
+  if (u_bright < 0.5) return t;
+  vec3 c = t.rgb / max(t.a, 0.0039);
+  float k = smoothstep(u_threshold, u_threshold + GLOW_KNEE, dot(c, LUMA)) * t.a;
+  return vec4(c * k, k);
+}
+
+void main() {
+  gl_FragColor = 0.25 * (
+${DOWN_TAPS.map(([x, y]) => `      tap(v_uv + vec2(${f(x)}, ${f(y)}) * u_srcTexel)`).join(" +\n")});
+}
+`;
+
+/** Up: this level mixed toward a 3×3 tent of the level below. */
+export const BLOOM_UP_FRAG = `${PRECISION}
+varying vec2 v_uv;
+uniform sampler2D u_fine;
+uniform sampler2D u_coarse;
+uniform vec2  u_coarseTexel;  // one texel of the coarser level, uv
+uniform float u_weight;       // bloomWeights for this level
+
+void main() {
+  vec4 tent = vec4(0.0);
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
+      tent += texture2D(u_coarse, v_uv + vec2(float(i), float(j)) * u_coarseTexel) * w;
+    }
+  }
+  vec4 fine = texture2D(u_fine, v_uv);
+  gl_FragColor = fine + (tent - fine) * u_weight;
+}
+`;
+
+export const BLOOM_DOWN_UNIFORMS = Object.freeze(["src", "srcTexel", "bright", "threshold"]);
+export const BLOOM_UP_UNIFORMS = Object.freeze(["fine", "coarse", "coarseTexel", "weight"]);
+
+/**
+ * Every uniform the fragment shader declares, in one list, so the context
+ * looks each one up and the check tool can compare the list against the GLSL.
+ * A name in the shader and not here holds its initial value forever; a name
+ * here and not in the shader is a location of null that every write ignores.
+ */
+export const UNIFORMS = Object.freeze([
+  "art",
+  "intensity",
+  "gain",
+  "lift",
+  "gamma",
+  "contrast",
+  "sat",
+  "hue",
+  "aspect",
+  "lightDir",
+  "gradAmount",
+  "gradColor",
+  "washAmount",
+  "washCast",
+  "darkGain",
+  "lightSoft",
+  "rimAmount",
+  "rimOffset",
+  "rimRadius",
+  "rimColor",
+  "backAmount",
+  "glowAmount",
+  "bloom",
+  ...Array.from({ length: MAX_LOOKS }, (_, i) => `lut${i}`),
+  "lookAmount",
+  "lookSize",
+  "skin",
+]);
 
 /** Longest edge of the render target, before display scaling. Stage art shows at
  *  roughly 40vh, so this only has to beat the tallest viewport that will ever
@@ -788,7 +535,7 @@ const BASE_RENDER_DIM = 1280;
 /** Hard ceiling. Nothing is gained past this and the upload cost is quadratic. */
 const MAX_RENDER_DIM = 2048;
 
-/** Art textures are GPU memory; bound the same way normal maps are. */
+/** Art textures are GPU memory; bounded. */
 const TEXTURE_LIMIT = 24;
 
 function renderDim() {
@@ -807,8 +554,8 @@ function renderDim() {
  * it once at decode also cuts the texture to a fraction of the VRAM.
  */
 async function fitForUpload(img, maxDim) {
-  const nw = img.naturalWidth || 0;
-  const nh = img.naturalHeight || 0;
+  const nw = img.naturalWidth || img.width || 0;
+  const nh = img.naturalHeight || img.height || 0;
   const scale = Math.min(1, maxDim / Math.max(nw, nh, 1));
   if (scale >= 1 || typeof createImageBitmap !== "function") {
     return { source: img, width: nw, height: nh, close: false };
@@ -829,22 +576,37 @@ async function fitForUpload(img, maxDim) {
 }
 
 export class StageGL {
-  constructor() {
+  /**
+   * @param {object} [opts]
+   * @param {() => void} [opts.onLost]  Called when the context is lost. The next
+   *   `prepare()` builds a fresh one, so the owner only has to ask for another
+   *   render — without that, a GPU reset leaves every slot on the CSS fallback
+   *   until something unrelated happens to re-render the stage.
+   */
+  constructor({ onLost = null, bloomFormat = "auto" } = {}) {
     this.canvas = null;
     this.gl = null;
     this.program = null;
     this.uniforms = null;
     this._renderDim = BASE_RENDER_DIM;
     this._artTextures = new Map(); // src → { tex, width, height }
-    this._nrmTextures = new Map(); // src → tex
+    this._lutTextures = new Map(); // look key → texture
     this._supported = null;
     this._lost = false;
     this._surface = null;
     this._generation = 0; // bumped per context; see the header
+    this._onLostCallback = onLost;
+    // "auto" renders the bloom in half float where the GPU can, 8-bit
+    // otherwise; "u8" forces 8-bit, which the harness uses to read it back.
+    this._bloomFormat = bloomFormat === "u8" ? "u8" : "auto";
+    this._bloom = null; // { key, type, levels: [{ w, h, down, up }] }
+    this._blank = null; // 1×1 transparent texture for u_bloom when not glowing
     this._onLost = (event) => {
       event.preventDefault();
       this._lost = true;
       this._dropTextures();
+      this._bloom = null;
+      try { this._onLostCallback?.(); } catch (_e) { /* the owner's problem, not the context's */ }
     };
   }
 
@@ -886,6 +648,9 @@ export class StageGL {
 
     const program = this._buildProgram(gl, VERT, FRAG);
     if (!program) return false;
+    const downProgram = this._buildProgram(gl, BLOOM_VERT, BLOOM_DOWN_FRAG);
+    const upProgram = this._buildProgram(gl, BLOOM_VERT, BLOOM_UP_FRAG);
+    if (!downProgram || !upProgram) return false;
 
     canvas.addEventListener("webglcontextlost", this._onLost);
 
@@ -895,9 +660,8 @@ export class StageGL {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     // Single oversized triangle — no index buffer, no second vertex.
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const posLoc = gl.getAttribLocation(program, "a_pos");
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
@@ -920,54 +684,188 @@ export class StageGL {
     // the viewport can never be sized against different values.
     this._renderDim = renderDim();
 
-    this.uniforms = {
-      art: gl.getUniformLocation(program, "u_art"),
-      nrm: gl.getUniformLocation(program, "u_nrm"),
-      nrmSize: gl.getUniformLocation(program, "u_nrmSize"),
-      ambient: gl.getUniformLocation(program, "u_ambient"),
-      bounce: gl.getUniformLocation(program, "u_bounce"),
-      key: gl.getUniformLocation(program, "u_key"),
-      lightP: gl.getUniformLocation(program, "u_lightP"),
-      lightZ: gl.getUniformLocation(program, "u_lightZ"),
-      refDist: gl.getUniformLocation(program, "u_refDist"),
-      uvScale: gl.getUniformLocation(program, "u_uvScale"),
-      figTop: gl.getUniformLocation(program, "u_figTop"),
-      figBottom: gl.getUniformLocation(program, "u_figBottom"),
-      ground: gl.getUniformLocation(program, "u_ground"),
-      shadowColor: gl.getUniformLocation(program, "u_shadowColor"),
-      intensity: gl.getUniformLocation(program, "u_intensity"),
-      rim: gl.getUniformLocation(program, "u_rim"),
-      rimEdge: gl.getUniformLocation(program, "u_rimEdge"),
-      glow: gl.getUniformLocation(program, "u_glow"),
-      contour: gl.getUniformLocation(program, "u_contour"),
-      spec: gl.getUniformLocation(program, "u_spec"),
-      sheen: gl.getUniformLocation(program, "u_sheen"),
-      exposure: gl.getUniformLocation(program, "u_exposure"),
-      night: gl.getUniformLocation(program, "u_night"),
-      shadow: gl.getUniformLocation(program, "u_shadow"),
-      lift: gl.getUniformLocation(program, "u_lift"),
-      cel: gl.getUniformLocation(program, "u_cel"),
-      rimOnly: gl.getUniformLocation(program, "u_rimOnly"),
-      mCast: gl.getUniformLocation(program, "u_mCast"),
-      mGain: gl.getUniformLocation(program, "u_mGain"),
-      mPivot: gl.getUniformLocation(program, "u_mPivot"),
-      mBright: gl.getUniformLocation(program, "u_mBright"),
-      mSat: gl.getUniformLocation(program, "u_mSat"),
-      skin: gl.getUniformLocation(program, "u_skin"),
-      wrap: gl.getUniformLocation(program, "u_wrap"),
-      wrapColor: gl.getUniformLocation(program, "u_wrapColor"),
-      backlight: gl.getUniformLocation(program, "u_backlight"),
-      backColor: gl.getUniformLocation(program, "u_backColor"),
-      fill: gl.getUniformLocation(program, "u_fill"),
-      glowRadius: gl.getUniformLocation(program, "u_glowRadius"),
-      glowSense: gl.getUniformLocation(program, "u_glowSense"),
-      halation: gl.getUniformLocation(program, "u_halation"),
-      halationColor: gl.getUniformLocation(program, "u_halationColor"),
-    };
-
+    this.uniforms = {};
+    for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     gl.uniform1i(this.uniforms.art, 0);
-    gl.uniform1i(this.uniforms.nrm, 1);
+    gl.uniform1i(this.uniforms.bloom, 1);
+    for (let i = 0; i < MAX_LOOKS; i++) gl.uniform1i(this.uniforms[`lut${i}`], 2 + i);
+
+    this._down = { program: downProgram, u: {} };
+    for (const name of BLOOM_DOWN_UNIFORMS) this._down.u[name] = gl.getUniformLocation(downProgram, `u_${name}`);
+    this._up = { program: upProgram, u: {} };
+    for (const name of BLOOM_UP_UNIFORMS) this._up.u[name] = gl.getUniformLocation(upProgram, `u_${name}`);
+    gl.useProgram(downProgram);
+    gl.uniform1i(this._down.u.src, 0);
+    gl.useProgram(upProgram);
+    gl.uniform1i(this._up.u.fine, 0);
+    gl.uniform1i(this._up.u.coarse, 1);
+    gl.useProgram(program);
+
+    this._blank = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this._blank);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    this._bloomType = this._pickBloomType(gl);
     return true;
+  }
+
+  /**
+   * Half float where the GPU can render to it and filter it, 8-bit otherwise.
+   * 8-bit works — the pyramid never leaves 0..1 — but a wide soft glow bands in
+   * it, so it is the fallback, not the choice.
+   */
+  _pickBloomType(gl) {
+    if (this._bloomFormat === "u8") return gl.UNSIGNED_BYTE;
+    const half = gl.getExtension("OES_texture_half_float");
+    const linear = gl.getExtension("OES_texture_half_float_linear");
+    if (!half || !linear) return gl.UNSIGNED_BYTE;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, half.HALF_FLOAT_OES, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(tex);
+    return ok ? half.HALF_FLOAT_OES : gl.UNSIGNED_BYTE;
+  }
+
+  /**
+   * The texture for one look's strip, uploaded once per key. Linear filtering
+   * is what makes the strip trilinear: the shader keeps every tap inside its
+   * tile, so the filter only ever blends neighbours within one blue slice.
+   */
+  _lutTexture(gl, key, strip) {
+    const cached = this._touch(this._lutTextures, key);
+    if (cached) return cached;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, strip.width, strip.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, strip.bytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this._lutTextures.set(key, tex);
+    this._evict(this._lutTextures, (t) => gl.deleteTexture(t));
+    return tex;
+  }
+
+  /** A render target: a linearly filtered, edge-clamped texture and its FBO. */
+  _target(gl, w, h) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, this._bloomType, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return { tex, fbo };
+  }
+
+  /** The pyramid's targets for art of this size, reused while the size holds. */
+  _bloomTargets(gl, width, height) {
+    const key = `${width}x${height}`;
+    if (this._bloom?.key === key) return this._bloom;
+    this._dropBloom();
+    const levels = bloomSizes(width, height).map(([w, h]) => ({
+      w,
+      h,
+      down: this._target(gl, w, h),
+      up: this._target(gl, w, h),
+    }));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._bloom = { key, levels };
+    return this._bloom;
+  }
+
+  _dropBloom() {
+    const gl = this.gl;
+    if (gl && this._bloom) {
+      for (const level of this._bloom.levels) {
+        for (const t of [level.down, level.up]) {
+          gl.deleteFramebuffer(t.fbo);
+          gl.deleteTexture(t.tex);
+        }
+      }
+    }
+    this._bloom = null;
+  }
+
+  /**
+   * Run the pyramid for one piece of art. Synchronous, like the draw it is
+   * part of. Returns the texture holding the finished bloom.
+   */
+  _renderBloom(gl, art, params) {
+    const pyr = this._bloomTargets(gl, art.width, art.height);
+    const { levels } = pyr;
+
+    const d = this._down;
+    gl.useProgram(d.program);
+    gl.uniform1f(d.u.threshold, params.glowThreshold);
+    gl.activeTexture(gl.TEXTURE0);
+    let srcTex = art.tex;
+    let srcW = art.width;
+    let srcH = art.height;
+    levels.forEach((level, i) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, level.down.fbo);
+      gl.viewport(0, 0, level.w, level.h);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform2f(d.u.srcTexel, 1 / srcW, 1 / srcH);
+      gl.uniform1f(d.u.bright, i === 0 ? 1 : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      srcTex = level.down.tex;
+      srcW = level.w;
+      srcH = level.h;
+    });
+
+    const weights = bloomWeights(levels.length, params.glowSpread);
+    const u = this._up;
+    gl.useProgram(u.program);
+    let coarse = levels[levels.length - 1];
+    let coarseTex = coarse.down.tex;
+    for (let i = levels.length - 2; i >= 0; i--) {
+      const level = levels[i];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, level.up.fbo);
+      gl.viewport(0, 0, level.w, level.h);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, level.down.tex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, coarseTex);
+      gl.uniform2f(u.u.coarseTexel, 1 / coarse.w, 1 / coarse.h);
+      gl.uniform1f(u.u.weight, weights[i]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      coarse = level;
+      coarseTex = level.up.tex;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(this.program);
+    return levels.length > 1 ? levels[0].up.tex : levels[0].down.tex;
+  }
+
+  /**
+   * The finished bloom of the last draw, read back as a premultiplied float
+   * image. For the browser harness only, and only for a context made with
+   * `bloomFormat: "u8"` — WebGL1 cannot read a half-float target back.
+   */
+  readBloom() {
+    const gl = this.gl;
+    if (!gl || !this._bloom || this._bloomType !== gl.UNSIGNED_BYTE) return null;
+    const { levels } = this._bloom;
+    const level = levels[0];
+    const target = levels.length > 1 ? level.up : level.down;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    const bytes = new Uint8Array(level.w * level.h * 4);
+    gl.readPixels(0, 0, level.w, level.h, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const data = new Float32Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) data[i] = bytes[i] / 255;
+    return { width: level.w, height: level.h, data };
   }
 
   _buildProgram(gl, vsrc, fsrc) {
@@ -994,6 +892,8 @@ export class StageGL {
     const program = gl.createProgram();
     gl.attachShader(program, vs);
     gl.attachShader(program, fs);
+    // Every program draws the same triangle from attribute 0.
+    gl.bindAttribLocation(program, 0, "a_pos");
     gl.linkProgram(program);
     gl.deleteShader(vs);
     gl.deleteShader(fs);
@@ -1023,9 +923,8 @@ export class StageGL {
     }
   }
 
-  /** Upload the character art. Uses the shared loader, so it reaches exactly the
-   *  same verdict as the normal-map prepass — the two must never disagree about
-   *  whether an asset is readable. */
+  /** Upload the character art through the shared loader, which decides once per
+   *  asset how (and whether) its pixels can be read. */
   async _artTexture(src) {
     const cached = this._touch(this._artTextures, src);
     if (cached) return cached;
@@ -1043,12 +942,10 @@ export class StageGL {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     // Premultiplied on upload, divided back out at every sample — see artAt().
-    // This is not a formality. Bilinear filtering blends whatever is *stored*,
-    // and in straight alpha the fully transparent pixels of a cut-out PNG carry
-    // rgb 0,0,0 almost without exception. Interpolating against them darkens
-    // every texel on the boundary, so the sampler manufactures a black rind that
-    // is nowhere in the asset — and the rim then draws a hot line along the
-    // outside of it, which is a halo, not an edge. Premultiplied is the space
+    // Bilinear filtering blends whatever is *stored*, and in straight alpha the
+    // transparent pixels of a cut-out PNG are almost always rgb 0,0,0.
+    // Interpolating against them darkens every texel on the boundary into a
+    // black rind that is nowhere in the asset. Premultiplied is the space
     // interpolation is correct in.
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -1065,36 +962,6 @@ export class StageGL {
     return entry;
   }
 
-  /** Upload a prepassed normal map. */
-  _normalTexture(src, normal) {
-    const cached = this._touch(this._nrmTextures, src);
-    if (cached) return cached;
-
-    const gl = this.gl;
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      normal.width,
-      normal.height,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      new Uint8Array(normal.data.buffer, normal.data.byteOffset, normal.data.length)
-    );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    this._nrmTextures.set(src, tex);
-    this._evict(this._nrmTextures, (v) => gl.deleteTexture(v));
-    return tex;
-  }
-
   /**
    * Get everything one character needs onto the GPU.
    *
@@ -1105,11 +972,11 @@ export class StageGL {
    * that can suspend lives here; everything that touches the shared canvas lives
    * in `draw`.
    *
-   * @returns {Promise<object|null>} A handle for `draw`, or null when shading
+   * @returns {Promise<object|null>} A handle for `draw`, or null when grading
    *                                 isn't possible.
    */
-  async prepare(src, normal) {
-    if (!normal || !src) return null;
+  async prepare(src) {
+    if (!src) return null;
     // Rebuilds a released context. The visibility answer is ignored on purpose:
     // there is no loop to catch up on a skipped render.
     this._surface?.use();
@@ -1128,36 +995,28 @@ export class StageGL {
     // The context can be lost (or released) while the art texture is in flight.
     if (!art || !this.gl || this._lost || this._generation !== generation) return null;
 
-    return {
-      generation,
-      src,
-      art,
-      nrmTex: this._normalTexture(src, normal),
-      nrmWidth: normal.width,
-      nrmHeight: normal.height,
-    };
+    return { generation, src, art };
   }
 
   /**
-   * Shade one prepared character and return the shared canvas holding the
+   * Grade one prepared character and return the shared canvas holding the
    * result. The caller must copy it out *before returning to the event loop* —
    * not merely before the next `draw`.
    *
    * Synchronous on purpose, and it has to stay that way. One canvas serves every
    * slot, so the only thing keeping one character's pixels out of another's slot
-   * is that nothing else gets a turn between this draw and that copy. When this
-   * work sat behind an `await`, adding a second actor to the stage repainted the
-   * first one with the new actor's art: both slots drew into the shared canvas
-   * before either copied out, and the last draw won twice.
+   * is that nothing else gets a turn between this draw and that copy.
    *
-   * @returns {HTMLCanvasElement|null} null when shading isn't possible.
+   * @param {object} prepared  From `prepare`.
+   * @param {object} params    `{ intensity }` plus the fields of `stackParams`.
+   * @returns {HTMLCanvasElement|null} null when grading isn't possible.
    */
   draw(prepared, params) {
     if (!prepared || !this.gl || this._lost || prepared.generation !== this._generation) return null;
     this._surface?.touch();
 
     const gl = this.gl;
-    const { art, nrmTex } = prepared;
+    const { art } = prepared;
 
     const scale = Math.min(1, this._renderDim / Math.max(art.width, art.height, 1));
     const width = Math.max(1, Math.round(art.width * scale));
@@ -1167,58 +1026,62 @@ export class StageGL {
       this.canvas.width = width;
       this.canvas.height = height;
     }
-    gl.viewport(0, 0, width, height);
+    // The bloom renders into its own targets first; the main pass then reads it.
+    const bloomTex = params.glowAmount > 0 ? this._renderBloom(gl, art, params) : this._blank;
 
+    // Looks: slot i on texture unit 2 + i. `params.looks[i]` is { key, strip }
+    // or null; an empty slot binds the blank texture and has amount 0.
+    // Every texture is uploaded before any is bound: an upload binds its new
+    // texture to whichever unit is active, which would silently replace the
+    // previous slot's look with this one.
+    const amounts = [0, 0, 0, 0];
+    const sizes = [2, 2, 2, 2];
+    const lutTex = [];
+    for (let i = 0; i < MAX_LOOKS; i++) {
+      const look = params.looks?.[i];
+      const w = params.lookAmounts?.[i] ?? 0;
+      lutTex[i] = look && w > 0 ? this._lutTexture(gl, look.key, look.strip) : this._blank;
+      if (look && w > 0) {
+        amounts[i] = w;
+        sizes[i] = look.strip.size;
+      }
+    }
+    for (let i = 0; i < MAX_LOOKS; i++) {
+      gl.activeTexture(gl.TEXTURE2 + i);
+      gl.bindTexture(gl.TEXTURE_2D, lutTex[i]);
+    }
+
+    gl.viewport(0, 0, width, height);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, bloomTex);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, art.tex);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, nrmTex);
 
     const u = this.uniforms;
-    gl.uniform2f(u.nrmSize, prepared.nrmWidth, prepared.nrmHeight);
-    gl.uniform3fv(u.ambient, params.ambient);
-    gl.uniform3fv(u.bounce, params.bounce);
-    gl.uniform3fv(u.key, params.key);
-    gl.uniform2fv(u.lightP, params.lightP);
-    gl.uniform1f(u.lightZ, params.lightZ);
-    gl.uniform1f(u.refDist, params.refDist);
-    gl.uniform2fv(u.uvScale, params.uvScale);
-    gl.uniform1f(u.figTop, params.figTop);
-    gl.uniform1f(u.figBottom, params.figBottom);
-    gl.uniform1f(u.ground, params.ground);
-    gl.uniform3fv(u.shadowColor, params.shadowColor);
     gl.uniform1f(u.intensity, params.intensity);
-    gl.uniform1f(u.rim, params.rim);
-    gl.uniform1f(u.rimEdge, params.rimEdge);
-    gl.uniform1f(u.glow, params.glow);
-    gl.uniform1f(u.contour, params.contour);
-    gl.uniform1f(u.spec, params.spec);
-    gl.uniform1f(u.sheen, params.sheen);
-    gl.uniform1f(u.exposure, params.exposure);
-    gl.uniform1f(u.night, params.night);
-    gl.uniform1f(u.shadow, params.shadow);
+    gl.uniform1f(u.gain, params.gain);
     gl.uniform1f(u.lift, params.lift);
-    gl.uniform1f(u.cel, params.cel);
-    gl.uniform1f(u.rimOnly, params.rimOnly);
-    // The match arrives pre-weighted from `matchGrade`, already at its identity
-    // when the dials are down — there is no "off" branch here on purpose, since
-    // a branch is a second code path and this has to be provably the old picture
-    // at zero rather than merely close to it.
-    gl.uniform3fv(u.mCast, params.mCast);
-    gl.uniform1f(u.mGain, params.mGain);
-    gl.uniform1f(u.mPivot, params.mPivot);
-    gl.uniform1f(u.mBright, params.mBright);
-    gl.uniform1f(u.mSat, params.mSat);
+    gl.uniform1f(u.gamma, params.gamma);
+    gl.uniform1f(u.contrast, params.contrast);
+    gl.uniform1f(u.sat, params.sat);
+    gl.uniform2f(u.hue, params.hueCos, params.hueSin);
+    gl.uniform1f(u.aspect, params.aspect);
+    gl.uniform2fv(u.lightDir, params.lightDir);
+    gl.uniform1f(u.gradAmount, params.gradAmount);
+    gl.uniform1f(u.lightSoft, params.lightSoft);
+    gl.uniform3fv(u.gradColor, params.gradColor);
+    gl.uniform1f(u.washAmount, params.washAmount);
+    gl.uniform3fv(u.washCast, params.washCast);
+    gl.uniform1f(u.darkGain, params.darkGain);
+    gl.uniform1f(u.rimAmount, params.rimAmount);
+    gl.uniform2fv(u.rimOffset, params.rimOffset);
+    gl.uniform2fv(u.rimRadius, params.rimRadius);
+    gl.uniform3fv(u.rimColor, params.rimColor);
+    gl.uniform1f(u.backAmount, params.backAmount);
+    gl.uniform1f(u.glowAmount, params.glowAmount);
+    gl.uniform4fv(u.lookAmount, amounts);
+    gl.uniform4fv(u.lookSize, sizes);
     gl.uniform1f(u.skin, params.skin);
-    gl.uniform1f(u.wrap, params.wrap);
-    gl.uniform3fv(u.wrapColor, params.wrapColor);
-    gl.uniform1f(u.backlight, params.backlight);
-    gl.uniform3fv(u.backColor, params.backColor);
-    gl.uniform1f(u.fill, params.fill);
-    gl.uniform1f(u.glowRadius, params.glowRadius);
-    gl.uniform1f(u.glowSense, params.glowSense);
-    gl.uniform1f(u.halation, params.halation);
-    gl.uniform3fv(u.halationColor, params.halationColor);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1230,24 +1093,27 @@ export class StageGL {
     const gl = this.gl;
     if (gl) {
       for (const entry of this._artTextures.values()) gl.deleteTexture(entry.tex);
-      for (const tex of this._nrmTextures.values()) gl.deleteTexture(tex);
+      for (const tex of this._lutTextures.values()) gl.deleteTexture(tex);
     }
     this._artTextures.clear();
-    this._nrmTextures.clear();
+    this._lutTextures.clear();
   }
 
-  /** Drop one asset's GPU copies — used when an actor's image changes. */
+  /** Drop one look's texture — used when a custom look's file is replaced. */
+  invalidateLook(key) {
+    const tex = this._lutTextures.get(key);
+    if (tex) {
+      this.gl?.deleteTexture(tex);
+      this._lutTextures.delete(key);
+    }
+  }
+
+  /** Drop one asset's GPU copy — used when an actor's image changes. */
   invalidate(src) {
-    const gl = this.gl;
     const art = this._artTextures.get(src);
     if (art) {
-      gl?.deleteTexture(art.tex);
+      this.gl?.deleteTexture(art.tex);
       this._artTextures.delete(src);
-    }
-    const nrm = this._nrmTextures.get(src);
-    if (nrm) {
-      gl?.deleteTexture(nrm);
-      this._nrmTextures.delete(src);
     }
   }
 
@@ -1263,9 +1129,13 @@ export class StageGL {
   _freeContext() {
     const gl = this.gl;
     this._dropTextures();
+    this._dropBloom();
     if (gl) {
       if (this._buffer) gl.deleteBuffer(this._buffer);
       if (this.program) gl.deleteProgram(this.program);
+      if (this._down) gl.deleteProgram(this._down.program);
+      if (this._up) gl.deleteProgram(this._up.program);
+      if (this._blank) gl.deleteTexture(this._blank);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     }
     this.canvas?.removeEventListener("webglcontextlost", this._onLost);
@@ -1273,6 +1143,9 @@ export class StageGL {
     this.gl = null;
     this.program = null;
     this.uniforms = null;
+    this._down = null;
+    this._up = null;
+    this._blank = null;
     this._buffer = null;
     this._lost = false;
   }

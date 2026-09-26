@@ -1,10 +1,10 @@
 /* ════════════════════════════════════════════════════════════════════════
-   GLUniverse Stage — character art post-processing
+   GLUniverse Stage — character grade
    ────────────────────────────────────────────────────────────────────────
-   Two presentations of the same effect:
+   Two presentations of the same grade:
 
-   .glstage-pp-on             the shaded canvas replaces the flat <img>
-   .glstage-pp-on.glstage-pp-css   the CSS fallback used when the art's pixels
+   .glstage-pp-on                  the graded canvas replaces the flat <img>
+   .glstage-pp-on.glstage-pp-css   the CSS fallback, used when the art's pixels
                                    can't be read (cross-origin without CORS
                                    headers) or WebGL is unavailable
 
@@ -15,16 +15,13 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 .stage-actor-img-wrap {
-    /* Anchors the overlay layers. The wrap already carries the per-actor
-       scale/translate, so the overlays inherit that framing for free. */
+    /* Anchors the graded canvas. The wrap already carries the per-actor
+       scale/translate, so the canvas inherits that framing for free. */
     position: relative;
-    /* Keep blending confined to the character. Without this the layers would
-       blend with the map behind the stage, which is unpredictable and reads
-       as a rendering bug when the GM pans. */
     isolation: isolate;
 }
 
-/* ── Shaded output ──
+/* ── Graded output ──
    The <img> keeps driving layout; the canvas is painted over it. Sizing the
    canvas from the image's own box means the two can never disagree about
    aspect ratio, however the art is cropped or scaled. */
@@ -34,9 +31,9 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
     /* The stage overlay is pointer-transparent; nothing here should change
        that or start intercepting clicks meant for Foundry's chrome. */
+    pointer-events: none;
 }
 
 .stage-actor-img-wrap.glstage-pp-on:not(.glstage-pp-css) .stage-actor-img {
@@ -45,15 +42,20 @@
 }
 
 /* ── CSS fallback ──
-   Masked to the art's own alpha via mask-image. Masks reference the image by
-   URL and never read its pixels, so this path works on cross-origin art that
-   the shader path can't touch. */
+   The basic-correction dials as a filter chain on the art itself. Filters
+   never read the image's pixels, so this works on cross-origin art the shader
+   can't touch. An approximation: see cssFilterFor(). */
 
+.stage-actor-img-wrap.glstage-pp-css .stage-actor-img {
+    filter: var(--glstage-pp-filter, none);
+}
+
+/* The directional layers, as overlays masked to the art's own alpha. Masks
+   reference the art by URL and never read its pixels. */
 .glstage-pp-fallback {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: var(--glstage-pp-strength, 0.6);
 }
 
 .glstage-pp-fallback > span {
@@ -70,134 +72,40 @@
     mask-mode: alpha;
 }
 
-/* Ambient: the room's colour washed over the character. */
-.glstage-pp-tint {
-    background: var(--glstage-pp-ambient, transparent);
-    mix-blend-mode: soft-light;
+/* Wash: the room's colour over the whole figure. Multiplied with the cast
+   scaled to a peak of 1, so it tints without darkening. */
+.glstage-pp-wash {
+    background: var(--glstage-pp-wash-color, transparent);
+    mix-blend-mode: multiply;
+    opacity: var(--glstage-pp-wash-opacity, 0);
 }
 
-/* Key: a directional gradient along the inferred light angle, so the lit side
-   brightens and the far side falls away. */
-.glstage-pp-key {
-    /* Three stops, not two. A straight ramp to `transparent` fades linearly,
-       which reads as a flat wedge across the art rather than light falling off;
-       the extra stop bends it so most of the decay happens early. */
+/* Gradient: the light's colour on the lit side, falling away across the
+   figure. Three stops so most of the decay happens early, as light does. */
+.glstage-pp-gradient {
     background: linear-gradient(
-        var(--glstage-pp-angle, 0deg),
-        var(--glstage-pp-key, transparent) 0%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 35%, transparent) 30%,
-        transparent 66%
+        var(--glstage-pp-grad-angle, 180deg),
+        var(--glstage-pp-grad-color, transparent) 0%,
+        color-mix(in srgb, var(--glstage-pp-grad-color, transparent) 40%, transparent) 35%,
+        transparent 75%
     );
-    mix-blend-mode: screen;
-    opacity: 0.75;
+    mix-blend-mode: soft-light;
+    opacity: var(--glstage-pp-grad-opacity, 0);
 }
 
-/* Shade: the same gradient reversed, darkening the side turned away from the
-   light. Without it the fallback only ever adds brightness, which flattens the
-   art instead of giving it form — and for art whose pixels can't be read, this
-   is the only shading it will ever get. Deepens when the slot is dimmed, since
-   the shader's shadow term isn't available here. */
+/* Back shadow: the side turned away from the light, darkened. */
 .glstage-pp-shade {
     background: linear-gradient(
-        var(--glstage-pp-shade-angle, 180deg),
-        var(--glstage-pp-shadow, transparent) 0%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 40%, transparent) 34%,
-        transparent 74%
+        var(--glstage-pp-shade-angle, 0deg),
+        rgb(var(--gl-tint-dark) / 1) 0%,
+        rgb(var(--gl-tint-dark) / 0.4) 35%,
+        transparent 75%
     );
     mix-blend-mode: multiply;
-    opacity: calc(0.55 + var(--glstage-pp-dim, 0) * 0.3);
+    opacity: var(--glstage-pp-shade-opacity, 0);
 }
 
-/* Scene darkness dims the fallback the same way exposure dims the shader. */
-.stage-actor-img-wrap.glstage-pp-css .stage-actor-img {
-    filter: brightness(var(--glstage-pp-exposure, 1));
-}
-
-/* ── Cel style, on the fallback ──
-   The shader bands the shading itself; three gradients over art whose pixels
-   were never readable cannot. What they can do is stop being ramps: each
-   gradient repeats its stop to hold a tone flat, then jumps at a terminator, so
-   the lit and shadow sides meet at a line rather than fading into one another.
-   That is the same decision the shader makes, made with what this path has.
-
-   Percentages, not lengths — the terminator has to land in the same place on a
-   portrait and on a full body. */
-.glstage-pp-css.glstage-pp-cel .glstage-pp-key {
-    background: linear-gradient(
-        var(--glstage-pp-angle, 0deg),
-        var(--glstage-pp-key, transparent) 0%,
-        var(--glstage-pp-key, transparent) 26%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 26%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 44%,
-        transparent 44%
-    );
-    /* The band is flat, so it covers more of the figure than the ramp did at the
-       same opacity — eased back to land in the same place overall. */
-    opacity: 0.62;
-}
-
-.glstage-pp-css.glstage-pp-cel .glstage-pp-shade {
-    background: linear-gradient(
-        var(--glstage-pp-shade-angle, 180deg),
-        var(--glstage-pp-shadow, transparent) 0%,
-        var(--glstage-pp-shadow, transparent) 30%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 30%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 52%,
-        transparent 52%
-    );
-    opacity: calc(0.48 + var(--glstage-pp-dim, 0) * 0.3);
-}
-
-/* ── Rim-light-only style, on the fallback ──
-   The one style this path can render honestly rather than approximate. The two
-   directional gradients are the whole thing rim-only removes, so they go; the
-   ambient tint stays, because grading the art to the room is the half of the
-   effect this mode keeps.
-
-   What replaces them is a drop-shadow on the art itself, which is a blur of the
-   image's own alpha — the same quantity the shader's spill term reads, arrived
-   at by a different route. Two of them: a tight one for the line and a wide one
-   for the glow behind it, which is the two-lobe rim the shader draws, and for
-   the same reason. Both sit *outside* the silhouette, since the <img> paints
-   over its own shadow — so on this path the light provably cannot bleed into
-   the art, which is exactly what the mode promises.
-
-   The strength dial rides in the colour's alpha; a filter cannot be faded any
-   other way. */
-.glstage-pp-css.glstage-pp-rim .glstage-pp-key,
-.glstage-pp-css.glstage-pp-rim .glstage-pp-shade {
-    display: none;
-}
-
-.stage-actor-img-wrap.glstage-pp-css.glstage-pp-rim .stage-actor-img {
-    filter: brightness(var(--glstage-pp-exposure, 1))
-        drop-shadow(0 0 3px var(--glstage-pp-rim-glow, transparent))
-        drop-shadow(0 0 14px var(--glstage-pp-rim-glow, transparent));
-}
-
-/* ── GM panel controls ──
-   The strength dial lives in the Stage Director toolbar alongside the framing
-   controls, because lighting is tuned by looking at it. */
-
-/* Style picker, sitting in the same toolbar row as the strength slider — the
-   two are one decision and get looked at together. Sized to the sliders beside
-   it rather than to its own content, so the row doesn't reflow on selection. */
-.glstage-pp-style-select {
-    width: 116px;
-    height: 22px;
-    padding: 0 4px;
-    border: 1px solid var(--gl-edge);
-    border-radius: 4px;
-    background: rgb(var(--gl-tint-dark) / 0.35);
-    color: var(--gl-text);
-    font-size: var(--gl-fs-xs, 11px);
-    cursor: pointer;
-}
-
-.glstage-pp-style-select:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
+/* ── GM panel controls ── */
 
 .glstage-field-check {
     margin-top: 2px;
@@ -238,11 +146,253 @@
     color: var(--gl-accent);
 }
 
-/* ── State interaction ──
-   The highlight drop-shadow on .stage-slot is a UI affordance and stays exactly
-   as it was. Dimming is now partly carried by colour in the shader, so the
-   opacity component is eased back to avoid double-dimming. */
+/* ════════════════════════════════════════════════════════════════════════
+   The Stage Director's Grade tab (scripts/features/stage/grade-tab.mjs)
+   ════════════════════════════════════════════════════════════════════════ */
 
-.stage-slot.dimmed:has(.glstage-pp-on) {
-    opacity: calc(var(--glstage-dim-opacity, 0.8) + (1 - var(--glstage-dim-opacity, 0.8)) * 0.45);
+.glstage-grade-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.glstage-grade-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-scene {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--gl-fs-sm);
+    color: var(--gl-text);
+    font-weight: var(--gl-weight-medium);
+}
+
+.glstage-grade-scene i {
+    color: var(--gl-accent);
+}
+
+.glstage-grade-badge {
+    margin-left: auto;
+    padding: 1px 8px;
+    border: 1px solid var(--gl-edge);
+    border-radius: 999px;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+    font-weight: normal;
+}
+
+.glstage-grade-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.glstage-grade-actions select {
+    flex: 1 1 160px;
+    min-width: 0;
+    height: 26px;
+}
+
+.glstage-grade-section {
+    border: 1px solid var(--gl-edge);
+    border-radius: 6px;
+    background: rgb(var(--gl-tint-light) / 0.03);
+}
+
+.glstage-grade-section > summary {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: var(--gl-fs-sm);
+    font-weight: var(--gl-weight-medium);
+    color: var(--gl-text);
+    list-style-position: inside;
+}
+
+.glstage-grade-section[open] > summary {
+    border-bottom: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px 10px;
+}
+
+.glstage-grade-hint {
+    font-size: var(--gl-fs-xs);
+    line-height: 1.4;
+    color: var(--gl-text-dim);
+}
+
+.glstage-grade-subhead {
+    font-size: var(--gl-fs-xs);
+    font-weight: var(--gl-weight-medium);
+    color: var(--gl-text);
+}
+
+/* One dial: label, slider, readout — the readout column is fixed so rows
+   line up and the slider never jumps as its number changes width. */
+.glstage-grade-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 34%) 1fr 52px;
+    align-items: center;
+    gap: 8px;
+}
+
+.glstage-grade-row label {
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.glstage-grade-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--gl-accent);
+}
+
+.glstage-grade-row input[type="color"] {
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--gl-edge);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.glstage-grade-value {
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.glstage-grade-master {
+    padding-top: 2px;
+}
+
+/* The 3×3 direction pad. */
+.glstage-grade-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 32px);
+    grid-auto-rows: 32px;
+    gap: 4px;
+    align-self: center;
+}
+
+.glstage-grade-pad-btn,
+.glstage-grade-pad-sun {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--gl-edge);
+    border-radius: 6px;
+    font-size: var(--gl-fs-md, 14px);
+    color: var(--gl-text-dim);
+}
+
+.glstage-grade-pad-btn {
+    padding: 0;
+    background: rgb(var(--gl-tint-light) / 0.04);
+    cursor: pointer;
+}
+
+.glstage-grade-pad-btn:hover {
+    color: var(--gl-text);
+    background: rgb(var(--gl-tint-light) / 0.1);
+}
+
+.glstage-grade-pad-btn.active {
+    color: var(--gl-accent);
+    border-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
+    background: color-mix(in srgb, var(--gl-accent) 14%, transparent);
+}
+
+.glstage-grade-pad-sun {
+    border-style: dashed;
+    color: var(--gl-accent);
+}
+
+/* Looks: one row per slot. */
+.glstage-grade-look {
+    display: grid;
+    grid-template-columns: minmax(110px, 40%) 1fr 40px auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.glstage-grade-look select {
+    min-width: 0;
+    height: 24px;
+}
+
+.glstage-grade-look input[type="range"] {
+    width: 100%;
+    accent-color: var(--gl-accent);
+}
+
+.glstage-grade-import {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-import-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.glstage-grade-import-row input[type="file"] {
+    flex: 1 1 160px;
+    min-width: 0;
+    font-size: var(--gl-fs-xs);
+}
+
+.glstage-grade-import-row input[type="text"] {
+    flex: 1 1 100px;
+    min-width: 0;
+    height: 26px;
+}
+
+.glstage-grade-custom-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.glstage-grade-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 0 0 8px;
+    border: 1px solid var(--gl-edge);
+    border-radius: 999px;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+}
+
+/* The per-actor correction in the Actors tab. */
+.glstage-trim > summary {
+    cursor: pointer;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+}
+
+.glstage-trim[open] > summary {
+    margin-bottom: 4px;
 }

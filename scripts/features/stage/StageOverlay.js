@@ -2,6 +2,8 @@ import { MODULE_ID, getSetting } from './settings.js';
 import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
 import { animate, createTimeline, motionDuration } from '../../core/motion.mjs';
 import { StagePostFX } from './postfx/index.mjs';
+import { readSceneGrade, readSceneDarkness, seedSceneGrade, readCustomLooks } from './postfx/grade-store.mjs';
+import { LookLibrary } from './postfx/look-library.mjs';
 
 const SHOW_DURATION = 400;
 const HIDE_DURATION = 350;
@@ -77,52 +79,82 @@ export class StageOverlay {
      */
     _ensurePostFX() {
         if (this._postfx) return this._postfx;
-        this._postfx = new StagePostFX();
+        this._postfx = new StagePostFX({ looks: this.lookLibrary });
         this.updatePostFXConfig();
         return this._postfx;
     }
 
-    /** Read the current settings into the effect and re-sample the scene. */
+    /**
+     * The look library, shared by the renderer and the Grade tab. Built-in
+     * looks are recipes; custom looks are `.cube` files listed in the
+     * `stage.lookLibrary` world setting and read over HTTP like any asset.
+     */
+    get lookLibrary() {
+        if (!this._lookLibrary) {
+            this._lookLibrary = new LookLibrary({
+                customLooks: () => readCustomLooks(),
+                fetchText: async (path) => {
+                    const res = await fetch(path);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.text();
+                },
+                warn: (msg) => console.warn(`gluniverse | stage: ${msg}`)
+            });
+        }
+        return this._lookLibrary;
+    }
+
+    /** The custom look list changed: reload what it points at. */
+    invalidateLooks(id = null) {
+        this._lookLibrary?.invalidate(id);
+        this._postfx?.invalidateLooks(id);
+    }
+
+    /** Read the current settings into the effect and reload the scene's grade. */
     updatePostFXConfig() {
         if (!this._postfx) return;
-        const pct = (key) => (Number(getSetting(key)) || 0) / 100;
         this._postfx.setConfig({
             enabled: getSetting('ppEnabled') !== false,
             intensity: (Number(getSetting('ppIntensity')) || 0) / 100,
-            quality: getSetting('ppQuality') || 'auto',
-            style: getSetting('ppStyle') || 'realistic',
-            // The four match dials arrive as one object so a partial update
-            // cannot silently reset a sibling — see `setConfig`.
-            match: {
-                cast: pct('ppMatchCast'),
-                sat: pct('ppMatchSat'),
-                bright: pct('ppMatchBright'),
-                tone: pct('ppMatchTone')
-            },
-            skin: pct('ppSkinGuard'),
-            kit: {
-                wrap: pct('ppWrap'),
-                backlight: pct('ppBacklight'),
-                halation: pct('ppHalation'),
-                glowRadius: pct('ppGlowRadius'),
-                glowSense: pct('ppGlowSense'),
-                backColor: getSetting('ppBacklightColor') || '',
-                fillColor: getSetting('ppFillColor') || '',
-                halationColor: getSetting('ppHalationColor') || ''
-            }
+            quality: getSetting('ppQuality') || 'auto'
         });
         this.refreshPostFXScene();
     }
 
     /**
-     * Re-derive the grade from the scene the *viewing client* is looking at.
-     * Each client computes this locally: the point is to match the background
-     * actually behind the art, which is a per-client fact, so there is nothing
-     * to broadcast.
+     * Load the grade of the scene this client is looking at, easing into it.
+     *
+     * The grade is stored on the scene, so every client viewing it reads the
+     * same values; nothing about it is computed locally or broadcast.
      */
     refreshPostFXScene() {
         if (!this._postfx) return;
-        this._postfx.refreshScene(canvas?.scene ?? game.scenes?.current ?? null);
+        const scene = this._viewedScene();
+        this._postfx.setGrade(readSceneGrade(scene));
+        this._postfx.setDarkness(readSceneDarkness(scene));
+        this._maybeSeedGrade();
+    }
+
+    _viewedScene() {
+        return canvas?.scene ?? game.scenes?.current ?? null;
+    }
+
+    /**
+     * The first time a scene is used on the stage, propose its starting grade
+     * from the background. GM only, once per scene: `seedSceneGrade` is a no-op
+     * on a scene that already has a grade, so this is safe on every update.
+     */
+    _maybeSeedGrade() {
+        if (!game.user?.isGM || !this._state.visible) return;
+        if (!(this._state.slots || []).some((slot) => slot?.actor)) return;
+        seedSceneGrade(this._viewedScene()).catch((err) => {
+            console.warn('gluniverse | stage: could not seed the scene grade', err);
+        });
+    }
+
+    /** "Re-sample background": re-read the colours and light direction. */
+    async resampleSceneGrade() {
+        return seedSceneGrade(this._viewedScene(), { force: true });
     }
 
     /**
@@ -134,6 +166,15 @@ export class StageOverlay {
         this._postfx?.setConfig({ intensity });
     }
 
+    /**
+     * Live preview of a grade the GM is editing. Local only and immediate — the
+     * preview follows the hand. The value reaches other clients when it is
+     * saved to the scene, and they ease into it.
+     */
+    previewPostFXGrade(grade) {
+        this._postfx?.setGrade(grade, { immediate: true });
+    }
+
     /** Report degradation for the GM panel. Never surfaced to players. */
     getPostFXStatus() {
         return this._postfx?.getStatus() ?? null;
@@ -142,11 +183,6 @@ export class StageOverlay {
     /** An actor's art changed — drop every cached derivative of the old asset. */
     invalidatePostFXArt(src) {
         this._postfx?.invalidateArt(src);
-    }
-
-    /** A background was re-uploaded to a path we have already sampled. */
-    invalidatePostFXBackground(src) {
-        this._postfx?.invalidateBackground(src);
     }
 
     /**
@@ -162,7 +198,6 @@ export class StageOverlay {
 
         const slots = this._state.slots || [];
         const total = Math.max(slots.length, 1);
-        const hasHighlight = this._state.highlightedSlot >= 0;
 
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
@@ -172,16 +207,14 @@ export class StageOverlay {
             const wrap = el?.querySelector('.stage-actor-img-wrap');
             if (!wrap) continue;
 
-            const isHighlighted = this._state.highlightedSlot === i;
             fx.register(wrap, {
                 src: actorImage(slot.actor),
                 // Centre of this slot's share of the stage. Slot X maps straight
                 // to background X — no camera transform — so every client lands
                 // on the same value and panning never re-grades.
                 position: (i + 0.5) / total,
-                highlighted: isHighlighted,
-                dimmed: hasHighlight && !isHighlighted,
-                optOut: slot.actor.ppOptOut === true
+                optOut: slot.actor.ppOptOut === true,
+                trim: slot.actor.ppTrim
             });
         }
     }
@@ -334,6 +367,7 @@ export class StageOverlay {
         this._ensurePostFX();
         this._reconcileSlots(wasHidden);
         this._syncPostFX();
+        this._maybeSeedGrade();
 
         if (wasHidden) {
             this._animateShow();

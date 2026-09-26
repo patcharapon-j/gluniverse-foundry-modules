@@ -1,16 +1,15 @@
 /**
- * Stage post-processing — scene background sampling.
+ * Stage character grade — scene background sampling.
  *
- * Derives everything the lighting model needs from the *scene background asset*
- * alone: an ambient colour, a horizontal strip of column colours (so a character
- * standing in front of the campfire picks up its orange while the one by the
- * window picks up cold blue), and a luminance centroid that stands in for the
- * scene's key light.
+ * Reads the *scene background asset* for the starting values a grade is seeded
+ * with (seed.mjs): an ambient colour, a strip of column colours, and a
+ * luminance centroid standing in for the scene's key light. It runs when a GM
+ * first uses a scene on the stage or asks to re-sample — never on its own, and
+ * its result is only ever a proposal the GM can change.
  *
- * Deliberately does NOT read the renderer or the lighting layer. Slot X maps
- * straight to image X — no camera transform — so the result is a pure function
- * of the background asset. Every client computes an identical grade, panning
- * never re-grades, and there is nothing to broadcast over the socket.
+ * Deliberately does NOT read the renderer or the lighting layer: Foundry's
+ * lights, tiles and weather are invisible to it. The result is a pure function
+ * of the background asset.
  *
  * Sampling is layered so it can never hard-fail:
  *   1. still image  → downsample during decode, read pixels
@@ -21,7 +20,6 @@
 
 import { clamp01, hex6 } from "../../../core/util.mjs";
 import { loadPixelImage, corsRetryUrl, invalidateAsset } from "./asset.mjs";
-import { tallyPixels, NEUTRAL_STATS } from "./tally.mjs";
 
 /** Width of the sampling thumbnail — also the number of columns we keep. */
 const THUMB_W = 32;
@@ -267,11 +265,6 @@ export function analyse(data) {
     columns,
     centroid: findKeyLight(lum),
     luminance: luma(ambient),
-    // The room half of the reference match. Deliberately measured over the whole
-    // frame rather than the row-weighted mean above: the ambient is asking "what
-    // colour is the light down where people stand", and this is asking "what
-    // tonal range is this painting drawn in", which is a property of all of it.
-    stats: tallyPixels(data, 1),
   };
 }
 

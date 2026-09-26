@@ -11,74 +11,15 @@
                 "hint": "Width of the visual novel stage area as a percentage of the viewport width."
             },
             "ppEnabled": {
-                "name": "Character Lighting",
-                "hint": "Light and colour-grade stage character art to match the current scene's background, so the cast reads as standing in the room rather than pasted over it."
+                "name": "Character Grade",
+                "hint": "Colour-grade stage character art with the grade set for each scene in the Stage Director, so the cast reads as standing in the room rather than pasted over it."
             },
             "ppIntensity": {
-                "name": "Character Lighting Strength (%)",
-                "hint": "How strongly the scene's colour and light affect the character art. Fine-tune this live from the Stage Director panel."
-            },
-            "ppStyle": {
-                "name": "Character Lighting Style",
-                "hint": "Which shading model the lighting uses. Semi-realistic gives soft falloffs and a glowing rim, and suits painted or rendered portraits. Cel / Anime gives flat tones with a drawn terminator, hard-edged highlights and a crisp rim band, and suits anime-style art. Rim Light Only still grades the art to the room's colour, but keeps the light itself on the outline — nothing washes across the artwork, so already-shaded art keeps its own shading.",
-                "realistic": "Semi-realistic",
-                "cel": "Cel / Anime",
-                "rim": "Rim Light Only"
-            },
-            "ppMatchCast": {
-                "name": "Match — Light Colour (%)",
-                "hint": "How much of the room's colour cast is carried onto the character. This is the dial that answers 'why does this portrait look pasted on' — a figure painted under neutral studio light standing in a firelit hall is wrong about its colour before it is wrong about anything else. Skin resists this; see Skin Protection."
-            },
-            "ppMatchSat": {
-                "name": "Match — Saturation (%)",
-                "hint": "How much the character's chroma is pulled toward the background's. Raise it when vivid art sits in a muted, hazy or rain-washed scene; lower it if the cast starts looking drained. Skin resists this too."
-            },
-            "ppMatchBright": {
-                "name": "Match — Brightness (%)",
-                "hint": "How much the character's overall level is pulled toward the room's. Moves brightness only — contrast, hue and chroma each have their own dial, so if the result is too dark this is the one to move and nothing else changes."
-            },
-            "ppMatchTone": {
-                "name": "Match — Tonal Range (%)",
-                "hint": "How much the character's contrast is pulled toward the room's — how far apart its blacks and whites sit. Raise it for flat art in a scene with deep shadows; lower it if figures start looking crushed or washed out. Pivots about the art's own mid-tone, so it changes contrast without also changing brightness."
-            },
-            "ppSkinGuard": {
-                "name": "Skin Protection (%)",
-                "hint": "How hard skin resists the Light Colour and Saturation dials. At the default a face in a blue night scene gets darker and loses contrast along with everything else, but does not turn blue — which is what people notice. Lower it for a cast that is not meant to read as human."
-            },
-            "ppWrap": {
-                "name": "Light Wrap (%)",
-                "hint": "The background's own colour bleeding inward over the character's outline, as it does around any real subject photographed in front of something. The cheapest thing there is for stopping art looking cut out. 100% is the chosen style's own balance."
-            },
-            "ppBacklight": {
-                "name": "Backlight (%)",
-                "hint": "Light coming through the figure rather than around it — hair, a cloak's hem, a sleeve seen edge on. Lands only where the art is genuinely thin, so on a solid figure it is nearly absent. 100% is the chosen style's own balance."
-            },
-            "ppBacklightColor": {
-                "name": "Backlight Colour",
-                "hint": "Leave blank to take the scene's own key light colour, which is usually right — a backlight is that same lamp seen from behind. Set a hex colour (#88bbff) to override it."
-            },
-            "ppFillColor": {
-                "name": "Shadow Fill Colour",
-                "hint": "The colour the character's shadow side leans toward. Blank derives it from the room, biased cool the way skylight and painted interiors actually fill. Set a hex colour (#3a4a6b) to override it."
-            },
-            "ppGlowRadius": {
-                "name": "Glow Radius (%)",
-                "hint": "How far light spills past the outline into the air. 100% is the reach this effect has always had; raise it for a soft atmospheric bloom, lower it to keep the glow tight against the silhouette."
-            },
-            "ppGlowSense": {
-                "name": "Glow Threshold (%)",
-                "hint": "How bright the art must be just inside the outline before it throws any light. At 0 everything but true black glows. Raise it to confine the spill to the parts of a character that are actually lit, instead of the whole perimeter."
-            },
-            "ppHalation": {
-                "name": "Halation (%)",
-                "hint": "Warm bleed in the outer edge of the glow — the red scatter real film and camera sensors produce around a bright edge. Off by default, because it is a statement about a lens rather than about the light in the room. A little of it reads as 'photographed'; a lot reads as a dream sequence."
-            },
-            "ppHalationColor": {
-                "name": "Halation Colour",
-                "hint": "Leave blank for the warm red-orange real halation always is — long wavelengths scatter furthest, which is why the effect has a colour at all. Set a hex colour (#ff6b38) to override it."
+                "name": "Character Grade Strength (%)",
+                "hint": "Blends the whole character grade back toward the original art. 100% applies every layer exactly as set; lower it to back the whole look off at once."
             },
             "ppQuality": {
-                "name": "Character Lighting Quality",
+                "name": "Character Grade Quality",
                 "hint": "Your own setting only — it does not change what anyone else sees. Turn this off if the stage costs you performance.",
                 "auto": "Automatic",
                 "off": "Off"
@@ -160,22 +101,13 @@
             "screenLine": "Screen Line",
             "stageXOffset": "Stage X Offset",
             "stageYOffset": "Stage Y Offset",
-            "ppIntensity": "Scene Lighting",
-            "ppStyleLabel": "Lighting Style",
-            "ppStyleHint": "Semi-realistic suits painted portraits; Cel / Anime flattens the shading into bands with a drawn terminator and a crisp rim; Rim Light Only keeps the scene's colour but confines the light to the outline.",
-            "ppStyle": {
-                "realistic": "Semi-realistic",
-                "cel": "Cel / Anime",
-                "rim": "Rim Light Only"
-            },
-            "ppOptOut": "Skip lighting",
-            "ppOptOutHint": "Leave this character's art untouched. Use it for portraits that are already lit, where re-lighting only muddies them.",
-            "ppNoWebGL": "Scene lighting is running in reduced mode — this client has no WebGL.",
-            "ppArtNotSampled": "Some character art couldn't be read for lighting, so those characters use the simpler tinted look.",
-            "ppArtCORS": "Some character art is hosted somewhere that allows it to be displayed but not read (no Access-Control-Allow-Origin header), so those characters use the simpler tinted look. If that's an S3 bucket, allowing GET from this site in its CORS rules enables full lighting — the exact rule is printed in your browser console.",
+            "ppIntensity": "Grade Strength",
+            "ppOptOut": "Skip grading",
+            "ppOptOutHint": "Leave this character's art untouched by the scene grade. Use it for portraits that are already lit, where grading only muddies them.",
+            "ppNoWebGL": "Character grading is running in reduced mode — this client has no WebGL.",
+            "ppArtNotSampled": "Some character art couldn't be read for grading, so those characters use a simpler approximation.",
+            "ppArtCORS": "Some character art is hosted somewhere that allows it to be displayed but not read (no Access-Control-Allow-Origin header), so those characters use a simpler approximation. If that's an S3 bucket, allowing GET from this site in its CORS rules enables full grading — the exact rule is printed in your browser console.",
             "ppArtMissing": "Some character art failed to load at all — check those image paths.",
-            "ppBackgroundCORS": "This scene's background can't be read for colour (it's served without CORS headers), so lighting falls back to the scene's flat background colour.",
-            "ppBackgroundFlat": "This scene's background couldn't be sampled, so lighting falls back to the scene's flat background colour.",
             "stageYOffsetHint": "Percentage of character to crop from the bottom. The visible portion scales up to fill the stage.",
             "noActorsConfigured": "No actors configured. Click Add Actor or import one to get started.",
             "noSlotsConfigured": "No slots on stage. Click Add Slot to create character positions.",
@@ -201,7 +133,10 @@
             "presentation": "Presentation (theme & tint)",
             "themeDefault": "Default Theme",
             "commsThemeOverride": "Override the comms theme for this actor",
-            "commsTintOverride": "Enable a custom tint colour for this actor"
+            "commsTintOverride": "Enable a custom tint colour for this actor",
+            "grade": "Grade",
+            "trim": "Colour correction",
+            "trimHint": "This character's own correction, for art that is always too dark, too saturated or the wrong colour whatever room it is in. Adds to the scene's grade."
         },
         "comms": {
             "connecting": "Connecting",
@@ -231,6 +166,95 @@
             "step4title": "4. Highlight & Animate",
             "step4": "Click Highlight on a character to dim others and indicate the speaker. Use animations for expressive moments — bounce for excitement, shake for anger, nod for agreement.",
             "tip": "Tip: Use 'Show Stage' to make the stage visible to all players. 'Clear Stage' removes all characters but keeps actors configured."
+        },
+        "grade": {
+            "noScene": "Open a scene to grade its characters.",
+            "editing": "Grading {scene}",
+            "ownGrade": "This scene's grade",
+            "worldGrade": "Using the world default",
+            "resample": "Re-sample background",
+            "resampleHint": "Read the background again for the light's colour, the room's colour and the light's direction. Keeps every amount you have set.",
+            "reset": "Reset to defaults",
+            "resetHint": "Replace this scene's grade with the world default.",
+            "saveDefault": "Save as default",
+            "saveDefaultHint": "Make this grade the one every ungraded scene starts from.",
+            "savedDefault": "Saved as the world's default grade.",
+            "copyFrom": "Copy grade from scene…",
+            "copy": "Copy",
+            "intensity": "Grade strength",
+            "saveFailed": "The scene grade could not be saved — see the console.",
+            "basic": {
+                "title": "Basic correction",
+                "hint": "The art's own tone and colour, before any light touches it. Every dial moves one thing only.",
+                "exposure": "Exposure",
+                "brightness": "Brightness",
+                "contrast": "Contrast",
+                "gamma": "Gamma",
+                "saturation": "Saturation",
+                "hue": "Hue"
+            },
+            "light": {
+                "title": "Light",
+                "hint": "The scene's one light, shared by every character so they are all lit from the same side. The arrows are shortcuts; the angle is exact.",
+                "pad": "Light direction",
+                "angle": "Angle",
+                "softness": "Softness"
+            },
+            "gradient": {
+                "title": "Light gradient",
+                "hint": "The light's colour across each figure, strongest on the side facing it.",
+                "amount": "Amount",
+                "color": "Light colour"
+            },
+            "wash": {
+                "title": "Room wash",
+                "hint": "The room's colour over the whole figure, without changing how bright it is — and how far characters darken with the scene's darkness.",
+                "amount": "Amount",
+                "color": "Room colour",
+                "darkness": "Follow scene darkness"
+            },
+            "rim": {
+                "title": "Rim light",
+                "hint": "Light catching the edge that faces the lamp.",
+                "amount": "Amount",
+                "width": "Depth",
+                "softness": "Softness",
+                "color": "Rim colour"
+            },
+            "backShadow": {
+                "title": "Backlight shadow",
+                "hint": "Darkens the side of each figure turned away from the light.",
+                "amount": "Amount"
+            },
+            "glow": {
+                "title": "Glow",
+                "hint": "The art's own highlights blooming, and spilling a little past the outline.",
+                "amount": "Amount",
+                "radius": "Radius",
+                "threshold": "Threshold"
+            },
+            "looks": {
+                "title": "Looks",
+                "none": "No looks on this scene.",
+                "look": "Look",
+                "opacity": "Opacity",
+                "add": "Add look",
+                "remove": "Remove this look",
+                "importTitle": "Import a .cube look",
+                "importHint": "A 3D LUT exported from Resolve, Photoshop, Lightroom or any grading tool. It is copied into this world's folder.",
+                "importFile": ".cube file",
+                "importName": "Name",
+                "import": "Import",
+                "importNoFile": "Choose a .cube file first.",
+                "imported": "Imported the look \"{name}\".",
+                "importFailed": "That file could not be imported: {reason}",
+                "removeCustom": "Remove this imported look from the list"
+            },
+            "skin": {
+                "title": "Skin protection",
+                "hint": "How hard skin holds back the colour of the gradient, wash and looks. It never holds back brightness: a face in a dark room still darkens.",
+                "guard": "Protection"
+            }
         }
     }
 }

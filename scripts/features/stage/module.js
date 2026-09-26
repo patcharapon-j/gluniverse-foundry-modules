@@ -5,6 +5,7 @@ import { StageManager } from './StageManager.js';
 import { StageOverlay } from './StageOverlay.js';
 import { CommsOverlay } from './CommsOverlay.js';
 import { GMPanel } from './GMPanel.js';
+import { changeTouchesGrade } from './postfx/grade-store.mjs';
 
 export { registerSettings };
 
@@ -81,19 +82,17 @@ export function onReady() {
         (state) => commsOverlay.applyState(state)
     );
 
-    // Character art post-processing follows whatever scene this client is
-    // actually looking at — including a GM previewing a non-active scene, whose
-    // own screen then stays internally coherent.
+    // The character grade follows whatever scene this client is actually
+    // looking at — including a GM previewing a non-active scene, whose own
+    // screen then stays internally coherent.
     Hooks.on('canvasReady', () => overlay.refreshPostFXScene());
 
-    // Darkness and background edits re-grade the cast. The background asset is
-    // cached by path, so a re-upload to the same path needs its entry dropped.
+    // A saved grade reaches every client viewing that scene through the scene
+    // document itself; each one eases into it. Darkness is the one live input
+    // the grade listens to, through the wash layer's own darkness dial.
     Hooks.on('updateScene', (scene, changes) => {
         if (scene?.id !== (canvas?.scene?.id ?? null)) return;
-        const touchesLook =
-            'background' in changes || 'environment' in changes || 'backgroundColor' in changes;
-        if (!touchesLook) return;
-        if (changes.background?.src) overlay.invalidatePostFXBackground(changes.background.src);
+        if (!changeTouchesGrade(changes) && !('environment' in changes)) return;
         overlay.refreshPostFXScene();
     });
 

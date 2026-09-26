@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 /**
- * Render the Stage lighting shader for real, in a real GPU context.
+ * Render the Stage character grade for real, in a real GPU context.
  *
- * `tools/postfx-check.mjs` pins the maths down without a browser, which is most
- * of the feature — but it cannot compile a line of GLSL, and a shader that fails
- * to compile degrades silently to the CSS fallback rather than erroring. Nor can
- * it show you what any of this *looks* like, which for a lighting effect is the
- * only question that finally matters.
+ * `tools/postfx-check.mjs` pins the grade's rules down against the JavaScript
+ * reference (`shadePixel`), but it cannot compile a line of GLSL — and a shader
+ * that fails to compile degrades silently to the CSS fallback rather than
+ * erroring. Nor can it show that the GLSL agrees with the reference it claims to
+ * transcribe. This does both:
  *
- * So this drives the production modules — `getNormalMap`, `StageGL.prepare`,
- * `StageGL.draw`, `lightPlacement` — in headless Chromium against a synthetic
- * character built to exercise the terms that are hard to reason about: a
- * silhouette for the rim and the spill, a bright panel over a dark one for the
- * interior contours, and a curved edge so the directional gate has somewhere to
- * fall off.
+ *   - compiles and links the production shader through the production StageGL;
+ *   - asserts every dial neutral returns the art untouched, and master
+ *     intensity 0 returns it untouched whatever the dials say;
+ *   - renders every layer and dial at a test value and compares the GPU's
+ *     pixels with `shadePixel` on the same input and position, pixel for pixel;
+ *   - writes a contact sheet, one tile per test.
  *
  *   node tools/stage-lighting-preview.mjs                 # verify + write sheet
  *   node tools/stage-lighting-preview.mjs --out=/tmp/x.png
  *
- * Exit code is non-zero if the shader fails to compile or link, so this doubles
- * as the compile check the pure-logic tool cannot do.
+ * Exit code is non-zero on any failure. Needs Playwright; without it this
+ * prints SKIP and exits 0.
  */
 
 import { createServer } from "node:http";
@@ -32,12 +32,241 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const outArg = process.argv.find((a) => a.startsWith("--out="));
 // Outside the repo by default: this package ships as its own source tree, so a
 // generated PNG left in tools/ would be installed into every world.
-const OUT = outArg ? outArg.slice("--out=".length) : join(tmpdir(), "gl-stage-lighting.png");
+const OUT = outArg ? outArg.slice("--out=".length) : join(tmpdir(), "gl-stage-grade.png");
 
 const TYPES = { ".mjs": "text/javascript", ".js": "text/javascript", ".html": "text/html", ".json": "application/json" };
 
+/**
+ * Each test is a partial grade laid over the neutral one, so it exercises one
+ * layer (or one dial) at a time. Values are large enough to see and, for the
+ * basic dials, small enough to stay clear of the gamut walls on most of the
+ * swatch.
+ */
+const TESTS = [
+  { label: "exposure +1", grade: { basic: { exposure: 1 } } },
+  { label: "exposure -1", grade: { basic: { exposure: -1 } } },
+  { label: "brightness +40", grade: { basic: { brightness: 40 } } },
+  { label: "gamma 1.8", grade: { basic: { gamma: 1.8 } } },
+  { label: "contrast +50", grade: { basic: { contrast: 50 } } },
+  { label: "contrast -50", grade: { basic: { contrast: -50 } } },
+  { label: "saturation +60", grade: { basic: { saturation: 60 } } },
+  { label: "saturation -100", grade: { basic: { saturation: -100 } } },
+  { label: "hue +90", grade: { basic: { hue: 90 } } },
+  { label: "basic, everything", grade: { basic: { exposure: 0.4, brightness: 10, gamma: 1.2, contrast: 25, saturation: 30, hue: -40 } } },
+  { label: "gradient, light right", grade: { light: { angle: 0, softness: 50 }, gradient: { amount: 80, color: "#ffd9a0" } } },
+  { label: "gradient, light above-left", grade: { light: { angle: 135, softness: 70 }, gradient: { amount: 80, color: "#a8c8ff" } } },
+  { label: "wash, blue room", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 0 } } },
+  { label: "wash, blue, skin guarded", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 100 } } },
+  { label: "darkness 0.6 at dial 65", grade: { wash: { darkness: 65 } }, darkness: 0.6 },
+  { label: "rim, light right", grade: { light: { angle: 0 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
+  { label: "rim, light above-left", grade: { light: { angle: 135 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
+  { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
+  { label: "look: Night City", grade: { looks: [{ id: "builtin:night-city", opacity: 100 }] } },
+  { label: "look: Cherry Blossoms 60%", grade: { looks: [{ id: "builtin:cherry-blossoms", opacity: 60 }] } },
+  { label: "looks stacked: Vintage + Gray 40%", grade: { looks: [{ id: "builtin:vintage", opacity: 100 }, { id: "builtin:gray", opacity: 40 }] } },
+  { label: "look: OrangeFilm, skin guarded", grade: { looks: [{ id: "builtin:orange-film", opacity: 100 }], skin: { guard: 100 } } },
+  { label: "glow, tight", grade: { glow: { amount: 100, radius: 0, threshold: 55 } } },
+  { label: "glow, wide", grade: { glow: { amount: 100, radius: 100, threshold: 55 } } },
+  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, gradient: { amount: 35, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 60, width: 30, softness: 40, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
+];
+
+const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
+<script type="module">
+import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
+import { stackParams, shadeFragment, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM, bloomPyramid, sampleImage } from "/scripts/features/stage/postfx/grade-model.mjs";
+import { LookLibrary } from "/scripts/features/stage/postfx/look-library.mjs";
+const lookLibrary = new LookLibrary();
+
+const TESTS = ${JSON.stringify(TESTS)};
+// (TESTS entries gain a _looks field in the page; it never leaves it.)
+
+// ── A synthetic character ──
+// A silhouette carrying the colours a grade has to get right: a skin tone,
+// saturated primaries, a grey ramp from black to white, and deep shadow.
+function buildArt() {
+  const c = document.createElement("canvas");
+  c.width = 360; c.height = 640;
+  const g = c.getContext("2d");
+  const body = new Path2D();
+  body.moveTo(180, 30);
+  body.bezierCurveTo(260, 30, 280, 130, 252, 190);
+  body.bezierCurveTo(350, 230, 350, 460, 336, 620);
+  body.lineTo(24, 620);
+  body.bezierCurveTo(10, 460, 10, 230, 108, 190);
+  body.bezierCurveTo(80, 130, 100, 30, 180, 30);
+  g.save(); g.clip(body);
+  g.fillStyle = "#4a4550"; g.fillRect(0, 0, 360, 640);
+  g.fillStyle = "#e9c3a8"; g.beginPath(); g.ellipse(180, 120, 58, 70, 0, 0, 7); g.fill(); // skin
+  const sw = ["#d23a2c", "#3aa84a", "#2c5fd2", "#e8c440", "#8a3ab8", "#1c1c22"];
+  sw.forEach((col, i) => { g.fillStyle = col; g.fillRect(40 + i * 48, 250, 44, 90); });
+  for (let i = 0; i < 12; i++) {                        // grey ramp, 0 → 255
+    const v = Math.round((i / 11) * 255);
+    g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+    g.fillRect(30 + i * 25, 370, 25, 80);
+  }
+  const grad = g.createLinearGradient(30, 0, 330, 0);   // a smooth hue sweep
+  grad.addColorStop(0, "#b85a4a"); grad.addColorStop(0.5, "#5a9a8a"); grad.addColorStop(1, "#7a5ab8");
+  g.fillStyle = grad; g.fillRect(30, 470, 300, 120);
+  g.restore();
+  return c.toDataURL("image/png");
+}
+
+window.run = async () => {
+  const src = buildArt();
+  let lostCount = 0;
+  // 8-bit bloom, so the finished pyramid can be read back and compared.
+  const gl = new StageGL({ onLost: () => lostCount++, bloomFormat: "u8" });
+  if (!gl.isSupported()) return { error: "no WebGL in this browser" };
+
+  // Headless Chromium's software GPU resets once shortly after the first
+  // context in a page is made, which loses that context. Real GPUs reset too,
+  // and StageGL is built to rebuild on the next prepare — so this waits out the
+  // reset and then exercises exactly that recovery path.
+  let prepared = await gl.prepare(src);
+  if (!prepared) return { error: "StageGL.prepare returned null (shader failed to compile or link?)" };
+  await new Promise((r) => setTimeout(r, 1000));
+  if (gl._lost) {
+    prepared = await gl.prepare(src);
+    if (!prepared) return { error: "StageGL did not rebuild after losing its context" };
+  }
+
+  const paramsFor = (test) => stackParams(
+    normalizeGrade(test.grade ?? {}, NEUTRAL_GRADE),
+    test.trim ?? DEFAULT_TRIM,
+    { aspect: prepared.art.width / prepared.art.height, darkness: test.darkness ?? 0 },
+  );
+  // Looks are resolved up front here; in production they load in the
+  // background and appear on the next render.
+  const looksFor = async (test) => Promise.all(paramsFor(test).lookIds.map((id) => lookLibrary.get(id)));
+  for (const t of TESTS) t._looks = await looksFor(t);
+  const shoot = (test, intensity = 1) => {
+    const out = gl.draw(prepared, { intensity, ...paramsFor(test), looks: test._looks ?? [] });
+    if (!out) throw new Error("draw returned null mid-run (context lost again?)");
+    const bloom = paramsFor(test).glowAmount > 0 ? gl.readBloom() : null;
+    const c = document.createElement("canvas");
+    c.width = out.width; c.height = out.height;
+    const g2 = c.getContext("2d");
+    g2.drawImage(out, 0, 0);
+    return { canvas: c, data: g2.getImageData(0, 0, c.width, c.height).data, bloom };
+  };
+
+  const first = shoot({ grade: {} });
+  const W = first.canvas.width, H = first.canvas.height;
+  const ref = document.createElement("canvas");
+  ref.width = W; ref.height = H;
+  const rg = ref.getContext("2d");
+  const img = new Image(); img.src = src; await img.decode();
+  rg.drawImage(img, 0, 0, W, H);
+  const artPx = rg.getImageData(0, 0, W, H).data;
+
+  // Opaque pixels only: premultiplied edges round differently through the two
+  // paths and say nothing about the grade.
+  // Every other pixel on both axes: the reference runs in page JavaScript, and
+  // a quarter of the frame is far more than enough to catch a transcription.
+  const drift = (px, expect) => {
+    let worst = 0, sum = 0, n = 0;
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+      const p = (y * W + x) * 4;
+      if (artPx[p + 3] < 250) continue;
+      const e = expect ? expect(p, x, y) : [artPx[p], artPx[p + 1], artPx[p + 2]];
+      for (let k = 0; k < 3; k++) {
+        const d = Math.abs(px[p + k] - e[k]);
+        worst = Math.max(worst, d); sum += d; n++;
+      }
+    }
+    return { worst, mean: n ? sum / n : 0 };
+  };
+
+  const neutral = drift(first.data);
+  const zero = drift(shoot(TESTS[TESTS.length - 1], 0).data);
+
+  // The shader samples at pixel centres; so does the reference.
+  // The art sampled the way the GPU samples its texture: premultiplied,
+  // bilinear between texel centres, clamped at the edges.
+  const texel = (x, y) => {
+    const i = (y * W + x) * 4;
+    const a = artPx[i + 3] / 255;
+    return [artPx[i] / 255 * a, artPx[i + 1] / 255 * a, artPx[i + 2] / 255 * a, a];
+  };
+  const sample = (u, v) => {
+    const tx = Math.min(Math.max(u * W - 0.5, 0), W - 1);
+    const ty = Math.min(Math.max(v * H - 0.5, 0), H - 1);
+    const x0 = Math.floor(tx), y0 = Math.floor(ty);
+    const x1 = Math.min(x0 + 1, W - 1), y1 = Math.min(y0 + 1, H - 1);
+    const fx = tx - x0, fy = ty - y0;
+    const a = texel(x0, y0), b = texel(x1, y0), c = texel(x0, y1), d = texel(x1, y1);
+    return a.map((_, k) => (a[k] * (1 - fx) + b[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy);
+  };
+  // The main pass is compared given the GPU's own bloom (read back), so a
+  // difference points at the main pass; the pyramid is compared on its own.
+  let bloomNow = null;
+  const bloomAt = (u, v) => (bloomNow ? sampleImage(bloomNow, u, v) : [0, 0, 0, 0]);
+  const fragmentAt = (test, x, y, intensity = 1) =>
+    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), sample, intensity, bloomAt, test._looks ?? null);
+  const artImage = { width: W, height: H, data: new Float32Array(W * H * 4) };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) artImage.data.set(texel(x, y), (y * W + x) * 4);
+  const bloomDrift = (gpu, test) => {
+    const cpu = bloomPyramid(artImage, paramsFor(test));
+    let worst = 0;
+    for (let i = 0; i < cpu.data.length; i++) worst = Math.max(worst, Math.abs(cpu.data[i] - gpu.data[i]) * 255);
+    return { worst: Math.round(worst), size: gpu.width + "x" + gpu.height, cpuSize: cpu.width + "x" + cpu.height };
+  };
+  const reference = (test) => (i, x, y) => {
+    const f = fragmentAt(test, x, y);
+    const a = Math.max(f[3], 1e-6);
+    return [f[0] / a, f[1] / a, f[2] / a].map((v) => Math.round(Math.min(v, 1) * 255));
+  };
+  // Coverage everywhere, including outside the art, where only the glow draws.
+  const alphaDrift = (px, test) => {
+    let worst = 0;
+    for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) {
+      const i = (y * W + x) * 4;
+      worst = Math.max(worst, Math.abs(px[i + 3] - Math.round(fragmentAt(test, x, y)[3] * 255)));
+    }
+    return worst;
+  };
+
+  const dials = [];
+  const tiles = [{ label: "original", canvas: first.canvas }];
+  for (const t of TESTS) {
+    const shot = shoot(t);
+    bloomNow = shot.bloom;
+    dials.push({
+      label: t.label,
+      ...drift(shot.data, reference(t)),
+      moved: drift(shot.data).mean,
+      alpha: alphaDrift(shot.data, t),
+      bloom: shot.bloom ? bloomDrift(shot.bloom, t) : null,
+    });
+    bloomNow = null;
+    tiles.push({ label: t.label, canvas: shot.canvas });
+  }
+
+  // Contact sheet: one tile per dial, labelled.
+  const TW = 180, TH = Math.round((H / W) * TW), COLS = 6;
+  const rows = Math.ceil(tiles.length / COLS);
+  const sheet = document.createElement("canvas");
+  sheet.width = COLS * TW; sheet.height = rows * (TH + 22);
+  const sg = sheet.getContext("2d");
+  sg.fillStyle = "#101014"; sg.fillRect(0, 0, sheet.width, sheet.height);
+  sg.font = "12px sans-serif"; sg.fillStyle = "#d8d8e0";
+  tiles.forEach((t, i) => {
+    const x = (i % COLS) * TW, y = Math.floor(i / COLS) * (TH + 22);
+    sg.drawImage(t.canvas, x, y + 18, TW, TH);
+    sg.fillText(t.label, x + 6, y + 13);
+  });
+
+  return { png: sheet.toDataURL("image/png"), neutral, zero, dials };
+};
+</script></body>`;
+
 const server = createServer(async (req, res) => {
-  const path = normalize(join(ROOT, decodeURIComponent(req.url.split("?")[0])));
+  const url = req.url.split("?")[0];
+  if (url === "/__preview.html") {
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(PAGE);
+  }
+  const path = normalize(join(ROOT, decodeURIComponent(url)));
   if (!path.startsWith(ROOT)) return res.writeHead(403).end();
   try {
     const body = await readFile(path);
@@ -50,641 +279,15 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
-/** Four rooms, chosen so the grade has somewhere different to go in each. */
-const ROOMS = [
-  { name: "dark room, warm lamp high left", ambient: [0.10, 0.09, 0.12], key: [1.0, 0.72, 0.42], centroid: [0.18, 0.16], darkness: 0.55 },
-  { name: "green interior, lamp behind", ambient: [0.16, 0.32, 0.24], key: [0.62, 1.0, 0.74], centroid: [0.5, 0.3], darkness: 0.3 },
-  { name: "underwater, light from above", ambient: [0.30, 0.52, 0.72], key: [0.78, 0.94, 1.0], centroid: [0.5, 0.06], darkness: 0.15 },
-  { name: "sunlit green, lamp high right", ambient: [0.34, 0.42, 0.26], key: [1.0, 0.98, 0.82], centroid: [0.86, 0.12], darkness: 0.0 },
-];
-
-const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
-<script type="module">
-import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
-import { getNormalMap } from "/scripts/features/stage/postfx/normal-map.mjs";
-import { lightPlacement, bounceLight, SHADER_STRENGTHS, CEL_SHADER_STRENGTHS, RIM_SHADER_STRENGTHS,
-         KIT_DEFAULTS, HALATION_DEFAULT, MATCH_DEFAULTS, gradeParams }
-  from "/scripts/features/stage/postfx/index.mjs";
-import { matchGrade, tallyPixels, NEUTRAL_STATS } from "/scripts/features/stage/postfx/tally.mjs";
-
-// The grade and light-kit half of the draw params, at the values a world gets
-// with the match inert. Every existing assertion below is written against the
-// picture the model produced before the grade existed, so the baseline they all
-// stand on has to be the identity — and it has to come from the real matchGrade
-// rather than from five literals, or it stops being the identity the moment one
-// of them moves.
-const GRADE_INERT = {
-  ...gradeParams(matchGrade(NEUTRAL_STATS, NEUTRAL_STATS, MATCH_DEFAULTS)),
-  skin: 0.75,
-  halation: KIT_DEFAULTS.halation,
-  glowRadius: KIT_DEFAULTS.glowRadius,
-  glowSense: KIT_DEFAULTS.glowSense,
-  halationColor: HALATION_DEFAULT,
-};
-
-// ── A synthetic character ──
-// Not art, but it carries the three things the shader reads: an alpha
-// silhouette with curvature, a large tonal split (pale coat over dark shirt) for
-// the contour term, and some thin lineart the contour term must NOT latch onto.
-// \`rind\` reproduces the asset defect this pass has to survive: a cut-out whose
-// silhouette carries a dark outline, either authored or left behind by a matte
-// lifted off a black background. A hot core traced along one of those reads as a
-// sticker, not as light, so the shader is supposed to back off there.
-function buildArt(rind) {
-  const c = document.createElement("canvas");
-  c.width = 420; c.height = 760;
-  const g = c.getContext("2d");
-
-  const body = new Path2D();
-  body.moveTo(210, 40);
-  body.bezierCurveTo(300, 40, 320, 150, 292, 210);   // head + jaw
-  body.bezierCurveTo(400, 260, 400, 520, 380, 740);  // right side
-  body.lineTo(40, 740);
-  body.bezierCurveTo(20, 520, 20, 260, 128, 210);    // left side
-  body.bezierCurveTo(100, 150, 120, 40, 210, 40);
-  g.fillStyle = "#4a4550"; g.fill(body);             // dark shirt / base
-
-  g.save(); g.clip(body);
-  const coat = new Path2D();                          // pale coat panel — the
-  coat.moveTo(40, 300); coat.lineTo(175, 250);        // big tonal edge
-  coat.lineTo(150, 740); coat.lineTo(40, 740); g.fillStyle = "#c9c2b4"; g.fill(coat);
-  const coat2 = new Path2D();
-  coat2.moveTo(380, 300); coat2.lineTo(248, 250);
-  coat2.lineTo(272, 740); coat2.lineTo(380, 740); g.fillStyle = "#b6ae9e"; g.fill(coat2);
-  g.fillStyle = "#e8e2d6"; g.beginPath(); g.ellipse(210, 130, 62, 74, 0, 0, 7); g.fill(); // face
-  g.strokeStyle = "#20202a"; g.lineWidth = 3;         // thin lineart — must not
-  g.beginPath(); g.moveTo(185, 120); g.lineTo(205, 120);  // become a highlight
-  g.moveTo(228, 120); g.lineTo(248, 120);
-  g.moveTo(200, 168); g.lineTo(228, 168); g.stroke();
-  g.restore();
-
-  if (rind) {
-    // Stroked inside the clip, so the alpha silhouette is identical to the clean
-    // figure's and the only difference between the two renders is the colour of
-    // the boundary pixels.
-    g.save(); g.clip(body);
-    g.strokeStyle = "#050508"; g.lineWidth = 7; g.stroke(body);
-    g.restore();
-  }
-  return c.toDataURL("image/png");
-}
-
-const ROOMS = ${JSON.stringify(ROOMS)};
-
-window.run = async () => {
-  const src = buildArt(false);
-  const normal = await getNormalMap(src);
-  if (!normal) return { error: "normal-map prepass returned null" };
-
-  const gl = new StageGL();
-  if (!gl.isSupported()) return { error: "no WebGL in this browser" };
-  const prepared = await gl.prepare(src, normal);
-  if (!prepared) return { error: "prepare() returned null — shader compile/link or texture upload failed" };
-
-  const rindSrc = buildArt(true);
-  const rindNormal = await getNormalMap(rindSrc);
-  const rindPrepared = rindNormal ? await gl.prepare(rindSrc, rindNormal) : null;
-  if (!rindPrepared) return { error: "prepare() returned null for the dark-rind figure" };
-
-  const strip = document.createElement("canvas");
-  const tileW = 300, tileH = 543;
-  // A 2x crop of the head and shoulder under each tile. The rim core is a few
-  // pixels wide by design, and at tile scale a crisp line and a soft band are
-  // indistinguishable — which is the whole thing being judged here.
-  // The third row is the same crop of the matted figure, so the sheet answers
-  // the question the numbers can only score: does an asset with its own black
-  // outline still get a halo drawn round it.
-  // Rows four and five are the cel style, tile and detail. Both are needed: the
-  // tile shows whether the terminator lands somewhere a viewer would accept, the
-  // detail whether the rim is a drawn line or a soft band pretending to be one.
-  // Six and seven are rim-only, and the pairing matters most there: the tile is
-  // where you check that the body really is just the flat art graded to the room
-  // (the failure mode is a mode that looks "off" rather than deliberate), and the
-  // detail is where you check the light still reads as light and not as a stroke.
-  const detailH = 300;
-  strip.width = tileW * ROOMS.length;
-  strip.height = tileH * 3 + detailH * 4;
-  const sg = strip.getContext("2d");
-  sg.imageSmoothingEnabled = false;
-
-  const label = (text, x, y, alpha) => {
-    sg.fillStyle = "rgba(255,255,255," + alpha + ")";
-    sg.font = "13px system-ui, sans-serif";
-    sg.fillText(text, x, y);
-  };
-
-  for (let i = 0; i < ROOMS.length; i++) {
-    const room = ROOMS[i];
-    const place = lightPlacement(room.centroid, 0.5, normal.figure,
-                                 normal.width / normal.height, 16 / 9);
-    const params = {
-      ...place,
-      // The real bounce, not a copy of the ambient — the shadow-side colour
-      // separation is a big part of what the figure ends up looking like.
-      ambient: room.ambient, bounce: bounceLight(room.ambient, room.key), key: room.key,
-      // The GM dial's default, so this is the picture a world actually gets.
-      shadowColor: [0.06, 0.08, 0.14], intensity: 0.6,
-      ...SHADER_STRENGTHS,
-      ...GRADE_INERT,
-      // Production feeds these per slot: the wrap carries the background
-      // directly behind the character, and the backlight is the key from behind.
-      wrapColor: room.ambient, backColor: room.key,
-      exposure: Math.pow(1 - room.darkness * 0.65, 2.2),
-      night: room.darkness * room.darkness * 0.55, shadow: 0, lift: 0,
-    };
-    const out = gl.draw(prepared, params);
-    if (!out) return { error: "draw() returned null at room " + i };
-
-    // Paint the room behind it, so the spill has something to spill onto.
-    const px = (c) => "rgb(" + c.map((v) => Math.round(v * 255)).join(",") + ")";
-    const room_ = px(room.ambient.map((v) => v * 0.55));
-    sg.fillStyle = room_;
-    sg.fillRect(i * tileW, 0, tileW, tileH);
-    sg.drawImage(out, i * tileW, 0, tileW, tileH);
-
-    // Detail: the top-left quarter of the figure, at native pixels.
-    sg.fillStyle = room_;
-    sg.fillRect(i * tileW, tileH, tileW, detailH);
-    sg.drawImage(out, 0, 0, tileW, detailH, i * tileW, tileH, tileW, detailH);
-
-    label(room.name, i * tileW + 10, tileH - 12, 0.75);
-
-    // Same crop, same light, art with a black rind round its silhouette.
-    const rindOut = gl.draw(rindPrepared, params);
-    if (!rindOut) return { error: "draw() returned null for the dark-rind figure" };
-    sg.fillStyle = room_;
-    sg.fillRect(i * tileW, tileH + detailH, tileW, detailH);
-    sg.drawImage(rindOut, 0, 0, tileW, detailH, i * tileW, tileH + detailH, tileW, detailH);
-    label("same art, black rind", i * tileW + 10, tileH + detailH + 20, 0.6);
-
-    // ── The same room, the cel style ──
-    // Same light, same dial, same art: everything that differs between these two
-    // rows is the style, which is the only way to judge whether the cel set is
-    // balanced against the realistic one or merely different from it.
-    const celOut = gl.draw(prepared, { ...params, ...CEL_SHADER_STRENGTHS });
-    if (!celOut) return { error: "draw() returned null for the cel style at room " + i };
-    const celTop = tileH + detailH * 2;
-    sg.fillStyle = room_;
-    sg.fillRect(i * tileW, celTop, tileW, tileH + detailH);
-    sg.drawImage(celOut, i * tileW, celTop, tileW, tileH);
-    sg.drawImage(celOut, 0, 0, tileW, detailH, i * tileW, celTop + tileH, tileW, detailH);
-    label("cel — " + room.name, i * tileW + 10, celTop + tileH - 12, 0.75);
-
-    // ── The same room again, rim-light-only ──
-    // The row to read against the first one, not against the cel rows: what is
-    // being judged is whether the body still belongs in the room once the key
-    // has stopped shading it, which is a question about the *grade*.
-    const rimOut = gl.draw(prepared, { ...params, ...RIM_SHADER_STRENGTHS });
-    if (!rimOut) return { error: "draw() returned null for the rim-only style at room " + i };
-    const rimTop = celTop + tileH + detailH;
-    sg.fillStyle = room_;
-    sg.fillRect(i * tileW, rimTop, tileW, tileH + detailH);
-    sg.drawImage(rimOut, i * tileW, rimTop, tileW, tileH);
-    sg.drawImage(rimOut, 0, 0, tileW, detailH, i * tileW, rimTop + tileH, tileW, detailH);
-    label("rim only — " + room.name, i * tileW + 10, rimTop + tileH - 12, 0.75);
-  }
-
-  // ── Assertions ──
-  const BASE = {
-    ambient: [0.12, 0.11, 0.14], bounce: [0.1, 0.12, 0.18], key: [1.0, 0.95, 0.88],
-    shadowColor: [0.06, 0.08, 0.14], ...SHADER_STRENGTHS, ...GRADE_INERT,
-    wrapColor: [0.12, 0.11, 0.14], backColor: [1.0, 0.95, 0.88],
-    exposure: 0.5, night: 0, shadow: 0, lift: 0,
-  };
-  const shoot = (centroid, intensity, target = prepared, style = SHADER_STRENGTHS) => {
-    const place = lightPlacement(centroid, 0.5, normal.figure,
-                                 normal.width / normal.height, 16 / 9);
-    const out = gl.draw(target, { ...BASE, ...style, ...place, intensity });
-    // Copy out immediately — the canvas is shared and the next draw owns it.
-    const c = document.createElement("canvas");
-    c.width = out.width; c.height = out.height;
-    const g2 = c.getContext("2d");
-    g2.drawImage(out, 0, 0);
-    return g2.getImageData(0, 0, c.width, c.height);
-  };
-
-  const W = gl.canvas.width, H = gl.canvas.height;
-  const artRef = document.createElement("canvas");
-  artRef.width = W; artRef.height = H;
-  const arg = artRef.getContext("2d");
-  const img0 = new Image(); img0.src = src; await img0.decode();
-  arg.drawImage(img0, 0, 0, W, H);
-  const artPx = arg.getImageData(0, 0, W, H).data;
-
-  // Strength 0 must be the original pixels, exactly. The rim core and the spill
-  // are now added *past* the dial's crossfade, which is precisely the change
-  // that could break this.
-  const driftFromArt = (px) => {
-    let m = 0;
-    for (let p = 0; p < px.length; p += 4) {
-      if (artPx[p + 3] < 250) continue;            // premultiplied edges round
-      for (let k = 0; k < 3; k++) m = Math.max(m, Math.abs(px[p + k] - artPx[p + k]));
-    }
-    return m;
-  };
-  const maxDelta = driftFromArt(shoot([0.5, 0.15], 0).data);
-  // The same property has to hold for the cel style, and it is not implied by
-  // the realistic one: the banded terms are a different arithmetic path, and a
-  // band that does not go to zero with the dial would tint the art at strength 0.
-  const celZeroDelta = driftFromArt(shoot([0.5, 0.15], 0, prepared, CEL_SHADER_STRENGTHS).data);
-  // And again for rim-only, where it is the least obvious of the three: that
-  // style's key term is a constant rather than a shading function, and a
-  // constant that survives the dial would tint every character at strength 0.
-  const rimZeroDelta = driftFromArt(shoot([0.5, 0.15], 0, prepared, RIM_SHADER_STRENGTHS).data);
-
-  // Where the rim lands. Walk each row of the silhouette, take a band just
-  // inside the left and right extremes, and average its luminance.
-  const bandLuma = (px, side) => {
-    let sum = 0, n = 0;
-    for (let y = 0; y < H; y += 2) {
-      let x0 = -1, x1 = -1;
-      for (let x = 0; x < W; x++) if (artPx[(y * W + x) * 4 + 3] > 200) { if (x0 < 0) x0 = x; x1 = x; }
-      if (x0 < 0 || x1 - x0 < 24) continue;
-      for (let d = 2; d < 10; d++) {
-        const x = side === "left" ? x0 + d : x1 - d;
-        const p = (y * W + x) * 4;
-        sum += (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
-        n++;
-      }
-    }
-    return n ? sum / n : 0;
-  };
-
-  const fromLeft = shoot([0.02, 0.5], 0.6).data;
-  const fromRight = shoot([0.98, 0.5], 0.6).data;
-  const peak = (px) => {
-    let m = 0;
-    for (let p = 0; p < px.length; p += 4) {
-      if (px[p + 3] < 200) continue;
-      m = Math.max(m, (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255);
-    }
-    return m;
-  };
-
-  const celFromLeft = shoot([0.02, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
-  const celFromRight = shoot([0.98, 0.5], 0.6, prepared, CEL_SHADER_STRENGTHS).data;
-  const rimFromLeft = shoot([0.02, 0.5], 0.6, prepared, RIM_SHADER_STRENGTHS).data;
-  const rimFromRight = shoot([0.98, 0.5], 0.6, prepared, RIM_SHADER_STRENGTHS).data;
-
-  const rim = {
-    zeroDelta: maxDelta,
-    celZeroDelta,
-    rimZeroDelta,
-    leftLampLeftBand: bandLuma(fromLeft, "left"),
-    leftLampRightBand: bandLuma(fromLeft, "right"),
-    rightLampLeftBand: bandLuma(fromRight, "left"),
-    rightLampRightBand: bandLuma(fromRight, "right"),
-    peakLuma: peak(fromLeft),
-    celLeftLampLeftBand: bandLuma(celFromLeft, "left"),
-    celLeftLampRightBand: bandLuma(celFromLeft, "right"),
-    celRightLampLeftBand: bandLuma(celFromRight, "left"),
-    celRightLampRightBand: bandLuma(celFromRight, "right"),
-    celPeakLuma: peak(celFromLeft),
-    rimLeftLampLeftBand: bandLuma(rimFromLeft, "left"),
-    rimLeftLampRightBand: bandLuma(rimFromLeft, "right"),
-    rimRightLampLeftBand: bandLuma(rimFromRight, "left"),
-    rimRightLampRightBand: bandLuma(rimFromRight, "right"),
-    rimPeakLuma: peak(rimFromLeft),
-  };
-
-  // ── Is it actually banded? ──
-  // The claim the cel style makes is that the shading is flat tones with a drawn
-  // terminator rather than a ramp, and that is exactly the thing a screenshot
-  // argues about. Measured over the pale coat panel only: that panel is a single
-  // flat fill in the source art, so every difference across it in the render is
-  // the lighting and nothing else — base colour cannot leak into the number.
-  //
-  // Counting tone levels does not separate the two styles, and the reason is
-  // worth knowing: deep inside a silhouette the invented normal barely turns, so
-  // the shading of *both* styles is dominated by one broad tone and a ramp near
-  // the edge. What the styles disagree about is that ramp's tail. Cel reaches a
-  // tone and stops; the continuous model never quite stops, and keeps drifting
-  // across the fill for as far as the panel runs.
-  //
-  // So the measurement is the flatness of the fill *past* the terminator: per
-  // row of the panel, the peak-to-trough spread over its inner half. Inner half
-  // because both styles have finished their edge ramp well before it, so this
-  // compares like with like rather than scoring one style's terminator against
-  // the other's plateau. Dither puts a floor of about one 8-bit step on it.
-  const PANEL = [201, 194, 180];
-  const inPanel = new Uint8Array(W * H);
-  let panelPixels = 0;
-  for (let i = 0; i < W * H; i++) {
-    const p = i * 4;
-    if (artPx[p + 3] < 250) continue;
-    if (Math.abs(artPx[p] - PANEL[0]) < 6 && Math.abs(artPx[p + 1] - PANEL[1]) < 6 &&
-        Math.abs(artPx[p + 2] - PANEL[2]) < 6) { inPanel[i] = 1; panelPixels++; }
-  }
-  const fillSpread = (px) => {
-    let sum = 0, rows = 0;
-    for (let y = 0; y < H; y++) {
-      let x0 = -1, x1 = -1;
-      for (let x = 0; x < W; x++) {
-        if (!inPanel[y * W + x]) continue;
-        if (x0 < 0) x0 = x;
-        x1 = x;
-      }
-      if (x0 < 0 || x1 - x0 < 80) continue;
-      let lo = 1, hi = 0;
-      // Stopping short of the far end as well: the panel's inner edge is where
-      // it meets the dark shirt, and both styles draw a contour highlight along
-      // that. A drawn line is not the fill, and including it measures the term
-      // this is not asking about.
-      for (let x = x0 + Math.floor((x1 - x0) / 2); x <= x1 - 20; x++) {
-        const q = (y * W + x) * 4;
-        const l = (0.2126 * px[q] + 0.7152 * px[q + 1] + 0.0722 * px[q + 2]) / 255;
-        lo = Math.min(lo, l);
-        hi = Math.max(hi, l);
-      }
-      sum += hi - lo;
-      rows++;
-    }
-    return rows ? sum / rows : 0;
-  };
-  // A style is a decision about shape. If it also moves the exposure, every
-  // stage that switches to it needs its strength dial re-tuned and the scene
-  // grade stops matching the room — so the two have to land in the same place
-  // overall, and only the arrangement of light within the figure differs.
-  const meanLuma = (px) => {
-    let sum = 0, n = 0;
-    for (let p = 0; p < px.length; p += 4) {
-      if (artPx[p + 3] < 250) continue;
-      sum += (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
-      n++;
-    }
-    return n ? sum / n : 0;
-  };
-  // ── Does the light stay out of the art? ──
-  // The claim rim-only makes is not "less light" — it is that the key does not
-  // reach the *interior* at all, only the outline. Flatness alone would not
-  // prove that: a wash that happens to be even is still a wash, and dimming the
-  // whole model would score well on it.
-  //
-  // What proves it is moving the lamp. Light the figure from hard left, then
-  // from hard right, and compare the pixels well inside the silhouette. If the
-  // key touches them, swinging it 180° changes them — that is what a shading
-  // gradient *is*. If it does not, the two renders are the same picture, and
-  // the only place the lamp exists is the band this excludes.
-  //
-  // The erosion is what makes it honest: the rim is *supposed* to move, so the
-  // measurement has to start past where it reaches. INSET is a comfortable
-  // margin beyond the widened halo — measured on the panel, not guessed.
-  const INSET = 45;
-  const inside = (x, y) =>
-    x >= INSET && y >= INSET && x < W - INSET && y < H - INSET &&
-    artPx[(y * W + x) * 4 + 3] > 250 &&
-    artPx[(y * W + x - INSET) * 4 + 3] > 250 && artPx[(y * W + x + INSET) * 4 + 3] > 250 &&
-    artPx[((y - INSET) * W + x) * 4 + 3] > 250 && artPx[((y + INSET) * W + x) * 4 + 3] > 250;
-  const lum = (px, p) => (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
-  const interiorDelta = (a, b) => {
-    let sum = 0, n = 0;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (!inside(x, y)) continue;
-        const p = (y * W + x) * 4;
-        sum += Math.abs(lum(a, p) - lum(b, p));
-        n++;
-      }
-    }
-    return { delta: n ? sum / n : 0, pixels: n };
-  };
-  const realisticSwing = interiorDelta(fromLeft, fromRight);
-  const rimSwing = interiorDelta(rimFromLeft, rimFromRight);
-
-  // ── How far in does the rim reach? ──
-  // The swing measurement above proves the light stops *somewhere*; it does not
-  // say where, and "somewhere inside 45px" is not the same claim as "on the
-  // outline".
-  //
-  // Reading it off a profile does not work, and the reason took a while to see:
-  // walking inward from the outline crosses the art's own materials — a dark
-  // shirt, then a pale coat — so a threshold against any single baseline scores
-  // the artwork's edges as light. The number that came out was three times the
-  // truth.
-  //
-  // So the rim is measured against itself with the rim switched off. Same style,
-  // same lamp, same dial, rim/rimEdge/glow zeroed: the difference between
-  // the two renders is the light and nothing else, whatever the art underneath
-  // is doing. The dither is deterministic and identical in both, so it cancels
-  // rather than setting a floor. Reach is then the depth at which that
-  // difference drops under one 8-bit step and stays there.
-  //
-  // Expressed as a fraction of the figure's width, not in pixels: the render
-  // target is sized from the source art, so a pixel count would score the same
-  // rim differently on a 900px portrait and a 2000px one.
-  const noRim = (style) => ({ ...style, rim: 0, rimEdge: 0, glow: 0 });
-  const rimReach = (px, ref, side) => {
-    let sum = 0, rows = 0, widths = 0;
-    for (let y = 0; y < H; y += 2) {
-      let x0 = -1, x1 = -1;
-      for (let x = 0; x < W; x++) if (artPx[(y * W + x) * 4 + 3] > 250) { if (x0 < 0) x0 = x; x1 = x; }
-      if (x0 < 0 || x1 - x0 < 140) continue;
-      const at = (d) => {
-        const p = (y * W + (side === "left" ? x0 + d : x1 - d)) * 4;
-        return Math.abs(lum(px, p) - lum(ref, p));
-      };
-      let peak = 0;
-      for (let d = 0; d < 60; d++) peak = Math.max(peak, at(d));
-      if (peak < 0.05) continue;                     // no rim on this row to measure
-      let reach = 120;
-      for (let d = 0; d < 120; d++) {
-        if (at(d) < 0.004 && at(d + 1) < 0.004 && at(d + 2) < 0.004) { reach = d; break; }
-      }
-      sum += reach; rows++; widths += x1 - x0;
-    }
-    return rows ? { px: sum / rows, frac: sum / rows / (widths / rows), rows } : { px: 0, frac: 0, rows: 0 };
-  };
-  const reach = rimReach(
-    rimFromLeft,
-    shoot([0.02, 0.5], 0.6, prepared, noRim(RIM_SHADER_STRENGTHS)).data,
-    "left"
-  );
-  const realisticReach = rimReach(
-    fromLeft,
-    shoot([0.02, 0.5], 0.6, prepared, noRim(SHADER_STRENGTHS)).data,
-    "left"
-  );
-
-  const banding = {
-    panelPixels,
-    realisticFill: fillSpread(fromLeft),
-    celFill: fillSpread(celFromLeft),
-    rimFill: fillSpread(rimFromLeft),
-    realisticMean: meanLuma(fromLeft),
-    celMean: meanLuma(celFromLeft),
-    rimMean: meanLuma(rimFromLeft),
-    interiorPixels: rimSwing.pixels,
-    realisticSwing: realisticSwing.delta,
-    rimSwing: rimSwing.delta,
-    rimReachPx: reach.px,
-    rimReachFrac: reach.frac,
-    rimReachRows: reach.rows,
-    realisticReachFrac: realisticReach.frac,
-  };
-
-  // Alpha outside the silhouette proves the spill is being drawn at all. Shot
-  // deliberately rather than read off gl.canvas: the render target is shared, so
-  // scraping it measures whichever style happened to draw last — which made this
-  // block silently change what it was scoring every time a shot was added above.
-  const spillShot = shoot([0.5, 0.15], 0.6).data;
-  let spillPixels = 0, spillPeak = 0, insidePixels = 0;
-  for (let p = 0; p < spillShot.length; p += 4) {
-    if (artPx[p + 3] > 8) { insidePixels++; continue; }
-    if (spillShot[p + 3] > 2) { spillPixels++; spillPeak = Math.max(spillPeak, spillShot[p + 3]); }
-  }
-  // ── The dark-rind case ──
-  // Same silhouette, same lamp, same strengths; only the colour of the boundary
-  // pixels differs. Tracing a hot core along an asset's own black outline is the
-  // halo the guard exists to prevent, so the matted figure has to come out
-  // visibly cooler at the edge than the clean one — while the clean one keeps
-  // every property asserted above.
-  const edgePeak = (px, side) => {
-    let sum = 0, n = 0;
-    for (let y = 0; y < H; y += 2) {
-      let x0 = -1, x1 = -1;
-      for (let x = 0; x < W; x++) if (artPx[(y * W + x) * 4 + 3] > 200) { if (x0 < 0) x0 = x; x1 = x; }
-      if (x0 < 0 || x1 - x0 < 24) continue;
-      let m = 0;
-      // A narrow band straddling the outline: the core and the hot end of the
-      // spill both live in it, and which texel they peak on moves with the
-      // curvature. Kept narrow deliberately — reach a few texels further in and
-      // the maximum finds the character's own lit body, which is bright on any
-      // figure and would swamp the thing being measured.
-      //
-      // Weighted by coverage, because getImageData hands back *unassociated*
-      // colour: the faintest breath of spill reads as pure white at alpha 3, and
-      // an unweighted maximum over this band measures the spill's hue rather
-      // than its brightness — which is to say, nothing at all.
-      for (let d = -3; d < 3; d++) {
-        const x = side === "left" ? x0 + d : x1 - d;
-        if (x < 0 || x >= W) continue;
-        const p = (y * W + x) * 4;
-        const l = (0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2]) / 255;
-        m = Math.max(m, l * (px[p + 3] / 255));
-      }
-      sum += m; n++;
-    }
-    return n ? sum / n : 0;
-  };
-  const cleanEdge = edgePeak(fromLeft, "left");
-  const rindEdge = edgePeak(shoot([0.02, 0.5], 0.6, rindPrepared).data, "left");
-
-  // ── The skin guard ──
-  // Its own two-patch swatch rather than the figure above, for two reasons: the
-  // figure has no skin tone in it (its face is a pale off-white, which is
-  // deliberate — it is there to be a tonal step for the contour term), and
-  // giving it one would move every whole-figure mean the assertions above are
-  // written against. So this is a flat card: a mid skin tone beside a grey of
-  // matched luminance, graded hard toward blue.
-  //
-  // Matched luminance is the point. The claim is not "skin changes less", which
-  // a darker patch would satisfy for free; it is that skin resists the *hue*
-  // while taking the level. Two patches at the same luma isolate exactly that.
-  const skinCard = (() => {
-    const c = document.createElement("canvas");
-    c.width = 128; c.height = 64;
-    const g = c.getContext("2d");
-    g.fillStyle = "#c68642"; g.fillRect(0, 0, 64, 64);   // mid skin
-    g.fillStyle = "#8d8d8d"; g.fillRect(64, 0, 64, 64);  // grey, ~same luma
-    return c.toDataURL("image/png");
-  })();
-  const skinNormal = await getNormalMap(skinCard);
-  const skinPrepared = skinNormal ? await gl.prepare(skinCard, skinNormal) : null;
-  if (!skinPrepared) return { error: "prepare() returned null for the skin card" };
-
-  // A deliberately violent blue cast — far past anything a real room asks for,
-  // so the difference between guarded and unguarded is unmistakable rather than
-  // a fraction of an 8-bit step.
-  const BLUE = { mCast: [0.75, 0.95, 1.35], mGain: 1, mPivot: 0.5, mBright: 1, mSat: 1 };
-  const flatLight = {
-    ...BASE, ...SHADER_STRENGTHS, ...GRADE_INERT, ...BLUE,
-    wrapColor: [0.12, 0.11, 0.14], backColor: [1.0, 0.95, 0.88],
-    ...lightPlacement([0.5, 0.5], 0.5, skinNormal.figure,
-                      skinNormal.width / skinNormal.height, 16 / 9),
-    intensity: 1,
-  };
-  const shotSkin = (skin) => {
-    const out = gl.draw(skinPrepared, { ...flatLight, skin });
-    const c = document.createElement("canvas");
-    c.width = out.width; c.height = out.height;
-    c.getContext("2d").drawImage(out, 0, 0);
-    return c.getContext("2d").getImageData(0, 0, out.width, out.height).data;
-  };
-  // Sampled well inside each patch: the edge terms all fire at the boundary and
-  // at the card's own outline, and none of them are what is being measured.
-  const patchHue = (px, w, h, x0, x1) => {
-    let r = 0, g2 = 0, b = 0, n = 0;
-    for (let y = (h * 0.3) | 0; y < h * 0.7; y++) {
-      for (let x = (w * x0) | 0; x < w * x1; x++) {
-        const p = (y * w + x) * 4;
-        if (px[p + 3] < 250) continue;
-        r += px[p]; g2 += px[p + 1]; b += px[p + 2]; n++;
-      }
-    }
-    if (!n) return null;
-    // Blue minus red, over the total — a scalar that moves with a blue cast and
-    // is invariant to how bright the patch is.
-    const sum = Math.max(r + g2 + b, 1);
-    return { bias: (b - r) / sum, luma: (0.2126 * r + 0.7152 * g2 + 0.0722 * b) / n / 255, n };
-  };
-  const W2 = skinPrepared.art.width, H2 = skinPrepared.art.height;
-  // Three shots, not two. A skin tone is red-dominant to begin with, so its
-  // absolute blue bias is negative whatever the cast does — the quantity that
-  // means anything is how far each patch *moved*, which needs the same render
-  // with the cast at identity to measure against. Comparing the two patches'
-  // absolute bias instead would score the swatch's own paint.
-  const uncast = gl.draw(skinPrepared, { ...flatLight, ...GRADE_INERT, skin: 0 });
-  const grab = (out) => {
-    const c = document.createElement("canvas");
-    c.width = out.width; c.height = out.height;
-    c.getContext("2d").drawImage(out, 0, 0);
-    return c.getContext("2d").getImageData(0, 0, out.width, out.height).data;
-  };
-  const basePx = grab(uncast);
-  const guarded = shotSkin(0.75);
-  const unguarded = shotSkin(0);
-  const shift = (px, x0, x1, ref) => {
-    const a = patchHue(px, W2, H2, x0, x1);
-    return a ? { ...a, shift: a.bias - ref.bias } : null;
-  };
-  const skinBase = patchHue(basePx, W2, H2, 0.08, 0.36);
-  const greyBase = patchHue(basePx, W2, H2, 0.64, 0.92);
-  const skinGuarded = shift(guarded, 0.08, 0.36, skinBase);
-  const greyGuarded = shift(guarded, 0.64, 0.92, greyBase);
-  const skinOff = shift(unguarded, 0.08, 0.36, skinBase);
-  const greyOff = shift(unguarded, 0.64, 0.92, greyBase);
-
-  return {
-    png: strip.toDataURL("image/png"),
-    spillPixels, spillPeak, insidePixels, cleanEdge, rindEdge, ...rim, ...banding,
-    skin: { skinGuarded, greyGuarded, skinOff, greyOff },
-  };
-};
-</script></body>`;
-
-server.on("request", () => {});
-const pageRoute = "/__preview.html";
-const origHandler = server.listeners("request")[0];
-server.removeAllListeners("request");
-server.on("request", async (req, res) => {
-  if (req.url.split("?")[0] === pageRoute) {
-    res.writeHead(200, { "content-type": "text/html" });
-    return res.end(PAGE);
-  }
-  return origHandler(req, res);
-});
-
 // Playwright is a dev convenience, not a dependency — the repo has no
 // package.json and Foundry consumes the source directly. Resolve it wherever it
 // happens to live (local install, or the global root) rather than pinning one.
 const { createRequire } = await import("node:module");
 const require_ = createRequire(import.meta.url);
 const { dirname: _dirname, join: _join } = await import("node:path");
-// Hard-coded POSIX prefixes only found it on Linux, which meant this tool
-// printed SKIP and exited 0 on the Windows box most of this repo is written on —
-// a check that proves nothing while reporting success, which is worse than one
-// that fails. The node-relative and %APPDATA% entries are where npm actually
-// puts a global install on Windows and under nvm.
+// The node-relative and %APPDATA% entries are where npm puts a global install on
+// Windows and under nvm; without them this printed SKIP on the box most of this
+// repo is written on — a check that proves nothing while reporting success.
 const _nodeDir = _dirname(process.execPath);
 const GLOBAL_ROOTS = [
   "/opt/node22/lib/node_modules",
@@ -699,15 +302,13 @@ try {
   playwrightPath = require_.resolve("playwright", { paths: [ROOT, ...GLOBAL_ROOTS] });
 } catch {
   console.log("SKIP  playwright is not installed — cannot compile the shader without a browser");
-  console.log("      npm i -g playwright   (Chromium is already present in this image)");
+  console.log("      npm i -g playwright");
   server.close();
   process.exit(0);
 }
-// CommonJS package — the named export lands on `default` through the ESM shim.
-// Via a file:// URL: a bare absolute path is a valid specifier on POSIX and is
-// read as the scheme "c:" on Windows, where it throws.
-const { pathToFileURL: _toFileURL } = await import("node:url");
-const pw = await import(_toFileURL(playwrightPath).href);
+// Via a file:// URL: a bare absolute path is read as the scheme "c:" on Windows.
+const { pathToFileURL } = await import("node:url");
+const pw = await import(pathToFileURL(playwrightPath).href);
 const chromium = pw.chromium ?? pw.default?.chromium;
 const browser = await chromium.launch({
   args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu-sandbox"],
@@ -719,8 +320,7 @@ page.on("console", (m) => {
 });
 page.on("pageerror", (e) => problems.push(String(e)));
 
-await page.goto(`${ORIGIN}${pageRoute}`);
-// The page is a module; `load` can fire before its import graph has settled.
+await page.goto(`${ORIGIN}/__preview.html`);
 try {
   await page.waitForFunction(() => typeof window.run === "function", null, { timeout: 15000 });
 } catch {
@@ -730,12 +330,11 @@ try {
   server.close();
   process.exit(1);
 }
-const result = await page.evaluate(() => window.run());
+const result = await page.evaluate(() => window.run()).catch((e) => ({ error: String(e.message || e) }));
 await browser.close();
 server.close();
 
 for (const p of problems) console.log("  browser:", p);
-
 if (result.error) {
   console.log(`FAIL  ${result.error}`);
   process.exit(1);
@@ -750,179 +349,26 @@ const ok = (cond, label, extra = "") => {
 };
 
 ok(!problems.some((p) => /compile failed|link failed/i.test(p)), "the shader compiles and links");
-ok(result.spillPixels > 0, "light spills past the silhouette", `${result.spillPixels} px outside the alpha`);
-ok(
-  result.spillPixels > result.insidePixels * 0.02,
-  "…far enough out to read as a glow",
-  `${((result.spillPixels / result.insidePixels) * 100).toFixed(1)}% of the figure's area`
-);
-ok(result.spillPeak > 40, "…and bright enough to see", `peak alpha ${result.spillPeak}/255`);
+ok(result.neutral.worst <= 1, "every dial neutral returns the art untouched", `worst channel drift ${result.neutral.worst}/255`);
+ok(result.zero.worst <= 1, "master intensity 0 returns the art untouched, whatever the dials say", `worst ${result.zero.worst}/255`);
 
-const f = (v) => v.toFixed(3);
-ok(
-  result.zeroDelta <= 1,
-  "strength 0 returns the original pixels untouched",
-  `worst channel drift ${result.zeroDelta}/255`
-);
-ok(
-  result.leftLampLeftBand > result.leftLampRightBand * 1.15,
-  "a lamp on the left rims the left edge",
-  `${f(result.leftLampLeftBand)} vs ${f(result.leftLampRightBand)}`
-);
-ok(
-  result.rightLampRightBand > result.rightLampLeftBand * 1.15,
-  "…and a lamp on the right rims the right edge",
-  `${f(result.rightLampRightBand)} vs ${f(result.rightLampLeftBand)}`
-);
-ok(
-  result.peakLuma > 0.85,
-  "the rim core reaches near-white at the default strength",
-  `peak luminance ${f(result.peakLuma)}`
-);
-ok(
-  result.rindEdge < result.cleanEdge * 0.70,
-  "the rim stands down on art with its own dark outline",
-  `edge peak ${f(result.rindEdge)} vs ${f(result.cleanEdge)} on the clean cut-out`
-);
-
-// ── The cel style ──
-// Every property asserted above is a property of the *effect*, not of one style,
-// so the cel set has to hold them all over again — and none of them follows from
-// the realistic set passing, because the banded terms are a separate path
-// through the shader.
-ok(
-  result.celZeroDelta <= 1,
-  "cel: strength 0 returns the original pixels untouched",
-  `worst channel drift ${result.celZeroDelta}/255`
-);
-ok(
-  result.celLeftLampLeftBand > result.celLeftLampRightBand * 1.15,
-  "cel: a lamp on the left rims the left edge",
-  `${f(result.celLeftLampLeftBand)} vs ${f(result.celLeftLampRightBand)}`
-);
-ok(
-  result.celRightLampRightBand > result.celRightLampLeftBand * 1.15,
-  "cel: …and a lamp on the right rims the right edge",
-  `${f(result.celRightLampRightBand)} vs ${f(result.celRightLampLeftBand)}`
-);
-ok(
-  result.celPeakLuma > 0.85,
-  "cel: the rim core still reaches near-white",
-  `peak luminance ${f(result.celPeakLuma)}`
-);
-// And the thing that makes it a second style rather than a second set of dials.
-ok(
-  result.celFill < result.realisticFill * 0.5,
-  "cel: the fill past the terminator is flat, where the ramp keeps drifting",
-  `spread ${f(result.celFill)} vs ${f(result.realisticFill)} semi-realistic` +
-    ` (${result.panelPixels} px of flat coat)`
-);
-ok(
-  Math.abs(result.celMean - result.realisticMean) < result.realisticMean * 0.08,
-  "cel: …at the same exposure, so switching style doesn't re-tune the stage",
-  `mean ${f(result.celMean)} vs ${f(result.realisticMean)} semi-realistic`
-);
-
-// ── Rim-light-only ──
-// Same drill: it is a third path through the shader, so it re-earns every
-// property rather than inheriting one.
-ok(
-  result.rimZeroDelta <= 1,
-  "rim-only: strength 0 returns the original pixels untouched",
-  `worst channel drift ${result.rimZeroDelta}/255`
-);
-ok(
-  result.rimLeftLampLeftBand > result.rimLeftLampRightBand * 1.15,
-  "rim-only: a lamp on the left rims the left edge",
-  `${f(result.rimLeftLampLeftBand)} vs ${f(result.rimLeftLampRightBand)}`
-);
-ok(
-  result.rimRightLampRightBand > result.rimRightLampLeftBand * 1.15,
-  "rim-only: …and a lamp on the right rims the right edge",
-  `${f(result.rimRightLampRightBand)} vs ${f(result.rimRightLampLeftBand)}`
-);
-ok(
-  result.rimPeakLuma > 0.85,
-  "rim-only: the rim core still reaches near-white",
-  `peak luminance ${f(result.rimPeakLuma)}`
-);
-// The assertion the mode exists for. Swing the lamp from one side of the room
-// to the other and the interior of the art must not notice.
-ok(
-  result.rimSwing < result.realisticSwing * 0.1,
-  "rim-only: swinging the lamp 180° leaves the interior of the art unchanged",
-  `mean shift ${f(result.rimSwing)} vs ${f(result.realisticSwing)} semi-realistic` +
-    ` (${result.interiorPixels} px past the rim)`
-);
-ok(
-  result.rimSwing < 0.005,
-  "…to within the dither floor, which is as unchanged as 8 bits get",
-  `${(result.rimSwing * 255).toFixed(2)} of one 8-bit step`
-);
-ok(
-  result.rimReachFrac < 0.035 && result.rimReachFrac < result.realisticReachFrac * 0.5,
-  "rim-only: …and the light itself sits on the outline, not over the art",
-  `reaches ${(result.rimReachFrac * 100).toFixed(1)}% of the figure's width in` +
-    ` vs ${(result.realisticReachFrac * 100).toFixed(1)}% semi-realistic` +
-    ` (${result.rimReachPx.toFixed(1)} px over ${result.rimReachRows} rows)`
-);
-ok(
-  Math.abs(result.rimMean - result.realisticMean) < result.realisticMean * 0.1,
-  "rim-only: …and at the same exposure — the key becomes a level, not nothing",
-  `mean ${f(result.rimMean)} vs ${f(result.realisticMean)} semi-realistic`
-);
-
-// ── The skin guard ──
-// The one property that stops the reference match ruining every face on the
-// stage, and the only place it can be measured is a real GL context — it lives
-// entirely inside the fragment shader. `postfx-check` can prove the guard is
-// *wired* to the chromatic terms and not to the achromatic ones; only this can
-// prove it does anything.
-const skin = result.skin ?? {};
-ok(
-  skin.skinOff && skin.greyOff && skin.skinGuarded && skin.greyGuarded,
-  "the skin card renders",
-  skin.skinOff ? `${skin.skinOff.n} px per patch` : "missing"
-);
-if (skin.skinOff && skin.greyGuarded) {
-  // With the guard off, a violent blue cast has to move both patches. If it
-  // does not, the rest of this proves nothing — the cast would be inert and
-  // every comparison below would pass on a shader that did nothing at all.
+// float32 on the GPU against float64 in the reference, both rounded to 8 bits:
+// a couple of steps at the worst pixel is arithmetic, a mean above half a step
+// is a transcription error.
+for (const d of result.dials) {
   ok(
-    skin.skinOff.shift > 0.015 && skin.greyOff.shift > 0.015,
-    "unguarded, the blue cast reaches both patches",
-    `skin +${f(skin.skinOff.shift)}, grey +${f(skin.greyOff.shift)}`
+    d.worst <= 3 && d.mean <= 0.5,
+    `GLSL matches shadePixel: ${d.label}`,
+    `worst ${d.worst}/255, mean ${d.mean.toFixed(3)}`
   );
-  const skinShift = skin.skinGuarded.shift;
-  const greyShift = skin.greyGuarded.shift;
-  ok(
-    skinShift < skin.skinOff.shift * 0.6,
-    "guarded, skin resists most of the cast it otherwise takes",
-    `+${f(skinShift)} vs +${f(skin.skinOff.shift)} with the guard off`
-  );
-  ok(
-    skinShift < greyShift * 0.7,
-    "…and shifts far less than the grey standing beside it",
-    `skin +${f(skinShift)} vs grey +${f(greyShift)}`
-  );
-  // The other half of the claim, and the half that is easy to lose: skin is
-  // supposed to take level and contrast in full. A guard that also held back
-  // brightness would leave every face floating at its original exposure in a
-  // dark room — lit from nowhere, and far more obviously wrong than a blue one.
-  ok(
-    Math.abs(skin.skinGuarded.luma - skin.skinOff.luma) < 0.03,
-    "…while its brightness is untouched by the guard, as it must be",
-    `luma ${f(skin.skinGuarded.luma)} vs ${f(skin.skinOff.luma)}`
-  );
-  // And the guard must not leak onto things that merely sit near skin in
-  // chroma. If grey moves, the ellipse is too generous and the match is being
-  // held back everywhere — which reads as the feature simply not working.
-  ok(
-    Math.abs(greyShift - skin.greyOff.shift) < 0.01,
-    "…and does not spill onto the neutral patch next to it",
-    `grey +${f(greyShift)} guarded vs +${f(skin.greyOff.shift)} unguarded`
-  );
+  ok(d.moved > 1, `…and the dial visibly moves the picture`, `mean change ${d.moved.toFixed(2)}/255`);
+  ok(d.alpha <= 2, `…and its coverage matches, outside the art included`, `worst ${d.alpha}/255`);
+  if (d.bloom) {
+    // Four 8-bit render targets deep, so a few steps of rounding is expected.
+    ok(d.bloom.size === d.bloom.cpuSize && d.bloom.worst <= 6, `…and the GPU bloom pyramid matches bloomPyramid`, `${d.bloom.size}, worst ${d.bloom.worst}/255`);
+  }
 }
 
-console.log(`\nwrote ${OUT}`);
+console.log(`\ncontact sheet: ${OUT}`);
+console.log(failed ? `\n${failed} FAILED` : "\nall passed");
 process.exit(failed ? 1 : 0);

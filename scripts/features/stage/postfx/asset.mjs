@@ -1,8 +1,8 @@
 /**
  * Stage post-processing — CORS-aware asset loading.
  *
- * Every part of this feature that touches pixels (the normal-map prepass, the
- * background sampler, the GL texture upload) needs the browser to consider the
+ * Every part of this feature that touches pixels (the background sampler, the
+ * GL texture upload) needs the browser to consider the
  * asset *readable*, not merely displayable. Those are different bars, and the
  * gap between them is where remotely-hosted art — S3 above all — lands:
  *
@@ -123,10 +123,10 @@ function adviseOnce(url) {
   _advised = true;
   const origin = window.location.origin;
   console.warn(
-    `gluniverse | Stage lighting can display ${url.host} art but cannot read its ` +
+    `gluniverse | Stage grading can display ${url.host} art but cannot read its ` +
       `pixels, because the host does not send an Access-Control-Allow-Origin header. ` +
-      `Those characters fall back to the simpler tinted look.\n` +
-      `To enable full lighting, add a CORS rule to the bucket allowing GET from ` +
+      `Those characters fall back to a simpler CSS approximation.\n` +
+      `To enable full grading, add a CORS rule to the bucket allowing GET from ` +
       `this origin:\n` +
       JSON.stringify(
         [
