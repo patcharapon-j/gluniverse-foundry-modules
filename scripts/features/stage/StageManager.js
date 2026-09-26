@@ -1,6 +1,7 @@
 import { MODULE_ID, getSetting, setSetting } from './settings.js';
 import { emitSocket, SOCKET_EVENTS } from './socket-handler.js';
 import { clampNumber } from '../../core/util.mjs';
+import { normalizeTrim } from './postfx/grade-model.mjs';
 
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
 
@@ -44,7 +45,10 @@ function normalizeActorData(data = {}) {
         // Some portraits ship already lit — painted highlights, or a hard-edged
         // stylised silhouette that re-lighting only muddies. Without a per-actor
         // opt-out the GM's only recourse would be killing the whole feature.
-        ppOptOut: data.ppOptOut === true
+        ppOptOut: data.ppOptOut === true,
+        // A small correction for art that is always off the same way whatever
+        // room it stands in. Composes with the scene's own basic correction.
+        ppTrim: normalizeTrim(data.ppTrim)
     };
 }
 
@@ -62,6 +66,7 @@ function normalizeActorUpdates(updates = {}) {
     if ('commsTint' in updates) normalized.commsTint = cleanTint(updates.commsTint);
     if ('measureHidden' in updates) normalized.measureHidden = updates.measureHidden === true;
     if ('ppOptOut' in updates) normalized.ppOptOut = updates.ppOptOut === true;
+    if ('ppTrim' in updates) normalized.ppTrim = normalizeTrim(updates.ppTrim);
     return normalized;
 }
 
@@ -109,8 +114,8 @@ export class StageManager {
         const normalizedUpdates = normalizeActorUpdates(updates);
         if (!Object.keys(normalizedUpdates).length) return;
 
-        // Repointing the art invalidates its cached normal-map prepass and GPU
-        // textures, which are keyed by the *old* path.
+        // Repointing the art invalidates its GPU texture, which is keyed by the
+        // *old* path.
         const previousImage = actors[idx].image;
         Object.assign(actors[idx], normalizedUpdates);
         if ('image' in normalizedUpdates && previousImage !== actors[idx].image) {

@@ -1,10 +1,10 @@
 /* ════════════════════════════════════════════════════════════════════════
-   GLUniverse Stage — character art post-processing
+   GLUniverse Stage — character grade
    ────────────────────────────────────────────────────────────────────────
-   Two presentations of the same effect:
+   Two presentations of the same grade:
 
-   .glstage-pp-on             the shaded canvas replaces the flat <img>
-   .glstage-pp-on.glstage-pp-css   the CSS fallback used when the art's pixels
+   .glstage-pp-on                  the graded canvas replaces the flat <img>
+   .glstage-pp-on.glstage-pp-css   the CSS fallback, used when the art's pixels
                                    can't be read (cross-origin without CORS
                                    headers) or WebGL is unavailable
 
@@ -15,16 +15,13 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 .stage-actor-img-wrap {
-    /* Anchors the overlay layers. The wrap already carries the per-actor
-       scale/translate, so the overlays inherit that framing for free. */
+    /* Anchors the graded canvas. The wrap already carries the per-actor
+       scale/translate, so the canvas inherits that framing for free. */
     position: relative;
-    /* Keep blending confined to the character. Without this the layers would
-       blend with the map behind the stage, which is unpredictable and reads
-       as a rendering bug when the GM pans. */
     isolation: isolate;
 }
 
-/* ── Shaded output ──
+/* ── Graded output ──
    The <img> keeps driving layout; the canvas is painted over it. Sizing the
    canvas from the image's own box means the two can never disagree about
    aspect ratio, however the art is cropped or scaled. */
@@ -34,9 +31,9 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
     /* The stage overlay is pointer-transparent; nothing here should change
        that or start intercepting clicks meant for Foundry's chrome. */
+    pointer-events: none;
 }
 
 .stage-actor-img-wrap.glstage-pp-on:not(.glstage-pp-css) .stage-actor-img {
@@ -45,159 +42,15 @@
 }
 
 /* ── CSS fallback ──
-   Masked to the art's own alpha via mask-image. Masks reference the image by
-   URL and never read its pixels, so this path works on cross-origin art that
-   the shader path can't touch. */
+   The basic-correction dials as a filter chain on the art itself. Filters
+   never read the image's pixels, so this works on cross-origin art the shader
+   can't touch. An approximation: see cssFilterFor(). */
 
-.glstage-pp-fallback {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: var(--glstage-pp-strength, 0.6);
-}
-
-.glstage-pp-fallback > span {
-    position: absolute;
-    inset: 0;
-    display: block;
-    -webkit-mask-image: var(--glstage-pp-mask);
-    mask-image: var(--glstage-pp-mask);
-    -webkit-mask-size: 100% 100%;
-    mask-size: 100% 100%;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-mode: alpha;
-    mask-mode: alpha;
-}
-
-/* Ambient: the room's colour washed over the character. */
-.glstage-pp-tint {
-    background: var(--glstage-pp-ambient, transparent);
-    mix-blend-mode: soft-light;
-}
-
-/* Key: a directional gradient along the inferred light angle, so the lit side
-   brightens and the far side falls away. */
-.glstage-pp-key {
-    /* Three stops, not two. A straight ramp to `transparent` fades linearly,
-       which reads as a flat wedge across the art rather than light falling off;
-       the extra stop bends it so most of the decay happens early. */
-    background: linear-gradient(
-        var(--glstage-pp-angle, 0deg),
-        var(--glstage-pp-key, transparent) 0%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 35%, transparent) 30%,
-        transparent 66%
-    );
-    mix-blend-mode: screen;
-    opacity: 0.75;
-}
-
-/* Shade: the same gradient reversed, darkening the side turned away from the
-   light. Without it the fallback only ever adds brightness, which flattens the
-   art instead of giving it form — and for art whose pixels can't be read, this
-   is the only shading it will ever get. Deepens when the slot is dimmed, since
-   the shader's shadow term isn't available here. */
-.glstage-pp-shade {
-    background: linear-gradient(
-        var(--glstage-pp-shade-angle, 180deg),
-        var(--glstage-pp-shadow, transparent) 0%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 40%, transparent) 34%,
-        transparent 74%
-    );
-    mix-blend-mode: multiply;
-    opacity: calc(0.55 + var(--glstage-pp-dim, 0) * 0.3);
-}
-
-/* Scene darkness dims the fallback the same way exposure dims the shader. */
 .stage-actor-img-wrap.glstage-pp-css .stage-actor-img {
-    filter: brightness(var(--glstage-pp-exposure, 1));
+    filter: var(--glstage-pp-filter, none);
 }
 
-/* ── Cel style, on the fallback ──
-   The shader bands the shading itself; three gradients over art whose pixels
-   were never readable cannot. What they can do is stop being ramps: each
-   gradient repeats its stop to hold a tone flat, then jumps at a terminator, so
-   the lit and shadow sides meet at a line rather than fading into one another.
-   That is the same decision the shader makes, made with what this path has.
-
-   Percentages, not lengths — the terminator has to land in the same place on a
-   portrait and on a full body. */
-.glstage-pp-css.glstage-pp-cel .glstage-pp-key {
-    background: linear-gradient(
-        var(--glstage-pp-angle, 0deg),
-        var(--glstage-pp-key, transparent) 0%,
-        var(--glstage-pp-key, transparent) 26%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 26%,
-        color-mix(in srgb, var(--glstage-pp-key, transparent) 45%, transparent) 44%,
-        transparent 44%
-    );
-    /* The band is flat, so it covers more of the figure than the ramp did at the
-       same opacity — eased back to land in the same place overall. */
-    opacity: 0.62;
-}
-
-.glstage-pp-css.glstage-pp-cel .glstage-pp-shade {
-    background: linear-gradient(
-        var(--glstage-pp-shade-angle, 180deg),
-        var(--glstage-pp-shadow, transparent) 0%,
-        var(--glstage-pp-shadow, transparent) 30%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 30%,
-        color-mix(in srgb, var(--glstage-pp-shadow, transparent) 50%, transparent) 52%,
-        transparent 52%
-    );
-    opacity: calc(0.48 + var(--glstage-pp-dim, 0) * 0.3);
-}
-
-/* ── Rim-light-only style, on the fallback ──
-   The one style this path can render honestly rather than approximate. The two
-   directional gradients are the whole thing rim-only removes, so they go; the
-   ambient tint stays, because grading the art to the room is the half of the
-   effect this mode keeps.
-
-   What replaces them is a drop-shadow on the art itself, which is a blur of the
-   image's own alpha — the same quantity the shader's spill term reads, arrived
-   at by a different route. Two of them: a tight one for the line and a wide one
-   for the glow behind it, which is the two-lobe rim the shader draws, and for
-   the same reason. Both sit *outside* the silhouette, since the <img> paints
-   over its own shadow — so on this path the light provably cannot bleed into
-   the art, which is exactly what the mode promises.
-
-   The strength dial rides in the colour's alpha; a filter cannot be faded any
-   other way. */
-.glstage-pp-css.glstage-pp-rim .glstage-pp-key,
-.glstage-pp-css.glstage-pp-rim .glstage-pp-shade {
-    display: none;
-}
-
-.stage-actor-img-wrap.glstage-pp-css.glstage-pp-rim .stage-actor-img {
-    filter: brightness(var(--glstage-pp-exposure, 1))
-        drop-shadow(0 0 3px var(--glstage-pp-rim-glow, transparent))
-        drop-shadow(0 0 14px var(--glstage-pp-rim-glow, transparent));
-}
-
-/* ── GM panel controls ──
-   The strength dial lives in the Stage Director toolbar alongside the framing
-   controls, because lighting is tuned by looking at it. */
-
-/* Style picker, sitting in the same toolbar row as the strength slider — the
-   two are one decision and get looked at together. Sized to the sliders beside
-   it rather than to its own content, so the row doesn't reflow on selection. */
-.glstage-pp-style-select {
-    width: 116px;
-    height: 22px;
-    padding: 0 4px;
-    border: 1px solid var(--gl-edge);
-    border-radius: 4px;
-    background: rgb(var(--gl-tint-dark) / 0.35);
-    color: var(--gl-text);
-    font-size: var(--gl-fs-xs, 11px);
-    cursor: pointer;
-}
-
-.glstage-pp-style-select:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
+/* ── GM panel controls ── */
 
 .glstage-field-check {
     margin-top: 2px;
@@ -236,13 +89,4 @@
 .glstage-pp-note i {
     margin-top: 1px;
     color: var(--gl-accent);
-}
-
-/* ── State interaction ──
-   The highlight drop-shadow on .stage-slot is a UI affordance and stays exactly
-   as it was. Dimming is now partly carried by colour in the shader, so the
-   opacity component is eased back to avoid double-dimming. */
-
-.stage-slot.dimmed:has(.glstage-pp-on) {
-    opacity: calc(var(--glstage-dim-opacity, 0.8) + (1 - var(--glstage-dim-opacity, 0.8)) * 0.45);
 }

@@ -6,10 +6,6 @@ import { frameImages } from '../../core/face-frame.mjs';
 const i18n = (key) => game.i18n.localize(`GLSTAGE.${key}`);
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
 
-/** Character-lighting styles, in the order the picker offers them. Mirrors the
- *  `ppStyle` setting's choices; anything else falls back to the first. */
-const PP_STYLES = ['realistic', 'cel', 'rim'];
-
 function escapeAttr(value) {
     return escapeHTML(value);
 }
@@ -319,13 +315,6 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         else if (status.corsFallbacks > 0) notes.push(i18n('panel.ppArtCORS'));
         else if (status.cssFallbacks > 0) notes.push(i18n('panel.ppArtNotSampled'));
         if (status.missingArt > 0) notes.push(i18n('panel.ppArtMissing'));
-        if (status.backgroundDegraded) {
-            notes.push(
-                status.backgroundReason === 'cors'
-                    ? i18n('panel.ppBackgroundCORS')
-                    : i18n('panel.ppBackgroundFlat')
-            );
-        }
         if (!notes.length) return '';
 
         return `<div class="glstage-pp-note">
@@ -344,12 +333,8 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const currentWidth = finiteNumber(state.stageWidth || getSetting('stageWidth'), 100);
         const currentXOffset = finiteNumber(state.stageXOffset ?? getSetting('stageXOffset'), 0);
         const currentYOffset = finiteNumber(state.stageYOffset ?? getSetting('stageYOffset'), 0);
-        const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 60);
+        const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 100);
         const ppEnabled = getSetting('ppEnabled') !== false;
-        const ppStyle = PP_STYLES.includes(getSetting('ppStyle')) ? getSetting('ppStyle') : 'realistic';
-        const ppStyleOptions = PP_STYLES
-            .map(s => `<option value="${s}" ${s === ppStyle ? 'selected' : ''}>${i18n(`panel.ppStyle.${s}`)}</option>`)
-            .join('');
         html += `<div class="glstage-toolbar">
             <button class="glstage-btn ${isVisible ? 'glstage-btn-active' : ''}" data-action="toggle-visibility">
                 <i class="fas fa-${isVisible ? 'eye' : 'eye-slash'}"></i>
@@ -388,13 +373,6 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 <input type="range" min="0" max="100" step="5" value="${currentPPIntensity}" data-action="stage-pp-intensity"
                     ${ppEnabled ? '' : 'disabled'}/>
                 <span class="glstage-pp-value">${currentPPIntensity}%</span>
-            </div>
-            <div class="glstage-height-control">
-                <label>${i18n('panel.ppStyleLabel')}</label>
-                <select class="glstage-pp-style-select" data-action="stage-pp-style"
-                    title="${escapeAttr(i18n('panel.ppStyleHint'))}" ${ppEnabled ? '' : 'disabled'}>
-                    ${ppStyleOptions}
-                </select>
             </div>
         </div>
         ${this._buildPostFXNote()}`;
@@ -1073,16 +1051,6 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
             });
             ppSlider.addEventListener('change', async () => {
                 await setSetting('ppIntensity', parseInt(ppSlider.value));
-            });
-        }
-
-        // Shading style. No live preview to do here: the setting's own onChange
-        // pushes the new style into every client's overlay, including this one.
-        const ppStyleSelect = el.querySelector('[data-action="stage-pp-style"]');
-        if (ppStyleSelect) {
-            ppStyleSelect.addEventListener('change', async () => {
-                const picked = ppStyleSelect.value;
-                await setSetting('ppStyle', PP_STYLES.includes(picked) ? picked : 'realistic');
             });
         }
     }
