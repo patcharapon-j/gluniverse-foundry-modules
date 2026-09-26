@@ -71,6 +71,8 @@ const dial = (min, max, step, dflt, neutral) =>
 //   glow       the art's own highlights, bloomed and screened back on — and
 //              spilling past the outline, which is the one place the pass
 //              draws outside the art's coverage
+//   looks      up to MAX_LOOKS colour looks (3D LUTs, lut.mjs), applied in
+//              order, each at its own opacity
 //
 // `light` is not a layer: it is the one light the scene has, shared by every
 // layer that has a direction, so every character is lit from the same side.
@@ -178,6 +180,15 @@ const LIFT_PER_UNIT = 0.25 / 100;
 /** `contrast` of ±100 halves or doubles the curve's slope at mid-grey. */
 const CONTRAST_OCTAVES_PER_UNIT = 1 / 100;
 
+/** How many looks one grade can stack. Each is a texture unit in the shader. */
+export const MAX_LOOKS = 4;
+
+/** A look's opacity, 0..100. Neutral at 0. */
+export const LOOK_OPACITY = dial(0, 100, 1, 100, 0);
+
+/** A look id: "builtin:<slug>" or "custom:<slug>". Stored data, never renamed. */
+export const LOOK_ID_RE = /^(builtin|custom):[a-z0-9][a-z0-9-]{0,63}$/;
+
 function buildGrade(pick) {
   const out = { v: GRADE_VERSION };
   for (const [section, dials] of Object.entries(SECTIONS)) {
@@ -185,7 +196,22 @@ function buildGrade(pick) {
     for (const [key, spec] of Object.entries(dials)) out[section][key] = pick(spec);
     for (const [key, value] of Object.entries(COLORS[section] ?? {})) out[section][key] = value;
   }
+  out.looks = [];
   out.seeded = false;
+  return out;
+}
+
+/** Coerce a stored look stack: valid ids only, opacities in range, at most
+ *  MAX_LOOKS, order kept. */
+export function normalizeLooks(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const entry of raw) {
+    if (out.length >= MAX_LOOKS) break;
+    const id = typeof entry?.id === "string" ? entry.id : "";
+    if (!LOOK_ID_RE.test(id)) continue;
+    out.push({ id, opacity: readDial(LOOK_OPACITY, entry.opacity, LOOK_OPACITY.default) });
+  }
   return out;
 }
 
@@ -238,6 +264,7 @@ export function normalizeGrade(raw, fallback = DEFAULT_GRADE) {
       out[section][key] = hex6(String(s[key] ?? ""), fb).toLowerCase();
     }
   }
+  out.looks = normalizeLooks(Array.isArray(src.looks) ? src.looks : base.looks);
   out.seeded = "seeded" in src ? src.seeded === true : base.seeded === true;
   return out;
 }
@@ -259,7 +286,7 @@ export function isNeutralTrim(trim) {
 /** Interpolate two normalized grades — the scene-change tween. Dials ease;
  *  colours ease in linear light; the light angle takes the short way round. */
 export function lerpGrade(a, b, t) {
-  const out = { v: GRADE_VERSION, seeded: b.seeded };
+  const out = { v: GRADE_VERSION, seeded: b.seeded, looks: lerpLooks(a.looks ?? [], b.looks ?? [], t) };
   for (const [section, dials] of Object.entries(SECTIONS)) {
     out[section] = {};
     for (const key of Object.keys(dials)) {
@@ -280,6 +307,18 @@ export function lerpGrade(a, b, t) {
     }
   }
   return out;
+}
+
+/**
+ * The look stack mid-tween. The same looks in the same order ease their
+ * opacities; a different stack cannot be crossfaded in MAX_LOOKS slots, so the
+ * new one fades in from nothing instead.
+ */
+function lerpLooks(a, b, t) {
+  const same = a.length === b.length && a.every((l, i) => l.id === b[i].id);
+  if (t >= 1) return b.map((l) => ({ ...l }));
+  if (same) return b.map((l, i) => ({ id: l.id, opacity: a[i].opacity + (l.opacity - a[i].opacity) * t }));
+  return b.map((l) => ({ id: l.id, opacity: l.opacity * t }));
 }
 
 // ─── Resolution to shader parameters ───
@@ -390,6 +429,10 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
     glowAmount: g.glow.amount / 100,
     glowSpread: g.glow.radius / 100,
     glowThreshold: g.glow.threshold / 100,
+    // Slot i of the shader's look stack. The renderer resolves each id to a
+    // LUT; an id it cannot resolve is drawn at opacity 0.
+    lookIds: g.looks.map((l) => l.id),
+    lookAmounts: Array.from({ length: MAX_LOOKS }, (_, i) => (g.looks[i] ? g.looks[i].opacity / 100 : 0)),
     skin: g.skin.guard / 100,
   };
 }
@@ -726,7 +769,7 @@ export function basicCorrect(lin, p) {
  * identity. Every layer is skipped outright at its neutral value for the same
  * reason.
  */
-export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1) {
+export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1, looks = null) {
   const lin = srgb.map(toLinear);
   const guard = p.skin * skinMask(srgb);
 
@@ -770,6 +813,18 @@ export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1) {
   }
 
   c = gamutFit(c);
+
+  // Looks: each LUT applied in order at its own opacity, on encoded colour.
+  // `looks[i]` is the strip for slot i (lut.mjs `sampleStrip`), or null.
+  if (looks) {
+    for (let i = 0; i < MAX_LOOKS; i++) {
+      const w = p.lookAmounts[i];
+      if (!(w > 0) || !looks[i]) continue;
+      const e = c.map((x) => Math.min(Math.max(toSRGB(x), 0), 1));
+      const graded = looks[i].sample(e);
+      c = guardSkin(c, e.map((x, k) => toLinear(x + (graded[k] - x) * w)), guard);
+    }
+  }
   return srgb.map((x, i) => Math.min(Math.max(x + (toSRGB(c[i]) - toSRGB(lin[i])), 0), 1));
 }
 
@@ -943,7 +998,7 @@ export function glowFrom(bloom, p) {
  * `sample` samples the art anywhere, and `bloomAt` samples the finished bloom
  * — exactly what the shader reads.
  */
-export function shadeFragment(texel, uv, p, sample, intensity = 1, bloomAt = null) {
+export function shadeFragment(texel, uv, p, sample, intensity = 1, bloomAt = null, looks = null) {
   const a = texel[3];
   const G = p.glowAmount > 0 && bloomAt ? glowFrom(bloomAt(uv[0], uv[1]), p) : null;
   if (a <= 0) {
@@ -953,7 +1008,7 @@ export function shadeFragment(texel, uv, p, sample, intensity = 1, bloomAt = nul
   }
   const div = Math.max(a, 0.0039);
   const srgb = [texel[0] / div, texel[1] / div, texel[2] / div];
-  let graded = shadePixel(srgb, uv, p, (u, v) => sample(u, v)[3], a);
+  let graded = shadePixel(srgb, uv, p, (u, v) => sample(u, v)[3], a, looks);
   if (G) graded = graded.map((x, i) => screen(Math.min(Math.max(x, 0), 1), G[i]));
   const out = srgb.map((x, i) => x + (graded[i] - x) * intensity);
   if (G && a < 1) {

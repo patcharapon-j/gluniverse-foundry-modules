@@ -99,7 +99,13 @@ export function cssFallbackFor(grade, trim, intensity, darkness = 0) {
 }
 
 export class StagePostFX {
-  constructor() {
+  /**
+   * @param {object} [opts]
+   * @param {import("./look-library.mjs").LookLibrary} [opts.looks]  Resolves
+   *        look ids to LUTs. Without one, every look is drawn at opacity 0.
+   */
+  constructor({ looks = null } = {}) {
+    this._looks = looks;
     this._gl = null;
     this._slots = new Map(); // wrap element → slot state
     this._enabled = true;
@@ -312,12 +318,14 @@ export class StagePostFX {
 
     // ── Nothing below this line may await. ──
     const { art } = prepared;
+    const params = stackParams(this._grade, state.trim, {
+      aspect: art.width / Math.max(art.height, 1),
+      darkness: this._darkness,
+    });
     const canvas = this._gl.draw(prepared, {
       intensity: this._intensity,
-      ...stackParams(this._grade, state.trim, {
-        aspect: art.width / Math.max(art.height, 1),
-        darkness: this._darkness,
-      }),
+      ...params,
+      looks: this._resolveLooks(params.lookIds),
     });
 
     if (!canvas) {
@@ -325,6 +333,30 @@ export class StagePostFX {
       return;
     }
     this._blit(wrap, state, canvas);
+  }
+
+  /**
+   * The LUTs for a look stack, from what is already loaded. Anything not yet
+   * loaded is requested and drawn at opacity 0 for now; its arrival schedules
+   * another render. So a look never makes the render wait, and a look that
+   * fails to load simply is not there.
+   */
+  _resolveLooks(ids) {
+    if (!this._looks || !ids?.length) return [];
+    return ids.map((id) => {
+      const ready = this._looks.peek(id);
+      if (ready) return ready;
+      this._looks.get(id).then((loaded) => {
+        if (loaded) this._scheduleRender();
+      });
+      return null;
+    });
+  }
+
+  /** A look's source changed (a custom file was replaced or removed). */
+  invalidateLooks(id = null) {
+    this._looks?.invalidate(id);
+    this._scheduleRender();
   }
 
   /** Copy the shared GL canvas into this slot's own canvas. */

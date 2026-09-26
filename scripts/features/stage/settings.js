@@ -114,6 +114,17 @@ export function registerSettings() {
         onChange: () => game.modules.get(MODULE_ID)?.stageOverlay?.refreshPostFXScene?.()
     });
 
+    // Custom looks this world has imported: `.cube` files in the world's own
+    // folder, listed here by id, name, path and revision. Built-in looks are
+    // code and are not listed. See postfx/grade-store.mjs.
+    game.settings.register(MODULE_ID, k('lookLibrary'), {
+        scope: 'world',
+        config: false,
+        type: Array,
+        default: [],
+        onChange: () => game.modules.get(MODULE_ID)?.stageOverlay?.invalidateLooks?.()
+    });
+
     // Per-player escape hatch. Client-scoped so someone on a weak machine can
     // kill the shader without having to argue with the GM about the look.
     game.settings.register(MODULE_ID, k('ppQuality'), {

@@ -2,7 +2,8 @@ import { MODULE_ID, getSetting } from './settings.js';
 import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
 import { animate, createTimeline, motionDuration } from '../../core/motion.mjs';
 import { StagePostFX } from './postfx/index.mjs';
-import { readSceneGrade, readSceneDarkness, seedSceneGrade } from './postfx/grade-store.mjs';
+import { readSceneGrade, readSceneDarkness, seedSceneGrade, readCustomLooks } from './postfx/grade-store.mjs';
+import { LookLibrary } from './postfx/look-library.mjs';
 
 const SHOW_DURATION = 400;
 const HIDE_DURATION = 350;
@@ -78,9 +79,35 @@ export class StageOverlay {
      */
     _ensurePostFX() {
         if (this._postfx) return this._postfx;
-        this._postfx = new StagePostFX();
+        this._postfx = new StagePostFX({ looks: this.lookLibrary });
         this.updatePostFXConfig();
         return this._postfx;
+    }
+
+    /**
+     * The look library, shared by the renderer and the Grade tab. Built-in
+     * looks are recipes; custom looks are `.cube` files listed in the
+     * `stage.lookLibrary` world setting and read over HTTP like any asset.
+     */
+    get lookLibrary() {
+        if (!this._lookLibrary) {
+            this._lookLibrary = new LookLibrary({
+                customLooks: () => readCustomLooks(),
+                fetchText: async (path) => {
+                    const res = await fetch(path);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.text();
+                },
+                warn: (msg) => console.warn(`gluniverse | stage: ${msg}`)
+            });
+        }
+        return this._lookLibrary;
+    }
+
+    /** The custom look list changed: reload what it points at. */
+    invalidateLooks(id = null) {
+        this._lookLibrary?.invalidate(id);
+        this._postfx?.invalidateLooks(id);
     }
 
     /** Read the current settings into the effect and reload the scene's grade. */

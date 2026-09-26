@@ -48,6 +48,7 @@ import {
   DOWN_TAPS,
   bloomSizes,
   bloomWeights,
+  MAX_LOOKS,
 } from "./grade-model.mjs";
 
 // ── Constants, written into the GLSL from the model's own statement of them ──
@@ -119,6 +120,11 @@ uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MA
 // ── Layer 6: glow ──
 uniform float u_glowAmount;   // 0..1
 uniform sampler2D u_bloom;    // the finished bloom pyramid, premultiplied
+
+// ── Layer 7: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
+${Array.from({ length: MAX_LOOKS }, (_, i) => `uniform sampler2D u_lut${i};`).join("\n")}
+uniform vec4  u_lookAmount;   // opacity of each slot, 0..1
+uniform vec4  u_lookSize;     // grid size N of each slot's LUT
 
 uniform float u_skin;         // how hard skin holds back colour changes, 0..1
 
@@ -292,6 +298,25 @@ vec3 screen(vec3 b, vec3 s) {
   return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
 }
 
+// sampleStrip in lut.mjs: bilinear inside blue tiles b and b+1, at texel
+// centres so a tile never bleeds into its neighbour, then mixed — trilinear.
+vec3 lutSample(sampler2D lut, float N, vec3 c) {
+  vec3 p = clamp(c, 0.0, 1.0) * (N - 1.0);
+  float b0 = floor(p.b);
+  float fb = p.b - b0;
+  float b1 = min(b0 + 1.0, N - 1.0);
+  float y = (p.g + 0.5) / N;
+  vec3 s0 = texture2D(lut, vec2((b0 * N + p.r + 0.5) / (N * N), y)).rgb;
+  vec3 s1 = texture2D(lut, vec2((b1 * N + p.r + 0.5) / (N * N), y)).rgb;
+  return mix(s0, s1, fb);
+}
+
+vec3 applyLook(vec3 lin, sampler2D lut, float N, float w, float guard) {
+  vec3 e = clamp(toSRGB(lin), 0.0, 1.0);
+  vec3 graded = lutSample(lut, N, e);
+  return guardSkin(lin, toLinear(e + (graded - e) * w), guard);
+}
+
 // glowFrom in grade-model.mjs: the finished bloom, scaled, dimmed by the
 // room's darkness like everything else the light does.
 vec3 glowAt(vec2 uv) {
@@ -364,6 +389,12 @@ void main() {
   }
 
   lin = gamutFit(lin);
+
+  // ── Layer 7: looks ── in order, each at its own opacity; skipped at 0.
+${Array.from({ length: MAX_LOOKS }, (_, i) => {
+  const c = "xyzw"[i];
+  return `  if (u_lookAmount.${c} > 0.0) lin = applyLook(lin, u_lut${i}, u_lookSize.${c}, u_lookAmount.${c}, guard);`;
+}).join("\n")}
 
   // Formed as a difference from the input so an untouched pixel is exactly the
   // input: both encodes come from the same expression and cancel.
@@ -489,6 +520,9 @@ export const UNIFORMS = Object.freeze([
   "backAmount",
   "glowAmount",
   "bloom",
+  ...Array.from({ length: MAX_LOOKS }, (_, i) => `lut${i}`),
+  "lookAmount",
+  "lookSize",
   "skin",
 ]);
 
@@ -556,6 +590,7 @@ export class StageGL {
     this.uniforms = null;
     this._renderDim = BASE_RENDER_DIM;
     this._artTextures = new Map(); // src → { tex, width, height }
+    this._lutTextures = new Map(); // look key → texture
     this._supported = null;
     this._lost = false;
     this._surface = null;
@@ -653,6 +688,7 @@ export class StageGL {
     for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     gl.uniform1i(this.uniforms.art, 0);
     gl.uniform1i(this.uniforms.bloom, 1);
+    for (let i = 0; i < MAX_LOOKS; i++) gl.uniform1i(this.uniforms[`lut${i}`], 2 + i);
 
     this._down = { program: downProgram, u: {} };
     for (const name of BLOOM_DOWN_UNIFORMS) this._down.u[name] = gl.getUniformLocation(downProgram, `u_${name}`);
@@ -693,6 +729,27 @@ export class StageGL {
     gl.deleteFramebuffer(fbo);
     gl.deleteTexture(tex);
     return ok ? half.HALF_FLOAT_OES : gl.UNSIGNED_BYTE;
+  }
+
+  /**
+   * The texture for one look's strip, uploaded once per key. Linear filtering
+   * is what makes the strip trilinear: the shader keeps every tap inside its
+   * tile, so the filter only ever blends neighbours within one blue slice.
+   */
+  _lutTexture(gl, key, strip) {
+    const cached = this._touch(this._lutTextures, key);
+    if (cached) return cached;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, strip.width, strip.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, strip.bytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this._lutTextures.set(key, tex);
+    this._evict(this._lutTextures, (t) => gl.deleteTexture(t));
+    return tex;
   }
 
   /** A render target: a linearly filtered, edge-clamped texture and its FBO. */
@@ -972,6 +1029,28 @@ export class StageGL {
     // The bloom renders into its own targets first; the main pass then reads it.
     const bloomTex = params.glowAmount > 0 ? this._renderBloom(gl, art, params) : this._blank;
 
+    // Looks: slot i on texture unit 2 + i. `params.looks[i]` is { key, strip }
+    // or null; an empty slot binds the blank texture and has amount 0.
+    // Every texture is uploaded before any is bound: an upload binds its new
+    // texture to whichever unit is active, which would silently replace the
+    // previous slot's look with this one.
+    const amounts = [0, 0, 0, 0];
+    const sizes = [2, 2, 2, 2];
+    const lutTex = [];
+    for (let i = 0; i < MAX_LOOKS; i++) {
+      const look = params.looks?.[i];
+      const w = params.lookAmounts?.[i] ?? 0;
+      lutTex[i] = look && w > 0 ? this._lutTexture(gl, look.key, look.strip) : this._blank;
+      if (look && w > 0) {
+        amounts[i] = w;
+        sizes[i] = look.strip.size;
+      }
+    }
+    for (let i = 0; i < MAX_LOOKS; i++) {
+      gl.activeTexture(gl.TEXTURE2 + i);
+      gl.bindTexture(gl.TEXTURE_2D, lutTex[i]);
+    }
+
     gl.viewport(0, 0, width, height);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, bloomTex);
@@ -1000,6 +1079,8 @@ export class StageGL {
     gl.uniform3fv(u.rimColor, params.rimColor);
     gl.uniform1f(u.backAmount, params.backAmount);
     gl.uniform1f(u.glowAmount, params.glowAmount);
+    gl.uniform4fv(u.lookAmount, amounts);
+    gl.uniform4fv(u.lookSize, sizes);
     gl.uniform1f(u.skin, params.skin);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1012,8 +1093,19 @@ export class StageGL {
     const gl = this.gl;
     if (gl) {
       for (const entry of this._artTextures.values()) gl.deleteTexture(entry.tex);
+      for (const tex of this._lutTextures.values()) gl.deleteTexture(tex);
     }
     this._artTextures.clear();
+    this._lutTextures.clear();
+  }
+
+  /** Drop one look's texture — used when a custom look's file is replaced. */
+  invalidateLook(key) {
+    const tex = this._lutTextures.get(key);
+    if (tex) {
+      this.gl?.deleteTexture(tex);
+      this._lutTextures.delete(key);
+    }
   }
 
   /** Drop one asset's GPU copy — used when an actor's image changes. */

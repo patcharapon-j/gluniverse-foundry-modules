@@ -119,6 +119,8 @@ globalThis.Image = class {
 const M = await import(mod("grade-model.mjs"));
 const { StagePostFX, cssFallbackFor, cssGradientAngle } = await import(mod("index.mjs"));
 const { seedFromSample, lightAngleFrom, toKeyLight } = await import(mod("seed.mjs"));
+const LUT = await import(mod("lut.mjs"));
+const { LookLibrary, normalizeCustomLook, customLookId } = await import(mod("look-library.mjs"));
 const { StageGL, FRAG, UNIFORMS, BLOOM_DOWN_FRAG, BLOOM_UP_FRAG, BLOOM_DOWN_UNIFORMS, BLOOM_UP_UNIFORMS } = await import(mod("gl.mjs"));
 const { changeTouchesGrade } = await import(mod("grade-store.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
@@ -357,6 +359,10 @@ section("shader wiring");
   for (const n of ["srcTexel", "bright", "threshold", "coarseTexel", "weight"]) {
     ok(new RegExp(`\\.u\\.${n}\\b`).test(bloomBody), `the bloom pass writes u_${n}`);
   }
+  ok(FRAG.includes("float y = (p.g + 0.5) / N;") && FRAG.includes("(b0 * N + p.r + 0.5) / (N * N)"), "the GLSL samples the strip at texel centres inside its tile, like sampleStrip");
+  for (let i = 0; i < M.MAX_LOOKS; i++) {
+    ok(FRAG.includes(`if (u_lookAmount.${"xyzw"[i]} > 0.0) lin = applyLook(lin, u_lut${i},`), `look slot ${i} is applied, and skipped at opacity 0`);
+  }
   const knee = BLOOM_DOWN_FRAG.match(/const float GLOW_KNEE = ([\d.]+);/);
   ok(!!knee && Number(knee[1]) === M.GLOW_KNEE, "GLSL GLOW_KNEE is the model's", knee?.[1]);
   const taps = [...BLOOM_DOWN_FRAG.matchAll(/tap\(v_uv \+ vec2\(([-\d.]+), ([-\d.]+)\)/g)].map((m) => [Number(m[1]), Number(m[2])]);
@@ -366,7 +372,7 @@ section("shader wiring");
   const src = await read("scripts/features/stage/postfx/gl.mjs");
   const drawBody = src.slice(src.indexOf("  draw(prepared, params)"), src.indexOf("  _dropTextures()"));
   // Samplers are bound to their texture units once, when the context is made.
-  const unwritten = UNIFORMS.filter((n) => n !== "art" && n !== "bloom" && !new RegExp(`u\\.${n}\\b`).test(drawBody));
+  const unwritten = UNIFORMS.filter((n) => n !== "art" && n !== "bloom" && !/^lut\d$/.test(n) && !new RegExp(`u\\.${n}\\b`).test(drawBody));
   ok(!unwritten.length, "every uniform is written on every draw", unwritten.join(", "));
 
   // The constants are emitted from the model rather than copied, so what is
@@ -622,6 +628,135 @@ section("glow: a bloom pyramid of the art's own highlights");
     if (rising ? line[i] < line[i - 1] - 1e-4 : line[i] > line[i - 1] + 1e-4) bumps++;
   }
   ok(bumps === 0, "the bloom falls off monotonically from its peak — no ghost copies", `${bumps} reversals`);
+}
+
+section("looks: .cube parsing");
+{
+  const cube2 = "# comment\nTITLE \"Swap\"\nLUT_3D_SIZE 2\n0 0 0\n0 1 0\n1 0 0\n1 1 0\n0 0 1\n0 1 1\n1 0 1\n1 1 1\n";
+  const swap = LUT.parseCube(cube2);
+  ok(swap.title === "Swap" && swap.size === 2, "title and size are read", `${swap.title} ${swap.size}`);
+  const s = LUT.sampleLut(swap, [0.25, 0.75, 0.5]);
+  ok(Math.abs(s[0] - 0.75) < 1e-6 && Math.abs(s[1] - 0.25) < 1e-6, "red varies fastest (this LUT swaps red and green)", String(s));
+  const errs = [
+    ["LUT_3D_SIZE 3\n0 0 0\n", /expected 27/],
+    ["0 0 0\n1 1 1\n", /not a \.cube/],
+    ["LUT_3D_SIZE 2\n0 0 x\n", /bad data line/],
+    ["LUT_3D_SIZE 2000\n", /out of range/],
+    ["DOMAIN_MIN 1 1 1\nDOMAIN_MAX 0 0 0\nLUT_3D_SIZE 2\n" + "0 0 0\n".repeat(8), /DOMAIN_MIN/],
+  ];
+  for (const [text, re] of errs) {
+    let msg = "";
+    try { LUT.parseCube(text); } catch (e) { msg = e.message; }
+    ok(re.test(msg), `a broken file is refused with a reason: ${re}`, msg);
+  }
+  // A 1D LUT is applied per channel.
+  const inv = LUT.parseCube("LUT_1D_SIZE 2\n1 1 1\n0 0 0\n");
+  const i1 = LUT.sampleLut(inv, [0.2, 0.5, 0.9]);
+  ok(i1.every((x, k) => Math.abs(x - (1 - [0.2, 0.5, 0.9][k])) < 1e-6), "a 1D LUT is applied per channel", String(i1));
+  // A domain other than 0..1 is remapped onto 0..1.
+  const half = LUT.parseCube("DOMAIN_MAX 2 2 2\nLUT_3D_SIZE 2\n0 0 0\n2 0 0\n0 2 0\n2 2 0\n0 0 2\n2 0 2\n0 2 2\n2 2 2\n");
+  const h = LUT.sampleLut(half, [0.5, 0.5, 0.5]);
+  ok(h.every((x) => Math.abs(x - 0.5) < 1e-6), "a 0..2 domain is remapped onto 0..1", String(h));
+  const big = LUT.resampleLut(LUT.bakeFunction((c) => c, 65));
+  ok(big.size === LUT.LUT_SIZE, "a larger LUT is resampled down to LUT_SIZE");
+}
+
+section("looks: the strip the shader samples");
+{
+  const id = LUT.lutToStrip(LUT.bakeFunction((c) => c));
+  ok(id.width === LUT.LUT_SIZE ** 2 && id.height === LUT.LUT_SIZE, "a strip is size² wide and size tall");
+  let worst = 0;
+  for (let i = 0; i < 3000; i++) {
+    const c = [Math.random(), Math.random(), Math.random()];
+    worst = Math.max(worst, ...LUT.sampleStrip(id, c).map((x, k) => Math.abs(x - c[k])));
+  }
+  ok(worst * 255 <= 0.51, "an identity LUT through the strip returns the colour to within half an 8-bit step", (worst * 255).toFixed(3));
+
+  // Every built-in recipe survives baking: a 33-point grid cannot follow the
+  // gamut's own corners exactly, but on average it is well under a step.
+  for (const lookId of LUT.BUILTIN_LOOK_IDS) {
+    const recipe = LUT.BUILTIN_LOOKS[lookId].recipe;
+    const strip = LUT.lutToStrip(LUT.bakeRecipe(recipe));
+    let sum = 0;
+    const n = 400;
+    for (let i = 0; i < n; i++) {
+      const c = [Math.random(), Math.random(), Math.random()];
+      const a = LUT.applyRecipe(recipe, c);
+      const b = LUT.sampleStrip(strip, c);
+      sum += Math.max(...a.map((x, k) => Math.abs(x - b[k])));
+    }
+    ok((sum / n) * 255 < 1.5, `${lookId}: the baked LUT follows its recipe`, `mean ${((sum / n) * 255).toFixed(2)}/255`);
+  }
+  const names = Object.values(LUT.BUILTIN_LOOKS).map((l) => l.name);
+  for (const want of ["Cherry Blossoms", "Neon", "Night City", "Rainy Forest", "Under Water", "Winter", "Flame", "Gray", "Lipstick", "Pastel", "Vintage", "Silence", "OrangeFilm"]) {
+    ok(names.includes(want), `the built-in looks include ${want}`);
+  }
+  ok(LUT.BUILTIN_LOOK_IDS.every((i) => M.LOOK_ID_RE.test(i)), "every built-in id is a valid stored look id");
+  const gray = LUT.applyRecipe(LUT.BUILTIN_LOOKS["builtin:gray"].recipe, [0.8, 0.3, 0.2]);
+  ok(Math.max(...gray) - Math.min(...gray) < 0.01, "Gray takes the colour out", String(gray));
+}
+
+section("looks: in the stack");
+{
+  const g = M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 50 }, { id: "nope" }, { id: "custom:x", opacity: 900 }, { id: "builtin:gray" }, { id: "builtin:winter" }, { id: "builtin:flame" }] });
+  ok(g.looks.length === M.MAX_LOOKS, "a stack keeps at most MAX_LOOKS looks", String(g.looks.length));
+  ok(g.looks[0].opacity === 50 && g.looks[1].id === "custom:x" && g.looks[1].opacity === 100, "invalid ids are dropped, opacities clamped, order kept", JSON.stringify(g.looks));
+  ok(M.normalizeGrade({}).looks.length === 0, "a fresh grade has no looks");
+
+  const neonStrip = LUT.lutToStrip(LUT.bakeRecipe(LUT.BUILTIN_LOOKS["builtin:neon"].recipe));
+  const look = { sample: (c) => LUT.sampleStrip(neonStrip, c) };
+  const zero = M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 0 }] }, M.NEUTRAL_GRADE));
+  let bad = 0;
+  for (let i = 0; i < 2000; i++) {
+    const c = [Math.random(), Math.random(), Math.random()];
+    if (M.shadePixel(c, [0.5, 0.5], zero, null, 1, [look]).some((x, k) => x !== c[k])) bad++;
+  }
+  ok(bad === 0, "a look at opacity 0 changes nothing, bit for bit", `${bad} differed`);
+  const full = M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 100 }], skin: { guard: 0 } }, M.NEUTRAL_GRADE));
+  const c = [0.4, 0.5, 0.6];
+  const viaStack = M.shadePixel(c, [0.5, 0.5], full, null, 1, [look]);
+  const direct = LUT.sampleStrip(neonStrip, c);
+  ok(viaStack.every((x, k) => Math.abs(x - direct[k]) < 1e-6), "at full opacity the stack gives exactly the LUT's colour", `${viaStack} vs ${direct}`);
+  const half = M.shadePixel(c, [0.5, 0.5], M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 50 }], skin: { guard: 0 } }, M.NEUTRAL_GRADE)), null, 1, [look]);
+  ok(half.every((x, k) => Math.abs(x - (c[k] + direct[k]) / 2) < 1e-6), "…and at 50% exactly halfway, in encoded colour");
+  ok(M.shadePixel(c, [0.5, 0.5], full, null, 1, [null]).every((x, k) => x === c[k]), "a look that has not loaded is drawn at opacity 0");
+
+  const a = M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 20 }] });
+  const b = M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 80 }] });
+  ok(Math.abs(M.lerpGrade(a, b, 0.5).looks[0].opacity - 50) < 1e-9, "the same stack eases its opacities");
+  const other = M.normalizeGrade({ looks: [{ id: "builtin:winter", opacity: 80 }] });
+  const mid = M.lerpGrade(a, other, 0.5).looks;
+  ok(mid.length === 1 && mid[0].id === "builtin:winter" && Math.abs(mid[0].opacity - 40) < 1e-9, "a different stack fades in from nothing", JSON.stringify(mid));
+}
+
+section("looks: the library");
+{
+  ok(customLookId("Moody Blue!") === "custom:moody-blue", "a custom id is a slug of its name", customLookId("Moody Blue!"));
+  ok(customLookId("Moody Blue", ["custom:moody-blue"]) === "custom:moody-blue-2", "…made unique against the ids already taken");
+  ok(customLookId("日本") === "custom:look", "…and never empty");
+  ok(normalizeCustomLook({ id: "custom:a", path: "" }) === null && normalizeCustomLook({ id: "builtin:a", path: "x" }) === null, "a custom entry needs a path and a custom id");
+
+  const cube = LUT.lutToStrip ? "LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n" : "";
+  let fetches = 0;
+  const warnings = [];
+  let customs = [{ id: "custom:ident", name: "Ident", path: "worlds/w/gluniverse/luts/ident.cube", rev: 1 }, { id: "custom:broken", name: "Broken", path: "x.cube", rev: 1 }];
+  const lib = new LookLibrary({
+    customLooks: () => customs,
+    fetchText: async (path) => { fetches++; if (path === "x.cube") return "not a lut"; return cube; },
+    warn: (m) => warnings.push(m),
+  });
+  ok(lib.list().length === LUT.BUILTIN_LOOK_IDS.length + 2 && lib.list()[0].builtin, "the list is built-ins first, then custom looks");
+  const [one, two] = await Promise.all([lib.get("custom:ident"), lib.get("custom:ident")]);
+  ok(one && one === two && fetches === 1, "concurrent requests share one fetch");
+  ok(lib.peek("custom:ident") === one, "a loaded look can be read synchronously");
+  ok((await lib.get("custom:broken")) === null && warnings.length === 1, "a file that does not parse resolves to null, with one warning");
+  await lib.get("custom:broken");
+  ok(warnings.length === 1 && fetches === 2, "…and is not retried on every render");
+  customs = [{ ...customs[0], rev: 2 }];
+  ok(lib.peek("custom:ident") === null, "replacing a custom look's file (a new revision) is a cache miss");
+  ok((await lib.get("custom:nope")) === null, "an unknown id resolves to null");
+  const builtin = await lib.get("builtin:gray");
+  ok(builtin?.strip?.size === LUT.LUT_SIZE, "a built-in look bakes on first use");
 }
 
 section("back shadow: the far side, level only");

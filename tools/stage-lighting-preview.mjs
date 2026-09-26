@@ -61,6 +61,10 @@ const TESTS = [
   { label: "rim, light right", grade: { light: { angle: 0 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
   { label: "rim, light above-left", grade: { light: { angle: 135 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
   { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
+  { label: "look: Night City", grade: { looks: [{ id: "builtin:night-city", opacity: 100 }] } },
+  { label: "look: Cherry Blossoms 60%", grade: { looks: [{ id: "builtin:cherry-blossoms", opacity: 60 }] } },
+  { label: "looks stacked: Vintage + Gray 40%", grade: { looks: [{ id: "builtin:vintage", opacity: 100 }, { id: "builtin:gray", opacity: 40 }] } },
+  { label: "look: OrangeFilm, skin guarded", grade: { looks: [{ id: "builtin:orange-film", opacity: 100 }], skin: { guard: 100 } } },
   { label: "glow, tight", grade: { glow: { amount: 100, radius: 0, threshold: 55 } } },
   { label: "glow, wide", grade: { glow: { amount: 100, radius: 100, threshold: 55 } } },
   { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, gradient: { amount: 35, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 60, width: 30, softness: 40, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
@@ -70,8 +74,11 @@ const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;backgro
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { stackParams, shadeFragment, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM, bloomPyramid, sampleImage } from "/scripts/features/stage/postfx/grade-model.mjs";
+import { LookLibrary } from "/scripts/features/stage/postfx/look-library.mjs";
+const lookLibrary = new LookLibrary();
 
 const TESTS = ${JSON.stringify(TESTS)};
+// (TESTS entries gain a _looks field in the page; it never leaves it.)
 
 // ── A synthetic character ──
 // A silhouette carrying the colours a grade has to get right: a skin tone,
@@ -128,8 +135,12 @@ window.run = async () => {
     test.trim ?? DEFAULT_TRIM,
     { aspect: prepared.art.width / prepared.art.height, darkness: test.darkness ?? 0 },
   );
+  // Looks are resolved up front here; in production they load in the
+  // background and appear on the next render.
+  const looksFor = async (test) => Promise.all(paramsFor(test).lookIds.map((id) => lookLibrary.get(id)));
+  for (const t of TESTS) t._looks = await looksFor(t);
   const shoot = (test, intensity = 1) => {
-    const out = gl.draw(prepared, { intensity, ...paramsFor(test) });
+    const out = gl.draw(prepared, { intensity, ...paramsFor(test), looks: test._looks ?? [] });
     if (!out) throw new Error("draw returned null mid-run (context lost again?)");
     const bloom = paramsFor(test).glowAmount > 0 ? gl.readBloom() : null;
     const c = document.createElement("canvas");
@@ -191,7 +202,7 @@ window.run = async () => {
   let bloomNow = null;
   const bloomAt = (u, v) => (bloomNow ? sampleImage(bloomNow, u, v) : [0, 0, 0, 0]);
   const fragmentAt = (test, x, y, intensity = 1) =>
-    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), sample, intensity, bloomAt);
+    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), sample, intensity, bloomAt, test._looks ?? null);
   const artImage = { width: W, height: H, data: new Float32Array(W * H * 4) };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) artImage.data.set(texel(x, y), (y * W + x) * 4);
   const bloomDrift = (gpu, test) => {

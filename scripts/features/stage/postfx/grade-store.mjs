@@ -17,6 +17,8 @@ import { MODULE_ID } from "../settings.js";
 import { GRADE_FLAG, normalizeGrade, DEFAULT_GRADE } from "./grade-model.mjs";
 import { sampleScene, invalidateSceneSamples } from "./scene-sample.mjs";
 import { seedFromSample } from "./seed.mjs";
+import { parseCube } from "./lut.mjs";
+import { normalizeCustomLook, customLookId } from "./look-library.mjs";
 
 const DEFAULTS_KEY = "stage.gradeDefaults";
 
@@ -100,6 +102,72 @@ export async function seedSceneGrade(scene, { force = false } = {}) {
   } finally {
     _seeding.delete(scene.id);
   }
+}
+
+// ─── Custom looks ───
+
+const LOOKS_KEY = "stage.lookLibrary";
+
+/** Folder, inside the world, that imported `.cube` files are uploaded to. */
+export function lookFolder() {
+  return `worlds/${game.world?.id ?? "world"}/gluniverse/luts`;
+}
+
+/** The custom looks this world has imported, normalized. */
+export function readCustomLooks() {
+  let raw;
+  try {
+    raw = game.settings.get(MODULE_ID, LOOKS_KEY);
+  } catch (_e) {
+    raw = [];
+  }
+  return (Array.isArray(raw) ? raw : []).map(normalizeCustomLook).filter(Boolean);
+}
+
+/** Replace the custom look list. GM only. */
+export async function writeCustomLooks(list) {
+  if (!game.user?.isGM) return false;
+  await game.settings.set(MODULE_ID, LOOKS_KEY, list.map(normalizeCustomLook).filter(Boolean));
+  return true;
+}
+
+/**
+ * Import a `.cube` file: check that it parses, upload it into the world's own
+ * folder, and list it. Re-importing under an existing name replaces that look
+ * and bumps its revision, so every client reloads it.
+ *
+ * @param {File} file   The file the GM picked.
+ * @param {string} name What to call it in the look list.
+ * @returns {Promise<{id: string}>} Throws with a message the GM can act on.
+ */
+export async function importCubeLook(file, name) {
+  if (!game.user?.isGM) throw new Error("only a GM can import looks");
+  // Parse before uploading: a file that is not a LUT should never reach the
+  // world folder, and the parser's message says why it is not one.
+  parseCube(await file.text());
+
+  const list = readCustomLooks();
+  const existing = list.find((l) => l.name.toLowerCase() === String(name).trim().toLowerCase());
+  const id = existing?.id ?? customLookId(name, list.map((l) => l.id));
+  const filename = `${id.slice(7)}.cube`;
+  const folder = lookFolder();
+
+  const FP = foundry.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+  await FP.createDirectory("data", `worlds/${game.world.id}/gluniverse`).catch(() => {});
+  await FP.createDirectory("data", folder).catch(() => {});
+  const upload = new File([file], filename, { type: "text/plain" });
+  const result = await FP.upload("data", folder, upload, {}, { notify: false });
+  const path = result?.path ?? `${folder}/${filename}`;
+
+  const entry = { id, name: String(name).trim() || id.slice(7), path, rev: (existing?.rev ?? 0) + 1 };
+  const next = existing ? list.map((l) => (l.id === id ? entry : l)) : [...list, entry];
+  await writeCustomLooks(next);
+  return { id };
+}
+
+/** Remove a custom look from the list. The file stays in the world folder. */
+export async function removeCustomLook(id) {
+  return writeCustomLooks(readCustomLooks().filter((l) => l.id !== id));
 }
 
 /** Store the world default grade. GM only. */
