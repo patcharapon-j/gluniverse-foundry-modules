@@ -11,7 +11,7 @@
                 "hint": "Width of the visual novel stage area as a percentage of the viewport width."
             },
             "ppEnabled": {
-                "name": "Character Lighting",
+                "name": "Character Grade",
                 "hint": "Colour-grade stage character art with the grade set for each scene in the Stage Director, so the cast reads as standing in the room rather than pasted over it."
             },
             "ppIntensity": {
@@ -133,7 +133,10 @@
             "presentation": "Presentation (theme & tint)",
             "themeDefault": "Default Theme",
             "commsThemeOverride": "Override the comms theme for this actor",
-            "commsTintOverride": "Enable a custom tint colour for this actor"
+            "commsTintOverride": "Enable a custom tint colour for this actor",
+            "grade": "Grade",
+            "trim": "Colour correction",
+            "trimHint": "This character's own correction, for art that is always too dark, too saturated or the wrong colour whatever room it is in. Adds to the scene's grade."
         },
         "comms": {
             "connecting": "Connecting",
@@ -163,6 +166,95 @@
             "step4title": "4. Highlight & Animate",
             "step4": "Click Highlight on a character to dim others and indicate the speaker. Use animations for expressive moments — bounce for excitement, shake for anger, nod for agreement.",
             "tip": "Tip: Use 'Show Stage' to make the stage visible to all players. 'Clear Stage' removes all characters but keeps actors configured."
+        },
+        "grade": {
+            "noScene": "Open a scene to grade its characters.",
+            "editing": "Grading {scene}",
+            "ownGrade": "This scene's grade",
+            "worldGrade": "Using the world default",
+            "resample": "Re-sample background",
+            "resampleHint": "Read the background again for the light's colour, the room's colour and the light's direction. Keeps every amount you have set.",
+            "reset": "Reset to defaults",
+            "resetHint": "Replace this scene's grade with the world default.",
+            "saveDefault": "Save as default",
+            "saveDefaultHint": "Make this grade the one every ungraded scene starts from.",
+            "savedDefault": "Saved as the world's default grade.",
+            "copyFrom": "Copy grade from scene…",
+            "copy": "Copy",
+            "intensity": "Grade strength",
+            "saveFailed": "The scene grade could not be saved — see the console.",
+            "basic": {
+                "title": "Basic correction",
+                "hint": "The art's own tone and colour, before any light touches it. Every dial moves one thing only.",
+                "exposure": "Exposure",
+                "brightness": "Brightness",
+                "contrast": "Contrast",
+                "gamma": "Gamma",
+                "saturation": "Saturation",
+                "hue": "Hue"
+            },
+            "light": {
+                "title": "Light",
+                "hint": "The scene's one light, shared by every character so they are all lit from the same side. The arrows are shortcuts; the angle is exact.",
+                "pad": "Light direction",
+                "angle": "Angle",
+                "softness": "Softness"
+            },
+            "gradient": {
+                "title": "Light gradient",
+                "hint": "The light's colour across each figure, strongest on the side facing it.",
+                "amount": "Amount",
+                "color": "Light colour"
+            },
+            "wash": {
+                "title": "Room wash",
+                "hint": "The room's colour over the whole figure, without changing how bright it is — and how far characters darken with the scene's darkness.",
+                "amount": "Amount",
+                "color": "Room colour",
+                "darkness": "Follow scene darkness"
+            },
+            "rim": {
+                "title": "Rim light",
+                "hint": "Light catching the edge that faces the lamp.",
+                "amount": "Amount",
+                "width": "Depth",
+                "softness": "Softness",
+                "color": "Rim colour"
+            },
+            "backShadow": {
+                "title": "Backlight shadow",
+                "hint": "Darkens the side of each figure turned away from the light.",
+                "amount": "Amount"
+            },
+            "glow": {
+                "title": "Glow",
+                "hint": "The art's own highlights blooming, and spilling a little past the outline.",
+                "amount": "Amount",
+                "radius": "Radius",
+                "threshold": "Threshold"
+            },
+            "looks": {
+                "title": "Looks",
+                "none": "No looks on this scene.",
+                "look": "Look",
+                "opacity": "Opacity",
+                "add": "Add look",
+                "remove": "Remove this look",
+                "importTitle": "Import a .cube look",
+                "importHint": "A 3D LUT exported from Resolve, Photoshop, Lightroom or any grading tool. It is copied into this world's folder.",
+                "importFile": ".cube file",
+                "importName": "Name",
+                "import": "Import",
+                "importNoFile": "Choose a .cube file first.",
+                "imported": "Imported the look \"{name}\".",
+                "importFailed": "That file could not be imported: {reason}",
+                "removeCustom": "Remove this imported look from the list"
+            },
+            "skin": {
+                "title": "Skin protection",
+                "hint": "How hard skin holds back the colour of the gradient, wash and looks. It never holds back brightness: a face in a dark room still darkens.",
+                "guard": "Protection"
+            }
         }
     }
 }

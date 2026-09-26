@@ -1011,6 +1011,43 @@ section("localization");
     for (const m of text.matchAll(/'(GLSTAGE\.[\w.]+)'/g)) if (!has(m[1])) missing.push(`${f}: ${m[1]}`);
   }
   ok(!missing.length, "every literal GLSTAGE key the stage names resolves", missing.join("; "));
+
+  // The Grade tab builds its keys at runtime from GRADE_UI, so nothing above
+  // sees them; a missing one renders as its own key path in the GM's panel.
+  const { GRADE_UI, DIRECTION_PAD } = await import(new URL("scripts/features/stage/grade-tab.mjs", ROOT).href);
+  const dynamic = [];
+  const wrongControl = [];
+  for (const block of GRADE_UI) {
+    dynamic.push(`GLSTAGE.grade.${block.section}.title`);
+    if (block.section !== "looks") dynamic.push(`GLSTAGE.grade.${block.section}.hint`);
+    for (const key of block.controls ?? []) {
+      dynamic.push(`GLSTAGE.grade.${block.section}.${key}`);
+      const isDial = !!M.SECTIONS[block.section]?.[key];
+      const isColor = !!M.COLORS[block.section]?.[key];
+      if (!isDial && !isColor) wrongControl.push(`${block.section}.${key}`);
+    }
+  }
+  for (const k of M.TRIM_KEYS) dynamic.push(`GLSTAGE.grade.basic.${k}`);
+  const tabSrc = await read("scripts/features/stage/grade-tab.mjs");
+  for (const m of tabSrc.matchAll(/\b(?:i18n|fmt)\('([\w.]+)'/g)) dynamic.push(`GLSTAGE.grade.${m[1]}`);
+  const unresolved = [...new Set(dynamic)].filter((k) => !has(k));
+  ok(!unresolved.length, "every key the Grade tab builds or names resolves", unresolved.join("; "));
+  ok(!wrongControl.length, "every Grade tab control is a real dial or colour of its section", wrongControl.join(", "));
+
+  // Every dial of every section, and every colour, has a control somewhere:
+  // a dial with no control is reachable only from the console.
+  const shown = new Set(GRADE_UI.flatMap((b) => (b.controls ?? []).map((k) => `${b.section}.${k}`)));
+  const hidden = [];
+  for (const [section, dials] of Object.entries(M.SECTIONS)) {
+    for (const key of [...Object.keys(dials), ...Object.keys(M.COLORS[section] ?? {})]) {
+      if (!shown.has(`${section}.${key}`)) hidden.push(`${section}.${key}`);
+    }
+  }
+  ok(!hidden.length, "every dial and colour in the schema has a Grade tab control", hidden.join(", "));
+  ok(GRADE_UI.some((b) => b.looks), "the look stack has a section");
+  ok(DIRECTION_PAD.filter((a) => a !== null).length === 8 && DIRECTION_PAD[4] === null, "the direction pad is eight directions around an empty centre");
+  ok(DIRECTION_PAD.every((a) => a === null || (a >= M.SECTIONS.light.angle.min && a <= M.SECTIONS.light.angle.max)), "…each inside the angle dial's range");
+  ok(has("GLSTAGE.panel.grade") && has("GLSTAGE.panel.trim") && has("GLSTAGE.panel.trimHint"), "the tab and the actor correction have their labels");
 }
 
 console.log(failed ? `\n${failed} of ${checks} FAILED` : `\n${checks} checks passed`);

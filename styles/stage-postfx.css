@@ -145,3 +145,254 @@
     margin-top: 1px;
     color: var(--gl-accent);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   The Stage Director's Grade tab (scripts/features/stage/grade-tab.mjs)
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glstage-grade-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.glstage-grade-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-scene {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--gl-fs-sm);
+    color: var(--gl-text);
+    font-weight: var(--gl-weight-medium);
+}
+
+.glstage-grade-scene i {
+    color: var(--gl-accent);
+}
+
+.glstage-grade-badge {
+    margin-left: auto;
+    padding: 1px 8px;
+    border: 1px solid var(--gl-edge);
+    border-radius: 999px;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+    font-weight: normal;
+}
+
+.glstage-grade-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.glstage-grade-actions select {
+    flex: 1 1 160px;
+    min-width: 0;
+    height: 26px;
+}
+
+.glstage-grade-section {
+    border: 1px solid var(--gl-edge);
+    border-radius: 6px;
+    background: rgb(var(--gl-tint-light) / 0.03);
+}
+
+.glstage-grade-section > summary {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: var(--gl-fs-sm);
+    font-weight: var(--gl-weight-medium);
+    color: var(--gl-text);
+    list-style-position: inside;
+}
+
+.glstage-grade-section[open] > summary {
+    border-bottom: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px 10px;
+}
+
+.glstage-grade-hint {
+    font-size: var(--gl-fs-xs);
+    line-height: 1.4;
+    color: var(--gl-text-dim);
+}
+
+.glstage-grade-subhead {
+    font-size: var(--gl-fs-xs);
+    font-weight: var(--gl-weight-medium);
+    color: var(--gl-text);
+}
+
+/* One dial: label, slider, readout — the readout column is fixed so rows
+   line up and the slider never jumps as its number changes width. */
+.glstage-grade-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 34%) 1fr 52px;
+    align-items: center;
+    gap: 8px;
+}
+
+.glstage-grade-row label {
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.glstage-grade-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--gl-accent);
+}
+
+.glstage-grade-row input[type="color"] {
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--gl-edge);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.glstage-grade-value {
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.glstage-grade-master {
+    padding-top: 2px;
+}
+
+/* The 3×3 direction pad. */
+.glstage-grade-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 32px);
+    grid-auto-rows: 32px;
+    gap: 4px;
+    align-self: center;
+}
+
+.glstage-grade-pad-btn,
+.glstage-grade-pad-sun {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--gl-edge);
+    border-radius: 6px;
+    font-size: var(--gl-fs-md, 14px);
+    color: var(--gl-text-dim);
+}
+
+.glstage-grade-pad-btn {
+    padding: 0;
+    background: rgb(var(--gl-tint-light) / 0.04);
+    cursor: pointer;
+}
+
+.glstage-grade-pad-btn:hover {
+    color: var(--gl-text);
+    background: rgb(var(--gl-tint-light) / 0.1);
+}
+
+.glstage-grade-pad-btn.active {
+    color: var(--gl-accent);
+    border-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
+    background: color-mix(in srgb, var(--gl-accent) 14%, transparent);
+}
+
+.glstage-grade-pad-sun {
+    border-style: dashed;
+    color: var(--gl-accent);
+}
+
+/* Looks: one row per slot. */
+.glstage-grade-look {
+    display: grid;
+    grid-template-columns: minmax(110px, 40%) 1fr 40px auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.glstage-grade-look select {
+    min-width: 0;
+    height: 24px;
+}
+
+.glstage-grade-look input[type="range"] {
+    width: 100%;
+    accent-color: var(--gl-accent);
+}
+
+.glstage-grade-import {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--gl-edge);
+}
+
+.glstage-grade-import-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.glstage-grade-import-row input[type="file"] {
+    flex: 1 1 160px;
+    min-width: 0;
+    font-size: var(--gl-fs-xs);
+}
+
+.glstage-grade-import-row input[type="text"] {
+    flex: 1 1 100px;
+    min-width: 0;
+    height: 26px;
+}
+
+.glstage-grade-custom-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.glstage-grade-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 0 0 8px;
+    border: 1px solid var(--gl-edge);
+    border-radius: 999px;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+}
+
+/* The per-actor correction in the Actors tab. */
+.glstage-trim > summary {
+    cursor: pointer;
+    font-size: var(--gl-fs-xs);
+    color: var(--gl-text-dim);
+}
+
+.glstage-trim[open] > summary {
+    margin-bottom: 4px;
+}

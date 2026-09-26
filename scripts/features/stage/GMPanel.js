@@ -2,6 +2,8 @@ import { MODULE_ID, getSetting, setSetting } from './settings.js';
 import { StageManager } from './StageManager.js';
 import { escapeHTML } from '../../core/util.mjs';
 import { frameImages } from '../../core/face-frame.mjs';
+import { buildGradeTab, bindGradeTab } from './grade-tab.mjs';
+import { TRIM_KEYS, BASIC_DIALS, normalizeTrim } from './postfx/grade-model.mjs';
 
 const i18n = (key) => game.i18n.localize(`GLSTAGE.${key}`);
 const DEFAULT_ACTOR_IMAGE = 'icons/svg/mystery-man.svg';
@@ -50,13 +52,17 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
 
     constructor(options = {}) {
         super(options);
-        this._tab = 'actors'; // 'actors' | 'stage' | 'measure' | 'guide'
+        this._tab = 'actors'; // 'actors' | 'stage' | 'grade' | 'comms' | 'measure' | 'guide'
+        // The Grade tab edits the scene the GM is looking at; follow them.
+        this._onCanvasReady = () => { if (this._tab === 'grade') this.render({ force: false }); };
+        Hooks.on('canvasReady', this._onCanvasReady);
         this._onManagerChange = () => this.render({ force: false });
         StageManager.getInstance().subscribe(this._onManagerChange);
     }
 
     async close(options = {}) {
         StageManager.getInstance().unsubscribe(this._onManagerChange);
+        Hooks.off('canvasReady', this._onCanvasReady);
         return super.close(options);
     }
 
@@ -179,6 +185,8 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         this._bindHeightSlider(el);
         // Measure tab listeners
         this._bindMeasureListeners(el);
+        // Grade tab
+        bindGradeTab(el, this);
     }
 
     // ─── HTML Builders ───
@@ -187,6 +195,7 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const tabs = [
             { id: 'actors', label: i18n('panel.actors'), icon: 'fas fa-users' },
             { id: 'stage', label: i18n('panel.stage'), icon: 'fas fa-tv' },
+            { id: 'grade', label: i18n('panel.grade'), icon: 'fas fa-palette' },
             { id: 'comms', label: i18n('panel.comms'), icon: 'fas fa-satellite-dish' },
             { id: 'measure', label: i18n('panel.measure'), icon: 'fas fa-ruler-vertical' },
             { id: 'guide', label: i18n('panel.guide'), icon: 'fas fa-question-circle' }
@@ -202,6 +211,7 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         switch (this._tab) {
             case 'actors': return this._buildActorsTab(ctx);
             case 'stage': return this._buildStageTab(ctx);
+            case 'grade': return buildGradeTab(this);
             case 'comms': return this._buildCommsTab(ctx);
             case 'measure': return this._buildMeasureTab(ctx);
             case 'guide': return this._buildGuideTab(ctx);
@@ -291,8 +301,31 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                         ${i18n('panel.ppOptOut')}
                     </label>
                 </div>
+                ${this._buildTrimFields(actor)}
             </div>
         </div>`;
+    }
+
+    /**
+     * The actor's own colour correction: a few basic-correction dials for art
+     * that is always off the same way, whatever room it stands in. They add to
+     * the scene's grade rather than replacing it.
+     */
+    _buildTrimFields(actor) {
+        const trim = normalizeTrim(actor.ppTrim);
+        const changed = TRIM_KEYS.some((k) => trim[k] !== BASIC_DIALS[k].neutral);
+        return `<details class="glstage-trim" ${changed ? 'open' : ''}>
+            <summary title="${escapeAttr(i18n('panel.trimHint'))}">${i18n('panel.trim')}${changed ? ' •' : ''}</summary>
+            <div class="glstage-field-group">
+                ${TRIM_KEYS.map((k) => {
+                    const spec = BASIC_DIALS[k];
+                    return `<div class="glstage-field">
+                        <label>${game.i18n.localize(`GLSTAGE.grade.basic.${k}`)}</label>
+                        <input type="number" data-field="ppTrim.${k}" value="${trim[k]}" step="${spec.step}" min="${spec.min}" max="${spec.max}" />
+                    </div>`;
+                }).join('')}
+            </div>
+        </details>`;
     }
 
     /**
@@ -333,8 +366,6 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
         const currentWidth = finiteNumber(state.stageWidth || getSetting('stageWidth'), 100);
         const currentXOffset = finiteNumber(state.stageXOffset ?? getSetting('stageXOffset'), 0);
         const currentYOffset = finiteNumber(state.stageYOffset ?? getSetting('stageYOffset'), 0);
-        const currentPPIntensity = finiteNumber(getSetting('ppIntensity'), 100);
-        const ppEnabled = getSetting('ppEnabled') !== false;
         html += `<div class="glstage-toolbar">
             <button class="glstage-btn ${isVisible ? 'glstage-btn-active' : ''}" data-action="toggle-visibility">
                 <i class="fas fa-${isVisible ? 'eye' : 'eye-slash'}"></i>
@@ -368,14 +399,7 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 <input type="range" min="0" max="50" step="1" value="${currentYOffset}" data-action="stage-y-offset"/>
                 <span class="glstage-yoffset-value">${currentYOffset}%</span>
             </div>
-            <div class="glstage-height-control">
-                <label>${i18n('panel.ppIntensity')}</label>
-                <input type="range" min="0" max="100" step="5" value="${currentPPIntensity}" data-action="stage-pp-intensity"
-                    ${ppEnabled ? '' : 'disabled'}/>
-                <span class="glstage-pp-value">${currentPPIntensity}%</span>
-            </div>
-        </div>
-        ${this._buildPostFXNote()}`;
+        </div>`;
 
         const slots = state.slots || [];
         if (slots.length === 0) {
@@ -696,7 +720,13 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                     // A checkbox's `value` is "on" whether or not it is ticked.
                     if (input.type === 'checkbox') value = input.checked;
                     else if (input.type === 'number') value = parseFloat(value) || 0;
-                    await mgr.updateActor(actorId, { [input.dataset.field]: value });
+                    const field = input.dataset.field;
+                    if (field.startsWith('ppTrim.')) {
+                        const actor = mgr.getActors().find(a => a.id === actorId);
+                        await mgr.updateActor(actorId, { ppTrim: { ...normalizeTrim(actor?.ppTrim), [field.slice(7)]: value } });
+                        return;
+                    }
+                    await mgr.updateActor(actorId, { [field]: value });
                 });
             });
 
@@ -1037,22 +1067,6 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                 await setSetting('stageYOffset', parseInt(yOffsetSlider.value));
             });
         }
-
-        // Character lighting strength. Lighting is tuned by looking at it, so
-        // `input` previews live on the overlay and only `change` commits the
-        // world setting — dragging the slider doesn't spam every client.
-        const ppSlider = el.querySelector('[data-action="stage-pp-intensity"]');
-        if (ppSlider) {
-            const ppLabel = el.querySelector('.glstage-pp-value');
-            ppSlider.addEventListener('input', () => {
-                if (ppLabel) ppLabel.textContent = `${ppSlider.value}%`;
-                const overlay = game.modules.get(MODULE_ID)?.stageOverlay;
-                overlay?.previewPostFXIntensity?.(parseInt(ppSlider.value) / 100);
-            });
-            ppSlider.addEventListener('change', async () => {
-                await setSetting('ppIntensity', parseInt(ppSlider.value));
-            });
-        }
     }
 
     _bindMeasureListeners(el) {
@@ -1094,7 +1108,13 @@ export class GMPanel extends foundry.applications.api.ApplicationV2 {
                     // A checkbox's `value` is "on" whether or not it is ticked.
                     if (input.type === 'checkbox') value = input.checked;
                     else if (input.type === 'number') value = parseFloat(value) || 0;
-                    await mgr.updateActor(actorId, { [input.dataset.field]: value });
+                    const field = input.dataset.field;
+                    if (field.startsWith('ppTrim.')) {
+                        const actor = mgr.getActors().find(a => a.id === actorId);
+                        await mgr.updateActor(actorId, { ppTrim: { ...normalizeTrim(actor?.ppTrim), [field.slice(7)]: value } });
+                        return;
+                    }
+                    await mgr.updateActor(actorId, { [field]: value });
                 });
             });
         });

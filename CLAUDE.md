@@ -152,64 +152,62 @@ Zero errors required. The same tool checks a file directly
 (`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
 export/import symmetry rules and the `ult.*` cross-feature flag contract.
 
-**When touching Stage character lighting** (`features/stage/postfx/`), re-run the
-pure-logic checks. The blur kernel, light geometry, framing detection and CORS
-strategy are all things a diff cannot show you were wrong about:
+**When touching the Stage character grade** (`features/stage/postfx/`,
+`features/stage/grade-tab.mjs`), re-run the pure-logic checks:
 
 ```bash
 node tools/postfx-check.mjs
 ```
 
-Zero failures required. It also cross-checks that every shader uniform is both
-declared in the GLSL and looked up from JS — a typo there is a silent no-op, not
-an error.
+Zero failures required. The grade is a stack of layers the GM sets — basic
+correction, light gradient, room wash, rim, back shadow, looks, glow, strength —
+stored on the scene (`stage.grade`), with the background only ever *proposing*
+starting values, once, when a scene is first staged or the GM re-samples. Two
+rules hold for every dial, and the tool enforces both: **neutral is an exact
+no-op** (bit for bit — each GPU step is skipped at neutral, because
+`pow(x, 1.0)` is not `x` on a GPU, and output is formed as a difference from
+the input so the encode round trip cancels), and **one dial owns one property**
+(tone dials act on luminance as a ratio; saturation and hue act on the OKLab
+chroma vector). Scene darkness reaches the picture only through the wash's
+`darkness` dial. Skin holds back the *colour* of the gradient, wash and looks
+and never their level.
+
+`postfx/grade-model.mjs` holds `shadePixel`, the shader written in JavaScript,
+and `gl.mjs` is its transcription — every GLSL constant (OKLab matrices, knees,
+skin ellipse, tap counts) is *emitted from* the model, never copied, and the
+check tool asserts the emission and that every uniform in all three programs is
+declared, looked up and written. Grades are written only through
+`grade-store.mjs`, and `normalizeGrade` must stay total: Foundry merges a flag
+update, so a key a grade lacked would survive the write.
 
 **When you touch the GLSL itself**, that tool is not enough — it cannot compile a
 line of it, and a shader that fails to compile degrades *silently* to the CSS
-fallback rather than erroring. Run the browser-backed one too:
+fallback. Run the browser-backed one too, and **look at its contact sheet**:
 
 ```bash
-node tools/stage-lighting-preview.mjs
+node tools/stage-lighting-preview.mjs --out=.preview/grade.png
 ```
 
-It drives the real modules in headless Chromium, fails on a compile or link
-error, asserts the edge behaviour (strength 0 is bit-identical to the source art;
-the rim follows the lamp; the core reaches near-white), and writes a four-room
-contact sheet with a magnified detail row — `--out=/tmp/sheet.png` to put it
-somewhere you'll look. Needs Playwright; skips cleanly with exit 0 without it.
-Neither tool can check how any of this *looks* on real art; that needs a real
-session. See `docs/STAGE_LIGHTING.md` for the shading model, the edge terms and
-the asset-hosting contract (S3/CORS).
+It compiles all three programs through the real `StageGL`, asserts both
+identities at 0/255 drift, compares the GPU with `shadePixel` pixel for pixel on
+every layer (coverage outside the art included), and reads the bloom pyramid
+back against `bloomPyramid`. Needs Playwright; skips cleanly without it. Two
+failures in this feature's history passed every number and were caught only on
+the sheet: a glow sampled as a ring of taps (ghost copies of every highlight —
+it is a pyramid now), and saturation in linear light (a seam across gradients —
+it is OKLab now).
 
-**The grade is measured on both sides** (`postfx/tally.mjs`), and its four
-components — light colour, saturation, brightness, tonal range — are separable
-*by design*, not by tidiness: a GM who dislikes the result has to be able to find
-which part they dislike, and a single per-channel affine (the obvious
-simplification, and one multiply instead of four) makes every dial a different
-way of asking the same question. `postfx-check` asserts one dial moves one
-property, including that the cast's own luma is 1 — skip that and brightness and
-light colour both move the level. Every component is its own identity at 0, so a
-world can get the previous look back exactly.
-
-**Skin resists the two chromatic components and takes the two achromatic ones in
-full.** That asymmetry is the feature: a face in a blue night scene has to get
-darker without going blue. It is also why the four have to stay separable — if
-level and hue arrived as one matrix there would be nothing to split. The wiring
-is pinned structurally by `postfx-check` (the guard must not reach the level or
-contrast statements) and the *behaviour* only by the browser harness, which
-scores a skin patch against a luminance-matched grey under a hard blue cast.
-Matched luminance is the point: "skin changes less" is satisfied for free by a
-darker patch. Two easy-to-lose assertions sit beside it — that the guard leaves
-brightness alone (a guard that held back level too leaves every face floating at
-its original exposure in a dark room, which is worse than a blue one), and that
-it does not spill onto neutrals (an over-generous ellipse holds the match back
-everywhere, which reads as the feature not working).
-
-The light kit's `ppWrap` and `ppBacklight` are **multipliers over the style
-table**; halation, glow radius and glow sense are **absolute**, because no style
-carries a value for them to multiply — halation is a claim about a lens and none
-of the three styles is one. Don't "fix" that asymmetry by adding them to the
-tables: a multiplier over a table value of 0 is a dial that cannot be turned on.
+Four things there fail silently. The bloom passes use their own *unflipped*
+vertex shader — render targets store rows bottom-up, and the flipped one mirrors
+each level. Every look texture is uploaded before any is bound — an upload binds
+to the active unit and replaced the previous slot's look. Looks are never
+awaited by a render: an unloaded look draws at opacity 0 and its arrival
+re-renders. And recipes are fitted into gamut once, softly, in OKLab
+(`fitOklab`), or the baked 33-point LUT misses creases the recipe has. The Grade
+tab builds its i18n keys from `GRADE_UI` at runtime; the check walks them, and
+requires every schema dial and colour to have a control. See
+`docs/STAGE_LIGHTING.md` for the layers, the look pipeline, seeding, and the
+asset-hosting contract (S3/CORS).
 
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.

@@ -68,11 +68,11 @@ const dial = (min, max, step, dflt, neutral) =>
 //              shifted toward the light and blurred, cut out of itself — the
 //              inner-shadow model — screened on in the rim's colour
 //   backShadow the side turned away from the lamp, darkened
-//   glow       the art's own highlights, bloomed and screened back on — and
-//              spilling past the outline, which is the one place the pass
-//              draws outside the art's coverage
 //   looks      up to MAX_LOOKS colour looks (3D LUTs, lut.mjs), applied in
 //              order, each at its own opacity
+//   glow       the art's own highlights, bloomed and screened on over the
+//              result — and spilling past the outline, which is the one place
+//              the pass draws outside the art's coverage
 //
 // `light` is not a layer: it is the one light the scene has, shared by every
 // layer that has a direction, so every character is lit from the same side.

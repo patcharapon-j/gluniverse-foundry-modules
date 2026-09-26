@@ -1,460 +1,233 @@
-# Stage character lighting
+# Stage character grade
 
-Four things decide how a character ends up looking: **the style**, **the shading
-model**, **how the art is framed**, and **where it is hosted**. The last one
-decides whether the full effect is available at all.
+The Stage grades character art so the cast reads as standing in the scene
+rather than pasted over it. It is a **stack of layers the GM controls**,
+modelled on a compositor's adjustment layers: the background is read once to
+*propose* starting values, and after that nothing changes unless the GM changes
+it.
 
-## The three styles
+```
+scripts/features/stage/
+  grade-tab.mjs            the Stage Director's Grade tab
+  postfx/
+    grade-model.mjs        the schema, the dials, and shadePixel — the shader in JS
+    gl.mjs                 the GPU pass (main program + bloom down/up programs)
+    index.mjs              slots, the tween, the CSS fallback
+    grade-store.mjs        scene flag / world default / custom looks (touches `game`)
+    seed.mjs               starting values from a background sample
+    scene-sample.mjs       reads the background asset
+    lut.mjs                looks: .cube parsing, recipes, the LUT strip
+    look-library.mjs       look id → LUT, cached
+    asset.mjs              CORS-aware pixel loading
+```
 
-`stage.ppStyle` picks between **semi-realistic**, **cel / anime** and **rim light
-only**. They are one shader, not three: `u_cel` and `u_rimOnly` crossfade every
-affected term below against its twin, so semi-realistic is both switches at 0 and
-is the model term for term — a style cannot quietly rebalance the look of a world
-that never switched. `tools/postfx-check.mjs` reads main() statement by statement
-and fails on any banded term that reaches the output without passing through
-`mix(…, u_cel)`, and on any statement touching `u_rimOnly` that is not itself a
-`mix()`.
+## Two rules
 
-What cel changes, and why each one is a separate decision rather than a filter
-over the finished image:
+Every dial in every layer keeps both, and `tools/postfx-check.mjs` enforces
+both:
 
-| Term | Semi-realistic | Cel |
+1. **Neutral is an exact no-op.** Every dial at its neutral value returns the art
+   bit for bit — not nearly: on a GPU `pow(x, 1.0)` is `exp2(log2(x))`, so each
+   step is *skipped* at neutral rather than evaluated there, and the output is
+   formed as `input + (toSRGB(out) − toSRGB(in))` so the encode round trip
+   cancels. Master strength 0 returns the art exactly whatever the dials say.
+2. **One dial, one property.** Two dials that move the same thing are two ways of
+   asking one question, and a GM who dislikes the result can no longer find which
+   part they dislike.
+
+Settings that only shape an effect — the light's angle, a colour, a softness —
+have no neutral. They cannot leak: the check sets every one of them to an
+extreme with every amount at 0 and requires the art back exactly.
+
+## Where values live
+
+| | | |
 | --- | --- | --- |
-| diffuse | continuous wrap ramp | three flat tones, two terminators |
-| rim halo / core | falloffs peaking at the outline | strips of constant brightness |
-| facing | fades out round the silhouette | the arc terminates |
-| ambient bounce | hue creeping across the figure | a fill with an edge on it |
-| specular / sheen | lobes | hard-edged shapes with the lobe's own contour |
-| contour | form edges catch light | a drawn line along them |
-| grounding | a fade at the hem | a shadow with a boundary |
+| scene flag | `stage.grade` | the scene's whole stack |
+| world setting | `stage.gradeDefaults` | what a scene with no grade uses |
+| world setting | `stage.lookLibrary` | imported `.cube` looks: id, name, path, revision |
+| actor library | `ppTrim` | a per-art correction (exposure, gamma, saturation, hue) |
+| actor library | `ppOptOut` | leave this art untouched |
+| world setting | `stage.ppIntensity` | master strength |
+| client setting | `stage.ppQuality` | a player's own off switch |
 
-Two orderings inside that carry more weight than they look like they should.
+A scene with no flag is "the world default", not "neutral": changing the default
+reaches every scene nobody has graded, and none that somebody has. Grades are
+written through `grade-store.mjs` only, and `normalizeGrade` is total — every
+stored grade carries every key — because Foundry *merges* a flag update, and a
+key the new grade lacked would survive the write.
 
-**The diffuse is banded after the distance falloff, not before.** Fold a
-continuous attenuation into a quantised tone and every fill acquires a slow
-gradient again, which is the one thing this style cannot have. Applied
-afterwards, the lamp's distance moves the *terminator* — a shape, which is how
-the style expresses distance anyway.
+## The layers, in shader order
 
-**The additive terms take a flattened attenuation.** Same failure, arriving from
-the other side: a flat shape multiplied by a continuous gain is a gradient, and
-the sheen lobe is broad enough to do that across half a garment. A third of the
-falloff is kept so a lamp across the room is still weaker than one beside it.
-
-The cel strengths are their own frozen table and are lower almost across the
-board — not a taste judgement but arithmetic, since a flat band delivers several
-times the light of the falloff peaking at one contour that it replaces. Carrying
-the realistic numbers over turns the rim into a white bar. The two that go *up*
-are the core and the contour, which are the terms the style leans on.
-
-One honest limit. The normal field is invented from the blurred alpha, so deep
-inside a silhouette it barely turns and the diffuse hardly varies there in either
-style — the banding mostly shows where the shading actually ramps, which is near
-the outline and across the form edges the contour term finds. On art that is
-already flat-shaded that is the right amount; do not expect cel to invent
-interior form the model cannot see.
-
-The claim that this is a change of *shape* is checked rather than asserted:
-`tools/stage-lighting-preview.mjs` measures the fill past the terminator (0.004
-against the realistic model's 0.012 — the cel fill sits on the dither floor) and
-the mean luminance over the whole figure (0.385 against 0.385, so the strength
-dial does not need re-tuning when a stage switches style).
-
-### Rim light only
-
-For art that is already lit — a portrait with its own painted shading, which
-re-lighting only muddies — but that still has to belong to the room it is
-standing in. The colour grade stays; the light stops at the outline.
-
-Everything that puts a gradient on the body from the lamp's direction goes:
-
-| Term | Semi-realistic | Rim only |
+| Layer | Dials | Owns |
 | --- | --- | --- |
-| diffuse | N·L ramp × distance falloff | one flat level (`KEY_FLAT`) |
-| ambient bounce | lamp's side vs the room's | held at the midpoint, both hues kept |
-| contact darkening | edge sits in its own shadow | off — it greys the band the rim lands on |
-| grounding | a fade at the hem | off |
-| contour / specular / sheen | interior form and highlights | strength 0 |
-| rim halo | `edge³·⁵`, dies out over the ribs | `edge²²`, a line on the outline |
-| rim core, spill | the outline and just past it | driven harder — all that is left |
+| basic | exposure, brightness, gamma, contrast, saturation, hue | tone and colour of the art itself |
+| gradient | amount, colour | the light's colour across the figure, soft-light, lit side strongest |
+| wash | amount, colour, darkness | the room's colour as a luminance-neutral cast; how far scene darkness dims the cast |
+| rim | amount, depth, softness, colour | light on the edge that faces the lamp, screened |
+| back shadow | amount | the side turned away from the lamp, darker (level only) |
+| looks | up to 4 × (look, opacity) | 3D LUTs, in order |
+| glow | amount, radius, threshold | the art's highlights bloomed, spilling past the outline |
+| strength | one dial | crossfades everything back to the art |
 
-`KEY_FLAT` is not zero, and that is the design. Dropping the key term would
-darken every stage by whatever it was carrying, so instead the lamp stops being a
-*direction* and becomes an *exposure*: mean luminance lands at 0.385 against the
-semi-realistic model's 0.385, so a GM switching style does not then have to
-re-tune the strength dial.
+`light` (angle, softness) is not a layer: it is the scene's one light, shared by
+every layer with a direction, so every character is lit from the same side.
+`skin` (protection) is not a layer either — see below.
 
-`RIM_ONLY_FALLOFF` is large because the field it raises sits at 0.5 exactly on
-the outline and climbs slowly — gentler exponents do not bite. The value is
-measured, not chosen; see *Checking it* below.
+### Basic correction
 
-The interior terms are zeroed in the strength table rather than flattened in the
-shader, because no amount of tuning makes an interior highlight not be one.
-`postfx-check` fails if any of the three acquires a value.
+The four tone dials act on luminance only, applied to the pixel as a *ratio*, so
+none of them can move chromaticity; each pins something different:
 
-### On the CSS fallback
-
-Cel follows as far as three masked gradients can: hard stops instead of ramps, so
-the lit and shadow sides meet at a line. It cannot band the art's own shading,
-because it never reads a pixel.
-
-Rim-only is the one style this path renders honestly rather than approximates.
-The two directional gradients are exactly what the mode removes, so they are
-hidden, and the glow becomes two stacked `drop-shadow()`s on the `<img>` — tight
-plus wide, the same two lobes for the same reason. A drop-shadow is a blur of the
-image's own alpha, which is the quantity the shader's spill term reads, reached
-by a different route; and because the `<img>` paints over its own shadow, on this
-path the light *cannot* reach the art. The strength dial rides in the shadow
-colour's alpha, since a filter has no opacity of its own.
-
-## The grade
-
-Two things happen to a character here, in this order, and they answer different
-questions. The **grade** asks what colour the character is *painted* in; the
-**lighting** asks what is falling on them. Everything below happens to `base`
-before a single light term is computed, which is what lets a rim land on already
-corrected skin rather than on the original art with a correction laid over it.
-
-For its first several versions the grade was open-loop: it measured the room and
-multiplied the art by a tint. Nothing ever looked at the art. That is enough to
-make a character warmer or cooler, and it is not enough to make one *belong* to a
-scene — because belonging is a claim about two things at once. A portrait painted
-in flat daylight and one painted with crushed blacks need opposite corrections to
-land in the same room, and a tint cannot tell them apart.
-
-So both sides are measured, into the same shape (`postfx/tally.mjs`):
-
-| | |
-| --- | --- |
-| `black` / `mid` / `white` | per channel, from a 64-bin histogram — the tonal range |
-| `mean` | per channel — the colour cast |
-| `luma` | overall level |
-| `sat` | overall chroma, luma-weighted |
-
-Neither measurement costs a decode. The normal prepass already walks every pixel
-of the art at 256px and the scene sampler already holds the background at 32px;
-this is one extra pass over a buffer that was being walked anyway.
-
-Two details in the measurement carry more weight than they look like they should.
-
-**The range is read at percentiles, not at min and max.** One specular ping, one
-anti-aliased corner of a signature, and a min/max white point is 1.0 for the
-entire figure — after which the contrast match is reading a single pixel and
-swinging the whole cast with it. 2% and 98%.
-
-**The subject is measured above the same alpha the bounding box uses.** The
-antialiased fringe of a cut-out carries whatever the art was lifted off, which is
-very often black; measuring it would put the subject's black point on the
-*background it came from* and then correct the character for it.
-
-### Four dials, not one
-
-`matchGrade` turns a pair of those into a correction with four components, and
-the fact that they are separable is the design rather than tidiness:
-
-| component | moves | leaves alone |
+| Dial | Moves | Pinned |
 | --- | --- | --- |
-| brightness | the mean level | contrast, hue, chroma |
-| tonal range | contrast about the subject's own mean | the mean level, hue, chroma |
-| light colour | hue | the level — it is luma-normalised |
-| saturation | chroma | the level, hue |
+| exposure | white (a gain in linear light) | black |
+| brightness | black (a lift) | white |
+| gamma | the midtones | black and white |
+| contrast | the slope about mid-grey | black, white, mid-grey |
 
-A GM who does not like the result has to be able to find out *which part* they do
-not like, and they can only do that if moving one slider changes one thing. The
-obvious simplification here is a single per-channel affine mapping subject black
-and white onto scene black and white — it is one multiply and it does all four at
-once. It also makes every dial a different way of asking the same question, so
-none of them answers it.
+A ratio runs away near black (lifting 0.1% luminance to 5% is 50×, which turns
+dark-region colour noise into blotches), so it is capped at `TONE_RATIO_CAP` and
+the rest of the luminance arrives as grey. That is also what lets brightness
+lift pure black at all.
 
-Two consequences of holding that line:
+Saturation and hue act on the **OKLab** chroma vector, so neither moves
+lightness. Linear light would be the obvious space and is the wrong one: a dark
+channel is a tiny number there, a chroma push drives it below zero almost at
+once, and in encoded values that is a channel collapsing over a sliver of the
+input — a visible seam across any gradient. A colour pushed past what the
+display can show has its chroma compressed at constant lightness and hue, with
+a soft knee (`GAMUT_KNEE`): a hard stop is continuous but has a corner, and the
+corner is a seam.
 
-- **Contrast pivots on the subject's own mean.** A raw black-to-white affine
-  moves the average as a side effect, so a stage that only wanted more contrast
-  quietly gets darker too.
-- **The cast is luma-normalised.** A per-channel multiplier re-exposes the
-  picture unless its own luma is exactly 1. Skip that and brightness and light
-  colour both move the level, and a GM chasing an over-bright figure has two
-  sliders that each half-work.
+### Gradient, wash and darkness
 
-Every component is its own identity at weight 0, so all four at 0 is the picture
-this feature produced before any of it existed — exactly, not approximately.
-Unmeasurable art or an unmeasurable room (a degraded scene, a flat background
-colour, a CORS failure) makes the match inert rather than making it up; the
-ambient tint that was always there still reaches the art.
+The gradient ramps the light's colour from the lit side of the art's frame
+(`litWeight`), made isotropic first so 45° is 45° on a tall portrait. The wash is
+the room's colour normalised to unit luminance, so it moves hue and not level; a
+saturated room is pulled toward white until no channel asks for more than
+`WASH_CAST_MAX`, which keeps its luminance at exactly 1.
 
-Every ratio is **clamped**, and the clamps are the difference between a grade and
-a disaster. The measurement can legitimately return an enormous number — a
-near-black portrait against a snowfield asks for roughly 6× — and obeying it does
-not put the character in the room, it destroys the character. Past the bounds the
-honest answer is that the art does not belong in that scene and no correction
-will fix it.
+Foundry's **scene darkness** is the one live input the grade listens to, and it
+reaches the picture only through the wash's `darkness` dial. At dial 0 a
+pitch-dark scene changes nothing.
+
+### Rim
+
+AutoCompositing's inner-shadow model, made directional: the art's blurred
+silhouette here, minus the same silhouette shifted toward the light, is high
+exactly where moving toward the lamp leaves the figure. The plain inner shadow
+(shifted silhouette alone) also lights every edge the blur reaches, including
+ones parallel to the light — an outline, not a rim. Coverage clamps at the
+frame's border, so a bust cropped by its own frame gets no false rim along the
+crop. Reach and blur are in units of the art's height, divided by the aspect on
+x.
+
+### Glow
+
+A bloom pyramid, not a ring of taps. A single pass sampling a wide radius leaves
+visible copies of every sharp highlight; the pyramid does not at any radius,
+because each level only blurs by a texel or two of its own resolution.
+
+```
+down 0   bright pass at half size: four bilinear taps, each thresholded (4×4 box)
+down k   the same four-tap box from the level above   (GLOW_LEVELS levels)
+up k     mix(down k, 3×3 tent of up k+1, bloomWeights[k])
+```
+
+`bloomWeights` makes the result the *normalised sum* of every level: at spread 0
+only the finest counts, at spread 1 all count equally. A plain mix toward the
+coarser level washes the core out; a plain sum overflows an 8-bit target. The
+weighted mix is that normalised sum one level at a time and never leaves 0..1.
+Targets are half-float where the GPU can render and filter it, 8-bit otherwise.
+
+The bloom passes use their **own vertex shader, unflipped**: a render target
+stores rows bottom-up, so a pass writing at the main pass's flipped coordinate
+mirrors the image, and the next pass mirrors it back. Unflipped, every level
+holds image row *y* at texture *y* — the art texture's convention — and the main
+pass samples the bloom at its own `v_uv`. The glow is the one layer that draws
+outside the art's coverage, as premultiplied emission.
+
+### Looks
+
+Every look is a 3D LUT on encoded colour, whatever it started as:
+
+- **built-in** — a recipe in `lut.mjs` (exposure, contrast, saturation, hue,
+  white balance, split tones, fade), baked on first use. The 13 are named after
+  AutoCompositing's presets; their ids are stored data and are never renamed.
+- **custom** — a `.cube` file (3D or 1D, any domain), imported from the Grade
+  tab, validated *before* it is uploaded into `worlds/<id>/gluniverse/luts/`,
+  resampled to `LUT_SIZE` (33) if larger.
+
+WebGL1 has no 3D textures, so a LUT is a **strip**: N tiles of N×N side by side,
+tile *b* holding blue slice *b*. The shader samples bilinearly inside tiles *b*
+and *b+1* at texel centres — so a tile never bleeds into its neighbour — and
+mixes them: trilinear. `sampleStrip` does the same on the same 8-bit data.
+
+Recipes are fitted into gamut **once, at the end, softly, in OKLab**
+(`fitOklab`). Fitting after every step — or pulling toward grey at constant
+luminance — puts creases in the colour cube that no 33-point grid can follow;
+near white a bright yellow's blue channel went from 0 to 103 across 2% of the
+input.
+
+Looks load in the background (`look-library.mjs`) and are **never awaited by a
+render**: a look not yet loaded draws at opacity 0 and its arrival schedules
+another render; a look that fails draws at 0 with one console warning. A custom
+look's cache key carries its revision, so re-importing a file under the same
+name reloads it everywhere. Every look texture is uploaded before any is bound:
+an upload binds its new texture to whichever unit is active, which silently
+replaced the previous slot's look.
 
 ### Skin
 
-A blue night exterior is a correct measurement of a blue night exterior, and
-applying it honestly turns every face in the cast blue. Nobody reads that as
-moonlight; they read it as broken, because a viewer's tolerance for a shifted
-skin tone is far narrower than for any other colour in the frame — it is the one
-hue everybody has a lifetime of reference for.
+A blue night scene applied honestly turns every face blue, and nobody reads that
+as moonlight. Skin (a soft ellipse in Cb/Cr, measured on the *original* art)
+holds back the **chromatic** change of the gradient, wash and looks by the
+protection dial, and takes their **level** in full: a face in a dark room still
+darkens. `guardSkin` keeps the layer's luminance and the pre-layer
+chromaticity. It does not spill onto neutrals. The rim and glow are light and are
+not held back. Skin-coloured things that are not skin are protected too; that is
+the price of finding skin by colour.
 
-So skin resists the two **chromatic** components and takes the two achromatic
-ones in full. A face in a dark room gets darker and loses contrast along with
-everything else; what it does not do is change hue. That asymmetry is the whole
-trick, and it is the reason the four components have to stay separable — if level
-and hue arrived as one matrix there would be nothing here to split.
+## Seeding and re-sampling
 
-Detection is a soft ellipse in **chroma**, which is where skin actually clusters:
-across every human complexion the Cb/Cr pair moves far less than luma does, which
-is why video has subsampled it since the 1950s. One ellipse in chroma covers the
-whole range of real complexions; the same test in RGB matches only the pale end.
-Both ends of the luma range are excluded, because chroma is meaningless at
-either — near black it is quantisation, and near white it is a blown highlight. The
-second matters more than it sounds: a white shirt sits a long way up the Cr axis,
-and protecting it would leave an uncorrected patch in the middle of a corrected
-figure.
+The first time a scene is used on the stage — visible, with a character on it —
+the active GM's client samples the background (`scene-sample.mjs`) and stores a
+grade: the world default's amounts, with the light's colour, the room's colour,
+the rim colour and the light's direction proposed from the image. A flat-colour
+background proposes colours but not a direction. After that the grade is data.
 
-`postfx-check` pins the asymmetry structurally — the skin term must not reach the
-level or contrast statements. If it ever does, skin stops being dimmed by the
-scene at all, and every face in the cast floats at its original exposure in a dark
-room, lit from nowhere.
+"Re-sample background" re-reads the image and replaces only the colours and the
+direction, keeping every amount. "Reset to defaults" stores the world default *as
+the scene's grade* rather than clearing the flag — a scene with no grade would be
+re-seeded the next time it is staged.
 
-## The shading model
+The sampler reads the background asset only; Foundry's lights, tiles and weather
+are invisible to it.
 
-The pass works in **linear light**. Every number arriving from an image or a CSS
-colour is gamma-encoded, and the operations that matter here behave differently
-on encoded values: adding two lights saturates early, mixing two colours passes
-through a muddy midpoint, and clamping a highlight shifts its hue instead of
-rolling it off.
+## Live editing
 
-Two things are deliberately *not* in linear, and both were arrived at by
-computing the old and new results side by side rather than by eye:
+The Grade tab edits a draft of the grade of the scene the GM is viewing.
+Dragging previews on the GM's screen only, immediately
+(`previewPostFXGrade`); releasing saves to the scene flag, and every client
+viewing that scene eases into it over the 620 ms reveal (`setGrade`, also used
+for scene darkness). A different look stack cannot be crossfaded in four slots,
+so the new one fades in from nothing.
 
-- **The diffuse multiplier is converted, not re-derived.** A multiplier is a
-  ratio, and a ratio means the same thing in either space provided it is raised
-  to the same power the values were: `base * toLinear(amb + key * diffuse)`
-  reproduces the previous shading contrast exactly. Re-deriving it instead —
-  linearising the ambient and key separately — cannot be made to match, because
-  a gamma-space *sum* of two lights is not any fixed pair of linear gains; a fit
-  that lands on one room's balance is wrong for the next one.
-- **The strength dial blends after the encode.** `u_intensity` is a control a GM
-  drags, not a light quantity. Blending in linear makes the same slider position
-  deliver visibly less effect in a dark room than a bright one.
+## The CSS fallback
 
-The upshot is that the baseline — the model with the new terms inert — is
-numerically the same picture it was before, so every visible difference is
-attributable to a term that was added on purpose. The largest baseline deviation
-across four test rooms and four art tones is 0.03 in encoded luminance, all of it
-where the tone-map shoulder engages on a highlight that used to clip.
-
-The rim and specular strengths passed from `index.mjs` *do* add in linear, where
-mid-grey is 0.22 rather than 0.5 — which is why they look far too large next to
-the values they replaced.
-
-The terms, in the order they apply:
-
-| Term | What it is for |
-| --- | --- |
-| ambient / bounce | Two luminance-matched colours, not one wash. Light that misses the key side arrives bounced off the room and carries the *room's* colour, not the lamp's — see `bounceLight`. Matching luminance keeps it a colour separation rather than a second lamp. |
-| diffuse | Half-Lambert wrapped with true Lambert, attenuated by distance to the positioned key. |
-| rim halo | The wide inward falloff from the outline. On its own this is a soft wash with no edge in it. |
-| rim core | A tight, near-white line hugging the outline. On its own this is a drawn outline with no light in it. See below — together they are the effect. |
-| spill | The same edge continuing *past* the silhouette into the air. |
-| light wrap | The room's own colour arriving *inward* over the edge — the other direction of the same exchange, and the cheapest thing there is for stopping a cut-out looking cut out. Takes no `facing`: it is the whole background, not one lamp. |
-| backlight | Light coming *through* thin art rather than round it — hair, a hem, a sleeve seen edge on. Off the unrescaled field, which is what keeps it a wash instead of a third line on an edge that already has two. |
-| contour | Interior form edges — a lapel over a shirt, a collar, an arm crossing hair. The alpha silhouette cannot see any of them. |
-| specular / sheen | A tight lobe and a broad one. Both gated on thickness and on the art's own brightness, so a highlight lands on a pauldron and never on black cloth. The tight lobe alone puts a speck on metal and nothing on cloth; the broad one is what separates satin from wool and gives hair a band. |
-| grounding | The bottom of a full body sits in its own shadow. Framing-dependent — see below. |
-| exposure / night | Scene darkness dims, and deep darkness desaturates and drifts blue. |
-| tone map | A shoulder above `KNEE`, applied to luminance and rescaled. Clamping channels independently is what turns a warm-lit face magenta; only the very top desaturates. |
-| dither | Sub-LSB interleaved-gradient noise. The output is 8-bit and most of the image is a slow ramp, which is the one thing 8 bits cannot hold. |
-
-Two sampling details carry more weight than their size suggests. The normal field
-is prepassed small and stretched over a much larger render, so it is fetched with
-a smoothstepped interpolant — plain bilinear is only C0 and its texel lattice
-shows up as faint diamond creases on a ramp this smooth. And art is downscaled by
-the browser at decode rather than by the GPU at sample time, because WebGL1
-cannot mipmap a non-power-of-two texture: minifying a 4000px portrait would
-otherwise be a single bilinear tap, which crawls on hair and fine outlines.
-
-## The edge
-
-The rim is most of what people mean when they say art is "lit into" a scene, so
-it gets four things the rest of the model does not. Each one is there because the
-obvious version of it demonstrably did not work.
-
-**It has its own light, behind the figure.** A rim light *is* a light behind the
-subject; the key cannot be, because it has to sit in front or nothing would be
-diffusely lit. So the rim takes the key's bearing across the frame and throws its
-depth away. Using the full 3D key instead lets `u_lightZ` — roughly half a
-body-height in front of the art plane — dominate the dot product, so nearly every
-outward-facing normal scores the same and the rim comes out even the whole way
-round. That reads as a sticker cut from white paper.
-
-**It is measured twice, at two scales.** The prepass field is blurred wide on
-purpose: its job is inventing a rounded *surface*, and its ramp runs several
-percent of the frame. A core taken from it is a soft band however hard the
-exponent is raised. So the core gets its own measurement — eight taps on a small
-ring of the art's own alpha, at full render resolution — while the halo and the
-outer bloom keep using the prepass field. Hot line, soft air behind it.
-
-**Both are rescaled before the exponent.** A blurred step edge reads 0.5 *at* the
-outline and climbs to 1.0 going inward, so a bare `1 - thickness` tops out at 0.5
-on the outermost real pixel. Any exponent sharp enough to make a line out of that
-annihilates the term instead — 0.5 to the 11th is 0.0005 — which is why the rim
-has to be normalised against the half of the ramp that is actually inside the
-figure.
-
-**The core is added past the strength dial, not through it.** Every other term
-crossfades with `u_intensity`, which is right for anything that *modifies*
-pixels. It is wrong for the rim: the crossfade mixes the flat original art back
-over the lit edge, and at the default 60% that caps the core at 0.72 over dark
-art no matter how hard it is driven. A rim that cannot reach white is not a rim.
-So the core and the spill scale with the dial rather than crossfading with it.
-Strength 0 is still exactly the original pixels — that was the property that
-mattered, and `tools/stage-lighting-preview.mjs` asserts it channel-for-channel.
-
-The spill is the one place this feature gets something for free. Drawing light
-past the outline normally means a second render target and a blur pass; here the
-prepass already blurred the alpha channel, so the field it hands over already
-extends a blur-radius beyond the silhouette, already shaped like a falloff. The
-branch for `art.a ≈ 0` is that falloff, drawn.
-
-One honest limit: the spill composites with normal alpha blending, because the
-canvas also carries the opaque character and `screen`/`plus-lighter` on the
-element would blow the figure itself through the background. Over the dark
-painted backgrounds this feature targets that is indistinguishable from additive.
-Over a bright background the spill is subtler than it should be.
-
-## The light kit
-
-Six dials a GM can reach, sitting on top of the model rather than inside it.
-Two of them are **multipliers over the chosen style's own balance**, so 100% is
-"whatever this style says" and turning the wrap up on a cel stage still gets cel
-proportions; the rest are absolute, because no style carries a value for them to
-multiply.
-
-| Setting | | |
-| --- | --- | --- |
-| `ppWrap` | ×, default 100% | the light wrap above |
-| `ppBacklight` | ×, default 100% | the backlight above |
-| `ppBacklightColor` | blank = the key | a backlight is the same lamp from behind |
-| `ppFillColor` | blank = `bounceLight` | the hue the shadow side leans toward |
-| `ppGlowRadius` | 100% = the old falloff | how far the spill reaches |
-| `ppGlowSense` | 0 = inert | how bright the art must be to throw light |
-| `ppHalation` | 0 = off | warm bleed in the outer spill |
-| `ppHalationColor` | blank = warm | see below |
-
-Three of those need a word about why they are shaped the way they are.
-
-**Glow radius rides on the exponent, not on the probe.** The falloff the spill
-descends is the prepass's blurred alpha, and its width was fixed at prepass time
-— so how fast we descend it is the only thing left to move.
-
-**Glow sense reads the rind guard's inner tap.** Out past the silhouette this
-fragment's own art is transparent by definition, so the only colour reading
-available is the one already being taken a few pixels inward for the dark-rind
-guard. At 0 it clears everything but true black, which is why the dial starts
-inert.
-
-**Halation is off by default and its colour is a setting rather than derived.**
-Every other colour here comes from the room; this one cannot, because halation is
-light that entered the emulsion or the sensor stack, scattered, and came back out
-around a highlight. Long wavelengths scatter furthest and are absorbed least, so
-the residue is always warm. A blue halation is not a stylistic variant of it — it
-is a different effect wearing its name. And it is off by default because it is a
-statement about a *lens*, and none of the three styles is one; they are claims
-about how light falls on a figure.
-
-`u_fill` — how far the shadow side travels toward the bounce hue — was a literal
-`0.7` in the shader and keeps that value, so this term starts exactly where it
-was. It is a dial now because it is a property of the room rather than of the
-model: a stage lit by one saturated source wants more separation than one
-standing in overcast daylight.
-
-## Art with a dark rind
-
-A rim is only a rim if it lands on the character. Land it on a black outline
-instead and it reads as a halo: the eye takes the bright line, then the dark band
-immediately behind it, and the pair together look like a sticker cut out and
-pasted onto the scene. Two separate things put a dark band there, and they need
-different answers.
-
-**The sampler can invent one.** Bilinear filtering blends whatever is stored, and
-in straight alpha the fully transparent pixels of a cut-out PNG carry rgb 0,0,0
-almost without exception. Interpolating against those darkens every texel on the
-boundary — a black rind that is nowhere in the asset, appearing only once the art
-is magnified to the render size. The fix is not a workaround: premultiplied is
-the space interpolation is *correct* in, so the art texture is uploaded
-premultiplied and every colour read goes back through `artAt()`, which divides
-the coverage out again. `tools/postfx-check.mjs` fails the build on a bare
-`texture2D(u_art, …).rgb`, because that reads as ordinary code and silently
-shades a half-covered pixel as though the artist had painted it darker.
-
-**The asset can carry one of its own** — an authored outline stroke, or the
-residue of a matte lifted off a black background. Nothing can be done about those
-pixels; they are the art. So the shader stands down instead. A guard measures the
-boundary against the body a few pixels inside it and fades the core, the halo,
-the spill and the contour term where it fires.
-
-Two conditions have to hold together, and the pair is what makes the guard safe:
-
-- the boundary is **markedly darker** than the body just inside it, and
-- the boundary is **near black in absolute terms**.
-
-Relative darkness alone cannot tell a matte from a navy coat with a pale lining —
-that test alone cost the clean reference figure 9% of its edge. Absolute darkness
-alone would strip the rim from any character dressed head to foot in black.
-Requiring both leaves the clean figure measurably untouched while cutting the
-matted one by a third.
-
-The contour term is the one that gains most from the guard, which is not obvious:
-a matte rind is the largest tonal step anywhere in the asset, so the term that
-looks for form edges finds its inner boundary first and draws a *second* bright
-line just inside the rim. That pair is most of what makes a halo look like one.
-
-## Framing — knee-up vs full body
-
-Stage art is composited over the background, not placed in it, so nothing tells
-the shader where the figure is standing or how much of a body is on screen. Both
-are inferred.
-
-The normal-map prepass already scans every pixel of the alpha channel, so it also
-measures the silhouette's bounding box. Its height-to-width ratio is the framing
-signal — a whole standing figure lands near 2.9, a knee-up three-quarter shot
-near 1.8, a waist-up portrait near 1.4 — and `describeFigure` turns that into
-`bodyFraction`: how much of a whole body is in frame, measured down from the
-head. Art with no transparency degrades to the image's own aspect, which is
-still roughly right.
-
-Two things depend on it:
-
-- **Where the light sits relative to the figure.** The key light is passed to the
-  shader as a *position* in the art's own space, not as one direction shared by
-  the whole figure. On a full body the head and the shins are far apart, and a
-  lamp in the room does not shine on both from the same angle — so the head
-  catches a rim the legs do not, and `dot(N, L)` varies down the body. A knee-up
-  crop at the same pixel height is not the same distance from that lamp, so it
-  gets a gentler gradient.
-- **Grounding shadow.** A full body has a floor in frame and its lowest part sits
-  in its own shadow. A knee-up crop has no floor, so a dark band across its hem
-  would read as a bug. Strength scales with `bodyFraction` cubed, which takes a
-  knee-up crop to roughly a quarter of a full body's.
-
-The scene model behind this is two constants in `postfx/index.mjs`: a standing
-figure's feet land near the bottom of the frame (`FEET_SCENE_Y`) and the figure
-covers about half the frame's height (`BODY_SCENE_HEIGHT`). They hold for painted
-VN-style backgrounds, where the horizon is high and the foreground floor fills
-the lower third. Both spaces are made isotropic before any angle is computed,
-because 0.1 across a 16:9 background is nearly twice the distance of 0.1 down it.
-
-The CSS fallback cannot do any of this — it has no normal map, which is why it is
-the fallback — so it uses a single direction measured from mid-body.
+Used when the art cannot be read (CORS) or there is no WebGL. Basic correction
+and darkness become a CSS filter chain on the `<img>`; the gradient, wash and
+back shadow become overlays masked to the art by URL. The rim, glow and looks
+need the art's pixels and have no honest CSS equivalent, so the fallback leaves
+them out rather than faking them. Neutral dials, or strength 0, write no filter
+and invisible overlays.
 
 ## One canvas, many characters
 
 There is a single WebGL context and a single render target for the whole feature
 — a browser caps out around sixteen contexts, and a stage can hold more slots
-than that. Characters are shaded into it one at a time and each result is copied
+than that. Characters are graded into it one at a time and each result is copied
 into that slot's own 2D canvas.
 
 That makes the copy-out a **synchronisation point**, and the pipeline is split
@@ -463,160 +236,61 @@ around it:
 | | Suspends? | Touches the shared canvas? |
 | --- | --- | --- |
 | `StageGL.prepare` | yes — fetch, decode, upload | no |
-| `StageGL.draw` | **never** | yes |
+| `StageGL.draw` | **never** (bloom passes included) | yes |
 | `StagePostFX._blit` | never | reads it |
 
-A slot's pixels exist alone for exactly as long as the synchronous block that
-drew them. Yield anywhere between `draw` and `_blit` and the slot copies out
-whatever the *next* character drew — which is what made adding an actor to the
-stage repaint the actor beside them with the new arrival's face. Nothing about
-that looks like a timing bug on screen; it looks like the wrong art was assigned.
+Yield anywhere between `draw` and `_blit` and the slot copies out whatever the
+*next* character drew — which looks like the wrong art was assigned, not like a
+timing bug. So: **no `await` between `draw` and `_blit`.**
 
-So: **no `await` between `draw` and `_blit`.** `tools/postfx-check.mjs` pins this
-down two ways — structurally (`draw` must not be an async function) and by
-driving two slots through one coalesced render pass against a fake context that
-poisons the shared canvas on the next microtask.
+The context is a suite Surface (`core/gl-surfaces.mjs`) and can be released
+while idle; a lost or released context is rebuilt on the next `prepare`, and a
+loss schedules a re-render so a GPU reset does not leave the stage on the CSS
+fallback. (Headless Chromium's software GPU resets once shortly after a page's
+first context; the browser harness waits it out and exercises exactly that
+path.)
 
 ## Checking it
 
-Two tools, and they cover different things.
-
 ```bash
-node tools/postfx-check.mjs             # the maths, no browser
-node tools/stage-lighting-preview.mjs   # the shader, in a real GPU context
+node tools/postfx-check.mjs
 ```
 
-`postfx-check` is pure logic — blur kernel, light geometry, framing, the CORS
-strategy, slot ownership, and a cross-check that every shader uniform is both
-declared in the GLSL and looked up from JS. It cannot compile a line of GLSL,
-which matters more than it sounds: a shader that fails to compile does not throw,
-it degrades silently to the CSS fallback.
-
-It also carries the whole of the grade, which is pure arithmetic and therefore
-provable here rather than by eye:
-
-- **The measurement.** A flat field has no tonal range; a ramp reads black < mid
-  < white; four blown pixels in a thousand do not become the white point; and
-  transparent pixels are not measured whatever colour they carry.
-- **Inertness.** Every dial at zero is the exact identity, and so is an
-  unmeasurable subject or an unmeasurable room. This is what lets the feature
-  ship a changed default look without a world being unable to get the old one
-  back exactly.
-- **Separability**, one assertion per dial: brightness moves the level and
-  nothing else, tonal range the contrast and nothing else, and so on — including
-  that the cast's own luma is 1 to within 1e-4, which is what stops it
-  re-exposing the picture it is only supposed to re-tint.
-- **The clamps.** A near-black figure against a snowfield asks for roughly 6×;
-  the answer that comes back is bounded, and nothing returns NaN from a
-  zero-span subject.
-- **Shape checks** on three things the shader's comments claim and a diff would
-  show as one word: that the skin guard cannot reach the level or contrast
-  statements, that the wrap takes no `facing`, and that the backlight reads the
-  unrescaled field.
-- **Uniform writes**, which is the other half of the existing uniform check: a
-  location that is never written holds whatever the driver initialised it to for
-  the life of the context, with no error and nothing to see but a term that does
-  nothing — or one that does something constant to every character on the stage.
-
-`stage-lighting-preview` fills that gap. It serves the repo, drives the real
-`getNormalMap` / `prepare` / `draw` in headless Chromium against a synthetic
-character, and asserts the things a diff cannot show — that the shader compiles
-and links, that strength 0 is bit-identical to the source art, that a lamp on the
-left rims the left edge and one on the right rims the right, that the core
-reaches near-white at the default strength, that light actually crosses the
-silhouette, and that the rim stands down on art carrying its own black rind. That
-last one renders the same silhouette twice, differing only in the colour of its
-boundary pixels, so the two numbers are directly comparable.
-
-**The skin guard is measured here and nowhere else** — it lives entirely inside
-the fragment shader, so `postfx-check` can prove it is *wired* to the chromatic
-terms and only a real GL context can prove it does anything. It gets its own
-two-patch swatch rather than the figure above, for two reasons: the figure has no
-skin tone in it (its face is a pale off-white, deliberately — it is there to be a
-tonal step for the contour term), and giving it one would move every whole-figure
-mean the other assertions are written against.
-
-The swatch is a mid skin tone beside a grey of **matched luminance**, graded hard
-toward blue, and each patch is scored against the same render with the cast at
-identity. Matching the luminance is the point: the claim is not "skin changes
-less", which a darker patch would satisfy for free — it is that skin resists the
-*hue* while taking the level. Unguarded, the cast moves skin by +0.052 and the
-grey by +0.087; guarded, skin moves +0.023 and the grey is untouched at +0.087.
-
-Two of the four assertions there are the ones easiest to lose. That skin's
-*brightness* is unaffected by the guard — one that held back level too would
-leave every face floating at its original exposure in a dark room, lit from
-nowhere, which is far more obviously wrong than a blue one. And that the guard
-does not spill onto the neutral patch beside it — an over-generous ellipse holds
-the match back everywhere, which reads as the feature simply not working.
-
-Every one of those is a property of the effect rather than of one style, so each
-style is put through them again — none of it follows from the realistic set
-passing, because the styles are separate paths through the shader. On top of that
-each gets the measurements that make it a style and not a second set of dials.
-
-For **cel**: the fill past the terminator is flat (0.004 spread against 0.012, on
-the flat coat panel only, so the art's own colour cannot leak into the number) and
-the exposure has not moved (0.385 against 0.385).
-
-For **rim only**, two, and they answer different halves of the claim:
-
-- **The lamp swings, the art does not.** Light the figure from hard left, then
-  hard right, and compare every pixel more than 45px inside the silhouette. A
-  shading gradient *is* the thing that would change; the mean shift is 0.000
-  against the semi-realistic model's 0.025, over 127k pixels. Flatness alone
-  would not have proved this — an even wash is still a wash.
-- **The rim reaches 2.9% of the figure's width in**, against 11.3%
-  semi-realistic. Getting this number honestly took a second attempt: reading a
-  luminance profile inward from the outline crosses the art's own materials — a
-  dark shirt, then a pale coat — so any single baseline scores the *artwork's*
-  edges as light, and the first version read three times the truth. The
-  measurement now differences the render against the same render with
-  `rim`/`rimEdge`/`glow` zeroed, which isolates the light whatever is underneath
-  it. The dither is deterministic and identical in both, so it cancels instead of
-  setting a floor.
-
-It also writes a four-room contact sheet with magnified detail rows — the clean
-cut-out, the matted one, the cel style and the rim-only style — which is the only
-way to tell a crisp edge from a soft one, or a rim from a halo:
+Pure logic, no browser. Pins both rules for every dial and layer; the gamut and
+seam behaviour; the look pipeline (`.cube` parsing and refusals, strip sampling,
+every recipe surviving its bake, the library's caching and failure handling);
+seeding; the tween; the CSS fallback; that every GLSL constant is *emitted from*
+the model and every uniform in all three programs is declared, looked up and
+written; the CORS ladder; slot ownership; and every i18n key the Grade tab builds
+at runtime.
 
 ```bash
-node tools/stage-lighting-preview.mjs --out=/tmp/sheet.png
+node tools/stage-lighting-preview.mjs --out=.preview/grade.png
 ```
 
-It needs Playwright (`npm i -g playwright`; Chromium is usually already present)
-and skips cleanly with exit 0 when that is missing. Neither tool can tell you how
-any of this looks on real art — that still needs a session.
+Real GPU, via Playwright. Compiles all three programs, asserts both identities at
+0/255 drift, renders every layer and dial and compares the GPU with `shadePixel`
+pixel for pixel (coverage outside the art included), reads the bloom pyramid back
+and compares it with `bloomPyramid`, and writes a contact sheet. **Look at the
+contact sheet** — the ghosting in the first glow and the seam in the first
+saturation both passed every numeric check and were caught there.
 
-Re-registering a slot with different art drops its canvas rather than carrying it
-forward, for the same reason: the shaded canvas is what the viewer sees and the
-`<img>` beneath it is hidden, so a stale canvas is a stale *face*. Dropping it
-shows the plain art, unlit, until the new render lands.
+Neither can tell you how a grade looks on real art. That needs a real session.
 
 ## Asset hosting
 
-The Stage feature can light and colour-grade character art to match the current
-scene's background (`stage.ppEnabled`). Doing that means *reading* pixels, not
-just displaying them, and those are two different permissions in a browser. This
-is the one thing that decides whether a given portrait gets the full effect or
-the reduced one, so it is worth understanding before blaming the art.
-
-## The two bars
+Grading means *reading* pixels, not just displaying them, and those are two
+different permissions in a browser. This is the one thing that decides whether a
+given portrait gets the full grade or the CSS fallback.
 
 | Operation | Needs |
 | --- | --- |
 | `<img src="…">` renders | nothing |
 | `getImageData()` / `texImage2D()` | request sent in CORS mode **and** an `Access-Control-Allow-Origin` response header |
 
-So art hosted on S3 that displays perfectly today may still be unreadable. The
-`crossOrigin="anonymous"` attribute asks for CORS mode, but it is all-or-nothing:
-if the host doesn't answer with the header, the image fails to load *entirely*
-rather than loading un-readably.
-
-## What the feature does about it
-
-`scripts/features/stage/postfx/asset.mjs` resolves, once per asset, the
-strongest strategy that actually works, and caches the verdict:
+`crossOrigin="anonymous"` is all-or-nothing: if the host doesn't answer with the
+header, the image fails to load *entirely*. `asset.mjs` resolves, once per asset,
+the strongest strategy that works, and caches the verdict:
 
 | Strategy | When |
 | --- | --- |
@@ -626,30 +300,22 @@ strongest strategy that actually works, and caches the verdict:
 | `cors` | Host serves the file but never the header — unreadable |
 | `missing` | The file itself doesn't load |
 
-`cors` and `missing` both fall back to the CSS presentation (ambient tint, key
-gradient, shade gradient — masked to the art's silhouette by URL, which never
-requires pixel access). Players see a slightly simpler look; nobody sees an
+`cors` and `missing` fall back to CSS. Players see a simpler look; nobody sees an
 error. Only the GM panel reports it, and only `cors` is reported as fixable.
 
-### The `anon-bust` rung
-
-A response fetched in **no-CORS** mode — by the visible `<img>`, by an actor
-sheet, by a token — can be reused from the HTTP cache to satisfy a later
-**CORS-mode** request. That cached copy carries no `Access-Control-Allow-Origin`,
-so the CORS load fails even though the bucket is configured correctly. It's worse
-behind CloudFront, which won't forward `Origin` unless told to and will cache and
-serve the header-less variant to everyone.
-
+A response fetched in **no-CORS** mode — by the visible `<img>`, an actor sheet,
+a token — can be reused from the HTTP cache to satisfy a later **CORS-mode**
+request, and that cached copy carries no header; behind CloudFront it is worse.
 Retrying under `?glstage-cors=1` sidesteps the poisoned entry. The retry is
-**skipped for pre-signed URLs** (`X-Amz-Signature`, `X-Amz-Credential`,
-`AWSAccessKeyId`, Azure `sig=`), where the signature covers the query string and
-an extra parameter would turn a CORS problem into a 403.
+skipped for pre-signed URLs (`X-Amz-Signature`, `X-Amz-Credential`,
+`AWSAccessKeyId`, Azure `sig=`), where an extra parameter would turn a CORS
+problem into a 403.
 
-## Enabling full lighting on an S3 bucket
+### Enabling full grading on an S3 bucket
 
 Add a CORS rule allowing `GET` from the Foundry origin. The exact rule, with the
-origin already filled in, is printed to the browser console the first time an
-unreadable asset is hit:
+origin filled in, is printed to the browser console the first time an unreadable
+asset is hit:
 
 ```json
 [
@@ -663,35 +329,9 @@ unreadable asset is hit:
 ]
 ```
 
-If the bucket sits behind CloudFront, the distribution must **also** forward
-`Origin`, `Access-Control-Request-Method` and `Access-Control-Request-Headers`,
-or it will cache one variant of the response and serve it to every origin.
+Behind CloudFront the distribution must **also** forward `Origin`,
+`Access-Control-Request-Method` and `Access-Control-Request-Headers`.
 
-Hosts that already work without any change: Foundry's own `Data` directory
-(same-origin), The Forge asset library, and any CDN configured with `*`.
-
-## Verifying a change
-
-Almost none of this is reviewable by eye, so the maths is factored into pure
-exported helpers and pinned down by:
-
-```bash
-node tools/postfx-check.mjs
-```
-
-Zero failures required. It covers the blur kernel, the light geometry and its
-sign conventions, framing detection, background sampling (where the key light is
-located, and the luminance-matching contract `bounceLight` has to hold), column
-interpolation, the CORS strategy ladder, and a cross-check that every shader
-uniform is both declared in the GLSL and looked up from JS — a typo there returns
-`null` and every write to it becomes a silent no-op.
-
-The fragment shader itself is not covered: GLSL needs a GPU to run, and mirroring
-its maths in JS would only create a second copy to drift. The uniform cross-check
-and the NIGHT-constant check are the only automated guards it has. When changing
-a lighting term, reproduce the old and new arithmetic side by side over a few
-rooms and art tones before trusting it — the baseline figures quoted above came
-from exactly that, and it caught two rebalances that would have re-exposed every
-stage in the process of "improving" it.
-
-It cannot check how any of it *looks*. That needs a real session with real art.
+Hosts that already work: Foundry's own `Data` directory (same-origin), The Forge
+asset library, and any CDN configured with `*`. Imported `.cube` looks live in
+the world folder and are always same-origin.
