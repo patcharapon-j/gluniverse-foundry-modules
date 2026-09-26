@@ -98,25 +98,25 @@ export const SECTIONS = Object.freeze({
     softness: dial(0, 100, 1, 70),
   }),
   gradient: Object.freeze({
-    amount: dial(0, 100, 1, 35, 0),
+    amount: dial(0, 100, 1, 55, 0),
   }),
   wash: Object.freeze({
-    amount: dial(0, 100, 1, 30, 0),
+    amount: dial(0, 100, 1, 60, 0),
     /** How far the figure dims at full scene darkness. */
-    darkness: dial(0, 100, 1, 65, 0),
+    darkness: dial(0, 100, 1, 75, 0),
   }),
   rim: Object.freeze({
-    amount: dial(0, 100, 1, 60, 0),
+    amount: dial(0, 100, 1, 75, 0),
     /** How far in from the edge the rim reaches ("light depth"). */
     width: dial(0, 100, 1, 30),
     /** How soft the rim's inner edge is. */
     softness: dial(0, 100, 1, 40),
   }),
   backShadow: Object.freeze({
-    amount: dial(0, 100, 1, 35, 0),
+    amount: dial(0, 100, 1, 50, 0),
   }),
   glow: Object.freeze({
-    amount: dial(0, 100, 1, 20, 0),
+    amount: dial(0, 100, 1, 30, 0),
     /** How far the bloom spreads: 0 keeps it tight to the highlight, 100 lets
      *  the widest level of the bloom pyramid dominate. */
     radius: dial(0, 100, 1, 40),
@@ -372,7 +372,7 @@ export function basicParams(basic, trim = DEFAULT_TRIM) {
 
 /** Largest channel gain a wash cast may apply. A saturated room colour
  *  normalised to unit luminance can otherwise ask for 10× on one channel. */
-export const WASH_CAST_MAX = 3;
+export const WASH_CAST_MAX = 4;
 
 /**
  * Everything the shader takes, for one character in one room.

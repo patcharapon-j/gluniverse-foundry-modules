@@ -12,7 +12,7 @@
 
 import { clamp01 } from "../../../core/util.mjs";
 import { columnAt } from "./scene-sample.mjs";
-import { normalizeGrade, linearToHex, toLinear } from "./grade-model.mjs";
+import { normalizeGrade, linearToHex, toLinear, toSRGB, linearToOklab, oklabToLinear, gamutFit } from "./grade-model.mjs";
 
 /** Where a standing character's middle sits in the background, 0..1 (+Y down).
  *  Stage art is composited over the lower part of the frame. */
@@ -29,7 +29,48 @@ const mix = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
  */
 export function toKeyLight(rgb) {
   const peak = Math.max(rgb[0], rgb[1], rgb[2], 0.001);
-  return mix(rgb.map((c) => c / peak), [1, 1, 1], 0.35).map(clamp01);
+  return mix(rgb.map((c) => c / peak), [1, 1, 1], KEY_WHITEN).map(clamp01);
+}
+
+/** How far a key light is pulled toward white. Enough to read as light rather
+ *  than paint; more and a blue room lights its cast in near-white. */
+export const KEY_WHITEN = 0.2;
+
+/** How far the rim is pulled further toward white than the key. */
+export const RIM_WHITEN = 0.35;
+
+/** How much the room's average colour is saturated before it becomes the wash.
+ *  An average over a whole background is far greyer than the light the room
+ *  reads as — a night street averages to a slate that is barely blue. */
+export const WASH_CHROMA_BOOST = 2.2;
+
+/** The least OKLab chroma a seeded wash carries once the room has a clear hue. */
+export const WASH_CHROMA_MIN = 0.1;
+
+/** Below this OKLab chroma a room is grey, and its hue is noise: it is only
+ *  boosted, never lifted to WASH_CHROMA_MIN. */
+const GREY_CHROMA = [0.01, 0.04];
+
+const smoothstep = (a, b, x) => {
+  const t = clamp01((x - a) / (b - a));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * The room's colour as a wash: its hue, at a chroma that reads as coloured
+ * light. Lightness is fixed, since the cast is normalised to unit luminance
+ * anyway, and set where the gamut leaves the most room for chroma.
+ * Encoded 0..1 in, encoded 0..1 out.
+ */
+export function roomCast(rgb) {
+  const lab = linearToOklab(rgb.map(toLinear));
+  const C = Math.hypot(lab[1], lab[2]);
+  if (C < 1e-4) return [...rgb];
+  const boosted = C * WASH_CHROMA_BOOST;
+  const target = boosted + Math.max(WASH_CHROMA_MIN - boosted, 0) * smoothstep(GREY_CHROMA[0], GREY_CHROMA[1], C);
+  const k = target / C;
+  const lin = gamutFit(oklabToLinear([0.72, lab[1] * k, lab[2] * k]));
+  return lin.map((x) => clamp01(toSRGB(clamp01(x))));
 }
 
 /**
@@ -58,14 +99,14 @@ export function seedFromSample(sample, base) {
   if (!sample?.ok) return { ...g, seeded: true };
 
   const ambient = sample.ambient ?? [0.5, 0.5, 0.5];
-  // The wash is the room's colour, lightly pulled toward white so a saturated
-  // room tints the cast rather than repainting it.
-  g.wash.color = toHex(mix(ambient, [1, 1, 1], 0.15));
+  // The wash is the room's hue, saturated: the background's average is much
+  // greyer than the light it reads as (roomCast).
+  g.wash.color = toHex(roomCast(ambient));
   // The light's colour is the background's where the light appears to be.
   const key = columnAt(sample, sample.centroid?.[0] ?? 0.5);
   g.gradient.color = toHex(toKeyLight(key));
   // The rim is the same lamp seen at a grazing angle: its colour, but hotter.
-  g.rim.color = toHex(mix(toKeyLight(key), [1, 1, 1], 0.5));
+  g.rim.color = toHex(mix(toKeyLight(key), [1, 1, 1], RIM_WHITEN));
   if (!sample.degraded && sample.centroid) {
     g.light.angle = lightAngleFrom(sample.centroid, sample.aspect);
   }
