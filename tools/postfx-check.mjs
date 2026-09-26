@@ -117,7 +117,8 @@ globalThis.Image = class {
 };
 
 const M = await import(mod("grade-model.mjs"));
-const { StagePostFX, cssFilterFor } = await import(mod("index.mjs"));
+const { StagePostFX, cssFallbackFor, cssGradientAngle } = await import(mod("index.mjs"));
+const { seedFromSample, lightAngleFrom, toKeyLight } = await import(mod("seed.mjs"));
 const { StageGL, FRAG, UNIFORMS } = await import(mod("gl.mjs"));
 const { changeTouchesGrade } = await import(mod("grade-store.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
@@ -164,7 +165,19 @@ const MUTED = [
 section("grade model: normalization");
 {
   const g = M.normalizeGrade(null);
-  ok(M.BASIC_KEYS.every((k) => g.basic[k] === M.BASIC_DIALS[k].neutral), "nothing stored reads as all-neutral");
+  ok(JSON.stringify(g) === JSON.stringify(M.DEFAULT_GRADE), "nothing stored reads as the world's default grade");
+  const n = M.normalizeGrade(null, M.NEUTRAL_GRADE);
+  ok(M.BASIC_KEYS.every((k) => n.basic[k] === M.BASIC_DIALS[k].neutral), "…and against the neutral grade, as all-neutral");
+  for (const [section, dials] of Object.entries(M.SECTIONS)) {
+    for (const [key, spec] of Object.entries(dials)) {
+      ok(spec.default >= spec.min && spec.default <= spec.max, `${section}.${key}: default is inside its range`);
+      if ("neutral" in spec) ok(spec.neutral >= spec.min && spec.neutral <= spec.max, `${section}.${key}: neutral is inside its range`);
+    }
+  }
+  const colours = M.normalizeGrade({ gradient: { color: "red" }, wash: { color: "#ABCDEF" } });
+  ok(colours.gradient.color === M.COLORS.gradient.color, "an unparseable colour falls back to the default");
+  ok(colours.wash.color === "#abcdef", "a valid colour is kept, lower-cased");
+  ok(M.normalizeGrade({ seeded: true }).seeded === true && M.normalizeGrade({}).seeded === false, "the seeded flag survives normalization");
 
   const junk = M.normalizeGrade({ basic: { exposure: "x", gamma: NaN, hue: 9999, saturation: -500, extra: 5 } });
   ok(
@@ -178,9 +191,10 @@ section("grade model: normalization");
   const partial = M.normalizeGrade({ basic: { exposure: 1 } }, { basic: { ...M.DEFAULT_GRADE.basic, contrast: 30 } });
   ok(partial.basic.exposure === 1 && partial.basic.contrast === 30, "a partial grade fills its gaps from the fallback, not from neutral");
 
+  const keysOf = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v && typeof v === "object" ? Object.keys(v) : typeof v])));
   ok(
-    JSON.stringify(Object.keys(M.normalizeGrade({}).basic)) === JSON.stringify(M.BASIC_KEYS),
-    "normalized grades always carry every key",
+    keysOf(M.normalizeGrade({ basic: { hue: 3 } })) === keysOf(M.DEFAULT_GRADE),
+    "normalized grades always carry every key of every section",
     "grade-store writes by merge and relies on this to replace every value"
   );
 
@@ -204,10 +218,28 @@ section("identity: every dial neutral returns the art bit for bit");
   const samples = [...edges];
   for (let i = 0; i < 20000; i++) samples.push([Math.random(), Math.random(), Math.random()]);
   for (const px of samples) {
-    const out = M.gradePixel(px, P);
+    const out = M.shadePixel(px, [Math.random(), Math.random()], P);
     if (out.some((x, j) => x !== px[j])) bad++;
   }
-  ok(bad === 0, `gradePixel at neutral is exact on ${samples.length} colours`, `${bad} differed`);
+  ok(bad === 0, `the whole stack at neutral is exact on ${samples.length} colours`, `${bad} differed`);
+
+  // Scene darkness reaches the picture only through the wash's darkness dial.
+  const darkRoom = M.stackParams(M.NEUTRAL_GRADE, M.DEFAULT_TRIM, { darkness: 1 });
+  ok(darkRoom.darkGain === 1, "a pitch-dark scene changes nothing while the darkness dial is at 0");
+
+  // Every layer's amount at 0, with every shaping setting and colour at its
+  // most extreme, is still the identity: shaping settings cannot leak.
+  const loud = M.normalizeGrade({
+    light: { angle: 37 }, gradient: { softness: 0, color: "#ff0000" },
+    wash: { color: "#0000ff" }, skin: { guard: 100 },
+  }, M.NEUTRAL_GRADE);
+  const LP = M.stackParams(loud, M.DEFAULT_TRIM, { aspect: 0.4, darkness: 0.8 });
+  let badL = 0;
+  for (const px of samples.slice(0, 5000)) {
+    const out = M.shadePixel(px, [Math.random(), Math.random()], LP);
+    if (out.some((x, j) => x !== px[j])) badL++;
+  }
+  ok(badL === 0, "…and stays exact whatever the angle, softness, colours and skin guard say", `${badL} differed`);
 
   let badI = 0;
   for (const px of samples.slice(0, 2000)) {
@@ -217,7 +249,7 @@ section("identity: every dial neutral returns the art bit for bit");
   }
   ok(badI === 0, "master intensity 0 returns the art exactly, whatever the dials say");
 
-  const trimmed = M.basicParams(M.DEFAULT_GRADE.basic, M.DEFAULT_TRIM);
+  const trimmed = M.stackParams(M.NEUTRAL_GRADE, M.DEFAULT_TRIM);
   ok(JSON.stringify(trimmed) === JSON.stringify(P), "a neutral actor trim changes nothing");
 }
 
@@ -337,6 +369,10 @@ section("shader wiring");
     ok(same(nums(glName, "mat3"), colMajor(M.OKLAB[key])), `GLSL ${glName} is OKLAB.${key}, column-major`);
   }
   ok(FRAG.includes(`i < ${M.GAMUT_STEPS}; i++`), "the GLSL gamut search runs GAMUT_STEPS bisections");
+  ok(same(nums("SKIN_CENTRE", "vec2"), M.SKIN_CENTRE) && same(nums("SKIN_RADIUS", "vec2"), M.SKIN_RADIUS), "GLSL skin ellipse is the model's");
+  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)"]) {
+    ok(FRAG.includes(guard), `the shader skips a layer at neutral: ${guard}`);
+  }
   ok(FRAG.includes("if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);"),
     "the GLSL skips the OKLab round trip at neutral", "it is not exact, and rule 1 is");
 
@@ -379,16 +415,130 @@ section("extremes stay finite and in range");
   ok(bad === 0, "every dial at either end, alone and together, stays finite and in [0, 1]", example);
 }
 
+// ═══ 5c. Gradient, wash, darkness and skin ═══
+section("gradient: the light's colour, ramping from the lit side");
+{
+  const at = (dials, uv, px = [0.5, 0.45, 0.42], ctx = { aspect: 0.6 }) =>
+    M.shadePixel(px, uv, M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, ctx));
+  const warm = { light: { angle: 0 }, gradient: { amount: 80, softness: 40, color: "#fff0d8" } };
+  const right = at(warm, [0.95, 0.5]);
+  const left = at(warm, [0.05, 0.5]);
+  ok(Y(right) > Y([0.5, 0.45, 0.42]) * 1.05, "a light on the right brightens the right edge", `${Y(right).toFixed(4)}`);
+  ok(left.every((x, i) => x === [0.5, 0.45, 0.42][i]), "…and leaves the far edge exactly as it was");
+  const flip = { ...warm, light: { angle: 180 } };
+  ok(Y(at(flip, [0.05, 0.5])) > Y(at(flip, [0.95, 0.5])), "turning the light round turns the ramp round");
+  const up = { ...warm, light: { angle: 90 } };
+  ok(Y(at(up, [0.5, 0.05])) > Y(at(up, [0.5, 0.95])), "a light above lights the top (+Y is down in art space)");
+
+  // 45° on a tall portrait has to be 45° in pixels, not in uv.
+  const diag = { ...warm, light: { angle: 45 }, gradient: { ...warm.gradient, softness: 0 } };
+  const tall = { aspect: 0.5 };
+  // A point on the terminator for a true 45° line through the centre, in
+  // isotropic units: moving right by d and down by d stays on it.
+  const onLine = at(diag, [0.5 + 0.1 / 0.5, 0.5 + 0.1], [0.5, 0.45, 0.42], tall);
+  const lit = at(diag, [0.5 + 0.15 / 0.5, 0.5 - 0.05], [0.5, 0.45, 0.42], tall);
+  ok(Y(lit) > Y(onLine), "the ramp is isotropic: 45° is 45° on a tall portrait");
+
+  const amt = (a) => Y(at({ ...warm, gradient: { ...warm.gradient, amount: a } }, [0.9, 0.5]));
+  ok(amt(20) < amt(50) && amt(50) < amt(90), "the amount dial scales the effect monotonically");
+}
+
+section("wash: the room's colour as a level-free cast");
+{
+  const grey = [0.5, 0.5, 0.5];
+  const blue = { wash: { amount: 60, color: "#4060c0" } };
+  const P = M.stackParams(M.normalizeGrade(blue, M.NEUTRAL_GRADE));
+  const out = M.shadePixel(grey, [0.5, 0.5], P);
+  ok(Math.abs(Y(out) - Y(grey)) < 2e-3, "on a neutral pixel the wash moves hue, not level", `${Y(out).toFixed(4)} vs ${Y(grey).toFixed(4)}`);
+  ok(out[2] > out[0], "…toward the room's colour");
+  const big = M.stackParams(M.normalizeGrade({ wash: { amount: 100, color: "#0000ff" } }, M.NEUTRAL_GRADE));
+  ok(big.washCast.every((x) => x <= M.WASH_CAST_MAX + 1e-12), "a saturated room cannot ask for more than WASH_CAST_MAX on any channel", String(big.washCast));
+  const castY = big.washCast[0] * M.LUMA[0] + big.washCast[1] * M.LUMA[1] + big.washCast[2] * M.LUMA[2];
+  ok(Math.abs(castY - 1) < 1e-12, "…and limiting it keeps the cast at unit luminance", String(castY));
+}
+
+section("darkness: level only, and only through its dial");
+{
+  const g = M.normalizeGrade({ wash: { darkness: 60 } }, M.NEUTRAL_GRADE);
+  const lit = M.stackParams(g, M.DEFAULT_TRIM, { darkness: 0 });
+  const dark = M.stackParams(g, M.DEFAULT_TRIM, { darkness: 1 });
+  ok(lit.darkGain === 1, "a scene at darkness 0 changes nothing, whatever the dial");
+  ok(Math.abs(dark.darkGain - 0.4) < 1e-12, "full darkness at dial 60 is a 60% cut in linear light", String(dark.darkGain));
+  ok(MUTED.every((px) => sameRatios(M.shadePixel(px, [0.5, 0.5], dark), px, 1e-6)), "…which moves level and not chromaticity");
+}
+
+section("skin: holds back colour, never level");
+{
+  // A skin tone and a grey of the same luminance, under a hard blue wash.
+  const skin = [0.87, 0.68, 0.56];
+  const yS = Y(skin);
+  const g = M.toSRGB(yS);
+  const grey = [g, g, g];
+  const blue = (guard) => M.stackParams(M.normalizeGrade({ wash: { amount: 100, color: "#2040ff" }, skin: { guard } }, M.NEUTRAL_GRADE));
+  ok(M.skinMask(skin) > 0.8, "the test swatch reads as skin", String(M.skinMask(skin)));
+  ok(M.skinMask(grey) < 0.05, "…and the matched grey does not", String(M.skinMask(grey)));
+  const guarded = M.shadePixel(skin, [0.5, 0.5], blue(100));
+  const open = M.shadePixel(skin, [0.5, 0.5], blue(0));
+  const bOf = (px) => M.linearToOklab(lin(px))[2];
+  ok(bOf(guarded) > bOf(open) + 0.01, "guarded, skin turns far less blue than unguarded", `b ${bOf(guarded).toFixed(4)} vs ${bOf(open).toFixed(4)}`);
+  ok(Math.abs(Y(guarded) - Y(open)) < 1e-9, "…while taking exactly the same level");
+  const greyG = M.shadePixel(grey, [0.5, 0.5], blue(100));
+  const greyO = M.shadePixel(grey, [0.5, 0.5], blue(0));
+  ok(greyG.every((x, i) => Math.abs(x - greyO[i]) < 1e-9), "the guard does not spill onto the neutral beside it");
+
+  // Darkness is level, and skin takes all of it.
+  const dim = M.normalizeGrade({ wash: { darkness: 100 }, skin: { guard: 100 } }, M.NEUTRAL_GRADE);
+  const d = M.shadePixel(skin, [0.5, 0.5], M.stackParams(dim, M.DEFAULT_TRIM, { darkness: 0.5 }));
+  ok(Y(d) < yS * 0.6, "skin darkens in a dark room in full", `${Y(d).toFixed(4)} vs ${yS.toFixed(4)}`);
+}
+
+section("seeding: proposals from the background, never amounts");
+{
+  ok(lightAngleFrom([0.5, 0.1]) === 90, "a light straight above is 90°");
+  ok(lightAngleFrom([0.95, 0.68]) === 0 && lightAngleFrom([0.05, 0.68]) === 180, "…right is 0° and left is 180°");
+  ok(Math.abs(lightAngleFrom([0.85, 0.3], 16 / 9) - (Math.atan2(0.38, 0.35 * 16 / 9) * 180) / Math.PI) < 1, "angles are measured with the background's aspect");
+  const k = toKeyLight([0.2, 0.1, 0.05]);
+  ok(Math.max(...k) === 1 && k[0] >= k[1] && k[1] >= k[2], "a dim warm background yields a bright warm light", String(k));
+
+  const base = M.normalizeGrade({ gradient: { amount: 12 }, wash: { amount: 77, darkness: 5 }, light: { angle: -40 } });
+  const sample = { ok: true, degraded: false, ambient: [0.2, 0.3, 0.6], columns: [[0.9, 0.6, 0.3]], centroid: [0.2, 0.2], aspect: 16 / 9 };
+  const seeded = seedFromSample(sample, base);
+  ok(seeded.gradient.amount === 12 && seeded.wash.amount === 77 && seeded.wash.darkness === 5, "seeding keeps every amount of the grade it starts from");
+  ok(seeded.light.angle !== -40 && seeded.seeded === true, "…and proposes the light direction and marks the grade seeded");
+  ok(seeded.wash.color !== base.wash.color && seeded.gradient.color !== base.gradient.color, "…and proposes both colours");
+  const flat = seedFromSample({ ...sample, degraded: true }, base);
+  ok(flat.light.angle === -40, "a flat-colour background proposes no light direction");
+  ok(seedFromSample(null, base).gradient.color === base.gradient.color, "no sample at all proposes nothing");
+}
+
+section("tween");
+{
+  const a = M.normalizeGrade({ light: { angle: 170 } });
+  const b = M.normalizeGrade({ light: { angle: -170 } });
+  const mid = M.lerpGrade(a, b, 0.5);
+  ok(Math.abs(Math.abs(mid.light.angle) - 180) < 1e-9, "the light turns the short way round", String(mid.light.angle));
+  const c = M.lerpGrade(M.normalizeGrade({ wash: { color: "#000000" } }), M.normalizeGrade({ wash: { color: "#ffffff" } }), 1);
+  ok(c.wash.color === "#ffffff", "a finished colour tween lands exactly on the target");
+}
+
 // ═══ 6. CSS fallback ═══
 section("CSS fallback");
 {
-  ok(cssFilterFor(M.DEFAULT_GRADE.basic, M.DEFAULT_TRIM, 1) === "", "neutral dials produce no filter at all");
-  const f = cssFilterFor({ ...M.DEFAULT_GRADE.basic, saturation: 40, hue: 30 }, M.DEFAULT_TRIM, 1);
+  const neutral = cssFallbackFor(M.NEUTRAL_GRADE, M.DEFAULT_TRIM, 1, 1);
+  ok(neutral.filter === "" && neutral.gradient.opacity === 0 && neutral.wash.opacity === 0,
+    "a neutral grade produces no filter and invisible overlays, even in a dark scene");
+  const f = cssFallbackFor({ ...M.NEUTRAL_GRADE, basic: { ...M.NEUTRAL_GRADE.basic, saturation: 40, hue: 30 } }, M.DEFAULT_TRIM, 1).filter;
   ok(/saturate\(1\.4/.test(f) && /hue-rotate\(30/.test(f), "saturation and hue map onto their CSS filters", f);
-  const half = cssFilterFor({ ...M.DEFAULT_GRADE.basic, hue: 30 }, M.DEFAULT_TRIM, 0.5);
+  const half = cssFallbackFor({ ...M.NEUTRAL_GRADE, basic: { ...M.NEUTRAL_GRADE.basic, hue: 30 } }, M.DEFAULT_TRIM, 0.5).filter;
   ok(/hue-rotate\(15/.test(half), "intensity scales each filter toward neutral", half);
-  ok(cssFilterFor({ ...M.DEFAULT_GRADE.basic, hue: 30, exposure: 1, contrast: 20 }, M.DEFAULT_TRIM, 0) === "",
-     "…to nothing at all at intensity 0");
+  const zero = cssFallbackFor(M.DEFAULT_GRADE, M.DEFAULT_TRIM, 0, 1);
+  ok(zero.filter === "" && zero.gradient.opacity === 0 && zero.wash.opacity === 0, "…to nothing at all at intensity 0");
+  const dark = cssFallbackFor(M.NEUTRAL_GRADE.basic ? { ...M.NEUTRAL_GRADE, wash: { ...M.NEUTRAL_GRADE.wash, darkness: 100 } } : null, M.DEFAULT_TRIM, 1, 0.5).filter;
+  ok(/brightness\(0\./.test(dark), "scene darkness dims the fallback through brightness()", dark);
+
+  ok(cssGradientAngle(90) === 180, "a light above paints its colour at the top (gradient runs to bottom)");
+  ok(cssGradientAngle(0) === 270, "a light to the right paints the right edge (gradient runs to left)");
+  ok(cssGradientAngle(180) === 90, "a light to the left paints the left edge (gradient runs to right)");
 }
 
 // ═══ 7. Scene flag detection ═══
@@ -519,7 +669,7 @@ section("slot ownership (one shared render target, N slots)");
     isSupported() { return true; }
     async prepare(src) {
       await null; // the art-texture upload
-      return { src };
+      return { src, art: { width: 8, height: 16 } };
     }
     draw(prepared, params) {
       this.draws++;

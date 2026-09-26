@@ -3,7 +3,7 @@
  * Render the Stage character grade for real, in a real GPU context.
  *
  * `tools/postfx-check.mjs` pins the grade's rules down against the JavaScript
- * reference (`gradePixel`), but it cannot compile a line of GLSL — and a shader
+ * reference (`shadePixel`), but it cannot compile a line of GLSL — and a shader
  * that fails to compile degrades silently to the CSS fallback rather than
  * erroring. Nor can it show that the GLSL agrees with the reference it claims to
  * transcribe. This does both:
@@ -11,9 +11,9 @@
  *   - compiles and links the production shader through the production StageGL;
  *   - asserts every dial neutral returns the art untouched, and master
  *     intensity 0 returns it untouched whatever the dials say;
- *   - renders every dial at a test value and compares the GPU's pixels with
- *     `gradePixel` on the same input, pixel for pixel;
- *   - writes a contact sheet, one tile per dial.
+ *   - renders every layer and dial at a test value and compares the GPU's
+ *     pixels with `shadePixel` on the same input and position, pixel for pixel;
+ *   - writes a contact sheet, one tile per test.
  *
  *   node tools/stage-lighting-preview.mjs                 # verify + write sheet
  *   node tools/stage-lighting-preview.mjs --out=/tmp/x.png
@@ -36,27 +36,37 @@ const OUT = outArg ? outArg.slice("--out=".length) : join(tmpdir(), "gl-stage-gr
 
 const TYPES = { ".mjs": "text/javascript", ".js": "text/javascript", ".html": "text/html", ".json": "application/json" };
 
-/** Each dial at a value large enough to see and small enough to stay clear of
- *  the gamut walls on most of the swatch. */
-const DIAL_TESTS = [
-  { label: "exposure +1", basic: { exposure: 1 } },
-  { label: "exposure -1", basic: { exposure: -1 } },
-  { label: "brightness +40", basic: { brightness: 40 } },
-  { label: "gamma 1.8", basic: { gamma: 1.8 } },
-  { label: "contrast +50", basic: { contrast: 50 } },
-  { label: "contrast -50", basic: { contrast: -50 } },
-  { label: "saturation +60", basic: { saturation: 60 } },
-  { label: "saturation -100", basic: { saturation: -100 } },
-  { label: "hue +90", basic: { hue: 90 } },
-  { label: "everything", basic: { exposure: 0.4, brightness: 10, gamma: 1.2, contrast: 25, saturation: 30, hue: -40 } },
+/**
+ * Each test is a partial grade laid over the neutral one, so it exercises one
+ * layer (or one dial) at a time. Values are large enough to see and, for the
+ * basic dials, small enough to stay clear of the gamut walls on most of the
+ * swatch.
+ */
+const TESTS = [
+  { label: "exposure +1", grade: { basic: { exposure: 1 } } },
+  { label: "exposure -1", grade: { basic: { exposure: -1 } } },
+  { label: "brightness +40", grade: { basic: { brightness: 40 } } },
+  { label: "gamma 1.8", grade: { basic: { gamma: 1.8 } } },
+  { label: "contrast +50", grade: { basic: { contrast: 50 } } },
+  { label: "contrast -50", grade: { basic: { contrast: -50 } } },
+  { label: "saturation +60", grade: { basic: { saturation: 60 } } },
+  { label: "saturation -100", grade: { basic: { saturation: -100 } } },
+  { label: "hue +90", grade: { basic: { hue: 90 } } },
+  { label: "basic, everything", grade: { basic: { exposure: 0.4, brightness: 10, gamma: 1.2, contrast: 25, saturation: 30, hue: -40 } } },
+  { label: "gradient, light right", grade: { light: { angle: 0 }, gradient: { amount: 80, softness: 50, color: "#ffd9a0" } } },
+  { label: "gradient, light above-left", grade: { light: { angle: 135 }, gradient: { amount: 80, softness: 70, color: "#a8c8ff" } } },
+  { label: "wash, blue room", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 0 } } },
+  { label: "wash, blue, skin guarded", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 100 } } },
+  { label: "darkness 0.6 at dial 65", grade: { wash: { darkness: 65 } }, darkness: 0.6 },
+  { label: "default grade, warm room", grade: { light: { angle: 120 }, gradient: { amount: 35, softness: 70, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, skin: { guard: 50 } }, darkness: 0.2 },
 ];
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
-import { basicParams, gradePixel, DEFAULT_GRADE } from "/scripts/features/stage/postfx/grade-model.mjs";
+import { stackParams, shadePixel, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM } from "/scripts/features/stage/postfx/grade-model.mjs";
 
-const DIAL_TESTS = ${JSON.stringify(DIAL_TESTS)};
+const TESTS = ${JSON.stringify(TESTS)};
 
 // ── A synthetic character ──
 // A silhouette carrying the colours a grade has to get right: a skin tone,
@@ -107,8 +117,13 @@ window.run = async () => {
     if (!prepared) return { error: "StageGL did not rebuild after losing its context" };
   }
 
-  const shoot = (basic, intensity = 1) => {
-    const out = gl.draw(prepared, { intensity, ...basicParams({ ...DEFAULT_GRADE.basic, ...basic }) });
+  const paramsFor = (test) => stackParams(
+    normalizeGrade(test.grade ?? {}, NEUTRAL_GRADE),
+    test.trim ?? DEFAULT_TRIM,
+    { aspect: prepared.art.width / prepared.art.height, darkness: test.darkness ?? 0 },
+  );
+  const shoot = (test, intensity = 1) => {
+    const out = gl.draw(prepared, { intensity, ...paramsFor(test) });
     if (!out) throw new Error("draw returned null mid-run (context lost again?)");
     const c = document.createElement("canvas");
     c.width = out.width; c.height = out.height;
@@ -117,7 +132,7 @@ window.run = async () => {
     return { canvas: c, data: g2.getImageData(0, 0, c.width, c.height).data };
   };
 
-  const first = shoot({});
+  const first = shoot({ grade: {} });
   const W = first.canvas.width, H = first.canvas.height;
   const ref = document.createElement("canvas");
   ref.width = W; ref.height = H;
@@ -128,11 +143,14 @@ window.run = async () => {
 
   // Opaque pixels only: premultiplied edges round differently through the two
   // paths and say nothing about the grade.
+  // Every other pixel on both axes: the reference runs in page JavaScript, and
+  // a quarter of the frame is far more than enough to catch a transcription.
   const drift = (px, expect) => {
     let worst = 0, sum = 0, n = 0;
-    for (let p = 0; p < px.length; p += 4) {
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+      const p = (y * W + x) * 4;
       if (artPx[p + 3] < 250) continue;
-      const e = expect ? expect(p) : [artPx[p], artPx[p + 1], artPx[p + 2]];
+      const e = expect ? expect(p, x, y) : [artPx[p], artPx[p + 1], artPx[p + 2]];
       for (let k = 0; k < 3; k++) {
         const d = Math.abs(px[p + k] - e[k]);
         worst = Math.max(worst, d); sum += d; n++;
@@ -142,27 +160,23 @@ window.run = async () => {
   };
 
   const neutral = drift(first.data);
-  const zero = drift(shoot(DIAL_TESTS[DIAL_TESTS.length - 1].basic, 0).data);
+  const zero = drift(shoot(TESTS[TESTS.length - 1], 0).data);
 
-  const cache = new Map();
-  const reference = (basic) => {
-    const p = basicParams({ ...DEFAULT_GRADE.basic, ...basic });
-    return (i) => {
-      const key = artPx[i] + "," + artPx[i + 1] + "," + artPx[i + 2] + "|" + JSON.stringify(basic);
-      let v = cache.get(key);
-      if (!v) {
-        v = gradePixel([artPx[i] / 255, artPx[i + 1] / 255, artPx[i + 2] / 255], p).map((x) => Math.round(x * 255));
-        cache.set(key, v);
-      }
-      return v;
-    };
+  // The shader samples at pixel centres; so does the reference.
+  const reference = (test) => {
+    const p = paramsFor(test);
+    return (i, x, y) => shadePixel(
+      [artPx[i] / 255, artPx[i + 1] / 255, artPx[i + 2] / 255],
+      [(x + 0.5) / W, (y + 0.5) / H],
+      p,
+    ).map((v) => Math.round(v * 255));
   };
 
   const dials = [];
   const tiles = [{ label: "original", canvas: first.canvas }];
-  for (const t of DIAL_TESTS) {
-    const shot = shoot(t.basic);
-    dials.push({ label: t.label, ...drift(shot.data, reference(t.basic)), moved: drift(shot.data).mean });
+  for (const t of TESTS) {
+    const shot = shoot(t);
+    dials.push({ label: t.label, ...drift(shot.data, reference(t)), moved: drift(shot.data).mean });
     tiles.push({ label: t.label, canvas: shot.canvas });
   }
 
@@ -282,7 +296,7 @@ ok(result.zero.worst <= 1, "master intensity 0 returns the art untouched, whatev
 for (const d of result.dials) {
   ok(
     d.worst <= 3 && d.mean <= 0.5,
-    `GLSL matches gradePixel: ${d.label}`,
+    `GLSL matches shadePixel: ${d.label}`,
     `worst ${d.worst}/255, mean ${d.mean.toFixed(3)}`
   );
   ok(d.moved > 1, `…and the dial visibly moves the picture`, `mean change ${d.moved.toFixed(2)}/255`);

@@ -15,6 +15,8 @@
 
 import { MODULE_ID } from "../settings.js";
 import { GRADE_FLAG, normalizeGrade, DEFAULT_GRADE } from "./grade-model.mjs";
+import { sampleScene, invalidateSceneSamples } from "./scene-sample.mjs";
+import { seedFromSample } from "./seed.mjs";
 
 const DEFAULTS_KEY = "stage.gradeDefaults";
 
@@ -27,6 +29,13 @@ export function readWorldDefaults() {
     raw = null;
   }
   return normalizeGrade(raw, DEFAULT_GRADE);
+}
+
+/** Foundry's scene darkness, 0..1. The wash layer's `darkness` dial decides
+ *  how much of it reaches the cast. */
+export function readSceneDarkness(scene) {
+  const d = Number(scene?.environment?.darknessLevel ?? 0);
+  return Number.isFinite(d) ? Math.min(Math.max(d, 0), 1) : 0;
 }
 
 /** True when this scene carries a grade of its own. */
@@ -61,6 +70,36 @@ export async function clearSceneGrade(scene) {
   if (!scene || !game.user?.isGM) return false;
   await scene.unsetFlag(MODULE_ID, GRADE_FLAG);
   return true;
+}
+
+/** Scenes with a seed in flight, so two triggers cannot sample twice. */
+const _seeding = new Set();
+
+/**
+ * Propose starting values from the scene's background and store them.
+ *
+ * `force` is the GM's "Re-sample background": it re-reads the background and
+ * replaces the colours and the light direction, keeping every amount the scene
+ * already has. Without it this only runs on a scene with no grade of its own —
+ * the first time a scene is used on the stage — and is a no-op everywhere
+ * else, so it is safe to call on every stage update. Only the active GM writes,
+ * so a table with two GMs connected seeds once.
+ */
+export async function seedSceneGrade(scene, { force = false } = {}) {
+  if (!scene || !game.user?.isGM) return false;
+  if (!force && game.users?.activeGM && !game.users.activeGM.isSelf) return false;
+  if (!force && hasSceneGrade(scene)) return false;
+  if (_seeding.has(scene.id)) return false;
+  _seeding.add(scene.id);
+  try {
+    if (force) invalidateSceneSamples(scene.background?.src || null);
+    const sample = await sampleScene(scene);
+    const base = force ? readSceneGrade(scene) : readWorldDefaults();
+    if (!force && hasSceneGrade(scene)) return false; // someone graded it meanwhile
+    return writeSceneGrade(scene, seedFromSample(sample, base));
+  } finally {
+    _seeding.delete(scene.id);
+  }
 }
 
 /** Store the world default grade. GM only. */

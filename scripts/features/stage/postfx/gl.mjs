@@ -26,13 +26,22 @@
  *
  * The fragment shader is organised as the layer stack in grade-model.mjs. Each
  * layer is its own block, applied in stack order, and each is an exact no-op at
- * its neutral values. The basic-correction block is a line-for-line
- * transcription of `gradePixel`; the browser harness compares the two.
+ * its neutral values. The whole pass is a line-for-line transcription of
+ * `shadePixel` in grade-model.mjs; the browser harness compares the two.
  */
 
 import { loadPixelImage, markTainted } from "./asset.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
-import { LUMA, OKLAB, TONE_RATIO_CAP, GAMUT_STEPS, GAMUT_REACH, GAMUT_KNEE } from "./grade-model.mjs";
+import {
+  LUMA,
+  OKLAB,
+  TONE_RATIO_CAP,
+  GAMUT_STEPS,
+  GAMUT_REACH,
+  GAMUT_KNEE,
+  SKIN_CENTRE,
+  SKIN_RADIUS,
+} from "./grade-model.mjs";
 
 // ── Constants, written into the GLSL from the model's own statement of them ──
 // A number copied by hand into a shader is a number that drifts; these are
@@ -77,6 +86,22 @@ uniform float u_contrast;     // S-curve exponent about mid-grey
 uniform float u_sat;          // chroma scale
 uniform vec2  u_hue;          // (cos, sin) of the hue rotation
 
+// ── The scene light ── (shared by every layer with a direction)
+uniform float u_aspect;       // art width / height, so directions are isotropic
+uniform vec2  u_lightDir;     // unit vector toward the light, image space (+Y down)
+
+// ── Layer 2: gradient ──
+uniform float u_gradAmount;   // 0..1
+uniform float u_gradSoft;     // ramp half-width, in units of the art's half-extent
+uniform vec3  u_gradColor;    // the light's colour, encoded
+
+// ── Layer 3: wash ──
+uniform float u_washAmount;   // 0..1
+uniform vec3  u_washCast;     // the room's colour at unit luminance, linear
+uniform float u_darkGain;     // level from the scene's darkness, 1 = untouched
+
+uniform float u_skin;         // how hard skin holds back colour changes, 0..1
+
 const vec3 LUMA = vec3(${LUMA.map(f).join(", ")});
 
 // OKLab — see the note above linearToOklab in grade-model.mjs.
@@ -88,6 +113,8 @@ const mat3 OK_FROM_LMS = ${mat3(OKLAB.fromLms)};
 const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
 const float GAMUT_REACH = ${f(GAMUT_REACH)};
 const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
+const vec2 SKIN_CENTRE = vec2(${SKIN_CENTRE.map(f).join(", ")});
+const vec2 SKIN_RADIUS = vec2(${SKIN_RADIUS.map(f).join(", ")});
 
 vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
 vec3 toSRGB(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
@@ -195,12 +222,71 @@ vec3 basicCorrection(vec3 lin) {
   return c;
 }
 
+// skinMask in grade-model.mjs — on the original art's encoded colour.
+float skinMask(vec3 srgb) {
+  float cb = -0.169 * srgb.r - 0.331 * srgb.g + 0.5 * srgb.b + 0.5;
+  float cr = 0.5 * srgb.r - 0.419 * srgb.g - 0.081 * srgb.b + 0.5;
+  float d = length((vec2(cb, cr) - SKIN_CENTRE) / SKIN_RADIUS);
+  float inside = 1.0 - smoothstep(0.7, 1.3, d);
+  float l = dot(srgb, LUMA);
+  return inside * smoothstep(0.06, 0.18, l) * (1.0 - smoothstep(0.86, 0.98, l));
+}
+
+// guardSkin: keep the layer's change of level, hold back its change of colour.
+vec3 guardSkin(vec3 before, vec3 after, float k) {
+  if (k <= 0.0) return after;
+  float Yb = dot(before, LUMA);
+  if (Yb <= 1e-9) return after;
+  float r = dot(after, LUMA) / Yb;
+  return after + (before * r - after) * k;
+}
+
+// litWeight: 1 on the lit side of the art, 0 on the far side.
+float litWeight(vec2 uv) {
+  vec2 p = vec2((uv.x - 0.5) * u_aspect, uv.y - 0.5);
+  float half_ = 0.5 * (abs(u_lightDir.x) * u_aspect + abs(u_lightDir.y));
+  float t = dot(p, u_lightDir) / max(half_, 1e-6);
+  return smoothstep(-u_gradSoft, u_gradSoft, t);
+}
+
+// W3C soft-light, on encoded values.
+float softLight1(float b, float s) {
+  if (s <= 0.5) return b - (1.0 - 2.0 * s) * b * (1.0 - b);
+  float d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b);
+  return b + (2.0 * s - 1.0) * (d - b);
+}
+
+vec3 softLight(vec3 b, vec3 s) {
+  return vec3(softLight1(b.r, s.r), softLight1(b.g, s.g), softLight1(b.b, s.b));
+}
+
 void main() {
   vec4 art = artAt(v_uv);
   if (art.a <= 0.0) { gl_FragColor = vec4(0.0); return; }
 
   vec3 linIn = toLinear(art.rgb);
+  float guard = u_skin * skinMask(art.rgb);
+
+  // ── Layer 1: basic correction ──
   vec3 lin = basicCorrection(linIn);
+
+  // ── Layer 2: gradient ──
+  if (u_gradAmount > 0.0) {
+    float w = u_gradAmount * litWeight(v_uv);
+    if (w > 0.0) {
+      vec3 e = toSRGB(lin);
+      vec3 lit = e + (softLight(clamp(e, 0.0, 1.0), u_gradColor) - e) * w;
+      lin = guardSkin(lin, toLinear(lit), guard);
+    }
+  }
+
+  // ── Layer 3: wash ──
+  if (u_washAmount > 0.0) {
+    lin = guardSkin(lin, lin * (vec3(1.0) + (u_washCast - vec3(1.0)) * u_washAmount), guard);
+  }
+  if (u_darkGain != 1.0) lin *= u_darkGain;
+
+  lin = gamutFit(lin);
 
   // Formed as a difference from the input so an untouched pixel is exactly the
   // input: both encodes come from the same expression and cancel.
@@ -227,6 +313,15 @@ export const UNIFORMS = Object.freeze([
   "contrast",
   "sat",
   "hue",
+  "aspect",
+  "lightDir",
+  "gradAmount",
+  "gradSoft",
+  "gradColor",
+  "washAmount",
+  "washCast",
+  "darkGain",
+  "skin",
 ]);
 
 /** Longest edge of the render target, before display scaling. Stage art shows at
@@ -522,7 +617,7 @@ export class StageGL {
    * is that nothing else gets a turn between this draw and that copy.
    *
    * @param {object} prepared  From `prepare`.
-   * @param {object} params    `{ intensity }` plus the fields of `basicParams`.
+   * @param {object} params    `{ intensity }` plus the fields of `stackParams`.
    * @returns {HTMLCanvasElement|null} null when grading isn't possible.
    */
   draw(prepared, params) {
@@ -553,6 +648,15 @@ export class StageGL {
     gl.uniform1f(u.contrast, params.contrast);
     gl.uniform1f(u.sat, params.sat);
     gl.uniform2f(u.hue, params.hueCos, params.hueSin);
+    gl.uniform1f(u.aspect, params.aspect);
+    gl.uniform2fv(u.lightDir, params.lightDir);
+    gl.uniform1f(u.gradAmount, params.gradAmount);
+    gl.uniform1f(u.gradSoft, params.gradSoft);
+    gl.uniform3fv(u.gradColor, params.gradColor);
+    gl.uniform1f(u.washAmount, params.washAmount);
+    gl.uniform3fv(u.washCast, params.washCast);
+    gl.uniform1f(u.darkGain, params.darkGain);
+    gl.uniform1f(u.skin, params.skin);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

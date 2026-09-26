@@ -50,6 +50,49 @@
     filter: var(--glstage-pp-filter, none);
 }
 
+/* The directional layers, as overlays masked to the art's own alpha. Masks
+   reference the art by URL and never read its pixels. */
+.glstage-pp-fallback {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.glstage-pp-fallback > span {
+    position: absolute;
+    inset: 0;
+    display: block;
+    -webkit-mask-image: var(--glstage-pp-mask);
+    mask-image: var(--glstage-pp-mask);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-mode: alpha;
+    mask-mode: alpha;
+}
+
+/* Wash: the room's colour over the whole figure. Multiplied with the cast
+   scaled to a peak of 1, so it tints without darkening. */
+.glstage-pp-wash {
+    background: var(--glstage-pp-wash-color, transparent);
+    mix-blend-mode: multiply;
+    opacity: var(--glstage-pp-wash-opacity, 0);
+}
+
+/* Gradient: the light's colour on the lit side, falling away across the
+   figure. Three stops so most of the decay happens early, as light does. */
+.glstage-pp-gradient {
+    background: linear-gradient(
+        var(--glstage-pp-grad-angle, 180deg),
+        var(--glstage-pp-grad-color, transparent) 0%,
+        color-mix(in srgb, var(--glstage-pp-grad-color, transparent) 40%, transparent) 35%,
+        transparent 75%
+    );
+    mix-blend-mode: soft-light;
+    opacity: var(--glstage-pp-grad-opacity, 0);
+}
+
 /* ── GM panel controls ── */
 
 .glstage-field-check {

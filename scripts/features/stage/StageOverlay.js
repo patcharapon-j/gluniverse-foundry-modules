@@ -2,7 +2,7 @@ import { MODULE_ID, getSetting } from './settings.js';
 import { clampNumber, escapeAttr, escapeHTML } from '../../core/util.mjs';
 import { animate, createTimeline, motionDuration } from '../../core/motion.mjs';
 import { StagePostFX } from './postfx/index.mjs';
-import { readSceneGrade } from './postfx/grade-store.mjs';
+import { readSceneGrade, readSceneDarkness, seedSceneGrade } from './postfx/grade-store.mjs';
 
 const SHOW_DURATION = 400;
 const HIDE_DURATION = 350;
@@ -102,8 +102,32 @@ export class StageOverlay {
      */
     refreshPostFXScene() {
         if (!this._postfx) return;
-        const scene = canvas?.scene ?? game.scenes?.current ?? null;
+        const scene = this._viewedScene();
         this._postfx.setGrade(readSceneGrade(scene));
+        this._postfx.setDarkness(readSceneDarkness(scene));
+        this._maybeSeedGrade();
+    }
+
+    _viewedScene() {
+        return canvas?.scene ?? game.scenes?.current ?? null;
+    }
+
+    /**
+     * The first time a scene is used on the stage, propose its starting grade
+     * from the background. GM only, once per scene: `seedSceneGrade` is a no-op
+     * on a scene that already has a grade, so this is safe on every update.
+     */
+    _maybeSeedGrade() {
+        if (!game.user?.isGM || !this._state.visible) return;
+        if (!(this._state.slots || []).some((slot) => slot?.actor)) return;
+        seedSceneGrade(this._viewedScene()).catch((err) => {
+            console.warn('gluniverse | stage: could not seed the scene grade', err);
+        });
+    }
+
+    /** "Re-sample background": re-read the colours and light direction. */
+    async resampleSceneGrade() {
+        return seedSceneGrade(this._viewedScene(), { force: true });
     }
 
     /**
@@ -316,6 +340,7 @@ export class StageOverlay {
         this._ensurePostFX();
         this._reconcileSlots(wasHidden);
         this._syncPostFX();
+        this._maybeSeedGrade();
 
         if (wasHidden) {
             this._animateShow();

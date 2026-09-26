@@ -88,10 +88,11 @@ export function onReady() {
     Hooks.on('canvasReady', () => overlay.refreshPostFXScene());
 
     // A saved grade reaches every client viewing that scene through the scene
-    // document itself; each one eases into it.
+    // document itself; each one eases into it. Darkness is the one live input
+    // the grade listens to, through the wash layer's own darkness dial.
     Hooks.on('updateScene', (scene, changes) => {
         if (scene?.id !== (canvas?.scene?.id ?? null)) return;
-        if (!changeTouchesGrade(changes)) return;
+        if (!changeTouchesGrade(changes) && !('environment' in changes)) return;
         overlay.refreshPostFXScene();
     });
 
