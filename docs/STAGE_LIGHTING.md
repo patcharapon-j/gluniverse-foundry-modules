@@ -197,6 +197,12 @@ grade: the world default's amounts, with the light's colour, the room's colour,
 the rim colour and the light's direction proposed from the image. A flat-colour
 background proposes colours but not a direction. After that the grade is data.
 
+The room colour is *saturated* on the way in (`roomCast`): an average over a
+whole background is far greyer than the light it reads as, so its OKLab chroma is
+multiplied by `WASH_CHROMA_BOOST` and, once the room has a clear hue, lifted to at
+least `WASH_CHROMA_MIN`. A grey room stays grey. Key and rim colours are pulled
+only `KEY_WHITEN` / `RIM_WHITEN` toward white, so a blue room lights blue.
+
 "Re-sample background" re-reads the image and replaces only the colours and the
 direction, keeping every amount. "Reset to defaults" stores the world default *as
 the scene's grade* rather than clearing the flag — a scene with no grade would be
