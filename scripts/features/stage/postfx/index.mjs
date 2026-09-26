@@ -91,9 +91,9 @@ export function cssFallbackFor(grade, trim, intensity, darkness = 0) {
       opacity: p.gradAmount * k,
     },
     wash: { color: washTint, opacity: p.washAmount * k },
-    // The back shadow is the same ramp from the other side. The rim has no
-    // honest CSS equivalent — an inner edge light needs the art's pixels — so
-    // the fallback leaves it out rather than faking it with an outer glow.
+    // The back shadow is the same ramp from the other side. The rim and the
+    // glow have no honest CSS equivalent — both need the art's pixels — so the
+    // fallback leaves them out rather than faking them with an outer shadow.
     shade: { angle: cssGradientAngle(g.light.angle + 180), opacity: p.backAmount * k },
   };
 }

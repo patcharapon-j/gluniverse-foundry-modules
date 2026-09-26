@@ -119,7 +119,7 @@ globalThis.Image = class {
 const M = await import(mod("grade-model.mjs"));
 const { StagePostFX, cssFallbackFor, cssGradientAngle } = await import(mod("index.mjs"));
 const { seedFromSample, lightAngleFrom, toKeyLight } = await import(mod("seed.mjs"));
-const { StageGL, FRAG, UNIFORMS } = await import(mod("gl.mjs"));
+const { StageGL, FRAG, UNIFORMS, BLOOM_DOWN_FRAG, BLOOM_UP_FRAG, BLOOM_DOWN_UNIFORMS, BLOOM_UP_UNIFORMS } = await import(mod("gl.mjs"));
 const { changeTouchesGrade } = await import(mod("grade-store.mjs"));
 const { loadPixelImage, assetReason, corsRetryUrl, isSameOrigin, invalidateAsset } = await import(
   mod("asset.mjs")
@@ -345,15 +345,28 @@ section("actor trim composes with the scene");
 // ═══ 5. The shader agrees with the model ═══
 section("shader wiring");
 {
-  const declared = [...FRAG.matchAll(/^\s*uniform\s+\w+\s+u_(\w+)\s*;/gm)].map((m) => m[1]);
-  const missing = declared.filter((n) => !UNIFORMS.includes(n));
-  const extra = UNIFORMS.filter((n) => !declared.includes(n));
-  ok(!missing.length, "every uniform the GLSL declares is looked up", missing.join(", "));
-  ok(!extra.length, "every looked-up uniform exists in the GLSL", extra.join(", "));
+  for (const [name, src, list] of [["main", FRAG, UNIFORMS], ["bloom down", BLOOM_DOWN_FRAG, BLOOM_DOWN_UNIFORMS], ["bloom up", BLOOM_UP_FRAG, BLOOM_UP_UNIFORMS]]) {
+    const declared = [...src.matchAll(/^\s*uniform\s+\w+\s+u_(\w+)\s*;/gm)].map((m) => m[1]);
+    const missing = declared.filter((n) => !list.includes(n));
+    const extra = list.filter((n) => !declared.includes(n));
+    ok(!missing.length, `${name}: every uniform the GLSL declares is looked up`, missing.join(", "));
+    ok(!extra.length, `${name}: every looked-up uniform exists in the GLSL`, extra.join(", "));
+  }
+  const glSrc = await read("scripts/features/stage/postfx/gl.mjs");
+  const bloomBody = glSrc.slice(glSrc.indexOf("  _renderBloom(gl, art, params) {"), glSrc.indexOf("  readBloom() {"));
+  for (const n of ["srcTexel", "bright", "threshold", "coarseTexel", "weight"]) {
+    ok(new RegExp(`\\.u\\.${n}\\b`).test(bloomBody), `the bloom pass writes u_${n}`);
+  }
+  const knee = BLOOM_DOWN_FRAG.match(/const float GLOW_KNEE = ([\d.]+);/);
+  ok(!!knee && Number(knee[1]) === M.GLOW_KNEE, "GLSL GLOW_KNEE is the model's", knee?.[1]);
+  const taps = [...BLOOM_DOWN_FRAG.matchAll(/tap\(v_uv \+ vec2\(([-\d.]+), ([-\d.]+)\)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  ok(JSON.stringify(taps) === JSON.stringify(M.DOWN_TAPS), "the GLSL downsample taps are DOWN_TAPS", JSON.stringify(taps));
+  ok(/\(i == 0 \? 2\.0 : 1\.0\) \* \(j == 0 \? 2\.0 : 1\.0\) \/ 16\.0/.test(BLOOM_UP_FRAG), "the GLSL upsample is the model's 3×3 tent");
 
   const src = await read("scripts/features/stage/postfx/gl.mjs");
   const drawBody = src.slice(src.indexOf("  draw(prepared, params)"), src.indexOf("  _dropTextures()"));
-  const unwritten = UNIFORMS.filter((n) => n !== "art" && !new RegExp(`u\\.${n}\\b`).test(drawBody));
+  // Samplers are bound to their texture units once, when the context is made.
+  const unwritten = UNIFORMS.filter((n) => n !== "art" && n !== "bloom" && !new RegExp(`u\\.${n}\\b`).test(drawBody));
   ok(!unwritten.length, "every uniform is written on every draw", unwritten.join(", "));
 
   // The constants are emitted from the model rather than copied, so what is
@@ -372,7 +385,7 @@ section("shader wiring");
   ok(FRAG.includes(`i < ${M.GAMUT_STEPS}; i++`), "the GLSL gamut search runs GAMUT_STEPS bisections");
   ok(FRAG.includes(`i < ${M.RIM_TAPS}; i++`) && FRAG.includes(`/ ${M.RIM_TAPS + 1}.0`), "the GLSL rim samples RIM_TAPS + 1 taps, like the model");
   ok(same(nums("SKIN_CENTRE", "vec2"), M.SKIN_CENTRE) && same(nums("SKIN_RADIUS", "vec2"), M.SKIN_RADIUS), "GLSL skin ellipse is the model's");
-  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)", "u_rimAmount > 0.0", "u_backAmount > 0.0", "if (k != 1.0)"]) {
+  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)", "u_rimAmount > 0.0", "u_backAmount > 0.0", "if (k != 1.0)", "bool glowing = u_glowAmount > 0.0;", "glowing ? vec4(G, ga) * u_intensity : vec4(0.0)"]) {
     ok(FRAG.includes(guard), `the shader skips a layer at neutral: ${guard}`);
   }
   ok(FRAG.includes("if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);"),
@@ -384,7 +397,7 @@ section("shader wiring");
     ok(FRAG.includes(guard), `the shader keeps its neutral guard: ${guard}`);
   }
   ok(/art\.rgb \+ \(toSRGB\(lin\) - toSRGB\(linIn\)\)/.test(FRAG), "the shader forms its output as a difference from the input");
-  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_GAIN", M.RIM_GAIN]]) {
+  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_GAIN", M.RIM_GAIN], ["GLOW_GAIN", M.GLOW_GAIN]]) {
     const m = FRAG.match(new RegExp(`const float ${name} = ([\\d.]+);`));
     ok(!!m && Number(m[1]) === value, `GLSL ${name} is the model's`, m?.[1]);
   }
@@ -527,6 +540,88 @@ section("rim: the edge that faces the lamp");
   const side = M.stackParams(M.normalizeGrade(rim(0), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect });
   ok(Math.abs(side.rimOffset[0] * aspect - M.stackParams(M.normalizeGrade(rim(-90), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect }).rimOffset[1]) < 1e-12,
     "the rim's reach is isotropic on a tall portrait");
+}
+
+section("glow: a bloom pyramid of the art's own highlights");
+{
+  // A grey disc on a 64×96 image, a bright patch in its middle and a bright
+  // band at its right edge. Premultiplied, like the texture.
+  const W = 64;
+  const H = 96;
+  const aspect = W / H;
+  const art = { width: W, height: H, data: new Float32Array(W * H * 4) };
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const u = (x + 0.5) / W;
+      const v = (y + 0.5) / H;
+      if (Math.hypot((u - 0.5) * aspect, v - 0.5) >= 0.3) continue;
+      const c = Math.abs(u - 0.5) < 0.08 && Math.abs(v - 0.5) < 0.04 ? [1, 0.9, 0.6]
+        : u > 0.82 ? [0.95, 0.95, 0.95] : [0.3, 0.3, 0.3];
+      art.data.set([...c, 1], (y * W + x) * 4);
+    }
+  }
+  const sample = (u, v) => M.sampleImage(art, u, v);
+  const texelAt = (u, v) => {
+    const x = Math.min(Math.max(Math.floor(u * W), 0), W - 1);
+    const y = Math.min(Math.max(Math.floor(v * H), 0), H - 1);
+    return Array.from(art.data.subarray((y * W + x) * 4, (y * W + x) * 4 + 4));
+  };
+  const P = (dials, ctx = {}) => M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect, ...ctx });
+  const glowing = (p) => {
+    const bloom = M.bloomPyramid(art, p);
+    return (uv, k = 1) => M.shadeFragment(texelAt(...uv), uv, p, sample, k, (u, v) => M.sampleImage(bloom, u, v));
+  };
+  const glow = { glow: { amount: 100, radius: 50, threshold: 60 } };
+  const frag = glowing(P(glow));
+
+  const sizes = M.bloomSizes(1280, 720);
+  ok(sizes.length === M.GLOW_LEVELS && sizes[0][0] === 640 && sizes[4][0] === 40, "the pyramid halves GLOW_LEVELS times from half size", JSON.stringify(sizes));
+  ok(M.bloomSizes(3, 2).at(-1).join() === "1,1", "…and stops at a single texel on tiny art");
+  const w1 = M.bloomWeights(5, 1);
+  const w0 = M.bloomWeights(5, 0);
+  ok(w0.every((x) => x === 0), "at spread 0 only the finest level counts");
+  ok(Math.abs(w1[0] - 0.8) < 1e-12 && Math.abs(w1[3] - 0.5) < 1e-12, "at spread 1 every level counts equally", String(w1));
+
+  const off = glowing(M.NEUTRAL_PARAMS);
+  let bad = 0;
+  for (let i = 0; i < 3000; i++) {
+    const uv = [Math.random(), Math.random()];
+    const t = texelAt(...uv);
+    if (off(uv).some((x, j) => x !== t[j])) bad++;
+  }
+  ok(bad === 0, "with glow off, every fragment — inside and outside the art — is the texture exactly", `${bad} differed`);
+  let bad0 = 0;
+  for (let i = 0; i < 2000; i++) {
+    const uv = [Math.random(), Math.random()];
+    const t = texelAt(...uv);
+    if (frag(uv, 0).some((x, j) => x !== t[j])) bad0++;
+  }
+  ok(bad0 === 0, "at intensity 0 the glow draws nothing anywhere", `${bad0} differed`);
+
+  const near = frag([0.5, 0.56]);
+  const far = frag([0.5, 0.66]);
+  ok(near[0] > 0.33 && far[0] < near[0], "light blooms out of the bright patch and falls off with distance", `${near[0].toFixed(3)} → ${far[0].toFixed(3)}`);
+  const outside = frag([0.97, 0.5]);
+  ok(outside[3] > 0.02, "the bright edge spills past the outline, the one place the pass draws outside the art", outside.map((x) => x.toFixed(3)).join(","));
+  ok(frag([0.03, 0.5])[3] < outside[3] / 4, "…and a dark edge spills far less");
+  ok(glowing(P({ glow: { ...glow.glow, threshold: 100 } }))([0.5, 0.56])[0] < near[0], "raising the threshold narrows what glows");
+  ok(glowing(P({ ...glow, wash: { darkness: 100 } }, { darkness: 0.8 }))([0.5, 0.56])[0] < near[0], "a dark room glows less");
+
+  // Spread changes how far the glow reaches.
+  const reach = (radius) => glowing(P({ glow: { ...glow.glow, radius } }))([0.5, 0.7])[0];
+  ok(reach(100) > reach(0), "a wider radius reaches further", `${reach(100).toFixed(4)} vs ${reach(0).toFixed(4)}`);
+
+  // No ghosts: along a line through the bright patch, the bloom rises and falls
+  // with no secondary peaks — the failure a sparse ring of taps produced.
+  const bloom = M.bloomPyramid(art, P({ glow: { ...glow.glow, radius: 100 } }));
+  const line = Array.from({ length: 60 }, (_, i) => M.sampleImage(bloom, 0.5, 0.2 + (i / 59) * 0.6)[0]);
+  const peak = line.indexOf(Math.max(...line));
+  let bumps = 0;
+  for (let i = 1; i < line.length; i++) {
+    const rising = i <= peak;
+    if (rising ? line[i] < line[i - 1] - 1e-4 : line[i] > line[i - 1] + 1e-4) bumps++;
+  }
+  ok(bumps === 0, "the bloom falls off monotonically from its peak — no ghost copies", `${bumps} reversals`);
 }
 
 section("back shadow: the far side, level only");

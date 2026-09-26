@@ -61,13 +61,15 @@ const TESTS = [
   { label: "rim, light right", grade: { light: { angle: 0 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
   { label: "rim, light above-left", grade: { light: { angle: 135 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
   { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
+  { label: "glow, tight", grade: { glow: { amount: 100, radius: 0, threshold: 55 } } },
+  { label: "glow, wide", grade: { glow: { amount: 100, radius: 100, threshold: 55 } } },
   { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, gradient: { amount: 35, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 60, width: 30, softness: 40, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
 ];
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
-import { stackParams, shadePixel, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM } from "/scripts/features/stage/postfx/grade-model.mjs";
+import { stackParams, shadeFragment, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM, bloomPyramid, sampleImage } from "/scripts/features/stage/postfx/grade-model.mjs";
 
 const TESTS = ${JSON.stringify(TESTS)};
 
@@ -105,7 +107,8 @@ function buildArt() {
 window.run = async () => {
   const src = buildArt();
   let lostCount = 0;
-  const gl = new StageGL({ onLost: () => lostCount++ });
+  // 8-bit bloom, so the finished pyramid can be read back and compared.
+  const gl = new StageGL({ onLost: () => lostCount++, bloomFormat: "u8" });
   if (!gl.isSupported()) return { error: "no WebGL in this browser" };
 
   // Headless Chromium's software GPU resets once shortly after the first
@@ -128,11 +131,12 @@ window.run = async () => {
   const shoot = (test, intensity = 1) => {
     const out = gl.draw(prepared, { intensity, ...paramsFor(test) });
     if (!out) throw new Error("draw returned null mid-run (context lost again?)");
+    const bloom = paramsFor(test).glowAmount > 0 ? gl.readBloom() : null;
     const c = document.createElement("canvas");
     c.width = out.width; c.height = out.height;
     const g2 = c.getContext("2d");
     g2.drawImage(out, 0, 0);
-    return { canvas: c, data: g2.getImageData(0, 0, c.width, c.height).data };
+    return { canvas: c, data: g2.getImageData(0, 0, c.width, c.height).data, bloom };
   };
 
   const first = shoot({ grade: {} });
@@ -166,33 +170,64 @@ window.run = async () => {
   const zero = drift(shoot(TESTS[TESTS.length - 1], 0).data);
 
   // The shader samples at pixel centres; so does the reference.
-  // Coverage anywhere in the art, sampled the way the GPU samples the
-  // texture: bilinear between texel centres, clamped at the edges.
-  const alphaAt = (u, v) => {
+  // The art sampled the way the GPU samples its texture: premultiplied,
+  // bilinear between texel centres, clamped at the edges.
+  const texel = (x, y) => {
+    const i = (y * W + x) * 4;
+    const a = artPx[i + 3] / 255;
+    return [artPx[i] / 255 * a, artPx[i + 1] / 255 * a, artPx[i + 2] / 255 * a, a];
+  };
+  const sample = (u, v) => {
     const tx = Math.min(Math.max(u * W - 0.5, 0), W - 1);
     const ty = Math.min(Math.max(v * H - 0.5, 0), H - 1);
     const x0 = Math.floor(tx), y0 = Math.floor(ty);
     const x1 = Math.min(x0 + 1, W - 1), y1 = Math.min(y0 + 1, H - 1);
     const fx = tx - x0, fy = ty - y0;
-    const a = (x, y) => artPx[(y * W + x) * 4 + 3] / 255;
-    return (a(x0, y0) * (1 - fx) + a(x1, y0) * fx) * (1 - fy) + (a(x0, y1) * (1 - fx) + a(x1, y1) * fx) * fy;
+    const a = texel(x0, y0), b = texel(x1, y0), c = texel(x0, y1), d = texel(x1, y1);
+    return a.map((_, k) => (a[k] * (1 - fx) + b[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy);
   };
-  const reference = (test) => {
-    const p = paramsFor(test);
-    return (i, x, y) => shadePixel(
-      [artPx[i] / 255, artPx[i + 1] / 255, artPx[i + 2] / 255],
-      [(x + 0.5) / W, (y + 0.5) / H],
-      p,
-      alphaAt,
-      artPx[i + 3] / 255,
-    ).map((v) => Math.round(v * 255));
+  // The main pass is compared given the GPU's own bloom (read back), so a
+  // difference points at the main pass; the pyramid is compared on its own.
+  let bloomNow = null;
+  const bloomAt = (u, v) => (bloomNow ? sampleImage(bloomNow, u, v) : [0, 0, 0, 0]);
+  const fragmentAt = (test, x, y, intensity = 1) =>
+    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), sample, intensity, bloomAt);
+  const artImage = { width: W, height: H, data: new Float32Array(W * H * 4) };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) artImage.data.set(texel(x, y), (y * W + x) * 4);
+  const bloomDrift = (gpu, test) => {
+    const cpu = bloomPyramid(artImage, paramsFor(test));
+    let worst = 0;
+    for (let i = 0; i < cpu.data.length; i++) worst = Math.max(worst, Math.abs(cpu.data[i] - gpu.data[i]) * 255);
+    return { worst: Math.round(worst), size: gpu.width + "x" + gpu.height, cpuSize: cpu.width + "x" + cpu.height };
+  };
+  const reference = (test) => (i, x, y) => {
+    const f = fragmentAt(test, x, y);
+    const a = Math.max(f[3], 1e-6);
+    return [f[0] / a, f[1] / a, f[2] / a].map((v) => Math.round(Math.min(v, 1) * 255));
+  };
+  // Coverage everywhere, including outside the art, where only the glow draws.
+  const alphaDrift = (px, test) => {
+    let worst = 0;
+    for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) {
+      const i = (y * W + x) * 4;
+      worst = Math.max(worst, Math.abs(px[i + 3] - Math.round(fragmentAt(test, x, y)[3] * 255)));
+    }
+    return worst;
   };
 
   const dials = [];
   const tiles = [{ label: "original", canvas: first.canvas }];
   for (const t of TESTS) {
     const shot = shoot(t);
-    dials.push({ label: t.label, ...drift(shot.data, reference(t)), moved: drift(shot.data).mean });
+    bloomNow = shot.bloom;
+    dials.push({
+      label: t.label,
+      ...drift(shot.data, reference(t)),
+      moved: drift(shot.data).mean,
+      alpha: alphaDrift(shot.data, t),
+      bloom: shot.bloom ? bloomDrift(shot.bloom, t) : null,
+    });
+    bloomNow = null;
     tiles.push({ label: t.label, canvas: shot.canvas });
   }
 
@@ -316,6 +351,11 @@ for (const d of result.dials) {
     `worst ${d.worst}/255, mean ${d.mean.toFixed(3)}`
   );
   ok(d.moved > 1, `…and the dial visibly moves the picture`, `mean change ${d.moved.toFixed(2)}/255`);
+  ok(d.alpha <= 2, `…and its coverage matches, outside the art included`, `worst ${d.alpha}/255`);
+  if (d.bloom) {
+    // Four 8-bit render targets deep, so a few steps of rounding is expected.
+    ok(d.bloom.size === d.bloom.cpuSize && d.bloom.worst <= 6, `…and the GPU bloom pyramid matches bloomPyramid`, `${d.bloom.size}, worst ${d.bloom.worst}/255`);
+  }
 }
 
 console.log(`\ncontact sheet: ${OUT}`);

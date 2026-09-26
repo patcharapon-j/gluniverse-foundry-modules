@@ -43,6 +43,11 @@ import {
   SKIN_RADIUS,
   RIM_TAPS,
   RIM_GAIN,
+  GLOW_KNEE,
+  GLOW_GAIN,
+  DOWN_TAPS,
+  bloomSizes,
+  bloomWeights,
 } from "./grade-model.mjs";
 
 // ── Constants, written into the GLSL from the model's own statement of them ──
@@ -111,6 +116,10 @@ uniform vec3  u_rimColor;     // encoded
 // ── Layer 5: back shadow ──
 uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MAX
 
+// ── Layer 6: glow ──
+uniform float u_glowAmount;   // 0..1
+uniform sampler2D u_bloom;    // the finished bloom pyramid, premultiplied
+
 uniform float u_skin;         // how hard skin holds back colour changes, 0..1
 
 const vec3 LUMA = vec3(${LUMA.map(f).join(", ")});
@@ -125,6 +134,7 @@ const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
 const float GAMUT_REACH = ${f(GAMUT_REACH)};
 const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
 const float RIM_GAIN = ${f(RIM_GAIN)};
+const float GLOW_GAIN = ${f(GLOW_GAIN)};
 const vec2 SKIN_CENTRE = vec2(${SKIN_CENTRE.map(f).join(", ")});
 const vec2 SKIN_RADIUS = vec2(${SKIN_RADIUS.map(f).join(", ")});
 
@@ -282,6 +292,12 @@ vec3 screen(vec3 b, vec3 s) {
   return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
 }
 
+// glowFrom in grade-model.mjs: the finished bloom, scaled, dimmed by the
+// room's darkness like everything else the light does.
+vec3 glowAt(vec2 uv) {
+  return clamp(texture2D(u_bloom, uv).rgb * (u_glowAmount * GLOW_GAIN * u_darkGain), 0.0, 1.0);
+}
+
 // W3C soft-light, on encoded values.
 float softLight1(float b, float s) {
   if (s <= 0.5) return b - (1.0 - 2.0 * s) * b * (1.0 - b);
@@ -295,7 +311,20 @@ vec3 softLight(vec3 b, vec3 s) {
 
 void main() {
   vec4 art = artAt(v_uv);
-  if (art.a <= 0.0) { gl_FragColor = vec4(0.0); return; }
+
+  // ── Layer 6: glow ── computed first, because it is the one layer that draws
+  // outside the art's coverage.
+  vec3 G = vec3(0.0);
+  bool glowing = u_glowAmount > 0.0;
+  if (glowing) G = glowAt(v_uv);
+
+  if (art.a <= 0.0) {
+    // Premultiplied emission: colour G at coverage max(G), whose premultiplied
+    // value is G itself. Zero, exactly, whenever the glow is off.
+    float ga = max(max(G.r, G.g), G.b);
+    gl_FragColor = glowing ? vec4(G, ga) * u_intensity : vec4(0.0);
+    return;
+  }
 
   vec3 linIn = toLinear(art.rgb);
   float guard = u_skin * skinMask(art.rgb);
@@ -339,12 +368,96 @@ void main() {
   // Formed as a difference from the input so an untouched pixel is exactly the
   // input: both encodes come from the same expression and cancel.
   vec3 graded = clamp(art.rgb + (toSRGB(lin) - toSRGB(linIn)), 0.0, 1.0);
+  if (glowing) graded = screen(clamp(graded, 0.0, 1.0), G);
   vec3 outc = art.rgb + (graded - art.rgb) * u_intensity;
+
+  // On a partly covered edge pixel the glow also lands on what is behind it.
+  if (glowing && art.a < 1.0) {
+    float ga = max(max(G.r, G.g), G.b) * u_intensity;
+    gl_FragColor = vec4(outc * art.a + G * u_intensity * (1.0 - art.a), art.a + ga * (1.0 - art.a));
+    return;
+  }
 
   // Premultiplied — the context is created with premultipliedAlpha.
   gl_FragColor = vec4(outc * art.a, art.a);
 }
 `;
+
+// ── The bloom pyramid ── (see "Bloom" in grade-model.mjs)
+
+const PRECISION = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+`;
+
+/**
+ * The bloom passes' vertex shader. Unlike the main pass it does not flip Y:
+ * a render target stores its rows bottom-up, so a pass that wrote at the
+ * flipped coordinate would mirror the image, and every pass after it would
+ * mirror it back. Kept unflipped, every level holds image row y at texture
+ * coordinate y — the same convention as the art texture, which is what lets the
+ * main pass sample the finished bloom at its own v_uv.
+ */
+const BLOOM_VERT = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
+
+/** Down: the four-tap box; on the first level, the bright pass per tap. */
+export const BLOOM_DOWN_FRAG = `${PRECISION}
+varying vec2 v_uv;
+uniform sampler2D u_src;
+uniform vec2  u_srcTexel;     // one texel of the source, uv
+uniform float u_bright;       // 1 on the first level: apply the bright pass
+uniform float u_threshold;
+
+const vec3 LUMA = vec3(${LUMA.map(f).join(", ")});
+const float GLOW_KNEE = ${f(GLOW_KNEE)};
+
+vec4 tap(vec2 uv) {
+  vec4 t = texture2D(u_src, uv);
+  if (u_bright < 0.5) return t;
+  vec3 c = t.rgb / max(t.a, 0.0039);
+  float k = smoothstep(u_threshold, u_threshold + GLOW_KNEE, dot(c, LUMA)) * t.a;
+  return vec4(c * k, k);
+}
+
+void main() {
+  gl_FragColor = 0.25 * (
+${DOWN_TAPS.map(([x, y]) => `      tap(v_uv + vec2(${f(x)}, ${f(y)}) * u_srcTexel)`).join(" +\n")});
+}
+`;
+
+/** Up: this level mixed toward a 3×3 tent of the level below. */
+export const BLOOM_UP_FRAG = `${PRECISION}
+varying vec2 v_uv;
+uniform sampler2D u_fine;
+uniform sampler2D u_coarse;
+uniform vec2  u_coarseTexel;  // one texel of the coarser level, uv
+uniform float u_weight;       // bloomWeights for this level
+
+void main() {
+  vec4 tent = vec4(0.0);
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
+      tent += texture2D(u_coarse, v_uv + vec2(float(i), float(j)) * u_coarseTexel) * w;
+    }
+  }
+  vec4 fine = texture2D(u_fine, v_uv);
+  gl_FragColor = fine + (tent - fine) * u_weight;
+}
+`;
+
+export const BLOOM_DOWN_UNIFORMS = Object.freeze(["src", "srcTexel", "bright", "threshold"]);
+export const BLOOM_UP_UNIFORMS = Object.freeze(["fine", "coarse", "coarseTexel", "weight"]);
 
 /**
  * Every uniform the fragment shader declares, in one list, so the context
@@ -374,6 +487,8 @@ export const UNIFORMS = Object.freeze([
   "rimRadius",
   "rimColor",
   "backAmount",
+  "glowAmount",
+  "bloom",
   "skin",
 ]);
 
@@ -434,7 +549,7 @@ export class StageGL {
    *   render — without that, a GPU reset leaves every slot on the CSS fallback
    *   until something unrelated happens to re-render the stage.
    */
-  constructor({ onLost = null } = {}) {
+  constructor({ onLost = null, bloomFormat = "auto" } = {}) {
     this.canvas = null;
     this.gl = null;
     this.program = null;
@@ -446,10 +561,16 @@ export class StageGL {
     this._surface = null;
     this._generation = 0; // bumped per context; see the header
     this._onLostCallback = onLost;
+    // "auto" renders the bloom in half float where the GPU can, 8-bit
+    // otherwise; "u8" forces 8-bit, which the harness uses to read it back.
+    this._bloomFormat = bloomFormat === "u8" ? "u8" : "auto";
+    this._bloom = null; // { key, type, levels: [{ w, h, down, up }] }
+    this._blank = null; // 1×1 transparent texture for u_bloom when not glowing
     this._onLost = (event) => {
       event.preventDefault();
       this._lost = true;
       this._dropTextures();
+      this._bloom = null;
       try { this._onLostCallback?.(); } catch (_e) { /* the owner's problem, not the context's */ }
     };
   }
@@ -492,6 +613,9 @@ export class StageGL {
 
     const program = this._buildProgram(gl, VERT, FRAG);
     if (!program) return false;
+    const downProgram = this._buildProgram(gl, BLOOM_VERT, BLOOM_DOWN_FRAG);
+    const upProgram = this._buildProgram(gl, BLOOM_VERT, BLOOM_UP_FRAG);
+    if (!downProgram || !upProgram) return false;
 
     canvas.addEventListener("webglcontextlost", this._onLost);
 
@@ -501,9 +625,8 @@ export class StageGL {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     // Single oversized triangle — no index buffer, no second vertex.
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const posLoc = gl.getAttribLocation(program, "a_pos");
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
@@ -529,7 +652,163 @@ export class StageGL {
     this.uniforms = {};
     for (const name of UNIFORMS) this.uniforms[name] = gl.getUniformLocation(program, `u_${name}`);
     gl.uniform1i(this.uniforms.art, 0);
+    gl.uniform1i(this.uniforms.bloom, 1);
+
+    this._down = { program: downProgram, u: {} };
+    for (const name of BLOOM_DOWN_UNIFORMS) this._down.u[name] = gl.getUniformLocation(downProgram, `u_${name}`);
+    this._up = { program: upProgram, u: {} };
+    for (const name of BLOOM_UP_UNIFORMS) this._up.u[name] = gl.getUniformLocation(upProgram, `u_${name}`);
+    gl.useProgram(downProgram);
+    gl.uniform1i(this._down.u.src, 0);
+    gl.useProgram(upProgram);
+    gl.uniform1i(this._up.u.fine, 0);
+    gl.uniform1i(this._up.u.coarse, 1);
+    gl.useProgram(program);
+
+    this._blank = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this._blank);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    this._bloomType = this._pickBloomType(gl);
     return true;
+  }
+
+  /**
+   * Half float where the GPU can render to it and filter it, 8-bit otherwise.
+   * 8-bit works — the pyramid never leaves 0..1 — but a wide soft glow bands in
+   * it, so it is the fallback, not the choice.
+   */
+  _pickBloomType(gl) {
+    if (this._bloomFormat === "u8") return gl.UNSIGNED_BYTE;
+    const half = gl.getExtension("OES_texture_half_float");
+    const linear = gl.getExtension("OES_texture_half_float_linear");
+    if (!half || !linear) return gl.UNSIGNED_BYTE;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, half.HALF_FLOAT_OES, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(tex);
+    return ok ? half.HALF_FLOAT_OES : gl.UNSIGNED_BYTE;
+  }
+
+  /** A render target: a linearly filtered, edge-clamped texture and its FBO. */
+  _target(gl, w, h) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, this._bloomType, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return { tex, fbo };
+  }
+
+  /** The pyramid's targets for art of this size, reused while the size holds. */
+  _bloomTargets(gl, width, height) {
+    const key = `${width}x${height}`;
+    if (this._bloom?.key === key) return this._bloom;
+    this._dropBloom();
+    const levels = bloomSizes(width, height).map(([w, h]) => ({
+      w,
+      h,
+      down: this._target(gl, w, h),
+      up: this._target(gl, w, h),
+    }));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._bloom = { key, levels };
+    return this._bloom;
+  }
+
+  _dropBloom() {
+    const gl = this.gl;
+    if (gl && this._bloom) {
+      for (const level of this._bloom.levels) {
+        for (const t of [level.down, level.up]) {
+          gl.deleteFramebuffer(t.fbo);
+          gl.deleteTexture(t.tex);
+        }
+      }
+    }
+    this._bloom = null;
+  }
+
+  /**
+   * Run the pyramid for one piece of art. Synchronous, like the draw it is
+   * part of. Returns the texture holding the finished bloom.
+   */
+  _renderBloom(gl, art, params) {
+    const pyr = this._bloomTargets(gl, art.width, art.height);
+    const { levels } = pyr;
+
+    const d = this._down;
+    gl.useProgram(d.program);
+    gl.uniform1f(d.u.threshold, params.glowThreshold);
+    gl.activeTexture(gl.TEXTURE0);
+    let srcTex = art.tex;
+    let srcW = art.width;
+    let srcH = art.height;
+    levels.forEach((level, i) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, level.down.fbo);
+      gl.viewport(0, 0, level.w, level.h);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform2f(d.u.srcTexel, 1 / srcW, 1 / srcH);
+      gl.uniform1f(d.u.bright, i === 0 ? 1 : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      srcTex = level.down.tex;
+      srcW = level.w;
+      srcH = level.h;
+    });
+
+    const weights = bloomWeights(levels.length, params.glowSpread);
+    const u = this._up;
+    gl.useProgram(u.program);
+    let coarse = levels[levels.length - 1];
+    let coarseTex = coarse.down.tex;
+    for (let i = levels.length - 2; i >= 0; i--) {
+      const level = levels[i];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, level.up.fbo);
+      gl.viewport(0, 0, level.w, level.h);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, level.down.tex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, coarseTex);
+      gl.uniform2f(u.u.coarseTexel, 1 / coarse.w, 1 / coarse.h);
+      gl.uniform1f(u.u.weight, weights[i]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      coarse = level;
+      coarseTex = level.up.tex;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(this.program);
+    return levels.length > 1 ? levels[0].up.tex : levels[0].down.tex;
+  }
+
+  /**
+   * The finished bloom of the last draw, read back as a premultiplied float
+   * image. For the browser harness only, and only for a context made with
+   * `bloomFormat: "u8"` — WebGL1 cannot read a half-float target back.
+   */
+  readBloom() {
+    const gl = this.gl;
+    if (!gl || !this._bloom || this._bloomType !== gl.UNSIGNED_BYTE) return null;
+    const { levels } = this._bloom;
+    const level = levels[0];
+    const target = levels.length > 1 ? level.up : level.down;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    const bytes = new Uint8Array(level.w * level.h * 4);
+    gl.readPixels(0, 0, level.w, level.h, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const data = new Float32Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) data[i] = bytes[i] / 255;
+    return { width: level.w, height: level.h, data };
   }
 
   _buildProgram(gl, vsrc, fsrc) {
@@ -556,6 +835,8 @@ export class StageGL {
     const program = gl.createProgram();
     gl.attachShader(program, vs);
     gl.attachShader(program, fs);
+    // Every program draws the same triangle from attribute 0.
+    gl.bindAttribLocation(program, 0, "a_pos");
     gl.linkProgram(program);
     gl.deleteShader(vs);
     gl.deleteShader(fs);
@@ -688,8 +969,12 @@ export class StageGL {
       this.canvas.width = width;
       this.canvas.height = height;
     }
-    gl.viewport(0, 0, width, height);
+    // The bloom renders into its own targets first; the main pass then reads it.
+    const bloomTex = params.glowAmount > 0 ? this._renderBloom(gl, art, params) : this._blank;
 
+    gl.viewport(0, 0, width, height);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, bloomTex);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, art.tex);
 
@@ -714,6 +999,7 @@ export class StageGL {
     gl.uniform2fv(u.rimRadius, params.rimRadius);
     gl.uniform3fv(u.rimColor, params.rimColor);
     gl.uniform1f(u.backAmount, params.backAmount);
+    gl.uniform1f(u.glowAmount, params.glowAmount);
     gl.uniform1f(u.skin, params.skin);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -751,9 +1037,13 @@ export class StageGL {
   _freeContext() {
     const gl = this.gl;
     this._dropTextures();
+    this._dropBloom();
     if (gl) {
       if (this._buffer) gl.deleteBuffer(this._buffer);
       if (this.program) gl.deleteProgram(this.program);
+      if (this._down) gl.deleteProgram(this._down.program);
+      if (this._up) gl.deleteProgram(this._up.program);
+      if (this._blank) gl.deleteTexture(this._blank);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     }
     this.canvas?.removeEventListener("webglcontextlost", this._onLost);
@@ -761,6 +1051,9 @@ export class StageGL {
     this.gl = null;
     this.program = null;
     this.uniforms = null;
+    this._down = null;
+    this._up = null;
+    this._blank = null;
     this._buffer = null;
     this._lost = false;
   }

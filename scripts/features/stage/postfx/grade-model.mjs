@@ -68,6 +68,9 @@ const dial = (min, max, step, dflt, neutral) =>
 //              shifted toward the light and blurred, cut out of itself — the
 //              inner-shadow model — screened on in the rim's colour
 //   backShadow the side turned away from the lamp, darkened
+//   glow       the art's own highlights, bloomed and screened back on — and
+//              spilling past the outline, which is the one place the pass
+//              draws outside the art's coverage
 //
 // `light` is not a layer: it is the one light the scene has, shared by every
 // layer that has a direction, so every character is lit from the same side.
@@ -110,6 +113,14 @@ export const SECTIONS = Object.freeze({
   backShadow: Object.freeze({
     amount: dial(0, 100, 1, 35, 0),
   }),
+  glow: Object.freeze({
+    amount: dial(0, 100, 1, 20, 0),
+    /** How far the bloom spreads: 0 keeps it tight to the highlight, 100 lets
+     *  the widest level of the bloom pyramid dominate. */
+    radius: dial(0, 100, 1, 40),
+    /** How bright a part of the art must be to glow at all. */
+    threshold: dial(0, 100, 1, 65),
+  }),
   skin: Object.freeze({
     guard: dial(0, 100, 1, 50),
   }),
@@ -128,6 +139,19 @@ export const RIM_MAX_WIDTH = 0.06;
 /** How far the back shadow darkens the far side at `amount` 100, in linear
  *  light. Never to black: a figure's shadow side still has the room in it. */
 export const BACK_SHADOW_MAX = 0.7;
+
+/** Width of the glow's threshold knee, in encoded luma. */
+export const GLOW_KNEE = 0.15;
+
+/** Glow strength at `amount` 100. */
+export const GLOW_GAIN = 1.2;
+
+/**
+ * Levels in the bloom pyramid. Each halves the resolution of the one before,
+ * starting at half the render size, so five reach about 1/64 of it — wide
+ * enough for a soft glow that fills the air around a character.
+ */
+export const GLOW_LEVELS = 5;
 
 /** Taps on the ring the rim's blur samples, plus one at the centre. */
 export const RIM_TAPS = 8;
@@ -363,6 +387,9 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
     rimRadius: [blur / asp, blur],
     rimColor: hexToRgb(g.rim.color),
     backAmount: (g.backShadow.amount / 100) * BACK_SHADOW_MAX,
+    glowAmount: g.glow.amount / 100,
+    glowSpread: g.glow.radius / 100,
+    glowThreshold: g.glow.threshold / 100,
     skin: g.skin.guard / 100,
   };
 }
@@ -744,6 +771,196 @@ export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1) {
 
   c = gamutFit(c);
   return srgb.map((x, i) => Math.min(Math.max(x + (toSRGB(c[i]) - toSRGB(lin[i])), 0), 1));
+}
+
+// ── Bloom ──
+//
+// The glow is a bloom: the art's bright parts, blurred over a pyramid of
+// progressively smaller images and blended back up. A single pass of taps over
+// a wide radius leaves visible copies of every sharp highlight; a pyramid does
+// not, at any radius, because each level only ever blurs by a pixel or two of
+// its own resolution.
+//
+//   down 0   the bright pass, at half resolution: four bilinear taps, each
+//            thresholded, so every output texel averages a 4×4 block
+//   down k   the same four-tap box, from the level above
+//   up k     the level's own down result, mixed with a tent-filtered copy of
+//            the level below by a per-level weight (`bloomWeights`)
+//
+// The weights make the result the *normalised sum* of every level, each one
+// `spread` times the weight of the level above it: at spread 0 only the finest
+// level counts, at spread 1 every level counts equally. A plain mix toward the
+// coarser level would let the coarsest replace the rest and wash the core out;
+// a plain sum would overflow an 8-bit render target. The weighted mix is that
+// normalised sum, one level at a time, and never leaves 0..1.
+//
+// The images hold premultiplied bright colour. This reference runs the same
+// passes on the CPU, sampling exactly as the GPU does (bilinear between texel
+// centres, clamped at the edges), so the browser harness can compare them.
+
+/** A float RGBA image: `{ width, height, data }`, premultiplied. */
+function makeImage(width, height) {
+  return { width, height, data: new Float32Array(width * height * 4) };
+}
+
+/** Bilinear sample of an image at uv, clamped at the edges, like a texture. */
+export function sampleImage(img, u, v) {
+  const { width: W, height: H, data } = img;
+  const tx = Math.min(Math.max(u * W - 0.5, 0), W - 1);
+  const ty = Math.min(Math.max(v * H - 0.5, 0), H - 1);
+  const x0 = Math.floor(tx);
+  const y0 = Math.floor(ty);
+  const x1 = Math.min(x0 + 1, W - 1);
+  const y1 = Math.min(y0 + 1, H - 1);
+  const fx = tx - x0;
+  const fy = ty - y0;
+  const out = [0, 0, 0, 0];
+  for (let k = 0; k < 4; k++) {
+    const a = data[(y0 * W + x0) * 4 + k];
+    const b = data[(y0 * W + x1) * 4 + k];
+    const c = data[(y1 * W + x0) * 4 + k];
+    const d = data[(y1 * W + x1) * 4 + k];
+    out[k] = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+  }
+  return out;
+}
+
+/** The bright pass on one premultiplied texel: its colour, kept by how far its
+ *  luma clears the threshold. Premultiplied out. */
+export function brightPass(t, threshold) {
+  const a = Math.max(t[3], 0.0039);
+  const c = [t[0] / a, t[1] / a, t[2] / a];
+  const k = smoothstep(threshold, threshold + GLOW_KNEE, dot(c, LUMA)) * t[3];
+  return [c[0] * k, c[1] * k, c[2] * k, k];
+}
+
+/** Sizes of the pyramid for a render of `width` × `height`. */
+export function bloomSizes(width, height) {
+  const sizes = [];
+  let w = width;
+  let h = height;
+  for (let i = 0; i < GLOW_LEVELS; i++) {
+    w = Math.max(1, Math.round(w / 2));
+    h = Math.max(1, Math.round(h / 2));
+    sizes.push([w, h]);
+    if (w === 1 && h === 1) break;
+  }
+  return sizes;
+}
+
+/** Offsets of the four-tap box, in source texels. */
+export const DOWN_TAPS = Object.freeze([[-1, -1], [1, -1], [-1, 1], [1, 1]]);
+
+/** The four-tap box downsample; `bright` applies the bright pass per tap. */
+function downsample(src, w, h, threshold, bright) {
+  const out = makeImage(w, h);
+  const ox = 1 / src.width;
+  const oy = 1 / src.height;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w;
+      const v = (y + 0.5) / h;
+      const acc = [0, 0, 0, 0];
+      for (const [dx, dy] of DOWN_TAPS) {
+        let t = sampleImage(src, u + dx * ox, v + dy * oy);
+        if (bright) t = brightPass(t, threshold);
+        for (let k = 0; k < 4; k++) acc[k] += t[k] * 0.25;
+      }
+      out.data.set(acc, (y * w + x) * 4);
+    }
+  }
+  return out;
+}
+
+/**
+ * The mix weight of each up step, finest first. With N the normaliser of the
+ * accumulated level below (N = 1 at the coarsest), the step is
+ * (fine + s·N·tent) / (1 + s·N), which is a mix toward the tent by s·N/(1+s·N).
+ */
+export function bloomWeights(levels, spread) {
+  const weights = new Array(Math.max(levels - 1, 0));
+  let n = 1;
+  for (let i = levels - 2; i >= 0; i--) {
+    weights[i] = (spread * n) / (1 + spread * n);
+    n = 1 + spread * n;
+  }
+  return weights;
+}
+
+/** The up step: this level's own result, mixed toward a 3×3 tent of the
+ *  coarser level by `weight`. */
+function upsample(fine, coarse, weight) {
+  const out = makeImage(fine.width, fine.height);
+  const ox = 1 / coarse.width;
+  const oy = 1 / coarse.height;
+  for (let y = 0; y < fine.height; y++) {
+    for (let x = 0; x < fine.width; x++) {
+      const u = (x + 0.5) / fine.width;
+      const v = (y + 0.5) / fine.height;
+      const tent = [0, 0, 0, 0];
+      for (let j = -1; j <= 1; j++) {
+        for (let i = -1; i <= 1; i++) {
+          const w = ((i === 0 ? 2 : 1) * (j === 0 ? 2 : 1)) / 16;
+          const t = sampleImage(coarse, u + i * ox, v + j * oy);
+          for (let k = 0; k < 4; k++) tent[k] += t[k] * w;
+        }
+      }
+      const f = sampleImage(fine, u, v);
+      out.data.set(f.map((x2, k) => x2 + (tent[k] - x2) * weight), (y * fine.width + x) * 4);
+    }
+  }
+  return out;
+}
+
+/**
+ * The whole pyramid, on the CPU. `art` is the premultiplied art image. Returns
+ * the finished bloom at half resolution — what the shader samples as `u_bloom`.
+ */
+export function bloomPyramid(art, p) {
+  const sizes = bloomSizes(art.width, art.height);
+  const down = [];
+  let src = art;
+  sizes.forEach(([w, h], i) => {
+    src = downsample(src, w, h, p.glowThreshold, i === 0);
+    down.push(src);
+  });
+  const weights = bloomWeights(down.length, p.glowSpread);
+  let up = down[down.length - 1];
+  for (let i = down.length - 2; i >= 0; i--) up = upsample(down[i], up, weights[i]);
+  return up;
+}
+
+/** The glow's emission from a bloom sample, encoded. Scaled by the scene's
+ *  darkness, so a dark room's highlights glow less. */
+export function glowFrom(bloom, p) {
+  const k = p.glowAmount * GLOW_GAIN * p.darkGain;
+  return [0, 1, 2].map((i) => Math.min(Math.max(bloom[i] * k, 0), 1));
+}
+
+/**
+ * The shader's whole output for one fragment: premultiplied [r, g, b, a], after
+ * master intensity. `texel` is the premultiplied texture value at `uv`,
+ * `sample` samples the art anywhere, and `bloomAt` samples the finished bloom
+ * — exactly what the shader reads.
+ */
+export function shadeFragment(texel, uv, p, sample, intensity = 1, bloomAt = null) {
+  const a = texel[3];
+  const G = p.glowAmount > 0 && bloomAt ? glowFrom(bloomAt(uv[0], uv[1]), p) : null;
+  if (a <= 0) {
+    if (!G) return [0, 0, 0, 0];
+    const ga = Math.max(G[0], G[1], G[2]);
+    return [G[0] * intensity, G[1] * intensity, G[2] * intensity, ga * intensity];
+  }
+  const div = Math.max(a, 0.0039);
+  const srgb = [texel[0] / div, texel[1] / div, texel[2] / div];
+  let graded = shadePixel(srgb, uv, p, (u, v) => sample(u, v)[3], a);
+  if (G) graded = graded.map((x, i) => screen(Math.min(Math.max(x, 0), 1), G[i]));
+  const out = srgb.map((x, i) => x + (graded[i] - x) * intensity);
+  if (G && a < 1) {
+    const ga = Math.max(G[0], G[1], G[2]) * intensity;
+    return [...out.map((x, i) => x * a + G[i] * intensity * (1 - a)), a + ga * (1 - a)];
+  }
+  return [out[0] * a, out[1] * a, out[2] * a, a];
 }
 
 /** Basic correction alone, on an encoded colour — the first layer in
