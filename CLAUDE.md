@@ -1534,3 +1534,21 @@ grep -rhoE '@keyframes\s+gl-[A-Za-z0-9_-]+' styles/ | sort | uniq -d
 - Don't register anything under an id other than `gluniverse-foundry-modules`.
 - Don't rename existing i18n keys or CSS class prefixes (breaks migration/world data).
 - Don't move side effects to import time in feature adapters.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `patcharapon-j/gluniverse-foundry-modules`, via the
+`gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name (`needs-triage`,
+`needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root, read alongside
+this file and the per-feature `docs/*.md`. See `docs/agents/domain.md`.
