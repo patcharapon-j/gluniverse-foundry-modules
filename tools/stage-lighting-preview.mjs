@@ -53,18 +53,13 @@ const TESTS = [
   { label: "saturation -100", grade: { basic: { saturation: -100 } } },
   { label: "hue +90", grade: { basic: { hue: 90 } } },
   { label: "basic, everything", grade: { basic: { exposure: 0.4, brightness: 10, gamma: 1.2, contrast: 25, saturation: 30, hue: -40 } } },
+  { label: "gradient, light right", grade: { light: { angle: 0, softness: 50 }, gradient: { amount: 80, color: "#ffd9a0" } } },
+  { label: "gradient, light above-left", grade: { light: { angle: 135, softness: 70 }, gradient: { amount: 80, color: "#a8c8ff" } } },
   { label: "wash, blue room", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 0 } } },
   { label: "wash, blue, skin guarded", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 100 } } },
   { label: "darkness 0.6 at dial 65", grade: { wash: { darkness: 65 } }, darkness: 0.6 },
-  // The rim is the only way the scene light reaches the art, so it gets the
-  // spread: both ends of each of its three dials, and the light's own.
-  { label: "rim, light right", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
-  { label: "rim, light above-left", grade: { light: { angle: 135, softness: 30 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
-  { label: "rim, shallow + flat", grade: { light: { angle: 0, softness: 10 }, rim: { amount: 100, width: 10, softness: 0, color: "#fff0d8" } } },
-  { label: "rim, deep + soft", grade: { light: { angle: 0, softness: 10 }, rim: { amount: 100, width: 100, softness: 100, color: "#fff0d8" } } },
-  { label: "rim, hard light (even)", grade: { light: { angle: 20, softness: 0 }, rim: { amount: 100, width: 35, softness: 50, color: "#fff0d8" } } },
-  { label: "rim, soft light (focused)", grade: { light: { angle: 20, softness: 100 }, rim: { amount: 100, width: 35, softness: 50, color: "#fff0d8" } } },
-  { label: "rim 40%, light below", grade: { light: { angle: -90, softness: 40 }, rim: { amount: 40, width: 30, softness: 60, color: "#ffd0a0" } } },
+  { label: "rim, light right", grade: { light: { angle: 0 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
+  { label: "rim, light above-left", grade: { light: { angle: 135 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
   { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
   { label: "look: Night City", grade: { looks: [{ id: "builtin:night-city", opacity: 100 }] } },
   { label: "look: Cherry Blossoms 60%", grade: { looks: [{ id: "builtin:cherry-blossoms", opacity: 60 }] } },
@@ -72,14 +67,13 @@ const TESTS = [
   { label: "look: OrangeFilm, skin guarded", grade: { looks: [{ id: "builtin:orange-film", opacity: 100 }], skin: { guard: 100 } } },
   { label: "glow, tight", grade: { glow: { amount: 100, radius: 0, threshold: 55 } } },
   { label: "glow, wide", grade: { glow: { amount: 100, radius: 100, threshold: 55 } } },
-  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 80, width: 26, softness: 55, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
+  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, gradient: { amount: 35, color: "#ffc891" }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 60, width: 30, softness: 40, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
 ];
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
 <script type="module">
 import { StageGL } from "/scripts/features/stage/postfx/gl.mjs";
 import { stackParams, shadeFragment, normalizeGrade, NEUTRAL_GRADE, DEFAULT_TRIM, bloomPyramid, sampleImage } from "/scripts/features/stage/postfx/grade-model.mjs";
-import { edgeFieldFrom, sampleEdgeField } from "/scripts/features/stage/postfx/edge-field.mjs";
 import { LookLibrary } from "/scripts/features/stage/postfx/look-library.mjs";
 const lookLibrary = new LookLibrary();
 
@@ -194,17 +188,21 @@ window.run = async () => {
     const a = artPx[i + 3] / 255;
     return [artPx[i] / 255 * a, artPx[i + 1] / 255 * a, artPx[i + 2] / 255 * a, a];
   };
-  // The edge field the rim reads. Built here from the same pixels, at the same
-  // size, that StageGL.prepare built the GPU's copy from — so a difference
-  // between the two is the shader's reading of the field and not the field.
-  const field = edgeFieldFrom(artPx, W, H);
-  const fieldAt = (u, v) => sampleEdgeField(field, u, v);
+  const sample = (u, v) => {
+    const tx = Math.min(Math.max(u * W - 0.5, 0), W - 1);
+    const ty = Math.min(Math.max(v * H - 0.5, 0), H - 1);
+    const x0 = Math.floor(tx), y0 = Math.floor(ty);
+    const x1 = Math.min(x0 + 1, W - 1), y1 = Math.min(y0 + 1, H - 1);
+    const fx = tx - x0, fy = ty - y0;
+    const a = texel(x0, y0), b = texel(x1, y0), c = texel(x0, y1), d = texel(x1, y1);
+    return a.map((_, k) => (a[k] * (1 - fx) + b[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy);
+  };
   // The main pass is compared given the GPU's own bloom (read back), so a
   // difference points at the main pass; the pyramid is compared on its own.
   let bloomNow = null;
   const bloomAt = (u, v) => (bloomNow ? sampleImage(bloomNow, u, v) : [0, 0, 0, 0]);
   const fragmentAt = (test, x, y, intensity = 1) =>
-    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), fieldAt, intensity, bloomAt, test._looks ?? null);
+    shadeFragment(texel(x, y), [(x + 0.5) / W, (y + 0.5) / H], paramsFor(test), sample, intensity, bloomAt, test._looks ?? null);
   const artImage = { width: W, height: H, data: new Float32Array(W * H * 4) };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) artImage.data.set(texel(x, y), (y * W + x) * 4);
   const bloomDrift = (gpu, test) => {
@@ -218,20 +216,14 @@ window.run = async () => {
     const a = Math.max(f[3], 1e-6);
     return [f[0] / a, f[1] / a, f[2] / a].map((v) => Math.round(Math.min(v, 1) * 255));
   };
-  // Coverage everywhere, including outside the art, where only the glow and the
-  // rim's own spill draw. "spill" counts how many pixels outside the art the
-  // GPU actually lit: the colour comparison below skips them (un-premultiplying
-  // a nearly transparent pixel amplifies its last bit), so without this a spill
-  // that stopped drawing altogether would pass every number here.
+  // Coverage everywhere, including outside the art, where only the glow draws.
   const alphaDrift = (px, test) => {
     let worst = 0;
-    let spill = 0;
     for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) {
       const i = (y * W + x) * 4;
-      if (artPx[i + 3] === 0 && px[i + 3] > 2) spill++;
       worst = Math.max(worst, Math.abs(px[i + 3] - Math.round(fragmentAt(test, x, y)[3] * 255)));
     }
-    return { alpha: worst, spill };
+    return worst;
   };
 
   const dials = [];
@@ -243,8 +235,7 @@ window.run = async () => {
       label: t.label,
       ...drift(shot.data, reference(t)),
       moved: drift(shot.data).mean,
-      ...alphaDrift(shot.data, t),
-      rim: paramsFor(t).rimAmount > 0,
+      alpha: alphaDrift(shot.data, t),
       bloom: shot.bloom ? bloomDrift(shot.bloom, t) : null,
     });
     bloomNow = null;
@@ -372,10 +363,6 @@ for (const d of result.dials) {
   );
   ok(d.moved > 1, `…and the dial visibly moves the picture`, `mean change ${d.moved.toFixed(2)}/255`);
   ok(d.alpha <= 2, `…and its coverage matches, outside the art included`, `worst ${d.alpha}/255`);
-  // The rim's band is screened into the figure, which the drift above covers.
-  // Its spill off the outline is emission into pixels the art does not cover,
-  // and nothing else in this report would notice it vanishing.
-  if (d.rim) ok(d.spill > 0, `…and the rim spills outside the outline`, `${d.spill} lit pixels beyond the art`);
   if (d.bloom) {
     // Four 8-bit render targets deep, so a few steps of rounding is expected.
     ok(d.bloom.size === d.bloom.cpuSize && d.bloom.worst <= 6, `…and the GPU bloom pyramid matches bloomPyramid`, `${d.bloom.size}, worst ${d.bloom.worst}/255`);

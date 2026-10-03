@@ -44,6 +44,7 @@ const fmt = (key, data) => game.i18n.format(`GLSTAGE.grade.${key}`, data);
 export const GRADE_UI = Object.freeze([
     { section: 'basic', controls: ['exposure', 'brightness', 'contrast', 'gamma', 'saturation', 'hue'] },
     { section: 'light', controls: ['angle', 'softness'], pad: true },
+    { section: 'gradient', controls: ['amount', 'color'] },
     { section: 'wash', controls: ['amount', 'color', 'darkness'] },
     { section: 'rim', controls: ['amount', 'width', 'softness', 'color'] },
     { section: 'backShadow', controls: ['amount'] },

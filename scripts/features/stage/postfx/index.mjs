@@ -40,11 +40,10 @@ const WRAP_CLASSES = ["glstage-pp-on", "glstage-pp-css"];
 const WRAP_VARS = ["--glstage-pp-filter"];
 
 /**
- * The CSS gradient angle that puts a ramp's first stop on the side the light is
- * at, for a light at `deg` (0 right, 90 up). CSS angles run clockwise from "to
- * top", and the first stop sits at the end *opposite* the angle, so the gradient
- * has to point away from the light. The back shadow passes `deg + 180`, which
- * lands its first stop on the far side.
+ * The CSS gradient angle that puts the lit colour on the lit side, for a light
+ * at `deg` (0 right, 90 up). CSS angles run clockwise from "to top", and the
+ * first stop sits at the end *opposite* the angle, so the gradient has to point
+ * away from the light.
  */
 export function cssGradientAngle(deg) {
   return (((-90 - deg) % 360) + 360) % 360;
@@ -55,7 +54,7 @@ export function cssGradientAngle(deg) {
  *
  * Approximate by necessity. CSS filters run per channel in encoded light and
  * have no lift or midtone control, so brightness, gamma and the scene's
- * darkness are carried by `brightness()` alone; the wash and the back shadow are
+ * darkness are carried by `brightness()` alone; the gradient and the wash are
  * overlays masked to the art. Master intensity scales every value toward its
  * neutral rather than crossfading pixels. Neutral values — or intensity 0 —
  * produce no filter and fully transparent overlays.
@@ -86,15 +85,15 @@ export function cssFallbackFor(grade, trim, intensity, darkness = 0) {
 
   return {
     filter: parts.join(" "),
+    gradient: {
+      color: g.gradient.color,
+      angle: cssGradientAngle(g.light.angle),
+      opacity: p.gradAmount * k,
+    },
     wash: { color: washTint, opacity: p.washAmount * k },
-    // The back shadow is a ramp from the dark side. The rim, the glow and the
-    // looks have no honest CSS equivalent — all three need the art's pixels —
-    // so the fallback leaves them out rather than faking them. Since the rim is
-    // now the only way the scene light reaches the art, that means a slot on
-    // the fallback gets the room's colour and the shadow side and no light:
-    // less, never different. A `drop-shadow` offset toward the lamp would fake
-    // the rim's outer spill, but not the band inside the outline that is the
-    // whole effect, and a halo with no band on it reads as a mistake.
+    // The back shadow is the same ramp from the other side. The rim and the
+    // glow have no honest CSS equivalent — both need the art's pixels — so the
+    // fallback leaves them out rather than faking them with an outer shadow.
     shade: { angle: cssGradientAngle(g.light.angle + 180), opacity: p.backAmount * k },
   };
 }
@@ -407,7 +406,10 @@ export class StagePostFX {
       layer = document.createElement("div");
       layer.className = "glstage-pp-fallback";
       layer.setAttribute("aria-hidden", "true");
-      layer.innerHTML = '<span class="glstage-pp-wash"></span><span class="glstage-pp-shade"></span>';
+      layer.innerHTML =
+        '<span class="glstage-pp-wash"></span>' +
+        '<span class="glstage-pp-gradient"></span>' +
+        '<span class="glstage-pp-shade"></span>';
       wrap.appendChild(layer);
       state.overlay = layer;
     }
@@ -415,6 +417,9 @@ export class StagePostFX {
     // :root, which would repaint every feature loaded after Stage.
     const set = (k, v) => layer.style.setProperty(k, v);
     set("--glstage-pp-mask", `url("${state.src.replace(/["\\]/g, "\\$&")}")`);
+    set("--glstage-pp-grad-color", css.gradient.color);
+    set("--glstage-pp-grad-angle", `${css.gradient.angle}deg`);
+    set("--glstage-pp-grad-opacity", css.gradient.opacity.toFixed(4));
     set("--glstage-pp-wash-color", css.wash.color);
     set("--glstage-pp-wash-opacity", css.wash.opacity.toFixed(4));
     set("--glstage-pp-shade-angle", `${css.shade.angle}deg`);

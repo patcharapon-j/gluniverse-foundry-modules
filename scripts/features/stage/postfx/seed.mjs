@@ -102,11 +102,10 @@ export function seedFromSample(sample, base) {
   // The wash is the room's hue, saturated: the background's average is much
   // greyer than the light it reads as (roomCast).
   g.wash.color = toHex(roomCast(ambient));
-  // The rim is the scene's lamp seen at a grazing angle: the background's own
-  // colour where the light appears to be, read as a light rather than as paint
-  // (toKeyLight) and then hotter again, because a grazing edge is the brightest
-  // thing a lamp does.
+  // The light's colour is the background's where the light appears to be.
   const key = columnAt(sample, sample.centroid?.[0] ?? 0.5);
+  g.gradient.color = toHex(toKeyLight(key));
+  // The rim is the same lamp seen at a grazing angle: its colour, but hotter.
   g.rim.color = toHex(mix(toKeyLight(key), [1, 1, 1], RIM_WHITEN));
   if (!sample.degraded && sample.centroid) {
     g.light.angle = lightAngleFrom(sample.centroid, sample.aspect);

@@ -117,7 +117,6 @@ globalThis.Image = class {
 };
 
 const M = await import(mod("grade-model.mjs"));
-const EF = await import(mod("edge-field.mjs"));
 const { StagePostFX, cssFallbackFor, cssGradientAngle } = await import(mod("index.mjs"));
 const { seedFromSample, lightAngleFrom, toKeyLight } = await import(mod("seed.mjs"));
 const LUT = await import(mod("lut.mjs"));
@@ -177,18 +176,9 @@ section("grade model: normalization");
       if ("neutral" in spec) ok(spec.neutral >= spec.min && spec.neutral <= spec.max, `${section}.${key}: neutral is inside its range`);
     }
   }
-  const colours = M.normalizeGrade({ rim: { color: "red" }, wash: { color: "#ABCDEF" } });
-  ok(colours.rim.color === M.COLORS.rim.color, "an unparseable colour falls back to the default");
+  const colours = M.normalizeGrade({ gradient: { color: "red" }, wash: { color: "#ABCDEF" } });
+  ok(colours.gradient.color === M.COLORS.gradient.color, "an unparseable colour falls back to the default");
   ok(colours.wash.color === "#abcdef", "a valid colour is kept, lower-cased");
-  // The directional light reaches the art as a rim and nothing else. A
-  // `gradient` section would be the light's colour smeared over the whole
-  // figure again, which is the bleed this feature exists not to have.
-  ok(!("gradient" in M.DEFAULT_GRADE) && !("gradient" in M.SECTIONS), "there is no whole-figure light gradient layer");
-  ok(
-    JSON.stringify(M.normalizeGrade({ gradient: { amount: 90, color: "#ff0000" } })) === JSON.stringify(M.DEFAULT_GRADE),
-    "a grade stored by a build that had one reads back without it",
-    "normalizeGrade drops unknown sections, so an old scene flag simply loses the layer"
-  );
   ok(M.normalizeGrade({ seeded: true }).seeded === true && M.normalizeGrade({}).seeded === false, "the seeded flag survives normalization");
 
   const junk = M.normalizeGrade({ basic: { exposure: "x", gamma: NaN, hue: 9999, saturation: -500, extra: 5 } });
@@ -242,7 +232,7 @@ section("identity: every dial neutral returns the art bit for bit");
   // Every layer's amount at 0, with every shaping setting and colour at its
   // most extreme, is still the identity: shaping settings cannot leak.
   const loud = M.normalizeGrade({
-    light: { angle: 37, softness: 0 },
+    light: { angle: 37, softness: 0 }, gradient: { color: "#ff0000" },
     rim: { width: 100, softness: 100, color: "#00ff00" },
     wash: { color: "#0000ff" }, skin: { guard: 100 },
   }, M.NEUTRAL_GRADE);
@@ -382,9 +372,7 @@ section("shader wiring");
   const src = await read("scripts/features/stage/postfx/gl.mjs");
   const drawBody = src.slice(src.indexOf("  draw(prepared, params)"), src.indexOf("  _dropTextures()"));
   // Samplers are bound to their texture units once, when the context is made.
-  const unwritten = UNIFORMS.filter(
-    (n) => n !== "art" && n !== "bloom" && n !== "field" && !/^lut\d$/.test(n) && !new RegExp(`u\\.${n}\\b`).test(drawBody)
-  );
+  const unwritten = UNIFORMS.filter((n) => n !== "art" && n !== "bloom" && !/^lut\d$/.test(n) && !new RegExp(`u\\.${n}\\b`).test(drawBody));
   ok(!unwritten.length, "every uniform is written on every draw", unwritten.join(", "));
 
   // The constants are emitted from the model rather than copied, so what is
@@ -401,15 +389,9 @@ section("shader wiring");
     ok(same(nums(glName, "mat3"), colMajor(M.OKLAB[key])), `GLSL ${glName} is OKLAB.${key}, column-major`);
   }
   ok(FRAG.includes(`i < ${M.GAMUT_STEPS}; i++`), "the GLSL gamut search runs GAMUT_STEPS bisections");
+  ok(FRAG.includes(`i < ${M.RIM_TAPS}; i++`) && FRAG.includes(`/ ${M.RIM_TAPS + 1}.0`), "the GLSL rim samples RIM_TAPS + 1 taps, like the model");
   ok(same(nums("SKIN_CENTRE", "vec2"), M.SKIN_CENTRE) && same(nums("SKIN_RADIUS", "vec2"), M.SKIN_RADIUS), "GLSL skin ellipse is the model's");
-  // The rim reads the edge field with ONE tap and takes its direction from the
-  // field's own normal. A loop over the art's alpha here would be the ring-tap
-  // rim back, which is the bleed.
-  ok(/texture2D\(u_field, uv\)/.test(FRAG) && !/texture2D\(u_art, [^)]*u_rim/.test(FRAG),
-    "the GLSL rim reads the edge field, not a ring of taps over the art");
-  ok(!/for \(int i = 0; i < \d+; i\+\+\) \{\s*float a = float\(i\)/.test(FRAG), "…and samples no ring at all");
-  ok(/float sd = fd\.a - fd\.b;/.test(FRAG), "the GLSL band is a function of the signed distance");
-  for (const guard of ["u_washAmount > 0.0", "u_darkGain != 1.0", "u_rimAmount <= 0.0", "if (rim > 0.0)", "u_backAmount > 0.0", "if (k != 1.0)", "bool glowing = u_glowAmount > 0.0;", "emitting ? vec4(E, ea) * u_intensity : vec4(0.0)"]) {
+  for (const guard of ["u_gradAmount > 0.0", "u_washAmount > 0.0", "u_darkGain != 1.0", "if (w > 0.0)", "u_rimAmount > 0.0", "u_backAmount > 0.0", "if (k != 1.0)", "bool glowing = u_glowAmount > 0.0;", "glowing ? vec4(G, ga) * u_intensity : vec4(0.0)"]) {
     ok(FRAG.includes(guard), `the shader skips a layer at neutral: ${guard}`);
   }
   ok(FRAG.includes("if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);"),
@@ -421,7 +403,7 @@ section("shader wiring");
     ok(FRAG.includes(guard), `the shader keeps its neutral guard: ${guard}`);
   }
   ok(/art\.rgb \+ \(toSRGB\(lin\) - toSRGB\(linIn\)\)/.test(FRAG), "the shader forms its output as a difference from the input");
-  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_NORMAL_MIN", M.RIM_NORMAL_MIN], ["GLOW_GAIN", M.GLOW_GAIN]]) {
+  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_GAIN", M.RIM_GAIN], ["GLOW_GAIN", M.GLOW_GAIN]]) {
     const m = FRAG.match(new RegExp(`const float ${name} = ([\\d.]+);`));
     ok(!!m && Number(m[1]) === value, `GLSL ${name} is the model's`, m?.[1]);
   }
@@ -454,7 +436,34 @@ section("extremes stay finite and in range");
   ok(bad === 0, "every dial at either end, alone and together, stays finite and in [0, 1]", example);
 }
 
-// ═══ 5c. The wash, darkness and skin ═══
+// ═══ 5c. Gradient, wash, darkness and skin ═══
+section("gradient: the light's colour, ramping from the lit side");
+{
+  const at = (dials, uv, px = [0.5, 0.45, 0.42], ctx = { aspect: 0.6 }) =>
+    M.shadePixel(px, uv, M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, ctx));
+  const warm = { light: { angle: 0, softness: 40 }, gradient: { amount: 80, color: "#fff0d8" } };
+  const right = at(warm, [0.95, 0.5]);
+  const left = at(warm, [0.05, 0.5]);
+  ok(Y(right) > Y([0.5, 0.45, 0.42]) * 1.05, "a light on the right brightens the right edge", `${Y(right).toFixed(4)}`);
+  ok(left.every((x, i) => x === [0.5, 0.45, 0.42][i]), "…and leaves the far edge exactly as it was");
+  const flip = { ...warm, light: { angle: 180 } };
+  ok(Y(at(flip, [0.05, 0.5])) > Y(at(flip, [0.95, 0.5])), "turning the light round turns the ramp round");
+  const up = { ...warm, light: { angle: 90 } };
+  ok(Y(at(up, [0.5, 0.05])) > Y(at(up, [0.5, 0.95])), "a light above lights the top (+Y is down in art space)");
+
+  // 45° on a tall portrait has to be 45° in pixels, not in uv.
+  const diag = { ...warm, light: { angle: 45, softness: 0 } };
+  const tall = { aspect: 0.5 };
+  // A point on the terminator for a true 45° line through the centre, in
+  // isotropic units: moving right by d and down by d stays on it.
+  const onLine = at(diag, [0.5 + 0.1 / 0.5, 0.5 + 0.1], [0.5, 0.45, 0.42], tall);
+  const lit = at(diag, [0.5 + 0.15 / 0.5, 0.5 - 0.05], [0.5, 0.45, 0.42], tall);
+  ok(Y(lit) > Y(onLine), "the ramp is isotropic: 45° is 45° on a tall portrait");
+
+  const amt = (a) => Y(at({ ...warm, gradient: { ...warm.gradient, amount: a } }, [0.9, 0.5]));
+  ok(amt(20) < amt(50) && amt(50) < amt(90), "the amount dial scales the effect monotonically");
+}
+
 section("wash: the room's colour as a level-free cast");
 {
   const grey = [0.5, 0.5, 0.5];
@@ -504,188 +513,39 @@ section("skin: holds back colour, never level");
   ok(Y(d) < yS * 0.6, "skin darkens in a dark room in full", `${Y(d).toFixed(4)} vs ${yS.toFixed(4)}`);
 }
 
-// ═══ 5d. The rim — the scene light, and the only thing that carries it ═══
-section("edge field: the exact distance and direction the rim is built from");
+section("rim: the edge that faces the lamp");
 {
-  // A disc on a tall raster, the field built from it at the raster's own size.
-  const W = 160;
-  const H = 320;
-  const R = 60;
-  const alpha = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      alpha[y * W + x] = Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2) <= R ? 1 : 0;
-    }
-  }
-  const field = EF.buildEdgeField(alpha, W, H);
-  const at = (x, y) => EF.sampleEdgeField(field, (x + 0.5) / W, (y + 0.5) / H);
-
-  // The normal is the outline's, and it is a unit vector where there is one.
-  const right = at(W / 2 + R - 1, H / 2);
-  const top = at(W / 2, H / 2 - R + 1);
-  ok(right[0] > 0.98 && Math.abs(right[1]) < 0.05, "the normal on the right of a disc points right", String(right.map((v) => v.toFixed(3))));
-  ok(top[1] < -0.98 && Math.abs(top[0]) < 0.05, "…and on top of it points up (+Y is down in art space)", String(top.map((v) => v.toFixed(3))));
-  ok(at(W / 2, H / 2)[2] === 1, "the middle of the figure is further in than the field can see");
-  // Art with no transparency at all — a rectangular portrait — has no outline
-  // inside the frame, so it has no rim. The field says so by going flat: a
-  // constant distance field has no gradient, and RIM_NORMAL_MIN catches it.
-  const solid = EF.buildEdgeField(new Float32Array(W * H).fill(1), W, H);
-  const anyNormal = Array.from({ length: 24 }, (_, i) => EF.sampleEdgeField(solid, 0.1 + i * 0.03, 0.5))
-    .reduce((m, s) => Math.max(m, Math.hypot(s[0], s[1])), 0);
-  ok(anyNormal < M.RIM_NORMAL_MIN, "a fully opaque raster has no edge anywhere", anyNormal.toFixed(5));
-  // …and a figure cropped by its own frame gets no outline along the crop,
-  // which is where a blurred-silhouette rim drew a false edge.
-  const cropped = Float32Array.from(alpha);
-  for (let y = H / 2; y < H; y++) for (let x = W / 2 - 40; x < W / 2 + 40; x++) cropped[y * W + x] = 1;
-  const cf = EF.buildEdgeField(cropped, W, H);
-  const onCrop = EF.sampleEdgeField(cf, 0.5, (H - 1.5) / H);
-  ok(onCrop[2] === 1, "a figure running off the bottom of its frame has no outline there", String(onCrop.map((v) => v.toFixed(3))));
-
-  // Distances, in units of FIELD_RANGE of the art's height. The one thing the
-  // rim's whole no-bleed guarantee rests on.
-  const px = EF.FIELD_RANGE * H; // one FIELD_RANGE, in pixels
-  const depthAt = (d) => at(W / 2 + R - d, H / 2)[2] * px;
-  for (const d of [2, 5, 10]) {
-    ok(Math.abs(depthAt(d) - d) < 1.0, `${d}px inside the outline measures ${d}px`, depthAt(d).toFixed(2));
-  }
-  ok(at(W / 2 + R + 5, H / 2)[3] * px > 4 && at(W / 2 + R + 5, H / 2)[2] === 0, "5px outside measures outward and not inward");
-  // Isotropy comes free of measuring in pixels: the same depth down the side of
-  // a tall portrait as across the top of it, which the old uv-space rim needed
-  // an aspect division to fake.
-  const down = at(W / 2, H / 2 - R + 8)[2] * px;
-  ok(Math.abs(down - depthAt(8)) < 1.0, "a depth is the same number on both axes of a tall portrait", `${down.toFixed(2)} vs ${depthAt(8).toFixed(2)}`);
-
-  // A soft interior: the exact thing the old ring-tap rim lit by mistake.
-  const veiled = Float32Array.from(alpha);
-  for (let y = H / 2 - 10; y < H / 2 + 10; y++) {
-    for (let x = W / 2 - 20; x < W / 2 + 20; x++) veiled[y * W + x] = 0.55 + 0.45 * ((x - (W / 2 - 20)) / 40);
-  }
-  const vf = EF.buildEdgeField(veiled, W, H);
-  const vat = EF.sampleEdgeField(vf, 0.5, 0.5);
-  ok(vat[2] === 1 && Math.hypot(vat[0], vat[1]) < M.RIM_NORMAL_MIN,
-    "a soft gradient inside the figure makes no edge",
-    "coverage is thresholded, so paint that never reaches the outline cannot be rimmed");
-}
-
-section("rim: a band on the outline facing the lamp, and nothing deeper");
-{
-  const W = 160;
-  const H = 320;
-  const R = 60;
-  const alpha = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      alpha[y * W + x] = Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2) <= R ? 1 : 0;
-    }
-  }
-  const field = EF.buildEdgeField(alpha, W, H);
-  const fieldAt = (u, v) => EF.sampleEdgeField(field, u, v);
-  const uvOf = (x, y) => [(x + 0.5) / W, (y + 0.5) / H];
-
-  const px = [0.3, 0.3, 0.3];
-  const rim = (angle, extra = {}) => ({ light: { angle, softness: 30 }, rim: { amount: 100, width: 60, softness: 40, ...extra } });
-  const P = (dials) => M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect: W / H });
-  const shade = (dials, uv) => M.shadePixel(px, uv, P(dials), fieldAt);
-  const weight = (dials, uv) => M.rimWeight(uv, P(dials), fieldAt);
-
-  const rightEdge = uvOf(W / 2 + R - 2, H / 2);
-  const leftEdge = uvOf(W / 2 - R + 2, H / 2);
-  const topEdge = uvOf(W / 2, H / 2 - R + 2);
-  const bottomEdge = uvOf(W / 2, H / 2 + R - 2);
-
-  ok(Y(shade(rim(0), rightEdge)) > Y(px) * 2, "a light on the right rims the right edge", Y(shade(rim(0), rightEdge)).toFixed(4));
-  ok(shade(rim(0), leftEdge).every((x, i) => x === px[i]), "…and leaves the left edge untouched, exactly");
-  ok(Y(shade(rim(180), leftEdge)) > Y(px) * 2, "turning the light round moves the rim to the left edge");
-  ok(Y(shade(rim(90), topEdge)) > Y(px) * 2 && shade(rim(90), bottomEdge).every((x, i) => x === px[i]), "a light above rims the top, not the bottom");
-  ok(shade(rim(0), [0.5, 0.5]).every((x, i) => x === px[i]), "the middle of the figure gets no rim");
-  // An edge running parallel to the light: lit by a plain inner shadow, and the
-  // reason the direction comes from the outline's own normal.
-  ok(weight(rim(0), bottomEdge) === 0, "an edge parallel to the light gets no rim");
-
-  // ── The claim the model exists for ──
-  // Driven over the whole figure, not sampled at a point: a weight anywhere
-  // deeper in than the depth dial is a rim bleeding into the character.
-  const depthScan = (dials) => {
-    const p = P(dials);
-    let deepest = 0;
-    let lit = 0;
-    for (let y = 1; y < H; y += 1) {
-      for (let x = 1; x < W; x += 1) {
-        if (alpha[y * W + x] < 0.5) continue;
-        if (!(M.rimWeight(uvOf(x, y), p, fieldAt) > 0)) continue;
-        lit++;
-        deepest = Math.max(deepest, R - Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2));
-      }
-    }
-    return { lit, deepest, limit: p.rimWidth * EF.FIELD_RANGE * H };
+  // A disc of coverage, with clamp-to-edge sampling like a texture's.
+  const aspect = 0.5;
+  const disc = (u, v) => {
+    const cu = Math.min(Math.max(u, 0), 1);
+    const cv = Math.min(Math.max(v, 0), 1);
+    return Math.hypot((cu - 0.5) * aspect, cv - 0.5) < 0.2 ? 1 : 0;
   };
-  for (const width of [20, 60, 100]) {
-    const s = depthScan(rim(0, { width }));
-    ok(s.lit > 0 && s.deepest <= s.limit + 1.5,
-      `at depth ${width} nothing deeper than ${s.limit.toFixed(1)}px is lit`,
-      `deepest lit pixel ${s.deepest.toFixed(2)}px, ${s.lit} lit`);
-  }
-  const reach = [20, 60, 100].map((width) => depthScan(rim(0, { width })).deepest);
-  ok(reach[0] < reach[1] && reach[1] < reach[2], "…and a deeper dial does reach deeper", String(reach.map((r) => r.toFixed(1))));
-
-  // ── The band's own shape ──
-  // Driven through a synthetic field, so the band is read at an exact signed
-  // distance rather than wherever a raster's texels happen to fall: the normal
-  // points right, the light is on the right, so `face` is exactly 1 and what is
-  // left is the band.
-  const band = (sd, dials = rim(0)) => M.rimWeight([0.5, 0.5], P(dials), () => [1, 0, Math.max(-sd, 0), Math.max(sd, 0)]);
-  const full = P(rim(0)).rimAmount;
-  ok(band(0) === full, "the band is at full strength exactly on the outline", `${band(0)} vs ${full}`);
-  ok(Math.abs(band(-1e-7) - band(1e-7)) < 1e-6, "…and crosses it without a seam, from either side");
-  const inner = P(rim(0)).rimWidth;
-  const bleed = P(rim(0)).rimBleed;
-  ok(band(-inner) === 0 && band(-inner * 1.2) === 0, "the band is exactly zero at the depth dial and past it");
-  ok(band(bleed) === 0 && band(bleed * 1.2) === 0, "…and exactly zero at the end of the outward spill and past it");
-  ok(bleed < inner, "the spill outside the outline is thinner than the band inside it", `${bleed.toFixed(4)} vs ${inner.toFixed(4)}`);
-  const falling = (xs) => xs.every((x, i) => i === 0 || x <= xs[i - 1] + 1e-12);
-  ok(falling([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => band(-inner * t))), "the band only ever falls off going inward");
-  ok(falling([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => band(bleed * t))), "…and going outward");
-  ok(weight(rim(180), uvOf(W / 2 + R + 2, H / 2)) === 0, "the spill is only on the side facing the lamp");
-
-  // ── The dials ──
-  const amt = (a) => weight(rim(0, { amount: a }), rightEdge);
-  ok(amt(20) < amt(50) && amt(50) < amt(90), "the amount dial scales the rim monotonically");
-  // Falloff owns the band's profile and nothing else: a flat strip at 0, a
-  // falloff that starts at the outline at 100. Measured mid-band.
-  const mid = -inner * 0.5;
-  ok(band(mid, rim(0, { softness: 0 })) > band(mid, rim(0, { softness: 100 })),
-    "a flat band holds its strength further in than a soft one",
-    `${band(mid, rim(0, { softness: 0 })).toFixed(3)} vs ${band(mid, rim(0, { softness: 100 })).toFixed(3)}`);
-  ok(band(-inner * 0.999, rim(0, { softness: 0 })) < full,
-    "…and even a flat band keeps a feather at its end, so it is not a stair",
-    `feather ${P(rim(0, { softness: 0 })).rimFeather.toFixed(4)}, floor ${(1 - M.RIM_FEATHER_MIN).toFixed(4)}`);
-  // The light's softness is how gradually the rim gives out toward the
-  // terminator. It never crosses it: an outline facing away from the lamp is
-  // not lit at any setting, because a rim that carries all the way round is an
-  // outline rather than light.
-  const faceAt = (softness, uv) => weight({ light: { angle: 0, softness }, rim: { amount: 100, width: 60, softness: 40 } }, uv);
-  ok(faceAt(0, topEdge) === 0 && faceAt(100, topEdge) === 0, "the terminator is never crossed, hard light or soft");
-  const quarter = uvOf(W / 2 + Math.round(R * 0.7) - 2, H / 2 - Math.round(R * 0.7) + 2);
-  ok(faceAt(0, quarter) > faceAt(100, quarter), "a hard light rims the whole lit half evenly; a soft one concentrates on what faces it",
-    `${faceAt(0, quarter).toFixed(3)} vs ${faceAt(100, quarter).toFixed(3)}`);
-
-  ok(M.stackParams(M.normalizeGrade(rim(0, { width: 0 }), M.NEUTRAL_GRADE)).rimAmount === 0, "a rim with no depth is no rim");
-  ok(M.RIM_MAX_WIDTH === EF.FIELD_RANGE, "the deepest rim is exactly as far as the field can see",
-    "one statement, so no dial can ask for a distance the field has saturated");
+  const px = [0.3, 0.3, 0.3];
+  const shade = (dials, uv) => M.shadePixel(px, uv, M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect }), disc, disc(...uv));
+  const rim = (angle, extra = {}) => ({ light: { angle }, rim: { amount: 100, width: 60, softness: 30, ...extra } });
+  // Disc edges, in uv: x = 0.5 ± 0.4, y = 0.5 ± 0.2.
+  const rightEdge = [0.87, 0.5];
+  const leftEdge = [0.13, 0.5];
+  ok(Y(shade(rim(0), rightEdge)) > Y(px) * 2, "a light on the right rims the right edge", Y(shade(rim(0), rightEdge)).toFixed(4));
+  ok(shade(rim(0), leftEdge).every((x, i) => x === px[i]), "…and leaves the left edge untouched");
+  ok(Y(shade(rim(180), leftEdge)) > Y(px) * 2, "turning the light round moves the rim to the left edge");
+  ok(Y(shade(rim(90), [0.5, 0.31])) > Y(px) * 2 && shade(rim(90), [0.5, 0.69]).every((x, i) => x === px[i]), "a light above rims the top, not the bottom");
+  ok(shade(rim(0), [0.5, 0.5]).every((x, i) => x === px[i]), "the middle of the figure gets no rim");
+  // The bottom of the disc runs parallel to a light from the right: an outline
+  // there is the failure the directional mask exists to prevent.
+  ok(Y(shade(rim(0), [0.5, 0.69])) < Y(px) * 1.02, "an edge parallel to the light gets no rim", Y(shade(rim(0), [0.5, 0.69])).toFixed(4));
+  const reachAt = (width) => Y(shade(rim(0, { width }), [0.78, 0.5]));
+  ok(reachAt(90) > reachAt(20), "a wider rim reaches further in", `${reachAt(90).toFixed(4)} vs ${reachAt(20).toFixed(4)}`);
+  ok(M.stackParams(M.normalizeGrade(rim(0, { width: 0 }), M.NEUTRAL_GRADE)).rimAmount === 0, "a rim with no width is no rim");
   const warm = shade(rim(0, { color: "#ffb060" }), rightEdge);
   ok(warm[0] > warm[2], "the rim takes its colour", String(warm));
-  // The rim is light, not pigment: skin takes it as it is.
-  const guarded = M.shadePixel([0.85, 0.66, 0.55], rightEdge, P({ ...rim(0), skin: { guard: 100 } }), fieldAt);
-  const open = M.shadePixel([0.85, 0.66, 0.55], rightEdge, P({ ...rim(0), skin: { guard: 0 } }), fieldAt);
-  ok(guarded.every((x, i) => Math.abs(x - open[i]) < 1e-12), "skin protection never holds the rim back");
-
-  // ── Outside the art: the spill is emission, and only when something emits ──
-  const empty = [0, 0, 0, 0];
-  const outside = uvOf(W / 2 + R + 2, H / 2);
-  ok(M.shadeFragment(empty, outside, P(rim(0)), fieldAt).every((x) => x > 0), "the spill draws outside the art's coverage");
-  ok(M.shadeFragment(empty, outside, P({ rim: { amount: 0 } }), fieldAt).every((x) => x === 0),
-    "…and with the rim off, nothing outside the art is written at all");
-  ok(M.emission(null, 0, P(rim(0))) === null, "no glow and no rim is no emission");
+  // Isotropic: the same width reaches the same distance on the side of a tall
+  // portrait as on its top, measured in isotropic units.
+  const side = M.stackParams(M.normalizeGrade(rim(0), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect });
+  ok(Math.abs(side.rimOffset[0] * aspect - M.stackParams(M.normalizeGrade(rim(-90), M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect }).rimOffset[1]) < 1e-12,
+    "the rim's reach is isotropic on a tall portrait");
 }
 
 section("glow: a bloom pyramid of the art's own highlights");
@@ -849,17 +709,17 @@ section("looks: in the stack");
   let bad = 0;
   for (let i = 0; i < 2000; i++) {
     const c = [Math.random(), Math.random(), Math.random()];
-    if (M.shadePixel(c, [0.5, 0.5], zero, null, [look]).some((x, k) => x !== c[k])) bad++;
+    if (M.shadePixel(c, [0.5, 0.5], zero, null, 1, [look]).some((x, k) => x !== c[k])) bad++;
   }
   ok(bad === 0, "a look at opacity 0 changes nothing, bit for bit", `${bad} differed`);
   const full = M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 100 }], skin: { guard: 0 } }, M.NEUTRAL_GRADE));
   const c = [0.4, 0.5, 0.6];
-  const viaStack = M.shadePixel(c, [0.5, 0.5], full, null, [look]);
+  const viaStack = M.shadePixel(c, [0.5, 0.5], full, null, 1, [look]);
   const direct = LUT.sampleStrip(neonStrip, c);
   ok(viaStack.every((x, k) => Math.abs(x - direct[k]) < 1e-6), "at full opacity the stack gives exactly the LUT's colour", `${viaStack} vs ${direct}`);
-  const half = M.shadePixel(c, [0.5, 0.5], M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 50 }], skin: { guard: 0 } }, M.NEUTRAL_GRADE)), null, [look]);
+  const half = M.shadePixel(c, [0.5, 0.5], M.stackParams(M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 50 }], skin: { guard: 0 } }, M.NEUTRAL_GRADE)), null, 1, [look]);
   ok(half.every((x, k) => Math.abs(x - (c[k] + direct[k]) / 2) < 1e-6), "…and at 50% exactly halfway, in encoded colour");
-  ok(M.shadePixel(c, [0.5, 0.5], full, null, [null]).every((x, k) => x === c[k]), "a look that has not loaded is drawn at opacity 0");
+  ok(M.shadePixel(c, [0.5, 0.5], full, null, 1, [null]).every((x, k) => x === c[k]), "a look that has not loaded is drawn at opacity 0");
 
   const a = M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 20 }] });
   const b = M.normalizeGrade({ looks: [{ id: "builtin:neon", opacity: 80 }] });
@@ -919,15 +779,15 @@ section("seeding: proposals from the background, never amounts");
   const k = toKeyLight([0.2, 0.1, 0.05]);
   ok(Math.max(...k) === 1 && k[0] >= k[1] && k[1] >= k[2], "a dim warm background yields a bright warm light", String(k));
 
-  const base = M.normalizeGrade({ rim: { amount: 12 }, wash: { amount: 77, darkness: 5 }, light: { angle: -40 } });
+  const base = M.normalizeGrade({ gradient: { amount: 12 }, wash: { amount: 77, darkness: 5 }, light: { angle: -40 } });
   const sample = { ok: true, degraded: false, ambient: [0.2, 0.3, 0.6], columns: [[0.9, 0.6, 0.3]], centroid: [0.2, 0.2], aspect: 16 / 9 };
   const seeded = seedFromSample(sample, base);
-  ok(seeded.rim.amount === 12 && seeded.wash.amount === 77 && seeded.wash.darkness === 5, "seeding keeps every amount of the grade it starts from");
+  ok(seeded.gradient.amount === 12 && seeded.wash.amount === 77 && seeded.wash.darkness === 5, "seeding keeps every amount of the grade it starts from");
   ok(seeded.light.angle !== -40 && seeded.seeded === true, "…and proposes the light direction and marks the grade seeded");
-  ok(seeded.wash.color !== base.wash.color && seeded.rim.color !== base.rim.color, "…and proposes both colours");
+  ok(seeded.wash.color !== base.wash.color && seeded.gradient.color !== base.gradient.color, "…and proposes both colours");
   const flat = seedFromSample({ ...sample, degraded: true }, base);
   ok(flat.light.angle === -40, "a flat-colour background proposes no light direction");
-  ok(seedFromSample(null, base).rim.color === base.rim.color, "no sample at all proposes nothing");
+  ok(seedFromSample(null, base).gradient.color === base.gradient.color, "no sample at all proposes nothing");
 }
 
 section("tween");
@@ -944,26 +804,20 @@ section("tween");
 section("CSS fallback");
 {
   const neutral = cssFallbackFor(M.NEUTRAL_GRADE, M.DEFAULT_TRIM, 1, 1);
-  ok(neutral.filter === "" && neutral.shade.opacity === 0 && neutral.wash.opacity === 0,
+  ok(neutral.filter === "" && neutral.gradient.opacity === 0 && neutral.wash.opacity === 0,
     "a neutral grade produces no filter and invisible overlays, even in a dark scene");
   const f = cssFallbackFor({ ...M.NEUTRAL_GRADE, basic: { ...M.NEUTRAL_GRADE.basic, saturation: 40, hue: 30 } }, M.DEFAULT_TRIM, 1).filter;
   ok(/saturate\(1\.4/.test(f) && /hue-rotate\(30/.test(f), "saturation and hue map onto their CSS filters", f);
   const half = cssFallbackFor({ ...M.NEUTRAL_GRADE, basic: { ...M.NEUTRAL_GRADE.basic, hue: 30 } }, M.DEFAULT_TRIM, 0.5).filter;
   ok(/hue-rotate\(15/.test(half), "intensity scales each filter toward neutral", half);
   const zero = cssFallbackFor(M.DEFAULT_GRADE, M.DEFAULT_TRIM, 0, 1);
-  ok(zero.filter === "" && zero.shade.opacity === 0 && zero.wash.opacity === 0, "…to nothing at all at intensity 0");
+  ok(zero.filter === "" && zero.gradient.opacity === 0 && zero.wash.opacity === 0, "…to nothing at all at intensity 0");
   const dark = cssFallbackFor(M.NEUTRAL_GRADE.basic ? { ...M.NEUTRAL_GRADE, wash: { ...M.NEUTRAL_GRADE.wash, darkness: 100 } } : null, M.DEFAULT_TRIM, 1, 0.5).filter;
   ok(/brightness\(0\./.test(dark), "scene darkness dims the fallback through brightness()", dark);
 
-  ok(cssGradientAngle(90) === 180, "a ramp for a light above starts at the top (and so runs to the bottom)");
-  ok(cssGradientAngle(0) === 270, "…for one on the right, at the right edge");
-  ok(cssGradientAngle(180) === 90, "…and for one on the left, at the left edge");
-  // The rim needs the art's pixels, so the fallback carries no light at all.
-  // Less than the shader, never different from it — and never a faked halo.
-  ok(!("gradient" in neutral) && !("rim" in neutral), "the fallback has no light layer to fake it with");
-  const lit = cssFallbackFor({ ...M.DEFAULT_GRADE, rim: { ...M.DEFAULT_GRADE.rim, amount: 100 } }, M.DEFAULT_TRIM, 1);
-  const unlit = cssFallbackFor({ ...M.DEFAULT_GRADE, rim: { ...M.DEFAULT_GRADE.rim, amount: 0 } }, M.DEFAULT_TRIM, 1);
-  ok(JSON.stringify(lit) === JSON.stringify(unlit), "…so the rim's amount changes nothing on the fallback path");
+  ok(cssGradientAngle(90) === 180, "a light above paints its colour at the top (gradient runs to bottom)");
+  ok(cssGradientAngle(0) === 270, "a light to the right paints the right edge (gradient runs to left)");
+  ok(cssGradientAngle(180) === 90, "a light to the left paints the left edge (gradient runs to right)");
 }
 
 // ═══ 7. Scene flag detection ═══

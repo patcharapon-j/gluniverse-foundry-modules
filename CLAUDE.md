@@ -160,39 +160,17 @@ node tools/postfx-check.mjs
 ```
 
 Zero failures required. The grade is a stack of layers the GM sets — basic
-correction, room wash, rim, back shadow, looks, glow, strength — stored on the
-scene (`stage.grade`), with the background only ever *proposing* starting values,
-once, when a scene is first staged or the GM re-samples. Two
+correction, light gradient, room wash, rim, back shadow, looks, glow, strength —
+stored on the scene (`stage.grade`), with the background only ever *proposing*
+starting values, once, when a scene is first staged or the GM re-samples. Two
 rules hold for every dial, and the tool enforces both: **neutral is an exact
 no-op** (bit for bit — each GPU step is skipped at neutral, because
 `pow(x, 1.0)` is not `x` on a GPU, and output is formed as a difference from
 the input so the encode round trip cancels), and **one dial owns one property**
 (tone dials act on luminance as a ratio; saturation and hue act on the OKLab
 chroma vector). Scene darkness reaches the picture only through the wash's
-`darkness` dial. Skin holds back the *colour* of the wash and the looks
+`darkness` dial. Skin holds back the *colour* of the gradient, wash and looks
 and never their level.
-
-**The scene light reaches the art as a rim and nothing else**, and that is a
-decision, not an omission: there was a `gradient` layer — the light's colour
-soft-light blended across the whole figure — and art arrives already painted with
-its own light, so a second one smeared over all of it reads as a pale strip laid
-on the character rather than as light in the room. Restoring it is the change
-that will look like an improvement in its own diff. The rim is a band in signed
-distance from the silhouette, built from `postfx/edge-field.mjs` — an exact
-euclidean distance transform plus its gradient, uploaded as one RGBA8 texture —
-so the band is **provably zero** past the depth dial whatever the art does there,
-and the direction comes from the outline's own normal rather than from a blurred
-silhouette shifted toward the lamp, which lit every soft interior gradient it
-reached. Two things in that field fail only on the contact sheet, never in a
-number: seeds are placed at **sub-pixel** positions from the coverage (threshold
-at 0.5 instead and the field is wrong by half a cell in a pattern that repeats
-along the outline, whose *gradient* is several tenths — near the terminator that
-draws the fading rim as a row of detached ticks), and the field is then smoothed,
-in that order (a blur wide enough to flatten the unseeded ripple is wider than
-the features it protects, because the ripple's period grows with how shallow the
-outline is). The rim is also the one layer whose weight is used twice — screened
-into the figure over the covered part of a pixel, emitted into the air over the
-uncovered part — and it is the alpha composite, not two weights, that splits it.
 
 `postfx/grade-model.mjs` holds `shadePixel`, the shader written in JavaScript,
 and `gl.mjs` is its transcription — every GLSL constant (OKLab matrices, knees,
