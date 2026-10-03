@@ -57,17 +57,14 @@ const TESTS = [
   { label: "wash, blue, skin guarded", grade: { wash: { amount: 70, color: "#3050c0" }, skin: { guard: 100 } } },
   { label: "darkness 0.6 at dial 65", grade: { wash: { darkness: 65 } }, darkness: 0.6 },
   // The rim is the only way the scene light reaches the art, so it gets the
-  // spread: each of its two lights alone and together, both ends of their
-  // reaches, and the light's own softness.
-  { label: "rim edge only, light right", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 100, width: 18, softness: 25, halo: 0, color: "#fff0d8" } } },
-  { label: "rim edge, hairline", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 100, width: 4, softness: 0, halo: 0, color: "#fff0d8" } } },
-  { label: "rim edge, widest", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 100, width: 100, softness: 60, halo: 0, color: "#fff0d8" } } },
-  { label: "backglow only, light right", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 0, halo: 100, haloSpread: 55, color: "#fff0d8" } } },
-  { label: "backglow, widest", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 0, halo: 100, haloSpread: 100, color: "#b0d0ff" } } },
-  { label: "rim + backglow, above-left", grade: { light: { angle: 135, softness: 30 }, rim: { amount: 100, width: 18, softness: 25, halo: 70, haloSpread: 55, color: "#b0d0ff" } } },
-  { label: "rim, hard light (even)", grade: { light: { angle: 20, softness: 0 }, rim: { amount: 100, width: 18, softness: 25, halo: 50, color: "#fff0d8" } } },
-  { label: "rim, soft light (focused)", grade: { light: { angle: 20, softness: 100 }, rim: { amount: 100, width: 18, softness: 25, halo: 50, color: "#fff0d8" } } },
-  { label: "rim 40%, light below", grade: { light: { angle: -90, softness: 40 }, rim: { amount: 40, width: 18, softness: 25, halo: 40, color: "#ffd0a0" } } },
+  // spread: both ends of each of its three dials, and the light's own.
+  { label: "rim, light right", grade: { light: { angle: 0, softness: 30 }, rim: { amount: 100, width: 40, softness: 40, color: "#fff0d8" } } },
+  { label: "rim, light above-left", grade: { light: { angle: 135, softness: 30 }, rim: { amount: 100, width: 60, softness: 20, color: "#b0d0ff" } } },
+  { label: "rim, shallow + flat", grade: { light: { angle: 0, softness: 10 }, rim: { amount: 100, width: 10, softness: 0, color: "#fff0d8" } } },
+  { label: "rim, deep + soft", grade: { light: { angle: 0, softness: 10 }, rim: { amount: 100, width: 100, softness: 100, color: "#fff0d8" } } },
+  { label: "rim, hard light (even)", grade: { light: { angle: 20, softness: 0 }, rim: { amount: 100, width: 35, softness: 50, color: "#fff0d8" } } },
+  { label: "rim, soft light (focused)", grade: { light: { angle: 20, softness: 100 }, rim: { amount: 100, width: 35, softness: 50, color: "#fff0d8" } } },
+  { label: "rim 40%, light below", grade: { light: { angle: -90, softness: 40 }, rim: { amount: 40, width: 30, softness: 60, color: "#ffd0a0" } } },
   { label: "back shadow, light right", grade: { light: { angle: 0, softness: 60 }, backShadow: { amount: 80 } } },
   { label: "look: Night City", grade: { looks: [{ id: "builtin:night-city", opacity: 100 }] } },
   { label: "look: Cherry Blossoms 60%", grade: { looks: [{ id: "builtin:cherry-blossoms", opacity: 60 }] } },
@@ -75,7 +72,7 @@ const TESTS = [
   { label: "look: OrangeFilm, skin guarded", grade: { looks: [{ id: "builtin:orange-film", opacity: 100 }], skin: { guard: 100 } } },
   { label: "glow, tight", grade: { glow: { amount: 100, radius: 0, threshold: 55 } } },
   { label: "glow, wide", grade: { glow: { amount: 100, radius: 100, threshold: 55 } } },
-  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 85, width: 18, softness: 25, halo: 45, haloSpread: 55, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
+  { label: "default grade, warm room", grade: { light: { angle: 120, softness: 70 }, wash: { amount: 30, darkness: 65, color: "#8a6a50" }, rim: { amount: 80, width: 26, softness: 55, color: "#ffe4c8" }, backShadow: { amount: 35 }, skin: { guard: 50 } }, darkness: 0.2 },
 ];
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#101014">
@@ -186,20 +183,6 @@ window.run = async () => {
     return { worst, mean: n ? sum / n : 0 };
   };
 
-  // Does this dial change anything at all? Measured against the neutral render,
-  // over every channel of every pixel, and as a *peak* rather than a mean.
-  //
-  // Both halves of that are the rim's doing. It draws only in the air outside
-  // the outline, so a measure that samples the figure reports a working rim as
-  // a dial that does nothing — and it draws a line a pixel or two wide, which
-  // over a quarter of a million pixels is a mean of a hundredth of one level
-  // however bright it is. A peak asks the question the label actually asks.
-  const movedFrom = (px, base) => {
-    let worst = 0;
-    for (let i = 0; i < px.length; i++) worst = Math.max(worst, Math.abs(px[i] - base[i]));
-    return worst;
-  };
-
   const neutral = drift(first.data);
   const zero = drift(shoot(TESTS[TESTS.length - 1], 0).data);
 
@@ -259,9 +242,9 @@ window.run = async () => {
     dials.push({
       label: t.label,
       ...drift(shot.data, reference(t)),
-      moved: movedFrom(shot.data, first.data),
+      moved: drift(shot.data).mean,
       ...alphaDrift(shot.data, t),
-      rim: paramsFor(t).rimAmount > 0 || paramsFor(t).rimHalo > 0,
+      rim: paramsFor(t).rimAmount > 0,
       bloom: shot.bloom ? bloomDrift(shot.bloom, t) : null,
     });
     bloomNow = null;
@@ -387,12 +370,12 @@ for (const d of result.dials) {
     `GLSL matches shadePixel: ${d.label}`,
     `worst ${d.worst}/255, mean ${d.mean.toFixed(3)}`
   );
-  ok(d.moved > 4, `…and the dial visibly moves the picture`, `peak change ${d.moved}/255`);
+  ok(d.moved > 1, `…and the dial visibly moves the picture`, `mean change ${d.moved.toFixed(2)}/255`);
   ok(d.alpha <= 2, `…and its coverage matches, outside the art included`, `worst ${d.alpha}/255`);
   // The rim's band is screened into the figure, which the drift above covers.
   // Its spill off the outline is emission into pixels the art does not cover,
   // and nothing else in this report would notice it vanishing.
-  if (d.rim) ok(d.spill > 0, `…and the rim lights the air outside the outline`, `${d.spill} lit pixels beyond the art`);
+  if (d.rim) ok(d.spill > 0, `…and the rim spills outside the outline`, `${d.spill} lit pixels beyond the art`);
   if (d.bloom) {
     // Four 8-bit render targets deep, so a few steps of rounding is expected.
     ok(d.bloom.size === d.bloom.cpuSize && d.bloom.worst <= 6, `…and the GPU bloom pyramid matches bloomPyramid`, `${d.bloom.size}, worst ${d.bloom.worst}/255`);

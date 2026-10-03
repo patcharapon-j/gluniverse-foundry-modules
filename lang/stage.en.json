@@ -209,12 +209,10 @@
             },
             "rim": {
                 "title": "Rim light",
-                "hint": "The lamp behind each figure, and the only light the scene puts on one. It is drawn entirely in the air *outside* the outline — a sharp line catching the edge that faces the lamp, and a wider backglow spilling around it. No pixel of the artwork is touched, at any setting.",
-                "amount": "Edge",
-                "width": "Edge width",
-                "softness": "Edge falloff",
-                "halo": "Backglow",
-                "haloSpread": "Backglow reach",
+                "hint": "The scene's light on each figure, and the only place it lands: a band along the outline that faces the lamp, spilling a little into the air beside it. Depth is how far in it reaches — nothing deeper than that is touched, at any amount.",
+                "amount": "Amount",
+                "width": "Depth",
+                "softness": "Falloff",
                 "color": "Rim colour"
             },
             "backShadow": {

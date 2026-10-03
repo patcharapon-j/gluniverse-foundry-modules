@@ -113,20 +113,13 @@ export const SECTIONS = Object.freeze({
     darkness: dial(0, 100, 1, 75, 0),
   }),
   rim: Object.freeze({
-    /** The sharp edge: light in the air immediately outside the outline. */
-    amount: dial(0, 100, 1, 85, 0),
-    /** How far out the sharp edge reaches, as a fraction of RIM_MAX_WIDTH —
-     *  which is small, because a rim that is wide is not sharp. */
-    width: dial(0, 100, 1, 18),
-    /** How the sharp edge falls off across its own width: 0 a hard line that
-     *  ends at the width, 100 a falloff that starts at the outline. */
-    softness: dial(0, 100, 1, 25),
-    /** The backglow: the lamp behind the figure, spilling into the air around
-     *  it. Far wider than the edge and far weaker — a separate light, not the
-     *  edge made fuzzy, which is why it is its own dial and not a softness. */
-    halo: dial(0, 100, 1, 45, 0),
-    /** How far the backglow reaches, as a fraction of HALO_MAX_SPREAD. */
-    haloSpread: dial(0, 100, 1, 55),
+    amount: dial(0, 100, 1, 80, 0),
+    /** How far in from the outline the rim reaches ("light depth"), as a
+     *  fraction of RIM_MAX_WIDTH. Nothing past it is lit, at any amount. */
+    width: dial(0, 100, 1, 26),
+    /** How the band falls off across its own depth: 0 a flat strip that ends
+     *  at the width, 100 a falloff that starts at the outline. */
+    softness: dial(0, 100, 1, 55),
   }),
   backShadow: Object.freeze({
     amount: dial(0, 100, 1, 50, 0),
@@ -151,34 +144,22 @@ export const COLORS = Object.freeze({
 });
 
 /**
- * How far the sharp edge reaches at `width` 100, as a fraction of the art's
- * height.
+ * Rim reach at `width` 100, as a fraction of the art's height.
  *
- * Small, and that is the point. A rim light is the lamp behind the figure
- * caught on one edge of it, and what sells it is that the catch is *thin*: a
- * bright line, a pixel or three, not a band. Give the dial a centimetre of
- * reach and every setting on it is a smear. The width the eye reads as an edge
- * is a fixed fraction of the figure, so this is in units of the art's height
- * and a stage at any resolution gets the same line.
+ * It is the edge field's own range, from one statement: the field records
+ * distances up to FIELD_RANGE and the width dial is read in the same units, so
+ * `width` 100 reaches exactly as far as the field can see and no dial can ask
+ * for a distance the field has saturated.
  */
-export const RIM_MAX_WIDTH = 0.02;
+export const RIM_MAX_WIDTH = FIELD_RANGE;
 
 /**
- * How far the backglow reaches at `haloSpread` 100, as a fraction of the art's
- * height. The edge field's whole range: a halo is the widest thing the rim
- * draws, so it sets what the field has to be able to see.
+ * How far the rim spills *outside* the outline, as a fraction of how far it
+ * reaches inside. Thin on purpose: enough that the lit edge reads as light in
+ * the air next to the figure rather than as a painted stroke along it, little
+ * enough that it is not a second glow.
  */
-export const HALO_MAX_SPREAD = FIELD_RANGE;
-
-/**
- * The backglow's strength at `halo` 100.
- *
- * Under one, because a halo that can reach full strength competes with the edge
- * it is behind, and then the sharp line is sitting on a bright field instead of
- * against the room. It is the light that got past the figure, not the light on
- * it.
- */
-export const HALO_GAIN = 0.55;
+export const RIM_BLEED_SPAN = 0.45;
 
 /**
  * The least feather the band's inner edge keeps, as a fraction of its depth.
@@ -201,26 +182,6 @@ export const RIM_FEATHER_MIN = 1 / 12;
  * 0.0039 per axis) and nothing else.
  */
 export const RIM_NORMAL_MIN = 0.02;
-
-/**
- * How far it takes the rim to rise from nothing at the outline to its full
- * strength, in units of FIELD_RANGE.
- *
- * The figure occludes its own light, so the band has to start somewhere, and
- * "at the outline, instantly" is not a width a picture can hold: it is a step,
- * and a step in an image is the one edge a display cannot draw. About a pixel
- * of the field is the honest answer — the light cannot be said to change faster
- * than the field can see — and that is what this is, for the render sizes the
- * stage uses.
- *
- * It is also what lets the shader and `shadePixel` agree. A step at `sd = 0`
- * puts a jump from zero to full strength across a sign test, and the GPU
- * computes that sign in float32 while the reference computes it in float64: the
- * two then disagree by the entire band on the pixels either side of the
- * outline — the brightest pixels the rim draws — with nothing in the numbers
- * saying which is right. A continuous rise has no side to be on.
- */
-export const RIM_OCCLUDE_RISE = 0.03;
 
 /** How far the back shadow darkens the far side at `amount` 100, in linear
  *  light. Never to black: a figure's shadow side still has the room in it. */
@@ -482,15 +443,14 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
   // Image space: +Y is down, so "up" is a negative Y.
   const dir = [Math.cos(rad), -Math.sin(rad)];
 
-  // The rim's two reaches, in units of FIELD_RANGE — which is what the edge
-  // field records its distances in, so the shader compares two numbers in the
-  // same units and never has to know the art's aspect. (The field measures
-  // distance in units of the art's *height* on both axes, which is what makes
-  // the edge the same width down the side of a tall portrait as across the top
-  // of it.) An edge with no width is no edge; a halo with no spread is no halo.
+  // The rim's band, in units of FIELD_RANGE — which is what the edge field
+  // records its distances in, so the shader compares two numbers in the same
+  // units and never has to know the art's aspect. (The field measures distance
+  // in units of the art's *height* on both axes, which is what makes the band
+  // the same depth down the side of a tall portrait as across the top of it.)
+  // A rim with no depth is no rim.
   const width = (g.rim.width / 100) * (RIM_MAX_WIDTH / FIELD_RANGE);
   const feather = Math.min(1 - g.rim.softness / 100, 1 - RIM_FEATHER_MIN);
-  const haloSpread = (g.rim.haloSpread / 100) * (HALO_MAX_SPREAD / FIELD_RANGE);
 
   return {
     ...basicParams(g.basic, trim),
@@ -503,8 +463,7 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
     rimAmount: width > 0 ? g.rim.amount / 100 : 0,
     rimWidth: width,
     rimFeather: feather,
-    rimHalo: haloSpread > 0 ? (g.rim.halo / 100) * HALO_GAIN : 0,
-    rimHaloSpread: haloSpread,
+    rimBleed: width * RIM_BLEED_SPAN,
     rimColor: hexToRgb(g.rim.color),
     backAmount: (g.backShadow.amount / 100) * BACK_SHADOW_MAX,
     glowAmount: g.glow.amount / 100,
@@ -770,56 +729,35 @@ export function litWeight(uv, p) {
 /**
  * How much rim light lands on a point, 0..1, from the edge field.
  *
- * **It is light in the air, not paint on the figure.** The whole of it lives
- * outside the outline; a pixel the art covers is never touched. That is not a
- * tolerance to be tuned, it is the shape of the effect: a rim light is the lamp
- * *behind* a figure, and what you see of it is the light that got past the
- * figure's edge. Nothing of it is on the character, so nothing of it can bleed
- * into one. The lit edge still reads as attached, because a silhouette's own
- * boundary pixels are partly transparent and the alpha composite in
- * {@link shadeFragment} lets exactly that much of the light through them —
- * the art's coverage is already the only honest answer to how much of a
- * boundary pixel is figure.
+ * Two questions, each answered by one channel of the field (edge-field.mjs):
  *
- * Two lights, sharing a colour and a direction:
+ *   *how near the outline is this* — the band. One function of the signed
+ *   distance, spanning `rimWidth` inside the outline to `rimBleed` outside it,
+ *   equal to 1 on the outline itself so the two halves meet without a seam. It
+ *   is **exactly zero** past either end, which is the whole point: a pixel
+ *   deeper in than the width dial cannot be lit, whatever the art's own paint
+ *   does there, so the rim can no longer bleed into the character.
  *
- *   *the edge* — a sharp line hugging the outline and ending at `rimWidth`,
- *   which is small (see RIM_MAX_WIDTH). This is the rim proper, and sharpness
- *   is the whole of its job.
- *
- *   *the backglow* — the same lamp spilling into the room around the figure,
- *   reaching `rimHaloSpread` and far weaker (HALO_GAIN). It is its own dial
- *   rather than a softness on the edge, because widening a rim does not make a
- *   glow — it makes a fuzzy rim, which reads as the edge being out of focus.
- *
- * Both are gated by *which way the outline faces*: the gradient of the same
- * field, the outline's true outward normal, dotted with the direction of the
- * light. The light's softness is how gradually that fades toward the
- * terminator — a hard light lights the whole lit half of the outline evenly and
- * stops dead, a soft one concentrates on the part pointing at the lamp. Either
- * way it is exactly zero on the far side: an edge facing away from the lamp is
- * never lit at any setting, because a rim that carries all the way round is an
- * outline rather than light.
+ *   *which way does the outline face* — the gradient of the same field, the
+ *   outline's true outward normal, dotted with the direction of the light. The
+ *   light's softness is how gradually that fades toward the terminator: a hard
+ *   light rims the whole lit half of the outline evenly and stops dead, a soft
+ *   one concentrates on the part pointing at the lamp and fades away before the
+ *   terminator. Either way it is exactly zero on the far side — an edge facing
+ *   away from the lamp is never lit, at any setting, which is the other half of
+ *   not bleeding: a rim that carries all the way round is an outline, not light.
  *
  * `fieldAt(u, v)` samples the field — the shader's texture, or the harness's
  * copy of the same bytes.
+ *
+ * The weight is for the whole pixel. What makes the inside half land on the
+ * figure and the outside half land in the air beside it is the alpha composite
+ * in {@link shadeFragment}, not two different weights: the art's own coverage
+ * is already the only honest answer to how much of a boundary pixel is figure.
  */
 export function rimWeight(uv, p, fieldAt) {
-  const lit = p.rimAmount > 0 || p.rimHalo > 0;
-  if (!lit || !fieldAt) return 0;
+  if (!(p.rimAmount > 0) || !fieldAt) return 0;
   const [nx, ny, inward, outward] = fieldAt(uv[0], uv[1]);
-  // How far outside the outline this is. The *difference* of the two channels,
-  // never `outward` alone and never a test on `inward`: each channel is the
-  // signed distance rectified to one side, so a texel the outline runs through
-  // carries both, and either read on its own is wrong by up to a texel right
-  // where the sharp edge lives — which drew it faint and broken, in dashes.
-  // The difference is exactly the signed distance and stays exact through the
-  // bilinear filter, because max(d,0) − max(−d,0) is d for every d and
-  // interpolation is linear.
-  const sd = outward - inward;
-  // Inside the outline there is nothing to draw. Not "almost nothing": the
-  // figure's own pixels are never touched by the light at all.
-  if (sd <= 0) return 0;
   const len = Math.hypot(nx, ny);
   if (len < RIM_NORMAL_MIN) return 0;
 
@@ -827,26 +765,14 @@ export function rimWeight(uv, p, fieldAt) {
   const face = smoothstep(0, p.lightSoft, facing);
   if (face <= 0) return 0;
 
-  // The sharp edge: a line in the air hugging the outline, ending at `width`.
-  const edge =
-    p.rimAmount > 0 && p.rimWidth > 0
-      ? p.rimAmount * (1 - smoothstep(p.rimFeather * p.rimWidth, p.rimWidth, sd))
-      : 0;
-
-  // The backglow: the lamp behind the figure. Squared rather than a smoothstep,
-  // because a smoothstep leaves on a shelf — it holds near full strength for the
-  // first third of its range and then falls, which on something this wide is a
-  // slab of light with an edge, the exact thing a halo must not have. This
-  // leaves at full slope and arrives at zero with none, so it reads as light
-  // giving out with distance and has no outer boundary to see.
-  const t = p.rimHalo > 0 && p.rimHaloSpread > 0 ? Math.min(sd / p.rimHaloSpread, 1) : 1;
-  const halo = p.rimHalo * (1 - t) * (1 - t);
-
-  // Screened, not added: the edge sits *in* the halo, and two lights over one
-  // pixel of air cannot take it past white. Both rise out of the outline
-  // together — see RIM_OCCLUDE_RISE.
-  const occlusion = smoothstep(0, RIM_OCCLUDE_RISE, sd);
-  return face * occlusion * (1 - (1 - edge) * (1 - halo));
+  const sd = outward - inward;
+  const band =
+    sd <= 0
+      ? 1 - smoothstep(p.rimFeather * p.rimWidth, p.rimWidth, -sd)
+      : p.rimBleed > 0
+        ? 1 - smoothstep(0, p.rimBleed, sd)
+        : 0;
+  return p.rimAmount * face * band;
 }
 
 /** Screen, per channel, on encoded values. */
@@ -896,7 +822,7 @@ export function basicCorrect(lin, p) {
  * identity. Every layer is skipped outright at its neutral value for the same
  * reason.
  */
-export function shadePixel(srgb, uv, p, fieldAt = null, looks = null) {
+export function shadePixel(srgb, uv, p, fieldAt = null, looks = null, rim = rimWeight(uv, p, fieldAt)) {
   const lin = srgb.map(toLinear);
   const guard = p.skin * skinMask(srgb);
 
@@ -910,8 +836,12 @@ export function shadePixel(srgb, uv, p, fieldAt = null, looks = null) {
   // …and the room's darkness, which is level only — skin takes it in full.
   if (p.darkGain !== 1) c = c.map((x) => x * p.darkGain);
 
-  // The rim is not a layer here. It is light in the air outside the outline and
-  // never touches a pixel the art covers — see rimWeight and shadeFragment.
+  // Rim: the band of outline facing the lamp, screened on in the rim's colour.
+  // It is light, not pigment, so skin takes it as it is.
+  if (rim > 0) {
+    const e = c.map(toSRGB);
+    c = e.map((x, i) => toLinear(x + (screen(Math.min(Math.max(x, 0), 1), p.rimColor[i]) - x) * rim));
+  }
 
   // Back shadow: the side turned away from the lamp, darker. Level only.
   if (p.backAmount > 0) {
@@ -1119,11 +1049,10 @@ export function emission(glow, rim, p) {
  * `fieldAt` samples the edge field and `bloomAt` the finished bloom — exactly
  * what the shader reads.
  *
- * The rim never reaches {@link shadePixel}: it is light in the air outside the
- * outline, so it arrives here as emission and only the uncovered part of a
- * pixel receives it. On a silhouette's own boundary pixels that part is what
- * makes the lit edge read as attached to the figure rather than floating beside
- * it — see {@link rimWeight}.
+ * The rim is computed once here and handed to {@link shadePixel}, because the
+ * same weight does both halves of the rim: it is screened into the figure over
+ * the covered part of the pixel and emitted into the air over the uncovered
+ * part. One weight, split by the art's own coverage — see {@link rimWeight}.
  */
 export function shadeFragment(texel, uv, p, fieldAt, intensity = 1, bloomAt = null, looks = null) {
   const a = texel[3];
@@ -1137,7 +1066,7 @@ export function shadeFragment(texel, uv, p, fieldAt, intensity = 1, bloomAt = nu
   }
   const div = Math.max(a, 0.0039);
   const srgb = [texel[0] / div, texel[1] / div, texel[2] / div];
-  let graded = shadePixel(srgb, uv, p, fieldAt, looks);
+  let graded = shadePixel(srgb, uv, p, fieldAt, looks, rim);
   if (G) graded = graded.map((x, i) => screen(Math.min(Math.max(x, 0), 1), G[i]));
   const out = srgb.map((x, i) => x + (graded[i] - x) * intensity);
   if (E && a < 1) {
