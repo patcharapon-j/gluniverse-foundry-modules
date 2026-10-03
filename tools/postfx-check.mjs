@@ -408,8 +408,15 @@ section("shader wiring");
   ok(/texture2D\(u_field, uv\)/.test(FRAG) && !/texture2D\(u_art, [^)]*u_rim/.test(FRAG),
     "the GLSL rim reads the edge field, not a ring of taps over the art");
   ok(!/for \(int i = 0; i < \d+; i\+\+\) \{\s*float a = float\(i\)/.test(FRAG), "…and samples no ring at all");
-  ok(/float sd = fd\.a - fd\.b;/.test(FRAG), "the GLSL band is a function of the signed distance");
-  for (const guard of ["u_washAmount > 0.0", "u_darkGain != 1.0", "u_rimAmount <= 0.0", "if (rim > 0.0)", "u_backAmount > 0.0", "if (k != 1.0)", "bool glowing = u_glowAmount > 0.0;", "emitting ? vec4(E, ea) * u_intensity : vec4(0.0)"]) {
+  // The rim leaves the art alone in the GLSL too: it returns before reading a
+  // dial once the field says this pixel is inside the outline, and the layer
+  // stack in main() never touches it. A `lin = … u_rimColor …` line reappearing
+  // in the stack is the rim painting on the figure again.
+  ok(/float sd = fd\.a - fd\.b;/.test(FRAG) && /if \(sd <= 0\.0\) return 0\.0;/.test(FRAG),
+    "the GLSL rim reads the signed distance and returns zero inside the outline");
+  ok(!/lin = .*u_rimColor/.test(FRAG), "…and the layer stack never applies the rim to the art");
+  ok(/float edge = /.test(FRAG) && /float halo = /.test(FRAG), "the GLSL rim is the model's two lights, the sharp edge and the backglow");
+  for (const guard of ["u_washAmount > 0.0", "u_darkGain != 1.0", "u_rimAmount <= 0.0 && u_rimHalo <= 0.0", "u_backAmount > 0.0", "if (k != 1.0)", "bool glowing = u_glowAmount > 0.0;", "emitting ? vec4(E, ea) * u_intensity : vec4(0.0)"]) {
     ok(FRAG.includes(guard), `the shader skips a layer at neutral: ${guard}`);
   }
   ok(FRAG.includes("if (u_sat != 1.0 || u_hue.x != 1.0 || u_hue.y != 0.0) c = chromaAdjust(c);"),
@@ -421,7 +428,7 @@ section("shader wiring");
     ok(FRAG.includes(guard), `the shader keeps its neutral guard: ${guard}`);
   }
   ok(/art\.rgb \+ \(toSRGB\(lin\) - toSRGB\(linIn\)\)/.test(FRAG), "the shader forms its output as a difference from the input");
-  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_NORMAL_MIN", M.RIM_NORMAL_MIN], ["GLOW_GAIN", M.GLOW_GAIN]]) {
+  for (const [name, value] of [["TONE_RATIO_CAP", M.TONE_RATIO_CAP], ["GAMUT_REACH", M.GAMUT_REACH], ["GAMUT_KNEE", M.GAMUT_KNEE], ["RIM_NORMAL_MIN", M.RIM_NORMAL_MIN], ["RIM_OCCLUDE_RISE", M.RIM_OCCLUDE_RISE], ["GLOW_GAIN", M.GLOW_GAIN]]) {
     const m = FRAG.match(new RegExp(`const float ${name} = ([\\d.]+);`));
     ok(!!m && Number(m[1]) === value, `GLSL ${name} is the model's`, m?.[1]);
   }
@@ -567,7 +574,7 @@ section("edge field: the exact distance and direction the rim is built from");
     "coverage is thresholded, so paint that never reaches the outline cannot be rimmed");
 }
 
-section("rim: a band on the outline facing the lamp, and nothing deeper");
+section("rim: light in the air outside the figure, never on it");
 {
   const W = 160;
   const H = 320;
@@ -581,111 +588,106 @@ section("rim: a band on the outline facing the lamp, and nothing deeper");
   const field = EF.buildEdgeField(alpha, W, H);
   const fieldAt = (u, v) => EF.sampleEdgeField(field, u, v);
   const uvOf = (x, y) => [(x + 0.5) / W, (y + 0.5) / H];
-
   const px = [0.3, 0.3, 0.3];
-  const rim = (angle, extra = {}) => ({ light: { angle, softness: 30 }, rim: { amount: 100, width: 60, softness: 40, ...extra } });
+
+  // `amount` is the sharp line alone and `halo` the backglow alone, so each can
+  // be driven without the other standing in for it.
+  const rim = (angle, extra = {}) => ({
+    light: { angle, softness: 30 },
+    rim: { amount: 100, width: 40, softness: 25, halo: 0, haloSpread: 55, ...extra },
+  });
   const P = (dials) => M.stackParams(M.normalizeGrade(dials, M.NEUTRAL_GRADE), M.DEFAULT_TRIM, { aspect: W / H });
-  const shade = (dials, uv) => M.shadePixel(px, uv, P(dials), fieldAt);
   const weight = (dials, uv) => M.rimWeight(uv, P(dials), fieldAt);
-
-  const rightEdge = uvOf(W / 2 + R - 2, H / 2);
-  const leftEdge = uvOf(W / 2 - R + 2, H / 2);
-  const topEdge = uvOf(W / 2, H / 2 - R + 2);
-  const bottomEdge = uvOf(W / 2, H / 2 + R - 2);
-
-  ok(Y(shade(rim(0), rightEdge)) > Y(px) * 2, "a light on the right rims the right edge", Y(shade(rim(0), rightEdge)).toFixed(4));
-  ok(shade(rim(0), leftEdge).every((x, i) => x === px[i]), "…and leaves the left edge untouched, exactly");
-  ok(Y(shade(rim(180), leftEdge)) > Y(px) * 2, "turning the light round moves the rim to the left edge");
-  ok(Y(shade(rim(90), topEdge)) > Y(px) * 2 && shade(rim(90), bottomEdge).every((x, i) => x === px[i]), "a light above rims the top, not the bottom");
-  ok(shade(rim(0), [0.5, 0.5]).every((x, i) => x === px[i]), "the middle of the figure gets no rim");
-  // An edge running parallel to the light: lit by a plain inner shadow, and the
-  // reason the direction comes from the outline's own normal.
-  ok(weight(rim(0), bottomEdge) === 0, "an edge parallel to the light gets no rim");
+  /** `d` pixels straight out from the right edge of the disc. */
+  const out = (d) => uvOf(W / 2 + R + d, H / 2);
+  const unit = EF.FIELD_RANGE * H; // one FIELD_RANGE, in pixels of this raster
 
   // ── The claim the model exists for ──
-  // Driven over the whole figure, not sampled at a point: a weight anywhere
-  // deeper in than the depth dial is a rim bleeding into the character.
-  const depthScan = (dials) => {
-    const p = P(dials);
-    let deepest = 0;
+  // Not "almost nothing on the figure": nothing. Driven over every pixel the
+  // art covers, with both lights at full and every reach at its maximum.
+  {
+    const loud = P(rim(0, { amount: 100, width: 100, softness: 100, halo: 100, haloSpread: 100 }));
     let lit = 0;
-    for (let y = 1; y < H; y += 1) {
-      for (let x = 1; x < W; x += 1) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
         if (alpha[y * W + x] < 0.5) continue;
-        if (!(M.rimWeight(uvOf(x, y), p, fieldAt) > 0)) continue;
-        lit++;
-        deepest = Math.max(deepest, R - Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2));
+        if (M.rimWeight(uvOf(x, y), loud, fieldAt) > 0) lit++;
       }
     }
-    return { lit, deepest, limit: p.rimWidth * EF.FIELD_RANGE * H };
-  };
-  for (const width of [20, 60, 100]) {
-    const s = depthScan(rim(0, { width }));
-    ok(s.lit > 0 && s.deepest <= s.limit + 1.5,
-      `at depth ${width} nothing deeper than ${s.limit.toFixed(1)}px is lit`,
-      `deepest lit pixel ${s.deepest.toFixed(2)}px, ${s.lit} lit`);
+    ok(lit === 0, "no pixel the art covers is ever lit, at any setting", `${lit} lit inside the figure`);
   }
-  const reach = [20, 60, 100].map((width) => depthScan(rim(0, { width })).deepest);
-  ok(reach[0] < reach[1] && reach[1] < reach[2], "…and a deeper dial does reach deeper", String(reach.map((r) => r.toFixed(1))));
+  ok(M.shadePixel(px, uvOf(W / 2 + R - 1, H / 2), P(rim(0)), fieldAt).every((x, i) => x === px[i]),
+    "…and the layer stack has no rim in it to light one with");
 
-  // ── The band's own shape ──
-  // Driven through a synthetic field, so the band is read at an exact signed
-  // distance rather than wherever a raster's texels happen to fall: the normal
-  // points right, the light is on the right, so `face` is exactly 1 and what is
-  // left is the band.
-  const band = (sd, dials = rim(0)) => M.rimWeight([0.5, 0.5], P(dials), () => [1, 0, Math.max(-sd, 0), Math.max(sd, 0)]);
-  const full = P(rim(0)).rimAmount;
-  ok(band(0) === full, "the band is at full strength exactly on the outline", `${band(0)} vs ${full}`);
-  ok(Math.abs(band(-1e-7) - band(1e-7)) < 1e-6, "…and crosses it without a seam, from either side");
-  const inner = P(rim(0)).rimWidth;
-  const bleed = P(rim(0)).rimBleed;
-  ok(band(-inner) === 0 && band(-inner * 1.2) === 0, "the band is exactly zero at the depth dial and past it");
-  ok(band(bleed) === 0 && band(bleed * 1.2) === 0, "…and exactly zero at the end of the outward spill and past it");
-  ok(bleed < inner, "the spill outside the outline is thinner than the band inside it", `${bleed.toFixed(4)} vs ${inner.toFixed(4)}`);
-  const falling = (xs) => xs.every((x, i) => i === 0 || x <= xs[i - 1] + 1e-12);
-  ok(falling([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => band(-inner * t))), "the band only ever falls off going inward");
-  ok(falling([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => band(bleed * t))), "…and going outward");
-  ok(weight(rim(180), uvOf(W / 2 + R + 2, H / 2)) === 0, "the spill is only on the side facing the lamp");
+  // ── The sharp edge ──
+  ok(weight(rim(0), out(1)) > 0.5, "a light on the right lights the air just outside the right edge", weight(rim(0), out(1)).toFixed(3));
+  ok(weight(rim(0), uvOf(W / 2 - R - 1, H / 2)) === 0, "…and nothing outside the left edge");
+  ok(weight(rim(180), uvOf(W / 2 - R - 1, H / 2)) > 0.5, "turning the light round moves it to the left");
+  ok(weight(rim(90), uvOf(W / 2, H / 2 - R - 1)) > 0.5 && weight(rim(90), uvOf(W / 2, H / 2 + R + 1)) === 0,
+    "a light above lights over the top, not under the bottom");
 
-  // ── The dials ──
-  const amt = (a) => weight(rim(0, { amount: a }), rightEdge);
-  ok(amt(20) < amt(50) && amt(50) < amt(90), "the amount dial scales the rim monotonically");
-  // Falloff owns the band's profile and nothing else: a flat strip at 0, a
-  // falloff that starts at the outline at 100. Measured mid-band.
-  const mid = -inner * 0.5;
-  ok(band(mid, rim(0, { softness: 0 })) > band(mid, rim(0, { softness: 100 })),
-    "a flat band holds its strength further in than a soft one",
-    `${band(mid, rim(0, { softness: 0 })).toFixed(3)} vs ${band(mid, rim(0, { softness: 100 })).toFixed(3)}`);
-  ok(band(-inner * 0.999, rim(0, { softness: 0 })) < full,
-    "…and even a flat band keeps a feather at its end, so it is not a stair",
-    `feather ${P(rim(0, { softness: 0 })).rimFeather.toFixed(4)}, floor ${(1 - M.RIM_FEATHER_MIN).toFixed(4)}`);
-  // The light's softness is how gradually the rim gives out toward the
-  // terminator. It never crosses it: an outline facing away from the lamp is
-  // not lit at any setting, because a rim that carries all the way round is an
-  // outline rather than light.
-  const faceAt = (softness, uv) => weight({ light: { angle: 0, softness }, rim: { amount: 100, width: 60, softness: 40 } }, uv);
-  ok(faceAt(0, topEdge) === 0 && faceAt(100, topEdge) === 0, "the terminator is never crossed, hard light or soft");
-  const quarter = uvOf(W / 2 + Math.round(R * 0.7) - 2, H / 2 - Math.round(R * 0.7) + 2);
-  ok(faceAt(0, quarter) > faceAt(100, quarter), "a hard light rims the whole lit half evenly; a soft one concentrates on what faces it",
+  /** How far out lit air reaches, in pixels — what "sharp" is measured in. */
+  const reachOf = (dials) => {
+    let last = 0;
+    for (let d = 1; d < Math.ceil(unit) + 4; d++) if (weight(dials, out(d)) > 0.004) last = d;
+    return last;
+  };
+  const edgeReach = reachOf(rim(0));
+  ok(edgeReach > 0 && edgeReach <= Math.ceil(P(rim(0)).rimWidth * unit) + 1,
+    "the sharp edge stops at its width and not past it",
+    `${edgeReach}px lit, width ${(P(rim(0)).rimWidth * unit).toFixed(1)}px`);
+  const reaches = [10, 40, 100].map((width) => reachOf(rim(0, { width })));
+  ok(reaches[0] < reaches[1] && reaches[1] < reaches[2], "a wider dial reaches further out", String(reaches));
+  // Sharp is a number, not an adjective: the shipped default has to be a line.
+  const shippedPx = (M.stackParams(M.DEFAULT_GRADE).rimWidth * EF.FIELD_RANGE) * 1280;
+  ok(shippedPx <= 8, "the shipped edge is a few pixels on a full-size render, not a band", `${shippedPx.toFixed(1)}px at 1280 tall`);
+  ok(M.RIM_MAX_WIDTH < M.HALO_MAX_SPREAD, "and even at its widest the edge is narrower than the backglow's reach");
+
+  // ── The backglow ──
+  const halo = (extra = {}) => rim(0, { amount: 0, halo: 100, haloSpread: 55, ...extra });
+  ok(weight(halo(), out(1)) > 0, "the backglow lights the air behind the figure");
+  ok(weight(halo(), out(Math.round(unit * 0.3))) > 0, "…much further out than the edge reaches");
+  ok(reachOf(halo()) > edgeReach * 3, "…several times further", `${reachOf(halo())}px vs ${edgeReach}px`);
+  ok(weight(halo(), out(1)) < weight(rim(0), out(1)), "…and weaker than the edge where they overlap");
+  const haloReaches = [20, 55, 100].map((haloSpread) => reachOf(halo({ haloSpread })));
+  ok(haloReaches[0] < haloReaches[1] && haloReaches[1] < haloReaches[2], "the spread dial moves how far it carries", String(haloReaches));
+  ok(weight(halo(), out(Math.ceil(P(halo()).rimHaloSpread * unit) + 2)) === 0, "and it is exactly zero past its spread");
+
+  // The two are separate lights, not one dial's two ends.
+  ok(weight(rim(0, { halo: 0 }), out(Math.round(unit * 0.3))) === 0, "with the backglow off the edge alone lights nothing far out");
+  ok(weight(rim(0, { amount: 0, halo: 0 }), out(1)) === 0, "with both off nothing is lit at all");
+  ok(M.stackParams(M.normalizeGrade(rim(0, { width: 0, halo: 0 }), M.NEUTRAL_GRADE)).rimAmount === 0, "an edge with no width is no edge");
+  ok(M.stackParams(M.normalizeGrade(rim(0, { haloSpread: 0 }), M.NEUTRAL_GRADE)).rimHalo === 0, "a backglow with no spread is no backglow");
+  // A halo that could reach full strength would put the sharp line on a bright
+  // field instead of against the room.
+  ok(M.HALO_GAIN < 1 && P(halo()).rimHalo === M.HALO_GAIN, "the backglow cannot reach full strength");
+
+  // ── Direction ──
+  ok(weight(rim(0), uvOf(W / 2, H / 2 - R - 1)) === 0 && weight(rim(0), uvOf(W / 2, H / 2 + R + 1)) === 0,
+    "air beside an edge that runs parallel to the light is not lit");
+  const faceAt = (softness, uv) =>
+    weight({ light: { angle: 0, softness }, rim: { amount: 100, width: 40, softness: 25, halo: 0, haloSpread: 55 } }, uv);
+  ok(faceAt(0, uvOf(W / 2, H / 2 - R - 1)) === 0 && faceAt(100, uvOf(W / 2, H / 2 - R - 1)) === 0,
+    "the terminator is never crossed, hard light or soft");
+  const quarter = uvOf(W / 2 + Math.round(R * 0.72) + 1, H / 2 - Math.round(R * 0.72) - 1);
+  ok(faceAt(0, quarter) > faceAt(100, quarter),
+    "a hard light lights the whole lit half evenly; a soft one concentrates on what faces it",
     `${faceAt(0, quarter).toFixed(3)} vs ${faceAt(100, quarter).toFixed(3)}`);
 
-  ok(M.stackParams(M.normalizeGrade(rim(0, { width: 0 }), M.NEUTRAL_GRADE)).rimAmount === 0, "a rim with no depth is no rim");
-  ok(M.RIM_MAX_WIDTH === EF.FIELD_RANGE, "the deepest rim is exactly as far as the field can see",
-    "one statement, so no dial can ask for a distance the field has saturated");
-  const warm = shade(rim(0, { color: "#ffb060" }), rightEdge);
-  ok(warm[0] > warm[2], "the rim takes its colour", String(warm));
-  // The rim is light, not pigment: skin takes it as it is.
-  const guarded = M.shadePixel([0.85, 0.66, 0.55], rightEdge, P({ ...rim(0), skin: { guard: 100 } }), fieldAt);
-  const open = M.shadePixel([0.85, 0.66, 0.55], rightEdge, P({ ...rim(0), skin: { guard: 0 } }), fieldAt);
-  ok(guarded.every((x, i) => Math.abs(x - open[i]) < 1e-12), "skin protection never holds the rim back");
-
-  // ── Outside the art: the spill is emission, and only when something emits ──
+  // ── Emission, and only emission ──
   const empty = [0, 0, 0, 0];
-  const outside = uvOf(W / 2 + R + 2, H / 2);
-  ok(M.shadeFragment(empty, outside, P(rim(0)), fieldAt).every((x) => x > 0), "the spill draws outside the art's coverage");
-  ok(M.shadeFragment(empty, outside, P({ rim: { amount: 0 } }), fieldAt).every((x) => x === 0),
-    "…and with the rim off, nothing outside the art is written at all");
+  ok(M.shadeFragment(empty, out(1), P(rim(0)), fieldAt).every((x) => x > 0), "the rim draws where the art does not");
+  ok(M.shadeFragment(empty, out(1), P(rim(0, { amount: 0, halo: 0 })), fieldAt).every((x) => x === 0),
+    "…and with both lights off writes nothing outside the art at all");
+  const warm = M.shadeFragment(empty, out(1), P(rim(0, { color: "#ffb060" })), fieldAt);
+  ok(warm[0] > warm[2], "the rim takes its colour", String(warm.map((v) => v.toFixed(3))));
   ok(M.emission(null, 0, P(rim(0))) === null, "no glow and no rim is no emission");
+  // A covered pixel is the graded art and nothing else, however loud the rim.
+  const covered = uvOf(W / 2, H / 2);
+  const texel = [0.3, 0.3, 0.3, 1];
+  const withRim = M.shadeFragment(texel, covered, P(rim(0, { amount: 100, halo: 100 })), fieldAt);
+  const without = M.shadeFragment(texel, covered, P(rim(0, { amount: 0, halo: 0 })), fieldAt);
+  ok(withRim.every((x, i) => x === without[i]), "a covered pixel is identical with the rim on and off", String(withRim));
 }
 
 section("glow: a bloom pyramid of the art's own highlights");

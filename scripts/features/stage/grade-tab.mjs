@@ -45,7 +45,7 @@ export const GRADE_UI = Object.freeze([
     { section: 'basic', controls: ['exposure', 'brightness', 'contrast', 'gamma', 'saturation', 'hue'] },
     { section: 'light', controls: ['angle', 'softness'], pad: true },
     { section: 'wash', controls: ['amount', 'color', 'darkness'] },
-    { section: 'rim', controls: ['amount', 'width', 'softness', 'color'] },
+    { section: 'rim', controls: ['amount', 'width', 'softness', 'halo', 'haloSpread', 'color'] },
     { section: 'backShadow', controls: ['amount'] },
     { section: 'glow', controls: ['amount', 'radius', 'threshold'] },
     { section: 'looks', looks: true },

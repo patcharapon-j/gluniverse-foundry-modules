@@ -177,22 +177,38 @@ decision, not an omission: there was a `gradient` layer — the light's colour
 soft-light blended across the whole figure — and art arrives already painted with
 its own light, so a second one smeared over all of it reads as a pale strip laid
 on the character rather than as light in the room. Restoring it is the change
-that will look like an improvement in its own diff. The rim is a band in signed
-distance from the silhouette, built from `postfx/edge-field.mjs` — an exact
-euclidean distance transform plus its gradient, uploaded as one RGBA8 texture —
-so the band is **provably zero** past the depth dial whatever the art does there,
-and the direction comes from the outline's own normal rather than from a blurred
-silhouette shifted toward the lamp, which lit every soft interior gradient it
-reached. Two things in that field fail only on the contact sheet, never in a
-number: seeds are placed at **sub-pixel** positions from the coverage (threshold
-at 0.5 instead and the field is wrong by half a cell in a pattern that repeats
-along the outline, whose *gradient* is several tenths — near the terminator that
-draws the fading rim as a row of detached ticks), and the field is then smoothed,
-in that order (a blur wide enough to flatten the unseeded ripple is wider than
-the features it protects, because the ripple's period grows with how shallow the
-outline is). The rim is also the one layer whose weight is used twice — screened
-into the figure over the covered part of a pixel, emitted into the air over the
-uncovered part — and it is the alpha composite, not two weights, that splits it.
+that will look like an improvement in its own diff.
+
+**The rim is light in the AIR, never paint on the figure.** It is not in the
+layer stack at all — it is emission in `shadeFragment`, drawn entirely outside
+the silhouette, and no pixel the art covers is touched at any setting. What
+attaches it is the alpha composite: a silhouette's boundary pixels are partly
+transparent and let exactly that much through. It is two lights sharing a colour
+and a direction — a **sharp edge** (`RIM_MAX_WIDTH` is 2% of the art's height at
+its widest and a few pixels shipped, because a rim is sold by the catch being
+thin) and a wider, weaker **backglow** (`HALO_GAIN` caps it, or the sharp line
+sits on a bright field instead of against the room). The backglow is its own
+dial, not a softness on the edge: widening a rim does not make a glow, it makes a
+fuzzy rim. Both come from `postfx/edge-field.mjs` — an exact euclidean distance
+transform plus its gradient, uploaded as one RGBA8 texture — so the direction is
+the outline's own normal rather than a blurred silhouette shifted toward the
+lamp, which lit every soft interior gradient it reached.
+
+Four things there fail only on the contact sheet, never in a number. Seeds are
+placed at **sub-pixel** positions from the coverage (threshold at 0.5 instead and
+the field is wrong by half a cell in a pattern that repeats along the outline,
+whose *gradient* is several tenths — near the terminator that draws the fading
+rim as a row of detached ticks), and the field is then smoothed, in that order (a
+blur wide enough to flatten the unseeded ripple is wider than the features it
+protects, because the ripple's period grows with how shallow the outline is). The
+distance is the **difference of the two distance channels** and never either
+alone — each is the signed distance rectified to one side, so a texel the outline
+runs through carries both, and either read on its own is wrong by up to a texel
+exactly where the sharp edge lives, which draws it faint and broken in dashes.
+And both lights **rise out of the outline** over `RIM_OCCLUDE_RISE` instead of
+starting at full: a step at `sd = 0` is an edge no display can draw, and it is
+also a sign test the GPU takes in float32 and the reference in float64, so the
+two disagree by the whole band on the brightest pixels the rim has.
 
 `postfx/grade-model.mjs` holds `shadePixel`, the shader written in JavaScript,
 and `gl.mjs` is its transcription — every GLSL constant (OKLab matrices, knees,
