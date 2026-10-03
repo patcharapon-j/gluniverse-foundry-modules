@@ -26,6 +26,7 @@
  */
 
 import { clamp, hex6 } from "../../../core/util.mjs";
+import { FIELD_RANGE } from "./edge-field.mjs";
 
 /** Schema version of a stored grade. */
 export const GRADE_VERSION = 1;
@@ -60,13 +61,11 @@ const dial = (min, max, step, dflt, neutral) =>
 //              The four tone dials act on luminance as a ratio, so none of them
 //              can shift chromaticity; the two colour dials act on the OKLab
 //              chroma vector, so neither can shift lightness.
-//   gradient   a ramp of the light's colour across the figure, lit side to dark
-//              side, soft-light blended
 //   wash       the room's colour over the whole figure, as a luminance-neutral
 //              cast; and how far the figure darkens with Foundry's scene darkness
-//   rim        light catching the edge that faces the lamp: the silhouette,
-//              shifted toward the light and blurred, cut out of itself — the
-//              inner-shadow model — screened on in the rim's colour
+//   rim        the scene light, and the ONLY way it reaches the art: a band in
+//              signed distance from the outline, on the side of the outline that
+//              faces the lamp, screened on in the rim's colour
 //   backShadow the side turned away from the lamp, darkened
 //   looks      up to MAX_LOOKS colour looks (3D LUTs, lut.mjs), applied in
 //              order, each at its own opacity
@@ -78,6 +77,15 @@ const dial = (min, max, step, dflt, neutral) =>
 // layer that has a direction, so every character is lit from the same side.
 // `skin` is not a layer either: it is how hard skin holds back the chromatic
 // half of the colour layers (never their level — a face in a dark room darkens).
+//
+// The light reaches the art as a rim and nothing else. There used to be a
+// `gradient` layer as well — the light's colour soft-light blended across the
+// whole figure, strongest on the lit side — and that is the one thing a grade
+// cannot do honestly: the art is already painted with its own light, so a second
+// one smeared over all of it reads as a pale strip laid on top of the character
+// rather than as light in the room. Light lands on an edge. So the directional
+// light is a rim, the `backShadow` takes the far side down in level only, and
+// the room's own colour arrives through the wash, which has no direction at all.
 
 export const SECTIONS = Object.freeze({
   basic: Object.freeze({
@@ -92,13 +100,12 @@ export const SECTIONS = Object.freeze({
     /** Direction from the character toward the light, degrees: 0 right, 90 up,
      *  180 left, -90 down. */
     angle: dial(-180, 180, 1, 90),
-    /** How much of the figure the light's falloff spans: 0 is a hard
-     *  terminator across the middle, 100 a ramp from edge to edge. Shared by the
-     *  gradient and the back shadow, which are the two sides of one falloff. */
+    /** How gradually the light gives out toward its terminator: 0 is a hard
+     *  edge — the rim covers the whole lit half of the outline and stops dead,
+     *  the back shadow a hard line across the middle — 100 a ramp that starts
+     *  at the point facing the lamp. Shared by the rim and the back shadow,
+     *  which are the two ends of one falloff. */
     softness: dial(0, 100, 1, 70),
-  }),
-  gradient: Object.freeze({
-    amount: dial(0, 100, 1, 55, 0),
   }),
   wash: Object.freeze({
     amount: dial(0, 100, 1, 60, 0),
@@ -106,11 +113,13 @@ export const SECTIONS = Object.freeze({
     darkness: dial(0, 100, 1, 75, 0),
   }),
   rim: Object.freeze({
-    amount: dial(0, 100, 1, 75, 0),
-    /** How far in from the edge the rim reaches ("light depth"). */
-    width: dial(0, 100, 1, 30),
-    /** How soft the rim's inner edge is. */
-    softness: dial(0, 100, 1, 40),
+    amount: dial(0, 100, 1, 80, 0),
+    /** How far in from the outline the rim reaches ("light depth"), as a
+     *  fraction of RIM_MAX_WIDTH. Nothing past it is lit, at any amount. */
+    width: dial(0, 100, 1, 26),
+    /** How the band falls off across its own depth: 0 a flat strip that ends
+     *  at the width, 100 a falloff that starts at the outline. */
+    softness: dial(0, 100, 1, 55),
   }),
   backShadow: Object.freeze({
     amount: dial(0, 100, 1, 50, 0),
@@ -130,13 +139,49 @@ export const SECTIONS = Object.freeze({
 
 /** Colour settings, per section, as `#rrggbb`. */
 export const COLORS = Object.freeze({
-  gradient: Object.freeze({ color: "#ffe6c4" }),
   wash: Object.freeze({ color: "#808080" }),
   rim: Object.freeze({ color: "#fff4e6" }),
 });
 
-/** Rim reach at `width` 100, as a fraction of the art's height. */
-export const RIM_MAX_WIDTH = 0.06;
+/**
+ * Rim reach at `width` 100, as a fraction of the art's height.
+ *
+ * It is the edge field's own range, from one statement: the field records
+ * distances up to FIELD_RANGE and the width dial is read in the same units, so
+ * `width` 100 reaches exactly as far as the field can see and no dial can ask
+ * for a distance the field has saturated.
+ */
+export const RIM_MAX_WIDTH = FIELD_RANGE;
+
+/**
+ * How far the rim spills *outside* the outline, as a fraction of how far it
+ * reaches inside. Thin on purpose: enough that the lit edge reads as light in
+ * the air next to the figure rather than as a painted stroke along it, little
+ * enough that it is not a second glow.
+ */
+export const RIM_BLEED_SPAN = 0.45;
+
+/**
+ * The least feather the band's inner edge keeps, as a fraction of its depth.
+ *
+ * At `softness` 0 the band would otherwise end on a step, and a step in a mask
+ * is a hard edge the display cannot show without a stair on every curve. One
+ * twelfth of the depth is below what reads as softness and above what reads as
+ * aliasing.
+ */
+export const RIM_FEATHER_MIN = 1 / 12;
+
+/**
+ * The shortest edge normal the rim will take a direction from.
+ *
+ * Where the field is flat the stored normal is zero, and a zero has no
+ * direction to light from. That happens on the medial axis, where the nearest
+ * outline is in two directions at once, and across a raster with no outline in
+ * it at all — art with no transparency, which has no silhouette to rim. The
+ * threshold has to clear the quantisation of a stored zero (one 8-bit step,
+ * 0.0039 per axis) and nothing else.
+ */
+export const RIM_NORMAL_MIN = 0.02;
 
 /** How far the back shadow darkens the far side at `amount` 100, in linear
  *  light. Never to black: a figure's shadow side still has the room in it. */
@@ -154,13 +199,6 @@ export const GLOW_GAIN = 1.2;
  * enough for a soft glow that fills the air around a character.
  */
 export const GLOW_LEVELS = 5;
-
-/** Taps on the ring the rim's blur samples, plus one at the centre. */
-export const RIM_TAPS = 8;
-
-/** How quickly the rim reaches full strength across its edge. The directional
- *  difference it is built from rarely reaches 1 inside a soft rim. */
-export const RIM_GAIN = 1.5;
 
 // Kept as named exports because the actor trim and the check tool speak in
 // basic-correction terms.
@@ -405,25 +443,27 @@ export function stackParams(grade, trim = DEFAULT_TRIM, { aspect = 0.5, darkness
   // Image space: +Y is down, so "up" is a negative Y.
   const dir = [Math.cos(rad), -Math.sin(rad)];
 
-  // The rim, in the art's uv. Lengths are measured in units of the art's
-  // height and divided by the aspect on x, so the rim is as wide on the side of
-  // a tall portrait as it is on top of it. A rim with no reach is no rim.
-  const reach = (g.rim.width / 100) * RIM_MAX_WIDTH;
-  const blur = reach * (0.25 + g.rim.softness / 100);
+  // The rim's band, in units of FIELD_RANGE — which is what the edge field
+  // records its distances in, so the shader compares two numbers in the same
+  // units and never has to know the art's aspect. (The field measures distance
+  // in units of the art's *height* on both axes, which is what makes the band
+  // the same depth down the side of a tall portrait as across the top of it.)
+  // A rim with no depth is no rim.
+  const width = (g.rim.width / 100) * (RIM_MAX_WIDTH / FIELD_RANGE);
+  const feather = Math.min(1 - g.rim.softness / 100, 1 - RIM_FEATHER_MIN);
 
   return {
     ...basicParams(g.basic, trim),
     aspect: asp,
     lightDir: dir,
     lightSoft: 0.08 + 0.92 * (g.light.softness / 100),
-    gradAmount: g.gradient.amount / 100,
-    gradColor: hexToRgb(g.gradient.color),
     washAmount: g.wash.amount / 100,
     washCast: cast,
     darkGain: 1 - Math.min(Math.max(Number(darkness) || 0, 0), 1) * (g.wash.darkness / 100),
-    rimAmount: reach > 0 ? g.rim.amount / 100 : 0,
-    rimOffset: [(dir[0] * reach) / asp, dir[1] * reach],
-    rimRadius: [blur / asp, blur],
+    rimAmount: width > 0 ? g.rim.amount / 100 : 0,
+    rimWidth: width,
+    rimFeather: feather,
+    rimBleed: width * RIM_BLEED_SPAN,
     rimColor: hexToRgb(g.rim.color),
     backAmount: (g.backShadow.amount / 100) * BACK_SHADOW_MAX,
     glowAmount: g.glow.amount / 100,
@@ -686,45 +726,58 @@ export function litWeight(uv, p) {
   return smoothstep(-p.lightSoft, p.lightSoft, t);
 }
 
-/** The blurred silhouette around a point: the centre and a ring of taps. */
-export function ringAlpha(cx, cy, p, alphaAt) {
-  let sum = alphaAt(cx, cy);
-  for (let i = 0; i < RIM_TAPS; i++) {
-    const a = (i * 2 * Math.PI) / RIM_TAPS;
-    sum += alphaAt(cx + Math.cos(a) * p.rimRadius[0], cy + Math.sin(a) * p.rimRadius[1]);
-  }
-  return sum / (RIM_TAPS + 1);
-}
-
 /**
- * How much rim light lands on a point: the inner-shadow model, made
- * directional.
+ * How much rim light lands on a point, 0..1, from the edge field.
  *
- * The blurred silhouette here, minus the blurred silhouette shifted toward the
- * light, is high exactly where moving toward the lamp leaves the figure — the
- * edge that faces it. Using the shifted silhouette alone (the plain inner
- * shadow) also lights every edge the blur reaches, including ones that run
- * parallel to the light, which reads as an outline rather than a rim. Where the
- * art is cut off by its own frame, coverage clamps at the border, so a cropped
- * bust gets no false rim along the crop. `alphaAt(u, v)` samples the art's
- * coverage — the shader's texture, or the harness's copy of it.
+ * Two questions, each answered by one channel of the field (edge-field.mjs):
+ *
+ *   *how near the outline is this* — the band. One function of the signed
+ *   distance, spanning `rimWidth` inside the outline to `rimBleed` outside it,
+ *   equal to 1 on the outline itself so the two halves meet without a seam. It
+ *   is **exactly zero** past either end, which is the whole point: a pixel
+ *   deeper in than the width dial cannot be lit, whatever the art's own paint
+ *   does there, so the rim can no longer bleed into the character.
+ *
+ *   *which way does the outline face* — the gradient of the same field, the
+ *   outline's true outward normal, dotted with the direction of the light. The
+ *   light's softness is how gradually that fades toward the terminator: a hard
+ *   light rims the whole lit half of the outline evenly and stops dead, a soft
+ *   one concentrates on the part pointing at the lamp and fades away before the
+ *   terminator. Either way it is exactly zero on the far side — an edge facing
+ *   away from the lamp is never lit, at any setting, which is the other half of
+ *   not bleeding: a rim that carries all the way round is an outline, not light.
+ *
+ * `fieldAt(u, v)` samples the field — the shader's texture, or the harness's
+ * copy of the same bytes.
+ *
+ * The weight is for the whole pixel. What makes the inside half land on the
+ * figure and the outside half land in the air beside it is the alpha composite
+ * in {@link shadeFragment}, not two different weights: the art's own coverage
+ * is already the only honest answer to how much of a boundary pixel is figure.
  */
-export function rimMask(uv, alpha, p, alphaAt) {
-  const here = ringAlpha(uv[0], uv[1], p, alphaAt);
-  const shifted = ringAlpha(uv[0] + p.rimOffset[0], uv[1] + p.rimOffset[1], p, alphaAt);
-  return alpha * Math.min(Math.max((here - shifted) * RIM_GAIN, 0), 1);
+export function rimWeight(uv, p, fieldAt) {
+  if (!(p.rimAmount > 0) || !fieldAt) return 0;
+  const [nx, ny, inward, outward] = fieldAt(uv[0], uv[1]);
+  const len = Math.hypot(nx, ny);
+  if (len < RIM_NORMAL_MIN) return 0;
+
+  const facing = (nx * p.lightDir[0] + ny * p.lightDir[1]) / len;
+  const face = smoothstep(0, p.lightSoft, facing);
+  if (face <= 0) return 0;
+
+  const sd = outward - inward;
+  const band =
+    sd <= 0
+      ? 1 - smoothstep(p.rimFeather * p.rimWidth, p.rimWidth, -sd)
+      : p.rimBleed > 0
+        ? 1 - smoothstep(0, p.rimBleed, sd)
+        : 0;
+  return p.rimAmount * face * band;
 }
 
 /** Screen, per channel, on encoded values. */
 export function screen(b, s) {
   return 1 - (1 - b) * (1 - s);
-}
-
-/** W3C soft-light, per channel, on encoded values. */
-export function softLight(b, s) {
-  if (s <= 0.5) return b - (1 - 2 * s) * b * (1 - b);
-  const d = b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b);
-  return b + (2 * s - 1) * (d - b);
 }
 
 /** Basic correction on a linear colour. */
@@ -758,9 +811,9 @@ export function basicCorrect(lin, p) {
 
 /**
  * The whole stack for one pixel. `srgb` is the original art's encoded colour,
- * `uv` its position in the art, `alpha` its coverage, and `alphaAt(u, v)`
- * samples coverage anywhere in the art (the rim needs its neighbourhood).
- * Returns encoded colour, before master intensity.
+ * `uv` its position in the art, and `fieldAt(u, v)` samples the edge field (the
+ * rim needs to know how near the outline is and which way it faces). Returns
+ * encoded colour, before master intensity.
  *
  * The result is formed as `input + (out − in)` in encoded space, with both
  * encodes taken from the same expression. With every layer neutral the linear
@@ -769,24 +822,11 @@ export function basicCorrect(lin, p) {
  * identity. Every layer is skipped outright at its neutral value for the same
  * reason.
  */
-export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1, looks = null) {
+export function shadePixel(srgb, uv, p, fieldAt = null, looks = null, rim = rimWeight(uv, p, fieldAt)) {
   const lin = srgb.map(toLinear);
   const guard = p.skin * skinMask(srgb);
 
   let c = basicCorrect(lin, p);
-
-  // Gradient: the light's colour, soft-light blended, ramping from the lit side.
-  if (p.gradAmount > 0) {
-    const w = p.gradAmount * litWeight(uv, p);
-    if (w > 0) {
-      const e = c.map(toSRGB);
-      const lit = e.map((x, i) => {
-        const b = Math.min(Math.max(x, 0), 1);
-        return x + (softLight(b, p.gradColor[i]) - x) * w;
-      });
-      c = guardSkin(c, lit.map(toLinear), guard);
-    }
-  }
 
   // Wash: the room's colour, as a cast that moves hue and not level.
   if (p.washAmount > 0) {
@@ -796,14 +836,11 @@ export function shadePixel(srgb, uv, p, alphaAt = null, alpha = 1, looks = null)
   // …and the room's darkness, which is level only — skin takes it in full.
   if (p.darkGain !== 1) c = c.map((x) => x * p.darkGain);
 
-  // Rim: the edge facing the lamp, screened on in the rim's colour. It is
-  // light, not pigment, so skin takes it as it is.
-  if (p.rimAmount > 0 && alphaAt) {
-    const w = p.rimAmount * rimMask(uv, alpha, p, alphaAt);
-    if (w > 0) {
-      const e = c.map(toSRGB);
-      c = e.map((x, i) => toLinear(x + (screen(Math.min(Math.max(x, 0), 1), p.rimColor[i]) - x) * w));
-    }
+  // Rim: the band of outline facing the lamp, screened on in the rim's colour.
+  // It is light, not pigment, so skin takes it as it is.
+  if (rim > 0) {
+    const e = c.map(toSRGB);
+    c = e.map((x, i) => toLinear(x + (screen(Math.min(Math.max(x, 0), 1), p.rimColor[i]) - x) * rim));
   }
 
   // Back shadow: the side turned away from the lamp, darker. Level only.
@@ -993,27 +1030,48 @@ export function glowFrom(bloom, p) {
 }
 
 /**
+ * Light in the air beside the figure, encoded: the rim's own spill off the
+ * outline, and the glow. Null when neither is on, which is what keeps a grade
+ * with both off from writing anything outside the art's coverage.
+ *
+ * Screened rather than summed, like every other light in the stack: two lights
+ * over the same empty pixel cannot take it past white.
+ */
+export function emission(glow, rim, p) {
+  const R = rim > 0 ? p.rimColor.map((x) => Math.min(Math.max(x * rim, 0), 1)) : null;
+  if (glow && R) return glow.map((x, i) => screen(x, R[i]));
+  return glow ?? R;
+}
+
+/**
  * The shader's whole output for one fragment: premultiplied [r, g, b, a], after
  * master intensity. `texel` is the premultiplied texture value at `uv`,
- * `sample` samples the art anywhere, and `bloomAt` samples the finished bloom
- * — exactly what the shader reads.
+ * `fieldAt` samples the edge field and `bloomAt` the finished bloom — exactly
+ * what the shader reads.
+ *
+ * The rim is computed once here and handed to {@link shadePixel}, because the
+ * same weight does both halves of the rim: it is screened into the figure over
+ * the covered part of the pixel and emitted into the air over the uncovered
+ * part. One weight, split by the art's own coverage — see {@link rimWeight}.
  */
-export function shadeFragment(texel, uv, p, sample, intensity = 1, bloomAt = null, looks = null) {
+export function shadeFragment(texel, uv, p, fieldAt, intensity = 1, bloomAt = null, looks = null) {
   const a = texel[3];
   const G = p.glowAmount > 0 && bloomAt ? glowFrom(bloomAt(uv[0], uv[1]), p) : null;
+  const rim = rimWeight(uv, p, fieldAt);
+  const E = emission(G, rim, p);
   if (a <= 0) {
-    if (!G) return [0, 0, 0, 0];
-    const ga = Math.max(G[0], G[1], G[2]);
-    return [G[0] * intensity, G[1] * intensity, G[2] * intensity, ga * intensity];
+    if (!E) return [0, 0, 0, 0];
+    const ea = Math.max(E[0], E[1], E[2]);
+    return [E[0] * intensity, E[1] * intensity, E[2] * intensity, ea * intensity];
   }
   const div = Math.max(a, 0.0039);
   const srgb = [texel[0] / div, texel[1] / div, texel[2] / div];
-  let graded = shadePixel(srgb, uv, p, (u, v) => sample(u, v)[3], a, looks);
+  let graded = shadePixel(srgb, uv, p, fieldAt, looks, rim);
   if (G) graded = graded.map((x, i) => screen(Math.min(Math.max(x, 0), 1), G[i]));
   const out = srgb.map((x, i) => x + (graded[i] - x) * intensity);
-  if (G && a < 1) {
-    const ga = Math.max(G[0], G[1], G[2]) * intensity;
-    return [...out.map((x, i) => x * a + G[i] * intensity * (1 - a)), a + ga * (1 - a)];
+  if (E && a < 1) {
+    const ea = Math.max(E[0], E[1], E[2]) * intensity;
+    return [...out.map((x, i) => x * a + E[i] * intensity * (1 - a)), a + ea * (1 - a)];
   }
   return [out[0] * a, out[1] * a, out[2] * a, a];
 }

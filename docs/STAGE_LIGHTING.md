@@ -11,6 +11,7 @@ scripts/features/stage/
   grade-tab.mjs            the Stage Director's Grade tab
   postfx/
     grade-model.mjs        the schema, the dials, and shadePixel — the shader in JS
+    edge-field.mjs         the silhouette's distance + normal field, for the rim
     gl.mjs                 the GPU pass (main program + bloom down/up programs)
     index.mjs              slots, the tween, the CSS fallback
     grade-store.mjs        scene flag / world default / custom looks (touches `game`)
@@ -62,9 +63,8 @@ key the new grade lacked would survive the write.
 | Layer | Dials | Owns |
 | --- | --- | --- |
 | basic | exposure, brightness, gamma, contrast, saturation, hue | tone and colour of the art itself |
-| gradient | amount, colour | the light's colour across the figure, soft-light, lit side strongest |
 | wash | amount, colour, darkness | the room's colour as a luminance-neutral cast; how far scene darkness dims the cast |
-| rim | amount, depth, softness, colour | light on the edge that faces the lamp, screened |
+| rim | amount, depth, falloff, colour | **the scene light** — a band on the outline facing the lamp, screened, spilling thinly past it |
 | back shadow | amount | the side turned away from the lamp, darker (level only) |
 | looks | up to 4 × (look, opacity) | 3D LUTs, in order |
 | glow | amount, radius, threshold | the art's highlights bloomed, spilling past the outline |
@@ -73,6 +73,18 @@ key the new grade lacked would survive the write.
 `light` (angle, softness) is not a layer: it is the scene's one light, shared by
 every layer with a direction, so every character is lit from the same side.
 `skin` (protection) is not a layer either — see below.
+
+**The light reaches the art as a rim and nothing else.** There used to be a
+`gradient` layer as well — the light's colour soft-light blended across the whole
+figure, strongest on the lit side — and it is the one thing a grade cannot do
+honestly. The art arrives already painted with its own light, so a second one
+smeared over all of it does not read as light in the room; it reads as a pale
+strip laid over the character, and it was the loudest thing on the stage. Light
+lands on an edge. So the directional light is a rim, the back shadow takes the
+far side down in level only, and the room's own colour arrives through the wash,
+which has no direction at all. A grade stored before this reads back without the
+layer — `normalizeGrade` drops sections it does not know — and keeps everything
+else exactly as it was.
 
 ### Basic correction
 
@@ -100,10 +112,9 @@ display can show has its chroma compressed at constant lightness and hue, with
 a soft knee (`GAMUT_KNEE`): a hard stop is continuous but has a corner, and the
 corner is a seam.
 
-### Gradient, wash and darkness
+### Wash and darkness
 
-The gradient ramps the light's colour from the lit side of the art's frame
-(`litWeight`), made isotropic first so 45° is 45° on a tall portrait. The wash is
+The wash is
 the room's colour normalised to unit luminance, so it moves hue and not level; a
 saturated room is pulled toward white until no channel asks for more than
 `WASH_CAST_MAX`, which keeps its luminance at exactly 1.
@@ -114,14 +125,48 @@ pitch-dark scene changes nothing.
 
 ### Rim
 
-AutoCompositing's inner-shadow model, made directional: the art's blurred
-silhouette here, minus the same silhouette shifted toward the light, is high
-exactly where moving toward the lamp leaves the figure. The plain inner shadow
-(shifted silhouette alone) also lights every edge the blur reaches, including
-ones parallel to the light — an outline, not a rim. Coverage clamps at the
-frame's border, so a bust cropped by its own frame gets no false rim along the
-crop. Reach and blur are in units of the art's height, divided by the aspect on
-x.
+The scene's light, and the only thing carrying it. Two questions, each answered
+by one channel of the **edge field** (`edge-field.mjs`), which is built once per
+asset during `prepare` and uploaded as one RGBA8 texture the shader reads with a
+single tap:
+
+- *how near the outline is this* — the band. One function of the signed
+  distance, spanning `width` inside the outline to `RIM_BLEED_SPAN × width`
+  outside it, equal to 1 on the outline itself so the two halves meet without a
+  seam, and **exactly zero** past either end. That is the whole point: a pixel
+  deeper in than the depth dial cannot be lit, whatever the art is painted like
+  there. `falloff` shapes the profile across that depth and nothing else; even at
+  its flattest the band keeps `RIM_FEATHER_MIN` of feather, so its end is not a
+  stair.
+- *which way does the outline face* — the gradient of the same field, the
+  outline's true outward normal, dotted with the light. The light's `softness` is
+  how gradually that fades toward the terminator. It is never crossed: an edge
+  facing away from the lamp is not lit at any setting, because a rim that carries
+  all the way round is an outline rather than light.
+
+The weight is for the whole pixel, and what puts half of it on the figure and
+half in the air beside it is the alpha composite — the art's own coverage is
+already the only honest answer to how much of a boundary pixel is figure. A
+figure cropped by its own frame has no outline along the crop (the field finds
+none there), and art with no transparency at all has no outline anywhere, so it
+gets no rim.
+
+Two things about the field are the difference between a rim that fades out
+cleanly and one that fades out in **dashes**, and both are invisible in a diff:
+
+- Seeds are placed at **sub-pixel** positions, from `(coverage − ½) / |∇coverage|`.
+  Threshold coverage at 0.5 instead and every seed sits at a cell centre, so the
+  field is wrong by up to half a cell in a pattern that repeats along the
+  outline — and a half-cell ripple with a period of a few cells has a *gradient*
+  of several tenths. That gradient is the direction the rim lights from.
+- The field is then **smoothed** (`SMOOTH_PASSES`), which finishes what seeding
+  leaves. The order matters: a blur wide enough to flatten the *unseeded* ripple
+  would be wider than the features it is protecting, because that ripple's period
+  grows with how shallow the outline is.
+
+Near the terminator a tenth of direction is the difference between lit and
+unlit, so either one missing draws the fading rim as a row of detached ticks.
+No number in `postfx-check` catches it; the contact sheet shows it at a glance.
 
 ### Glow
 
@@ -182,7 +227,7 @@ replaced the previous slot's look.
 
 A blue night scene applied honestly turns every face blue, and nobody reads that
 as moonlight. Skin (a soft ellipse in Cb/Cr, measured on the *original* art)
-holds back the **chromatic** change of the gradient, wash and looks by the
+holds back the **chromatic** change of the wash and the looks by the
 protection dial, and takes their **level** in full: a face in a dark room still
 darkens. `guardSkin` keeps the layer's luminance and the pre-layer
 chromaticity. It does not spill onto neutrals. The rim and glow are light and are
@@ -193,15 +238,18 @@ the price of finding skin by colour.
 
 The first time a scene is used on the stage — visible, with a character on it —
 the active GM's client samples the background (`scene-sample.mjs`) and stores a
-grade: the world default's amounts, with the light's colour, the room's colour,
-the rim colour and the light's direction proposed from the image. A flat-colour
-background proposes colours but not a direction. After that the grade is data.
+grade: the world default's amounts, with the room's colour, the rim's colour and
+the light's direction proposed from the image. A flat-colour background proposes
+colours but not a direction. After that the grade is data.
 
 The room colour is *saturated* on the way in (`roomCast`): an average over a
 whole background is far greyer than the light it reads as, so its OKLab chroma is
 multiplied by `WASH_CHROMA_BOOST` and, once the room has a clear hue, lifted to at
-least `WASH_CHROMA_MIN`. A grey room stays grey. Key and rim colours are pulled
-only `KEY_WHITEN` / `RIM_WHITEN` toward white, so a blue room lights blue.
+least `WASH_CHROMA_MIN`. A grey room stays grey. The rim's colour is the
+background where the light appears to be, read as a light rather than as paint
+(`toKeyLight`, `KEY_WHITEN`) and then pulled `RIM_WHITEN` further toward white,
+because a grazing edge is the brightest thing a lamp does — but only part of the
+way, so a blue room still lights blue.
 
 "Re-sample background" re-reads the image and replaces only the colours and the
 direction, keeping every amount. "Reset to defaults" stores the world default *as
@@ -223,11 +271,17 @@ so the new one fades in from nothing.
 ## The CSS fallback
 
 Used when the art cannot be read (CORS) or there is no WebGL. Basic correction
-and darkness become a CSS filter chain on the `<img>`; the gradient, wash and
-back shadow become overlays masked to the art by URL. The rim, glow and looks
-need the art's pixels and have no honest CSS equivalent, so the fallback leaves
-them out rather than faking them. Neutral dials, or strength 0, write no filter
-and invisible overlays.
+and darkness become a CSS filter chain on the `<img>`; the wash and the back
+shadow become overlays masked to the art by URL. The rim, glow and looks need the
+art's pixels and have no honest CSS equivalent, so the fallback leaves them out
+rather than faking them. Neutral dials, or strength 0, write no filter and
+invisible overlays.
+
+Since the rim is now the only way the scene light reaches the art, a slot on this
+path gets the room's colour and the shadow side and **no light** — less than the
+shader, never different from it. A `drop-shadow` offset toward the lamp would
+fake the rim's outer spill but not the band inside the outline that is the whole
+effect, and a halo with no band on it reads as a mistake.
 
 ## One canvas, many characters
 
@@ -270,6 +324,14 @@ the model and every uniform in all three programs is declared, looked up and
 written; the CORS ladder; slot ownership; and every i18n key the Grade tab builds
 at runtime.
 
+For the rim it drives the real edge field built from a real raster, rather than
+sampling the model at a point: that the field's distances and normals are what
+they claim to be, that a figure cropped by its frame and art with no transparency
+both have no outline, that a soft gradient *inside* the figure makes no edge —
+and, scanned over every pixel of the figure at three depth settings, that **no
+pixel deeper in than the depth dial is ever lit**. That last one is the claim the
+whole model exists for, so it is driven and not asserted at a point.
+
 ```bash
 node tools/stage-lighting-preview.mjs --out=.preview/grade.png
 ```
@@ -278,8 +340,9 @@ Real GPU, via Playwright. Compiles all three programs, asserts both identities a
 0/255 drift, renders every layer and dial and compares the GPU with `shadePixel`
 pixel for pixel (coverage outside the art included), reads the bloom pyramid back
 and compares it with `bloomPyramid`, and writes a contact sheet. **Look at the
-contact sheet** — the ghosting in the first glow and the seam in the first
-saturation both passed every numeric check and were caught there.
+contact sheet** — the ghosting in the first glow, the seam in the first
+saturation and the ticks in the first SDF rim all passed every numeric check and
+were caught there.
 
 Neither can tell you how a grade looks on real art. That needs a real session.
 
