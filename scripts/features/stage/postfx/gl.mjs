@@ -43,6 +43,7 @@ import {
   SKIN_CENTRE,
   SKIN_RADIUS,
   RIM_NORMAL_MIN,
+  RIM_OCCLUDE_RISE,
   GLOW_KNEE,
   GLOW_GAIN,
   DOWN_TAPS,
@@ -104,22 +105,24 @@ uniform float u_washAmount;   // 0..1
 uniform vec3  u_washCast;     // the room's colour at unit luminance, linear
 uniform float u_darkGain;     // level from the scene's darkness, 1 = untouched
 
-// ── Layer 3: rim ── the scene light, and the only way it reaches the art
+// ── The rim ── the scene light. Light in the AIR outside the outline: it is
+// emission, never a layer over the art, and no pixel the art covers is touched.
 uniform sampler2D u_field;    // edge-field.mjs: RG outward normal, B inward, A outward
-uniform float u_rimAmount;    // 0..1
-uniform float u_rimWidth;     // how far in the band reaches, in FIELD_RANGE units
-uniform float u_rimFeather;   // where the band starts falling off, 0..1 of its width
-uniform float u_rimBleed;     // how far out it spills, in FIELD_RANGE units
+uniform float u_rimAmount;    // the sharp edge, 0..1
+uniform float u_rimWidth;     // how far out the sharp edge reaches, FIELD_RANGE units
+uniform float u_rimFeather;   // where the edge starts falling off, 0..1 of its width
+uniform float u_rimHalo;      // the backglow, 0..HALO_GAIN
+uniform float u_rimHaloSpread;// how far the backglow reaches, FIELD_RANGE units
 uniform vec3  u_rimColor;     // encoded
 
-// ── Layer 4: back shadow ──
+// ── Layer 3: back shadow ──
 uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MAX
 
-// ── Layer 5: glow ──
+// ── Layer 4: glow ──
 uniform float u_glowAmount;   // 0..1
 uniform sampler2D u_bloom;    // the finished bloom pyramid, premultiplied
 
-// ── Layer 6: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
+// ── Layer 5: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
 ${Array.from({ length: MAX_LOOKS }, (_, i) => `uniform sampler2D u_lut${i};`).join("\n")}
 uniform vec4  u_lookAmount;   // opacity of each slot, 0..1
 uniform vec4  u_lookSize;     // grid size N of each slot's LUT
@@ -138,6 +141,7 @@ const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
 const float GAMUT_REACH = ${f(GAMUT_REACH)};
 const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
 const float RIM_NORMAL_MIN = ${f(RIM_NORMAL_MIN)};
+const float RIM_OCCLUDE_RISE = ${f(RIM_OCCLUDE_RISE)};
 const float NORMAL_MID = ${f(NORMAL_MID)};
 const float NORMAL_SCALE = ${f(NORMAL_SCALE)};
 const float GLOW_GAIN = ${f(GLOW_GAIN)};
@@ -281,26 +285,37 @@ vec3 screen(vec3 b, vec3 s) {
   return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
 }
 
-// rimWeight in grade-model.mjs: one band in signed distance from the outline,
-// gated by how far that piece of outline faces the light. One texture tap, and
-// exactly zero past either end of the band — which is what keeps the rim out of
-// the middle of the figure however the art is painted there.
+// rimWeight in grade-model.mjs: a sharp edge and a backglow, both in the air
+// outside the outline, both gated by how far that piece of outline faces the
+// light. One texture tap, and zero everywhere the art covers.
 float rimWeight(vec2 uv) {
-  if (u_rimAmount <= 0.0) return 0.0;
+  if (u_rimAmount <= 0.0 && u_rimHalo <= 0.0) return 0.0;
   vec4 fd = texture2D(u_field, uv);
   // Decoded in the byte domain, like sampleEdgeField — see NORMAL_MID.
   vec2 n = (fd.rg * 255.0 - NORMAL_MID) / NORMAL_SCALE;
+  // The difference of the two distance channels, never either alone: each is
+  // the signed distance rectified to one side, so a texel the outline runs
+  // through carries both. See rimWeight in grade-model.mjs.
+  float sd = fd.a - fd.b;
+  if (sd <= 0.0) return 0.0;              // inside the outline: nothing to draw
   float len = length(n);
   // No edge near enough to have a direction: deep inside, or on the medial
   // axis, where the nearest outline is in two directions at once.
   if (len < RIM_NORMAL_MIN) return 0.0;
   float face = smoothstep(0.0, u_lightSoft, dot(n / len, u_lightDir));
   if (face <= 0.0) return 0.0;
-  float sd = fd.a - fd.b;                 // signed: negative inside the outline
-  float band = sd <= 0.0
-    ? 1.0 - smoothstep(u_rimFeather * u_rimWidth, u_rimWidth, -sd)
-    : (u_rimBleed > 0.0 ? 1.0 - smoothstep(0.0, u_rimBleed, sd) : 0.0);
-  return u_rimAmount * face * band;
+
+  float edge = (u_rimAmount > 0.0 && u_rimWidth > 0.0)
+    ? u_rimAmount * (1.0 - smoothstep(u_rimFeather * u_rimWidth, u_rimWidth, sd))
+    : 0.0;
+  // Squared, not a smoothstep: a smoothstep leaves on a shelf, and on something
+  // this wide that is a slab of light with an edge on it.
+  float t = (u_rimHalo > 0.0 && u_rimHaloSpread > 0.0) ? min(sd / u_rimHaloSpread, 1.0) : 1.0;
+  float halo = u_rimHalo * (1.0 - t) * (1.0 - t);
+
+  // Both rise out of the outline together — see RIM_OCCLUDE_RISE.
+  float occlusion = smoothstep(0.0, RIM_OCCLUDE_RISE, sd);
+  return face * occlusion * (1.0 - (1.0 - edge) * (1.0 - halo));
 }
 
 // sampleStrip in lut.mjs: bilinear inside blue tiles b and b+1, at texel
@@ -370,13 +385,10 @@ void main() {
   }
   if (u_darkGain != 1.0) lin *= u_darkGain;
 
-  // ── Layer 3: rim ──
-  if (rim > 0.0) {
-    vec3 e = toSRGB(lin);
-    lin = toLinear(e + (screen(clamp(e, 0.0, 1.0), u_rimColor) - e) * rim);
-  }
+  // The rim is not a layer here: it is light in the air outside the outline and
+  // was already folded into E above.
 
-  // ── Layer 4: back shadow ──
+  // ── Layer 3: back shadow ──
   if (u_backAmount > 0.0) {
     float k = 1.0 - u_backAmount * (1.0 - litWeight(v_uv));
     if (k != 1.0) lin *= k;
@@ -384,7 +396,7 @@ void main() {
 
   lin = gamutFit(lin);
 
-  // ── Layer 6: looks ── in order, each at its own opacity; skipped at 0.
+  // ── Layer 5: looks ── in order, each at its own opacity; skipped at 0.
 ${Array.from({ length: MAX_LOOKS }, (_, i) => {
   const c = "xyzw"[i];
   return `  if (u_lookAmount.${c} > 0.0) lin = applyLook(lin, u_lut${i}, u_lookSize.${c}, u_lookAmount.${c}, guard);`;
@@ -510,7 +522,8 @@ export const UNIFORMS = Object.freeze([
   "rimAmount",
   "rimWidth",
   "rimFeather",
-  "rimBleed",
+  "rimHalo",
+  "rimHaloSpread",
   "rimColor",
   "backAmount",
   "glowAmount",
@@ -1138,7 +1151,8 @@ export class StageGL {
     gl.uniform1f(u.rimAmount, art.field ? params.rimAmount : 0);
     gl.uniform1f(u.rimWidth, params.rimWidth);
     gl.uniform1f(u.rimFeather, params.rimFeather);
-    gl.uniform1f(u.rimBleed, params.rimBleed);
+    gl.uniform1f(u.rimHalo, art.field ? params.rimHalo : 0);
+    gl.uniform1f(u.rimHaloSpread, params.rimHaloSpread);
     gl.uniform3fv(u.rimColor, params.rimColor);
     gl.uniform1f(u.backAmount, params.backAmount);
     gl.uniform1f(u.glowAmount, params.glowAmount);

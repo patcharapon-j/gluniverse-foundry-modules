@@ -64,7 +64,7 @@ key the new grade lacked would survive the write.
 | --- | --- | --- |
 | basic | exposure, brightness, gamma, contrast, saturation, hue | tone and colour of the art itself |
 | wash | amount, colour, darkness | the room's colour as a luminance-neutral cast; how far scene darkness dims the cast |
-| rim | amount, depth, falloff, colour | **the scene light** — a band on the outline facing the lamp, screened, spilling thinly past it |
+| rim | edge, edge width, edge falloff, backglow, backglow reach, colour | **the scene light** — a sharp line and a soft backglow, both in the air *outside* the outline facing the lamp |
 | back shadow | amount | the side turned away from the lamp, darker (level only) |
 | looks | up to 4 × (look, opacity) | 3D LUTs, in order |
 | glow | amount, radius, threshold | the art's highlights bloomed, spilling past the outline |
@@ -125,29 +125,57 @@ pitch-dark scene changes nothing.
 
 ### Rim
 
-The scene's light, and the only thing carrying it. Two questions, each answered
-by one channel of the **edge field** (`edge-field.mjs`), which is built once per
-asset during `prepare` and uploaded as one RGBA8 texture the shader reads with a
-single tap:
+The scene's light, and the only thing carrying it.
 
-- *how near the outline is this* — the band. One function of the signed
-  distance, spanning `width` inside the outline to `RIM_BLEED_SPAN × width`
-  outside it, equal to 1 on the outline itself so the two halves meet without a
-  seam, and **exactly zero** past either end. That is the whole point: a pixel
-  deeper in than the depth dial cannot be lit, whatever the art is painted like
-  there. `falloff` shapes the profile across that depth and nothing else; even at
-  its flattest the band keeps `RIM_FEATHER_MIN` of feather, so its end is not a
-  stair.
-- *which way does the outline face* — the gradient of the same field, the
-  outline's true outward normal, dotted with the light. The light's `softness` is
-  how gradually that fades toward the terminator. It is never crossed: an edge
-  facing away from the lamp is not lit at any setting, because a rim that carries
-  all the way round is an outline rather than light.
+**It is light in the air, not paint on the figure.** The whole of it lives
+outside the outline; a pixel the art covers is never touched, at any setting.
+That is not a tolerance, it is the shape of the effect: a rim light is the lamp
+*behind* a figure, and what you see of it is the light that got past the
+figure's edge. Nothing of it is on the character, so nothing of it can bleed
+into one — the rim does not appear in the layer stack at all, it is emission in
+{@link shadeFragment}. The lit edge still reads as attached, because a
+silhouette's own boundary pixels are partly transparent and the alpha composite
+lets exactly that much of the light through them; the art's coverage is already
+the only honest answer to how much of a boundary pixel is figure.
 
-The weight is for the whole pixel, and what puts half of it on the figure and
-half in the air beside it is the alpha composite — the art's own coverage is
-already the only honest answer to how much of a boundary pixel is figure. A
-figure cropped by its own frame has no outline along the crop (the field finds
+Two lights, sharing a colour and a direction, both read from the **edge field**
+(`edge-field.mjs`) — built once per asset during `prepare` and uploaded as one
+RGBA8 texture the shader reads with a single tap:
+
+- **the edge** — a sharp line hugging the outline and ending at `width`, which
+  is deliberately small (`RIM_MAX_WIDTH`, 2% of the art's height at its widest,
+  and a few pixels at the shipped default). Sharpness is the whole of its job: a
+  rim light is sold by the catch being *thin*, and a dial with a centimetre of
+  reach is a smear at every setting. `falloff` shapes the profile and nothing
+  else; even at its flattest it keeps `RIM_FEATHER_MIN` of feather, so its end is
+  not a stair.
+- **the backglow** — the same lamp spilling into the room around the figure,
+  reaching `haloSpread` (up to `HALO_MAX_SPREAD`) and far weaker (`HALO_GAIN`,
+  which it cannot exceed, or the sharp line would sit on a bright field instead
+  of against the room). Its falloff is squared rather than a smoothstep: a
+  smoothstep leaves on a shelf, and over that distance a shelf is a slab of light
+  with a visible edge on it. It is its own dial rather than a softness on the
+  edge, because widening a rim does not make a glow — it makes a fuzzy rim, which
+  reads as the edge being out of focus.
+
+Both are gated by *which way the outline faces* — the gradient of the same
+field, the outline's true outward normal, dotted with the light. The light's
+`softness` is how gradually that fades toward the terminator. It is never
+crossed: an edge facing away from the lamp is not lit at any setting, because a
+rim that carries all the way round is an outline rather than light.
+
+Two things that are read wrong easily and fail only on the sheet. The distance
+is the **difference of the two distance channels** and never either alone: each
+is the signed distance rectified to one side, so a texel the outline runs
+through carries both, and either read on its own is wrong by up to a texel right
+where the sharp edge lives — which drew it faint and broken, in dashes. And both
+lights **rise out of the outline** over `RIM_OCCLUDE_RISE` rather than starting
+at full strength: the figure occludes its own light, and a step at `sd = 0` is
+not only an edge no display can draw but a sign test, which the GPU computes in
+float32 and the reference in float64 — the two then disagree by the entire band
+on the brightest pixels the rim draws.
+
+A figure cropped by its own frame has no outline along the crop (the field finds
 none there), and art with no transparency at all has no outline anywhere, so it
 gets no rim.
 
@@ -279,9 +307,10 @@ invisible overlays.
 
 Since the rim is now the only way the scene light reaches the art, a slot on this
 path gets the room's colour and the shadow side and **no light** — less than the
-shader, never different from it. A `drop-shadow` offset toward the lamp would
-fake the rim's outer spill but not the band inside the outline that is the whole
-effect, and a halo with no band on it reads as a mistake.
+shader, never different from it. A `drop-shadow` offset toward the lamp is the
+obvious fake and is not one: it is the silhouette blurred and shifted, which has
+no sharp edge in it and is bright where the figure is thin, so it reads as a
+smudge behind the character rather than as a line caught on it.
 
 ## One canvas, many characters
 
@@ -327,10 +356,12 @@ at runtime.
 For the rim it drives the real edge field built from a real raster, rather than
 sampling the model at a point: that the field's distances and normals are what
 they claim to be, that a figure cropped by its frame and art with no transparency
-both have no outline, that a soft gradient *inside* the figure makes no edge —
-and, scanned over every pixel of the figure at three depth settings, that **no
-pixel deeper in than the depth dial is ever lit**. That last one is the claim the
-whole model exists for, so it is driven and not asserted at a point.
+both have no outline, that a soft gradient *inside* the figure makes no edge, and
+that the edge and the backglow are two separate lights with their own reaches and
+their own zeroes. The claim the whole model exists for is driven over **every
+pixel the art covers, with both lights at full and every reach at maximum**: not
+one of them is ever lit. The shipped edge is also measured in pixels at a
+full-size render, because "sharp" is a number.
 
 ```bash
 node tools/stage-lighting-preview.mjs --out=.preview/grade.png
@@ -341,8 +372,8 @@ Real GPU, via Playwright. Compiles all three programs, asserts both identities a
 pixel for pixel (coverage outside the art included), reads the bloom pyramid back
 and compares it with `bloomPyramid`, and writes a contact sheet. **Look at the
 contact sheet** — the ghosting in the first glow, the seam in the first
-saturation and the ticks in the first SDF rim all passed every numeric check and
-were caught there.
+saturation, the ticks in the first SDF rim and the dashes in the first sharp edge
+all passed every numeric check and were caught there.
 
 Neither can tell you how a grade looks on real art. That needs a real session.
 
