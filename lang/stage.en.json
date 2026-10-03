@@ -195,16 +195,10 @@
             },
             "light": {
                 "title": "Light",
-                "hint": "The scene's one light, shared by every character so they are all lit from the same side. The arrows are shortcuts; the angle is exact.",
+                "hint": "The scene's one light, shared by every character so they are all lit from the same side. Softness is how gradually it gives out toward the shadow side: hard rims the whole lit half of the outline, soft concentrates on the part facing the lamp. The arrows are shortcuts; the angle is exact.",
                 "pad": "Light direction",
                 "angle": "Angle",
                 "softness": "Softness"
-            },
-            "gradient": {
-                "title": "Light gradient",
-                "hint": "The light's colour across each figure, strongest on the side facing it.",
-                "amount": "Amount",
-                "color": "Light colour"
             },
             "wash": {
                 "title": "Room wash",
@@ -215,10 +209,10 @@
             },
             "rim": {
                 "title": "Rim light",
-                "hint": "Light catching the edge that faces the lamp.",
+                "hint": "The scene's light on each figure, and the only place it lands: a band along the outline that faces the lamp, spilling a little into the air beside it. Depth is how far in it reaches — nothing deeper than that is touched, at any amount.",
                 "amount": "Amount",
                 "width": "Depth",
-                "softness": "Softness",
+                "softness": "Falloff",
                 "color": "Rim colour"
             },
             "backShadow": {
@@ -252,7 +246,7 @@
             },
             "skin": {
                 "title": "Skin protection",
-                "hint": "How hard skin holds back the colour of the gradient, wash and looks. It never holds back brightness: a face in a dark room still darkens.",
+                "hint": "How hard skin holds back the colour of the wash and the looks. It never holds back brightness: a face in a dark room still darkens. The rim is light, not colour, and is never held back.",
                 "guard": "Protection"
             }
         }

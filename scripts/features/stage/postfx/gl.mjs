@@ -31,6 +31,7 @@
  */
 
 import { loadPixelImage, markTainted } from "./asset.mjs";
+import { edgeFieldFrom, NORMAL_MID, NORMAL_SCALE } from "./edge-field.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
 import {
   LUMA,
@@ -41,8 +42,7 @@ import {
   GAMUT_KNEE,
   SKIN_CENTRE,
   SKIN_RADIUS,
-  RIM_TAPS,
-  RIM_GAIN,
+  RIM_NORMAL_MIN,
   GLOW_KNEE,
   GLOW_GAIN,
   DOWN_TAPS,
@@ -97,31 +97,29 @@ uniform vec2  u_hue;          // (cos, sin) of the hue rotation
 // ── The scene light ── (shared by every layer with a direction)
 uniform float u_aspect;       // art width / height, so directions are isotropic
 uniform vec2  u_lightDir;     // unit vector toward the light, image space (+Y down)
-uniform float u_lightSoft;    // falloff half-width, in units of the art's half-extent
+uniform float u_lightSoft;    // how far the light wraps past the terminator
 
-// ── Layer 2: gradient ──
-uniform float u_gradAmount;   // 0..1
-uniform vec3  u_gradColor;    // the light's colour, encoded
-
-// ── Layer 3: wash ──
+// ── Layer 2: wash ──
 uniform float u_washAmount;   // 0..1
 uniform vec3  u_washCast;     // the room's colour at unit luminance, linear
 uniform float u_darkGain;     // level from the scene's darkness, 1 = untouched
 
-// ── Layer 4: rim ──
+// ── Layer 3: rim ── the scene light, and the only way it reaches the art
+uniform sampler2D u_field;    // edge-field.mjs: RG outward normal, B inward, A outward
 uniform float u_rimAmount;    // 0..1
-uniform vec2  u_rimOffset;    // the silhouette's shift toward the light, uv
-uniform vec2  u_rimRadius;    // the shifted silhouette's blur radius, uv
+uniform float u_rimWidth;     // how far in the band reaches, in FIELD_RANGE units
+uniform float u_rimFeather;   // where the band starts falling off, 0..1 of its width
+uniform float u_rimBleed;     // how far out it spills, in FIELD_RANGE units
 uniform vec3  u_rimColor;     // encoded
 
-// ── Layer 5: back shadow ──
+// ── Layer 4: back shadow ──
 uniform float u_backAmount;   // how far the far side darkens, 0..BACK_SHADOW_MAX
 
-// ── Layer 6: glow ──
+// ── Layer 5: glow ──
 uniform float u_glowAmount;   // 0..1
 uniform sampler2D u_bloom;    // the finished bloom pyramid, premultiplied
 
-// ── Layer 7: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
+// ── Layer 6: looks ── (lut.mjs: each LUT is a strip of N tiles of N×N)
 ${Array.from({ length: MAX_LOOKS }, (_, i) => `uniform sampler2D u_lut${i};`).join("\n")}
 uniform vec4  u_lookAmount;   // opacity of each slot, 0..1
 uniform vec4  u_lookSize;     // grid size N of each slot's LUT
@@ -139,7 +137,9 @@ const mat3 OK_FROM_LMS = ${mat3(OKLAB.fromLms)};
 const float TONE_RATIO_CAP = ${f(TONE_RATIO_CAP)};
 const float GAMUT_REACH = ${f(GAMUT_REACH)};
 const float GAMUT_KNEE = ${f(GAMUT_KNEE)};
-const float RIM_GAIN = ${f(RIM_GAIN)};
+const float RIM_NORMAL_MIN = ${f(RIM_NORMAL_MIN)};
+const float NORMAL_MID = ${f(NORMAL_MID)};
+const float NORMAL_SCALE = ${f(NORMAL_SCALE)};
 const float GLOW_GAIN = ${f(GLOW_GAIN)};
 const vec2 SKIN_CENTRE = vec2(${SKIN_CENTRE.map(f).join(", ")});
 const vec2 SKIN_RADIUS = vec2(${SKIN_RADIUS.map(f).join(", ")});
@@ -277,25 +277,30 @@ float litWeight(vec2 uv) {
   return smoothstep(-u_lightSoft, u_lightSoft, t);
 }
 
-// ringAlpha / rimMask in grade-model.mjs: the blurred silhouette here, minus
-// the blurred silhouette shifted toward the light — the edge that faces it.
-float ringAlpha(vec2 c) {
-  float sum = texture2D(u_art, c).a;
-  for (int i = 0; i < ${RIM_TAPS}; i++) {
-    float a = float(i) * 6.283185307179586 / ${f(RIM_TAPS)};
-    sum += texture2D(u_art, c + vec2(cos(a), sin(a)) * u_rimRadius).a;
-  }
-  return sum / ${f(RIM_TAPS + 1)};
-}
-
-float rimMask(vec2 uv, float alpha) {
-  float here = ringAlpha(uv);
-  float shifted = ringAlpha(uv + u_rimOffset);
-  return alpha * clamp((here - shifted) * RIM_GAIN, 0.0, 1.0);
-}
-
 vec3 screen(vec3 b, vec3 s) {
   return vec3(1.0) - (vec3(1.0) - b) * (vec3(1.0) - s);
+}
+
+// rimWeight in grade-model.mjs: one band in signed distance from the outline,
+// gated by how far that piece of outline faces the light. One texture tap, and
+// exactly zero past either end of the band — which is what keeps the rim out of
+// the middle of the figure however the art is painted there.
+float rimWeight(vec2 uv) {
+  if (u_rimAmount <= 0.0) return 0.0;
+  vec4 fd = texture2D(u_field, uv);
+  // Decoded in the byte domain, like sampleEdgeField — see NORMAL_MID.
+  vec2 n = (fd.rg * 255.0 - NORMAL_MID) / NORMAL_SCALE;
+  float len = length(n);
+  // No edge near enough to have a direction: deep inside, or on the medial
+  // axis, where the nearest outline is in two directions at once.
+  if (len < RIM_NORMAL_MIN) return 0.0;
+  float face = smoothstep(0.0, u_lightSoft, dot(n / len, u_lightDir));
+  if (face <= 0.0) return 0.0;
+  float sd = fd.a - fd.b;                 // signed: negative inside the outline
+  float band = sd <= 0.0
+    ? 1.0 - smoothstep(u_rimFeather * u_rimWidth, u_rimWidth, -sd)
+    : (u_rimBleed > 0.0 ? 1.0 - smoothstep(0.0, u_rimBleed, sd) : 0.0);
+  return u_rimAmount * face * band;
 }
 
 // sampleStrip in lut.mjs: bilinear inside blue tiles b and b+1, at texel
@@ -323,31 +328,33 @@ vec3 glowAt(vec2 uv) {
   return clamp(texture2D(u_bloom, uv).rgb * (u_glowAmount * GLOW_GAIN * u_darkGain), 0.0, 1.0);
 }
 
-// W3C soft-light, on encoded values.
-float softLight1(float b, float s) {
-  if (s <= 0.5) return b - (1.0 - 2.0 * s) * b * (1.0 - b);
-  float d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b);
-  return b + (2.0 * s - 1.0) * (d - b);
-}
-
-vec3 softLight(vec3 b, vec3 s) {
-  return vec3(softLight1(b.r, s.r), softLight1(b.g, s.g), softLight1(b.b, s.b));
-}
-
 void main() {
   vec4 art = artAt(v_uv);
 
-  // ── Layer 6: glow ── computed first, because it is the one layer that draws
-  // outside the art's coverage.
+  // The two lights that draw outside the art's coverage, computed first.
+  // The rim is computed once and used twice: screened into the figure over the
+  // covered part of this pixel below, and emitted into the air over the
+  // uncovered part — one weight, split by the art's own coverage.
   vec3 G = vec3(0.0);
   bool glowing = u_glowAmount > 0.0;
   if (glowing) G = glowAt(v_uv);
+  float rim = rimWeight(v_uv);
+
+  // emission() in grade-model.mjs: screened, so two lights over one empty pixel
+  // cannot take it past white. Untouched, and exactly zero, when both are off.
+  vec3 E = G;
+  bool emitting = glowing;
+  if (rim > 0.0) {
+    vec3 R = clamp(u_rimColor * rim, 0.0, 1.0);
+    E = emitting ? screen(E, R) : R;
+    emitting = true;
+  }
 
   if (art.a <= 0.0) {
-    // Premultiplied emission: colour G at coverage max(G), whose premultiplied
-    // value is G itself. Zero, exactly, whenever the glow is off.
-    float ga = max(max(G.r, G.g), G.b);
-    gl_FragColor = glowing ? vec4(G, ga) * u_intensity : vec4(0.0);
+    // Premultiplied emission: colour E at coverage max(E), whose premultiplied
+    // value is E itself.
+    float ea = max(max(E.r, E.g), E.b);
+    gl_FragColor = emitting ? vec4(E, ea) * u_intensity : vec4(0.0);
     return;
   }
 
@@ -357,32 +364,19 @@ void main() {
   // ── Layer 1: basic correction ──
   vec3 lin = basicCorrection(linIn);
 
-  // ── Layer 2: gradient ──
-  if (u_gradAmount > 0.0) {
-    float w = u_gradAmount * litWeight(v_uv);
-    if (w > 0.0) {
-      vec3 e = toSRGB(lin);
-      vec3 lit = e + (softLight(clamp(e, 0.0, 1.0), u_gradColor) - e) * w;
-      lin = guardSkin(lin, toLinear(lit), guard);
-    }
-  }
-
-  // ── Layer 3: wash ──
+  // ── Layer 2: wash ──
   if (u_washAmount > 0.0) {
     lin = guardSkin(lin, lin * (vec3(1.0) + (u_washCast - vec3(1.0)) * u_washAmount), guard);
   }
   if (u_darkGain != 1.0) lin *= u_darkGain;
 
-  // ── Layer 4: rim ──
-  if (u_rimAmount > 0.0) {
-    float w = u_rimAmount * rimMask(v_uv, art.a);
-    if (w > 0.0) {
-      vec3 e = toSRGB(lin);
-      lin = toLinear(e + (screen(clamp(e, 0.0, 1.0), u_rimColor) - e) * w);
-    }
+  // ── Layer 3: rim ──
+  if (rim > 0.0) {
+    vec3 e = toSRGB(lin);
+    lin = toLinear(e + (screen(clamp(e, 0.0, 1.0), u_rimColor) - e) * rim);
   }
 
-  // ── Layer 5: back shadow ──
+  // ── Layer 4: back shadow ──
   if (u_backAmount > 0.0) {
     float k = 1.0 - u_backAmount * (1.0 - litWeight(v_uv));
     if (k != 1.0) lin *= k;
@@ -390,7 +384,7 @@ void main() {
 
   lin = gamutFit(lin);
 
-  // ── Layer 7: looks ── in order, each at its own opacity; skipped at 0.
+  // ── Layer 6: looks ── in order, each at its own opacity; skipped at 0.
 ${Array.from({ length: MAX_LOOKS }, (_, i) => {
   const c = "xyzw"[i];
   return `  if (u_lookAmount.${c} > 0.0) lin = applyLook(lin, u_lut${i}, u_lookSize.${c}, u_lookAmount.${c}, guard);`;
@@ -402,10 +396,11 @@ ${Array.from({ length: MAX_LOOKS }, (_, i) => {
   if (glowing) graded = screen(clamp(graded, 0.0, 1.0), G);
   vec3 outc = art.rgb + (graded - art.rgb) * u_intensity;
 
-  // On a partly covered edge pixel the glow also lands on what is behind it.
-  if (glowing && art.a < 1.0) {
-    float ga = max(max(G.r, G.g), G.b) * u_intensity;
-    gl_FragColor = vec4(outc * art.a + G * u_intensity * (1.0 - art.a), art.a + ga * (1.0 - art.a));
+  // On a partly covered edge pixel the light also lands on what is behind it —
+  // which is how the rim's spill reaches the air next to the outline.
+  if (emitting && art.a < 1.0) {
+    float ea = max(max(E.r, E.g), E.b) * u_intensity;
+    gl_FragColor = vec4(outc * art.a + E * u_intensity * (1.0 - art.a), art.a + ea * (1.0 - art.a));
     return;
   }
 
@@ -507,15 +502,15 @@ export const UNIFORMS = Object.freeze([
   "hue",
   "aspect",
   "lightDir",
-  "gradAmount",
-  "gradColor",
   "washAmount",
   "washCast",
   "darkGain",
   "lightSoft",
+  "field",
   "rimAmount",
-  "rimOffset",
-  "rimRadius",
+  "rimWidth",
+  "rimFeather",
+  "rimBleed",
   "rimColor",
   "backAmount",
   "glowAmount",
@@ -525,6 +520,13 @@ export const UNIFORMS = Object.freeze([
   "lookSize",
   "skin",
 ]);
+
+/**
+ * Texture unit the edge field is bound to. Units 0 and 1 are the art and the
+ * bloom, 2..2+MAX_LOOKS−1 the look stack; WebGL1 guarantees at least eight, so
+ * one more is safe.
+ */
+const FIELD_UNIT = 2 + MAX_LOOKS;
 
 /** Longest edge of the render target, before display scaling. Stage art shows at
  *  roughly 40vh, so this only has to beat the tallest viewport that will ever
@@ -689,6 +691,7 @@ export class StageGL {
     gl.uniform1i(this.uniforms.art, 0);
     gl.uniform1i(this.uniforms.bloom, 1);
     for (let i = 0; i < MAX_LOOKS; i++) gl.uniform1i(this.uniforms[`lut${i}`], 2 + i);
+    gl.uniform1i(this.uniforms.field, FIELD_UNIT);
 
     this._down = { program: downProgram, u: {} };
     for (const name of BLOOM_DOWN_UNIFORMS) this._down.u[name] = gl.getUniformLocation(downProgram, `u_${name}`);
@@ -923,6 +926,43 @@ export class StageGL {
     }
   }
 
+  /**
+   * The art's edge field (edge-field.mjs), built from its pixels on the way to
+   * the GPU.
+   *
+   * Reading the pixels back out of a canvas is a second, stricter permission
+   * than drawing them: `getImageData` throws SecurityError on a canvas a
+   * cross-origin image has tainted, exactly as `texImage2D` does. The shared
+   * loader has already resolved a readable strategy for this asset, so this
+   * normally succeeds — and when it does not, the throw takes the same path as
+   * a tainted upload and the slot degrades to the CSS fallback.
+   */
+  _buildField(source, width, height) {
+    const scratch = document.createElement("canvas");
+    scratch.width = width;
+    scratch.height = height;
+    const ctx = scratch.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(source, 0, 0, width, height);
+    return edgeFieldFrom(ctx.getImageData(0, 0, width, height).data, width, height);
+  }
+
+  /** Upload one edge field. Linear and edge-clamped: every channel of it is
+   *  smooth near the outline, which is the only place the rim reads it, so the
+   *  texture's own filter is the right filter. */
+  _fieldTexture(gl, field) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    // Never premultiplied: the alpha channel here is a distance, not coverage.
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, field.width, field.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, field.bytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return tex;
+  }
+
   /** Upload the character art through the shared loader, which decides once per
    *  asset how (and whether) its pixels can be read. */
   async _artTexture(src) {
@@ -935,6 +975,20 @@ export class StageGL {
     // Released or lost while decoding: a texture made on that context would be
     // cached into the next one's map and bound there as garbage.
     if (this.gl !== gl || this._lost) {
+      if (fitted.close) fitted.source.close();
+      return null;
+    }
+
+    // Before anything is created on the GPU, so a refused read leaves nothing
+    // behind to clean up.
+    let field;
+    try {
+      field = this._buildField(fitted.source, fitted.width, fitted.height);
+    } catch (err) {
+      if (fitted.close) fitted.source.close();
+      throw err;
+    }
+    if (!field) {
       if (fitted.close) fitted.source.close();
       return null;
     }
@@ -956,10 +1010,16 @@ export class StageGL {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     if (fitted.close) fitted.source.close();
 
-    const entry = { tex, width: fitted.width, height: fitted.height };
+    const entry = { tex, field: this._fieldTexture(gl, field), width: fitted.width, height: fitted.height };
     this._artTextures.set(src, entry);
-    this._evict(this._artTextures, (v) => gl.deleteTexture(v.tex));
+    this._evict(this._artTextures, (v) => this._dropArt(gl, v));
     return entry;
+  }
+
+  /** Both of one asset's textures — the art and its edge field. */
+  _dropArt(gl, entry) {
+    gl.deleteTexture(entry.tex);
+    if (entry.field) gl.deleteTexture(entry.field);
   }
 
   /**
@@ -1052,6 +1112,8 @@ export class StageGL {
     }
 
     gl.viewport(0, 0, width, height);
+    gl.activeTexture(gl.TEXTURE0 + FIELD_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, art.field ?? this._blank);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, bloomTex);
     gl.activeTexture(gl.TEXTURE0);
@@ -1067,15 +1129,16 @@ export class StageGL {
     gl.uniform2f(u.hue, params.hueCos, params.hueSin);
     gl.uniform1f(u.aspect, params.aspect);
     gl.uniform2fv(u.lightDir, params.lightDir);
-    gl.uniform1f(u.gradAmount, params.gradAmount);
     gl.uniform1f(u.lightSoft, params.lightSoft);
-    gl.uniform3fv(u.gradColor, params.gradColor);
     gl.uniform1f(u.washAmount, params.washAmount);
     gl.uniform3fv(u.washCast, params.washCast);
     gl.uniform1f(u.darkGain, params.darkGain);
-    gl.uniform1f(u.rimAmount, params.rimAmount);
-    gl.uniform2fv(u.rimOffset, params.rimOffset);
-    gl.uniform2fv(u.rimRadius, params.rimRadius);
+    // A slot with no field cannot be rimmed; without this the shader would read
+    // the blank texture's zeros as an outward normal pointing down and left.
+    gl.uniform1f(u.rimAmount, art.field ? params.rimAmount : 0);
+    gl.uniform1f(u.rimWidth, params.rimWidth);
+    gl.uniform1f(u.rimFeather, params.rimFeather);
+    gl.uniform1f(u.rimBleed, params.rimBleed);
     gl.uniform3fv(u.rimColor, params.rimColor);
     gl.uniform1f(u.backAmount, params.backAmount);
     gl.uniform1f(u.glowAmount, params.glowAmount);
@@ -1092,7 +1155,7 @@ export class StageGL {
   _dropTextures() {
     const gl = this.gl;
     if (gl) {
-      for (const entry of this._artTextures.values()) gl.deleteTexture(entry.tex);
+      for (const entry of this._artTextures.values()) this._dropArt(gl, entry);
       for (const tex of this._lutTextures.values()) gl.deleteTexture(tex);
     }
     this._artTextures.clear();
@@ -1112,7 +1175,7 @@ export class StageGL {
   invalidate(src) {
     const art = this._artTextures.get(src);
     if (art) {
-      this.gl?.deleteTexture(art.tex);
+      if (this.gl) this._dropArt(this.gl, art);
       this._artTextures.delete(src);
     }
   }

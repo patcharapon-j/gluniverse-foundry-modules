@@ -80,20 +80,9 @@
     opacity: var(--glstage-pp-wash-opacity, 0);
 }
 
-/* Gradient: the light's colour on the lit side, falling away across the
-   figure. Three stops so most of the decay happens early, as light does. */
-.glstage-pp-gradient {
-    background: linear-gradient(
-        var(--glstage-pp-grad-angle, 180deg),
-        var(--glstage-pp-grad-color, transparent) 0%,
-        color-mix(in srgb, var(--glstage-pp-grad-color, transparent) 40%, transparent) 35%,
-        transparent 75%
-    );
-    mix-blend-mode: soft-light;
-    opacity: var(--glstage-pp-grad-opacity, 0);
-}
-
-/* Back shadow: the side turned away from the light, darkened. */
+/* Back shadow: the side turned away from the light, darkened. The rim — the
+   only other thing the light does — needs the art's pixels and has no honest
+   equivalent here, so this path carries no light at all. See cssFallbackFor. */
 .glstage-pp-shade {
     background: linear-gradient(
         var(--glstage-pp-shade-angle, 0deg),
