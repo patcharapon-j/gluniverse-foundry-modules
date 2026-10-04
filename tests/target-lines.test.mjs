@@ -20,6 +20,8 @@ function createHarness({ users, calm = true }) {
   const log = [];
   const rings = [];
   const combat = { id: "combat", started: true, round: 1, turn: 0, combatant: null };
+  /** The world targeting settings the controller reads; tests mutate these in place. */
+  const settings = { enabled: true, showAllSources: false, outOfCombat: false };
 
   class FakeTargetLine {
     shown = false;
@@ -104,13 +106,18 @@ function createHarness({ users, calm = true }) {
   const context = vm.createContext({
     console, Map, Set, JSON,
     game: { users: { contents: users } },
-    canvas: { ready: true, scene: { id: "scene" }, tokens: { get: id => tokens.get(id) } },
+    canvas: {
+      ready: true,
+      scene: { id: "scene" },
+      // `placeables` is what `visibleTokens()` walks for the every-source modes.
+      tokens: { get: id => tokens.get(id), get placeables() { return [...tokens.values()]; } }
+    },
     Hooks: { on: (name, fn) => hooks.set(name, [...(hooks.get(name) ?? []), fn]) },
     requestAnimationFrame: fn => frames.push(fn),
     getActiveSceneCombat: () => combat,
     getActiveCombatant: c => c.combatant,
     getCombatantToken: c => c?.token ?? null,
-    getTargetingSettings: () => ({ enabled: true }),
+    getTargetingSettings: () => settings,
     getShowLines: () => true,
     isConfiguredStreamUser: () => false,
     // constants.js namespaces onto the suite id, and the feature raises its own
@@ -156,6 +163,7 @@ function createHarness({ users, calm = true }) {
   const harness = {
     controller,
     combat,
+    settings,
     clock,
     log,
     rings,
@@ -191,6 +199,25 @@ function createHarness({ users, calm = true }) {
     target(user, token) {
       user.targets.add(token);
       emit("targetToken", user, token, true);
+    },
+    /** Change the world targeting settings as the editor does, and let the controller react. */
+    changeSettings(patch) {
+      Object.assign(settings, patch);
+      emit(context.TARGETS_HOOKS.settingsChanged);
+      flush();
+    },
+    /** The encounter ends: there is no current turn, which is where `outOfCombat` takes over. */
+    endCombat() {
+      combat.started = false;
+      combat.combatant = null;
+      emit("deleteCombat", combat);
+      flush();
+    },
+    /** An encounter starts again with `token` acting, restoring the turn rule. */
+    startCombat(token, { round = 1, turn = 0 } = {}) {
+      combat.started = true;
+      harness.turn(token, { round, turn });
+      flush();
     },
     untarget(user, token) {
       user.targets.delete(token);
@@ -717,6 +744,112 @@ function loadTargetLine() {
 }
 
 const token = (x, y, size = 100) => ({ document: {}, center: { x, y }, w: size, h: size });
+
+test("showing every source keeps each player-controlled token's lines up off its turn", () => {
+  const gm = gmUser();
+  const seri = player("seri");
+  const tavi = player("tavi");
+  const h = createHarness({ users: [gm, seri, tavi], calm: false });
+  const orc = h.token("orc");
+  const seriPc = h.token("seri-pc", [seri]);
+  h.token("tavi-pc", [tavi]);
+  const goblin = h.token("goblin");
+  const kobold = h.token("kobold");
+  h.start(orc);
+  h.target(seri, goblin);
+  h.target(tavi, kobold);
+  h.flush();
+  assert.equal(h.controller.lines.size, 0, "following the turn, only the acting creature draws");
+
+  h.changeSettings({ showAllSources: true });
+  assert.equal(h.shown("seri-pc>goblin"), true);
+  assert.equal(h.shown("tavi-pc>kobold"), true);
+  assert.equal(h.controller.lines.size, 2);
+
+  // The turn moving onto one of them leaves the other's line exactly where it was.
+  const taviLine = h.controller.lines.get("tavi-pc>kobold");
+  h.turn(seriPc);
+  h.flush();
+  assert.equal(h.shown("seri-pc>goblin"), true);
+  assert.equal(h.controller.lines.get("tavi-pc>kobold"), taviLine, "the same line, untouched");
+  assert.equal(taviLine.leaving, false);
+  assert.equal(h.liveTimers().length, 0, "nothing retracts, so no hand-off is staged");
+  assert.deepEqual(h.ringLog(), [], "and no origin ring is drawn for a hand-off that never happens");
+});
+
+test("a GM-controlled token off its turn draws nothing, however many NPCs the GM runs", () => {
+  const gm = gmUser();
+  const h = createHarness({ users: [gm], calm: false });
+  const orc = h.token("orc");
+  h.token("ogre");
+  h.token("troll");
+  const target = h.token("target");
+  gm.targets.add(target);
+  h.settings.showAllSources = true;
+  h.start(orc);
+  assert.deepEqual(
+    [...h.controller.lines.keys()],
+    ["orc>target"],
+    "the acting creature is the one NPC the GM's single selection can be pinned to"
+  );
+});
+
+test("outside combat the player tokens draw and the turn rule has nothing to follow", () => {
+  const gm = gmUser();
+  const seri = player("seri");
+  const h = createHarness({ users: [gm, seri], calm: false });
+  const pc = h.token("pc", [seri]);
+  const orc = h.token("orc");
+  const goblin = h.token("goblin");
+  h.start(pc);
+  h.target(seri, goblin);
+  h.target(gm, orc);
+  h.flush();
+  assert.equal(h.shown("pc>goblin"), true);
+
+  h.endCombat();
+  assert.equal(h.leaving("pc>goblin"), true, "off by default: no encounter, no lines");
+
+  h.changeSettings({ outOfCombat: true });
+  assert.equal(h.shown("pc>goblin"), true, "a standing target draws with no turn to follow");
+  assert.equal(h.controller.lines.size, 1, "the GM's selection still belongs to no NPC of theirs");
+
+  // A token arriving is a source the moment it is dropped: its owner already has a target standing.
+  const pet = h.token("pet", [seri]);
+  h.emit("createToken", pet.document);
+  h.flush();
+  assert.equal(h.shown("pet>goblin"), true);
+
+  h.startCombat(orc);
+  assert.equal(h.leaving("pc>goblin"), true, "an encounter restores the turn rule");
+  assert.equal(h.leaving("pet>goblin"), true);
+  assert.equal(h.controller.lines.has("orc>orc"), false, "and the GM's carried selection with it");
+  assert.equal(seri.targets.has(goblin), true, "Foundry targets are never written");
+});
+
+test("both widened modes still obey enabled, the client switch and visibility", () => {
+  const gm = gmUser();
+  const seri = player("seri");
+  const h = createHarness({ users: [gm, seri], calm: false });
+  const pc = h.token("pc", [seri]);
+  const goblin = h.token("goblin");
+  h.settings.showAllSources = true;
+  h.settings.outOfCombat = true;
+  h.start(pc);
+  h.target(seri, goblin);
+  h.flush();
+  assert.equal(h.shown("pc>goblin"), true);
+
+  h.changeSettings({ enabled: false });
+  assert.equal(h.leaving("pc>goblin"), true);
+
+  h.changeSettings({ enabled: true });
+  assert.equal(h.shown("pc>goblin"), true);
+
+  h.endCombat();
+  h.changeSettings({ enabled: false });
+  assert.equal(h.leaving("pc>goblin"), true, "out of combat too");
+});
 
 test("TargetLine launches and collapses on the clock it reports", () => {
   const t = loadTargetLine();

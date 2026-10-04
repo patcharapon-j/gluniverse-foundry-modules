@@ -90,6 +90,24 @@ hairline.
 - **GM turns** do not reuse the GM's carried targets from the previous NPC.
 - **Back-to-back turns for one player** hand the line over: it retracts into the
   first token while the reticle stays up dimmed, then relaunches from the next.
+  Under either of the two scope switches below the hand-off is skipped: the
+  outgoing token's lines stay up, so nothing retracts and staging a hand-off
+  would only hold the incoming lines back for a beat that shows nothing.
+- **Show all, not just the current turn** (`showAllSources`, off) keeps every
+  eligible token's lines standing at once instead of following the turn order.
+- **Show outside combat** (`outOfCombat`, off) keeps drawing with no encounter
+  running. There is no current turn then, so every source draws, whatever the
+  switch above says.
+- **Away from the active turn only player-controlled tokens draw.** Foundry
+  records targets per *user*, not per creature. A player's selection is their
+  standing intent for their own token, but a GM runs every NPC off one
+  selection, so attributing it to each of them would put the same line on every
+  creature the GM owns — five goblins, five arcs, one click. The acting creature
+  is the one NPC that selection can be pinned to, which is why the turn is
+  always a source even in the widened modes, and why a GM sees nothing from
+  their NPCs outside combat. A player's own companion is the same ambiguity one
+  level down and is accepted: a token's targets are its owners' targets, which
+  is the rule `targetsOfToken` has always applied.
 - **Colours** follow disposition. Secret dispositions count as neutral, so a
   line never reveals a hidden allegiance.
 - **Visible to** — everyone / GMs and the stream / stream only. **The last two
