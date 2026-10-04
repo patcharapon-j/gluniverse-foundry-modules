@@ -28,6 +28,13 @@
  * is not, and a one-tap "blur" is not a texture read). A side with no blur reads
  * its texture once, exactly where an unshaded sprite would.
  *
+ * The BACKDROP is a second, separate mesh (`renderer.backdrop`) for a viewer whose
+ * view reaches past the frame — Fit framing, or a GM zoomed out. It is the same
+ * two sides under the same mix (and the same wipe line), each cover-fitted to the
+ * whole view rather than the frame, blurred hard and darkened. The host mounts it
+ * OUTSIDE canvas.primary, because Foundry masks that group to the scene rect and
+ * the backdrop lives exactly where the scene is not.
+ *
  * If the shader fails to compile or link, the layer says so in the console
  * and degrades to two plain sprites crossfading (no treatment, no wipe edge).
  * The probe runs on the first render, against the renderer PIXI hands the mesh,
@@ -43,7 +50,14 @@ import { coverRect, isVideo, normalizeTreatment, normalizeDrift } from "../model
 
 /** Behaviours given up under load, cheapest to lose first. Bound to the shared
  *  frame clock by the host with Budget.ladder(). */
-export const SHED_ORDER = Object.freeze(["drift", "bloom", "blur"]);
+export const SHED_ORDER = Object.freeze(["drift", "bloom", "blur", "backdrop"]);
+
+/** The backdrop around a fitted frame: the same picture, blurred and darker. */
+export const BACKDROP = Object.freeze({
+  gain: 0.55,        // brightness against the frame's own
+  blur: 0.035,       // disc radius as a fraction of the view's width
+  overscan: 1.08,    // cover-fitted past the view, so the blur never reaches a clamped edge
+});
 
 /** Push-in (chapter): the approved mock's numbers. */
 export const PUSH = Object.freeze({
@@ -335,6 +349,90 @@ export const SHOT_UNIFORMS = Object.freeze([
   "uTintA", "uTintB", "uBlurA", "uBlurB", "uHas", "uMix", "uWipe", "uWipeLine", "uWipeSoft", "uSize",
 ]);
 
+export const BACK_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vFrame;              // frame-normalised: 0..1 is the frame, the view reaches past it
+uniform sampler2D uTexA;
+uniform sampler2D uTexB;
+uniform vec4 uPlaceA;             // image rect in frame-normalised units, cover-fitted to the VIEW
+uniform vec4 uPlaceB;
+uniform vec4 uCropA;
+uniform vec4 uCropB;
+uniform vec3 uGradeA;             // gain (already darkened), saturation, tint amount
+uniform vec3 uGradeB;
+uniform vec3 uTintA;
+uniform vec3 uTintB;
+uniform vec3 uBlurA;              // blur radius in image uv (x, y), mip bias
+uniform vec3 uBlurB;
+uniform vec2 uHas;
+uniform float uMix;
+uniform float uWipe;
+uniform vec3 uWipeLine;
+uniform float uWipeSoft;
+uniform vec2 uSize;
+uniform float uTaps;              // 1: the full disc; 0: one tap at a deep mip (shed)
+
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+const float GOLDEN = 2.39996323;
+
+vec3 tap(sampler2D tex, vec2 uv, vec4 crop, float bias) {
+  return texture2D(tex, crop.xy + clamp(uv, 0.0, 1.0) * crop.zw, bias).rgb;
+}
+
+vec3 shade(sampler2D tex, vec4 place, vec4 crop, vec3 grade, vec3 tint, vec3 blur) {
+  vec2 uv = (vFrame - place.xy) / place.zw;
+  vec3 c = tap(tex, uv, crop, blur.z);
+  if (uTaps > 0.5) {
+    for (int i = 1; i <= ${BLUR_TAPS}; i++) {
+      float fi = float(i);
+      float r = sqrt(fi / ${f(BLUR_TAPS)});
+      float a = fi * GOLDEN;
+      c += tap(tex, uv + vec2(cos(a), sin(a)) * r * blur.xy, crop, blur.z);
+    }
+    c /= ${f(BLUR_TAPS + 1)};
+  }
+  c *= grade.x;
+  if (grade.y != 1.0) { float l = dot(c, LUMA); c = max(vec3(l) + (c - vec3(l)) * grade.y, 0.0); }
+  if (grade.z > 0.0) c = mix(c, tint * dot(c, LUMA), grade.z);
+  return c;
+}
+
+void main() {
+  float w = uMix;
+  if (uWipe > 0.5) {
+    float s = dot(vFrame * uSize, uWipeLine.xy);
+    w = 1.0 - smoothstep(uWipeLine.z - 0.5 * uWipeSoft, uWipeLine.z + 0.5 * uWipeSoft, s);
+  }
+  vec3 a = vec3(0.0);
+  vec3 b = vec3(0.0);
+  if (w < 1.0 && uHas.x > 0.5) a = shade(uTexA, uPlaceA, uCropA, uGradeA, uTintA, uBlurA);
+  if (w > 0.0 && uHas.y > 0.5) b = shade(uTexB, uPlaceB, uCropB, uGradeB, uTintB, uBlurB);
+  vec3 col = w <= 0.0 ? a : (w >= 1.0 ? b : mix(a, b, w));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/** Every uniform the backdrop program declares (the renderer writes all of them). */
+export const BACK_UNIFORMS = Object.freeze([...SHOT_UNIFORMS, "uTaps"]);
+
+/**
+ * The backdrop's image rect for an image of iw×ih, cover-fitted (with overscan)
+ * to the view rect `v`, in frame px.
+ */
+export function backdropRect(iw, ih, v, focus) {
+  const k = BACKDROP.overscan;
+  const bw = v.width * k, bh = v.height * k;
+  const r = coverRect(iw, ih, bw, bh, focus ?? { x: 0.5, y: 0.5 });
+  return { x: v.x - (bw - v.width) / 2 + r.x, y: v.y - (bh - v.height) / 2 + r.y, width: r.width, height: r.height };
+}
+
+/** True when the view rect (frame px) shows anything past the frame. */
+export const viewOverhangs = (v, W, H, eps = 0.5) =>
+  !!v && (v.x < -eps || v.y < -eps || v.x + v.width > W + eps || v.y + v.height > H + eps);
+
 /**
  * Compile and link the program on `gl` without touching PIXI's state.
  * @returns {{ ok: boolean, log: string }}
@@ -413,6 +511,10 @@ export class ShotRenderer {
     this._fallback = false;
     this._probed = false;
     this._destroyed = false;
+    /** The viewer's view in frame px (the host's); the backdrop covers it. */
+    this.view = { x: 0, y: 0, width, height };
+    this._backFailed = false;
+    this._backProbed = false;
 
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
@@ -420,6 +522,7 @@ export class ShotRenderer {
 
     this._buildMesh();
     this._buildFallback();
+    this._buildBackdrop();
   }
 
   /* ── construction ──────────────────────────────────────────────────── */
@@ -460,6 +563,71 @@ export class ShotRenderer {
       render.call(this.mesh, renderer);
     };
     this.container.addChild(this.mesh);
+  }
+
+  _backGeometry() {
+    const v = this.view, W = this.width, H = this.height;
+    const x0 = v.x, y0 = v.y, x1 = v.x + v.width, y1 = v.y + v.height;
+    const g = new this.PIXI.Geometry();
+    g.addAttribute("aVertexPosition", new Float32Array([x0, y0, x1, y0, x1, y1, x0, y1]), 2);
+    g.addAttribute("aFrame", new Float32Array([x0 / W, y0 / H, x1 / W, y0 / H, x1 / W, y1 / H, x0 / W, y1 / H]), 2);
+    g.addIndex(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    return g;
+  }
+
+  _buildBackdrop() {
+    const PIXI = this.PIXI;
+    const empty = PIXI.Texture.EMPTY ?? PIXI.Texture.WHITE;
+    this.backShader = PIXI.Shader.from(SHOT_VERT, BACK_FRAG, {
+      uTexA: empty, uTexB: empty,
+      uPlaceA: new Float32Array([0, 0, 1, 1]), uPlaceB: new Float32Array([0, 0, 1, 1]),
+      uCropA: new Float32Array([0, 0, 1, 1]), uCropB: new Float32Array([0, 0, 1, 1]),
+      uGradeA: new Float32Array([1, 1, 0]), uGradeB: new Float32Array([1, 1, 0]),
+      uTintA: new Float32Array(3), uTintB: new Float32Array(3),
+      uBlurA: new Float32Array(3), uBlurB: new Float32Array(3),
+      uHas: new Float32Array(2),
+      uMix: 0, uWipe: 0, uWipeLine: new Float32Array([1, 0, 0]), uWipeSoft: 1,
+      uSize: new Float32Array([this.width, this.height]),
+      uTaps: 1,
+    });
+    this.backMesh = new PIXI.Mesh(this._backGeometry(), this.backShader);
+    const render = this.backMesh._render;
+    this.backMesh._render = (renderer) => {
+      if (!this._backProbed) {
+        this._backProbed = true;
+        const { ok, log } = probeProgram(renderer?.gl, SHOT_VERT, BACK_FRAG);
+        if (!ok) {
+          this._backFailed = true;
+          this.backdrop.renderable = false;
+          this._warn("the backdrop shader failed to compile; a fitted frame will sit on plain black.", log);
+          return;
+        }
+      }
+      render.call(this.backMesh, renderer);
+    };
+    this.backdrop = new PIXI.Container();
+    this.backdrop.eventMode = "none";
+    this.backdrop.interactiveChildren = false;
+    this.backdrop.renderable = false;
+    this.backdrop.addChild(this.backMesh);
+  }
+
+  /**
+   * The viewer's view, in frame px (it may reach past the frame on every side).
+   * The backdrop draws only while it does.
+   */
+  setView(v) {
+    if (!v || !(v.width > 0 && v.height > 0)) return;
+    const o = this.view;
+    if (Math.abs(o.x - v.x) < 0.25 && Math.abs(o.y - v.y) < 0.25 && Math.abs(o.width - v.width) < 0.25 && Math.abs(o.height - v.height) < 0.25) return;
+    this.view = { x: v.x, y: v.y, width: v.width, height: v.height };
+    this._rebuildBack();
+  }
+
+  _rebuildBack() {
+    const old = this.backMesh.geometry;
+    this.backMesh.geometry = this._backGeometry();
+    try { old.destroy(); } catch { /* shared */ }
   }
 
   _buildFallback() {
@@ -702,6 +870,50 @@ export class ShotRenderer {
     const B = this.b ? this._sideState(this.b, period, beat?.scaleB ?? 1, 1, beat?.bloomB ?? 0) : null;
     if (this._fallback) this._drawFallback(A, B, beat);
     else this._writeUniforms(A, B, beat);
+    this._updateBackdrop();
+  }
+
+  /** The backdrop follows the frame's mix and wipe line exactly; only placement, blur and level differ. */
+  _updateBackdrop() {
+    const on = !this._backFailed && !this._fallback && viewOverhangs(this.view, this.width, this.height);
+    this.backdrop.renderable = on;
+    if (!on) return;
+    const u = this.backShader.uniforms;
+    const W = this.width, H = this.height, v = this.view;
+    const wt = this.backdrop.worldTransform;
+    const dev = this.resolution * (wt ? Math.hypot(wt.a, wt.b) || 1 : 1);
+    const full = this.allows("backdrop");
+    const rFrame = BACKDROP.blur * v.width;
+    const empty = this.PIXI.Texture.EMPTY ?? this.PIXI.Texture.WHITE;
+    const side = (s, k) => {
+      const tex = this._tex(s);
+      if (!s?.shot || !tex) { u[`uTex${k}`] = empty; return 0; }
+      const r = backdropRect(tex.width, tex.height, v, s.focus);
+      const place = u[`uPlace${k}`], crop = u[`uCrop${k}`], grade = u[`uGrade${k}`], tint = u[`uTint${k}`], blur = u[`uBlur${k}`];
+      u[`uTex${k}`] = tex;
+      place[0] = r.x / W; place[1] = r.y / H; place[2] = r.width / W; place[3] = r.height / H;
+      const bt = tex.baseTexture, fr = tex.frame, bw = bt.width || 1, bh = bt.height || 1;
+      crop[0] = fr.x / bw; crop[1] = fr.y / bh; crop[2] = fr.width / bw; crop[3] = fr.height / bh;
+      const t = s.treatment;
+      grade[0] = gainOf(t.exposure) * BACKDROP.gain;
+      grade[1] = t.saturation;
+      grade[2] = t.tintAmount;
+      const tv = t.tintAmount > 0 ? tintVector(t.tint) : [0, 0, 0];
+      tint[0] = tv[0]; tint[1] = tv[1]; tint[2] = tv[2];
+      blur[0] = rFrame / r.width;
+      blur[1] = rFrame / r.height;
+      // The full disc reads a mip matched to its tap spacing; shed, one tap reads the mip the whole disc spans.
+      blur[2] = Math.max(0, Math.log2((rFrame * dev) / (full ? TREATMENT.tapSpacing : 1)));
+      return 1;
+    };
+    u.uHas[0] = side(this.a, "A");
+    u.uHas[1] = side(this.b, "B");
+    u.uTaps = full ? 1 : 0;
+    const m = this.shader.uniforms;
+    u.uMix = m.uMix;
+    u.uWipe = m.uWipe;
+    u.uWipeLine[0] = m.uWipeLine[0]; u.uWipeLine[1] = m.uWipeLine[1]; u.uWipeLine[2] = m.uWipeLine[2];
+    u.uWipeSoft = m.uWipeSoft;
   }
 
   /** Device px per frame px, from the container's on-screen scale. */
@@ -788,6 +1000,9 @@ export class ShotRenderer {
     try { old.destroy(); } catch { /* shared */ }
     this.shader.uniforms.uSize[0] = width;
     this.shader.uniforms.uSize[1] = height;
+    this.backShader.uniforms.uSize[0] = width;
+    this.backShader.uniforms.uSize[1] = height;
+    this._rebuildBack();
     this._drawFallbackRects();
   }
 
@@ -800,6 +1015,9 @@ export class ShotRenderer {
     try { this.container.parent?.removeChild(this.container); } catch { /* torn down */ }
     try { this.mesh.geometry?.destroy(); } catch { /* torn down */ }
     try { this.container.destroy({ children: true }); } catch { /* torn down */ }
+    try { this.backdrop.parent?.removeChild(this.backdrop); } catch { /* torn down */ }
+    try { this.backMesh.geometry?.destroy(); } catch { /* torn down */ }
+    try { this.backdrop.destroy({ children: true }); } catch { /* torn down */ }
     this.a = makeSide(null);
     this.b = null;
     this._tr = null;

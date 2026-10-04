@@ -14,7 +14,23 @@ export const SETTINGS = Object.freeze({
   chatOnCut: "th.chatOnCut",       // world  Boolean — post a location line to chat on a cut (off)
   defaultStyle: "th.defaultStyle", // world  String  — STYLES key a new Theatre scene starts with
   defaultFace: "th.defaultFace",   // world  String  — FACES key a new Theatre scene starts with
+  defaultFraming: "th.defaultFraming", // world  String — FRAMINGS key every viewer gets unless they choose
+  defaultPadding: "th.defaultPadding", // world  Number — the padding that goes with it
+  framing: "th.framing",           // client String  — FRAMING_CHOICES key: "default" follows the GM's pair
+  padding: "th.padding",           // client Number  — Fit only, own framing only: % of the display's shorter side kept clear
 });
+
+/**
+ * How the 16:9 frame meets a display that is not 16:9. i18n: GLTH.framing.<key>
+ *   fill — the frame covers the display; whatever overhangs is cropped (the default)
+ *   fit  — the whole frame is shown, inset by the padding; the space around it is
+ *          the same picture, blurred, scaled to cover and a little darker
+ */
+export const FRAMINGS = Object.freeze(["fill", "fit"]);
+export const DEFAULT_FRAMING = "fill";
+/** A viewer's own choice: the GM's default (framing AND padding), or a framing of their own. */
+export const FRAMING_CHOICES = Object.freeze(["default", ...FRAMINGS]);
+export const PADDING_MAX = 20;
 
 /** Scene flag keys (scope SUITE_ID). Dotted keys nest: flags[SUITE_ID].th.shots */
 export const FLAGS = Object.freeze({
