@@ -3,7 +3,7 @@ import { HOOKS, MODULE_ID, TARGET_LINE_VISIBILITY } from "../../stream/constants
 import { createTimer, onCanvasFrame, prefersCalmMotion } from "../../stream/motion/engine.js";
 import { TARGETS_HOOKS, getShowLines, getTargetingSettings } from "../settings.js";
 import { isConfiguredStreamUser } from "../../stream/settings.js";
-import { getCanvasToken, isVisibleToken, playerControllingUsers, targetsOfToken, turnPlayers } from "../../stream/token-utils.js";
+import { getCanvasToken, isVisibleToken, playerControllingUsers, targetsOfToken, turnPlayers, visibleTokens } from "../../stream/token-utils.js";
 import { OriginRing, TargetLine } from "./target-line.js";
 
 /** Above rulers and cursors, below the scrolling combat text. */
@@ -15,6 +15,9 @@ const HALO_BLUR_QUALITY = 2;
  * Draws a targeting line from the active combatant to every token it is targeting, on any client the
  * targeting settings allow. Each client decides for itself with its own visibility, so a line never
  * reveals a token that client cannot see.
+ *
+ * Two settings widen that from the current turn (see `#desiredLines`): `showAllSources` keeps every
+ * eligible token's lines standing at once, and `outOfCombat` keeps drawing with no encounter running.
  */
 export class TargetLineController {
   lines = new Map();
@@ -58,6 +61,10 @@ export class TargetLineController {
       "createCombatant",
       "updateCombatant",
       "deleteCombatant",
+      // A token arriving can be a source the moment it is dropped: its owner may already have a target
+      // standing, which `targetsOfToken` attributes to it. That only shows in the wider modes, where a
+      // token off the current turn draws at all.
+      "createToken",
       "deleteToken",
       "sightRefresh",
       "userConnected",
@@ -135,6 +142,9 @@ export class TargetLineController {
     const fromId = previous?.document?.id;
     const sourceId = current?.document?.id;
     if (!fromId || !sourceId || fromId === sourceId) return;
+    // With every source drawing, the outgoing token's lines stay up: nothing retracts, so there is no
+    // hand-off to stage, and staging one would hold the incoming lines back for a beat that shows nothing.
+    if (drawsEverySource(getTargetingSettings(), getActiveSceneCombat())) return;
     if (!sameTurnPlayer(previous, current)) return;
     const outgoing = [...this.lines.values()].filter(line => line.origin !== sourceId);
     // Nothing on screen to retract: there is nothing to wait for.
@@ -253,22 +263,47 @@ export class TargetLineController {
     this.#updateListening();
   }
 
+  /**
+   * Which lines should be on screen, keyed `source>target`.
+   *
+   * The combatant whose turn it is is always a source. `showAllSources` adds every other visible
+   * player-controlled token that has targets, and `outOfCombat` keeps that going with no encounter
+   * running, where there is no current turn to follow and so every source draws.
+   *
+   * Away from the active turn only **player-controlled** tokens draw. Foundry records targets per user,
+   * not per creature: a player's selection is their standing intent for their own token, but a GM runs
+   * every NPC off one selection, so attributing it to each of them would put the same line on every
+   * creature the GM owns. The acting creature is the one NPC the GM's selection can be pinned to, which
+   * is why the turn is always a source even in the wider modes.
+   */
   #desiredLines(settings) {
     const desired = new Map();
     if (!canShowLines(settings)) return desired;
     const combat = getActiveSceneCombat();
-    if (!combat?.started) return desired;
-    const source = getCombatantToken(getActiveCombatant(combat));
-    if (!isVisibleToken(source)) return desired;
+    if (!combat?.started && !settings.outOfCombat) return desired;
+    const active = combat?.started ? getCombatantToken(getActiveCombatant(combat)) : null;
+    if (isVisibleToken(active)) this.#addLines(desired, active, settings);
+    if (!drawsEverySource(settings, combat)) return desired;
+    const activeId = active?.document?.id ?? null;
+    for (const token of visibleTokens()) {
+      if (token.document.id === activeId) continue;
+      if (!playerControllingUsers(token).length) continue;
+      this.#addLines(desired, token, settings);
+    }
+    return desired;
+  }
+
+  /** Add `source`'s lines to `desired`, one per target it can see. */
+  #addLines(desired, source, settings) {
     // A player's targets are their standing intent for their own creature, so they show from the first
     // frame of its turn, round after round. The GM's selection is left over from whichever NPC acted last,
     // so a GM-controlled turn only draws targets picked during that turn.
     const includeTarget = playerControllingUsers(source).length
       ? undefined
       : (user, target) => !this.carriedTargets.get(user.id)?.has(target.document.id);
+    const sourceId = source.document.id;
     for (const target of targetsOfToken(source, includeTarget)) {
       if (!isVisibleToken(target)) continue;
-      const sourceId = source.document.id;
       const targetId = target.document.id;
       desired.set(`${sourceId}>${targetId}`, {
         sourceId,
@@ -276,7 +311,6 @@ export class TargetLineController {
         style: { color: relationColor(source, target, settings), intensity: Number(settings.intensity) || 1 }
       });
     }
-    return desired;
   }
 
   #render() {
@@ -373,6 +407,14 @@ export class TargetLineController {
 function sameTurnPlayer(previous, current) {
   const previousIds = new Set(turnPlayers(previous).map(user => user.id));
   return turnPlayers(current).some(user => previousIds.has(user.id));
+}
+
+/**
+ * Whether every eligible token draws its own lines rather than only the combatant whose turn it is.
+ * With no encounter running there is no current turn to follow, so the wider rule is the only one.
+ */
+function drawsEverySource(settings, combat) {
+  return Boolean(settings.showAllSources) || !combat?.started;
 }
 
 function canShowLines(settings) {

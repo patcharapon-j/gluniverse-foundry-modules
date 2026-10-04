@@ -2,6 +2,8 @@
   <h2>Targeting Lines</h2>
   <div class="gluniverse-stream-number-grid">
     <label><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> Show targeting lines</label>
+    <label title="Keep every token's lines up at once instead of following the turn order."><input type="checkbox" name="targeting.showAllSources" {{#if targeting.showAllSources}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> Show all, not just the current turn</label>
+    <label title="Keep drawing when no encounter is running."><input type="checkbox" name="targeting.outOfCombat" {{#if targeting.outOfCombat}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> Show outside combat</label>
     {{#if showVisibility}}
     <label>Visible to <select name="targeting.visibility" {{#unless canEdit}}disabled{{/unless}}>{{#each visibilityOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></label>
     {{/if}}
@@ -14,5 +16,5 @@
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorSameSide" value="{{targeting.colorSameSide}}" {{#unless canEdit}}disabled{{/unless}}> Same side</label>
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorOther" value="{{targeting.colorOther}}" {{#unless canEdit}}disabled{{/unless}}> Neutral / other</label>
   </div>
-  <p class="gluniverse-stream-form-hint"><small>During combat, draws a glowing line from the combatant whose turn it is to every token it targets. Each client only draws lines between tokens it can see, and secret dispositions count as neutral. Players can also hide lines on their own screen from the GLUniverse Suite control centre.{{#unless showVisibility}} Enable the Stream Client feature to restrict who sees the lines.{{/unless}}</small></p>
+  <p class="gluniverse-stream-form-hint"><small>Draws a glowing line from the combatant whose turn it is to every token it targets. Each client only draws lines between tokens it can see, and secret dispositions count as neutral. Players can also hide lines on their own screen from the GLUniverse Suite control centre. Away from the current turn &mdash; under either of the two options above &mdash; only player-controlled tokens draw: Foundry records targets per user, so a GM&rsquo;s single selection belongs to no particular NPC of theirs.{{#unless showVisibility}} Enable the Stream Client feature to restrict who sees the lines.{{/unless}}</small></p>
 </section>

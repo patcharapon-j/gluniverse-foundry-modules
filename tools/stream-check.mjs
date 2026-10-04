@@ -19,8 +19,12 @@
 
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+// `fileURLToPath`, not `URL#pathname`: on Windows the latter keeps a leading slash before the drive
+// letter, and `join` then builds a doubled drive prefix, so the tool cannot read a line of the repo
+// it checks.
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const FEATURES = ["stream", "stream-cards", "stream-targets"];
 
 const problems = [];

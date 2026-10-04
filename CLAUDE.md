@@ -1195,7 +1195,7 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (147 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (151 tests; Node's
 directory mode is not supported here, so name the glob).
 
 Seven things are worth knowing before you change any of it.

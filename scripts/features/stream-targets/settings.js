@@ -112,6 +112,9 @@ export function sanitize(value) {
     Object.entries(DEFAULT_TARGETING_SETTINGS).map(([k, fallback]) => [k, k in source ? source[k] : fallback])
   );
   settings.enabled = settings.enabled !== false;
+  // Both scope switches ship off, so an absent or junk value reads as off rather than as on.
+  settings.showAllSources = settings.showAllSources === true;
+  settings.outOfCombat = settings.outOfCombat === true;
 
   // A stored stream-only visibility is kept as data but falls back on read when
   // `stream` is off, so toggling that feature never blanks the arcs.

@@ -162,6 +162,13 @@ export const TARGET_LINE_VISIBILITY = {
 export const DEFAULT_TARGETING_SETTINGS = {
   enabled: true,
   visibility: TARGET_LINE_VISIBILITY.everyone,
+  /**
+   * Draw from every eligible token at once rather than only the combatant whose turn it is. Off, the arcs
+   * follow the turn; on, every player-controlled token that has targets keeps its own line standing.
+   */
+  showAllSources: false,
+  /** Keep drawing with no encounter running. There is no current turn then, so every source draws. */
+  outOfCombat: false,
   colorFriendlyToHostile: "#4db8ff",
   colorHostileToFriendly: "#ff4a5c",
   colorSameSide: "#52f5a0",
