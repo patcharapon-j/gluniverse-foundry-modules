@@ -25,7 +25,7 @@ function framingTransform(actor) {
 }
 
 /**
- * Guarantee comms.css is actually loaded.
+ * Guarantee stage-comms.css is actually loaded.
  *
  * Foundry only injects newly-added `styles` manifest entries on a full world
  * relaunch — a browser refresh re-runs the esmodules (so the comms feature
@@ -35,7 +35,7 @@ function framingTransform(actor) {
  * ourselves so the feature works without requiring a server restart.
  */
 function ensureCommsStylesheet() {
-    const href = new URL('../styles/comms.css', import.meta.url).href;
+    const href = new URL('../../../styles/stage-comms.css', import.meta.url).href;
     const already = [...document.styleSheets].some(s => s.href === href)
         || !!document.querySelector(`link[rel="stylesheet"][href="${href}"]`);
     if (already) return;

@@ -206,6 +206,11 @@ section = "purity";
     try { await imp(f); passed++; } catch (e) { ok(`${f} imports under plain Node`, false, e.message); }
   }
   try { await imp(`${FEAT}/apps/index.mjs`); passed++; } catch (e) { ok("the apps import under plain Node", false, e.message); }
+  // A cancelled cue commits its values inline on the persistent title node — the
+  // exit blur among them — and nothing later animates that node's filter.
+  const overlay = stripComments(read(`${FEAT}/overlay/title-overlay.mjs`));
+  const clear = /_clearTitleDom\(\)\s*\{([\s\S]*?)\n  \}/.exec(overlay)?.[1] ?? "";
+  ok("a new cue wipes the title node's committed inline styles (else every later title stays blurred)", /\$\.title\.style\.cssText\s*=\s*""/.test(clear));
 }
 
 /* ── Writes: one path, forced replacement ────────────────────────────── */

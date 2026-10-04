@@ -32,6 +32,21 @@ import { CHAT_KEEP, CHAT_SLACK } from "./constants.mjs";
 const _inflight = new WeakMap();
 
 /**
+ * A deferred render NEVER calls a `wrapped` it kept from an earlier call.
+ * libWrapper invalidates that function as soon as anything re-registers on the
+ * chain, and then throws when it is called ("This wrapper function … is no
+ * longer valid"), which took down the trailing render of a burst. A deferred
+ * render goes back in through the public method instead, so it gets the chain
+ * as it stands now, and this one-shot marker tells the handler to pass it on.
+ */
+let _reentry = null;
+
+function reenter(target, call) {
+  _reentry = target;
+  try { return call(); } finally { _reentry = null; }
+}
+
+/**
  * Merge two sets of render options into one render that satisfies both.
  * `force` is sticky; `parts` is a union, and a call with no `parts` (a full
  * render) wins outright; everything else is last-writer-wins, which is what
@@ -50,10 +65,10 @@ function normalise(options, _options) {
   return { ...(options ?? {}) };
 }
 
-function launch(app, wrapped, options, entry) {
+function launch(app, call, options, entry) {
   let promise;
   try {
-    promise = Promise.resolve(wrapped(options));
+    promise = Promise.resolve(call(options));
   } catch (e) {
     promise = Promise.reject(e);
   }
@@ -64,7 +79,7 @@ function launch(app, wrapped, options, entry) {
       return;
     }
     entry.trailing = null;
-    const p = launch(app, wrapped, trailing.options, entry);
+    const p = launch(app, (o) => reenter(app, () => app.render(o)), trailing.options, entry);
     p.then(trailing.resolve, trailing.reject);
   };
   promise.then(next, next);
@@ -77,11 +92,15 @@ Patches.define({
   signature: "#semaphore.add(this.#render.bind(this), options)",
   handler(wrapped, options = {}, _options = {}) {
     const opts = normalise(options, _options);
+    if (_reentry === this) {
+      _reentry = null;
+      return wrapped(opts);
+    }
     const entry = _inflight.get(this);
     if (!entry) {
       const fresh = { trailing: null };
       _inflight.set(this, fresh);
-      return launch(this, wrapped, opts, fresh);
+      return launch(this, (o) => wrapped(o), opts, fresh);
     }
     if (entry.trailing) {
       entry.trailing.options = mergeRenderOptions(entry.trailing.options, opts);
@@ -107,10 +126,14 @@ Patches.define({
   target: "foundry.documents.abstract.DocumentCollection.prototype.render",
   signature: "opts.force = force;",
   handler(wrapped, force = false, options = {}) {
+    if (_reentry === this) {
+      _reentry = null;
+      return wrapped(force, options);
+    }
     const pending = _dirTimers.get(this);
     if (!pending) {
       // Leading edge: a single edit renders immediately.
-      _dirTimers.set(this, { timer: window.setTimeout(() => flushDirectory(this, wrapped), DIRECTORY_WINDOW_MS), force: false, options: null });
+      _dirTimers.set(this, { timer: window.setTimeout(() => flushDirectory(this), DIRECTORY_WINDOW_MS), force: false, options: null });
       return wrapped(force, options);
     }
     pending.force ||= !!force;
@@ -119,11 +142,11 @@ Patches.define({
   },
 });
 
-function flushDirectory(collection, wrapped) {
+function flushDirectory(collection) {
   const pending = _dirTimers.get(collection);
   _dirTimers.delete(collection);
   // Trailing edge only if something arrived during the window.
-  if (pending?.options) wrapped(pending.force, pending.options);
+  if (pending?.options) reenter(collection, () => collection.render(pending.force, pending.options));
 }
 
 /* ══════════════════════════════════════════════════════════════════════

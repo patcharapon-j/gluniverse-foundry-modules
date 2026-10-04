@@ -248,6 +248,14 @@ await section("every core patch is gated on generation and on the method it was 
   for (const [f, body] of defines) {
     const id = /id:\s*"(\w+)"/.exec(body)?.[1];
     ok(PATCHES.some((p) => p.id === id && p.core), f, `Patches.define("${id}") is not a core patch in PATCHES`);
+    // libWrapper invalidates a `wrapped` once the chain changes and throws when a
+    // kept one is called, so a deferred render must re-enter the public method.
+    ok(!/setTimeout\([^;]*\bwrapped\b/.test(body), f, `"${id}" hands \`wrapped\` to a timer — call it synchronously or re-enter the method`);
+  }
+  for (const [f, s] of src) {
+    if (/patches\.mjs$/.test(f.replace(/\\/g, "/"))) continue; // the engine hands it down, synchronously
+    const outside = s.replace(/Patches\.define\(\{[\s\S]*?\n\s*\}\)/g, "");
+    ok(!/\bwrapped\b/.test(outside), f, "`wrapped` escapes its handler — a deferred call to it throws once libWrapper rebuilds the chain");
   }
 
   // Drive the evaluator: wrong generation, missing target, tampered method.

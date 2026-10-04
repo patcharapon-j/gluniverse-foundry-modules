@@ -536,6 +536,10 @@ export class TitleOverlay {
 
   _clearTitleDom() {
     this.$.title.replaceChildren();
+    // The title node outlives its cue, and a cancelled cue COMMITS its values
+    // inline — the exit's blur among them. Nothing in the next cue animates the
+    // node's filter, so a committed blur would soften every title after the first.
+    this.$.title.style.cssText = "";
     this.$.title.style.opacity = "0";
     this.$.title.className = "glth-title";
     this.$.card.replaceChildren();
