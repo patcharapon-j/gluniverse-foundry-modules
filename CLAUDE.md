@@ -1508,9 +1508,9 @@ background — which is black.
 `document.timeline`.** A background tab's `document.timeline.currentTime` is
 stale, so `startTime` puts an alt-tabbed player's cue ahead of everyone else's;
 a `visibilitychange` re-anchors. The renderer and overlay are pure (the check
-imports both under Node), the drift is first in `SHED_ORDER`, every face's
+imports both under Node), the backdrop is last in `SHED_ORDER`, every face's
 family is declared in `gl-fonts.css`, and every dynamic family (`GLTH.style/
-face/drift/cue.*`) resolves. To see it: `node tools/theatre-preview.mjs && node
+face/cue.*`) resolves. To see it: `node tools/theatre-preview.mjs && node
 tools/preview-server.mjs`, then `/.preview/theatre.html` (URL params `style`,
 `face`, `seek` for headless frames). See `docs/THEATRE.md`.
 

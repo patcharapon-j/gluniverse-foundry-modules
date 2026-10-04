@@ -17,7 +17,6 @@
  *   face:      FACES key  | null (null = the scene's default),
  *   hold:      ms | null (null = the scene's default),
  *   focus:     { x: 0..1, y: 0..1 } — the point of the image kept in frame when it is cropped to cover,
- *   drift:     { mode: DRIFT_MODES, strength: 0..1 },
  *   treatment: Treatment,
  *   grade:     Stage grade object | null — the Stage character grade this shot relights to (null = leave Stage alone),
  * }
@@ -41,7 +40,7 @@
  * { background: string, width, height, padding, gridType, tokenVision, backgroundColor } | null
  */
 
-import { DEFAULT_FACE, DEFAULT_STYLE, DRIFT_MODES, FACES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
+import { DEFAULT_FACE, DEFAULT_STYLE, FACES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
 
 const num = (v, lo, hi, fallback) => {
   const n = Number(v);
@@ -60,8 +59,6 @@ export const DEFAULT_TREATMENT = Object.freeze({
 export const NEUTRAL_TREATMENT = Object.freeze({
   exposure: 0, saturation: 1, tint: "#000000", tintAmount: 0, vignette: 0, blur: 0, letterbox: null,
 });
-
-export const DEFAULT_DRIFT = Object.freeze({ mode: "push", strength: 0.5 });
 
 export const DEFAULT_CONFIG = Object.freeze({
   style: DEFAULT_STYLE, face: DEFAULT_FACE, hold: TIMING.hold, letterbox: 0, tag: false,
@@ -83,11 +80,6 @@ export function normalizeTreatment(raw) {
 export function isNeutralTreatment(t) {
   const n = normalizeTreatment(t);
   return n.exposure === 0 && n.saturation === 1 && n.tintAmount === 0 && n.vignette === 0 && n.blur === 0;
-}
-
-export function normalizeDrift(raw) {
-  const d = raw && typeof raw === "object" ? raw : {};
-  return { mode: oneOf(d.mode, DRIFT_MODES, DEFAULT_DRIFT.mode), strength: num(d.strength, 0, 1, DEFAULT_DRIFT.strength) };
 }
 
 /**
@@ -121,7 +113,6 @@ export function normalizeShot(raw, index = 0) {
     face: orNull(s.face, (v) => (v in FACES ? v : null)),
     hold: orNull(s.hold, (v) => num(v, TIMING.holdMin, TIMING.holdMax, null)),
     focus: { x: num(focus.x, 0, 1, 0.5), y: num(focus.y, 0, 1, 0.5) },
-    drift: normalizeDrift(s.drift),
     treatment: normalizeTreatment(s.treatment),
     grade: s.grade && typeof s.grade === "object" ? s.grade : null,
   };

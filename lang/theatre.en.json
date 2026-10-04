@@ -39,11 +39,6 @@
   "GLTH.face.cormorant": "Cormorant Garamond",
   "GLTH.face.oxanium": "Oxanium",
 
-  "GLTH.drift.push": "Push in",
-  "GLTH.drift.pull": "Pull out",
-  "GLTH.drift.panLeft": "Pan left",
-  "GLTH.drift.panRight": "Pan right",
-  "GLTH.drift.none": "Still",
 
   "GLTH.cue.shot": "Cut to shot",
   "GLTH.cue.title": "Re-announce title",

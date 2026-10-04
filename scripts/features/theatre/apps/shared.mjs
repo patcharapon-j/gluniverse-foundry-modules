@@ -12,7 +12,7 @@
 
 import { featurePath, SUITE_ID } from "../../../core/const.mjs";
 import { Suite } from "../../../core/registry.mjs";
-import { DRIFT_MODES, FACE_KEYS, FACES, FEATURE_ID, STYLES, VIDEO_RE } from "../constants.mjs";
+import { FACE_KEYS, FACES, FEATURE_ID, STYLES, VIDEO_RE } from "../constants.mjs";
 import { titleFromFilename } from "../model.mjs";
 
 export const tpl = (name) => featurePath(FEATURE_ID, `templates/${name}.hbs`);
@@ -64,11 +64,10 @@ export function stageEnabled() {
 
 export const suiteApi = () => globalThis.game?.modules?.get(SUITE_ID)?.api ?? null;
 
-/* ── Choice lists (dynamic i18n families are W5's: GLTH.style/face/drift.*) ── */
+/* ── Choice lists (dynamic i18n families are W5's: GLTH.style/face.*) ── */
 
 export const styleLabel = (k) => L(`GLTH.style.${k}.name`);
 export const faceLabel = (k) => L(`GLTH.face.${k}`);
-export const driftLabel = (k) => L(`GLTH.drift.${k}`);
 
 /**
  * Options for an override select: first "Scene default (<resolved>)" (value ""),
@@ -87,7 +86,6 @@ export function plainOptions(keys, label, selected) {
 
 export const styleKeys = () => [...STYLES];
 export const faceKeys = () => [...FACE_KEYS];
-export const driftKeys = () => [...DRIFT_MODES];
 
 /** Inline style for a type specimen in a given FACES entry (data from constants, never users). */
 export function faceSpecimenStyle(key) {

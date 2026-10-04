@@ -149,7 +149,7 @@ async function bootRenderer() {
       renderer.setView({ x: -x / k, y: -y / k, width: innerWidth / k, height: innerHeight / k });
     };
     fit(); addEventListener("resize", fit);
-    app.ticker.add(() => { if (!frozen) renderer.update(app.ticker.deltaMS); });
+    app.ticker.add(() => { if (!frozen) renderer.update(); });
     renderer.preload(SHOTS.map((s) => s.src));
     return null;
   } catch (e) {
@@ -214,9 +214,9 @@ window.__theatreSeek = (ms) => {
     const startAt = performance.now() - ms;
     if (renderer) {
       renderer.show(SHOTS[prevIndex], { timeline: tl, startAt, settle: true });
-      renderer.update(0);
+      renderer.update();
       renderer.show(SHOTS[shot], { timeline: tl, startAt, settle: false });
-      renderer.update(0);
+      renderer.update();
       frozen = true;
     } else if (fallback.last) { fallback.last.pause(); fallback.last.currentTime = ms; }
   }

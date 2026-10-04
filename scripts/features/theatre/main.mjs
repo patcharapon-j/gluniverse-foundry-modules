@@ -53,7 +53,7 @@ const refreshControls = () => { try { ui.controls?.render({ reset: true }); } ca
 const emit = (store, detail) => Hooks.callAll(HOOK_CHANGED, store, detail);
 
 /** The parts of a shot the shot layer draws (a change here redraws it). */
-const drawSig = (shot) => (shot ? JSON.stringify([shot.id, shot.src, shot.focus, shot.drift, shot.treatment]) : null);
+const drawSig = (shot) => (shot ? JSON.stringify([shot.id, shot.src, shot.focus, shot.treatment]) : null);
 
 /* ── Timelines ──────────────────────────────────────────────────────────── */
 
