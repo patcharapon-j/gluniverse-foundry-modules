@@ -1,0 +1,807 @@
+/**
+ * Theatre — the shot layer.
+ *
+ * PURE: PIXI is injected and nothing here reads `game`, `canvas`, `foundry`,
+ * `ui` or `Hooks`. The host (../host.mjs) decides which scene, which shot and
+ * when; the preview page drives this exact module with a bare PIXI.
+ *
+ * One quad covering the frame (the scene rect, in frame px from 0,0), drawn by
+ * ONE fragment shader holding two sides — A (what is on screen) and B (what is
+ * arriving). Per frame the JS works out, for each side, where its image sits
+ * (cover-fit about the shot's focus, times the Ken Burns drift, times the
+ * transition's own scale) and its Treatment, and the shader mixes the two by
+ * the transition mode:
+ *
+ *   swap  — B replaces A at the beat (hidden behind the overlay's black / bars)
+ *   push  — B dissolves in from 1.14× with a brief soft bloom; A eases back to 0.96×
+ *   wipe  — a soft diagonal edge sweeps B across; A dims to 0.55
+ *   cut   — a short linear crossfade
+ *   none  — the image does not change
+ *
+ * Every time comes from the timeline (../timeline.mjs) the caller passes in,
+ * already scaled by the motion scale. The constants below are SHAPES (scales,
+ * easings, the bloom's size), never durations — except the drift's leg, which
+ * is TIMING.driftPeriod from constants.mjs.
+ *
+ * NEUTRAL_TREATMENT is an exact no-op: each grade step is skipped at its
+ * neutral value rather than evaluated (x * 1.0 is exact, but `l + (c - l) * 1.0`
+ * is not, and a one-tap "blur" is not a texture read). A side with no blur reads
+ * its texture once, exactly where an unshaded sprite would.
+ *
+ * If the shader fails to compile or link, the layer says so in the console
+ * and degrades to two plain sprites crossfading (no treatment, no wipe edge).
+ * The probe runs on the first render, against the renderer PIXI hands the mesh,
+ * so it needs nothing from the host.
+ */
+
+import { TIMING } from "../constants.mjs";
+import { coverRect, isVideo, normalizeTreatment, normalizeDrift } from "../model.mjs";
+
+/* ══════════════════════════════════════════════════════════════════════
+   Shapes (not durations)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Behaviours given up under load, cheapest to lose first. Bound to the shared
+ *  frame clock by the host with Budget.ladder(). */
+export const SHED_ORDER = Object.freeze(["drift", "bloom", "blur"]);
+
+/** Push-in (chapter): the approved mock's numbers. */
+export const PUSH = Object.freeze({
+  inScale: 1.14,     // B starts this much larger and settles to 1
+  outScale: 0.96,    // A eases back to this
+  bloomBlur: 0.010,  // B's starting blur, disc radius as a fraction of the frame width (≈ CSS blur(10px) at 1080p)
+  bloomGain: 0.3,    // B's starting brightness lift (CSS brightness(1.3))
+});
+
+/** Soft diagonal wipe (wipe). */
+export const WIPE = Object.freeze({
+  angleDeg: 100,     // CSS gradient angle of the mock: sweeping left → right, leaning 10° down
+  soft: 0.3,         // the soft edge, as a fraction of the frame's on-screen width…
+  minSoftPx: 2,      // …never narrower than this many DEVICE pixels (no aliased hairline)
+  dim: 0.55,         // A's brightness at the end of the wipe
+});
+
+/** Ken Burns. One leg is TIMING.driftPeriod; legs alternate (ping-pong) on a
+ *  cosine, so the motion has zero velocity at each turn and never jumps. */
+export const DRIFT = Object.freeze({
+  zoom: 0.12,        // extra scale at strength 1 (push / pull; pans overscan by the same)
+  pan: 0.5,          // a pan travels at most this fraction of the overscan's frame width
+});
+
+/** Treatment ranges the shader works in. */
+export const TREATMENT = Object.freeze({
+  blurMax: 0.02,     // blur 1 = a disc this fraction of the frame width
+  tapSpacing: 3.5,   // device px between blur taps, for the mip bias
+});
+
+/** The vignette's ellipse (matches the mock's radial-gradient). Constants in GLSL. */
+export const VIGNETTE = Object.freeze({ cx: 0.5, cy: 0.48, rx: 0.75, ry: 0.70, inner: 0.55 });
+
+/** Blur taps on a golden-angle spiral (plus the centre). */
+export const BLUR_TAPS = 12;
+
+/* ══════════════════════════════════════════════════════════════════════
+   Pure maths (exported for the check tool)
+   ══════════════════════════════════════════════════════════════════════ */
+
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+/** CSS cubic-bezier(x1, y1, x2, y2) as a function of 0..1. Exact at 0 and 1. */
+export function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = (t) => ((ax * t + bx) * t + cx) * t;
+  const Y = (t) => ((ay * t + by) * t + cy) * t;
+  const dX = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const e = X(t) - x;
+      if (Math.abs(e) < 1e-6) return Y(t);
+      const d = dX(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= e / d;
+    }
+    let lo = 0, hi = 1;
+    t = x;
+    for (let i = 0; i < 40; i++) {
+      const v = X(t);
+      if (Math.abs(v - x) < 1e-6) break;
+      if (v < x) lo = t; else hi = t;
+      t = (lo + hi) / 2;
+    }
+    return Y(t);
+  };
+}
+
+/** The mock's easings: E (expo-ish out) and SHARP (in-out). */
+export const EASE = Object.freeze({
+  out: cubicBezier(0.16, 1, 0.3, 1),
+  sharp: cubicBezier(0.7, 0, 0.1, 1),
+  linear: (x) => clamp01(x),
+});
+
+/**
+ * Where the image beat of a cue stands `t` ms after the cue's start.
+ * @param {{mode:string, at:number, dur:number}} image  timeline.image (scaled)
+ * @param {number} t
+ * @returns {{ mode, started, done, w, scaleA, scaleB, bloomB, dimA, wipe }}
+ *   w      — weight of B (0..1); for a wipe, the edge's progress
+ *   scaleA / scaleB — the transition's own scale about the frame centre
+ *   bloomB — 1..0, the push-in's soft bloom on B
+ *   dimA   — A's brightness multiplier
+ */
+export function imageBeat(image, t) {
+  const mode = image?.mode ?? "swap";
+  const at = Number(image?.at) || 0, dur = Math.max(0, Number(image?.dur) || 0);
+  const out = { mode, started: false, done: false, w: 0, scaleA: 1, scaleB: 1, bloomB: 0, dimA: 1, wipe: false };
+  if (mode === "none") { out.started = true; out.done = true; return out; }
+  if (t < at) return out;
+  out.started = true;
+  const raw = dur > 0 ? clamp01((t - at) / dur) : 1;
+  out.done = raw >= 1;
+  switch (mode) {
+    case "push": {
+      const e = EASE.out(raw);
+      out.w = e;
+      out.scaleA = 1 + (PUSH.outScale - 1) * e;
+      out.scaleB = PUSH.inScale + (1 - PUSH.inScale) * e;
+      out.bloomB = 1 - e;
+      break;
+    }
+    case "wipe": {
+      const e = EASE.sharp(raw);
+      out.w = e;
+      out.wipe = !out.done;
+      out.dimA = 1 + (WIPE.dim - 1) * e;
+      break;
+    }
+    case "cut":
+      out.w = raw;
+      break;
+    case "swap":
+    default:
+      out.w = 1;
+      out.done = true;
+      break;
+  }
+  return out;
+}
+
+/**
+ * Ken Burns phase: 0 → 1 over one leg, back to 0 over the next, forever.
+ * Cosine-eased so velocity is zero at each turn — the loop never steps.
+ */
+export function driftPhase(ms, period = TIMING.driftPeriod) {
+  if (!(period > 0)) return 0;
+  return 0.5 - 0.5 * Math.cos(Math.PI * (ms % (2 * period)) / period);
+}
+
+/**
+ * The drift's transform for a shot whose cover rect is `base`, in frame px.
+ * Scale `s` is about the focus point P; `tx`/`ty` translate after it. The
+ * result always still covers the frame (scale ≥ 1, pans clamped to the overscan).
+ */
+export function driftTransform(drift, u, base, focus, fw, fh) {
+  const d = drift ?? { mode: "none", strength: 0 };
+  const P = { x: base.x + focus.x * base.width, y: base.y + focus.y * base.height };
+  const A = DRIFT.zoom * (Number(d.strength) || 0);
+  if (!(A > 0) || d.mode === "none") return { s: 1, tx: 0, ty: 0, P };
+  if (d.mode === "push") return { s: 1 + A * u, tx: 0, ty: 0, P };
+  if (d.mode === "pull") return { s: 1 + A * (1 - u), tx: 0, ty: 0, P };
+  // Pans: hold the overscan, travel inside it.
+  const s = 1 + A;
+  const left = P.x + (base.x - P.x) * s;                     // ≤ 0
+  const right = P.x + (base.x + base.width - P.x) * s;       // ≥ fw
+  const reach = DRIFT.pan * A * fw;
+  const lo = Math.max(fw - right, -reach), hi = Math.min(-left, reach);
+  const from = d.mode === "panLeft" ? hi : lo, to = d.mode === "panLeft" ? lo : hi;
+  return { s, tx: from + (to - from) * u, ty: 0, P };
+}
+
+/**
+ * A side's image rect in frame px: cover-fit about the focus, the drift about
+ * the focus, then the transition's scale about the frame centre.
+ */
+export function placeRect(iw, ih, fw, fh, focus, drift, u, tScale = 1) {
+  const f = focus ?? { x: 0.5, y: 0.5 };
+  const base = coverRect(iw, ih, fw, fh, f);
+  const { s, tx, ty, P } = driftTransform(drift, u, base, f, fw, fh);
+  const cx = fw / 2, cy = fh / 2;
+  const x = cx + (P.x + (base.x - P.x) * s + tx - cx) * tScale;
+  const y = cy + (P.y + (base.y - P.y) * s + ty - cy) * tScale;
+  return { x, y, width: base.width * s * tScale, height: base.height * s * tScale };
+}
+
+/** Wipe line in frame px: unit direction and the edge's position at progress p. */
+export function wipeLine(p, fw, fh, soft) {
+  const a = (WIPE.angleDeg * Math.PI) / 180;
+  const dx = Math.sin(a), dy = -Math.cos(a);   // CSS angle: 90deg points right, 180deg down (y down)
+  const s = [0, dx * fw, dy * fh, dx * fw + dy * fh];
+  const smin = Math.min(...s), smax = Math.max(...s);
+  return { dx, dy, edge: (smin - soft / 2) + (smax - smin + soft) * clamp01(p) };
+}
+
+/** Exposure (stops) and the transient multipliers as one gain. */
+export const gainOf = (exposure, dim = 1, bloom = 0) =>
+  (exposure === 0 ? 1 : Math.pow(2, exposure)) * dim * (bloom > 0 ? 1 + PUSH.bloomGain * bloom : 1);
+
+/** Tint colour pre-divided by its own luminance, so a wash keeps the pixel's level. */
+export function tintVector(hex) {
+  const n = parseInt(String(hex ?? "#000000").slice(1), 16) || 0;
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return l > 1e-3 ? [r / l, g / l, b / l] : [0, 0, 0];
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   GLSL
+   ══════════════════════════════════════════════════════════════════════ */
+
+const f = (n) => (Number.isInteger(n) ? `${n}.0` : String(n));
+
+export const SHOT_VERT = `
+attribute vec2 aVertexPosition;
+attribute vec2 aFrame;
+uniform mat3 translationMatrix;
+uniform mat3 projectionMatrix;
+varying vec2 vFrame;
+void main() {
+  vFrame = aFrame;
+  gl_Position = vec4((projectionMatrix * translationMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0);
+}`;
+
+export const SHOT_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vFrame;              // 0..1 across the frame
+uniform sampler2D uTexA;          // A: on screen
+uniform sampler2D uTexB;          // B: arriving
+uniform vec4 uPlaceA;             // image rect in frame-normalised units (x, y, w, h)
+uniform vec4 uPlaceB;
+uniform vec4 uCropA;              // the texture's frame inside its base texture (uv x, y, w, h)
+uniform vec4 uCropB;
+uniform vec4 uGradeA;             // gain, saturation, tint amount, vignette
+uniform vec4 uGradeB;
+uniform vec3 uTintA;              // tint / luma(tint)
+uniform vec3 uTintB;
+uniform vec3 uBlurA;              // blur radius in image uv (x, y), mip bias
+uniform vec3 uBlurB;
+uniform vec2 uHas;                // 1 where a side has a texture (A, B)
+uniform float uMix;               // weight of B (non-wipe modes)
+uniform float uWipe;              // 1 while the weight is the wipe edge
+uniform vec3 uWipeLine;           // wipe: unit direction (x, y), edge position — frame px
+uniform float uWipeSoft;          // wipe: soft edge width — frame px (floored in device px by the host)
+uniform vec2 uSize;               // frame size, frame px
+
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+const vec2 VIG_C = vec2(${f(VIGNETTE.cx)}, ${f(VIGNETTE.cy)});
+const vec2 VIG_R = vec2(${f(VIGNETTE.rx)}, ${f(VIGNETTE.ry)});
+const float VIG_IN = ${f(VIGNETTE.inner)};
+const float GOLDEN = 2.39996323;
+
+vec3 tap(sampler2D tex, vec2 uv, vec4 crop, float bias) {
+  return texture2D(tex, crop.xy + clamp(uv, 0.0, 1.0) * crop.zw, bias).rgb;
+}
+
+vec3 shade(sampler2D tex, vec4 place, vec4 crop, vec4 grade, vec3 tint, vec3 blur) {
+  vec2 uv = (vFrame - place.xy) / place.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec3(0.0);
+  vec3 c;
+  if (blur.x > 0.0 || blur.y > 0.0) {
+    // Golden-angle disc; taps read a mip level matched to their spacing, so the
+    // disc is filled rather than drawn as ${BLUR_TAPS} ghost copies.
+    c = tap(tex, uv, crop, blur.z);
+    for (int i = 1; i <= ${BLUR_TAPS}; i++) {
+      float fi = float(i);
+      float r = sqrt(fi / ${f(BLUR_TAPS)});
+      float a = fi * GOLDEN;
+      c += tap(tex, uv + vec2(cos(a), sin(a)) * r * blur.xy, crop, blur.z);
+    }
+    c /= ${f(BLUR_TAPS + 1)};
+  } else {
+    c = texture2D(tex, crop.xy + uv * crop.zw).rgb;
+  }
+  // Each step is skipped at neutral: NEUTRAL_TREATMENT is bit-exact.
+  if (grade.x != 1.0) c *= grade.x;
+  if (grade.y != 1.0) { float l = dot(c, LUMA); c = max(vec3(l) + (c - vec3(l)) * grade.y, 0.0); }
+  if (grade.z > 0.0) c = mix(c, tint * dot(c, LUMA), grade.z);
+  if (grade.w > 0.0) c *= 1.0 - grade.w * smoothstep(VIG_IN, 1.0, length((vFrame - VIG_C) / VIG_R));
+  return c;
+}
+
+void main() {
+  float w = uMix;
+  if (uWipe > 0.5) {
+    float s = dot(vFrame * uSize, uWipeLine.xy);
+    w = 1.0 - smoothstep(uWipeLine.z - 0.5 * uWipeSoft, uWipeLine.z + 0.5 * uWipeSoft, s);
+  }
+  vec3 a = vec3(0.0);
+  vec3 b = vec3(0.0);
+  if (w < 1.0 && uHas.x > 0.5) a = shade(uTexA, uPlaceA, uCropA, uGradeA, uTintA, uBlurA);
+  if (w > 0.0 && uHas.y > 0.5) b = shade(uTexB, uPlaceB, uCropB, uGradeB, uTintB, uBlurB);
+  vec3 col = w <= 0.0 ? a : (w >= 1.0 ? b : mix(a, b, w));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+/** Every uniform the fragment program declares (the host writes all of them). */
+export const SHOT_UNIFORMS = Object.freeze([
+  "uTexA", "uTexB", "uPlaceA", "uPlaceB", "uCropA", "uCropB", "uGradeA", "uGradeB",
+  "uTintA", "uTintB", "uBlurA", "uBlurB", "uHas", "uMix", "uWipe", "uWipeLine", "uWipeSoft", "uSize",
+]);
+
+/**
+ * Compile and link the program on `gl` without touching PIXI's state.
+ * @returns {{ ok: boolean, log: string }}
+ */
+export function probeProgram(gl, vert = SHOT_VERT, frag = SHOT_FRAG) {
+  if (!gl?.createShader) return { ok: true, log: "" };
+  const made = [];
+  const compile = (type, src) => {
+    const sh = gl.createShader(type);
+    made.push(sh);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    return gl.getShaderParameter(sh, gl.COMPILE_STATUS) ? "" : String(gl.getShaderInfoLog(sh) || "compile failed");
+  };
+  let log = compile(gl.VERTEX_SHADER, `precision highp float;\n${vert}`) + compile(gl.FRAGMENT_SHADER, frag);
+  let prog = null;
+  if (!log) {
+    prog = gl.createProgram();
+    for (const sh of made) gl.attachShader(prog, sh);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) log = String(gl.getProgramInfoLog(prog) || "link failed");
+  }
+  if (gl.isContextLost?.()) log = "";   // a lost context reports failure for everything; not our shader
+  for (const sh of made) gl.deleteShader(sh);
+  if (prog) gl.deleteProgram(prog);
+  return { ok: !log, log };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   The renderer
+   ══════════════════════════════════════════════════════════════════════ */
+
+const NO_DRIFT = Object.freeze({ mode: "none", strength: 0 });
+
+/** One side of the mix: a shot and its texture. */
+function makeSide(shot) {
+  return {
+    shot: shot ?? null,
+    src: shot?.src ?? "",
+    treatment: normalizeTreatment(shot?.treatment),
+    drift: shot ? normalizeDrift(shot.drift) : NO_DRIFT,
+    focus: shot?.focus ?? { x: 0.5, y: 0.5 },
+    driftMs: 0,
+  };
+}
+
+export class ShotRenderer {
+  /**
+   * @param {typeof import("pixi.js")} PIXI
+   * @param {object} o
+   * @param {number} o.width   frame width (scene rect), frame px
+   * @param {number} o.height  frame height
+   * @param {(src:string) => Promise<any>} [o.loadTexture]  image loader (the host passes Foundry's,
+   *        which shares its cache and handles S3/CORS). Videos are always loaded here.
+   * @param {(...a:any[]) => void} [o.warn]
+   * @param {number} [o.resolution]  device px per CSS px of the PIXI renderer
+   */
+  constructor(PIXI, { width, height, loadTexture = null, warn = null, resolution = 1 } = {}) {
+    this.PIXI = PIXI;
+    this.width = width;
+    this.height = height;
+    this._loadImage = loadTexture;
+    this._warn = warn ?? ((...a) => console.warn("Theatre |", ...a));
+    this.resolution = resolution || 1;
+    this.motion = 1;
+    this.driftEnabled = true;
+    this.shed = 0;
+    /** src → Promise<entry>; entry = { tex, video, owned } | null */
+    this._cache = new Map();
+    /** src → entry, once resolved */
+    this._ready = new Map();
+    this.a = makeSide(null);
+    this.b = null;
+    this._tr = null;          // { image, startAt }
+    this._lastW = 0;
+    this._fallback = false;
+    this._probed = false;
+    this._destroyed = false;
+
+    this.container = new PIXI.Container();
+    this.container.eventMode = "none";
+    this.container.interactiveChildren = false;
+
+    this._buildMesh();
+    this._buildFallback();
+  }
+
+  /* ── construction ──────────────────────────────────────────────────── */
+
+  _geometry() {
+    const { width: w, height: h } = this;
+    const g = new this.PIXI.Geometry();
+    g.addAttribute("aVertexPosition", new Float32Array([0, 0, w, 0, w, h, 0, h]), 2);
+    g.addAttribute("aFrame", new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2);
+    g.addIndex(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    return g;
+  }
+
+  _buildMesh() {
+    const PIXI = this.PIXI;
+    const empty = PIXI.Texture.EMPTY ?? PIXI.Texture.WHITE;
+    this.shader = PIXI.Shader.from(SHOT_VERT, SHOT_FRAG, {
+      uTexA: empty, uTexB: empty,
+      uPlaceA: new Float32Array([0, 0, 1, 1]), uPlaceB: new Float32Array([0, 0, 1, 1]),
+      uCropA: new Float32Array([0, 0, 1, 1]), uCropB: new Float32Array([0, 0, 1, 1]),
+      uGradeA: new Float32Array([1, 1, 0, 0]), uGradeB: new Float32Array([1, 1, 0, 0]),
+      uTintA: new Float32Array(3), uTintB: new Float32Array(3),
+      uBlurA: new Float32Array(3), uBlurB: new Float32Array(3),
+      uHas: new Float32Array(2),
+      uMix: 0, uWipe: 0, uWipeLine: new Float32Array([1, 0, 0]), uWipeSoft: 1,
+      uSize: new Float32Array([this.width, this.height]),
+    });
+    this.mesh = new PIXI.Mesh(this._geometry(), this.shader);
+    // Probe the program on the first real render, with the renderer PIXI hands
+    // us. PIXI itself only logs a failed link and then draws nothing, forever.
+    const render = this.mesh._render;
+    this.mesh._render = (renderer) => {
+      if (!this._probed) {
+        this._probed = true;
+        const { ok, log } = probeProgram(renderer?.gl);
+        if (!ok) { this._enterFallback(log); return; }
+      }
+      render.call(this.mesh, renderer);
+    };
+    this.container.addChild(this.mesh);
+  }
+
+  _buildFallback() {
+    const PIXI = this.PIXI;
+    this.fb = new PIXI.Container();
+    this.fb.renderable = false;
+    this.fbBack = new PIXI.Graphics();
+    this.fbMask = new PIXI.Graphics();
+    this.fbA = new PIXI.Sprite(PIXI.Texture.EMPTY);
+    this.fbB = new PIXI.Sprite(PIXI.Texture.EMPTY);
+    this._drawFallbackRects();
+    this.fb.addChild(this.fbBack, this.fbA, this.fbB, this.fbMask);
+    this.fb.mask = this.fbMask;
+    this.container.addChild(this.fb);
+  }
+
+  _drawFallbackRects() {
+    for (const g of [this.fbBack, this.fbMask]) {
+      g.clear();
+      g.beginFill(0x000000, 1).drawRect(0, 0, this.width, this.height).endFill();
+    }
+  }
+
+  _enterFallback(log) {
+    if (this._fallback) return;
+    this._fallback = true;
+    this._warn("the shot shader failed to compile; falling back to plain crossfades (no treatment, no wipe edge).", log);
+    this.mesh.renderable = false;
+    this.fb.renderable = true;
+  }
+
+  /** True when the shader is unavailable and sprites are drawing instead. */
+  get degraded() { return this._fallback; }
+
+  /* ── textures ──────────────────────────────────────────────────────── */
+
+  /**
+   * Load (once) and cache a shot source. Resolves to a PIXI.Texture, or null on
+   * any failure — never rejects. Videos are muted, looping and playing.
+   */
+  load(src) {
+    const key = String(src ?? "");
+    if (!key) return Promise.resolve(null);
+    let p = this._cache.get(key);
+    if (!p) {
+      p = (isVideo(key) ? this._loadVideo(key) : this._loadImageEntry(key))
+        .catch((e) => { this._warn(`could not load ${key}`, e); return null; })
+        .then((entry) => {
+          if (this._destroyed) { this._release(entry); return null; }
+          if (entry) this._ready.set(key, entry);
+          this._syncVideos();
+          return entry;
+        });
+      this._cache.set(key, p);
+    }
+    return p.then((entry) => entry?.tex ?? null);
+  }
+
+  /** Fire-and-forget load of many sources. */
+  preload(srcs) {
+    for (const s of srcs ?? []) this.load(s);
+  }
+
+  async _loadImageEntry(src) {
+    const PIXI = this.PIXI;
+    let tex = null, owned = false;
+    if (this._loadImage) tex = await this._loadImage(src);
+    else { tex = await (PIXI.Assets?.load ? PIXI.Assets.load(src) : PIXI.Texture.fromURL(src)); owned = !PIXI.Assets?.load; }
+    if (!tex || !tex.baseTexture || !(tex.width > 1 && tex.height > 1)) return null;
+    // Mipmaps: the frame is usually drawn at half its texels, and the blur taps
+    // read a mip level matched to their spacing.
+    const bt = tex.baseTexture;
+    const ON = PIXI.MIPMAP_MODES?.ON ?? 1;
+    if (bt.mipmap !== ON) { bt.mipmap = ON; bt.update?.(); }
+    return { tex, video: null, owned };
+  }
+
+  _loadVideo(src) {
+    const PIXI = this.PIXI;
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      v.muted = true;
+      v.defaultMuted = true;
+      v.loop = true;
+      v.playsInline = true;
+      v.autoplay = true;
+      v.preload = "auto";
+      v.crossOrigin = "anonymous";
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        if (!ok || !v.videoWidth) { try { v.removeAttribute("src"); v.load(); } catch { /* gone */ } resolve(null); return; }
+        const tex = PIXI.Texture.from(v, { resourceOptions: { autoPlay: false } });
+        resolve({ tex, video: v, owned: true });
+      };
+      v.addEventListener("loadeddata", () => finish(true), { once: true });
+      v.addEventListener("error", () => finish(false), { once: true });
+      v.src = src;
+    });
+  }
+
+  _release(entry) {
+    if (!entry || !entry.owned) return;
+    try {
+      if (entry.video) { entry.video.pause(); entry.video.removeAttribute("src"); entry.video.load(); }
+      entry.tex.destroy(true);
+    } catch { /* already gone */ }
+  }
+
+  /** Play the videos on screen, pause the rest. */
+  _syncVideos() {
+    const live = new Set([this.a?.src, this.b?.src].filter(Boolean));
+    for (const [src, entry] of this._ready) {
+      const v = entry?.video;
+      if (!v) continue;
+      if (live.has(src)) { if (v.paused) v.play?.()?.catch?.(() => {}); }
+      else if (!v.paused) v.pause();
+    }
+  }
+
+  _tex(side) {
+    return side?.src ? this._ready.get(side.src)?.tex ?? null : null;
+  }
+
+  /* ── playback ──────────────────────────────────────────────────────── */
+
+  /**
+   * Begin a transition to `shot` (a normalized Shot, or null for black).
+   * @param {object|null} shot
+   * @param {object} o
+   * @param {object} [o.timeline]  scaled timeline (timelineFor → scaleTimeline); its `image` beat is used
+   * @param {number} [o.startAt]   performance.now()-based ms the cue starts
+   * @param {boolean} [o.settle]   jump straight to the end state
+   */
+  show(shot, { timeline = null, startAt = performance.now(), settle = false } = {}) {
+    const image = timeline?.image ?? { mode: "swap", at: 0, dur: 0 };
+    const sameShot = (side) => side && (side.shot?.id ?? null) === (shot?.id ?? null) && side.src === (shot?.src ?? "");
+
+    // The shot already arriving, asked for again (a repeated feed of the same
+    // cue): refresh its data, keep the transition running — never restart it.
+    if (this._tr && !settle && sameShot(this.b)) {
+      const ms = this.b.driftMs;
+      this.b = makeSide(shot);
+      this.b.driftMs = ms;
+      return;
+    }
+
+    // A transition still running is committed to whichever side holds the screen.
+    if (this._tr) {
+      if (this._lastW >= 0.5 && this.b) this.a = this.b;
+      this.b = null;
+      this._tr = null;
+    }
+
+    // The same shot again (a re-announce, an edit): refresh its data in place,
+    // keeping its drift clock — the picture does not restart.
+    if (sameShot(this.a)) {
+      const ms = this.a.driftMs;
+      this.a = makeSide(shot);
+      this.a.driftMs = ms;
+      this._syncVideos();
+      return;
+    }
+    if (image.mode === "none" && this.a.shot) return;   // interlude: the image does not change
+
+    const side = makeSide(shot);
+    if (side.src) this.load(side.src);
+    if (settle || image.mode === "none") {
+      this.a = side;
+      this.b = null;
+    } else {
+      this.b = side;
+      this._tr = { image, startAt: Number(startAt) || performance.now() };
+    }
+    this._lastW = 0;
+    this._syncVideos();
+  }
+
+  /** The shot the layer is showing (or arriving at). */
+  get shot() { return (this.b ?? this.a)?.shot ?? null; }
+
+  /** True while a transition is running. */
+  get transitioning() { return !!this._tr; }
+
+  setDriftEnabled(on) { this.driftEnabled = !!on; }
+
+  /** Budget hook: how many entries of SHED_ORDER are shed. */
+  setShed(level) { this.shed = Math.max(0, Number(level) || 0); }
+
+  /** Device px per CSS px of the PIXI renderer. */
+  setResolution(r) { this.resolution = r > 0 ? r : 1; }
+
+  /** The motion scale; 0 freezes the drift, >1 slows it. */
+  setMotionScale(k) { this.motion = Number.isFinite(k) && k >= 0 ? k : 1; }
+
+  allows(name) {
+    const i = SHED_ORDER.indexOf(name);
+    return i < 0 || i >= this.shed;
+  }
+
+  get _driftLive() { return this.driftEnabled && this.motion > 0 && this.allows("drift"); }
+
+  _drifts(side) { return !!(side?.shot && side.drift.mode !== "none" && side.drift.strength > 0 && this._tex(side)); }
+
+  /** True while anything here moves on its own (the host claims motion with it). */
+  get animating() {
+    if (this._tr) return true;
+    const sides = [this.a, this.b];
+    if (this._driftLive && sides.some((s) => this._drifts(s))) return true;
+    return sides.some((s) => s?.src && this._ready.get(s.src)?.video && !this._ready.get(s.src).video.paused);
+  }
+
+  /* ── per frame ─────────────────────────────────────────────────────── */
+
+  /** @param {number} dtMs  ms since the last frame (drift only; cue time is performance.now()) */
+  update(dtMs = 16) {
+    if (this._destroyed) return;
+    const dt = Number.isFinite(dtMs) && dtMs > 0 ? Math.min(dtMs, 250) : 0;
+    let beat = null;
+    if (this._tr) {
+      beat = imageBeat(this._tr.image, performance.now() - this._tr.startAt);
+      if (beat.done) {
+        this.a = this.b ?? makeSide(null);
+        this.b = null;
+        this._tr = null;
+        beat = null;
+        this._syncVideos();
+      }
+    }
+    this._lastW = beat?.w ?? 0;
+
+    if (this._driftLive) {
+      this.a.driftMs += dt;
+      if (this.b && beat?.started) this.b.driftMs += dt;
+    }
+
+    const period = TIMING.driftPeriod * (this.motion || 1);
+    const A = this._sideState(this.a, period, beat ? beat.scaleA : 1, beat ? beat.dimA : 1, 0);
+    const B = this.b ? this._sideState(this.b, period, beat?.scaleB ?? 1, 1, beat?.bloomB ?? 0) : null;
+    if (this._fallback) this._drawFallback(A, B, beat);
+    else this._writeUniforms(A, B, beat);
+  }
+
+  /** Device px per frame px, from the container's on-screen scale. */
+  _devicePerFrame() {
+    const wt = this.container.worldTransform;
+    const s = wt ? Math.hypot(wt.a, wt.b) : 1;
+    return (s > 0 ? s : 1) * this.resolution;
+  }
+
+  _sideState(side, period, tScale, dim, bloom) {
+    const tex = this._tex(side);
+    if (!side?.shot || !tex) return null;
+    const W = this.width, H = this.height;
+    const u = side.drift.mode === "none" ? 0 : driftPhase(side.driftMs, period);
+    const rect = placeRect(tex.width, tex.height, W, H, side.focus, side.drift, u, tScale);
+    const t = side.treatment;
+    const blurFrac = (this.allows("blur") ? t.blur * TREATMENT.blurMax : 0) + (this.allows("bloom") ? bloom * PUSH.bloomBlur : 0);
+    return { tex, rect, t, dim, bloom, blurFrac };
+  }
+
+  _writeUniforms(A, B, beat) {
+    const u = this.shader.uniforms;
+    const W = this.width, H = this.height;
+    const dev = this._devicePerFrame();
+    const empty = this.PIXI.Texture.EMPTY ?? this.PIXI.Texture.WHITE;
+    const side = (S, k) => {
+      const place = u[`uPlace${k}`], crop = u[`uCrop${k}`], grade = u[`uGrade${k}`], tint = u[`uTint${k}`], blur = u[`uBlur${k}`];
+      if (!S) { u[`uTex${k}`] = empty; return 0; }
+      u[`uTex${k}`] = S.tex;
+      place[0] = S.rect.x / W; place[1] = S.rect.y / H; place[2] = S.rect.width / W; place[3] = S.rect.height / H;
+      const bt = S.tex.baseTexture, fr = S.tex.frame;
+      const bw = bt.width || 1, bh = bt.height || 1;
+      crop[0] = fr.x / bw; crop[1] = fr.y / bh; crop[2] = fr.width / bw; crop[3] = fr.height / bh;
+      grade[0] = gainOf(S.t.exposure, S.dim, S.bloom);
+      grade[1] = S.t.saturation;
+      grade[2] = S.t.tintAmount;
+      grade[3] = S.t.vignette;
+      const tv = S.t.tintAmount > 0 ? tintVector(S.t.tint) : [0, 0, 0];
+      tint[0] = tv[0]; tint[1] = tv[1]; tint[2] = tv[2];
+      if (S.blurFrac > 0) {
+        const rFrame = S.blurFrac * W;   // disc radius, frame px
+        blur[0] = rFrame / S.rect.width;
+        blur[1] = rFrame / S.rect.height;
+        blur[2] = Math.max(0, Math.log2((rFrame * dev) / TREATMENT.tapSpacing));
+      } else { blur[0] = 0; blur[1] = 0; blur[2] = 0; }
+      return 1;
+    };
+    u.uHas[0] = side(A, "A");
+    u.uHas[1] = side(B, "B");
+    const w = B || beat ? (beat?.w ?? 0) : 0;
+    u.uMix = w;
+    if (beat?.wipe) {
+      const soft = Math.max(WIPE.soft * W, WIPE.minSoftPx / dev);
+      const line = wipeLine(w, W, H, soft);
+      u.uWipe = 1;
+      u.uWipeLine[0] = line.dx; u.uWipeLine[1] = line.dy; u.uWipeLine[2] = line.edge;
+      u.uWipeSoft = soft;
+    } else u.uWipe = 0;
+  }
+
+  _drawFallback(A, B, beat) {
+    const put = (sprite, S, alpha) => {
+      if (!S) { sprite.visible = false; return; }
+      sprite.visible = true;
+      if (sprite.texture !== S.tex) sprite.texture = S.tex;
+      sprite.position.set(S.rect.x, S.rect.y);
+      sprite.width = S.rect.width;
+      sprite.height = S.rect.height;
+      sprite.alpha = alpha;
+    };
+    const w = beat?.w ?? 0;
+    put(this.fbA, A, 1);
+    put(this.fbB, B, B ? w : 0);
+  }
+
+  /* ── lifecycle ─────────────────────────────────────────────────────── */
+
+  resize(width, height) {
+    if (!(width > 0 && height > 0) || (width === this.width && height === this.height)) return;
+    this.width = width;
+    this.height = height;
+    const old = this.mesh.geometry;
+    this.mesh.geometry = this._geometry();
+    try { old.destroy(); } catch { /* shared */ }
+    this.shader.uniforms.uSize[0] = width;
+    this.shader.uniforms.uSize[1] = height;
+    this._drawFallbackRects();
+  }
+
+  destroy() {
+    if (this._destroyed) return;
+    this._destroyed = true;
+    for (const entry of this._ready.values()) this._release(entry);
+    this._ready.clear();
+    this._cache.clear();
+    try { this.container.parent?.removeChild(this.container); } catch { /* torn down */ }
+    try { this.mesh.geometry?.destroy(); } catch { /* torn down */ }
+    try { this.container.destroy({ children: true }); } catch { /* torn down */ }
+    this.a = makeSide(null);
+    this.b = null;
+    this._tr = null;
+  }
+}

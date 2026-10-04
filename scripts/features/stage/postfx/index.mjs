@@ -119,7 +119,11 @@ export class StagePostFX {
     this._from = { grade: this._grade, darkness: 0 };
     this._to = { grade: this._grade, darkness: 0 };
     this._tweenStart = 0;
+    this._tweenDuration = 0;
     this._tweenRaf = 0;
+    // A retarget waiting out its delay: { next, duration, timer }. Until it
+    // fires, `_to` is still what is on screen (or being eased into).
+    this._pending = null;
     this._renderRaf = 0;
     this._destroyed = false;
   }
@@ -151,18 +155,68 @@ export class StagePostFX {
    * @param {boolean} [opts.immediate]  Skip the tween — used while the GM drags a
    *                                    slider, where the preview must follow the
    *                                    hand rather than chase it.
+   * @param {number} [opts.delayMs]     Hold the current grade this long first.
+   * @param {number} [opts.durationMs]  Tween length, taken as already
+   *                                    motion-scaled. Omitted: the default
+   *                                    (620ms through the motion scale).
    */
-  setGrade(grade, { immediate = false } = {}) {
-    this._retarget({ grade: normalizeGrade(grade), darkness: this._to.darkness }, immediate);
+  setGrade(grade, opts = {}) {
+    this._retarget({ grade: normalizeGrade(grade) }, opts);
   }
 
-  /** Adopt the scene's darkness, 0..1. Eased like a grade change. */
-  setDarkness(darkness, { immediate = false } = {}) {
-    this._retarget({ grade: this._to.grade, darkness: clamp01(Number(darkness) || 0) }, immediate);
+  /** Adopt the scene's darkness, 0..1. Eased like a grade change; takes the
+   *  same timing options. */
+  setDarkness(darkness, opts = {}) {
+    this._retarget({ darkness: clamp01(Number(darkness) || 0) }, opts);
   }
 
-  _retarget(next, immediate) {
-    const duration = immediate ? 0 : scaledMs(TWEEN_MS);
+  /** The newest target, including one still waiting out its delay. */
+  _latest() {
+    return this._pending?.next ?? this._to;
+  }
+
+  _cancelPending() {
+    if (this._pending) clearTimeout(this._pending.timer);
+    this._pending = null;
+  }
+
+  /**
+   * Move toward `patch` (a grade, a darkness, or both) on the given timing.
+   *
+   * A delayed retarget supersedes any earlier delayed one. An undelayed grade
+   * supersedes a pending one outright. An undelayed darkness lands now and is
+   * also folded into the pending target, so the pending grade still arrives
+   * when it was meant to and does not take the darkness back with it.
+   */
+  _retarget(patch, { immediate = false, delayMs = 0, durationMs } = {}) {
+    const delay = immediate ? 0 : Math.max(Number(delayMs) || 0, 0);
+    const explicit = typeof durationMs === "number" && Number.isFinite(durationMs);
+    const duration = immediate ? 0 : explicit ? Math.max(durationMs, 0) : scaledMs(TWEEN_MS);
+
+    if (delay > 0) {
+      const next = { ...this._latest(), ...patch };
+      this._cancelPending();
+      const pending = { next, duration, timer: 0 };
+      pending.timer = setTimeout(() => {
+        if (this._pending !== pending || this._destroyed) return;
+        this._pending = null;
+        this._apply(pending.next, duration);
+      }, delay);
+      this._pending = pending;
+      return;
+    }
+
+    if (this._pending && !("grade" in patch)) {
+      this._pending.next = { ...this._pending.next, ...patch };
+      this._apply({ ...this._to, ...patch }, duration);
+      return;
+    }
+    const next = { ...this._latest(), ...patch };
+    this._cancelPending();
+    this._apply(next, duration);
+  }
+
+  _apply(next, duration) {
     if (duration <= 0) {
       if (this._tweenRaf) cancelAnimationFrame(this._tweenRaf);
       this._tweenRaf = 0;
@@ -175,13 +229,16 @@ export class StagePostFX {
     this._from = { grade: this._grade, darkness: this._darkness };
     this._to = next;
     this._tweenStart = performance.now();
-    if (!this._tweenRaf) this._tweenRaf = requestAnimationFrame(() => this._stepTween(duration));
+    // Read by the running loop on every step, so a retarget mid-tween with a
+    // different length takes effect instead of finishing on the old one.
+    this._tweenDuration = duration;
+    if (!this._tweenRaf) this._tweenRaf = requestAnimationFrame(() => this._stepTween());
   }
 
-  _stepTween(duration) {
+  _stepTween() {
     this._tweenRaf = 0;
     if (this._destroyed) return;
-    const t = clamp01((performance.now() - this._tweenStart) / duration);
+    const t = clamp01((performance.now() - this._tweenStart) / this._tweenDuration);
     if (t >= 1) {
       this._grade = this._to.grade;
       this._darkness = this._to.darkness;
@@ -192,7 +249,7 @@ export class StagePostFX {
       this._darkness = this._from.darkness + (this._to.darkness - this._from.darkness) * e;
     }
     this._renderAll();
-    if (t < 1) this._tweenRaf = requestAnimationFrame(() => this._stepTween(duration));
+    if (t < 1) this._tweenRaf = requestAnimationFrame(() => this._stepTween());
   }
 
   /**
@@ -453,6 +510,7 @@ export class StagePostFX {
 
   destroy() {
     this._destroyed = true;
+    this._cancelPending();
     if (this._tweenRaf) cancelAnimationFrame(this._tweenRaf);
     if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
     this._tweenRaf = 0;

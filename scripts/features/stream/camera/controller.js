@@ -19,6 +19,24 @@ import {
   unionBounds
 } from "./framing.js";
 import { CameraMotion } from "./motion.js";
+import { Suite } from "../../../core/registry.mjs";
+
+/**
+ * A Theatre scene owns the camera: the frame is locked to its 16:9 shot and the
+ * broadcast client is a player client, so an auto-reframe here would fight that
+ * lock every time a token or combat changed. Theatre is never imported from
+ * stream: the guard reads the registry and the scene flag directly, so either
+ * feature stays independently switchable.
+ */
+const THEATRE_FEATURE = "theatre";
+const THEATRE_FLAG = "th.enabled";
+function theatreHoldsCamera() {
+  try {
+    return Suite.enabled(THEATRE_FEATURE) && !!canvas?.scene?.getFlag?.(MODULE_ID, THEATRE_FLAG);
+  } catch {
+    return false;
+  }
+}
 
 const REFRAME_DEBOUNCE_MS = 100;
 const MAX_INTERACTION_RETRIES = 120;
@@ -130,6 +148,10 @@ export class CameraController {
 
   async reframe({ animate = true, force = false, explicit = false } = {}) {
     if (!canvas?.ready || (!this.streamMode.active && !force)) return false;
+    if (theatreHoldsCamera()) {
+      this.motion.stop();
+      return false;
+    }
     if (isCanvasInteractionBusy() && this.busyRetries < MAX_INTERACTION_RETRIES) {
       // A drag, ruler, or token placement is live on this client. Retry on the next frame instead of
       // moving the canvas out from under it, but give up waiting rather than stall the camera if an

@@ -800,6 +800,105 @@ section("tween");
   ok(c.wash.color === "#ffffff", "a finished colour tween lands exactly on the target");
 }
 
+section("grade API: timed relight and forced write");
+{
+  const { TWEEN_OPTION, MAX_DELAY_MS, resolveTweenTiming } = await import(mod("tween-timing.mjs"));
+  const store = await import(mod("grade-store.mjs"));
+  const { sampleSrc, sampleScene } = await import(mod("scene-sample.mjs"));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // ── the timing every client resolves from the update option ──
+  ok(store.TWEEN_OPTION === TWEEN_OPTION && TWEEN_OPTION === "glStageTween", "the option key is glStageTween, re-exported by the store");
+  ok(resolveTweenTiming(undefined, 5) === null && resolveTweenTiming("x", 5) === null, "no option resolves to null (behaviour unchanged)");
+  const opt = { at: 1000, delayMs: 500, durationMs: 300 };
+  ok(same(resolveTweenTiming(opt, 1000), { delayMs: 500, durationMs: 300 }), "received at once: the whole delay remains");
+  ok(same(resolveTweenTiming(opt, 1200), { delayMs: 300, durationMs: 300 }), "received 200ms late: 300ms of the delay remains");
+  ok(same(resolveTweenTiming(opt, 1600), { delayMs: 0, durationMs: 200 }), "past the start: finish in what is left of the tween");
+  ok(same(resolveTweenTiming(opt, 1800), { delayMs: 0, immediate: true }), "past the end: snap");
+  ok(same(resolveTweenTiming({ at: 1000, delayMs: 100 }, 1500), { delayMs: 0 }), "late with the default duration: start now, default length");
+  ok(same(resolveTweenTiming({ delayMs: 250, durationMs: 80 }, 99), { delayMs: 250, durationMs: 80 }), "no stamp: the delay counts from receipt");
+  ok(same(resolveTweenTiming({ at: 0, delayMs: -5, durationMs: NaN }, 0), { delayMs: 0 }), "negative and non-finite values are dropped");
+  ok(resolveTweenTiming({ at: 0, delayMs: 1e9 }, 0).delayMs === MAX_DELAY_MS, "a runaway delay is capped");
+  ok(resolveTweenTiming({ at: 1e9, delayMs: 0 }, 0).delayMs === MAX_DELAY_MS, "…including one from a writer whose clock runs far ahead");
+
+  // ── the forced-replacement fragment ──
+  const ID = "gluniverse-foundry-modules";
+  const partial = { wash: { amount: 40 }, light: { angle: 30 }, junk: 1 };
+  const v13 = store.gradeUpdateData(partial);
+  const v13Key = `flags.${ID}.stage.==grade`;
+  ok(same(Object.keys(v13), [v13Key]), "v13: one key, the grade path with its last segment forced (==)", Object.keys(v13).join());
+  ok(same(v13[v13Key], M.normalizeGrade(partial)) && same(M.normalizeGrade(v13[v13Key]), v13[v13Key]),
+    "…holding the normalized grade, which round-trips through normalizeGrade unchanged");
+  ok(!("junk" in v13[v13Key]), "…with nothing outside the schema");
+  const expanded = { flags: { [ID]: { stage: { "==grade": v13[v13Key] } } } };
+  ok(changeTouchesGrade(expanded), "the expanded fragment is recognised as a grade change");
+
+  const hadFoundry = "foundry" in globalThis;
+  const prevFoundry = globalThis.foundry;
+  globalThis.foundry = { data: { operators: { ForcedReplacement: { create: (v) => ({ forced: v }) } } } };
+  try {
+    const v14 = store.gradeUpdateData(partial);
+    const v14Key = `flags.${ID}.stage.grade`;
+    ok(same(Object.keys(v14), [v14Key]) && same(v14[v14Key].forced, M.normalizeGrade(partial)),
+      "v14: the plain path set to ForcedReplacement.create(normalized grade)");
+  } finally {
+    if (hadFoundry) globalThis.foundry = prevFoundry;
+    else delete globalThis.foundry;
+  }
+
+  // ── the delayed tween ──
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const A = M.normalizeGrade({ light: { angle: 10 } });
+  const B = M.normalizeGrade({ light: { angle: 120 } });
+  const C = M.normalizeGrade({ light: { angle: -60 } });
+  const fx = new StagePostFX();
+  fx.setGrade(A, { immediate: true });
+  fx.setGrade(B, { delayMs: 30, durationMs: 0 });
+  ok(same(fx.grade, A), "a delayed grade holds the current one during its delay");
+  await wait(60);
+  ok(same(fx.grade, B), "…and lands when the delay runs out");
+  fx.setGrade(C, { delayMs: 30, durationMs: 0 });
+  fx.setDarkness(0.5, { immediate: true });
+  ok(same(fx.grade, B) && fx._darkness === 0.5, "an undelayed darkness lands at once without releasing the pending grade");
+  await wait(60);
+  ok(same(fx.grade, C) && fx._darkness === 0.5, "…and the pending grade does not take the darkness back with it");
+  fx.setGrade(A, { delayMs: 30, durationMs: 0 });
+  fx.setGrade(B, { immediate: true });
+  await wait(60);
+  ok(same(fx.grade, B), "an undelayed grade supersedes a pending one");
+  fx.setGrade(A, { delayMs: 30, durationMs: 0 });
+  fx.destroy();
+  await wait(60);
+  ok(same(fx.grade, B), "destroy cancels a pending grade");
+  const fx2 = new StagePostFX();
+  fx2.setGrade(A, { immediate: true });
+  fx2.setGrade(C, { durationMs: 40 });
+  await wait(15);
+  const midAngle = fx2.grade.light.angle;
+  ok(midAngle !== A.light.angle && midAngle !== C.light.angle, "an explicit duration tweens rather than snapping", String(midAngle));
+  await wait(80);
+  ok(same(fx2.grade, C), "…and lands exactly on the target when it ends");
+  fx2.destroy();
+
+  // ── wiring ──
+  const moduleSrc = await read("scripts/features/stage/module.js");
+  ok(/updateScene'[\s\S]{0,400}resolveTweenTiming\(options\?\.\[TWEEN_OPTION\]/.test(moduleSrc), "the updateScene hook resolves the tween option and hands it on");
+  const apiNames = ["setSceneGrade", "readSceneGrade", "gradeFromSrc", "gradeUpdateData", "TWEEN_OPTION"];
+  const apiBlock = moduleSrc.match(/export const api = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const missingApi = apiNames.filter((n) => !new RegExp(`\\b${n}\\b`).test(apiBlock));
+  ok(!missingApi.length, "the public api carries the grade API", missingApi.join(", "));
+  ok(/globalThis\.GLUniverseStage = api/.test(moduleSrc), "…and globalThis.GLUniverseStage is that same object");
+
+  // ── sampling: one cache, one set of degrade reasons ──
+  HOSTS = {};
+  const missing = `${ORIGIN}/art/theatre-missing.webp`;
+  const bare = await sampleSrc(missing);
+  const scene = await sampleScene({ background: { src: missing }, backgroundColor: "#ff0000", environment: { darknessLevel: 0.25 } });
+  ok(bare.degraded && scene.degraded && bare.reason === scene.reason, "an unreadable asset degrades with the same reason either way", `${bare.reason} / ${scene.reason}`);
+  ok(scene.ambient[0] === 1 && scene.darkness === 0.25 && bare.darkness === 0, "…the scene path keeps its flat colour and darkness; the bare path has none");
+  ok((await sampleSrc("")).reason === "no-background", "an empty path is 'no-background'");
+}
+
 // ═══ 6. CSS fallback ═══
 section("CSS fallback");
 {

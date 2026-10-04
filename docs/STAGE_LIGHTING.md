@@ -220,6 +220,63 @@ viewing that scene eases into it over the 620 ms reveal (`setGrade`, also used
 for scene darkness). A different look stack cannot be crossfaded in four slots,
 so the new one fades in from nothing.
 
+## Grade API
+
+Another feature can relight the cast — Theatre does it on every cut, so the
+relight lands behind the black. Everything below is on the stage feature's api
+(`game.modules.get(SUITE_ID).api.features.stage`, mirrored as
+`globalThis.GLUniverseStage`). It is plain data on the scene, so it works
+whether or not the stage is showing, and does nothing visible on a client
+whose stage feature is off.
+
+| Export | What it does |
+| --- | --- |
+| `setSceneGrade(scene, grade, { delayMs, durationMs })` | GM only; resolves `false` when refused. One forced write of the flag. With timing, the update carries `TWEEN_OPTION` stamped now. |
+| `gradeUpdateData(grade)` | The update-data fragment that writes `grade` as a **forced replacement**, for a writer that puts the grade in its own single `scene.update`. Always normalized. |
+| `tweenUpdateOptions({ at, delayMs, durationMs })` | The update *options* fragment, `{ glStageTween: { at, delayMs, durationMs } }`; `at` defaults to `game.time.serverTime`. |
+| `TWEEN_OPTION` | `"glStageTween"`. |
+| `readSceneGrade(scene)` | The grade that applies: the scene's own, or the world default. |
+| `gradeFromSrc(src, base = world default)` | The grade a scene's first use would propose, read off an image or video path instead of a background. Unreadable art proposes nothing: `base` comes back normalized. |
+| `sampleSrc(src)` | The raw sample behind it (`sampleScene` is built on the same reader and cache, with the same degrade reasons). |
+
+The forced-replacement fragment, since a plain nested update **merges**:
+
+```js
+// v14 — foundry.data.operators present
+{ "flags.gluniverse-foundry-modules.stage.grade": ForcedReplacement.create(grade) }
+// v13
+{ "flags.gluniverse-foundry-modules.stage.==grade": grade }
+```
+
+### Timed relights
+
+Timing travels in the update **options**, which Foundry hands to `updateScene`
+on every client beside the change:
+
+```js
+options.glStageTween = { at, delayMs, durationMs }
+```
+
+`at` is the writer's `game.time.serverTime`; the tween starts `delayMs` after
+it and runs `durationMs` (omitted: the default 620 ms through the motion
+scale). Both are taken as **already motion-scaled** — the writer owns its
+timeline. Each client resolves the remaining delay against its own server clock
+(`resolveTweenTiming` in `postfx/tween-timing.mjs`): received in time, it waits
+out what is left; past the start, it finishes in whatever is left of the
+duration; past the end, it snaps. Delays are capped at 60 s, since anything
+longer is a broken clock. An update with no option behaves exactly as before.
+
+Inside `StagePostFX`, `setGrade`/`setDarkness(value, { immediate, delayMs,
+durationMs })` hold the current picture through the delay. A later delayed
+change replaces a pending one; an undelayed grade (a GM dragging a slider)
+supersedes it; an undelayed darkness lands at once and is folded into the
+pending target, so the relight does not take it back. Scene darkness in the
+same timed update is delayed with the grade, so the two arrive as one movement.
+
+A scene with no grade of its own is still seeded from its background the first
+time the stage is shown on it. A Theatre scene's background is flat black, so a
+feature that owns the scene's look should write a grade before that happens.
+
 ## The CSS fallback
 
 Used when the art cannot be read (CORS) or there is no WebGL. Basic correction

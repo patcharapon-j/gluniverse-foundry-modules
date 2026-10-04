@@ -2,7 +2,7 @@
   "id": "gluniverse-foundry-modules",
   "title": "GLUniverse Suite",
   "description": "A unified suite of GLUniverse modules for Foundry VTT — clocks & trackers, initiative, weather, loot, critical animations, and more — all sharing one premium Etched Glass interface. Every module can be enabled or disabled individually from a single Feature Manager.",
-  "version": "1.39.6",
+  "version": "1.40.0",
   "compatibility": {
     "minimum": "13",
     "verified": "14",
@@ -57,6 +57,8 @@
     "styles/hexcrawl.css",
     "styles/hexcrawl-play.css",
     "styles/hexcrawl-import.css",
+    "styles/theatre.css",
+    "styles/theatre-apps.css",
     "styles/perf.css"
   ],
   "languages": [
@@ -203,6 +205,16 @@
     {
       "lang": "en",
       "name": "English",
+      "path": "lang/theatre.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/theatre-apps.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
       "path": "lang/perf.en.json"
     }
   ],
@@ -252,5 +264,5 @@
   "socket": true,
   "url": "https://github.com/patcharapon-j/gluniverse-foundry-modules",
   "manifest": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/latest/download/module.json",
-  "download": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/download/v1.39.6/module.zip"
+  "download": "https://github.com/patcharapon-j/gluniverse-foundry-modules/releases/download/v1.40.0/module.zip"
 }

@@ -5,13 +5,25 @@ import { StageManager } from './StageManager.js';
 import { StageOverlay } from './StageOverlay.js';
 import { CommsOverlay } from './CommsOverlay.js';
 import { GMPanel } from './GMPanel.js';
-import { changeTouchesGrade } from './postfx/grade-store.mjs';
+import {
+    changeTouchesGrade,
+    readSceneGrade,
+    setSceneGrade,
+    gradeFromSrc,
+    gradeUpdateData,
+    tweenUpdateOptions
+} from './postfx/grade-store.mjs';
+import { sampleSrc } from './postfx/scene-sample.mjs';
+import { TWEEN_OPTION, resolveTweenTiming } from './postfx/tween-timing.mjs';
 
 export { registerSettings };
 
 // The public API object. Created lazily in `onReady`, but defined here so the
 // adapter can hand the suite a stable reference and `globalThis.GLUniverseStage`
 // can mirror it. Methods resolve their state at call time.
+//
+// The grade half (setSceneGrade … TWEEN_OPTION) is what another feature uses to
+// relight the cast on a cut; see docs/STAGE_LIGHTING.md, "Grade API".
 export const api = {
     openPanel: () => {
         if (!game.user.isGM) {
@@ -22,7 +34,14 @@ export const api = {
     },
     getManager: () => StageManager.getInstance(),
     getOverlay: () => game.modules.get(MODULE_ID)?.stageOverlay ?? null,
-    getCommsOverlay: () => game.modules.get(MODULE_ID)?.commsOverlay ?? null
+    getCommsOverlay: () => game.modules.get(MODULE_ID)?.commsOverlay ?? null,
+    setSceneGrade,
+    readSceneGrade,
+    gradeFromSrc,
+    gradeUpdateData,
+    tweenUpdateOptions,
+    sampleSrc,
+    TWEEN_OPTION
 };
 
 /** Everything that used to run in the standalone module's `init` hook. */
@@ -90,10 +109,13 @@ export function onReady() {
     // A saved grade reaches every client viewing that scene through the scene
     // document itself; each one eases into it. Darkness is the one live input
     // the grade listens to, through the wash layer's own darkness dial.
-    Hooks.on('updateScene', (scene, changes) => {
+    // A writer that wants the change to land at a set moment stamps the update
+    // options with TWEEN_OPTION; the remaining delay is measured here against
+    // this client's own server clock. No option: ease in on receipt, as ever.
+    Hooks.on('updateScene', (scene, changes, options) => {
         if (scene?.id !== (canvas?.scene?.id ?? null)) return;
         if (!changeTouchesGrade(changes) && !('environment' in changes)) return;
-        overlay.refreshPostFXScene();
+        overlay.refreshPostFXScene(resolveTweenTiming(options?.[TWEEN_OPTION], game.time?.serverTime));
     });
 
     // If GM, load saved state into overlays immediately
