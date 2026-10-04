@@ -149,6 +149,7 @@ section = "i18n";
   for (const k of C.FACE_KEYS) ok(`GLTH.face.${k}`, `GLTH.face.${k}` in lang);
   for (const k of C.DRIFT_MODES) ok(`GLTH.drift.${k}`, `GLTH.drift.${k}` in lang);
   for (const k of C.CUE_KINDS) ok(`GLTH.cue.${k}`, `GLTH.cue.${k}` in lang);
+  for (const k of C.FRAMING_CHOICES) ok(`GLTH.framing.${k}`, `GLTH.framing.${k}` in lang);
   ok("GLS.feature.theatre.title", "GLS.feature.theatre.title" in lang);
   ok("GLS.feature.theatre.hint", "GLS.feature.theatre.hint" in lang);
 
@@ -239,6 +240,62 @@ section = "perf";
   ok("the host binds SHED_ORDER to Budget.ladder", /Budget\.ladder\(/.test(host) && /SHED_ORDER/.test(host));
   ok("the host claims motion while it moves", /Budget\.claimMotion\(/.test(host));
   ok("the host mounts in canvas.primary beneath tiles", /canvas\??\.primary/.test(host) && /TILES/.test(host));
+}
+
+/* ── Framing: fill covers, fit contains, the backdrop fills the rest ──── */
+section = "framing";
+{
+  const { frameView } = await imp(`${FEAT}/camera.mjs`);
+  const R = await imp(`${FEAT}/render/shot-renderer.mjs`);
+  const rect = { x: 100, y: 50, width: C.FRAME.width, height: C.FRAME.height };
+  const shown = (v, sw, sh) => ({ x: v.x - sw / 2 / v.scale - rect.x, y: v.y - sh / 2 / v.scale - rect.y, width: sw / v.scale, height: sh / v.scale });
+  for (const [sw, sh] of [[1920, 1080], [1440, 1080], [2560, 1080], [1080, 1920], [3440, 1440]]) {
+    const fill = frameView(rect, sw, sh, { mode: "fill" });
+    const vFill = shown(fill, sw, sh);
+    ok(`fill ${sw}×${sh}: the frame covers the screen (no backdrop)`, !R.viewOverhangs(vFill, rect.width, rect.height));
+    for (const padding of [0, 5, C.PADDING_MAX]) {
+      const fit = frameView(rect, sw, sh, { mode: "fit", padding });
+      const pad = (padding / 100) * Math.min(sw, sh);
+      const fw = rect.width * fit.scale, fh = rect.height * fit.scale;
+      ok(`fit ${sw}×${sh} pad ${padding}: the whole frame is on screen inside the padding`, fw <= sw - 2 * pad + 1e-6 && fh <= sh - 2 * pad + 1e-6);
+      ok(`fit ${sw}×${sh} pad ${padding}: the frame touches the padded box`, Math.abs(fw - (sw - 2 * pad)) < 1e-6 || Math.abs(fh - (sh - 2 * pad)) < 1e-6);
+      const v = shown(fit, sw, sh);
+      const overhang = padding > 0 || Math.abs(sw / sh - rect.width / rect.height) > 1e-3;
+      ok(`fit ${sw}×${sh} pad ${padding}: the backdrop draws exactly when the screen shows past the frame`, R.viewOverhangs(v, rect.width, rect.height) === overhang);
+    }
+  }
+  ok("padding is clamped to PADDING_MAX", frameView(rect, 1920, 1080, { mode: "fit", padding: 999 }).scale === frameView(rect, 1920, 1080, { mode: "fit", padding: C.PADDING_MAX }).scale);
+  const v = { x: -500, y: -300, width: 4840, height: 2760 };
+  const b = R.backdropRect(1000, 1000, v, { x: 0.5, y: 0.5 });
+  ok("the backdrop image covers the whole view", b.x <= v.x && b.y <= v.y && b.x + b.width >= v.x + v.width && b.y + b.height >= v.y + v.height);
+  ok("the backdrop is darker than the frame", R.BACKDROP.gain > 0 && R.BACKDROP.gain < 1);
+  ok("the backdrop sheds last", R.SHED_ORDER.at(-1) === "backdrop");
+  const src = stripComments(read(`${FEAT}/render/shot-renderer.mjs`));
+  // A uniform declared and never written holds its initial value forever, silently.
+  const init = src.slice(src.indexOf("this.backShader = PIXI.Shader.from("), src.indexOf("this.backMesh = new PIXI.Mesh("));
+  const upd = src.slice(src.indexOf("_updateBackdrop() {"));
+  for (const name of R.BACK_UNIFORMS) {
+    const base = name.replace(/[AB]$/, "");
+    ok(`backdrop uniform ${name} is declared`, new RegExp(`uniform\\s+\\w+\\s+${name}\\b`).test(R.BACK_FRAG));
+    ok(`backdrop uniform ${name} is initialised`, new RegExp(`\\b${name}\\s*:`).test(init));
+    ok(`backdrop uniform ${name} is written`, upd.includes(`u.${name}`) || upd.includes(`\`${base}\${k}\``) || src.includes(`backShader.uniforms.${name}`));
+  }
+  const host = stripComments(read(`${FEAT}/host.mjs`));
+  ok("the backdrop mounts on canvas.stage, outside primary's scene-rect mask", /canvas\.stage\.addChildAt\(this\.renderer\.backdrop,\s*0\)/.test(host));
+  ok("the host feeds the live view every frame", /r\.setView\(/.test(host));
+  const idx = read(`${FEAT}/index.mjs`);
+  for (const [k, scope] of [["defaultFraming", "world"], ["defaultPadding", "world"], ["framing", "client"], ["padding", "client"]]) {
+    const at = idx.indexOf(`SETTINGS.${k},`);
+    if (!ok(`th.${k} is registered`, at >= 0)) continue;
+    const block = idx.slice(at);
+    const reg = block.slice(0, block.indexOf("});"));
+    ok(`th.${k} is ${scope} scope (the GM's default vs the viewer's own)`, new RegExp(`scope:\\s*"${scope}"`).test(reg));
+    ok(`th.${k} re-fits on change`, /onChange:\s*\(\)\s*=>\s*applyFraming\(\)/.test(reg));
+  }
+  ok("a viewer's framing defaults to following the GM", /SETTINGS\.framing,[\s\S]*?default:\s*"default"/.test(idx) && C.FRAMING_CHOICES[0] === "default");
+  const main = stripComments(read(`${FEAT}/main.mjs`));
+  const rf = main.slice(main.indexOf("export function readFraming"), main.indexOf("export function applyFraming"));
+  ok("following the GM takes the GM's padding too", /SETTINGS\.defaultFraming/.test(rf) && /SETTINGS\.defaultPadding/.test(rf));
 }
 
 /* ── Seams: Stage, stream, motion, CSS ───────────────────────────────── */

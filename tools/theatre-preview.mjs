@@ -136,11 +136,17 @@ async function bootRenderer() {
     app = new PIXI.Application({ resizeTo: window, backgroundAlpha: 1, backgroundColor: 0x000000, antialias: false, autoDensity: true, resolution: devicePixelRatio || 1 });
     $("#frame").append(app.view);
     renderer = new mod.ShotRenderer(PIXI, { width: FRAME.width, height: FRAME.height });
-    app.stage.addChild(renderer.container);
+    app.stage.addChild(renderer.backdrop, renderer.container);
+    // ?framing=fit&pad=5 — the camera's own maths (camera.mjs frameView), the backdrop fed the view as the host does.
+    const { frameView } = await import("/scripts/features/theatre/camera.mjs");
+    const q = new URLSearchParams(location.search);
+    const framing = { mode: q.get("framing") === "fit" ? "fit" : "fill", padding: Number(q.get("pad")) || 0 };
     const fit = () => {
-      const k = Math.max(innerWidth / FRAME.width, innerHeight / FRAME.height);
-      renderer.container.scale.set(k);
-      renderer.container.position.set((innerWidth - FRAME.width * k) / 2, (innerHeight - FRAME.height * k) / 2);
+      const v = frameView({ x: 0, y: 0, width: FRAME.width, height: FRAME.height }, innerWidth, innerHeight, framing);
+      const k = v.scale;
+      const x = (innerWidth - FRAME.width * k) / 2, y = (innerHeight - FRAME.height * k) / 2;
+      for (const c of [renderer.container, renderer.backdrop]) { c.scale.set(k); c.position.set(x, y); }
+      renderer.setView({ x: -x / k, y: -y / k, width: innerWidth / k, height: innerHeight / k });
     };
     fit(); addEventListener("resize", fit);
     app.ticker.add(() => { if (!frozen) renderer.update(app.ticker.deltaMS); });

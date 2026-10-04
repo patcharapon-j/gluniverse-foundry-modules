@@ -127,8 +127,29 @@ first time it shows a character, and a Theatre scene's background is black.
 
 ## Camera
 
-Players are locked to the frame: it covers the viewport and cannot be panned or
-zoomed. The GM gets the same framing with a free-pan toggle for placing tokens.
+Players are locked to the frame and cannot pan or zoom it. The GM gets the same
+framing with a free-pan toggle for placing tokens.
+
+How the 16:9 frame meets a display that is not 16:9 is the **framing**:
+
+- **Fill** (the default): the frame covers the screen; whatever overhangs is cropped.
+- **Fit**: the whole frame is shown, inset by a **padding** (per cent of the
+  screen's shorter side, 0–`PADDING_MAX`). The space around it is the
+  **backdrop** — the same picture cover-fitted to the whole view, blurred hard
+  (`BACKDROP.blur`) and darkened (`BACKDROP.gain`). It follows the frame's mix and
+  wipe line exactly, so a transition sweeps the surround with the picture.
+
+The GM sets the default framing and padding for everyone (`th.defaultFraming`,
+`th.defaultPadding`, world). Each viewer's own `th.framing` (client) starts at
+"Use the GM's default", which takes **both** of the GM's values; choosing Fill or
+Fit overrides them, with the viewer's own `th.padding`. `frameView()` in
+`camera.mjs` is the one statement of the maths.
+
+The backdrop is a second mesh on `canvas.stage` beneath `canvas.root`, not in
+the shot layer: Foundry masks `canvas.primary` to the scene rect (padding is 0
+on a Theatre scene), which is exactly where the backdrop is not. It draws only
+while the view reaches past the frame — Fit, or a GM zoomed out — and is the
+last entry of `SHED_ORDER` (shed, it reads one deep-mip tap instead of a disc).
 The stream broadcast is a player client, so it is locked the same way, and the
 stream's auto-camera stands down while the viewed scene is a Theatre scene.
 

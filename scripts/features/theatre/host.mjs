@@ -13,6 +13,12 @@
  * opaque over the scene rect, so a converted scene's own background (which
  * Theatre never touches) is simply covered.
  *
+ * The backdrop (the blurred picture around a fitted frame) cannot live there:
+ * Foundry masks canvas.primary to the scene rect, which is exactly where the
+ * backdrop is not. It goes on canvas.stage beneath `canvas.root` instead —
+ * world-space, under every group, unmasked — and is fed the live view each
+ * frame, so it also covers a GM who zooms out past the frame.
+ *
  * Shedding: SHED_ORDER (drift first) is bound to the suite's one frame clock
  * with Budget.ladder(); the renderer is told the level each frame. While the
  * layer moves on its own (a drift, a transition, a playing video) it claims
@@ -76,8 +82,10 @@ class Host {
     }
     this.scene = scene;
     this.renderer.container.position.set(rect.x, rect.y);
+    this.renderer.backdrop.position.set(rect.x, rect.y);
     this.renderer.setMotionScale(motionScale());
     layer.addChild(this.renderer.container);
+    canvas.stage.addChildAt(this.renderer.backdrop, 0);
 
     // The ladder starts the budget's frame loop — never at import.
     this.ladder = Budget.ladder(FEATURE_ID, SHED_ORDER);
@@ -122,6 +130,8 @@ class Host {
       r.setShed(this.ladder?.level ?? 0);
       r.setDriftEnabled(Budget.ambientAllowed);
       r.setResolution(canvas.app.renderer.resolution);
+      const view = this._view();
+      if (view) r.setView(view);
       r.update(canvas.app.ticker.deltaMS);
       const moving = r.animating;
       if (moving !== this._claimed) { Budget.claimMotion(FEATURE_ID, moving); this._claimed = moving; }
@@ -162,11 +172,22 @@ class Host {
     return this.renderer ? this.renderer.load(src) : Promise.resolve(null);
   }
 
+  /** What this client's screen shows, in frame px (the scene rect's own coordinates). */
+  _view() {
+    const st = canvas?.stage, rect = canvas?.dimensions?.sceneRect;
+    const s = st?.scale?.x;
+    if (!rect || !(s > 0)) return null;
+    const [sw, sh] = canvas.screenDimensions ?? [innerWidth, innerHeight];
+    const w = sw / s, h = sh / s;
+    return { x: st.pivot.x - w / 2 - rect.x, y: st.pivot.y - h / 2 - rect.y, width: w, height: h };
+  }
+
   /** The scene rect changed (dimensions update without a redraw). */
   refresh() {
     if (!this.renderer || !canvas?.ready) return;
     const rect = canvas.dimensions.sceneRect;
     this.renderer.container.position.set(rect.x, rect.y);
+    this.renderer.backdrop.position.set(rect.x, rect.y);
     this.renderer.resize(rect.width, rect.height);
     camera.fit();
   }
@@ -187,6 +208,11 @@ class Host {
   }
 
   get freePan() { return this._freePan; }
+
+  /** This client's fill/fit choice and the fit's padding (client settings). */
+  setFraming(framing) {
+    camera.setFraming(framing);
+  }
 
   _applyCamera() {
     const locked = this.attached && this._lockWanted && !(game.user?.isGM && this._freePan);

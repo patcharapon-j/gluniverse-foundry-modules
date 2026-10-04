@@ -17,9 +17,9 @@
  * TIMING.lateGrace after its start, SETTLES: the end state, no animation.
  */
 
-import { warn } from "../../core/const.mjs";
+import { SUITE_ID, warn } from "../../core/const.mjs";
 import { motionScale } from "../../core/theme.mjs";
-import { FACES, TIMING } from "./constants.mjs";
+import { DEFAULT_FRAMING, FACES, SETTINGS, TIMING } from "./constants.mjs";
 import {
   hasTitle, resolveFace, resolveHold, resolveLetterbox, resolveStyle, titleOf,
 } from "./model.mjs";
@@ -193,6 +193,21 @@ function restLetterbox(store) {
   overlay?.setLetterbox(lb, { animate: true });
 }
 
+/* ── Framing (this client's fill / fit) ─────────────────────────────────── */
+
+/** This client's framing: its own override, else the GM's default (framing and padding together). */
+export function readFraming() {
+  const get = (k, d) => { try { return game.settings.get(SUITE_ID, k); } catch { return d; } };
+  const own = get(SETTINGS.framing, "default");
+  if (own === "fill" || own === "fit") return { mode: own, padding: get(SETTINGS.padding, 0) };
+  return { mode: get(SETTINGS.defaultFraming, DEFAULT_FRAMING), padding: get(SETTINGS.defaultPadding, 0) };
+}
+
+/** A framing setting changed: re-fit now if a Theatre scene is up. */
+export function applyFraming() {
+  if (attached) host.setFraming(readFraming());
+}
+
 /* ── Attach / detach ────────────────────────────────────────────────────── */
 
 function attachScene() {
@@ -205,6 +220,7 @@ function attachScene() {
   if (!store) return;
   attached = scene;
   try { host.attach(scene); } catch (e) { warn("theatre | host attach failed", e); }
+  try { host.setFraming(readFraming()); } catch (e) { warn("theatre | framing failed", e); }
   try { host.lockCamera(true); } catch (e) { warn("theatre | camera lock failed", e); }
   overlay?.mount();
   preloadAll(store.shots.map((s) => s.src));

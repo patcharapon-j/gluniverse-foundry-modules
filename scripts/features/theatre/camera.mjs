@@ -17,17 +17,28 @@
  *
  * A `canvasPan` listener re-fits too, for anything that moved the stage pivot
  * without going through pan.
+ *
+ * Fill or fit is the viewer's own choice (a client setting), so two players on
+ * different displays can frame the same scene differently.
  */
 
-/** The view that makes the scene rect cover the viewport. */
-export function coverView(sceneRect, screenW, screenH) {
+import { PADDING_MAX } from "./constants.mjs";
+
+/**
+ * The locked view of the scene rect on a screen.
+ *   fill — the rect covers the screen (cropped where the aspects differ)
+ *   fit  — the whole rect is shown inside the screen less `padding` per cent of
+ *          its shorter side on every edge; the backdrop fills what is left
+ */
+export function frameView(sceneRect, screenW, screenH, { mode = "fill", padding = 0 } = {}) {
   const r = sceneRect;
   if (!r || !(r.width > 0 && r.height > 0) || !(screenW > 0 && screenH > 0)) return null;
-  return {
-    x: r.x + r.width / 2,
-    y: r.y + r.height / 2,
-    scale: Math.max(screenW / r.width, screenH / r.height),
-  };
+  let scale;
+  if (mode === "fit") {
+    const pad = (Math.max(0, Math.min(PADDING_MAX, Number(padding) || 0)) / 100) * Math.min(screenW, screenH);
+    scale = Math.min(Math.max(1, screenW - 2 * pad) / r.width, Math.max(1, screenH - 2 * pad) / r.height);
+  } else scale = Math.max(screenW / r.width, screenH / r.height);
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2, scale };
 }
 
 const WRAP = Symbol.for("gluniverse.theatre.cameraWrap");
@@ -39,6 +50,13 @@ class Camera {
     this.sceneId = null;
     this._hook = null;
     this._fitting = false;
+    this.framing = { mode: "fill", padding: 0 };
+  }
+
+  /** Fill or fit, and the fit's padding. Re-fits a locked view at once. */
+  setFraming({ mode = "fill", padding = 0 } = {}) {
+    this.framing = { mode: mode === "fit" ? "fit" : "fill", padding: Number(padding) || 0 };
+    this.fit();
   }
 
   /** The fitted view for the live canvas, or null. */
@@ -47,7 +65,7 @@ class Camera {
     if (!c?.ready || !c.dimensions?.sceneRect) return null;
     if (this.sceneId && c.scene?.id !== this.sceneId) return null;
     const [sw, sh] = c.screenDimensions ?? [c.app?.renderer?.screen?.width, c.app?.renderer?.screen?.height];
-    return coverView(c.dimensions.sceneRect, sw || globalThis.innerWidth, sh || globalThis.innerHeight);
+    return frameView(c.dimensions.sceneRect, sw || globalThis.innerWidth, sh || globalThis.innerHeight, this.framing);
   }
 
   _install(c) {
