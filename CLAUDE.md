@@ -1460,6 +1460,49 @@ one system and a throwaway `world.json`, launched with `node main.mjs
 unrelated package in the real data folder from stopping the server. See
 `docs/HEXCRAWL.md`.
 
+**When touching Theatre** (`features/theatre/`, `styles/theatre*.css`,
+`templates/theatre/`), re-run its check. Everything it covers fails silently:
+
+```bash
+node tools/theatre-check.mjs
+```
+
+Zero problems required. The load-bearing ones:
+
+**`timeline.mjs` is the only statement of when anything happens.** Three
+renderers play one cue — the PIXI shot layer (the picture), the DOM overlay
+(black, bars, title, card) and Stage (the portraits' relight) — and they agree
+only because all three read it. The check proves the relight sits wholly behind
+full black (centre, interlude) or closed bars (credits), and inside the image
+transition (chapter, wipe): a relight beat that slips out from behind its cover
+relights the cast in full view of the table while every number looks fine. It
+caught exactly that on the way in — the black lifted 100 ms after it landed and
+the relight ran 200.
+
+**A cut is ONE scene update.** `th.state` and, when Stage is on and the shot has
+a grade, Stage's grade fragment (`gradeUpdateData`) travel together, with the
+relight timing in the update **options** (`TWEEN_OPTION`), which Foundry hands
+every client's `updateScene` hook. Every map is a forced replacement; apps write
+only through `TheatreStore`, never `scene.update`. Cues carry **server** time
+(`game.time.serverTime + TIMING.cueLead`) — `Date.now()` differs per client.
+
+**`scene.background` is never touched while Theatre is on.** Changing it redraws
+the whole canvas: a flash and a stall, not a transition. The picture is a
+container in `canvas.primary` at `TILES − 1` (hexcrawl's slot); the overlay is
+DOM at `--gl-z-base + 1`, above Stage's overlay so the dip hides the portraits.
+Create/Convert write a starting Stage grade, or Stage seeds the scene from its
+background — which is black.
+
+**The overlay anchors every animation to `performance.now()`, not
+`document.timeline`.** A background tab's `document.timeline.currentTime` is
+stale, so `startTime` puts an alt-tabbed player's cue ahead of everyone else's;
+a `visibilitychange` re-anchors. The renderer and overlay are pure (the check
+imports both under Node), the drift is first in `SHED_ORDER`, every face's
+family is declared in `gl-fonts.css`, and every dynamic family (`GLTH.style/
+face/drift/cue.*`) resolves. To see it: `node tools/theatre-preview.mjs && node
+tools/preview-server.mjs`, then `/.preview/theatre.html` (URL params `style`,
+`face`, `seek` for headless frames). See `docs/THEATRE.md`.
+
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
 `core/pan.mjs`, any `SHED_ORDER`, any suite WebGL context, any backdrop blur),

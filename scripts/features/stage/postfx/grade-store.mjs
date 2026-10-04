@@ -15,7 +15,10 @@
 
 import { MODULE_ID } from "../settings.js";
 import { GRADE_FLAG, normalizeGrade, DEFAULT_GRADE } from "./grade-model.mjs";
-import { sampleScene, invalidateSceneSamples } from "./scene-sample.mjs";
+import { sampleScene, sampleSrc, invalidateSceneSamples } from "./scene-sample.mjs";
+import { TWEEN_OPTION } from "./tween-timing.mjs";
+
+export { TWEEN_OPTION };
 import { seedFromSample } from "./seed.mjs";
 import { parseCube } from "./lut.mjs";
 import { normalizeCustomLook, customLookId } from "./look-library.mjs";
@@ -65,6 +68,73 @@ export async function writeSceneGrade(scene, grade) {
   if (!scene || !game.user?.isGM) return false;
   await scene.setFlag(MODULE_ID, GRADE_FLAG, normalizeGrade(grade));
   return true;
+}
+
+/** The flag's full update path, `flags.<suite>.stage.grade`. */
+export const GRADE_PATH = `flags.${MODULE_ID}.${GRADE_FLAG}`;
+
+/**
+ * The update-data fragment that stores `grade` on a scene as a FORCED
+ * replacement, for a writer that wants the grade in its own single
+ * `scene.update` (Theatre writes the cue and the relight together).
+ *
+ * Forced because a plain nested update merges into what is stored; a total
+ * grade happens to survive a merge today, but the fragment should not depend
+ * on that. v14: the path set to `foundry.data.operators.ForcedReplacement`;
+ * v13: the last segment prefixed `==`. The value is always normalized.
+ *
+ * @param {object} grade
+ * @returns {object} e.g. `{ "flags.<suite>.stage.==grade": {…} }` on v13
+ */
+export function gradeUpdateData(grade) {
+  const value = normalizeGrade(grade);
+  const O = globalThis.foundry?.data?.operators;
+  if (O?.ForcedReplacement) return { [GRADE_PATH]: O.ForcedReplacement.create(value) };
+  const i = GRADE_PATH.lastIndexOf(".");
+  return { [`${GRADE_PATH.slice(0, i)}.==${GRADE_PATH.slice(i + 1)}`]: value };
+}
+
+/**
+ * The update options that make every client land a grade change at a set
+ * moment rather than on receipt. Merge into the options of the update that
+ * carries {@link gradeUpdateData}.
+ *
+ * @param {object} [timing]
+ * @param {number} [timing.at]          serverTime ms the delay counts from;
+ *                                      defaults to now.
+ * @param {number} [timing.delayMs]     hold before the tween starts (from `at`)
+ * @param {number} [timing.durationMs]  tween length; omit for Stage's default
+ */
+export function tweenUpdateOptions({ at, delayMs = 0, durationMs } = {}) {
+  const stamp = Number.isFinite(at) ? at : game.time?.serverTime ?? Date.now();
+  const opt = { at: stamp, delayMs: Math.max(Number(delayMs) || 0, 0) };
+  if (Number.isFinite(durationMs)) opt.durationMs = Math.max(durationMs, 0);
+  return { [TWEEN_OPTION]: opt };
+}
+
+/**
+ * Store a grade on a scene with tween timing. GM only; resolves false when
+ * refused. With neither `delayMs` nor `durationMs` this is a plain forced
+ * write and every client eases in on receipt, exactly as before.
+ */
+export async function setSceneGrade(scene, grade, { delayMs, durationMs } = {}) {
+  if (!scene || !game.user?.isGM) return false;
+  const timed = Number.isFinite(delayMs) || Number.isFinite(durationMs);
+  await scene.update(gradeUpdateData(grade), timed ? tweenUpdateOptions({ delayMs, durationMs }) : {});
+  return true;
+}
+
+/**
+ * The grade proposed for an image or video: `base` with the colours and light
+ * direction read off the asset — the same proposal a scene's first use on the
+ * stage makes from its background. An asset whose pixels cannot be read
+ * proposes nothing, and `base` comes back unchanged (normalized): with no
+ * scene there is no meaningful flat colour to propose from.
+ */
+export async function gradeFromSrc(src, base = readWorldDefaults()) {
+  const sample = await sampleSrc(src);
+  if (!sample?.ok || sample.degraded) return normalizeGrade(base);
+  return seedFromSample(sample, base);
 }
 
 /** Drop a scene's own grade so it follows the world default again. */

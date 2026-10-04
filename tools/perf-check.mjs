@@ -282,7 +282,8 @@ await section("the suite sheds on one clock and holds no idle GPU context", () =
   // Every shed order is bound to the shared budget somewhere in its feature.
   const byFeature = new Map();
   for (const f of featureSrc) {
-    const dir = f.split("/").slice(0, 3).join("/");
+    // walk() joins with the platform separator; group on "/" either way.
+    const dir = f.replaceAll("\\", "/").split("/").slice(0, 3).join("/");
     if (!byFeature.has(dir)) byFeature.set(dir, []);
     byFeature.get(dir).push(stripComments(read(f)));
   }

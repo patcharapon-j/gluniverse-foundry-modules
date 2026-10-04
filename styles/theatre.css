@@ -1,0 +1,188 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Theatre — the title overlay (scripts/features/theatre/overlay/title-overlay.mjs)
+
+   One fixed layer on <body>: scrims, corner tag, black, letterbox bars, title,
+   interlude card — in that paint order (DOM order; nothing here sets a
+   per-child z-index). Every timing is JS-driven from the Theatre timeline, so
+   this sheet declares no duration, easing or keyframe.
+
+   Stacking. Foundry's canvas is z 0, Stage's #gluniverse-stage-overlay and the
+   comms strip are z 1 (--gl-z-base), and Foundry's UI columns start at
+   --z-index-app (30). The overlay sits at --gl-z-base + 1: over the stage
+   portraits (a title reads over the cast), under every control.
+
+   The title faces are set inline from FACES (constants.mjs) — this sheet never
+   names a typeface. `--glth-lb` is the resting letterbox fraction, written by
+   the overlay, so placements clear the bars.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glth-overlay {
+  --glth-lb: 0;
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gl-z-base) + 1);
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  color: var(--gl-text-bright);
+  font-family: var(--gl-display);
+}
+.glth-overlay > * {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ── Scrims: a local shade behind each title placement ── */
+.glth-scrim {
+  inset: 0;
+  opacity: 0;
+}
+.glth-scrim--mid {
+  background: radial-gradient(ellipse 60% 35% at 50% 50%, rgb(var(--gl-tint-dark) / 0.45), transparent 75%);
+}
+.glth-scrim--low {
+  background: linear-gradient(to top, rgb(var(--gl-tint-dark) / 0.7), transparent 45%);
+}
+.glth-scrim--high {
+  background: linear-gradient(to bottom left, rgb(var(--gl-tint-dark) / 0.6), transparent 45%);
+}
+
+/* ── Black dip and letterbox bars ── */
+.glth-black {
+  inset: 0;
+  opacity: 0;
+  background: rgb(var(--gl-tint-dark));
+}
+.glth-bar {
+  left: 0;
+  right: 0;
+  background: rgb(var(--gl-tint-dark));
+  will-change: transform;
+}
+.glth-bar--top { top: 0; transform-origin: 50% 0; }
+.glth-bar--bottom { bottom: 0; transform-origin: 50% 100%; }
+
+/* ── Title ── */
+.glth-title {
+  opacity: 0;
+  max-width: none;
+  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+}
+.glth-title--centre {
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  text-align: center;
+}
+.glth-title--chapter {
+  left: 6vw;
+  bottom: calc(11vh + var(--glth-lb) * 100vh);
+  text-align: left;
+}
+.glth-title--credits {
+  left: 50%;
+  bottom: 4.2vh;
+  translate: -50% 0;
+  text-align: center;
+}
+.glth-title--wipe {
+  right: 6vw;
+  top: calc(10vh + var(--glth-lb) * 100vh);
+  text-align: right;
+}
+
+.glth-title__name {
+  font-size: clamp(40px, 6.2vw, 112px);
+  line-height: 1;
+  white-space: nowrap;
+}
+.glth-title--credits .glth-title__name {
+  font-size: clamp(26px, 3vw, 54px);
+}
+.glth-title__eyebrow {
+  font-size: clamp(11px, 1vw, 16px);
+  line-height: 1.3;
+  color: rgb(var(--gl-tint-light) / 0.82);
+}
+.glth-title--chapter .glth-title__eyebrow,
+.glth-title--wipe .glth-title__eyebrow {
+  margin-bottom: 0.7em;
+}
+.glth-title__sub {
+  font-size: clamp(12px, 1.15vw, 19px);
+  line-height: 1.3;
+  margin-top: 0.9em;
+  color: rgb(var(--gl-tint-light) / 0.78);
+}
+.glth-title--credits .glth-title__sub {
+  margin-top: 0.5em;
+}
+/* A lower-case italic serif secondary (Cinzel, Cormorant) has a small x-height;
+   it needs more size to carry the same weight as a tracked capital line. */
+.glth-title--serif-secondary :is(.glth-title__eyebrow, .glth-title__sub) {
+  font-size: clamp(15px, 1.4vw, 24px);
+}
+
+.glth-title__rule {
+  width: 62%;
+  height: 1px;
+  margin: 0.9em auto;
+  background: rgb(var(--gl-tint-light) / 0.7);
+  transform-origin: 50% 50%;
+}
+.glth-title__underline {
+  width: clamp(80px, 8.5vw, 160px);
+  height: 2px;
+  margin: 0.7em 0 0;
+  background: var(--gl-accent);
+  transform-origin: 0 50%;
+}
+.glth-title__piece {
+  display: inline-block;
+}
+/* The window each word of the wipe title rises through. */
+.glth-title__mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.08em;
+}
+
+/* ── Interlude card ── */
+.glth-card {
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.glth-card__text {
+  max-width: 72vw;
+  font-size: clamp(28px, 3.6vw, 64px);
+  line-height: 1.25;
+  text-align: center;
+  opacity: 0;
+  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+}
+
+/* ── Corner location tag ──
+   Inset clear of the scene controls and below the resting top bar. */
+.glth-tag {
+  left: clamp(72px, 5vw, 120px);
+  top: calc(clamp(56px, 7vh, 96px) + var(--glth-lb) * 100vh);
+  opacity: 0;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgb(var(--gl-tint-light) / 0.75);
+  text-shadow: 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
+}
+.glth-tag::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  margin-right: 10px;
+  vertical-align: middle;
+  background: var(--gl-accent);
+}

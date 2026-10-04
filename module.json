@@ -57,6 +57,8 @@
     "styles/hexcrawl.css",
     "styles/hexcrawl-play.css",
     "styles/hexcrawl-import.css",
+    "styles/theatre.css",
+    "styles/theatre-apps.css",
     "styles/perf.css"
   ],
   "languages": [
@@ -199,6 +201,16 @@
       "lang": "en",
       "name": "English",
       "path": "lang/hexcrawl-import.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/theatre.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/theatre-apps.en.json"
     },
     {
       "lang": "en",
