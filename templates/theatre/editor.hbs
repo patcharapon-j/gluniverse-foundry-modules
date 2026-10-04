@@ -117,16 +117,6 @@
                   placeholder="{{localize "GLTH.editor.holdDefault" value=detail.holdDefault}}">
               </label>
             </div>
-            <div class="glth-grid2">
-              <label class="glth-field">
-                <span class="glth-label">{{localize "GLTH.editor.drift"}}</span>
-                <select name="drift.mode" class="gl-field">{{#each detail.drifts}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
-              </label>
-              <label class="glth-field">
-                <span class="glth-label">{{localize "GLTH.editor.driftStrength"}} <output data-for="drift.strength" data-fmt="pct">{{detail.driftStrengthOut}}</output></span>
-                <input type="range" name="drift.strength" min="0" max="1" step="0.05" value="{{detail.driftStrength}}">
-              </label>
-            </div>
           </section>
 
           <section class="glth-block">

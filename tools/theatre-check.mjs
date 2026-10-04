@@ -12,8 +12,7 @@
  * back to the browser's serif mid-title; a renderer or overlay that reads the
  * world works in Foundry and breaks the preview, which then flatters a copy
  * nobody ships; an app that writes the scene directly bypasses the forced
- * replacement and keeps a deleted field forever; a drift that is not first to
- * shed never degrades under load; and the stream's auto-camera, left alone,
+ * replacement and keeps a deleted field forever; and the stream's auto-camera, left alone,
  * pans a broadcast off the frame the players are locked to.
  *
  * This drives the pure modules and reads the rest. Zero problems required;
@@ -56,7 +55,7 @@ const T = await imp(`${FEAT}/timeline.mjs`);
 /* ── Model: every normaliser is total ─────────────────────────────────── */
 section = "model";
 {
-  const junk = [undefined, null, 0, "x", [], { style: "nope", face: "nope", hold: "x", focus: 3, drift: 7, treatment: "t", grade: 4 }];
+  const junk = [undefined, null, 0, "x", [], { style: "nope", face: "nope", hold: "x", focus: 3, treatment: "t", grade: 4 }];
   const shotKeys = Object.keys(M.normalizeShot({}));
   const treatKeys = Object.keys(M.DEFAULT_TREATMENT);
   for (const j of junk) {
@@ -147,7 +146,6 @@ section = "i18n";
   }
   for (const k of C.STYLES) { ok(`GLTH.style.${k}.name`, `GLTH.style.${k}.name` in lang); ok(`GLTH.style.${k}.hint`, `GLTH.style.${k}.hint` in lang); }
   for (const k of C.FACE_KEYS) ok(`GLTH.face.${k}`, `GLTH.face.${k}` in lang);
-  for (const k of C.DRIFT_MODES) ok(`GLTH.drift.${k}`, `GLTH.drift.${k}` in lang);
   for (const k of C.CUE_KINDS) ok(`GLTH.cue.${k}`, `GLTH.cue.${k}` in lang);
   for (const k of C.FRAMING_CHOICES) ok(`GLTH.framing.${k}`, `GLTH.framing.${k}` in lang);
   ok("GLS.feature.theatre.title", "GLS.feature.theatre.title" in lang);
@@ -231,11 +229,10 @@ section = "writes";
   ok("store writes are serialised", /_write\(/.test(store) && /this\._queue/.test(store));
 }
 
-/* ── Performance: drift sheds first and is bound to the budget ───────── */
+/* ── Performance: shedding is bound to the budget ────────────────────── */
 section = "perf";
 {
   const R = await imp(`${FEAT}/render/shot-renderer.mjs`);
-  ok("SHED_ORDER sheds drift first", R.SHED_ORDER?.[0] === "drift", JSON.stringify(R.SHED_ORDER));
   const host = stripComments(read(`${FEAT}/host.mjs`));
   ok("the host binds SHED_ORDER to Budget.ladder", /Budget\.ladder\(/.test(host) && /SHED_ORDER/.test(host));
   ok("the host claims motion while it moves", /Budget\.claimMotion\(/.test(host));

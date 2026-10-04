@@ -25,7 +25,7 @@ import { coverRect, normalizeShot, resolveFace, resolveHold, resolveStyle } from
 import { escapeHTML } from "../../../core/util.mjs";
 import { TheatreAppBase } from "./base.mjs";
 import {
-  L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, driftKeys, driftLabel, faceKeys, faceLabel,
+  L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, faceKeys, faceLabel,
   faceSecondaryStyle, faceSpecimenStyle, guarded, isVideoSrc, loadStore, overrideOptions, partialFromSrc, pathsFromDrop,
   pickFile, pickFolder, plainOptions, stageEnabled, styleKeys, styleLabel, tpl,
 } from "./shared.mjs";
@@ -60,7 +60,6 @@ function patchFromForm(f, base) {
     face: f.face || null,
     hold: holdSec === "" || !Number.isFinite(Number(holdSec)) ? null : Number(holdSec) * 1000,
     focus: { x: num(f.focus?.x, base.focus.x), y: num(f.focus?.y, base.focus.y) },
-    drift: { mode: f.drift?.mode ?? base.drift.mode, strength: num(f.drift?.strength, base.drift.strength) },
     treatment: {
       exposure: num(t.exposure, base.treatment.exposure),
       saturation: num(t.saturation, base.treatment.saturation),
@@ -179,9 +178,6 @@ function EditorApp() {
           holdDefault: sec(config.hold),
           focusX: d.focus.x,
           focusY: d.focus.y,
-          drifts: plainOptions(driftKeys(), driftLabel, d.drift.mode),
-          driftStrength: d.drift.strength,
-          driftStrengthOut: fmt.pct(d.drift.strength),
           t,
           out: {
             exposure: fmt.exposure(t.exposure),

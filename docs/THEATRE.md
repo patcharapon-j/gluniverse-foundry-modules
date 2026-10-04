@@ -42,7 +42,6 @@ forced replacement and reads it back off the document.
 | `notes`     | GM only; never drawn for a player |
 | `style`, `face`, `hold` | per-shot overrides of the scene default (`null` = default) |
 | `focus`     | the point of the image kept in frame when it is cropped to cover |
-| `drift`     | Ken Burns: push, pull, pan left/right or none, and a strength |
 | `treatment` | the backdrop's own look: exposure, saturation, tint, vignette, blur, letterbox |
 | `grade`     | the Stage character grade this shot relights to (`null` leaves Stage alone) |
 
@@ -163,9 +162,9 @@ override. A browser only fetches a face something actually uses.
 
 ## Performance
 
-The Ken Burns drift is the first entry of the feature's `SHED_ORDER` on the
-shared frame budget, and the layer claims motion while it drifts so Balanced does
-not stutter it. Transitions are short and are not shed.
+The picture holds still between cues. The transition bloom sheds first on the
+shared frame budget and the backdrop last, and the layer claims motion while a
+transition or a video plays so Balanced does not stutter it.
 
 ## Checks
 

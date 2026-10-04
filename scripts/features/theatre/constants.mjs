@@ -89,9 +89,6 @@ export const FACES = Object.freeze({
 export const FACE_KEYS = Object.freeze(Object.keys(FACES));
 export const DEFAULT_FACE = "gsflex";
 
-/** Ken Burns drift modes. i18n: GLTH.drift.<key> */
-export const DRIFT_MODES = Object.freeze(["push", "pull", "panLeft", "panRight", "none"]);
-
 /**
  * Timing constants (ms, at motion scale 1). The ONLY place a Theatre duration
  * is written; everything else multiplies these by the motion scale.
@@ -102,7 +99,6 @@ export const TIMING = Object.freeze({
   holdMax: 20000,
   cueLead: 300,        // a cue is stamped this far in the future so every client starts together
   lateGrace: 1500,     // a client that receives a cue later than this after its start settles instead of playing
-  driftPeriod: 26000,  // one Ken Burns leg
   tagDelay: 1000,      // corner tag appears this long after the title leaves
 });
 

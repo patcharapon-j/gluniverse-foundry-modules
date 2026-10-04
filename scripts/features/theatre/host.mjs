@@ -19,9 +19,9 @@
  * world-space, under every group, unmasked — and is fed the live view each
  * frame, so it also covers a GM who zooms out past the frame.
  *
- * Shedding: SHED_ORDER (drift first) is bound to the suite's one frame clock
+ * Shedding: SHED_ORDER (bloom first) is bound to the suite's one frame clock
  * with Budget.ladder(); the renderer is told the level each frame. While the
- * layer moves on its own (a drift, a transition, a playing video) it claims
+ * layer moves on its own (a transition, a playing video) it claims
  * continuous motion, so the perf feature's idle-rate drop never stutters it.
  *
  * Nothing runs at import.
@@ -128,11 +128,10 @@ class Host {
     if (!r) return;
     try {
       r.setShed(this.ladder?.level ?? 0);
-      r.setDriftEnabled(Budget.ambientAllowed);
       r.setResolution(canvas.app.renderer.resolution);
       const view = this._view();
       if (view) r.setView(view);
-      r.update(canvas.app.ticker.deltaMS);
+      r.update();
       const moving = r.animating;
       if (moving !== this._claimed) { Budget.claimMotion(FEATURE_ID, moving); this._claimed = moving; }
     } catch (e) {

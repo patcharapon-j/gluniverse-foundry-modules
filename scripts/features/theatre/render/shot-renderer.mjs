@@ -8,8 +8,7 @@
  * One quad covering the frame (the scene rect, in frame px from 0,0), drawn by
  * ONE fragment shader holding two sides — A (what is on screen) and B (what is
  * arriving). Per frame the JS works out, for each side, where its image sits
- * (cover-fit about the shot's focus, times the Ken Burns drift, times the
- * transition's own scale) and its Treatment, and the shader mixes the two by
+ * (cover-fit about the shot's focus, times the transition's own scale) and its Treatment, and the shader mixes the two by
  * the transition mode:
  *
  *   swap  — B replaces A at the beat (hidden behind the overlay's black / bars)
@@ -20,8 +19,7 @@
  *
  * Every time comes from the timeline (../timeline.mjs) the caller passes in,
  * already scaled by the motion scale. The constants below are SHAPES (scales,
- * easings, the bloom's size), never durations — except the drift's leg, which
- * is TIMING.driftPeriod from constants.mjs.
+ * easings, the bloom's size), never durations.
  *
  * NEUTRAL_TREATMENT is an exact no-op: each grade step is skipped at its
  * neutral value rather than evaluated (x * 1.0 is exact, but `l + (c - l) * 1.0`
@@ -41,8 +39,7 @@
  * so it needs nothing from the host.
  */
 
-import { TIMING } from "../constants.mjs";
-import { coverRect, isVideo, normalizeTreatment, normalizeDrift } from "../model.mjs";
+import { coverRect, isVideo, normalizeTreatment } from "../model.mjs";
 
 /* ══════════════════════════════════════════════════════════════════════
    Shapes (not durations)
@@ -50,7 +47,7 @@ import { coverRect, isVideo, normalizeTreatment, normalizeDrift } from "../model
 
 /** Behaviours given up under load, cheapest to lose first. Bound to the shared
  *  frame clock by the host with Budget.ladder(). */
-export const SHED_ORDER = Object.freeze(["drift", "bloom", "blur", "backdrop"]);
+export const SHED_ORDER = Object.freeze(["bloom", "blur", "backdrop"]);
 
 /** The backdrop around a fitted frame: the same picture, blurred and darker. */
 export const BACKDROP = Object.freeze({
@@ -73,13 +70,6 @@ export const WIPE = Object.freeze({
   soft: 0.3,         // the soft edge, as a fraction of the frame's on-screen width…
   minSoftPx: 2,      // …never narrower than this many DEVICE pixels (no aliased hairline)
   dim: 0.55,         // A's brightness at the end of the wipe
-});
-
-/** Ken Burns. One leg is TIMING.driftPeriod; legs alternate (ping-pong) on a
- *  cosine, so the motion has zero velocity at each turn and never jumps. */
-export const DRIFT = Object.freeze({
-  zoom: 0.12,        // extra scale at strength 1 (push / pull; pans overscan by the same)
-  pan: 0.5,          // a pan travels at most this fraction of the overscan's frame width
 });
 
 /** Treatment ranges the shader works in. */
@@ -185,48 +175,18 @@ export function imageBeat(image, t) {
 }
 
 /**
- * Ken Burns phase: 0 → 1 over one leg, back to 0 over the next, forever.
- * Cosine-eased so velocity is zero at each turn — the loop never steps.
+ * A side's image rect in frame px: cover-fit about the focus, then the
+ * transition's scale about the frame centre.
  */
-export function driftPhase(ms, period = TIMING.driftPeriod) {
-  if (!(period > 0)) return 0;
-  return 0.5 - 0.5 * Math.cos(Math.PI * (ms % (2 * period)) / period);
-}
-
-/**
- * The drift's transform for a shot whose cover rect is `base`, in frame px.
- * Scale `s` is about the focus point P; `tx`/`ty` translate after it. The
- * result always still covers the frame (scale ≥ 1, pans clamped to the overscan).
- */
-export function driftTransform(drift, u, base, focus, fw, fh) {
-  const d = drift ?? { mode: "none", strength: 0 };
-  const P = { x: base.x + focus.x * base.width, y: base.y + focus.y * base.height };
-  const A = DRIFT.zoom * (Number(d.strength) || 0);
-  if (!(A > 0) || d.mode === "none") return { s: 1, tx: 0, ty: 0, P };
-  if (d.mode === "push") return { s: 1 + A * u, tx: 0, ty: 0, P };
-  if (d.mode === "pull") return { s: 1 + A * (1 - u), tx: 0, ty: 0, P };
-  // Pans: hold the overscan, travel inside it.
-  const s = 1 + A;
-  const left = P.x + (base.x - P.x) * s;                     // ≤ 0
-  const right = P.x + (base.x + base.width - P.x) * s;       // ≥ fw
-  const reach = DRIFT.pan * A * fw;
-  const lo = Math.max(fw - right, -reach), hi = Math.min(-left, reach);
-  const from = d.mode === "panLeft" ? hi : lo, to = d.mode === "panLeft" ? lo : hi;
-  return { s, tx: from + (to - from) * u, ty: 0, P };
-}
-
-/**
- * A side's image rect in frame px: cover-fit about the focus, the drift about
- * the focus, then the transition's scale about the frame centre.
- */
-export function placeRect(iw, ih, fw, fh, focus, drift, u, tScale = 1) {
-  const f = focus ?? { x: 0.5, y: 0.5 };
-  const base = coverRect(iw, ih, fw, fh, f);
-  const { s, tx, ty, P } = driftTransform(drift, u, base, f, fw, fh);
+export function placeRect(iw, ih, fw, fh, focus, tScale = 1) {
+  const base = coverRect(iw, ih, fw, fh, focus ?? { x: 0.5, y: 0.5 });
   const cx = fw / 2, cy = fh / 2;
-  const x = cx + (P.x + (base.x - P.x) * s + tx - cx) * tScale;
-  const y = cy + (P.y + (base.y - P.y) * s + ty - cy) * tScale;
-  return { x, y, width: base.width * s * tScale, height: base.height * s * tScale };
+  return {
+    x: cx + (base.x - cx) * tScale,
+    y: cy + (base.y - cy) * tScale,
+    width: base.width * tScale,
+    height: base.height * tScale,
+  };
 }
 
 /** Wipe line in frame px: unit direction and the edge's position at progress p. */
@@ -465,17 +425,13 @@ export function probeProgram(gl, vert = SHOT_VERT, frag = SHOT_FRAG) {
    The renderer
    ══════════════════════════════════════════════════════════════════════ */
 
-const NO_DRIFT = Object.freeze({ mode: "none", strength: 0 });
-
 /** One side of the mix: a shot and its texture. */
 function makeSide(shot) {
   return {
     shot: shot ?? null,
     src: shot?.src ?? "",
     treatment: normalizeTreatment(shot?.treatment),
-    drift: shot ? normalizeDrift(shot.drift) : NO_DRIFT,
     focus: shot?.focus ?? { x: 0.5, y: 0.5 },
-    driftMs: 0,
   };
 }
 
@@ -498,7 +454,6 @@ export class ShotRenderer {
     this._warn = warn ?? ((...a) => console.warn("Theatre |", ...a));
     this.resolution = resolution || 1;
     this.motion = 1;
-    this.driftEnabled = true;
     this.shed = 0;
     /** src → Promise<entry>; entry = { tex, video, owned } | null */
     this._cache = new Map();
@@ -770,9 +725,7 @@ export class ShotRenderer {
     // The shot already arriving, asked for again (a repeated feed of the same
     // cue): refresh its data, keep the transition running — never restart it.
     if (this._tr && !settle && sameShot(this.b)) {
-      const ms = this.b.driftMs;
       this.b = makeSide(shot);
-      this.b.driftMs = ms;
       return;
     }
 
@@ -783,12 +736,10 @@ export class ShotRenderer {
       this._tr = null;
     }
 
-    // The same shot again (a re-announce, an edit): refresh its data in place,
-    // keeping its drift clock — the picture does not restart.
+    // The same shot again (a re-announce, an edit): refresh its data in place —
+    // the picture does not restart.
     if (sameShot(this.a)) {
-      const ms = this.a.driftMs;
       this.a = makeSide(shot);
-      this.a.driftMs = ms;
       this._syncVideos();
       return;
     }
@@ -813,15 +764,13 @@ export class ShotRenderer {
   /** True while a transition is running. */
   get transitioning() { return !!this._tr; }
 
-  setDriftEnabled(on) { this.driftEnabled = !!on; }
-
   /** Budget hook: how many entries of SHED_ORDER are shed. */
   setShed(level) { this.shed = Math.max(0, Number(level) || 0); }
 
   /** Device px per CSS px of the PIXI renderer. */
   setResolution(r) { this.resolution = r > 0 ? r : 1; }
 
-  /** The motion scale; 0 freezes the drift, >1 slows it. */
+  /** The motion scale; >1 slows the transitions. */
   setMotionScale(k) { this.motion = Number.isFinite(k) && k >= 0 ? k : 1; }
 
   allows(name) {
@@ -829,24 +778,17 @@ export class ShotRenderer {
     return i < 0 || i >= this.shed;
   }
 
-  get _driftLive() { return this.driftEnabled && this.motion > 0 && this.allows("drift"); }
-
-  _drifts(side) { return !!(side?.shot && side.drift.mode !== "none" && side.drift.strength > 0 && this._tex(side)); }
-
   /** True while anything here moves on its own (the host claims motion with it). */
   get animating() {
     if (this._tr) return true;
-    const sides = [this.a, this.b];
-    if (this._driftLive && sides.some((s) => this._drifts(s))) return true;
-    return sides.some((s) => s?.src && this._ready.get(s.src)?.video && !this._ready.get(s.src).video.paused);
+    return [this.a, this.b].some((s) => s?.src && this._ready.get(s.src)?.video && !this._ready.get(s.src).video.paused);
   }
 
   /* ── per frame ─────────────────────────────────────────────────────── */
 
-  /** @param {number} dtMs  ms since the last frame (drift only; cue time is performance.now()) */
-  update(dtMs = 16) {
+  /** Cue time is performance.now(), so the frame delta is not needed. */
+  update() {
     if (this._destroyed) return;
-    const dt = Number.isFinite(dtMs) && dtMs > 0 ? Math.min(dtMs, 250) : 0;
     let beat = null;
     if (this._tr) {
       beat = imageBeat(this._tr.image, performance.now() - this._tr.startAt);
@@ -860,14 +802,8 @@ export class ShotRenderer {
     }
     this._lastW = beat?.w ?? 0;
 
-    if (this._driftLive) {
-      this.a.driftMs += dt;
-      if (this.b && beat?.started) this.b.driftMs += dt;
-    }
-
-    const period = TIMING.driftPeriod * (this.motion || 1);
-    const A = this._sideState(this.a, period, beat ? beat.scaleA : 1, beat ? beat.dimA : 1, 0);
-    const B = this.b ? this._sideState(this.b, period, beat?.scaleB ?? 1, 1, beat?.bloomB ?? 0) : null;
+    const A = this._sideState(this.a, beat ? beat.scaleA : 1, beat ? beat.dimA : 1, 0);
+    const B = this.b ? this._sideState(this.b, beat?.scaleB ?? 1, 1, beat?.bloomB ?? 0) : null;
     if (this._fallback) this._drawFallback(A, B, beat);
     else this._writeUniforms(A, B, beat);
     this._updateBackdrop();
@@ -923,12 +859,11 @@ export class ShotRenderer {
     return (s > 0 ? s : 1) * this.resolution;
   }
 
-  _sideState(side, period, tScale, dim, bloom) {
+  _sideState(side, tScale, dim, bloom) {
     const tex = this._tex(side);
     if (!side?.shot || !tex) return null;
     const W = this.width, H = this.height;
-    const u = side.drift.mode === "none" ? 0 : driftPhase(side.driftMs, period);
-    const rect = placeRect(tex.width, tex.height, W, H, side.focus, side.drift, u, tScale);
+    const rect = placeRect(tex.width, tex.height, W, H, side.focus, tScale);
     const t = side.treatment;
     const blurFrac = (this.allows("blur") ? t.blur * TREATMENT.blurMax : 0) + (this.allows("bloom") ? bloom * PUSH.bloomBlur : 0);
     return { tex, rect, t, dim, bloom, blurFrac };
