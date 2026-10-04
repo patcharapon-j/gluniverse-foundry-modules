@@ -68,6 +68,11 @@ export function emitClientStatus(status) {
   Hooks.callAll(HOOKS.clientStatus, payload);
 }
 
+/** Drop a disconnected client's last report, so the panel stops claiming it is live. */
+export function forgetClientStatus(userId) {
+  if (clientStatusByUser.delete(userId)) Hooks.callAll(HOOKS.clientStatus, null);
+}
+
 export function getStreamClientStatus() {
   const streamUserId = getSetting("streamUserId");
   return streamUserId ? clientStatusByUser.get(streamUserId) : undefined;

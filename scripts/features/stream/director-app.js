@@ -1,4 +1,4 @@
-import { getActiveSceneCombat, getCombatants } from "./combat-utils.js";
+import { getActiveSceneCombat, getCombatants, getRunningSceneCombat } from "./combat-utils.js";
 import { featurePath } from "../../core/const.mjs";
 import { ensureSuiteGroup } from "../../core/scene-controls.mjs";
 import {
@@ -24,6 +24,7 @@ import {
 import { delegationUnavailable, requestCommand } from "./director-auth.mjs";
 import { offerPanelAction, offerPanelChange, renderPanelSections } from "./extensions.mjs";
 import { getStreamClientStatus, requestStreamClientStatus } from "./socket.js";
+import { openChatFilterApp, summarizeChatFilter } from "./chat-filter-app.js";
 
 let services = {};
 let instance = null;
@@ -76,7 +77,8 @@ export function addStreamSceneControl(controls) {
     icon: "fas fa-broadcast-tower",
     button: true,
     visible: true,
-    onClick: () => openDirectorApp(),
+    // `onChange` only — v13+ calls a deprecated `onClick` as well, and `bindSuiteToolClicks` binds the
+    // node, so declaring both opened the panel up to three times per click.
     onChange: () => openDirectorApp()
   };
 }
@@ -135,7 +137,7 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
         autoStartCanEnable: Boolean(streamUserId && !autoStartIds.includes(streamUserId)),
         scene: canvas?.scene?.name ?? game.i18n.localize("GLUNIVERSE_STREAM.common.none"),
         mode: cameraModeLabel(activeMode),
-        combat: getActiveSceneCombat() ? "Yes" : "No"
+        combat: getRunningSceneCombat() ? "Yes" : (getActiveSceneCombat() ? "Prepared, not started" : "No")
       },
       users: game.users?.map(user => ({
         id: user.id,
@@ -150,6 +152,7 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       camera,
       spotlightSelected: camera.combatMode === CAMERA_MODES.spotlight,
       chat,
+      chatFilterSummary: summarizeChatFilter(),
       cardScale: { ...CARD_SCALE_RANGE, percent: Math.round(chat.cardScale * 100) },
       dialog,
       // Sections contributed by sibling features (targeting arcs, roll cards).
@@ -288,6 +291,8 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
         return this.#setAutoStart(true);
       case "revoke-auto-start":
         return this.#setAutoStart(false);
+      case "open-chat-filter":
+        return openChatFilterApp();
       case "reframe":
         requestStreamClientStatus();
         return services.camera?.requestReframe({ force: true });
@@ -368,7 +373,7 @@ function getCombatRows() {
 }
 
 function getActiveCameraMode(camera) {
-  return getActiveSceneCombat() ? camera.combatMode : camera.outOfCombatMode;
+  return getRunningSceneCombat() ? camera.combatMode : camera.outOfCombatMode;
 }
 
 function cameraModeLabel(mode) {

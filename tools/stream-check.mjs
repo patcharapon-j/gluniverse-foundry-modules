@@ -589,43 +589,15 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   const reader = strip(read("scripts/features/stream-cards/pf2e/read-message.js"));
   const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
   const lang = JSON.parse(read("lang/stream-cards.en.json"));
-  const form = read("templates/stream-cards/section.hbs");
-  const panel = strip(read("scripts/features/stream-cards/panel.js"));
 
-  // The defaults are one statement. Stated again in settings.js they would drift,
-  // and a row whose default says "off" only on the side that reads it is a
-  // feature nobody switched off silently not existing.
-  const settings = strip(read("scripts/features/stream-cards/settings.js"));
-  if (/DEFAULT_BASIC_CARDS\s*=\s*Object\.freeze/.test(settings)) {
-    fail("stream-cards/settings.js: DEFAULT_BASIC_CARDS is declared here as well as in the reader — one of the two will drift, and the reader is the only thing that consults a row");
+  // Which kinds reach the stream is the chat filter's, in `stream`. A reader that
+  // stopped consulting it would put every row back on the stream with the page
+  // still showing them switched off.
+  if (!/allows\(filter, rowOf\(/.test(reader)) {
+    fail("read-message.js: readMessage no longer gates the kind through the chat filter (allows(filter, rowOf(...)))");
   }
-  if (!/import\s*\{[^}]*DEFAULT_BASIC_CARDS[^}]*\}\s*from\s*"\.\/pf2e\/read-message\.js"/.test(settings)) {
-    fail("stream-cards/settings.js: DEFAULT_BASIC_CARDS must be imported from the reader it gates");
-  }
-
-  const defaults = reader.match(/DEFAULT_BASIC_CARDS = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
-  if (!defaults) fail("stream-cards/pf2e/read-message.js: could not find DEFAULT_BASIC_CARDS");
-  else {
-    const rows = [...defaults[1].matchAll(/^\s{2}([A-Za-z0-9_]+):/gm)].map((m) => m[1]);
-    if (!rows.length) fail("read-message.js: DEFAULT_BASIC_CARDS is empty");
-    for (const row of rows) {
-      if (!new RegExp(`["'\\[.]${row}\\b`).test(reader)) {
-        fail(`stream-cards: basic-card setting "${row}" is registered but the reader never consults it — a switch that does nothing`);
-      }
-      if (!form.includes(`name="basicCards.${row}"`)) {
-        fail(`templates/stream-cards/section.hbs: no control for basic-card setting "${row}" — a GM could only reach it from the console`);
-      }
-      const key = `GLUNIVERSE_STREAM.basicCard.settings.${row}`;
-      if (!(key in lang)) fail(`lang/stream-cards.en.json: runtime-built i18n key ${key} is not defined`);
-    }
-    for (const m of form.matchAll(/name="basicCards\.([A-Za-z0-9_]+)"/g)) {
-      if (!rows.includes(m[1])) {
-        fail(`templates/stream-cards/section.hbs: control for basicCards.${m[1]}, which no setting row backs — the panel would save a key the sanitizer drops`);
-      }
-    }
-  }
-  if (!/name\.startsWith\("basicCards\."\)/.test(panel)) {
-    fail("stream-cards/panel.js: the panel does not claim basicCards.* — every switch in that section would be offered to the host and dropped");
+  if (/basicCards/.test(reader)) {
+    fail("read-message.js: still reads basicCards — those switches were folded into stream.chatFilter");
   }
 
   // Style is the whole test for a chat card. Style OTHER (0) is the default every
@@ -682,6 +654,64 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   if (!formula) fail("roll-card.js: could not find buildFormula");
   else if (/glus-rc-degree-label/.test(formula[0])) {
     fail("roll-card.js: the plain roll's box carries a label as well as its formula — \"Roll\" is already the headline on the left");
+  }
+}
+
+/* ------------------------------------------------------------- chat filter -- */
+// One vocabulary of content types, switched per author, read by three readers
+// and drawn by one page. A row with no label renders its key; a reader that
+// forgot to ask it is a switch that does nothing on one kind of world; and the
+// page's menu given a plain class is swallowed by registerAllSettings.
+{
+  const model = await import(new URL("../scripts/features/stream/chat-filter.mjs", import.meta.url));
+  const lang = JSON.parse(read("lang/stream.en.json"));
+  const need = (key) => { if (!(key in lang)) fail(`lang/stream.en.json: runtime-built i18n key ${key} is not defined`); };
+  for (const group of model.CHAT_FILTER_GROUPS) {
+    need(`GLUNIVERSE_STREAM.chatFilter.group.${group.id}.name`);
+    need(`GLUNIVERSE_STREAM.chatFilter.group.${group.id}.hint`);
+  }
+  for (const row of model.CHAT_FILTER_ROWS) {
+    need(`GLUNIVERSE_STREAM.chatFilter.row.${row.id}.name`);
+    need(`GLUNIVERSE_STREAM.chatFilter.row.${row.id}.hint`);
+  }
+  for (const detail of model.CHAT_FILTER_DETAILS) {
+    need(`GLUNIVERSE_STREAM.chatFilter.detail.${detail.id}.name`);
+    need(`GLUNIVERSE_STREAM.chatFilter.detail.${detail.id}.hint`);
+  }
+  for (const author of model.CHAT_FILTER_AUTHORS) need(`GLUNIVERSE_STREAM.chatFilter.columns.${author}`);
+  const ids = new Set(model.CHAT_FILTER_ROWS.map((r) => r.id));
+  for (const row of Object.values(model.PF2E_CHECK_ROWS)) if (!ids.has(row)) fail(`chat-filter.mjs: PF2E_CHECK_ROWS names "${row}", which is no row`);
+  for (const row of Object.values(model.TEXT_STYLE_ROWS)) if (!ids.has(row)) fail(`chat-filter.mjs: TEXT_STYLE_ROWS names "${row}", which is no row`);
+  // Style OTHER is every document's default, not a line somebody typed.
+  if (0 in model.TEXT_STYLE_ROWS) fail("chat-filter.mjs: TEXT_STYLE_ROWS accepts style 0 (OTHER)");
+  // Whispers and blind rolls are not a preference.
+  for (const forbidden of ["whisper", "whispers", "blind", "private"]) {
+    if (ids.has(forbidden)) fail(`chat-filter.mjs: a "${forbidden}" row would let the page put a private message on a broadcast`);
+  }
+
+  const overlay = strip(read("scripts/features/stream/chat-overlay.js"));
+  if (!/passesChatFilter\(message\)/.test(overlay) || !/classifyMessage\(/.test(overlay)) {
+    fail("stream/chat-overlay.js: the cloned-card path no longer asks the chat filter");
+  }
+  const status = strip(read("scripts/features/stream-cards/pf2e/read-status.js"));
+  if (!/allows\(/.test(status)) fail("stream-cards/pf2e/read-status.js: status cards no longer ask the chat filter's condition/effect rows");
+  const snapshot = strip(read("scripts/features/stream-cards/pf2e/snapshot.js"));
+  if (!/chatFilter:\s*getChatFilter\(\)/.test(snapshot)) fail("stream-cards/pf2e/snapshot.js: the snapshot does not carry the chat filter — the reader would fall back to the defaults forever");
+
+  const auth = read("scripts/features/stream/director-auth.mjs");
+  if (!/\$\{PREFIX\}chatFilter/.test(auth)) fail("director-auth.mjs: chatFilter is not delegable — a trusted director would get a page that discards every edit");
+  const main = strip(read("scripts/features/stream/main.js"));
+  if (!/chatFilterMenu[\s\S]{0,400}type:\s*shimClass\(/.test(main)) {
+    fail("stream/main.js: the chat filter menu's type is not an ApplicationV2 shim — registerMenu would throw and the Control Center would show no button");
+  }
+  const app = read("scripts/features/stream/chat-filter-app.js");
+  if (/^const \{[^}]*ApplicationV2/m.test(app)) fail("chat-filter-app.js: reads foundry.applications at module scope — the check tools import this module under Node");
+
+  // Foundry's own pans fight the stream camera; the guard has to be installed.
+  if (!/installPanGuard\(/.test(main)) fail("stream/main.js: installPanGuard is never called — Foundry pans the stream camera to a controlled token that moves");
+  const controller = strip(read("scripts/features/stream/camera/controller.js"));
+  if (/getActiveSceneCombat\(/.test(controller)) {
+    fail("camera/controller.js: uses getActiveSceneCombat — a prepared, unstarted encounter would put the camera on its combat mode");
   }
 }
 

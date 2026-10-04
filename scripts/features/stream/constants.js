@@ -80,6 +80,22 @@ export const FLAGS = {
   trackedTokenIds: "stream.trackedTokenIds"
 };
 
+/**
+ * True when a scene update touches this feature's own scene flag. Other suite features write scene flags
+ * too (hexcrawl reveals on every party move, the stage grade, PF2e areas), and reacting to any suite flag
+ * re-rendered the Control Room and force-reframed the camera on each of them. Both shapes Foundry uses for
+ * a dotted key are accepted: literal inside `flags[scope]`, or nested.
+ */
+export function isStreamSceneFlagChange(changes) {
+  const flags = changes?.flags?.[MODULE_ID];
+  if (!flags || typeof flags !== "object") return false;
+  const key = FLAGS.trackedTokenIds;
+  if (key in flags || `-=${key}` in flags) return true;
+  const [head, ...rest] = key.split(".");
+  const nested = flags[head];
+  return Boolean(nested && typeof nested === "object" && (rest.join(".") in nested || `-=${rest.join(".")}` in nested));
+}
+
 export const CAMERA_MODES = {
   manual: "manual",
   scene: "scene",

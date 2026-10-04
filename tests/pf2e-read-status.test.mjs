@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { foldChanges, readStatusChange, statusTone } from "../scripts/features/stream-cards/pf2e/read-status.js";
 import { DEFAULT_STATUS_UPDATES } from "../scripts/features/stream-cards/settings.js";
+import { DEFAULT_CHAT_FILTER } from "../scripts/features/stream/chat-filter.mjs";
 
 const settings = (patch = {}) => ({ ...DEFAULT_STATUS_UPDATES, ...patch });
+/** The shipped chat filter with some rows replaced; `condition`/`effect` columns are whose creature it is. */
+const filter = (rows = {}) => ({ rows: { ...DEFAULT_CHAT_FILTER.rows, ...rows }, details: DEFAULT_CHAT_FILTER.details });
 
 /** A player character's own condition: the least gated case there is. */
 function pcSnapshot(patch = {}) {
@@ -64,20 +67,19 @@ describe("status changes the stream draws", () => {
 
   test("every gate refuses its own kind of change and nothing else", () => {
     assert.equal(readStatusChange(pcSnapshot(), settings({ enabled: false })), null);
-    assert.equal(readStatusChange(pcSnapshot(), settings({ conditions: false })), null);
-    assert.equal(readStatusChange(pcSnapshot(), settings({ players: false })), null);
-    // An effect is its own switch, and off by default.
+    assert.equal(readStatusChange(pcSnapshot(), settings(), filter({ condition: { player: false, gm: true } })), null);
+    // An effect is its own row, and off by default.
     const effect = pcSnapshot({ change: { kind: "effect", slug: "spell-effect-bless" } });
     assert.equal(readStatusChange(effect, settings()), null);
-    assert.ok(readStatusChange(effect, settings({ effects: true })));
+    assert.ok(readStatusChange(effect, settings(), filter({ effect: { player: true, gm: false } })));
     // Value moves and endings are quieter events with switches of their own.
     for (const direction of ["raised", "lowered"]) {
       assert.equal(readStatusChange(pcSnapshot({ change: { direction } }), settings({ valueChanges: false })), null);
       assert.ok(readStatusChange(pcSnapshot({ change: { direction } }), settings()));
     }
     assert.equal(readStatusChange(pcSnapshot({ change: { direction: "lost" } }), settings({ removals: false })), null);
-    // "conditions: false" must not take effects with it, nor the other way round.
-    assert.ok(readStatusChange(effect, settings({ conditions: false, effects: true })));
+    // Conditions off must not take effects with it, nor the other way round.
+    assert.ok(readStatusChange(effect, settings(), filter({ condition: { player: false, gm: false }, effect: { player: true, gm: true } })));
   });
 
   test("a creature nobody can see is never announced, whatever the settings say", () => {
@@ -85,11 +87,13 @@ describe("status changes the stream draws", () => {
       actor: { isCharacter: false, hasPlayerOwner: false, observable: false }
     });
     assert.equal(readStatusChange(hidden, settings()), null);
-    assert.equal(readStatusChange(hidden, settings({ npcs: true, players: true })), null);
+    assert.equal(readStatusChange(hidden, settings(), filter({ condition: { player: true, gm: true } })), null);
     const seen = pcSnapshot({ actor: { isCharacter: false, hasPlayerOwner: false, observable: true } });
     const model = readStatusChange(seen, settings());
     assert.equal(model.actor.isNpc, true);
-    assert.equal(readStatusChange(seen, settings({ npcs: false })), null);
+    assert.equal(readStatusChange(seen, settings(), filter({ condition: { player: true, gm: false } })), null);
+    // ...and the player column does not answer for it.
+    assert.ok(readStatusChange(seen, settings(), filter({ condition: { player: false, gm: true } })));
   });
 
   test("an NPC whose name players cannot see keeps its art and loses its name", () => {

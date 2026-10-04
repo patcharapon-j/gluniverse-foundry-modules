@@ -1320,12 +1320,23 @@ at roll-card weight. The plain roll's d20 is drawn only when the roll has exactl
 one d20 rolling exactly once — any other shape has no natural, and a die showing
 one of ten results is a lie about the roll that renders perfectly. A message body
 is arbitrary markup from any client in the world, so it is flattened in the pure
-reader and set through `textContent`, never `innerHTML`. And `DEFAULT_BASIC_CARDS`
-is **one statement**, in the reader beside the gates that consult it: restated in
-`settings.js` it drifts, and a row whose default says off only on the reading
-side is a feature nobody switched off silently not existing — which is also why an
-absent `basicCards` (the fixtures, the check tools) reads as the shipped defaults
-rather than as a row of `undefined`.
+reader and set through `textContent`, never `innerHTML`. And **what reaches the
+stream is one statement**: `stream/chat-filter.mjs` (the `stream.chatFilter`
+setting, edited on the Chat Filter page) lists every content type, switched per
+author (player / GM; for status rows, whose creature it is). The cloned-card
+path (`classifyMessage`), the roll-card reader (`rowOf`) and the status reader
+all ask it, so a row means the same on every kind of world. Its sanitizer is
+total, and an absent filter (the fixtures, the check tools) reads as the shipped
+defaults rather than as rows of `undefined`. Whispers and other players' blind
+rolls are not rows and must never become one. The old `basicCards` and the
+per-kind rows of `statusUpdates` were folded into it once by
+`migrateLegacyChatFilter`.
+
+The stream camera is the only thing that may move the capture client's view:
+`camera/pan-guard.js` refuses Foundry's own `Token#panCanvas` and
+`Canvas#animatePan` while stream mode owns the shot (a controlled token moving
+pulled the camera to it in Scene mode), and the camera's "in combat" is
+`getRunningSceneCombat()` — an encounter that has *started*, never a prepared one.
 
 Two smaller ones. Hook names are built in one place per feature: under the suite
 id an un-namespaced `${MODULE_ID}.settingsChanged` is a name any feature could

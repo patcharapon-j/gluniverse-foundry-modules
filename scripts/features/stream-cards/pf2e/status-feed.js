@@ -7,7 +7,7 @@
  */
 
 import { StatusCard } from "../cards/status-card.js";
-import { getChatSettings } from "../../stream/settings.js";
+import { getChatFilter, getChatSettings } from "../../stream/settings.js";
 import { getStatusSettings } from "../settings.js";
 import { portraitFramer } from "../framing/portrait-framer.js";
 import { foldChanges, readStatusChange } from "./read-status.js";
@@ -26,7 +26,9 @@ export class StatusCardFeed {
     /** actor key -> the record currently showing that creature's changes. */
     this.byKey = new Map();
     /**
-     * item id -> the condition's value as this client last saw it.
+     * item uuid -> the condition's value as this client last saw it. Not the id: an unlinked token's
+     * synthetic actor copies its base actor's items under the same ids, so two goblins off one sheet
+     * would share — and overwrite — one remembered value.
      *
      * Foundry's `updateItem` hook hands over the *new* values only, and `preUpdateItem` fires solely on
      * the client that made the change — never on the stream client. So the previous value has to be
@@ -44,13 +46,13 @@ export class StatusCardFeed {
 
   handleCreate(item) {
     const value = valueOf(item);
-    if (item?.id) this.values.set(item.id, value);
+    if (keyOf(item)) this.values.set(keyOf(item), value);
     this.offer(item, "gained", value);
   }
 
   handleDelete(item) {
-    const value = this.values.get(item?.id) ?? valueOf(item);
-    if (item?.id) this.values.delete(item.id);
+    const value = this.values.get(keyOf(item)) ?? valueOf(item);
+    if (keyOf(item)) this.values.delete(keyOf(item));
     this.offer(item, "lost", value);
   }
 
@@ -59,8 +61,8 @@ export class StatusCardFeed {
     // reasons (duration ticks, rule-element bookkeeping) and none of them is a moment on the stream.
     if (changed?.system?.value?.value === undefined) return;
     const next = valueOf(item);
-    const previous = this.values.get(item?.id);
-    if (item?.id) this.values.set(item.id, next);
+    const previous = this.values.get(keyOf(item));
+    if (keyOf(item)) this.values.set(keyOf(item), next);
     if (!Number.isFinite(next) || next === previous) return;
     // No remembered value: the direction is unknowable, so the card says it arrived rather than
     // inventing an arrow that might point the wrong way.
@@ -72,7 +74,7 @@ export class StatusCardFeed {
     if (!this.live) return;
     const snapshot = snapshotStatusChange(item, direction, value);
     if (!snapshot) return;
-    const model = readStatusChange(snapshot, getStatusSettings());
+    const model = readStatusChange(snapshot, getStatusSettings(), getChatFilter());
     if (!model) return;
     const record = this.find(model.key);
     if (record) return this.fold(record, model.changes[0]);
@@ -156,7 +158,7 @@ export class StatusCardFeed {
 
   remember(actor) {
     for (const item of actor?.items ?? []) {
-      if (item.type === "condition" && item.id) this.values.set(item.id, valueOf(item));
+      if (item.type === "condition" && keyOf(item)) this.values.set(keyOf(item), valueOf(item));
     }
   }
 
@@ -165,6 +167,11 @@ export class StatusCardFeed {
     this.byKey.clear();
     this.values.clear();
   }
+}
+
+/** The remembered-value key: the item's uuid, which runs through an unlinked token's path. */
+function keyOf(item) {
+  return item?.uuid ?? null;
 }
 
 function valueOf(item) {

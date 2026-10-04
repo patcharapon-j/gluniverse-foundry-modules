@@ -98,7 +98,16 @@
             }
           : item,
         defaultArt: defaultRollArt(),
-        nameVisibilitySetting: game.pf2e?.settings?.tokens?.nameVisibility ?? null
+        nameVisibilitySetting: game.pf2e?.settings?.tokens?.nameVisibility ?? null,
+        // Mirrors snapshot.js: the inputs PF2e reads to decide whether a player sees a DC.
+        metagameDcs: !!game.pf2e?.settings?.metagame?.dcs,
+        opposer: (() => {
+          const context = message.flags?.pf2e?.context;
+          const roller = message.actor?.uuid ?? null;
+          const ref = roller && context?.target?.actor === roller ? context?.origin : context?.target;
+          const other = ref?.actor ? fromUuidSync(ref.actor) : null;
+          return other ? { hasPlayerOwner: !!other.hasPlayerOwner } : null;
+        })()
       }
     };
   };

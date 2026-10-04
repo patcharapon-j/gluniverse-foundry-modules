@@ -15,14 +15,16 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { CameraController } from "./camera/controller.js";
+import { installPanGuard } from "./camera/pan-guard.js";
 import { ChatOverlay } from "./chat-overlay.js";
-import { FEATURE_ID, HOOKS, MODULE_ID, PREFIX } from "./constants.js";
+import { openChatFilterApp, renderChatFilterApp } from "./chat-filter-app.js";
+import { FEATURE_ID, HOOKS, MODULE_ID, PREFIX, isStreamSceneFlagChange } from "./constants.js";
 import { CONTROL_ROOM_TOOL, addStreamSceneControl, configureDirectorApp, openDirectorApp, renderDirectorApp } from "./director-app.js";
 import { installDirectorRelay } from "./director-auth.mjs";
 import { DialogOverlay } from "./dialog-overlay.js";
 import { registerMotionEngine } from "./motion/engine.js";
 import { registerSettings as registerStreamSettings, sanitizeByKey } from "./settings.js";
-import { registerSocket } from "./socket.js";
+import { forgetClientStatus, registerSocket } from "./socket.js";
 import { StreamMode } from "./stream-mode.js";
 import { TokenTracking } from "./token-tracking.js";
 import { UiDetector } from "./ui-detector.js";
@@ -47,9 +49,34 @@ export function registerSettings() {
     type: controlRoomShimClass(),
     restricted: false
   });
+
+  // The chat filter gets its own entry as well as its Control Room button: "what reaches the stream" is
+  // the question a GM opens settings to answer, and it should not be two windows deep.
+  game.settings.registerMenu(SUITE_ID, `${PREFIX}chatFilterMenu`, {
+    name: "GLUNIVERSE_STREAM.menu.chatFilter.name",
+    label: "GLUNIVERSE_STREAM.menu.chatFilter.label",
+    hint: "GLUNIVERSE_STREAM.menu.chatFilter.hint",
+    icon: "fas fa-filter",
+    type: shimClass("chatFilter", () => openChatFilterApp()),
+    restricted: false
+  });
 }
 
 let ControlRoomShim = null;
+const shims = {};
+
+/** The same shim as the Control Room's, onto another singleton window. */
+function shimClass(id, open) {
+  if (shims[id]) return shims[id];
+  const { ApplicationV2 } = foundry.applications.api;
+  shims[id] = class StreamMenuShim extends ApplicationV2 {
+    render() {
+      open();
+      return this;
+    }
+  };
+  return shims[id];
+}
 
 /**
  * Foundry instantiates a menu's `type` and calls `render`. The panel is a
@@ -103,6 +130,9 @@ export function onInit() {
 
 export async function onReady() {
   state.streamMode = new StreamMode();
+  // Foundry's own auto-pans (to a controlled token that moves, to a chat bubble's speaker) would fight the
+  // stream camera; they are refused while stream mode owns the shot.
+  installPanGuard(state.streamMode);
   state.tokenTracking = new TokenTracking();
   state.camera = new CameraController(state.streamMode, state.tokenTracking);
   state.chatOverlay = new ChatOverlay(state.streamMode);
@@ -125,11 +155,14 @@ export async function onReady() {
 
   Hooks.on(HOOKS.settingsChanged, (key) => {
     renderDirectorApp();
+    if (key === "chatFilter") renderChatFilterApp();
     // Appointing a director is a world setting, so it lands on the appointee's
     // client with nothing redrawn. Their scene controls were built while they
     // were not a director and stay that way until a reload, which reads as the
     // appointment not having worked. Same on the way back out.
-    if (["trustedDirectorUserIds", "streamUserId"].includes(key)) ui.controls?.render();
+    // `reset` is what makes SceneControls re-run getSceneControlButtons; a plain render reuses the
+    // cached tool list, so the appointment would still need a reload.
+    if (["trustedDirectorUserIds", "streamUserId"].includes(key)) ui.controls?.render({ reset: true });
     if (!["streamUserId", "autoStartStreamUserIds"].includes(key)) return;
     if (state.streamMode?.isStreamUser) state.streamMode.promptIfNeeded();
     else state.streamMode?.deactivate({ notify: false });
@@ -139,7 +172,25 @@ export async function onReady() {
 
   Hooks.on("canvasReady", () => state.streamMode?.reportStatus());
   Hooks.on("updateScene", (scene, changes) => {
-    if (scene.id === canvas?.scene?.id && foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`)) renderDirectorApp();
+    if (scene.id === canvas?.scene?.id && isStreamSceneFlagChange(changes)) renderDirectorApp();
+  });
+  // A capture login that drops would otherwise read "Active" in the panel, with Stop and Reframe live,
+  // until something else happened to re-render it.
+  Hooks.on("userConnected", (user, connected) => {
+    if (!connected) forgetClientStatus(user.id);
+    renderDirectorApp();
+  });
+
+  // Resizing the OBS source or going fullscreen after the stream started changes the frame the cards
+  // are scaled to and the viewport the camera fitted. Settled once, after the resize stops.
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    if (!state.streamMode?.active) return;
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      state.chatOverlay?.applySettings();
+      state.camera?.scheduleReframe({ force: true });
+    }, 150);
   });
 
   await state.streamMode.promptIfNeeded();

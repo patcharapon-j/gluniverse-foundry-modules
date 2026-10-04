@@ -6,6 +6,14 @@
  */
 
 import { isFocus } from "../framing/focus-math.js";
+import {
+  DEFAULT_CHAT_FILTER,
+  PF2E_CHECK_ROWS,
+  allows,
+  authorColumn,
+  sanitizeChatFilter,
+  showsDetail
+} from "../../stream/chat-filter.mjs";
 
 export const DEGREES = ["criticalFailure", "failure", "success", "criticalSuccess"];
 
@@ -36,27 +44,9 @@ const CHECK_TYPES = new Set(Object.keys(CHECK_TYPE_KEYS));
  * In a PF2e world the overlay hands *every* new message to this feed and never clones a chat card, so
  * a `/r 2d6+3` and a line of speech used to reach the stream as nothing at all — the reader returned
  * null and no card was built, which looks exactly like the overlay being switched off. They are cards
- * now, behind these switches.
- *
- * The defaults live here, beside the gates that read them, rather than in `settings.js`: the reader is
- * the only thing that consults a row, and a row whose default said one thing here and another there
- * would be a switch that reads as off in a world that never stored it. `settings.js` re-exports this
- * object and its sanitizer rebuilds from these keys.
+ * now, and like every other kind they answer to the GM's chat filter (`stream/chat-filter.mjs`), which
+ * is the one place a row is switched for players and for the GM.
  */
-export const DEFAULT_BASIC_CARDS = Object.freeze({
-  /** Draw either kind at all. */
-  enabled: true,
-  /** A plain dice roll: `/r 2d6+3`, a macro roll, anything PF2e did not claim as a check or damage. */
-  rolls: true,
-  /** In-character speech. */
-  speech: true,
-  /** `/emote`. */
-  emotes: true,
-  /** Out-of-character chatter. */
-  ooc: true,
-  /** Messages the GM typed. Their own switch: a table may want the narration and not the table talk. */
-  gm: true
-});
 
 /**
  * Foundry's chat styles, and the label each one headlines with.
@@ -67,9 +57,9 @@ export const DEFAULT_BASIC_CARDS = Object.freeze({
  * feature. A message someone typed carries IC, EMOTE or OOC, and that is the whole test.
  */
 export const TEXT_STYLES = Object.freeze({
-  1: { gate: "ooc", key: "OutOfCharacter", name: "ooc" },
-  2: { gate: "speech", key: "Says", name: "speech" },
-  3: { gate: "emotes", key: "Emotes", name: "emote" }
+  1: { row: "ooc", key: "OutOfCharacter", name: "ooc" },
+  2: { row: "speech", key: "Says", name: "speech" },
+  3: { row: "emote", key: "Emotes", name: "emote" }
 });
 
 /** A quote longer than this is cut: the card is a glance, and it has three lines to give. */
@@ -95,10 +85,33 @@ export function readMessage(snapshot) {
 
   const pf2e = raw.flags?.pf2e ?? {};
   const context = pf2e.context ?? null;
-  const gates = gatesOf(derived);
-  const kind = kindOf(pf2e, context, derived, raw, gates);
+  const kind = kindOf(pf2e, context, derived, raw);
   if (!kind) return null;
+  // The GM's filter: whether this kind is shown at all for whoever posted it, then what it may say.
+  const filter = filterOf(derived);
+  const author = authorColumn(!!derived.authorIsGM);
+  if (!allows(filter, rowOf(kind, context, raw), author)) return null;
+  const model = applyDetails(buildModel(kind, raw, pf2e, context, derived, visibility), filter, author);
+  return visibility === "ownBlind" ? withoutResult(model) : model;
+}
 
+/**
+ * A player's own blind roll: the card says *that* they rolled — the "Blind" chip — and nothing of how it
+ * went. The roller cannot see the result in their own chat log; the stream is a screen they can watch,
+ * so a total, a natural, a degree or a crack here hands them exactly what a blind roll withholds. The
+ * formula stays (it was chosen before the dice landed); the faces a plain roll lists under its headline
+ * go, and a damage roll drops its parts, since each part prints its amount.
+ */
+function withoutResult(model) {
+  if (!model) return model;
+  const out = { ...model, fx: null };
+  if (out.roll) out.roll = { ...out.roll, natural: null, total: null, dc: null, dcVisible: false, degree: null };
+  if (out.damage) out.damage = { total: null, parts: [], crit: false };
+  if (out.kind === "roll" && out.action) out.action = { ...out.action, sub: null };
+  return out;
+}
+
+function buildModel(kind, raw, pf2e, context, derived, visibility) {
   const base = {
     id: raw._id,
     kind,
@@ -143,18 +156,63 @@ export function visibilityOf(raw, derived) {
 }
 
 /**
- * The switches, with the defaults standing in for a snapshot that carries none.
+ * The GM's chat filter, with the defaults standing in for a snapshot that carries none.
  *
- * The fixtures were captured before these existed and the check tools drive the reader directly, so an
- * absent `basicCards` must read as the shipped defaults rather than as an object of `undefined` — every
- * gate below would read that as off, which is the feature silently not existing.
+ * The fixtures were captured before it existed and the check tools drive the reader directly, so an
+ * absent filter must read as the shipped defaults rather than as rows of `undefined` — every gate would
+ * read that as off, which is the feature silently not existing.
  */
-function gatesOf(derived) {
-  const stored = derived?.basicCards;
-  return stored && typeof stored === "object" ? { ...DEFAULT_BASIC_CARDS, ...stored } : DEFAULT_BASIC_CARDS;
+function filterOf(derived) {
+  const stored = derived?.chatFilter;
+  return stored && typeof stored === "object" ? sanitizeChatFilter(stored) : DEFAULT_CHAT_FILTER;
 }
 
-function kindOf(pf2e, context, derived, raw, gates) {
+/** The filter row a card kind answers to. One vocabulary with the cloned-card path's `classifyMessage`. */
+export function rowOf(kind, context, raw) {
+  switch (kind) {
+    case "check":
+      return PF2E_CHECK_ROWS[context?.type] ?? "check";
+    case "damage":
+      return "damage";
+    case "cast":
+      return "spell";
+    case "action":
+      return "action";
+    case "roll":
+      return "roll";
+    case "text":
+      return TEXT_STYLES[raw?.style]?.row ?? null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * What a shown card may say. Each detail the GM switched off is removed from the model rather than hidden
+ * by the card, so nothing downstream can draw it.
+ *
+ * Hiding the degree also re-derives the crack from the natural die alone, exactly as a roll against no DC
+ * does: a gold crack over a card with no degree on it would say "critical success" in everything but
+ * words.
+ */
+function applyDetails(model, filter, author) {
+  if (!model) return model;
+  const out = { ...model };
+  if (out.roll) {
+    const roll = { ...out.roll };
+    if (roll.degree !== null && roll.degree !== undefined && !showsDetail(filter, "degree", author)) {
+      roll.degree = null;
+      out.fx = fxOf(null, roll.natural ?? null);
+    }
+    if (roll.dcVisible && !showsDetail(filter, "dc", author)) roll.dcVisible = false;
+    out.roll = roll;
+  }
+  if (out.target && !showsDetail(filter, "target", author)) out.target = null;
+  if (out.player && !showsDetail(filter, "playerName", author)) out.player = null;
+  return out;
+}
+
+function kindOf(pf2e, context, derived, raw) {
   const type = context?.type;
   if (type && CHECK_TYPES.has(type)) return derived.rollCount > 0 ? "check" : null;
   if (type === "damage-roll") return derived.rollCount > 0 ? "damage" : null;
@@ -162,17 +220,8 @@ function kindOf(pf2e, context, derived, raw, gates) {
   if (!type && pf2e.origin && derived.rollCount === 0 && /^(action|feat)$/.test(pf2e.origin.type ?? "")) return "action";
   // Anything left that carries dice is a plain roll: `/r 2d6+3`, a macro, a system PF2e has no context
   // type for. Anything left that carries none is a card only if a person typed it.
-  if (derived.rollCount > 0) return gates.enabled && gates.rolls ? "roll" : null;
-  return textKind(raw, derived, gates);
-}
-
-/** A typed message, or null. Style is the whole test — see TEXT_STYLES. */
-function textKind(raw, derived, gates) {
-  if (!gates.enabled) return null;
-  const style = TEXT_STYLES[raw.style];
-  if (!style || !gates[style.gate]) return null;
-  if (derived.authorIsGM && !gates.gm) return null;
-  return plainText(raw.content) ? "text" : null;
+  if (derived.rollCount > 0) return "roll";
+  return TEXT_STYLES[raw.style] && plainText(raw.content) ? "text" : null;
 }
 
 /**
@@ -293,7 +342,7 @@ function readCheck(raw, context, derived) {
       natural,
       total: roll.total ?? null,
       dc: dcValue,
-      dcVisible: dcValue !== null && !derived.authorIsGM,
+      dcVisible: dcValue !== null && !derived.authorIsGM && dcShown(context, derived),
       degree
     },
     fx: fxOf(degree, natural)
@@ -313,11 +362,25 @@ function readDamage(raw, derived) {
   };
 }
 
+/**
+ * Whether PF2e would print this DC to the players: the check's own `dc.visible`, an opposer a player owns
+ * (a PC's own AC is no secret to their table), or the world's "show DCs" metagame setting. Anything else
+ * is an NPC's AC or a GM's DC, which the player's own chat card withholds and the stream must too.
+ *
+ * Absent snapshot fields — the fixtures predate them — read as *hidden*: a missing answer must not be
+ * the one that leaks.
+ */
+function dcShown(context, derived) {
+  return context?.dc?.visible === true || derived.opposer?.hasPlayerOwner === true || derived.metagameDcs === true;
+}
+
 function readCast(pf2e, derived) {
   const item = derived.item ?? {};
   const defense = item.defense ?? {};
   const save = defense.save ?? null;
   const isAttack = !save && defense.passive?.statistic === "ac";
+  // An NPC caster's spell DC is the GM's number, under the same rule as a check's DC.
+  const dcKnown = derived.actor?.hasPlayerOwner === true || derived.metagameDcs === true;
   return {
     action: { label: item.name ?? "", labelKey: null, sub: null, map: 0 },
     spell: {
@@ -325,7 +388,7 @@ function readCast(pf2e, derived) {
       tradition: pf2e.casting?.tradition ?? null,
       rank: item.rank ?? null,
       isCantrip: !!item.isCantrip,
-      dc: save ? item.spellDC ?? null : null,
+      dc: save && dcKnown ? item.spellDC ?? null : null,
       save: save ? { statistic: save.statistic, basic: !!save.basic } : null,
       attackBonus: isAttack ? item.spellAttack ?? null : null
     }
@@ -474,7 +537,7 @@ function decodeEntities(text) {
  * @property {{label: string|null, labelKey: string|null, sub: string|null, map: number, cost?: {type: string, value: number|null}|null}|null} action
  * @property {{natural: number|null, total: number|null, dc: number|null, dcVisible: boolean, degree: 0|1|2|3|null, formula?: string|null}|null} roll
  * @property {{name: string, tradition: string|null, rank: number|null, isCantrip: boolean, dc: number|null, save: {statistic: string, basic: boolean}|null, attackBonus: number|null}|null} spell
- * @property {{total: number, parts: {type: string, amount: number, persistent: boolean}[], crit: boolean}|null} damage
+ * @property {{total: number|null, parts: {type: string, amount: number, persistent: boolean}[], crit: boolean}|null} damage
  * @property {{body: string, style: "speech"|"emote"|"ooc"}|null} text
  * @property {"gold"|"red"|"pop"|null} fx
  */

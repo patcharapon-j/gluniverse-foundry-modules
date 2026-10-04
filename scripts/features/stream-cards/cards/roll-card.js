@@ -404,10 +404,11 @@ export class RollCard {
     return [rank, tradition].filter(Boolean).join(" · ") || null;
   }
 
+  /** A total the reader withheld (a player's own blind roll) reads "?", never a blank box or "null". */
   headlineValue() {
     const m = this.model;
-    if (m.roll) return m.roll.total;
-    if (m.damage) return m.damage.total;
+    if (m.roll) return m.roll.total ?? "?";
+    if (m.damage) return m.damage.total ?? "?";
     return null;
   }
 
@@ -686,7 +687,7 @@ export class RollCard {
     [...row.querySelectorAll(".glus-rc-damage-part, .glus-rc-damage-crit")].forEach((chip, index) =>
       tween(chip, { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 300, delay: index * 70, ease: EASE_OUT })
     );
-    countUp(total, damage.total, 640);
+    countUp(total, damage.total ?? "?", 640);
     await wait(640);
     if (this.destroyed || version !== this.version) return;
     if (damage.crit) {

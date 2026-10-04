@@ -22,7 +22,7 @@ import { Suite } from "../../core/registry.mjs";
 import { CARDS_FEATURE_ID, CARDS_PREFIX, FEATURE_ID } from "../stream/constants.js";
 import { registerCardFeed, registerPanelSection } from "../stream/extensions.mjs";
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { CARD_FLAGS, SETTINGS, registerSettings } from "./settings.js";
+import { CARD_FLAGS, SETTINGS, migrateLegacyChatFilter, registerSettings } from "./settings.js";
 import { claimAction, claimChange, renderSection } from "./panel.js";
 import { registerFramingSheetHeader } from "./framing/sheet-header.js";
 import { RollCardFeed } from "./pf2e/roll-card-feed.js";
@@ -62,6 +62,10 @@ Suite.register({
     // They are pointed at whichever feed is current and are inert until one exists, so registering here
     // — after `stream`'s onReady has built the overlay and its feed — is the whole wiring.
     registerStatusHooks();
+
+    // `basicCards` and the per-kind rows of `statusUpdates` became rows of the stream's chat filter.
+    // Fire-and-forget: it writes once, on the active GM, only in a world that never stored a filter.
+    migrateLegacyChatFilter().catch((e) => warn("Stream cards: chat filter migration failed", e));
 
     registerPanelSection({
       id: CARDS_FEATURE_ID,

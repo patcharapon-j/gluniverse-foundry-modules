@@ -62,6 +62,7 @@ export const DELEGABLE_KEYS = Object.freeze(new Set([
   `${PREFIX}autoStartStreamUserIds`,
   `${PREFIX}cameraSettings`,
   `${PREFIX}chatSettings`,
+  `${PREFIX}chatFilter`,
   `${PREFIX}dialogSettings`,
   `${PREFIX}uiRules`,
 ]));

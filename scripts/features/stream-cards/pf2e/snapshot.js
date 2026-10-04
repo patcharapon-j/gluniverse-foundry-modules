@@ -6,7 +6,8 @@
  */
 
 import { MODULE_ID } from "../../stream/constants.js";
-import { CARD_FLAGS, getBasicCardSettings, getDefaultRollArt } from "../settings.js";
+import { getChatFilter } from "../../stream/settings.js";
+import { CARD_FLAGS, getDefaultRollArt } from "../settings.js";
 
 export function snapshotMessage(message) {
   const source = message._source ?? message.toObject?.() ?? {};
@@ -35,10 +36,34 @@ export function snapshotMessage(message) {
       target: targetOf(message),
       item: itemOf(message),
       defaultArt: getDefaultRollArt(),
-      basicCards: getBasicCardSettings(),
-      nameVisibilitySetting: !!game.pf2e?.settings?.tokens?.nameVisibility
+      chatFilter: getChatFilter(),
+      nameVisibilitySetting: !!game.pf2e?.settings?.tokens?.nameVisibility,
+      // The two inputs PF2e's own result flavor reads, beside `context.dc.visible` (already in the raw
+      // flags), to decide whether a player sees a DC. See `dcShown` in read-message.js.
+      metagameDcs: !!game.pf2e?.settings?.metagame?.dcs,
+      opposer: opposerOf(message)
     }
   };
+}
+
+/**
+ * The other side of a check — whose AC or DC it was rolled against — resolved the way PF2e's reroll
+ * path resolves it from the flags: the origin when the roller is the context's target (a save against
+ * a spell), the target otherwise (a strike). Flags carry no `origin.self`, so the roller's uuid decides.
+ */
+function opposerOf(message) {
+  const context = message.flags?.pf2e?.context;
+  if (!context) return null;
+  const roller = message.actor?.uuid ?? null;
+  const ref = roller && context.target?.actor === roller ? context.origin : context.target;
+  if (!ref?.actor) return null;
+  let actor = null;
+  try {
+    actor = fromUuidSync(ref.actor);
+  } catch {
+    return null;
+  }
+  return actor ? { hasPlayerOwner: !!actor.hasPlayerOwner } : null;
 }
 
 function summarizeRoll(roll) {

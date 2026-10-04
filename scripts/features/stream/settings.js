@@ -10,6 +10,7 @@ import {
   PREFIX
 } from "./constants.js";
 import { canDelegate, isDirectorUser, requestWrite } from "./director-auth.mjs";
+import { DEFAULT_CHAT_FILTER, sanitizeChatFilter } from "./chat-filter.mjs";
 
 /**
  * GLUniverse Stream — settings.
@@ -43,6 +44,8 @@ const SETTINGS = {
   trustedDirectorUserIds: { type: Array, default: [], config: false },
   cameraSettings: { type: Object, default: DEFAULT_CAMERA_SETTINGS, config: false },
   chatSettings: { type: Object, default: DEFAULT_CHAT_SETTINGS, config: false },
+  /** Which content types reach the chat overlay, per author. See `chat-filter.mjs`. */
+  chatFilter: { type: Object, default: DEFAULT_CHAT_FILTER, config: false },
   dialogSettings: { type: Object, default: DEFAULT_DIALOG_SETTINGS, config: false },
   uiRules: { type: Object, default: DEFAULT_UI_RULES, config: false }
 };
@@ -98,6 +101,11 @@ export function getChatSettings() {
   return sanitizeChatSettings(getSetting("chatSettings"));
 }
 
+/** What the chat overlay may show, per content type and author. */
+export function getChatFilter() {
+  return sanitizeChatFilter(getSetting("chatFilter"));
+}
+
 export function getDialogSettings() {
   return { ...DEFAULT_DIALOG_SETTINGS, ...(getSetting("dialogSettings") ?? {}) };
 }
@@ -144,6 +152,8 @@ export function sanitizeSetting(name, value) {
       return sanitizeCameraSettings(value);
     case "chatSettings":
       return sanitizeChatSettings(value);
+    case "chatFilter":
+      return sanitizeChatFilter(value);
     case "dialogSettings":
       return sanitizeObject(value, DEFAULT_DIALOG_SETTINGS);
     case "uiRules":

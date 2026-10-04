@@ -5,5 +5,8 @@
   "GLUNIVERSE_STREAM.settings.targetingSettings.hint": "World-level combat targeting line settings.",
   "GLUNIVERSE_STREAM.settings.showTargetLines.name": "Show Targeting Lines",
   "GLUNIVERSE_STREAM.settings.showTargetLines.hint": "Draw combat targeting lines on this screen when the Stream Director has them enabled for you.",
-  "GLUNIVERSE_STREAM.menu.targeting.label": "Open editor"
+  "GLUNIVERSE_STREAM.menu.targeting.label": "Open editor",
+  "GLUNIVERSE_STREAM.targeting.visibility.everyone": "Everyone",
+  "GLUNIVERSE_STREAM.targeting.visibility.gmAndStream": "GMs and the stream",
+  "GLUNIVERSE_STREAM.targeting.visibility.streamOnly": "Stream only"
 }

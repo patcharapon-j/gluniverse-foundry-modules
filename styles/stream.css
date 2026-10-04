@@ -467,6 +467,133 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   opacity: 0.75;
 }
 
+/* Chat Filter page: one table, content types down, author columns across. */
+.gluniverse-stream-filter .window-content {
+  padding: 0.75rem;
+}
+
+.gluniverse-stream-filter-body {
+  height: 100%;
+  overflow-y: auto;
+  padding-inline-end: 0.25rem;
+}
+
+.gluniverse-stream-filter-intro {
+  margin: 0 0 0.35rem;
+}
+
+.gluniverse-stream-filter-presets,
+.gluniverse-stream-filter-entry {
+  justify-content: space-between;
+}
+
+.gluniverse-stream-filter-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-block: 0.6rem;
+}
+
+.gluniverse-stream-filter-presets button {
+  flex: 0 0 auto;
+  width: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.gluniverse-stream-filter-summary {
+  flex: 1 1 100%;
+  color: var(--gl-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.gluniverse-stream-filter-entry button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.gluniverse-stream-filter-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+
+.gluniverse-stream-filter-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gl-surface-raised, rgb(var(--gl-tint-dark) / 0.9));
+  border-block-end: 1px solid var(--stream-border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.gluniverse-stream-filter-table th.gluniverse-stream-filter-col,
+.gluniverse-stream-filter-cell {
+  width: 6.5rem;
+  text-align: center;
+}
+
+.gluniverse-stream-filter-col > span {
+  display: block;
+}
+
+.gluniverse-stream-filter-bulk {
+  display: flex !important;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: normal;
+}
+
+.gluniverse-stream-filter-bulk a {
+  color: var(--gl-accent);
+  cursor: pointer;
+}
+
+.gluniverse-stream-filter-group-head th {
+  padding: 0.7rem 0.5rem 0.3rem;
+  text-align: left;
+  font-size: 0.95rem;
+  border-block-end: 1px solid var(--stream-border);
+}
+
+.gluniverse-stream-filter-group-head small,
+.gluniverse-stream-filter-content small {
+  display: block;
+  font-weight: normal;
+  color: var(--gl-text-dim);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.gluniverse-stream-filter-table tbody tr:not(.gluniverse-stream-filter-group-head):hover {
+  background: rgb(var(--gl-tint-light) / 0.04);
+}
+
+.gluniverse-stream-filter-content {
+  padding: 0.3rem 0.5rem;
+}
+
+.gluniverse-stream-filter-cell {
+  vertical-align: middle !important;
+}
+
+.gluniverse-stream-filter-cell input[type="checkbox"] {
+  margin: 0;
+}
+
+.gluniverse-stream-filter-na {
+  color: var(--gl-text-faint);
+}
+
+.gluniverse-stream-filter a[data-action="open-chat-filter"],
+.gluniverse-stream-director a[data-action="open-chat-filter"] {
+  color: var(--gl-accent);
+  cursor: pointer;
+}
+
 @media (max-width: 720px) {
   .gluniverse-stream-chat-root {
     max-width: calc(100vw - 2rem);

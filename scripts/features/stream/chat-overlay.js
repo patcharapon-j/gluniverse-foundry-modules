@@ -2,7 +2,8 @@ import { CLASSES, HOOKS, MODULE_ID } from "./constants.js";
 import { animate, prefersCalmMotion, remove } from "./motion/engine.js";
 import { waitForDiceAnimation } from "./dice-wait.js";
 import { createCardFeed, hasCardFeed } from "./extensions.mjs";
-import { getChatSettings } from "./settings.js";
+import { getChatFilter, getChatSettings } from "./settings.js";
+import { allows, authorColumn, classifyMessage } from "./chat-filter.mjs";
 import { frameImage } from "../../core/face-frame.mjs";
 
 /** Where cards slide in from and out to, per overlay corner, in pixels. */
@@ -19,6 +20,15 @@ export class ChatOverlay {
     this.streamMode = streamMode;
     this.cards = [];
     this.cardsByMessageId = new Map();
+    /**
+     * Messages already shown this session, kept after their card expires. Foundry re-renders a message on
+     * every update (a module writing a flag, a roll revealed) and when older history is loaded, and each
+     * of those passes every other test here — so an expired card's message would come back on the
+     * broadcast as if it had just been posted.
+     */
+    this.shownMessageIds = new Set();
+    /** When stream mode last started; anything posted before it is history, not news. */
+    this.activatedAt = 0;
     // Null unless a feature has claimed the card-feed slot; every use below
     // is optional-chained so the overlay degrades to cloned chat cards.
     this.feed = createCardFeed(this);
@@ -38,6 +48,7 @@ export class ChatOverlay {
     });
     Hooks.on(HOOKS.streamModeChanged, active => {
       if (active) {
+        this.activatedAt = Date.now();
         this.applySettings();
         if (usesRollCards()) this.feed?.prescan();
       } else this.clear();
@@ -54,6 +65,7 @@ export class ChatOverlay {
   handleRenderedMessage(message, html) {
     if (!this.streamMode.active || usesRollCards()) return;
     if (!isAudienceVisible(message)) return;
+    if (!passesChatFilter(message)) return;
     const source = getElement(html);
     if (!source) return;
     // Modules such as RSReforged run transient/preview renders through
@@ -70,7 +82,13 @@ export class ChatOverlay {
         if (existing.element?.isConnected) this.refreshCardContents(existing, message, source);
         return;
       }
+      if (this.shownMessageIds.has(messageId)) return;
     }
+    // History: a message posted before stream mode started (with a little slack for one being posted as
+    // it starts) is never news, however it came to be re-rendered.
+    const postedAt = Number(message?.timestamp);
+    if (Number.isFinite(postedAt) && postedAt > 0 && postedAt < this.activatedAt - 2000) return;
+    if (messageId) this.shownMessageIds.add(messageId);
 
     const placeholder = { pending: true, messageId };
     if (messageId) this.cardsByMessageId.set(messageId, placeholder);
@@ -374,6 +392,7 @@ export class ChatOverlay {
     }
     this.cards = [];
     this.cardsByMessageId.clear();
+    this.shownMessageIds.clear();
     this.feed?.clear();
     document.querySelectorAll(".gluniverse-stream-chat-card").forEach(card => {
       remove(card);
@@ -423,6 +442,22 @@ function isAudienceVisible(message) {
     const user = game.users?.get?.(id);
     return user ? !user.isGM : false;
   });
+}
+
+/**
+ * The GM's chat filter, on the cloned-card path. Classified from plain facts about the message so the
+ * same rows mean the same thing here as on PF2e roll cards — see `chat-filter.mjs`.
+ */
+function passesChatFilter(message) {
+  const pf2e = message?.flags?.pf2e ?? {};
+  const row = classifyMessage({
+    style: message?.style ?? 0,
+    rollCount: message?.rolls?.length ?? 0,
+    contextType: pf2e.context?.type ?? null,
+    casting: Boolean(pf2e.casting),
+    originType: pf2e.origin?.type ?? null
+  });
+  return allows(getChatFilter(), row, authorColumn(Boolean(message?.author?.isGM)));
 }
 
 // Interactive roll-editing affordances — e.g. RSReforged's hover overlays for retro

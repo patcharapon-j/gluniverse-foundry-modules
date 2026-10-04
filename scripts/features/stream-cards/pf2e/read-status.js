@@ -19,10 +19,15 @@
  * that is off costs nothing rather than drawing invisibly.
  */
 
-/** Which document types this feature will draw, and the settings gate each one answers to. */
+import { DEFAULT_CHAT_FILTER, allows, sanitizeChatFilter } from "../../stream/chat-filter.mjs";
+
+/**
+ * Which document types this feature will draw, and the chat-filter row each one answers to. The filter's
+ * column is whose creature it is: `player` for a character or anything a player owns, `gm` for the rest.
+ */
 export const STATUS_KINDS = Object.freeze({
-  condition: "conditions",
-  effect: "effects"
+  condition: "condition",
+  effect: "effect"
 });
 
 /** How a status moved. `gained`/`raised` read as pressure arriving, `lost`/`lowered` as it letting go. */
@@ -33,23 +38,27 @@ const EASED = new Set(["lowered", "lost"]);
 /**
  * @param {object} snapshot                      from snapshotStatusChange()
  * @param {object} settings                      sanitized `stream.card.statusUpdates`
+ * @param {object} [filter]                      sanitized `stream.chatFilter`; the shipped defaults when absent
  * @returns {StatusCardModel|null}               null when the stream must not show this change
  */
-export function readStatusChange(snapshot, settings) {
+export function readStatusChange(snapshot, settings, filter = DEFAULT_CHAT_FILTER) {
   const change = snapshot?.change;
   const actor = snapshot?.actor;
   if (!change || !actor || !settings?.enabled) return null;
 
-  const gate = STATUS_KINDS[change.kind];
-  if (!gate || !settings[gate]) return null;
+  const row = STATUS_KINDS[change.kind];
+  if (!row) return null;
   if (!STATUS_DIRECTIONS.includes(change.direction)) return null;
+  // An unidentified effect is one PF2e itself keeps from the players — name, icon and all. A card would
+  // print both, so it is refused outright rather than redacted into a row that says nothing.
+  if (change.unidentified) return null;
   // A value moving is a quieter event than a condition arriving, and a table that watches a lot of
   // frightened creatures ticking down can say so.
   if (!settings.valueChanges && (change.direction === "raised" || change.direction === "lowered")) return null;
   if (!settings.removals && change.direction === "lost") return null;
 
   const isNpc = !actor.isCharacter && !actor.hasPlayerOwner;
-  if (!settings[isNpc ? "npcs" : "players"]) return null;
+  if (!allows(filter && typeof filter === "object" ? sanitizeChatFilter(filter) : DEFAULT_CHAT_FILTER, row, isNpc ? "gm" : "player")) return null;
   // Fails closed: an actor whose observability could not be established is not drawn.
   if (isNpc && !actor.observable) return null;
 

@@ -64,9 +64,27 @@ export function TargetingEditor() {
   return Cls;
 }
 
-/** The shim Foundry instantiates for the settings menu. */
-export class TargetingEditorMenu {
-  render() {
-    new (TargetingEditor())().render({ force: true });
-  }
+/**
+ * The class Foundry is handed for the settings menu. `registerMenu` throws unless
+ * `type` is an ApplicationV2 (or FormApplication) subclass, and that throw lands
+ * inside `Suite.registerAllSettings`, which swallows it — so a plain class here
+ * meant no "Open editor" button and an Object setting reachable only from the
+ * console. Memoised and built at registerSettings time, never at module scope,
+ * for the same Node reason as the editor. It never renders itself: it hands off
+ * to one editor window, so a repeat click brings that window forward.
+ */
+let MenuCls = null;
+let editor = null;
+
+export function TargetingEditorMenu() {
+  if (MenuCls) return MenuCls;
+  const { ApplicationV2 } = foundry.applications.api;
+  MenuCls = class TargetingEditorMenuShim extends ApplicationV2 {
+    render() {
+      editor ??= new (TargetingEditor())();
+      editor.render({ force: true });
+      return this;
+    }
+  };
+  return MenuCls;
 }

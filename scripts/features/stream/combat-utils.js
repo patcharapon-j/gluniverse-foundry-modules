@@ -25,6 +25,25 @@ export function getActiveSceneCombat() {
     ?? matches[0];
 }
 
+/**
+ * The encounter the stream camera treats as "in combat": one on this scene that has actually begun.
+ *
+ * `getActiveSceneCombat` answers "is there an encounter here", and falls back to any matching one —
+ * including an encounter the GM has prepared and not started, or a scene-less one left over from last
+ * session. Driving the camera from that put a table that was plainly out of combat on the *combat*
+ * camera mode, so moving or dropping a PC who had been added to the prepared encounter pulled the shot
+ * to them while the Control Room's out-of-combat mode said Scene. Combat, for the camera, starts when
+ * round 1 does.
+ */
+export function getRunningSceneCombat() {
+  const sceneId = canvas?.scene?.id ?? null;
+  const started = getCombatsList().filter(combat => {
+    const combatSceneId = getCombatSceneId(combat);
+    return combat?.started && (combatSceneId == null || combatSceneId === sceneId);
+  });
+  return started.find(combat => combat?.active) ?? started[0] ?? null;
+}
+
 export function getActiveCombatant(combat) {
   if (combat?.combatant) return combat.combatant;
   const turns = combat?.turns;

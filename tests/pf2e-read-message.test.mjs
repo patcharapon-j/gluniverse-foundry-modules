@@ -16,7 +16,7 @@ for (const [viewer, capture] of Object.entries(captures)) {
   const read = label => readMessage(byLabel(label)[0]);
 
   describe(`PF2e 8.4 fixtures read on the ${viewer} client`, () => {
-    test("a plain hit shows total, natural, DC and success with no cracks", () => {
+    test("a plain hit shows total, natural and success, and withholds the NPC's AC", () => {
       const card = read("strike-map5");
       assert.equal(card.kind, "check");
       assert.equal(card.visibility, "public");
@@ -27,7 +27,10 @@ for (const [viewer, capture] of Object.entries(captures)) {
       assert.equal(card.target.name, "Oleg");
       assert.equal(card.action.label, "Melee Strike: +1 Scimitar");
       assert.equal(card.action.map, 1);
-      assert.deepEqual(card.roll, { natural: 12, total: 15, dc: 12, dcVisible: true, degree: 2 });
+      // Oleg is an NPC, the DC carries no `visible`, and these captures predate the metagame snapshot,
+      // so PF2e's own card would not print AC 12 to the player — this once asserted the leak. The DC
+      // value stays on the model (the degree came from it); only its visibility is withheld.
+      assert.deepEqual(card.roll, { natural: 12, total: 15, dc: 12, dcVisible: false, degree: 2 });
       assert.equal(card.fx, null);
       assert.equal(card.originKey, "Actor.MjkJCqGyiVNWlcLU.Item.Kf9Fu77b4kHAwSUm");
     });
@@ -56,7 +59,8 @@ for (const [viewer, capture] of Object.entries(captures)) {
       const card = read("save-reflex-dc-fumble");
       assert.equal(card.action.label, "Reflex Saving Throw");
       assert.equal(card.target, null);
-      assert.deepEqual(card.roll, { natural: 1, total: 7, dc: 22, dcVisible: true, degree: 0 });
+      // A save with no opposer and no `dc.visible`: PF2e withholds DC 22 from the player, so does the stream.
+      assert.deepEqual(card.roll, { natural: 1, total: 7, dc: 22, dcVisible: false, degree: 0 });
       assert.equal(card.fx, "red");
       assert.equal(card.originKey, null);
     });
@@ -112,11 +116,14 @@ for (const [viewer, capture] of Object.entries(captures)) {
       assert.equal(card.originKey, read("spell-save-damage").originKey);
     });
 
-    test("a player's own blind roll is shown with its result, other secret rolls are hidden", () => {
+    test("a player's own blind roll is shown without its result, other secret rolls are hidden", () => {
       const blind = read("blind-own-roll");
       assert.equal(blind.visibility, "ownBlind");
-      assert.equal(blind.roll.total, 18);
-      assert.equal(blind.roll.natural, 17);
+      // This once asserted the total (18) and natural (17): the very result a blind roll withholds
+      // from the player who made it. The card says only that they rolled.
+      assert.equal(blind.roll.total, null);
+      assert.equal(blind.roll.natural, null);
+      assert.equal(blind.fx, null);
       assert.equal(read("gm-secret-blind"), null);
       assert.equal(read("gm-whisper"), null);
     });

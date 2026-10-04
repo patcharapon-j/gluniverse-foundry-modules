@@ -29,7 +29,7 @@ export class DialogOverlay {
   trackApplication(app, html, force = false) {
     if (!this.streamMode.active) return;
     const element = getElement(html) ?? getElement(app?.element);
-    if (!element || element.closest(`#${MODULE_ID}-director`) || element.closest("#gluniverse-stream-overlay")) return;
+    if (!element || element.closest(`#${MODULE_ID}-stream-control-room, #${MODULE_ID}-stream-chat-filter`) || element.closest("#gluniverse-stream-overlay")) return;
     if (!force && !isStreamPresentation(app, element)) return;
     const key = app ?? element;
     if (this.entries.has(key)) return;
@@ -113,9 +113,18 @@ export class DialogOverlay {
     this.backdropRoot = null;
   }
 
+  /**
+   * Stream mode ending removes the overlay root, and with it every presentation moved into it. Each one is
+   * handed back to the page with the stream's classes taken off, or its app would still count as rendered
+   * while living in a detached element — invisible, and unreachable until a reload.
+   */
   #reset() {
     for (const entry of this.entries.values()) {
       if (entry.timeout) window.clearTimeout(entry.timeout);
+      const element = entry.element;
+      if (!(element instanceof HTMLElement)) continue;
+      element.classList.remove(CLASSES.centeredDialog, CLASSES.imagePresentation, CLASSES.journalPresentation, CLASSES.manualCloseDialog);
+      if (!element.isConnected || element.closest("#gluniverse-stream-overlay")) document.body.append(element);
     }
     this.entries.clear();
     this.#detachBackdrop();

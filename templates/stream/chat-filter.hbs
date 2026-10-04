@@ -1,0 +1,66 @@
+<div class="gluniverse-stream-filter-body">
+<fieldset class="gluniverse-stream-controls" {{#if readOnly}}disabled{{/if}}>
+  {{#if readOnly}}<p class="gluniverse-stream-form-hint gluniverse-stream-readonly"><small>{{readOnlyMessage}}</small></p>{{/if}}
+
+  <p class="gluniverse-stream-filter-intro">{{localize "GLUNIVERSE_STREAM.chatFilter.intro"}}</p>
+  <p class="gluniverse-stream-form-hint"><small><i class="fas fa-lock"></i> {{localize "GLUNIVERSE_STREAM.chatFilter.privacy"}}</small></p>
+
+  <div class="gluniverse-stream-filter-presets">
+    <span class="gluniverse-stream-filter-summary">{{summary}}</span>
+    <button type="button" data-action="preset" data-preset="noChat" title="{{localize "GLUNIVERSE_STREAM.chatFilter.presets.noChat.hint"}}"><i class="fas fa-comment-slash"></i> {{localize "GLUNIVERSE_STREAM.chatFilter.presets.noChat.name"}}</button>
+    <button type="button" data-action="preset" data-preset="rollsOnly" title="{{localize "GLUNIVERSE_STREAM.chatFilter.presets.rollsOnly.hint"}}"><i class="fas fa-dice-d20"></i> {{localize "GLUNIVERSE_STREAM.chatFilter.presets.rollsOnly.name"}}</button>
+    <button type="button" data-action="preset" data-preset="defaults" title="{{localize "GLUNIVERSE_STREAM.chatFilter.presets.defaults.hint"}}"><i class="fas fa-rotate-left"></i> {{localize "GLUNIVERSE_STREAM.chatFilter.presets.defaults.name"}}</button>
+  </div>
+
+  <table class="gluniverse-stream-filter-table">
+    <thead>
+      <tr>
+        <th class="gluniverse-stream-filter-content">{{localize "GLUNIVERSE_STREAM.chatFilter.columns.content"}}</th>
+        {{#each authors}}
+        <th class="gluniverse-stream-filter-col">
+          <span>{{label}}</span>
+          <span class="gluniverse-stream-filter-bulk">
+            <a data-action="column" data-author="{{author}}" data-value="on" title="{{localize "GLUNIVERSE_STREAM.chatFilter.all"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.all"}}</a>
+            <a data-action="column" data-author="{{author}}" data-value="off" title="{{localize "GLUNIVERSE_STREAM.chatFilter.none"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.none"}}</a>
+          </span>
+        </th>
+        {{/each}}
+      </tr>
+    </thead>
+    {{#each groups}}
+    <tbody class="gluniverse-stream-filter-group">
+      <tr class="gluniverse-stream-filter-group-head">
+        <th colspan="3">{{label}}<small>{{hint}}</small></th>
+      </tr>
+      {{#each rows}}
+      <tr>
+        <td class="gluniverse-stream-filter-content"><span class="gluniverse-stream-filter-label">{{label}}</span><small>{{hint}}</small></td>
+        {{#each cells}}
+        <td class="gluniverse-stream-filter-cell"><input type="checkbox" name="{{name}}" {{#if checked}}checked{{/if}} aria-label="{{../label}} — {{authorLabel}}"></td>
+        {{/each}}
+      </tr>
+      {{/each}}
+    </tbody>
+    {{/each}}
+    {{#if details.length}}
+    <tbody class="gluniverse-stream-filter-group">
+      <tr class="gluniverse-stream-filter-group-head">
+        <th colspan="3">{{localize "GLUNIVERSE_STREAM.chatFilter.detailsHeading"}}<small>{{localize "GLUNIVERSE_STREAM.chatFilter.detailsHint"}}</small></th>
+      </tr>
+      {{#each details}}
+      <tr>
+        <td class="gluniverse-stream-filter-content"><span class="gluniverse-stream-filter-label">{{label}}</span><small>{{hint}}</small></td>
+        {{#each cells}}
+        <td class="gluniverse-stream-filter-cell">{{#if applies}}<input type="checkbox" name="{{name}}" {{#if checked}}checked{{/if}} aria-label="{{../label}} — {{authorLabel}}">{{else}}<span class="gluniverse-stream-filter-na" title="{{localize "GLUNIVERSE_STREAM.chatFilter.notApplicable"}}">—</span>{{/if}}</td>
+        {{/each}}
+      </tr>
+      {{/each}}
+    </tbody>
+    {{/if}}
+  </table>
+
+  {{#unless details.length}}
+  <p class="gluniverse-stream-form-hint"><small>{{localize "GLUNIVERSE_STREAM.chatFilter.nonPf2e"}}</small></p>
+  {{/unless}}
+</fieldset>
+</div>

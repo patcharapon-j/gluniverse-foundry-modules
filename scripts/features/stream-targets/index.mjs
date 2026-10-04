@@ -46,7 +46,7 @@ Suite.register({
       label: "GLUNIVERSE_STREAM.menu.targeting.label",
       hint: "GLUNIVERSE_STREAM.settings.targetingSettings.hint",
       icon: "fas fa-crosshairs",
-      type: TargetingEditorMenu,
+      type: TargetingEditorMenu(),
       restricted: true
     });
   },

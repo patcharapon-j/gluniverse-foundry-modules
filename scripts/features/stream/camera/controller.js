@@ -1,5 +1,5 @@
-import { getActiveCombatant, getActiveSceneCombat, getCombatants, getCombatantToken } from "../combat-utils.js";
-import { CAMERA_MODES, HOOKS, MODULE_ID, SCENE_VIEW_MODES, STREAM_COMMANDS } from "../constants.js";
+import { getActiveCombatant, getCombatants, getCombatantToken, getRunningSceneCombat } from "../combat-utils.js";
+import { CAMERA_MODES, HOOKS, MODULE_ID, SCENE_VIEW_MODES, STREAM_COMMANDS, isStreamSceneFlagChange } from "../constants.js";
 import { getCameraSettings } from "../settings.js";
 import { requestCommand } from "../director-auth.mjs";
 import { isPartyToken, isVisibleToken, targetsOfToken, unionTokens, visibleTokens } from "../token-utils.js";
@@ -70,11 +70,13 @@ export class CameraController {
     Hooks.on("createCombatant", () => this.scheduleReframe());
     Hooks.on("deleteCombatant", () => this.scheduleReframe());
     Hooks.on(HOOKS.trackedTokensChanged, () => this.scheduleReframe());
+    // Marking a token dead from its HUD only adds a status effect; nothing writes `combatant.defeated`.
+    Hooks.on("applyTokenStatusEffect", () => this.scheduleReframe());
     Hooks.on(HOOKS.settingsChanged, key => {
       if (key === "cameraSettings") this.scheduleReframe({ force: true });
     });
     Hooks.on("updateScene", (scene, changes) => {
-      if (scene.id === canvas?.scene?.id && (foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`) || "width" in changes || "height" in changes || "background" in changes)) this.scheduleReframe({ force: true });
+      if (scene.id === canvas?.scene?.id && (isStreamSceneFlagChange(changes) || "width" in changes || "height" in changes || "background" in changes)) this.scheduleReframe({ force: true });
     });
     Hooks.on(HOOKS.streamModeChanged, active => {
       if (active) this.scheduleReframe({ animate: false, force: true });
@@ -148,7 +150,7 @@ export class CameraController {
       if (spotlightToken) return this.frameSpotlight(spotlightToken, { animate, settings });
       const fallback = this.getTokensForMode(CAMERA_MODES.combatants, settings);
       if (fallback.length) return this.frameTokenBounds(fallback, { animate, settings });
-      if (!getActiveSceneCombat()) return frameScene();
+      if (!getRunningSceneCombat()) return frameScene();
       return explicit ? frameScene() : false;
     }
 
@@ -158,7 +160,7 @@ export class CameraController {
   }
 
   getEffectiveMode(settings = getCameraSettings()) {
-    return getActiveSceneCombat() ? settings.combatMode : settings.outOfCombatMode;
+    return getRunningSceneCombat() ? settings.combatMode : settings.outOfCombatMode;
   }
 
   /**
@@ -178,20 +180,20 @@ export class CameraController {
       case CAMERA_MODES.trackedToken:
         return this.getVisibleTrackedTokens();
       case CAMERA_MODES.combatants: {
-        const combat = getActiveSceneCombat();
+        const combat = getRunningSceneCombat();
         if (!combat) return [];
         const combatantTokens = getCombatants(combat)
-          .filter(combatant => !(settings.excludeDefeated !== false && combatant.defeated))
+          .filter(combatant => !(settings.excludeDefeated !== false && isDefeated(combatant)))
           .map(getCombatantToken)
           .filter(isVisibleToken);
         return unionTokens(combatantTokens, this.getVisibleTrackedTokens());
       }
       case CAMERA_MODES.activeTurn: {
-        const combat = getActiveSceneCombat();
+        const combat = getRunningSceneCombat();
         if (!combat) return [];
         const activeTokens = [];
         const combatant = getActiveCombatant(combat);
-        if (combatant && !(settings.excludeDefeated !== false && combatant.defeated)) {
+        if (combatant && !(settings.excludeDefeated !== false && isDefeated(combatant))) {
           const token = getCombatantToken(combatant);
           if (isVisibleToken(token)) activeTokens.push(token);
         }
@@ -213,11 +215,11 @@ export class CameraController {
    * the active token is targeting are the one exception, handled in `frameSpotlight`.
    */
   getSpotlightToken(settings = getCameraSettings()) {
-    const combat = getActiveSceneCombat();
+    const combat = getRunningSceneCombat();
     if (!combat) return null;
     const combatant = getActiveCombatant(combat);
     if (!combatant) return null;
-    if (settings.excludeDefeated !== false && combatant.defeated) return null;
+    if (settings.excludeDefeated !== false && isDefeated(combatant)) return null;
     const token = getCombatantToken(combatant);
     if (!isVisibleToken(token)) return null;
     if (settings.spotlightPlayersOnly && !isPartyToken(token)) return null;
@@ -301,6 +303,14 @@ function mergeReframeOptions(current, options) {
     merged.animate = current.animate === false || options.animate === false ? false : merged.animate;
   }
   return merged;
+}
+
+/**
+ * Core's own test: the defeated flag, or the actor carrying the "dead" status a token HUD applies — which
+ * never touches the flag. Reading only `defeated` kept framing a creature marked dead from its token.
+ */
+function isDefeated(combatant) {
+  return Boolean(combatant?.isDefeated ?? combatant?.defeated);
 }
 
 function spotlightZoom(settings) {

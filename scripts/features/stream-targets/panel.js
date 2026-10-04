@@ -16,10 +16,11 @@ import { featurePath } from "../../core/const.mjs";
 import { TARGET_LINE_VISIBILITY, TARGETS_FEATURE_ID } from "../stream/constants.js";
 import { getTargetingSettings, setTargetingSettings, streamFeatureActive, visibilityChoices } from "./settings.js";
 
+/** i18n keys, localized at render (the lang file is not loaded at import time). */
 const VISIBILITY_LABELS = {
-  [TARGET_LINE_VISIBILITY.everyone]: "Everyone",
-  [TARGET_LINE_VISIBILITY.gmAndStream]: "GMs and the stream",
-  [TARGET_LINE_VISIBILITY.streamOnly]: "Stream only"
+  [TARGET_LINE_VISIBILITY.everyone]: "GLUNIVERSE_STREAM.targeting.visibility.everyone",
+  [TARGET_LINE_VISIBILITY.gmAndStream]: "GLUNIVERSE_STREAM.targeting.visibility.gmAndStream",
+  [TARGET_LINE_VISIBILITY.streamOnly]: "GLUNIVERSE_STREAM.targeting.visibility.streamOnly"
 };
 
 export async function renderSection() {
@@ -35,7 +36,7 @@ export async function renderSection() {
       showVisibility: streamFeatureActive() && choices.length > 1,
       visibilityOptions: choices.map((value) => ({
         value,
-        label: VISIBILITY_LABELS[value] ?? value,
+        label: VISIBILITY_LABELS[value] ? game.i18n.localize(VISIBILITY_LABELS[value]) : value,
         selected: value === targeting.visibility ? "selected" : ""
       }))
     }

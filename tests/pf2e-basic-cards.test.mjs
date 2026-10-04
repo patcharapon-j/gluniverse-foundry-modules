@@ -10,8 +10,8 @@
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { DEFAULT_CHAT_FILTER } from "../scripts/features/stream/chat-filter.mjs";
 import {
-  DEFAULT_BASIC_CARDS,
   diceFaces,
   plainText,
   readMessage,
@@ -19,7 +19,7 @@ import {
 } from "../scripts/features/stream-cards/pf2e/read-message.js";
 
 /** The shape `snapshot.js` builds, with only what these paths read. */
-function snapshot({ style = 0, content = "", flavor = "", rolls = [], authorIsGM = false, speaker = {}, basicCards, authorName = "Player1" } = {}) {
+function snapshot({ style = 0, content = "", flavor = "", rolls = [], authorIsGM = false, speaker = {}, chatFilter, authorName = "Player1" } = {}) {
   return {
     raw: { _id: "msg", blind: false, whisper: [], speaker, flavor, content, style, flags: {} },
     derived: {
@@ -33,7 +33,7 @@ function snapshot({ style = 0, content = "", flavor = "", rolls = [], authorIsGM
       target: null,
       item: null,
       defaultArt: { src: "", focus: null },
-      ...(basicCards ? { basicCards } : {}),
+      ...(chatFilter ? { chatFilter } : {}),
       nameVisibilitySetting: false
     }
   };
@@ -69,9 +69,9 @@ describe("a plain dice roll", () => {
   });
 
   test("the switch silences it without silencing the rest", () => {
-    const off = { ...DEFAULT_BASIC_CARDS, rolls: false };
-    assert.equal(readMessage(snapshot({ rolls: [d6Roll], basicCards: off })), null);
-    assert.ok(readMessage(snapshot({ style: 2, content: "<p>Hello</p>", basicCards: off })));
+    const off = filterWith({ roll: { player: false, gm: false } });
+    assert.equal(readMessage(snapshot({ rolls: [d6Roll], chatFilter: off })), null);
+    assert.ok(readMessage(snapshot({ style: 2, content: "<p>Hello</p>", chatFilter: off })));
   });
 
   test("singleD20Of refuses every shape but one d20 rolling once", () => {
@@ -114,18 +114,21 @@ describe("a typed chat message", () => {
     assert.equal(readMessage(snapshot({ style: 1, content: "brb", authorName: "Player2" })).actor.name, "Player2");
   });
 
-  test("each switch, and the GM's own, is its own", () => {
-    const noOoc = { ...DEFAULT_BASIC_CARDS, ooc: false };
-    assert.equal(readMessage(snapshot({ style: 1, content: "brb", basicCards: noOoc })), null);
-    assert.ok(readMessage(snapshot({ style: 2, content: "Hello", basicCards: noOoc })));
+  test("each row is its own, and each column is its own", () => {
+    const noOoc = filterWith({ ooc: { player: false, gm: false } });
+    assert.equal(readMessage(snapshot({ style: 1, content: "brb", chatFilter: noOoc })), null);
+    assert.ok(readMessage(snapshot({ style: 2, content: "Hello", chatFilter: noOoc })));
 
-    const noGm = { ...DEFAULT_BASIC_CARDS, gm: false };
-    assert.equal(readMessage(snapshot({ style: 2, content: "Hello", authorIsGM: true, basicCards: noGm })), null);
-    assert.ok(readMessage(snapshot({ style: 2, content: "Hello", authorIsGM: false, basicCards: noGm })));
+    // Speech off for the GM only: the GM's narration goes, the players' lines stay.
+    const noGmSpeech = filterWith({ speech: { player: true, gm: false } });
+    assert.equal(readMessage(snapshot({ style: 2, content: "Hello", authorIsGM: true, chatFilter: noGmSpeech })), null);
+    assert.ok(readMessage(snapshot({ style: 2, content: "Hello", authorIsGM: false, chatFilter: noGmSpeech })));
+    assert.ok(readMessage(snapshot({ style: 3, content: "waves", authorIsGM: true, chatFilter: noGmSpeech })), "emotes are another row");
 
-    const off = { ...DEFAULT_BASIC_CARDS, enabled: false };
-    assert.equal(readMessage(snapshot({ style: 2, content: "Hello", basicCards: off })), null);
-    assert.equal(readMessage(snapshot({ rolls: [d6Roll], basicCards: off })), null);
+    // And the other way round, for plain rolls.
+    const noPlayerRolls = filterWith({ roll: { player: false, gm: true } });
+    assert.equal(readMessage(snapshot({ rolls: [d6Roll], chatFilter: noPlayerRolls })), null);
+    assert.ok(readMessage(snapshot({ rolls: [d6Roll], authorIsGM: true, chatFilter: noPlayerRolls })));
   });
 
   test("a snapshot with no switches at all reads as the shipped defaults", () => {
@@ -134,6 +137,11 @@ describe("a typed chat message", () => {
     assert.ok(readMessage(snapshot({ style: 2, content: "Hello" })));
   });
 });
+
+/** The shipped filter with some rows replaced. */
+function filterWith(rows) {
+  return { rows: { ...DEFAULT_CHAT_FILTER.rows, ...rows }, details: DEFAULT_CHAT_FILTER.details };
+}
 
 describe("plainText", () => {
   test("flattens chat HTML, decodes entities and collapses space", () => {

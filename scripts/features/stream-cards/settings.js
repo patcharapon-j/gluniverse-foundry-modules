@@ -1,7 +1,12 @@
 /**
  * GLUniverse Stream Roll Cards — settings.
  *
- * Two settings. One was moved out of the stream client on the way in:
+ * Which content types reach the stream, per author, is not here: that is `stream.chatFilter`, owned by
+ * the stream client because it gates the cloned-card path too. This feature's former `basicCards` and
+ * the per-kind / per-audience rows of `statusUpdates` were folded into it, once, by
+ * `migrateLegacyChatFilter`.
+ *
+ * Two live settings. One was moved out of the stream client on the way in:
  *
  *   `defaultRollArt` → `stream.card.defaultRollArt`
  *
@@ -23,45 +28,36 @@
  * anything is drawing roll cards into it.
  */
 
-import { SUITE_ID } from "../../core/const.mjs";
+import { SUITE_ID, warn } from "../../core/const.mjs";
 import { CARDS_PREFIX, DEFAULT_ROLL_ART } from "../stream/constants.js";
+import { DEFAULT_CHAT_FILTER, sanitizeChatFilter } from "../stream/chat-filter.mjs";
+import { setSetting, settingKey } from "../stream/settings.js";
 import { isFocus } from "./framing/focus-math.js";
-// The defaults live beside the gates that read them, in the pure reader. Re-exported here so the
-// panel, the sanitizer and the reader can never disagree about what a row means when a world has
-// never stored it — which would read as a switch nobody can find in the off position.
-import { DEFAULT_BASIC_CARDS } from "./pf2e/read-message.js";
-
-export { DEFAULT_BASIC_CARDS };
 
 export const SETTINGS = {
   defaultRollArt: `${CARDS_PREFIX}.defaultRollArt`,
   statusUpdates: `${CARDS_PREFIX}.statusUpdates`,
+  /** Legacy: read once by `migrateLegacyChatFilter`, never written, never drawn. */
   basicCards: `${CARDS_PREFIX}.basicCards`
 };
 
 /**
- * Which status changes reach the stream.
+ * How status changes reach the stream.
  *
  * Every row is a switch a GM can find, because every row is something a table might not want narrated:
- * a party that plays with a lot of spell effects does not want each one announced, and a table running
- * a fight full of frightened skeletons does not want every tick of it. The reader consults these before
- * it builds a model, so a row that is off costs nothing at all.
+ * a table running a fight full of frightened skeletons does not want every tick of it. The reader
+ * consults these before it builds a model, so a row that is off costs nothing at all.
  *
- * `players` and `npcs` are the audience, not the source: an NPC additionally has to be somewhere a
- * player could see it (see `pf2e/read-status.js`), and no setting can switch that off.
+ * *Which* statuses (conditions, effects) for *whose* creatures (player characters, the GM's) is the chat
+ * filter's `condition` and `effect` rows. An NPC additionally has to be somewhere a player could see it
+ * (see `pf2e/read-status.js`), and no setting can switch that off.
  */
 export const DEFAULT_STATUS_UPDATES = Object.freeze({
   enabled: true,
-  /** PF2e condition items: frightened, prone, dying, persistent damage, the whole printed list. */
-  conditions: true,
-  /** PF2e effect items: spell effects, feat effects, stances. Off by default — there are a great many. */
-  effects: false,
   /** A condition's value moving, e.g. frightened 1 rising to 2 or ticking back down. */
   valueChanges: true,
   /** A condition ending. */
   removals: true,
-  players: true,
-  npcs: true,
   /** Of the chat overlay's lifetime. A status is a glance, not a read. */
   lifetimeFactor: 0.6
 });
@@ -103,8 +99,9 @@ export function registerSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: foundry.utils.deepClone(DEFAULT_BASIC_CARDS),
-    onChange: () => Hooks.callAll(CARDS_HOOKS.settingsChanged)
+    // Legacy, registered only so the one-time migration can read what a world stored. The default is
+    // empty so an unset world migrates nothing.
+    default: {}
   });
 
   game.settings.register(SUITE_ID, SETTINGS.statusUpdates, {
@@ -133,34 +130,6 @@ export async function setDefaultRollArt(value) {
   const next = sanitizeDefaultRollArt(value);
   await game.settings.set(SUITE_ID, SETTINGS.defaultRollArt, next);
   return next;
-}
-
-/**
- * Which plain rolls and typed messages the stream draws.
- *
- * Read once per message, into the snapshot, so the pure reader can consult it without reaching for
- * `game`. A row that is off costs nothing beyond this read.
- */
-export function getBasicCardSettings() {
-  return sanitizeBasicCards(game.settings.get(SUITE_ID, SETTINGS.basicCards));
-}
-
-/** GM-only, for the same reason `setDefaultRollArt` is: this feature has no delegated write path. */
-export async function setBasicCardSettings(patch) {
-  if (!game.user?.isGM) return getBasicCardSettings();
-  const next = sanitizeBasicCards({ ...getBasicCardSettings(), ...patch });
-  await game.settings.set(SUITE_ID, SETTINGS.basicCards, next);
-  return next;
-}
-
-/** Rebuilt from the defaults' keys, for the reason `sanitizeStatusUpdates` is. */
-export function sanitizeBasicCards(value) {
-  const source = (value && typeof value === "object") ? value : {};
-  const out = {};
-  for (const [key, fallback] of Object.entries(DEFAULT_BASIC_CARDS)) {
-    out[key] = key in source ? Boolean(source[key]) : fallback;
-  }
-  return out;
 }
 
 /** Which status changes the stream draws. */
@@ -201,4 +170,57 @@ export function sanitizeDefaultRollArt(value) {
   const src = typeof source.src === "string" ? source.src.trim() : "";
   const focus = source.focus;
   return { src, focus: src && isFocus(focus) ? { x: focus.x, y: focus.y, w: focus.w } : null };
+}
+
+/**
+ * Folds the two retired shapes into `stream.chatFilter`, once.
+ *
+ * Runs on the active GM only, and only while the world has never stored a chat filter: after that the
+ * filter is the GM's own and nothing here may overwrite it. `statusUpdates` is read raw, before its
+ * sanitizer drops the four keys that moved, and is left in place — the next save rebuilds it.
+ *
+ * The old shapes were AND-ed switches (`conditions` and `players`, say); the filter is a matrix, so each
+ * cell is the AND of the two switches that used to decide it. A table that changed nothing migrates to
+ * exactly the defaults.
+ */
+export async function migrateLegacyChatFilter() {
+  if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id) return;
+  const storage = game.settings.storage?.get?.("world");
+  const stored = (key) => storage?.getSetting?.(`${SUITE_ID}.${key}`) ?? null;
+  if (stored(settingKey("chatFilter"))) return;
+  const basicDoc = stored(SETTINGS.basicCards);
+  const statusDoc = stored(SETTINGS.statusUpdates);
+  if (!basicDoc && !statusDoc) return;
+
+  const raw = (key) => {
+    const value = game.settings.get(SUITE_ID, key);
+    return value && typeof value === "object" ? value : {};
+  };
+  const on = (source, key, fallback = true) => (key in source ? Boolean(source[key]) : fallback);
+  const filter = foundry.utils.deepClone(sanitizeChatFilter(DEFAULT_CHAT_FILTER));
+
+  if (basicDoc) {
+    const basic = raw(SETTINGS.basicCards);
+    const enabled = on(basic, "enabled");
+    const rolls = enabled && on(basic, "rolls");
+    filter.rows.roll = { player: rolls, gm: rolls };
+    for (const [row, key] of [["speech", "speech"], ["emote", "emotes"], ["ooc", "ooc"]]) {
+      const shown = enabled && on(basic, key);
+      filter.rows[row] = { player: shown, gm: shown && on(basic, "gm") };
+    }
+  }
+  if (statusDoc) {
+    const status = raw(SETTINGS.statusUpdates);
+    const players = on(status, "players");
+    const npcs = on(status, "npcs");
+    const conditions = on(status, "conditions");
+    const effects = on(status, "effects", false);
+    filter.rows.condition = { player: conditions && players, gm: conditions && npcs };
+    filter.rows.effect = { player: effects && players, gm: effects && npcs };
+  }
+  try {
+    await setSetting("chatFilter", filter);
+  } catch (error) {
+    warn("Stream cards: could not migrate the old chat switches into the chat filter", error);
+  }
 }

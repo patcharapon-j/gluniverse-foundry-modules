@@ -101,12 +101,15 @@ export function getShowLines() {
 /** GM-only: this feature has no delegated write path of its own. */
 export async function setTargetingSettings(patch) {
   if (!game.user?.isGM) return getTargetingSettings();
-  const next = sanitize({ ...getTargetingSettings(), ...patch });
+  // Merge onto the *stored* value, not the read one: the read collapses a
+  // stream-only visibility to `everyone` while `stream` is off, and merging onto
+  // that would persist the fallback on the first unrelated edit.
+  const next = sanitize({ ...game.settings.get(SUITE_ID, SETTINGS.settings), ...patch }, { keepVisibility: true });
   await game.settings.set(SUITE_ID, SETTINGS.settings, next);
-  return next;
+  return sanitize(next);
 }
 
-export function sanitize(value) {
+export function sanitize(value, { keepVisibility = false } = {}) {
   const source = (value && typeof value === "object") ? value : {};
   const settings = Object.fromEntries(
     Object.entries(DEFAULT_TARGETING_SETTINGS).map(([k, fallback]) => [k, k in source ? source[k] : fallback])
@@ -121,7 +124,7 @@ export function sanitize(value) {
   if (!Object.values(TARGET_LINE_VISIBILITY).includes(settings.visibility)) {
     settings.visibility = DEFAULT_TARGETING_SETTINGS.visibility;
   }
-  if (!visibilityChoices().includes(settings.visibility)) {
+  if (!keepVisibility && !visibilityChoices().includes(settings.visibility)) {
     settings.visibility = TARGET_LINE_VISIBILITY.everyone;
   }
 

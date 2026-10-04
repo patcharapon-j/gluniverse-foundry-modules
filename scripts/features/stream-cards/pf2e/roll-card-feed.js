@@ -44,7 +44,7 @@ export class RollCardFeed {
     const rerollKey = rerollKeyOf(snapshot);
 
     // Claim a rerolled card before the dice wait, so its grace timer cannot remove it meanwhile.
-    const rerolled = model.isReroll ? this.claimReroll(rerollKey) : null;
+    let rerolled = model.isReroll ? this.claimReroll(rerollKey) : null;
 
     await waitForDiceAnimation(message);
     if (!this.overlay.streamMode.active || !game.messages?.get?.(message.id)) {
@@ -52,6 +52,9 @@ export class RollCardFeed {
       return;
     }
 
+    // The claim stops the grace timer, not the stack: `maxVisible` or a clear can still evict the card
+    // during the dice wait, and rewriting a destroyed card shows the reroll nowhere. It gets a new card.
+    if (rerolled && (rerolled.exiting || rerolled.card?.destroyed)) rerolled = null;
     if (rerolled) return this.rewrite(rerolled, message.id, model, rerollKey, { reroll: true });
 
     const target = this.findMergeTarget(model);

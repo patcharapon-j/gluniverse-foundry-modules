@@ -27,7 +27,9 @@ export function snapshotStatusChange(item, direction, value) {
       kind: item.type === "condition" ? "condition" : "effect",
       img: item.img ?? null,
       value,
-      direction
+      direction,
+      // PF2e hides an unidentified effect's name and icon from players; the reader refuses it outright.
+      unidentified: item.type === "effect" && !!item.system?.unidentified
     }
   };
 }
@@ -35,8 +37,9 @@ export function snapshotStatusChange(item, direction, value) {
 /**
  * The creature the change is on.
  *
- * `key` is the *actor's* id, not the item's: every change to one creature folds into one card, and an
- * unlinked token actor has its own id already, so two goblins never share a row.
+ * `key` is the *actor's* uuid, not the item's: every change to one creature folds into one card. Not
+ * its id — an unlinked token's synthetic actor carries its base actor's `_id`, so two goblins off one
+ * sheet would fold into one card under it. The uuid runs through the token, so they never share a row.
  */
 function actorOf(actor) {
   const token = tokenOf(actor);
@@ -44,7 +47,7 @@ function actorOf(actor) {
   const tokenImg = token?.texture?.src ?? null;
   const img = artFor(actor.img, tokenImg, isNpc);
   return {
-    key: actor.id ?? actor.uuid ?? "",
+    key: actor.uuid ?? actor.id ?? "",
     name: token?.name ?? actor.name ?? "",
     isCharacter: isCharacter(actor),
     hasPlayerOwner: !!actor.hasPlayerOwner,
