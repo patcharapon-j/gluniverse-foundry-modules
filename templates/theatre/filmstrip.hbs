@@ -1,0 +1,125 @@
+{{!-- Theatre — GM filmstrip. GM only; every string localized. Notes are text, never markup. --}}
+<div class="glth-root glth-film gl-type {{#if collapsed}}is-collapsed{{/if}}">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLTH.app.noScene"}}</p>
+{{else}}
+  <header class="glth-transport">
+    <div class="glth-transport-status">
+      <span class="glth-tally {{#if isBlack}}is-black{{else}}is-live{{/if}}" aria-hidden="true"></span>
+      <span class="glth-status-text">
+        {{#if isBlack}}
+          <span class="glth-status-main">{{localize "GLTH.filmstrip.black"}}</span>
+        {{else}}
+          <span class="glth-status-kicker">{{localize "GLTH.filmstrip.onAir"}}</span>
+          <span class="glth-status-main">{{onAir}}</span>
+        {{/if}}
+        {{#if lastCue}}<span class="glth-status-sub">{{localize "GLTH.filmstrip.lastCue" cue=lastCue}}</span>{{/if}}
+      </span>
+    </div>
+
+    <div class="glth-transport-main">
+      <button type="button" class="glth-tbtn" data-action="prev" {{#unless canPrev}}disabled{{/unless}}
+        data-tooltip="{{localize "GLTH.filmstrip.prev"}}" aria-label="{{localize "GLTH.filmstrip.prev"}}"><i class="fa-solid fa-backward-step"></i></button>
+      <button type="button" class="gl-btn gl-btn-accent glth-go" data-action="go" {{#unless sel}}disabled{{/unless}}
+        data-tooltip="{{localize "GLTH.filmstrip.goHint"}}"><i class="fa-solid fa-play"></i><span>{{localize "GLTH.filmstrip.go"}}</span></button>
+      <select class="glth-go-style gl-field" data-go-style aria-label="{{localize "GLTH.filmstrip.goStyle"}}" data-tooltip="{{localize "GLTH.filmstrip.goStyle"}}">
+        {{#each goStyles}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+      </select>
+      <button type="button" class="glth-tbtn" data-action="next" {{#unless canNext}}disabled{{/unless}}
+        data-tooltip="{{localize "GLTH.filmstrip.next"}}" aria-label="{{localize "GLTH.filmstrip.next"}}"><i class="fa-solid fa-forward-step"></i></button>
+    </div>
+
+    <div class="glth-transport-cues">
+      <button type="button" class="glth-tbtn" data-action="reannounce" {{#if isBlack}}disabled{{/if}}
+        data-tooltip="{{localize "GLTH.filmstrip.reannounce"}}" aria-label="{{localize "GLTH.filmstrip.reannounce"}}"><i class="fa-solid fa-heading"></i></button>
+      <button type="button" class="glth-tbtn" data-action="card"
+        data-tooltip="{{localize "GLTH.filmstrip.card"}}" aria-label="{{localize "GLTH.filmstrip.card"}}"><i class="fa-solid fa-quote-left"></i></button>
+      <button type="button" class="glth-tbtn glth-tbtn--black" data-action="black"
+        data-tooltip="{{localize "GLTH.filmstrip.cutBlack"}}" aria-label="{{localize "GLTH.filmstrip.cutBlack"}}"><i class="fa-solid fa-square"></i></button>
+      <button type="button" class="glth-tbtn" data-action="clear"
+        data-tooltip="{{localize "GLTH.filmstrip.clear"}}" aria-label="{{localize "GLTH.filmstrip.clear"}}"><i class="fa-solid fa-eraser"></i></button>
+      <span class="glth-sep" aria-hidden="true"></span>
+      {{#if canFreePan}}
+        <button type="button" class="glth-tbtn {{#if freePan}}is-on{{/if}}" data-action="freePan" aria-pressed="{{#if freePan}}true{{else}}false{{/if}}"
+          data-tooltip="{{localize "GLTH.filmstrip.freePan"}}" aria-label="{{localize "GLTH.filmstrip.freePan"}}"><i class="fa-solid fa-up-down-left-right"></i></button>
+      {{/if}}
+      <button type="button" class="glth-tbtn" data-action="edit"
+        data-tooltip="{{localize "GLTH.filmstrip.edit"}}" aria-label="{{localize "GLTH.filmstrip.edit"}}"><i class="fa-solid fa-pen-ruler"></i></button>
+      <button type="button" class="glth-tbtn" data-action="collapse" aria-expanded="{{#if collapsed}}false{{else}}true{{/if}}"
+        data-tooltip="{{#if collapsed}}{{localize "GLTH.filmstrip.expand"}}{{else}}{{localize "GLTH.filmstrip.collapse"}}{{/if}}"
+        aria-label="{{#if collapsed}}{{localize "GLTH.filmstrip.expand"}}{{else}}{{localize "GLTH.filmstrip.collapse"}}{{/if}}"><i class="fa-solid {{#if collapsed}}fa-chevron-up{{else}}fa-chevron-down{{/if}}"></i></button>
+      <button type="button" class="glth-tbtn" data-action="close"
+        data-tooltip="{{localize "GLTH.app.close"}}" aria-label="{{localize "GLTH.app.close"}}"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </header>
+
+  {{#unless collapsed}}
+  <div class="glth-film-body">
+    <aside class="glth-preview" aria-label="{{localize "GLTH.filmstrip.preview"}}">
+      {{#if sel}}
+        <div class="glth-preview-screen {{#if sel.onAir}}is-on-air{{/if}}">
+          {{#if sel.hasSrc}}
+            {{#if sel.video}}
+              <video class="glth-preview-media" src="{{sel.src}}" muted loop autoplay playsinline style="object-position: {{sel.focus}}"></video>
+            {{else}}
+              <img class="glth-preview-media" src="{{sel.src}}" alt="" style="object-position: {{sel.focus}}">
+            {{/if}}
+          {{else}}
+            <div class="glth-preview-blank"><i class="fa-regular fa-image"></i></div>
+          {{/if}}
+          {{#if sel.hasTitle}}
+            <div class="glth-preview-title">
+              {{#if sel.eyebrow}}<span class="glth-pt-eyebrow" style="{{sel.secondaryStyle}}">{{sel.eyebrow}}</span>{{/if}}
+              {{#if sel.title}}<span class="glth-pt-title" style="{{sel.titleStyle}}">{{sel.title}}</span>{{/if}}
+              {{#if sel.subtitle}}<span class="glth-pt-sub" style="{{sel.secondaryStyle}}">{{sel.subtitle}}</span>{{/if}}
+            </div>
+          {{/if}}
+          <span class="glth-preview-tag">{{#if sel.onAir}}{{localize "GLTH.filmstrip.onAir"}}{{else}}{{localize "GLTH.filmstrip.cuedUp"}}{{/if}}</span>
+        </div>
+        <div class="glth-preview-meta">
+          <span class="glth-meta-style"><i class="fa-solid fa-film"></i> {{sel.style}}</span>
+        </div>
+        <div class="glth-notes gl-scroll">
+          {{#if sel.notes}}<p class="glth-notes-text">{{sel.notes}}</p>{{else}}<p class="glth-notes-empty">{{localize "GLTH.filmstrip.noNotes"}}</p>{{/if}}
+        </div>
+      {{else}}
+        <p class="gl-empty"><i class="fa-regular fa-image"></i>{{localize "GLTH.filmstrip.nothingSelected"}}</p>
+      {{/if}}
+    </aside>
+
+    <div class="glth-strip">
+      <div class="glth-strip-head">
+        <span class="glth-strip-label">{{localize "GLTH.filmstrip.reel"}}</span>
+        <span class="gl-rule"></span>
+        <span class="glth-strip-count">{{countLabel}}</span>
+      </div>
+      <ol class="glth-strip-reel gl-scroll" aria-label="{{localize "GLTH.filmstrip.reel"}}">
+        {{#each frames}}
+          <li class="glth-frame {{#if onAir}}is-on-air{{/if}} {{#if selected}}is-selected{{/if}}" data-id="{{id}}" draggable="true"
+            data-action="select" data-tooltip="{{label}} · {{style}}" aria-current="{{#if onAir}}true{{else}}false{{/if}}">
+            <div class="glth-frame-pic">
+              {{#if hasSrc}}
+                {{#if video}}<video src="{{src}}#t=0.1" muted preload="metadata" playsinline></video>{{else}}<img src="{{src}}" alt="" loading="lazy" draggable="false">{{/if}}
+              {{else}}
+                <span class="glth-frame-blank"><i class="fa-regular fa-image"></i></span>
+              {{/if}}
+              <span class="glth-frame-index">{{index}}</span>
+              <span class="glth-frame-flags">
+                {{#if video}}<i class="fa-solid fa-video" data-tooltip="{{localize "GLTH.app.video"}}"></i>{{/if}}
+                {{#if styleOverride}}<i class="fa-solid fa-wand-magic-sparkles" data-tooltip="{{style}}"></i>{{/if}}
+                {{#if hasGrade}}<i class="fa-solid fa-lightbulb" data-tooltip="{{localize "GLTH.app.hasGrade"}}"></i>{{/if}}
+                {{#if hasNotes}}<i class="fa-solid fa-note-sticky" data-tooltip="{{localize "GLTH.app.hasNotes"}}"></i>{{/if}}
+              </span>
+              {{#if onAir}}<span class="glth-frame-live">{{localize "GLTH.filmstrip.onAir"}}</span>{{/if}}
+            </div>
+            <span class="glth-frame-label {{#if untitled}}is-untitled{{/if}}">{{label}}</span>
+          </li>
+        {{else}}
+          <li class="glth-strip-empty"><i class="fa-solid fa-file-import"></i> {{localize "GLTH.filmstrip.empty"}}</li>
+        {{/each}}
+      </ol>
+    </div>
+  </div>
+  {{/unless}}
+{{/if}}
+</div>

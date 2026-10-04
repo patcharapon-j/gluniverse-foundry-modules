@@ -1,0 +1,245 @@
+{{!-- Theatre — shot editor. The shot form is a draft (Save writes it); scene defaults write on change. --}}
+<div class="glth-root glth-ed {{#if dirty}}is-dirty{{/if}} gl-type">
+{{#if empty}}
+  <p class="gl-empty">{{localize "GLTH.app.noScene"}}</p>
+{{else}}
+  <aside class="glth-ed-side">
+    <div class="glth-ed-side-head">
+      <span class="glth-label">{{localize "GLTH.editor.shots"}}</span>
+      <span class="gl-rule"></span>
+      <span class="glth-count">{{count}}</span>
+    </div>
+    <div class="glth-ed-adds">
+      <button type="button" class="gl-btn glth-btn" data-action="addShot"><i class="fa-solid fa-plus"></i> {{localize "GLTH.editor.addShot"}}</button>
+      <button type="button" class="gl-btn glth-btn" data-action="importFolder" data-tooltip="{{localize "GLTH.editor.importFolderHint"}}"><i class="fa-solid fa-folder-open"></i> {{localize "GLTH.editor.importFolder"}}</button>
+    </div>
+    <ol class="glth-ed-list gl-scroll">
+      {{#each rows}}
+        <li class="glth-row {{#if selected}}is-selected{{/if}} {{#if onAir}}is-on-air{{/if}} {{#if dirty}}is-dirty{{/if}}" data-id="{{id}}" draggable="true" data-action="select">
+          <span class="glth-row-grip" aria-hidden="true"><i class="fa-solid fa-grip-vertical"></i></span>
+          <span class="glth-row-thumb">
+            {{#if hasSrc}}
+              {{#if video}}<video src="{{src}}#t=0.1" muted preload="metadata" playsinline></video>{{else}}<img src="{{src}}" alt="" loading="lazy" draggable="false">{{/if}}
+            {{else}}<i class="fa-regular fa-image"></i>{{/if}}
+          </span>
+          <span class="glth-row-main">
+            <span class="glth-row-name {{#if untitled}}is-untitled{{/if}}">{{label}}</span>
+            <span class="glth-row-sub">{{#if onAir}}<span class="glth-live-dot"></span>{{localize "GLTH.filmstrip.onAir"}} · {{/if}}{{sub}}</span>
+          </span>
+          <span class="glth-row-acts">
+            <button type="button" class="glth-mini" data-action="duplicate" data-tooltip="{{localize "GLTH.editor.duplicate"}}" aria-label="{{localize "GLTH.editor.duplicate"}}"><i class="fa-regular fa-clone"></i></button>
+            <button type="button" class="glth-mini glth-danger" data-action="remove" data-tooltip="{{localize "GLTH.editor.remove"}}" aria-label="{{localize "GLTH.editor.remove"}}"><i class="fa-solid fa-trash"></i></button>
+          </span>
+        </li>
+      {{else}}
+        <li class="glth-ed-empty"><i class="fa-solid fa-images"></i><span>{{localize "GLTH.editor.noShots"}}</span></li>
+      {{/each}}
+    </ol>
+    <p class="glth-drop-hint"><i class="fa-solid fa-download"></i> {{localize "GLTH.editor.dropHint"}}</p>
+  </aside>
+
+  <main class="glth-ed-main">
+    <nav class="glth-tabs" role="tablist">
+      <button type="button" role="tab" class="glth-tab {{#if isShotTab}}is-active{{/if}}" data-action="tab" data-tab="shot" aria-selected="{{#if isShotTab}}true{{else}}false{{/if}}">
+        <i class="fa-solid fa-image"></i> {{localize "GLTH.editor.tabShot"}}
+      </button>
+      <button type="button" role="tab" class="glth-tab {{#if isSceneTab}}is-active{{/if}}" data-action="tab" data-tab="scene" aria-selected="{{#if isSceneTab}}true{{else}}false{{/if}}">
+        <i class="fa-solid fa-clapperboard"></i> {{localize "GLTH.editor.tabScene"}}
+      </button>
+    </nav>
+
+    {{#if isShotTab}}
+      {{#if detail}}
+      <form class="glth-ed-form" data-shot-form data-shot-id="{{detail.id}}" autocomplete="off">
+        <div class="glth-ed-detail gl-scroll">
+          <section class="glth-block glth-block--pic">
+            <div class="glth-focus {{#unless detail.hasSrc}}is-blank{{/unless}}" data-focus
+              data-tooltip="{{localize "GLTH.editor.focusHint"}}">
+              {{#if detail.hasSrc}}
+                {{#if detail.video}}
+                  <video class="glth-focus-media" src="{{detail.src}}" muted loop autoplay playsinline></video>
+                {{else}}
+                  <img class="glth-focus-media" src="{{detail.src}}" alt="" draggable="false">
+                {{/if}}
+              {{/if}}
+              <span class="glth-focus-crop" data-focus-crop hidden></span>
+              <span class="glth-focus-dot" data-focus-dot></span>
+              <span class="glth-focus-blank"><i class="fa-regular fa-image"></i> {{localize "GLTH.editor.noImage"}}</span>
+            </div>
+            <input type="hidden" name="focus.x" value="{{detail.focusX}}">
+            <input type="hidden" name="focus.y" value="{{detail.focusY}}">
+            <div class="glth-pic-row">
+              <input type="text" name="src" class="gl-field glth-src" value="{{detail.src}}" placeholder="{{localize "GLTH.editor.srcPlaceholder"}}" aria-label="{{localize "GLTH.editor.src"}}">
+              <button type="button" class="glth-mini glth-mini--wide" data-action="browseSrc" data-tooltip="{{localize "GLTH.editor.browse"}}" aria-label="{{localize "GLTH.editor.browse"}}"><i class="fa-solid fa-folder-open"></i></button>
+              <button type="button" class="glth-mini glth-mini--wide" data-action="resetFocus" data-tooltip="{{localize "GLTH.editor.resetFocus"}}" aria-label="{{localize "GLTH.editor.resetFocus"}}"><i class="fa-solid fa-crosshairs"></i></button>
+            </div>
+            <p class="glth-note">{{localize "GLTH.editor.focusNote"}}</p>
+          </section>
+
+          <section class="glth-block">
+            <h3 class="glth-block-head"><span>{{localize "GLTH.editor.titleGroup"}}</span><span class="gl-rule"></span></h3>
+            <label class="glth-field">
+              <span class="glth-label">{{localize "GLTH.editor.eyebrow"}}</span>
+              <input type="text" name="eyebrow" class="gl-field" value="{{detail.eyebrow}}" placeholder="{{localize "GLTH.editor.eyebrowPlaceholder"}}">
+            </label>
+            <label class="glth-field">
+              <span class="glth-label">{{localize "GLTH.editor.titleField"}}</span>
+              <input type="text" name="title" class="gl-field glth-field-title" value="{{detail.title}}">
+            </label>
+            <label class="glth-field">
+              <span class="glth-label">{{localize "GLTH.editor.subtitle"}}</span>
+              <input type="text" name="subtitle" class="gl-field" value="{{detail.subtitle}}">
+            </label>
+            <div class="glth-specimen" data-specimen aria-hidden="true">
+              <span class="glth-spec-title" data-spec-title style="{{detail.titleStyle}}">{{detail.specimen}}</span>
+              <span class="glth-spec-sub" data-spec-sub style="{{detail.secondaryStyle}}">{{#if detail.subtitle}}{{detail.subtitle}}{{else}}{{detail.eyebrow}}{{/if}}</span>
+            </div>
+            <label class="glth-field">
+              <span class="glth-label"><i class="fa-solid fa-lock"></i> {{localize "GLTH.editor.notes"}}</span>
+              <textarea name="notes" class="gl-field glth-notes-field" rows="4" placeholder="{{localize "GLTH.editor.notesPlaceholder"}}">{{detail.notes}}</textarea>
+            </label>
+          </section>
+
+          <section class="glth-block">
+            <h3 class="glth-block-head"><span>{{localize "GLTH.editor.cutGroup"}}</span><span class="gl-rule"></span></h3>
+            <div class="glth-grid3">
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.style"}}</span>
+                <select name="style" class="gl-field">{{#each detail.styles}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.face"}}</span>
+                <select name="face" class="gl-field">{{#each detail.faces}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.hold"}}</span>
+                <input type="number" name="hold" class="gl-field glth-num" min="{{holdMin}}" max="{{holdMax}}" step="0.5" value="{{detail.hold}}"
+                  placeholder="{{localize "GLTH.editor.holdDefault" value=detail.holdDefault}}">
+              </label>
+            </div>
+            <div class="glth-grid2">
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.drift"}}</span>
+                <select name="drift.mode" class="gl-field">{{#each detail.drifts}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.driftStrength"}} <output data-for="drift.strength" data-fmt="pct">{{detail.driftStrengthOut}}</output></span>
+                <input type="range" name="drift.strength" min="0" max="1" step="0.05" value="{{detail.driftStrength}}">
+              </label>
+            </div>
+          </section>
+
+          <section class="glth-block">
+            <h3 class="glth-block-head">
+              <span>{{localize "GLTH.editor.lookGroup"}}</span><span class="gl-rule"></span>
+              <button type="button" class="glth-link-btn" data-action="resetTreatment"><i class="fa-solid fa-rotate-left"></i> {{localize "GLTH.editor.neutral"}}</button>
+            </h3>
+            <div class="glth-dials">
+              <label class="glth-dial">
+                <span class="glth-label">{{localize "GLTH.editor.exposure"}}</span>
+                <input type="range" name="treatment.exposure" min="-2" max="2" step="0.05" value="{{detail.t.exposure}}">
+                <output data-for="treatment.exposure" data-fmt="exposure">{{detail.out.exposure}}</output>
+              </label>
+              <label class="glth-dial">
+                <span class="glth-label">{{localize "GLTH.editor.saturation"}}</span>
+                <input type="range" name="treatment.saturation" min="0" max="2" step="0.05" value="{{detail.t.saturation}}">
+                <output data-for="treatment.saturation" data-fmt="saturation">{{detail.out.saturation}}</output>
+              </label>
+              <label class="glth-dial">
+                <span class="glth-label">{{localize "GLTH.editor.vignette"}}</span>
+                <input type="range" name="treatment.vignette" min="0" max="1" step="0.05" value="{{detail.t.vignette}}">
+                <output data-for="treatment.vignette" data-fmt="pct">{{detail.out.vignette}}</output>
+              </label>
+              <label class="glth-dial">
+                <span class="glth-label">{{localize "GLTH.editor.blur"}}</span>
+                <input type="range" name="treatment.blur" min="0" max="1" step="0.05" value="{{detail.t.blur}}">
+                <output data-for="treatment.blur" data-fmt="pct">{{detail.out.blur}}</output>
+              </label>
+              <div class="glth-dial glth-dial--tint">
+                <span class="glth-label">{{localize "GLTH.editor.tint"}}</span>
+                <span class="glth-tint-row">
+                  <input type="color" name="treatment.tint" value="{{detail.t.tint}}" aria-label="{{localize "GLTH.editor.tint"}}">
+                  <input type="range" name="treatment.tintAmount" min="0" max="1" step="0.05" value="{{detail.t.tintAmount}}" aria-label="{{localize "GLTH.editor.tintAmount"}}">
+                </span>
+                <output data-for="treatment.tintAmount" data-fmt="pct">{{detail.out.tintAmount}}</output>
+              </div>
+              <div class="glth-dial glth-dial--letterbox">
+                <label class="glth-check"><input type="checkbox" name="treatment.letterboxOn" {{#if detail.letterboxOn}}checked{{/if}}><span class="glth-label">{{localize "GLTH.editor.letterboxOverride"}}</span></label>
+                <input type="range" name="treatment.letterbox" min="0" max="0.2" step="0.005" value="{{detail.letterboxValue}}" {{#unless detail.letterboxOn}}disabled{{/unless}} aria-label="{{localize "GLTH.editor.letterbox"}}">
+                <output data-for="treatment.letterbox" data-fmt="letterbox">{{detail.out.letterbox}}</output>
+              </div>
+            </div>
+            <p class="glth-note">{{localize "GLTH.editor.letterboxNote" value=detail.letterboxDefault}}</p>
+          </section>
+
+          {{#if stage}}
+          <section class="glth-block glth-block--stage">
+            <h3 class="glth-block-head"><span>{{localize "GLTH.editor.stageGroup"}}</span><span class="gl-rule"></span></h3>
+            <p class="glth-grade-state {{#if detail.hasGrade}}is-set{{/if}}">
+              <i class="fa-solid {{#if detail.hasGrade}}fa-lightbulb{{else}}fa-circle-minus{{/if}}"></i>
+              {{#if detail.hasGrade}}{{localize "GLTH.editor.gradeSet"}}{{else}}{{localize "GLTH.editor.gradeNone"}}{{/if}}
+            </p>
+            <div class="glth-btn-row">
+              <button type="button" class="gl-btn glth-btn" data-action="captureGrade" data-tooltip="{{localize "GLTH.editor.captureGradeHint"}}"><i class="fa-solid fa-camera"></i> {{localize "GLTH.editor.captureGrade"}}</button>
+              <button type="button" class="gl-btn glth-btn" data-action="resampleGrade" data-tooltip="{{localize "GLTH.editor.resampleGradeHint"}}" {{#unless detail.hasSrc}}disabled{{/unless}}><i class="fa-solid fa-eye-dropper"></i> {{localize "GLTH.editor.resampleGrade"}}</button>
+              {{#if detail.hasGrade}}<button type="button" class="gl-btn glth-btn glth-btn-danger" data-action="clearGrade"><i class="fa-solid fa-xmark"></i> {{localize "GLTH.editor.clearGrade"}}</button>{{/if}}
+            </div>
+          </section>
+          {{/if}}
+        </div>
+
+        <footer class="glth-ed-foot">
+          <button type="button" class="gl-btn glth-btn" data-action="cue" data-tooltip="{{localize "GLTH.editor.cueHint"}}"><i class="fa-solid fa-play"></i> {{localize "GLTH.editor.cue"}}</button>
+          <span class="glth-dirty-note" data-tooltip="{{localize "GLTH.editor.unsavedHint"}}"><i class="fa-solid fa-circle"></i> {{localize "GLTH.editor.unsaved"}}</span>
+          <span class="glth-spacer"></span>
+          <button type="button" class="gl-btn glth-btn" data-action="revert">{{localize "GLTH.editor.revert"}}</button>
+          <button type="submit" class="gl-btn gl-btn-accent glth-btn"><i class="fa-solid fa-check"></i> {{localize "GLTH.editor.save"}}</button>
+        </footer>
+      </form>
+      {{else}}
+        <p class="gl-empty"><i class="fa-solid fa-images"></i>{{localize "GLTH.editor.noShots"}}</p>
+      {{/if}}
+    {{/if}}
+
+    {{#if isSceneTab}}
+      <form class="glth-ed-form" data-config-form autocomplete="off">
+        <div class="glth-ed-detail gl-scroll">
+          <section class="glth-block">
+            <h3 class="glth-block-head"><span>{{localize "GLTH.editor.sceneGroup"}}</span><span class="gl-rule"></span></h3>
+            <p class="glth-note">{{localize "GLTH.editor.sceneNote"}}</p>
+            <div class="glth-grid2">
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.style"}}</span>
+                <select name="style" class="gl-field">{{#each config.styles}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.face"}}</span>
+                <select name="face" class="gl-field">{{#each config.faces}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+              </label>
+            </div>
+            <p class="glth-note">{{config.styleHint}}</p>
+            <div class="glth-specimen" aria-hidden="true">
+              <span class="glth-spec-title" style="{{config.titleStyle}}">{{localize "GLTH.editor.specimen"}}</span>
+              <span class="glth-spec-sub" style="{{config.secondaryStyle}}">{{localize "GLTH.editor.specimenSub"}}</span>
+            </div>
+            <div class="glth-grid2">
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.holdScene"}}</span>
+                <input type="number" name="hold" class="gl-field glth-num" min="{{holdMin}}" max="{{holdMax}}" step="0.5" value="{{config.hold}}">
+              </label>
+              <label class="glth-field">
+                <span class="glth-label">{{localize "GLTH.editor.letterbox"}} <output data-for="letterbox" data-fmt="letterbox">{{config.letterboxOut}}</output></span>
+                <input type="range" name="letterbox" min="0" max="0.2" step="0.005" value="{{config.letterbox}}">
+              </label>
+            </div>
+            <label class="glth-check glth-check--row">
+              <input type="checkbox" name="tag" {{#if config.tag}}checked{{/if}}>
+              <span><span class="glth-check-title">{{localize "GLTH.editor.tag"}}</span><span class="glth-note">{{localize "GLTH.editor.tagHint"}}</span></span>
+            </label>
+          </section>
+        </div>
+      </form>
+    {{/if}}
+  </main>
+{{/if}}
+</div>

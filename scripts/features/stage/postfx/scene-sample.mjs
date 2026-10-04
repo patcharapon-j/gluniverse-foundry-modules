@@ -286,43 +286,22 @@ function degradedSample(scene, reason) {
 }
 
 /**
- * Sample a scene's background. Resolves to a sample object; never rejects.
- * Repeat calls for the same background are served from cache.
+ * Read one asset, cached by its path. Resolves to either the asset's own part
+ * of a sample (`ok: true`, no darkness) or `{ failed: true, reason }`; never
+ * rejects. Nothing scene-specific is cached, so the scene and the bare-asset
+ * entry points share one entry per asset.
  */
-export async function sampleScene(scene) {
-  if (!scene) return NEUTRAL_SAMPLE;
-
-  const src = scene.background?.src || "";
-  const darkness = readDarkness(scene);
-
-  if (!src) {
-    // A blank scene still has its flat colour, which is better than nothing.
-    return degradedSample(scene, "no-background");
-  }
-
-  const key = src;
-  const cached = _cache.get(key);
-  // Darkness is free to read and changes independently of the asset, so it is
-  // refreshed on every call rather than baked into the cache entry.
-  if (cached) return { ...cached, darkness };
-  if (_pending.has(key)) {
-    const sample = await _pending.get(key);
-    return { ...sample, darkness };
-  }
+function readAsset(src) {
+  const cached = _cache.get(src);
+  if (cached) return Promise.resolve(cached);
+  if (_pending.has(src)) return _pending.get(src);
 
   const job = (async () => {
-    let sample;
+    let result;
     try {
       const { source, aspect } = VIDEO_RE.test(src) ? await decodeVideo(src) : await decodeImage(src);
       const data = readPixels(source);
-      sample = {
-        ok: true,
-        degraded: false,
-        ...analyse(data),
-        darkness,
-        aspect,
-        reason: "image",
-      };
+      result = { ok: true, degraded: false, ...analyse(data), aspect, reason: "image" };
       if (typeof source.close === "function") source.close();
     } catch (err) {
       // Tainted canvas, 404, decode failure — all degrade the same way, but the
@@ -332,15 +311,52 @@ export async function sampleScene(scene) {
       const reason =
         err?.reason ||
         (err?.name === "SecurityError" ? "cors" : VIDEO_RE.test(src) ? "video" : "decode");
-      sample = degradedSample(scene, reason);
+      result = { failed: true, reason };
     }
-    _cache.set(key, sample);
-    _pending.delete(key);
-    return sample;
+    _cache.set(src, result);
+    _pending.delete(src);
+    return result;
   })();
 
-  _pending.set(key, job);
+  _pending.set(src, job);
   return job;
+}
+
+/**
+ * Sample an image or video by path, with no scene behind it — what a Theatre
+ * shot is seeded from. Same cache, same layers and same degrade reasons as
+ * {@link sampleScene}; with no scene there is no flat colour to fall back on
+ * beyond the default one, and darkness is 0.
+ *
+ * @param {string} src
+ * @param {object} [opts]
+ * @param {string|number} [opts.backgroundColor]  Flat colour for a degraded sample.
+ */
+export async function sampleSrc(src, { backgroundColor } = {}) {
+  const host = { backgroundColor, environment: { darknessLevel: 0 } };
+  if (!src) return degradedSample(host, "no-background");
+  const result = await readAsset(String(src));
+  return result.failed ? degradedSample(host, result.reason) : { ...result, darkness: 0 };
+}
+
+/**
+ * Sample a scene's background. Resolves to a sample object; never rejects.
+ * Repeat calls for the same background are served from cache.
+ */
+export async function sampleScene(scene) {
+  if (!scene) return NEUTRAL_SAMPLE;
+
+  const src = scene.background?.src || "";
+  if (!src) {
+    // A blank scene still has its flat colour, which is better than nothing.
+    return degradedSample(scene, "no-background");
+  }
+
+  const result = await readAsset(src);
+  if (result.failed) return degradedSample(scene, result.reason);
+  // Darkness is free to read and changes independently of the asset, so it is
+  // refreshed on every call rather than baked into the cache entry.
+  return { ...result, darkness: readDarkness(scene) };
 }
 
 /**

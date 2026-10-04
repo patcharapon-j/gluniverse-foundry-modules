@@ -126,12 +126,17 @@ export class StageOverlay {
      *
      * The grade is stored on the scene, so every client viewing it reads the
      * same values; nothing about it is computed locally or broadcast.
+     *
+     * `timing` ({ delayMs, durationMs } or { immediate }) comes from a writer
+     * that stamped the update with `TWEEN_OPTION` and has already been
+     * resolved against this client's clock (`resolveTweenTiming`). Without it
+     * the grade eases in on receipt over the default length.
      */
-    refreshPostFXScene() {
+    refreshPostFXScene(timing = null) {
         if (!this._postfx) return;
         const scene = this._viewedScene();
-        this._postfx.setGrade(readSceneGrade(scene));
-        this._postfx.setDarkness(readSceneDarkness(scene));
+        this._postfx.setGrade(readSceneGrade(scene), timing ?? {});
+        this._postfx.setDarkness(readSceneDarkness(scene), timing ?? {});
         this._maybeSeedGrade();
     }
 
