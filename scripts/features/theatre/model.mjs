@@ -20,7 +20,15 @@
  *   shake:     0..1 | null — camera shake strength (null = the GM's default),
  *   treatment: Treatment,
  *   grade:     Stage grade object | null — the Stage character grade this shot relights to (null = leave Stage alone),
+ *   folder:    Folder id | null — the folder the shot is filed in (null = unfiled),
  * }
+ *
+ * Folder (an entry of flags[SUITE_ID].th.folders, ordered):
+ * { id: string (stable, unique within the scene), name: string, color: "#rrggbb" | null (null = the accent) }
+ *
+ * The shot list is always stored in PLAY order, and play order is folder order:
+ * every folder's shots in turn, then the unfiled ones (`orderShots`). Next and
+ * Previous walk that order, so what the GM sees grouped is what Next cuts to.
  *
  * Treatment — the backdrop's own look, separate from Stage's character grade:
  * { exposure: -2..2 (stops), saturation: 0..2 (1 = as authored), tint: "#rrggbb",
@@ -125,6 +133,7 @@ export function normalizeShot(raw, index = 0) {
     shake: orNull(s.shake, (v) => num(v, 0, 1, null)),
     treatment: normalizeTreatment(s.treatment),
     grade: s.grade && typeof s.grade === "object" ? s.grade : null,
+    folder: typeof s.folder === "string" && s.folder.trim() ? s.folder.trim() : null,
   };
 }
 
@@ -138,6 +147,91 @@ export function normalizeShots(raw) {
     seen.add(shot.id);
     return shot;
   });
+}
+
+/* ── Folders ────────────────────────────────────────────────────────────── */
+
+/** Deterministic id for a folder that arrived without one (same rule as shots). */
+export function mintFolderId(index, name = "") {
+  return `f${mintShotId(index, name).slice(1)}`;
+}
+
+/** A fresh, random id for a folder the GM is adding now. */
+export function newFolderId() {
+  return `f${newShotId().slice(1)}`;
+}
+
+export function normalizeFolder(raw, index = 0) {
+  const f = raw && typeof raw === "object" ? raw : {};
+  const name = str(f.name).trim();
+  return {
+    id: typeof f.id === "string" && f.id.trim() ? f.id.trim() : mintFolderId(index, name),
+    name,
+    color: orNull(f.color, (v) => hex(v, null)),
+  };
+}
+
+/** Normalise the folder list; duplicate ids are re-minted deterministically. */
+export function normalizeFolders(raw) {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw) : [];
+  const seen = new Set();
+  return list.map((r, i) => {
+    const folder = normalizeFolder(r, i);
+    if (seen.has(folder.id)) folder.id = mintFolderId(i, `${folder.name}#dup`);
+    seen.add(folder.id);
+    return folder;
+  });
+}
+
+/**
+ * Put shots in play order: each folder's shots in folder order, then the
+ * unfiled ones, keeping the stored order inside every group. A shot filed in a
+ * folder that no longer exists reads as unfiled. Returns new shot objects.
+ */
+export function orderShots(shots, folders) {
+  const rank = new Map((folders ?? []).map((f, i) => [f.id, i]));
+  const last = rank.size;
+  return (shots ?? [])
+    .map((s, i) => ({ s: { ...s, folder: rank.has(s.folder) ? s.folder : null }, i }))
+    .sort((a, b) => (rank.get(a.s.folder) ?? last) - (rank.get(b.s.folder) ?? last) || a.i - b.i)
+    .map(({ s }) => s);
+}
+
+/**
+ * Shots grouped for display, in play order: one group per folder (empty ones
+ * included), then the unfiled group when it has shots or there are no folders.
+ * Each entry carries the shot's index in the whole play order.
+ */
+export function groupShots(shots, folders) {
+  const ordered = orderShots(shots, folders);
+  const groups = (folders ?? []).map((folder) => ({ folder, shots: [] }));
+  const byId = new Map(groups.map((g) => [g.folder.id, g]));
+  const unfiled = { folder: null, shots: [] };
+  ordered.forEach((shot, index) => (byId.get(shot.folder) ?? unfiled).shots.push({ shot, index }));
+  if (unfiled.shots.length || !groups.length) groups.push(unfiled);
+  return groups;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────── */
+
+/** Lower case, accents stripped, whitespace collapsed: what a query and a shot are compared in. */
+export function foldText(v) {
+  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** Everything a GM might search a shot by: its title lines, notes, file name and folder. */
+export function searchText(shot, folderName = "") {
+  const file = String(shot?.src ?? "").split(/[\\/]/).pop();
+  let decoded = file;
+  try { decoded = decodeURIComponent(file); } catch { /* keep the raw name */ }
+  return foldText([shot?.eyebrow, shot?.title, shot?.subtitle, shot?.notes, decoded, folderName].filter(Boolean).join(" "));
+}
+
+/** True when every word of `query` appears somewhere in `text` (a `searchText`). An empty query matches all. */
+export function matchesQuery(text, query) {
+  const words = foldText(query).split(" ").filter(Boolean);
+  const hay = foldText(text);
+  return words.every((w) => hay.includes(w));
 }
 
 export function normalizeConfig(raw) {

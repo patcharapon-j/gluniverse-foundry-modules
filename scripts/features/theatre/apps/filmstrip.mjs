@@ -13,17 +13,25 @@
  * keybinding — the selection steps to the following frame, so the preview is
  * always "what is next".
  *
+ * Organisation: when the scene has folders, a row of chips filters the reel to
+ * one folder (or Unfiled), and in the full reel each folder opens with a slate.
+ * The search box narrows the reel by title, eyebrow, subtitle, notes, file name
+ * and folder. Both are a view only: Next and Previous still walk the whole play
+ * order. Filtering is done on the rendered frames, never by re-rendering, so
+ * typing keeps its caret; a re-render (someone else's write) restores focus.
+ * Dropping a frame on a chip or a slate refiles it.
+ *
  * It follows the viewed scene rather than closing on a switch, and closes only
  * when the viewed scene is not a Theatre scene. Every write goes through the
  * store; free pan is the local camera host's, not world data.
  */
 
 import { FACES } from "../constants.mjs";
-import { resolveFace, resolveStyle } from "../model.mjs";
+import { groupShots, matchesQuery, resolveFace, resolveStyle, searchText } from "../model.mjs";
 import { TheatreAppBase } from "./base.mjs";
 import {
-  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, faceSecondaryStyle, faceSpecimenStyle, gmFace, guarded, isVideoSrc,
-  loadHost, loadStore, partialFromSrc, pathsFromDrop, promptCardText, styleKeys, styleLabel, tpl,
+  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, dropSlot, faceSecondaryStyle, faceSpecimenStyle, folderOf, folderStyle, gmFace,
+  guarded, isVideoSrc, loadHost, loadStore, partialFromSrc, pathsFromDrop, promptCardText, styleKeys, styleLabel, tpl,
 } from "./shared.mjs";
 
 export const FILMSTRIP_ID = "glth-filmstrip";
@@ -32,6 +40,11 @@ export const FILMSTRIP_ID = "glth-filmstrip";
 const selection = new Map();
 let collapsed = false;
 let goStyle = "";
+/** The search text, kept across re-renders and reopenings within the session. */
+let query = "";
+/** Folder filter per scene: ALL, UNFILED ("") or a folder id. */
+const filters = new Map();
+const ALL = "*";
 
 let _Filmstrip = null;
 
@@ -57,6 +70,7 @@ function FilmstripApp() {
         freePan: TheatreFilmstrip.#onFreePan,
         edit: TheatreFilmstrip.#onEdit,
         collapse: TheatreFilmstrip.#onCollapse,
+        filter: TheatreFilmstrip.#onFilter,
         close: function () { this.close(); },
       },
     };
@@ -65,6 +79,18 @@ function FilmstripApp() {
 
     _onAir = null;
     _onResize = null;
+    /** Caret of a focused search box, carried across a re-render. */
+    _refocus = null;
+
+    get filter() {
+      const f = filters.get(this.sceneId);
+      const store = this.store;
+      if (f === undefined || f === ALL) return ALL;
+      if (f === "" || store?.folder(f)) return f;
+      return ALL;
+    }
+
+    set filter(v) { filters.set(this.sceneId, v); }
 
     get selectedId() {
       const store = this.store;
@@ -86,13 +112,18 @@ function FilmstripApp() {
       const context = await super._prepareContext(options);
       const store = this.store;
       if (!store) return { ...context, empty: true };
-      const { shots, config, state } = store;
+      const { shots, folders, config, state } = store;
       const selectedId = this.selectedId;
       this._onAir = state.shotId;
+      const hasFolders = folders.length > 0;
+      const filter = this.filter;
 
-      const frames = shots.map((s, i) => ({
+      const frame = (s, i, folderName) => ({
         id: s.id,
         index: i + 1,
+        pos: i,
+        folder: s.folder ?? "",
+        search: searchText(s, folderName),
         src: s.src,
         hasSrc: !!s.src,
         video: isVideoSrc(s.src),
@@ -104,7 +135,29 @@ function FilmstripApp() {
         selected: s.id === selectedId,
         hasNotes: !!s.notes.trim(),
         hasGrade: !!s.grade,
-      }));
+      });
+
+      // The reel in play order; with folders, each group opens with a slate.
+      const groups = groupShots(shots, folders);
+      const frames = [];
+      const reel = [];
+      const chips = [{ value: ALL, label: L("GLTH.folders.all"), count: shots.length, all: true, active: filter === ALL }];
+      for (const g of groups) {
+        const name = g.folder ? (g.folder.name || L("GLTH.folders.untitled")) : L("GLTH.folders.unfiled");
+        const style = g.folder ? folderStyle(g.folder.color) : "";
+        const value = g.folder?.id ?? "";
+        if (hasFolders) {
+          chips.push({ value, label: name, count: g.shots.length, style, unfiled: !g.folder, droppable: true, active: filter === value });
+          if (g.shots.length) {
+            reel.push({ slate: true, folder: value, name, style, unfiled: !g.folder, count: g.shots.length, countLabel: L("GLTH.filmstrip.count", { n: g.shots.length }) });
+          }
+        }
+        for (const { shot, index } of g.shots) {
+          const f = frame(shot, index, g.folder?.name ?? "");
+          frames.push(f);
+          reel.push(f);
+        }
+      }
 
       const sel = selectedId ? store.shot(selectedId) : null;
       const face = resolveFace(sel, config, gmFace());
@@ -117,6 +170,10 @@ function FilmstripApp() {
         empty: false,
         collapsed,
         frames,
+        reel,
+        chips,
+        hasFolders,
+        query,
         count: frames.length,
         countLabel: L("GLTH.filmstrip.count", { n: frames.length }),
         sel: sel ? {
@@ -162,6 +219,10 @@ function FilmstripApp() {
       const goSel = root.querySelector("[data-go-style]");
       goSel?.addEventListener("change", () => { goStyle = goSel.value; });
 
+      this.#bindSearch(root.querySelector("[data-search]"));
+      this.#bindChips(root);
+      this.#applyFilter();
+
       const reel = root.querySelector(".glth-strip-reel");
       if (reel) {
         this.#bindReel(reel);
@@ -173,6 +234,87 @@ function FilmstripApp() {
       }
       for (const f of root.querySelectorAll(".glth-frame[data-id]")) {
         f.addEventListener("dblclick", (ev) => { ev.preventDefault(); this.#openEditor(f.dataset.id); });
+      }
+    }
+
+    async _preRender(context, options) {
+      await super._preRender?.(context, options);
+      const a = document.activeElement;
+      this._refocus = a?.matches?.(".glth-filmstrip [data-search]") ? { start: a.selectionStart, end: a.selectionEnd } : null;
+    }
+
+    /* ── search + folder filter ──────────────────────────────────────── */
+
+    #bindSearch(input) {
+      if (!input) return;
+      if (this._refocus) {
+        input.focus({ preventScroll: true });
+        try { input.setSelectionRange(this._refocus.start, this._refocus.end); } catch { /* not a text input */ }
+        this._refocus = null;
+      }
+      input.addEventListener("input", () => { query = input.value; this.#applyFilter(); });
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          // Cue up the first match; Go stays a deliberate second press.
+          ev.preventDefault();
+          const first = this.element?.querySelector(".glth-frame[data-id]:not([hidden])");
+          if (first && first.dataset.id !== this.selectedId) { this.selectedId = first.dataset.id; this._revealSelected = true; this.render(); }
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (input.value) { input.value = ""; query = ""; this.#applyFilter(); } else input.blur();
+        }
+      });
+    }
+
+    /** Show the frames the folder filter and the search allow; slates and counts follow. */
+    #applyFilter() {
+      const root = this.element;
+      if (!root) return;
+      const filter = this.filter;
+      const frames = [...root.querySelectorAll(".glth-frame[data-id]")];
+      const shown = new Set();
+      let n = 0;
+      for (const f of frames) {
+        const ok = (filter === ALL || f.dataset.folder === filter) && matchesQuery(f.dataset.haystack ?? "", query);
+        f.hidden = !ok;
+        if (ok) { n++; shown.add(f.dataset.folder); }
+      }
+      // A slate only heads the full reel, and only over frames still showing.
+      for (const sl of root.querySelectorAll("[data-slate]")) sl.hidden = filter !== ALL || !shown.has(sl.dataset.folder);
+      for (const c of root.querySelectorAll(".glth-chip[data-folder-filter]")) {
+        const on = c.dataset.folderFilter === filter;
+        c.classList.toggle("is-active", on);
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+      const none = root.querySelector("[data-no-match]");
+      if (none) none.hidden = !(frames.length && !n);
+      const count = root.querySelector("[data-count]");
+      if (count) {
+        const total = frames.length;
+        count.textContent = n === total ? L("GLTH.filmstrip.count", { n: total }) : L("GLTH.filmstrip.countOf", { n, total });
+      }
+      root.querySelector(".glth-search")?.classList.toggle("is-active", !!query);
+    }
+
+    /** Folder chips take a dropped frame: it is refiled at the end of that folder. */
+    #bindChips(root) {
+      for (const chip of root.querySelectorAll("[data-drop-folder]")) {
+        chip.addEventListener("dragover", (ev) => {
+          if (!ev.dataTransfer?.types?.includes(SHOT_MIME)) return;
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = "move";
+          chip.classList.add("is-drop");
+        });
+        chip.addEventListener("dragleave", () => chip.classList.remove("is-drop"));
+        chip.addEventListener("drop", async (ev) => {
+          chip.classList.remove("is-drop");
+          const id = ev.dataTransfer?.getData(SHOT_MIME);
+          if (!id) return;
+          ev.preventDefault();
+          const store = this.store;
+          if (store) await guarded(() => store.moveShot(id, null, { folder: chip.dataset.dropFolder || null }));
+        });
       }
     }
 
@@ -190,19 +332,26 @@ function FilmstripApp() {
     /* ── reorder + drop ──────────────────────────────────────────────── */
 
     #bindReel(reel) {
-      const frames = () => [...reel.querySelectorAll(".glth-frame[data-id]")];
+      const frames = () => [...reel.querySelectorAll(".glth-frame[data-id]:not([hidden])")];
       const clearMarks = () => {
-        for (const f of frames()) f.classList.remove("is-drop-before", "is-drop-after", "is-dragging");
+        for (const f of reel.querySelectorAll(".glth-frame, [data-slate]")) f.classList.remove("is-drop-before", "is-drop-after", "is-dragging", "is-drop");
         reel.classList.remove("is-drop");
       };
-      /** Insertion index (0..n) for a pointer x, and the frame to mark. */
-      const slot = (x) => {
-        const list = frames();
-        for (let i = 0; i < list.length; i++) {
-          const b = list[i].getBoundingClientRect();
-          if (x < b.left + b.width / 2) return { index: i, el: list[i], side: "before" };
+      /**
+       * Where a drop at pointer x lands: the play index (0..n) and the folder.
+       * A slate takes the shot to the end of its folder; between frames, the
+       * nearest frame decides both (so the last slot of a folder is reachable).
+       */
+      const slot = (ev) => {
+        const slate = ev.target?.closest?.("[data-slate]");
+        if (slate) return { el: slate, slate: true, index: null, folder: folderOf(slate) };
+        const s = dropSlot(frames(), ev.clientX, "x");
+        if (!s.el) {
+          const f = this.filter;
+          return { el: null, index: null, folder: f === ALL ? undefined : (f || null) };
         }
-        return { index: list.length, el: list.at(-1) ?? null, side: "after" };
+        const i = Number(s.el.dataset.index);
+        return { el: s.el, side: s.side, index: s.side === "before" ? i : i + 1, folder: folderOf(s.el) };
       };
 
       for (const f of frames()) {
@@ -219,15 +368,15 @@ function FilmstripApp() {
         if (!internal && !dragLooksUseful(ev)) return;
         ev.preventDefault();
         ev.dataTransfer.dropEffect = internal ? "move" : "copy";
-        for (const fr of frames()) fr.classList.remove("is-drop-before", "is-drop-after");
-        const s = slot(ev.clientX);
-        s.el?.classList.add(s.side === "before" ? "is-drop-before" : "is-drop-after");
+        for (const fr of reel.querySelectorAll(".glth-frame, [data-slate]")) fr.classList.remove("is-drop-before", "is-drop-after", "is-drop");
+        const s = slot(ev);
+        s.el?.classList.add(s.slate ? "is-drop" : s.side === "before" ? "is-drop-before" : "is-drop-after");
         reel.classList.toggle("is-drop", !internal);
       });
       reel.addEventListener("dragleave", (ev) => { if (!reel.contains(ev.relatedTarget)) clearMarks(); });
       reel.addEventListener("drop", async (ev) => {
         ev.preventDefault();
-        const s = slot(ev.clientX);
+        const s = slot(ev);
         clearMarks();
         const store = this.store;
         if (!store) return;
@@ -235,13 +384,13 @@ function FilmstripApp() {
         if (id) {
           const from = store.indexOf(id);
           if (from < 0) return;
-          const to = s.index > from ? s.index - 1 : s.index;
-          if (to !== from) await guarded(() => store.moveShot(id, to));
+          const to = s.index == null ? null : s.index > from ? s.index - 1 : s.index;
+          await guarded(() => store.moveShot(id, to, { folder: s.folder }));
           return;
         }
         const paths = await pathsFromDrop(ev);
         if (!paths.length) { ui.notifications.warn(L("GLTH.editor.dropNothing")); return; }
-        const ids = await guarded(() => store.addShots(paths.map(partialFromSrc), { at: s.index }));
+        const ids = await guarded(() => store.addShots(paths.map(partialFromSrc), { at: s.index, folder: s.folder }));
         if (ids?.[0]) { this.selectedId = ids[0]; this._revealSelected = true; }
       });
     }
@@ -321,6 +470,15 @@ function FilmstripApp() {
 
     static #onEdit() {
       this.#openEditor(this.selectedId);
+    }
+
+    static #onFilter(event, target) {
+      const v = target.closest("[data-folder-filter]")?.dataset.folderFilter;
+      if (v === undefined) return;
+      // A second click on the active folder goes back to the whole reel.
+      this.filter = v === this.filter && v !== ALL ? ALL : v;
+      this.#applyFilter();
+      this.element?.querySelector(".glth-strip-reel")?.scrollTo({ left: 0 });
     }
 
     static #onCollapse() {

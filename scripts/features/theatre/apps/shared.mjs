@@ -256,6 +256,37 @@ export function dragLooksUseful(event) {
 
 /** The internal mime the apps use to reorder shots, so a reorder is never read as a file drop. */
 export const SHOT_MIME = "application/x-glth-shot";
+/** The internal mime the editor uses to reorder folders. */
+export const FOLDER_MIME = "application/x-glth-folder";
+
+/**
+ * Where a drag over a list of items would land: the item nearest the pointer
+ * along `axis` ("x" or "y"), and which half of it. Items are the visible ones
+ * only, so a filtered or collapsed list still drops where the pointer is.
+ * Resolves { el, side: "before" | "after" } or { el: null } for an empty list.
+ */
+export function dropSlot(items, pos, axis = "y") {
+  let best = null, bestD = Infinity;
+  for (const el of items) {
+    const b = el.getBoundingClientRect();
+    const lo = axis === "x" ? b.left : b.top, hi = axis === "x" ? b.right : b.bottom;
+    const d = pos < lo ? lo - pos : pos > hi ? pos - hi : 0;
+    if (d < bestD) { bestD = d; best = { el, side: pos < (lo + hi) / 2 ? "before" : "after" }; }
+  }
+  return best ?? { el: null, side: "after" };
+}
+
+/** The folder id a list item carries (`data-folder`; "" is unfiled → null). */
+export const folderOf = (el) => (el?.dataset?.folder ? el.dataset.folder : null);
+
+/** Inline style carrying a folder's colour (validated #rrggbb by the model), or "". */
+export const folderStyle = (color) => (/^#[0-9a-f]{6}$/i.test(String(color ?? "")) ? `--glth-folder: ${color}` : "");
+
+/** A folder name from an imported directory path: its last segment, as written. */
+export function folderNameFromPath(path) {
+  const last = String(path ?? "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  try { return decodeURIComponent(last).trim(); } catch { return last.trim(); }
+}
 
 /* ── Dialogs ────────────────────────────────────────────────────────────── */
 
@@ -288,6 +319,43 @@ export async function promptCardText(initial = "") {
     });
     const t = typeof text === "string" ? text.trim() : "";
     return t || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ask for a folder's name and colour. Resolves { name, color } (color null =
+ * the accent), or null on cancel. `initial` pre-fills an existing folder.
+ */
+export async function promptFolder(initial = null) {
+  const { DialogV2 } = globalThis.foundry.applications.api;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+  const color = /^#[0-9a-f]{6}$/i.test(String(initial?.color ?? "")) ? initial.color : null;
+  try {
+    const out = await DialogV2.prompt({
+      window: { title: L(initial ? "GLTH.folders.editTitle" : "GLTH.folders.newTitle"), icon: "fa-solid fa-folder" },
+      classes: ["glth-dialog"],
+      content: `<div class="glth-folder-prompt gl-type">
+        <label class="glth-folder-prompt-field"><span>${esc(L("GLTH.folders.name"))}</span>
+          <input type="text" name="name" class="gl-field" autofocus value="${esc(initial?.name ?? "")}" placeholder="${esc(L("GLTH.folders.namePlaceholder"))}"></label>
+        <label class="glth-folder-prompt-check"><input type="checkbox" name="colorOn" ${color ? "checked" : ""}>
+          <span>${esc(L("GLTH.folders.ownColor"))}</span>
+          <input type="color" name="color" value="${esc(color ?? "#808080")}" aria-label="${esc(L("GLTH.folders.color"))}"></label>
+      </div>`,
+      ok: {
+        label: L(initial ? "GLTH.folders.save" : "GLTH.folders.create"),
+        icon: "fa-solid fa-check",
+        callback: (event, button) => {
+          const els = button.form.elements;
+          return { name: String(els.name.value ?? "").trim(), color: els.colorOn.checked ? els.color.value : null };
+        },
+      },
+      rejectClose: false,
+      modal: true,
+    });
+    if (!out || typeof out !== "object") return null;
+    return { name: out.name || L("GLTH.folders.untitled"), color: out.color };
   } catch {
     return null;
   }

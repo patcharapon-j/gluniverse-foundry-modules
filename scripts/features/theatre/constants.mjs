@@ -36,7 +36,8 @@ export const PADDING_MAX = 30;
 /** Scene flag keys (scope SUITE_ID). Dotted keys nest: flags[SUITE_ID].th.shots */
 export const FLAGS = Object.freeze({
   enabled: "th.enabled",   // Boolean — this scene is a Theatre scene
-  shots: "th.shots",       // Shot[] (model.mjs), ordered
+  shots: "th.shots",       // Shot[] (model.mjs), in play order
+  folders: "th.folders",   // Folder[] (model.mjs), ordered — shots are grouped and played in this order
   config: "th.config",     // SceneConfig (model.mjs)
   state: "th.state",       // PlayState (model.mjs) — what is on screen, and the last cue
   restore: "th.restore",   // RestoreData — what Convert replaced, so Leave can put it back

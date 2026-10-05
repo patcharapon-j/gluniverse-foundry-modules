@@ -112,6 +112,108 @@ section = "model";
   }
 }
 
+/* ── Folders: play order is folder order, every road agrees ──────────── */
+section = "folders";
+{
+  for (const j of [undefined, null, 0, "x", [], { id: 4, name: 7, color: "red" }]) {
+    const fo = M.normalizeFolder(j, 2);
+    ok(`normalizeFolder(${JSON.stringify(j)}) is total`, ["id", "name", "color"].every((k) => k in fo) && typeof fo.id === "string" && fo.id.length > 0);
+    ok(`normalizeShot(${JSON.stringify(j)}) carries a folder key`, "folder" in M.normalizeShot(j));
+  }
+  ok("a junk folder colour is null (the accent)", M.normalizeFolder({ color: "red" }).color === null);
+  ok("a folder colour is kept, lower-cased", M.normalizeFolder({ color: "#AABBCC" }).color === "#aabbcc");
+  ok("an unfiled shot reads folder null", M.normalizeShot({}).folder === null && M.normalizeShot({ folder: "  " }).folder === null);
+  const fdup = M.normalizeFolders([{ id: "a" }, { id: "a" }]);
+  ok("duplicate folder ids are re-minted unique", new Set(fdup.map((x) => x.id)).size === 2);
+  ok("minted folder ids are deterministic", M.normalizeFolders([{ name: "Act I" }])[0].id === M.normalizeFolders([{ name: "Act I" }])[0].id);
+
+  const folders = M.normalizeFolders([{ id: "fA", name: "Act I" }, { id: "fB", name: "Act II" }, { id: "fE", name: "Empty" }]);
+  const shots = M.normalizeShots([
+    { id: "u1" }, { id: "b1", folder: "fB" }, { id: "a1", folder: "fA" }, { id: "x1", folder: "gone" }, { id: "b2", folder: "fB" }, { id: "a2", folder: "fA" },
+  ]);
+  const ordered = M.orderShots(shots, folders);
+  ok("play order is folder order, unfiled last, stored order within", ordered.map((x) => x.id).join() === "a1,a2,b1,b2,u1,x1", ordered.map((x) => x.id).join());
+  ok("a shot filed in a deleted folder reads unfiled", ordered.find((x) => x.id === "x1").folder === null);
+  ok("orderShots is idempotent", M.orderShots(ordered, folders).map((x) => x.id).join() === ordered.map((x) => x.id).join());
+  ok("orderShots never mutates its input", shots.find((x) => x.id === "x1").folder === "gone");
+  ok("no folders: order is untouched", M.orderShots(shots, []).map((x) => x.id).join() === shots.map((x) => x.id).join());
+  const groups = M.groupShots(shots, folders);
+  ok("every folder has a group, empty ones included, then unfiled", groups.map((g) => g.folder?.id ?? "-").join() === "fA,fB,fE,-");
+  ok("group indices are play-order indices", groups.flatMap((g) => g.shots).every(({ shot, index }) => ordered[index].id === shot.id));
+  ok("no unfiled group when every shot is filed", M.groupShots([{ id: "a", folder: "fA" }], folders).every((g) => g.folder));
+  ok("no folders: one unfiled group", M.groupShots(shots, []).length === 1 && M.groupShots([], []).length === 1);
+
+  const hay = M.searchText({ title: "The Drowned Chapel", notes: "Bell rings at midnight", src: "maps/sunken%20nave.webp" }, "Act Ⅰ Café");
+  ok("search matches title words in any order", M.matchesQuery(hay, "chapel drowned"));
+  ok("search matches notes", M.matchesQuery(hay, "midnight"));
+  ok("search matches the decoded file name", M.matchesQuery(hay, "sunken nave"));
+  ok("search matches the folder, accents folded", M.matchesQuery(hay, "cafe"));
+  ok("search needs every word", !M.matchesQuery(hay, "chapel tavern"));
+  ok("an empty query matches everything", M.matchesQuery(hay, "  ") && M.matchesQuery("", ""));
+}
+
+/* ── Folders: the store drives them through one forced write each ────── */
+section = "folder-store";
+{
+  const SUITE = "gluniverse-foundry-modules";
+  globalThis.game = { user: { isGM: true } };
+  const S = await imp(`${FEAT}/store.mjs`);
+  // A fake Scene that applies `==` replacements the way Foundry does and counts writes.
+  const scene = {
+    flags: { [SUITE]: { th: { enabled: true, shots: [{ id: "s1", src: "a.webp" }, { id: "s2", src: "b.webp" }, { id: "s3", src: "c.webp" }] } } },
+    writes: 0,
+    getFlag(scope, key) { return key.split(".").reduce((o, k) => o?.[k], this.flags[scope]); },
+    async update(upd) {
+      this.writes++;
+      for (const [path, v] of Object.entries(upd)) {
+        const parts = path.replace(/\.==/g, ".").split(".").slice(1);
+        let o = this.flags;
+        for (const k of parts.slice(0, -1)) o = o[k] ??= {};
+        o[parts.at(-1)] = structuredClone(v);
+      }
+    },
+  };
+  const store = S.TheatreStore.for(scene);
+  const ids = () => store.shots.map((x) => x.id).join();
+  try {
+    const fA = await store.addFolder({ name: "Act I" }, { shotIds: ["s3"] });
+    ok("addFolder files shots in the same single write", scene.writes === 1 && store.shot("s3").folder === fA);
+    ok("a filed shot moves to its folder's place in play order", ids() === "s3,s1,s2", ids());
+    ok("next/prev walk the folder order (indexOf speaks play order)", store.indexOf("s3") === 0);
+    const fB = await store.addFolder({ name: "Act II", color: "#123456" });
+    await store.moveShot("s1", null, { folder: fB });
+    ok("moveShot into a folder with no index lands at its end", ids() === "s3,s1,s2" && store.shot("s1").folder === fB, ids());
+    await store.moveShot("s2", 0, { folder: fA });
+    ok("moveShot to an index inside a folder keeps that slot", ids() === "s2,s3,s1", ids());
+    await store.moveFolder(fB, 0);
+    ok("moveFolder reorders the play order with it", ids() === "s1,s2,s3", ids());
+    const before = scene.writes;
+    await store.removeFolder(fB);
+    ok("removeFolder is one write and keeps its shots, unfiled", scene.writes === before + 1 && store.shot("s1")?.folder === null && store.shots.length === 3);
+    ok("unfiled shots play after the folders", ids() === "s2,s3,s1", ids());
+    ok("the stored list is already in play order", S.readShots(scene).map((x) => x.id).join() === ids());
+    await store.updateFolder(fA, { name: "Prologue", color: "nope" });
+    ok("updateFolder renames and validates the colour", store.folder(fA)?.name === "Prologue" && store.folder(fA)?.color === null);
+    const added = await store.addShots([{ src: "d.webp" }], { folder: fA });
+    ok("addShots files new shots in the folder given", store.shot(added?.[0])?.folder === fA && store.indexOf(added?.[0]) === 2, ids());
+    await store.addShots([{ src: "e.webp" }], { folder: "nope" });
+    ok("a shot filed in a folder that does not exist is unfiled", store.shots.at(-1).folder === null);
+    ok("touchedKeys sees a folder write", S.touchedKeys({ flags: { [SUITE]: { th: { folders: [] } } } }).folders === true);
+  } catch (e) {
+    ok("the store's folder operations run", false, e.stack);
+  } finally {
+    delete globalThis.game;
+  }
+  const src = stripComments(read(`${FEAT}/store.mjs`));
+  ok("the store writes folders by forced replacement", /forceSet\(upd, PATHS\.folders/.test(src));
+  ok("the store reads shots in play order", /get shots\(\)\s*\{\s*return orderShots\(/.test(src));
+  // Filing is organisation, not a draft edit: a draft saved later must never file the shot back.
+  const ed = stripComments(read(`${FEAT}/apps/editor.mjs`));
+  const patch = ed.slice(ed.indexOf("function patchFromForm"), ed.indexOf("function readForm"));
+  ok("a shot's folder is not part of the editor draft", !/folder/.test(patch));
+  ok("the folder picker writes at once and skips the draft", /data-folder-select/.test(ed) && /store\.moveShot\(id, null, \{ folder:/.test(ed));
+}
+
 /* ── Timeline: the relight is always hidden, every beat is in range ──── */
 section = "timeline";
 {

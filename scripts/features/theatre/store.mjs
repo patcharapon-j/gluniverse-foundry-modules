@@ -23,8 +23,8 @@ import { escapeHTML } from "../../core/util.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { DEFAULT_FACE, DEFAULT_SHAKE, FACES, FLAGS, SETTINGS, TIMING } from "./constants.mjs";
 import {
-  hasTitle, newShotId, normalizeConfig, normalizeShot, normalizeShots, normalizeState,
-  resolveHold, resolveLetterbox, resolveStyle, titleOf,
+  hasTitle, newFolderId, newShotId, normalizeConfig, normalizeFolder, normalizeFolders, normalizeShot, normalizeShots,
+  normalizeState, orderShots, resolveHold, resolveLetterbox, resolveStyle, titleOf,
 } from "./model.mjs";
 import { scaleTimeline, timelineFor } from "./timeline.mjs";
 import { currentGrade, gradeFragment, sampleGrade, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
@@ -36,6 +36,7 @@ const FLAG_ROOT = `flags.${SUITE_ID}`;
 export const PATHS = Object.freeze({
   enabled: `${FLAG_ROOT}.${FLAGS.enabled}`,
   shots: `${FLAG_ROOT}.${FLAGS.shots}`,
+  folders: `${FLAG_ROOT}.${FLAGS.folders}`,
   config: `${FLAG_ROOT}.${FLAGS.config}`,
   state: `${FLAG_ROOT}.${FLAGS.state}`,
   restore: `${FLAG_ROOT}.${FLAGS.restore}`,
@@ -68,6 +69,7 @@ export function forceDelete(upd, path) {
 export const isTheatreScene = (scene) => !!scene?.getFlag?.(SUITE_ID, FLAGS.enabled);
 
 export const readShots = (scene) => normalizeShots(scene?.getFlag?.(SUITE_ID, FLAGS.shots));
+export const readFolders = (scene) => normalizeFolders(scene?.getFlag?.(SUITE_ID, FLAGS.folders));
 export const readConfig = (scene) => normalizeConfig(scene?.getFlag?.(SUITE_ID, FLAGS.config));
 export const readState = (scene) => normalizeState(scene?.getFlag?.(SUITE_ID, FLAGS.state));
 
@@ -83,14 +85,14 @@ function flatten(obj, prefix = "", out = {}) {
 
 /** Did an updateScene change touch any th.* flag? (on the flattened diff) */
 export function touchedKeys(changes) {
-  const out = { enabled: false, shots: false, config: false, state: false, restore: false, any: false };
+  const out = { enabled: false, shots: false, folders: false, config: false, state: false, restore: false, any: false };
   if (!changes) return out;
   const flat = globalThis.foundry?.utils?.flattenObject?.(changes) ?? flatten(changes);
   const strip = (k) => k.replace(/(^|\.)(==|-=)/g, "$1");
   for (const raw of Object.keys(flat)) {
     const k = strip(raw);
     if (k === `${FLAG_ROOT}.th` || k === FLAG_ROOT) { for (const key of Object.keys(out)) out[key] = true; break; }
-    for (const key of ["enabled", "shots", "config", "state", "restore"]) {
+    for (const key of ["enabled", "shots", "folders", "config", "state", "restore"]) {
       if (k === PATHS[key] || k.startsWith(`${PATHS[key]}.`)) { out[key] = true; out.any = true; }
     }
   }
@@ -146,7 +148,10 @@ export class TheatreStore {
 
   get isGM() { return !!globalThis.game?.user?.isGM; }
   get enabled() { return isTheatreScene(this.scene); }
-  get shots() { return readShots(this.scene); }
+  /** The shots in play order (folder order, then unfiled). Every index the store speaks is into this list. */
+  get shots() { return orderShots(readShots(this.scene), this.folders); }
+  get folders() { return readFolders(this.scene); }
+  folder(id) { return id ? this.folders.find((f) => f.id === id) ?? null : null; }
   get config() { return readConfig(this.scene); }
   /** The scene's title typeface: its own, else the GM's default. */
   get face() { return this.config.face ?? defaultFace(); }
@@ -176,20 +181,36 @@ export class TheatreStore {
     return run.catch((e) => { warn("theatre | write failed", e); throw e; });
   }
 
-  async _writeShots(shots, extra = {}) {
-    const upd = { ...extra };
-    forceSet(upd, PATHS.shots, normalizeShots(shots));
+  /**
+   * Write the shot list in play order. With `folders`, the folder list is
+   * written in the same update and the shots are ordered (and orphaned shots
+   * unfiled) against it.
+   */
+  async _writeShots(shots, folders = null) {
+    const upd = {};
+    const list = folders ? normalizeFolders(folders) : this.folders;
+    forceSet(upd, PATHS.shots, orderShots(normalizeShots(shots), list));
+    if (folders) forceSet(upd, PATHS.folders, list);
     await this.scene.update(upd);
   }
 
-  /** Add shots (partial objects) at `at` (default: the end). Returns the new ids. */
-  addShots(partialShots, { at = null } = {}) {
+  /** A folder id that exists in this scene, else null (unfiled). */
+  _folderOrNull(id) {
+    return typeof id === "string" && this.folders.some((f) => f.id === id) ? id : null;
+  }
+
+  /**
+   * Add shots (partial objects) at `at` (default: the end of their folder).
+   * `folder` files every new shot that does not name its own. Returns the new ids.
+   */
+  addShots(partialShots, { at = null, folder = undefined } = {}) {
     return this._write(async () => {
       const list = (Array.isArray(partialShots) ? partialShots : [partialShots]).filter(Boolean);
       if (!list.length) return [];
       const sampling = stageEnabled();
       const fresh = await Promise.all(list.map(async (p) => {
         const shot = normalizeShot({ ...p, id: newShotId() });
+        shot.folder = this._folderOrNull("folder" in p ? p.folder : folder);
         if (sampling && shot.src && !shot.grade && !("grade" in p)) shot.grade = await sampleGrade(shot.src);
         return shot;
       }));
@@ -227,16 +248,79 @@ export class TheatreStore {
     });
   }
 
-  moveShot(id, toIndex) {
+  /**
+   * Move a shot to `toIndex` in the play order (after it is lifted out). With
+   * `folder` (an id, or null for unfiled) it is refiled too; a null `toIndex`
+   * puts it at the end of its (new) folder.
+   */
+  moveShot(id, toIndex, { folder = undefined } = {}) {
     return this._write(async () => {
       const shots = this.shots;
       const from = shots.findIndex((s) => s.id === id);
       if (from < 0) return false;
       const [shot] = shots.splice(from, 1);
-      const to = Math.max(0, Math.min(shots.length, Math.trunc(Number(toIndex)) || 0));
+      const refile = folder !== undefined && this._folderOrNull(folder) !== shot.folder;
+      if (folder !== undefined) shot.folder = this._folderOrNull(folder);
+      const to = toIndex == null ? shots.length : Math.max(0, Math.min(shots.length, Math.trunc(Number(toIndex)) || 0));
       shots.splice(to, 0, shot);
-      if (to === from) return true;
+      if (to === from && !refile) return true;
       await this._writeShots(shots);
+      return true;
+    });
+  }
+
+  /* ── Folders ── */
+
+  /** Add a folder at the end (or at `at`). `shotIds` are filed into it in the same write. Returns its id. */
+  addFolder({ name = "", color = null } = {}, { at = null, shotIds = [] } = {}) {
+    return this._write(async () => {
+      const folders = this.folders;
+      const folder = normalizeFolder({ id: newFolderId(), name, color });
+      const index = Number.isInteger(at) ? Math.max(0, Math.min(folders.length, at)) : folders.length;
+      folders.splice(index, 0, folder);
+      const move = new Set(shotIds ?? []);
+      const shots = this.shots.map((s) => (move.has(s.id) ? { ...s, folder: folder.id } : s));
+      await this._writeShots(shots, folders);
+      return folder.id;
+    });
+  }
+
+  /** Rename / recolour a folder. */
+  updateFolder(id, patch = {}) {
+    return this._write(async () => {
+      const folders = this.folders;
+      const i = folders.findIndex((f) => f.id === id);
+      if (i < 0) return false;
+      folders[i] = normalizeFolder({ ...folders[i], ...(patch ?? {}), id }, i);
+      const upd = {};
+      forceSet(upd, PATHS.folders, normalizeFolders(folders));
+      await this.scene.update(upd);
+      return true;
+    });
+  }
+
+  /** Delete a folder. Its shots are kept and become unfiled, in the same write. */
+  removeFolder(id) {
+    return this._write(async () => {
+      const folders = this.folders;
+      const next = folders.filter((f) => f.id !== id);
+      if (next.length === folders.length) return false;
+      await this._writeShots(this.shots, next);
+      return true;
+    });
+  }
+
+  /** Move a folder (and so its shots' place in the play order) to `toIndex` in the folder list. */
+  moveFolder(id, toIndex) {
+    return this._write(async () => {
+      const folders = this.folders;
+      const from = folders.findIndex((f) => f.id === id);
+      if (from < 0) return false;
+      const [folder] = folders.splice(from, 1);
+      const to = Math.max(0, Math.min(folders.length, Math.trunc(Number(toIndex)) || 0));
+      folders.splice(to, 0, folder);
+      if (to === from) return true;
+      await this._writeShots(this.shots, folders);
       return true;
     });
   }

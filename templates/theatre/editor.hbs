@@ -8,14 +8,37 @@
       <span class="glth-label">{{localize "GLTH.editor.shots"}}</span>
       <span class="gl-rule"></span>
       <span class="glth-count">{{count}}</span>
+      <button type="button" class="glth-mini" data-action="addFolder" data-tooltip="{{localize "GLTH.folders.new"}}" aria-label="{{localize "GLTH.folders.new"}}"><i class="fa-solid fa-folder-plus"></i></button>
     </div>
     <div class="glth-ed-adds">
       <button type="button" class="gl-btn glth-btn" data-action="addShot"><i class="fa-solid fa-plus"></i> {{localize "GLTH.editor.addShot"}}</button>
       <button type="button" class="gl-btn glth-btn" data-action="importFolder" data-tooltip="{{localize "GLTH.editor.importFolderHint"}}"><i class="fa-solid fa-folder-open"></i> {{localize "GLTH.editor.importFolder"}}</button>
     </div>
+    <label class="glth-search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" class="gl-field glth-search-input" data-search value="{{query}}" spellcheck="false" autocomplete="off"
+        placeholder="{{localize "GLTH.search.placeholder"}}" aria-label="{{localize "GLTH.search.label"}}">
+    </label>
     <ol class="glth-ed-list gl-scroll">
-      {{#each rows}}
-        <li class="glth-row {{#if selected}}is-selected{{/if}} {{#if onAir}}is-on-air{{/if}} {{#if dirty}}is-dirty{{/if}}" data-id="{{id}}" draggable="true" data-action="select">
+      {{#each groups}}
+        {{#if showHead}}
+        <li class="glth-group {{#if collapsed}}is-collapsed{{/if}} {{#if unfiled}}is-unfiled{{/if}}" data-group data-folder="{{folder}}" data-action="toggleFolder"
+          {{#unless unfiled}}draggable="true"{{/unless}} {{#if style}}style="{{style}}"{{/if}} aria-expanded="{{#if collapsed}}false{{else}}true{{/if}}">
+          <span class="glth-group-caret" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+          <span class="glth-group-icon" aria-hidden="true"><i class="fa-solid {{#if unfiled}}fa-inbox{{else}}fa-folder{{/if}}"></i></span>
+          <span class="glth-group-name">{{name}}</span>
+          <span class="glth-group-count">{{count}}</span>
+          {{#unless unfiled}}
+          <span class="glth-row-acts">
+            <button type="button" class="glth-mini" data-action="editFolder" data-tooltip="{{localize "GLTH.folders.edit"}}" aria-label="{{localize "GLTH.folders.edit"}}"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" class="glth-mini glth-danger" data-action="removeFolder" data-tooltip="{{localize "GLTH.folders.remove"}}" aria-label="{{localize "GLTH.folders.remove"}}"><i class="fa-solid fa-trash"></i></button>
+          </span>
+          {{/unless}}
+        </li>
+        {{/if}}
+        {{#each rows}}
+        <li class="glth-row {{#if selected}}is-selected{{/if}} {{#if onAir}}is-on-air{{/if}} {{#if dirty}}is-dirty{{/if}} {{#if ../showHead}}is-filed{{/if}}" data-id="{{id}}" data-index="{{pos}}"
+          data-folder="{{folder}}" data-haystack="{{search}}" draggable="true" data-action="select" {{#if ../collapsed}}hidden{{/if}}>
           <span class="glth-row-grip" aria-hidden="true"><i class="fa-solid fa-grip-vertical"></i></span>
           <span class="glth-row-thumb">
             {{#if hasSrc}}
@@ -31,9 +54,12 @@
             <button type="button" class="glth-mini glth-danger" data-action="remove" data-tooltip="{{localize "GLTH.editor.remove"}}" aria-label="{{localize "GLTH.editor.remove"}}"><i class="fa-solid fa-trash"></i></button>
           </span>
         </li>
-      {{else}}
-        <li class="glth-ed-empty"><i class="fa-solid fa-images"></i><span>{{localize "GLTH.editor.noShots"}}</span></li>
+        {{/each}}
       {{/each}}
+      {{#unless count}}
+        <li class="glth-ed-empty"><i class="fa-solid fa-images"></i><span>{{localize "GLTH.editor.noShots"}}</span></li>
+      {{/unless}}
+      <li class="glth-ed-empty glth-ed-nomatch" data-no-match hidden><i class="fa-solid fa-magnifying-glass"></i><span>{{localize "GLTH.search.none"}}</span></li>
     </ol>
     <p class="glth-drop-hint"><i class="fa-solid fa-download"></i> {{localize "GLTH.editor.dropHint"}}</p>
   </aside>
@@ -102,7 +128,7 @@
 
           <section class="glth-block">
             <h3 class="glth-block-head"><span>{{localize "GLTH.editor.cutGroup"}}</span><span class="gl-rule"></span></h3>
-            <div class="glth-grid3">
+            <div class="glth-grid2">
               <label class="glth-field">
                 <span class="glth-label">{{localize "GLTH.editor.style"}}</span>
                 <select name="style" class="gl-field">{{#each detail.styles}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
@@ -115,6 +141,10 @@
                 <span class="glth-label">{{localize "GLTH.editor.hold"}}</span>
                 <input type="number" name="hold" class="gl-field glth-num" min="{{holdMin}}" max="{{holdMax}}" step="0.5" value="{{detail.hold}}"
                   placeholder="{{localize "GLTH.editor.holdDefault" value=detail.holdDefault}}">
+              </label>
+              <label class="glth-field" data-tooltip="{{localize "GLTH.folders.pickHint"}}">
+                <span class="glth-label"><i class="fa-solid fa-folder"></i> {{localize "GLTH.folders.folder"}}</span>
+                <select class="gl-field" data-folder-select>{{#each detail.folders}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
               </label>
             </div>
           </section>

@@ -23,7 +23,8 @@ Theatre scene is a scene. Whether anything sits on it is the GM's choice.
 | Flag         | Holds |
 |--------------|-------|
 | `th.enabled` | this scene is a Theatre scene |
-| `th.shots`   | the ordered shot list (`model.mjs`) |
+| `th.shots`   | the shot list, stored in play order (`model.mjs`) |
+| `th.folders` | the ordered folder list: `{ id, name, color }` |
 | `th.config`  | scene defaults: style, face (`null` = the GM's default), hold, letterbox, corner tag |
 | `th.state`   | the shot on screen and the last cue |
 | `th.restore` | what Convert replaced |
@@ -45,12 +46,37 @@ forced replacement and reads it back off the document.
 | `shake`     | camera shake strength 0–1 (`null` = the GM's default) |
 | `treatment` | the backdrop's own look: exposure, saturation, tint, vignette, blur, letterbox |
 | `grade`     | the Stage character grade this shot relights to (`null` leaves Stage alone) |
+| `folder`    | the folder it is filed in (`null` = unfiled) |
 
 The treatment is the picture's grade and the Stage grade is the characters'.
 They are separate on purpose: the backdrop needs a few broad dials that make a
 still read as a film frame, the portraits need Stage's full stack so they sit in
 it, and running Stage's pipeline over a full-screen plate would cost a great deal
 for nothing visible. A neutral treatment is an exact no-op.
+
+## Folders and search
+
+A scene's shots can be filed in **folders** (acts, locations, flashbacks).
+Folder order is play order: every folder's shots in turn, then the unfiled ones,
+so Next and Previous walk exactly what the GM sees grouped. `orderShots` in
+`model.mjs` is the one statement of that order; the store reads shots through
+it and writes them back already ordered, so a folder move, a refile and a
+deletion are each one update. A shot filed in a folder that no longer exists
+reads as unfiled, and deleting a folder keeps its shots.
+
+In the **editor** the shot list is grouped under folder headers. A header
+collapses on click, opens rename/recolour on double-click, reorders by dragging
+and files any shot or image dropped on it. **New folder** sits beside the count,
+and **Import folder** files the imported shots in a new folder named after the
+directory. The shot form's Folder picker writes at once rather than joining the
+draft, so a draft saved later cannot file the shot back.
+
+In the **filmstrip** a row of chips filters the reel to one folder (or Unfiled);
+in the full reel each folder opens with a slate in its colour. Dropping a frame
+on a chip or a slate refiles it. The **search** box in both narrows by title,
+eyebrow, subtitle, notes, file name and folder (every word must match, accents
+ignored). Enter cues up the first match, Esc clears. Filters and search are a
+view only and are never written to the scene.
 
 ## Cues
 

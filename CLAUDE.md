@@ -1507,6 +1507,12 @@ is first in `SHED_ORDER`.
 Create/Convert write a starting Stage grade, or Stage seeds the scene from its
 background — which is black.
 
+**Folder order is play order.** `th.shots` is stored already ordered by
+`orderShots` (folders in order, then unfiled) and `store.shots` reads through it,
+so every index the store and the apps speak is a play index and Next walks what
+the GM sees grouped. A shot's folder is never part of the editor's draft: filing
+writes at once, or a draft saved later files the shot back.
+
 **The overlay anchors every animation to `performance.now()`, not
 `document.timeline`.** A background tab's `document.timeline.currentTime` is
 stale, so `startTime` puts an alt-tabbed player's cue ahead of everyone else's;

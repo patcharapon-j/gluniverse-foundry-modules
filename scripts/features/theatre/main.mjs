@@ -274,7 +274,7 @@ function onUpdateScene(scene, changes) {
     if (t.shots) redrawOnScreen(store);
     if (t.shots || t.config) restLetterbox(store);
   }
-  emit(store, { kind: "update", shots: t.shots, config: t.config, state: t.state, cue: fresh });
+  emit(store, { kind: "update", shots: t.shots, folders: t.folders, config: t.config, state: t.state, cue: fresh });
 }
 
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
