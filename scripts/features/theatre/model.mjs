@@ -17,9 +17,18 @@
  *   face:      FACES key  | null (null = the scene's default),
  *   hold:      ms | null (null = the scene's default),
  *   focus:     { x: 0..1, y: 0..1 } — the point of the image kept in frame when it is cropped to cover,
+ *   shake:     0..1 | null — camera shake strength (null = the GM's default),
  *   treatment: Treatment,
  *   grade:     Stage grade object | null — the Stage character grade this shot relights to (null = leave Stage alone),
+ *   folder:    Folder id | null — the folder the shot is filed in (null = unfiled),
  * }
+ *
+ * Folder (an entry of flags[SUITE_ID].th.folders, ordered):
+ * { id: string (stable, unique within the scene), name: string, color: "#rrggbb" | null (null = the accent) }
+ *
+ * The shot list is always stored in PLAY order, and play order is folder order:
+ * every folder's shots in turn, then the unfiled ones (`orderShots`). Next and
+ * Previous walk that order, so what the GM sees grouped is what Next cuts to.
  *
  * Treatment — the backdrop's own look, separate from Stage's character grade:
  * { exposure: -2..2 (stops), saturation: 0..2 (1 = as authored), tint: "#rrggbb",
@@ -27,7 +36,7 @@
  *   the frame height per bar; null = the scene's letterbox) }
  *
  * SceneConfig (flags[SUITE_ID].th.config):
- * { style: STYLES key, face: FACES key, hold: ms, letterbox: 0..0.2, tag: boolean }
+ * { style: STYLES key, face: FACES key | null (null = the GM's default), hold: ms, letterbox: 0..0.2, tag: boolean, v: CONFIG_VERSION }
  *
  * PlayState (flags[SUITE_ID].th.state):
  * { shotId: string | null  — the shot on screen (null = black),
@@ -60,8 +69,16 @@ export const NEUTRAL_TREATMENT = Object.freeze({
   exposure: 0, saturation: 1, tint: "#000000", tintAmount: 0, vignette: 0, blur: 0, letterbox: null,
 });
 
+/**
+ * The scene config's shape version. Before v2 every scene stored a face, so the
+ * GM's default typeface could never reach a scene made earlier; from v2 a null
+ * face means "the GM's default". A pre-v2 scene still on the face every scene
+ * used to be written with reads as following the default, with nothing written.
+ */
+export const CONFIG_VERSION = 2;
+
 export const DEFAULT_CONFIG = Object.freeze({
-  style: DEFAULT_STYLE, face: DEFAULT_FACE, hold: TIMING.hold, letterbox: 0, tag: false,
+  style: DEFAULT_STYLE, face: null, hold: TIMING.hold, letterbox: 0, tag: false, v: CONFIG_VERSION,
 });
 
 export function normalizeTreatment(raw) {
@@ -110,11 +127,13 @@ export function normalizeShot(raw, index = 0) {
     subtitle: str(s.subtitle),
     notes: str(s.notes),
     style: orNull(s.style, (v) => oneOf(v, STYLES, null)),
-    face: orNull(s.face, (v) => (v in FACES ? v : null)),
+    face: orNull(s.face, (v) => (Object.hasOwn(FACES, v) ? v : null)),
     hold: orNull(s.hold, (v) => num(v, TIMING.holdMin, TIMING.holdMax, null)),
     focus: { x: num(focus.x, 0, 1, 0.5), y: num(focus.y, 0, 1, 0.5) },
+    shake: orNull(s.shake, (v) => num(v, 0, 1, null)),
     treatment: normalizeTreatment(s.treatment),
     grade: s.grade && typeof s.grade === "object" ? s.grade : null,
+    folder: typeof s.folder === "string" && s.folder.trim() ? s.folder.trim() : null,
   };
 }
 
@@ -130,14 +149,100 @@ export function normalizeShots(raw) {
   });
 }
 
+/* ── Folders ────────────────────────────────────────────────────────────── */
+
+/** Deterministic id for a folder that arrived without one (same rule as shots). */
+export function mintFolderId(index, name = "") {
+  return `f${mintShotId(index, name).slice(1)}`;
+}
+
+/** A fresh, random id for a folder the GM is adding now. */
+export function newFolderId() {
+  return `f${newShotId().slice(1)}`;
+}
+
+export function normalizeFolder(raw, index = 0) {
+  const f = raw && typeof raw === "object" ? raw : {};
+  const name = str(f.name).trim();
+  return {
+    id: typeof f.id === "string" && f.id.trim() ? f.id.trim() : mintFolderId(index, name),
+    name,
+    color: orNull(f.color, (v) => hex(v, null)),
+  };
+}
+
+/** Normalise the folder list; duplicate ids are re-minted deterministically. */
+export function normalizeFolders(raw) {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw) : [];
+  const seen = new Set();
+  return list.map((r, i) => {
+    const folder = normalizeFolder(r, i);
+    if (seen.has(folder.id)) folder.id = mintFolderId(i, `${folder.name}#dup`);
+    seen.add(folder.id);
+    return folder;
+  });
+}
+
+/**
+ * Put shots in play order: each folder's shots in folder order, then the
+ * unfiled ones, keeping the stored order inside every group. A shot filed in a
+ * folder that no longer exists reads as unfiled. Returns new shot objects.
+ */
+export function orderShots(shots, folders) {
+  const rank = new Map((folders ?? []).map((f, i) => [f.id, i]));
+  const last = rank.size;
+  return (shots ?? [])
+    .map((s, i) => ({ s: { ...s, folder: rank.has(s.folder) ? s.folder : null }, i }))
+    .sort((a, b) => (rank.get(a.s.folder) ?? last) - (rank.get(b.s.folder) ?? last) || a.i - b.i)
+    .map(({ s }) => s);
+}
+
+/**
+ * Shots grouped for display, in play order: one group per folder (empty ones
+ * included), then the unfiled group when it has shots or there are no folders.
+ * Each entry carries the shot's index in the whole play order.
+ */
+export function groupShots(shots, folders) {
+  const ordered = orderShots(shots, folders);
+  const groups = (folders ?? []).map((folder) => ({ folder, shots: [] }));
+  const byId = new Map(groups.map((g) => [g.folder.id, g]));
+  const unfiled = { folder: null, shots: [] };
+  ordered.forEach((shot, index) => (byId.get(shot.folder) ?? unfiled).shots.push({ shot, index }));
+  if (unfiled.shots.length || !groups.length) groups.push(unfiled);
+  return groups;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────── */
+
+/** Lower case, accents stripped, whitespace collapsed: what a query and a shot are compared in. */
+export function foldText(v) {
+  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** Everything a GM might search a shot by: its title lines, notes, file name and folder. */
+export function searchText(shot, folderName = "") {
+  const file = String(shot?.src ?? "").split(/[\\/]/).pop();
+  let decoded = file;
+  try { decoded = decodeURIComponent(file); } catch { /* keep the raw name */ }
+  return foldText([shot?.eyebrow, shot?.title, shot?.subtitle, shot?.notes, decoded, folderName].filter(Boolean).join(" "));
+}
+
+/** True when every word of `query` appears somewhere in `text` (a `searchText`). An empty query matches all. */
+export function matchesQuery(text, query) {
+  const words = foldText(query).split(" ").filter(Boolean);
+  const hay = foldText(text);
+  return words.every((w) => hay.includes(w));
+}
+
 export function normalizeConfig(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   return {
     style: oneOf(c.style, STYLES, DEFAULT_CONFIG.style),
-    face: c.face in FACES ? c.face : DEFAULT_CONFIG.face,
+    face: Object.hasOwn(FACES, c.face) && (c.v === CONFIG_VERSION || c.face !== DEFAULT_FACE) ? c.face : null,
     hold: num(c.hold, TIMING.holdMin, TIMING.holdMax, DEFAULT_CONFIG.hold),
     letterbox: num(c.letterbox, 0, 0.2, DEFAULT_CONFIG.letterbox),
     tag: c.tag === true,
+    v: CONFIG_VERSION,
   };
 }
 
@@ -167,7 +272,10 @@ export function normalizeState(raw) {
 /* ── Resolution: a shot's effective values against its scene ─────────────── */
 
 export const resolveStyle = (shot, config) => shot?.style ?? config.style;
-export const resolveFace = (shot, config) => shot?.face ?? config.face;
+/** `fallback` is the GM's default typeface, for a scene that does not pick its own. */
+export const resolveFace = (shot, config, fallback = DEFAULT_FACE) => shot?.face ?? config?.face ?? fallback;
+/** `fallback` is the GM's default shake strength (0..1). */
+export const resolveShake = (shot, fallback = 0) => shot?.shake ?? fallback;
 export const resolveHold = (shot, config) => shot?.hold ?? config.hold;
 export const resolveLetterbox = (shot, config) => shot?.treatment?.letterbox ?? config.letterbox;
 export const isVideo = (src) => VIDEO_RE.test(String(src ?? ""));

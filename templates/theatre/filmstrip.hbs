@@ -90,12 +90,36 @@
     <div class="glth-strip">
       <div class="glth-strip-head">
         <span class="glth-strip-label">{{localize "GLTH.filmstrip.reel"}}</span>
-        <span class="gl-rule"></span>
-        <span class="glth-strip-count">{{countLabel}}</span>
+        <label class="glth-search">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <input type="search" class="gl-field glth-search-input" data-search value="{{query}}" spellcheck="false" autocomplete="off"
+            placeholder="{{localize "GLTH.search.placeholder"}}" aria-label="{{localize "GLTH.search.label"}}" data-tooltip="{{localize "GLTH.search.hint"}}">
+        </label>
+        <span class="glth-strip-count" data-count data-total="{{count}}">{{countLabel}}</span>
       </div>
+      {{#if hasFolders}}
+      <nav class="glth-chips gl-scroll" aria-label="{{localize "GLTH.folders.label"}}">
+        {{#each chips}}
+          <button type="button" class="glth-chip {{#if active}}is-active{{/if}} {{#if unfiled}}is-unfiled{{/if}}" data-action="filter" data-folder-filter="{{value}}"
+            {{#if style}}style="{{style}}"{{/if}} aria-pressed="{{#if active}}true{{else}}false{{/if}}" {{#if droppable}}data-drop-folder="{{value}}"{{/if}}>
+            {{#if all}}<i class="fa-solid fa-layer-group" aria-hidden="true"></i>{{else}}<span class="glth-chip-dot" aria-hidden="true"></span>{{/if}}
+            <span class="glth-chip-name">{{label}}</span>
+            <span class="glth-chip-count">{{count}}</span>
+          </button>
+        {{/each}}
+      </nav>
+      {{/if}}
       <ol class="glth-strip-reel gl-scroll" aria-label="{{localize "GLTH.filmstrip.reel"}}">
-        {{#each frames}}
-          <li class="glth-frame {{#if onAir}}is-on-air{{/if}} {{#if selected}}is-selected{{/if}}" data-id="{{id}}" draggable="true"
+        {{#each reel}}
+          {{#if slate}}
+          <li class="glth-slate {{#if unfiled}}is-unfiled{{/if}}" data-slate data-folder="{{folder}}" data-action="filter" data-folder-filter="{{folder}}"
+            {{#if style}}style="{{style}}"{{/if}} data-tooltip="{{name}} · {{countLabel}}">
+            <span class="glth-slate-name">{{name}}</span>
+            <span class="glth-slate-count">{{count}}</span>
+          </li>
+          {{else}}
+          <li class="glth-frame {{#if onAir}}is-on-air{{/if}} {{#if selected}}is-selected{{/if}}" data-id="{{id}}" data-index="{{pos}}" data-folder="{{folder}}"
+            data-haystack="{{search}}" draggable="true"
             data-action="select" data-tooltip="{{label}} · {{style}}" aria-current="{{#if onAir}}true{{else}}false{{/if}}">
             <div class="glth-frame-pic">
               {{#if hasSrc}}
@@ -114,9 +138,11 @@
             </div>
             <span class="glth-frame-label {{#if untitled}}is-untitled{{/if}}">{{label}}</span>
           </li>
+          {{/if}}
         {{else}}
           <li class="glth-strip-empty"><i class="fa-solid fa-file-import"></i> {{localize "GLTH.filmstrip.empty"}}</li>
         {{/each}}
+        <li class="glth-strip-empty glth-strip-nomatch" data-no-match hidden><i class="fa-solid fa-magnifying-glass"></i> {{localize "GLTH.search.none"}}</li>
       </ol>
     </div>
   </div>

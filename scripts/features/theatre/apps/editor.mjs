@@ -2,8 +2,15 @@
  * Theatre — the shot editor.
  *
  * Left: the scene's shots (drag to reorder, duplicate, delete; drop images,
- * tiles or OS files onto it; Add shot; Import folder). Right: two tabs — the
- * selected shot's detail form, and the scene's defaults.
+ * tiles or OS files onto it; Add shot; Import folder), grouped under the
+ * scene's folders with a search box over them. Folders collapse, rename,
+ * recolour, delete (their shots become unfiled) and reorder by dragging their
+ * header; a shot dropped on a header is filed there. Folder order IS play
+ * order. Importing a directory files its shots in a new folder named after it.
+ * Right: two tabs — the selected shot's detail form, and the scene's defaults.
+ *
+ * A shot's folder is not part of the draft: it is organisation, written the
+ * moment it is picked, so a draft saved later can never file the shot back.
  *
  * The shot form is a DRAFT. Typing never writes: the draft is read back from
  * the form on every input, so a re-render caused by someone else's write keeps
@@ -21,19 +28,27 @@
  */
 
 import { FRAME, TIMING } from "../constants.mjs";
-import { coverRect, normalizeShot, resolveFace, resolveHold, resolveStyle } from "../model.mjs";
+import { coverRect, groupShots, matchesQuery, normalizeShot, resolveFace, resolveHold, resolveStyle, searchText } from "../model.mjs";
 import { escapeHTML } from "../../../core/util.mjs";
 import { TheatreAppBase } from "./base.mjs";
 import {
-  L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, faceKeys, faceLabel,
-  faceSecondaryStyle, faceSpecimenStyle, guarded, isVideoSrc, loadStore, overrideOptions, partialFromSrc, pathsFromDrop,
-  pickFile, pickFolder, plainOptions, stageEnabled, styleKeys, styleLabel, tpl,
+  FOLDER_MIME, L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, dropSlot, faceKeys, faceLabel,
+  faceSecondaryStyle, faceSpecimenStyle, folderNameFromPath, folderOf, folderStyle, gmFace, gmShake, guarded, isVideoSrc, loadStore,
+  overrideOptions, partialFromSrc, pathsFromDrop, pickFile, pickFolder, plainOptions, promptFolder, stageEnabled, styleKeys, styleLabel, tpl,
 } from "./shared.mjs";
 
 export const EDITOR_ID = "glth-editor";
 
 let lastTab = "shot";
 let lastPosition = null;
+/** The list's search text, kept across re-renders within the session. */
+let query = "";
+/** Collapsed folder ids per scene ("" is the unfiled group). */
+const collapsedFolders = new Map();
+const collapsedSet = (sceneId) => {
+  if (!collapsedFolders.has(sceneId)) collapsedFolders.set(sceneId, new Set());
+  return collapsedFolders.get(sceneId);
+};
 
 const sec = (ms) => Math.round((ms / 1000) * 10) / 10;
 const fmt = {
@@ -60,6 +75,7 @@ function patchFromForm(f, base) {
     face: f.face || null,
     hold: holdSec === "" || !Number.isFinite(Number(holdSec)) ? null : Number(holdSec) * 1000,
     focus: { x: num(f.focus?.x, base.focus.x), y: num(f.focus?.y, base.focus.y) },
+    shake: f.shakeOn ? num(f.shake, 0) : null,
     treatment: {
       exposure: num(t.exposure, base.treatment.exposure),
       saturation: num(t.saturation, base.treatment.saturation),
@@ -103,6 +119,10 @@ function EditorApp() {
         revert: TheatreEditor.#onRevert,
         cue: TheatreEditor.#onCue,
         resetFocus: TheatreEditor.#onResetFocus,
+        addFolder: TheatreEditor.#onAddFolder,
+        editFolder: TheatreEditor.#onEditFolder,
+        removeFolder: TheatreEditor.#onRemoveFolder,
+        toggleFolder: TheatreEditor.#onToggleFolder,
         resetTreatment: TheatreEditor.#onResetTreatment,
         captureGrade: TheatreEditor.#onCaptureGrade,
         resampleGrade: TheatreEditor.#onResampleGrade,
@@ -118,6 +138,8 @@ function EditorApp() {
     _draft = null;
     /** The last store seen for this scene, so a dirty draft can still be saved while closing. */
     _lastStore = null;
+    /** Caret of a focused search box, carried across a re-render. */
+    _refocus = null;
 
     constructor(options = {}) {
       if (lastPosition) options.position = { ...(options.position ?? {}), ...lastPosition };
@@ -137,12 +159,15 @@ function EditorApp() {
       const store = this.store;
       if (!store) return { ...context, empty: true };
       this._lastStore = store;
-      const { shots, config, state } = store;
+      const { shots, folders, config, state } = store;
       if (!this.selectedId || !store.shot(this.selectedId)) this.selectedId = shots[0]?.id ?? null;
       if (this._draft && !store.shot(this._draft.id)) this._draft = null;
 
-      const rows = shots.map((s) => ({
+      const row = (s, i, folderName) => ({
         id: s.id,
+        pos: i,
+        folder: s.folder ?? "",
+        search: searchText(s, folderName),
         src: s.src,
         hasSrc: !!s.src,
         video: isVideoSrc(s.src),
@@ -152,7 +177,24 @@ function EditorApp() {
         selected: s.id === this.selectedId,
         onAir: s.id === state.shotId,
         dirty: this._draft?.id === s.id,
-      }));
+      });
+
+      const collapsed = collapsedSet(this.sceneId);
+      const hasFolders = folders.length > 0;
+      const groups = groupShots(shots, folders).map((g) => {
+        const folder = g.folder?.id ?? "";
+        return {
+          folder,
+          name: g.folder ? (g.folder.name || L("GLTH.folders.untitled")) : L("GLTH.folders.unfiled"),
+          style: g.folder ? folderStyle(g.folder.color) : "",
+          unfiled: !g.folder,
+          showHead: hasFolders,
+          collapsed: hasFolders && collapsed.has(folder),
+          count: g.shots.length,
+          rows: g.shots.map(({ shot, index }) => row(shot, index, g.folder?.name ?? "")),
+        };
+      });
+      const rows = groups.flatMap((g) => g.rows);
 
       const stage = stageEnabled();
       const stored = this.selectedId ? store.shot(this.selectedId) : null;
@@ -160,7 +202,9 @@ function EditorApp() {
       if (stored) {
         // The draft wins over the stored shot for everything the form edits; grade is never drafted.
         const d = this.dirty ? normalizeShot({ ...stored, ...this._draft.values, id: stored.id, grade: stored.grade }) : stored;
-        const face = resolveFace(d, config);
+        const sceneFace = config.face ?? gmFace();
+        const face = resolveFace(d, config, gmFace());
+        const shake = d.shake ?? gmShake();
         const t = d.treatment;
         detail = {
           id: d.id,
@@ -173,11 +217,15 @@ function EditorApp() {
           notes: d.notes,
           onAir: d.id === state.shotId,
           styles: overrideOptions(styleKeys(), styleLabel, d.style, config.style),
-          faces: overrideOptions(faceKeys(), faceLabel, d.face, config.face),
+          faces: overrideOptions(faceKeys(), faceLabel, d.face, sceneFace),
           hold: d.hold == null ? "" : sec(d.hold),
           holdDefault: sec(config.hold),
           focusX: d.focus.x,
           focusY: d.focus.y,
+          shakeOn: d.shake != null,
+          shakeValue: shake,
+          shakeOut: fmt.pct(shake),
+          shakeDefault: fmt.pct(gmShake()),
           t,
           out: {
             exposure: fmt.exposure(t.exposure),
@@ -195,6 +243,10 @@ function EditorApp() {
           specimen: d.title || L("GLTH.editor.specimen"),
           hasGrade: !!stored.grade,
           resolvedHold: sec(resolveHold(d, config)),
+          folders: [
+            { value: "", label: L("GLTH.folders.unfiled"), selected: !stored.folder },
+            ...folders.map((f) => ({ value: f.id, label: f.name || L("GLTH.folders.untitled"), selected: f.id === stored.folder })),
+          ],
         };
       }
 
@@ -205,6 +257,8 @@ function EditorApp() {
         isShotTab: lastTab === "shot",
         isSceneTab: lastTab === "scene",
         rows,
+        groups,
+        query,
         count: rows.length,
         detail,
         dirty: this.dirty,
@@ -213,14 +267,14 @@ function EditorApp() {
         holdMax: sec(TIMING.holdMax),
         config: {
           styles: plainOptions(styleKeys(), styleLabel, config.style),
-          faces: plainOptions(faceKeys(), faceLabel, config.face),
+          faces: overrideOptions(faceKeys(), faceLabel, config.face, gmFace(), "GLTH.editor.gmDefault"),
           hold: sec(config.hold),
           letterbox: config.letterbox,
           letterboxOut: fmt.letterbox(config.letterbox),
           tag: config.tag,
           styleHint: L(`GLTH.style.${config.style}.hint`),
-          titleStyle: faceSpecimenStyle(config.face),
-          secondaryStyle: faceSecondaryStyle(config.face),
+          titleStyle: faceSpecimenStyle(config.face ?? gmFace()),
+          secondaryStyle: faceSecondaryStyle(config.face ?? gmFace()),
         },
       };
     }
@@ -228,29 +282,99 @@ function EditorApp() {
     async _onRender(context, options) {
       await super._onRender(context, options);
       const root = this.element;
+      this.#bindSearch(root.querySelector("[data-search]"));
       this.#bindList(root.querySelector(".glth-ed-list"));
+      this.#applyFilter();
       this.#bindDetail(root.querySelector("form[data-shot-form]"));
       this.#bindConfig(root.querySelector("form[data-config-form]"));
+    }
+
+    async _preRender(context, options) {
+      await super._preRender?.(context, options);
+      const a = document.activeElement;
+      this._refocus = a?.matches?.(".glth-editor [data-search]") ? { start: a.selectionStart, end: a.selectionEnd } : null;
+    }
+
+    /* ── list: search + collapse ─────────────────────────────────────── */
+
+    #bindSearch(input) {
+      if (!input) return;
+      if (this._refocus) {
+        input.focus({ preventScroll: true });
+        try { input.setSelectionRange(this._refocus.start, this._refocus.end); } catch { /* not a text input */ }
+        this._refocus = null;
+      }
+      input.addEventListener("input", () => { query = input.value; this.#applyFilter(); });
+      input.addEventListener("keydown", async (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          const first = this.element?.querySelector(".glth-row[data-id]:not([hidden])");
+          if (first && first.dataset.id !== this.selectedId) {
+            await this.#flushDraft();
+            this.selectedId = first.dataset.id;
+            lastTab = "shot";
+            this.render();
+          }
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (input.value) { input.value = ""; query = ""; this.#applyFilter(); } else input.blur();
+        }
+      });
+    }
+
+    /**
+     * Rows show when they match the search and their folder is open; while
+     * searching, every match shows whatever is collapsed. A folder header shows
+     * unless a search leaves it nothing to head.
+     */
+    #applyFilter() {
+      const root = this.element;
+      if (!root) return;
+      const collapsed = collapsedSet(this.sceneId);
+      const rows = [...root.querySelectorAll(".glth-row[data-id]")];
+      const hits = new Set();
+      let n = 0;
+      for (const r of rows) {
+        const match = matchesQuery(r.dataset.haystack ?? "", query);
+        if (match) { n++; hits.add(r.dataset.folder); }
+        r.hidden = !match || (!query && collapsed.has(r.dataset.folder) && !!root.querySelector("[data-group]"));
+      }
+      for (const g of root.querySelectorAll("[data-group]")) {
+        const shut = collapsed.has(g.dataset.folder);
+        g.hidden = !!query && !hits.has(g.dataset.folder);
+        g.classList.toggle("is-collapsed", shut && !query);
+        g.setAttribute("aria-expanded", shut && !query ? "false" : "true");
+      }
+      const none = root.querySelector("[data-no-match]");
+      if (none) none.hidden = !(rows.length && !n);
+      root.querySelector(".glth-search")?.classList.toggle("is-active", !!query);
     }
 
     /* ── list: select, reorder, drop ─────────────────────────────────── */
 
     #bindList(list) {
       if (!list) return;
-      const rows = () => [...list.querySelectorAll(".glth-row[data-id]")];
+      const rows = () => [...list.querySelectorAll(".glth-row[data-id]:not([hidden])")];
+      const heads = () => [...list.querySelectorAll("[data-group]:not([hidden]):not(.is-unfiled)")];
+      const marked = () => list.querySelectorAll(".glth-row, [data-group]");
       const clearMarks = () => {
-        for (const r of rows()) r.classList.remove("is-drop-before", "is-drop-after", "is-dragging");
+        for (const r of marked()) r.classList.remove("is-drop-before", "is-drop-after", "is-dragging", "is-drop");
         list.classList.remove("is-drop");
       };
-      const slot = (y) => {
-        const all = rows();
-        for (let i = 0; i < all.length; i++) {
-          const b = all[i].getBoundingClientRect();
-          if (y < b.top + b.height / 2) return { index: i, el: all[i], side: "before" };
-        }
-        return { index: all.length, el: all.at(-1) ?? null, side: "after" };
+      /**
+       * Where a shot or a file lands: on a folder header, at the end of that
+       * folder; between rows, beside the nearest row and in its folder.
+       */
+      const slot = (ev) => {
+        const head = ev.target?.closest?.("[data-group]");
+        if (head) return { el: head, head: true, index: null, folder: folderOf(head) };
+        const s = dropSlot(rows(), ev.clientY, "y");
+        if (!s.el) return { el: null, index: null, folder: undefined };
+        const i = Number(s.el.dataset.index);
+        return { el: s.el, side: s.side, index: s.side === "before" ? i : i + 1, folder: folderOf(s.el) };
       };
-      for (const r of rows()) {
+      for (const r of list.querySelectorAll(".glth-row[data-id]")) {
         r.addEventListener("dragstart", (ev) => {
           ev.dataTransfer.setData(SHOT_MIME, r.dataset.id);
           ev.dataTransfer.effectAllowed = "move";
@@ -258,41 +382,74 @@ function EditorApp() {
         });
         r.addEventListener("dragend", clearMarks);
       }
+      for (const h of list.querySelectorAll("[data-group][draggable='true']")) {
+        h.addEventListener("dblclick", (ev) => {
+          if (ev.target.closest("button")) return;
+          ev.preventDefault();
+          TheatreEditor.#onEditFolder.call(this, ev, h);
+        });
+        h.addEventListener("dragstart", (ev) => {
+          ev.dataTransfer.setData(FOLDER_MIME, h.dataset.folder);
+          ev.dataTransfer.effectAllowed = "move";
+          h.classList.add("is-dragging");
+        });
+        h.addEventListener("dragend", clearMarks);
+      }
       list.addEventListener("dragover", (ev) => {
-        const internal = ev.dataTransfer?.types?.includes(SHOT_MIME);
+        const types = ev.dataTransfer?.types ?? [];
+        const folderDrag = types.includes(FOLDER_MIME);
+        const internal = folderDrag || types.includes(SHOT_MIME);
         if (!internal && !dragLooksUseful(ev)) return;
         ev.preventDefault();
         ev.dataTransfer.dropEffect = internal ? "move" : "copy";
-        for (const r of rows()) r.classList.remove("is-drop-before", "is-drop-after");
-        const s = slot(ev.clientY);
-        s.el?.classList.add(s.side === "before" ? "is-drop-before" : "is-drop-after");
+        for (const r of marked()) r.classList.remove("is-drop-before", "is-drop-after", "is-drop");
+        if (folderDrag) {
+          const s = dropSlot(heads(), ev.clientY, "y");
+          s.el?.classList.add(s.side === "before" ? "is-drop-before" : "is-drop-after");
+        } else {
+          const s = slot(ev);
+          s.el?.classList.add(s.head ? "is-drop" : s.side === "before" ? "is-drop-before" : "is-drop-after");
+        }
         list.classList.toggle("is-drop", !internal);
       });
       list.addEventListener("dragleave", (ev) => { if (!list.contains(ev.relatedTarget)) clearMarks(); });
       list.addEventListener("drop", async (ev) => {
         ev.preventDefault();
-        const s = slot(ev.clientY);
-        clearMarks();
         const store = this.store;
+        const folderId = ev.dataTransfer?.getData(FOLDER_MIME);
+        if (folderId) {
+          const s = dropSlot(heads(), ev.clientY, "y");
+          clearMarks();
+          if (!store || !s.el) return;
+          const from = store.folders.findIndex((f) => f.id === folderId);
+          const at = store.folders.findIndex((f) => f.id === s.el.dataset.folder);
+          if (from < 0 || at < 0) return;
+          const target = s.side === "before" ? at : at + 1;
+          const to = target > from ? target - 1 : target;
+          if (to !== from) await guarded(() => store.moveFolder(folderId, to));
+          return;
+        }
+        const s = slot(ev);
+        clearMarks();
         if (!store) return;
         const id = ev.dataTransfer?.getData(SHOT_MIME);
         if (id) {
           const from = store.indexOf(id);
           if (from < 0) return;
-          const to = s.index > from ? s.index - 1 : s.index;
-          if (to !== from) await guarded(() => store.moveShot(id, to));
+          const to = s.index == null ? null : s.index > from ? s.index - 1 : s.index;
+          await guarded(() => store.moveShot(id, to, { folder: s.folder }));
           return;
         }
-        await this.#addPaths(await pathsFromDrop(ev), s.index);
+        await this.#addPaths(await pathsFromDrop(ev), s.index, s.folder);
       });
     }
 
-    async #addPaths(paths, at) {
+    async #addPaths(paths, at, folder) {
       const store = this.store;
       if (!store) return;
       if (!paths?.length) { ui.notifications.warn(L("GLTH.editor.dropNothing")); return; }
       await this.#flushDraft();
-      const ids = await guarded(() => store.addShots(paths.map(partialFromSrc), at == null ? {} : { at }));
+      const ids = await guarded(() => store.addShots(paths.map(partialFromSrc), { at: at ?? null, folder }));
       if (ids?.length) {
         this.selectedId = ids[0];
         lastTab = "shot";
@@ -312,8 +469,16 @@ function EditorApp() {
         this.element.querySelector(".glth-ed")?.classList.add("is-dirty");
         this.element.querySelector(`.glth-row[data-id="${CSS.escape(id)}"]`)?.classList.add("is-dirty");
       };
-      form.addEventListener("input", (ev) => { this.#liveOutputs(form, ev.target); capture(); });
-      form.addEventListener("change", (ev) => {
+      const organise = (el) => !!el?.matches?.("[data-folder-select]");
+      form.addEventListener("input", (ev) => { if (organise(ev.target)) return; this.#liveOutputs(form, ev.target); capture(); });
+      form.addEventListener("change", async (ev) => {
+        if (organise(ev.target)) {
+          // Filing is organisation, not a draft edit: it writes now and leaves the draft alone.
+          const store = this.store;
+          const id = form.dataset.shotId;
+          if (store && id) await guarded(() => store.moveShot(id, null, { folder: ev.target.value || null }));
+          return;
+        }
         this.#liveOutputs(form, ev.target);
         capture();
         if (ev.target?.name === "src") this.#bindFocus(form, true);
@@ -333,10 +498,14 @@ function EditorApp() {
         const range = form.querySelector('input[name="treatment.letterbox"]');
         if (range) range.disabled = !el.checked;
       }
+      if (el?.name === "shakeOn") {
+        const range = form.querySelector('input[name="shake"]');
+        if (range) range.disabled = !el.checked;
+      }
       if (el?.name === "face" || el?.name === "title" || el?.name === "eyebrow" || el?.name === "subtitle") {
         const store = this.store;
         if (!store) return;
-        const faceKey = form.elements.face?.value || store.config.face;
+        const faceKey = form.elements.face?.value || store.face;
         const spec = form.querySelector("[data-specimen]");
         if (!spec) return;
         const t = spec.querySelector("[data-spec-title]");
@@ -476,7 +645,7 @@ function EditorApp() {
         const holdSec = Number(f.hold);
         const patch = {
           style: f.style,
-          face: f.face,
+          face: f.face || null,
           hold: Number.isFinite(holdSec) && String(f.hold).trim() !== "" ? holdSec * 1000 : store.config.hold,
           letterbox: Number(f.letterbox) || 0,
           tag: !!f.tag,
@@ -536,8 +705,9 @@ function EditorApp() {
     static async #onAddShot() {
       const path = await pickFile();
       if (!path) return;
-      const at = this.store && this.selectedId ? this.store.indexOf(this.selectedId) + 1 : undefined;
-      await this.#addPaths([path], at);
+      const sel = this.store?.shot(this.selectedId) ?? null;
+      const at = sel ? this.store.indexOf(sel.id) + 1 : null;
+      await this.#addPaths([path], at, sel ? sel.folder : undefined);
     }
 
     static async #onImportFolder() {
@@ -552,7 +722,11 @@ function EditorApp() {
         return;
       }
       if (!paths.length) { ui.notifications.warn(L("GLTH.editor.importEmpty", { path: picked.path })); return; }
-      await this.#addPaths(paths);
+      // A directory arrives as a folder of its own, named after it.
+      const store = this.store;
+      if (!store) return;
+      const folder = await guarded(() => store.addFolder({ name: folderNameFromPath(picked.path) || L("GLTH.folders.untitled") }));
+      await this.#addPaths(paths, null, typeof folder === "string" ? folder : undefined);
     }
 
     static async #onDuplicate(event, target) {
@@ -626,6 +800,45 @@ function EditorApp() {
       set("treatment.blur", 0);
       set("treatment.letterboxOn", false);
       form.elements["treatment.letterboxOn"]?.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    static async #onAddFolder() {
+      const store = this.store;
+      if (!store) return;
+      const data = await promptFolder();
+      if (!data || !this.store) return;
+      await guarded(() => this.store.addFolder(data));
+    }
+
+    static async #onEditFolder(event, target) {
+      const id = target.closest("[data-group]")?.dataset.folder;
+      const folder = id ? this.store?.folder(id) : null;
+      if (!folder) return;
+      const data = await promptFolder(folder);
+      if (!data || !this.store) return;
+      await guarded(() => this.store.updateFolder(id, data));
+    }
+
+    static async #onRemoveFolder(event, target) {
+      const id = target.closest("[data-group]")?.dataset.folder;
+      const store = this.store;
+      const folder = id ? store?.folder(id) : null;
+      if (!folder) return;
+      const n = store.shots.filter((s) => s.folder === id).length;
+      const name = escapeHTML(folder.name || L("GLTH.folders.untitled"));
+      const ok = await confirmDialog(L("GLTH.folders.removeTitle"), L("GLTH.folders.removeBody", { name, n }));
+      if (!ok || !this.store) return;
+      collapsedSet(this.sceneId).delete(id);
+      await guarded(() => this.store.removeFolder(id));
+    }
+
+    static #onToggleFolder(event, target) {
+      if (event.target.closest("button")) return;
+      const id = target.closest("[data-group]")?.dataset.folder;
+      if (id === undefined || query) return;
+      const set = collapsedSet(this.sceneId);
+      if (set.has(id)) set.delete(id); else set.add(id);
+      this.#applyFilter();
     }
 
     static async #onCaptureGrade() {

@@ -7,9 +7,13 @@
    this sheet declares no duration, easing or keyframe.
 
    Stacking. Foundry's canvas is z 0, Stage's #gluniverse-stage-overlay and the
-   comms strip are z 1 (--gl-z-base), and Foundry's UI columns start at
-   --z-index-app (30). The overlay sits at --gl-z-base + 1: over the stage
-   portraits (a title reads over the cast), under every control.
+   comms strip are z 1 (--gl-z-base), Foundry's UI columns and chat sidebar sit
+   at --z-index-ui (60) and its windows from 100. At rest the overlay sits at
+   --gl-z-base + 1: over the stage portraits (a title reads over the cast),
+   under every control, so the corner tag and a resting letterbox never cover
+   the UI. While a cue plays it is LIVE and rises just under the suite's splash
+   band — over the UI, the chat and ordinary windows — so a transition fills the
+   whole screen, then drops back when the cue ends.
 
    The title faces are set inline from FACES (constants.mjs) — this sheet never
    names a typeface. `--glth-lb` is the resting letterbox fraction, written by
@@ -26,6 +30,9 @@
   contain: strict;
   color: var(--gl-text-bright);
   font-family: var(--gl-display);
+}
+.glth-overlay.glth-overlay--live {
+  z-index: calc(var(--gl-z-splash) - 1);
 }
 .glth-overlay > * {
   position: absolute;

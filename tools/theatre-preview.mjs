@@ -79,6 +79,11 @@ const html = `<!doctype html>
   #stage-standin { position: fixed; left: 50%; bottom: 0; translate: -50% 0; width: 46vw; height: 9vh; z-index: 1; pointer-events: none;
     border-top: 1px dashed rgb(var(--gl-tint-light) / 0.25); display: none; }
   body.show-stage #stage-standin { display: block; }
+  /* Stand-in for Foundry's UI column and chat sidebar at --z-index-ui (60): a live cue covers it, a settled one does not. */
+  #ui-standin { position: fixed; top: 0; right: 0; bottom: 0; width: 300px; z-index: 60; pointer-events: none; display: none;
+    background: rgb(var(--gl-tint-dark) / 0.75); border-left: 1px solid var(--gl-hair); color: var(--gl-text-dim);
+    font-family: var(--gl-tech); font-size: var(--gl-fs-xs); padding: 12px; box-sizing: border-box; }
+  body.show-ui #ui-standin { display: block; }
   #dock { position: fixed; z-index: 50; left: 50%; top: 10px; translate: -50% 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
     max-width: calc(100vw - 32px); box-sizing: border-box; padding: 8px 10px; background: var(--gl-scrim); border: 1px solid var(--gl-hair);
     font-size: var(--gl-fs-sm); }
@@ -98,6 +103,7 @@ const html = `<!doctype html>
 <body>
 <div id="frame"></div>
 <div id="stage-standin"></div>
+<div id="ui-standin">Foundry UI stand-in (z 60)</div>
 <div id="dock">
   <div id="thumbs"></div><span class="sep"></span>
   <span id="styles"></span><span class="sep"></span>
@@ -107,6 +113,8 @@ const html = `<!doctype html>
   <label><input type="checkbox" id="tg"> Tag</label>
   <label><input type="checkbox" id="st"> Settle</label>
   <label><input type="checkbox" id="sg"> Stage z</label>
+  <label><input type="checkbox" id="ui"> UI z</label>
+  <label>Shake <select id="sk"><option value="0">0</option><option value="0.3" selected>30%</option><option value="0.6">60%</option><option value="1">100%</option></select></label>
   <span class="sep"></span>
   <button id="replay">Replay</button><button id="again">Re-announce</button><button id="card">Card</button><button id="black">Black</button><button id="clear">Clear</button>
 </div>
@@ -136,6 +144,9 @@ async function bootRenderer() {
     app = new PIXI.Application({ resizeTo: window, backgroundAlpha: 1, backgroundColor: 0x000000, antialias: false, autoDensity: true, resolution: devicePixelRatio || 1 });
     $("#frame").append(app.view);
     renderer = new mod.ShotRenderer(PIXI, { width: FRAME.width, height: FRAME.height });
+    // ?shake=0..1 — the GM's default camera shake (the dock's Shake select changes it live).
+    const sq = new URLSearchParams(location.search);
+    renderer.setShakeDefault(sq.has("shake") ? Number(sq.get("shake")) : Number($("#sk").value));
     app.stage.addChild(renderer.backdrop, renderer.container);
     // ?framing=fit&pad=5 — the camera's own maths (camera.mjs frameView), the backdrop fed the view as the host does.
     const { frameView } = await import("/scripts/features/theatre/camera.mjs");
@@ -257,6 +268,9 @@ for (const k of FACE_KEYS) $("#face").append(Object.assign(document.createElemen
 $("#face").onchange = () => cue({ kind: "title" });
 $("#lb").onchange = () => { letterbox = Number($("#lb").value); overlay.setLetterbox(letterbox); };
 $("#sg").onchange = () => document.body.classList.toggle("show-stage", $("#sg").checked);
+$("#ui").onchange = () => document.body.classList.toggle("show-ui", $("#ui").checked);
+$("#sk").onchange = () => renderer?.setShakeDefault(Number($("#sk").value));
+if (new URLSearchParams(location.search).get("ui") === "1") { $("#ui").checked = true; document.body.classList.add("show-ui"); }
 $("#replay").onclick = () => { index = prevIndex; cue({ shot: lastCue?.shot ?? 0 }); };
 $("#again").onclick = () => cue({ kind: "title" });
 $("#card").onclick = () => cue({ kind: "card" });

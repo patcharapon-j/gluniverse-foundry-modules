@@ -25,7 +25,7 @@
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { PALETTE } from "../../core/theme.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { DEFAULT_FACE, DEFAULT_STYLE, FACES, FRAME, SETTINGS, STYLES } from "./constants.mjs";
+import { DEFAULT_STYLE, FRAME, SETTINGS, STYLES } from "./constants.mjs";
 import { normalizeConfig, normalizeShots, normalizeState, titleFromFilename } from "./model.mjs";
 import { forceDelete, forceSet, isTheatreScene, PATHS, readShots } from "./store.mjs";
 import { gradeFragment, initialGrade, sampleGrade, stageEnabled } from "./stage-bridge.mjs";
@@ -48,12 +48,12 @@ function setting(key, list, fallback) {
   } catch { return fallback; }
 }
 
-/** The starting config of a new / newly converted Theatre scene. */
+/**
+ * The starting config of a new / newly converted Theatre scene. Its face is left
+ * empty, so it follows the GM's default typeface for as long as nobody picks one.
+ */
 export function initialConfig() {
-  return normalizeConfig({
-    style: setting(SETTINGS.defaultStyle, STYLES, DEFAULT_STYLE),
-    face: setting(SETTINGS.defaultFace, Object.keys(FACES), DEFAULT_FACE),
-  });
+  return normalizeConfig({ style: setting(SETTINGS.defaultStyle, STYLES, DEFAULT_STYLE), face: null });
 }
 
 /* ── Background (v13 fields / v14 Level) ────────────────────────────────── */

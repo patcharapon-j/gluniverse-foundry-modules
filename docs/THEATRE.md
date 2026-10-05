@@ -23,8 +23,9 @@ Theatre scene is a scene. Whether anything sits on it is the GM's choice.
 | Flag         | Holds |
 |--------------|-------|
 | `th.enabled` | this scene is a Theatre scene |
-| `th.shots`   | the ordered shot list (`model.mjs`) |
-| `th.config`  | scene defaults: style, face, hold, letterbox, corner tag |
+| `th.shots`   | the shot list, stored in play order (`model.mjs`) |
+| `th.folders` | the ordered folder list: `{ id, name, color }` |
+| `th.config`  | scene defaults: style, face (`null` = the GM's default), hold, letterbox, corner tag |
 | `th.state`   | the shot on screen and the last cue |
 | `th.restore` | what Convert replaced |
 
@@ -42,14 +43,40 @@ forced replacement and reads it back off the document.
 | `notes`     | GM only; never drawn for a player |
 | `style`, `face`, `hold` | per-shot overrides of the scene default (`null` = default) |
 | `focus`     | the point of the image kept in frame when it is cropped to cover |
+| `shake`     | camera shake strength 0–1 (`null` = the GM's default) |
 | `treatment` | the backdrop's own look: exposure, saturation, tint, vignette, blur, letterbox |
 | `grade`     | the Stage character grade this shot relights to (`null` leaves Stage alone) |
+| `folder`    | the folder it is filed in (`null` = unfiled) |
 
 The treatment is the picture's grade and the Stage grade is the characters'.
 They are separate on purpose: the backdrop needs a few broad dials that make a
 still read as a film frame, the portraits need Stage's full stack so they sit in
 it, and running Stage's pipeline over a full-screen plate would cost a great deal
 for nothing visible. A neutral treatment is an exact no-op.
+
+## Folders and search
+
+A scene's shots can be filed in **folders** (acts, locations, flashbacks).
+Folder order is play order: every folder's shots in turn, then the unfiled ones,
+so Next and Previous walk exactly what the GM sees grouped. `orderShots` in
+`model.mjs` is the one statement of that order; the store reads shots through
+it and writes them back already ordered, so a folder move, a refile and a
+deletion are each one update. A shot filed in a folder that no longer exists
+reads as unfiled, and deleting a folder keeps its shots.
+
+In the **editor** the shot list is grouped under folder headers. A header
+collapses on click, opens rename/recolour on double-click, reorders by dragging
+and files any shot or image dropped on it. **New folder** sits beside the count,
+and **Import folder** files the imported shots in a new folder named after the
+directory. The shot form's Folder picker writes at once rather than joining the
+draft, so a draft saved later cannot file the shot back.
+
+In the **filmstrip** a row of chips filters the reel to one folder (or Unfiled);
+in the full reel each folder opens with a slate in its colour. Dropping a frame
+on a chip or a slate refiles it. The **search** box in both narrows by title,
+eyebrow, subtitle, notes, file name and folder (every word must match, accents
+ignored). Enter cues up the first match, Esc clears. Filters and search are a
+view only and are never written to the scene.
 
 ## Cues
 
@@ -99,9 +126,13 @@ location on screen after the title has gone.
   Theatre is on: changing it redraws the whole canvas, which is a flash and a
   stall, not a transition.
 - **The overlay** — title, black, letterbox bars, text card, corner tag — is DOM,
-  above Stage's character overlay and below all of Foundry's UI, so the black dip
-  hides the portraits while they relight. It is DOM because the title needs real
-  typography.
+  above Stage's character overlay, so the black dip hides the portraits while
+  they relight. At rest it sits below Foundry's UI, so the corner tag and a
+  resting letterbox never cover a control. While a cue plays it is **live**
+  (`.glth-overlay--live`) and rises over the UI columns, the chat sidebar and
+  ordinary windows, so the transition fills the whole screen; it drops back when
+  the cue's last beat ends. It never takes the pointer. It is DOM because the
+  title needs real typography.
 
 ## Stage
 
@@ -133,7 +164,7 @@ How the 16:9 frame meets a display that is not 16:9 is the **framing**:
 
 - **Fill** (the default): the frame covers the screen; whatever overhangs is cropped.
 - **Fit**: the whole frame is shown, inset by a **padding** (per cent of the
-  screen's shorter side, 0–`PADDING_MAX`). The space around it is the
+  screen's shorter side, 0–`PADDING_MAX`, which is 30). The space around it is the
   **backdrop** — the same picture cover-fitted to the whole view, blurred hard
   (`BACKDROP.blur`) and darkened (`BACKDROP.gain`). It follows the frame's mix and
   wipe line exactly, so a transition sweeps the surround with the picture.
@@ -152,19 +183,38 @@ last entry of `SHED_ORDER` (shed, it reads one deep-mip tap instead of a disc).
 The stream broadcast is a player client, so it is locked the same way, and the
 stream's auto-camera stands down while the viewed scene is a Theatre scene.
 
+## Camera shake
+
+Between cues the picture sways like a handheld camera: slow, small and never
+repeating (three sines per axis at unrelated frequencies, `SHAKE` in
+`render/shot-renderer.mjs`). It moves the picture inside the frame only; the
+frame itself and the blurred backdrop around a fitted one stay put. The picture
+is scaled about the frame centre just enough that the sway never shows an edge,
+whatever the image's width and height.
+
+The GM sets the default strength for every shot (`th.defaultShake`, world, per
+cent, 30 by default; 0 holds the picture still) and a shot can set its own in the
+editor. The strength eases toward its target over `TIMING.shakeEase`, and the
+sway's speed rides on the eased strength, so a scene always starts slow and
+subtle. Its clock is integrated each frame, so a change of strength never jumps
+the picture. Paused ambient motion or a shed shake holds it still where it is.
+
 ## Type
 
 Five bundled faces, all OFL and declared once in `styles/gl-fonts.css`: Google
 Sans Flex (the default), Archivo, Cinzel, Cormorant Garamond and Oxanium. Each
 title face carries its own paired secondary for the eyebrow and subtitle
-(`FACES` in `constants.mjs`). The face is chosen per scene, with a per-shot
-override. A browser only fetches a face something actually uses.
+(`FACES` in `constants.mjs`). The GM sets the default face (`th.defaultFace`,
+world) that every scene follows unless it picks its own, and each shot can
+override that again. Scene configs before v2 stored the old default face on every
+scene; one still on it reads as following the GM's default (`CONFIG_VERSION` in
+`model.mjs`). A browser only fetches a face something actually uses.
 
 ## Performance
 
-The picture holds still between cues. The transition bloom sheds first on the
-shared frame budget and the backdrop last, and the layer claims motion while a
-transition or a video plays so Balanced does not stutter it.
+The camera shake is the first entry of `SHED_ORDER` on the shared frame budget
+and the backdrop the last, and the layer claims motion while it shakes, a
+transition runs or a video plays, so Balanced does not stutter it.
 
 ## Checks
 

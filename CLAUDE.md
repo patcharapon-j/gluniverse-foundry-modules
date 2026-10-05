@@ -1542,9 +1542,18 @@ only through `TheatreStore`, never `scene.update`. Cues carry **server** time
 **`scene.background` is never touched while Theatre is on.** Changing it redraws
 the whole canvas: a flash and a stall, not a transition. The picture is a
 container in `canvas.primary` at `TILES − 1` (hexcrawl's slot); the overlay is
-DOM at `--gl-z-base + 1`, above Stage's overlay so the dip hides the portraits.
+DOM at `--gl-z-base + 1`, above Stage's overlay so the dip hides the portraits,
+and rises over Foundry's UI only while a cue plays (`.glth-overlay--live`). The
+camera shake moves the picture inside the frame, never the fitted backdrop, and
+is first in `SHED_ORDER`.
 Create/Convert write a starting Stage grade, or Stage seeds the scene from its
 background — which is black.
+
+**Folder order is play order.** `th.shots` is stored already ordered by
+`orderShots` (folders in order, then unfiled) and `store.shots` reads through it,
+so every index the store and the apps speak is a play index and Next walks what
+the GM sees grouped. A shot's folder is never part of the editor's draft: filing
+writes at once, or a draft saved later files the shot back.
 
 **The overlay anchors every animation to `performance.now()`, not
 `document.timeline`.** A background tab's `document.timeline.currentTime` is

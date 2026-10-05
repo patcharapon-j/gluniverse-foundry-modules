@@ -72,6 +72,21 @@ section = "model";
   ok("hold is clamped", M.normalizeShot({ hold: 999999 }).hold === C.TIMING.holdMax);
   ok("letterbox null survives (scene default)", M.normalizeShot({ treatment: { letterbox: null } }).treatment.letterbox === null);
   ok("NEUTRAL_TREATMENT is neutral", M.isNeutralTreatment(M.NEUTRAL_TREATMENT));
+  ok("a shot's shake is clamped", M.normalizeShot({ shake: 5 }).shake === 1);
+  ok("a shot's shake null survives (the GM's default)", M.normalizeShot({ shake: null }).shake === null && M.normalizeShot({}).shake === null);
+  ok("a face key off the prototype is refused", M.normalizeShot({ face: "toString" }).face === null && M.normalizeConfig({ face: "toString", v: M.CONFIG_VERSION }).face === null);
+
+  // The GM's default typeface reaches every scene that has not picked its own,
+  // including scenes made before a scene's face could be left empty.
+  ok("a new scene config follows the GM's face", M.normalizeConfig({}).face === null);
+  ok("a pre-v2 scene on the old written default follows the GM's face", M.normalizeConfig({ face: C.DEFAULT_FACE }).face === null);
+  ok("a pre-v2 scene that chose another face keeps it", M.normalizeConfig({ face: "cinzel" }).face === "cinzel");
+  ok("a v2 scene that chose the default face keeps it", M.normalizeConfig({ face: C.DEFAULT_FACE, v: M.CONFIG_VERSION }).face === C.DEFAULT_FACE);
+  ok("a written config is stamped with its version", M.normalizeConfig({}).v === M.CONFIG_VERSION);
+  ok("resolveFace: shot, then scene, then the GM's default",
+    M.resolveFace({ face: "oxanium" }, { face: "cinzel" }, "archivo") === "oxanium"
+      && M.resolveFace({ face: null }, { face: "cinzel" }, "archivo") === "cinzel"
+      && M.resolveFace(null, { face: null }, "archivo") === "archivo");
   ok("DEFAULT_TREATMENT is not neutral (it vignettes)", !M.isNeutralTreatment(M.DEFAULT_TREATMENT));
 
   // Ids: a shot without one mints the same id on every client, and duplicates are re-minted.
@@ -95,6 +110,108 @@ section = "model";
         r.x <= 1e-6 && r.y <= 1e-6 && r.x + r.width >= 1600 - 1e-6 && r.y + r.height >= 900 - 1e-6);
     }
   }
+}
+
+/* ── Folders: play order is folder order, every road agrees ──────────── */
+section = "folders";
+{
+  for (const j of [undefined, null, 0, "x", [], { id: 4, name: 7, color: "red" }]) {
+    const fo = M.normalizeFolder(j, 2);
+    ok(`normalizeFolder(${JSON.stringify(j)}) is total`, ["id", "name", "color"].every((k) => k in fo) && typeof fo.id === "string" && fo.id.length > 0);
+    ok(`normalizeShot(${JSON.stringify(j)}) carries a folder key`, "folder" in M.normalizeShot(j));
+  }
+  ok("a junk folder colour is null (the accent)", M.normalizeFolder({ color: "red" }).color === null);
+  ok("a folder colour is kept, lower-cased", M.normalizeFolder({ color: "#AABBCC" }).color === "#aabbcc");
+  ok("an unfiled shot reads folder null", M.normalizeShot({}).folder === null && M.normalizeShot({ folder: "  " }).folder === null);
+  const fdup = M.normalizeFolders([{ id: "a" }, { id: "a" }]);
+  ok("duplicate folder ids are re-minted unique", new Set(fdup.map((x) => x.id)).size === 2);
+  ok("minted folder ids are deterministic", M.normalizeFolders([{ name: "Act I" }])[0].id === M.normalizeFolders([{ name: "Act I" }])[0].id);
+
+  const folders = M.normalizeFolders([{ id: "fA", name: "Act I" }, { id: "fB", name: "Act II" }, { id: "fE", name: "Empty" }]);
+  const shots = M.normalizeShots([
+    { id: "u1" }, { id: "b1", folder: "fB" }, { id: "a1", folder: "fA" }, { id: "x1", folder: "gone" }, { id: "b2", folder: "fB" }, { id: "a2", folder: "fA" },
+  ]);
+  const ordered = M.orderShots(shots, folders);
+  ok("play order is folder order, unfiled last, stored order within", ordered.map((x) => x.id).join() === "a1,a2,b1,b2,u1,x1", ordered.map((x) => x.id).join());
+  ok("a shot filed in a deleted folder reads unfiled", ordered.find((x) => x.id === "x1").folder === null);
+  ok("orderShots is idempotent", M.orderShots(ordered, folders).map((x) => x.id).join() === ordered.map((x) => x.id).join());
+  ok("orderShots never mutates its input", shots.find((x) => x.id === "x1").folder === "gone");
+  ok("no folders: order is untouched", M.orderShots(shots, []).map((x) => x.id).join() === shots.map((x) => x.id).join());
+  const groups = M.groupShots(shots, folders);
+  ok("every folder has a group, empty ones included, then unfiled", groups.map((g) => g.folder?.id ?? "-").join() === "fA,fB,fE,-");
+  ok("group indices are play-order indices", groups.flatMap((g) => g.shots).every(({ shot, index }) => ordered[index].id === shot.id));
+  ok("no unfiled group when every shot is filed", M.groupShots([{ id: "a", folder: "fA" }], folders).every((g) => g.folder));
+  ok("no folders: one unfiled group", M.groupShots(shots, []).length === 1 && M.groupShots([], []).length === 1);
+
+  const hay = M.searchText({ title: "The Drowned Chapel", notes: "Bell rings at midnight", src: "maps/sunken%20nave.webp" }, "Act Ⅰ Café");
+  ok("search matches title words in any order", M.matchesQuery(hay, "chapel drowned"));
+  ok("search matches notes", M.matchesQuery(hay, "midnight"));
+  ok("search matches the decoded file name", M.matchesQuery(hay, "sunken nave"));
+  ok("search matches the folder, accents folded", M.matchesQuery(hay, "cafe"));
+  ok("search needs every word", !M.matchesQuery(hay, "chapel tavern"));
+  ok("an empty query matches everything", M.matchesQuery(hay, "  ") && M.matchesQuery("", ""));
+}
+
+/* ── Folders: the store drives them through one forced write each ────── */
+section = "folder-store";
+{
+  const SUITE = "gluniverse-foundry-modules";
+  globalThis.game = { user: { isGM: true } };
+  const S = await imp(`${FEAT}/store.mjs`);
+  // A fake Scene that applies `==` replacements the way Foundry does and counts writes.
+  const scene = {
+    flags: { [SUITE]: { th: { enabled: true, shots: [{ id: "s1", src: "a.webp" }, { id: "s2", src: "b.webp" }, { id: "s3", src: "c.webp" }] } } },
+    writes: 0,
+    getFlag(scope, key) { return key.split(".").reduce((o, k) => o?.[k], this.flags[scope]); },
+    async update(upd) {
+      this.writes++;
+      for (const [path, v] of Object.entries(upd)) {
+        const parts = path.replace(/\.==/g, ".").split(".").slice(1);
+        let o = this.flags;
+        for (const k of parts.slice(0, -1)) o = o[k] ??= {};
+        o[parts.at(-1)] = structuredClone(v);
+      }
+    },
+  };
+  const store = S.TheatreStore.for(scene);
+  const ids = () => store.shots.map((x) => x.id).join();
+  try {
+    const fA = await store.addFolder({ name: "Act I" }, { shotIds: ["s3"] });
+    ok("addFolder files shots in the same single write", scene.writes === 1 && store.shot("s3").folder === fA);
+    ok("a filed shot moves to its folder's place in play order", ids() === "s3,s1,s2", ids());
+    ok("next/prev walk the folder order (indexOf speaks play order)", store.indexOf("s3") === 0);
+    const fB = await store.addFolder({ name: "Act II", color: "#123456" });
+    await store.moveShot("s1", null, { folder: fB });
+    ok("moveShot into a folder with no index lands at its end", ids() === "s3,s1,s2" && store.shot("s1").folder === fB, ids());
+    await store.moveShot("s2", 0, { folder: fA });
+    ok("moveShot to an index inside a folder keeps that slot", ids() === "s2,s3,s1", ids());
+    await store.moveFolder(fB, 0);
+    ok("moveFolder reorders the play order with it", ids() === "s1,s2,s3", ids());
+    const before = scene.writes;
+    await store.removeFolder(fB);
+    ok("removeFolder is one write and keeps its shots, unfiled", scene.writes === before + 1 && store.shot("s1")?.folder === null && store.shots.length === 3);
+    ok("unfiled shots play after the folders", ids() === "s2,s3,s1", ids());
+    ok("the stored list is already in play order", S.readShots(scene).map((x) => x.id).join() === ids());
+    await store.updateFolder(fA, { name: "Prologue", color: "nope" });
+    ok("updateFolder renames and validates the colour", store.folder(fA)?.name === "Prologue" && store.folder(fA)?.color === null);
+    const added = await store.addShots([{ src: "d.webp" }], { folder: fA });
+    ok("addShots files new shots in the folder given", store.shot(added?.[0])?.folder === fA && store.indexOf(added?.[0]) === 2, ids());
+    await store.addShots([{ src: "e.webp" }], { folder: "nope" });
+    ok("a shot filed in a folder that does not exist is unfiled", store.shots.at(-1).folder === null);
+    ok("touchedKeys sees a folder write", S.touchedKeys({ flags: { [SUITE]: { th: { folders: [] } } } }).folders === true);
+  } catch (e) {
+    ok("the store's folder operations run", false, e.stack);
+  } finally {
+    delete globalThis.game;
+  }
+  const src = stripComments(read(`${FEAT}/store.mjs`));
+  ok("the store writes folders by forced replacement", /forceSet\(upd, PATHS\.folders/.test(src));
+  ok("the store reads shots in play order", /get shots\(\)\s*\{\s*return orderShots\(/.test(src));
+  // Filing is organisation, not a draft edit: a draft saved later must never file the shot back.
+  const ed = stripComments(read(`${FEAT}/apps/editor.mjs`));
+  const patch = ed.slice(ed.indexOf("function patchFromForm"), ed.indexOf("function readForm"));
+  ok("a shot's folder is not part of the editor draft", !/folder/.test(patch));
+  ok("the folder picker writes at once and skips the draft", /data-folder-select/.test(ed) && /store\.moveShot\(id, null, \{ folder:/.test(ed));
 }
 
 /* ── Timeline: the relight is always hidden, every beat is in range ──── */
@@ -237,6 +354,34 @@ section = "perf";
   ok("the host binds SHED_ORDER to Budget.ladder", /Budget\.ladder\(/.test(host) && /SHED_ORDER/.test(host));
   ok("the host claims motion while it moves", /Budget\.claimMotion\(/.test(host));
   ok("the host mounts in canvas.primary beneath tiles", /canvas\??\.primary/.test(host) && /TILES/.test(host));
+  ok("the camera shake sheds first", R.SHED_ORDER[0] === "shake");
+  ok("the camera shake holds still while ambient motion is paused", /setShakeEnabled\(Budget\.ambientAllowed\)/.test(host));
+  ok("the host hands the renderer the GM's shake default on attach", /this\.renderer\.setShakeDefault\(/.test(host));
+
+  // Shake: neutral is exact, the sway is bounded, and a shaken picture still covers the frame.
+  ok("shake strength 0 is no camera at all", R.shakeCamera(0, { x: 1, y: 1 }, 3840, 2160) === null);
+  let maxN = 0;
+  for (let t = 0; t < 600; t += 0.37) { const n = R.shakeOffset(t); maxN = Math.max(maxN, Math.abs(n.x), Math.abs(n.y)); }
+  ok("the sway stays inside -1..1", maxN <= 1 + 1e-9, String(maxN));
+  ok("the sway speed rises with strength", R.SHAKE.fast > R.SHAKE.slow && R.SHAKE.slow > 0);
+  let covered = true, worst = "";
+  for (const [iw, ih] of [[3840, 2160], [1000, 1000], [4000, 1000], [1000, 4000]]) {
+    for (const k of [0.1, 0.3, 1]) {
+      for (const n of [{ x: 1, y: 1 }, { x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 }]) {
+        for (const f of [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }]) {
+          const r = R.placeRect(iw, ih, 3840, 2160, f, 1, R.shakeCamera(k, n, 3840, 2160));
+          if (!(r.x <= 1e-6 && r.y <= 1e-6 && r.x + r.width >= 3840 - 1e-6 && r.y + r.height >= 2160 - 1e-6)) { covered = false; worst = `${iw}x${ih} k${k}`; }
+        }
+      }
+    }
+  }
+  ok("a shaken picture still covers the frame at the sway's extremes", covered, worst);
+  const still = R.placeRect(1920, 1080, 3840, 2160, { x: 0.5, y: 0.5 }, 1, null);
+  ok("no shake places the picture exactly as before", still.x === 0 && still.y === 0 && still.width === 3840 && still.height === 2160);
+  const rsrc = stripComments(read(`${FEAT}/render/shot-renderer.mjs`));
+  const bd = rsrc.slice(rsrc.indexOf("_updateBackdrop() {"), rsrc.indexOf("_devicePerFrame() {"));
+  ok("the backdrop around a fitted frame never shakes", !/_cam|shake/i.test(bd));
+  ok("the shake's ease is a TIMING constant", /TIMING\.shakeEase/.test(rsrc));
 }
 
 /* ── Framing: fill covers, fit contains, the backdrop fills the rest ──── */
@@ -289,6 +434,14 @@ section = "framing";
     ok(`th.${k} is ${scope} scope (the GM's default vs the viewer's own)`, new RegExp(`scope:\\s*"${scope}"`).test(reg));
     ok(`th.${k} re-fits on change`, /onChange:\s*\(\)\s*=>\s*applyFraming\(\)/.test(reg));
   }
+  for (const [k, fn] of [["defaultShake", "applyShake"], ["defaultFace", "applyFace"]]) {
+    const at = idx.indexOf(`SETTINGS.${k},`);
+    if (!ok(`th.${k} is registered`, at >= 0)) continue;
+    const block = idx.slice(at);
+    const reg = block.slice(0, block.indexOf("});"));
+    ok(`th.${k} is the GM's (world scope)`, /scope:\s*"world"/.test(reg));
+    ok(`th.${k} applies on change`, new RegExp(`onChange:\\s*\\(\\)\\s*=>\\s*${fn}\\(\\)`).test(reg));
+  }
   ok("a viewer's framing defaults to following the GM", /SETTINGS\.framing,[\s\S]*?default:\s*"default"/.test(idx) && C.FRAMING_CHOICES[0] === "default");
   const main = stripComments(read(`${FEAT}/main.mjs`));
   const rf = main.slice(main.indexOf("export function readFraming"), main.indexOf("export function applyFraming"));
@@ -335,6 +488,10 @@ section = "seams";
   const ov = read("styles/theatre.css");
   ok("the overlay sits above Stage's overlay (z-index 1)", /z-index:\s*calc\(var\(--gl-z-base\)\s*\+\s*[1-9]/.test(ov) || /z-index:\s*([2-9]|[1-9]\d)\b/.test(ov));
   ok("the overlay never takes the pointer", /pointer-events:\s*none/.test(ov));
+  const O = await imp(`${FEAT}/overlay/title-overlay.mjs`);
+  const live = ov.replace(/\/\*[\s\S]*?\*\//g, "").match(new RegExp(`\\.${O.LIVE_CLASS}\\s*\\{([^}]*)\\}`));
+  ok("a playing cue raises the overlay over Foundry's UI (the class the overlay sets is styled)", !!live && /z-index:\s*calc\(var\(--gl-z-splash\)/.test(live[1]));
+  ok("the overlay drops back under the UI when a cue settles", /if \(settle\) \{ this\._live\(false\)/.test(stripComments(read(`${FEAT}/overlay/title-overlay.mjs`))));
 }
 
 console.log(problems ? `\ntheatre-check: ${problems} problem(s), ${passed} assertion(s) passed.` : `\ntheatre-check: 0 problems, ${passed} assertion(s) passed.`);

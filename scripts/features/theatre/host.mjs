@@ -19,10 +19,12 @@
  * world-space, under every group, unmasked — and is fed the live view each
  * frame, so it also covers a GM who zooms out past the frame.
  *
- * Shedding: SHED_ORDER (bloom first) is bound to the suite's one frame clock
- * with Budget.ladder(); the renderer is told the level each frame. While the
- * layer moves on its own (a transition, a playing video) it claims
- * continuous motion, so the perf feature's idle-rate drop never stutters it.
+ * Shedding: SHED_ORDER (the camera shake first) is bound to the suite's one
+ * frame clock with Budget.ladder(); the renderer is told the level each frame.
+ * The shake is ambient motion, so it also holds still while Budget says ambient
+ * motion should. While the layer moves on its own (a shake, a transition, a
+ * playing video) it claims continuous motion, so the perf feature's idle-rate
+ * drop never stutters it.
  *
  * Nothing runs at import.
  */
@@ -50,6 +52,7 @@ class Host {
     this._freePan = false;
     this._pendingPlay = null;
     this._pendingPreload = new Set();
+    this._shakeDefault = 0;
   }
 
   get attached() { return !!this.renderer; }
@@ -84,6 +87,7 @@ class Host {
     this.renderer.container.position.set(rect.x, rect.y);
     this.renderer.backdrop.position.set(rect.x, rect.y);
     this.renderer.setMotionScale(motionScale());
+    this.renderer.setShakeDefault(this._shakeDefault);
     layer.addChild(this.renderer.container);
     canvas.stage.addChildAt(this.renderer.backdrop, 0);
 
@@ -128,6 +132,7 @@ class Host {
     if (!r) return;
     try {
       r.setShed(this.ladder?.level ?? 0);
+      r.setShakeEnabled(Budget.ambientAllowed);
       r.setResolution(canvas.app.renderer.resolution);
       const view = this._view();
       if (view) r.setView(view);
@@ -154,6 +159,12 @@ class Host {
     } catch (e) {
       warn("theatre | could not play a shot", e);
     }
+  }
+
+  /** The GM's default camera shake (0..1); a shot's own wins. Kept across attaches. */
+  setShakeDefault(v) {
+    this._shakeDefault = Number(v) || 0;
+    this.renderer?.setShakeDefault(this._shakeDefault);
   }
 
   /** Background-load every source (a scene's whole shot list). */
