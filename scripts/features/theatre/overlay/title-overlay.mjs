@@ -23,12 +23,20 @@
  * time from the cue start and its `startTime` set so t = 0 is `startAt`
  * (performance.now() based). A client that is a little late therefore simply
  * joins mid-flight; `settle` jumps to the end state with nothing animated.
+ *
+ * Stacking. At rest the layer sits under Foundry's UI (the corner tag and a
+ * resting letterbox must not cover the controls). While a cue plays it is LIVE
+ * (`.glth-overlay--live`): raised over the UI columns, the chat sidebar and
+ * windows, so the dip, the bars and the title fill the whole screen. It drops
+ * back when the cue's last beat ends. The layer never takes the pointer either
+ * way, so the GM's controls stay usable under it.
  */
 
 import { FACES, DEFAULT_FACE, TIMING } from "../constants.mjs";
 import { timelineFor, scaleTimeline, segmentValue, CREDIT_LETTER_STAGGER } from "../timeline.mjs";
 
 export const OVERLAY_ID = "glth-overlay";
+export const LIVE_CLASS = "glth-overlay--live";
 
 /** The voice an interlude card is set in, whatever the title face (an italic serif reads as narration). */
 export const CARD_FACE = "cormorant";
@@ -138,6 +146,8 @@ export class TitleOverlay {
     this._tagText = null;
     this._last = null;           // last play() arguments, for seek()
     this._frozen = false;
+    this._liveTimer = null;
+    this._liveUntil = 0;         // performance.now() the layer drops back under the UI
     this._onVisibility = () => { if (document.visibilityState === "visible") this._resync(); };
   }
 
@@ -174,6 +184,7 @@ export class TitleOverlay {
 
   unmount() {
     document.removeEventListener("visibilitychange", this._onVisibility);
+    this._live(false);
     this._cancel(() => true, false);
     this.node?.remove();
     this.node = null;
@@ -208,8 +219,12 @@ export class TitleOverlay {
     this._frozen = false;
     this._tagText = cue.tag ?? null;
 
-    if (kind === "black") return this.setBlack(true, { animate: !settle });
-    if (kind === "clear") { this.clearTitle({ animate: !settle }); return this.setBlack(false, { animate: !settle }); }
+    if (kind === "black" || kind === "clear") {
+      this._live(!settle, { startAt: now() }, BEATS.black.dur * k);
+      if (kind === "black") return this.setBlack(true, { animate: !settle });
+      this.clearTitle({ animate: !settle });
+      return this.setBlack(false, { animate: !settle });
+    }
 
     // A new cue owns every element: freeze whatever is on screen where it is, then start over.
     // A re-announce owns only the title layers — a dip or bars still running keep running.
@@ -223,10 +238,11 @@ export class TitleOverlay {
     if (kind === "card" && !tl.card) tl = scaleTimeline(timelineFor("interlude", { hold: TIMING.hold }), k);
     const face = resolveFace(cue.face);
 
-    if (settle) return this._settle(kind, tl, cue);
+    if (settle) { this._live(false); return this._settle(kind, tl, cue); }
 
     const clock = { startAt };
     this._hideTag(clock);
+    if (kind !== "title") this._live(true, clock, tl.total);
 
     if (kind === "shot") {
       this._playBlack(tl.black, clock);
@@ -239,6 +255,7 @@ export class TitleOverlay {
       const beat = tl.title ?? scaleTimeline(timelineFor(TITLE_LAYOUT[style] === "centre" ? "centre" : style), k).title;
       if (beat && this._hasText(cue.title)) {
         const shift = BEATS.scrim.lead * k - beat.at;
+        this._live(true, clock, beat.outAt + beat.outDur + shift, { extend: true });
         this._playTitle(style === "interlude" ? "centre" : style, cue.title, face, beat, clock, k, shift);
         this._showTag(beat.outAt + beat.outDur + shift + TIMING.tagDelay * k, clock, k);
       }
@@ -309,6 +326,29 @@ export class TitleOverlay {
   /** Total length of the last cue (ms), for scrubbers. */
   get duration() {
     return this._last?.opts.timeline?.total ?? 0;
+  }
+
+  /**
+   * Raise the layer over Foundry's UI until `until` ms after the clock's start,
+   * or drop it now. A later cue replaces the deadline, except with `extend` (a
+   * re-announce, which leaves a running dip or bars running), which only ever
+   * lengthens it. A frozen (seeked) cue stays raised until it runs out.
+   */
+  _live(on, clock = null, until = 0, { extend = false } = {}) {
+    if (this._liveTimer !== null) { clearTimeout(this._liveTimer); this._liveTimer = null; }
+    if (!this.node) return;
+    let end = on ? (clock?.startAt ?? now()) + Math.max(0, until) : 0;
+    if (extend) end = Math.max(end, this._liveUntil);
+    this._liveUntil = end;
+    const left = end - now();
+    if (!(left > 0)) { this.node.classList.remove(LIVE_CLASS); return; }
+    this.node.classList.add(LIVE_CLASS);
+    const drop = () => {
+      this._liveTimer = null;
+      if (this._frozen) { this._liveTimer = setTimeout(drop, 250); return; }
+      this.node?.classList.remove(LIVE_CLASS);
+    };
+    this._liveTimer = setTimeout(drop, left);
   }
 
   /* ── cue parts ─────────────────────────────────────────────────────── */

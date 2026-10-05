@@ -17,6 +17,7 @@
  *   face:      FACES key  | null (null = the scene's default),
  *   hold:      ms | null (null = the scene's default),
  *   focus:     { x: 0..1, y: 0..1 } — the point of the image kept in frame when it is cropped to cover,
+ *   shake:     0..1 | null — camera shake strength (null = the GM's default),
  *   treatment: Treatment,
  *   grade:     Stage grade object | null — the Stage character grade this shot relights to (null = leave Stage alone),
  * }
@@ -27,7 +28,7 @@
  *   the frame height per bar; null = the scene's letterbox) }
  *
  * SceneConfig (flags[SUITE_ID].th.config):
- * { style: STYLES key, face: FACES key, hold: ms, letterbox: 0..0.2, tag: boolean }
+ * { style: STYLES key, face: FACES key | null (null = the GM's default), hold: ms, letterbox: 0..0.2, tag: boolean, v: CONFIG_VERSION }
  *
  * PlayState (flags[SUITE_ID].th.state):
  * { shotId: string | null  — the shot on screen (null = black),
@@ -60,8 +61,16 @@ export const NEUTRAL_TREATMENT = Object.freeze({
   exposure: 0, saturation: 1, tint: "#000000", tintAmount: 0, vignette: 0, blur: 0, letterbox: null,
 });
 
+/**
+ * The scene config's shape version. Before v2 every scene stored a face, so the
+ * GM's default typeface could never reach a scene made earlier; from v2 a null
+ * face means "the GM's default". A pre-v2 scene still on the face every scene
+ * used to be written with reads as following the default, with nothing written.
+ */
+export const CONFIG_VERSION = 2;
+
 export const DEFAULT_CONFIG = Object.freeze({
-  style: DEFAULT_STYLE, face: DEFAULT_FACE, hold: TIMING.hold, letterbox: 0, tag: false,
+  style: DEFAULT_STYLE, face: null, hold: TIMING.hold, letterbox: 0, tag: false, v: CONFIG_VERSION,
 });
 
 export function normalizeTreatment(raw) {
@@ -110,9 +119,10 @@ export function normalizeShot(raw, index = 0) {
     subtitle: str(s.subtitle),
     notes: str(s.notes),
     style: orNull(s.style, (v) => oneOf(v, STYLES, null)),
-    face: orNull(s.face, (v) => (v in FACES ? v : null)),
+    face: orNull(s.face, (v) => (Object.hasOwn(FACES, v) ? v : null)),
     hold: orNull(s.hold, (v) => num(v, TIMING.holdMin, TIMING.holdMax, null)),
     focus: { x: num(focus.x, 0, 1, 0.5), y: num(focus.y, 0, 1, 0.5) },
+    shake: orNull(s.shake, (v) => num(v, 0, 1, null)),
     treatment: normalizeTreatment(s.treatment),
     grade: s.grade && typeof s.grade === "object" ? s.grade : null,
   };
@@ -134,10 +144,11 @@ export function normalizeConfig(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   return {
     style: oneOf(c.style, STYLES, DEFAULT_CONFIG.style),
-    face: c.face in FACES ? c.face : DEFAULT_CONFIG.face,
+    face: Object.hasOwn(FACES, c.face) && (c.v === CONFIG_VERSION || c.face !== DEFAULT_FACE) ? c.face : null,
     hold: num(c.hold, TIMING.holdMin, TIMING.holdMax, DEFAULT_CONFIG.hold),
     letterbox: num(c.letterbox, 0, 0.2, DEFAULT_CONFIG.letterbox),
     tag: c.tag === true,
+    v: CONFIG_VERSION,
   };
 }
 
@@ -167,7 +178,10 @@ export function normalizeState(raw) {
 /* ── Resolution: a shot's effective values against its scene ─────────────── */
 
 export const resolveStyle = (shot, config) => shot?.style ?? config.style;
-export const resolveFace = (shot, config) => shot?.face ?? config.face;
+/** `fallback` is the GM's default typeface, for a scene that does not pick its own. */
+export const resolveFace = (shot, config, fallback = DEFAULT_FACE) => shot?.face ?? config?.face ?? fallback;
+/** `fallback` is the GM's default shake strength (0..1). */
+export const resolveShake = (shot, fallback = 0) => shot?.shake ?? fallback;
 export const resolveHold = (shot, config) => shot?.hold ?? config.hold;
 export const resolveLetterbox = (shot, config) => shot?.treatment?.letterbox ?? config.letterbox;
 export const isVideo = (src) => VIDEO_RE.test(String(src ?? ""));

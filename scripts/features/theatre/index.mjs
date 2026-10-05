@@ -1,13 +1,15 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
-import { DEFAULT_FACE, DEFAULT_FRAMING, DEFAULT_STYLE, FACE_KEYS, FEATURE_ID, FRAMING_CHOICES, FRAMINGS, PADDING_MAX, PREFIX, SETTINGS, STYLES } from "./constants.mjs";
-import { onInit, onReady, api, applyFraming } from "./main.mjs";
+import { DEFAULT_FACE, DEFAULT_FRAMING, DEFAULT_SHAKE, DEFAULT_STYLE, FACE_KEYS, FEATURE_ID, FRAMING_CHOICES, FRAMINGS, PADDING_MAX, PREFIX, SETTINGS, STYLES } from "./constants.mjs";
+import { onInit, onReady, api, applyFace, applyFraming, applyShake } from "./main.mjs";
 
 /**
  * Framing: the GM sets a default fill/fit and padding for everyone (world), and
  * each viewer may override both for their own display (client). The rest are
- * the GM's: what a new Theatre scene starts with, and whether a cut leaves a line in chat. Every scene can override style and face in its own
- * config, and every shot can override those again.
+ * the GM's: the transition a new Theatre scene starts with, the typeface and
+ * camera shake every scene uses unless it picks its own, and whether a cut
+ * leaves a line in chat. A scene can pick its own style and face, and every shot
+ * can override style, face and shake again.
  */
 function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.chatOnCut, {
@@ -35,6 +37,17 @@ function registerSettings() {
     type: String,
     choices: Object.fromEntries(FACE_KEYS.map((k) => [k, `GLTH.face.${k}`])),
     default: DEFAULT_FACE,
+    onChange: () => applyFace(),
+  });
+  game.settings.register(SUITE_ID, SETTINGS.defaultShake, {
+    name: "GLTH.settings.defaultShake.name",
+    hint: "GLTH.settings.defaultShake.hint",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 100, step: 5 },
+    default: Math.round(DEFAULT_SHAKE * 100),
+    onChange: () => applyShake(),
   });
   // How the 16:9 frame meets a display: the GM's default for everyone…
   game.settings.register(SUITE_ID, SETTINGS.defaultFraming, {

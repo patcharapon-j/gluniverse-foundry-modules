@@ -943,8 +943,8 @@
 .glth-dial > output { grid-area: out; }
 .glth-dial > input[type="range"],
 .glth-dial > .glth-tint-row { grid-area: input; }
-.glth-dial--letterbox > .glth-check { grid-area: label; }
-.glth-dial--letterbox > input:disabled { opacity: 0.35; }
+:is(.glth-dial--letterbox, .glth-dial--shake) > .glth-check { grid-area: label; }
+:is(.glth-dial--letterbox, .glth-dial--shake) > input:disabled { opacity: 0.35; }
 .glth-tint-row { display: flex; align-items: center; gap: var(--gl-sp-4); }
 
 .glth-root .glth-check {

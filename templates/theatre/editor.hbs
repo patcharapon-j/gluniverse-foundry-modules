@@ -158,8 +158,14 @@
                 <input type="range" name="treatment.letterbox" min="0" max="0.2" step="0.005" value="{{detail.letterboxValue}}" {{#unless detail.letterboxOn}}disabled{{/unless}} aria-label="{{localize "GLTH.editor.letterbox"}}">
                 <output data-for="treatment.letterbox" data-fmt="letterbox">{{detail.out.letterbox}}</output>
               </div>
+              <div class="glth-dial glth-dial--shake">
+                <label class="glth-check"><input type="checkbox" name="shakeOn" {{#if detail.shakeOn}}checked{{/if}}><span class="glth-label">{{localize "GLTH.editor.shakeOverride"}}</span></label>
+                <input type="range" name="shake" min="0" max="1" step="0.05" value="{{detail.shakeValue}}" {{#unless detail.shakeOn}}disabled{{/unless}} aria-label="{{localize "GLTH.editor.shake"}}">
+                <output data-for="shake" data-fmt="pct">{{detail.shakeOut}}</output>
+              </div>
             </div>
             <p class="glth-note">{{localize "GLTH.editor.letterboxNote" value=detail.letterboxDefault}}</p>
+            <p class="glth-note">{{localize "GLTH.editor.shakeNote" value=detail.shakeDefault}}</p>
           </section>
 
           {{#if stage}}

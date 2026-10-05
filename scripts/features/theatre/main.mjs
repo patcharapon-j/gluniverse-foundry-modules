@@ -24,7 +24,7 @@ import {
   hasTitle, resolveFace, resolveHold, resolveLetterbox, resolveStyle, titleOf,
 } from "./model.mjs";
 import { scaleTimeline, timelineFor } from "./timeline.mjs";
-import { HOOK_CHANGED, isTheatreScene, TheatreStore, touchedKeys } from "./store.mjs";
+import { defaultFace, defaultShake, HOOK_CHANGED, isTheatreScene, TheatreStore, touchedKeys } from "./store.mjs";
 import { host } from "./host.mjs";
 import { TitleOverlay } from "./overlay/title-overlay.mjs";
 import { clearPreloads, preloadAll, whenReady } from "./preload.mjs";
@@ -53,7 +53,7 @@ const refreshControls = () => { try { ui.controls?.render({ reset: true }); } ca
 const emit = (store, detail) => Hooks.callAll(HOOK_CHANGED, store, detail);
 
 /** The parts of a shot the shot layer draws (a change here redraws it). */
-const drawSig = (shot) => (shot ? JSON.stringify([shot.id, shot.src, shot.focus, shot.treatment]) : null);
+const drawSig = (shot) => (shot ? JSON.stringify([shot.id, shot.src, shot.focus, shot.shake, shot.treatment]) : null);
 
 /* ── Timelines ──────────────────────────────────────────────────────────── */
 
@@ -75,7 +75,7 @@ function overlayCue(kind, style, shot, config, extra = {}) {
     kind,
     style,
     title: titleOf(shot),
-    face: FACES[resolveFace(shot, config)] ?? FACES[config.face],
+    face: FACES[resolveFace(shot, config, defaultFace())],
     cardText: style === "interlude" && kind === "shot" ? (shot?.title || shot?.subtitle || "") : undefined,
     letterbox,
     tag: config.tag && shot?.title ? shot.title : null,
@@ -203,6 +203,16 @@ export function readFraming() {
   return { mode: get(SETTINGS.defaultFraming, DEFAULT_FRAMING), padding: get(SETTINGS.defaultPadding, 0) };
 }
 
+/** The GM's default shake changed: every shot without its own eases to it. */
+export function applyShake() {
+  host.setShakeDefault(defaultShake());
+}
+
+/** The GM's default typeface changed: the open apps redraw their specimens. */
+export function applyFace() {
+  if (attached) emit(TheatreStore.current, { kind: "update", config: true });
+}
+
 /** A framing setting changed: re-fit now if a Theatre scene is up. */
 export function applyFraming() {
   if (attached) host.setFraming(readFraming());
@@ -221,6 +231,7 @@ function attachScene() {
   attached = scene;
   try { host.attach(scene); } catch (e) { warn("theatre | host attach failed", e); }
   try { host.setFraming(readFraming()); } catch (e) { warn("theatre | framing failed", e); }
+  try { host.setShakeDefault(defaultShake()); } catch (e) { warn("theatre | shake failed", e); }
   try { host.lockCamera(true); } catch (e) { warn("theatre | camera lock failed", e); }
   overlay?.mount();
   preloadAll(store.shots.map((s) => s.src));

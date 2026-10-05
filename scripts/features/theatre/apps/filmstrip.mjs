@@ -22,7 +22,7 @@ import { FACES } from "../constants.mjs";
 import { resolveFace, resolveStyle } from "../model.mjs";
 import { TheatreAppBase } from "./base.mjs";
 import {
-  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, faceSecondaryStyle, faceSpecimenStyle, guarded, isVideoSrc,
+  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, faceSecondaryStyle, faceSpecimenStyle, gmFace, guarded, isVideoSrc,
   loadHost, loadStore, partialFromSrc, pathsFromDrop, promptCardText, styleKeys, styleLabel, tpl,
 } from "./shared.mjs";
 
@@ -107,7 +107,7 @@ function FilmstripApp() {
       }));
 
       const sel = selectedId ? store.shot(selectedId) : null;
-      const face = sel ? resolveFace(sel, config) : config.face;
+      const face = resolveFace(sel, config, gmFace());
       const onAirShot = state.shotId ? store.shot(state.shotId) : null;
       const cue = state.cue;
       const host = cameraHost();

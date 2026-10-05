@@ -13,7 +13,8 @@ export const I18N = "GLTH";
 export const SETTINGS = Object.freeze({
   chatOnCut: "th.chatOnCut",       // world  Boolean — post a location line to chat on a cut (off)
   defaultStyle: "th.defaultStyle", // world  String  — STYLES key a new Theatre scene starts with
-  defaultFace: "th.defaultFace",   // world  String  — FACES key a new Theatre scene starts with
+  defaultFace: "th.defaultFace",   // world  String  — FACES key every Theatre scene uses unless it picks its own
+  defaultShake: "th.defaultShake", // world  Number  — camera shake strength (per cent) every shot uses unless it sets its own
   defaultFraming: "th.defaultFraming", // world  String — FRAMINGS key every viewer gets unless they choose
   defaultPadding: "th.defaultPadding", // world  Number — the padding that goes with it
   framing: "th.framing",           // client String  — FRAMING_CHOICES key: "default" follows the GM's pair
@@ -30,7 +31,7 @@ export const FRAMINGS = Object.freeze(["fill", "fit"]);
 export const DEFAULT_FRAMING = "fill";
 /** A viewer's own choice: the GM's default (framing AND padding), or a framing of their own. */
 export const FRAMING_CHOICES = Object.freeze(["default", ...FRAMINGS]);
-export const PADDING_MAX = 20;
+export const PADDING_MAX = 30;
 
 /** Scene flag keys (scope SUITE_ID). Dotted keys nest: flags[SUITE_ID].th.shots */
 export const FLAGS = Object.freeze({
@@ -66,7 +67,7 @@ export const CUE_KINDS = Object.freeze(["shot", "title", "card", "black", "clear
  */
 export const FACES = Object.freeze({
   gsflex: Object.freeze({
-    family: "\"Google Sans Flex\", sans-serif", weight: 850, stretch: "140%", track: "-0.02em", upper: true,
+    family: "\"Google Sans Flex\", sans-serif", weight: 850, stretch: "100%", track: "-0.02em", upper: true,
     secondary: Object.freeze({ family: "\"Google Sans Flex\", sans-serif", weight: 300, stretch: "100%", style: "normal", track: "0.45em", upper: true }),
   }),
   archivo: Object.freeze({
@@ -100,7 +101,15 @@ export const TIMING = Object.freeze({
   cueLead: 300,        // a cue is stamped this far in the future so every client starts together
   lateGrace: 1500,     // a client that receives a cue later than this after its start settles instead of playing
   tagDelay: 1000,      // corner tag appears this long after the title leaves
+  shakeEase: 2500,     // the camera shake eases toward a new strength (and its speed with it) over about this long
 });
+
+/**
+ * Camera shake: a slow handheld sway of the picture inside the frame (never the
+ * fitted backdrop around it). Strength is 0..1; 0 holds the picture still. The
+ * GM sets the default (`th.defaultShake`, per cent) and a shot may set its own.
+ */
+export const DEFAULT_SHAKE = 0.3;
 
 /** Video extensions a shot may use (muted, looping). */
 export const VIDEO_RE = /\.(webm|mp4|m4v|ogv)(\?.*)?$/i;

@@ -72,6 +72,21 @@ section = "model";
   ok("hold is clamped", M.normalizeShot({ hold: 999999 }).hold === C.TIMING.holdMax);
   ok("letterbox null survives (scene default)", M.normalizeShot({ treatment: { letterbox: null } }).treatment.letterbox === null);
   ok("NEUTRAL_TREATMENT is neutral", M.isNeutralTreatment(M.NEUTRAL_TREATMENT));
+  ok("a shot's shake is clamped", M.normalizeShot({ shake: 5 }).shake === 1);
+  ok("a shot's shake null survives (the GM's default)", M.normalizeShot({ shake: null }).shake === null && M.normalizeShot({}).shake === null);
+  ok("a face key off the prototype is refused", M.normalizeShot({ face: "toString" }).face === null && M.normalizeConfig({ face: "toString", v: M.CONFIG_VERSION }).face === null);
+
+  // The GM's default typeface reaches every scene that has not picked its own,
+  // including scenes made before a scene's face could be left empty.
+  ok("a new scene config follows the GM's face", M.normalizeConfig({}).face === null);
+  ok("a pre-v2 scene on the old written default follows the GM's face", M.normalizeConfig({ face: C.DEFAULT_FACE }).face === null);
+  ok("a pre-v2 scene that chose another face keeps it", M.normalizeConfig({ face: "cinzel" }).face === "cinzel");
+  ok("a v2 scene that chose the default face keeps it", M.normalizeConfig({ face: C.DEFAULT_FACE, v: M.CONFIG_VERSION }).face === C.DEFAULT_FACE);
+  ok("a written config is stamped with its version", M.normalizeConfig({}).v === M.CONFIG_VERSION);
+  ok("resolveFace: shot, then scene, then the GM's default",
+    M.resolveFace({ face: "oxanium" }, { face: "cinzel" }, "archivo") === "oxanium"
+      && M.resolveFace({ face: null }, { face: "cinzel" }, "archivo") === "cinzel"
+      && M.resolveFace(null, { face: null }, "archivo") === "archivo");
   ok("DEFAULT_TREATMENT is not neutral (it vignettes)", !M.isNeutralTreatment(M.DEFAULT_TREATMENT));
 
   // Ids: a shot without one mints the same id on every client, and duplicates are re-minted.
@@ -237,6 +252,34 @@ section = "perf";
   ok("the host binds SHED_ORDER to Budget.ladder", /Budget\.ladder\(/.test(host) && /SHED_ORDER/.test(host));
   ok("the host claims motion while it moves", /Budget\.claimMotion\(/.test(host));
   ok("the host mounts in canvas.primary beneath tiles", /canvas\??\.primary/.test(host) && /TILES/.test(host));
+  ok("the camera shake sheds first", R.SHED_ORDER[0] === "shake");
+  ok("the camera shake holds still while ambient motion is paused", /setShakeEnabled\(Budget\.ambientAllowed\)/.test(host));
+  ok("the host hands the renderer the GM's shake default on attach", /this\.renderer\.setShakeDefault\(/.test(host));
+
+  // Shake: neutral is exact, the sway is bounded, and a shaken picture still covers the frame.
+  ok("shake strength 0 is no camera at all", R.shakeCamera(0, { x: 1, y: 1 }, 3840, 2160) === null);
+  let maxN = 0;
+  for (let t = 0; t < 600; t += 0.37) { const n = R.shakeOffset(t); maxN = Math.max(maxN, Math.abs(n.x), Math.abs(n.y)); }
+  ok("the sway stays inside -1..1", maxN <= 1 + 1e-9, String(maxN));
+  ok("the sway speed rises with strength", R.SHAKE.fast > R.SHAKE.slow && R.SHAKE.slow > 0);
+  let covered = true, worst = "";
+  for (const [iw, ih] of [[3840, 2160], [1000, 1000], [4000, 1000], [1000, 4000]]) {
+    for (const k of [0.1, 0.3, 1]) {
+      for (const n of [{ x: 1, y: 1 }, { x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 }]) {
+        for (const f of [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }]) {
+          const r = R.placeRect(iw, ih, 3840, 2160, f, 1, R.shakeCamera(k, n, 3840, 2160));
+          if (!(r.x <= 1e-6 && r.y <= 1e-6 && r.x + r.width >= 3840 - 1e-6 && r.y + r.height >= 2160 - 1e-6)) { covered = false; worst = `${iw}x${ih} k${k}`; }
+        }
+      }
+    }
+  }
+  ok("a shaken picture still covers the frame at the sway's extremes", covered, worst);
+  const still = R.placeRect(1920, 1080, 3840, 2160, { x: 0.5, y: 0.5 }, 1, null);
+  ok("no shake places the picture exactly as before", still.x === 0 && still.y === 0 && still.width === 3840 && still.height === 2160);
+  const rsrc = stripComments(read(`${FEAT}/render/shot-renderer.mjs`));
+  const bd = rsrc.slice(rsrc.indexOf("_updateBackdrop() {"), rsrc.indexOf("_devicePerFrame() {"));
+  ok("the backdrop around a fitted frame never shakes", !/_cam|shake/i.test(bd));
+  ok("the shake's ease is a TIMING constant", /TIMING\.shakeEase/.test(rsrc));
 }
 
 /* ── Framing: fill covers, fit contains, the backdrop fills the rest ──── */
@@ -289,6 +332,14 @@ section = "framing";
     ok(`th.${k} is ${scope} scope (the GM's default vs the viewer's own)`, new RegExp(`scope:\\s*"${scope}"`).test(reg));
     ok(`th.${k} re-fits on change`, /onChange:\s*\(\)\s*=>\s*applyFraming\(\)/.test(reg));
   }
+  for (const [k, fn] of [["defaultShake", "applyShake"], ["defaultFace", "applyFace"]]) {
+    const at = idx.indexOf(`SETTINGS.${k},`);
+    if (!ok(`th.${k} is registered`, at >= 0)) continue;
+    const block = idx.slice(at);
+    const reg = block.slice(0, block.indexOf("});"));
+    ok(`th.${k} is the GM's (world scope)`, /scope:\s*"world"/.test(reg));
+    ok(`th.${k} applies on change`, new RegExp(`onChange:\\s*\\(\\)\\s*=>\\s*${fn}\\(\\)`).test(reg));
+  }
   ok("a viewer's framing defaults to following the GM", /SETTINGS\.framing,[\s\S]*?default:\s*"default"/.test(idx) && C.FRAMING_CHOICES[0] === "default");
   const main = stripComments(read(`${FEAT}/main.mjs`));
   const rf = main.slice(main.indexOf("export function readFraming"), main.indexOf("export function applyFraming"));
@@ -335,6 +386,10 @@ section = "seams";
   const ov = read("styles/theatre.css");
   ok("the overlay sits above Stage's overlay (z-index 1)", /z-index:\s*calc\(var\(--gl-z-base\)\s*\+\s*[1-9]/.test(ov) || /z-index:\s*([2-9]|[1-9]\d)\b/.test(ov));
   ok("the overlay never takes the pointer", /pointer-events:\s*none/.test(ov));
+  const O = await imp(`${FEAT}/overlay/title-overlay.mjs`);
+  const live = ov.replace(/\/\*[\s\S]*?\*\//g, "").match(new RegExp(`\\.${O.LIVE_CLASS}\\s*\\{([^}]*)\\}`));
+  ok("a playing cue raises the overlay over Foundry's UI (the class the overlay sets is styled)", !!live && /z-index:\s*calc\(var\(--gl-z-splash\)/.test(live[1]));
+  ok("the overlay drops back under the UI when a cue settles", /if \(settle\) \{ this\._live\(false\)/.test(stripComments(read(`${FEAT}/overlay/title-overlay.mjs`))));
 }
 
 console.log(problems ? `\ntheatre-check: ${problems} problem(s), ${passed} assertion(s) passed.` : `\ntheatre-check: 0 problems, ${passed} assertion(s) passed.`);

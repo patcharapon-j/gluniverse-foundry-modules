@@ -26,7 +26,7 @@ import { escapeHTML } from "../../../core/util.mjs";
 import { TheatreAppBase } from "./base.mjs";
 import {
   L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, faceKeys, faceLabel,
-  faceSecondaryStyle, faceSpecimenStyle, guarded, isVideoSrc, loadStore, overrideOptions, partialFromSrc, pathsFromDrop,
+  faceSecondaryStyle, faceSpecimenStyle, gmFace, gmShake, guarded, isVideoSrc, loadStore, overrideOptions, partialFromSrc, pathsFromDrop,
   pickFile, pickFolder, plainOptions, stageEnabled, styleKeys, styleLabel, tpl,
 } from "./shared.mjs";
 
@@ -60,6 +60,7 @@ function patchFromForm(f, base) {
     face: f.face || null,
     hold: holdSec === "" || !Number.isFinite(Number(holdSec)) ? null : Number(holdSec) * 1000,
     focus: { x: num(f.focus?.x, base.focus.x), y: num(f.focus?.y, base.focus.y) },
+    shake: f.shakeOn ? num(f.shake, 0) : null,
     treatment: {
       exposure: num(t.exposure, base.treatment.exposure),
       saturation: num(t.saturation, base.treatment.saturation),
@@ -160,7 +161,9 @@ function EditorApp() {
       if (stored) {
         // The draft wins over the stored shot for everything the form edits; grade is never drafted.
         const d = this.dirty ? normalizeShot({ ...stored, ...this._draft.values, id: stored.id, grade: stored.grade }) : stored;
-        const face = resolveFace(d, config);
+        const sceneFace = config.face ?? gmFace();
+        const face = resolveFace(d, config, gmFace());
+        const shake = d.shake ?? gmShake();
         const t = d.treatment;
         detail = {
           id: d.id,
@@ -173,11 +176,15 @@ function EditorApp() {
           notes: d.notes,
           onAir: d.id === state.shotId,
           styles: overrideOptions(styleKeys(), styleLabel, d.style, config.style),
-          faces: overrideOptions(faceKeys(), faceLabel, d.face, config.face),
+          faces: overrideOptions(faceKeys(), faceLabel, d.face, sceneFace),
           hold: d.hold == null ? "" : sec(d.hold),
           holdDefault: sec(config.hold),
           focusX: d.focus.x,
           focusY: d.focus.y,
+          shakeOn: d.shake != null,
+          shakeValue: shake,
+          shakeOut: fmt.pct(shake),
+          shakeDefault: fmt.pct(gmShake()),
           t,
           out: {
             exposure: fmt.exposure(t.exposure),
@@ -213,14 +220,14 @@ function EditorApp() {
         holdMax: sec(TIMING.holdMax),
         config: {
           styles: plainOptions(styleKeys(), styleLabel, config.style),
-          faces: plainOptions(faceKeys(), faceLabel, config.face),
+          faces: overrideOptions(faceKeys(), faceLabel, config.face, gmFace(), "GLTH.editor.gmDefault"),
           hold: sec(config.hold),
           letterbox: config.letterbox,
           letterboxOut: fmt.letterbox(config.letterbox),
           tag: config.tag,
           styleHint: L(`GLTH.style.${config.style}.hint`),
-          titleStyle: faceSpecimenStyle(config.face),
-          secondaryStyle: faceSecondaryStyle(config.face),
+          titleStyle: faceSpecimenStyle(config.face ?? gmFace()),
+          secondaryStyle: faceSecondaryStyle(config.face ?? gmFace()),
         },
       };
     }
@@ -333,10 +340,14 @@ function EditorApp() {
         const range = form.querySelector('input[name="treatment.letterbox"]');
         if (range) range.disabled = !el.checked;
       }
+      if (el?.name === "shakeOn") {
+        const range = form.querySelector('input[name="shake"]');
+        if (range) range.disabled = !el.checked;
+      }
       if (el?.name === "face" || el?.name === "title" || el?.name === "eyebrow" || el?.name === "subtitle") {
         const store = this.store;
         if (!store) return;
-        const faceKey = form.elements.face?.value || store.config.face;
+        const faceKey = form.elements.face?.value || store.face;
         const spec = form.querySelector("[data-specimen]");
         if (!spec) return;
         const t = spec.querySelector("[data-spec-title]");
@@ -476,7 +487,7 @@ function EditorApp() {
         const holdSec = Number(f.hold);
         const patch = {
           style: f.style,
-          face: f.face,
+          face: f.face || null,
           hold: Number.isFinite(holdSec) && String(f.hold).trim() !== "" ? holdSec * 1000 : store.config.hold,
           letterbox: Number(f.letterbox) || 0,
           tag: !!f.tag,

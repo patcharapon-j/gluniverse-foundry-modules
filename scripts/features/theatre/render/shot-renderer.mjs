@@ -17,9 +17,19 @@
  *   cut   — a short linear crossfade
  *   none  — the image does not change
  *
+ * Between cues the camera SHAKES: a slow handheld sway of both sides together,
+ * the picture scaled about the frame centre just enough that the sway never
+ * shows an edge (see SHAKE). It moves the picture inside the frame only, never
+ * the backdrop around a fitted one. The strength eases toward its target, and
+ * the sway's speed rides on the eased strength, so it always starts slow and
+ * small. Its clock is a phase integrated each frame, so a change of speed never
+ * jumps the picture, and it holds still (rather than easing out) when ambient
+ * motion is paused or the shake is shed.
+ *
  * Every time comes from the timeline (../timeline.mjs) the caller passes in,
  * already scaled by the motion scale. The constants below are SHAPES (scales,
- * easings, the bloom's size), never durations.
+ * easings, the bloom's size), never durations — except the shake's ease, which
+ * is TIMING.shakeEase from constants.mjs.
  *
  * NEUTRAL_TREATMENT is an exact no-op: each grade step is skipped at its
  * neutral value rather than evaluated (x * 1.0 is exact, but `l + (c - l) * 1.0`
@@ -39,7 +49,8 @@
  * so it needs nothing from the host.
  */
 
-import { coverRect, isVideo, normalizeTreatment } from "../model.mjs";
+import { TIMING } from "../constants.mjs";
+import { coverRect, isVideo, normalizeTreatment, resolveShake } from "../model.mjs";
 
 /* ══════════════════════════════════════════════════════════════════════
    Shapes (not durations)
@@ -47,7 +58,7 @@ import { coverRect, isVideo, normalizeTreatment } from "../model.mjs";
 
 /** Behaviours given up under load, cheapest to lose first. Bound to the shared
  *  frame clock by the host with Budget.ladder(). */
-export const SHED_ORDER = Object.freeze(["bloom", "blur", "backdrop"]);
+export const SHED_ORDER = Object.freeze(["shake", "bloom", "blur", "backdrop"]);
 
 /** The backdrop around a fitted frame: the same picture, blurred and darker. */
 export const BACKDROP = Object.freeze({
@@ -71,6 +82,37 @@ export const WIPE = Object.freeze({
   minSoftPx: 2,      // …never narrower than this many DEVICE pixels (no aliased hairline)
   dim: 0.55,         // A's brightness at the end of the wipe
 });
+
+/**
+ * Camera shake. The sway is three sines per axis at unrelated frequencies, so it
+ * never visibly repeats; the weights sum to 1, so the offset stays in -1..1.
+ */
+export const SHAKE = Object.freeze({
+  reach: 0.02,       // the furthest the picture travels at strength 1, as a fraction of the frame height
+  slow: 0.6,         // sway speed at strength 0 …
+  fast: 1.6,         // … and at strength 1 (speed rides on the eased strength)
+  x: Object.freeze([[0.071, 0.55, 0.0], [0.153, 0.3, 1.7], [0.317, 0.15, 4.1]]),   // [Hz, weight, phase]
+  y: Object.freeze([[0.059, 0.55, 2.3], [0.131, 0.3, 0.6], [0.283, 0.15, 3.3]]),
+});
+
+/** The sway at `t` seconds of shake clock: { x, y } in -1..1. */
+export function shakeOffset(t) {
+  const axis = (terms) => terms.reduce((v, [hz, w, ph]) => v + w * Math.sin(2 * Math.PI * hz * t + ph), 0);
+  return { x: axis(SHAKE.x), y: axis(SHAKE.y) };
+}
+
+/**
+ * The camera at strength `k` and sway `n` for a frame of fw × fh: the scale about
+ * the frame centre and the offset, in frame px. The scale leaves exactly the
+ * margin the furthest offset needs on the frame's short side (the long side has
+ * more), so a covering picture still covers.
+ */
+export function shakeCamera(k, n, fw, fh) {
+  const r = SHAKE.reach * Math.max(0, Math.min(1, Number(k) || 0));
+  if (!(r > 0)) return null;
+  const reach = r * Math.min(fw, fh);
+  return { over: 1 + 2 * r, dx: n.x * reach, dy: n.y * reach };
+}
 
 /** Treatment ranges the shader works in. */
 export const TREATMENT = Object.freeze({
@@ -176,16 +218,18 @@ export function imageBeat(image, t) {
 
 /**
  * A side's image rect in frame px: cover-fit about the focus, then the
- * transition's scale about the frame centre.
+ * transition's scale and the shake's (`cam`, from shakeCamera) about the frame
+ * centre, then the shake's offset.
  */
-export function placeRect(iw, ih, fw, fh, focus, tScale = 1) {
+export function placeRect(iw, ih, fw, fh, focus, tScale = 1, cam = null) {
   const base = coverRect(iw, ih, fw, fh, focus ?? { x: 0.5, y: 0.5 });
   const cx = fw / 2, cy = fh / 2;
+  const s = tScale * (cam?.over ?? 1);
   return {
-    x: cx + (base.x - cx) * tScale,
-    y: cy + (base.y - cy) * tScale,
-    width: base.width * tScale,
-    height: base.height * tScale,
+    x: cx + (base.x - cx) * s + (cam?.dx ?? 0),
+    y: cy + (base.y - cy) * s + (cam?.dy ?? 0),
+    width: base.width * s,
+    height: base.height * s,
   };
 }
 
@@ -455,6 +499,13 @@ export class ShotRenderer {
     this.resolution = resolution || 1;
     this.motion = 1;
     this.shed = 0;
+    /** The GM's default shake strength (0..1), for a shot without its own. */
+    this.shakeDefault = 0;
+    this.shakeEnabled = true;
+    this._shakeK = 0;          // eased strength: starts at 0, so a scene's shake always eases in
+    this._shakeT = 0;          // shake clock, seconds (integrated, so a speed change never jumps)
+    this._shakeAt = null;      // performance.now() of the last update
+    this._cam = null;
     /** src → Promise<entry>; entry = { tex, video, owned } | null */
     this._cache = new Map();
     /** src → entry, once resolved */
@@ -773,6 +824,23 @@ export class ShotRenderer {
   /** The motion scale; >1 slows the transitions. */
   setMotionScale(k) { this.motion = Number.isFinite(k) && k >= 0 ? k : 1; }
 
+  /** The GM's default shake strength, 0..1. A shot's own wins. */
+  setShakeDefault(v) { const n = Number(v); this.shakeDefault = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0; }
+
+  /** False holds the shake still where it is (ambient motion paused). */
+  setShakeEnabled(on) { this.shakeEnabled = !!on; }
+
+  /** The shake strength the shot on screen (or arriving) asks for. */
+  get shakeTarget() {
+    const shot = (this.b ?? this.a)?.shot;
+    return shot && this.motion > 0 ? resolveShake(shot, this.shakeDefault) : 0;
+  }
+
+  /** True while the shake clock runs this frame. */
+  get _shaking() {
+    return this.shakeEnabled && this.allows("shake") && (this._shakeK > 1e-4 || this.shakeTarget > 0);
+  }
+
   allows(name) {
     const i = SHED_ORDER.indexOf(name);
     return i < 0 || i >= this.shed;
@@ -780,15 +848,16 @@ export class ShotRenderer {
 
   /** True while anything here moves on its own (the host claims motion with it). */
   get animating() {
-    if (this._tr) return true;
+    if (this._tr || this._shaking) return true;
     return [this.a, this.b].some((s) => s?.src && this._ready.get(s.src)?.video && !this._ready.get(s.src).video.paused);
   }
 
   /* ── per frame ─────────────────────────────────────────────────────── */
 
-  /** Cue time is performance.now(), so the frame delta is not needed. */
+  /** Cue time is performance.now(); the shake integrates its own clock off it. */
   update() {
     if (this._destroyed) return;
+    this._stepShake(performance.now());
     let beat = null;
     if (this._tr) {
       beat = imageBeat(this._tr.image, performance.now() - this._tr.startAt);
@@ -807,6 +876,24 @@ export class ShotRenderer {
     if (this._fallback) this._drawFallback(A, B, beat);
     else this._writeUniforms(A, B, beat);
     this._updateBackdrop();
+  }
+
+  /**
+   * Advance the shake: ease the strength toward the shot's, then run the clock
+   * at a speed that rides on it. Paused or shed, both hold where they are.
+   */
+  _stepShake(t) {
+    const dt = this._shakeAt === null ? 0 : Math.max(0, Math.min(100, t - this._shakeAt));
+    this._shakeAt = t;
+    if (this._shaking && dt > 0) {
+      const target = this.shakeTarget;
+      const tau = (TIMING.shakeEase * this.motion) / 3;   // ~95% of the way in shakeEase
+      this._shakeK = tau > 0 ? target + (this._shakeK - target) * Math.exp(-dt / tau) : target;
+      if (this._shakeK < 1e-4 && target === 0) this._shakeK = 0;
+      const rate = SHAKE.slow + (SHAKE.fast - SHAKE.slow) * this._shakeK;
+      if (this.motion > 0) this._shakeT += (dt / 1000) * (rate / this.motion);
+    }
+    this._cam = shakeCamera(this._shakeK, shakeOffset(this._shakeT), this.width, this.height);
   }
 
   /** The backdrop follows the frame's mix and wipe line exactly; only placement, blur and level differ. */
@@ -863,7 +950,7 @@ export class ShotRenderer {
     const tex = this._tex(side);
     if (!side?.shot || !tex) return null;
     const W = this.width, H = this.height;
-    const rect = placeRect(tex.width, tex.height, W, H, side.focus, tScale);
+    const rect = placeRect(tex.width, tex.height, W, H, side.focus, tScale, this._cam);
     const t = side.treatment;
     const blurFrac = (this.allows("blur") ? t.blur * TREATMENT.blurMax : 0) + (this.allows("bloom") ? bloom * PUSH.bloomBlur : 0);
     return { tex, rect, t, dim, bloom, blurFrac };

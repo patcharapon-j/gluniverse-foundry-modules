@@ -21,7 +21,7 @@
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { escapeHTML } from "../../core/util.mjs";
 import { motionScale } from "../../core/theme.mjs";
-import { FLAGS, SETTINGS, TIMING } from "./constants.mjs";
+import { DEFAULT_FACE, DEFAULT_SHAKE, FACES, FLAGS, SETTINGS, TIMING } from "./constants.mjs";
 import {
   hasTitle, newShotId, normalizeConfig, normalizeShot, normalizeShots, normalizeState,
   resolveHold, resolveLetterbox, resolveStyle, titleOf,
@@ -101,6 +101,22 @@ const chatOnCut = () => {
   try { return !!game.settings.get(SUITE_ID, SETTINGS.chatOnCut); } catch { return false; }
 };
 
+/** The GM's default title typeface (world setting): what a scene that picks none of its own uses. */
+export function defaultFace() {
+  try {
+    const v = game.settings.get(SUITE_ID, SETTINGS.defaultFace);
+    return Object.hasOwn(FACES, v) ? v : DEFAULT_FACE;
+  } catch { return DEFAULT_FACE; }
+}
+
+/** The GM's default camera shake strength, 0..1 (the world setting is per cent). */
+export function defaultShake() {
+  try {
+    const v = Number(game.settings.get(SUITE_ID, SETTINGS.defaultShake));
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v / 100)) : DEFAULT_SHAKE;
+  } catch { return DEFAULT_SHAKE; }
+}
+
 /* ── The store ──────────────────────────────────────────────────────────── */
 
 let _cached = null;
@@ -132,6 +148,8 @@ export class TheatreStore {
   get enabled() { return isTheatreScene(this.scene); }
   get shots() { return readShots(this.scene); }
   get config() { return readConfig(this.scene); }
+  /** The scene's title typeface: its own, else the GM's default. */
+  get face() { return this.config.face ?? defaultFace(); }
   get state() { return readState(this.scene); }
 
   shot(id) { return id ? this.shots.find((s) => s.id === id) ?? null : null; }

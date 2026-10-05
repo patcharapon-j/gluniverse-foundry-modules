@@ -12,7 +12,7 @@
 
 import { featurePath, SUITE_ID } from "../../../core/const.mjs";
 import { Suite } from "../../../core/registry.mjs";
-import { FACE_KEYS, FACES, FEATURE_ID, STYLES, VIDEO_RE } from "../constants.mjs";
+import { DEFAULT_FACE, DEFAULT_SHAKE, FACE_KEYS, FACES, FEATURE_ID, STYLES, VIDEO_RE } from "../constants.mjs";
 import { titleFromFilename } from "../model.mjs";
 
 export const tpl = (name) => featurePath(FEATURE_ID, `templates/${name}.hbs`);
@@ -43,6 +43,10 @@ export async function loadStore() {
 export const storeModule = () => _storeMod;
 /** The store for the viewed scene when it is a Theatre scene, else null. */
 export const currentStore = () => _storeMod?.TheatreStore?.current ?? null;
+/** The GM's default title typeface (world setting). */
+export const gmFace = () => _storeMod?.defaultFace?.() ?? DEFAULT_FACE;
+/** The GM's default camera shake, 0..1 (world setting). */
+export const gmShake = () => _storeMod?.defaultShake?.() ?? DEFAULT_SHAKE;
 
 /* ── The camera host, lazily (free pan is a local camera toggle, not world data) ── */
 
@@ -71,11 +75,12 @@ export const faceLabel = (k) => L(`GLTH.face.${k}`);
 
 /**
  * Options for an override select: first "Scene default (<resolved>)" (value ""),
- * then every key. `selected` null means the default row.
+ * then every key. `selected` null means the default row. `defaultKey` names the
+ * default row's label (the scene's, or for the scene itself the GM's).
  */
-export function overrideOptions(keys, label, selected, sceneValue) {
+export function overrideOptions(keys, label, selected, sceneValue, defaultKey = "GLTH.editor.sceneDefault") {
   return [
-    { value: "", label: L("GLTH.editor.sceneDefault", { value: label(sceneValue) }), selected: selected == null },
+    { value: "", label: L(defaultKey, { value: label(sceneValue) }), selected: selected == null },
     ...keys.map((k) => ({ value: k, label: label(k), selected: k === selected })),
   ];
 }
