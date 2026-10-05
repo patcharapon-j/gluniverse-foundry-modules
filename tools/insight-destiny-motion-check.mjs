@@ -66,7 +66,10 @@ insight.disposeNotification(instant);
 assert.equal(released, 2, 'external disposal must release once');
 let attach;
 globalThis.Hooks = { on: (_name, fn) => { attach = fn; } };
-const destiny = await production('../scripts/features/destiny-dice/fate-result.mjs', 'const FATE_DIE_DENOMINATION="f", FATE_DIE_NOTATION="1df", FLAGS={fate:"fate"}, KIND_OPPORTUNITY="opportunity", MODULE_ID="suite", getFaceImagePaths=()=>null, getFateFace=()=>null, getKindLabel=x=>x, normalizeKind=x=>x;');
+// fate-result.mjs takes the degree rule from core; the real one, since stripping
+// its import would otherwise leave it undefined.
+globalThis.__degree = await import('../scripts/core/pf2e-degree.mjs');
+const destiny = await production('../scripts/features/destiny-dice/fate-result.mjs', 'const { DEGREE_KEYS, baseDegree, adjustDegreeForNatural } = globalThis.__degree; const FATE_DIE_DENOMINATION="f", FATE_DIE_NOTATION="1df", FLAGS={fate:"fate"}, KIND_OPPORTUNITY="opportunity", MODULE_ID="suite", getFaceImagePaths=()=>null, getFateFace=()=>null, getKindLabel=x=>x, normalizeKind=x=>x;');
 destiny.registerFateRendering();
 const root = new Node();
 const fate = { appliedAt: Date.now(), face: 1, kind: 'opportunity', bonus: 0 };

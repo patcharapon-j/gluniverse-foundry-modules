@@ -28,6 +28,7 @@ import "./pf2e-aoe/index.mjs";
 import "./pf2e-arcane-surge/index.mjs";
 import "./pf2e-variant-rules/index.mjs";
 import "./pf2e-creaturedex/index.mjs";
+import "./spotlight-roll/index.mjs";
 // `stream-cards` is gated on `stream` via requiresFeature and must be imported
 // after it so the Control Center groups it beneath its parent — registration
 // order is UI order. `stream-targets` is a sibling, not a child.

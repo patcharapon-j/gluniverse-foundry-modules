@@ -51,6 +51,8 @@
     "styles/pf2e-variant-rules.css",
     "styles/pf2e-variant-rules-boss.css",
     "styles/pf2e-creaturedex.css",
+    "styles/spotlight-roll.css",
+    "styles/spotlight-roll-app.css",
     "styles/stream.css",
     "styles/stream-cards.css",
     "styles/stream-targets.css",
@@ -216,6 +218,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/perf.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/spotlight-roll.en.json"
     }
   ],
   "packs": [
@@ -239,6 +246,14 @@
         "reason": "Required only for the Tidy 5e Inventory Slots feature.",
         "compatibility": {
           "minimum": "13.0.0"
+        }
+      },
+      {
+        "id": "dice-so-nice",
+        "type": "module",
+        "reason": "Required only for the Spotlight Roll feature (Dice So Nice 6.x).",
+        "compatibility": {
+          "minimum": "6.0.0"
         }
       }
     ]

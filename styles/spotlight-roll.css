@@ -1,0 +1,1525 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Spotlight Roll — the Monolith overlay
+   ════════════════════════════════════════════════════════════════════════
+   One tall slab of etched glass on a plinth, the die floating in front of
+   it. The engraving is the gauge: light wells up from the plinth as the
+   total climbs, and the degree registers are cut so that the success band
+   IS the die — the DC line runs under it, the critical line over it.
+   Group rolls stand as a colonnade under one lintel and one DC line;
+   opposed rolls face a defender's stele across the gap.
+
+   The layer stack (scripts/features/spotlight-roll/director.mjs):
+     .glsr                     root, fixed full-screen, data-* state below
+       canvas.glsr-bg          WebGL backdrop (overlay/fragment.mjs)
+       .glsr-cssbg             CSS backdrop — used when data-render="css"
+       .glsr-back              overlay DOM drawn BEHIND the die
+       canvas.glsr-dice        the die (Dice So Nice)
+       .glsr-front             overlay DOM drawn OVER the die
+
+   State, written from the clock (seek-safe):
+     root            data-phase (furthest roll) · data-render · data-layout,
+                     data-degree / data-natural for a lone roll
+     [data-roll=i]   data-phase · data-degree · data-natural per roll —
+                     every per-roll rule below keys on .glsr-mono-unit
+
+   Every beat after the throw is driven from the seeked clock: anime
+   timelines write inline values, and the overlay's frame() writes the
+   --glsr-mono-* light properties. The only @keyframes here are idle loops,
+   and they run only while armed. Feature-local custom properties are
+   --glsr-mono-* / --glsr-*; no --gl-* foundation token is redeclared.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glsr {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gl-z-splash);
+  pointer-events: none;
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  --glsr-deg: var(--gl-accent);
+  --glsr-gold: var(--gl-warn);
+  --glsr-gold-hot: var(--gl-warn-hot);
+  --glsr-success: var(--gl-good);
+  --glsr-success-hot: var(--gl-good-hot);
+  --glsr-fail: var(--gl-text-dim);
+  --glsr-fail-hot: var(--gl-text);
+  --glsr-crimson: var(--gl-peril);
+  --glsr-crimson-hot: var(--gl-hazard-hot);
+}
+.glsr[data-degree="3"] { --glsr-deg: var(--glsr-gold); --glsr-deg-hot: var(--glsr-gold-hot); }
+.glsr[data-degree="2"] { --glsr-deg: var(--glsr-success); --glsr-deg-hot: var(--glsr-success-hot); }
+.glsr[data-degree="1"] { --glsr-deg: var(--glsr-fail); --glsr-deg-hot: var(--glsr-fail-hot); }
+.glsr[data-degree="0"] { --glsr-deg: var(--glsr-crimson); --glsr-deg-hot: var(--glsr-crimson-hot); }
+
+.glsr > * { position: absolute; inset: 0; }
+.glsr-bg, .glsr-dice { width: 100%; height: 100%; display: block; }
+.glsr-cssbg { display: none; }
+.glsr[data-render="css"] .glsr-bg { display: none; }
+.glsr[data-render="css"] .glsr-cssbg { display: block; }
+.glsr-back, .glsr-front { pointer-events: none; }
+.glsr [data-mod], .glsr [data-action] { pointer-events: auto; cursor: pointer; }
+.glsr [data-mod].is-off { opacity: 0.38; text-decoration: line-through; }
+
+.glsr,
+.glsr-mono-unit {
+  /* The light before any verdict: the accent, paled toward bright glass. */
+  --glsr-mono-ray: color-mix(in srgb, var(--gl-accent) 58%, var(--gl-text-bright));
+  /* …and after it, the degree's own hue, crossfaded on the seeked clock. */
+  --glsr-mono-lightc: color-mix(in oklab, var(--glsr-deg) calc(var(--glsr-mono-degk, 0) * 100%), var(--glsr-mono-ray));
+  --glsr-mono-lighthot: color-mix(in oklab, var(--glsr-mono-lightc) 62%, var(--gl-text-bright));
+  --glsr-mono-px: calc(1px * var(--glsr-mono-u, 1));
+}
+/* Each roll carries its own verdict (the harness stamps data-degree on every
+   [data-roll] element), so the degree hue is resolved per unit, not per page. */
+.glsr-mono-unit[data-degree="3"] { --glsr-deg: var(--glsr-gold); --glsr-deg-hot: var(--glsr-gold-hot); }
+.glsr-mono-unit[data-degree="2"] { --glsr-deg: var(--glsr-success); --glsr-deg-hot: var(--glsr-success-hot); }
+.glsr-mono-unit[data-degree="1"] { --glsr-deg: var(--glsr-fail); --glsr-deg-hot: var(--glsr-fail-hot); }
+.glsr-mono-unit[data-degree="0"] { --glsr-deg: var(--glsr-crimson); --glsr-deg-hot: var(--glsr-crimson-hot); }
+.glsr[data-degree="3"],
+.glsr-mono-unit[data-degree="3"] { --glsr-mono-lighthot: var(--glsr-gold-hot); }
+.glsr[data-degree="1"],
+.glsr-mono-unit[data-degree="1"] { --glsr-mono-lighthot: color-mix(in oklab, var(--glsr-fail) 80%, var(--gl-text-bright)); }
+
+.glsr-mono,
+.glsr-mono-rise,
+.glsr-mono-sink,
+.glsr-mono-monument,
+.glsr-mono-shards,
+.glsr-mono-shard,
+.glsr-mono-front { position: absolute; inset: 0; }
+
+.glsr-mono-shards { opacity: 0; }
+.glsr-mono-shard { will-change: transform; }
+
+/* ── the slab ─────────────────────────────────────────────────────────── */
+
+.glsr-mono-slab {
+  position: absolute;
+  clip-path: polygon(var(--glsr-mono-cham) 0, calc(100% - var(--glsr-mono-cham)) 0, 100% var(--glsr-mono-cham),
+    100% 100%, 0 100%, 0 var(--glsr-mono-cham));
+  filter: drop-shadow(0 0 0 transparent);
+}
+
+.glsr-mono-glass {
+  position: absolute;
+  inset: 0;
+  background:
+    /* two long refraction sheens laid diagonally through the body */
+    linear-gradient(103deg, transparent 0 13%, rgb(var(--gl-tint-light) / 0.06) 18%, transparent 29%,
+      transparent 63%, rgb(var(--gl-tint-light) / 0.035) 69%, transparent 77%),
+    /* the crown catches the room's light */
+    radial-gradient(120% 34% at 50% 0%, color-mix(in srgb, var(--gl-accent) 20%, transparent), transparent 72%),
+    /* depth: the slab darkens and thickens toward its foot */
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--gl-accent) 9%, rgb(var(--gl-tint-dark) / 0.42)) 0%,
+      rgb(var(--gl-tint-dark) / 0.56) 46%,
+      rgb(var(--gl-tint-dark) / 0.66) 100%);
+  backdrop-filter: blur(calc(14px * var(--gl-glass-k))) saturate(var(--gl-saturation));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.34),
+    inset 1px 0 0 rgb(var(--gl-tint-light) / 0.14),
+    inset -1px 0 0 rgb(var(--gl-tint-light) / 0.07),
+    inset 0 -80px 120px rgb(var(--gl-tint-dark) / 0.32);
+}
+/* Edge refraction: a bright line just inside the left face, an accent one
+   inside the right — light bending through the thickness of the glass. */
+.glsr-mono-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent, rgb(var(--gl-tint-light) / 0.30) 22%, rgb(var(--gl-tint-light) / 0.06) 70%, transparent)
+      left calc(5 * var(--glsr-mono-px)) top 0 / 1px 100% no-repeat,
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--gl-accent) 55%, transparent) 18%, transparent 64%)
+      right calc(4 * var(--glsr-mono-px)) top 0 / 1px 100% no-repeat,
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.10) 50%, transparent)
+      0 calc(var(--glsr-mono-cham) * 0.5) / 100% 1px no-repeat;
+}
+/* Frost: a fixed grain in the glass, so it reads as cut stone-glass and not
+   as a flat panel. Static image; costs nothing per frame. */
+.glsr-mono-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.09;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* armed: a slow sheen walks across the face of the glass (idle loop only) */
+.glsr-mono-sheen { display: none; }
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-sheen {
+  display: block;
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  background: linear-gradient(104deg, transparent 42%, rgb(var(--gl-tint-light) / 0.07) 49%, color-mix(in srgb, var(--gl-accent) 14%, transparent) 50%, transparent 58%)
+    0 0 / 300% 100% no-repeat;
+  animation: glsr-mono-sheen var(--gl-loop-sm) var(--gl-ease-inout) infinite;
+}
+@keyframes glsr-mono-sheen {
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
+}
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-plinth-glass::after {
+  animation: glsr-mono-glint var(--gl-breathe) var(--gl-ease-inout) infinite alternate;
+}
+
+/* The light in the glass: everything below the meniscus is suffused. */
+.glsr-mono-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--glsr-mono-slab-h) + 12px);
+  transform: translateY(var(--glsr-mono-fy));
+  opacity: var(--glsr-mono-fillk);
+  mix-blend-mode: screen;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--glsr-mono-lightc) 30%, transparent) 0,
+    color-mix(in srgb, var(--glsr-mono-lightc) 11%, transparent) calc(40 * var(--glsr-mono-px)),
+    color-mix(in srgb, var(--glsr-mono-lightc) 6%, transparent) 55%,
+    color-mix(in srgb, var(--glsr-mono-lightc) 18%, transparent) 100%);
+}
+.glsr-mono-meniscus {
+  position: absolute;
+  left: calc(6 * var(--glsr-mono-px));
+  right: calc(6 * var(--glsr-mono-px));
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glsr-mono-lightc) 10%, var(--glsr-mono-lighthot) 50%, var(--glsr-mono-lightc) 90%, transparent);
+  box-shadow:
+    0 0 8px 1px color-mix(in srgb, var(--glsr-mono-lightc) 80%, transparent),
+    0 0 34px 6px color-mix(in srgb, var(--glsr-mono-lightc) 30%, transparent);
+}
+/* the pointer on the ruler, riding the meniscus */
+.glsr-mono-meniscus::after {
+  content: "";
+  position: absolute;
+  right: calc(16 * var(--glsr-mono-px));
+  top: calc(-4 * var(--glsr-mono-px));
+  width: calc(8 * var(--glsr-mono-px));
+  height: calc(8 * var(--glsr-mono-px));
+  background: var(--glsr-mono-lighthot);
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+}
+
+/* ── the engraving, and its lit copies ────────────────────────────────── */
+
+.glsr-mono-eng {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.glsr-mono-eng.is-carved {
+  stroke: rgb(var(--gl-tint-light) / 0.17);
+  stroke-width: 1;
+  filter: drop-shadow(0 1px 0 rgb(var(--gl-tint-dark) / 0.9));
+}
+.glsr-mono-eng.is-carved .is-frame { stroke: rgb(var(--gl-tint-light) / 0.10); }
+.glsr-mono-eng.is-carved .is-ruler,
+.glsr-mono-eng.is-carved .is-ticks { stroke: rgb(var(--gl-tint-light) / 0.24); }
+.glsr-mono-eng.is-carved .is-nodes { stroke: rgb(var(--gl-tint-light) / 0.30); }
+
+.glsr-mono-halo {
+  stroke: var(--glsr-mono-lightc);
+  stroke-width: calc(5 * var(--glsr-mono-px));
+  opacity: 0.2;
+}
+.glsr-mono-core {
+  stroke: var(--glsr-mono-lighthot);
+  stroke-width: 1.25;
+}
+
+/* filled: everything under the meniscus */
+.glsr-mono-eng.is-lit {
+  opacity: var(--glsr-mono-fillk);
+  -webkit-mask-image: linear-gradient(180deg, transparent calc(var(--glsr-mono-fy) - 6px), black calc(var(--glsr-mono-fy) + 2px));
+  mask-image: linear-gradient(180deg, transparent calc(var(--glsr-mono-fy) - 6px), black calc(var(--glsr-mono-fy) + 2px));
+}
+/* the throw: beams of light turning through the lattice with the die */
+.glsr-mono-eng.is-scatter {
+  opacity: var(--glsr-mono-rate);
+  -webkit-mask-image:
+    repeating-conic-gradient(from var(--glsr-mono-spin) at var(--glsr-mono-dx) var(--glsr-mono-dy), transparent 0deg, black 6deg, black 12deg, transparent 20deg, transparent 40deg),
+    radial-gradient(circle at var(--glsr-mono-dx) var(--glsr-mono-dy), black 0, black calc(var(--glsr-mono-size) * 0.8), transparent calc(var(--glsr-mono-size) * 2.8));
+  mask-image:
+    repeating-conic-gradient(from var(--glsr-mono-spin) at var(--glsr-mono-dx) var(--glsr-mono-dy), transparent 0deg, black 6deg, black 12deg, transparent 20deg, transparent 40deg),
+    radial-gradient(circle at var(--glsr-mono-dx) var(--glsr-mono-dy), black 0, black calc(var(--glsr-mono-size) * 0.8), transparent calc(var(--glsr-mono-size) * 2.8));
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.glsr-mono-eng.is-scatter .glsr-mono-halo { opacity: 0.55; stroke-width: calc(9 * var(--glsr-mono-px)); }
+.glsr-mono-eng.is-scatter .glsr-mono-core { stroke: var(--gl-text-bright); stroke-width: 1.7; }
+/* landing: one pulse runs up the lattice */
+.glsr-mono-eng.is-pulse {
+  opacity: var(--glsr-mono-pk);
+  -webkit-mask-image: linear-gradient(180deg, transparent calc(var(--glsr-mono-py) - 14px), black var(--glsr-mono-py), transparent calc(var(--glsr-mono-py) + 90px));
+  mask-image: linear-gradient(180deg, transparent calc(var(--glsr-mono-py) - 14px), black var(--glsr-mono-py), transparent calc(var(--glsr-mono-py) + 90px));
+}
+.glsr-mono-eng.is-pulse .glsr-mono-core { stroke: var(--gl-text-bright); stroke-width: 1.6; }
+/* the verdict lights the whole engraving outward from the die */
+.glsr-mono-eng.is-ignite {
+  opacity: var(--glsr-mono-igk);
+  -webkit-mask-image: radial-gradient(circle at var(--glsr-mono-dx) var(--glsr-mono-dy), black calc(var(--glsr-mono-ig) - 50px), transparent var(--glsr-mono-ig));
+  mask-image: radial-gradient(circle at var(--glsr-mono-dx) var(--glsr-mono-dy), black calc(var(--glsr-mono-ig) - 50px), transparent var(--glsr-mono-ig));
+}
+.glsr-mono-unit[data-degree="3"] .glsr-mono-eng.is-ignite .glsr-mono-halo { opacity: 0.42; stroke-width: calc(7 * var(--glsr-mono-px)); }
+/* the natural: a sweep round the sigil, gold for 20, crimson for 1 */
+.glsr-mono-eng.is-natural {
+  opacity: var(--glsr-mono-natk);
+  -webkit-mask-image: conic-gradient(from 0deg at var(--glsr-mono-dx) var(--glsr-mono-dy), black 0deg, black var(--glsr-mono-nata), transparent calc(var(--glsr-mono-nata) + 2deg));
+  mask-image: conic-gradient(from 0deg at var(--glsr-mono-dx) var(--glsr-mono-dy), black 0deg, black var(--glsr-mono-nata), transparent calc(var(--glsr-mono-nata) + 2deg));
+}
+.glsr-mono-unit[data-natural="20"] .glsr-mono-eng.is-natural { --glsr-mono-lightc: var(--glsr-gold); --glsr-mono-lighthot: var(--glsr-gold-hot); }
+.glsr-mono-unit[data-natural="1"] .glsr-mono-eng.is-natural { --glsr-mono-lightc: var(--glsr-crimson); --glsr-mono-lighthot: var(--glsr-crimson-hot); }
+.glsr-mono-eng.is-natural .glsr-mono-halo { opacity: 0.45; stroke-width: calc(6 * var(--glsr-mono-px)); }
+
+/* armed: light wells slowly up through the engraving (idle loop only) */
+.glsr-mono-eng.is-breath { display: none; }
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-eng.is-breath {
+  display: block;
+  opacity: 0.9;
+  -webkit-mask-image: linear-gradient(0deg, transparent 37%, black 48%, transparent 54%);
+  mask-image: linear-gradient(0deg, transparent 37%, black 48%, transparent 54%);
+  -webkit-mask-size: 100% 260%;
+  mask-size: 100% 260%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: glsr-mono-well var(--gl-loop-sm) var(--gl-ease-inout) infinite;
+}
+@keyframes glsr-mono-well {
+  from { -webkit-mask-position: 0 0%; mask-position: 0 0%; }
+  to   { -webkit-mask-position: 0 100%; mask-position: 0 100%; }
+}
+
+/* conduit runners: a modifier's light travelling up into the die */
+.glsr-mono-eng.is-runners path {
+  stroke: var(--glsr-mono-lighthot);
+  stroke-width: calc(2.6 * var(--glsr-mono-px));
+  opacity: 0;
+  filter: drop-shadow(0 0 4px var(--glsr-mono-lightc)) drop-shadow(0 0 12px var(--glsr-mono-lightc));
+}
+
+/* the crack: crisp crimson seams with the light seeping through them */
+.glsr-mono-eng.is-crackset .glsr-mono-crack {
+  stroke: color-mix(in srgb, var(--glsr-crimson) 55%, var(--glsr-crimson-hot));
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 2px var(--glsr-crimson));
+}
+.glsr-mono-eng.is-crackset .glsr-mono-crack.is-branch { stroke-width: 1; }
+.glsr-mono-eng.is-crackset .glsr-mono-crack-glow {
+  stroke: var(--glsr-crimson);
+  stroke-width: calc(8 * var(--glsr-mono-px));
+  opacity: 0;
+  filter: blur(5px);
+}
+
+/* failure: frost creeps in from the edges as the light drains */
+.glsr-mono-cold {
+  position: absolute;
+  inset: 0;
+  opacity: var(--glsr-mono-cold);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.22), rgb(var(--gl-tint-dark) / 0.42));
+  box-shadow:
+    inset 0 0 calc(60 * var(--glsr-mono-px)) color-mix(in srgb, var(--gl-text-dim) 26%, transparent),
+    inset 0 0 calc(6 * var(--glsr-mono-px)) rgb(var(--gl-tint-light) / 0.16);
+}
+
+/* ── the outline, and the edge light that races round it ─────────────── */
+
+.glsr-mono-outline { position: absolute; left: 0; top: 0; overflow: visible; fill: none; }
+.glsr-mono-edge {
+  stroke: color-mix(in srgb, var(--glsr-mono-lightc) calc(25% + 45% * var(--glsr-mono-edgek)), rgb(var(--gl-tint-light) / 0.25));
+  stroke-width: 1.2;
+}
+.glsr-mono-race {
+  stroke: var(--glsr-mono-lighthot);
+  stroke-width: 3;
+  opacity: 0;
+  filter: drop-shadow(0 0 5px var(--glsr-mono-lightc));
+}
+.glsr-mono-unit[data-degree="3"] .glsr-mono-edge { stroke: var(--glsr-gold-hot); stroke-width: 1.6; }
+
+/* ── the degree registers ─────────────────────────────────────────────── */
+
+.glsr-mono-bands { position: absolute; inset: 0; }
+.glsr-mono-band {
+  position: absolute;
+  left: calc(12 * var(--glsr-mono-px));
+  right: calc(10 * var(--glsr-mono-px));
+  height: 0;
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(9.5 * var(--glsr-mono-px)));
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glsr-mono-band-rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.5px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.30) 8%, rgb(var(--gl-tint-light) / 0.30) 92%, transparent);
+  box-shadow: 0 1px 0 rgb(var(--gl-tint-dark) / 0.8);
+  transform-origin: 50% 50%;
+}
+.glsr-mono-band.is-dc .glsr-mono-band-rule {
+  top: -2px;
+  height: 4px;
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.5) 5%, rgb(var(--gl-tint-light) / 0.5) 95%, transparent) 0 0 / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.32) 5%, rgb(var(--gl-tint-light) / 0.32) 95%, transparent) 0 100% / 100% 1px no-repeat;
+}
+/* the end-caps of the DC line: small registration notches */
+.glsr-mono-band.is-dc .glsr-mono-band-rule::before,
+.glsr-mono-band.is-dc .glsr-mono-band-rule::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 10px;
+  background: rgb(var(--gl-tint-light) / 0.55);
+}
+.glsr-mono-band.is-dc .glsr-mono-band-rule::before { left: 4%; }
+.glsr-mono-band.is-dc .glsr-mono-band-rule::after { right: 4%; }
+
+.glsr-mono-band-label,
+.glsr-mono-band-value {
+  position: absolute;
+  bottom: calc(4 * var(--glsr-mono-px));
+  color: var(--gl-text-faint);
+  white-space: nowrap;
+}
+.glsr-mono-band-label { right: calc(48 * var(--glsr-mono-px)); }
+.glsr-mono-band-value {
+  right: calc(22 * var(--glsr-mono-px));
+  font-family: var(--gl-display);
+  letter-spacing: var(--gl-track-normal);
+  color: var(--gl-text-dim);
+}
+.glsr-mono-band.is-dc .glsr-mono-band-label { right: auto; left: calc(6 * var(--glsr-mono-px)); color: var(--gl-text-dim); }
+.glsr-mono-band.is-dc .glsr-mono-band-value {
+  right: auto;
+  left: calc(30 * var(--glsr-mono-px));
+  bottom: calc(3 * var(--glsr-mono-px));
+  font-size: max(13px, calc(18 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  color: var(--gl-text);
+}
+
+/* reached: the register catches the light that crossed it */
+.glsr-mono-unit[data-mono-reach="1"] .glsr-mono-band.is-fail .glsr-mono-band-rule,
+.glsr-mono-unit[data-mono-reach="2"] .glsr-mono-band:is(.is-fail, .is-dc) .glsr-mono-band-rule,
+.glsr-mono-unit[data-mono-reach="3"] .glsr-mono-band .glsr-mono-band-rule {
+  background: linear-gradient(90deg, transparent, var(--glsr-mono-lighthot) 6%, var(--glsr-mono-lighthot) 94%, transparent);
+  box-shadow: 0 0 10px 1px color-mix(in srgb, var(--glsr-mono-lightc) 75%, transparent);
+}
+.glsr-mono-unit[data-mono-reach="2"] .glsr-mono-band.is-dc :is(.glsr-mono-band-label, .glsr-mono-band-value),
+.glsr-mono-unit[data-mono-reach="3"] .glsr-mono-band :is(.glsr-mono-band-label, .glsr-mono-band-value) {
+  color: var(--glsr-mono-lighthot);
+  text-shadow: 0 0 10px var(--glsr-mono-lightc);
+}
+
+/* ── inscriptions ─────────────────────────────────────────────────────── */
+
+.glsr-mono-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--glsr-mono-cham) + 4 * var(--glsr-mono-px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  pointer-events: none;
+}
+.glsr-mono-kicker {
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(10 * var(--glsr-mono-px)));
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+  padding-left: 0.3em;
+}
+.glsr-mono-check {
+  margin-top: calc(6 * var(--glsr-mono-px));
+  font-family: var(--gl-display);
+  font-weight: var(--gl-weight-medium);
+  line-height: var(--gl-lh-tight);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding-left: 0.16em;
+  color: transparent;
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.95), rgb(var(--gl-tint-light) / 0.5));
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 1px 0 rgb(var(--gl-tint-dark) / 0.9)) drop-shadow(0 0 16px color-mix(in srgb, var(--gl-accent) 40%, transparent));
+  white-space: nowrap;
+}
+.glsr-mono-unit[data-degree="3"] .glsr-mono-check {
+  background: linear-gradient(180deg, var(--glsr-gold-hot), var(--glsr-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 1px 0 rgb(var(--gl-tint-dark) / 0.9)) drop-shadow(0 0 18px var(--glsr-gold));
+}
+.glsr-mono-title {
+  margin-top: calc(8 * var(--glsr-mono-px));
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--glsr-mono-px));
+  font-family: var(--gl-display);
+  font-size: max(11px, calc(15 * var(--glsr-mono-px)));
+  letter-spacing: var(--gl-track-normal);
+  color: var(--gl-text-dim);
+  white-space: nowrap;
+}
+.glsr-mono-title::before,
+.glsr-mono-title::after {
+  content: "";
+  width: calc(22 * var(--glsr-mono-px));
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.35));
+}
+.glsr-mono-title::after { transform: scaleX(-1); }
+.glsr-mono-fortune {
+  margin-top: calc(7 * var(--glsr-mono-px));
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(10 * var(--glsr-mono-px)));
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  padding-left: 0.24em;
+  color: color-mix(in srgb, var(--gl-accent) 60%, var(--gl-text-bright));
+}
+
+/* the roller: a small chamfered medallion, the name cut down the left face */
+.glsr-mono-actor {
+  position: absolute;
+  left: calc(14 * var(--glsr-mono-px));
+  top: calc(var(--glsr-mono-cham) + 12 * var(--glsr-mono-px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(12 * var(--glsr-mono-px));
+}
+.glsr-mono-medal {
+  --glsr-mono-mc: calc(9 * var(--glsr-mono-px));
+  width: calc(46 * var(--glsr-mono-px));
+  height: calc(46 * var(--glsr-mono-px));
+  padding: 1px;
+  background: linear-gradient(160deg, rgb(var(--gl-tint-light) / 0.55), rgb(var(--gl-tint-light) / 0.12));
+  clip-path: polygon(var(--glsr-mono-mc) 0, calc(100% - var(--glsr-mono-mc)) 0, 100% var(--glsr-mono-mc), 100% calc(100% - var(--glsr-mono-mc)),
+    calc(100% - var(--glsr-mono-mc)) 100%, var(--glsr-mono-mc) 100%, 0 calc(100% - var(--glsr-mono-mc)), 0 var(--glsr-mono-mc));
+}
+.glsr-mono-medal img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
+  filter: saturate(0.8) contrast(1.05);
+  clip-path: inherit;
+}
+.glsr-mono-names {
+  display: flex;
+  gap: calc(5 * var(--glsr-mono-px));
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+  white-space: nowrap;
+}
+.glsr-mono-name {
+  font-family: var(--gl-display);
+  font-size: max(10px, calc(13 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glsr-mono-role {
+  font-family: var(--gl-tech);
+  font-size: max(8px, calc(9 * var(--glsr-mono-px)));
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+}
+
+/* ── the plinth ───────────────────────────────────────────────────────── */
+
+.glsr-mono-plinth {
+  --glsr-mono-pc: calc(14 * var(--glsr-mono-px));
+  position: absolute;
+  clip-path: polygon(var(--glsr-mono-pc) 0, calc(100% - var(--glsr-mono-pc)) 0, 100% var(--glsr-mono-pc), 100% 100%, 0 100%, 0 var(--glsr-mono-pc));
+}
+.glsr-mono-plinth-glass {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.18) 50%, transparent) 0 0 / 100% 1px no-repeat,
+    radial-gradient(70% 70% at 50% 0%, color-mix(in srgb, var(--glsr-mono-lightc) calc(10% + 8% * var(--glsr-mono-fillk, 0)), transparent), transparent 80%),
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 7%, rgb(var(--gl-tint-dark) / 0.66)), rgb(var(--gl-tint-dark) / 0.78));
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k))) saturate(var(--gl-saturation));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.28),
+    inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.07);
+}
+/* the joint where slab meets plinth, cut as a registration rule */
+.glsr-mono-plinth-glass::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - var(--glsr-mono-slab-w) / 2);
+  width: var(--glsr-mono-slab-w);
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--glsr-mono-lightc), transparent);
+  opacity: 0.6;
+}
+
+.glsr-mono-mods {
+  position: absolute;
+  left: calc(8 * var(--glsr-mono-px));
+  right: calc(8 * var(--glsr-mono-px));
+  top: calc(12 * var(--glsr-mono-px));
+  height: max(48px, calc(64 * var(--glsr-mono-px)));
+  display: grid;
+}
+.glsr-mono-mod {
+  appearance: none;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  transform-origin: 50% 70%;
+}
+.glsr-mono-mod-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(3 * var(--glsr-mono-px));
+}
+.glsr-mono-mod + .glsr-mono-mod::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgb(var(--gl-tint-light) / 0.14), transparent);
+}
+.glsr-mono-mod-line {
+  width: 2px;
+  height: calc(16 * var(--glsr-mono-px));
+  background: linear-gradient(0deg, var(--glsr-mono-lighthot), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glsr-mono-lightc) 80%, transparent);
+  transform-origin: 50% 100%;
+}
+.glsr-mono-mod.is-optional .glsr-mono-mod-line {
+  background: repeating-linear-gradient(0deg, var(--glsr-mono-lighthot) 0 3px, transparent 3px 5px);
+}
+.glsr-mono-mod-v {
+  font-family: var(--gl-display);
+  font-size: max(13px, calc(19 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--glsr-mono-lightc) 55%, transparent);
+}
+.glsr-mono-mod-k {
+  max-width: 96%;
+  font-family: var(--gl-tech);
+  font-size: max(8px, calc(9.5 * var(--glsr-mono-px)));
+  line-height: 1.15;
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  text-align: center;
+}
+.glsr-mono-mod.is-optional .glsr-mono-mod-k::after { content: " ◇"; color: var(--gl-text-faint); }
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-mod:not(.is-off) .glsr-mono-mod-line {
+  animation: glsr-mono-glint var(--gl-breathe) var(--gl-ease-inout) infinite alternate;
+}
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-mod.is-optional:hover .glsr-mono-mod-v { color: var(--glsr-mono-lighthot); }
+@keyframes glsr-mono-glint {
+  from { opacity: 0.45; }
+  to   { opacity: 1; }
+}
+
+.glsr-mono-baserow {
+  position: absolute;
+  left: calc(18 * var(--glsr-mono-px));
+  right: calc(18 * var(--glsr-mono-px));
+  bottom: calc(12 * var(--glsr-mono-px));
+  height: max(38px, calc(50 * var(--glsr-mono-px)));
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+.glsr-mono-sum { justify-self: start; display: flex; flex-direction: column; gap: 2px; }
+.glsr-mono-sum-k,
+.glsr-mono-cart-k {
+  font-family: var(--gl-tech);
+  font-size: max(8px, calc(9.5 * var(--glsr-mono-px)));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+}
+.glsr-mono-sum-v {
+  font-family: var(--gl-display);
+  font-size: max(14px, calc(20 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  color: var(--gl-text);
+}
+
+/* the cartouche: an elongated hexagon cut into the plinth's face */
+.glsr-mono-cart {
+  --glsr-mono-cc: calc(16 * var(--glsr-mono-px));
+  position: relative;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--glsr-mono-px));
+  padding: calc(7 * var(--glsr-mono-px)) calc(26 * var(--glsr-mono-px));
+  clip-path: polygon(var(--glsr-mono-cc) 0, calc(100% - var(--glsr-mono-cc)) 0, 100% 50%, calc(100% - var(--glsr-mono-cc)) 100%, var(--glsr-mono-cc) 100%, 0 50%);
+  background: rgb(var(--gl-tint-light) / 0.30);
+}
+.glsr-mono-cart::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  clip-path: inherit;
+  background:
+    linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.55), rgb(var(--gl-tint-dark) / 0.35)),
+    var(--gl-ink-1);
+  box-shadow: inset 0 2px 6px rgb(var(--gl-tint-dark) / 0.8);
+}
+.glsr-mono-cart > * { position: relative; }
+.glsr-mono-cart-v {
+  position: relative;
+  min-width: calc(44 * var(--glsr-mono-px));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.glsr-mono-cart-num {
+  grid-area: 1 / 1;
+  font-family: var(--gl-display);
+  font-size: max(18px, calc(28 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  line-height: 1;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+}
+.glsr-mono-cart.is-none .glsr-mono-cart-v {
+  font-family: var(--gl-display);
+  font-size: max(16px, calc(22 * var(--glsr-mono-px)));
+  color: var(--gl-text-faint);
+}
+/* sealed: three cut lozenges on a hairline, the number still under them */
+.glsr-mono-seal {
+  grid-area: 1 / 1;
+  display: flex;
+  gap: calc(6 * var(--glsr-mono-px));
+  align-items: center;
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.3), transparent) 50% 50% / 100% 1px no-repeat;
+  padding: 0 calc(4 * var(--glsr-mono-px));
+}
+.glsr-mono-seal i {
+  width: calc(7 * var(--glsr-mono-px));
+  height: calc(7 * var(--glsr-mono-px));
+  rotate: 45deg;
+  border: 1px solid rgb(var(--gl-tint-light) / 0.45);
+  background: var(--gl-ink-1);
+}
+.glsr-mono-cart-scan {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 2px;
+  opacity: 0;
+  background: var(--gl-text-bright);
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--gl-accent) 80%, transparent);
+}
+
+/* the throw control: an etched plate, not a pill */
+.glsr-mono-roll {
+  --glsr-mono-rc: calc(9 * var(--glsr-mono-px));
+  appearance: none;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--glsr-mono-px));
+  margin: 0;
+  padding: calc(9 * var(--glsr-mono-px)) calc(18 * var(--glsr-mono-px)) calc(9 * var(--glsr-mono-px)) calc(14 * var(--glsr-mono-px));
+  border: 0;
+  font-family: var(--gl-display);
+  font-size: max(11px, calc(13 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--gl-text-bright);
+  clip-path: polygon(var(--glsr-mono-rc) 0, 100% 0, 100% calc(100% - var(--glsr-mono-rc)), calc(100% - var(--glsr-mono-rc)) 100%, 0 100%, 0 var(--glsr-mono-rc));
+  background:
+    linear-gradient(45deg, transparent calc(50% - 0.8px), color-mix(in srgb, var(--gl-accent) 80%, var(--gl-text-bright)) calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px))
+      0 0 / var(--glsr-mono-rc) var(--glsr-mono-rc) no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.8px), color-mix(in srgb, var(--gl-accent) 80%, var(--gl-text-bright)) calc(50% - 0.8px) calc(50% + 0.8px), transparent calc(50% + 0.8px))
+      100% 100% / var(--glsr-mono-rc) var(--glsr-mono-rc) no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 30%, transparent), color-mix(in srgb, var(--gl-accent) 10%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 80%, var(--gl-text-bright));
+  transition: translate var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glsr-mono-roll span { padding-left: 0.32em; }
+.glsr-mono-roll svg {
+  width: calc(17 * var(--glsr-mono-px));
+  height: calc(17 * var(--glsr-mono-px));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.glsr-mono-roll:hover { translate: 0 var(--gl-lift); }
+.glsr-mono-unit[data-phase="armed"] .glsr-mono-roll { animation: glsr-mono-beckon var(--gl-breathe) var(--gl-ease-inout) infinite alternate; }
+@keyframes glsr-mono-beckon {
+  from { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 70%, var(--gl-text-bright)), 0 0 0 transparent; }
+  to   { box-shadow: inset 0 0 0 1px var(--gl-text-bright), inset 0 0 18px color-mix(in srgb, var(--gl-accent) 50%, transparent); }
+}
+
+/* ── front layer: the beats that sit over the die ─────────────────────── */
+
+.glsr-mono-brackets {
+  position: absolute;
+  left: var(--glsr-mono-die-x);
+  top: var(--glsr-mono-die-y);
+  width: var(--glsr-mono-size);
+  height: var(--glsr-mono-size);
+  translate: -50% -50%;
+  opacity: 0;
+  color: var(--glsr-gold-hot);
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.glsr-mono-unit[data-natural="1"] .glsr-mono-brackets { color: var(--glsr-crimson-hot); }
+.glsr-mono-brackets i {
+  position: absolute;
+  width: calc(24 * var(--glsr-mono-px));
+  height: calc(24 * var(--glsr-mono-px));
+  border: 0 solid currentColor;
+}
+.glsr-mono-brackets i:nth-child(1) { left: 0; top: 0; border-width: 2px 0 0 2px; }
+.glsr-mono-brackets i:nth-child(2) { right: 0; top: 0; border-width: 2px 2px 0 0; }
+.glsr-mono-brackets i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }
+.glsr-mono-brackets i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
+
+.glsr-mono-nat {
+  position: absolute;
+  left: var(--glsr-mono-die-x);
+  top: var(--glsr-mono-deg-y);
+  translate: -50% 0;
+  opacity: 0;
+  padding-left: 0.42em;
+  font-family: var(--gl-display);
+  font-size: max(16px, calc(26 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--glsr-gold-hot);
+  text-shadow: 0 0 14px var(--glsr-gold), 0 0 40px color-mix(in srgb, var(--glsr-gold) 50%, transparent);
+}
+.glsr-mono-unit[data-natural="1"] .glsr-mono-nat {
+  color: var(--glsr-crimson-hot);
+  text-shadow: 0 0 14px var(--glsr-crimson), 0 0 40px color-mix(in srgb, var(--glsr-crimson) 50%, transparent);
+}
+
+.glsr-mono-shock {
+  position: absolute;
+  left: var(--glsr-mono-die-x);
+  top: var(--glsr-mono-die-y);
+  width: var(--glsr-mono-size);
+  height: var(--glsr-mono-size);
+  translate: -50% -50%;
+  border-radius: 50%;
+  opacity: 0;
+  border: 1.5px solid var(--glsr-deg-hot, var(--glsr-mono-lighthot));
+  box-shadow: 0 0 22px var(--glsr-deg), inset 0 0 22px var(--glsr-deg);
+}
+
+.glsr-mono-motes {
+  position: absolute;
+  left: calc(var(--glsr-mono-die-x) - var(--glsr-mono-slab-w) / 2);
+  width: var(--glsr-mono-slab-w);
+  top: calc(var(--glsr-mono-die-y) + var(--glsr-mono-size) * 0.3);
+  height: 0;
+}
+.glsr-mono-mote {
+  position: absolute;
+  top: 0;
+  width: calc(3px * var(--s));
+  height: calc(3px * var(--s));
+  border-radius: 50%;
+  opacity: 0;
+  background: var(--glsr-gold-hot);
+  box-shadow: 0 0 8px 1px var(--glsr-gold);
+}
+
+.glsr-mono-degree {
+  position: absolute;
+  left: var(--glsr-mono-die-x);
+  top: var(--glsr-mono-deg-y);
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  white-space: nowrap;
+  text-align: center;
+  isolation: isolate;
+}
+/* a dark breath of glass behind the verdict, so it reads over a lit lattice */
+.glsr-mono-degree::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -34% -20% -30%;
+  background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.78), rgb(var(--gl-tint-dark) / 0.5) 55%, transparent);
+}
+.glsr-mono-deg-kick {
+  padding-left: 0.62em;
+  font-family: var(--gl-display);
+  font-size: max(12px, calc(16 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.62em;
+  text-transform: uppercase;
+  color: var(--glsr-deg-hot);
+  text-shadow: 0 1px 0 rgb(var(--gl-tint-dark) / 0.9), 0 0 12px var(--glsr-deg);
+}
+.glsr-mono-deg-word {
+  position: relative;
+  padding: 0 0.1em 0 0.22em;
+  font-family: var(--gl-display);
+  font-size: max(30px, calc(62 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  line-height: 1.05;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glsr-deg-hot);
+  text-shadow:
+    0 1px 0 rgb(var(--gl-tint-dark) / 0.8),
+    0 0 18px var(--glsr-deg),
+    0 0 52px color-mix(in srgb, var(--glsr-deg) 55%, transparent);
+}
+.glsr-mono-unit[data-degree="1"] .glsr-mono-deg-word {
+  color: var(--glsr-fail);
+  text-shadow: 0 1px 0 rgb(var(--gl-tint-dark) / 0.9), 0 0 24px rgb(var(--gl-tint-dark) / 0.8);
+}
+.glsr-mono-unit[data-degree="none"] .glsr-mono-deg-word { color: var(--gl-text-bright); text-shadow: 0 0 22px color-mix(in srgb, var(--gl-accent) 60%, transparent); }
+/* one pass of light across the cut letters, clipped to the glyphs */
+.glsr-mono-deg-shine {
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(100deg, transparent 42%, rgb(var(--gl-tint-light) / 0.85) 50%, transparent 58%) 100% 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.glsr-mono-deg-detail {
+  margin-top: calc(10 * var(--glsr-mono-px));
+  padding-left: 0.22em;
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(11 * var(--glsr-mono-px)));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gl-text);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9);
+}
+.glsr-mono-deg-detail i { font-style: normal; color: var(--gl-text-dim); }
+
+.glsr-mono-flyer {
+  position: absolute;
+  translate: -50% -50%;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.glsr-mono-flyer span {
+  font-family: var(--gl-display);
+  font-size: max(14px, calc(22 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 10px var(--glsr-mono-lightc), 0 0 26px var(--glsr-mono-lightc);
+}
+.glsr-mono-flyer i {
+  order: 2;
+  width: 2px;
+  height: calc(54 * var(--glsr-mono-px));
+  background: linear-gradient(180deg, var(--glsr-mono-lighthot), transparent);
+  box-shadow: 0 0 10px var(--glsr-mono-lightc);
+}
+
+.glsr-mono-fmark {
+  position: absolute;
+  top: var(--glsr-mono-die-y);
+  width: calc(var(--glsr-mono-size) * 0.86);
+  height: calc(var(--glsr-mono-size) * 0.86);
+  translate: -50% -50%;
+  opacity: 0;
+  color: var(--glsr-mono-lighthot);
+  --glsr-mono-b: calc(16 * var(--glsr-mono-px));
+  background:
+    linear-gradient(currentColor, currentColor) 0 0 / var(--glsr-mono-b) 1.5px,
+    linear-gradient(currentColor, currentColor) 0 0 / 1.5px var(--glsr-mono-b),
+    linear-gradient(currentColor, currentColor) 100% 0 / var(--glsr-mono-b) 1.5px,
+    linear-gradient(currentColor, currentColor) 100% 0 / 1.5px var(--glsr-mono-b),
+    linear-gradient(currentColor, currentColor) 0 100% / var(--glsr-mono-b) 1.5px,
+    linear-gradient(currentColor, currentColor) 0 100% / 1.5px var(--glsr-mono-b),
+    linear-gradient(currentColor, currentColor) 100% 100% / var(--glsr-mono-b) 1.5px,
+    linear-gradient(currentColor, currentColor) 100% 100% / 1.5px var(--glsr-mono-b);
+  background-repeat: no-repeat;
+}
+.glsr-mono-fmark.is-kept { left: calc(var(--glsr-mono-die-x) - var(--glsr-mono-size) * 0.62); }
+.glsr-mono-fmark.is-dropped {
+  left: calc(var(--glsr-mono-die-x) + var(--glsr-mono-size) * 0.62);
+  color: var(--gl-text-dim);
+}
+.glsr-mono-fmark.is-dropped::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  background: linear-gradient(45deg, transparent calc(50% - 0.75px), currentColor calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+}
+.glsr-mono-fmark span {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(10 * var(--glsr-mono-px)));
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── the CSS-only backdrop: same light, gradients instead of a shader ── */
+
+.glsr-mono-cbg,
+.glsr-mono-cbg > i,
+.glsr-mono-cbg > i::before,
+.glsr-mono-cbg > i::after { position: absolute; inset: 0; }
+.glsr-mono-cbg > i { opacity: 0; }
+.glsr-mono-cbg > i::before,
+.glsr-mono-cbg > i::after { content: ""; }
+
+.glsr-mono-cbg-veil {
+  background: radial-gradient(ellipse 62% 78% at 50% 52%, rgb(var(--gl-tint-dark) / 0.62), rgb(var(--gl-tint-dark) / 0.95));
+}
+.glsr-mono-cbg-veil::after { background: rgb(var(--gl-tint-dark) / calc(0.3 * var(--glsr-mono-cold, 0))); }
+
+/* standing rays behind the stele, plus the throw's turning beams */
+.glsr-mono-cbg-rays { mix-blend-mode: screen; }
+.glsr-mono-cbg-rays::before {
+  background:
+    repeating-conic-gradient(from -8deg at var(--glsr-mono-die-x) calc(var(--glsr-mono-die-y) - var(--glsr-mono-size) * 0.18),
+      color-mix(in srgb, var(--glsr-mono-lightc) 20%, transparent) 0deg 1.5deg, transparent 4deg 9deg),
+    repeating-conic-gradient(from 3deg at var(--glsr-mono-die-x) calc(var(--glsr-mono-die-y) - var(--glsr-mono-size) * 0.18),
+      color-mix(in srgb, var(--glsr-mono-lightc) 12%, transparent) 0deg 3deg, transparent 6deg 17deg);
+  -webkit-mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), transparent calc(var(--glsr-mono-size) * 0.5), black calc(var(--glsr-mono-size) * 0.9), transparent calc(var(--glsr-mono-size) * 2.8));
+  mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), transparent calc(var(--glsr-mono-size) * 0.5), black calc(var(--glsr-mono-size) * 0.9), transparent calc(var(--glsr-mono-size) * 2.8));
+  opacity: calc(0.42 - 0.36 * var(--glsr-mono-cold, 0));
+}
+.glsr[data-degree="3"] .glsr-mono-cbg-rays::before {
+  background:
+    repeating-conic-gradient(from -8deg at var(--glsr-mono-die-x) calc(var(--glsr-mono-die-y) - var(--glsr-mono-size) * 0.18),
+      color-mix(in srgb, var(--glsr-gold-hot) 26%, transparent) 0deg 1.5deg, transparent 5deg 13deg),
+    repeating-conic-gradient(from 3deg at var(--glsr-mono-die-x) calc(var(--glsr-mono-die-y) - var(--glsr-mono-size) * 0.18),
+      color-mix(in srgb, var(--glsr-gold) 16%, transparent) 0deg 3deg, transparent 7deg 23deg);
+  -webkit-mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), black calc(var(--glsr-mono-size) * 0.4), transparent calc(var(--glsr-mono-size) * 3.6));
+  mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), black calc(var(--glsr-mono-size) * 0.4), transparent calc(var(--glsr-mono-size) * 3.6));
+  opacity: 1;
+}
+.glsr-mono-cbg-rays::after {
+  opacity: var(--glsr-mono-rate, 0);
+  background: repeating-conic-gradient(from var(--glsr-mono-spin, 0deg) at var(--glsr-mono-die-x) var(--glsr-mono-die-y),
+    color-mix(in srgb, var(--glsr-mono-ray) 38%, transparent) 0deg 4deg, transparent 12deg 120deg);
+  -webkit-mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), transparent calc(var(--glsr-mono-size) * 0.45), black calc(var(--glsr-mono-size) * 0.7), transparent calc(var(--glsr-mono-size) * 2.2));
+  mask-image: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), transparent calc(var(--glsr-mono-size) * 0.45), black calc(var(--glsr-mono-size) * 0.7), transparent calc(var(--glsr-mono-size) * 2.2));
+}
+
+/* the bloom behind the die: it follows the light in the slab */
+.glsr-mono-cbg-halo { mix-blend-mode: screen; }
+.glsr-mono-cbg-halo::before {
+  background: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y),
+    color-mix(in srgb, var(--glsr-mono-lightc) calc(14% + 26% * var(--glsr-mono-litk, 0)), transparent), transparent calc(var(--glsr-mono-size) * 2));
+  opacity: calc(1 - 0.8 * var(--glsr-mono-cold, 0));
+}
+.glsr[data-natural="20"] .glsr-mono-cbg-halo::after { background: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), color-mix(in srgb, var(--glsr-gold) 40%, transparent), transparent calc(var(--glsr-mono-size) * 2.4)); opacity: var(--glsr-mono-natk, 0); }
+.glsr[data-natural="1"] .glsr-mono-cbg-halo::after { background: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y), color-mix(in srgb, var(--glsr-crimson) 40%, transparent), transparent calc(var(--glsr-mono-size) * 1.6)); opacity: var(--glsr-mono-natk, 0); }
+.glsr[data-degree="0"] .glsr-mono-cbg-halo::after { background: radial-gradient(ellipse calc(var(--glsr-mono-slab-w) * 0.9) 50% at var(--glsr-mono-die-x) var(--glsr-mono-die-y), color-mix(in srgb, var(--glsr-crimson) 34%, transparent), transparent); opacity: 1; }
+
+/* ground haze at the plinth's foot */
+.glsr-mono-cbg-haze { mix-blend-mode: screen; }
+.glsr-mono-cbg-haze::before {
+  background: radial-gradient(ellipse calc(var(--glsr-mono-slab-w) * 1.4) calc(var(--glsr-mono-size) * 0.7) at 50% calc(var(--glsr-mono-plinth-y) + var(--glsr-mono-size) * 0.6),
+    color-mix(in srgb, var(--glsr-mono-lightc) 16%, transparent), transparent);
+  opacity: calc(1 - 0.6 * var(--glsr-mono-cold, 0));
+}
+
+/* ── the verdict's dimension line: from the DC line to where the light
+      came to rest, struck like a drafting measurement ─────────────────── */
+.glsr-mono-dim {
+  position: absolute;
+  right: calc(52 * var(--glsr-mono-px));
+  width: calc(10 * var(--glsr-mono-px));
+  opacity: 0;
+  color: var(--glsr-deg-hot);
+}
+.glsr-mono-unit[data-degree="1"] .glsr-mono-dim { color: var(--gl-text); }
+.glsr-mono-dim-rule {
+  position: absolute;
+  inset: 0;
+  border-top: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform-origin: 50% 100%;
+  background: linear-gradient(currentColor, currentColor) 50% 0 / 1px 100% no-repeat;
+  filter: drop-shadow(0 0 3px rgb(var(--gl-tint-dark) / 0.9));
+}
+.glsr-mono-dim.is-under .glsr-mono-dim-rule { transform-origin: 50% 0; }
+.glsr-mono-dim span {
+  position: absolute;
+  right: calc(100% + 6 * var(--glsr-mono-px));
+  top: 50%;
+  translate: 0 -50%;
+  font-family: var(--gl-display);
+  font-size: max(11px, calc(14 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-normal);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9), 0 0 10px rgb(var(--gl-tint-dark) / 0.8);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Multi-roll: the colonnade (group) and the duel (opposed)
+   ════════════════════════════════════════════════════════════════════════
+   Each roller is a .glsr-mono-unit carrying data-roll, so the harness stamps
+   its own phase / degree / natural on it and every rule above resolves per
+   stele. The shared architecture — the lintel, the one DC line, the cast
+   line of a defender — sits outside any unit and is driven from the clock. */
+
+/* ── compact stele (group) ── */
+.glsr-mono-chead {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--glsr-mono-cham) + 6 * var(--glsr-mono-px));
+  display: flex;
+  justify-content: center;
+}
+.glsr-mono-chead .glsr-mono-medal {
+  width: calc(42 * var(--glsr-mono-px));
+  height: calc(42 * var(--glsr-mono-px));
+  min-width: 22px;
+  min-height: 22px;
+}
+.glsr-mono-unit.is-compact .glsr-mono-band-label,
+.glsr-mono-unit.is-compact .glsr-mono-band.is-dc .glsr-mono-band-value,
+.glsr-mono-unit.is-attacker .glsr-mono-band.is-dc :is(.glsr-mono-band-label, .glsr-mono-band-value) { display: none; }
+.glsr-mono-unit.is-compact .glsr-mono-band-value { right: calc(20 * var(--glsr-mono-px)); font-size: max(8px, calc(11 * var(--glsr-mono-px))); }
+.glsr-mono-unit.is-compact .glsr-mono-dim { right: calc(34 * var(--glsr-mono-px)); }
+.glsr-mono-unit.is-compact .glsr-mono-deg-word { font-size: var(--glsr-mono-degfs); letter-spacing: 0.08em; }
+.glsr-mono-unit.is-compact .glsr-mono-deg-kick { font-size: max(9px, calc(13 * var(--glsr-mono-px))); letter-spacing: 0.36em; padding-left: 0.36em; }
+.glsr-mono-unit.is-compact .glsr-mono-deg-detail { font-size: max(8px, calc(11 * var(--glsr-mono-px))); margin-top: calc(6 * var(--glsr-mono-px)); letter-spacing: 0.16em; }
+.glsr-mono-unit.is-compact .glsr-mono-nat { font-size: max(10px, calc(19 * var(--glsr-mono-px))); letter-spacing: 0.3em; }
+.glsr-mono-unit.is-compact .glsr-mono-degree::before { inset: -26% -12% -24%; }
+
+.glsr-mono-plinth.is-compact { height: auto; }
+.glsr-mono-cplinth {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(5 * var(--glsr-mono-px));
+  padding: calc(10 * var(--glsr-mono-px)) 6px calc(10 * var(--glsr-mono-px));
+  text-align: center;
+}
+.glsr-mono-cname {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--gl-display);
+  font-size: max(10px, calc(14 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gl-text);
+}
+.glsr-mono-cfort {
+  font-family: var(--gl-tech);
+  font-size: max(8px, calc(9.5 * var(--glsr-mono-px)));
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gl-accent) 60%, var(--gl-text-bright));
+}
+.glsr-mono-crow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+}
+.glsr-mono-ctotal,
+.glsr-mono-cmod {
+  --glsr-mono-tc: 4px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 7px;
+  clip-path: polygon(var(--glsr-mono-tc) 0, 100% 0, 100% calc(100% - var(--glsr-mono-tc)), calc(100% - var(--glsr-mono-tc)) 100%, 0 100%, 0 var(--glsr-mono-tc));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.18);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  white-space: nowrap;
+}
+.glsr-mono-ctotal span {
+  font-family: var(--gl-tech);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-text-faint);
+}
+.glsr-mono-ctotal b {
+  font-family: var(--gl-display);
+  font-size: max(12px, calc(15 * var(--glsr-mono-px)));
+  color: var(--gl-text-bright);
+}
+.glsr-mono-cmod {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(10 * var(--glsr-mono-px)));
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 45%, transparent);
+}
+.glsr-mono-cmod b { font-family: var(--gl-display); color: var(--gl-text-bright); }
+.glsr-mono-cmod:hover { translate: 0 var(--gl-lift); }
+.glsr-mono-unit.is-compact .glsr-mono-roll {
+  --glsr-mono-rc: 6px;
+  gap: 5px;
+  padding: 5px 9px 5px 8px;
+  font-size: max(10px, calc(11 * var(--glsr-mono-px)));
+  letter-spacing: 0.24em;
+}
+.glsr-mono-unit.is-compact .glsr-mono-roll svg { width: 12px; height: 12px; }
+
+/* ── the lintel and the one DC line every stele is read against ── */
+.glsr-mono-arch { position: absolute; inset: 0; }
+.glsr-mono-lintel {
+  --glsr-mono-lc: calc(12 * var(--glsr-mono-px));
+  position: absolute;
+  clip-path: polygon(var(--glsr-mono-lc) 0, calc(100% - var(--glsr-mono-lc)) 0, 100% var(--glsr-mono-lc), 100% calc(100% - var(--glsr-mono-lc)),
+    calc(100% - var(--glsr-mono-lc)) 100%, var(--glsr-mono-lc) 100%, 0 calc(100% - var(--glsr-mono-lc)), 0 var(--glsr-mono-lc));
+}
+.glsr-mono-lintel .glsr-mono-plinth-glass::after { display: none; }
+.glsr-mono-lintel-in {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 clamp(14px, 2vw, 26px);
+}
+.glsr-mono-lintel-title { justify-self: start; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.glsr-mono-lintel .glsr-mono-kicker { padding-left: 0; letter-spacing: 0.24em; }
+.glsr-mono-lintel .glsr-mono-check { margin-top: 3px; padding-left: 0; font-size: clamp(17px, 2.6vh, 30px); }
+.glsr-mono-lintel .glsr-mono-title { margin-top: 3px; font-size: max(10px, 1.5vh); }
+.glsr-mono-lintel .glsr-mono-title::before { display: none; }
+.glsr-mono-lintel .glsr-mono-cart { justify-self: end; }
+.glsr-mono-summary {
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  white-space: nowrap;
+}
+.glsr-mono-summary b {
+  font-family: var(--gl-display);
+  font-size: clamp(15px, 2.8vh, 30px);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  color: var(--glsr-success-hot);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--glsr-success) 60%, transparent);
+}
+.glsr-mono-summary[data-tone="poor"] b { color: var(--gl-text); text-shadow: 0 0 14px rgb(var(--gl-tint-dark) / 0.9); }
+.glsr-mono-summary span {
+  font-family: var(--gl-tech);
+  font-size: max(8px, 1.1vh);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glsr-mono-sline { position: absolute; height: 0; }
+.glsr-mono-sline i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 4px;
+  transform-origin: 50% 50%;
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.42) 3%, rgb(var(--gl-tint-light) / 0.42) 97%, transparent) 0 0 / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.24) 3%, rgb(var(--gl-tint-light) / 0.24) 97%, transparent) 0 100% / 100% 1px no-repeat;
+}
+.glsr-mono-sline i::before,
+.glsr-mono-sline i::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  width: 1px;
+  height: 12px;
+  background: rgb(var(--gl-tint-light) / 0.55);
+}
+.glsr-mono-sline i::before { left: 1%; }
+.glsr-mono-sline i::after { right: 1%; }
+
+/* ── the duel: two steles turned toward each other ── */
+.glsr-mono-unit.is-attacker .glsr-mono-monument {
+  transform-origin: var(--glsr-mono-die-x) var(--glsr-mono-die-y);
+  transform: perspective(1800px) rotateY(6deg);
+}
+.glsr-mono-def .glsr-mono-monument {
+  transform-origin: var(--glsr-mono-pivot-x) var(--glsr-mono-pivot-y);
+  transform: perspective(1800px) rotateY(-6deg);
+}
+.glsr-mono-def {
+  /* the defender's own light: violet, routed through no degree — it is the
+     opposing force, not a verdict */
+  --glsr-mono-lightc: color-mix(in srgb, var(--gl-violet) 78%, var(--gl-text-bright));
+  --glsr-mono-lighthot: color-mix(in srgb, var(--gl-violet) 35%, var(--gl-text-bright));
+}
+.glsr-mono-def .glsr-mono-eng.is-lit { opacity: calc(var(--glsr-mono-fillk) * min(1, var(--glsr-mono-dk, 1))); }
+.glsr-mono-def .glsr-mono-eng.is-lit .glsr-mono-halo { opacity: calc(0.1 + 0.2 * var(--glsr-mono-dk, 1)); }
+.glsr-mono-def .glsr-mono-fill { opacity: calc(var(--glsr-mono-fillk) * min(1.4, var(--glsr-mono-dk, 1))); }
+.glsr-mono-def .glsr-mono-edge { stroke: color-mix(in srgb, var(--glsr-mono-lightc) calc(30% + 30% * min(1.5, var(--glsr-mono-dk, 1))), rgb(var(--gl-tint-light) / 0.25)); }
+.glsr-mono-def .glsr-mono-eng.is-ignite .glsr-mono-halo { opacity: 0.4; }
+.glsr-mono-dhead {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--glsr-mono-cham) + 6 * var(--glsr-mono-px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.glsr-mono-dstat {
+  margin-top: calc(6 * var(--glsr-mono-px));
+  padding-left: 0.14em;
+  font-family: var(--gl-display);
+  font-size: max(16px, calc(30 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: transparent;
+  background: linear-gradient(180deg, var(--glsr-mono-lighthot), rgb(var(--gl-tint-light) / 0.45));
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 1px 0 rgb(var(--gl-tint-dark) / 0.9)) drop-shadow(0 0 14px color-mix(in srgb, var(--glsr-mono-lightc) 45%, transparent));
+}
+.glsr-mono-dmedal {
+  --glsr-mono-mc: calc(14 * var(--glsr-mono-px));
+  position: absolute;
+  left: 50%;
+  width: calc(var(--glsr-mono-size) * 0.62);
+  height: calc(var(--glsr-mono-size) * 0.62);
+  translate: -50% -50%;
+  padding: 1.5px;
+  background: linear-gradient(160deg, var(--glsr-mono-lighthot), rgb(var(--gl-tint-light) / 0.15));
+  clip-path: polygon(var(--glsr-mono-mc) 0, calc(100% - var(--glsr-mono-mc)) 0, 100% var(--glsr-mono-mc), 100% calc(100% - var(--glsr-mono-mc)),
+    calc(100% - var(--glsr-mono-mc)) 100%, var(--glsr-mono-mc) 100%, 0 calc(100% - var(--glsr-mono-mc)), 0 var(--glsr-mono-mc));
+  box-shadow: 0 0 30px color-mix(in srgb, var(--glsr-mono-lightc) 40%, transparent);
+}
+.glsr-mono-dmedal img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; clip-path: inherit; }
+.glsr-mono-dword {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  opacity: 0;
+  padding-left: 0.32em;
+  font-family: var(--gl-display);
+  font-size: max(11px, calc(15 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--glsr-mono-lighthot);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9), 0 0 12px color-mix(in srgb, var(--glsr-mono-lightc) 70%, transparent);
+}
+.glsr-mono-def[data-degree="2"] .glsr-mono-dword,
+.glsr-mono-def[data-degree="3"] .glsr-mono-dword { color: var(--gl-text-dim); text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9); }
+.glsr-mono-dline-in {
+  position: absolute;
+  left: calc(10 * var(--glsr-mono-px));
+  right: calc(10 * var(--glsr-mono-px));
+  height: 0;
+}
+.glsr-mono-dline-in i,
+.glsr-mono-cast i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 4px;
+  background:
+    linear-gradient(90deg, var(--glsr-mono-lighthot), var(--glsr-mono-lighthot)) 0 0 / 100% 1px no-repeat,
+    linear-gradient(90deg, var(--glsr-mono-lightc), var(--glsr-mono-lightc)) 0 100% / 100% 1px no-repeat;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--glsr-mono-lightc) 60%, transparent);
+}
+.glsr-mono-dline-in i { transform-origin: 100% 50%; }
+.glsr-mono-cast { position: absolute; height: 0; }
+/* cast from the defender: it brightens toward its source and ends in a notch on the roller's slab */
+.glsr-mono-cast i {
+  transform-origin: 100% 50%;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--glsr-mono-lighthot) 50%, transparent), var(--glsr-mono-lighthot)) 0 0 / 100% 1px no-repeat,
+    linear-gradient(90deg, color-mix(in srgb, var(--glsr-mono-lightc) 40%, transparent), var(--glsr-mono-lightc)) 0 100% / 100% 1px no-repeat;
+}
+.glsr-mono-cast i::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -5px;
+  width: 7px;
+  height: 14px;
+  background: var(--glsr-mono-lighthot);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+.glsr-mono-dcart {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--glsr-mono-px));
+  white-space: nowrap;
+}
+.glsr-mono-dcart .glsr-mono-cart-k { font-size: max(10px, calc(13 * var(--glsr-mono-px))); color: var(--glsr-mono-lighthot); }
+.glsr-mono-dcart .glsr-mono-cart-v { min-width: calc(60 * var(--glsr-mono-px)); }
+.glsr-mono-dcart .glsr-mono-cart-num {
+  font-size: max(26px, calc(50 * var(--glsr-mono-px)));
+  text-shadow: 0 1px 0 rgb(var(--gl-tint-dark) / 0.9), 0 0 22px color-mix(in srgb, var(--glsr-mono-lightc) 70%, transparent);
+}
+.glsr-mono-cart.is-vs .glsr-mono-vs {
+  font-family: var(--gl-display);
+  font-size: max(12px, calc(17 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gl-violet) 45%, var(--gl-text-bright));
+  overflow: visible;
+}
+.glsr-mono-cmod .glsr-mono-mod-in { flex-direction: row; align-items: baseline; gap: 4px; }
+.glsr-mono-unit.is-compact .glsr-mono-dim span { display: none; }
+
+/* CSS-only path: each stele (and the defender) carries its own glow, since the
+   backdrop shader that would light it per die is not running. */
+.glsr[data-render="css"] .glsr-mono-unit.is-compact::before,
+.glsr[data-render="css"] .glsr-mono-def::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--glsr-mono-die-x) var(--glsr-mono-die-y),
+    color-mix(in srgb, var(--glsr-mono-lightc) calc(12% + 26% * var(--glsr-mono-degk, 0)), transparent), transparent calc(var(--glsr-mono-size) * 1.5));
+}
+.glsr[data-render="css"] .glsr-mono-def::before {
+  background: radial-gradient(circle at var(--glsr-mono-pivot-x) var(--glsr-mono-pivot-y),
+    color-mix(in srgb, var(--glsr-mono-lightc) calc(14% * min(2, var(--glsr-mono-dk, 1))), transparent), transparent calc(var(--glsr-mono-size) * 1.6));
+}
+/* the defender's DC sits on its own dark plate: the spine and any crack seam pass behind it, never through the digits */
+.glsr-mono-dcart {
+  --glsr-mono-pc2: calc(8 * var(--glsr-mono-px));
+  padding: calc(4 * var(--glsr-mono-px)) calc(16 * var(--glsr-mono-px));
+  background: color-mix(in srgb, var(--gl-ink-1) 88%, transparent);
+  clip-path: polygon(var(--glsr-mono-pc2) 0, calc(100% - var(--glsr-mono-pc2)) 0, 100% 50%, calc(100% - var(--glsr-mono-pc2)) 100%, var(--glsr-mono-pc2) 100%, 0 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glsr-mono-lightc) 40%, transparent);
+}
+.glsr-mono-dword { width: max-content; margin: 0 auto; padding: 2px 10px 2px calc(10px + 0.32em); background: color-mix(in srgb, var(--gl-ink-1) 80%, transparent); }
+
+/* ── sealed: a blind roll — this screen may not learn the result ── */
+.glsr-mono-sealed {
+  position: absolute;
+  left: var(--glsr-mono-die-x);
+  top: var(--glsr-mono-deg-y);
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--glsr-mono-px));
+  opacity: 0;
+  white-space: nowrap;
+  text-align: center;
+  isolation: isolate;
+}
+.glsr-mono-sealed::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -30% -24% -30%;
+  background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.78), rgb(var(--gl-tint-dark) / 0.45) 55%, transparent);
+}
+.glsr-mono-sealed .glsr-mono-cart { padding: calc(8 * var(--glsr-mono-px)) calc(30 * var(--glsr-mono-px)); }
+.glsr-mono-sealed .glsr-mono-seal i { width: calc(11 * var(--glsr-mono-px)); height: calc(11 * var(--glsr-mono-px)); }
+.glsr-mono-sealed-title {
+  padding-left: 0.42em;
+  font-family: var(--gl-display);
+  font-size: max(18px, calc(40 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--gl-text);
+  text-shadow: 0 1px 0 rgb(var(--gl-tint-dark) / 0.9), 0 0 18px color-mix(in srgb, var(--gl-accent) 45%, transparent);
+}
+.glsr-mono-sealed-note {
+  font-family: var(--gl-tech);
+  font-size: max(9px, calc(11 * var(--glsr-mono-px)));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glsr-mono-unit.is-compact .glsr-mono-sealed-title { font-size: var(--glsr-mono-degfs); letter-spacing: 0.24em; padding-left: 0.24em; }
+
+/* ── Hero Point: an etched control under the verdict, never a pill ── */
+.glsr-mono-reroll {
+  --glsr-mono-rc: calc(7 * var(--glsr-mono-px));
+  appearance: none;
+  margin: calc(12 * var(--glsr-mono-px)) 0 0;
+  padding: calc(6 * var(--glsr-mono-px)) calc(14 * var(--glsr-mono-px));
+  border: 0;
+  opacity: 0;
+  font-family: var(--gl-display);
+  font-size: max(10px, calc(12 * var(--glsr-mono-px)));
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--glsr-gold-hot);
+  clip-path: polygon(var(--glsr-mono-rc) 0, 100% 0, 100% calc(100% - var(--glsr-mono-rc)), calc(100% - var(--glsr-mono-rc)) 100%, 0 100%, 0 var(--glsr-mono-rc));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--glsr-gold) 18%, transparent), color-mix(in srgb, var(--glsr-gold) 6%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glsr-gold) 60%, transparent);
+  transition: translate var(--gl-d-quick) var(--gl-ease);
+}
+.glsr-mono-reroll[hidden] { display: none; }
+.glsr-mono-reroll:hover { translate: 0 var(--gl-lift); }
+.glsr-mono-unit.is-compact .glsr-mono-reroll { font-size: max(9px, calc(10 * var(--glsr-mono-px))); letter-spacing: 0.14em; padding: 4px 8px; }
+.glsr-mono-deg-kick:empty { display: none; }

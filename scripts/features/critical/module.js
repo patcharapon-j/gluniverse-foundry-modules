@@ -1138,6 +1138,9 @@ function registerDetector() {
   Hooks.on("createChatMessage", (raw) => {
     const message = raw;
     if (messageAuthorId(message) !== game.user.id) return;
+    // A Spotlight Roll card is posted the moment its degree has already been
+    // played centre-screen on every client; a second cut-in would be a replay.
+    if (message?.flags?.["gluniverse-foundry-modules"]?.spotlight) return;
     void waitForDiceThenProcess(adapter, message);
   });
 }

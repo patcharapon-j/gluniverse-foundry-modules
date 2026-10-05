@@ -1,0 +1,173 @@
+{
+  "GLSR": {
+    "direction": {
+      "monolith": "Monolith"
+    },
+    "dc": "DC",
+    "kicker": {
+      "critical": "Critical"
+    },
+    "degree": {
+      "criticalFailure": "Critical Failure",
+      "failure": "Failure",
+      "success": "Success",
+      "criticalSuccess": "Critical Success"
+    },
+    "degreeWord": {
+      "criticalFailure": "Failure",
+      "failure": "Failure",
+      "success": "Success",
+      "criticalSuccess": "Success"
+    },
+    "label": {
+      "total": "Total",
+      "modifier": "Modifier",
+      "mod": "Mod",
+      "noDc": "No DC",
+      "against": "Against",
+      "defendsWith": "Defends with"
+    },
+    "band": {
+      "criticalSuccess": "Critical success",
+      "failure": "Failure"
+    },
+    "natural": "Natural {n}",
+    "fortune": {
+      "fortune": "Fortune · keep higher",
+      "misfortune": "Misfortune · keep lower"
+    },
+    "dice": {
+      "kept": "Kept",
+      "dropped": "Dropped · {n}"
+    },
+    "detail": {
+      "full": "{total} against DC {dc} · {margin}",
+      "compact": "{total} · {margin}",
+      "total": "Total {total}",
+      "noDc": "{check} · no DC"
+    },
+    "margin": {
+      "met": "met exactly",
+      "metShort": "met",
+      "by": "by {n}",
+      "short": "short by {n}",
+      "shortShort": "short {n}"
+    },
+    "action": {
+      "roll": "Roll",
+      "reroll": "Hero Point · reroll"
+    },
+    "sealed": {
+      "title": "Sealed",
+      "note": "The GM knows"
+    },
+    "group": {
+      "rollers": "{kind} · {n} rollers"
+    },
+    "summary": {
+      "succeed": "{ok} of {n} succeed",
+      "sealed": "{n} sealed",
+      "count": {
+        "criticalFailure": "{n} critical failure",
+        "failure": "{n} failure",
+        "success": "{n} success",
+        "criticalSuccess": "{n} critical"
+      }
+    },
+    "defender": {
+      "criticalFailure": "Unmoved",
+      "failure": "Holds",
+      "success": "Overcome",
+      "criticalSuccess": "Broken"
+    },
+    "feature": {
+      "title": "Spotlight Roll",
+      "hint": "The GM calls for a check and every screen goes cinematic: the roller's own Dice So Nice die tumbles centre-stage, modifiers fly into it and PF2e's degree lands. Needs Dice So Nice 6.x."
+    },
+    "controls": {
+      "request": "Spotlight a roll"
+    },
+    "kind": {
+      "skill": "Skill check",
+      "save": "Saving throw",
+      "perception": "Perception check",
+      "flat": "Flat check",
+      "formula": "Roll"
+    },
+    "mod": {
+      "situational": "Situational"
+    },
+    "actor": {
+      "level": "Level {level}",
+      "creature": "Creature {level}"
+    },
+    "gm": {
+      "throwRest": "Throw the rest",
+      "close": "Close for everyone"
+    },
+    "warn": {
+      "noDice": "Spotlight Roll could not start Dice So Nice's renderer on this screen.",
+      "formula": "That formula throws no dice Spotlight Roll can show (d4, d6, d8, d10, d12, d20, d100; up to six dice).",
+      "rollFailed": "Spotlight Roll could not roll for {name}.",
+      "noRollers": "Pick at least one roller: select their tokens or add the party.",
+      "flatDc": "A flat check needs a DC."
+    },
+    "settings": {
+      "allowDismiss": {
+        "name": "Players may close the spotlight",
+        "hint": "Lets each player close the spotlight on their own screen with Escape. The GM can always close it for everyone."
+      },
+      "cssOnly": {
+        "name": "Spotlight without WebGL effects",
+        "hint": "Draws the spotlight's light and backdrop with CSS only on this screen. The dice still need Dice So Nice."
+      }
+    },
+    "app": {
+      "title": "Spotlight a roll",
+      "rollers": "Rollers",
+      "addSelected": "Add selected",
+      "addParty": "Add party",
+      "remove": "Remove",
+      "noRollers": "Select tokens on the canvas, then add them here.",
+      "check": "Check",
+      "formula": "Formula",
+      "titleField": "Title",
+      "titlePlaceholder": "Force the portcullis",
+      "against": "Against",
+      "againstNote": "The DC is the target's own, read live from their statistic.",
+      "targetNote": "Target a creature before opening this to make it an opposed check against one of its DCs. Leave the DC empty for no DC.",
+      "dc": "DC",
+      "audience": {
+        "all": "Everyone",
+        "roller": "The roller and the GM",
+        "gm": "The GM only (blind)"
+      },
+      "dice": "Dice",
+      "bonus": "Situational bonus",
+      "submit": "Spotlight",
+      "kind": {
+        "skill": "Skill",
+        "lore": "Lore",
+        "save": "Save",
+        "perception": "Perception",
+        "flat": "Flat check",
+        "formula": "Formula"
+      },
+      "save": {
+        "fortitude": "Fortitude",
+        "reflex": "Reflex",
+        "will": "Will"
+      },
+      "dcMode": {
+        "shown": "Shown",
+        "hidden": "Hidden until the reveal",
+        "never": "Never shown"
+      },
+      "fortune": {
+        "none": "One die",
+        "fortune": "Fortune (keep higher)",
+        "misfortune": "Misfortune (keep lower)"
+      }
+    }
+  }
+}

@@ -1186,6 +1186,48 @@ identifies the thing the party is looking at. Knowing a *lie* counts as knowing
 something there: a player told one cannot see that it is false, so refusing to
 open is the module losing the only thing they were given.
 
+**When touching Spotlight Roll** (`features/spotlight-roll/`, `styles/spotlight-roll*.css`,
+`templates/spotlight-roll/`, `core/pf2e-degree.mjs`), re-run its check. Everything it
+covers fails silently:
+
+```bash
+node tools/spotlight-roll-check.mjs
+```
+
+Zero problems required. Four things are worth knowing before you change it.
+
+**The GM rolls everything, and only the GM's client ever holds a result a
+player may not see.** The world setting `dr.active` reaches every client, so it
+carries the request, the chips and when each slot was thrown, and never a total,
+a degree or a hidden DC (`normalizeRequest` drops them). Results ride the suite
+socket with `recipients`, which the SERVER filters; a result emitted without
+them hands a blind roll to every player's console while every screen looks
+right. Intents from players are honoured only on `meta.attested`, the sender id
+Foundry v14's server appends to custom socket events (`core/socket.mjs`).
+
+**The die must land exactly on its face, from any idle pose, for any seed.**
+`tumble.mjs` composes the orientation instead of simulating it (two body axes
+spun down to zero at the landing, then a windowed rock), and the check samples
+it at 120 Hz for exactness and continuity. A die a hair off its face reads a
+different number to every player.
+
+**PF2e decides the degree.** Roll through `Statistic#roll` with
+`createMessage: false`, hold the card, post it at the degree beat with
+`flags.dice-so-nice.skip` (or DSN rolls again on the board) and the suite's
+`spotlight` flag (Critical stands down for it). Chip toggles are applied by the
+`Check.roll` wrapper after PF2e's own `calculateTotal` pass, never before:
+`Modifier#test()` resets `ignored`. PF2e 8.4 has no `rollMode` argument.
+
+**The overlay, director, backdrop and models are pure.** The preview
+(`node tools/spotlight-roll-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/spotlight.html`) drives the shipped modules with a three.js stand-in
+for the dice; the check imports them under Node. `dsn-host.mjs` is the only
+file that reaches into Dice So Nice's internals (DiceScene under its own
+renderer cache key, never DiceBox; shared geometry is never disposed), and only
+a live v14 session can prove it. The backdrop warm-up polls shader completion on
+a timer, not animation frames: a background tab starves rAF, and a warm-up that
+waits on it holds the whole spotlight. See `docs/SPOTLIGHT_ROLL.md`.
+
 **When touching the stream features** (`features/stream/`, `features/stream-cards/`,
 `features/stream-targets/`), re-run their consistency check. The standalone
 `gluniverse-stream` module became three features, and almost everything that

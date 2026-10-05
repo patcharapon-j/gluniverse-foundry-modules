@@ -1,6 +1,7 @@
 import { createTimeline, stagger, motionDuration, createMotionOwner } from "../../core/motion.mjs";
 import { FATE_DIE_DENOMINATION, FATE_DIE_NOTATION, FLAGS, KIND_OPPORTUNITY, MODULE_ID } from "./constants.mjs";
 import { getFaceImagePaths, getFateFace, getKindLabel, normalizeKind } from "./settings.mjs";
+import { DEGREE_KEYS, baseDegree, adjustDegreeForNatural } from "../../core/pf2e-degree.mjs";
 
 const inFlightFateRolls = new Set();
 const revealedFates = new Map();
@@ -138,7 +139,7 @@ function getFaceResult(roll) {
 }
 
 // PF2e degree-of-success ordering: index === degree value (0 = worst).
-const DEGREE_OUTCOMES = ["criticalFailure", "failure", "success", "criticalSuccess"];
+const DEGREE_OUTCOMES = DEGREE_KEYS;
 
 // Adds the fate bonus to the message's primary check roll as a labeled, untyped
 // numeric term and re-derives the degree of success against the check DC. The
@@ -192,23 +193,6 @@ function getD20Result(roll) {
   const die = roll.dice?.find((d) => d.faces === 20);
   const active = die?.results?.find((r) => r.active !== false && !r.discarded);
   return Number.isInteger(active?.result) ? active.result : (Number.isInteger(die?.total) ? die.total : null);
-}
-
-// PF2e: beat the DC by 10+ → critical success, meet/beat → success, miss by
-// 10+ → critical failure, otherwise failure.
-function baseDegree(total, dc) {
-  const delta = total - dc;
-  if (delta >= 10) return 3;
-  if (delta >= 0) return 2;
-  if (delta <= -10) return 0;
-  return 1;
-}
-
-// A natural 20 shifts the result up one step; a natural 1 shifts it down one.
-function adjustDegreeForNatural(degree, dieResult) {
-  if (dieResult === 20) return Math.min(3, degree + 1);
-  if (dieResult === 1) return Math.max(0, degree - 1);
-  return degree;
 }
 
 // A freshly-applied fate plays the reveal-contract ceremony (§6.3); re-renders

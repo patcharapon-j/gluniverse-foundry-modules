@@ -1,0 +1,114 @@
+/*
+ * Spotlight Roll — the GM's request builder and the GM's control strip on the
+ * overlay. The overlay itself is styles/spotlight-roll.css.
+ *
+ * `.gl-btn` declares no font size (it takes the host's), so every button here
+ * is sized on its own class.
+ */
+
+/* ── builder ───────────────────────────────────────────────────────────── */
+.glsr-app-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-5);
+  padding: var(--gl-sp-6);
+  color: var(--gl-text);
+}
+
+.glsr-app-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  margin: 0;
+  padding: var(--gl-sp-5);
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-hair);
+}
+.glsr-app-block.glsr-app-grid { display: grid; }
+
+.glsr-app-head { display: flex; align-items: center; justify-content: space-between; gap: var(--gl-sp-4); }
+.glsr-app-tools { display: flex; gap: var(--gl-sp-3); }
+
+.glsr-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--gl-sp-4);
+  align-items: end;
+}
+.glsr-app-wide { grid-column: 1 / -1; }
+
+.glsr-app-field { display: flex; flex-direction: column; gap: var(--gl-sp-2); min-width: 0; }
+.glsr-app-field > span {
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glsr-app-field input,
+.glsr-app-field select {
+  width: 100%;
+  min-width: 0;
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  background: var(--gl-surface);
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+}
+.glsr-app-field input[type="number"] { font-family: var(--gl-tech); font-variant-numeric: tabular-nums; }
+.glsr-app-field input:focus-visible,
+.glsr-app-field select:focus-visible { border-color: var(--gl-accent); outline: none; }
+
+.glsr-app-rollers { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3); margin: 0; padding: 0; list-style: none; }
+.glsr-app-roller {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-1) var(--gl-sp-2) var(--gl-sp-1) var(--gl-sp-1);
+  background: rgb(var(--gl-tint-light) / 0.05);
+  border: 1px solid var(--gl-hair);
+  font-size: var(--gl-fs-sm);
+}
+.glsr-app-roller img { width: 26px; height: 26px; object-fit: cover; border: 0; }
+
+.glsr-app-x {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.glsr-app-x:hover { color: var(--gl-text-bright); }
+
+.glsr-app-note { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); line-height: var(--gl-lh-normal); }
+
+.glsr-app-btn { font-size: var(--gl-fs-xs); }
+.glsr-app-foot { display: flex; justify-content: flex-end; }
+.glsr-app-go { font-size: var(--gl-fs-sm); }
+
+/* ── the GM's strip on the overlay ─────────────────────────────────────── */
+.glsr-gm {
+  position: absolute;
+  inset: auto var(--gl-sp-6) var(--gl-sp-6) auto;
+  display: flex;
+  gap: var(--gl-sp-3);
+  pointer-events: auto;
+}
+.glsr-gm[hidden] { display: none; }
+.glsr-gm-btn { font-size: var(--gl-fs-xs); }
+.glsr[data-phase="out"] .glsr-gm { opacity: 0; transition: opacity var(--gl-d-quick) var(--gl-ease); }
+
+/* ── controls this screen may not use ──────────────────────────────────── */
+/* The director stamps data-may-act on every element of a roll. A player sees
+   another player's roller, but not a Roll plate or chips they cannot press. */
+.glsr [data-roll][data-may-act="0"] [data-action],
+.glsr [data-action][data-may-act="0"] { visibility: hidden; pointer-events: none; }
+.glsr [data-roll][data-may-act="0"] [data-mod],
+.glsr [data-mod][data-may-act="0"] { pointer-events: none; cursor: default; }

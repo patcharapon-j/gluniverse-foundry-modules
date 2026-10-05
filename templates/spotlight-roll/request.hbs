@@ -1,0 +1,105 @@
+{{!--
+  Spotlight Roll — the GM's request builder.
+  Layout is derived from who is in it (see request-app.mjs), so there is no
+  layout control here.
+--}}
+<div class="glsr-app-root gl-glass gl-type">
+
+  <section class="glsr-app-block">
+    <header class="glsr-app-head">
+      <span class="gl-tech-label">{{localize "GLSR.app.rollers"}}</span>
+      <span class="glsr-app-tools">
+        {{#if canAdd}}
+          <button type="button" class="gl-btn glsr-app-btn" data-action="addSelected"><i class="fa-solid fa-user-plus"></i> {{localize "GLSR.app.addSelected"}}</button>
+          <button type="button" class="gl-btn glsr-app-btn" data-action="addParty"><i class="fa-solid fa-users"></i> {{localize "GLSR.app.addParty"}}</button>
+        {{/if}}
+      </span>
+    </header>
+    {{#if rollers.length}}
+      <ul class="glsr-app-rollers">
+        {{#each rollers}}
+          <li class="glsr-app-roller">
+            <img src="{{img}}" alt="">
+            <span>{{name}}</span>
+            <button type="button" class="glsr-app-x" data-action="removeRoller" data-index="{{i}}" aria-label="{{localize "GLSR.app.remove"}}"><i class="fa-solid fa-xmark"></i></button>
+          </li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <p class="glsr-app-note">{{localize "GLSR.app.noRollers"}}</p>
+    {{/if}}
+  </section>
+
+  <section class="glsr-app-block glsr-app-grid">
+    <label class="glsr-app-field">
+      <span>{{localize "GLSR.app.check"}}</span>
+      <select name="kind">{{#each kinds}}<option value="{{k}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+    </label>
+    {{#if needsSlug}}
+      <label class="glsr-app-field">
+        <span>&nbsp;</span>
+        <select name="slug">{{#each slugs}}<option value="{{slug}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+      </label>
+    {{/if}}
+    {{#if isFormula}}
+      <label class="glsr-app-field">
+        <span>{{localize "GLSR.app.formula"}}</span>
+        <input type="text" name="formula" value="{{f.formula}}" placeholder="2d6+3">
+      </label>
+    {{/if}}
+    <label class="glsr-app-field glsr-app-wide">
+      <span>{{localize "GLSR.app.titleField"}}</span>
+      <input type="text" name="title" value="{{f.title}}" placeholder="{{localize "GLSR.app.titlePlaceholder"}}">
+    </label>
+  </section>
+
+  <section class="glsr-app-block">
+    {{#if defender}}
+      <header class="glsr-app-head">
+        <span class="gl-tech-label">{{localize "GLSR.app.against"}}</span>
+        <button type="button" class="glsr-app-x" data-action="clearDefender" aria-label="{{localize "GLSR.app.remove"}}"><i class="fa-solid fa-xmark"></i></button>
+      </header>
+      <div class="glsr-app-grid">
+        <div class="glsr-app-roller"><img src="{{defender.img}}" alt=""><span>{{defender.name}}</span></div>
+        <label class="glsr-app-field">
+          <select name="statistic">{{#each defenderStats}}<option value="{{slug}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+        <label class="glsr-app-field">
+          <select name="dcMode">{{#each dcModes}}<option value="{{m}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+      </div>
+      <p class="glsr-app-note">{{localize "GLSR.app.againstNote"}}</p>
+    {{else}}
+      <div class="glsr-app-grid">
+        <label class="glsr-app-field">
+          <span>{{localize "GLSR.app.dc"}}</span>
+          <input type="number" name="dc" value="{{f.dc}}" step="1" placeholder="—">
+        </label>
+        <label class="glsr-app-field">
+          <span>&nbsp;</span>
+          <select name="dcMode">{{#each dcModes}}<option value="{{m}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+      </div>
+      <p class="glsr-app-note">{{localize "GLSR.app.targetNote"}}</p>
+    {{/if}}
+  </section>
+
+  <section class="glsr-app-block glsr-app-grid">
+    <label class="glsr-app-field">
+      <span>{{localize "GLSR.app.audience"}}</span>
+      <select name="audience">{{#each audiences}}<option value="{{a}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+    </label>
+    <label class="glsr-app-field">
+      <span>{{localize "GLSR.app.dice"}}</span>
+      <select name="fortune">{{#each fortunes}}<option value="{{v}}" {{#if sel}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+    </label>
+    <label class="glsr-app-field">
+      <span>{{localize "GLSR.app.bonus"}}</span>
+      <input type="number" name="bonus" value="{{f.bonus}}" step="1">
+    </label>
+  </section>
+
+  <footer class="glsr-app-foot">
+    <button type="submit" class="gl-btn glsr-app-go"><i class="fa-solid fa-dice-d20"></i> {{localize "GLSR.app.submit"}}</button>
+  </footer>
+</div>
