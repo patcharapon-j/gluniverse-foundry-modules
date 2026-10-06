@@ -23,6 +23,12 @@
    are --glci-*; no foundation token is redeclared.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Foundry styles every <button> globally (flex, height: 2em, padding, a 0.5s
+   transition) from a cascade layer, so any property a class here leaves unset
+   inherits it and the labels overflow. Revert to the browser defaults these
+   buttons are designed on; zero specificity, so every class rule still wins. */
+:where(.glci) button { all: revert; }
+
 .glci {
   /* The GL palette probe (main.mjs reads these off the skinned root). */
   --glci-accent: var(--gl-accent);
@@ -33,7 +39,7 @@
   --glci-line: color-mix(in srgb, var(--gl-accent) 70%, var(--gl-text-bright));
   --glci-line-dim: color-mix(in srgb, var(--gl-accent) 34%, transparent);
   --glci-glass: color-mix(in srgb, var(--gl-accent) 7%, rgb(var(--gl-tint-dark) / 0.64));
-  --glci-card-w: clamp(176px, 14.5vw, 228px);
+  --glci-card-w: clamp(196px, 16.5vw, 268px);
   --glci-hostile: color-mix(in srgb, var(--gl-warn) 85%, var(--gl-accent));
 
   position: fixed;
@@ -275,7 +281,7 @@
 
 .glci-roster-item {
   position: relative;
-  width: clamp(64px, 6.4vw, 104px);
+  width: clamp(96px, 9vw, 148px);
   display: grid;
   gap: 5px;
   justify-items: center;
@@ -421,9 +427,9 @@
   justify-items: stretch;
 }
 /* Tall enough for a face to carry the card: main.mjs frames the art on the head
-   (ART_SHOTS.card, whose aspect is this box's 1 / 0.62). */
+   (ART_SHOTS.card, whose aspect is this box's 1 / 0.95). */
 .glci-card-art {
-  height: calc(var(--glci-card-w) * 0.62);
+  height: calc(var(--glci-card-w) * 0.95);
   overflow: hidden;
   -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent);
   mask-image: linear-gradient(180deg, #000 70%, transparent);
@@ -541,6 +547,9 @@
    visibility, not display, so the die anchor never jumps. */
 .glci-card-controls {
   display: grid;
+  /* an implicit auto column sizes to the widest unbreakable row, so the chips
+     never wrap and the card's clip-path cuts them off */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 6px 10px 12px;
   align-content: start;
@@ -662,7 +671,7 @@
   background: color-mix(in srgb, var(--gl-accent) 12%, rgb(var(--gl-tint-dark) / 0.7));
   box-shadow: inset 0 0 0 1px var(--glci-line-dim);
 }
-.glci-rollfor { flex: 1; font-size: var(--gl-fs-3xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glci-rollfor { flex: 1; min-width: 0; font-size: var(--gl-fs-3xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .glci-rollfor:hover,
 .glci-lock:hover,
 .glci-volley-throw:hover,
@@ -686,9 +695,9 @@
 
 .glci-volley {
   --gl-accent: var(--glci-hostile);
-  width: clamp(220px, 19vw, 300px);
+  width: clamp(260px, 21vw, 340px);
   display: grid;
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: 104px 1fr;
   grid-template-areas: "art head" "art dice" "ctl ctl" "seal throw";
   column-gap: 10px;
   row-gap: 4px;
@@ -696,8 +705,8 @@
 }
 .glci-volley-art {
   grid-area: art;
-  width: 64px;
-  height: 64px;
+  width: 104px;
+  height: 104px;
   overflow: hidden;
   clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   box-shadow: inset 0 0 0 1px var(--glci-line-dim);
@@ -931,13 +940,13 @@
 }
 .glci-boss[data-tier="supreme"] > b { box-shadow: 0 0 12px color-mix(in srgb, var(--gl-accent) 70%, transparent); }
 .glci-volley[data-boss] {
-  width: clamp(300px, 25vw, 400px);
-  grid-template-columns: 104px 1fr;
+  width: clamp(340px, 27vw, 440px);
+  grid-template-columns: 136px 1fr;
 }
-.glci-volley[data-boss] .glci-volley-art { width: 104px; height: 104px; }
+.glci-volley[data-boss] .glci-volley-art { width: 136px; height: 136px; }
 .glci-volley[data-boss] .glci-volley-name { font-size: var(--gl-fs-xl); }
 .glci-volley[data-boss] .glci-mini-die { width: 46px; height: 46px; }
-.glci-roster-item[data-boss] { width: clamp(88px, 8.8vw, 140px); }
+.glci-roster-item[data-boss] { width: clamp(120px, 11.5vw, 184px); }
 .glci-roster-item > .glci-boss {
   position: absolute;
   top: 0;

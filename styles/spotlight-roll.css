@@ -29,6 +29,12 @@
    --glsr-mono-* / --glsr-*; no --gl-* foundation token is redeclared.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Foundry styles every <button> globally (flex, height: 2em, padding, a 0.5s
+   transition) from a cascade layer, so any property a class here leaves unset
+   inherits it and the labels overflow. Revert to the browser defaults these
+   buttons are designed on; zero specificity, so every class rule still wins. */
+:where(.glsr) button { all: revert; }
+
 .glsr {
   position: fixed;
   inset: 0;
@@ -546,6 +552,36 @@
   text-transform: uppercase;
   color: var(--gl-text-faint);
 }
+
+/* the roller as a bust beside the slab (stele.mjs places it; the medallion
+   above is the fallback when the viewport leaves no room) */
+.glsr-mono-actor.is-bust {
+  width: var(--glsr-mono-bust-w);
+  display: grid;
+  justify-items: end;
+  gap: 0;
+  pointer-events: none;
+}
+.glsr-mono-actor.is-bust .glsr-mono-medal {
+  --glsr-mono-mc: calc(22 * var(--glsr-mono-px));
+  width: 100%;
+  height: calc(var(--glsr-mono-bust-w) * 4 / 3);
+  padding: 1.5px;
+  background: linear-gradient(160deg, var(--glsr-mono-lighthot), rgb(var(--gl-tint-light) / 0.1) 70%);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent);
+  mask-image: linear-gradient(180deg, #000 72%, transparent);
+}
+.glsr-mono-actor.is-bust .glsr-mono-names {
+  position: relative;
+  margin-top: calc(-70 * var(--glsr-mono-px));
+  padding-right: calc(18 * var(--glsr-mono-px));
+  flex-direction: column;
+  align-items: flex-end;
+  writing-mode: horizontal-tb;
+  rotate: none;
+}
+.glsr-mono-actor.is-bust .glsr-mono-name { font-size: max(16px, calc(26 * var(--glsr-mono-px))); letter-spacing: 0.18em; }
+.glsr-mono-actor.is-bust .glsr-mono-role { letter-spacing: 0.3em; }
 
 /* ── the plinth ───────────────────────────────────────────────────────── */
 
@@ -1113,19 +1149,25 @@
    line of a defender — sits outside any unit and is driven from the clock. */
 
 /* ── compact stele (group) ── */
+/* the roller's portrait fills the head of the column and fades out behind the die */
 .glsr-mono-chead {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--glsr-mono-cham) + 6 * var(--glsr-mono-px));
+  top: calc(var(--glsr-mono-cham) + 4 * var(--glsr-mono-px));
+  padding: 0 calc(10 * var(--glsr-mono-px));
   display: flex;
   justify-content: center;
 }
 .glsr-mono-chead .glsr-mono-medal {
-  width: calc(42 * var(--glsr-mono-px));
-  height: calc(42 * var(--glsr-mono-px));
-  min-width: 22px;
-  min-height: 22px;
+  --glsr-mono-mc: calc(16 * var(--glsr-mono-px));
+  width: 100%;
+  height: calc(300 * var(--glsr-mono-px));
+  padding: 0;
+  background: none;
+  opacity: 0.9;
+  -webkit-mask-image: linear-gradient(180deg, #000 45%, transparent 95%);
+  mask-image: linear-gradient(180deg, #000 45%, transparent 95%);
 }
 .glsr-mono-unit.is-compact .glsr-mono-band-label,
 .glsr-mono-unit.is-compact .glsr-mono-band.is-dc .glsr-mono-band-value,

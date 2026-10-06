@@ -192,10 +192,7 @@ export function createStele(env, cfg) {
           ${rq.title ? `<div class="glsr-mono-title">${esc(rq.title)}</div>` : ""}
           ${fortune ? `<div class="glsr-mono-fortune">${esc(tr(`GLSR.fortune.${fortune}`))}</div>` : ""}
         </header>
-        <div class="glsr-mono-actor">
-          <div class="glsr-mono-medal">${actor.img ? `<img alt="" src="${esc(actor.img)}">` : ""}</div>
-          <div class="glsr-mono-names"><span class="glsr-mono-name">${esc(actor.name)}</span><span class="glsr-mono-role">${esc(actor.title)}</span></div>
-        </div>`;
+        ${bustW() ? "" : actorBlock("")}`;
     return `
       <div class="glsr-mono-slab" style="left:${f1(g.slabX)}px;top:${f1(g.slabTop)}px;width:${f1(g.slabW)}px;height:${f1(g.slabH)}px">
         <div class="glsr-mono-glass"></div>
@@ -222,6 +219,25 @@ export function createStele(env, cfg) {
 
   /** A chip says its value; its label only when the label says more (a formula's flat "+3" does not). */
   const chipLabel = (m) => (m.label != null && String(m.label).trim() !== sgn(m.value) && String(m.label).trim() !== String(m.value) ? esc(m.label) : "");
+
+  /** The roller: a bust standing left of the slab, or the medallion on its face when there is no room. */
+  function actorBlock(cls, style = "") {
+    const actor = model.actor ?? {};
+    return `<div class="glsr-mono-actor${cls}"${style}>
+          <div class="glsr-mono-medal">${actor.img ? `<img alt="" src="${esc(actor.img)}">` : ""}</div>
+          <div class="glsr-mono-names"><span class="glsr-mono-name">${esc(actor.name)}</span><span class="glsr-mono-role">${esc(actor.title)}</span></div>
+        </div>`;
+  }
+  /** Width of the bust, or 0 when the viewport leaves too little room left of the slab. */
+  function bustW() {
+    if (compact) return 0;
+    const w = Math.min(300 * g.u, g.slabX - 28 * g.u - 56);
+    return w >= 120 ? w : 0;
+  }
+  function buildBust() {
+    const w = bustW();
+    return w ? actorBlock(" is-bust", ` style="left:${f1(g.slabX - 28 * g.u - w)}px;top:${f1(g.slabTop + 60 * g.u)}px;--glsr-mono-bust-w:${f1(w)}px"`) : "";
+  }
 
   function buildPlinth() {
     const mods = model.mods ?? [];
@@ -330,7 +346,7 @@ export function createStele(env, cfg) {
 
   function build() {
     g = cfg.layoutFn(model);
-    monument.innerHTML = buildSlab() + buildPlinth() + `<div class="glsr-mono-shards"></div>`;
+    monument.innerHTML = buildSlab() + buildBust() + buildPlinth() + `<div class="glsr-mono-shards"></div>`;
     fwrap.innerHTML = buildFront();
     place();
     refs.slab = monument.querySelector(".glsr-mono-slab");

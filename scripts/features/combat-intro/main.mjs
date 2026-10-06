@@ -348,7 +348,7 @@ function applyResult(raw) {
  * on a PC card, a head on the square volley and roster tiles.
  */
 const ART_SHOTS = Object.freeze({
-  card: { aspect: 1 / 0.62, headRatio: 0.66, eyeLine: 0.4 },
+  card: { aspect: 1 / 0.95, headRatio: 0.66, eyeLine: 0.4 },
   square: { aspect: 1, headRatio: 0.62, eyeLine: 0.42 },
 });
 function frameArt(layers) {
