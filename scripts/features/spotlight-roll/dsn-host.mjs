@@ -261,8 +261,15 @@ const isCanvasTex = (t) => !!t?.isTexture && typeof HTMLCanvasElement !== "undef
 /* ── the host ────────────────────────────────────────────────────────── */
 
 export class DsnDiceHost {
-  constructor({ container }) {
+  /**
+   * @param {{ container: HTMLElement, key?: string }} o  `key` is the DSN renderer cache key.
+   * Each host that can be on screen at the same time as another needs its own
+   * (combat-intro passes "glCombatIntro"); it must not be a prefix of DSN's
+   * board/showcase/editor/persistent keys or of another host's.
+   */
+  constructor({ container, key = KEY }) {
     this.container = container;
+    this.key = key;
     this.scene = null;
     this.dice = new Set();
     this.lights = null;
@@ -282,7 +289,7 @@ export class DsnDiceHost {
       if (!DiceScene || !d3.dice3dRenderers) return false;
       const w = this.container.clientWidth || innerWidth, h = this.container.clientHeight || innerHeight;
       this.scene = new DiceScene(this.container, factory(), {
-        rendererCacheKey: KEY, dimensions: { width: w, height: h }, scale: 100, autoscale: false,
+        rendererCacheKey: this.key, dimensions: { width: w, height: h }, scale: 100, autoscale: false,
       });
       // initialize() wraps an async executor: a throw inside it, or an HDR that
       // never loads, leaves the promise pending forever rather than rejecting.
@@ -481,8 +488,8 @@ export class DsnDiceHost {
     if (cache) for (const v of Object.values(cache)) if (v?.isTexture) v.dispose();
     try { r?.dispose(); r?.forceContextLoss(); } catch { /* already lost */ }
     const d3 = dsn();
-    if (d3?.dice3dRenderers?.[KEY] === r) delete d3.dice3dRenderers[KEY];
-    try { factory()?.disposeCachedMaterials(KEY); } catch { /* factory rebuilt */ }
+    if (d3?.dice3dRenderers?.[this.key] === r) delete d3.dice3dRenderers[this.key];
+    try { factory()?.disposeCachedMaterials(this.key); } catch { /* factory rebuilt */ }
     this.scene = null;
     this.lights = null;
     this.ok = false;

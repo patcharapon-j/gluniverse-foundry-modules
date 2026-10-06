@@ -87,7 +87,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   add the matching lang keys. Do NOT localize stored data values or
   parse/format vocabulary (e.g. statsblock parsing tokens).
 - **CSS** — read `docs/DESIGN_SYSTEM.md`. Etched Glass is the suite's ONLY
-  theme; `styles/gl-tokens.css` is the single source of truth and
+  theme (the one exception is the scoped Aegis skin of the initiative rail and
+  Combat Intro, docs/adr/0001-scoped-skins.md — it lives only under those
+  features' own skinned roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
   - Never redeclare a foundation token outside `gl-tokens.css`. Custom
@@ -541,8 +543,7 @@ acted always comes back under a new one. That card is the one exception to
 the morph: when the turn advances on the standard rail (stepping back only slides it
 down a slot) it leaves through the nearest screen edge and
 re-enters at its new slot, and every card that joins or leaves the rail does
-the same, so a card only ever appears or disappears at the edge of the screen
-(card mode keeps its deck collect and deal instead). Cleanup restores the primed inline
+the same, so a card only ever appears or disappears at the edge of the screen. Cleanup restores the primed inline
 values and flushes them *before* dropping `gluni-card--morphing`, or the
 surface's own `min-height` transition replays from the primed 0.
 `node tools/stage-initiative-motion-check.mjs` runs from the motion workshop page;
@@ -1068,12 +1069,13 @@ body comes back blank), and *leaving* the tab has to be done by hand too, since
 Foundry still believes the tab being clicked is the active one and its handler
 no-ops.
 
-Multi-turn initiative has two completely separate implementations and they must
-never both run. Card mode already models it through the per-actor
-`init.cardConfig` `{cards, turns}` flag; standard mode has nothing (nothing in the
-suite wraps `Combat#setupTurns`, subclasses `Combatant`, or mutates
-`combat.turns`), so a boss there gets N−1 extra real Combatant documents flagged
-as its Nth turn. A boss carrying both would be dealt nine turns a round.
+Multi-turn initiative has one implementation. Nothing in the suite wraps
+`Combat#setupTurns`, subclasses `Combatant`, or mutates `combat.turns`, so a boss
+gets N−1 extra real Combatant documents flagged as its Nth turn. The rail once
+had a card mode that modelled multi-turn through a per-actor `init.cardConfig`
+flag; it was removed, and stale `cardConfig`/`cardDeal` flags in old worlds have
+no reader. Do not bring a second mechanism back: a boss carrying both was dealt
+nine turns a round.
 
 Two PF2e data-model facts this feature depends on. An NPC has **no DataModel**
 (`CONFIG.Actor.dataModels` covers army/familiar/hazard/loot/party/vehicle only),
@@ -1227,6 +1229,55 @@ renderer cache key, never DiceBox; shared geometry is never disposed), and only
 a live v14 session can prove it. The backdrop warm-up polls shader completion on
 a timer, not animation frames: a background tab starves rAF, and a warm-up that
 waits on it holds the whole spotlight. See `docs/SPOTLIGHT_ROLL.md`.
+
+**When touching Combat Intro** (`features/combat-intro/`, `styles/combat-intro*.css`,
+`styles/initiative-aegis.css`, the rail's Start button and arrival), re-run its
+check. Everything it covers fails silently:
+
+```bash
+node tools/combat-intro-check.mjs
+```
+
+Zero problems required. Four things are worth knowing before you change it.
+
+**The flag is read by every player.** `ci.state` sits on the Combat and is read
+only through `normalizeState`, which drops any total, natural or degree and
+every NPC modifier: an NPC's modifiers give its total away as surely as the
+total does. Results ride the socket with `recipients` — full to `entitled`
+users (GMs; everyone for a PC), sealed to the rest — and intents are honoured
+only on `meta.attested`. Every conductor write goes through `mutate`, which
+re-reads the flag first; two rolls landing together otherwise clobber each
+other's throw stamps and the sort never becomes ready.
+
+**PF2e's initiative is a domain, not a skill.** Rolling `actor.skills.stealth`
+drops Scout and Incredible Initiative while every number still looks right. A
+fresh `ActorInitiative` is built per slot from `actor.initiative.constructor`
+and its `statistic.roll()` called with `createMessage: false`;
+`ActorInitiative#roll` writes the tracker at once and would put an NPC's total
+on every screen before the sort. Values commit in ONE `setMultipleInitiatives`
+(PF2e's tie-break flags), and the sort plays `combat.turns` read back after it.
+Toggles ride Spotlight Roll's `Check.roll` wrapper through `pendCheck`:
+libWrapper allows one wrapper per package per target.
+
+**One timeline, two skins.** `timeline.mjs` is the only statement of when
+anything happens; a skin changes how a beat looks and never when it lands. A
+skin's uniforms must all be written by its `write` and all be declared — the
+check drives `write` on every phase and both ladder states. The skin is the
+INITIATIVE feature's setting `init.skin`; this feature never registers its own,
+and the rail never imports this feature (it asks the suite API for
+`canStart`/`start` and re-renders on `gluniverse.combatIntro.ready`).
+
+**The skins are scoped** (ADR 0001). Every Aegis rule sits under
+`.glci[data-skin="aegis"]` or the rail's `[data-gl-skin="aegis"]` roots; the
+four `:root`-resolved accent derivations are struck with `color-mix()`;
+danger moves to amber with a hazard hatch, and the check measures it against the
+red accent in OKLCH hue. WebGL reads its palette from the skinned root's
+computed `--glci-*` colours, never from `:root`.
+
+To see it: `node tools/combat-intro-preview.mjs && node tools/preview-server.mjs`,
+then `/.preview/combat-intro.html` (`skin`, `phase`, `seek`, `view`, `late`).
+Nothing there proves Dice So Nice's own dice or the PF2e roll; only a live
+session does. See `docs/COMBAT_INTRO.md`.
 
 **When touching the stream features** (`features/stream/`, `features/stream-cards/`,
 `features/stream-targets/`), re-run their consistency check. The standalone

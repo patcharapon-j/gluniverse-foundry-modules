@@ -25,6 +25,7 @@
     "styles/clocks-tracker-delving.css",
     "styles/clocks-tracker-tracker-sheet.css",
     "styles/initiative.css",
+    "styles/initiative-aegis.css",
     "styles/flatfinder.css",
     "styles/destiny-dice.css",
     "styles/insight.css",
@@ -53,6 +54,8 @@
     "styles/pf2e-creaturedex.css",
     "styles/spotlight-roll.css",
     "styles/spotlight-roll-app.css",
+    "styles/combat-intro.css",
+    "styles/combat-intro-aegis.css",
     "styles/stream.css",
     "styles/stream-cards.css",
     "styles/stream-targets.css",
@@ -223,6 +226,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/spotlight-roll.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/combat-intro.en.json"
     }
   ],
   "packs": [

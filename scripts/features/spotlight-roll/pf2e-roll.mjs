@@ -34,6 +34,25 @@ import { splitD100 } from "./request-model.mjs";
 const PENDING = new Map();
 let wrapped = false;
 
+/**
+ * Register a steered or probed check under its identifier. combat-intro rolls
+ * initiative through this same wrapper: libWrapper allows one wrapper per
+ * package per target, so a second feature wrapping `Check.roll` would collide.
+ * @param {string} identifier  the `identifier` the roll will carry
+ * @param {{probe: boolean, toggles?: object, rollTwice?: string|false}} job
+ */
+export function pendCheck(identifier, job) {
+  PENDING.set(identifier, job);
+  return job;
+}
+
+export function unpendCheck(identifier) {
+  PENDING.delete(identifier);
+}
+
+/** The chip list a steered check would carry, exactly as PF2e stacks it. */
+export { modsOf as checkMods };
+
 /** Install the Check.roll wrapper once (any client may roll for us). */
 export function installCheckWrapper() {
   if (wrapped || !game.pf2e?.Check?.roll) return !!wrapped;

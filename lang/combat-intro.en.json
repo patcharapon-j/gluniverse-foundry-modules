@@ -1,0 +1,143 @@
+{
+  "GLCI": {
+    "feature": {
+      "title": "Combat Intro",
+      "hint": "A cinematic, full-screen start to a PF2e encounter: the roster, the title and the threat, every player's initiative rolled on their own Dice So Nice dice, then the cards sort into the tracker."
+    },
+    "settings": {
+      "cssOnly": {
+        "name": "CSS-only cinematic",
+        "hint": "Never compile the WebGL backdrop on this client. The CSS backdrop carries every beat on its own."
+      },
+      "volume": {
+        "name": "Cinematic volume",
+        "hint": "Master volume for the combat intro's sound cues."
+      },
+      "sound": {
+        "introHit": {
+          "name": "Sound: Intro hit",
+          "hint": "The low hit that opens the sequence. Leave blank to use the skin's own sound."
+        },
+        "rosterTick": {
+          "name": "Sound: Roster tick",
+          "hint": "Each side of the roster arriving, and the threat readout. Leave blank to use the skin's own sound."
+        },
+        "titleSlam": {
+          "name": "Sound: Title strike",
+          "hint": "The encounter title striking. Leave blank to use the skin's own sound."
+        },
+        "throw": {
+          "name": "Sound: Throw",
+          "hint": "A die leaving its card. Leave blank to use the skin's own sound."
+        },
+        "dieLand": {
+          "name": "Sound: Die lands",
+          "hint": "A die landing on its face. Leave blank to use the skin's own sound."
+        },
+        "seal": {
+          "name": "Sound: Seal",
+          "hint": "A sealed die landing, and the seals breaking at the sort. Leave blank to use the skin's own sound."
+        },
+        "sortTick": {
+          "name": "Sound: Sort",
+          "hint": "The cards travelling into initiative order. Leave blank to use the skin's own sound."
+        },
+        "dockIn": {
+          "name": "Sound: Dock",
+          "hint": "The cards docking into the tracker. Leave blank to use the skin's own sound."
+        }
+      },
+      "skinHint": "The look follows the initiative tracker's Skin setting, so the cinematic and the tracker always match."
+    },
+    "cue": {
+      "introHit": "Intro hit",
+      "rosterTick": "Roster tick",
+      "titleSlam": "Title strike",
+      "throw": "Throw",
+      "dieLand": "Die lands",
+      "seal": "Seal",
+      "sortTick": "Sort",
+      "dockIn": "Dock"
+    },
+    "warn": {
+      "noDice": "Combat Intro needs Dice So Nice 6 or newer.",
+      "rollFailed": "Initiative roll failed for {name}.",
+      "noCombatants": "There is nobody to roll initiative for.",
+      "running": "A cinematic start is already running for this encounter.",
+      "noGM": "A GM has to be connected to run the cinematic start.",
+      "commitFailed": "Combat Intro could not commit the initiative values. Press Roll remaining to try again, or Cancel."
+    },
+    "gm": {
+      "rollRemaining": "Roll remaining",
+      "skip": "Skip intro",
+      "cancel": "Cancel",
+      "rollFor": "Roll for {name}",
+      "lock": "Lock statistic",
+      "unlock": "Unlock statistic",
+      "volley": "Throw hostiles"
+    },
+    "dialog": {
+      "title": "Cinematic start",
+      "encounterTitle": "Encounter title",
+      "start": "Start",
+      "cancel": "Cancel"
+    },
+    "intro": {
+      "untitled": "Encounter",
+      "etched": {
+        "eyebrow": "Hostile contact",
+        "versus": "VS",
+        "threat": "Threat"
+      },
+      "aegis": {
+        "eyebrow": "BLEED EVENT",
+        "versus": "VERSUS",
+        "threat": "Bleed class",
+        "motto": "For Aegis."
+      }
+    },
+    "threat": {
+      "trivial": "Trivial",
+      "low": "Low",
+      "moderate": "Moderate",
+      "severe": "Severe",
+      "extreme": "Extreme",
+      "xp": "{xp} / {budget} XP"
+    },
+    "stat": {
+      "more": "More",
+      "perception": "Perception",
+      "acrobatics": "Acrobatics",
+      "arcana": "Arcana",
+      "athletics": "Athletics",
+      "crafting": "Crafting",
+      "deception": "Deception",
+      "diplomacy": "Diplomacy",
+      "intimidation": "Intimidation",
+      "medicine": "Medicine",
+      "nature": "Nature",
+      "occultism": "Occultism",
+      "performance": "Performance",
+      "religion": "Religion",
+      "society": "Society",
+      "stealth": "Stealth",
+      "survival": "Survival",
+      "thievery": "Thievery"
+    },
+    "card": {
+      "roll": "Roll",
+      "waiting": "Awaiting roll",
+      "rolling": "Rolling",
+      "total": "Initiative",
+      "natural": "d20 · {n}",
+      "sealed": "Sealed",
+      "locked": "Statistic locked by the GM"
+    },
+    "sort": {
+      "title": "Initiative order"
+    },
+    "late": {
+      "title": "Reinforcement"
+    }
+  }
+}

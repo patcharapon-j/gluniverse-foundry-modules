@@ -42,7 +42,6 @@ Suite.register({
     // suite id ("gluniverse-foundry-modules") with the "init." prefix.
     settings: {
       enabled: "init.enabled",
-      initiativeMode: "init.initiativeMode",
       edge: "init.edge",
       visibleCount: "init.visibleCount",
       showAllCombatants: "init.showAllCombatants",
