@@ -17,7 +17,11 @@
  * Foundry masks canvas.primary to the scene rect, which is exactly where the
  * backdrop is not. It goes on canvas.stage beneath `canvas.root` instead —
  * world-space, under every group, unmasked — and is fed the live view each
- * frame, so it also covers a GM who zooms out past the frame.
+ * frame, so it also covers a GM who zooms out past the frame. Its blur is baked
+ * once per picture with Foundry's own renderer (render/backdrop-blur.mjs), at
+ * the GM's strength (th.backdropBlur).
+ *
+ * Canvas mode never attaches the host: the picture is the scene background there.
  *
  * Shedding: SHED_ORDER (the camera shake first) is bound to the suite's one
  * frame clock with Budget.ladder(); the renderer is told the level each frame.
@@ -33,7 +37,7 @@ import { warn } from "../../core/const.mjs";
 import { Budget } from "../../core/budget.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { FEATURE_ID } from "./constants.mjs";
-import { ShotRenderer, SHED_ORDER } from "./render/shot-renderer.mjs";
+import { BACKDROP, ShotRenderer, SHED_ORDER } from "./render/shot-renderer.mjs";
 import { camera } from "./camera.mjs";
 
 export { SHED_ORDER };
@@ -53,6 +57,7 @@ class Host {
     this._pendingPlay = null;
     this._pendingPreload = new Set();
     this._shakeDefault = 0;
+    this._backdropBlur = BACKDROP.blur;
   }
 
   get attached() { return !!this.renderer; }
@@ -77,6 +82,7 @@ class Host {
         loadTexture,
         warn: (...a) => warn("theatre |", ...a),
         resolution: canvas.app.renderer.resolution,
+        renderer: canvas.app.renderer,
       });
     } catch (e) {
       warn("theatre | the shot layer failed to build", e);
@@ -88,6 +94,7 @@ class Host {
     this.renderer.backdrop.position.set(rect.x, rect.y);
     this.renderer.setMotionScale(motionScale());
     this.renderer.setShakeDefault(this._shakeDefault);
+    this.renderer.setBackdropBlur(this._backdropBlur);
     layer.addChild(this.renderer.container);
     canvas.stage.addChildAt(this.renderer.backdrop, 0);
 
@@ -134,6 +141,7 @@ class Host {
       r.setShed(this.ladder?.level ?? 0);
       r.setShakeEnabled(Budget.ambientAllowed);
       r.setResolution(canvas.app.renderer.resolution);
+      r.setRenderer(canvas.app.renderer);
       const view = this._view();
       if (view) r.setView(view);
       r.update();
@@ -165,6 +173,13 @@ class Host {
   setShakeDefault(v) {
     this._shakeDefault = Number(v) || 0;
     this.renderer?.setShakeDefault(this._shakeDefault);
+  }
+
+  /** The GM's backdrop blur strength (0..1). Kept across attaches. */
+  setBackdropBlur(v) {
+    const n = Number(v);
+    this._backdropBlur = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : BACKDROP.blur;
+    this.renderer?.setBackdropBlur(this._backdropBlur);
   }
 
   /** Background-load every source (a scene's whole shot list). */

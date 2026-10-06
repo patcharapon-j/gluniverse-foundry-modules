@@ -36,11 +36,14 @@
  *   the frame height per bar; null = the scene's letterbox) }
  *
  * SceneConfig (flags[SUITE_ID].th.config):
- * { style: STYLES key, face: FACES key | null (null = the GM's default), hold: ms, letterbox: 0..0.2, tag: boolean, v: CONFIG_VERSION }
+ * { style: STYLES key, face: FACES key | null (null = the GM's default), hold: ms, letterbox: 0..0.2, tag: boolean,
+ *   mode: MODES key ("frame" = Theatre's own locked layer; "canvas" = each cut becomes the scene background),
+ *   v: CONFIG_VERSION }
  *
  * PlayState (flags[SUITE_ID].th.state):
  * { shotId: string | null  — the shot on screen (null = black),
- *   cue: Cue | null        — the last thing the GM fired }
+ *   cue: Cue | null        — the last thing the GM fired,
+ *   drawn: integer | null  — Canvas mode: the seq whose picture is now the scene background }
  *
  * Cue: { seq: integer (monotonic), at: server-time ms the cue starts,
  *        kind: CUE_KINDS, shotId: string | null, style: STYLES key, text: string }
@@ -49,7 +52,7 @@
  * { background: string, width, height, padding, gridType, tokenVision, backgroundColor } | null
  */
 
-import { DEFAULT_FACE, DEFAULT_STYLE, FACES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
+import { DEFAULT_FACE, DEFAULT_MODE, DEFAULT_STYLE, FACES, MODES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
 
 const num = (v, lo, hi, fallback) => {
   const n = Number(v);
@@ -78,7 +81,7 @@ export const NEUTRAL_TREATMENT = Object.freeze({
 export const CONFIG_VERSION = 2;
 
 export const DEFAULT_CONFIG = Object.freeze({
-  style: DEFAULT_STYLE, face: null, hold: TIMING.hold, letterbox: 0, tag: false, v: CONFIG_VERSION,
+  style: DEFAULT_STYLE, face: null, hold: TIMING.hold, letterbox: 0, tag: false, mode: DEFAULT_MODE, v: CONFIG_VERSION,
 });
 
 export function normalizeTreatment(raw) {
@@ -242,6 +245,7 @@ export function normalizeConfig(raw) {
     hold: num(c.hold, TIMING.holdMin, TIMING.holdMax, DEFAULT_CONFIG.hold),
     letterbox: num(c.letterbox, 0, 0.2, DEFAULT_CONFIG.letterbox),
     tag: c.tag === true,
+    mode: oneOf(c.mode, MODES, DEFAULT_CONFIG.mode),
     v: CONFIG_VERSION,
   };
 }
@@ -266,8 +270,15 @@ export function normalizeState(raw) {
   return {
     shotId: typeof s.shotId === "string" && s.shotId ? s.shotId : null,
     cue: normalizeCue(s.cue),
+    drawn: typeof s.drawn === "number" && Number.isFinite(s.drawn) ? Math.trunc(s.drawn) : null,
   };
 }
+
+/** True when a scene config shows its shots as the scene background (Canvas mode). */
+export const isCanvasMode = (config) => config?.mode === "canvas";
+
+/** True when a cue in Canvas mode replaces the background (an interlude leaves the picture alone). */
+export const cueDraws = (cue) => cue?.kind === "shot" && cue.style !== "interlude";
 
 /* ── Resolution: a shot's effective values against its scene ─────────────── */
 

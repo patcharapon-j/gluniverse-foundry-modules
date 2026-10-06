@@ -22,7 +22,7 @@ import { CameraMotion } from "./motion.js";
 import { Suite } from "../../../core/registry.mjs";
 
 /**
- * A Theatre scene owns the camera: the frame is locked to its 16:9 shot and the
+ * A Frame-mode Theatre scene owns the camera: the frame is locked to its 16:9 shot and the
  * broadcast client is a player client, so an auto-reframe here would fight that
  * lock every time a token or combat changed. Theatre is never imported from
  * stream: the guard reads the registry and the scene flag directly, so either
@@ -30,9 +30,12 @@ import { Suite } from "../../../core/registry.mjs";
  */
 const THEATRE_FEATURE = "theatre";
 const THEATRE_FLAG = "th.enabled";
+const THEATRE_CONFIG = "th.config";
 function theatreHoldsCamera() {
   try {
-    return Suite.enabled(THEATRE_FEATURE) && !!canvas?.scene?.getFlag?.(MODULE_ID, THEATRE_FLAG);
+    // A Canvas-mode Theatre scene is an ordinary scene with a free camera.
+    return Suite.enabled(THEATRE_FEATURE) && !!canvas?.scene?.getFlag?.(MODULE_ID, THEATRE_FLAG)
+      && canvas.scene.getFlag(MODULE_ID, THEATRE_CONFIG)?.mode !== "canvas";
   } catch {
     return false;
   }

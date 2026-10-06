@@ -143,9 +143,12 @@ async function bootRenderer() {
   try {
     app = new PIXI.Application({ resizeTo: window, backgroundAlpha: 1, backgroundColor: 0x000000, antialias: false, autoDensity: true, resolution: devicePixelRatio || 1 });
     $("#frame").append(app.view);
-    renderer = new mod.ShotRenderer(PIXI, { width: FRAME.width, height: FRAME.height });
+    renderer = new mod.ShotRenderer(PIXI, { width: FRAME.width, height: FRAME.height, renderer: app.renderer });
     // ?shake=0..1 — the GM's default camera shake (the dock's Shake select changes it live).
     const sq = new URLSearchParams(location.search);
+    // ?blur=0..1 — the backdrop blur strength (th.backdropBlur); ?shed=4 — the shed backdrop (one mip tap, no bake).
+    if (sq.has("blur")) renderer.setBackdropBlur(Number(sq.get("blur")));
+    if (sq.has("shed")) renderer.setShed(Number(sq.get("shed")));
     renderer.setShakeDefault(sq.has("shake") ? Number(sq.get("shake")) : Number($("#sk").value));
     app.stage.addChild(renderer.backdrop, renderer.container);
     // ?framing=fit&pad=5 — the camera's own maths (camera.mjs frameView), the backdrop fed the view as the host does.

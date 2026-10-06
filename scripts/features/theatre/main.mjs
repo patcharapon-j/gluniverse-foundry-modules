@@ -15,15 +15,24 @@
  * handed the same timeline from timeline.mjs, scaled by the same motion scale.
  * A client that sees a cue for the first time on load, or later than
  * TIMING.lateGrace after its start, SETTLES: the end state, no animation.
+ *
+ * Canvas mode (canvas-mode.mjs) mounts no shot layer and no camera lock: the
+ * picture is the scene background and the canvas is Foundry's own. A cut that
+ * changes the picture plays in two halves (timeline.mjs canvasTimelines): the
+ * dip from the cue's start, then — once the GM has marked the cue drawn
+ * (th.state.drawn) and this client's canvas has finished redrawing — the
+ * reveal. The redraw tears the canvas down, so the overlay is KEPT mounted
+ * across it, black, and the attach that follows reveals instead of settling.
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { motionScale } from "../../core/theme.mjs";
-import { DEFAULT_FRAMING, FACES, SETTINGS, TIMING } from "./constants.mjs";
+import { BACKDROP } from "./render/shot-renderer.mjs";
+import { DEFAULT_FRAMING, FACES, LOAD_TIMEOUT, SETTINGS, TIMING } from "./constants.mjs";
 import {
-  hasTitle, resolveFace, resolveHold, resolveLetterbox, resolveStyle, titleOf,
+  cueDraws, hasTitle, isCanvasMode, resolveFace, resolveHold, resolveLetterbox, resolveStyle, titleOf,
 } from "./model.mjs";
-import { scaleTimeline, timelineFor } from "./timeline.mjs";
+import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
 import { defaultFace, defaultShake, HOOK_CHANGED, isTheatreScene, TheatreStore, touchedKeys } from "./store.mjs";
 import { host } from "./host.mjs";
 import { TitleOverlay } from "./overlay/title-overlay.mjs";
@@ -45,6 +54,13 @@ let token = 0;
 let restingLetterbox = 0;
 /** What the shot layer is showing, to redraw an on-screen shot the GM edits. */
 let shownSig = null;
+/** The mode the layers were attached in (a switch re-attaches). */
+let attachedMode = null;
+/**
+ * Canvas mode: a cut whose dip has played and whose reveal waits for the redraw.
+ * { sceneId, seq, drawn, reveal: () => void, timer }
+ */
+let pendingDraw = null;
 
 const now = () => performance.now();
 const serverNow = () => game.time?.serverTime ?? Date.now();
@@ -57,15 +73,40 @@ const drawSig = (shot) => (shot ? JSON.stringify([shot.id, shot.src, shot.focus,
 
 /* ── Timelines ──────────────────────────────────────────────────────────── */
 
-function shotTimeline(style, shot, config, k) {
-  const letterbox = resolveLetterbox(shot, config);
-  return scaleTimeline(timelineFor(style, {
+function timelineOpts(shot, config) {
+  return {
     hold: resolveHold(shot, config),
-    letterbox,
+    letterbox: resolveLetterbox(shot, config),
     fromLetterbox: restingLetterbox,
     letters: (shot?.title ?? "").length,
     title: hasTitle(shot),
-  }), k);
+  };
+}
+
+function shotTimeline(style, shot, config, k) {
+  return scaleTimeline(timelineFor(style, timelineOpts(shot, config)), k);
+}
+
+/* ── Canvas mode: the reveal after a redraw ─────────────────────────────── */
+
+function dropPending() {
+  if (pendingDraw?.timer) clearTimeout(pendingDraw.timer);
+  pendingDraw = null;
+}
+
+/** Reveal the pending cut once the GM has drawn it and this canvas is ready. */
+function checkReveal(store) {
+  const p = pendingDraw;
+  if (!p) return;
+  if (!p.drawn && store?.state.drawn === p.seq) p.drawn = true;
+  if (!p.drawn || !canvas?.ready || canvas.loading) return;   // canvasReady → attachScene → here again
+  revealPending();
+}
+
+function revealPending() {
+  const p = pendingDraw;
+  dropPending();
+  try { p?.reveal(); } catch (e) { warn("theatre | reveal failed", e); }
 }
 
 /** The DOM half's description of a shot. */
@@ -95,6 +136,7 @@ async function playCue(store, { settle = false } = {}) {
   const cue = state.cue;
   const config = store.config;
   const mine = ++token;
+  dropPending();
   if (!cue) return settleState(store);
   lastSeq = cue.seq;
 
@@ -108,6 +150,7 @@ async function playCue(store, { settle = false } = {}) {
     case "shot": {
       const shot = store.shot(cue.shotId);
       if (!shot) return;
+      if (isCanvasMode(config) && cueDraws(cue)) return playCanvasCut(store, shot, cue, { settle, atLocal, k });
       const timeline = shotTimeline(cue.style, shot, config, k);
       if (!settle) {
         await whenReady(shot.src);
@@ -144,6 +187,34 @@ async function playCue(store, { settle = false } = {}) {
       return;
     default:
   }
+}
+
+/**
+ * Canvas mode: dip to black now; reveal when the GM has drawn the cue and this
+ * canvas has redrawn (or after a long safety wait, so nobody is left on black).
+ */
+function playCanvasCut(store, shot, cue, { settle, atLocal, k }) {
+  const config = store.config;
+  const ocue = overlayCue("shot", cue.style, shot, config);
+  if (settle) {
+    const timeline = shotTimeline(cue.style, shot, config, k);
+    overlay?.play(ocue, { timeline, startAt: now(), settle: true, scale: k });
+  } else {
+    const { dip, reveal } = canvasTimelines(cue.style, timelineOpts(shot, config));
+    const dipT = scaleTimeline(dip, k), revealT = scaleTimeline(reveal, k);
+    const startAt = Math.max(atLocal, now());
+    overlay?.play(ocue, { timeline: dipT, startAt, settle: false, scale: k });
+    pendingDraw = {
+      sceneId: store.scene.id,
+      seq: cue.seq,
+      drawn: false,
+      reveal: () => overlay?.play(ocue, { timeline: revealT, startAt: now(), settle: false, scale: k }),
+      timer: setTimeout(revealPending, (startAt - now()) + dipT.total + 2 * LOAD_TIMEOUT),
+    };
+    checkReveal(store);
+  }
+  restingLetterbox = resolveLetterbox(shot, config);
+  shownSig = drawSig(shot);
 }
 
 /**
@@ -213,6 +284,19 @@ export function applyFace() {
   if (attached) emit(TheatreStore.current, { kind: "update", config: true });
 }
 
+/** The GM's backdrop blur strength (world, per cent), 0..1. */
+export function readBackdropBlur() {
+  try {
+    const v = Number(game.settings.get(SUITE_ID, SETTINGS.backdropBlur));
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v / 100)) : BACKDROP.blur;
+  } catch { return BACKDROP.blur; }
+}
+
+/** The backdrop blur setting changed: re-bake what is on screen. */
+export function applyBackdropBlur() {
+  host.setBackdropBlur(readBackdropBlur());
+}
+
 /** A framing setting changed: re-fit now if a Theatre scene is up. */
 export function applyFraming() {
   if (attached) host.setFraming(readFraming());
@@ -221,35 +305,55 @@ export function applyFraming() {
 /* ── Attach / detach ────────────────────────────────────────────────────── */
 
 function attachScene() {
-  const scene = canvas?.ready ? canvas.scene : null;
+  if (!canvas?.ready) return;   // mid-draw: canvasReady attaches
+  const scene = canvas.scene;
   const on = !!scene && isTheatreScene(scene);
-  if (on && attached === scene) return;
-  detachScene();
-  if (!on) return;
-  const store = TheatreStore.current;
-  if (!store) return;
+  const store = on ? TheatreStore.current : null;
+  const mode = store?.config.mode ?? null;
+  if (on && attached === scene && attachedMode === mode) return;
+  detachScene({ redraw: on && attached === scene });
+  // A redraw kept the overlay for a pending reveal; any other scene drops it.
+  if (pendingDraw && (!on || pendingDraw.sceneId !== scene?.id)) { dropPending(); overlay?.unmount(); }
+  if (!on || !store) return;
   attached = scene;
-  try { host.attach(scene); } catch (e) { warn("theatre | host attach failed", e); }
-  try { host.setFraming(readFraming()); } catch (e) { warn("theatre | framing failed", e); }
-  try { host.setShakeDefault(defaultShake()); } catch (e) { warn("theatre | shake failed", e); }
-  try { host.lockCamera(true); } catch (e) { warn("theatre | camera lock failed", e); }
+  attachedMode = mode;
+  const canvasMode = isCanvasMode(store.config);
+  if (!canvasMode) {
+    try { host.attach(scene); } catch (e) { warn("theatre | host attach failed", e); }
+    try { host.setFraming(readFraming()); } catch (e) { warn("theatre | framing failed", e); }
+    try { host.setShakeDefault(defaultShake()); } catch (e) { warn("theatre | shake failed", e); }
+    try { host.setBackdropBlur(readBackdropBlur()); } catch (e) { warn("theatre | backdrop blur failed", e); }
+  }
+  try { host.lockCamera(!canvasMode); } catch (e) { warn("theatre | camera lock failed", e); }
   overlay?.mount();
   preloadAll(store.shots.map((s) => s.src));
-  settleState(store);
+  if (pendingDraw) {
+    lastSeq = store.state.cue?.seq ?? null;
+    restingLetterbox = resolveLetterbox(store.currentShot, store.config);
+    checkReveal(store);
+  } else settleState(store);
   emit(store, { kind: "attach" });
   refreshControls();
 }
 
-function detachScene() {
+/**
+ * @param {{ redraw?: boolean }} [o]  redraw: the canvas is redrawing the same
+ *   scene; a Canvas-mode cut waiting on that redraw keeps the overlay (black).
+ */
+function detachScene({ redraw = false } = {}) {
   if (!attached) return;
+  const keep = redraw && !!pendingDraw && pendingDraw.sceneId === attached.id;
   attached = null;
+  attachedMode = null;
   lastSeq = null;
   shownSig = null;
   restingLetterbox = 0;
   ++token;
   try { host.lockCamera(false); } catch { /* host gone */ }
   try { host.detach(); } catch (e) { warn("theatre | host detach failed", e); }
-  overlay?.unmount();
+  if (!keep) { dropPending(); overlay?.unmount(); }
+  // A slower motion tier than the GM's can still be mid-dip here: never show the redraw.
+  else overlay?.setBlack(true, { animate: false });
   clearPreloads();
   emit(null, { kind: "detach" });
   refreshControls();
@@ -258,6 +362,10 @@ function detachScene() {
 function onUpdateScene(scene, changes) {
   if (scene !== canvas?.scene) return;
   const t = touchedKeys(changes);
+  // Canvas mode: the GM marked the pending cut drawn (this canvas may still be redrawing).
+  if (pendingDraw && t.state && pendingDraw.sceneId === scene.id) checkReveal(TheatreStore.current);
+  // A mode switch mounts or drops the shot layer and the camera lock.
+  if (attached && t.config && TheatreStore.current?.config.mode !== attachedMode) { attachScene(); return; }
   if (t.enabled || (!attached && isTheatreScene(scene)) || (attached && !isTheatreScene(scene))) {
     attachScene();
     if (t.enabled) return;
@@ -289,7 +397,7 @@ export function onInit() {
 export function onReady() {
   overlay = new TitleOverlay({ root: document.body });
   Hooks.on("canvasReady", () => attachScene());
-  Hooks.on("canvasTearDown", () => detachScene());
+  Hooks.on("canvasTearDown", () => detachScene({ redraw: true }));
   Hooks.on("updateScene", (scene, changes) => {
     try { onUpdateScene(scene, changes); } catch (e) { warn("theatre | updateScene", e); }
   });

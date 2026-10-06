@@ -233,6 +233,11 @@
           <section class="glth-block">
             <h3 class="glth-block-head"><span>{{localize "GLTH.editor.sceneGroup"}}</span><span class="gl-rule"></span></h3>
             <p class="glth-note">{{localize "GLTH.editor.sceneNote"}}</p>
+            <label class="glth-field">
+              <span class="glth-label">{{localize "GLTH.editor.mode"}}</span>
+              <select name="mode" class="gl-field">{{#each config.modes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+            </label>
+            <p class="glth-note">{{config.modeHint}}</p>
             <div class="glth-grid2">
               <label class="glth-field">
                 <span class="glth-label">{{localize "GLTH.editor.style"}}</span>

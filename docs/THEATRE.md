@@ -25,13 +25,50 @@ Theatre scene is a scene. Whether anything sits on it is the GM's choice.
 | `th.enabled` | this scene is a Theatre scene |
 | `th.shots`   | the shot list, stored in play order (`model.mjs`) |
 | `th.folders` | the ordered folder list: `{ id, name, color }` |
-| `th.config`  | scene defaults: style, face (`null` = the GM's default), hold, letterbox, corner tag |
-| `th.state`   | the shot on screen and the last cue |
+| `th.config`  | scene defaults: mode, style, face (`null` = the GM's default), hold, letterbox, corner tag |
+| `th.state`   | the shot on screen, the last cue, and (Canvas mode) the cue whose picture is drawn |
 | `th.restore` | what Convert replaced |
 
 Every normaliser in `model.mjs` is total. Foundry merges a flag update, so a key
 a shot lacked would otherwise survive the write; the store writes every map as a
 forced replacement and reads it back off the document.
+
+## Modes
+
+A Theatre scene shows its shots in one of two **modes** (`th.config.mode`). The
+GM picks the mode new and converted scenes start in (`th.defaultMode`, world),
+and each scene can change it on the editor's Scene tab.
+
+- **Frame** (the default): everything below. Theatre's own layer on the fixed
+  16:9 frame, cinematic transitions, the camera locked.
+- **Canvas**: each cut becomes the scene background, at the picture's own size,
+  padded (`CANVAS.padding`) on a surround coloured from the picture: its average
+  colour in OKLab, darker (`CANVAS.lightness`) and a little less saturated
+  (`CANVAS.chroma`). The scene then behaves like any other: no shot layer, no
+  camera lock, the stream's auto-camera works. Titles, cards, black and the Stage
+  relight work as in Frame mode; shot looks, camera shake and the fitted backdrop
+  do not apply, because Foundry draws the picture.
+
+A background write redraws the whole canvas, so a Canvas-mode cut that changes
+the picture (any style but interlude) is sequenced around full black, in two
+halves (`canvasTimelines` in `timeline.mjs`):
+
+1. The GM writes the cue as usual. Every client dips to black (`CANVAS_BEATS.dip`).
+2. At full black the GM lays the scene out (`writeCanvasLayout` in
+   `scene-setup.mjs`: size, padding, colour, then the background through
+   `bgWrite`), then writes `th.state.drawn = seq`. A cut overtaken first writes
+   nothing; a picture that cannot be loaded is still marked drawn.
+3. Each client reveals once the cue is drawn **and** its own canvas has finished
+   redrawing: black lifts and the style's own title plays. The redraw tears the
+   canvas down, so the overlay is kept mounted across it, snapped to black, and
+   the attach that follows reveals instead of settling. A long safety timer
+   reveals anyway, so nobody is left on black.
+
+Converting a scene into Canvas mode keeps its own background and size until the
+first cut. Switching a scene's mode lays it out once for the new mode
+(`writeFrameLayout` puts the 16:9 frame back). The surround colour is read from
+the picture on the GM's client; a cross-origin image without CORS cannot be read
+and falls back to black.
 
 ## Shots
 
@@ -122,9 +159,10 @@ location on screen after the title has gone.
 
 - **The picture** is a container in `canvas.primary` at `TILES − 1` with the
   background's elevation — above the scene background, beneath tiles and tokens,
-  exactly where hexcrawl draws its map. `scene.background` is never touched while
-  Theatre is on: changing it redraws the whole canvas, which is a flash and a
-  stall, not a transition.
+  exactly where hexcrawl draws its map. In Frame mode `scene.background` is never
+  touched while Theatre is on: changing it redraws the whole canvas, which is a
+  flash and a stall, not a transition. Canvas mode writes it on purpose, and only
+  behind full black (see Modes).
 - **The overlay** — title, black, letterbox bars, text card, corner tag — is DOM,
   above Stage's character overlay, so the black dip hides the portraits while
   they relight. At rest it sits below Foundry's UI, so the corner tag and a
@@ -165,9 +203,20 @@ How the 16:9 frame meets a display that is not 16:9 is the **framing**:
 - **Fill** (the default): the frame covers the screen; whatever overhangs is cropped.
 - **Fit**: the whole frame is shown, inset by a **padding** (per cent of the
   screen's shorter side, 0–`PADDING_MAX`, which is 30). The space around it is the
-  **backdrop** — the same picture cover-fitted to the whole view, blurred hard
-  (`BACKDROP.blur`) and darkened (`BACKDROP.gain`). It follows the frame's mix and
-  wipe line exactly, so a transition sweeps the surround with the picture.
+  **backdrop** — the same picture cover-fitted to the whole view, blurred and
+  darkened (`BACKDROP.gain`). It follows the frame's mix and wipe line exactly, so
+  a transition sweeps the surround with the picture.
+
+The backdrop's blur is **baked**, once per picture, by `render/backdrop-blur.mjs`:
+a dual-Kawase pyramid (each pass halves or doubles the size with five or eight
+bilinear taps) drawn with Foundry's own renderer into a small render texture,
+which the backdrop shader reads with one tap plus an interleaved-gradient dither
+(a soft dark surround bands in 8 bits without it). A live video re-bakes at
+`BAKE.videoMs`. The GM sets the strength (`th.backdropBlur`, world, per cent,
+50 by default = a radius of `BACKDROP.blurMax × 0.5` of the image width; 0 shows
+it sharp). It replaced a 13-tap disc read every frame at a deep mip, which drew
+the taps as ghost copies of every highlight and the mip as square steps; the
+check refuses a tap loop in the backdrop shader.
 
 The GM sets the default framing and padding for everyone (`th.defaultFraming`,
 `th.defaultPadding`, world). Each viewer's own `th.framing` (client) starts at
@@ -179,7 +228,7 @@ The backdrop is a second mesh on `canvas.stage` beneath `canvas.root`, not in
 the shot layer: Foundry masks `canvas.primary` to the scene rect (padding is 0
 on a Theatre scene), which is exactly where the backdrop is not. It draws only
 while the view reaches past the frame — Fit, or a GM zoomed out — and is the
-last entry of `SHED_ORDER` (shed, it reads one deep-mip tap instead of a disc).
+last entry of `SHED_ORDER` (shed, it bakes nothing and reads one deep-mip tap).
 The stream broadcast is a player client, so it is locked the same way, and the
 stream's auto-camera stands down while the viewed scene is a Theatre scene.
 

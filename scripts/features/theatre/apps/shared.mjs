@@ -12,7 +12,7 @@
 
 import { featurePath, SUITE_ID } from "../../../core/const.mjs";
 import { Suite } from "../../../core/registry.mjs";
-import { DEFAULT_FACE, DEFAULT_SHAKE, FACE_KEYS, FACES, FEATURE_ID, STYLES, VIDEO_RE } from "../constants.mjs";
+import { DEFAULT_FACE, DEFAULT_SHAKE, FACE_KEYS, FACES, FEATURE_ID, MODES, STYLES, VIDEO_RE } from "../constants.mjs";
 import { titleFromFilename } from "../model.mjs";
 
 export const tpl = (name) => featurePath(FEATURE_ID, `templates/${name}.hbs`);
@@ -90,6 +90,8 @@ export function plainOptions(keys, label, selected) {
 }
 
 export const styleKeys = () => [...STYLES];
+export const modeKeys = () => [...MODES];
+export const modeLabel = (k) => L(`GLTH.mode.${k}.name`);
 export const faceKeys = () => [...FACE_KEYS];
 
 /** Inline style for a type specimen in a given FACES entry (data from constants, never users). */

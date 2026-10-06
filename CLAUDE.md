@@ -1539,8 +1539,16 @@ every client's `updateScene` hook. Every map is a forced replacement; apps write
 only through `TheatreStore`, never `scene.update`. Cues carry **server** time
 (`game.time.serverTime + TIMING.cueLead`) — `Date.now()` differs per client.
 
-**`scene.background` is never touched while Theatre is on.** Changing it redraws
-the whole canvas: a flash and a stall, not a transition. The picture is a
+**In Frame mode `scene.background` is never touched while Theatre is on.**
+Changing it redraws the whole canvas: a flash and a stall, not a transition.
+Canvas mode writes it on purpose and only behind full black: the GM lays the
+scene out at the dip's full black, then marks the cue `th.state.drawn`, and each
+client reveals only once the cue is drawn and its own canvas has finished
+redrawing. The redraw tears the canvas down, so the overlay is kept mounted (and
+snapped to black) across it; an attach that settled instead would lift the black
+over a half-drawn canvas. The backdrop's blur is baked once per picture
+(`render/backdrop-blur.mjs`) and read with one dithered tap; a tap ring there
+draws ghost copies of every highlight, and the check refuses one. The picture is a
 container in `canvas.primary` at `TILES − 1` (hexcrawl's slot); the overlay is
 DOM at `--gl-z-base + 1`, above Stage's overlay so the dip hides the portraits,
 and rises over Foundry's UI only while a cue plays (`.glth-overlay--live`). The

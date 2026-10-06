@@ -110,6 +110,59 @@ export function timelineFor(style, { hold = TIMING.hold, letterbox = 0, fromLett
   return t;
 }
 
+/**
+ * Canvas mode (canvas-mode.mjs): every cut that changes the picture is a dip to
+ * black, a canvas redraw of unknown length behind it, then a reveal. So a cue
+ * there is TWO timelines, each played from its own start:
+ *   dip    — from the cue's start: black rises; the relight lands wholly inside full black
+ *   reveal — from the moment this client's canvas has redrawn: black lifts, the
+ *            style's own title (and, for credits, its bars) plays
+ */
+export const CANVAS_BEATS = Object.freeze({
+  dip: 700,          // black rises over this long
+  lift: 1600,        // and lifts over this long once the canvas is ready
+  titleAt: 500,      // the title starts this far into the reveal
+});
+
+/** @returns {{ dip: object, reveal: object }} the two halves, at motion scale 1 */
+export function canvasTimelines(style, o = {}) {
+  const base = timelineFor(style, o);
+  const letterbox = o.letterbox ?? 0;
+  const from = o.fromLetterbox ?? letterbox;
+  const dip = {
+    style,
+    image: { mode: "none", at: 0, dur: 0 },
+    black: [seg(0, CANVAS_BEATS.dip, 0, 1)],
+    bars: [seg(0, CANVAS_BEATS.dip, from, from)],
+    relight: { at: CANVAS_BEATS.dip + 20, dur: 240 },   // wholly inside full black (700..)
+    title: null,
+    card: null,
+    total: CANVAS_BEATS.dip + 260,
+  };
+  const shift = base.title ? base.title.at - CANVAS_BEATS.titleAt : 0;
+  const title = base.title ? { ...base.title, at: base.title.at - shift, outAt: base.title.outAt - shift } : null;
+  let bars = [seg(0, 900, from, letterbox)];
+  if (style === "credits") {
+    const back = base.bars[base.bars.length - 1];
+    bars = [seg(0, 900, from, base.creditsBars.top), { ...back, at: Math.max(900, back.at - shift) }];
+  }
+  const reveal = {
+    ...base,
+    image: { mode: "none", at: 0, dur: 0 },
+    black: [seg(0, CANVAS_BEATS.lift, 1, 0)],
+    bars,
+    relight: { at: 0, dur: 0 },
+    title,
+    card: null,
+  };
+  reveal.total = Math.max(
+    CANVAS_BEATS.lift,
+    ...bars.map((g) => g.at + g.dur),
+    title ? title.outAt + title.outDur : 0,
+  );
+  return { dip, reveal };
+}
+
 /** Multiply every time in a timeline by the motion scale. Returns a new object. */
 export function scaleTimeline(t, k = 1) {
   if (k === 1) return t;

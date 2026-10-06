@@ -1,12 +1,13 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
-import { DEFAULT_FACE, DEFAULT_FRAMING, DEFAULT_SHAKE, DEFAULT_STYLE, FACE_KEYS, FEATURE_ID, FRAMING_CHOICES, FRAMINGS, PADDING_MAX, PREFIX, SETTINGS, STYLES } from "./constants.mjs";
-import { onInit, onReady, api, applyFace, applyFraming, applyShake } from "./main.mjs";
+import { DEFAULT_FACE, DEFAULT_FRAMING, DEFAULT_MODE, DEFAULT_SHAKE, DEFAULT_STYLE, FACE_KEYS, FEATURE_ID, FRAMING_CHOICES, FRAMINGS, MODES, PADDING_MAX, PREFIX, SETTINGS, STYLES } from "./constants.mjs";
+import { BACKDROP } from "./render/shot-renderer.mjs";
+import { onInit, onReady, api, applyBackdropBlur, applyFace, applyFraming, applyShake } from "./main.mjs";
 
 /**
  * Framing: the GM sets a default fill/fit and padding for everyone (world), and
  * each viewer may override both for their own display (client). The rest are
- * the GM's: the transition a new Theatre scene starts with, the typeface and
+ * the GM's: the mode and transition a new Theatre scene starts with, the typeface and
  * camera shake every scene uses unless it picks its own, and whether a cut
  * leaves a line in chat. A scene can pick its own style and face, and every shot
  * can override style, face and shake again.
@@ -19,6 +20,15 @@ function registerSettings() {
     config: true,
     type: Boolean,
     default: false,
+  });
+  game.settings.register(SUITE_ID, SETTINGS.defaultMode, {
+    name: "GLTH.settings.defaultMode.name",
+    hint: "GLTH.settings.defaultMode.hint",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: Object.fromEntries(MODES.map((k) => [k, `GLTH.mode.${k}.name`])),
+    default: DEFAULT_MODE,
   });
   game.settings.register(SUITE_ID, SETTINGS.defaultStyle, {
     name: "GLTH.settings.defaultStyle.name",
@@ -69,6 +79,16 @@ function registerSettings() {
     range: { min: 0, max: PADDING_MAX, step: 1 },
     default: 0,
     onChange: () => applyFraming(),
+  });
+  game.settings.register(SUITE_ID, SETTINGS.backdropBlur, {
+    name: "GLTH.settings.backdropBlur.name",
+    hint: "GLTH.settings.backdropBlur.hint",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 100, step: 5 },
+    default: Math.round(BACKDROP.blur * 100),
+    onChange: () => applyBackdropBlur(),
   });
   // …and each viewer's own override for THIS display.
   game.settings.register(SUITE_ID, SETTINGS.framing, {

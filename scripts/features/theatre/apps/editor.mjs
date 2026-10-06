@@ -34,7 +34,7 @@ import { TheatreAppBase } from "./base.mjs";
 import {
   FOLDER_MIME, L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, dropSlot, faceKeys, faceLabel,
   faceSecondaryStyle, faceSpecimenStyle, folderNameFromPath, folderOf, folderStyle, gmFace, gmShake, guarded, isVideoSrc, loadStore,
-  overrideOptions, partialFromSrc, pathsFromDrop, pickFile, pickFolder, plainOptions, promptFolder, stageEnabled, styleKeys, styleLabel, tpl,
+  overrideOptions, partialFromSrc, pathsFromDrop, pickFile, pickFolder, plainOptions, promptFolder, stageEnabled, styleKeys, styleLabel, modeKeys, modeLabel, tpl,
 } from "./shared.mjs";
 
 export const EDITOR_ID = "glth-editor";
@@ -266,6 +266,8 @@ function EditorApp() {
         holdMin: sec(TIMING.holdMin),
         holdMax: sec(TIMING.holdMax),
         config: {
+          modes: plainOptions(modeKeys(), modeLabel, config.mode),
+          modeHint: L(`GLTH.mode.${config.mode}.hint`),
           styles: plainOptions(styleKeys(), styleLabel, config.style),
           faces: overrideOptions(faceKeys(), faceLabel, config.face, gmFace(), "GLTH.editor.gmDefault"),
           hold: sec(config.hold),
@@ -644,6 +646,7 @@ function EditorApp() {
         const key = ev.target?.name;
         const holdSec = Number(f.hold);
         const patch = {
+          mode: f.mode,
           style: f.style,
           face: f.face || null,
           hold: Number.isFinite(holdSec) && String(f.hold).trim() !== "" ? holdSec * 1000 : store.config.hold,

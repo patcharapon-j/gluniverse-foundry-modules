@@ -19,7 +19,19 @@ export const SETTINGS = Object.freeze({
   defaultPadding: "th.defaultPadding", // world  Number — the padding that goes with it
   framing: "th.framing",           // client String  — FRAMING_CHOICES key: "default" follows the GM's pair
   padding: "th.padding",           // client Number  — Fit only, own framing only: % of the display's shorter side kept clear
+  backdropBlur: "th.backdropBlur", // world  Number  — how soft the backdrop around a fitted frame is (per cent; 0 = sharp)
+  defaultMode: "th.defaultMode",   // world  String  — MODES key a new or converted Theatre scene starts in
 });
+
+/**
+ * How a Theatre scene shows its shots. i18n: GLTH.mode.<key>.name / .hint
+ *   frame  — Theatre's own layer on a fixed 16:9 frame, camera locked (the default)
+ *   canvas — each cut becomes the scene background, at the image's own size, on
+ *            a surround coloured from the picture; everyone pans and zooms as on
+ *            any scene
+ */
+export const MODES = Object.freeze(["frame", "canvas"]);
+export const DEFAULT_MODE = "frame";
 
 /**
  * How the 16:9 frame meets a display that is not 16:9. i18n: GLTH.framing.<key>

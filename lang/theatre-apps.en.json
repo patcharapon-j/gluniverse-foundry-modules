@@ -98,6 +98,7 @@
   "GLTH.editor.notesPlaceholder": "Only you see these, in the filmstrip preview.",
   "GLTH.editor.cutGroup": "The cut",
   "GLTH.editor.style": "Transition",
+  "GLTH.editor.mode": "Mode",
   "GLTH.editor.face": "Title typeface",
   "GLTH.editor.hold": "Title hold (s)",
   "GLTH.editor.holdDefault": "Scene: {value}",

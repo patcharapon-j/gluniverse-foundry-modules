@@ -39,7 +39,8 @@
  * The BACKDROP is a second, separate mesh (`renderer.backdrop`) for a viewer whose
  * view reaches past the frame — Fit framing, or a GM zoomed out. It is the same
  * two sides under the same mix (and the same wipe line), each cover-fitted to the
- * whole view rather than the frame, blurred hard and darkened. The host mounts it
+ * whole view rather than the frame, blurred hard and darkened. The blur is baked
+ * once per texture (render/backdrop-blur.mjs) and read with one dithered tap. The host mounts it
  * OUTSIDE canvas.primary, because Foundry masks that group to the scene rect and
  * the backdrop lives exactly where the scene is not.
  *
@@ -51,6 +52,7 @@
 
 import { TIMING } from "../constants.mjs";
 import { coverRect, isVideo, normalizeTreatment, resolveShake } from "../model.mjs";
+import { BackdropBaker, BAKE } from "./backdrop-blur.mjs";
 
 /* ══════════════════════════════════════════════════════════════════════
    Shapes (not durations)
@@ -63,7 +65,9 @@ export const SHED_ORDER = Object.freeze(["shake", "bloom", "blur", "backdrop"]);
 /** The backdrop around a fitted frame: the same picture, blurred and darker. */
 export const BACKDROP = Object.freeze({
   gain: 0.55,        // brightness against the frame's own
-  blur: 0.035,       // disc radius as a fraction of the view's width
+  blurMax: 0.07,     // blur strength 1 = a radius of this fraction of the image width (the bake's)
+  blur: 0.5,         // the default strength (th.backdropBlur, 0..1)
+  shedBlur: 0.035,   // shed or not yet baked: one tap at the mip this radius (of the view width) spans
   overscan: 1.08,    // cover-fitted past the view, so the blur never reaches a clamped edge
 });
 
@@ -370,35 +374,27 @@ uniform vec3 uGradeA;             // gain (already darkened), saturation, tint a
 uniform vec3 uGradeB;
 uniform vec3 uTintA;
 uniform vec3 uTintB;
-uniform vec3 uBlurA;              // blur radius in image uv (x, y), mip bias
-uniform vec3 uBlurB;
+uniform float uBiasA;             // mip bias: 0 on a baked (already soft) texture; deep on the raw one (shed)
+uniform float uBiasB;
 uniform vec2 uHas;
 uniform float uMix;
 uniform float uWipe;
 uniform vec3 uWipeLine;
 uniform float uWipeSoft;
 uniform vec2 uSize;
-uniform float uTaps;              // 1: the full disc; 0: one tap at a deep mip (shed)
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
-const float GOLDEN = 2.39996323;
+
+// Interleaved gradient noise: a soft dark surround bands in 8 bits without it.
+float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 
 vec3 tap(sampler2D tex, vec2 uv, vec4 crop, float bias) {
   return texture2D(tex, crop.xy + clamp(uv, 0.0, 1.0) * crop.zw, bias).rgb;
 }
 
-vec3 shade(sampler2D tex, vec4 place, vec4 crop, vec3 grade, vec3 tint, vec3 blur) {
+vec3 shade(sampler2D tex, vec4 place, vec4 crop, vec3 grade, vec3 tint, float bias) {
   vec2 uv = (vFrame - place.xy) / place.zw;
-  vec3 c = tap(tex, uv, crop, blur.z);
-  if (uTaps > 0.5) {
-    for (int i = 1; i <= ${BLUR_TAPS}; i++) {
-      float fi = float(i);
-      float r = sqrt(fi / ${f(BLUR_TAPS)});
-      float a = fi * GOLDEN;
-      c += tap(tex, uv + vec2(cos(a), sin(a)) * r * blur.xy, crop, blur.z);
-    }
-    c /= ${f(BLUR_TAPS + 1)};
-  }
+  vec3 c = tap(tex, uv, crop, bias);
   c *= grade.x;
   if (grade.y != 1.0) { float l = dot(c, LUMA); c = max(vec3(l) + (c - vec3(l)) * grade.y, 0.0); }
   if (grade.z > 0.0) c = mix(c, tint * dot(c, LUMA), grade.z);
@@ -413,14 +409,17 @@ void main() {
   }
   vec3 a = vec3(0.0);
   vec3 b = vec3(0.0);
-  if (w < 1.0 && uHas.x > 0.5) a = shade(uTexA, uPlaceA, uCropA, uGradeA, uTintA, uBlurA);
-  if (w > 0.0 && uHas.y > 0.5) b = shade(uTexB, uPlaceB, uCropB, uGradeB, uTintB, uBlurB);
+  if (w < 1.0 && uHas.x > 0.5) a = shade(uTexA, uPlaceA, uCropA, uGradeA, uTintA, uBiasA);
+  if (w > 0.0 && uHas.y > 0.5) b = shade(uTexB, uPlaceB, uCropB, uGradeB, uTintB, uBiasB);
   vec3 col = w <= 0.0 ? a : (w >= 1.0 ? b : mix(a, b, w));
-  gl_FragColor = vec4(col, 1.0);
+  col += (ign(gl_FragCoord.xy) - 0.5) / 255.0;
+  gl_FragColor = vec4(max(col, 0.0), 1.0);
 }`;
 
 /** Every uniform the backdrop program declares (the renderer writes all of them). */
-export const BACK_UNIFORMS = Object.freeze([...SHOT_UNIFORMS, "uTaps"]);
+export const BACK_UNIFORMS = Object.freeze([
+  ...SHOT_UNIFORMS.filter((n) => !n.startsWith("uBlur")), "uBiasA", "uBiasB",
+]);
 
 /**
  * The backdrop's image rect for an image of iw×ih, cover-fitted (with overscan)
@@ -490,7 +489,7 @@ export class ShotRenderer {
    * @param {(...a:any[]) => void} [o.warn]
    * @param {number} [o.resolution]  device px per CSS px of the PIXI renderer
    */
-  constructor(PIXI, { width, height, loadTexture = null, warn = null, resolution = 1 } = {}) {
+  constructor(PIXI, { width, height, loadTexture = null, warn = null, resolution = 1, renderer = null } = {}) {
     this.PIXI = PIXI;
     this.width = width;
     this.height = height;
@@ -521,6 +520,13 @@ export class ShotRenderer {
     this.view = { x: 0, y: 0, width, height };
     this._backFailed = false;
     this._backProbed = false;
+    /** The PIXI renderer the backdrop bakes with (the host's); null draws the shed backdrop. */
+    this.renderer = renderer;
+    /** Backdrop blur strength, 0..1 (th.backdropBlur); 0 shows the surround sharp. */
+    this.backdropBlur = BACKDROP.blur;
+    /** src → { texture, chain, key, radius, at } — the baked backdrop of a texture on screen. */
+    this._baked = new Map();
+    this._baker = null;
 
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
@@ -590,11 +596,10 @@ export class ShotRenderer {
       uCropA: new Float32Array([0, 0, 1, 1]), uCropB: new Float32Array([0, 0, 1, 1]),
       uGradeA: new Float32Array([1, 1, 0]), uGradeB: new Float32Array([1, 1, 0]),
       uTintA: new Float32Array(3), uTintB: new Float32Array(3),
-      uBlurA: new Float32Array(3), uBlurB: new Float32Array(3),
+      uBiasA: 0, uBiasB: 0,
       uHas: new Float32Array(2),
       uMix: 0, uWipe: 0, uWipeLine: new Float32Array([1, 0, 0]), uWipeSoft: 1,
       uSize: new Float32Array([this.width, this.height]),
-      uTaps: 1,
     });
     this.backMesh = new PIXI.Mesh(this._backGeometry(), this.backShader);
     const render = this.backMesh._render;
@@ -821,6 +826,17 @@ export class ShotRenderer {
   /** Device px per CSS px of the PIXI renderer. */
   setResolution(r) { this.resolution = r > 0 ? r : 1; }
 
+  /** The PIXI renderer the backdrop bakes its blur with. */
+  setRenderer(r) { this.renderer = r ?? null; }
+
+  /** Backdrop blur strength, 0..1. A change re-bakes what is on screen. */
+  setBackdropBlur(k) {
+    const n = Number(k);
+    const v = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : BACKDROP.blur;
+    if (v === this.backdropBlur) return;
+    this.backdropBlur = v;
+  }
+
   /** The motion scale; >1 slows the transitions. */
   setMotionScale(k) { this.motion = Number.isFinite(k) && k >= 0 ? k : 1; }
 
@@ -906,16 +922,18 @@ export class ShotRenderer {
     const wt = this.backdrop.worldTransform;
     const dev = this.resolution * (wt ? Math.hypot(wt.a, wt.b) || 1 : 1);
     const full = this.allows("backdrop");
-    const rFrame = BACKDROP.blur * v.width;
+    const rShed = BACKDROP.shedBlur * v.width * Math.min(1, this.backdropBlur / BACKDROP.blur);
     const empty = this.PIXI.Texture.EMPTY ?? this.PIXI.Texture.WHITE;
     const side = (s, k) => {
       const tex = this._tex(s);
       if (!s?.shot || !tex) { u[`uTex${k}`] = empty; return 0; }
       const r = backdropRect(tex.width, tex.height, v, s.focus);
-      const place = u[`uPlace${k}`], crop = u[`uCrop${k}`], grade = u[`uGrade${k}`], tint = u[`uTint${k}`], blur = u[`uBlur${k}`];
-      u[`uTex${k}`] = tex;
+      const place = u[`uPlace${k}`], crop = u[`uCrop${k}`], grade = u[`uGrade${k}`], tint = u[`uTint${k}`];
+      const baked = full ? this._bakedFor(s.src, tex) : null;
+      const read = baked ?? tex;
+      u[`uTex${k}`] = read;
       place[0] = r.x / W; place[1] = r.y / H; place[2] = r.width / W; place[3] = r.height / H;
-      const bt = tex.baseTexture, fr = tex.frame, bw = bt.width || 1, bh = bt.height || 1;
+      const bt = read.baseTexture, fr = read.frame, bw = bt.width || 1, bh = bt.height || 1;
       crop[0] = fr.x / bw; crop[1] = fr.y / bh; crop[2] = fr.width / bw; crop[3] = fr.height / bh;
       const t = s.treatment;
       grade[0] = gainOf(t.exposure) * BACKDROP.gain;
@@ -923,20 +941,54 @@ export class ShotRenderer {
       grade[2] = t.tintAmount;
       const tv = t.tintAmount > 0 ? tintVector(t.tint) : [0, 0, 0];
       tint[0] = tv[0]; tint[1] = tv[1]; tint[2] = tv[2];
-      blur[0] = rFrame / r.width;
-      blur[1] = rFrame / r.height;
-      // The full disc reads a mip matched to its tap spacing; shed, one tap reads the mip the whole disc spans.
-      blur[2] = Math.max(0, Math.log2((rFrame * dev) / (full ? TREATMENT.tapSpacing : 1)));
+      // Baked, or blur 0: one plain tap. Shed or not yet baked: one tap at the mip the radius spans.
+      u[`uBias${k}`] = baked || !(rShed > 0) ? 0 : Math.max(0, Math.log2(rShed * dev));
       return 1;
     };
     u.uHas[0] = side(this.a, "A");
     u.uHas[1] = side(this.b, "B");
-    u.uTaps = full ? 1 : 0;
+    this._releaseBakes();
     const m = this.shader.uniforms;
     u.uMix = m.uMix;
     u.uWipe = m.uWipe;
     u.uWipeLine[0] = m.uWipeLine[0]; u.uWipeLine[1] = m.uWipeLine[1]; u.uWipeLine[2] = m.uWipeLine[2];
     u.uWipeSoft = m.uWipeSoft;
+  }
+
+  /**
+   * The baked (blurred) backdrop texture for a source on screen, baking it now
+   * when it is missing, its strength changed, or a live video moved on. Null
+   * when there is no renderer, no blur, or the bake failed: the caller then
+   * reads the raw texture at a deep mip.
+   */
+  _bakedFor(src, tex) {
+    const radius = this.backdropBlur * BACKDROP.blurMax;
+    if (!this.renderer || !(radius > 0)) return null;
+    const prev = this._baked.get(src) ?? null;
+    const video = this._ready.get(src)?.video ?? null;
+    const now = performance.now();
+    const stale = !prev || prev.radius !== radius || prev.source !== tex
+      || (video && !video.paused && now - prev.at >= BAKE.videoMs);
+    if (!stale) return prev.texture;
+    this._baker ??= new BackdropBaker(this.PIXI);
+    let bake = null;
+    try { bake = this._baker.bake(this.renderer, tex, radius, prev); } catch (e) {
+      this._warn("the backdrop blur could not bake; the surround falls back to a mip read.", e);
+    }
+    if (!bake) { if (prev && !this._baker.failed) this._baker.release(prev); this._baked.delete(src); return null; }
+    this._baked.set(src, { ...bake, radius, source: tex, at: now });
+    return bake.texture;
+  }
+
+  /** Free the bakes of sources no longer on screen. */
+  _releaseBakes() {
+    if (!this._baked.size) return;
+    const live = new Set([this.a?.src, this.b?.src].filter(Boolean));
+    for (const [src, bake] of this._baked) {
+      if (live.has(src)) continue;
+      this._baker?.release(bake);
+      this._baked.delete(src);
+    }
   }
 
   /** Device px per frame px, from the container's on-screen scale. */
@@ -1033,6 +1085,10 @@ export class ShotRenderer {
     this._destroyed = true;
     for (const entry of this._ready.values()) this._release(entry);
     this._ready.clear();
+    for (const bake of this._baked.values()) this._baker?.release(bake);
+    this._baked.clear();
+    this._baker?.destroy();
+    this._baker = null;
     this._cache.clear();
     try { this.container.parent?.removeChild(this.container); } catch { /* torn down */ }
     try { this.mesh.geometry?.destroy(); } catch { /* torn down */ }

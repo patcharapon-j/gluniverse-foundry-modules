@@ -265,6 +265,8 @@ section = "i18n";
   for (const k of C.FACE_KEYS) ok(`GLTH.face.${k}`, `GLTH.face.${k}` in lang);
   for (const k of C.CUE_KINDS) ok(`GLTH.cue.${k}`, `GLTH.cue.${k}` in lang);
   for (const k of C.FRAMING_CHOICES) ok(`GLTH.framing.${k}`, `GLTH.framing.${k}` in lang);
+  for (const k of C.MODES) { ok(`GLTH.mode.${k}.name`, `GLTH.mode.${k}.name` in lang); ok(`GLTH.mode.${k}.hint`, `GLTH.mode.${k}.hint` in lang); }
+  for (const k of ["defaultMode", "backdropBlur"]) { ok(`GLTH.settings.${k}.name`, `GLTH.settings.${k}.name` in lang); ok(`GLTH.settings.${k}.hint`, `GLTH.settings.${k}.hint` in lang); }
   ok("GLS.feature.theatre.title", "GLS.feature.theatre.title" in lang);
   ok("GLS.feature.theatre.hint", "GLS.feature.theatre.hint" in lang);
 
@@ -446,6 +448,109 @@ section = "framing";
   const main = stripComments(read(`${FEAT}/main.mjs`));
   const rf = main.slice(main.indexOf("export function readFraming"), main.indexOf("export function applyFraming"));
   ok("following the GM takes the GM's padding too", /SETTINGS\.defaultFraming/.test(rf) && /SETTINGS\.defaultPadding/.test(rf));
+}
+
+/* ── Backdrop blur: baked once, read with one dithered tap ───────────── */
+section = "backdrop-blur";
+{
+  const B = await imp(`${FEAT}/render/backdrop-blur.mjs`);
+  const R = await imp(`${FEAT}/render/shot-renderer.mjs`);
+  ok("strength 0 bakes nothing (the surround reads sharp)", B.bakePlan(0, 2000) === null);
+  let prev = 0, prevSpan = 0, mono = true;
+  for (let k = 0.05; k <= 1.0001; k += 0.05) {
+    const plan = B.bakePlan(k * R.BACKDROP.blurMax, 3840);
+    if (!plan) { mono = false; break; }
+    const span = 2 ** (plan.levels + 1) * plan.offset;
+    if (plan.levels < prev || span + 1e-9 < prevSpan) mono = false;
+    if (plan.levels < B.BAKE.minLevels || plan.levels > B.BAKE.maxLevels || plan.offset < B.BAKE.minOffset || plan.offset > B.BAKE.maxOffset) mono = false;
+    prev = plan.levels; prevSpan = span;
+  }
+  ok("a stronger blur never bakes a smaller pyramid, and every plan stays in range", mono);
+  ok("the bake never reads past BAKE.maxWidth", B.bakePlan(0.05, 8000).base === B.BAKE.maxWidth);
+  // The ring of taps is what drew ghost copies of every highlight: it must not come back.
+  ok("the backdrop shader has no tap loop", !/for\s*\(/.test(R.BACK_FRAG));
+  ok("the backdrop shader dithers its output (a soft dark surround bands in 8 bits)", /ign\(gl_FragCoord\.xy\)/.test(R.BACK_FRAG));
+  for (const frag of [B.DOWN_FRAG, B.UP_FRAG]) {
+    for (const name of B.BAKE_UNIFORMS) ok(`bake uniform ${name} is declared`, new RegExp(`uniform\\s+\\w+\\s+${name}\\b`).test(frag));
+  }
+  const bsrc = stripComments(read(`${FEAT}/render/backdrop-blur.mjs`));
+  const pass = bsrc.slice(bsrc.indexOf("_pass(renderer"));
+  for (const name of B.BAKE_UNIFORMS) ok(`bake uniform ${name} is written each pass`, new RegExp(`u\\.${name}\\b`).test(pass));
+  ok("the bake does not use the shared anime engine or its own context", !/getContext\(|anime/.test(bsrc));
+  const rsrc = stripComments(read(`${FEAT}/render/shot-renderer.mjs`));
+  ok("bakes of sources off screen are released", /_releaseBakes\(\)/.test(rsrc.slice(rsrc.indexOf("_updateBackdrop() {"))));
+  ok("the renderer frees its bakes on destroy", /this\._baker\?\.destroy\(\)/.test(rsrc));
+  ok("a shed backdrop does not bake", /const baked = full \? this\._bakedFor\(/.test(rsrc));
+  const idx = read(`${FEAT}/index.mjs`);
+  const at = idx.indexOf("SETTINGS.backdropBlur,");
+  const reg = at >= 0 ? idx.slice(at, idx.indexOf("});", at)) : "";
+  ok("th.backdropBlur is registered, world scope, and applies on change", at >= 0 && /scope:\s*"world"/.test(reg) && /onChange:\s*\(\)\s*=>\s*applyBackdropBlur\(\)/.test(reg));
+  ok("th.backdropBlur defaults to BACKDROP.blur", /default:\s*Math\.round\(BACKDROP\.blur \* 100\)/.test(reg));
+}
+
+/* ── Canvas mode: a cut becomes the scene background, behind black ───── */
+section = "canvas-mode";
+{
+  const K = await imp(`${FEAT}/canvas-mode.mjs`);
+  ok("a config with no mode reads as Frame", M.normalizeConfig({}).mode === "frame" && M.normalizeConfig({ mode: "nope" }).mode === "frame");
+  ok("a canvas config keeps its mode", M.normalizeConfig({ mode: "canvas" }).mode === "canvas");
+  ok("DEFAULT_MODE is Frame (today's behaviour)", C.DEFAULT_MODE === "frame" && C.MODES.includes("canvas"));
+  ok("a state with no drawn reads null; a drawn seq survives", M.normalizeState({}).drawn === null && M.normalizeState({ drawn: 7 }).drawn === 7 && M.normalizeState({ drawn: "7" }).drawn === null);
+  ok("an interlude never redraws the background", !M.cueDraws({ kind: "shot", style: "interlude" }) && M.cueDraws({ kind: "shot", style: "wipe" }) && !M.cueDraws({ kind: "title", style: "centre" }));
+
+  // The surround: the picture's hue, darker, never brighter.
+  const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  let darker = true, hue = true;
+  for (const avg of [[0.8, 0.3, 0.1], [0.1, 0.3, 0.8], [0.2, 0.6, 0.25], [0.5, 0.5, 0.5], [1, 1, 1]]) {
+    const out = K.linearToOklab(lum(K.surroundColor(avg)).map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }));
+    const inn = K.linearToOklab(avg);
+    if (!(out[0] < inn[0])) darker = false;
+    const ci = Math.hypot(inn[1], inn[2]);
+    if (ci > 0.05 && Math.abs(Math.atan2(out[2], out[1]) - Math.atan2(inn[2], inn[1])) > 0.15) hue = false;
+  }
+  ok("the surround is always darker than the picture's average", darker);
+  ok("the surround keeps the picture's hue", hue);
+  ok("a broken average falls back", K.surroundColor(null) === K.CANVAS.fallback && K.surroundColor([NaN, 0, 0]) === K.CANVAS.fallback);
+  ok("black stays black", K.surroundColor([0, 0, 0]) === "#000000");
+  ok("averaging transparent data gives null", K.averageLinear([0, 0, 0, 0, 255, 255, 255, 0]) === null);
+  ok("the darkening is 'a touch', not a black-out", K.CANVAS.lightness >= 0.6 && K.CANVAS.lightness < 0.9);
+
+  // The two halves of a cut: relight inside full black, reveal starts from black.
+  for (const st of C.STYLES.filter((x) => x !== "interlude")) {
+    const { dip, reveal } = T.canvasTimelines(st, { letterbox: 0.05, fromLetterbox: 0 });
+    const full = dip.black[0].at + dip.black[0].dur;
+    ok(`${st}: the canvas dip ends on full black`, dip.black.at(-1).to === 1);
+    ok(`${st}: the canvas relight lands wholly inside full black`, dip.relight.at >= full && dip.total >= dip.relight.at + dip.relight.dur);
+    ok(`${st}: the dip changes no picture`, dip.image.mode === "none" && reveal.image.mode === "none");
+    ok(`${st}: the reveal lifts from full black`, reveal.black[0].from === 1 && reveal.black.at(-1).to === 0);
+    ok(`${st}: the reveal's title starts after the lift begins`, !reveal.title || reveal.title.at > 0);
+  }
+
+  const store = stripComments(read(`${FEAT}/store.mjs`));
+  const draw = store.slice(store.indexOf("_drawAtBlack(cue, shot) {"));
+  ok("the GM's second half re-checks the cue before laying out (an overtaken cut writes nothing)", /this\.state\.cue\?\.seq !== cue\.seq\) return;[\s\S]*writeCanvasLayout/.test(draw));
+  ok("a cut is marked drawn even when its picture could not be laid out", /catch \(e\) \{ warn\([^)]*\); \}[\s\S]*drawn: cue\.seq/.test(draw));
+  ok("the second half runs in the write queue", /this\._write\(async/.test(draw));
+  const setup = stripComments(read(`${FEAT}/scene-setup.mjs`));
+  ok("Canvas mode writes the background only through bgWrite (v14 keeps it on a Level)", /export async function writeCanvasLayout[\s\S]*?bgWrite\(scene, \{ src: shot\.src/.test(setup));
+  ok("new scenes start in the GM's default mode", /mode:\s*setting\(SETTINGS\.defaultMode, MODES, DEFAULT_MODE\)/.test(setup));
+
+  const main = stripComments(read(`${FEAT}/main.mjs`));
+  ok("a redraw keeps the overlay for a pending reveal", /canvasTearDown", \(\) => detachScene\(\{ redraw: true \}\)/.test(main) && /if \(!keep\) \{ dropPending\(\); overlay\?\.unmount\(\); \}/.test(main));
+  ok("a kept overlay snaps to full black at teardown (a slower client may still be mid-dip)", /else overlay\?\.setBlack\(true, \{ animate: false \}\);/.test(main));
+  ok("an attach mid-draw does nothing (canvasReady attaches)", /function attachScene\(\) \{\s*if \(!canvas\?\.ready\) return;/.test(main));
+  ok("an attach with a pending reveal reveals instead of settling", /if \(pendingDraw\) \{[\s\S]*?checkReveal\(store\);\s*\} else settleState\(store\);/.test(main));
+  ok("the reveal waits for the canvas to finish drawing", /if \(!p\.drawn \|\| !canvas\?\.ready \|\| canvas\.loading\) return;/.test(main));
+  ok("nobody is left on black: the reveal has a safety timer", /timer: setTimeout\(revealPending,/.test(main));
+  ok("Canvas mode mounts no shot layer and no camera lock", /if \(!canvasMode\) \{\s*try \{ host\.attach\(scene\)/.test(main) && /host\.lockCamera\(!canvasMode\)/.test(main));
+  const ctrl = stripComments(read("scripts/features/stream/camera/controller.js"));
+  ok("the stream camera works normally on a Canvas-mode scene", /mode !== "canvas"/.test(ctrl));
+  const idx = read(`${FEAT}/index.mjs`);
+  const at = idx.indexOf("SETTINGS.defaultMode,");
+  ok("th.defaultMode is registered (world) with every mode as a choice", at >= 0 && /scope:\s*"world"/.test(idx.slice(at, idx.indexOf("});", at))) && /MODES\.map/.test(idx.slice(at, idx.indexOf("});", at))));
+  const tpl = read("templates/theatre/editor.hbs");
+  ok("the Scene tab carries the mode control", /<select name="mode"/.test(tpl));
+  ok("the editor sends the mode with the scene config", /mode:\s*f\.mode/.test(stripComments(read(`${FEAT}/apps/editor.mjs`))));
 }
 
 /* ── Seams: Stage, stream, motion, CSS ───────────────────────────────── */

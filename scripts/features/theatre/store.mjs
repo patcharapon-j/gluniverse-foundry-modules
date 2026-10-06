@@ -16,6 +16,12 @@
  * the shot carries a grade, the same update writes Stage's grade fragment and
  * carries the relight timing as an update OPTION, so the relight lands behind
  * the black (or at the wipe's midpoint) on every client.
+ *
+ * Canvas mode (canvas-mode.mjs) adds a second half to a cut that changes the
+ * picture: at the dip's full black the GM writes the layout (size, padding,
+ * surround colour, background) and then `th.state.drawn = seq`, which is what
+ * tells every client its canvas may be revealed. A cut overtaken before its black
+ * lands writes nothing.
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
@@ -24,9 +30,11 @@ import { motionScale } from "../../core/theme.mjs";
 import { DEFAULT_FACE, DEFAULT_SHAKE, FACES, FLAGS, SETTINGS, TIMING } from "./constants.mjs";
 import {
   hasTitle, newFolderId, newShotId, normalizeConfig, normalizeFolder, normalizeFolders, normalizeShot, normalizeShots,
-  normalizeState, orderShots, resolveHold, resolveLetterbox, resolveStyle, titleOf,
+  normalizeState, orderShots, resolveHold, resolveLetterbox, resolveStyle, titleOf, isCanvasMode, cueDraws,
 } from "./model.mjs";
-import { scaleTimeline, timelineFor } from "./timeline.mjs";
+import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
+import { measureSource } from "./canvas-mode.mjs";
+import { writeCanvasLayout, writeFrameLayout } from "./scene-setup.mjs";
 import { currentGrade, gradeFragment, sampleGrade, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
 
 /** Fired as Hooks.callAll(HOOK_CHANGED, store|null, detail) on every change the viewed scene's Theatre data goes through. */
@@ -340,9 +348,16 @@ export class TheatreStore {
 
   setConfig(patch = {}) {
     return this._write(async () => {
+      const before = this.config;
+      const next = normalizeConfig({ ...before, ...(patch ?? {}) });
       const upd = {};
-      forceSet(upd, PATHS.config, normalizeConfig({ ...this.config, ...(patch ?? {}) }));
+      forceSet(upd, PATHS.config, next);
       await this.scene.update(upd);
+      // A mode switch lays the scene out for the new mode (a canvas redraw, once).
+      if (next.mode !== before.mode) {
+        if (isCanvasMode(next)) { const shot = this.currentShot; if (shot) await writeCanvasLayout(this.scene, shot); }
+        else await writeFrameLayout(this.scene);
+      }
       return true;
     });
   }
@@ -404,17 +419,21 @@ export class TheatreStore {
     forceSet(upd, PATHS.state, normalized);
     let options = {};
 
+    const draws = isCanvasMode(config) && cueDraws(normalized.cue);
+    if (draws) measureSource(shot.src, { warn: (...a) => warn("theatre |", ...a) });   // warm it during the dip
+
     // A cut relights the cast in the same write, timed to land behind the transition.
     if (kind === "shot" && shot?.grade) {
       const frag = gradeFragment(shot.grade);
       if (frag) {
         Object.assign(upd, frag);
-        const t = scaleTimeline(timelineFor(normalized.cue.style, {
+        const opts = {
           hold: resolveHold(shot, config),
           letterbox: resolveLetterbox(shot, config),
           letters: (shot.title ?? "").length,
           title: hasTitle(shot),
-        }), motionScale());
+        };
+        const t = scaleTimeline(draws ? canvasTimelines(normalized.cue.style, opts).dip : timelineFor(normalized.cue.style, opts), motionScale());
         // Pinned to the clock, not to this client's image-ready start: a client
         // whose image loads late relights before its own black. Preloading every
         // shot in the background is what keeps that rare.
@@ -423,8 +442,30 @@ export class TheatreStore {
     }
 
     await this.scene.update(upd, options);
+    if (draws) this._drawAtBlack(normalized.cue, shot);
     if (kind === "shot" && shot && hasTitle(shot) && chatOnCut()) postCutLine(this.scene, shot);
     return normalized.cue;
+  }
+
+  /**
+   * Canvas mode, the GM's second half of a cut: once the dip has reached full
+   * black, lay the scene out for the shot, then mark the cue drawn. Runs in the
+   * write queue; a cut overtaken by a newer cue writes nothing. A picture that
+   * cannot be loaded still marks the cue drawn, so no client waits for it.
+   */
+  _drawAtBlack(cue, shot) {
+    const dip = canvasTimelines(cue.style).dip.black[0];
+    const wait = Math.max(0, cue.at + (dip.at + dip.dur) * motionScale() - game.time.serverTime);
+    setTimeout(() => {
+      this._write(async () => {
+        if (!this.enabled || this.state.cue?.seq !== cue.seq) return;
+        try { await writeCanvasLayout(this.scene, shot); } catch (e) { warn("theatre | could not lay out the canvas", e); }
+        if (this.state.cue?.seq !== cue.seq) return;
+        const upd = {};
+        forceSet(upd, PATHS.state, normalizeState({ ...this.state, drawn: cue.seq }));
+        await this.scene.update(upd);
+      }).catch(() => {});
+    }, wait);
   }
 
   /** Cut to the next shot in order (from black: the shot after the hidden one; nothing on screen: the first). */

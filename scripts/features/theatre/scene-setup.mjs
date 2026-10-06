@@ -14,8 +14,14 @@
  * covers the scene rect; padding would show the canvas around it), gridless,
  * no token vision or fog (vision would black out the shot), and a black
  * background colour behind the shots. Convert also clears the background
- * image, because the shots replace it; Leave restores it. Between the two,
- * Theatre never touches scene.background.
+ * image, because the shots replace it; Leave restores it. In Frame mode
+ * Theatre never touches scene.background between the two.
+ *
+ * Canvas mode (canvas-mode.mjs) is the exception, on purpose: there each cut
+ * IS a background write, at the picture's own size on a coloured surround,
+ * always behind full black. `writeCanvasLayout` / `writeFrameLayout` are the
+ * only two writers of that layout. Converting a scene into Canvas mode keeps its
+ * own background and size until the first cut.
  *
  * v14 moved the background onto the scene's Levels and drops the legacy fields
  * without a word, so every read and write of the background goes through
@@ -25,8 +31,9 @@
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { PALETTE } from "../../core/theme.mjs";
 import { escapeHTML } from "../../core/util.mjs";
-import { DEFAULT_STYLE, FRAME, SETTINGS, STYLES } from "./constants.mjs";
-import { normalizeConfig, normalizeShots, normalizeState, titleFromFilename } from "./model.mjs";
+import { DEFAULT_MODE, DEFAULT_STYLE, FRAME, MODES, SETTINGS, STYLES } from "./constants.mjs";
+import { isCanvasMode, normalizeConfig, normalizeShots, normalizeState, titleFromFilename } from "./model.mjs";
+import { canvasLayout, measureSource } from "./canvas-mode.mjs";
 import { forceDelete, forceSet, isTheatreScene, PATHS, readShots } from "./store.mjs";
 import { gradeFragment, initialGrade, sampleGrade, stageEnabled } from "./stage-bridge.mjs";
 
@@ -53,7 +60,11 @@ function setting(key, list, fallback) {
  * empty, so it follows the GM's default typeface for as long as nobody picks one.
  */
 export function initialConfig() {
-  return normalizeConfig({ style: setting(SETTINGS.defaultStyle, STYLES, DEFAULT_STYLE), face: null });
+  return normalizeConfig({
+    style: setting(SETTINGS.defaultStyle, STYLES, DEFAULT_STYLE),
+    face: null,
+    mode: setting(SETTINGS.defaultMode, MODES, DEFAULT_MODE),
+  });
 }
 
 /* ── Background (v13 fields / v14 Level) ────────────────────────────────── */
@@ -82,6 +93,43 @@ async function bgWrite(scene, { src, color }) {
   if (src !== undefined) upd["background.src"] = src || null;
   if (color !== undefined && color !== null) upd.backgroundColor = color;
   if (Object.keys(upd).length) await scene.update(upd);
+}
+
+/* ── Layout per mode ────────────────────────────────────────────────────── */
+
+/**
+ * Canvas mode: lay the scene out for `shot` — its picture as the background,
+ * at its own size, padded, on a surround coloured from it. Resolves false when
+ * the picture cannot be loaded (the scene is left as it was).
+ */
+export async function writeCanvasLayout(scene, shot) {
+  if (!game.user.isGM || !scene || !shot?.src) return false;
+  const m = await measureSource(shot.src, { warn: (...a) => warn("theatre |", ...a) });
+  if (!m) return false;
+  const layout = canvasLayout(m, m.color);
+  const bg = bgRead(scene);
+  const upd = {};
+  if (scene.width !== layout.width) upd.width = layout.width;
+  if (scene.height !== layout.height) upd.height = layout.height;
+  if (scene.padding !== layout.padding) upd.padding = layout.padding;
+  if (Object.keys(upd).length) await scene.update(upd);
+  if (bg.src !== shot.src || bg.color !== layout.backgroundColor) {
+    await bgWrite(scene, { src: shot.src, color: layout.backgroundColor });
+  }
+  return true;
+}
+
+/** Frame mode: back to the fixed 16:9 frame, no padding, no background image, black. */
+export async function writeFrameLayout(scene) {
+  if (!game.user.isGM || !scene) return false;
+  const upd = {};
+  if (scene.width !== FRAME.width) upd.width = FRAME.width;
+  if (scene.height !== FRAME.height) upd.height = FRAME.height;
+  if (scene.padding !== 0) upd.padding = 0;
+  if (Object.keys(upd).length) await scene.update(upd);
+  const bg = bgRead(scene);
+  if (bg.src || bg.color !== BLACK) await bgWrite(scene, { src: "", color: BLACK });
+  return true;
 }
 
 /* ── Create / convert / leave ───────────────────────────────────────────── */
@@ -132,26 +180,24 @@ export async function convertScene(scene) {
     shots = normalizeShots([{ src: bg.src, title: scene.navName || scene.name || titleFromFilename(bg.src), grade }]);
   }
   const hadConfig = !!scene.getFlag(SUITE_ID, "th.config");
+  const config = hadConfig ? normalizeConfig(scene.getFlag(SUITE_ID, "th.config")) : initialConfig();
+  const canvasMode = isCanvasMode(config);
 
-  const upd = {
-    width: FRAME.width,
-    height: FRAME.height,
-    padding: 0,
-    "grid.type": gridless(),
-    tokenVision: false,
-    [PATHS.enabled]: true,
-  };
+  // Canvas mode keeps the scene's own picture and size until the first cut.
+  const upd = canvasMode
+    ? { "grid.type": gridless(), tokenVision: false, [PATHS.enabled]: true }
+    : { width: FRAME.width, height: FRAME.height, padding: 0, "grid.type": gridless(), tokenVision: false, [PATHS.enabled]: true };
   forceSet(upd, PATHS.restore, restore);
   forceSet(upd, PATHS.shots, shots);
-  if (!hadConfig) forceSet(upd, PATHS.config, initialConfig());
+  if (!hadConfig) forceSet(upd, PATHS.config, config);
   forceSet(upd, PATHS.state, normalizeState(null));
   // Stage seeds an ungraded scene from its background the first time it shows
   // an actor; a Theatre background is flat black, so give the scene a grade now.
   const frag = gradeFragment(initialGrade(scene, shots));
   if (frag) Object.assign(upd, frag);
-  // The background is cleared BEFORE the scene turns Theatre on, so Theatre
-  // never touches it while it is on (Leave restores it after switching off).
-  await bgWrite(scene, { src: "", color: BLACK });
+  // The background is cleared BEFORE the scene turns Theatre on, so a Frame-mode
+  // Theatre never touches it while it is on (Leave restores it after switching off).
+  if (!canvasMode) await bgWrite(scene, { src: "", color: BLACK });
   await scene.update(upd);
   return true;
 }
