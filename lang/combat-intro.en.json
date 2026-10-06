@@ -147,6 +147,7 @@
         "supreme": "Supreme"
       },
       "turns": "{n} turns"
-    }
+    },
+    "close": "Close the cinematic"
   }
 }

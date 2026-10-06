@@ -35,7 +35,7 @@ import {
   FEATURE_ID, FLAG, SETTINGS, SOUND_PREFIX, SKIN_SETTING, SKINS, DEFAULT_SKIN, DSN_ID, DSN_MIN_MAJOR,
   MSG, CUES, CUE_LEAD_MS, PRIVATE_KEY, HANDOFF_HOOK, ARRIVED_HOOK,
 } from "./constants.mjs";
-import { INTRO_MS, SORT_MS, HANDOFF_MS, phaseClock, sortReadyAt } from "./timeline.mjs";
+import { INTRO_MS, SORT_MS, HANDOFF_MS, phaseClock, phaseLength, sortReadyAt } from "./timeline.mjs";
 import {
   publicSlot, npcGroups, normalizeState, canAdvance, entitled, mayAct, sealResult, normalizeResult,
   normalizeIntent, orderFrom, commitEntries,
@@ -116,13 +116,41 @@ async function loadModules() {
 
 function buildRoot() {
   if (stage.root) return;
-  const { root, layers } = overlay.createRoot(document);
+  const { root, layers, close } = overlay.createRoot(document);
   root.dataset.phase = "idle";
   root.dataset.skin = worldSkin();
   root.hidden = true;
+  // Always there, for everyone: a full-screen layer must never be able to trap a
+  // client, whatever state it was left in (a reload mid-sequence, a lost GM).
+  close.title = T("GLCI.close");
+  close.setAttribute("aria-label", T("GLCI.close"));
+  close.addEventListener("click", (e) => { e.stopPropagation(); closeSequence(); });
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && !root.hidden) closeSequence(); });
   document.body.append(root);
   stage.root = root;
   stage.layers = layers;
+}
+
+/**
+ * Close the cinematic. Every client may close its own screen; it stays closed
+ * for that sequence. A GM also ends it for the table: before the commit that is
+ * a cancel, after it the combat starts with the values already written.
+ */
+function closeSequence() {
+  const combat = game.combats.get(stage.combatId) ?? game.combat;
+  const state = combat ? readState(combat) : null;
+  stage.dismissed = stage.seqId ?? state?.id ?? null;
+  teardown();
+  dropPresentation();
+  if (game.user.isGM && combat && state) conductor.abort(combat, state).catch((e) => err("combat-intro: could not close the sequence", e));
+}
+
+/** A timed phase this far past its end is stranded (nobody is conducting it). */
+const STRANDED_MS = 8000;
+function strandedCheck(combat, state) {
+  const { ms, done } = phaseClock(state, game.time.serverTime);
+  const len = phaseLength(state.phase);
+  return done && len != null && ms > len + STRANDED_MS;
 }
 
 /** Compile the skin's backdrop once; a different skin swaps the program on the same surface. */
@@ -249,6 +277,13 @@ function extrasFor(combat, state) {
 
 async function show(combat, state) {
   buildRoot();
+  if (stage.dismissed && stage.dismissed === state.id) return;
+  // Left behind by a reload or an update mid-sequence: never cover the screen with it.
+  if (strandedCheck(combat, state)) {
+    teardown();
+    if (game.user.isGM && isConductor()) conductor.abort(combat, state).catch((e) => err("combat-intro: could not clear a stranded sequence", e));
+    return;
+  }
   if (stage.director && stage.seqId === state.id) {
     stage.phase = state.phase;
     stage.director.setState(state, extrasFor(combat, state));
@@ -393,6 +428,9 @@ function loop() {
     try {
       stage.director.frame({ width: innerWidth, height: innerHeight, dpr: Math.min(2, devicePixelRatio || 1) });
       maybeHandOff();
+      const combat = game.combats.get(stage.combatId);
+      const state = combat && readState(combat);
+      if (state && strandedCheck(combat, state)) { show(combat, state); return; }
     } catch (e) {
       err("combat-intro: frame failed", e);
       teardown();
@@ -764,6 +802,22 @@ const conductor = {
       this.private = null;
       try { localStorage.removeItem(PRIVATE_KEY); } catch { /* ignore */ }
     }
+  },
+
+  /**
+   * End a sequence from anywhere (the close button). Before the commit nothing
+   * was written, so it cancels; after it the values stand and the combat starts.
+   */
+  async abort(combat, state) {
+    this.clearTimers();
+    if (["sorting", "handoff"].includes(state.phase)) {
+      this.private = null;
+      try { localStorage.removeItem(PRIVATE_KEY); } catch { /* ignore */ }
+      if (!state.late && !combat.started) await combat.startCombat();
+      if (readState(combat)) await combat.unsetFlag(SUITE_ID, FLAG);
+      return;
+    }
+    return this.cancel(combat);
   },
 
   /** Cancel: nothing was committed, so nothing is written but the flag's removal. */

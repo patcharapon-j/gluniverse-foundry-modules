@@ -50,9 +50,9 @@ const pad2 = (n) => String(n).padStart(2, "0");
 export function createRoot(doc = globalThis.document) {
   const root = doc.createElement("div");
   root.className = "glci gl-type";
-  root.innerHTML = `<canvas class="glci-bg"></canvas><div class="glci-cssbg"><i class="glci-cssbg-grid"></i><i class="glci-cssbg-scan"></i><i class="glci-cssbg-rule"></i><i class="glci-cssbg-band"></i><i class="glci-cssbg-cols"></i></div><div class="glci-back"></div><div class="glci-dice"></div><div class="glci-front"></div><div class="glci-gm"></div>`;
+  root.innerHTML = `<canvas class="glci-bg"></canvas><div class="glci-cssbg"><i class="glci-cssbg-grid"></i><i class="glci-cssbg-scan"></i><i class="glci-cssbg-rule"></i><i class="glci-cssbg-band"></i><i class="glci-cssbg-cols"></i></div><div class="glci-back"></div><div class="glci-dice"></div><div class="glci-front"></div><div class="glci-gm"></div><button type="button" class="glci-close" data-close aria-label="Close">✕</button>`;
   const q = (s) => root.querySelector(s);
-  return { root, layers: { bg: q(".glci-bg"), cssbg: q(".glci-cssbg"), back: q(".glci-back"), dice: q(".glci-dice"), front: q(".glci-front"), gm: q(".glci-gm") } };
+  return { root, close: q(".glci-close"), layers: { bg: q(".glci-bg"), cssbg: q(".glci-cssbg"), back: q(".glci-back"), dice: q(".glci-dice"), front: q(".glci-front"), gm: q(".glci-gm") } };
 }
 
 /* ── pieces ─────────────────────────────────────────────────────────────── */
