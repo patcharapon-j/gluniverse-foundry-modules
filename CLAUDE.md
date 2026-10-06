@@ -1274,6 +1274,14 @@ danger moves to amber with a hazard hatch, and the check measures it against the
 red accent in OKLCH hue. WebGL reads its palette from the skinned root's
 computed `--glci-*` colours, never from `:root`.
 
+**The sort is the rail.** Its cards are the rail's own (initiative
+`presentCards`), and the rail's arrival snapshots those exact nodes, so the
+handoff has nothing to turn into. Two things fail silently there: the presented
+layer must outlive the overlay until `gluniverse.initiative.arrived` (dropping it
+at the flag's removal leaves a frame with no cards), and a boss's extra turns
+must exist before the sort reads `combat.turns` (`settleBossTurns`), or the
+column is missing the turns the rail then shows.
+
 To see it: `node tools/combat-intro-preview.mjs && node tools/preview-server.mjs`,
 then `/.preview/combat-intro.html` (`skin`, `phase`, `seek`, `view`, `late`).
 Nothing there proves Dice So Nice's own dice or the PF2e roll; only a live

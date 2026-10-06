@@ -24,6 +24,18 @@
   --gluni-dying:       var(--gl-orchid);          /* orchid — kept distinct from secret violet */
   --gluni-dying-hot:   var(--gl-orchid-hot);
   --gluni-neutral:     #ffce6a;          /* neutral disposition reads amber, not white */
+  /* Disposition ("side") colours. Three hues far apart AND three levels of
+     lightness, so a party card, a neutral and a hostile never read as one
+     another at a glance, and none of them is the rail's cyan chrome: friendly
+     is the suite's green, hostile its hazard red, neutral amber. The skin sheet
+     restates all six on its own roots; constants.mjs DISPOSITION_PALETTE is
+     the GPU twin of these values (token markers). */
+  --gluni-side-friendly:     var(--gl-good);       /* #5fdb92 */
+  --gluni-side-friendly-hot: var(--gl-good-hot);   /* #b6ffd0 */
+  --gluni-side-neutral:      var(--gluni-neutral); /* #ffce6a */
+  --gluni-side-neutral-hot:  #ffe6b0;
+  --gluni-side-hostile:      var(--gl-hazard);     /* #ff4a52 */
+  --gluni-side-hostile-hot:  var(--gl-hazard-hot); /* #ffc0c6 */
   /* Ceremony amber == signal (§2.4); the neutral disposition amber above stays. */
   --gluni-signal:      var(--gl-signal);
   --gluni-signal-hot:  var(--gl-signal-hot);
@@ -525,7 +537,7 @@
   top: 0;
   bottom: 0;
   z-index: 7;
-  width: 3px;
+  width: 4px;
   background: var(--gluni-accent, var(--gluni-cyan));
   box-shadow: 0 0 16px var(--gluni-accent, var(--gluni-cyan));
   transition: width var(--gluni-d-quick) var(--gluni-ease),
@@ -1566,17 +1578,20 @@
      can overflow above the content. */
 }
 
+/* The side colour runs the whole stripe, lit to its own hot tint at the
+   middle. It used to blend toward violet and magenta, which made a friendly,
+   a neutral and a hostile active card all end in the same purple. */
 .gluni-card--active .gluni-card-accent {
-  width: 4px;
+  width: 5px;
   background: linear-gradient(
     180deg,
-    var(--gluni-holo-a),
-    var(--gluni-holo-b) 50%,
-    var(--gluni-holo-c)
+    var(--gluni-accent, var(--gluni-holo-a)),
+    color-mix(in srgb, var(--gluni-accent, var(--gluni-holo-a)) 55%, var(--gluni-white)) 50%,
+    var(--gluni-accent, var(--gluni-holo-a))
   );
   box-shadow:
-    0 0 24px var(--gluni-holo-a),
-    0 0 24px var(--gluni-holo-b);
+    0 0 24px var(--gluni-accent, var(--gluni-holo-a)),
+    0 0 10px color-mix(in srgb, var(--gluni-accent, var(--gluni-holo-a)) 70%, transparent);
 }
 
 .gluni-card--active .gluni-card-bracket {
@@ -1761,15 +1776,15 @@
 }
 
 .gluni-card--friendly {
-  --gluni-accent: var(--gluni-cyan);
+  --gluni-accent: var(--gluni-side-friendly);
 }
 
 .gluni-card--neutral {
-  --gluni-accent: var(--gluni-neutral, var(--gluni-white));
+  --gluni-accent: var(--gluni-side-neutral);
 }
 
 .gluni-card--hostile {
-  --gluni-accent: var(--gluni-red);
+  --gluni-accent: var(--gluni-side-hostile);
 }
 
 .gluni-card--secret,
@@ -3910,6 +3925,128 @@
   animation-delay: var(--gl-d-instant);
 }
 
+/* ============================================================
+   Splash HUD language — "Etched × Endfield"
+   The round and guard-break splashes speak the same drafting layer as the
+   Combat Intro (styles/combat-intro.css): a hazard band across the screen,
+   a hard-edged deck with corner brackets and a data code, an eyebrow label
+   led by chevrons, and a "//" data line under the hero type. Colour comes
+   from the splash's own accent (--gluni-splash-line): the rail's cyan for a
+   round, the break amber for a guard break. The band is tweened with the
+   rule in playSplashMotion; everything else rides the existing beats.
+   ============================================================ */
+
+.gluni-round-splash {
+  --gluni-splash-line: var(--gluni-cyan);
+}
+
+.gluni-break-splash {
+  --gluni-splash-line: var(--gluni-break);
+}
+
+.gluni-splash-band {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 38px;
+  pointer-events: none;
+  border-block: 1px solid color-mix(in srgb, var(--gluni-splash-line) 55%, transparent);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--gluni-splash-line) 18%, transparent) 0 10px,
+    color-mix(in srgb, var(--gluni-splash-line) 4%, transparent) 10px 20px
+  );
+  opacity: 0;
+  transform: translate(-50%, -50%) scaleY(0);
+  /* Parted behind the deck, so the hatch never runs through the hero type. */
+  -webkit-mask-image: linear-gradient(90deg, #000 0 26%, transparent 34% 66%, #000 74%);
+  mask-image: linear-gradient(90deg, #000 0 26%, transparent 34% 66%, #000 74%);
+}
+
+.gluni-splash-band--break {
+  height: 52px;
+  border-block-width: 2px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--gluni-splash-line) 34%, transparent) 0 11px,
+    color-mix(in srgb, var(--gluni-splash-line) 8%, transparent) 11px 22px
+  );
+}
+
+/* The deck drops its soft side fade for a hard plate with corner brackets. */
+.gluni-round-deck,
+.gluni-break-deck {
+  border-radius: 0;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.gluni-round-deck::before,
+.gluni-break-deck::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  pointer-events: none;
+  --gluni-bracket: var(--gluni-splash-line);
+  background:
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) left top / 16px 1px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) left top / 1px 16px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) right top / 16px 1px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) right top / 1px 16px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) left bottom / 16px 1px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) left bottom / 1px 16px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) right bottom / 16px 1px no-repeat,
+    linear-gradient(var(--gluni-bracket), var(--gluni-bracket)) right bottom / 1px 16px no-repeat;
+}
+
+/* Data code, top-left inside the plate: chevrons and the round. */
+.gluni-round-deck::after,
+.gluni-break-deck::after {
+  content: "\25B8\25B8\00a0" attr(data-code);
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: color-mix(in srgb, var(--gluni-splash-line) 80%, var(--gluni-white));
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Eyebrow: a tinted strip led by an accent bar and a chevron pair. */
+.gluni-round-label span:last-child,
+.gluni-break-splash-label span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px calc(10px + 0.6em);
+  border-left: 3px solid var(--gluni-splash-line);
+  background: color-mix(in srgb, var(--gluni-splash-line) 13%, transparent);
+}
+
+.gluni-round-label span:last-child::before,
+.gluni-break-splash-label span:last-child::before {
+  content: "\25B8\25B8";
+  color: var(--gluni-splash-line);
+  letter-spacing: 0;
+}
+
+/* The line under the hero type reads as a data line. */
+.gluni-round-sub span,
+.gluni-break-splash-name span {
+  font-family: var(--gl-tech);
+}
+
+.gluni-round-sub span::before,
+.gluni-break-splash-name span::before {
+  content: "//\00a0";
+  color: var(--gluni-splash-line);
+  letter-spacing: 0;
+}
+
 .gluni-portrait-dialog .window-content,
 .gluni-adhoc-dialog .window-content {
   color: var(--gluni-white);
@@ -5742,14 +5879,15 @@
   inset: calc(-1 * var(--gluni-card-overflow)) 0 0 0;
   z-index: 9;
   pointer-events: none;
-  /* A short hairline along the top edge, running off the accent stripe. */
+  /* A hairline along the top edge, running off the accent stripe in the side
+     colour, so the disposition reads along the card and not only at its edge. */
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 55%, transparent), transparent) left top / 46% 1px no-repeat;
+    linear-gradient(90deg, var(--gluni-accent, var(--gluni-cyan)), transparent) left top / 64% 2px no-repeat;
 }
 
 .gluni-initiative--left .gluni-card-hud {
   background:
-    linear-gradient(270deg, color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 55%, transparent), transparent) right top / 46% 1px no-repeat;
+    linear-gradient(270deg, var(--gluni-accent, var(--gluni-cyan)), transparent) right top / 64% 2px no-repeat;
 }
 
 /* Rail index, "01" down the order, tucked under the chamfer. */
@@ -5800,7 +5938,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 62%, var(--gluni-text-dim));
+  color: color-mix(in srgb, var(--gluni-accent, var(--gluni-cyan)) 88%, var(--gluni-text-dim));
   font-family: var(--gl-tech);
   font-size: 6.5px;
   font-weight: var(--gl-weight-bold);

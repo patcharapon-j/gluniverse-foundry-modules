@@ -144,14 +144,14 @@ function randomAxis(rand) {
 
 /** Every number the feel depends on, in seconds and radians. */
 export const TUMBLE = Object.freeze({
-  duration: 2.35,     // throw → landing
+  duration: 3.6,      // throw → landing: long enough to read as a throw, not a flick
   windup: 0.16,       // spin rate ramps in from rest
-  spinPeak: 26,       // rad/s at the top of the primary spin (~4 rev/s)
+  spinPeak: 19,       // rad/s at the top of the primary spin (~3 rev/s)
   spinCross: 9,       // rad/s on the secondary axis — the precession
-  arrival: 2.6,       // rad/s left on the primary axis at landing
-  rockHz: 2.1,        // the settle's rocking frequency
-  rockDecay: 7.5,     // 1/s — how fast the rock dies
-  settle: 0.62,       // landing → at rest
+  arrival: 2.2,       // rad/s left on the primary axis at landing
+  rockHz: 1.7,        // the settle's rocking frequency
+  rockDecay: 5.2,     // 1/s — how fast the rock dies
+  settle: 0.95,       // landing → at rest
   lift: 0.34,         // how far the die rises towards the camera mid-throw
   liftScale: 0.14,    // and how much bigger it reads at the top
   bounce: 0.05,       // the landing dip

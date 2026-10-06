@@ -254,7 +254,8 @@ void main(void){
 //      from those masks, so one baked sheet serves every disposition.
 export const FX_FRAG_TURN_BAKE = `
 varying vec2 vTextureCoord;
-uniform float uPhase, uActive, uHigh;
+// uSeed: FX_GLSL_NOISE's hashes read it; without it this program never compiled.
+uniform float uPhase, uActive, uHigh, uSeed;
 ${FX_GLSL_NOISE}
 #define TAU 6.28318530718
 void main(void){

@@ -25,6 +25,8 @@ const animMs = (ms) => scaledMs(ms, null, 16);
 const HANDOFF_HOOK = "gluniverse.combatIntro.handoff";
 /** Raised once by combat-intro when its canStart can first answer true. */
 const READY_HOOK = "gluniverse.combatIntro.ready";
+/** Raised by the rail the moment its arrival has primed every card: the intro may now drop its own copies. */
+const ARRIVED_HOOK = "gluniverse.initiative.arrived";
 /** How long a handoff waits for its combat to actually start. */
 const ARRIVAL_TTL_MS = 6000;
 
@@ -34,7 +36,7 @@ const ARRIVAL_TTL_MS = 6000;
 const socketReady = () => Boolean(game?.socket);
 import {
     MODULE_ID, FEATURE_ID, SOCKET_NAME, SETTINGS, TOKEN_OVERLAY_PALETTE, DISPOSITION_PALETTE,
-  ACTIVE_SHADER_PALETTE, getDispositionColors, FLAGS, SKINS, DEFAULT_SKIN, skinOf,
+  ACTIVE_SHADER_PALETTE, getDispositionColors, syncDispositionPalette, FLAGS, SKINS, DEFAULT_SKIN, skinOf,
   BREAK_GAUGE_DEFAULT_MAX, BREAK_GAUGE_MODES, BREAK_GAUGE_FLASH_SEC, BREAK_GAUGE_SHEEN_SEC,
   VISIBILITY, PF2E_GUARD_BREAK_EFFECT_SLUG, PF2E_GUARD_BREAK_PENALTY,
   LOCALIZATION_FALLBACKS, ADHOC_DEFAULT_TYPE, ADHOC_TYPES, ADHOC_VISIBILITY_MODES,
@@ -876,6 +878,7 @@ class BreakSplashGL {
       return false;
     }
     this.lifeMs = Math.max(400, lifeMs);
+    this.colors = breakSplashColors(host);
     // A fresh seed per break: the fracture is live now, so no two guard breaks
     // have to look identical the way a shared filmstrip forced them to.
     this.seed = Math.random() * 100;
@@ -1061,6 +1064,24 @@ class BreakSplashGL {
     this.surface = null;
     this.freeContext();
   }
+}
+
+// The fracture's colours for one splash. A skinned splash states its own
+// (--gluni-fx-break / -hot, set by the skin sheet on .gluni-break-splash, e.g.
+// Aegis amber); Etched states none and keeps the shared gold. Read off the
+// splash element itself, never :root (docs/adr/0001-scoped-skins.md).
+function breakSplashColors(host) {
+  const colors = {
+    break: [...ACTIVE_SHADER_PALETTE.splashHot],
+    hot:   [...ACTIVE_SHADER_PALETTE.splashGlow]
+  };
+  if (!host?.isConnected) return colors;
+  try {
+    const style = getComputedStyle(host);
+    colors.break = cssColorToFloat(style.getPropertyValue("--gluni-fx-break")) ?? colors.break;
+    colors.hot = cssColorToFloat(style.getPropertyValue("--gluni-fx-break-hot")) ?? colors.hot;
+  } catch { /* keep the defaults */ }
+  return colors;
 }
 
 // Lazily build (and cache) the single shared break-splash renderer. Returns null
@@ -1530,6 +1551,16 @@ export class GLUniverseInitiativeOverlay {
     if (this.root.dataset.glSkin === skin && cardFX?.paletteRoot === this.root) return;
     this.root.dataset.glSkin = skin;
     try { cardFX?.notifyThemeChange?.(this.root); } catch { /* renderer may be gone */ }
+    // Token markers are PIXI, so they take the skin's disposition colours from
+    // the same root rather than from a constant (--gluni-side-*).
+    try {
+      const style = getComputedStyle(this.root);
+      const readColor = name => {
+        const rgb = cssColorToFloat(style.getPropertyValue(name));
+        return rgb ? rgb.reduce((n, c) => (n << 8) | Math.round(c * 255), 0) : null;
+      };
+      if (syncDispositionPalette(readColor)) tokenOverlays?.notifyThemeChange?.();
+    } catch { /* overlays may be gone */ }
   }
 
   render() {
@@ -1645,6 +1676,9 @@ export class GLUniverseInitiativeOverlay {
     if (arrival) {
       this._arrival = null;
       this.playArrival(arrival.cards, { late: Boolean(arrival.late) });
+      // Same task as the priming: the intro's copies go in the frame the rail's own
+      // cards first paint at their spots, so there is never a frame with both or neither.
+      Hooks.callAll(ARRIVED_HOOK, { combatId: arrival.combatId });
     }
     this.playPendingGuardBreakImpact();
     this.playPendingSlideIns();
@@ -2453,7 +2487,11 @@ export class GLUniverseInitiativeOverlay {
       const rect = r && [r.left, r.top, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0
         ? { left: r.left, top: r.top, width: r.width, height: r.height }
         : null;
-      cards.push({ combatantId, rect });
+      // A live card node (combat-intro's presentation of the very same rail card) is
+      // snapshotted NOW, while it still sits where the intro left it: the arrival then
+      // starts from exactly what is on screen, size, type and crop included.
+      const node = card?.node instanceof HTMLElement && card.node.isConnected ? card.node : null;
+      cards.push({ combatantId, rect, snap: node ? captureMagicSnapshot(node) : null });
     }
     // The combat is already running: a late handoff (combatants joining
     // mid-fight), or a start that reached this client before its own handoff
@@ -2501,7 +2539,7 @@ export class GLUniverseInitiativeOverlay {
     const rects = new Map();
     const listed = new Set(cards.map(card => card?.combatantId).filter(Boolean));
     for (const card of cards) {
-      if (card?.combatantId && card.rect && !rects.has(card.combatantId)) rects.set(card.combatantId, card.rect);
+      if (card?.combatantId && (card.snap || card.rect) && !rects.has(card.combatantId)) rects.set(card.combatantId, card);
     }
 
     // Read pass: every measurement before the first write.
@@ -2511,10 +2549,10 @@ export class GLUniverseInitiativeOverlay {
     const used = new Set();
     for (const item of items) {
       const id = item.dataset.combatantId;
-      const rect = used.has(id) ? null : rects.get(id);
-      if (rect) {
+      const from = used.has(id) ? null : rects.get(id);
+      if (from) {
         used.add(id);
-        const plan = planMagicMove(item, arrivalSnapshot(item, rect));
+        const plan = planMagicMove(item, from.snap ?? arrivalSnapshot(item, from.rect));
         if (plan) plans.push(plan);
         continue;
       }
@@ -2645,11 +2683,13 @@ export class GLUniverseInitiativeOverlay {
     const subtitle = splash.querySelector(`.${isBreak ? prefix + "-name" : prefix + "-sub"} span`);
     const tick = splash.querySelector(".tick");
     const rule = splash.querySelector(`.${prefix}-rule`);
+    const band = splash.querySelector(".gluni-splash-band");
     if (rule) rule.style.transform = "translate(-50%, -50%)";
+    if (band) band.style.transform = "translate(-50%, -50%)";
     // The shader and rule glints retain their specialized renderers. The text,
     // deck and shell have one timeline so translated titles always finish entering.
     splash.classList.add("gluni-anime-splash", `gluni-${kind}-splash--show`);
-    for (const node of [inner, ...digits, label, subtitle, tick, rule]) {
+    for (const node of [inner, ...digits, label, subtitle, tick, rule, band]) {
       if (node) node.classList.add("gluni-anime-motion");
     }
     const ms = value => motionDuration(value, splash);
@@ -2669,6 +2709,7 @@ export class GLUniverseInitiativeOverlay {
     timeline.add(splash, { opacity: [0, 1], duration: ms(100), ease: "outQuad" }, 0);
     timeline.add(inner, { opacity: [0, 1], y: [12, 0], scale: [0.975, 1], duration: ms(420), ease: "outQuint" }, ms(45));
     timeline.add(rule, { opacity: [0, 1], scaleX: [0, 1], duration: ms(420), ease: "outExpo" }, 0);
+    if (band) timeline.add(band, { opacity: [0, 1], scaleY: [0, 1], duration: ms(320), ease: "outCubic" }, ms(60));
     timeline.add(tick, { width: [0, 44], duration: ms(280), ease: "outCubic" }, ms(150));
     timeline.add(label, { opacity: [0, 1], y: [4, 0], duration: ms(260), ease: "outCubic" }, ms(140));
     timeline.add(digits, { opacity: [0, 1], y: [isBreak ? 20 : 12, 0], scaleY: [1.08, 1],
@@ -2676,6 +2717,7 @@ export class GLUniverseInitiativeOverlay {
     timeline.add(subtitle, { opacity: [0, 1], y: [5, 0], duration: ms(300), ease: "outCubic" }, ms(340));
     timeline.add(inner, { opacity: [1, 0], y: [0, -9], duration: ms(320), ease: "inCubic" }, hold);
     timeline.add(rule, { opacity: [1, 0], scaleX: [1, 0.6], duration: ms(300), ease: "inCubic" }, hold);
+    if (band) timeline.add(band, { opacity: [1, 0], scaleY: [1, 0], duration: ms(260), ease: "inCubic" }, hold);
     timeline.add(splash, { opacity: [1, 0], duration: ms(220), ease: "inQuad" }, hold + ms(160));
     timeline.play();
   }
@@ -3424,9 +3466,10 @@ export class GLUniverseInitiativeOverlay {
     splash.className = "gluni-break-splash gluni-break-splash--cinematic";
     splash.innerHTML = `
       <div class="gluni-break-splash-burst" aria-hidden="true"></div>
+      <div class="gluni-splash-band gluni-splash-band--break" aria-hidden="true"></div>
       <div class="gluni-break-splash-rule" aria-hidden="true"></div>
       <div class="gluni-break-splash-inner">
-        <div class="gluni-break-deck" aria-hidden="true"></div>
+        <div class="gluni-break-deck" aria-hidden="true" data-code="R${formatRound(this.combat?.round || 0)}"></div>
         <div class="gluni-break-splash-label">
           <span class="tick" aria-hidden="true"></span>
           <span>${localize("GLUNI.Splash.Break").toUpperCase()}</span>
@@ -3950,9 +3993,10 @@ export class GLUniverseInitiativeOverlay {
     const splash = document.createElement("div");
     splash.className = "gluni-round-splash gluni-round-splash--cinematic";
     splash.innerHTML = `
+      <div class="gluni-splash-band gluni-splash-band--round" aria-hidden="true"></div>
       <div class="gluni-round-rule" aria-hidden="true"></div>
       <div class="gluni-round-splash-inner">
-        <div class="gluni-round-deck" aria-hidden="true"></div>
+        <div class="gluni-round-deck" aria-hidden="true" data-code="R${formatted}"></div>
         <div class="gluni-round-label">
           <span class="tick" aria-hidden="true"></span>
           <span>${localize("GLUNI.Round").toUpperCase()}</span>
@@ -5985,6 +6029,50 @@ class CardFXManager {
   }
 }
 
+
+/**
+ * The rail's own cards for these combatants, rendered by the rail into a
+ * body-level layer and left for the caller to place. combat-intro lays them out
+ * for its sort and hands the nodes back through HANDOFF_HOOK, so the arrival
+ * morphs the very cards that are on screen: same markup, skin, disposition,
+ * face framing and visibility rules as the rail. A card this user may not see
+ * is left out. Card effects are not driven here, so their canvases are dropped.
+ *
+ * @returns {{layer: HTMLElement, cards: Array<{combatantId: string, owner: string|null, ghost: HTMLElement, card: HTMLElement}>, width: number, scale: number}|null}
+ */
+export function presentCards(combatId, ids = []) {
+  const rail = overlay;
+  const combat = rail?.getCombatById?.(combatId);
+  if (!rail || !combat) return null;
+  const settings = rail.getRenderSettings();
+  const width = rail.root?.querySelector(".gluni-rail .gluni-card")?.offsetWidth || 188;
+  const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gl-ui-scale")) || 1;
+  const layer = document.createElement("div");
+  layer.className = `gluni-initiative gluni-initiative--${settings.edge} gluni-card-ghost-layer gluni-card-ghost-layer--present`;
+  layer.setAttribute("aria-hidden", "true");
+  layer.inert = true;
+  const cards = [];
+  for (const id of ids) {
+    const combatant = combat.combatants.get(id);
+    if (!combatant) continue;
+    const model = rail.buildCombatantCard(combatant, {
+      key: `present:${id}`, active: false, delayed: false, roundOffset: 0, displayRound: Number(combat.round) || 1
+    });
+    if (!model) continue;
+    const ghost = document.createElement("div");
+    ghost.className = "gluni-card-ghost gluni-card-ghost--present";
+    ghost.style.width = `${width}px`;
+    ghost.innerHTML = rail.renderCombatantCard(model);
+    const card = ghost.querySelector(".gluni-card");
+    if (!card) continue;
+    card.querySelectorAll("canvas").forEach(node => node.remove());
+    layer.appendChild(ghost);
+    // A boss's extra turn names the turn it echoes, so the sort can fly it out of the boss.
+    cards.push({ combatantId: id, owner: turnMarker(combatant)?.owner ?? null, ghost, card });
+  }
+  mountOnBody(layer);
+  return { layer, cards, width, scale };
+}
 
 /** The combat-intro feature's API, reached through the suite (never imported). */
 function combatIntroApi() {

@@ -51,12 +51,49 @@ export const TOKEN_OVERLAY_PALETTE = {
   gaugeBed: 0x1a0f02                                                   // darkened --gl-warn: break-gauge track
 };
 
-export const DISPOSITION_PALETTE = {
-  friendly: { base: 0x5eeaff, hi: 0xb9f7ff },                          // --gl-cyan
-  hostile:  { base: 0xff4a52, hi: 0xff9098 },                          // --gl-hazard
-  neutral:  { base: 0xffce6a, hi: 0xffe6b0 },                          // neutral disposition amber
-  secret:   { base: 0xb497ff, hi: 0xe0d4ff }                           // --gl-violet / -hot
-};
+// The Etched (default skin) disposition colours: the GPU twins of
+// --gluni-side-* in styles/initiative.css. Friendly is --gl-good rather than
+// the rail's cyan chrome, so a party card and the HUD around it never read as
+// one colour. Under another skin syncDispositionPalette() overwrites these in
+// place from the skinned rail root, and Etched restores them from here.
+const DISPOSITION_ETCHED = Object.freeze({
+  friendly: Object.freeze({ base: 0x5fdb92, hi: 0xb6ffd0 }),           // --gluni-side-friendly (--gl-good / -hot)
+  hostile:  Object.freeze({ base: 0xff4a52, hi: 0xffc0c6 }),           // --gluni-side-hostile (--gl-hazard / -hot)
+  neutral:  Object.freeze({ base: 0xffce6a, hi: 0xffe6b0 }),           // --gluni-side-neutral (amber)
+  secret:   Object.freeze({ base: 0xb497ff, hi: 0xe0d4ff })            // --gl-violet / -hot
+});
+
+export const DISPOSITION_PALETTE = Object.fromEntries(
+  Object.entries(DISPOSITION_ETCHED).map(([key, value]) => [key, { ...value }])
+);
+
+// The custom properties each disposition is probed from on the skinned rail
+// root. Secret has no skin variant and always keeps its Etched colour.
+export const DISPOSITION_VARS = Object.freeze({
+  friendly: ["--gluni-side-friendly", "--gluni-side-friendly-hot"],
+  neutral:  ["--gluni-side-neutral", "--gluni-side-neutral-hot"],
+  hostile:  ["--gluni-side-hostile", "--gluni-side-hostile-hot"]
+});
+
+/**
+ * Re-point DISPOSITION_PALETTE at the skin in force. `readColor(name)` returns a
+ * 0xRRGGBB int for a custom property, or null when it cannot be read, in which
+ * case the Etched value stands. Mutates in place (call sites snapshot the
+ * object) and answers whether anything changed, so a caller repaints only then.
+ */
+export function syncDispositionPalette(readColor) {
+  let changed = false;
+  for (const [key, defaults] of Object.entries(DISPOSITION_ETCHED)) {
+    const names = DISPOSITION_VARS[key];
+    const base = (names && readColor(names[0])) ?? defaults.base;
+    const hi = (names && readColor(names[1])) ?? defaults.hi;
+    const entry = DISPOSITION_PALETTE[key];
+    if (entry.base !== base || entry.hi !== hi) changed = true;
+    entry.base = base;
+    entry.hi = hi;
+  }
+  return changed;
+}
 
 // vec3 floats consumed directly by the WebGL filter uniforms in
 // CardFXManager / TokenOverlayManager / BreakSplashGL.

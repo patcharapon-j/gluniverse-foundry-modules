@@ -11,7 +11,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { registerSettings, onInit, onReady } from "./gluniverse-initiative.mjs";
+import { registerSettings, onInit, onReady, presentCards } from "./gluniverse-initiative.mjs";
 
 Suite.register({
   id: "initiative",
@@ -60,5 +60,6 @@ Suite.register({
     },
   },
 
-  api: null,
+  // combat-intro reaches the rail through this, never by import (docs/COMBAT_INTRO.md).
+  api: { presentCards },
 });

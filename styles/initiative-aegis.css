@@ -56,6 +56,20 @@
   --gluni-aegis-screen: radial-gradient(circle, transparent 0 0.8px, color-mix(in srgb, var(--gluni-aegis-void) 46%, transparent) 1.25px) 0 0 / 3px 3px;
   --gluni-aegis-tape: repeating-linear-gradient(-45deg, var(--gluni-aegis-amber) 0 6px, var(--gluni-aegis-ink) 6px 12px);
   --gluni-aegis-hatch: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-amber) 16%, transparent) 0 2px, transparent 2px 8px);
+  /* The skin's own tape for non-danger beats (the round): red on ink, so amber
+     tape keeps meaning danger. */
+  --gluni-aegis-tape-red: repeating-linear-gradient(-45deg, var(--gluni-aegis-accent) 0 6px, var(--gluni-aegis-ink) 6px 12px);
+
+  /* Disposition ("side") colours. Party is verdigris, hostile the skin's red,
+     neutral bone: three hues and three lightness levels, and none of them
+     amber, which is danger here. Probed off this root for the token markers
+     (constants.mjs syncDispositionPalette), so they stay plain colours. */
+  --gluni-side-friendly: #5fc4b8;
+  --gluni-side-friendly-hot: #a8efe4;
+  --gluni-side-neutral: #e8dccb;
+  --gluni-side-neutral-hot: #fff6ea;
+  --gluni-side-hostile: var(--gl-accent);
+  --gluni-side-hostile-hot: var(--gluni-aegis-pale);
 
   /* The rail's own tokens. --gluni-cyan is the rail's chrome colour, so the
      whole HUD follows the accent through it. */
@@ -218,14 +232,16 @@
   );
 }
 
-/* The portrait is printed through the screen: a dark dot screen and a red
-   multiply wash over the art, never a filter on the art itself (the state
-   rules own that). */
+/* A red multiply wash over the art, never a filter on the art itself (the
+   state rules own that). No dot screen: a halftone over a face read as noise,
+   so the print texture lives on the plates around the art instead. */
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-glass {
-  background:
-    var(--gluni-aegis-screen),
-    linear-gradient(180deg, color-mix(in srgb, var(--gluni-aegis-deep) 30%, transparent), color-mix(in srgb, var(--gluni-aegis-void) 40%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gluni-aegis-deep) 22%, transparent), color-mix(in srgb, var(--gluni-aegis-void) 34%, transparent));
   mix-blend-mode: multiply;
+}
+
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-glass {
+  background: linear-gradient(180deg, transparent 40%, color-mix(in srgb, var(--gluni-aegis-void) 30%, transparent));
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-spec {
@@ -302,14 +318,10 @@
   clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%);
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--friendly {
-  --gluni-accent: var(--gluni-aegis-pale);
-}
-
 /* The active card: the accent plate, a red band and a tape strip at its foot. */
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-surface {
+  /* No halftone: this plate is almost all art on the active card. */
   background:
-    var(--gluni-aegis-halftone),
     linear-gradient(98deg, color-mix(in srgb, var(--gluni-accent, var(--gl-accent)) 18%, var(--gluni-aegis-raised-strong)), var(--gluni-aegis-surface) 64%);
   box-shadow:
     inset 0 2px 0 var(--gluni-accent, var(--gl-accent)),
@@ -423,13 +435,13 @@
   left: -22px;
   right: -22px;
   padding: 4px 0;
-  background: var(--gluni-aegis-tape);
+  background: var(--gluni-aegis-tape-red);
   box-shadow: 0 0 0 1px var(--gluni-aegis-void), 0 8px 24px color-mix(in srgb, var(--gluni-aegis-void) 66%, transparent);
 }
 
 .gluni-round-splash[data-gl-skin="aegis"] .gluni-round-sub span {
   padding: 2px 10px;
-  color: var(--gluni-aegis-amber);
+  color: var(--gluni-aegis-text);
   background: var(--gluni-aegis-ink);
   font-family: var(--gluni-aegis-hud);
   font-weight: var(--gl-weight-bold);
@@ -468,4 +480,130 @@
   color: var(--gluni-aegis-amber);
   background: var(--gluni-aegis-ink);
   box-shadow: 0 0 0 4px var(--gluni-aegis-ink), 0 0 0 6px var(--gluni-aegis-amber);
+}
+
+/* ---- Splash HUD pieces, struck in the skin --------------------------------- */
+/* The deck's notch clips anything outside it, so the Etched corner brackets
+   stand down; the data code stays, in the HUD face. */
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-deck, .gluni-break-deck)::before {
+  content: none;
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-deck, .gluni-break-deck)::after {
+  color: var(--gluni-splash-line);
+  font-family: var(--gluni-aegis-hud);
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-label, .gluni-break-splash-label) span:last-child {
+  padding: 4px 12px 4px calc(10px + 0.4em);
+  color: var(--gluni-aegis-ink);
+  border-left: 0;
+  background: var(--gluni-splash-line);
+  font-family: var(--gluni-aegis-hud);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.4em;
+  text-shadow: none;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-label, .gluni-break-splash-label) span:last-child::before {
+  color: var(--gluni-aegis-ink);
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] .tick {
+  height: 2px;
+  background: var(--gluni-splash-line);
+  box-shadow: none;
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-sub, .gluni-break-splash-name) span::before {
+  color: var(--gluni-splash-line);
+}
+
+/* Round: hard red rules, a halftone band edged in red, no soft glow. */
+.gluni-round-splash[data-gl-skin="aegis"] {
+  --gluni-splash-line: var(--gluni-aegis-accent);
+}
+
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule {
+  height: 2px;
+  background: var(--gluni-aegis-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gluni-aegis-void) 60%, transparent);
+}
+
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule::before {
+  content: none;
+}
+
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule::after {
+  background: color-mix(in srgb, var(--gluni-aegis-accent) 60%, transparent);
+}
+
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-splash-band {
+  border-block: 2px solid var(--gluni-aegis-accent);
+  background:
+    var(--gluni-aegis-halftone),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-accent) 22%, transparent) 0 8px, transparent 8px 16px),
+    color-mix(in srgb, var(--gluni-aegis-void) 55%, transparent);
+}
+
+/* Guard break: danger, so amber hatch, amber tape and an amber fracture (the
+   WebGL layer reads --gluni-fx-break off this element). */
+.gluni-break-splash[data-gl-skin="aegis"] {
+  --gluni-splash-line: var(--gluni-aegis-amber);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"].gluni-break-splash--show {
+  background:
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gluni-aegis-amber) 8%, transparent) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, transparent 20%, color-mix(in srgb, var(--gluni-aegis-void) 34%, transparent) 60%, color-mix(in srgb, var(--gluni-aegis-void) 62%, transparent) 100%);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-burst {
+  background:
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--gluni-aegis-amber) 22%, transparent) 0%,
+      color-mix(in srgb, var(--gluni-aegis-amber) 8%, transparent) 30%,
+      transparent 56%
+    );
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule {
+  height: 6px;
+  background: var(--gluni-aegis-tape);
+  box-shadow: 0 0 0 1px var(--gluni-aegis-void);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule::before {
+  content: none;
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule::after {
+  top: 9px;
+  background: color-mix(in srgb, var(--gluni-aegis-amber) 55%, transparent);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-splash-band {
+  border-block: 0;
+  background:
+    var(--gluni-aegis-tape) left top / 100% 5px no-repeat,
+    var(--gluni-aegis-tape) left bottom / 100% 5px no-repeat,
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-amber) 26%, transparent) 0 6px, transparent 6px 16px),
+    color-mix(in srgb, var(--gluni-aegis-void) 60%, transparent);
+}
+
+/* The wide face at the Etched size runs off a laptop screen, so it is set
+   a size down here. */
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-text {
+  font-size: clamp(72px, 11vw, 168px);
+  color: var(--gluni-aegis-amber);
+  text-shadow:
+    4px 4px 0 var(--gluni-aegis-ink),
+    0 0 30px color-mix(in srgb, var(--gluni-aegis-amber) 34%, transparent),
+    0 16px 48px color-mix(in srgb, var(--gluni-aegis-void) 88%, transparent);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-name span {
+  text-shadow: none;
 }

@@ -76,7 +76,7 @@ if (worstEnd > 1e-6) fail(`tumble: the die does not come to rest exactly on its 
 // blur and the throw reads as a glitch; a step-to-step change over 0.06 rad is a pop.
 if (worstStep > 0.4) fail(`tumble: spins faster than 0.4 rad per 120Hz frame (${worstStep.toFixed(3)})`);
 if (worstJerk > 0.06) fail(`tumble: discontinuous rate — a frame-to-frame jump of ${worstJerk.toFixed(3)} rad`);
-if (!(TUMBLE.duration > 1.5 && TUMBLE.duration < 3.5)) fail("tumble: duration outside the 1.5–3.5 s a spotlight can hold");
+if (!(TUMBLE.duration > 2.5 && TUMBLE.duration < 5)) fail("tumble: duration outside the 2.5–5 s a cinematic throw needs (shorter reads as a flick)");
 
 /* ── 2. beats and degree ─────────────────────────────────────────────── */
 const { scheduleBeats } = await imp("scripts/features/spotlight-roll/timeline.mjs");

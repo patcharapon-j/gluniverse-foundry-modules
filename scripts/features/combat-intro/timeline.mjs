@@ -24,8 +24,8 @@ export const INTRO = Object.freeze([
 /** The roll phase: the deal, then each slot's own throw clock. */
 export const ROLL = Object.freeze({
   deal: 900,          // cards unfold onto the table
-  tumble: 1250,       // the die leaves its idle pose and lands on its face
-  reveal: 520,        // the total counts up beside the die
+  tumble: 3800,       // the die leaves its idle pose, flies and lands on its face
+  reveal: 620,        // the total counts up beside the die
   settle: 650,        // grace after the LAST slot lands, before the sort
 });
 
@@ -37,8 +37,8 @@ export const SORT = Object.freeze([
 ]);
 
 export const HANDOFF = Object.freeze([
-  ["collapse", 650],  // cards shrink toward the rail's slots
-  ["dock", 750],      // they land as rail cards; the overlay drops away
+  ["collapse", 700],  // the rail's cards shrink to the rail's own size, re-stacked
+  ["dock", 450],      // the overlay drops away around them; the rail then flies them home
 ]);
 
 const total = (beats) => beats.reduce((a, [, ms]) => a + ms, 0);

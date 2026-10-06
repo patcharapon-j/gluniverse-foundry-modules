@@ -10,12 +10,14 @@
  *
  * Pure: no `game`, no DOM. tools/combat-intro-check.mjs drives every rule here.
  */
-import { PHASES, KINDS, OPS, SEVERITIES } from "./constants.mjs";
+import { PHASES, KINDS, OPS, SEVERITIES, SIDES, BOSS_TIERS } from "./constants.mjs";
 
 const str = (v, max = 200) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const bool = (v) => v === true;
 const id = (v) => (typeof v === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(v) ? v : null);
+const side = (v, pc) => (pc ? "party" : SIDES.includes(v) && v !== "party" ? v : "hostile");
+const boss = (b) => (b && BOSS_TIERS.includes(b.tier) ? { tier: b.tier, turns: Math.max(1, Math.min(9, Math.trunc(num(b.turns, 1)))) } : null);
 
 /* ── kinds and groups ─────────────────────────────────────────────────── */
 
@@ -36,18 +38,24 @@ export function kindKey({ sourceId = null, name = "", level = null } = {}) {
  * @param {object} d  descriptor built by the Foundry glue:
  *   { combatantId, actorUuid, tokenUuid, hidden, tokenHidden, isPC, ownerId,
  *     appearanceUserId, name, img, maskedName, maskedImg, kind (kindKey input),
- *     statistic, locked, stats: [{slug,label,mod}], mods: [{slug,label,value,enabled}] }
+ *     statistic, locked, stats: [{slug,label,mod}], mods: [{slug,label,value,enabled}],
+ *     side: friendly|neutral|hostile|secret (NPCs), boss: {tier, turns}|null }
  */
 export function publicSlot(d) {
   if (!d || d.hidden || d.tokenHidden) return null;     // the GM rolls it silently
   const cid = id(d.combatantId);
   if (!cid) return null;
   const pc = !!d.isPC;
+  const b = pc ? null : boss(d.boss);
+  const sd = side(d.side, pc);
   return {
     id: cid,
     combatantId: cid,
     kind: pc ? "pc" : "npc",
-    group: pc ? null : kindKey(d.kind ?? {}),
+    // A boss never shares a volley: it is the one creature the table must see alone.
+    group: pc ? null : b ? `boss:${cid}` : `${sd}|${kindKey(d.kind ?? {})}`,
+    side: sd,
+    boss: b,
     actorUuid: str(d.actorUuid),
     tokenUuid: str(d.tokenUuid),
     // An NPC is shown exactly as the tracker shows it: cipher name, masked art.
@@ -66,13 +74,13 @@ export function publicSlot(d) {
 
 /**
  * NPC slots folded into volley cards, in first-seen order.
- * @returns {Array<{group: string, name: string, img: string, slotIds: string[]}>}
+ * @returns {Array<{group: string, name: string, img: string, side: string, boss: object|null, slotIds: string[]}>}
  */
 export function npcGroups(slots) {
   const out = new Map();
   for (const s of slots ?? []) {
     if (s.kind !== "npc") continue;
-    const g = out.get(s.group) ?? { group: s.group, name: s.name, img: s.img, slotIds: [] };
+    const g = out.get(s.group) ?? { group: s.group, name: s.name, img: s.img, side: s.side ?? "hostile", boss: s.boss ?? null, slotIds: [] };
     g.slotIds.push(s.id);
     out.set(s.group, g);
   }
@@ -81,7 +89,7 @@ export function npcGroups(slots) {
 
 /* ── the state ────────────────────────────────────────────────────────── */
 
-const SLOT_KEYS = ["id", "combatantId", "kind", "group", "actorUuid", "tokenUuid", "name", "img", "ownerId", "appearanceUserId", "statistic", "locked", "stats", "mods", "throw"];
+const SLOT_KEYS = ["id", "combatantId", "kind", "group", "side", "boss", "actorUuid", "tokenUuid", "name", "img", "ownerId", "appearanceUserId", "statistic", "locked", "stats", "mods", "throw"];
 
 function normalizeThrow(t) {
   if (!t || typeof t !== "object") return null;
@@ -99,6 +107,8 @@ function normalizeSlot(s) {
     combatantId: id(s.combatantId) ?? sid,
     kind: s.kind,
     group: pc ? null : str(s.group, 200) || kindKey({ name: s.name }),
+    side: side(s.side, pc),
+    boss: pc ? null : boss(s.boss),
     actorUuid: str(s.actorUuid),
     tokenUuid: str(s.tokenUuid),
     name: str(s.name, 80),
@@ -136,13 +146,21 @@ export function normalizeState(raw) {
     intro: {
       title: str(raw.intro?.title, 120),
       threat: severity ? { severity, xp: num(raw.intro.threat.xp), budget: num(raw.intro.threat.budget) } : null,
-      party: (raw.intro?.party ?? []).slice(0, 12).map((p) => ({ name: str(p?.name, 80), img: str(p?.img, 400) })),
-      hostiles: (raw.intro?.hostiles ?? []).slice(0, 12).map((p) => ({ name: str(p?.name, 80), img: str(p?.img, 400), count: Math.max(1, num(p?.count, 1)) })),
+      party: (raw.intro?.party ?? []).slice(0, 12).map(rosterItem),
+      hostiles: (raw.intro?.hostiles ?? []).slice(0, 12).map(rosterItem),
     },
     slots,
     order: Array.isArray(raw.order) ? raw.order.map(id).filter(Boolean) : null,
+    // Combatant ids in turn order (boss extra turns included) for the rail-card sort.
+    // Ids only: each client's own rail decides what of each card it may show.
+    rail: Array.isArray(raw.rail) ? raw.rail.slice(0, 200).map(id).filter(Boolean) : null,
     late: id(raw.late),
   };
+}
+
+/** One roster entry. A boss rides at the head of its side with its tier. */
+function rosterItem(p) {
+  return { name: str(p?.name, 80), img: str(p?.img, 400), count: Math.max(1, num(p?.count, 1)), side: SIDES.includes(p?.side) ? p.side : "hostile", boss: boss(p?.boss) };
 }
 
 /** Is `from → to` a legal step of the sequence? (The GM's writes go through this.) */

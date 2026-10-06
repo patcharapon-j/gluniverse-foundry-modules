@@ -27,10 +27,13 @@ import { Suite } from "../../core/registry.mjs";
 import { createTimeline, animate, stagger, eases, createTimer } from "../../core/motion.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { FLAGS as INIT_FLAGS, VISIBILITY } from "../initiative/constants.mjs";
+import { getDisposition } from "../initiative/util.mjs";
 import { isExtraTurn } from "../pf2e-variant-rules/boss/initiative.mjs";
+import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
+import { frameImages } from "../../core/face-frame.mjs";
 import {
   FEATURE_ID, FLAG, SETTINGS, SOUND_PREFIX, SKIN_SETTING, SKINS, DEFAULT_SKIN, DSN_ID, DSN_MIN_MAJOR,
-  MSG, CUES, CUE_LEAD_MS, PRIVATE_KEY, HANDOFF_HOOK,
+  MSG, CUES, CUE_LEAD_MS, PRIVATE_KEY, HANDOFF_HOOK, ARRIVED_HOOK,
 } from "./constants.mjs";
 import { INTRO_MS, SORT_MS, HANDOFF_MS, phaseClock, sortReadyAt } from "./timeline.mjs";
 import {
@@ -275,7 +278,7 @@ async function show(combat, state) {
       now: () => performance.now(), serverNow: () => game.time.serverTime,
       viewer: viewer(), mayAct: (slot) => mayAct(game.user, slot, { owns }),
       onIntent: (intent) => sendIntent(intent), onGm: (action, payload) => gmAction(action, payload),
-      railRect,
+      railRect, frameArt, present: (ids) => presentRailCards(combat.id, ids),
     });
     stage.director = director;
     await director.mount(state);
@@ -304,9 +307,65 @@ function applyResult(raw) {
   stage.director.applyResult(res, localAt(res.at));
 }
 
+/**
+ * Every portrait the overlay draws is framed on the head in its art, the same
+ * locator the rail's cards use. The shots match each box: a band across the face
+ * on a PC card, a head on the square volley and roster tiles.
+ */
+const ART_SHOTS = Object.freeze({
+  card: { aspect: 1 / 0.62, headRatio: 0.66, eyeLine: 0.4 },
+  square: { aspect: 1, headRatio: 0.62, eyeLine: 0.42 },
+});
+function frameArt(layers) {
+  try {
+    frameImages(layers.back, ".glci-card-art > img", ART_SHOTS.card);
+    frameImages(layers.back, ".glci-volley-art > img, .glci-rank-art > img", ART_SHOTS.square);
+    frameImages(layers.front, ".glci-roster-item > img", ART_SHOTS.square);
+  } catch (e) { warn("combat-intro: face framing unavailable", e); }
+}
+
+/**
+ * The rail's own cards for the sort, rendered by the initiative feature (reached
+ * through the suite API, never imported). Null when the rail is not running here,
+ * and the director falls back to its own rank tiles.
+ */
+function presentRailCards(combatId, ids) {
+  try {
+    const p = game.modules.get(SUITE_ID)?.api?.features?.initiative?.presentCards?.(combatId, ids) ?? null;
+    if (p) stage.presentation = p;
+    return p;
+  } catch (e) { warn("combat-intro: rail cards unavailable", e); return null; }
+}
+
+/**
+ * After the handoff the presented cards outlive the overlay: they stay exactly
+ * where the sort left them until the rail's arrival has primed its own copies on
+ * top of them (ARRIVED_HOOK), so there is never a frame with both or neither.
+ * A rail that never arrives here (hidden, or the start failed) lets them fade.
+ */
+function lingerPresentation(combatId) {
+  const p = stage.presentation;
+  stage.presentation = null;
+  if (!p?.layer?.isConnected) return;
+  const drop = () => { clearTimeout(timer); Hooks.off(ARRIVED_HOOK, hook); p.layer.remove(); };
+  const hook = Hooks.on(ARRIVED_HOOK, (payload) => { if (!payload?.combatId || payload.combatId === combatId) drop(); });
+  const timer = setTimeout(() => {
+    Hooks.off(ARRIVED_HOOK, hook);
+    animate(p.layer, { opacity: [1, 0], duration: 320, ease: "outQuad", onComplete: () => p.layer.remove() });
+  }, 4000);
+}
+
+function dropPresentation() {
+  stage.presentation?.layer?.remove();
+  stage.presentation = null;
+}
+
 function teardown() {
   cancelAnimationFrame(stage.raf);
   stage.raf = 0;
+  // A sequence torn down before its handoff (a cancel, a skin switch) takes its
+  // presented cards with it; after the handoff they are the rail's to retire.
+  if (!stage.handedOff) dropPresentation();
   try { stage.director?.destroy(); } catch (e) { warn("combat-intro: destroy failed", e); }
   stage.director = null;
   try { stage.dice?.clear?.(); } catch { /* host gone */ }
@@ -355,6 +414,8 @@ function maybeHandOff() {
   if (!phaseClock(state, game.time.serverTime).done) return;
   stage.handedOff = true;
   const cards = stage.director?.handoffRects?.() ?? [];
+  stage.director?.releasePresentation?.();
+  lingerPresentation(combat.id);
   Hooks.callAll(HANDOFF_HOOK, { combatId: combat.id, late: !!state.late, cards });
 }
 
@@ -657,9 +718,14 @@ const conductor = {
       }
       const results = new Map(Object.entries(this.private.results));
       await commitInitiatives(combat, commitEntries(results, state.slots, hidden));
+      // A boss's extra turns are placed by Boss Creatures off the boss's committed
+      // initiative, on a hook of its own: the sort waits for them, so it plays the
+      // order the rail will really show.
+      await settleBossTurns(combat, state.slots);
       await this.postCards(combat);
       const order = orderFrom(combat.turns, state.slots);
-      await this.advance(combat, seqId, "rolling", "sorting", { order });
+      const rail = combat.turns.map((c) => c.id);
+      await this.advance(combat, seqId, "rolling", "sorting", { order, rail });
       const sorted = readState(combat);
       if (sorted?.phase === "sorting") this.at(sorted.at + SORT_MS, () => this.toHandoff(combat, seqId));
     } catch (e) {
@@ -746,6 +812,23 @@ function visibilityOf(c) {
   return { hidden: mode === VISIBILITY.hidden || foundryHidden, mystery: mode === VISIBILITY.mystery };
 }
 
+/**
+ * Boss Creatures creates and moves a boss's extra turns when the boss's
+ * initiative changes. Resolves once the combat has been quiet for a beat (or
+ * after a cap), so the sort reads them. Nothing to wait for without a boss.
+ */
+function settleBossTurns(combat, slots) {
+  if (!slots.some((s) => s.boss)) return Promise.resolve();
+  return new Promise((resolve) => {
+    let quiet = 0;
+    const hooks = ["createCombatant", "updateCombatant", "deleteCombatant"].map((h) => [h, Hooks.on(h, (c) => { if (c?.parent === combat) poke(); })]);
+    const finish = () => { clearTimeout(quiet); clearTimeout(cap); for (const [h, id] of hooks) Hooks.off(h, id); resolve(); };
+    const poke = () => { clearTimeout(quiet); quiet = setTimeout(finish, 400); };
+    const cap = setTimeout(finish, 2500);
+    poke();
+  });
+}
+
 async function buildSlots(combat, only = null) {
   const slots = [], hidden = [];
   for (const c of only ?? combat.combatants) {
@@ -761,8 +844,13 @@ async function buildSlots(combat, only = null) {
       combatantId: c.id, actorUuid: actor.uuid, tokenUuid: c.token?.uuid ?? "",
       hidden: false, tokenHidden: false, isPC,
       ownerId: owner?.id ?? null, appearanceUserId: owner?.id ?? game.user.id,
+      // The actor's portrait, as the rail shows it (never the token art): the card
+      // the sort hands over is the same picture the rail card carries.
       name: c.name ?? actor.name, img: actor.img,
-      maskedName: vis.mystery ? T("GLUNI.Unknown") : (c.name ?? actor.name), maskedImg: vis.mystery ? "" : (c.token?.texture?.src ?? actor.img),
+      maskedName: vis.mystery ? T("GLUNI.Unknown") : (c.name ?? actor.name), maskedImg: vis.mystery ? "" : actor.img,
+      side: isPC ? "party" : getDisposition(c, vis.mystery),
+      // A mystery card must not say "boss" any more than the rail's does.
+      boss: isPC || vis.mystery ? null : bossBadge(actor),
       // A mystified creature's kind would name it in the flag and the DOM, so it gets one of its own.
       kind: vis.mystery ? { name: `mystery-${c.id}` } : { sourceId: compendiumSource(actor), name: actor.name, level: actor.level ?? actor.system?.details?.level?.value ?? null },
       statistic, locked: false,
@@ -782,8 +870,15 @@ async function buildIntro(combat, title, slots) {
       if (enc) threat = { severity: enc.severity, xp: enc.totalXp, budget: enc.budget?.[enc.severity] ?? 0 };
     } catch (e) { warn("combat-intro: threat unavailable", e); }
   }
-  const party = slots.filter((s) => s.kind === "pc").map((s) => ({ name: s.name, img: s.img }));
-  const hostiles = npcGroups(slots).map((g) => ({ name: g.name, img: g.img, count: g.slotIds.length }));
+  // Friendly creatures stand with the party; neutral and hostile ones across from
+  // it, a boss at the head of its side.
+  const groups = npcGroups(slots);
+  const item = (g) => ({ name: g.name, img: g.img, count: g.slotIds.length, side: g.side, boss: g.boss });
+  const party = [
+    ...slots.filter((s) => s.kind === "pc").map((s) => ({ name: s.name, img: s.img, count: 1, side: "party", boss: null })),
+    ...groups.filter((g) => g.side === "friendly").map(item),
+  ];
+  const hostiles = groups.filter((g) => g.side !== "friendly").map(item).sort((a, b) => (b.boss ? 1 : 0) - (a.boss ? 1 : 0));
   return { title, threat, party, hostiles };
 }
 
@@ -827,7 +922,10 @@ function onCombatChanged(combat) {
 
 function maybeHandOffNow(combat) {
   stage.handedOff = true;
-  Hooks.callAll(HANDOFF_HOOK, { combatId: combat.id, late: false, cards: stage.director?.handoffRects?.() ?? [] });
+  const cards = stage.director?.handoffRects?.() ?? [];
+  stage.director?.releasePresentation?.();
+  lingerPresentation(combat.id);
+  Hooks.callAll(HANDOFF_HOOK, { combatId: combat.id, late: false, cards });
 }
 
 /** Reinforcements: combatants created after the start get a small roll moment. */

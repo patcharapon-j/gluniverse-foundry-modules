@@ -70,7 +70,8 @@ function bakeMarkerSheet(renderer, active, high) {
   const temp = PIXI.RenderTexture.create({ width: hiRes, height: hiRes });
   temp.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
 
-  const src = makeFxMesh(FX_FRAG_TURN_BAKE, { uPhase: 0, uActive: active, uHigh: high });
+  // A fixed seed: the baked sheet must loop, and every client bakes the same one.
+  const src = makeFxMesh(FX_FRAG_TURN_BAKE, { uPhase: 0, uActive: active, uHigh: high, uSeed: 0 });
   src.blendMode = PIXI.BLEND_MODES.NONE;
   setFxMeshQuad(src, hiRes, hiRes, false);
 

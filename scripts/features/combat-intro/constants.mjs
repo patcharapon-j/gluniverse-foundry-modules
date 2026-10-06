@@ -47,6 +47,10 @@ export const PHASES = Object.freeze(["intro", "rolling", "sorting", "handoff"]);
 
 /** Slot kinds. A hidden token never becomes a slot at all. */
 export const KINDS = Object.freeze(["pc", "npc"]);
+/** Which side a card is on. Mirrors the rail's disposition classes; "party" is a PC. */
+export const SIDES = Object.freeze(["party", "friendly", "neutral", "hostile", "secret"]);
+/** Boss tiers (Boss Creatures, pf2e-variant-rules). */
+export const BOSS_TIERS = Object.freeze(["greater", "supreme"]);
 
 /**
  * Quick-pick statistics on a PC card, in display order. Everything else the
@@ -84,3 +88,5 @@ export const PRIVATE_KEY = "gluniverse-foundry-modules.ci.private";
  */
 /** Hook this feature raises right before startCombat(), carrying the cards' screen rects for the arrival. */
 export const HANDOFF_HOOK = "gluniverse.combatIntro.handoff";
+/** Raised by the rail once its arrival has primed: the presented cards may go. */
+export const ARRIVED_HOOK = "gluniverse.initiative.arrived";

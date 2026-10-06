@@ -43,7 +43,9 @@ const tokensOf = (list) => list.filter((t) => t?.actor).slice(0, MAX_ROLLERS);
 export const RequestApp = {
   open({ conductor }) {
     const App = factory();
-    if (_open?.rendered) { _open.bringToFront?.(); return _open; }
+    // Rendering counts as open: the scene control fires both onChange and the
+    // bound click, and a second instance under the same id must not be built.
+    if (_open?.state > 0) { _open.bringToFront?.(); return _open; }
     _open = new App({ conductor });
     _open.render({ force: true });
     return _open;
@@ -78,13 +80,13 @@ function factory() {
       this.rollers = tokensOf(canvas?.tokens?.controlled ?? []).map((t) => ({ actor: t.actor, token: t }));
       const target = game.user.targets?.first?.();
       this.defender = target?.actor && !this.rollers.some((r) => r.actor === target.actor) ? { actor: target.actor, token: target } : null;
-      this.form = { kind: "skill", slug: "athletics", formula: "1d20", title: "", dc: "", dcMode: "hidden", audience: "all", fortune: "none", bonus: 0, statistic: "fortitude" };
+      this.draft = { kind: "skill", slug: "athletics", formula: "1d20", title: "", dc: "", dcMode: "hidden", audience: "all", fortune: "none", bonus: 0, statistic: "fortitude" };
     }
 
     async _prepareContext(options) {
       const ctx = await super._prepareContext(options);
       const actors = this.rollers.map((r) => r.actor);
-      const f = this.form;
+      const f = this.draft;
       return {
         ...ctx,
         f,
@@ -112,9 +114,9 @@ function factory() {
       this.element.addEventListener("change", (e) => {
         const el = e.target;
         if (!el.name) return;
-        this.form[el.name] = el.value;
+        this.draft[el.name] = el.value;
         if (el.name === "kind") {
-          this.form.slug = el.value === "save" ? "fortitude" : el.value === "skill" ? "athletics" : "";
+          this.draft.slug = el.value === "save" ? "fortitude" : el.value === "skill" ? "athletics" : "";
           this.render();
         }
       });

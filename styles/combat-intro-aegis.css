@@ -46,6 +46,14 @@
   --glci-aegis-amber-hot: #ffe08a;
   /* hostiles keep the red identity; amber is reserved for danger */
   --glci-hostile: var(--gl-accent);
+  /* Sides, matching the rail's Aegis dispositions: verdigris for the party and
+     its friends, bone for the uncommitted, the skin's red for the enemy. None of
+     them is amber, which only ever means danger here. */
+  --glci-side-party: #5fc4b8;
+  --glci-side-friendly: #5fc4b8;
+  --glci-side-neutral: #e8dccb;
+  --glci-side-hostile: var(--gl-accent);
+  --glci-side-secret: #c98a83;
 
   --glci-aegis-hud: "Google Sans Code", var(--gl-tech);
   --glci-aegis-display: "Google Sans Flex", var(--gl-display);
@@ -162,7 +170,7 @@
 }
 
 /* Roster: hostiles keep the red identity (amber is reserved for danger). */
-.glci[data-skin="aegis"] .glci-roster-side[data-side="party"] { --gl-accent: var(--glci-hot); }
+.glci[data-skin="aegis"] .glci-roster-side[data-side="party"] { --gl-accent: var(--glci-side-party); }
 .glci[data-skin="aegis"] .glci-roster-side::before {
   font-family: var(--glci-aegis-hud);
   letter-spacing: 0.22em;
@@ -501,7 +509,7 @@
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
 }
 .glci[data-skin="aegis"][data-lite~="cardBlur"] .glci-rank::before { backdrop-filter: none; }
-.glci[data-skin="aegis"] .glci-rank[data-kind="pc"] { --gl-accent: var(--glci-hot); }
+
 .glci[data-skin="aegis"] .glci-rank-art {
   position: relative;
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);

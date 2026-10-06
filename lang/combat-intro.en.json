@@ -122,7 +122,8 @@
       "society": "Society",
       "stealth": "Stealth",
       "survival": "Survival",
-      "thievery": "Thievery"
+      "thievery": "Thievery",
+      "change": "Change statistic"
     },
     "card": {
       "roll": "Roll",
@@ -138,6 +139,14 @@
     },
     "late": {
       "title": "Reinforcement"
+    },
+    "boss": {
+      "tag": "Boss",
+      "tier": {
+        "greater": "Greater",
+        "supreme": "Supreme"
+      },
+      "turns": "{n} turns"
     }
   }
 }

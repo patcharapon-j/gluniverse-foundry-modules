@@ -17,7 +17,7 @@
  *   layers.gm      button.glci-gm-btn     (GM only)
  */
 import { escapeHTML as esc } from "../../core/util.mjs";
-import { QUICK_STATS, INTRO_LINES } from "./constants.mjs";
+import { QUICK_STATS, INTRO_LINES, BOSS_TIERS } from "./constants.mjs";
 import { npcGroups } from "./state-model.mjs";
 
 /** An NPC carries no stat values, so its picker draws from this list. Labels: GLCI.stat.<slug>. */
@@ -31,7 +31,14 @@ export const I18N_DYNAMIC = Object.freeze({
   "GLCI.stat": NPC_STATS,
   "GLCI.intro.etched": INTRO_LINES.etched,
   "GLCI.intro.aegis": INTRO_LINES.aegis,
+  "GLCI.boss.tier": BOSS_TIERS,
 });
+
+/** The boss plate: tier and how many turns a round it takes. Empty for anything else. */
+function bossMark(b, t, f) {
+  if (!b) return "";
+  return `<span class="glci-boss" data-tier="${esc(b.tier)}"><b>${esc(t("GLCI.boss.tag"))}</b><span>${esc(t(`GLCI.boss.tier.${b.tier}`))}</span>${b.turns > 1 ? `<span>${esc(f("GLCI.boss.turns", { n: b.turns }))}</span>` : ""}</span>`;
+}
 
 const signed = (n) => (n >= 0 ? `+${n}` : `−${Math.abs(n)}`);
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -72,6 +79,16 @@ function statPicker(slot, { t, gm, locked, values }) {
     + (rest.length ? `<details class="glci-more"><summary>${esc(t("GLCI.stat.more"))}</summary><div class="glci-more-list">${rest.map((s) => chip(s, statLabel(slot, s, t), valueOf(s), slot.statistic === s, disabled)).join("")}</div></details>` : "");
 }
 
+/**
+ * A volley's statistic, for the GM: one menu, not a wall of chips. Several
+ * creature kinds each carrying the full picker is what pushed the roll table
+ * off the screen; the current statistic is already printed in the volley head.
+ */
+function statMenu(slot, t) {
+  const chips = NPC_STATS.map((s) => chip(s, statLabel(slot, s, t), null, slot.statistic === s, false)).join("");
+  return `<details class="glci-more glci-more--stat"><summary>${esc(t("GLCI.stat.change"))}</summary><div class="glci-more-list">${chips}</div></details>`;
+}
+
 function pcCard(slot, n, ctx) {
   const { t, f } = ctx.i18n;
   const role = ctx.viewer?.role ?? "player";
@@ -88,7 +105,7 @@ function pcCard(slot, n, ctx) {
         </div>
       </div>`;
   return `
-    <article class="glci-card" data-slot="${esc(slot.id)}" data-kind="pc" data-state="waiting" data-may-act="${may ? 1 : 0}" data-locked="${slot.locked ? 1 : 0}"${ctx.state.late ? ' data-late="1"' : ""}>
+    <article class="glci-card" data-slot="${esc(slot.id)}" data-kind="pc" data-side="party" data-state="waiting" data-may-act="${may ? 1 : 0}" data-locked="${slot.locked ? 1 : 0}"${ctx.state.late ? ' data-late="1"' : ""}>
       <i class="glci-card-frame" aria-hidden="true"></i>
       <div class="glci-card-art">${slot.img ? `<img src="${esc(slot.img)}" alt="" draggable="false">` : ""}</div>
       <header class="glci-card-head">
@@ -103,19 +120,20 @@ function pcCard(slot, n, ctx) {
 }
 
 function volleyCard(g, slots, ctx) {
-  const { t } = ctx.i18n;
+  const { t, f } = ctx.i18n;
   const gm = ctx.viewer?.role === "gm";
   const first = slots[0];
   return `
-    <article class="glci-volley" data-group="${esc(g.group)}" data-slots="${esc(g.slotIds.join(" "))}" data-state="waiting" data-may-act="${gm ? 1 : 0}">
+    <article class="glci-volley" data-group="${esc(g.group)}" data-side="${esc(g.side ?? "hostile")}"${g.boss ? ` data-boss="${esc(g.boss.tier)}"` : ""} data-slots="${esc(g.slotIds.join(" "))}" data-state="waiting" data-may-act="${gm ? 1 : 0}">
       <i class="glci-card-frame" aria-hidden="true"></i>
       <div class="glci-volley-art">${g.img ? `<img src="${esc(g.img)}" alt="" draggable="false">` : ""}</div>
       <header class="glci-volley-head">
+        ${bossMark(g.boss, t, f)}
         <h3 class="glci-volley-name">${esc(g.name)}</h3>
-        <span class="glci-volley-count">×${g.slotIds.length}</span>
+        ${g.slotIds.length > 1 ? `<span class="glci-volley-count">×${g.slotIds.length}</span>` : ""}
         <span class="glci-volley-stat">${esc(statLabel(first, first.statistic, t))}</span>
       </header>
-      ${gm ? `<div class="glci-card-controls">${statPicker(first, { t, gm: true, locked: false, values: false })}</div>` : ""}
+      ${gm ? `<div class="glci-card-controls">${statMenu(first, t)}</div>` : ""}
       <div class="glci-volley-dice">${slots.map((s) => `<span class="glci-mini-die" data-slot="${esc(s.id)}" data-state="waiting"><i class="glci-mini-total"></i></span>`).join("")}</div>
       <span class="glci-volley-seal">${esc(t("GLCI.card.sealed"))}</span>
       ${gm ? `<button type="button" class="glci-volley-throw" data-gm="volley" data-group="${esc(g.group)}">${esc(t("GLCI.gm.volley"))}</button>` : ""}
@@ -129,7 +147,7 @@ function introMarkup(state, ctx) {
   const intro = state.intro;
   const side = (name, list) => `
       <div class="glci-roster-side" data-side="${name}">
-        ${list.map((p, i) => `<div class="glci-roster-item" style="--glci-i:${i}">${p.img ? `<img src="${esc(p.img)}" alt="" draggable="false">` : "<i></i>"}<span class="glci-roster-name">${esc(p.name)}</span>${p.count > 1 ? `<span class="glci-roster-count">×${p.count}</span>` : ""}</div>`).join("")}
+        ${list.map((p, i) => `<div class="glci-roster-item" data-side="${esc(p.side ?? (name === "party" ? "party" : "hostile"))}"${p.boss ? ` data-boss="${esc(p.boss.tier)}"` : ""} style="--glci-i:${i}">${p.img ? `<img src="${esc(p.img)}" alt="" draggable="false">` : "<i></i>"}${bossMark(p.boss, t, f)}<span class="glci-roster-name">${esc(p.name)}</span>${p.count > 1 ? `<span class="glci-roster-count">×${p.count}</span>` : ""}</div>`).join("")}
       </div>`;
   const sev = intro.threat?.severity;
   return `
@@ -235,7 +253,7 @@ function sync(refs, ctx) {
 
 /** One sort tile. The director positions it; `.glci-rank-total` is filled at the hold beat. */
 function rank(slot, n) {
-  return `<div class="glci-rank" data-slot="${esc(slot.id)}" data-kind="${slot.kind}">
+  return `<div class="glci-rank" data-slot="${esc(slot.id)}" data-kind="${slot.kind}" data-side="${esc(slot.side ?? (slot.kind === "pc" ? "party" : "hostile"))}"${slot.boss ? ` data-boss="${esc(slot.boss.tier)}"` : ""}>
     <span class="glci-rank-n">${pad2(n + 1)}</span>
     <span class="glci-rank-art">${slot.img ? `<img src="${esc(slot.img)}" alt="" draggable="false">` : ""}</span>
     <span class="glci-rank-name">${esc(slot.name)}</span>

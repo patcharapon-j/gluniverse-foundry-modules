@@ -35,9 +35,9 @@ export const SHED_ORDER = Object.freeze([...new Set([...OWN_SHED, ...Object.valu
 
 /** The die fits the roll phase's tumble beat exactly: flight + settle = ROLL.tumble. */
 export const TUMBLE_PARAMS = Object.freeze({
-  duration: (ROLL.tumble / 1000) * 0.8,
-  settle: (ROLL.tumble / 1000) * 0.2,
-  spinPeak: 17, spinCross: 6, arrival: 2.4, rockHz: 2.8, rockDecay: 12, lift: 0.3, liftScale: 0.12,
+  duration: (ROLL.tumble / 1000) * 0.76,
+  settle: (ROLL.tumble / 1000) * 0.24,
+  spinPeak: 17, spinCross: 7, arrival: 2.2, rockHz: 1.8, rockDecay: 5.6, lift: 0.3, liftScale: 0.12,
 });
 
 const PHASE_INDEX = { intro: 0, rolling: 1, sorting: 2, handoff: 3 };
@@ -59,6 +59,9 @@ export class Director {
       now: () => performance.now(), serverNow: () => Date.now(),
       viewer: { userId: null, isGM: false, role: "spectator" }, mayAct: () => false,
       onIntent: () => {}, onGm: () => {}, palette: () => ({}), cssOnly: false,
+      // present(combatantIds) → the rail's own cards ({layer, cards, width, scale}) or null;
+      // frameArt(layers) frames every portrait on its head. Both optional (the preview has neither).
+      present: null, frameArt: null,
     }, o);
     this.state = null;
     this.refs = null;
@@ -91,6 +94,8 @@ export class Director {
       await this.backdrop.compile(this.skinModule);
     }
     this.refs = this.overlay.build({ layers: this.layers, state, i18n: this.i18n, viewer: this.viewer, mayAct: this.mayAct });
+    this.frameArt?.(this.layers);
+    this._fitTable();
     this._wire();
     const shown = this._shown();
     const rows = await this.dice.createDice(shown.map((s) => [{ faces: 20, userId: s.appearanceUserId, actorUuid: s.actorUuid, small: s.kind === "npc" }]));
@@ -137,10 +142,34 @@ export class Director {
   seek(ms) { this.frozen = Math.max(0, Number(ms) || 0); }
   play() { this.frozen = null; }
 
-  /** Where each card ended after the collapse, for the rail's arrival. */
+  /**
+   * Where each card ended after the collapse, for the rail's arrival. With the
+   * rail's own cards on screen each entry also carries the card NODE: the rail
+   * snapshots it and morphs its real card out of exactly what is there.
+   */
   handoffRects() {
+    if (this._present) {
+      return this._present.cards.map((c) => {
+        const r = c.card.getBoundingClientRect();
+        return { combatantId: c.combatantId, node: c.card, rect: { left: r.left, top: r.top, width: r.width, height: r.height } };
+      });
+    }
     const plan = this._handoffPlan ?? this._planHandoff(this._order());
     return plan.map((p) => ({ combatantId: p.combatantId, rect: { ...p.rect } }));
+  }
+
+  /**
+   * Hand the presented cards over: they keep their last pose (no revert) and the
+   * director forgets them, so its teardown cannot snap or remove them. The caller
+   * retires the layer once the rail has taken over.
+   */
+  releasePresentation() {
+    if (!this._present) return null;
+    const p = this._present;
+    this._present = null;
+    this.timelines.sort = null;
+    this.timelines.handoff = null;
+    return p;
   }
 
   destroy() {
@@ -167,7 +196,12 @@ export class Director {
   _dropTimeline(k) {
     try { this.timelines[k]?.revert?.(); } catch { /* already gone */ }
     this.timelines[k] = null;
-    if (k === "sort") { this._sortPlan = null; this.refs?.sort?.replaceChildren(); }
+    if (k === "sort") {
+      this._sortPlan = null;
+      this.refs?.sort?.replaceChildren();
+      this._present?.layer?.remove();
+      this._present = null;
+    }
     if (k === "handoff") this._handoffPlan = null;
   }
 
@@ -210,6 +244,26 @@ export class Director {
     };
     this.root.addEventListener("click", onClick);
     this._unwire = () => this.root.removeEventListener("click", onClick);
+  }
+
+  /**
+   * Shrink the roll table to fit its box. A big party, or many creature kinds
+   * on the GM's screen, otherwise pushes the top cards off the screen. Uniform
+   * scale about the centre; the dice read their anchors back after it.
+   */
+  _fitTable() {
+    const table = this.refs?.table;
+    if (!table) return;
+    const W = globalThis.innerWidth ?? 0, H = globalThis.innerHeight ?? 0;
+    if (this._fitFor === `${W}x${H}`) return;
+    this._fitFor = `${W}x${H}`;
+    table.style.removeProperty("--glci-fit");
+    const kids = [...table.children];
+    const gap = parseFloat(getComputedStyle(table).rowGap) || 0;
+    const need = kids.reduce((a, el) => a + el.offsetHeight, 0) + gap * Math.max(0, kids.length - 1);
+    const wide = Math.max(0, ...kids.map((el) => el.scrollWidth));
+    const k = Math.min(1, table.clientHeight / Math.max(1, need), table.clientWidth / Math.max(1, wide));
+    if (k < 0.995) table.style.setProperty("--glci-fit", String(Math.max(0.5, Math.round(k * 1000) / 1000)));
   }
 
   /* ── what is on screen ─────────────────────────────────────────────── */
@@ -322,7 +376,116 @@ export class Director {
     return r && r.width ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
   }
 
+  /**
+   * The rail's own cards, stacked in turn order in the middle of the screen: the
+   * sort IS the rail, only bigger, so the handoff has nothing to turn into. Each
+   * card flies out of the roll-table card (or die) that rolled it; a boss's extra
+   * turns fly out of the boss. Uniform scale only, so nothing is ever squashed.
+   */
+  _presentSort() {
+    const st = this.state;
+    const ids = st?.rail ?? [];
+    const p = ids.length ? this.present?.(ids) : null;
+    if (!p?.cards?.length) { p?.layer?.remove(); return null; }
+    this._present = p;
+    const W = globalThis.innerWidth ?? 1600, H = globalThis.innerHeight ?? 900;
+    const n = p.cards.length;
+    const hs = p.cards.map((c) => c.ghost.offsetHeight || 58);
+    const gap = 8;
+    const colH = (list) => list.reduce((a, h) => a + h, 0) + gap * Math.max(0, list.length - 1);
+    // Two columns only when one would leave the cards smaller than the rail's own.
+    let cols = 1;
+    let Z = Math.min(1.9, (H * 0.76) / colH(hs), (W * 0.36) / p.width);
+    if (Z < p.scale * 1.2 && n > 5) {
+      cols = 2;
+      const per = Math.ceil(n / 2);
+      Z = Math.min(1.9, (H * 0.76) / Math.max(colH(hs.slice(0, per)), colH(hs.slice(per))), (W * 0.36) / p.width);
+    }
+    Z = Math.max(Z, p.scale);
+    this._presentZ = Z;
+    const per = Math.ceil(n / cols);
+    this._presentCols = { cols, per };
+    const slots = this._columnLayout(hs, { cols, per, Z, W, H, width: p.width, gap });
+    const byCombatant = new Map(st.slots.map((s) => [s.combatantId, s]));
+    const tl = createTimeline({ autoplay: false, defaults: { ease: "outQuart" } });
+    const move = beatStart(SORT, "move");
+    const stag = Math.min(60, 380 / Math.max(1, n));
+    const doc = this.root.ownerDocument;
+    tl.add(this.refs.table, { opacity: [1, 0], duration: 360, ease: "outQuad" }, 60);
+    this._presentPlan = p.cards.map((c, i) => {
+      const d = slots[i];
+      const slot = byCombatant.get(c.combatantId) ?? byCombatant.get(c.owner);
+      const src = (slot && this._sourceRect(slot.id)) ?? { left: d.cx - 40, top: H + 40, width: 80, height: 80 };
+      Object.assign(c.ghost.style, { left: `${d.cx - p.width / 2}px`, top: `${d.cy - hs[i] / 2}px` });
+      c.ghost.dataset.side = slot?.side ?? "";
+      const dx = src.left + src.width / 2 - d.cx, dy = src.top + src.height / 2 - d.cy;
+      const k0 = Math.max(0.3, Math.min(Z, src.width / p.width));
+      tl.set(c.ghost, { translateX: dx, translateY: dy, scale: k0, opacity: 0 }, 0);
+      tl.add(c.ghost, { opacity: [0, 1], duration: 240, ease: "outQuad" }, 30 + i * 22);
+      tl.add(c.ghost, { translateX: [dx, 0], translateY: [dy, 0], scale: [k0, Z], duration: 900, ease: "inOutCubic" }, move + i * stag);
+      // The comet tail and the rank number live in the overlay, under the cards.
+      const trail = doc.createElement("i");
+      trail.className = "glci-rank-trail glci-rank-trail--rail";
+      if (slot?.side) trail.dataset.side = slot.side;
+      const len = Math.hypot(dx, dy);
+      Object.assign(trail.style, { left: `${d.cx}px`, top: `${d.cy}px`, width: `${len}px`, rotate: `${Math.atan2(dy, dx)}rad` });
+      this.refs.sort.append(trail);
+      tl.set(trail, { opacity: 0, scaleX: 0 }, 0);
+      tl.add(trail, { scaleX: [0, 1], opacity: [0, 0.85], duration: 600, ease: "inOutCubic" }, move + i * stag + 40);
+      tl.add(trail, { opacity: [0.85, 0], duration: 360, ease: "outQuad" }, move + i * stag + 620);
+      const num = doc.createElement("span");
+      num.className = "glci-rail-n";
+      if (slot?.side) num.dataset.side = slot.side;
+      num.textContent = String(i + 1).padStart(2, "0");
+      Object.assign(num.style, { left: `${d.cx - (p.width * Z) / 2}px`, top: `${d.cy}px` });
+      this.refs.sort.append(num);
+      tl.set(num, { opacity: 0 }, 0);
+      tl.add(num, { opacity: [0, 1], translateX: [12, 0], duration: 320, ease: "outBack(2)" }, move + i * stag + 760);
+      return { id: slot?.id ?? null, combatantId: c.combatantId, ghost: c.ghost, card: c.card, h: hs[i], num, slot: d };
+    });
+    return tl;
+  }
+
+  /** Centres of a column (or two) of cards of these layout heights at scale Z. */
+  _columnLayout(hs, { cols, per, Z, W, H, width, gap }) {
+    const out = [];
+    for (let c = 0; c < cols; c++) {
+      const list = hs.slice(c * per, (c + 1) * per);
+      const colH = (list.reduce((a, h) => a + h, 0) + gap * Math.max(0, list.length - 1)) * Z;
+      const cx = W / 2 + (c - (cols - 1) / 2) * (width * Z + 56);
+      let y = H / 2 - colH / 2;
+      for (const h of list) { out.push({ cx, cy: y + (h * Z) / 2 }); y += (h + gap) * Z; }
+    }
+    return out;
+  }
+
+  /**
+   * The presented cards shrink to exactly the rail's size, re-stacked at that
+   * size, so the rail's arrival only has to move them. The rank numbers go.
+   */
+  _presentHandoff() {
+    const p = this._present;
+    if (!this.timelines.sort) this.timelines.sort = this._sortTimeline();
+    this.timelines.sort?.seek(beatStart(SORT, "settle") + SORT.at(-1)[1]);
+    const W = globalThis.innerWidth ?? 1600, H = globalThis.innerHeight ?? 900;
+    const plan = this._presentPlan ?? [];
+    const s = p.scale || 1;
+    const { cols, per } = this._presentCols ?? { cols: 1, per: plan.length };
+    const end = this._columnLayout(plan.map((e) => e.h), { cols, per, Z: s, W, H, width: p.width, gap: 6 });
+    const tl = createTimeline({ autoplay: false, defaults: { ease: "inOutQuart" } });
+    const len = HANDOFF.find(([k]) => k === "collapse")[1];
+    const stag = Math.min(30, 200 / Math.max(1, plan.length));
+    plan.forEach((e, i) => {
+      const dx = end[i].cx - e.slot.cx, dy = end[i].cy - e.slot.cy;
+      tl.add(e.ghost, { translateX: [0, dx], translateY: [0, dy], scale: [this._presentZ ?? s, s], duration: len - stag * Math.min(i, 6), ease: "inOutQuart" }, i * stag * 0.5);
+      tl.add(e.num, { opacity: [1, 0], duration: 220, ease: "outQuad" }, 0);
+    });
+    return tl;
+  }
+
   _sortTimeline() {
+    const presented = this.present ? this._presentSort() : null;
+    if (presented) return presented;
     const st = this.state;
     const order = this._order();
     const byId = new Map(st.slots.map((s) => [s.id, s]));
@@ -395,6 +558,7 @@ export class Director {
 
   _handoffTimeline() {
     if (!this.timelines.sort) this.timelines.sort = this._sortTimeline();
+    if (this._present) return this._presentHandoff();
     this.timelines.sort.seek(beatStart(SORT, "settle") + SORT.at(-1)[1]);
     const plan = this._planHandoff(this._order());
     this._handoffPlan = plan;
@@ -501,6 +665,7 @@ export class Director {
     }
     T("beat", beat);
 
+    this._fitTable();
     // 2 ── read every anchor (one layout)
     const shown = this._shown();
     const anchors = shown.map((s) => {
@@ -606,6 +771,18 @@ export class Director {
       this._write(`vs:${group}`, this.refs.volleys.get(group), (e, val) => { e.dataset.state = val; }, v);
     }
 
+    // the rail's cards: their initiative counts up as the seals break
+    if ((phase === "sorting" || phase === "handoff") && this._present && this._presentPlan) {
+      const reveal = phase === "handoff" ? 1 : clamp01((ms - 150) / 520);
+      for (const e of this._presentPlan) {
+        const badge = e.card.querySelector(".gluni-initiative-badge");
+        if (!badge) continue;
+        badge.dataset.final ??= badge.textContent;
+        const final = Number(badge.dataset.final);
+        const v = !Number.isFinite(final) ? badge.dataset.final : reveal <= 0 ? "—" : reveal >= 1 ? badge.dataset.final : String(Math.round(final * outCubic(reveal)));
+        this._write(`rb:${e.combatantId}`, badge, (el, val) => { el.textContent = val; }, v);
+      }
+    }
     // sort tiles: totals read at the hold beat (NPC seals break here)
     if ((phase === "sorting" || phase === "handoff") && this._sortPlan) {
       const reveal = phase === "handoff" ? 1 : clamp01((ms - 150) / 300);

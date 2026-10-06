@@ -6,11 +6,20 @@ start** in the initiative rail's header; every client plays the same sequence:
 1. **intro** (timed) — party versus hostiles, the encounter title, the threat.
 2. **rolling** (waits for people) — each PC's card with the owner's own Dice So
    Nice die, a statistic picker and modifier chips; NPCs answer in one GM
-   volley, grouped by kind, their totals sealed.
-3. **sorting** (timed) — the GM commits every value in one batch, the cards
-   travel into PF2e's own order (`combat.turns`).
-4. **handoff** (timed) — the cards collapse into the rail, which plays its
-   arrival, and the GM calls `combat.startCombat()`.
+   volley, grouped by kind and side, their totals sealed. A boss is never
+   grouped: it gets its own, larger volley with its tier and turns per round.
+3. **sorting** (timed) — the GM commits every value in one batch, waits for
+   Boss Creatures to place the extra turns, and the rail's own cards (one per
+   turn, extra turns included) fly out of the roll table into a centred column
+   in PF2e's order (`combat.turns`).
+4. **handoff** (timed) — the column shrinks to exactly the rail's size, the
+   overlay fades around it, and the GM calls `combat.startCombat()`. The rail's
+   arrival then morphs its real cards out of those very nodes.
+
+Every portrait is the actor's image (as the rail shows it, never the token
+art), framed on the head by the shared face locator. Each card carries its
+side (`party`, `friendly`, `neutral`, `hostile`, `secret`) in the same hues as
+the rail's dispositions.
 
 Feature id `combat-intro`, setting prefix `ci.`, i18n namespace `GLCI.*`. It
 requires the `initiative` feature, PF2e and Dice So Nice 6.x. The skin is the
@@ -64,13 +73,16 @@ const director = new Director({
   mayAct,             // (slot) => boolean
   onIntent,           // ({ op: "stat"|"toggle"|"throw", slotId, ... }) => void
   onGm,               // (action: "rest"|"skip"|"cancel"|"rollFor", { slotId? }) => void
-  railRect,           // () => DOMRect-like of the rail, or null (handoff target)
+  railRect,           // () => DOMRect-like of the rail, or null (fallback handoff target)
+  present,            // (combatantIds) => the rail's cards (initiative api presentCards), or null
+  frameArt,           // (layers) => void: frames every portrait on its head
 });
 await director.mount(state);          // builds DOM for state.skin, creates every die
 director.setState(state, { totals }); // new flag value; totals: Map<slotId, number> once committed
 director.applyResult(result, localAt);// a normalized result (full or sealed), cue at localAt
 director.frame({ width, height, dpr });
-director.handoffRects();              // [{ combatantId, rect: { left, top, width, height } }]
+director.handoffRects();              // [{ combatantId, rect, node? }]: node = the presented rail card
+director.releasePresentation();       // hand the presented cards over without reverting them
 director.destroy();
 ```
 
@@ -154,9 +166,14 @@ The initiative feature owns the skin (`init.skin`) and never imports this one.
 Its header asks `api.features["combat-intro"].canStart(combat)` and calls
 `start(combat)`; it re-renders on `gluniverse.combatIntro.ready`. At the end of
 the handoff every client raises `gluniverse.combatIntro.handoff` with
-`{ combatId, late, cards: [{ combatantId, rect }] }`; the rail holds it for 6 s
-and, on the `started` update, plays its arrival from those rects instead of the
-round splash.
+`{ combatId, late, cards: [{ combatantId, rect, node }] }`; the rail snapshots
+each `node` at once, holds the payload for 6 s and, on the `started` update,
+plays its arrival from those snapshots instead of the round splash. In the same
+task it raises `gluniverse.initiative.arrived`, and only then does this feature
+remove the presented cards, so no frame shows both or neither. The sort's cards
+come from the initiative API's `presentCards(combatId, ids)`, which renders the
+rail's own markup, visibility rules and skin into a body-level ghost layer.
+Without it (the preview) the sort falls back to its own rank tiles.
 
 ## PF2e
 
