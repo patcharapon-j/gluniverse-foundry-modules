@@ -9,7 +9,7 @@ export const SOCKET_NAME = `module.${MODULE_ID}`;
 
 export const SETTINGS = {
   enabled: "init.enabled",
-  initiativeMode: "init.initiativeMode",
+  skin: "init.skin",
   edge: "init.edge",
   visibleCount: "init.visibleCount",
   showAllCombatants: "init.showAllCombatants",
@@ -91,28 +91,25 @@ export const FLAGS = {
   adhoc: "init.adhoc",
   adhocActor: "init.adhocActor",
   turnStart: "init.turnStart",
-  hiddenConditions: "init.hiddenConditions",
-  // Card initiative mode: per-actor deck config { cards, turns } stored on the
-  // Actor, and the live shuffled turn order stored on the Combat as cardDeal:
-  // { round, pointer, sequence: [{ cid, n }] }.
-  cardConfig: "init.cardConfig",
-  cardDeal: "init.cardDeal"
+  hiddenConditions: "init.hiddenConditions"
+  // init.cardConfig / init.cardDeal belonged to the removed card initiative
+  // mode. Worlds may still carry them; nothing reads them any more.
 };
 
-export const INITIATIVE_MODE = Object.freeze({ standard: "standard", card: "card" });
+/**
+ * The rail's skin. A skin is a scoped re-dress of the same markup: the tracker
+ * root and every element this feature mounts on <body> carry
+ * `data-gl-skin="<id>"`, and styles/initiative-aegis.css matches only under
+ * that attribute (docs/adr/0001-scoped-skins.md). Etched x Endfield is the
+ * default and lives in styles/initiative.css itself.
+ */
+export const SKINS = Object.freeze({ etched: "etched", aegis: "aegis" });
+export const DEFAULT_SKIN = SKINS.etched;
 
-// Card mode per-actor deck configuration.
-//  - cards: copies of this actor's card in the deck; more copies => more likely
-//    to be dealt an early slot. Extra draws after placement are ignored.
-//  - turns: how many turns this actor takes per round (boss multi-turn). Each of
-//    the actor's first `turns` draws becomes a real turn slot.
-// The deck holds max(cards, turns) copies so a multi-turn actor can always reach
-// its full turn count.
-export const CARD_CONFIG_DEFAULTS = Object.freeze({ cards: 1, turns: 1 });
-export const CARD_CONFIG_LIMITS = Object.freeze({
-  cards: Object.freeze({ min: 1, max: 10 }),
-  turns: Object.freeze({ min: 1, max: 10 })
-});
+/** A valid skin id for any stored value; anything unknown reads as the default. */
+export function skinOf(value) {
+  return Object.hasOwn(SKINS, value) ? SKINS[value] : DEFAULT_SKIN;
+}
 
 // Break gauge: a GM-managed resource bar that depletes toward a guard break.
 // Stored per-combatant under FLAGS.breakGauge as { max, value, mode }.
@@ -263,29 +260,12 @@ export const LOCALIZATION_FALLBACKS = Object.freeze({
   "GLUNI.Splash.Break": "GUARD BREAK",
   "GLUNI.Splash.Cycle": "INITIATIVE - CYCLE {round}",
   "GLUNI.Unknown": "Unknown",
-  "GLUNI.Settings.InitiativeMode.Name": "Initiative mode",
-  "GLUNI.Settings.InitiativeMode.Hint": "Standard uses each combatant's rolled initiative. Card draws a fresh, shuffled turn order each round, ignoring initiative scores.",
-  "GLUNI.Settings.InitiativeMode.Standard": "Standard (initiative scores)",
-  "GLUNI.Settings.InitiativeMode.Card": "Card (shuffle &amp; deal each round)",
-  "GLUNI.Card.Order": "Draw order {order}",
-  "GLUNI.Card.Swap": "Swap turn with another combatant",
-  "GLUNI.Card.SwapCancel": "Cancel swap",
-  "GLUNI.Card.SwapPick": "Force this combatant to act now",
-  "GLUNI.Card.SwapPickShort": "Act now",
-  "GLUNI.Card.Reshuffle": "Reshuffle",
-  "GLUNI.Card.Deck": "Deck",
-  "GLUNI.Card.DeckRemaining": "{count} cards left this round",
-  "GLUNI.Card.Reorder": "Drag to reorder upcoming turns",
-  "GLUNI.Card.Config.Button": "Deck",
-  "GLUNI.Card.Config.Open": "Configure initiative deck",
-  "GLUNI.Card.Config.Title": "{name} Initiative Deck",
-  "GLUNI.Card.Config.Hint": "Card initiative settings for this actor. These only apply while the Card initiative mode is active.",
-  "GLUNI.Card.Config.Cards": "Cards in deck",
-  "GLUNI.Card.Config.CardsHint": "More copies make this actor more likely to be dealt an early turn. Extra copies do not grant extra turns.",
-  "GLUNI.Card.Config.Turns": "Turns per round",
-  "GLUNI.Card.Config.TurnsHint": "How many turns this actor takes each round (for multi-turn bosses).",
-  "GLUNI.Card.Config.Reset": "Reset",
-  "GLUNI.Card.Config.Save": "Save"
+  "GLUNI.Settings.Skin.Name": "Tracker skin",
+  "GLUNI.Settings.Skin.Hint": "How the initiative tracker, its splashes and its card effects are dressed. Layout and motion are the same in every skin.",
+  "GLUNI.Settings.Skin.Etched": "Etched × Endfield",
+  "GLUNI.Settings.Skin.Aegis": "Aegis Fallen",
+  "GLUNI.Controls.CinematicStart": "Cinematic start",
+  "GLUNI.Hud.Init": "INIT"
 });
 
 export const ADHOC_DEFAULT_TYPE = "effect";

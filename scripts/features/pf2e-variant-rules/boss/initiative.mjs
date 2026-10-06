@@ -4,30 +4,21 @@
  * "All bosses gain additional turns, allowing them to act multiple times in the
  * same round." A Greater boss takes 2, a Supreme 3.
  *
- * The suite's initiative rail has two modes and they need completely different
- * treatment, which is the whole reason this file exists:
+ * Nothing in the suite wraps `Combat#setupTurns`, subclasses `Combatant`, or
+ * ever mutates `combat.turns`; the rail reads Foundry's own turn order and
+ * hands turn advancement straight back to `combat.nextTurn()`. The only way to
+ * give a creature a second turn without patching the system out from under
+ * every other module is to put a second *entry* in the order — which is exactly
+ * what the rail's own ad hoc combatants already do.
  *
- *   • **Card mode** already models a multi-turn actor. `buildCardSequence` reads
- *     a per-actor `init.cardConfig` of `{ cards, turns }` and gives that actor
- *     `turns` slots in the shuffled deal. So all a boss has to do there is write
- *     its turn count into that flag and get out of the way.
+ * So a boss gets N−1 extra real Combatant documents pointing at the same actor
+ * and token, each flagged as that boss's Nth turn. Foundry sorts them, walks
+ * them, and every other module that reads the tracker sees a perfectly ordinary
+ * turn order. Nothing is patched.
  *
- *   • **Standard mode** has no such thing. Nothing in the suite wraps
- *     `Combat#setupTurns`, subclasses `Combatant`, or ever mutates
- *     `combat.turns`; the rail reads Foundry's own turn order and hands turn
- *     advancement straight back to `combat.nextTurn()`. The only way to give a
- *     creature a second turn without patching the system out from under every
- *     other module is to put a second *entry* in the order — which is exactly
- *     what the rail's own ad hoc combatants already do.
- *
- * So in standard mode a boss gets N−1 extra real Combatant documents pointing at
- * the same actor and token, each flagged as that boss's Nth turn. Foundry sorts
- * them, walks them, and every other module that reads the tracker sees a
- * perfectly ordinary turn order. Nothing is patched.
- *
- * The two paths must never both run: a boss with extra combatants *and* a
- * cardConfig of 3 would be dealt three cards per extra entry and take nine turns
- * a round, which looks like the rail is broken rather than like a rule is wrong.
+ * (The rail once had a card mode that modelled multi-turn through a per-actor
+ * `init.cardConfig` flag. It is gone; worlds may still carry that flag and
+ * nothing reads or writes it.)
  */
 
 import { SUITE_ID, warn } from "../../../core/const.mjs";
@@ -37,19 +28,6 @@ import { BOSS_FLAGS } from "./constants.mjs";
 import { bossTurns, turnOffsets } from "./rules.mjs";
 import { bossProfile } from "./profile.mjs";
 import { advanceTurn, resetState } from "./downfall.mjs";
-
-/** The initiative feature's own keys. Read, never written except cardConfig. */
-const INIT_MODE_SETTING = "init.initiativeMode";
-const INIT_CARD_CONFIG = "init.cardConfig";
-
-/** True when the rail is running its card deal rather than Foundry's order. */
-export function cardMode() {
-  try {
-    return game.settings.get(SUITE_ID, INIT_MODE_SETTING) === "card";
-  } catch {
-    return false;
-  }
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    PLACEMENT — pure, so the check tool can assert on it
@@ -162,10 +140,9 @@ export async function syncBossTurns(combat, combatant) {
   const profile = bossProfile(combatant.actor);
   const existing = extrasFor(combat, combatant.id);
 
-  // In card mode the deal owns multi-turn, so every extra entry has to go — and
-  // so does a table that switched extra turns off, which must leave the
-  // encounter exactly as it found it rather than merely stopping.
-  const allowed = profile && get(SETTINGS.bossExtraTurns, true) && !cardMode();
+  // A table that switched extra turns off must leave the encounter exactly as
+  // it found it rather than merely stopping, so every extra entry goes.
+  const allowed = profile && get(SETTINGS.bossExtraTurns, true);
   const wanted = allowed ? bossTurns(profile.tier) - 1 : 0;
 
   if (!wanted) {
@@ -239,25 +216,6 @@ export async function syncEncounter(combat) {
     if (isExtraTurn(combatant)) continue;
     if (!bossProfile(combatant?.actor)) continue;
     await syncBossTurns(combat, combatant);
-  }
-}
-
-/**
- * Keep the per-actor card config honest.
- *
- * Written when a boss is marked or its tier changes, and reset to 1 when it is
- * unmarked, so a world that switches the rail to card mode later already has the
- * right turn count without the GM having to find the deck dialog.
- */
-export async function syncCardConfig(actor, turns) {
-  if (!actor?.setFlag) return;
-  const count = Math.max(1, Math.trunc(Number(turns) || 1));
-  const current = actor.getFlag(SUITE_ID, INIT_CARD_CONFIG) ?? {};
-  if (Number(current.turns) === count) return;
-  try {
-    await actor.setFlag(SUITE_ID, INIT_CARD_CONFIG, { ...current, turns: count });
-  } catch (error) {
-    warn("pf2e-variant-rules | could not write the card turn count", error);
   }
 }
 

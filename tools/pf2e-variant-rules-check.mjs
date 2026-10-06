@@ -1194,14 +1194,14 @@ if (!incapSource.includes("bossIncapacitationLevel")) {
 }
 
 /*
- * Card mode and standard mode must never both give a boss its extra turns. The
- * card deal already multiplies an actor's slots by `cardConfig.turns`, so extra
- * Combatant documents on top of it would be dealt once each — a Supreme boss
- * taking nine turns a round.
+ * Extra turns are real Combatant documents and the only multi-turn path. The
+ * rail's card mode (which modelled it through a per-actor `init.cardConfig`)
+ * was removed; nothing may read or write that flag again, or a second path
+ * would multiply a boss's turns.
  */
 const bossInitSource = read("scripts/features/pf2e-variant-rules/boss/initiative.mjs");
-if (!bossInitSource.includes("!cardMode()")) {
-  fail("boss: extra combatants are not gated on card mode — the card deal would multiply them again");
+if (/cardMode\(\)|init\.cardConfig["'`]|init\.initiativeMode/.test(bossInitSource.replace(/\/\*[\s\S]*?\*\//g, ""))) {
+  fail("boss: extra turns reach for the removed card mode — extra Combatants are the only multi-turn path");
 }
 if (!bossInitSource.includes("deleteEmbeddedDocuments")) {
   fail("boss: a boss whose extra turns are switched off must have them removed, not merely stopped");

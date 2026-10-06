@@ -225,6 +225,7 @@ rather than at the end.
 | pf2e-arcane-surge  | surge.                       | pf2e              | —               | off     |
 | pf2e-creaturedex   | dex.                         | pf2e              | —               | off     |
 | spotlight-roll     | dr.                          | pf2e              | dice-so-nice (6.x, v14) | off |
+| combat-intro       | ci.                          | pf2e              | dice-so-nice (6.x, v14); feature initiative | off |
 | stream             | stream.                      | null              | —               | off     |
 | stream-cards       | stream.card                  | pf2e              | ⤷ stream        | off     |
 | stream-targets     | tgt.                         | null              | —               | off     |

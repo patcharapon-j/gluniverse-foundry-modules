@@ -1,0 +1,613 @@
+/* ============================================================================
+ * Combat Intro — "Aegis Fallen" skin.
+ *
+ * A SCOPED SKIN (docs/adr/0001-scoped-skins.md). Every rule here is matched
+ * under `.glci[data-skin="aegis"]`, the overlay's own root; nothing writes on
+ * :root and nothing matches a bare `[data-skin]`. Layout and motion are the
+ * base sheet's (styles/combat-intro.css) and the director's; this sheet only
+ * changes material, type and the CSS-only fallback ground.
+ *
+ * The look is the GLUniverse Audience app's Aegis language: red halftone
+ * printed through a monitor, NOTCH / CHAMFER cuts, 12px L-bracket corners,
+ * HUD codes, octagon portrait plates over a dot screen, amber/black hazard
+ * tape, scanlines. Red is identity; amber (+ a hazard hatch) is ONLY for
+ * danger and warning, so the two never share a meaning.
+ *
+ * `--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` resolve
+ * at :root against the suite accent, so every accent-derived value here is
+ * struck with color-mix() off var(--gl-accent) instead.
+ *
+ * Type: Google Sans Code (HUD voice) and Google Sans Flex wide (display), both
+ * declared in styles/gl-fonts.css. This sheet declares no font.
+ * ==========================================================================*/
+
+/* ---- Palette + token remap ----------------------------------------------- */
+.glci[data-skin="aegis"] {
+  --gl-accent: #ff3b2f;
+
+  /* Read by the WebGL palette probe (backdrop uAccent/uHot/uInk/uWarn). */
+  --glci-accent: var(--gl-accent);
+  --glci-hot: #ffb4a8;
+  --glci-ink: #0a0606;
+  --glci-warn: #f6c01e;
+
+  --glci-aegis-strong: #c8141c;
+  --glci-aegis-deep: #8a0d12;
+  --glci-aegis-deeper: #4a0709;
+  --glci-aegis-void: #050303;
+  --glci-aegis-panel: #120c0cf0;
+  --glci-aegis-raised: #181010;
+  --glci-aegis-raised-strong: #221515;
+  --glci-aegis-border: #3a1f1f;
+  --glci-aegis-border-strong: #56292a;
+  --glci-aegis-text: #f1ecea;
+  --glci-aegis-muted: #bfaeab;
+  --glci-aegis-subtle: #7d6966;
+  --glci-aegis-amber-hot: #ffe08a;
+  /* hostiles keep the red identity; amber is reserved for danger */
+  --glci-hostile: var(--gl-accent);
+
+  --glci-aegis-hud: "Google Sans Code", var(--gl-tech);
+  --glci-aegis-display: "Google Sans Flex", var(--gl-display);
+
+  --glci-aegis-notch: 18px;
+  --glci-aegis-cut-sm: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  --glci-aegis-chamfer: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, var(--gl-cut-sm) 100%, 0 calc(100% - var(--gl-cut-sm)));
+  --glci-aegis-plate: polygon(18% 0, 100% 0, 100% 82%, 82% 100%, 0 100%, 0 18%);
+
+  --glci-aegis-halftone: radial-gradient(circle, color-mix(in oklab, var(--gl-accent) 34%, transparent) 0 0.7px, transparent 1.1px) 0 0 / 4px 4px;
+  --glci-aegis-grid: linear-gradient(color-mix(in oklab, var(--gl-accent) 7%, transparent) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, color-mix(in oklab, var(--gl-accent) 7%, transparent) 1px, transparent 1px) 0 0 / 44px 44px;
+  --glci-aegis-scanlines: repeating-linear-gradient(to bottom, transparent 0 2px, rgb(var(--gl-tint-dark) / 0.35) 2px 3px);
+  --glci-aegis-tape: repeating-linear-gradient(-45deg, var(--glci-warn) 0 12px, var(--glci-ink) 12px 24px);
+  --glci-aegis-hatch: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--glci-warn) 18%, transparent) 0 2px, transparent 2px 8px);
+
+  color: var(--glci-aegis-text);
+  font-family: var(--glci-aegis-hud);
+}
+
+/* Foundry styles headings and buttons at element level; restate the voice. */
+.glci[data-skin="aegis"] :is(h1, h3, button, summary) {
+  font-family: var(--glci-aegis-hud);
+  color: inherit;
+}
+
+/* ---- Shared vocabulary --------------------------------------------------- */
+/* Wide display: the brand's hero cut. */
+.glci[data-skin="aegis"] :is(.glci-intro-title, .glci-intro-versus, .glci-card-name, .glci-volley-name, .glci-card-total-v, .glci-rank-n, .glci-rank-total, .glci-roll, .glci-threat-v) {
+  font-family: var(--glci-aegis-display);
+  font-stretch: 135%;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+
+/* HUD voice: codes, labels, readouts. */
+.glci[data-skin="aegis"] :is(.glci-card-tag, .glci-card-stat, .glci-card-total-k, .glci-card-nat, .glci-volley-count, .glci-volley-stat, .glci-roster-name, .glci-roster-count, .glci-threat-k, .glci-threat-xp, .glci-rank-name, .glci-chip, .glci-more > summary, .glci-gm-btn, .glci-rollfor, .glci-volley-throw, .glci-volley-seal) {
+  font-family: var(--glci-aegis-hud);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- Intro --------------------------------------------------------------- */
+/* Positions are the base sheet's; only the material changes here. */
+.glci[data-skin="aegis"] .glci-intro-eyebrow {
+  font-family: var(--glci-aegis-display);
+  font-stretch: 112%;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  color: var(--glci-hot);
+}
+.glci[data-skin="aegis"] .glci-intro-eyebrow > span {
+  background: color-mix(in oklab, var(--glci-ink) 80%, transparent);
+  border-left: 0;
+  box-shadow: inset 3px 0 0 var(--gl-accent), inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 35%, transparent);
+  clip-path: var(--glci-aegis-cut-sm);
+}
+/* a lit status pip, then the HUD code the base sheet prints after */
+.glci[data-skin="aegis"] .glci-intro-eyebrow > span::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: var(--gl-accent);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--gl-accent) 70%, transparent);
+}
+.glci[data-skin="aegis"] .glci-intro-eyebrow > span::after {
+  content: "// MOD-01";
+  font-family: var(--glci-aegis-hud);
+  font-stretch: normal;
+  color: var(--glci-aegis-subtle);
+}
+
+.glci[data-skin="aegis"] .glci-intro-title {
+  font-size: clamp(30px, 4.1vw, 88px);
+  font-stretch: 140%;
+  line-height: 1;
+  color: var(--glci-aegis-text);
+  /* the plate printed slightly off register: red and cyan ghosts, no bloom */
+  text-shadow:
+    0.035em 0 0 color-mix(in oklab, var(--gl-accent) 60%, transparent),
+    -0.025em 0 0 color-mix(in oklab, var(--gl-cyan) 22%, transparent),
+    0 0 0.35em color-mix(in oklab, var(--gl-accent) 28%, transparent);
+}
+
+/* The motto rides amber/black hazard tape: a black slug stencilled in amber over it. */
+.glci[data-skin="aegis"] .glci-intro-motto {
+  left: 50%;
+  right: auto;
+  translate: -50% 0;
+  padding: 7px 30px;
+  font-family: var(--glci-aegis-hud);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  white-space: nowrap;
+  color: var(--glci-warn);
+  background:
+    linear-gradient(var(--glci-ink), var(--glci-ink)) center / calc(100% - 36px) calc(100% - 8px) no-repeat,
+    var(--glci-aegis-tape);
+  box-shadow: 0 0 0 1px var(--glci-ink), 0 8px 24px rgb(var(--gl-tint-dark) / 0.66);
+}
+
+.glci[data-skin="aegis"] .glci-intro-versus > span {
+  font-family: var(--glci-aegis-display);
+  font-size: clamp(18px, 1.9vw, 34px);
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--gl-accent);
+  text-shadow: none;
+}
+
+/* Roster: hostiles keep the red identity (amber is reserved for danger). */
+.glci[data-skin="aegis"] .glci-roster-side[data-side="party"] { --gl-accent: var(--glci-hot); }
+.glci[data-skin="aegis"] .glci-roster-side::before {
+  font-family: var(--glci-aegis-hud);
+  letter-spacing: 0.22em;
+}
+.glci[data-skin="aegis"] .glci-roster-side[data-side="party"]::before { content: "PC-UNIT // FRIENDLY"; }
+.glci[data-skin="aegis"] .glci-roster-side[data-side="hostiles"]::before { content: "CONTACT // HOSTILE"; }
+
+/* PcPlate portraits: an octagon cut, a solid accent rim, a dot screen over the art. */
+.glci[data-skin="aegis"] .glci-roster-item > :is(img, i) {
+  box-sizing: border-box;
+  padding: 3px;
+  background: var(--gl-accent);
+  box-shadow: none;
+  outline: 0;
+  clip-path: var(--glci-aegis-plate);
+}
+.glci[data-skin="aegis"] .glci-roster-item > i {
+  background:
+    var(--glci-aegis-halftone),
+    linear-gradient(var(--glci-aegis-raised-strong), var(--glci-aegis-raised-strong)) content-box,
+    var(--gl-accent);
+}
+.glci[data-skin="aegis"] .glci-roster-item::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 3px;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle, rgb(var(--gl-tint-dark) / 0.45) 0 0.8px, transparent 1.2px) 0 0 / 3px 3px,
+    linear-gradient(to top, color-mix(in oklab, var(--glci-aegis-deep) 50%, transparent), transparent 55%);
+  clip-path: var(--glci-aegis-plate);
+  pointer-events: none;
+}
+.glci[data-skin="aegis"] .glci-roster-name { font-weight: 700; color: var(--glci-aegis-text); }
+.glci[data-skin="aegis"] .glci-roster-count {
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+
+/* Threat: the contract's RISK tag. Red label + readout; amber and the hatch past moderate. */
+.glci[data-skin="aegis"] .glci-threat {
+  gap: 0;
+  padding: 0;
+  height: 34px;
+  background: transparent;
+  box-shadow: none;
+  clip-path: var(--glci-aegis-cut-sm);
+}
+.glci[data-skin="aegis"] .glci-threat[data-severity="moderate"] { --glci-sev: var(--gl-accent); }
+.glci[data-skin="aegis"] .glci-threat :is(.glci-threat-k, .glci-threat-v, .glci-threat-xp) {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0 14px;
+}
+.glci[data-skin="aegis"] .glci-threat-k {
+  font-weight: 700;
+  color: var(--glci-ink);
+  background: var(--glci-sev);
+}
+.glci[data-skin="aegis"] .glci-threat-k::before { content: none; }
+.glci[data-skin="aegis"] .glci-threat-v {
+  font-size: 18px;
+  color: var(--glci-aegis-text);
+  background: color-mix(in oklab, var(--glci-ink) 90%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--glci-sev) 50%, transparent), inset 0 -1px 0 color-mix(in oklab, var(--glci-sev) 50%, transparent);
+}
+.glci[data-skin="aegis"] .glci-threat-xp {
+  color: var(--glci-aegis-muted);
+  background: color-mix(in oklab, var(--glci-ink) 90%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--glci-sev) 50%, transparent), inset 0 -1px 0 color-mix(in oklab, var(--glci-sev) 50%, transparent), inset -1px 0 0 color-mix(in oklab, var(--glci-sev) 50%, transparent);
+}
+.glci[data-skin="aegis"] .glci-threat:is([data-severity="severe"], [data-severity="extreme"]) { --glci-sev: var(--glci-warn); }
+.glci[data-skin="aegis"] .glci-threat:is([data-severity="severe"], [data-severity="extreme"]) :is(.glci-threat-v, .glci-threat-xp) {
+  color: var(--glci-warn);
+  background: var(--glci-aegis-hatch), color-mix(in oklab, var(--glci-ink) 92%, transparent);
+}
+.glci[data-skin="aegis"] .glci-threat[data-severity="extreme"] .glci-threat-v {
+  animation: glci-aegis-alarm var(--gl-d-slow) var(--gl-linear) infinite;
+}
+
+/* ---- Roll table: cards in the Hub's Module-card material ------------------ */
+/* Layout, sizes and visibility are the base sheet's. */
+.glci[data-skin="aegis"] :is(.glci-card, .glci-volley) {
+  color: var(--glci-aegis-text);
+  background:
+    var(--glci-aegis-scanlines),
+    var(--glci-aegis-grid),
+    var(--glci-aegis-panel);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k))) saturate(1.1);
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border);
+  /* NOTCH: one cut, top right */
+  clip-path: polygon(0 0, calc(100% - var(--glci-aegis-notch)) 0, 100% var(--glci-aegis-notch), 100% 100%, 0 100%);
+}
+.glci[data-skin="aegis"][data-lite~="cardBlur"] :is(.glci-card, .glci-volley) {
+  backdrop-filter: none;
+  background: var(--glci-aegis-scanlines), var(--glci-aegis-grid), var(--glci-aegis-raised);
+}
+.glci[data-skin="aegis"] .glci-volley { --glci-aegis-notch: 12px; }
+
+/* L-bracket corners (12px, accent) and the notch's own edge, replacing the base frame. */
+.glci[data-skin="aegis"] .glci-card-frame {
+  inset: 0;
+  background:
+    linear-gradient(to bottom left, transparent calc(50% - 0.5px), var(--glci-aegis-border-strong) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)) right top / var(--glci-aegis-notch) var(--glci-aegis-notch) no-repeat;
+}
+.glci[data-skin="aegis"] .glci-card-frame::before,
+.glci[data-skin="aegis"] .glci-card-frame::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+.glci[data-skin="aegis"] .glci-card-frame::before { top: 8px; left: 8px; border-top: 1px solid var(--gl-accent); border-left: 1px solid var(--gl-accent); }
+.glci[data-skin="aegis"] .glci-card-frame::after { right: 8px; bottom: 8px; border-right: 1px solid var(--gl-accent); border-bottom: 1px solid var(--gl-accent); }
+
+.glci[data-skin="aegis"] .glci-card-tag { color: var(--glci-aegis-subtle); }
+.glci[data-skin="aegis"] :is(.glci-card-name, .glci-volley-name) {
+  font-size: clamp(14px, 1.15vw, 19px);
+  font-stretch: 118%;
+  line-height: 1.05;
+  color: var(--glci-aegis-text);
+}
+.glci[data-skin="aegis"] :is(.glci-card-stat, .glci-volley-stat) { color: var(--gl-accent); }
+
+/* Card art: printed through the dot screen, burnt red at the foot. */
+.glci[data-skin="aegis"] .glci-card-art { position: relative; }
+.glci[data-skin="aegis"] :is(.glci-card-art, .glci-volley-art) > img { filter: saturate(0.78) contrast(1.08); }
+.glci[data-skin="aegis"] .glci-card-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle, rgb(var(--gl-tint-dark) / 0.42) 0 0.8px, transparent 1.2px) 0 0 / 3px 3px,
+    linear-gradient(to top, color-mix(in oklab, var(--glci-aegis-deep) 60%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+/* PcPlate: the volley's portrait in an octagon with a solid accent rim and dot screen. */
+.glci[data-skin="aegis"] .glci-volley-art {
+  position: relative;
+  box-sizing: border-box;
+  padding: 3px;
+  background: var(--gl-accent);
+  box-shadow: none;
+  clip-path: var(--glci-aegis-plate);
+}
+.glci[data-skin="aegis"] .glci-volley-art > img { clip-path: var(--glci-aegis-plate); }
+.glci[data-skin="aegis"] .glci-volley-art:empty { background: var(--glci-aegis-halftone), var(--glci-aegis-raised-strong); }
+.glci[data-skin="aegis"] .glci-volley-art::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: radial-gradient(circle, rgb(var(--gl-tint-dark) / 0.42) 0 0.8px, transparent 1.2px) 0 0 / 3px 3px;
+  clip-path: var(--glci-aegis-plate);
+  pointer-events: none;
+}
+
+/* Totals. */
+.glci[data-skin="aegis"] .glci-card-total-k { color: var(--glci-aegis-subtle); }
+.glci[data-skin="aegis"] .glci-card-total-v {
+  font-variant-numeric: tabular-nums;
+  color: var(--glci-aegis-subtle);
+  text-shadow: none;
+}
+.glci[data-skin="aegis"] .glci-card-nat { color: var(--glci-aegis-muted); }
+
+/* States: waiting is dim, thrown lights the rim, landed prints the total in red. */
+.glci[data-skin="aegis"] .glci-card[data-state="waiting"][data-may-act="1"] {
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border-strong), inset 0 -2px 0 var(--gl-accent);
+}
+.glci[data-skin="aegis"] .glci-card[data-state="thrown"] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 60%, transparent), 0 0 24px color-mix(in oklab, var(--gl-accent) 20%, transparent);
+}
+.glci[data-skin="aegis"] .glci-card[data-state="thrown"] .glci-card-total-k {
+  color: var(--gl-accent);
+  animation: glci-aegis-blink var(--gl-d-slow) steps(1) infinite;
+}
+.glci[data-skin="aegis"] .glci-card[data-state="landed"] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 45%, transparent);
+}
+.glci[data-skin="aegis"] .glci-card[data-state="landed"] .glci-card-total-v {
+  color: var(--gl-accent);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--gl-accent) 45%, transparent);
+}
+/* The base sheet repaints a natural 20 in its warn hue; amber is danger here. */
+.glci[data-skin="aegis"] .glci-card[data-nat="20"] { --gl-accent: var(--glci-accent); }
+/* Natural 20: the pale-hot print. Natural 1: a warning, so amber and the hatch. */
+.glci[data-skin="aegis"] .glci-card[data-nat="20"] .glci-card-total-v {
+  color: var(--glci-hot);
+  text-shadow: 0 0 22px color-mix(in oklab, var(--gl-accent) 70%, transparent), 0.04em 0 0 color-mix(in oklab, var(--gl-cyan) 30%, transparent);
+}
+.glci[data-skin="aegis"] .glci-card[data-nat="20"] .glci-card-nat { color: var(--glci-hot); }
+.glci[data-skin="aegis"] .glci-card[data-nat="1"] {
+  background: var(--glci-aegis-hatch), var(--glci-aegis-scanlines), var(--glci-aegis-panel);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glci-warn) 55%, transparent);
+}
+.glci[data-skin="aegis"] .glci-card[data-nat="1"] :is(.glci-card-total-v, .glci-card-nat) { color: var(--glci-warn); text-shadow: none; }
+
+/* ---- Chips: statistic picker, modifiers ---------------------------------- */
+.glci[data-skin="aegis"] .glci-chip {
+  letter-spacing: 0.03em;
+  color: var(--glci-aegis-muted);
+  background: rgb(var(--gl-tint-light) / 0.03);
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border-strong);
+  clip-path: var(--glci-aegis-chamfer);
+}
+.glci[data-skin="aegis"] .glci-chip:hover:not([disabled]) {
+  color: var(--glci-aegis-text);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 60%, transparent);
+}
+.glci[data-skin="aegis"] .glci-chip-v { font-variant-numeric: tabular-nums; color: var(--glci-aegis-text); }
+.glci[data-skin="aegis"] .glci-chip[aria-pressed="true"] {
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  box-shadow: none;
+}
+.glci[data-skin="aegis"] .glci-chip[aria-pressed="true"] .glci-chip-v { color: var(--glci-ink); }
+/* A modifier switched off reads as struck from the order, in red. */
+.glci[data-skin="aegis"] .glci-chip--mod[aria-pressed="false"] { text-decoration-color: var(--gl-accent); }
+.glci[data-skin="aegis"] .glci-chip--mod[aria-pressed="true"] {
+  color: var(--glci-aegis-text);
+  background: color-mix(in oklab, var(--gl-accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 60%, transparent);
+}
+.glci[data-skin="aegis"] .glci-chip--mod[aria-pressed="true"] .glci-chip-v { color: var(--glci-aegis-text); }
+.glci[data-skin="aegis"] .glci-more > summary { color: var(--glci-aegis-subtle); }
+.glci[data-skin="aegis"] .glci-more > summary::before { color: var(--gl-accent); }
+.glci[data-skin="aegis"] .glci-more-list {
+  background: var(--glci-aegis-scanlines), var(--glci-aegis-raised);
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border);
+}
+/* The GM's stat picker on a volley: the same chips, one size down. */
+.glci[data-skin="aegis"] .glci-volley .glci-chip { padding: 2px 6px; font-size: 10px; }
+.glci[data-skin="aegis"] .glci-volley .glci-more > summary { font-size: 10px; }
+
+/* ---- Buttons ------------------------------------------------------------- */
+.glci[data-skin="aegis"] .glci-roll {
+  font-size: 15px;
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  clip-path: var(--glci-aegis-cut-sm);
+  box-shadow: 0 0 22px color-mix(in oklab, var(--gl-accent) 45%, transparent);
+}
+.glci[data-skin="aegis"] .glci-roll:hover { background: color-mix(in oklab, var(--gl-accent) 78%, var(--glci-hot)); }
+
+/* GM controls: outlined HUD buttons in the pale, never the accent's solid fill. */
+.glci[data-skin="aegis"] :is(.glci-rollfor, .glci-volley-throw, .glci-gm-btn, .glci-lock) {
+  color: var(--glci-hot);
+  background: color-mix(in oklab, var(--glci-ink) 85%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glci-hot) 40%, transparent);
+  clip-path: var(--glci-aegis-chamfer);
+}
+.glci[data-skin="aegis"] :is(.glci-rollfor, .glci-volley-throw, .glci-gm-btn, .glci-lock):hover {
+  color: var(--glci-aegis-text);
+  background: color-mix(in oklab, var(--glci-ink) 85%, transparent);
+  box-shadow: inset 0 0 0 1px var(--gl-accent), inset 0 -2px 0 var(--gl-accent);
+}
+/* The volley throw is the one GM control that rolls: it takes the accent fill. */
+.glci[data-skin="aegis"] .glci-volley-throw,
+.glci[data-skin="aegis"] .glci-volley-throw:hover {
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  box-shadow: none;
+}
+.glci[data-skin="aegis"] .glci-volley-throw:hover { background: color-mix(in oklab, var(--gl-accent) 78%, var(--glci-hot)); }
+.glci[data-skin="aegis"] .glci-gm-btn[data-gm="rest"] { color: var(--glci-ink); background: var(--glci-hot); box-shadow: none; }
+.glci[data-skin="aegis"] .glci-gm-btn[data-gm="cancel"] {
+  color: var(--glci-warn);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glci-warn) 45%, transparent);
+}
+.glci[data-skin="aegis"] .glci-gm-btn[data-gm="cancel"]:hover {
+  background: var(--glci-aegis-hatch), color-mix(in oklab, var(--glci-ink) 85%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glci-warn);
+}
+/* The statistic lock: held is a warning to the player, so amber and the hatch. */
+.glci[data-skin="aegis"] .glci-lock[aria-pressed="true"],
+.glci[data-skin="aegis"] .glci-lock[aria-pressed="true"]:hover {
+  color: var(--glci-warn);
+  background: var(--glci-aegis-hatch), color-mix(in oklab, var(--glci-ink) 85%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glci-warn);
+}
+
+/* ---- NPC volleys ---------------------------------------------------------- */
+.glci[data-skin="aegis"] .glci-volley-count {
+  padding: 1px 6px;
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.glci[data-skin="aegis"] .glci-mini-die {
+  background: rgb(var(--gl-tint-light) / 0.03);
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border-strong);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.glci[data-skin="aegis"] .glci-mini-die[data-state="thrown"] {
+  box-shadow: inset 0 0 0 1px var(--gl-accent);
+  animation: glci-aegis-blink var(--gl-d-slow) steps(1) infinite;
+}
+.glci[data-skin="aegis"] .glci-mini-die[data-state="landed"] {
+  background: color-mix(in oklab, var(--gl-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--gl-accent);
+}
+.glci[data-skin="aegis"] .glci-mini-total {
+  font-family: var(--glci-aegis-display);
+  font-size: 11px;
+  font-stretch: 118%;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--glci-aegis-text);
+}
+/* Sealed NPC totals: a stamp, red on black, struck at an angle. */
+.glci[data-skin="aegis"] .glci-volley-seal {
+  justify-self: start;
+  padding: 2px 8px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--gl-accent);
+  box-shadow: inset 0 0 0 1px var(--gl-accent), inset 0 0 0 3px color-mix(in oklab, var(--gl-accent) 18%, transparent);
+  rotate: -4deg;
+}
+
+/* ---- Sort ----------------------------------------------------------------- */
+/* The glass is the base sheet's ::before (so the trail is not clipped); restyle it there. */
+.glci[data-skin="aegis"] .glci-rank::before {
+  background:
+    linear-gradient(var(--gl-accent), var(--gl-accent)) left 0 top 0 / 100% 2px no-repeat,
+    var(--glci-aegis-scanlines),
+    var(--glci-aegis-panel);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px var(--glci-aegis-border);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.glci[data-skin="aegis"][data-lite~="cardBlur"] .glci-rank::before { backdrop-filter: none; }
+.glci[data-skin="aegis"] .glci-rank[data-kind="pc"] { --gl-accent: var(--glci-hot); }
+.glci[data-skin="aegis"] .glci-rank-art {
+  position: relative;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.glci[data-skin="aegis"] .glci-rank-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgb(var(--gl-tint-dark) / 0.42) 0 0.8px, transparent 1.2px) 0 0 / 3px 3px;
+  pointer-events: none;
+}
+.glci[data-skin="aegis"] .glci-rank-n {
+  color: var(--glci-ink);
+  background: var(--gl-accent);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+  font-size: 18px;
+}
+.glci[data-skin="aegis"] .glci-rank-name { font-family: var(--glci-aegis-hud); font-size: 12px; }
+.glci[data-skin="aegis"] .glci-rank-total {
+  font-size: 34px;
+  text-shadow: 0.04em 0 0 color-mix(in oklab, var(--gl-accent) 55%, transparent);
+}
+/* The travel: a torn band of signal, dashed, with a cyan misprint line riding it. */
+.glci[data-skin="aegis"] .glci-rank-trail {
+  height: 3px;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--gl-cyan) 55%, transparent), transparent 60%) 0 0 / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--gl-accent) 0 14px, transparent 14px 18px, var(--gl-accent) 18px 22px, transparent 22px 30px);
+  -webkit-mask-image: linear-gradient(90deg, #000, transparent);
+  mask-image: linear-gradient(90deg, #000, transparent);
+}
+
+/* ---- Late reinforcement: compact, under hazard tape ----------------------- */
+/* A new contact mid-fight is a warning, so the card wears a strip of tape. */
+.glci[data-skin="aegis"][data-late] :is(.glci-card, .glci-volley) {
+  --glci-aegis-notch: 12px;
+  background:
+    var(--glci-aegis-tape) top / 100% 5px no-repeat,
+    var(--glci-aegis-scanlines),
+    var(--glci-aegis-grid),
+    var(--glci-aegis-panel);
+}
+.glci[data-skin="aegis"][data-late] .glci-card-tag { color: var(--glci-warn); }
+.glci[data-skin="aegis"][data-late] :is(.glci-card-name, .glci-volley-name) { font-size: 16px; }
+.glci[data-skin="aegis"][data-late] .glci-roll { font-size: 13px; }
+.glci[data-skin="aegis"][data-late] .glci-chip { padding: 2px 6px; font-size: 10px; }
+.glci[data-skin="aegis"][data-late] .glci-card-frame::before { top: 10px; left: 6px; }
+.glci[data-skin="aegis"][data-late] .glci-card-frame::after { right: 6px; bottom: 6px; }
+
+/* ---- CSS-only fallback ground (data-render="css") ------------------------ */
+/* Still reads as Aegis: the void, a furnace of red halftone at the foot, the
+   scope's rings while the roster locks, scanlines. The base sheet's own beats
+   (the curve-driven scan, title rules, hazard band, HUD corners) keep running
+   and follow the remapped accent. */
+.glci[data-skin="aegis"][data-render="css"] .glci-cssbg {
+  background:
+    var(--glci-aegis-scanlines),
+    radial-gradient(ellipse 70% 45% at 85% 105%, color-mix(in oklab, var(--glci-aegis-deep) 55%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 10% 110%, color-mix(in oklab, var(--glci-aegis-deeper) 70%, transparent), transparent 70%),
+    radial-gradient(75% 75% at 50% 48%, transparent 55%, rgb(var(--gl-tint-dark) / 0.6) 100%),
+    var(--glci-aegis-void);
+}
+/* the dot screen, printed at 15 degrees, densest where the furnace is */
+.glci[data-skin="aegis"][data-render="css"] .glci-cssbg-grid {
+  inset: -25%;
+  opacity: calc(var(--glci-boot, 1) * (0.9 - var(--glci-table, 0) * 0.35));
+  background: radial-gradient(circle, color-mix(in oklab, var(--gl-accent) 85%, transparent) 0 1.7px, transparent 2.4px) 0 0 / 7px 7px;
+  rotate: 15deg;
+  -webkit-mask-image: linear-gradient(to top, #000 12%, rgb(var(--gl-tint-dark) / 0.25) 34%, transparent 52%);
+  mask-image: linear-gradient(to top, #000 12%, rgb(var(--gl-tint-dark) / 0.25) 34%, transparent 52%);
+  animation: glci-aegis-rise var(--gl-loop-md) var(--gl-linear) infinite;
+}
+/* the scope: range rings and a sweep, drawn on through the roster beat */
+.glci[data-skin="aegis"][data-render="css"] .glci-cssbg-cols {
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: 68vh;
+  height: 68vh;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, transparent 0 calc(33.3% - 1px), color-mix(in oklab, var(--gl-accent) 55%, transparent) calc(33.3% - 1px) 33.3%, transparent 33.3%),
+    conic-gradient(from calc(var(--glci-roster, 0) * 2turn), color-mix(in oklab, var(--gl-accent) 22%, transparent), transparent 10%);
+  -webkit-mask-image: radial-gradient(circle, #000 70.6%, transparent 70.8%);
+  mask-image: radial-gradient(circle, #000 70.6%, transparent 70.8%);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--gl-accent) 70%, transparent);
+  opacity: calc(var(--glci-roster, 0) * (1 - var(--glci-table, 0)) * 0.8);
+}
+/* the hazard band: real amber/black tape once the threat is severe */
+.glci[data-skin="aegis"][data-render="css"]:has(.glci-threat:is([data-severity="severe"], [data-severity="extreme"])) .glci-cssbg-band {
+  background: var(--glci-aegis-tape);
+  background-size: 33.9px 33.9px;
+  border-block-color: var(--glci-ink);
+}
+
+/* ---- Keyframes (feature-prefixed: names are global) ---------------------- */
+@keyframes glci-aegis-rise {
+  from { background-position: 0 0; }
+  to { background-position: 0 -84px; }
+}
+@keyframes glci-aegis-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.35; }
+}
+@keyframes glci-aegis-alarm {
+  0%, 100% { color: var(--glci-warn); }
+  50% { color: var(--glci-aegis-amber-hot); }
+}

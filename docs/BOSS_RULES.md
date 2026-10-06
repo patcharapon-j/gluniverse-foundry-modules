@@ -76,13 +76,8 @@ nobody was told about is just the boss taking a free turn.
 
 ## Initiative
 
-Which mechanism runs depends on the rail's mode, and they are mutually exclusive.
-
-**Card mode** already models a multi-turn actor: the per-actor `init.cardConfig`
-flag carries a `turns` count and the deal gives that actor that many slots.
-Marking a boss writes the count and stops there.
-
-**Standard mode** has no such thing — nothing in the suite wraps
+There is one mechanism. (The rail's old card mode, with its per-actor
+`init.cardConfig` turn count, was removed; stale flags have no reader.) Nothing in the suite wraps
 `Combat#setupTurns`, subclasses `Combatant`, or mutates `combat.turns`. So a boss
 gets N−1 extra real Combatant documents pointing at the same actor and token,
 each flagged as its Nth turn. Foundry sorts and walks them like any other entry,

@@ -81,10 +81,25 @@ export async function runStageInitiativeMotionChecks() {
     initiative.animateTurnChange(initiative.captureItemRects());
     check(!grown.classList.contains("gluni-card--morphing"), "Initiative magic move stands down at motion tier none");
     initiative.root.style.setProperty("--gl-motion-scale", "0.1");
-    initiative.spawnCollectGhosts([{ html: '<div class="gluni-card" id="duplicate-id">A</div>', rect }], rect);
-    check(document.querySelector('.gluni-card-ghost')?.inert && !document.querySelector('.gluni-card-ghost [id]'), 'Initiative collect ghosts are inert and have no duplicate IDs');
+    const leaving = document.createElement('div');
+    leaving.innerHTML = '<div class="gluni-card" id="duplicate-id">A</div>';
+    initiative.spawnLeaveGhosts([{ node: leaving.firstElementChild, rect, surface: rect }], 'right');
+    check(document.querySelector('.gluni-card-ghost')?.inert && !document.querySelector('.gluni-card-ghost [id]'), 'Initiative leave ghosts are inert and have no duplicate IDs');
     initiative.clearPresentationMotion();
-    check(!document.querySelector('.gluni-card-ghost-layer'), 'Initiative teardown removes collect layers immediately');
+    check(!document.querySelector('.gluni-card-ghost-layer'), 'Initiative teardown removes leave layers immediately');
+    // A cinematic-start arrival: a card flies in from the rect the intro handed
+    // over, as real geometry, and lands with nothing left on it.
+    initiative.root.innerHTML = '<div class="gluni-rail"><div class="gluni-card gluni-card--active" data-gluni-key="combatant:z:round:0" data-combatant-id="z"><div class="gluni-card-surface" style="min-height:0;height:100px;width:200px"><h3>Z</h3></div></div></div>';
+    const arriving = initiative.root.querySelector('.gluni-card');
+    const arrived = initiative.playArrival([{ combatantId: 'z', rect: { left: 300, top: 300, width: 160, height: 220 } }]);
+    initiative._arrivalTimeline?.pause();
+    initiative._arrivalTimeline?.seek(0);
+    const startBox = arriving.firstElementChild.getBoundingClientRect();
+    check(arrived === 1 && Math.round(startBox.width) === 160 && Math.round(startBox.height) === 220,
+      'Initiative arrival starts each card at the rect the intro handed over');
+    initiative._arrivalTimeline?.seek(initiative._arrivalTimeline.duration);
+    check(!arriving.classList.contains('gluni-card--morphing') && !arriving.style.height && arriving.firstElementChild.style.position !== 'absolute',
+      'Initiative arrival hands the card back to the stylesheet when it lands');
     const splash = () => {
       const el = document.createElement('div');
       el.style.setProperty('--gl-motion-scale', '0.1');

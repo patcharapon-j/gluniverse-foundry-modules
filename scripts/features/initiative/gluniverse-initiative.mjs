@@ -21,13 +21,20 @@ import { Surfaces } from "../../core/gl-surfaces.mjs";
  */
 const animMs = (ms) => scaledMs(ms, null, 16);
 
+/** Raised locally by combat-intro just before startCombat(); see queueArrival. */
+const HANDOFF_HOOK = "gluniverse.combatIntro.handoff";
+/** Raised once by combat-intro when its canStart can first answer true. */
+const READY_HOOK = "gluniverse.combatIntro.ready";
+/** How long a handoff waits for its combat to actually start. */
+const ARRIVAL_TTL_MS = 6000;
+
 // True when Foundry's socket subsystem is live. Emits are routed through the
 // suite's shared dispatcher (emitSocket); this guard only gates the optimistic
 // "broadcast to peers" paths, falling back to local-only behaviour otherwise.
 const socketReady = () => Boolean(game?.socket);
 import {
     MODULE_ID, FEATURE_ID, SOCKET_NAME, SETTINGS, TOKEN_OVERLAY_PALETTE, DISPOSITION_PALETTE,
-  ACTIVE_SHADER_PALETTE, getDispositionColors, FLAGS, INITIATIVE_MODE, CARD_CONFIG_DEFAULTS, CARD_CONFIG_LIMITS,
+  ACTIVE_SHADER_PALETTE, getDispositionColors, FLAGS, SKINS, DEFAULT_SKIN, skinOf,
   BREAK_GAUGE_DEFAULT_MAX, BREAK_GAUGE_MODES, BREAK_GAUGE_FLASH_SEC, BREAK_GAUGE_SHEEN_SEC,
   VISIBILITY, PF2E_GUARD_BREAK_EFFECT_SLUG, PF2E_GUARD_BREAK_PENALTY,
   LOCALIZATION_FALLBACKS, ADHOC_DEFAULT_TYPE, ADHOC_TYPES, ADHOC_VISIBILITY_MODES,
@@ -77,7 +84,6 @@ export function onReady() {
   cardFX = new CardFXManager();
   overlay.mount();
   overlay.render();
-  overlay.maybeRedealCards();
   tokenOverlays = new TokenOverlayManager();
   refreshNativeTurnMarkerSuppression();
   // Build the guard-break splash renderer AND warm it: the fracture now runs
@@ -89,6 +95,14 @@ export function onReady() {
 
   // Route the feature's socket messages through the suite's shared dispatcher.
   onSocket(FEATURE_ID, data => overlay?.handleSocket(data));
+
+  // A cinematic combat start (combat-intro) hands its cards over just before
+  // the GM starts the combat. Held briefly, and played instead of the round
+  // splash when that start lands (see onCombatUpdate / playArrival).
+  Hooks.on(HANDOFF_HOOK, payload => overlay?.queueArrival(payload));
+  // canStart answers false until combat-intro has finished its own ready, so
+  // the Cinematic start button can only appear on a render after that.
+  Hooks.on(READY_HOOK, () => overlay?.renderSoon());
 
   // PIXI filters and WebGL shaders cannot observe a CSS custom-property change,
   // so the rail registers its repaint path with the suite's theme module. Any
@@ -105,16 +119,16 @@ export function onReady() {
 // All Foundry hooks are attached here (called at init only when the feature is
 // enabled & available), so a disabled feature stays completely inert.
 export function onInit() {
-  Hooks.on("createCombat", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("createCombat", () => overlay?.renderSoon());
   Hooks.on("preDeleteCombat", combat => overlay?.removeAllPF2eGuardBreakEffects(combat));
   Hooks.on("deleteCombat", () => {
     overlay?.renderSoon();
     refreshNativeTurnMarkerSuppression();
   });
   Hooks.on("updateCombat", (combat, changed) => overlay?.onCombatUpdate(combat, changed));
-  Hooks.on("createCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("createCombatant", () => overlay?.renderSoon());
   Hooks.on("preDeleteCombatant", combatant => overlay?.removePF2eGuardBreakEffect(combatant));
-  Hooks.on("deleteCombatant", () => { overlay?.renderSoon(); overlay?.maybeRedealCards(); });
+  Hooks.on("deleteCombatant", () => overlay?.renderSoon());
   Hooks.on("updateCombatant", (_combatant, changed) => {
     if (isRelevantCombatantUpdate(changed)) overlay?.renderSoon();
   });
@@ -133,12 +147,12 @@ export function onInit() {
   Hooks.on("createActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
   Hooks.on("deleteActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
   Hooks.on("updateActiveEffect", effect => overlay?.onActorItemChange(resolveEffectActor(effect)));
-  Hooks.on("getApplicationHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-  Hooks.on("getApplicationV1HeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-  Hooks.on("getActorSheetHeaderButtons", (app, buttons) => { addPortraitHeaderButton(app, buttons); addCardConfigHeaderButton(app, buttons); });
-  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => { addPortraitHeaderControl(app, controls); addCardConfigHeaderControl(app, controls); });
-  Hooks.on("renderApplicationV1", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
-  Hooks.on("renderApplicationV2", (app, html) => { injectPortraitTitlebarButton(app, html); injectCardConfigTitlebarButton(app, html); });
+  Hooks.on("getApplicationHeaderButtons", (app, buttons) => addPortraitHeaderButton(app, buttons));
+  Hooks.on("getApplicationV1HeaderButtons", (app, buttons) => addPortraitHeaderButton(app, buttons));
+  Hooks.on("getActorSheetHeaderButtons", (app, buttons) => addPortraitHeaderButton(app, buttons));
+  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => addPortraitHeaderControl(app, controls));
+  Hooks.on("renderApplicationV1", (app, html) => injectPortraitTitlebarButton(app, html));
+  Hooks.on("renderApplicationV2", (app, html) => injectPortraitTitlebarButton(app, html));
   Hooks.on("renderTokenHUD", (hud, html, data) => {
     addGuardBreakTokenHudButton(hud, html, data);
     addBreakGaugeTokenHudButton(hud, html, data);
@@ -172,18 +186,21 @@ function registerSettings() {
     onChange: () => { rerender(); refreshNativeTurnMarkerSuppression(); }
   });
 
-  game.settings.register(MODULE_ID, SETTINGS.initiativeMode, {
-    name: localize("GLUNI.Settings.InitiativeMode.Name"),
-    hint: localize("GLUNI.Settings.InitiativeMode.Hint"),
+  game.settings.register(MODULE_ID, SETTINGS.skin, {
+    name: localize("GLUNI.Settings.Skin.Name"),
+    hint: localize("GLUNI.Settings.Skin.Hint"),
     scope: "world",
     config: true,
     type: String,
     choices: {
-      [INITIATIVE_MODE.standard]: localize("GLUNI.Settings.InitiativeMode.Standard"),
-      [INITIATIVE_MODE.card]: localize("GLUNI.Settings.InitiativeMode.Card")
+      [SKINS.etched]: localize("GLUNI.Settings.Skin.Etched"),
+      [SKINS.aegis]: localize("GLUNI.Settings.Skin.Aegis")
     },
-    default: INITIATIVE_MODE.standard,
-    onChange: () => { overlay?.onInitiativeModeChanged(); }
+    default: DEFAULT_SKIN,
+    onChange: () => {
+      overlay?.applySkin();
+      rerender();
+    }
   });
 
   game.settings.register(MODULE_ID, SETTINGS.edge, {
@@ -1277,7 +1294,7 @@ export class GLUniverseInitiativeOverlay {
     // readers with the entire card list on each tick. Turn/round changes are
     // announced through a dedicated, atomic status region instead (see below).
     this.root.setAttribute("aria-label", localize("GLUNI.A11y.OverlayLabel"));
-    document.body.appendChild(this.root);
+    mountOnBody(this.root);
 
     this.announcer = document.createElement("div");
     this.announcer.id = "gluni-initiative-announcer";
@@ -1285,7 +1302,7 @@ export class GLUniverseInitiativeOverlay {
     this.announcer.setAttribute("role", "status");
     this.announcer.setAttribute("aria-live", "polite");
     this.announcer.setAttribute("aria-atomic", "true");
-    document.body.appendChild(this.announcer);
+    mountOnBody(this.announcer);
     this.lastAnnouncement = "";
 
     this.root.addEventListener("click", event => this.onClick(event));
@@ -1308,7 +1325,6 @@ export class GLUniverseInitiativeOverlay {
     if (data?.type === "breakSplash") this.showBreakSplash(data.name);
     if (data?.type === "statusAnimation") this.queueStatusAnimation(data);
     if (data?.type === "requestEndTurn") this.onSocketEndTurnRequest(data);
-    if (data?.type === "requestCardSwap") this.onSocketCardSwapRequest(data);
   }
 
   get combat() {
@@ -1343,7 +1359,7 @@ export class GLUniverseInitiativeOverlay {
   // that flag — only the ground markers do — so letting it through costs a second
   // full render() (view model, markup, status scan, overlay refresh, FX re-sync)
   // landing 50-200ms into a move that is still travelling. Deliberately narrow:
-  // it matches ONLY the turnStart key, so cardDeal and every real turn/round
+  // it matches ONLY the turnStart key, so every real turn/round
   // change still render. Anything that does not match exactly falls through.
   isTurnStartEcho(changed) {
     if (!changed) return false;
@@ -1368,19 +1384,25 @@ export class GLUniverseInitiativeOverlay {
       return;
     }
 
-    if (changed?.started === true) {
-      this.showRoundSplash(combat.round ?? 1);
-    }
+    // A cinematic start already announced the fight: the cards it handed over
+    // fly into the rail instead of the round splash playing over them.
+    const arrival = (changed?.started === true || typeof changed?.round === "number")
+      ? this.takeArrival(combat?.id)
+      : null;
+    if (arrival) {
+      const round = typeof changed?.round === "number" ? changed.round : (combat.round ?? 1);
+      this._arrival = arrival;
+      this.lastRound = round;
+      this.lastSplashRound = round;
+    } else {
+      if (changed?.started === true) {
+        this.showRoundSplash(combat.round ?? 1);
+      }
 
-    if (typeof changed?.round === "number" && changed.round !== this.lastRound) {
-      this.showRoundSplash(changed.round);
-      this.lastRound = changed.round;
-    }
-
-    // Card mode: (re)deal when combat starts or the round changes. Self-guards to
-    // the primary GM and is a no-op when the current deal already matches.
-    if (this.isCardMode() && (changed?.started === true || typeof changed?.round === "number")) {
-      this.maybeRedealCards(combat);
+      if (typeof changed?.round === "number" && changed.round !== this.lastRound) {
+        this.showRoundSplash(changed.round);
+        this.lastRound = changed.round;
+      }
     }
 
     if (game.user.isGM && (typeof changed?.turn === "number" || typeof changed?.round === "number")) {
@@ -1444,11 +1466,6 @@ export class GLUniverseInitiativeOverlay {
     const result = { active: null, next: null };
     if (!combat?.started) return result;
 
-    if (this.isCardMode()) {
-      const cardTargets = this.getCardTurnMarkerTargets(combat);
-      if (cardTargets) return cardTargets;
-    }
-
     const sourceTurns = Array.isArray(combat.turns) && combat.turns.length
       ? combat.turns
       : combat.combatants?.contents ?? Array.from(combat.combatants ?? []);
@@ -1504,44 +1521,21 @@ export class GLUniverseInitiativeOverlay {
     return result;
   }
 
-  // Card-mode marker targets: active is the slot under the pointer, next is the
-  // following eligible slot in the dealt order (no wrap — the next round is
-  // reshuffled and unknown).
-  getCardTurnMarkerTargets(combat) {
-    const deal = this.getCardDeal(combat);
-    if (!deal) return null;
-
-    const showDefeated = Boolean(game.settings.get(MODULE_ID, SETTINGS.showDefeated));
-    const currentRound = Number(combat.round) || 1;
-    const result = { active: null, next: null };
-
-    const toTarget = (combatant, active) => {
-      if (!combatant) return null;
-      if (combatant.defeated && !showDefeated) return null;
-      const card = this.buildCombatantCard(combatant, {
-        active,
-        delayed: false,
-        roundOffset: 0,
-        displayRound: currentRound,
-        key: `marker:${combatant.id}`
-      });
-      if (!card) return null;
-      return { combatantId: combatant.id, disposition: card.disposition, mystery: card.mystery };
-    };
-
-    for (let index = deal.pointer; index < deal.sequence.length; index++) {
-      const combatant = combat.combatants?.get(deal.sequence[index].cid);
-      if (index === deal.pointer) { result.active = toTarget(combatant, true); continue; }
-      const next = toTarget(combatant, false);
-      if (next && next.combatantId !== result.active?.combatantId) { result.next = next; break; }
-    }
-
-    return result;
+  // Stamps the world's skin on the rail and its announcer. A change also
+  // repaints the card effects, whose colours are probed off this element.
+  applySkin() {
+    if (!this.root) return;
+    const skin = currentSkin();
+    if (this.announcer && this.announcer.dataset.glSkin !== skin) this.announcer.dataset.glSkin = skin;
+    if (this.root.dataset.glSkin === skin && cardFX?.paletteRoot === this.root) return;
+    this.root.dataset.glSkin = skin;
+    try { cardFX?.notifyThemeChange?.(this.root); } catch { /* renderer may be gone */ }
   }
 
   render() {
     if (!this.root) return;
     this.renderTimer = null;
+    this.applySkin();
 
     const combat = this.combat;
     // GMs get the tracker the moment a combat has any combatants — before the
@@ -1586,25 +1580,20 @@ export class GLUniverseInitiativeOverlay {
     const previousActiveKey = this.lastActiveKey;
     const previousActiveInitiative = this.lastActiveInitiative ?? null;
     const isDelayReturn = Boolean(this.pendingDelayReturnId && view.activeId === this.pendingDelayReturnId);
-    const isCardView = Boolean(view.cardMode);
-    // A reshuffle is signalled purely by the deal flag's round advancing: the
-    // whole sequence was re-dealt. (The combat round + deal often update together,
-    // so leaning on roundDelta here would miss the render that shows the new
-    // order.) Drives the collect -> shuffle -> deal beat.
-    const isReshuffle = isCardView
-      && Number.isFinite(this.lastDealRound) && view.dealRound > this.lastDealRound;
     const rootClassName = [
       "gluni-initiative",
       `gluni-initiative--${settings.edge}`,
       settings.isGM ? "gluni-initiative--gm" : "gluni-initiative--player",
-      isCardView ? "gluni-initiative--card-mode" : "",
       settings.delayedPlacement === "side" ? "gluni-initiative--delayed-side" : "",
       isTurnChange ? "gluni-initiative--turn-change" : "",
       isDelayReturn ? "gluni-initiative--delay-return" : ""
     ].filter(Boolean).join(" ");
     const markup = this.renderMarkup(combat, view, settings);
     const markupChanged = markup !== this.lastMarkup;
-    const shouldAnimateTurnChange = isTurnChange && markupChanged;
+    // A pending cinematic arrival replaces the turn-change move on the render
+    // that first shows the started combat.
+    const arrival = this._arrival && combat.started && combat.id === this._arrival.combatId ? this._arrival : null;
+    const shouldAnimateTurnChange = !arrival && isTurnChange && markupChanged;
     // A turn change arrives with a tail of renders that are not turn changes:
     // the turn-start flag echo, effects expiring at the start of the turn, a
     // face-locator result for a portrait just dealt in. Each would rebuild the
@@ -1612,18 +1601,14 @@ export class GLUniverseInitiativeOverlay {
     // second full rebuild + two layouts in the middle of the move. They wait
     // for the move to land instead (flushed from its settle) and then render
     // once. Nothing below this line has run, so the held render has no effect.
-    if (!shouldAnimateTurnChange && markupChanged && this.holdRenderForMove()) return;
+    if (!arrival && !shouldAnimateTurnChange && markupChanged && this.holdRenderForMove()) return;
     this.releaseHeldRender();
     this.detectStatusTransitions();
     // A render that lands while a move is still travelling for longer than the
     // hold allows re-plans from where every layer currently is, instead of
     // snapping the half-grown card to its end state.
-    const shouldContinueMove = !shouldAnimateTurnChange && markupChanged && this.magicMoveLive;
+    const shouldContinueMove = !arrival && !shouldAnimateTurnChange && markupChanged && this.magicMoveLive;
     const oldRects = (shouldAnimateTurnChange || shouldContinueMove) ? this.captureItemRects() : new Map();
-    // Card mode collect/deal beats fly clones of the outgoing cards into (and new
-    // cards out of) the deck stub, so snapshot the rail's current look + geometry
-    // before the markup is swapped out.
-    const cardSnapshot = (isCardView && shouldAnimateTurnChange) ? this.snapshotRailCards() : null;
     this.lastTurnKey = turnKey;
 
     if (rootClassName !== this.lastRootClassName) {
@@ -1652,16 +1637,15 @@ export class GLUniverseInitiativeOverlay {
         isDelayReturn,
         roundDelta: shouldAnimateTurnChange ? roundDelta : 0,
         edge: settings.edge,
-        cardMode: isCardView,
         turnAdvanced,
         previousActiveInitiative
       });
     }
     this.applyFloatingControls(controlPosition);
-    if (cardSnapshot) {
-      this.playCardModeMotion(cardSnapshot, { isReshuffle, edge: settings.edge });
+    if (arrival) {
+      this._arrival = null;
+      this.playArrival(arrival.cards, { late: Boolean(arrival.late) });
     }
-    this.lastDealRound = isCardView ? view.dealRound : null;
     this.playPendingGuardBreakImpact();
     this.playPendingSlideIns();
     this.playPendingDyingWipes();
@@ -1811,7 +1795,6 @@ export class GLUniverseInitiativeOverlay {
       showAll: Boolean(game.settings.get(MODULE_ID, SETTINGS.showAllCombatants)),
       delayedPlacement: game.settings.get(MODULE_ID, SETTINGS.delayedPlacement) || "side",
       uiScale,
-      mode: getInitiativeMode(),
       showDefeated: Boolean(game.settings.get(MODULE_ID, SETTINGS.showDefeated)),
       isGM: Boolean(game.user.isGM)
     };
@@ -1829,26 +1812,35 @@ export class GLUniverseInitiativeOverlay {
             <span class="gluni-round-chip-divider" aria-hidden="true"></span>
             <strong class="gluni-round-chip-num">${formatRound(combat.round)}</strong>
           </div>
+          ${this.renderCinematicStartControl(combat)}
         </header>
         <div class="gluni-rail">
           ${view.normal.map(item => this.renderRailItem(item)).join("")}
         </div>
-        ${view.cardMode ? this.renderDeckStub(view) : ""}
         ${this.renderDelayedSection(view.delayed)}
         ${this.renderFloatingTurnControls(view)}
       </div>
     `;
   }
 
-  buildViewModel(combat, settings = this.getRenderSettings()) {
-    // Card mode draws its order from the shared deal flag rather than native
-    // initiative sorting. Falls through to the standard model when no deal exists
-    // yet (e.g. a player before the GM has dealt the first round).
-    if (settings.mode === INITIATIVE_MODE.card) {
-      const cardView = this.buildCardViewModel(combat, settings);
-      if (cardView) return cardView;
-    }
+  // The combat-intro feature's Start button. The rail never imports that
+  // feature: it asks the suite API, which answers false whenever the intro is
+  // off, stood down, or cannot run this encounter.
+  renderCinematicStartControl(combat) {
+    if (!game.user.isGM || !combat || combat.started) return "";
+    let ready = false;
+    try { ready = combatIntroApi()?.canStart?.(combat) === true; } catch { ready = false; }
+    if (!ready) return "";
+    const label = escapeAttr(localize("GLUNI.Controls.CinematicStart"));
+    return `
+      <button class="gl-btn gluni-cinematic-start" type="button" data-action="cinematicStart" title="${label}" aria-label="${label}">
+        <i class="fa-solid fa-clapperboard" aria-hidden="true"></i>
+        <span>${escapeHTML(localize("GLUNI.Controls.CinematicStart")).toUpperCase()}</span>
+      </button>
+    `;
+  }
 
+  buildViewModel(combat, settings = this.getRenderSettings()) {
     const sourceTurns = Array.isArray(combat.turns) && combat.turns.length
       ? combat.turns
       : combat.combatants?.contents ?? Array.from(combat.combatants ?? []);
@@ -1943,97 +1935,6 @@ export class GLUniverseInitiativeOverlay {
     return { normal, delayed, activeId, activeKey };
   }
 
-  // Whether this client controls the currently-active card (GM, or a player who
-  // owns the active combatant) — gates who may start a swap.
-  userControlsActiveCard(combat = this.combat) {
-    const combatant = combat?.combatant;
-    return Boolean(combatant && this.userOwnsCombatant(combatant, game.user));
-  }
-
-  buildCardViewModel(combat, settings) {
-    const deal = this.getCardDeal(combat);
-    if (!deal) return null;
-
-    const { pointer, sequence, round: dealRound } = deal;
-    const currentRound = combat.round ?? 1;
-    const activeId = sequence[pointer]?.cid ?? null;
-    const controlsActive = this.userControlsActiveCard(combat);
-    const swapPending = Boolean(this.cardSwapPending) && controlsActive;
-    const normal = [];
-
-    const totalByCid = new Map();
-    for (const slot of sequence) totalByCid.set(slot.cid, (totalByCid.get(slot.cid) ?? 0) + 1);
-
-    // A chaotic fight could leave many combatants broken/dying at once; force-
-    // expanding all of them would un-compress the whole deck and defeat the
-    // stacked look. Cap how many non-active alert cards pop out of the stack —
-    // the rest keep their always-on status edge but stay compressed.
-    const ALERT_EXPAND_CAP = 2;
-    let alertExpands = 0;
-
-    // Show all reveals the whole remaining deal instead of a fixed window.
-    const cardLimit = settings.showAll ? sequence.length : settings.visibleCount;
-    let added = 0;
-    for (let index = pointer; index < sequence.length && added < cardLimit; index++) {
-      const slot = sequence[index];
-      const combatant = combat.combatants?.get(slot.cid);
-      if (!combatant) continue;
-      if (combatant.defeated && !settings.showDefeated) continue;
-
-      const isActive = index === pointer;
-      const card = this.buildCombatantCard(combatant, {
-        active: isActive,
-        delayed: false,
-        roundOffset: 0,
-        displayRound: currentRound,
-        key: `card:${dealRound}:${slot.cid}:${slot.n}`
-      });
-      if (!card) continue;
-
-      card.cardMode = true;
-      card.cardSlot = index;
-      card.cardOrder = index - pointer + 1;
-      card.cardCompressed = !isActive;
-      // Critical states keep an always-on status edge even when compressed; the
-      // first few also force-expand out of the stack for triage.
-      card.cardAlert = !isActive && (card.guardBroken || Boolean(card.dying && !card.dying.stable));
-      card.cardAlertExpand = card.cardAlert && alertExpands < ALERT_EXPAND_CAP;
-      if (card.cardAlertExpand) alertExpands += 1;
-      const total = totalByCid.get(slot.cid) ?? 1;
-      if (total > 1) {
-        card.cardTurn = slot.n + 1;
-        card.cardTurnTotal = total;
-      }
-      card.canSwap = isActive && controlsActive && index < sequence.length - 1;
-      card.canReorder = settings.isGM && !isActive;
-      card.swapPending = isActive && swapPending;
-      card.swapTarget = swapPending && index > pointer;
-      normal.push(card);
-      added += 1;
-    }
-
-    if (!settings.showAll && added < settings.visibleCount && normal.length) {
-      normal.push({
-        type: "separator",
-        key: `separator:cardnext:${dealRound}`,
-        round: currentRound + 1,
-        cardNext: true
-      });
-    }
-
-    const activeKey = normal.find(item => item.type === "combatant" && item.active)?.key ?? null;
-    return {
-      normal,
-      delayed: [],
-      activeId,
-      activeKey,
-      cardMode: true,
-      dealRound,
-      deckRemaining: Math.max(0, sequence.length - pointer),
-      deckTotal: sequence.length
-    };
-  }
-
   buildCombatantCard(combatant, options) {
     const visibility = this.resolveVisibility(combatant);
     if (visibility.playerMode === VISIBILITY.hidden && !game.user.isGM) return null;
@@ -2082,14 +1983,6 @@ export class GLUniverseInitiativeOverlay {
 
   renderRailItem(item) {
     if (item.type === "separator") {
-      if (item.cardNext) {
-        return `
-          <div class="gluni-round-separator gluni-round-separator--reshuffle" data-gluni-key="${escapeAttr(item.key)}" data-round="${item.round}">
-            <span><i class="fa-solid fa-shuffle" aria-hidden="true"></i> ${localize("GLUNI.Card.Reshuffle").toUpperCase()}</span>
-            <strong>${formatRound(item.round)}</strong>
-          </div>
-        `;
-      }
       return `
         <div class="gluni-round-separator" data-gluni-key="${escapeAttr(item.key)}" data-round="${item.round}">
           <span>${localize("GLUNI.Round").toUpperCase()}</span>
@@ -2099,79 +1992,6 @@ export class GLUniverseInitiativeOverlay {
     }
 
     return this.renderCombatantCard(item);
-  }
-
-  // Card mode replaces the numeric initiative badge with a draw-order chip. For
-  // multi-turn actors it also shows which of their turns this slot is (e.g. 2/3).
-  renderCardBadge(card) {
-    const multi = card.cardTurnTotal > 1
-      ? `<span class="gluni-card-badge-turn">${card.cardTurn}/${card.cardTurnTotal}</span>`
-      : "";
-    return `
-      <span class="gluni-card-badge gluni-initiative-badge" aria-label="${formatLocalized("GLUNI.Card.Order", { order: card.cardOrder })}">
-        <i class="fa-solid fa-clone" aria-hidden="true"></i>
-        <span class="gluni-card-badge-order">${card.cardOrder}</span>
-        ${multi}
-      </span>
-    `;
-  }
-
-  // The face-down deck identity: a holo emblem on a patterned panel. Shown on the
-  // persistent deck stub and, transiently, on cards as they flip during a
-  // reshuffle. Pure CSS + a FontAwesome centrepiece — no shipped art.
-  renderCardBack() {
-    return `
-      <span class="gluni-card-back" aria-hidden="true">
-        <span class="gluni-card-back-lattice"></span>
-        <span class="gluni-card-back-emblem"><i class="fa-solid fa-clone"></i></span>
-        <span class="gluni-card-back-sheen"></span>
-      </span>
-    `;
-  }
-
-  // The persistent face-down pile at the rail tail. Cards deal out of it and are
-  // collected back into it; its depth hints at how many draws remain this round.
-  renderDeckStub(view) {
-    const remaining = Math.max(0, Number(view.deckRemaining) || 0);
-    const depth = clamp(remaining, 0, 6);
-    const label = formatLocalized("GLUNI.Card.DeckRemaining", { count: remaining });
-    return `
-      <div class="gluni-card-deck-stub" style="--gluni-deck-depth:${depth};" data-remaining="${remaining}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">
-        <span class="gluni-card-deck-stub-pile" aria-hidden="true">${this.renderCardBack()}</span>
-        <span class="gluni-card-deck-stub-meta" aria-hidden="true">
-          <span class="gluni-card-deck-stub-label">${localize("GLUNI.Card.Deck").toUpperCase()}</span>
-          <span class="gluni-card-deck-stub-count">${remaining}</span>
-        </span>
-      </div>
-    `;
-  }
-
-  // Compact always-on status row for compressed sliver cards: keeps break / dying
-  // / condition-count readable at a glance without expanding the card.
-  renderCardSliverStatus(card) {
-    const icons = [];
-    if (card.guardBroken) {
-      icons.push(`<i class="fa-solid fa-shield-halved gluni-sliver-icon gluni-sliver-icon--break"></i>`);
-    }
-    if (card.dying && !card.dying.stable) {
-      icons.push(`<i class="fa-solid fa-skull gluni-sliver-icon gluni-sliver-icon--dying"></i>`);
-    } else if (card.dying?.stable) {
-      icons.push(`<i class="fa-solid fa-heart-pulse gluni-sliver-icon gluni-sliver-icon--stable"></i>`);
-    }
-    if (Array.isArray(card.conditions) && card.conditions.length) {
-      icons.push(`<span class="gluni-sliver-icon gluni-sliver-icon--cond">${card.conditions.length}</span>`);
-    }
-    return icons.join("");
-  }
-
-  renderCardSwapControl(card) {
-    const pending = card.swapPending;
-    const label = pending ? localize("GLUNI.Card.SwapCancel") : localize("GLUNI.Card.Swap");
-    return `
-      <button class="gluni-card-swap${pending ? " is-active" : ""}" type="button" data-action="cardSwapStart" title="${label}" aria-label="${label}">
-        <i class="fa-solid ${pending ? "fa-xmark" : "fa-shuffle"}" aria-hidden="true"></i>
-      </button>
-    `;
   }
 
   renderCombatantCard(card) {
@@ -2193,13 +2013,6 @@ export class GLUniverseInitiativeOverlay {
       card.dying?.stable ? "gluni-card--stable" : "",
       card.mystery ? "gluni-card--mystery" : "",
       card.defeated ? "gluni-card--defeated" : "",
-      card.cardMode ? "gluni-card--card-mode" : "",
-      card.cardCompressed ? "gluni-card--card-compressed" : "",
-      card.cardAlert ? "gluni-card--card-alert" : "",
-      card.cardAlertExpand ? "gluni-card--card-alert-expand" : "",
-      card.canReorder ? "gluni-card--card-reorderable" : "",
-      card.swapPending ? "gluni-card--swap-source" : "",
-      card.swapTarget ? "gluni-card--swap-target" : "",
       `gluni-card--${card.disposition}`,
       game.user.isGM && card.gmVisibilityMode !== VISIBILITY.auto ? `gluni-card--gm-${card.gmVisibilityMode}` : ""
     ].filter(Boolean).join(" ");
@@ -2238,14 +2051,13 @@ export class GLUniverseInitiativeOverlay {
         ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
         : 1;
 
-    const slotAttr = Number.isInteger(card.cardSlot) ? ` data-card-slot="${card.cardSlot}"` : "";
-
     return `
-      <article class="${classes}" data-gluni-key="${escapeAttr(card.key)}" data-combatant-id="${card.id}" data-round-offset="${card.roundOffset}"${slotAttr}${style}>
+      <article class="${classes}" data-gluni-key="${escapeAttr(card.key)}" data-combatant-id="${card.id}" data-round-offset="${card.roundOffset}"${style}>
         <div class="gluni-card-surface">
         <div class="gluni-card-accent" aria-hidden="true"></div>
         <div class="gluni-card-spec" aria-hidden="true"></div>
         <div class="gluni-card-bracket" aria-hidden="true"></div>
+        <div class="gluni-card-hud" aria-hidden="true"><span class="gluni-card-hud-code">${localize("GLUNI.Hud.Init")}</span></div>
         ${game.user.isGM ? this.renderGMVisibilityMarker(card) : ""}
         ${card.adhoc && !card.mystery
           ? `
@@ -2310,14 +2122,10 @@ export class GLUniverseInitiativeOverlay {
           ${card.dying ? (card.dying.kind === "deathsaves" ? renderDeathSavePips(card.dying) : renderDyingPips(card.dying)) : ""}
           ${card.breakGauge ? renderBreakGaugeBar(card.breakGauge) : ""}
         </div>
-        ${card.cardMode ? this.renderCardBadge(card) : `<span class="gluni-initiative-badge">${formatInitiative(card.initiative)}</span>`}
+        <span class="gluni-initiative-badge">${formatInitiative(card.initiative)}</span>
         ${card.active ? `<div class="gluni-card-sheen" aria-hidden="true"></div>` : ""}
-        ${card.canSwap ? this.renderCardSwapControl(card) : ""}
         ${game.user.isGM ? this.renderGMControls(card) : ""}
-        ${card.cardMode ? `<div class="gluni-card-sliver-status" aria-hidden="true">${this.renderCardSliverStatus(card)}</div>` : ""}
-        ${card.cardMode ? this.renderCardBack() : ""}
         </div>
-        ${card.swapTarget ? `<button class="gluni-card-swap-pick" type="button" data-action="cardSwapPick" data-target-id="${card.id}" title="${localize("GLUNI.Card.SwapPick")}" aria-label="${localize("GLUNI.Card.SwapPick")}"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i><span>${localize("GLUNI.Card.SwapPickShort").toUpperCase()}</span></button>` : ""}
         ${card.conditions && getConditionBadgesEnabled()
           ? `<div class="gluni-card-condition-labels gluni-card-condition-labels--${getConditionBadgeLayout()}">${renderConditionLabels(card.conditions)}</div>`
           : ""}
@@ -2414,10 +2222,9 @@ export class GLUniverseInitiativeOverlay {
         <button class="${activeMode === VISIBILITY.hidden ? "is-selected" : ""}" type="button" data-action="visibility" data-mode="hidden" title="${localize("GLUNI.Controls.Hidden")}" aria-label="${localize("GLUNI.Controls.Hidden")}">
           <i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
         </button>
-        ${card.cardMode ? "" : `
         <button type="button" data-action="${card.delayed ? "return" : "delay"}" title="${card.delayed ? localize("GLUNI.Controls.Return") : localize("GLUNI.Controls.Delay")}" aria-label="${card.delayed ? localize("GLUNI.Controls.Return") : localize("GLUNI.Controls.Delay")}">
           <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
-        </button>`}
+        </button>
         ${!card.adhoc ? `
           <button class="${card.guardBroken ? "is-selected" : ""}" type="button" data-action="guardBreak" title="${card.guardBroken ? localize("GLUNI.Controls.ClearGuardBreak") : localize("GLUNI.Controls.GuardBreak")}" aria-label="${card.guardBroken ? localize("GLUNI.Controls.ClearGuardBreak") : localize("GLUNI.Controls.GuardBreak")}">
             <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
@@ -2530,8 +2337,7 @@ export class GLUniverseInitiativeOverlay {
     // down the rail: it leaves through the screen edge and comes back in at the
     // bottom, the way a played card goes to the back of the queue. Stepping the
     // turn back only moves it down a slot, so it morphs like any other card.
-    // Card mode collects it into the deck instead, so there it keeps its move.
-    const sendsActiveAround = !options.cardMode && options.turnAdvanced !== false;
+    const sendsActiveAround = options.turnAdvanced !== false;
     const exiting = [];
     const rejoining = new Set();
     // Read pass. Every measurement happens before the first write so the move
@@ -2546,7 +2352,7 @@ export class GLUniverseInitiativeOverlay {
       const plan = planMagicMove(item, from);
       if (plan) plans.push(plan);
     }
-    const entries = enterItems.map(item => ({ item, offset: options.cardMode ? 0 : edgeEntryOffset(item) }));
+    const entries = enterItems.map(item => ({ item, offset: edgeEntryOffset(item) }));
 
     const settles = [];
     const timeline = createTimeline({ autoplay: false, onComplete: () => settle() });
@@ -2594,26 +2400,13 @@ export class GLUniverseInitiativeOverlay {
         }
       });
       item.classList.add("gluni-anime-motion");
-      if (options.cardMode) {
-        // Dealt from the deck: a short rise rather than a trip across the screen.
-        item.style.opacity = "0";
-        item.style.setProperty("--gluni-flip-y", "16px");
-      } else {
-        item.style.setProperty("--gluni-flip-x", `${offset}px`);
-      }
+      item.style.setProperty("--gluni-flip-x", `${offset}px`);
     }
 
     for (const plan of plans) tweenMagicMove(timeline, plan, duration);
 
     let newcomer = 0;
     for (const { item, offset } of entries) {
-      if (options.cardMode) {
-        timeline.add(item, {
-          opacity: [0, 1], "--gluni-flip-y": ["16px", "0px"],
-          duration: enterMs, ease: "outCubic"
-        }, duration * 0.35 + motionDuration(Math.min(newcomer++, 6) * 40, this.root));
-        continue;
-      }
       // In from the nearest screen edge, parked off screen until its turn to
       // move. The card that just acted waits until it has cleared the screen.
       const start = rejoining.has(item)
@@ -2625,16 +2418,13 @@ export class GLUniverseInitiativeOverlay {
       }, start);
     }
 
-    // Cards that left the rail, and the one whose turn just ended. Card mode
-    // flies its own into the deck stub; the standard rail sends them out
-    // through the screen edge rather than letting them vanish.
-    if (!options.cardMode) {
-      const leaving = [...exiting];
-      for (const snapshot of snapshots.values()) {
-        if (!matched.has(snapshot) && snapshot.node) leaving.push(snapshot);
-      }
-      this.spawnLeaveGhosts(leaving, options.edge ?? "right");
+    // Cards that left the rail, and the one whose turn just ended, go out
+    // through the screen edge rather than vanishing.
+    const leaving = [...exiting];
+    for (const snapshot of snapshots.values()) {
+      if (!matched.has(snapshot) && snapshot.node) leaving.push(snapshot);
     }
+    this.spawnLeaveGhosts(leaving, options.edge ?? "right");
 
     if (!plans.length && !entries.length) return;
     this._magicLive = (this._magicLive || 0) + 1;
@@ -2642,6 +2432,148 @@ export class GLUniverseInitiativeOverlay {
     // Held for the preview harness, which pauses and seeks it frame by frame.
     this._magicTimeline = timeline;
     timeline.play();
+  }
+
+  // ---- Cinematic start arrival ----------------------------------------------
+  //
+  // combat-intro raises HANDOFF_HOOK on every client a moment before the GM
+  // calls startCombat(), with the screen rect each of its cards ended on. The
+  // payload is held until that start lands (or ARRIVAL_TTL_MS passes), then the
+  // first render of the started combat plays playArrival instead of the round
+  // splash and the turn-change move.
+
+  queueArrival(payload) {
+    const combatId = typeof payload?.combatId === "string" ? payload.combatId : null;
+    if (!combatId) return;
+    const cards = [];
+    for (const card of Array.isArray(payload.cards) ? payload.cards : []) {
+      const combatantId = typeof card?.combatantId === "string" ? card.combatantId : null;
+      if (!combatantId) continue;
+      const r = card.rect ?? null;
+      const rect = r && [r.left, r.top, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0
+        ? { left: r.left, top: r.top, width: r.width, height: r.height }
+        : null;
+      cards.push({ combatantId, rect });
+    }
+    // The combat is already running: a late handoff (combatants joining
+    // mid-fight), or a start that reached this client before its own handoff
+    // beat did (a background tab, a slow client). There is no start left to
+    // wait for, so the arrival plays on the very next render.
+    const combat = this.getCombatById?.(combatId) ?? null;
+    if (combat?.started) {
+      this._arrival = { combatId, cards, late: true };
+      this.renderSoon();
+      return;
+    }
+    this._pendingArrival = { combatId, cards, at: performance.now() };
+    window.clearTimeout(this._pendingArrivalTimer);
+    this._pendingArrivalTimer = window.setTimeout(() => { this._pendingArrival = null; }, ARRIVAL_TTL_MS);
+  }
+
+  takeArrival(combatId) {
+    const pending = this._pendingArrival;
+    if (!pending || pending.combatId !== combatId) return null;
+    this._pendingArrival = null;
+    window.clearTimeout(this._pendingArrivalTimer);
+    if (performance.now() - pending.at > ARRIVAL_TTL_MS) return null;
+    return pending;
+  }
+
+  /**
+   * Flies the rail's cards in from where the intro left them.
+   *
+   * A card with a rect is a magic move from a synthetic snapshot of that rect,
+   * through the same planMagicMove / primeMagicMove / tweenMagicMove the turn
+   * change uses: the surface's real width, height and offset travel, the art's
+   * crop and overhang are their own variables, and type tweens as a font size.
+   * Nothing is ever scaled. A card without one comes in from the nearest screen
+   * edge, as a newcomer to the rail does; on a late handoff (the combat was
+   * already running) cards the intro did not list stay put. Returns how many
+   * cards flew in from a rect.
+   */
+  playArrival(cards = [], { late = false } = {}) {
+    if (!this.root) return 0;
+    const duration = motionDuration(ARRIVAL_MOVE_MS, this.root);
+    if (duration <= 0) return 0;
+    const enterMs = motionDuration(MAGIC_ENTER_MS, this.root);
+    const step = motionDuration(ARRIVAL_STAGGER_MS, this.root);
+
+    const rects = new Map();
+    const listed = new Set(cards.map(card => card?.combatantId).filter(Boolean));
+    for (const card of cards) {
+      if (card?.combatantId && card.rect && !rects.has(card.combatantId)) rects.set(card.combatantId, card.rect);
+    }
+
+    // Read pass: every measurement before the first write.
+    const items = Array.from(this.root.querySelectorAll(".gluni-rail .gluni-card[data-combatant-id]"));
+    const plans = [];
+    const entries = [];
+    const used = new Set();
+    for (const item of items) {
+      const id = item.dataset.combatantId;
+      const rect = used.has(id) ? null : rects.get(id);
+      if (rect) {
+        used.add(id);
+        const plan = planMagicMove(item, arrivalSnapshot(item, rect));
+        if (plan) plans.push(plan);
+        continue;
+      }
+      // Late: the rail is already up, so only the newcomers move.
+      if (late && !listed.has(id)) continue;
+      entries.push({ item, offset: edgeEntryOffset(item) });
+    }
+    if (!plans.length && !entries.length) return 0;
+
+    this._railMotion.clear();
+    const settles = [];
+    const timeline = createTimeline({ autoplay: false, onComplete: () => settle() });
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      this._magicLive = Math.max(0, (this._magicLive || 0) - 1);
+      timeline.revert();
+      // Same order as the turn change: hand every inline style back, ONE
+      // layout flush, then drop the morph classes.
+      for (const entry of settles) entry.restore();
+      const flush = settles.find(entry => entry.commit);
+      if (flush) void (this.root ?? flush.node)?.offsetHeight;
+      for (const entry of settles) entry.commit?.();
+      this._railMotion.forget(handle);
+      if (this._arrivalTimeline === timeline) this._arrivalTimeline = null;
+      if (!this.magicMoveLive) this.flushHeldRender();
+    };
+    const handle = { revert: settle };
+
+    // Write pass: prime everything, then queue every tween.
+    for (const plan of plans) settles.push(primeMagicMove(plan));
+    for (const { item, offset } of entries) {
+      settles.push({
+        restore() {
+          item.classList.remove("gluni-anime-motion");
+          item.style.removeProperty("opacity");
+          item.style.removeProperty("--gluni-flip-x");
+        }
+      });
+      item.classList.add("gluni-anime-motion");
+      item.style.setProperty("--gluni-flip-x", `${offset}px`);
+      item.style.opacity = "0";
+    }
+
+    plans.forEach((plan, index) => tweenMagicMove(timeline, plan, duration, Math.min(index, 8) * step));
+    entries.forEach(({ item, offset }, index) => {
+      timeline.add(item, {
+        "--gluni-flip-x": [`${offset}px`, "0px"], opacity: [0, 1],
+        duration: enterMs, ease: MAGIC_ARRIVE_EASE
+      }, duration * 0.35 + Math.min(plans.length + index, 10) * step);
+    });
+
+    this._magicLive = (this._magicLive || 0) + 1;
+    this._railMotion.add(handle);
+    // Held for the preview harness and the motion check, which seek it.
+    this._arrivalTimeline = timeline;
+    timeline.play();
+    return plans.length;
   }
 
   get magicMoveLive() {
@@ -2671,6 +2603,7 @@ export class GLUniverseInitiativeOverlay {
       ghost.setAttribute("aria-hidden", "true");
       const clone = snapshot.node.cloneNode(true);
       clearMagicStyles(clone);
+      clone.removeAttribute("id");
       clone.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
       clone.querySelectorAll("canvas").forEach(node => node.remove());
       ghost.appendChild(clone);
@@ -2686,104 +2619,9 @@ export class GLUniverseInitiativeOverlay {
         duration: leaveMs, ease: MAGIC_DEPART_EASE
       }, 0);
     }
-    document.body.appendChild(layer);
+    mountOnBody(layer);
     // Held for the preview harness, alongside the rail's own timeline.
     this._leaveTimeline = timeline;
-    timeline.play();
-  }
-
-  // ---- Card-mode collect / deal / reshuffle motion --------------------------
-  //
-  // These beats are additive overlays: clones of the cards that left the rail
-  // fly into the deck stub (collect), while the freshly-dealt cards play their
-  // CSS deal-in keyframe. Because the ghosts are throwaway clones and the deal-in
-  // rides the existing enter animation, none of this fights the FLIP reflow that
-  // moves the cards that simply shifted position.
-
-  snapshotRailCards() {
-    if (!this.root) return null;
-    const cards = Array.from(this.root.querySelectorAll(".gluni-rail .gluni-card[data-gluni-key]"));
-    if (!cards.length) return null;
-    const stubPile = this.root.querySelector(".gluni-card-deck-stub-pile");
-    return {
-      stubRect: stubPile?.getBoundingClientRect() ?? null,
-      cards: cards.map(el => ({
-        key: el.dataset.gluniKey,
-        rect: el.getBoundingClientRect(),
-        html: el.outerHTML
-      }))
-    };
-  }
-
-  playCardModeMotion(snapshot, { isReshuffle = false, edge = "right" } = {}) {
-    if (!this.root || !snapshot?.cards?.length) return;
-    // The stub lives in the freshly rendered DOM; fall back to the pre-swap
-    // position if the new one hasn't been laid out yet.
-    const stubPile = this.root.querySelector(".gluni-card-deck-stub-pile");
-    const stubRect = stubPile?.getBoundingClientRect() || snapshot.stubRect;
-    if (!stubRect || !stubRect.width) return;
-
-    const presentKeys = new Set(
-      Array.from(this.root.querySelectorAll(".gluni-rail .gluni-card[data-gluni-key]"))
-        .map(el => el.dataset.gluniKey)
-    );
-    // On a reshuffle every card is re-dealt, so collect them all; on a normal
-    // turn only the cards that left the visible window (the spent active card)
-    // are collected.
-    const leaving = snapshot.cards.filter(card => isReshuffle || !presentKeys.has(card.key));
-    if (isReshuffle) this.flashReshuffle();
-    this.spawnCollectGhosts(leaving, stubRect, { stagger: isReshuffle, edge });
-  }
-
-  flashReshuffle() {
-    if (!this.root) return;
-    this.root.classList.add("gluni-initiative--reshuffling");
-    window.clearTimeout(this._reshuffleTimer);
-    this._reshuffleTimer = window.setTimeout(() => {
-      this.root?.classList.remove("gluni-initiative--reshuffling");
-    }, 900);
-  }
-
-  spawnCollectGhosts(items, stubRect, { stagger = false, edge = "right" } = {}) {
-    if (!items?.length) return;
-    const layer = document.createElement("div");
-    // Carry the overlay's scoping classes so the cloned cards keep their styling,
-    // but live on <body> so the shell's UI-scale transform doesn't double-apply.
-    layer.className = `gluni-initiative gluni-initiative--${edge} gluni-initiative--card-mode gluni-card-ghost-layer`;
-    const collectMs = motionDuration(480, this.root);
-
-    const stubCx = stubRect.left + stubRect.width / 2;
-    const stubCy = stubRect.top + stubRect.height / 2;
-    this._collectLayers.add(layer);
-    const timeline = createTimeline({ autoplay: false, onComplete: () => {
-      timeline.revert();
-      this._collectMotion.forget(timeline);
-      this._collectLayers.delete(layer);
-      layer.remove();
-    }});
-    this._collectMotion.add(timeline);
-    items.forEach((item, index) => {
-      const ghost = document.createElement("div");
-      ghost.className = "gluni-card-ghost gluni-card-ghost--collect";
-      ghost.setAttribute("aria-hidden", "true");
-      ghost.innerHTML = item.html;
-      // Clones are decorative: never duplicate identifiers or actionable controls.
-      ghost.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
-      ghost.inert = true;
-      ghost.style.left = `${item.rect.left}px`;
-      ghost.style.top = `${item.rect.top}px`;
-      ghost.style.width = `${item.rect.width}px`;
-      ghost.style.height = `${item.rect.height}px`;
-      layer.appendChild(ghost);
-      const dx = stubCx - (item.rect.left + item.rect.width / 2);
-      const dy = stubCy - (item.rect.top + item.rect.height / 2);
-      timeline.add(ghost, {
-        x: [0, dx], y: [0, dy], scale: [1, 0.14], rotateY: [0, 58],
-        opacity: [1, 0], duration: collectMs, ease: "inOutCubic"
-      }, motionDuration(stagger ? index * 45 : 0, this.root));
-    });
-    // Attached once the clones are in it — see spawnLeaveGhosts.
-    document.body.appendChild(layer);
     timeline.play();
   }
 
@@ -2957,20 +2795,12 @@ export class GLUniverseInitiativeOverlay {
       return;
     }
 
-    // Card-mode swap is available to whoever controls the active card (GM or the
-    // owning player), so these branches sit ahead of the GM-only guard.
-    if (action === "cardSwapStart") {
-      if (!this.isCardMode() || !this.userControlsActiveCard()) return;
-      this.cardSwapPending = !this.cardSwapPending;
-      this.renderSoon();
-      return;
-    }
-
-    if (action === "cardSwapPick") {
-      const wasPending = Boolean(this.cardSwapPending);
-      this.cardSwapPending = false;
-      this.renderSoon();
-      if (wasPending && this.isCardMode()) await this.requestCardSwap(button.dataset.targetId);
+    if (action === "cinematicStart") {
+      if (!game.user.isGM) return;
+      const combat = this.combat;
+      const intro = combatIntroApi();
+      if (!combat || combat.started || intro?.canStart?.(combat) !== true) return;
+      await intro.start(combat);
       return;
     }
 
@@ -3139,11 +2969,6 @@ export class GLUniverseInitiativeOverlay {
   async changeTurn(direction, combat = this.combat) {
     if (!combat?.started) return;
 
-    if (this.isCardMode()) {
-      await this.cardAdvance(direction, combat);
-      return;
-    }
-
     const outgoingCombatant = combat.combatant;
     const outgoingRound = combat.round ?? 1;
 
@@ -3160,171 +2985,12 @@ export class GLUniverseInitiativeOverlay {
     this.broadcastRefresh();
   }
 
-  // ---- Card initiative mode -------------------------------------------------
-
-  isCardMode() {
-    return getInitiativeMode() === INITIATIVE_MODE.card;
-  }
-
-  // Reads and validates the live deal stored on the combat. Returns null when no
-  // deal exists yet (e.g. a player before the GM has dealt, or a fresh combat).
-  getCardDeal(combat = this.combat) {
-    const raw = combat?.getFlag?.(MODULE_ID, FLAGS.cardDeal);
-    if (!raw || !Array.isArray(raw.sequence) || !raw.sequence.length) return null;
-    // Defeated combatants are treated as no longer live (consistent with
-    // dealCards), so a mid-round defeat drops that creature's remaining slots
-    // from the order rather than letting the turn advance onto a dead creature.
-    const liveIds = new Set(Array.from(combat.combatants ?? [])
-      .map(entry => (Array.isArray(entry) ? entry[1] : entry))
-      .filter(combatant => combatant && !combatant.defeated)
-      .map(combatant => combatant.id));
-    // Track the active slot by object identity so removing an earlier combatant
-    // keeps the same combatant active rather than shifting the pointer.
-    const rawPointer = clamp(Number(raw.pointer) || 0, 0, raw.sequence.length - 1);
-    const activeSlot = raw.sequence[rawPointer];
-    const sequence = raw.sequence.filter(slot => slot && liveIds.has(slot.cid));
-    if (!sequence.length) return null;
-    let pointer = sequence.indexOf(activeSlot);
-    if (pointer < 0) pointer = clamp(rawPointer, 0, sequence.length - 1);
-    return { round: Number(raw.round) || 1, pointer, sequence };
-  }
-
-  // Re-deals when the stored deal is missing, stale (wrong round), or its actor
-  // set drifted. GM-primary only, so exactly one client writes the flag.
-  async maybeRedealCards(combat = this.combat, { force = false } = {}) {
-    if (!this.isCardMode()) return;
-    if (!game.user.isGM || !this.isPrimaryActiveGM()) return;
-    if (!combat?.started || !combat.combatants?.size) return;
-
-    const deal = combat.getFlag(MODULE_ID, FLAGS.cardDeal) ?? null;
-    const round = Number(combat.round) || 1;
-    const stale = !deal || !Array.isArray(deal.sequence) || !deal.sequence.length || deal.round !== round;
-
-    if (force || stale) {
-      await this.dealCards(combat, round);
-      return;
-    }
-
-    await this.reconcileCardDeal(combat);
-  }
-
-  // Shuffles a fresh order for the round and writes it together with the round
-  // and the native turn pointer in one update (single updateCombat for all).
-  async dealCards(combat, round = Number(combat.round) || 1) {
-    const combatants = Array.from(combat.combatants ?? [])
-      .map(entry => Array.isArray(entry) ? entry[1] : entry)
-      .filter(combatant => combatant && !combatant.defeated);
-    const sequence = buildCardSequence(combatants);
-    if (!sequence.length) return;
-
-    const update = {
-      round,
-      flags: { [MODULE_ID]: { [FLAGS.cardDeal]: { round, pointer: 0, sequence } } }
-    };
-    const turnIndex = nativeTurnIndexOf(combat, sequence[0].cid);
-    if (turnIndex !== null) update.turn = turnIndex;
-    await combat.update(update);
-    this.broadcastRefresh();
-  }
-
-  // Keeps an in-progress deal valid when combatants are added/removed mid-round
-  // without reshuffling: drops slots for departed combatants (keeping the active
-  // slot stable) and appends turn slots for newcomers after the current pointer.
-  async reconcileCardDeal(combat) {
-    const deal = this.getCardDeal(combat);
-    if (!deal) { await this.dealCards(combat); return; }
-
-    const combatants = Array.from(combat.combatants ?? [])
-      .map(entry => Array.isArray(entry) ? entry[1] : entry)
-      .filter(combatant => combatant && !combatant.defeated);
-    const presentIds = new Set(deal.sequence.map(slot => slot.cid));
-    const additions = [];
-    for (const combatant of combatants) {
-      if (presentIds.has(combatant.id)) continue;
-      const config = getCombatantCardConfig(combatant);
-      for (let n = 0; n < config.turns; n++) additions.push({ cid: combatant.id, n });
-    }
-
-    const sameLength = deal.sequence.length === combat.getFlag(MODULE_ID, FLAGS.cardDeal)?.sequence?.length;
-    if (!additions.length && sameLength) return;
-
-    const sequence = deal.sequence.slice();
-    if (additions.length) sequence.splice(deal.pointer + 1, 0, ...additions);
-
-    await combat.setFlag(MODULE_ID, FLAGS.cardDeal, {
-      round: deal.round,
-      pointer: deal.pointer,
-      sequence
-    });
-    this.broadcastRefresh();
-  }
-
-  async setCardPointer(combat, pointer) {
-    const deal = this.getCardDeal(combat);
-    if (!deal) return;
-    const next = clamp(pointer, 0, deal.sequence.length - 1);
-    const update = {
-      flags: { [MODULE_ID]: { [FLAGS.cardDeal]: { round: deal.round, pointer: next, sequence: deal.sequence } } }
-    };
-    const turnIndex = nativeTurnIndexOf(combat, deal.sequence[next].cid);
-    if (turnIndex !== null) update.turn = turnIndex;
-    await combat.update(update);
-    this.broadcastRefresh();
-  }
-
-  async cardAdvance(direction, combat = this.combat) {
-    if (!game.user.isGM) return;
-    const deal = this.getCardDeal(combat);
-    if (!deal) { await this.maybeRedealCards(combat, { force: true }); return; }
-
-    const next = deal.pointer + direction;
-    if (next >= deal.sequence.length) {
-      // Past the last slot: advance the round and reshuffle a new deal.
-      await this.dealCards(combat, (Number(combat.round) || 1) + 1);
-      return;
-    }
-    if (next < 0) return;   // clamp at the first slot; a shuffle can't be rewound
-    await this.setCardPointer(combat, next);
-  }
-
-  // Swap-delay: the active creature trades places with an upcoming creature,
-  // forcing that creature to act now. Identified by target combatant id; we swap
-  // the active slot with that combatant's next upcoming slot. GM authority only.
-  async performCardSwap(targetCid, combat = this.combat) {
-    if (!game.user.isGM) return;
-    const deal = this.getCardDeal(combat);
-    if (!deal) return;
-    const { pointer, sequence } = deal;
-    if (sequence[pointer]?.cid === targetCid) return;
-
-    const targetSlot = sequence.findIndex((slot, index) => index > pointer && slot.cid === targetCid);
-    if (targetSlot < 0) return;
-
-    const next = sequence.slice();
-    [next[pointer], next[targetSlot]] = [next[targetSlot], next[pointer]];
-
-    const update = {
-      flags: { [MODULE_ID]: { [FLAGS.cardDeal]: { round: deal.round, pointer, sequence: next } } }
-    };
-    const turnIndex = nativeTurnIndexOf(combat, next[pointer].cid);
-    if (turnIndex !== null) update.turn = turnIndex;
-    await combat.update(update);
-    this.broadcastRefresh();
-  }
-
-  onInitiativeModeChanged() {
-    this.cardSwapPending = null;
-    if (this.isCardMode()) this.maybeRedealCards();
-    this.renderSoon();
-  }
-
   skipInactiveAdhocTurnSoon() {
     window.clearTimeout(this.adhocSkipTimer);
     this.adhocSkipTimer = window.setTimeout(() => this.skipInactiveAdhocTurns(), 40);
   }
 
   async skipInactiveAdhocTurns(combat = this.combat) {
-    if (this.isCardMode()) return;   // card mode drives order from the deal, not native nextTurn
     if (!game.user.isGM || !combat?.started || !this.isPrimaryActiveGM()) return;
 
     const turns = Array.from(combat.turns ?? []);
@@ -3413,56 +3079,6 @@ export class GLUniverseInitiativeOverlay {
     if (!requestingUser || !this.userOwnsCombatant(combat.combatant, requestingUser)) return;
 
     await this.changeTurn(1, combat);
-  }
-
-  // Card-mode swap initiated by the active combatant's owner. GM applies it
-  // directly; players socket the request to the GM (mirrors End Turn).
-  async requestCardSwap(targetId) {
-    const combat = this.combat;
-    const combatant = combat?.combatant;
-    if (!combat?.started || !combatant || !targetId || !this.userOwnsCombatant(combatant, game.user)) {
-      this.renderSoon();
-      return;
-    }
-
-    if (game.user.isGM) {
-      await this.performCardSwap(targetId, combat);
-      return;
-    }
-
-    if (socketReady()) {
-      emitSocket(FEATURE_ID, {
-        type: "requestCardSwap",
-        requestId: `${game.user.id}:${combat.id}:${Date.now()}`,
-        combatId: combat.id,
-        sourceId: combatant.id,
-        targetId,
-        userId: game.user.id
-      });
-    } else {
-      this.renderSoon();
-    }
-  }
-
-  async onSocketCardSwapRequest(data) {
-    if (!game.user.isGM || !data?.combatId || !data?.sourceId || !data?.targetId || !data?.userId) return;
-
-    this.handledCardSwapRequests ??= new Set();
-    const requestId = data.requestId || `${data.userId}:${data.combatId}:${data.targetId}`;
-    if (this.handledCardSwapRequests.has(requestId)) return;
-    this.handledCardSwapRequests.add(requestId);
-    window.setTimeout(() => this.handledCardSwapRequests.delete(requestId), 10000);
-
-    const gmRank = this.getActiveGMRank();
-    if (gmRank > 0) await wait(gmRank * 180);
-
-    const combat = this.getCombatById(data.combatId);
-    if (!combat?.started || combat.combatant?.id !== data.sourceId) return;
-
-    const requestingUser = game.users?.get(data.userId);
-    if (!requestingUser || !this.userOwnsCombatant(combat.combatant, requestingUser)) return;
-
-    await this.performCardSwap(data.targetId, combat);
   }
 
   getCombatById(combatId) {
@@ -3819,7 +3435,7 @@ export class GLUniverseInitiativeOverlay {
         <div class="gluni-break-splash-name"><span>${escapeHTML(name)}</span></div>
       </div>
     `;
-    document.body.appendChild(splash);
+    mountOnBody(splash);
 
     // WebGL glass-crack + shockwave layer. Decorative and additive over the CSS
     // deck. Uses the shared pre-compiled renderer, so no per-break shader compilation.
@@ -3937,37 +3553,6 @@ export class GLUniverseInitiativeOverlay {
     const combatant = this.combat?.combatants?.get(card.dataset.combatantId);
     if (!combatant) return;
 
-    // Card mode reorders the deal sequence rather than initiative. Only upcoming
-    // (non-active) slots may move — the active/spent slots are fixed — and the
-    // drop maths works off the live, possibly-overlapping card rects.
-    const cardMode = this.isCardMode();
-    if (cardMode) {
-      if (card.classList.contains("gluni-card--active")) return;
-      const fromSlot = Number(card.dataset.cardSlot);
-      if (!Number.isInteger(fromSlot)) return;
-      event.preventDefault();
-      this.closeInitiativeContextMenu();
-      card.setPointerCapture?.(event.pointerId);
-      this.cardDrag = {
-        cardMode: true,
-        combatantId: combatant.id,
-        dragKey: card.dataset.gluniKey,
-        fromSlot,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        lastClientY: event.clientY,
-        moved: false,
-        card
-      };
-      this.root.classList.add("gluni-initiative--card-dragging");
-      card.classList.add("gluni-card--dragging");
-      window.addEventListener("pointermove", this.onCardPointerMove);
-      window.addEventListener("pointerup", this.onCardPointerUp, { once: true });
-      window.addEventListener("pointercancel", this.onCardPointerCancel, { once: true });
-      return;
-    }
-
     const railCards = Array.from(this.root?.querySelectorAll(".gluni-rail .gluni-card[data-combatant-id]") ?? []);
     const originalIndex = railCards.indexOf(card);
 
@@ -4044,14 +3629,6 @@ export class GLUniverseInitiativeOverlay {
     const drag = this.cardDrag;
     if (!drag) return;
 
-    if (drag.cardMode) {
-      const target = drag.moved ? this.getCardDropTargetCard(event.clientY) : null;
-      this.finishCardDrag();
-      if (!target || target.toSlot === drag.fromSlot) return;
-      await this.moveCardSlot(drag.fromSlot, target.toSlot);
-      return;
-    }
-
     const target = drag.moved ? this.getCardDropTarget(event.clientY) : null;
     this.finishCardDrag();
 
@@ -4089,34 +3666,6 @@ export class GLUniverseInitiativeOverlay {
     const drag = this.cardDrag;
     if (!drag) return;
 
-    // Card mode rebinds by the per-slot rail key (a multi-turn boss has several
-    // cards sharing one combatant id, so the id alone is ambiguous) and refreshes
-    // the slot index in case the deal shifted under us.
-    if (drag.cardMode) {
-      const newCard = drag.dragKey
-        ? this.root?.querySelector(`.gluni-rail .gluni-card[data-gluni-key="${CSS.escape(drag.dragKey)}"]`)
-        : null;
-      if (!newCard || newCard.classList.contains("gluni-card--active")) {
-        this.finishCardDrag();
-        return;
-      }
-      const fromSlot = Number(newCard.dataset.cardSlot);
-      if (!Number.isInteger(fromSlot)) {
-        this.finishCardDrag();
-        return;
-      }
-      drag.card = newCard;
-      drag.fromSlot = fromSlot;
-      this.root.classList.add("gluni-initiative--card-dragging");
-      newCard.classList.add("gluni-card--dragging");
-      newCard.setPointerCapture?.(drag.pointerId);
-      if (drag.moved) {
-        newCard.style.setProperty("--gluni-card-drag-y", `${Math.round(drag.lastClientY - drag.startY)}px`);
-        this.updateCardReorder(drag.lastClientY);
-      }
-      return;
-    }
-
     const railCards = Array.from(this.root?.querySelectorAll(".gluni-rail .gluni-card[data-combatant-id]") ?? []);
     const newCard = railCards.find(el => el.dataset.combatantId === drag.combatantId) ?? null;
     if (!newCard) {
@@ -4145,17 +3694,6 @@ export class GLUniverseInitiativeOverlay {
   // and draw the drop line at that boundary.
   updateCardReorder(clientY) {
     this.clearCardDropMarkers();
-
-    // Card mode: overlapping, variable-height cards make a slot-height gap shift
-    // unreliable, so just draw the insertion line; the FLIP reflow animates the
-    // cards into their new order on drop.
-    if (this.cardDrag?.cardMode) {
-      const target = this.getCardDropTargetCard(clientY);
-      if (target?.marker) {
-        target.marker.classList.add(target.position === "before" ? "gluni-card--drop-before" : "gluni-card--drop-after");
-      }
-      return;
-    }
 
     const target = this.getCardDropTarget(clientY);
     if (!target) return;
@@ -4211,57 +3749,6 @@ export class GLUniverseInitiativeOverlay {
     };
   }
 
-  // Card-mode drop target: find where, among the upcoming rail cards, the cursor
-  // wants to land and return the absolute deal-sequence slot to insert before.
-  getCardDropTargetCard(clientY) {
-    const drag = this.cardDrag;
-    if (!drag) return null;
-
-    const cards = Array.from(this.root?.querySelectorAll(".gluni-rail .gluni-card[data-card-slot]") ?? [])
-      .map(el => {
-        const rect = el.getBoundingClientRect();
-        return {
-          el,
-          slot: Number(el.dataset.cardSlot),
-          mid: rect.top + rect.height / 2,
-          active: el.classList.contains("gluni-card--active")
-        };
-      })
-      .filter(card => Number.isInteger(card.slot) && !card.active);
-    if (!cards.length) return null;
-
-    const others = cards.filter(card => card.slot !== drag.fromSlot);
-    if (!others.length) return null;
-
-    const before = others.find(card => clientY < card.mid);
-    if (before) {
-      return { toSlot: before.slot, marker: before.el, position: "before" };
-    }
-    const last = others[others.length - 1];
-    return { toSlot: last.slot + 1, marker: last.el, position: "after" };
-  }
-
-  // Reorder the upcoming portion of the live deal. GM authority only (drag is
-  // gated to the GM); active and already-spent slots are left untouched, and the
-  // new order holds until the next round's reshuffle re-deals.
-  async moveCardSlot(fromSlot, toSlot, combat = this.combat) {
-    if (!game.user.isGM) return;
-    const deal = this.getCardDeal(combat);
-    if (!deal) return;
-    const { pointer, sequence } = deal;
-    if (!Number.isInteger(fromSlot) || fromSlot <= pointer || fromSlot >= sequence.length) return;
-    if (!Number.isInteger(toSlot) || toSlot <= pointer || toSlot > sequence.length) return;
-
-    const next = sequence.slice();
-    const [moved] = next.splice(fromSlot, 1);
-    const insertAt = toSlot > fromSlot ? toSlot - 1 : toSlot;
-    if (insertAt === fromSlot) return;
-    next.splice(insertAt, 0, moved);
-
-    await combat.setFlag(MODULE_ID, FLAGS.cardDeal, { round: deal.round, pointer, sequence: next });
-    this.broadcastRefresh();
-  }
-
   async moveCombatantBetween(combatant, beforeId, afterId) {
     const combat = this.combat;
     if (!combat?.started || !combatant) return;
@@ -4315,7 +3802,7 @@ export class GLUniverseInitiativeOverlay {
       ${this.renderConditionContextSection(combatant)}
     `;
 
-    document.body.appendChild(menu);
+    mountOnBody(menu);
     const menuRect = menu.getBoundingClientRect();
     const left = clamp(event.clientX, 6, window.innerWidth - menuRect.width - 6);
     const top = clamp(event.clientY, 6, window.innerHeight - menuRect.height - 6);
@@ -4474,7 +3961,7 @@ export class GLUniverseInitiativeOverlay {
         <div class="gluni-round-sub"><span>${escapeHTML(subString)}</span></div>
       </div>
     `;
-    document.body.appendChild(splash);
+    mountOnBody(splash);
 
     this.playSplashMotion(splash, "round");
   }
@@ -4543,7 +4030,7 @@ export class GLUniverseInitiativeOverlay {
     ghost.style.width = `${Math.round(rect.width)}px`;
     ghost.style.height = `${Math.round(rect.height)}px`;
     ghost.style.margin = "0";
-    document.body.appendChild(ghost);
+    mountOnBody(ghost);
     window.requestAnimationFrame(() => {
       ghost.classList.add(edge === "left" ? "gluni-status-slide-ghost--go-left" : "gluni-status-slide-ghost--go-right");
     });
@@ -4567,7 +4054,7 @@ export class GLUniverseInitiativeOverlay {
     flash.className = `gluni-status-flash gluni-status-flash--${colorClass}`;
     flash.innerHTML = `<span>${escapeHTML(text)}</span>`;
     ghost.appendChild(flash);
-    document.body.appendChild(ghost);
+    mountOnBody(ghost);
     window.requestAnimationFrame(() => flash.classList.add("gluni-status-flash--go"));
     const flashDuration = animMs(680);
     const slideDuration = animMs(420);
@@ -4802,6 +4289,12 @@ const MOVE_HOLD_MAX_MS = 1500;
 // Screen-edge exits accelerate away; entries arrive fast and settle.
 const MAGIC_DEPART_EASE = cubicBezier(0.55, 0, 0.9, 0.4);
 const MAGIC_ARRIVE_EASE = cubicBezier(0.1, 0.6, 0.2, 1);
+// A cinematic arrival crosses the screen, so it is given a little longer than a
+// turn change, and each card sets off a beat after the one above it.
+const ARRIVAL_MOVE_MS = 820;
+const ARRIVAL_STAGGER_MS = 55;
+// The intro shows its art wider than the rail crops it; the crop settles in.
+const ARRIVAL_PORTRAIT_ZOOM = 0.88;
 // Clearance past the screen edge, so a card's glow is gone too.
 const EDGE_CLEARANCE = 24;
 
@@ -4883,6 +4376,27 @@ function captureMagicSnapshot(item) {
 }
 
 const near = (a, b, epsilon) => Math.abs(a - b) < epsilon;
+
+// A snapshot of a card that "was" at a screen rect the intro handed over, so
+// planMagicMove can treat the arrival exactly like a turn change. Type starts in
+// proportion to the rect, the art starts inside the frame (no overhang) and a
+// touch wider in its crop, and nothing was active.
+function arrivalSnapshot(item, rect) {
+  const surface = item.querySelector(":scope > .gluni-card-surface");
+  const ratio = surface?.offsetWidth ? clamp(rect.width / surface.offsetWidth, 0.6, 1.8) : 1;
+  const fonts = {};
+  if (surface) {
+    for (const selector of MAGIC_FONT_PARTS) {
+      const part = surface.querySelector(selector);
+      const size = part ? parseFloat(getComputedStyle(part).fontSize) : NaN;
+      if (Number.isFinite(size)) fonts[selector] = size * ratio;
+    }
+  }
+  const portrait = readPortraitVars(getComputedStyle(item));
+  if (portrait) portrait[2] *= ARRIVAL_PORTRAIT_ZOOM;
+  const box = { left: rect.left, top: rect.top, width: rect.width, height: rect.height, right: rect.left + rect.width, bottom: rect.top + rect.height };
+  return { node: null, combatantId: item.dataset.combatantId ?? null, rect: box, surface: box, labels: null, active: false, overflow: 0, portrait, fonts };
+}
 
 // Read-only: everything a move needs, measured against the new layout.
 function planMagicMove(item, from) {
@@ -5045,10 +4559,10 @@ function primeMagicMove(plan) {
 // Write pass, part two: queues the card's tweens. Runs only once every card has
 // primed, so the computed-value reads anime.js makes while it builds them all
 // land on the same style recalculation.
-function tweenMagicMove(timeline, plan, duration) {
+function tweenMagicMove(timeline, plan, duration, start = 0) {
   const { item } = plan;
   const tween = (target, props, offset = 0, length = duration, ease = MAGIC_EASE) =>
-    timeline.add(target, { ...props, duration: length, ease }, offset);
+    timeline.add(target, { ...props, duration: length, ease }, start + offset);
 
   if (plan.kind === "shift") {
     tween(item, { "--gluni-flip-x": [`${plan.dx}px`, "0px"], "--gluni-flip-y": [`${plan.dy}px`, "0px"] });
@@ -5126,11 +4640,6 @@ function renderCombatantStyle(card) {
   if (Number.isFinite(card.portraitScaleCap)) {
     styleParts.push(`--gluni-portrait-quality-cap: ${card.portraitScaleCap.toFixed(3)};`);
   }
-  // Card-mode deck stacking: earlier draws paint above later ones so each card's
-  // lower band (name + badge + status) stays clear of the card tucked beneath it.
-  if (Number.isInteger(card.cardOrder)) {
-    styleParts.push(`--gluni-deck-z: ${40 - card.cardOrder};`);
-  }
   return styleParts.length ? ` style="${escapeAttr(styleParts.join(" "))}"` : "";
 }
 
@@ -5140,79 +4649,6 @@ function getUsedInitiatives(combat, exceptId = null) {
     .filter(combatant => combatant?.id !== exceptId)
     .map(combatant => Number(combatant.initiative))
     .filter(Number.isFinite);
-}
-
-function getInitiativeMode() {
-  return game.settings.get(MODULE_ID, SETTINGS.initiativeMode) === INITIATIVE_MODE.card
-    ? INITIATIVE_MODE.card
-    : INITIATIVE_MODE.standard;
-}
-
-function normalizeCardConfig(value) {
-  const config = { ...CARD_CONFIG_DEFAULTS };
-  if (value && typeof value === "object") {
-    for (const key of ["cards", "turns"]) {
-      const number = Math.round(Number(value[key]));
-      if (Number.isFinite(number)) {
-        config[key] = clamp(number, CARD_CONFIG_LIMITS[key].min, CARD_CONFIG_LIMITS[key].max);
-      }
-    }
-  }
-  return config;
-}
-
-function getActorCardConfig(actor) {
-  return normalizeCardConfig(actor?.getFlag?.(MODULE_ID, FLAGS.cardConfig));
-}
-
-function getCombatantCardConfig(combatant) {
-  return getActorCardConfig(combatant?.actor);
-}
-
-// Fisher-Yates, in place.
-function shuffleInPlace(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
-
-// Builds a freshly shuffled turn order for the round. Each combatant contributes
-// max(cards, turns) copies to the deck; dealing one card at a time, a combatant
-// gains a turn slot on each draw until it has reached its `turns` count, after
-// which further draws of that combatant are ignored. The result is an ordered
-// list of { cid, n } slots, where n is the 0-based occurrence for that combatant
-// (so multi-turn actors get stable per-occurrence keys for animation).
-function buildCardSequence(combatants) {
-  const deck = [];
-  const turnsById = new Map();
-  for (const combatant of combatants) {
-    if (!combatant?.id) continue;
-    const config = getCombatantCardConfig(combatant);
-    const copies = Math.max(config.cards, config.turns);
-    turnsById.set(combatant.id, config.turns);
-    for (let i = 0; i < copies; i++) deck.push(combatant.id);
-  }
-
-  shuffleInPlace(deck);
-
-  const sequence = [];
-  const placed = new Map();
-  for (const cid of deck) {
-    const used = placed.get(cid) ?? 0;
-    if (used >= (turnsById.get(cid) ?? 1)) continue;
-    sequence.push({ cid, n: used });
-    placed.set(cid, used + 1);
-  }
-  return sequence;
-}
-
-function nativeTurnIndexOf(combat, cid) {
-  const turns = Array.from(combat?.turns ?? [])
-    .map(entry => Array.isArray(entry) ? entry[1] : entry);
-  const index = turns.findIndex(combatant => combatant?.id === cid);
-  return index >= 0 ? index : null;
 }
 
 function chooseInitiativeBetween({ before, after, existing = [] } = {}) {
@@ -5329,7 +4765,7 @@ function openBreakGaugeEditor(combatant, anchor) {
     </div>
   `;
 
-  document.body.appendChild(form);
+  mountOnBody(form);
 
   const maxInput = form.querySelector("input[name='max']");
   const valueInput = form.querySelector("input[name='value']");
@@ -5505,153 +4941,6 @@ function getActorFromSheet(app) {
 function canConfigurePortrait(actor) {
   if (!actor || !CONFIGURABLE_ACTOR_TYPES.has(actor.type)) return false;
   return game.user.isGM || actor.isOwner || actor.testUserPermission?.(game.user, "OWNER");
-}
-
-// The card-deck control only appears for users who could configure the actor and
-// only while Card initiative mode is active, since it has no effect otherwise.
-function canConfigureCards(actor) {
-  return getInitiativeMode() === INITIATIVE_MODE.card && canConfigurePortrait(actor);
-}
-
-function addCardConfigHeaderButton(app, buttons) {
-  const actor = getActorFromSheet(app);
-  if (!canConfigureCards(actor)) return;
-  if (buttons.some(button => button.class === "gluni-card-config")) return;
-
-  buttons.unshift({
-    label: localize("GLUNI.Card.Config.Button"),
-    class: "gluni-card-config",
-    icon: "fa-solid fa-clone",
-    onclick: event => {
-      event?.preventDefault?.();
-      openCardConfigDialog(actor);
-    }
-  });
-}
-
-function addCardConfigHeaderControl(app, controls) {
-  const actor = getActorFromSheet(app);
-  if (!canConfigureCards(actor)) return;
-  if (controls.some(control => control.action === "gluni-card-config")) return;
-
-  controls.unshift({
-    action: "gluni-card-config",
-    icon: "fa-solid fa-clone",
-    label: localize("GLUNI.Card.Config.Button"),
-    onClick: event => {
-      event?.preventDefault?.();
-      openCardConfigDialog(actor);
-    },
-    visible: true
-  });
-}
-
-function injectCardConfigTitlebarButton(app, html) {
-  const actor = getActorFromSheet(app);
-  if (!canConfigureCards(actor)) return;
-
-  const element = getHTMLElement(html) ?? getHTMLElement(app.element) ?? app.element;
-  const wrapper = element?.closest?.(".app, .application, .window-app") ?? element;
-  const header = app.window?.header ?? wrapper?.querySelector?.(".window-header");
-  if (!header || header.querySelector("[data-gluni-card-config], .gluni-card-config")) return;
-
-  const button = document.createElement("a");
-  button.className = "header-button gluni-card-config";
-  button.dataset.gluniCardConfig = "true";
-  button.dataset.action = "gluni-card-config";
-  button.title = localize("GLUNI.Card.Config.Open");
-  button.innerHTML = `<i class="fa-solid fa-clone" aria-hidden="true"></i>${localize("GLUNI.Card.Config.Button")}`;
-  button.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    openCardConfigDialog(actor);
-  });
-
-  const close = header.querySelector('[data-action="close"], .close');
-  if (close) header.insertBefore(button, close);
-  else header.appendChild(button);
-}
-
-function openCardConfigDialog(actor) {
-  const config = getActorCardConfig(actor);
-
-  const DialogV2 = foundry.applications?.api?.DialogV2;
-  if (!DialogV2) return;
-
-  new DialogV2({
-    window: { title: formatLocalized("GLUNI.Card.Config.Title", { name: actor.name }) },
-    classes: ["gluni-card-config-dialog"],
-    position: { width: 440 },
-    content: renderCardConfigDialog(config),
-    buttons: [
-      {
-        action: "reset",
-        icon: "fa-solid fa-rotate-left",
-        label: localize("GLUNI.Card.Config.Reset"),
-        callback: async () => {
-          await actor.unsetFlag(MODULE_ID, FLAGS.cardConfig);
-          overlay?.maybeRedealCards();
-          overlay?.broadcastRefresh();
-        }
-      },
-      {
-        action: "save",
-        icon: "fa-solid fa-check",
-        label: localize("GLUNI.Card.Config.Save"),
-        default: true,
-        callback: async (event, button) => {
-          const next = readCardConfigForm(button.form);
-          await actor.setFlag(MODULE_ID, FLAGS.cardConfig, next);
-          overlay?.maybeRedealCards();
-          overlay?.broadcastRefresh();
-        }
-      }
-    ]
-  }).render({ force: true });
-}
-
-function renderCardConfigDialog(config) {
-  const cardsField = renderCardConfigField(
-    "cards",
-    localize("GLUNI.Card.Config.Cards"),
-    localize("GLUNI.Card.Config.CardsHint"),
-    config.cards,
-    CARD_CONFIG_LIMITS.cards
-  );
-  const turnsField = renderCardConfigField(
-    "turns",
-    localize("GLUNI.Card.Config.Turns"),
-    localize("GLUNI.Card.Config.TurnsHint"),
-    config.turns,
-    CARD_CONFIG_LIMITS.turns
-  );
-
-  return `
-    <div class="gluni-card-config-form" autocomplete="off">
-      <p class="gluni-card-config-note">${localize("GLUNI.Card.Config.Hint")}</p>
-      ${cardsField}
-      ${turnsField}
-    </div>
-  `;
-}
-
-function renderCardConfigField(name, label, hint, value, limits) {
-  return `
-    <label class="gluni-card-config-field">
-      <span class="gluni-card-config-field-label">${escapeHTML(label)}</span>
-      <input type="number" name="${escapeAttr(name)}" min="${limits.min}" max="${limits.max}" step="1" value="${clamp(Math.round(Number(value) || limits.min), limits.min, limits.max)}">
-      <small class="gluni-card-config-field-hint">${escapeHTML(hint)}</small>
-    </label>
-  `;
-}
-
-function readCardConfigForm(html) {
-  const root = getHTMLElement(html) ?? html?.[0] ?? html;
-  const read = name => {
-    const input = root?.querySelector?.(`[name="${name}"]`);
-    return input ? Number(input.value) : NaN;
-  };
-  return normalizeCardConfig({ cards: read("cards"), turns: read("turns") });
 }
 
 function openPortraitConfigDialog(actor) {
@@ -6255,6 +5544,47 @@ function clonePortraitFrameDefaults() {
 
 // Supersample factor for the procedural card FX. Shader-generated crack edges
 // can't be smoothed by MSAA, so we render larger and let the blit downsample.
+/**
+ * The card effects' colours, read off the tracker root.
+ *
+ * WebGL cannot read a custom property, so the shaders take float triples. A
+ * skin states its card colours as `--gluni-fx-*` on its own scoped root
+ * (styles/initiative-aegis.css); probing `:root` would miss them, because they
+ * are declared on `#gluni-initiative[data-gl-skin=…]`, not on the document. Any
+ * key a skin does not state keeps the Etched value from ACTIVE_SHADER_PALETTE.
+ */
+const CARD_FX_VARS = Object.freeze({
+  breakAmber: "--gluni-fx-break", breakHot: "--gluni-fx-break-hot",
+  veinBase: "--gluni-fx-vein", veinHot: "--gluni-fx-vein-hot",
+  mysteryA: "--gluni-fx-mystery-a", mysteryB: "--gluni-fx-mystery-b",
+  tyrantBase: "--gluni-fx-tyrant-deep", tyrantMid: "--gluni-fx-tyrant", tyrantHot: "--gluni-fx-tyrant-hot"
+});
+
+export function cssColorToFloat(value) {
+  const text = String(value ?? "").trim();
+  let match = /^#([0-9a-f]{3}|[0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(text);
+  if (match) {
+    let hex = match[1];
+    if (hex.length === 3) hex = hex.replace(/./g, c => c + c);
+    return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  }
+  match = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text);
+  if (match) return [match[1], match[2], match[3]].map(n => clamp(Number(n) / 255, 0, 1));
+  return null;
+}
+
+function cardFxPalette(root) {
+  const palette = { ...ACTIVE_SHADER_PALETTE };
+  if (!root?.isConnected) return palette;
+  let style;
+  try { style = getComputedStyle(root); } catch { return palette; }
+  for (const [key, name] of Object.entries(CARD_FX_VARS)) {
+    const rgb = cssColorToFloat(style.getPropertyValue(name));
+    if (rgb) palette[key] = rgb;
+  }
+  return palette;
+}
+
 class CardFXManager {
   constructor() {
     this.supported = false;
@@ -6394,7 +5724,7 @@ class CardFXManager {
     try {
       if (!globalThis.PIXI?.Renderer || !globalThis.PIXI?.Filter || !globalThis.PIXI?.Sprite) return false;
       this.sprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-      const S = ACTIVE_SHADER_PALETTE;
+      const S = cardFxPalette(this.paletteRoot);
       const mk = (frag, extra) => {
         const uniforms = { uTime: 0, uSeed: 0, uAspect: 1, uClipCircle: 0, uThick: 0.09, uTexel: 0, uImpact: [0.65, 0.34], ...extra };
         const f = new PIXI.Filter(undefined, frag, uniforms);
@@ -6627,9 +5957,12 @@ class CardFXManager {
 
   // Updates the live filter colour uniforms from the active shader palette so
   // existing break/dying/scramble cards repaint in the new theme on the next tick.
-  notifyThemeChange() {
+  // The palette is probed off the tracker root, not :root: a skin remaps the
+  // card colours on that scoped element (see cardFxPalette).
+  notifyThemeChange(root = this.paletteRoot) {
+    if (root) this.paletteRoot = root;
     if (!this.supported) return;
-    const S = ACTIVE_SHADER_PALETTE;
+    const S = cardFxPalette(this.paletteRoot);
     const set = (filter, key, value) => { if (filter?.uniforms) filter.uniforms[key] = [...value]; };
     set(this.filters.break,    "uBreakAmber", S.breakAmber);
     set(this.filters.break,    "uBreakHot",   S.breakHot);
@@ -6638,6 +5971,7 @@ class CardFXManager {
     set(this.filters.scramble, "uMysteryA",   S.mysteryA);
     set(this.filters.scramble, "uMysteryB",   S.mysteryB);
     set(this.filters.dread,    "uTyrantBase",  S.tyrantBase);
+    set(this.filters.dread,    "uTyrantMid",   S.tyrantMid);
     set(this.filters.dread,    "uTyrantHot",   S.tyrantHot);
   }
 
@@ -6651,6 +5985,26 @@ class CardFXManager {
   }
 }
 
+
+/** The combat-intro feature's API, reached through the suite (never imported). */
+function combatIntroApi() {
+  return game.modules?.get?.(MODULE_ID)?.api?.features?.["combat-intro"] ?? null;
+}
+
+/** The world's skin id, always valid. Safe before the setting exists. */
+export function currentSkin() {
+  try { return skinOf(game.settings.get(MODULE_ID, SETTINGS.skin)); } catch { return DEFAULT_SKIN; }
+}
+
+/**
+ * Every element this feature puts on <body> carries the skin, so a scoped skin
+ * sheet can match splashes, ghosts and menus as well as the rail itself.
+ */
+function mountOnBody(element) {
+  element.dataset.glSkin = currentSkin();
+  document.body.appendChild(element);
+  return element;
+}
 
 function getHTMLElement(value) {
   if (!value) return null;

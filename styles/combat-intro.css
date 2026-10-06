@@ -1,0 +1,860 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Combat Intro — base + the "Etched × Endfield" skin
+   ════════════════════════════════════════════════════════════════════════
+   Etched Glass is the material; an industrial survey HUD is the drafting
+   layer over it: hairline rules, corner brackets, data labels, chevrons and
+   hazard bands. The aegis skin restyles the same markup under
+   .glci[data-skin="aegis"] (styles/combat-intro-aegis.css).
+
+   Layer stack (scripts/features/combat-intro/overlay.mjs createRoot):
+     .glci                     root, fixed full-screen
+       canvas.glci-bg          WebGL backdrop  (data-render="webgl")
+       .glci-cssbg             CSS backdrop    (data-render="css")
+       .glci-back              the roll table and the sort tiles
+       .glci-dice              the dice (Dice So Nice)
+       .glci-front             the intro
+       .glci-gm                the GM's bar
+
+   Everything that moves after mount is driven by the director's seeked
+   clock: anime timelines write inline values, and frame() writes the
+   --glci-* curves the CSS backdrop reads (--glci-boot, -roster, -title,
+   -flash, -threat, -table, -collapse, -intensity, -sweep, -land, -move).
+   The only @keyframes here are idle loops. Feature-local custom properties
+   are --glci-*; no foundation token is redeclared.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glci {
+  /* The GL palette probe (main.mjs reads these off the skinned root). */
+  --glci-accent: var(--gl-accent);
+  --glci-hot: var(--gl-text-bright);
+  --glci-ink: var(--gl-ink-0);
+  --glci-warn: var(--gl-warn);
+
+  --glci-line: color-mix(in srgb, var(--gl-accent) 70%, var(--gl-text-bright));
+  --glci-line-dim: color-mix(in srgb, var(--gl-accent) 34%, transparent);
+  --glci-glass: color-mix(in srgb, var(--gl-accent) 7%, rgb(var(--gl-tint-dark) / 0.64));
+  --glci-card-w: clamp(176px, 14.5vw, 228px);
+  --glci-hostile: color-mix(in srgb, var(--gl-warn) 85%, var(--gl-accent));
+
+  position: fixed;
+  inset: 0;
+  z-index: var(--gl-z-splash);
+  pointer-events: none;
+  overflow: hidden;
+  font-family: var(--gl-display);
+  color: var(--gl-text);
+  user-select: none;
+}
+
+.glci > .glci-bg,
+.glci > .glci-cssbg,
+.glci > .glci-back,
+.glci > .glci-dice,
+.glci > .glci-front {
+  position: absolute;
+  inset: 0;
+}
+.glci-bg { width: 100%; height: 100%; display: block; }
+.glci-dice > canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.glci-cssbg { display: none; }
+.glci[data-render="css"] .glci-bg { display: none; }
+.glci[data-render="css"] .glci-cssbg { display: block; }
+
+.glci button,
+.glci summary { pointer-events: auto; cursor: pointer; font-family: var(--gl-tech); }
+.glci button[disabled] { cursor: not-allowed; }
+.glci img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* Phase gates. The table keeps its layout while hidden: the sort measures it. */
+.glci:not([data-phase="intro"]) .glci-intro { display: none; }
+.glci[data-phase="intro"] .glci-table,
+.glci[data-phase="handoff"] .glci-table { visibility: hidden; }
+.glci:not([data-phase="sorting"]):not([data-phase="handoff"]) .glci-sort { display: none; }
+
+/* Accent-derived values resolve where they are declared, so every scope that
+   remaps --gl-accent (hostiles, a natural 20) restates them. */
+.glci-roster-side,
+.glci-card,
+.glci-volley,
+.glci-rank {
+  --glci-line: color-mix(in srgb, var(--gl-accent) 70%, var(--gl-text-bright));
+  --glci-line-dim: color-mix(in srgb, var(--gl-accent) 34%, transparent);
+  --glci-glass: color-mix(in srgb, var(--gl-accent) 7%, rgb(var(--gl-tint-dark) / 0.64));
+}
+
+/* ── the CSS backdrop: every beat, read off the seeked curves ─────────── */
+
+.glci-cssbg {
+  opacity: var(--glci-intensity, 1);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 46%, color-mix(in srgb, var(--gl-accent) 9%, transparent), transparent 70%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, color-mix(in srgb, var(--glci-ink) 74%, transparent), color-mix(in srgb, var(--glci-ink) 93%, transparent));
+  clip-path: inset(0 0 calc(var(--glci-collapse, 0) * 100%) 0);
+}
+.glci-cssbg > i { position: absolute; display: block; pointer-events: none; }
+
+.glci-cssbg-grid {
+  inset: 0;
+  opacity: calc(0.55 - var(--glci-table, 0) * 0.3);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 16%, transparent) 1px, transparent 1px) 50% 50% / 224px 224px,
+    linear-gradient(color-mix(in srgb, var(--gl-accent) 16%, transparent) 1px, transparent 1px) 50% 50% / 224px 224px,
+    linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 6%, transparent) 1px, transparent 1px) 50% 50% / 56px 56px,
+    linear-gradient(color-mix(in srgb, var(--gl-accent) 6%, transparent) 1px, transparent 1px) 50% 50% / 56px 56px;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 calc(var(--glci-boot, 1) * 62vmax), transparent calc(var(--glci-boot, 1) * 62vmax + 8vmax));
+  mask-image: radial-gradient(circle at 50% 50%, #000 calc(var(--glci-boot, 1) * 62vmax), transparent calc(var(--glci-boot, 1) * 62vmax + 8vmax));
+}
+
+.glci-cssbg-scan {
+  left: 0;
+  right: 0;
+  top: calc(var(--glci-sweep, -1) * 100%);
+  height: 120px;
+  translate: 0 -100%;
+  opacity: clamp(0, calc(var(--glci-sweep, -1) * 1000 + 1), 1);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--gl-accent) 12%, transparent) 92%, var(--glci-line) 99%, transparent);
+}
+
+/* the title rules: grown from the centre, struck by a flash */
+.glci-cssbg-rule {
+  left: 50%;
+  top: 31.5vh;
+  height: 16vh;
+  width: calc(var(--glci-title, 0) * 84vw);
+  translate: -50% 0;
+  border-top: 1px solid var(--glci-line);
+  border-bottom: 1px solid var(--glci-line);
+  background: radial-gradient(ellipse 50% 6% at 50% 53%, color-mix(in srgb, var(--glci-hot) calc(var(--glci-flash, 0) * 90%), transparent), transparent);
+}
+
+/* the hazard band */
+.glci-cssbg-band {
+  left: 50%;
+  top: calc(83.5vh - 15px);
+  height: 30px;
+  width: calc(var(--glci-threat, 0) * 100vw);
+  translate: -50% 0;
+  --glci-band: var(--gl-accent);
+  border-block: 1px solid var(--glci-band);
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--glci-band) 34%, transparent) 0 11px, color-mix(in srgb, var(--glci-band) 10%, transparent) 11px 22px);
+  background-size: 31.1px 31.1px;
+  animation: glci-band-scroll var(--gl-loop-sm) var(--gl-linear) infinite;
+}
+.glci:has(.glci-threat[data-severity="moderate"]) .glci-cssbg-band { --glci-band: color-mix(in srgb, var(--gl-warn) 50%, var(--gl-accent)); }
+.glci:has(.glci-threat[data-severity="severe"]) .glci-cssbg-band,
+.glci:has(.glci-threat[data-severity="extreme"]) .glci-cssbg-band { --glci-band: var(--gl-warn); }
+@keyframes glci-band-scroll {
+  from { background-position: 0 0; }
+  to   { background-position: 311px 0; }
+}
+
+/* the roster's light columns */
+.glci-cssbg-cols {
+  inset: 0;
+  opacity: var(--glci-roster, 0);
+  background:
+    radial-gradient(ellipse 9% 70% at 27% 85%, color-mix(in srgb, var(--gl-accent) 28%, transparent), transparent),
+    radial-gradient(ellipse 9% 70% at 73% 85%, color-mix(in srgb, var(--glci-hostile) 28%, transparent), transparent);
+}
+
+/* HUD frame corners: on the CSS path only (the shader draws its own) */
+.glci[data-render="css"] .glci-cssbg::before,
+.glci[data-render="css"] .glci-cssbg::after {
+  content: "";
+  position: absolute;
+  inset: 34px;
+  opacity: var(--glci-boot, 1);
+  background:
+    linear-gradient(var(--glci-line), var(--glci-line)) left top / 120px 1px no-repeat,
+    linear-gradient(var(--glci-line), var(--glci-line)) left top / 1px 120px no-repeat,
+    linear-gradient(var(--glci-line), var(--glci-line)) right bottom / 120px 1px no-repeat,
+    linear-gradient(var(--glci-line), var(--glci-line)) right bottom / 1px 120px no-repeat;
+}
+.glci[data-render="css"] .glci-cssbg::after { transform: scaleX(-1); }
+
+/* ── the intro ─────────────────────────────────────────────────────────── */
+
+.glci-intro { position: absolute; inset: 0; }
+
+.glci-intro-eyebrow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(31.5vh - 2.6em);
+  display: flex;
+  justify-content: center;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-sm);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--glci-line);
+}
+.glci-intro-eyebrow > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 12px;
+  background: color-mix(in srgb, var(--gl-accent) 14%, transparent);
+  border-left: 3px solid var(--gl-accent);
+}
+.glci-intro-eyebrow > span::before { content: "\25B8\25B8"; letter-spacing: 0; color: var(--gl-accent); }
+.glci-intro-eyebrow > span::after { content: "// 01"; color: var(--gl-text-dim); letter-spacing: var(--gl-track-wide); }
+
+.glci-intro-title {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  top: calc(40vh - 0.55em);
+  margin: 0;
+  border: 0;
+  font-family: var(--gl-display);
+  font-size: clamp(34px, 4.4vw, 84px);
+  font-weight: var(--gl-weight-heavy);
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* The GM types this: it wraps to two balanced lines rather than losing words. */
+  white-space: normal;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--gl-accent) 55%, transparent), 0 0 2px var(--gl-text-bright);
+}
+
+.glci-intro-motto {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(48.5vh + 0.6em);
+  text-align: center;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-lg);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glci-roster {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 54vh;
+  height: 24vh;
+}
+.glci-roster-side {
+  position: absolute;
+  top: 0;
+  width: 40vw;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 12px;
+}
+.glci-roster-side[data-side="party"] { left: 7vw; }
+.glci-roster-side[data-side="hostiles"] { left: 53vw; --gl-accent: var(--glci-hostile); }
+.glci-roster-side::before {
+  /* the side's data label, struck above its portraits */
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  translate: -50% 0;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-xwide);
+  color: var(--gl-accent);
+  white-space: nowrap;
+}
+.glci-roster-side[data-side="party"]::before { content: "\25C2\00a0PARTY · FRIENDLY"; }
+.glci-roster-side[data-side="hostiles"]::before { content: "HOSTILE · CONTACT \25B8"; }
+
+.glci-roster-item {
+  position: relative;
+  width: clamp(64px, 6.4vw, 104px);
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+.glci-roster-item > img,
+.glci-roster-item > i {
+  width: 100%;
+  aspect-ratio: 1;
+  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%, 0 var(--gl-cut));
+  background: var(--glci-glass);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  outline-offset: 3px;
+}
+.glci-roster-name {
+  max-width: 100%;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gl-text);
+}
+.glci-roster-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 5px;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-bold);
+  color: var(--gl-ink-0);
+  background: var(--gl-accent);
+}
+
+.glci-intro-versus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  display: flex;
+  justify-content: center;
+}
+.glci-intro-versus > span {
+  translate: 0 -50%;
+  font-family: var(--gl-display);
+  font-size: clamp(26px, 3.4vw, 54px);
+  font-weight: var(--gl-weight-heavy);
+  font-style: normal;
+  letter-spacing: var(--gl-track-wide);
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+}
+
+.glci-threat {
+  position: absolute;
+  left: 50%;
+  top: calc(83.5vh - 15px);
+  height: 30px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  white-space: nowrap;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--glci-ink) 88%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glci-sev, var(--gl-accent));
+  --glci-sev: var(--gl-accent);
+}
+.glci-threat[data-severity="none"] { display: none; }
+.glci-threat[data-severity="moderate"] { --glci-sev: color-mix(in srgb, var(--gl-warn) 55%, var(--gl-accent)); }
+.glci-threat[data-severity="severe"],
+.glci-threat[data-severity="extreme"] { --glci-sev: var(--gl-warn); }
+.glci-threat-k { color: var(--gl-text-dim); }
+.glci-threat-k::before { content: "\25B2\00a0"; color: var(--glci-sev); }
+.glci-threat-v { font-size: var(--gl-fs-md); font-weight: var(--gl-weight-bold); color: var(--glci-sev); letter-spacing: var(--gl-track-xwide); }
+.glci-threat-xp { color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); }
+
+/* ── the roll table ────────────────────────────────────────────────────── */
+
+.glci-table {
+  position: absolute;
+  inset: 8vh 3vw 11vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+.glci-party,
+.glci-hostiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 16px;
+}
+.glci-hostiles { gap: 12px; }
+
+/* shared glass + HUD frame for both card kinds */
+.glci-card,
+.glci-volley {
+  position: relative;
+  pointer-events: auto;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 10%, transparent), transparent 40%),
+    var(--glci-glass);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%, 0 var(--gl-cut));
+  box-shadow: var(--gl-etch), inset 0 0 0 1px var(--gl-edge);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glci[data-lite~="cardBlur"] .glci-card,
+.glci[data-lite~="cardBlur"] .glci-volley,
+.glci[data-lite~="cardBlur"] .glci-rank::before { backdrop-filter: none; background: color-mix(in srgb, var(--glci-ink) 90%, var(--gl-accent)); }
+
+.glci-card-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform-origin: left center;
+  background:
+    linear-gradient(var(--glci-line), var(--glci-line)) left 0 top 0 / 100% 1px no-repeat,
+    linear-gradient(var(--glci-line), var(--glci-line)) right 0 bottom 0 / 16px 1px no-repeat,
+    linear-gradient(var(--glci-line), var(--glci-line)) right 0 bottom 0 / 1px 16px no-repeat,
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gl-accent) 75%, transparent) 0 3px, transparent 3px 6px) right 10px top 6px / 36px 5px no-repeat;
+}
+
+.glci-card {
+  width: var(--glci-card-w);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto 1fr;
+  align-content: start;
+  justify-items: stretch;
+}
+.glci-card-art {
+  height: calc(var(--glci-card-w) * 0.42);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent);
+  mask-image: linear-gradient(180deg, #000 55%, transparent);
+}
+.glci-card-art > img { object-position: 50% 22%; filter: saturate(0.9) contrast(1.05); }
+
+.glci-card-head {
+  display: grid;
+  gap: 1px;
+  padding: 0 12px;
+  margin-top: -18px;
+  position: relative;
+}
+.glci-card-tag,
+.glci-card-stat,
+.glci-volley-stat {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--gl-accent);
+}
+.glci-card-stat,
+.glci-volley-stat { color: var(--gl-text-dim); }
+.glci-card-name,
+.glci-volley-name {
+  margin: 0;
+  border: 0;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-lg);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gl-text-bright);
+}
+
+/* the die anchor: a reticle the die floats in */
+.glci-card-die {
+  position: relative;
+  width: 58%;
+  height: auto;
+  aspect-ratio: 1;
+  justify-self: center;
+  align-self: start;
+  margin: 8px 0 2px;
+}
+.glci-card-die::before {
+  content: "";
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--gl-accent) 40%, transparent);
+}
+.glci-card-die::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(var(--glci-line-dim), var(--glci-line-dim)) 50% 0 / 1px 9px no-repeat,
+    linear-gradient(var(--glci-line-dim), var(--glci-line-dim)) 50% 100% / 1px 9px no-repeat,
+    linear-gradient(var(--glci-line-dim), var(--glci-line-dim)) 0 50% / 9px 1px no-repeat,
+    linear-gradient(var(--glci-line-dim), var(--glci-line-dim)) 100% 50% / 9px 1px no-repeat;
+}
+.glci-card-die > i {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  border-top-color: var(--glci-line);
+  border-bottom-color: color-mix(in srgb, var(--gl-accent) 40%, transparent);
+  animation: glci-reticle var(--gl-loop-md) var(--gl-linear) infinite;
+}
+@keyframes glci-reticle { to { rotate: 1turn; } }
+
+.glci-card-total {
+  display: grid;
+  justify-items: center;
+  padding: 0 10px 6px;
+}
+.glci-card-total-k {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glci-card-total-v {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xl);
+  font-weight: var(--gl-weight-bold);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-faint);
+}
+.glci-card-nat {
+  min-height: 1.3em;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  color: var(--gl-text-dim);
+}
+.glci-card[data-state="thrown"] { box-shadow: var(--gl-etch), inset 0 0 0 1px var(--gl-accent), 0 0 24px color-mix(in srgb, var(--gl-accent) 30%, transparent); }
+.glci-card[data-state="landed"] .glci-card-total-v {
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 calc(4px + var(--glci-land, 0) * 18px) color-mix(in srgb, var(--gl-accent) 70%, transparent);
+}
+.glci-card[data-nat="20"] { --gl-accent: var(--gl-warn); }
+.glci-card[data-nat="20"] .glci-card-nat { color: var(--gl-warn-hot); }
+.glci-card[data-nat="1"] .glci-card-nat { color: var(--gl-hazard-hot); }
+
+/* controls: present only while the card waits, and only for those who may use them.
+   visibility, not display, so the die anchor never jumps. */
+.glci-card-controls {
+  display: grid;
+  gap: 6px;
+  padding: 6px 10px 12px;
+  align-content: start;
+  border-top: 1px solid var(--gl-hair);
+}
+.glci-card[data-may-act="0"] .glci-card-controls { display: none; }
+.glci-card:not([data-state="waiting"]) .glci-card-controls,
+.glci-volley:not([data-state="waiting"]) .glci-card-controls,
+.glci-volley:not([data-state="waiting"]) .glci-volley-throw { visibility: hidden; }
+
+.glci-stats,
+.glci-mods,
+.glci-more-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.glci-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  padding: 3px 6px;
+  min-height: 0;
+  width: auto;
+  line-height: 1.2;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  background: rgb(var(--gl-tint-light) / 0.04);
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
+  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease);
+}
+.glci-chip:hover:not([disabled]) { color: var(--gl-text-bright); translate: 0 var(--gl-lift); }
+.glci-chip[aria-pressed="true"] {
+  color: var(--gl-ink-0);
+  background: var(--glci-line);
+  box-shadow: none;
+}
+.glci-chip-v { font-weight: var(--gl-weight-bold); }
+.glci-chip--mod[aria-pressed="false"] { opacity: 0.5; text-decoration: line-through; }
+.glci-chip[disabled] { opacity: 0.45; }
+
+.glci-lockmark { display: none; width: 10px; height: 12px; position: relative; }
+.glci-card[data-locked="1"] .glci-lockmark { display: inline-block; }
+.glci-lockmark::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  height: 7px;
+  background: var(--gl-warn);
+}
+.glci-lockmark::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 7px;
+  border: 1.5px solid var(--gl-warn);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.glci-more > summary {
+  list-style: none;
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-accent);
+}
+.glci-more > summary::-webkit-details-marker { display: none; }
+.glci-more > summary::before { content: "\25B8\00a0"; }
+.glci-more[open] > summary::before { content: "\25BE\00a0"; }
+.glci-more-list { margin-top: 4px; max-height: 96px; overflow-y: auto; pointer-events: auto; }
+
+.glci-card-actions { display: flex; gap: 4px; align-items: stretch; }
+.glci-roll,
+.glci-rollfor,
+.glci-lock,
+.glci-volley-throw,
+.glci-gm-btn {
+  margin: 0;
+  padding: 6px 10px;
+  min-height: 0;
+  width: auto;
+  line-height: 1.1;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
+  transition: background var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-quick) var(--gl-ease);
+}
+.glci-roll {
+  flex: 1;
+  color: var(--gl-ink-0);
+  background: var(--glci-line);
+}
+.glci-roll::before { content: "\25B8\00a0"; }
+.glci-roll:hover { background: var(--gl-text-bright); translate: 0 var(--gl-lift); }
+.glci-rollfor,
+.glci-lock,
+.glci-volley-throw,
+.glci-gm-btn {
+  color: var(--gl-text);
+  background: color-mix(in srgb, var(--gl-accent) 12%, rgb(var(--gl-tint-dark) / 0.7));
+  box-shadow: inset 0 0 0 1px var(--glci-line-dim);
+}
+.glci-rollfor { flex: 1; font-size: var(--gl-fs-3xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glci-rollfor:hover,
+.glci-lock:hover,
+.glci-volley-throw:hover,
+.glci-gm-btn:hover { background: color-mix(in srgb, var(--gl-accent) 30%, rgb(var(--gl-tint-dark) / 0.7)); translate: 0 var(--gl-lift); }
+.glci-lock { width: 28px; padding: 0; position: relative; }
+.glci-lock::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: 7px;
+  bottom: 13px;
+  border: 1.5px solid currentColor;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+.glci-lock::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 6px; height: 7px; background: currentColor; }
+.glci-lock[aria-pressed="true"] { color: var(--gl-ink-0); background: var(--gl-warn); box-shadow: none; }
+
+/* ── NPC volleys ──────────────────────────────────────────────────────── */
+
+.glci-volley {
+  --gl-accent: var(--glci-hostile);
+  width: clamp(220px, 19vw, 300px);
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  grid-template-areas: "art head" "art dice" "ctl ctl" "seal throw";
+  column-gap: 10px;
+  row-gap: 4px;
+  padding: 8px 10px 8px 8px;
+}
+.glci-volley-art {
+  grid-area: art;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
+  box-shadow: inset 0 0 0 1px var(--glci-line-dim);
+}
+.glci-volley-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.glci-volley-name { flex: 1 1 auto; min-width: 0; font-size: var(--gl-fs-md); }
+.glci-volley-count { font-family: var(--gl-tech); font-size: var(--gl-fs-sm); font-weight: var(--gl-weight-bold); color: var(--gl-accent); }
+.glci-volley-stat { flex-basis: 100%; }
+.glci-volley .glci-card-controls { grid-area: ctl; padding: 4px 0 0; }
+.glci-volley-dice { grid-area: dice; display: flex; flex-wrap: wrap; gap: 6px; }
+.glci-mini-die {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  box-shadow: inset 0 0 0 1px var(--glci-line-dim);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
+}
+.glci-mini-die[data-state="thrown"] { box-shadow: inset 0 0 0 1px var(--gl-accent); }
+.glci-mini-total {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-style: normal;
+  font-weight: var(--gl-weight-bold);
+  text-align: center;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 3px var(--gl-ink-0);
+}
+.glci-volley-seal {
+  grid-area: seal;
+  align-self: center;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glci-volley-seal::before { content: "\25A0\00a0"; color: var(--gl-accent); }
+.glci[data-role="gm"] .glci-volley-seal { visibility: hidden; }
+.glci-volley-throw { grid-area: throw; justify-self: end; font-size: var(--gl-fs-3xs); }
+
+/* ── the sort ──────────────────────────────────────────────────────────── */
+
+.glci-sort { position: absolute; inset: 0; }
+.glci-rank {
+  position: absolute;
+  display: grid;
+  grid-template-rows: 58% auto 1fr;
+  justify-items: center;
+  will-change: transform;
+}
+/* The glass lives on a pseudo so the comet trail is not clipped by the chamfer. */
+.glci-rank::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(var(--glci-line), var(--glci-line)) left 0 top 0 / 100% 2px no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 14%, transparent), transparent 50%),
+    var(--glci-glass);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% calc(100% - var(--gl-cut)), calc(100% - var(--gl-cut)) 100%, 0 100%, 0 var(--gl-cut));
+  box-shadow: inset 0 0 0 1px var(--gl-edge);
+}
+.glci-rank[data-kind="npc"] { --gl-accent: var(--glci-hostile); }
+.glci-rank-trail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  z-index: -2;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--glci-line), color-mix(in srgb, var(--gl-accent) 30%, transparent) 40%, transparent);
+  pointer-events: none;
+}
+.glci[data-lite~="trails"] .glci-rank-trail { display: none; }
+.glci-rank-art {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut));
+  -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+  mask-image: linear-gradient(180deg, #000 60%, transparent);
+}
+.glci-rank-n {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  z-index: 1;
+  padding: 1px 6px;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-md);
+  font-weight: var(--gl-weight-heavy);
+  color: var(--gl-ink-0);
+  background: var(--glci-line);
+}
+.glci-rank-name {
+  max-width: 92%;
+  margin-top: -10px;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-normal);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gl-text-bright);
+}
+.glci-rank-total {
+  align-self: center;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xl);
+  font-weight: var(--gl-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-bright);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+}
+
+/* ── the GM bar ────────────────────────────────────────────────────────── */
+
+.glci > .glci-gm {
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  gap: 8px;
+}
+.glci[data-phase="handoff"] .glci-gm { display: none; }
+.glci-gm-btn[data-gm="cancel"] { color: var(--gl-hazard-hot); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-hazard) 50%, transparent); }
+.glci-gm-btn[data-gm="rest"] { color: var(--gl-ink-0); background: var(--glci-line); box-shadow: none; }
+
+/* ── a late reinforcement: compact, near the rail ─────────────────────── */
+
+.glci[data-late] { --glci-card-w: clamp(150px, 12vw, 190px); }
+.glci[data-late] .glci-table {
+  inset: 10vh 3vw auto auto;
+  align-items: flex-end;
+}
+
+/* ── phone ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .glci { --glci-card-w: 44vw; }
+  .glci-table {
+    inset: 6vh 8px 70px;
+    justify-content: flex-start;
+    overflow-y: auto;
+    pointer-events: auto;
+  }
+  .glci-party,
+  .glci-hostiles { gap: 8px; }
+  .glci-volley { width: calc(88vw); }
+  .glci-roster-side { width: 46vw; }
+  .glci-roster-side[data-side="party"] { left: 2vw; }
+  .glci-roster-side[data-side="hostiles"] { left: 52vw; }
+  .glci-roster-item { width: 52px; }
+  .glci-intro-title { font-size: clamp(26px, 9vw, 44px); }
+  .glci > .glci-gm { left: 8px; right: 8px; bottom: 10px; justify-content: center; flex-wrap: wrap; }
+}

@@ -27,7 +27,7 @@ import {
   syncDownfallItems,
   unmarkBoss,
 } from "./apply.mjs";
-import { syncCardConfig, isExtraTurn } from "./initiative.mjs";
+import { isExtraTurn } from "./initiative.mjs";
 import { canTrigger, currentPenalty, readState, readTelegraph, setTelegraph, triggerDownfall } from "./downfall.mjs";
 import { announceDownfall, announceTelegraph } from "./chat.mjs";
 
@@ -416,7 +416,6 @@ function wire(root, actor) {
     button.addEventListener("click", async () => {
       const tier = button.dataset.tier;
       await markBoss(actor, tier);
-      await syncCardConfig(actor, bossTurns(tier));
       await refreshAbilityText(actor);
       await syncDownfallItems(actor);
       actor.sheet?.render(false);
@@ -425,7 +424,6 @@ function wire(root, actor) {
 
   panel.querySelector(`.${CLASS}-unmark`)?.addEventListener("click", async () => {
     await unmarkBoss(actor);
-    await syncCardConfig(actor, 1);
     actor.sheet?.render(false);
   });
 
