@@ -58,6 +58,11 @@ export class PerilOverlay {
     return true;
   }
 
+  /** Compile the WebGL backdrop ahead of the first reveal, only when it is on. */
+  warm() {
+    if (this._webglEnabled()) this._webgl?.warm();
+  }
+
   initialize() {
     this._createStageContainer();
     this._createIndicatorContainer();

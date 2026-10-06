@@ -21,6 +21,7 @@ import { SafetyLightPanel } from './SafetyLightPanel.js';
 import { SafetyRequestOverlay } from './SafetyRequestOverlay.js';
 import { SafetyAlertOverlay } from './SafetyAlertOverlay.js';
 import { ThemeManager } from './ThemeManager.js';
+import { warmAtIdle } from '../../core/warmup.mjs';
 
 export { registerSettings };
 
@@ -157,12 +158,14 @@ export function onReady() {
     // streaming overlay hidden from the pacer UI also stays clear of this splash.
     campfireOverlay = new CampfireOverlay();
     campfireOverlay.initialize();
+    warmAtIdle('stream-pacer.campfire', () => campfireOverlay?.warm());
   }
 
   // The Dire Peril splash is gated by its own exemption list
   if (!isPerilExempt) {
     perilOverlay = new PerilOverlay();
     perilOverlay.initialize();
+    warmAtIdle('stream-pacer.peril', () => perilOverlay?.warm());
   }
 
   // Initialize GM-only components

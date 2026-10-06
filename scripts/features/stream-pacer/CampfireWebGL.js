@@ -355,6 +355,26 @@ export class CampfireWebGL {
     return true;
   }
 
+  /**
+   * Compile and draw the fire once at idle, before any bar exists, so the
+   * first campfire of a session does not pay the driver's deferred compile.
+   * The canvas is still detached, so nothing reaches the screen. No-op once a
+   * context exists or was released.
+   */
+  warm() {
+    if (this.gl || this._released || !this.isSupported() || !this._ensureContext()) return;
+    this._resize();
+    const gl = this.gl;
+    gl.uniform1f(this.uniforms.time, 0);
+    gl.uniform2f(this.uniforms.res, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uniforms.dpr, this._dpr);
+    gl.uniform1f(this.uniforms.base, this._base);
+    gl.uniform1f(this.uniforms.intensity, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.finish();
+  }
+
   /** Toggle the hotter, taller "final stretch" flames. */
   setEnding(ending) {
     this._intensityTarget = ending ? 1 : 0;

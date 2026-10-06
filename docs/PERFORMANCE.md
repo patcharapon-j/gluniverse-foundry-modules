@@ -103,7 +103,10 @@ so its "oldest rendered" pointer stays exact).
 `Surfaces.register({ id, element, pause, resume, release, restore })` for every
 WebGL context a feature owns. The feature calls `use()` before each draw: that
 rebuilds a released context and returns false while the surface is off-screen or
-the page is hidden under policy. `perf-check` requires a registration in every
+the page is hidden under policy. A surface is released only after its first
+`use()` or `touch()`: one built ahead of time by an idle warm-up
+(`core/warmup.mjs`) keeps its context until it really draws, or the warm-up
+would be thrown away before anyone saw the effect. `perf-check` requires a registration in every
 feature folder that creates a context. Registered today: initiative (break
 splash, card FX), stage postfx, stream-pacer campfire and peril, arcane-surge
 beats, critical.

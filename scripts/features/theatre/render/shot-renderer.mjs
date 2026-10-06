@@ -604,16 +604,7 @@ export class ShotRenderer {
     this.backMesh = new PIXI.Mesh(this._backGeometry(), this.backShader);
     const render = this.backMesh._render;
     this.backMesh._render = (renderer) => {
-      if (!this._backProbed) {
-        this._backProbed = true;
-        const { ok, log } = probeProgram(renderer?.gl, SHOT_VERT, BACK_FRAG);
-        if (!ok) {
-          this._backFailed = true;
-          this.backdrop.renderable = false;
-          this._warn("the backdrop shader failed to compile; a fitted frame will sit on plain black.", log);
-          return;
-        }
-      }
+      if (!this._probeBack(renderer?.gl)) return;
       render.call(this.backMesh, renderer);
     };
     this.backdrop = new PIXI.Container();
@@ -621,6 +612,35 @@ export class ShotRenderer {
     this.backdrop.interactiveChildren = false;
     this.backdrop.renderable = false;
     this.backdrop.addChild(this.backMesh);
+  }
+
+  /** Probe the backdrop program once; false (the backdrop stays off) when it failed. */
+  _probeBack(gl) {
+    if (this._backProbed) return !this._backFailed;
+    this._backProbed = true;
+    const { ok, log } = probeProgram(gl, SHOT_VERT, BACK_FRAG);
+    if (ok) return true;
+    this._backFailed = true;
+    this.backdrop.renderable = false;
+    this._warn("the backdrop shader failed to compile; a fitted frame will sit on plain black.", log);
+    return false;
+  }
+
+  /**
+   * Throwaway copies of the programs a cue reaches first: the backdrop and the
+   * baker's two passes compile on the frame the surround first appears, which
+   * is mid-dip. The caller draws each once at idle and destroys it. The shot
+   * mesh itself draws from the first frame after attach, so it is warm already.
+   * Runs the backdrop's probe now too, so its first real frame compiles nothing.
+   * @param {WebGLRenderingContext} [gl]
+   * @returns {any[]}
+   */
+  warmMeshes(gl) {
+    if (this._destroyed || this._fallback || !this._probeBack(gl)) return [];
+    const PIXI = this.PIXI;
+    const back = new PIXI.Mesh(this._backGeometry(), PIXI.Shader.from(SHOT_VERT, BACK_FRAG, { ...this.backShader.uniforms }));
+    const { down, up } = new BackdropBaker(PIXI);   // the two passes share one geometry; the last destroy frees it
+    return [back, down, up];
   }
 
   /**

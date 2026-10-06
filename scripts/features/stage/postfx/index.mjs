@@ -506,6 +506,14 @@ export class StagePostFX {
     this._scheduleRender();
   }
 
+  /** Compile the grade's shaders ahead of the first staged character. Only
+   *  while the grade is on: an "off" grade never builds a context at all. */
+  warm() {
+    if (this._destroyed || !this.active) return;
+    if (!this._gl) this._gl = new StageGL({ onLost: () => this._scheduleRender() });
+    this._gl.warm();
+  }
+
   // ─── Teardown ───
 
   destroy() {

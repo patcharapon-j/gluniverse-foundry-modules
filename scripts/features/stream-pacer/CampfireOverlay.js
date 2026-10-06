@@ -73,6 +73,11 @@ export class CampfireOverlay {
     this._show();
   }
 
+  /** Compile the WebGL fire ahead of the first campfire (see CampfireWebGL#warm). */
+  warm() {
+    this._webgl?.warm();
+  }
+
   _arrive() {
     clearTimeout(this._holdTimer);
     const remaining = PacerManager.getCampfireRemaining();

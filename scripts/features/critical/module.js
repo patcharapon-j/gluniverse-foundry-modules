@@ -4,6 +4,7 @@ import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
 import { Surfaces } from "../../core/gl-surfaces.mjs";
 import { Budget } from "../../core/budget.mjs";
+import { warmAtIdle, warmPixi } from "../../core/warmup.mjs";
 
 const MODULE_ID = "gluniverse-foundry-modules";
 const FEATURE_ID = "critical";
@@ -173,6 +174,30 @@ function releaseApp() {
   }
   app.destroy(true, { children: true, texture: false, baseTexture: false });
   app = null;
+}
+/**
+ * Compile the overlay's batch program and decode the GM portrait before the
+ * first crit: both otherwise land on frame one of the cut-in. The beat is a
+ * sprite and a rect behind a rect mask, which all draw through PIXI's batch
+ * shader (the mask resolves to a scissor), so one masked sprite and one
+ * Graphics warm everything it binds.
+ */
+async function warm() {
+  if (!getSetting(SETTINGS.SHOW_CINEMATICS)) return;
+  const renderer = app?.renderer;
+  if (!renderer) return;
+  const backdrop = new PIXI.Graphics().beginFill(0, 1).drawRect(0, 0, 4, 4).endFill();
+  const sprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+  const mask = new PIXI.Graphics().beginFill(16777215, 1).drawRect(0, 0, 4, 2).endFill();
+  sprite.width = 4; sprite.height = 4;
+  sprite.mask = mask;
+  try { warmPixi([backdrop, sprite], renderer); } finally { mask.destroy(); }
+  const gm = getSetting(SETTINGS.GM_AVATAR);
+  if (!gm || isVideoPath(gm)) return;
+  const texture = await loadImage(gm);
+  // The app may have been released while the image loaded.
+  if (!texture || !app) return;
+  try { app.renderer.texture.bind(texture); } catch { /* best-effort: first render uploads it */ }
 }
 function getOverlayApp() {
   return app;
@@ -1545,6 +1570,7 @@ export async function onReady() {
   await runMigrations();
   mountOverlay();
   registerSockets();
+  warmAtIdle("critical.overlay", warm);
 }
 
 export { createPublicAPI };

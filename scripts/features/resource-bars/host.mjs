@@ -32,6 +32,7 @@ import { isBroken } from "./break.mjs";
 import { getAtlas, resetAtlas, runGeometry, TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER } from "./atlas.mjs";
 import { createBloomFilter } from "../../core/bloom.mjs";
 import { Budget } from "../../core/budget.mjs";
+import { filterProbe, warmPixi } from "../../core/warmup.mjs";
 /* ── Names ── */
 import { HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
 import { cipherSeed, decideLabel, invalidateKnowledge, labelContext, labelReserved, reserveFacts, tokenFacts } from "./mystify.mjs";
@@ -338,6 +339,33 @@ class BarHost {
     const old = mesh.shader;
     mesh.shader = PIXI.Shader.from(VERTEX_SHADER, fragmentShader(this.liquid), { ...old.uniforms });
     old.destroy?.();
+  }
+
+  /**
+   * Compile what the first bar on screen would otherwise compile mid-play.
+   *
+   * A bar hidden until hover, a readout gated off until a token is selected,
+   * and a bloom over a container with nothing drawn all leave their programs
+   * unbound at scene load. One throwaway draw of each on the canvas renderer
+   * puts them in PIXI's cache. Only the world's liquid, and the bloom only
+   * where it is on. The readout probe samples WHITE rather than the atlas, so
+   * the atlas is not rasterised before the display face has loaded.
+   */
+  warm() {
+    if (!this.container) return;
+    const quad = new PIXI.Geometry()
+      .addAttribute("aVertexPosition", [0, 0, 1, 0, 1, 1, 0, 1], 2)
+      .addAttribute("aUvs", [0, 0, 1, 0, 1, 1, 0, 1], 2)
+      .addAttribute("aDim", [0, 0, 0, 0], 1)
+      .addIndex([0, 1, 2, 0, 2, 3]);
+    const text = new PIXI.Mesh(quad, PIXI.Shader.from(TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, {
+      uAtlas: PIXI.Texture.WHITE, uInk: new Float32Array(3), uEdge: new Float32Array(3), uOpacity: 1,
+    }));
+    warmPixi([
+      makeBarMesh(ROLE.hero, { segments: 0, seed: 0, ramp: this.ramp, liquid: this.liquid }),
+      text,
+      this.bloom ? filterProbe(this.bloom) : null,
+    ]);
   }
 
   applyBloom() {

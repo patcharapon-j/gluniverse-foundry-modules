@@ -14,7 +14,10 @@
  *     `display: none`, or the page is hidden (unless this client is a capture
  *     client: an OBS browser source is "hidden" while it records).
  *   • RELEASE the context once it has gone unused for the policy's
- *     `glRelease` seconds. The feature rebuilds on its next `use()`.
+ *     `glRelease` seconds. The feature rebuilds on its next `use()`. A surface
+ *     that has never been used is exempt: it was built ahead of time by an
+ *     idle warm-up (`core/warmup.mjs`), and releasing it before its first real
+ *     draw would throw the warm-up away and put the compile back on that draw.
  *
  * The feature keeps every decision about WHAT to draw; the registry only ever
  * calls the four callbacks it was handed. With the `perf` feature off, the
@@ -79,7 +82,7 @@ function sweep() {
   if (limit <= 0) return;
   const t = now();
   for (const s of _surfaces) {
-    if (!s._released && t - s._lastUse > limit * 1000) s._release();
+    if (s._used && !s._released && t - s._lastUse > limit * 1000) s._release();
   }
 }
 
@@ -89,6 +92,7 @@ class Surface {
     this.spec = spec;
     this._lastUse = now();
     this._released = false;
+    this._used = false;
     this._paused = false;
     this._onScreen = true;
     this._observed = null;
@@ -120,6 +124,7 @@ class Surface {
    * canvas nobody can see.
    */
   use() {
+    this._used = true;
     this._lastUse = now();
     this._observe();
     if (this._released) {
@@ -131,6 +136,7 @@ class Surface {
 
   /** Mark as used without asking to draw (a state change that will draw soon). */
   touch() {
+    this._used = true;
     this._lastUse = now();
   }
 

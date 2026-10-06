@@ -12,6 +12,7 @@ import { SUITE_ID, log, warn } from "../../core/const.mjs";
 import { coalescePan } from "../../core/pan.mjs";
 import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
+import { warmAtIdle } from "../../core/warmup.mjs";
 import { DIVIDER, READOUT, SETTINGS } from "./constants.mjs";
 import { host } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
@@ -293,6 +294,7 @@ export function onReady() {
   on("renderPrototypeTokenConfig", (app, element) => injectTokenConfig(app, element));
 
   if (canvas?.ready) host.attach();
+  warmAtIdle("resource-bars", () => host.warm());
 }
 
 export function onDisable() {

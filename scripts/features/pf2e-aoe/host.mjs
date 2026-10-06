@@ -12,6 +12,7 @@ import { presentationStyle } from "./presentation.mjs";
 import { createMeasurementPresenter, layoutPresenters, measurementSummary } from "./measurement.mjs";
 import { sceneUsesNativePresentation } from "./scene-config.mjs";
 import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shader.mjs";
+import { filterProbe, warmPixi } from "../../core/warmup.mjs";
 
 const FINISH = 0.88; // settled Spellglass review value
 const ENTER_MODE = 2; // ignite: extent readable on frame one
@@ -296,6 +297,17 @@ function suppressNativeHighlights(region) {
   }
   for (const item of suppressed) item.node.renderable = false;
   return suppressed;
+}
+
+/** Compile the region program, the token edge light and the four-pass bloom
+ *  ahead of the first template, from throwaway copies of the same sources.
+ *  One program serves every plane and material (uPlane / uArch are uniforms). */
+export function warmShaders() {
+  const region = new PIXI.Mesh(quad(4, 4), PIXI.Shader.from(VERTEX_SHADER, FRAGMENT_SHADER, {
+    uAtlas: PIXI.Texture.WHITE, uCells: PIXI.Texture.WHITE,
+  }));
+  const edge = tokenEdgeFilter({ tint: new Float32Array([1, 1, 1]) }, { origin: { x: 0, y: 0 } }, { x: 1, y: 1, w: 1, h: 1 });
+  warmPixi([region, filterProbe(edge), filterProbe(createBloomFilter())]);
 }
 
 /** Whether the current canvas can host a Spellglass mesh for this Region. */

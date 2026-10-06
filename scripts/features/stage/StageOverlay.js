@@ -85,6 +85,16 @@ export class StageOverlay {
     }
 
     /**
+     * Compile the grade's shaders at idle so the first character staged this
+     * session does not hitch. Skipped when the grade is switched off here,
+     * which is the one case where no context would ever be built.
+     */
+    warmPostFX() {
+        if (getSetting('ppEnabled') === false || getSetting('ppQuality') === 'off') return;
+        this._ensurePostFX().warm();
+    }
+
+    /**
      * The look library, shared by the renderer and the Grade tab. Built-in
      * looks are recipes; custom looks are `.cube` files listed in the
      * `stage.lookLibrary` world setting and read over HTTP like any asset.

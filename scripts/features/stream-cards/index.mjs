@@ -27,6 +27,9 @@ import { claimAction, claimChange, renderSection } from "./panel.js";
 import { registerFramingSheetHeader } from "./framing/sheet-header.js";
 import { RollCardFeed } from "./pf2e/roll-card-feed.js";
 import { registerStatusHooks } from "./pf2e/status-watch.js";
+import { crackRenderer } from "./fx/crack-renderer.js";
+import { isConfiguredStreamUser } from "../stream/settings.js";
+import { warmAtIdle } from "../../core/warmup.mjs";
 
 Suite.register({
   id: CARDS_FEATURE_ID,
@@ -79,6 +82,10 @@ Suite.register({
       // instead of showing them live controls that discard every edit.
       gmOnly: true
     });
+
+    // Only the stream client ever draws a crack, and its renderer is a WebGL context held for the
+    // session once built, so nobody else pays for one.
+    if (isConfiguredStreamUser()) warmAtIdle("stream-cards.crack", () => crackRenderer.warm());
   },
 
   /**

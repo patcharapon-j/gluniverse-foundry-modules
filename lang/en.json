@@ -2,6 +2,7 @@
   "GLS.module.title": "GLUniverse Suite",
   "GLS.controls.suiteGroup": "GLUniverse",
   "GLS.config.menu.name": "Control Center",
+  "GLS.warmup.progress": "Preparing visual effects… {done}/{total}",
   "GLS.config.menu.label": "Open Control Center",
   "GLS.config.menu.hint": "Enable, disable and configure every module in the GLUniverse Suite from one place.",
   "GLS.config.title": "GLUniverse Suite — Control Center",

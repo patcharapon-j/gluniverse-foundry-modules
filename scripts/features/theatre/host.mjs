@@ -35,6 +35,7 @@
 
 import { warn } from "../../core/const.mjs";
 import { Budget } from "../../core/budget.mjs";
+import { warmAtIdle, warmPixi } from "../../core/warmup.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { FEATURE_ID } from "./constants.mjs";
 import { BACKDROP, ShotRenderer, SHED_ORDER } from "./render/shot-renderer.mjs";
@@ -111,6 +112,11 @@ class Host {
       this.renderer.show(shot, opts);
     }
     this._applyCamera();
+    // The backdrop and its blur first compile mid-cue; compile them at idle instead.
+    const r = this.renderer;
+    warmAtIdle(FEATURE_ID, () => {
+      if (r === this.renderer) warmPixi(r.warmMeshes(canvas.app.renderer.gl), canvas.app.renderer);
+    });
     return true;
   }
 

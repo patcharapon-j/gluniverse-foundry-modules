@@ -1,5 +1,6 @@
 import { MODULE_ID, registerSettings } from './settings.js';
 import { ensureSuiteGroup } from '../../core/scene-controls.mjs';
+import { warmAtIdle } from '../../core/warmup.mjs';
 import { initializeSocket, requestStateSync } from './socket-handler.js';
 import { StageManager } from './StageManager.js';
 import { StageOverlay } from './StageOverlay.js';
@@ -81,6 +82,7 @@ export function onReady() {
     const overlay = new StageOverlay();
     overlay.render();
     mod.stageOverlay = overlay;
+    warmAtIdle('stage.postfx', () => overlay.warmPostFX());
 
     // Create the comms / call-in overlay (all clients)
     const commsOverlay = new CommsOverlay();

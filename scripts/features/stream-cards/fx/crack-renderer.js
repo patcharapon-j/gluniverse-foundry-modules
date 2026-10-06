@@ -33,6 +33,11 @@ class CrackRenderer {
     return this.ensureRenderer();
   }
 
+  /** Builds the renderer and compiles its program ahead of the first crit (core/warmup.mjs). */
+  warm() {
+    this.ensureRenderer();
+  }
+
   ensureRenderer() {
     if (this.initTried) return this.supported;
     this.initTried = true;

@@ -49,6 +49,8 @@ import {
   bloomSizes,
   bloomWeights,
   MAX_LOOKS,
+  DEFAULT_GRADE,
+  stackParams,
 } from "./grade-model.mjs";
 
 // ── Constants, written into the GLSL from the model's own statement of them ──
@@ -1087,6 +1089,22 @@ export class StageGL {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     return this.canvas;
+  }
+
+  /**
+   * Build the context and run all three programs once, off-screen, so the
+   * first staged character does not pay the driver's deferred compile (most
+   * drivers specialise a program on its first draw, not at link). The glow is
+   * forced on so the bloom pyramid runs too. Nothing is copied out, so nothing
+   * of it reaches a slot. No-op once a context exists.
+   */
+  warm() {
+    if (this.gl || !this.isSupported() || !this._ensureContext()) return false;
+    const art = { tex: this._blank, width: 2, height: 2 };
+    const params = { intensity: 1, ...stackParams(DEFAULT_GRADE), glowAmount: 1, looks: [] };
+    this.draw({ generation: this._generation, art }, params);
+    this.gl.finish();
+    return true;
   }
 
   _dropTextures() {

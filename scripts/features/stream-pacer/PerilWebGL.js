@@ -340,6 +340,23 @@ export class PerilWebGL {
     }
   }
 
+  /**
+   * Compile and draw the backdrop once at idle, so the first Dire Peril of a
+   * session does not pay the driver's deferred compile mid-reveal. The canvas
+   * sits at opacity 0 until `play()` marks it visible. No-op once a context
+   * exists.
+   */
+  warm() {
+    if (this.gl || !this.isSupported() || !this._ensureContext()) return;
+    const gl = this.gl;
+    gl.uniform1f(this.uniforms.time, 0);
+    gl.uniform2f(this.uniforms.res, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uniforms.intensity, 1);
+    gl.uniform1f(this.uniforms.burst, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.finish();
+  }
+
   _loop() {
     if (!this._running || !this.gl) return;
     this._surface?.touch();

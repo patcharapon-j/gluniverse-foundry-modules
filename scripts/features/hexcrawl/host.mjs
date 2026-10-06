@@ -24,6 +24,8 @@ import { partyCentres } from "./party.mjs";
 import { terrainName } from "./labels.mjs";
 import { HexStore } from "./store.mjs";
 import { resolveIcon } from "./icons.mjs";
+import { blightGeometry, blightShader } from "./render/blight.mjs";
+import { warmAtIdle, warmPixi } from "../../core/warmup.mjs";
 
 export { resolveIcon };
 
@@ -75,6 +77,15 @@ class Host {
     this._tick = () => { try { this.renderer?.update(canvas.app.ticker.deltaMS); } catch (e) { warn("hexcrawl | render tick failed", e); this._stopTick(); } };
     canvas.app.ticker.add(this._tick);
     this._unTheme = onThemeChange(() => this.rebuild());
+    // Blight is drawn only once a visible hex carries it, which is usually a GM
+    // painting it or the party walking into it mid-session. Compile it at idle on
+    // the first hexcrawl scene instead; the program is cached for every later one.
+    if (!this._blightWarmed) {
+      this._blightWarmed = true;
+      const body = [0, 1, 2, 3, 4, 5].map((i) => ({ x: Math.cos(i * Math.PI / 3), y: Math.sin(i * Math.PI / 3) }));
+      warmAtIdle("hexcrawl", () => warmPixi([new PIXI.Mesh(blightGeometry(PIXI, [{ c: { x: 2, y: 2 }, body }]),
+        blightShader(PIXI, { R: 1, color: 0, hot: 0, bruise: 0 }))]));
+    }
   }
 
   _ensureLayer() {

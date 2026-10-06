@@ -37,8 +37,9 @@
  * (`ladder.mjs`): this host no longer times its own frames for it. The context
  * is a registered `core/gl-surfaces.mjs` surface, because a context held for a
  * whole session to play a two-second beat a few times an hour is exactly what
- * that registry exists to hand back. On a tier with a `glRelease` limit it is
- * lost after that long unused, and the next beat rebuilds it — and RE-WARMS it —
+ * that registry exists to hand back. The load-time warm-up holds until the
+ * first beat; after that, on a tier with a `glRelease` limit, it is lost after
+ * that long unused, and the next beat rebuilds it — and RE-WARMS it —
  * before its first frame (see `_prepare()`). That moves the compile from "the
  * middle of the animation" to "the instant before it starts", which is the most
  * a released context can promise; with the `perf` feature off nothing is ever
