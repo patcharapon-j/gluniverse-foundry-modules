@@ -141,9 +141,14 @@ export function registerWrapper(target, fn, type = MIXED) {
     return next.call(self, ...args);
   };
 
+  // The dispatcher is registered once, under the FIRST handler's type, but it
+  // speaks for every handler added later. A MIXED handler may short-circuit
+  // (spotlight-roll's probe never calls PF2e), and libWrapper unregisters a
+  // WRAPPER that does not chain — so a shared dispatcher is always MIXED.
+  const libType = type === OVERRIDE ? OVERRIDE : MIXED;
   let backend;
   if (hasLibWrapper()) {
-    libWrapper.register(SUITE_ID, target, dispatcher, type);
+    libWrapper.register(SUITE_ID, target, dispatcher, libType);
     backend = "libwrapper";
   } else {
     fallbackRegister(target, dispatcher, type);

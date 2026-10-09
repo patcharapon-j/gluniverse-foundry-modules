@@ -25,7 +25,7 @@
  * we want is applied to the held data instead, which is also what lets an
  * author-GM card be whispered to the player who threw it.
  */
-import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
+import { registerWrapper, MIXED } from "../../core/wrapper.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
 import { IDENT } from "./constants.mjs";
 import { degreeOf } from "../../core/pf2e-degree.mjs";
@@ -79,7 +79,7 @@ export function installCheckWrapper() {
       return Promise.resolve(null);
     }
     return next(check, context, ...rest);
-  }, WRAPPER);
+  }, MIXED);
   wrapped = true;
   return true;
 }
