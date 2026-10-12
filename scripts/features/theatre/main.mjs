@@ -35,7 +35,7 @@ import {
 import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
 import { defaultFace, defaultShake, HOOK_CHANGED, isTheatreScene, TheatreStore, touchedKeys } from "./store.mjs";
 import { host } from "./host.mjs";
-import { camera, sidebarInset } from "./camera.mjs";
+import { camera } from "./camera.mjs";
 import { TitleOverlay } from "./overlay/title-overlay.mjs";
 import { clearPreloads, preloadAll, whenReady } from "./preload.mjs";
 import {
@@ -327,7 +327,7 @@ function attachScene() {
   }
   try { host.lockCamera(!canvasMode); } catch (e) { warn("theatre | camera lock failed", e); }
   overlay?.mount();
-  overlay?.setInset(sidebarInset());
+  overlay?.setInset(camera.titleInset());
   preloadAll(store.shots.map((s) => s.src));
   if (pendingDraw) {
     lastSeq = store.state.cue?.seq ?? null;
@@ -408,7 +408,7 @@ export function onReady() {
   Hooks.on("collapseSidebar", () => {
     if (attached) camera.followSidebar((inset) => overlay?.setInset(inset));
   });
-  window.addEventListener("resize", () => { if (attached) overlay?.setInset(sidebarInset()); });
+  window.addEventListener("resize", () => { if (attached) overlay?.setInset(camera.titleInset()); });
   if (canvas?.ready) attachScene();
 }
 

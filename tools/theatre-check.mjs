@@ -409,14 +409,26 @@ section = "framing";
     }
   }
   ok("padding is clamped to PADDING_MAX", frameView(rect, 1920, 1080, { mode: "fit", padding: 999 }).scale === frameView(rect, 1920, 1080, { mode: "fit", padding: C.PADDING_MAX }).scale);
-  // An expanded sidebar: the frame is fitted to, and centred in, the screen left of it.
-  for (const [sw, sh, right] of [[1920, 1080, 312], [2560, 1440, 360], [1440, 1080, 300]]) {
+  // An expanded sidebar: fill centres in the screen left of it; fit keeps its
+  // shut left margin and shrinks until it clears the sidebar by the padding.
+  // 3823×1972 with a 463px sidebar at 4% is the table this was reported from.
+  for (const [sw, sh, right, padding] of [[1920, 1080, 312, 5], [2560, 1440, 360, 5], [1440, 1080, 300, 5], [3823, 1972, 463, 4], [3823, 1972, 463, 0]]) {
     const vis = sw - right;
     // Where the frame lands on screen: Foundry puts the pivot at the screen's centre.
     const onScreen = (v) => ({ left: (rect.x - v.x) * v.scale + sw / 2, width: rect.width * v.scale, top: (rect.y - v.y) * v.scale + sh / 2, height: rect.height * v.scale });
     for (const mode of ["fill", "fit"]) {
-      const s = onScreen(frameView(rect, sw, sh, { mode, padding: 5 }, { right }));
-      ok(`${mode} ${sw}×${sh} sidebar ${right}: the frame is centred in the visible screen`, Math.abs(s.left + s.width / 2 - vis / 2) < 1e-6 && Math.abs(s.top + s.height / 2 - sh / 2) < 1e-6);
+      const v = frameView(rect, sw, sh, { mode, padding }, { right });
+      const s = onScreen(v);
+      ok(`${mode} ${sw}×${sh} sidebar ${right}: the frame is centred vertically`, Math.abs(s.top + s.height / 2 - sh / 2) < 1e-6);
+      ok(`${mode} ${sw}×${sh} sidebar ${right}: screenX is where the frame's centre lands`, Math.abs(s.left + s.width / 2 - v.screenX) < 1e-6);
+      if (mode === "fill") ok(`fill ${sw}×${sh} sidebar ${right}: the frame is centred in the visible screen`, Math.abs(s.left + s.width / 2 - vis / 2) < 1e-6);
+      else {
+        const shut = onScreen(frameView(rect, sw, sh, { mode, padding }));
+        const pad = (padding / 100) * Math.min(sw, sh);
+        ok(`fit ${sw}×${sh} sidebar ${right}: the left margin is the one it has with the sidebar shut`, Math.abs(s.left - shut.left) < 1e-6 && s.left >= pad - 1e-6);
+        ok(`fit ${sw}×${sh} sidebar ${right}: the frame clears the sidebar by the padding`, s.left + s.width <= vis - pad + 1e-6);
+        ok(`fit ${sw}×${sh} sidebar ${right}: the frame only ever shrinks`, s.width <= shut.width + 1e-6);
+      }
       if (mode === "fill") {
         const full = onScreen(frameView(rect, sw, sh, { mode }));
         const cropFull = Math.max(0, full.width - sw), crop = Math.max(0, s.width - vis);
@@ -429,7 +441,12 @@ section = "framing";
   ok("no sidebar is the plain framing", JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 }, { right: 0 })) === JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 })));
   const cam = stripComments(read(`${FEAT}/camera.mjs`));
   const mainSrc = stripComments(read(`${FEAT}/main.mjs`));
-  ok("the locked view measures the sidebar", /frameView\([^)]*\{\s*right:\s*sidebarInset\(\)\s*\}/.test(cam));
+  // Foundry clamps a pan's zoom to its minimum, which a fit beside the sidebar
+  // goes below: clamped, the zoom holds while the centre moves and the frame
+  // slides off the left edge. Every locked pan goes through _panExact.
+  ok("the locked pan bypasses Foundry's zoom clamp", /c\._constrainView\s*=\s*function/.test(cam) && /self\._exact/.test(cam)
+    && (cam.match(/_panExact\(/g) ?? []).length >= 4 && !/\bpan\.call\(this,\s*v\)/.test(cam));
+  ok("the locked view measures the sidebar",/frameView\([^)]*\{\s*right:\s*sidebarInset\(\)\s*\}/.test(cam));
   ok("a sidebar toggle re-fits the frame and moves the titles with it", /Hooks\.on\("collapseSidebar"[\s\S]{0,200}followSidebar\([\s\S]{0,80}setInset/.test(mainSrc));
   const css = read("styles/theatre.css");
   ok("titles, scrims and the card clear the sidebar", ["glth-scrim", "glth-title--centre", "glth-title--credits", "glth-title--wipe", "glth-card"].every((c) => new RegExp(`\\.${c}\\s*\\{[^}]*var\\(--glth-inset-r\\)`).test(css)));
