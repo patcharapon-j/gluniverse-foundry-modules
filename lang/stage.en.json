@@ -11,6 +11,10 @@
         "full": "Full",
         "lite": "Lite"
       },
+      "breath": {
+        "name": "Idle Breathing",
+        "hint": "A slow breathing sway on every character on stage while nothing else moves. Off by default; applies to every client."
+      },
       "director": {
         "name": "Stage Director",
         "label": "Open the Director",

@@ -113,10 +113,12 @@ export class Director {
    * @param {object} opts
    * @param {(ms:number) => number} [opts.scale]  motion scale (the suite's tier)
    * @param {(name:string) => boolean} [opts.allows]  shed ladder: may this behaviour run
+   * @param {() => boolean} [opts.breathe]  the world's idle breath switch (off by default)
    */
-  constructor({ scale = (ms) => ms, allows = () => true } = {}) {
+  constructor({ scale = (ms) => ms, allows = () => true, breathe = () => false } = {}) {
     this.scale = scale;
     this.allows = allows;
+    this.breathe = breathe;
     this.view = { w: 1920, h: 1080 };
     this.layout = { figure: 0.92, floor: 0, width: 0.86, nameplates: "close" };
     this.cast = new Map();
@@ -345,12 +347,15 @@ export class Director {
     return false;
   }
 
+  /** The idle breath: the world's switch, then the shed ladder. */
+  _breathing() { return this.allows("breath") && this.breathe(); }
+
   /** Whether anything would move with nothing changing (breath, flicker). */
   ambient() {
     if (this.show.to <= 0) return false;
     if (this.allows("grain") && this._rigTo.grain > 0) return true;
     if (!this.figs.size) return false;
-    return this.allows("breath") || (this.allows("flicker") && this._rigTo.flicker > 0);
+    return this._breathing() || (this.allows("flicker") && this._rigTo.flicker > 0);
   }
 
   step(now) {
@@ -384,7 +389,7 @@ export class Director {
         const o = gesture(g.kind, (now - g.t0) / g.dur, toward);
         dx += o[0] * r.figH; dy += o[1] * r.figH; rot += o[2]; breath += o[3];
       }
-      if (this.allows("breath")) breath += 0.0045 * Math.sin((now / BREATH_PERIOD + f.phase) * Math.PI * 2);
+      if (this._breathing()) breath += 0.0045 * Math.sin((now / BREATH_PERIOD + f.phase) * Math.PI * 2);
 
       const padU = art.padU ?? 0.1;
       const padV = art.padV ?? 0.1;

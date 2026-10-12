@@ -29,7 +29,7 @@ import { assetReason, corsRetryUrl, isSameOrigin, loadPixelImage, markTainted } 
 import { mountStageDom } from "./stage-dom.mjs";
 import { onStageSetting } from "./settings.mjs";
 import { onReaction } from "./channel.mjs";
-import { readCast, readComms, readCommsLayout, readLayout, readLight, readQuality, readState, sceneBackground } from "./store.mjs";
+import { readBreath, readCast, readComms, readCommsLayout, readLayout, readLight, readQuality, readState, sceneBackground } from "./store.mjs";
 import { TWEEN_OPTION, resolveTweenTiming } from "./timing.mjs";
 import { FEATURE_ID } from "./model.mjs";
 
@@ -106,6 +106,7 @@ export class StageOverlay {
     this._warned = new Set();
     this._lastDark = null;
     this._syncRev = 0;
+    this._breathe = readBreath();
     this._draw = Budget.measure(FEATURE_ID, (frame) => this.gl?.draw(frame));
   }
 
@@ -117,6 +118,7 @@ export class StageOverlay {
     this.director = new Director({
       scale: (ms) => ms * motionScale(this.dom?.root),
       allows: (name) => this.ladder.allows(name),
+      breathe: () => this._breathe,
     });
     this.dom = mountStageDom(document.body);
     this._buildRenderer();
@@ -310,6 +312,9 @@ export class StageOverlay {
         return;
       case "quality":
         this._buildRenderer();
+        break;
+      case "breath":
+        this._breathe = readBreath();
         break;
       default:
         return;

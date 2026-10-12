@@ -291,6 +291,19 @@ section = "director";
   f = d.step(t);
   ok("rapid restaging settles on the last state", f.figures.length === 1 && f.figures[0].id === "b");
 
+  // The idle breath is the world's switch, off unless it says otherwise.
+  {
+    const still = d.step(t + 1234).figures.every((g) => g.motion[3] === 0);
+    ok("characters do not breathe unless the world turns it on", still);
+    const d3 = new D.Director({ breathe: () => true });
+    d3.setView(1920, 1080);
+    d3.setCast(cast);
+    d3.setArt("a.webp", info);
+    d3.setState(M.normalizeState({ visible: true, on: [{ id: "a", x: 0.5 }] }), 0, { immediate: true });
+    const sway = [500, 1500, 2500].map((ms) => d3.step(ms).figures[0].motion[3]);
+    ok("with breathing on, a character breathes", sway.some((v) => Math.abs(v) > 1e-4));
+  }
+
   // Mirrored art whose figure is off-centre in its file stays on its mark.
   {
     const d2 = new D.Director();

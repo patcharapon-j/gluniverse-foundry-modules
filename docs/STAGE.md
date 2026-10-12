@@ -47,6 +47,7 @@ scripts/features/stage/
 | `stage.comms` | world | open calls, who is speaking |
 | `stage.commsLayout` | world | edge, alignment, style (holo / radio / clean), size |
 | `stage.quality` | client | full (lit) or lite (plain pictures) |
+| `stage.breath` | world | an idle breathing sway on the cast (off by default) |
 | scene flag `stage.light` | scene | the scene's light: mood, dials, picture override |
 
 All world values are GM-written through `store.mjs` and read back through a

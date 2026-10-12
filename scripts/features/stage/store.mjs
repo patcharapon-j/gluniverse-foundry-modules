@@ -38,6 +38,7 @@ export function readState() { return normalizeState(safeGet(KEY.state, {}), cast
 export function readLayout() { return normalizeLayout(safeGet(KEY.layout, {})); }
 export function readComms() { return normalizeComms(safeGet(KEY.comms, {}), castIds()); }
 export function readCommsLayout() { return normalizeCommsLayout(safeGet(KEY.commsLayout, {})); }
+export function readBreath() { return safeGet(KEY.breath, false) === true; }
 export function readQuality() { return safeGet(KEY.quality, "full") === "lite" ? "lite" : "full"; }
 
 /* ── writes: the cast ───────────────────────────────────────────────── */

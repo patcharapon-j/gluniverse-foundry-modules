@@ -15,6 +15,7 @@ export const KEY = Object.freeze({
   comms: "stage.comms",
   commsLayout: "stage.commsLayout",
   quality: "stage.quality",
+  breath: "stage.breath",
   migrated: "stage.migrated",
   // The old Stage's stored values, registered only so migration can read them.
   legacyLibrary: "stage.actorLibrary",
@@ -33,7 +34,7 @@ export const QUALITY = Object.freeze(["full", "lite"]);
 
 const listeners = new Set();
 
-/** Subscribe to stored changes: fn(kind) with kind one of cast|state|layout|comms|commsLayout|quality. */
+/** Subscribe to stored changes: fn(kind) with kind one of cast|state|layout|comms|commsLayout|quality|breath. */
 export function onStageSetting(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -78,6 +79,16 @@ export function registerSettings() {
     },
     default: "full",
     onChange: () => emit("quality"),
+  });
+
+  game.settings.register(SUITE_ID, KEY.breath, {
+    name: "GLSTAGE.settings.breath.name",
+    hint: "GLSTAGE.settings.breath.hint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: () => emit("breath"),
   });
 
   game.settings.registerMenu(SUITE_ID, "stage.director", {
