@@ -30,7 +30,7 @@ export const TIMING = Object.freeze({
   backdrop: 900,
   // A silhouette falls fast; the reveal is the GM's beat and takes its time.
   mask: 500,
-  reveal: 1800,
+  reveal: 2600,
   react: { nod: 560, shake: 520, hop: 520, tremble: 1000, lean: 900 },
 });
 
@@ -47,6 +47,7 @@ export const ease = {
   out: (t) => 1 - (1 - t) ** 3,
   inOut: (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2),
   in: (t) => t * t * t,
+  sine: (t) => 0.5 - 0.5 * Math.cos(Math.PI * t),
 };
 
 /** One animated number. Retargeting mid-flight starts from where it is. */
@@ -261,7 +262,7 @@ export class Director {
       if (member) f.turn.set(this.facing(member, mark), now, D(TIMING.turn));
       const lit = state.focus === mark.id ? 1 : 0;
       const dim = state.focus && state.focus !== mark.id ? 1 : 0;
-      f.mask.set(mark.masked ? 1 : 0, now, D(mark.masked ? TIMING.mask : TIMING.reveal), ease.inOut);
+      f.mask.set(mark.masked ? 1 : 0, now, D(mark.masked ? TIMING.mask : TIMING.reveal), mark.masked ? ease.inOut : ease.sine);
       f.lit.set(lit, now, D(TIMING.focus));
       f.dim.set(dim, now, D(TIMING.focus));
     }

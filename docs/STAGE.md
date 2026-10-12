@@ -114,8 +114,9 @@ from a sender `meta.attested` says is a GM.
 A character can stand as a **silhouette** (`masked` on their mark: entered that
 way from the Director's roster, or toggled on stage) while the GM describes
 them: the room's deepest shade with only the rim light, the outline and the halo
-on it, and no name card. Revealing sweeps the art up from the feet behind a thin
-lit seam (`TIMING.reveal`); the name card arrives with it. The lite renderer
+on it, and no name card. Revealing lifts the dark off like smoke, from the feet
+first in soft drifting patches, never along a line (`TIMING.reveal`, eased on
+a sine so it neither snaps in nor stops dead); the name card arrives with it. The lite renderer
 darkens the picture instead. The art is still in the world's data, so this is
 staging, not a secret a player cannot dig out.
 

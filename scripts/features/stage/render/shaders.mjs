@@ -131,7 +131,7 @@ uniform float uWrap;
 uniform float uAO;
 uniform vec3 uHaze;
 uniform float uFlicker;     // 1 + live flicker offset
-uniform float uMask;        // 1 a silhouette, 0 revealed; between, the reveal sweeping up
+uniform float uMask;        // 1 a silhouette, 0 revealed; between, the dark lifting off
 uniform vec3 uSilhouette;   // the silhouette's colour (linear): the room's deepest shade
 uniform float uDebug;       // 0 off · 1 normals · 2 rim · 3 occlusion · 4 light · 5 outline
 
@@ -156,6 +156,11 @@ float maskNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   vec2 s = f * f * (3.0 - 2.0 * f);
   return mix(mix(maskHash(i), maskHash(i + vec2(1.0, 0.0)), s.x), mix(maskHash(i + vec2(0.0, 1.0)), maskHash(i + 1.0), s.x), s.y);
+}
+// Three octaves, stretched to fill 0..1.
+float maskFbm(vec2 p) {
+  float n = maskNoise(p) * 0.55 + maskNoise(p * 2.03 + 17.1) * 0.3 + maskNoise(p * 4.07 + 41.3) * 0.15;
+  return clamp((n - 0.22) / 0.56, 0.0, 1.0);
 }
 
 // Highlights past the shoulder roll off instead of clipping.
@@ -293,17 +298,18 @@ void main() {
   // ── the silhouette ──
   // A character not yet revealed is a shape against the room: its deepest
   // shade, with only the rim light on it (the outline and halo stay). The
-  // reveal sweeps up from the feet behind a lit seam. Skipped at 0, so a
-  // revealed character is exactly the lit one.
+  // reveal lifts the dark off like smoke: from the feet first, in soft
+  // drifting patches, never a line. Skipped at 0, so a revealed character is
+  // exactly the lit one.
   if (uMask > 0.0) {
-    float hgt = 1.0 - clamp(artUV.y, 0.0, 1.0) + (maskNoise(artUV * vec2(9.0, 14.0)) - 0.5) * 0.05;
-    float front = (1.0 - uMask) * 1.12 - 0.06;
-    float shown = smoothstep(hgt - 0.025, hgt + 0.025, front);
+    float r = 1.0 - uMask;
+    vec2 auv = clamp(artUV, 0.0, 1.0);
+    // When each pixel clears (0 first, 1 last): half height, half a drifting field.
+    float n = clamp(0.5 * (1.0 - auv.y) + 0.5 * maskFbm(auv * vec2(3.0, 2.2) + vec2(0.0, -r * 0.9)), 0.0, 1.0);
+    const float SOFT = 0.16;
+    float shown = smoothstep(n - SOFT, n + SOFT, mix(-SOFT, 1.0 + SOFT, r));
     vec3 shade = uSilhouette + (rim * 0.9 + rimHue * spill * uRimGlow * 0.35) * uStrength;
     outLin = mix(shade, outLin, shown);
-    // The front is a thin lit seam, the room's rim colour, fading behind it.
-    float seam = (front - hgt) / 0.012;
-    outLin += rimHue * exp(-seam * seam) * 0.45 * (1.0 - smoothstep(0.85, 1.0, 1.0 - uMask));
   }
   float a = art.a * uAlpha;
 

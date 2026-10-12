@@ -27,6 +27,7 @@
  *   from=<shot>           start in this shot and cut to `shot` at 0, to seek a push
  *   mask=a,b              these characters stand as silhouettes
  *   reveal=a,b            these start as silhouettes and are revealed at 0
+ *   loop=1                with reveal=: mask and reveal again on a loop
  *   split=1               left half unlit, right half lit
  *   ui=0                  hide the control strip (for screenshots)
  *   view=1..5             debug: normals · rim light · occlusion · the light alone · outline+halo
@@ -178,6 +179,16 @@ function frame() {
   if (frozen === null) requestAnimationFrame(frame);
 }
 frame();
+
+// A reveal on a loop: revealed, held, masked again, held.
+if (q.get("loop") === "1" && reveals.size) {
+  let masked = false;
+  setInterval(() => {
+    masked = !masked;
+    const now = T0 + performance.now() - start;
+    for (const r of renderers) r.director.setState(spread(stateFor(q.get("shot") ?? "wide", masked)), now);
+  }, 3400);
+}
 
 // Controls.
 const ui = document.getElementById("ui");
