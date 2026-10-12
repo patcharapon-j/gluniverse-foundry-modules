@@ -1,5 +1,5 @@
 import { Suite } from "../../core/registry.mjs";
-import { registerSettings, onInit, onReady, api } from "./module.js";
+import { registerSettings, onInit, onReady, api } from "./main.mjs";
 
 Suite.register({
   id: "stage",
@@ -21,16 +21,14 @@ Suite.register({
   },
 
   onReady() {
-    onReady();
+    return onReady();
   },
 
+  // The old standalone module's keys. Only the cast and the comms are read
+  // (store.mjs `migrateLegacy`); the rest describe a stage that no longer exists.
   legacy: {
     id: "gluniverse-stage",
     settings: {
-      stageHeight: "stage.stageHeight",
-      stageWidth: "stage.stageWidth",
-      stageXOffset: "stage.stageXOffset",
-      stageYOffset: "stage.stageYOffset",
       commsTheme: "stage.commsTheme",
       commsEdge: "stage.commsEdge",
       commsVAlign: "stage.commsVAlign",
@@ -39,7 +37,6 @@ Suite.register({
       commsTopOffset: "stage.commsTopOffset",
       commsState: "stage.commsState",
       actorLibrary: "stage.actorLibrary",
-      stageState: "stage.stageState",
     },
   },
 

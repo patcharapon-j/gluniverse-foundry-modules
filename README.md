@@ -26,7 +26,7 @@ flat native list — the Control Center is the single place to configure everyth
 | **Flatfinder** | PF2e | Off-guard / competence surfacing, incapacitation, encounter XP budget. Ships a Flatfinder compendium. |
 | **Destiny Dice** | PF2e | Cinematic Destiny/Fate die for checks & rerolls (Dice So Nice optional). |
 | **Insight** | any | Passive, broadcastable on-screen notifications. |
-| **Stage** | any | Visual-novel presenter: portraits, dialogue, comms overlays. |
+| **Stage** | any | Cinematic stage: the cast lit by the room they stand in, a push-in close-up with a name card, comms call-ins. |
 | **Stream Pacer** | any | Pacing HUD: countdowns, spotlight, hand-raise, peril cues. |
 | **PF2e Stat Block Importer** | PF2e | Import NPCs & hazards from pasted stat-block text. |
 | **Loot Generator** | PF2e / D&D 5e | System-aware loot generation with audited treasure proposals. |

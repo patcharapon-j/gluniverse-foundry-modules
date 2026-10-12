@@ -154,62 +154,50 @@ Zero errors required. The same tool checks a file directly
 (`node tools/parse-check.mjs foo.md`). See `docs/STATBLOCK_FORMAT.md` for the
 export/import symmetry rules and the `ult.*` cross-feature flag contract.
 
-**When touching the Stage character grade** (`features/stage/postfx/`,
-`features/stage/grade-tab.mjs`), re-run the pure-logic checks:
+**When touching Stage** (`features/stage/`, `styles/stage*.css`,
+`templates/stage/`), re-run its check. Almost everything there fails silently:
+a uniform declared and never written holds the driver's initial value; a frame
+field the renderer reads and the director never writes draws every figure at 0;
+a shed name missing from `SHED_ORDER` never degrades; a pure module that reads
+the world breaks the preview, which then flatters a copy nobody ships:
 
 ```bash
-node tools/postfx-check.mjs
+node tools/stage-check.mjs
 ```
 
-Zero failures required. The grade is a stack of layers the GM sets — basic
-correction, light gradient, room wash, rim, back shadow, looks, glow, strength —
-stored on the scene (`stage.grade`), with the background only ever *proposing*
-starting values, once, when a scene is first staged or the GM re-samples. Two
-rules hold for every dial, and the tool enforces both: **neutral is an exact
-no-op** (bit for bit — each GPU step is skipped at neutral, because
-`pow(x, 1.0)` is not `x` on a GPU, and output is formed as a difference from
-the input so the encode round trip cancels), and **one dial owns one property**
-(tone dials act on luminance as a ratio; saturation and hue act on the OKLab
-chroma vector). Scene darkness reaches the picture only through the wash's
-`darkness` dial. Skin holds back the *colour* of the gradient, wash and looks
-and never their level.
+Zero problems required. Four things are worth knowing before you change it.
 
-`postfx/grade-model.mjs` holds `shadePixel`, the shader written in JavaScript,
-and `gl.mjs` is its transcription — every GLSL constant (OKLab matrices, knees,
-skin ellipse, tap counts) is *emitted from* the model, never copied, and the
-check tool asserts the emission and that every uniform in all three programs is
-declared, looked up and written. Grades are written only through
-`grade-store.mjs`, and `normalizeGrade` must stay total: Foundry merges a flag
-update, so a key a grade lacked would survive the write.
+**`store.mjs` is the only reader and writer.** Every value comes back through a
+normalizer, and the scene light (`stage.light` flag) is a forced replacement —
+a plain nested update merges, so a dial the GM cleared survives. Theatre writes
+it through the api in the same update as `th.state`, with the relight timing in
+the update options (`TWEEN_OPTION`); the api keeps the old grade names
+(`gradeUpdateData`, `gradeFromSrc`, `readSceneGrade`) because that is what
+`theatre/stage-bridge.mjs` calls.
 
-**When you touch the GLSL itself**, that tool is not enough — it cannot compile a
-line of it, and a shader that fails to compile degrades *silently* to the CSS
-fallback. Run the browser-backed one too, and **look at its contact sheet**:
+**Neutral is exact.** `mood: off` and `strength: 0` resolve to `identityRig()`,
+and the check holds them to it. Tints are hue only (`tintOf` renormalises to unit
+luminance), so a tint never changes how bright a character is.
+
+**Hairlines are screen pixels.** The outline is dilated by `uStrokePx` (device
+px) and the rims step in px, never in art units: an art-sized stroke is a slab on
+a close-up and vanishes on a small figure. Every art read is `textureLod` at a
+level chosen from the art's size on screen.
+
+**The cast must be pixel-readable** (same origin, or CORS headers). A tainted
+image is left off the lit stage with one warning, never drawn unlit over a lit
+room.
+
+The check cannot compile GLSL, and a program that fails to compile leaves the
+host on the lite renderer with only a console warning. After touching
+`render/shaders.mjs`, serve the preview and look at it:
 
 ```bash
-node tools/stage-lighting-preview.mjs --out=.preview/grade.png
+node tools/stage-preview.mjs --assets=<dir of portraits and backdrops> && node tools/preview-server.mjs
 ```
 
-It compiles all three programs through the real `StageGL`, asserts both
-identities at 0/255 drift, compares the GPU with `shadePixel` pixel for pixel on
-every layer (coverage outside the art included), and reads the bloom pyramid
-back against `bloomPyramid`. Needs Playwright; skips cleanly without it. Two
-failures in this feature's history passed every number and were caught only on
-the sheet: a glow sampled as a ring of taps (ghost copies of every highlight —
-it is a pyramid now), and saturation in linear light (a seam across gradients —
-it is OKLab now).
-
-Four things there fail silently. The bloom passes use their own *unflipped*
-vertex shader — render targets store rows bottom-up, and the flipped one mirrors
-each level. Every look texture is uploaded before any is bound — an upload binds
-to the active unit and replaced the previous slot's look. Looks are never
-awaited by a render: an unloaded look draws at opacity 0 and its arrival
-re-renders. And recipes are fitted into gamut once, softly, in OKLab
-(`fitOklab`), or the baked 33-point LUT misses creases the recipe has. The Grade
-tab builds its i18n keys from `GRADE_UI` at runtime; the check walks them, and
-requires every schema dial and colour to have a control. See
-`docs/STAGE_LIGHTING.md` for the layers, the look pipeline, seeding, and the
-asset-hosting contract (S3/CORS).
+(`/.preview/stage.html`; `view=1..5` are the shader's debug views.) See
+`docs/STAGE.md` for the light dials, the frame's passes and the choreography.
 
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.

@@ -13,7 +13,7 @@ this is one Foundry package, not a monorepo.
   (architecture, lifecycle, conventions, and the per-feature validation commands).
   Always read it; it is not optional and not lazily created.
 - **`docs/<AREA>.md`**: the per-feature design documents (`DESIGN_SYSTEM.md`,
-  `FEATURE_CONTRACT.md`, `RESOURCE_BARS.md`, `STAGE_LIGHTING.md`, and so on).
+  `FEATURE_CONTRACT.md`, `RESOURCE_BARS.md`, `STAGE.md`, and so on).
   `CLAUDE.md` names the relevant one for each area you might touch. Read the ones
   that cover your area before changing it.
 - **`CONTEXT.md`** at the repo root: the domain glossary, when it exists.

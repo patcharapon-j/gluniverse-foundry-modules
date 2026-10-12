@@ -1,260 +1,243 @@
 {
-    "GLSTAGE": {
-        "title": "GLUniverse Stage",
-        "settings": {
-            "stageHeight": {
-                "name": "Stage Height (%)",
-                "hint": "Height of the visual novel stage area as a percentage of the viewport height."
-            },
-            "stageWidth": {
-                "name": "Stage Width (%)",
-                "hint": "Width of the visual novel stage area as a percentage of the viewport width."
-            },
-            "ppEnabled": {
-                "name": "Character Grade",
-                "hint": "Colour-grade stage character art with the grade set for each scene in the Stage Director, so the cast reads as standing in the room rather than pasted over it."
-            },
-            "ppIntensity": {
-                "name": "Character Grade Strength (%)",
-                "hint": "Blends the whole character grade back toward the original art. 100% applies every layer exactly as set; lower it to back the whole look off at once."
-            },
-            "ppQuality": {
-                "name": "Character Grade Quality",
-                "hint": "Your own setting only — it does not change what anyone else sees. Turn this off if the stage costs you performance.",
-                "auto": "Automatic",
-                "off": "Off"
-            },
-            "commsTheme": {
-                "name": "Comms Theme",
-                "hint": "Visual style for the call-in overlay.",
-                "scifi": "Sci-fi Radio",
-                "ethereal": "Fantasy Ethereal",
-                "minimal": "Minimal"
-            },
-            "commsEdge": {
-                "name": "Comms Edge",
-                "hint": "Which screen edge the call-in cards stack against.",
-                "right": "Right",
-                "left": "Left"
-            },
-            "commsVAlign": {
-                "name": "Comms Vertical Anchor",
-                "hint": "Where the call-in stack anchors vertically. The vertical offset below is measured relative to this anchor.",
-                "centered": "Centered",
-                "top": "From Top",
-                "bottom": "From Bottom"
-            },
-            "commsFrameWidth": {
-                "name": "Comms Card Width (px)",
-                "hint": "Width of each call-in portrait card in pixels."
-            },
-            "commsEdgeOffset": {
-                "name": "Comms Edge Spacing (px)",
-                "hint": "Gap between the call-in stack and its screen edge, in pixels."
-            },
-            "commsTopOffset": {
-                "name": "Comms Vertical Offset (%)",
-                "hint": "Vertical offset relative to the anchor, as a percentage of viewport height. When centered it nudges up (negative) or down (positive); when anchored from the top or bottom it sets the gap from that edge."
-            }
+  "GLSTAGE": {
+    "title": "Stage",
+    "controls": {
+      "director": "Stage Director"
+    },
+    "settings": {
+      "quality": {
+        "name": "Stage Lighting",
+        "hint": "Your own setting only. Full draws the cast lit by the room: graded into its colour, outlined and glowing, with the backdrop softened behind them. Lite draws the same staging as plain pictures, for a machine the full effect slows down.",
+        "full": "Full",
+        "lite": "Lite"
+      },
+      "director": {
+        "name": "Stage Director",
+        "label": "Open the Director",
+        "hint": "Cast, staging, the scene's light and the comms, in one panel."
+      }
+    },
+    "warn": {
+      "art": "Stage could not read {src} for lighting. Serve it from this server, or from a host that sends CORS headers."
+    },
+    "director": {
+      "title": "Stage Director",
+      "gmOnly": "Only the GM can direct the stage.",
+      "writeFailed": "Stage: that change could not be saved. See the console for details.",
+      "browse": "Browse files",
+      "tab": {
+        "stage": "Stage",
+        "cast": "Cast",
+        "light": "Light",
+        "comms": "Comms"
+      },
+      "status": {
+        "stageUp": "Stage live",
+        "stageDown": "Stage hidden",
+        "commsUp": "Comms live",
+        "commsDown": "Comms hidden"
+      },
+      "stage": {
+        "show": "Show stage",
+        "hide": "Hide stage",
+        "shotWide": "Wide shot",
+        "shotClose": "Close-up on {name}",
+        "focusOn": "Focus: {name}",
+        "count": "{n} / {max} on stage",
+        "strip": "Stage marks",
+        "emptyStrip": "Nobody is on stage. Bring someone on from the cast list.",
+        "dragHint": "Drag across to move · up and down for depth",
+        "wide": "Wide shot",
+        "wideHint": "Pull back from the close-up to the whole stage.",
+        "spread": "Spread",
+        "spreadHint": "Space everyone evenly, keeping their order.",
+        "clear": "Clear stage",
+        "clearHint": "Send everyone off. The stage stays up on the empty room.",
+        "cast": "Cast",
+        "enter": "Enter",
+        "onStage": "On stage",
+        "noCast": "No characters yet.",
+        "toCast": "Set up the cast",
+        "full": "The stage is full ({max} at most).",
+        "focus": "Focus on this character",
+        "closePush": "Close-up (push in)",
+        "closeCut": "Close-up (hard cut)",
+        "flip": "Turn to face the other way",
+        "exit": "Exit",
+        "reactions": "Reactions",
+        "reactFailed": "That reaction could not be sent."
+      },
+      "layout": {
+        "title": "Stage layout",
+        "figure": "Figure height",
+        "figureHint": "How tall a character of height ×1 stands, as a share of the screen height.",
+        "floor": "Floor",
+        "floorHint": "Where feet meet the floor: up from (or below) the bottom edge of the screen.",
+        "width": "Stage width",
+        "widthHint": "How much of the screen width the marks span.",
+        "nameplates": "Name cards"
+      },
+      "cast": {
+        "add": "Add",
+        "fromTokens": "From tokens",
+        "fromTokensHint": "Add a character for every selected token, using its actor's portrait.",
+        "dropHint": "Drop an Actor on this window to add it.",
+        "empty": "The cast is empty. Add a character, import selected tokens, or drop an Actor here.",
+        "nothingSelected": "Pick a character from the list to edit them.",
+        "newName": "New character",
+        "noTokens": "Select one or more tokens on the canvas first.",
+        "imported": "Added {n} to the cast ({skipped} already in it).",
+        "alreadyCast": "{name} is already in the cast.",
+        "dropFailed": "That Actor could not be found.",
+        "linked": "Linked to an actor",
+        "linkedTo": "Linked to {uuid}",
+        "edit": "Edit",
+        "lineup": "Lineup",
+        "lineupHint": "Everyone on one floor at their relative heights. Adjust heights until they look right side by side.",
+        "name": "Name",
+        "titleField": "Title",
+        "titlePlaceholder": "Shown under the name on the name card",
+        "image": "Portrait art",
+        "faces": {
+          "label": "Art faces",
+          "hint": "Which way the character looks as drawn, so the stage can turn them into the scene.",
+          "left": "Left",
+          "right": "Right",
+          "front": "Front"
         },
-        "panel": {
-            "title": "Stage Director",
-            "actors": "Actors",
-            "stage": "Stage",
-            "addActor": "Add Actor",
-            "newActor": "New Actor",
-            "importSelectedToken": "Import Selected Token",
-            "importFoundryActor": "Import Actor",
-            "selectFoundryActor": "Select Foundry Actor...",
-            "noSelectedToken": "Select one or more tokens on the canvas first.",
-            "noFoundryActorSelected": "Select a Foundry Actor to import first.",
-            "actorImported": "Actor imported into GLUniverse Stage.",
-            "actorsImported": "{count} actors imported into GLUniverse Stage.",
-            "editActor": "Edit Actor",
-            "removeActor": "Remove Actor",
-            "name": "Name",
-            "image": "Image",
-            "scale": "Scale",
-            "offsetX": "Offset X",
-            "offsetY": "Offset Y",
-            "present": "Show on Stage",
-            "hide": "Hide from Stage",
-            "highlight": "Highlight (Speaking)",
-            "unhighlight": "Unhighlight",
-            "clearStage": "Clear Stage",
-            "showStage": "Show Stage",
-            "hideStage": "Hide Stage",
-            "addSlot": "Add Slot",
-            "removeSlot": "Remove Slot",
-            "emptySlot": "Empty",
-            "animation": "Animation",
-            "triggerAnimation": "Play",
-            "slotPosition": "Position",
-            "guide": "Guide",
-            "browse": "Browse",
-            "stageHeight": "Height",
-            "stageWidth": "Width",
-            "zIndex": "Layer",
-            "measure": "Measure",
-            "measureInfo": "Preview all actors side by side to calibrate scale and positioning. Adjust each actor so feet are level on the floor line.",
-            "floorLine": "Floor Line",
-            "screenLine": "Screen Line",
-            "stageXOffset": "Stage X Offset",
-            "stageYOffset": "Stage Y Offset",
-            "ppIntensity": "Grade Strength",
-            "ppOptOut": "Skip grading",
-            "ppOptOutHint": "Leave this character's art untouched by the scene grade. Use it for portraits that are already lit, where grading only muddies them.",
-            "ppNoWebGL": "Character grading is running in reduced mode — this client has no WebGL.",
-            "ppArtNotSampled": "Some character art couldn't be read for grading, so those characters use a simpler approximation.",
-            "ppArtCORS": "Some character art is hosted somewhere that allows it to be displayed but not read (no Access-Control-Allow-Origin header), so those characters use a simpler approximation. If that's an S3 bucket, allowing GET from this site in its CORS rules enables full grading — the exact rule is printed in your browser console.",
-            "ppArtMissing": "Some character art failed to load at all — check those image paths.",
-            "stageYOffsetHint": "Percentage of character to crop from the bottom. The visible portion scales up to fill the stage.",
-            "noActorsConfigured": "No actors configured. Click Add Actor or import one to get started.",
-            "noSlotsConfigured": "No slots on stage. Click Add Slot to create character positions.",
-            "noActorsToMeasure": "No actors configured. Add actors in the Actors tab first.",
-            "hideInMeasure": "Hide in Measure",
-            "showInMeasure": "Show in Measure",
-            "resetScale": "Reset",
-            "comms": "Comms",
-            "callIn": "Call In",
-            "showComms": "Show Comms",
-            "hideComms": "Hide Comms",
-            "clearComms": "Hang Up All",
-            "clearCommsConfirm": "End all active calls and hide the comms overlay?",
-            "selectActorToCall": "Select actor to call...",
-            "noCalls": "No active calls. Ring an actor in from the Actors tab or the dropdown above.",
-            "setSpeaker": "Set as Speaker",
-            "hangUp": "Hang Up",
-            "moveUp": "Move Up",
-            "moveDown": "Move Down",
-            "unknownActor": "Unknown",
-            "commsFraming": "Position the portrait inside the call card (scale / X / Y)",
-            "resetFraming": "Reset framing",
-            "presentation": "Presentation (theme & tint)",
-            "themeDefault": "Default Theme",
-            "commsThemeOverride": "Override the comms theme for this actor",
-            "commsTintOverride": "Enable a custom tint colour for this actor",
-            "grade": "Grade",
-            "trim": "Colour correction",
-            "trimHint": "This character's own correction, for art that is always too dark, too saturated or the wrong colour whatever room it is in. Adds to the scene's grade."
-        },
-        "comms": {
-            "connecting": "Connecting",
-            "live": "Live",
-            "sending": "Sending",
-            "attuned": "Attuned"
-        },
-        "animations": {
-            "none": "None",
-            "bounce": "Bounce",
-            "shake": "Shake",
-            "flip": "Flip",
-            "nod": "Nod",
-            "jiggle": "Jiggle",
-            "fadeIn": "Fade In",
-            "slideIn": "Slide In"
-        },
-        "guide": {
-            "title": "Stage Setup Guide",
-            "intro": "Configure your actors to display consistently across all player screens.",
-            "step1title": "1. Add Actors",
-            "step1": "Click 'Add Actor' to create characters. Give them a name and select their image. Use character art with transparent backgrounds for best results.",
-            "step2title": "2. Configure Scale & Offset",
-            "step2": "Adjust Scale to resize the actor (1.0 = 100%). Use Offset X/Y to fine-tune positioning within the stage. These values sync to all players.",
-            "step3title": "3. Manage the Stage",
-            "step3": "Switch to the Stage tab to control what players see. Add slots (positions) for characters. Assign actors to slots or leave them empty for spacing.",
-            "step4title": "4. Highlight & Animate",
-            "step4": "Click Highlight on a character to dim others and indicate the speaker. Use animations for expressive moments — bounce for excitement, shake for anger, nod for agreement.",
-            "tip": "Tip: Use 'Show Stage' to make the stage visible to all players. 'Clear Stage' removes all characters but keeps actors configured."
-        },
-        "grade": {
-            "noScene": "Open a scene to grade its characters.",
-            "editing": "Grading {scene}",
-            "ownGrade": "This scene's grade",
-            "worldGrade": "Using the world default",
-            "resample": "Re-sample background",
-            "resampleHint": "Read the background again for the light's colour, the room's colour and the light's direction. Keeps every amount you have set.",
-            "reset": "Reset to defaults",
-            "resetHint": "Replace this scene's grade with the world default.",
-            "saveDefault": "Save as default",
-            "saveDefaultHint": "Make this grade the one every ungraded scene starts from.",
-            "savedDefault": "Saved as the world's default grade.",
-            "copyFrom": "Copy grade from scene…",
-            "copy": "Copy",
-            "intensity": "Grade strength",
-            "saveFailed": "The scene grade could not be saved — see the console.",
-            "basic": {
-                "title": "Basic correction",
-                "hint": "The art's own tone and colour, before any light touches it. Every dial moves one thing only.",
-                "exposure": "Exposure",
-                "brightness": "Brightness",
-                "contrast": "Contrast",
-                "gamma": "Gamma",
-                "saturation": "Saturation",
-                "hue": "Hue"
-            },
-            "light": {
-                "title": "Light",
-                "hint": "The scene's one light, shared by every character so they are all lit from the same side. The arrows are shortcuts; the angle is exact.",
-                "pad": "Light direction",
-                "angle": "Angle",
-                "softness": "Softness"
-            },
-            "gradient": {
-                "title": "Light gradient",
-                "hint": "The light's colour across each figure, strongest on the side facing it.",
-                "amount": "Amount",
-                "color": "Light colour"
-            },
-            "wash": {
-                "title": "Room wash",
-                "hint": "The room's colour over the whole figure, without changing how bright it is — and how far characters darken with the scene's darkness.",
-                "amount": "Amount",
-                "color": "Room colour",
-                "darkness": "Follow scene darkness"
-            },
-            "rim": {
-                "title": "Rim light",
-                "hint": "Light catching the edge that faces the lamp.",
-                "amount": "Amount",
-                "width": "Depth",
-                "softness": "Softness",
-                "color": "Rim colour"
-            },
-            "backShadow": {
-                "title": "Backlight shadow",
-                "hint": "Darkens the side of each figure turned away from the light.",
-                "amount": "Amount"
-            },
-            "glow": {
-                "title": "Glow",
-                "hint": "The art's own highlights blooming, and spilling a little past the outline.",
-                "amount": "Amount",
-                "radius": "Radius",
-                "threshold": "Threshold"
-            },
-            "looks": {
-                "title": "Looks",
-                "none": "No looks on this scene.",
-                "look": "Look",
-                "opacity": "Opacity",
-                "add": "Add look",
-                "remove": "Remove this look",
-                "importTitle": "Import a .cube look",
-                "importHint": "A 3D LUT exported from Resolve, Photoshop, Lightroom or any grading tool. It is copied into this world's folder.",
-                "importFile": ".cube file",
-                "importName": "Name",
-                "import": "Import",
-                "importNoFile": "Choose a .cube file first.",
-                "imported": "Imported the look \"{name}\".",
-                "importFailed": "That file could not be imported: {reason}",
-                "removeCustom": "Remove this imported look from the list"
-            },
-            "skin": {
-                "title": "Skin protection",
-                "hint": "How hard skin holds back the colour of the gradient, wash and looks. It never holds back brightness: a face in a dark room still darkens.",
-                "guard": "Protection"
-            }
-        }
+        "tint": "Comms tint",
+        "tintHint": "The colour of this character's comms card.",
+        "height": "Height",
+        "heightHint": "Relative height: a child is about ×0.7, an ogre ×1.3.",
+        "offsetX": "Nudge across",
+        "offsetXHint": "Shift the art sideways, as a share of its own width.",
+        "offsetY": "Nudge up",
+        "offsetYHint": "Lift (or lower) the art, for empty space under the feet or a cropped waist.",
+        "faceHint": "Click the centre of the face to frame the close-up.",
+        "faceSet": "Close-up framed on the point you set.",
+        "faceAuto": "Close-up framed automatically. Click the face to set it by hand.",
+        "faceSize": "Head size",
+        "faceClear": "Automatic",
+        "delete": "Delete",
+        "deleteTitle": "Delete character",
+        "deleteBody": "Remove <strong>{name}</strong> from the cast? They also leave the stage and the comms."
+      },
+      "light": {
+        "scene": "Lighting for scene",
+        "noScene": "No scene is being viewed. Open a scene to light it.",
+        "reset": "Reset to defaults",
+        "mood": "Mood",
+        "moodHint": "Auto reads the backdrop. The others describe a room; the dials below push or soften it.",
+        "offHint": "Off: the cast is drawn exactly as painted. The dials have no effect.",
+        "dials": "Dials",
+        "angle": "Key light angle",
+        "angleHint": "Where the front light comes from: 0° above, 90° right, −90° left.",
+        "angleAuto": "Auto angle",
+        "darkness": "Follow scene darkness",
+        "darknessHint": "Dim the cast with Foundry's darkness level.",
+        "flicker": "Flicker",
+        "flickerHint": "Let a firelit room's light breathe.",
+        "src": "Picture to read",
+        "srcPlaceholder": "The scene's background",
+        "srcHint": "Light the cast from this image instead of the scene's background.",
+        "srcClear": "Use the scene's background"
+      },
+      "comms": {
+        "show": "Show comms",
+        "hide": "Hide comms",
+        "clear": "End all calls",
+        "count": "{n} / {max} calls",
+        "full": "Too many calls at once ({max} at most).",
+        "calls": "Active calls",
+        "none": "No one is on the line.",
+        "speak": "Speak",
+        "speaking": "Speaking",
+        "hangUp": "Hang up",
+        "callIn": "Call in",
+        "call": "Call",
+        "onCall": "On call",
+        "layout": "Comms layout",
+        "edge": "Screen edge",
+        "align": "Position",
+        "style": "Style",
+        "width": "Card width",
+        "inset": "Edge gap",
+        "insetHint": "Distance from the screen edge.",
+        "shift": "Vertical shift",
+        "shiftHint": "Nudge the stack up or down, as a share of the screen height."
+      }
+    },
+    "mood": {
+      "auto": "Auto",
+      "day": "Day",
+      "golden": "Golden hour",
+      "dusk": "Dusk",
+      "night": "Night",
+      "fire": "Firelight",
+      "neon": "Neon",
+      "storm": "Storm",
+      "off": "Off"
+    },
+    "light": {
+      "strength": {
+        "name": "Strength",
+        "hint": "Master amount. 0 shows the art as painted on a sharp backdrop."
+      },
+      "match": {
+        "name": "Match",
+        "hint": "How far the cast takes on the room's colour, brightness and black point."
+      },
+      "key": {
+        "name": "Key light",
+        "hint": "How strongly the front light models the figure."
+      },
+      "rim": {
+        "name": "Rim",
+        "hint": "Edge light: the bright line round the silhouette and the backdrop's lamps catching it."
+      },
+      "glow": {
+        "name": "Glow",
+        "hint": "Bloom, halo and light wrapping round the edges."
+      },
+      "blur": {
+        "name": "Backdrop blur",
+        "hint": "Depth of field on the backdrop behind the cast."
+      },
+      "grain": {
+        "name": "Grain",
+        "hint": "Film grain over the whole frame."
+      }
+    },
+    "reaction": {
+      "nod": "Nod",
+      "shake": "Shake",
+      "hop": "Hop",
+      "tremble": "Tremble",
+      "lean": "Lean in"
+    },
+    "nameplates": {
+      "off": "Off",
+      "close": "On close-up",
+      "focus": "On focus"
+    },
+    "comms": {
+      "style": {
+        "holo": "Hologram",
+        "radio": "Radio",
+        "clean": "Clean"
+      },
+      "edge": {
+        "left": "Left",
+        "right": "Right"
+      },
+      "align": {
+        "top": "Top",
+        "center": "Centre",
+        "bottom": "Bottom"
+      },
+      "live": "Live",
+      "transmit": "TX",
+      "channel": "CH"
     }
+  }
 }
