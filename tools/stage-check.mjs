@@ -291,6 +291,25 @@ section = "director";
   f = d.step(t);
   ok("rapid restaging settles on the last state", f.figures.length === 1 && f.figures[0].id === "b");
 
+  // A silhouette: masked on its mark, no name card, revealed by the GM.
+  {
+    ok("a mark keeps its silhouette flag", M.normalizeMark({ id: "a", masked: true }).masked === true && M.normalizeMark({ id: "a" }).masked === false);
+    const d4 = new D.Director();
+    d4.setView(1920, 1080);
+    d4.setCast(cast);
+    d4.setArt("b.webp", info);
+    d4.setLayout({ nameplates: "close" });
+    d4.setState(M.normalizeState({ visible: true, shot: "close", close: "b", on: [{ id: "b", x: 0.5, masked: true }] }), 0, { immediate: true });
+    let g = d4.step(5000);
+    ok("a masked character stands as a silhouette", g.figures[0].mask === 1);
+    ok("a silhouette has no name card, even in a close-up", g.nameplate === null);
+    d4.setState(M.normalizeState({ visible: true, shot: "close", close: "b", on: [{ id: "b", x: 0.5, masked: false }] }), 5000);
+    const mid = d4.step(5000 + D.TIMING.reveal / 2).figures[0].mask;
+    ok("the reveal takes its time", mid > 0.05 && mid < 0.95 && d4.busy(5000 + D.TIMING.reveal / 2));
+    g = d4.step(5000 + D.TIMING.reveal + 1);
+    ok("the reveal lands exactly on the art, with its name card", g.figures[0].mask === 0 && g.nameplate?.name === "B" && g.nameplate.amount > 0.99);
+  }
+
   // The idle breath is the world's switch, off unless it says otherwise.
   {
     const still = d.step(t + 1234).figures.every((g) => g.motion[3] === 0);

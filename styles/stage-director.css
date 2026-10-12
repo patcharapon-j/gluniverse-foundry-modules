@@ -531,6 +531,8 @@
   pointer-events: none;
 }
 .glstage-dir-fig > img.is-flipped { scale: -1 1; }
+/* A silhouette on stage: dark here too, but still recognisable to the GM. */
+.glstage-dir-fig > img.is-masked { filter: brightness(0.22) saturate(0.4); }
 .glstage-dir-fig::after {
   content: "";
   position: absolute;

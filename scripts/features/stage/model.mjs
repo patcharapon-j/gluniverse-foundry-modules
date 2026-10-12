@@ -168,6 +168,8 @@ export function normalizeMark(raw) {
     x: num(r.x, 0, 1, 0.5),
     depth: num(r.depth, 0, 1, 0),
     flip: bool(r.flip, false),
+    // Shown as a silhouette until the GM reveals them.
+    masked: bool(r.masked, false),
   };
 }
 

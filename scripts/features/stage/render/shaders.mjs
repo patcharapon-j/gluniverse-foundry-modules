@@ -131,6 +131,8 @@ uniform float uWrap;
 uniform float uAO;
 uniform vec3 uHaze;
 uniform float uFlicker;     // 1 + live flicker offset
+uniform float uMask;        // 1 a silhouette, 0 revealed; between, the reveal sweeping up
+uniform vec3 uSilhouette;   // the silhouette's colour (linear): the room's deepest shade
 uniform float uDebug;       // 0 off · 1 normals · 2 rim · 3 occlusion · 4 light · 5 outline
 
 const vec2 TAPS[12] = vec2[12](
@@ -143,6 +145,18 @@ float alphaAt(vec2 uv) {
 }
 
 vec3 screenOver(vec3 a, vec3 b) { return 1.0 - (1.0 - a) * (1.0 - clamp(b, 0.0, 1.0)); }
+
+// Value noise for the reveal's ragged front.
+float maskHash(vec2 p) {
+  p = fract(p * vec2(443.897, 441.423));
+  p += dot(p, p.yx + 19.19);
+  return fract((p.x + p.y) * p.x);
+}
+float maskNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 s = f * f * (3.0 - 2.0 * f);
+  return mix(mix(maskHash(i), maskHash(i + vec2(1.0, 0.0)), s.x), mix(maskHash(i + vec2(0.0, 1.0)), maskHash(i + 1.0), s.x), s.y);
+}
 
 // Highlights past the shoulder roll off instead of clipping.
 vec3 rolloff(vec3 c, float s) {
@@ -275,6 +289,22 @@ void main() {
   lit *= 1.0 + uLit * 0.06;
 
   vec3 outLin = mix(albedo, lit, uStrength);
+
+  // ── the silhouette ──
+  // A character not yet revealed is a shape against the room: its deepest
+  // shade, with only the rim light on it (the outline and halo stay). The
+  // reveal sweeps up from the feet behind a lit seam. Skipped at 0, so a
+  // revealed character is exactly the lit one.
+  if (uMask > 0.0) {
+    float hgt = 1.0 - clamp(artUV.y, 0.0, 1.0) + (maskNoise(artUV * vec2(9.0, 14.0)) - 0.5) * 0.05;
+    float front = (1.0 - uMask) * 1.12 - 0.06;
+    float shown = smoothstep(hgt - 0.025, hgt + 0.025, front);
+    vec3 shade = uSilhouette + (rim * 0.9 + rimHue * spill * uRimGlow * 0.35) * uStrength;
+    outLin = mix(shade, outLin, shown);
+    // The front is a thin lit seam, the room's rim colour, fading behind it.
+    float seam = (front - hgt) / 0.012;
+    outLin += rimHue * exp(-seam * seam) * 0.45 * (1.0 - smoothstep(0.85, 1.0, 1.0 - uMask));
+  }
   float a = art.a * uAlpha;
 
   // ── the outline of light, and its halo ──
@@ -471,7 +501,7 @@ export const UNIFORMS = Object.freeze({
     "uSky", "uGround", "uEnvAmt", "uRoomLum", "uKeyDir", "uKeyColor", "uKey",
     "uRimPos", "uRimColor", "uRimPower",
     "uStroke", "uStrokeColor", "uStrokeFloor", "uRimGlow", "uHalo", "uHaloColor", "uDiffusion", "uWrap",
-    "uAO", "uHaze", "uFlicker", "uDebug",
+    "uAO", "uHaze", "uFlicker", "uMask", "uSilhouette", "uDebug",
   ],
   shadow: ["uView", "uCamera", "uFoot", "uThrow", "uShape", "uPad", "uFlipX", "uFootUV", "uShadowColor", "uShadow", "uAlpha"],
   backdrop: ["uSharp", "uMid", "uSoft", "uGlow", "uBgMap", "uAmount", "uBlur", "uBloom", "uLevel", "uTint", "uHaze", "uHazeColor"],

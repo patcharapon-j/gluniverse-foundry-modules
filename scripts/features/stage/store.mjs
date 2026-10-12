@@ -95,11 +95,11 @@ export async function patchState(patch) {
 export async function showStage(visible = true) { return patchState({ visible: !!visible }); }
 
 /** Bring a character on at the widest gap (or at `x`/`depth` if given). */
-export async function enter(id, { x, depth = 0 } = {}) {
+export async function enter(id, { x, depth = 0, masked = false } = {}) {
   const s = readState();
   if (s.on.some((m) => m.id === id)) return true;
   if (s.on.length >= MAX_ON_STAGE) return false;
-  const on = [...s.on, { id, x: Number.isFinite(x) ? x : openMark(s.on), depth, flip: false }];
+  const on = [...s.on, { id, x: Number.isFinite(x) ? x : openMark(s.on), depth, flip: false, masked: !!masked }];
   return writeState({ ...s, on, visible: true });
 }
 
@@ -119,11 +119,14 @@ export async function clearStage() {
   return writeState({ ...s, on: [], focus: null, close: null, shot: "wide" });
 }
 
-/** Move a character's mark: any of { x, depth, flip }. */
+/** Move a character's mark: any of { x, depth, flip, masked }. */
 export async function moveMark(id, patch) {
   const s = readState();
   return writeState({ ...s, on: s.on.map((m) => (m.id === id ? { ...m, ...patch } : m)) });
 }
+
+/** Show a character on stage as a silhouette (true) or reveal them (false). */
+export async function setMasked(id, masked) { return moveMark(id, { masked: !!masked }); }
 
 /** Even out the marks, keeping left-to-right order. */
 export async function spread() {

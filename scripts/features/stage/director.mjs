@@ -28,6 +28,9 @@ export const TIMING = Object.freeze({
   push: 1050,
   relight: 1400,
   backdrop: 900,
+  // A silhouette falls fast; the reveal is the GM's beat and takes its time.
+  mask: 500,
+  reveal: 1800,
   react: { nod: 560, shake: 520, hop: 520, tremble: 1000, lean: 900 },
 });
 
@@ -241,6 +244,7 @@ export class Director {
           id: mark.id, side, leaving: false,
           alpha: new Tween(0), slide: new Tween(side * 0.05), x: new Tween(mark.x), depth: new Tween(mark.depth),
           turn: new Tween(member ? this.facing(member, mark) : 1), lit: new Tween(0), dim: new Tween(0),
+          mask: new Tween(mark.masked ? 1 : 0),
           reacts: [], phase: hash01(mark.id),
         };
         this.figs.set(mark.id, f);
@@ -257,6 +261,7 @@ export class Director {
       if (member) f.turn.set(this.facing(member, mark), now, D(TIMING.turn));
       const lit = state.focus === mark.id ? 1 : 0;
       const dim = state.focus && state.focus !== mark.id ? 1 : 0;
+      f.mask.set(mark.masked ? 1 : 0, now, D(mark.masked ? TIMING.mask : TIMING.reveal), ease.inOut);
       f.lit.set(lit, now, D(TIMING.focus));
       f.dim.set(dim, now, D(TIMING.focus));
     }
@@ -341,7 +346,7 @@ export class Director {
     if (this.bg.from && this.bg.fade.busy(now)) return true;
     for (const f of this.figs.values()) {
       if (f.alpha.busy(now) || f.slide.busy(now) || f.x.busy(now) || f.depth.busy(now)) return true;
-      if (f.turn.busy(now) || f.lit.busy(now) || f.dim.busy(now)) return true;
+      if (f.turn.busy(now) || f.lit.busy(now) || f.dim.busy(now) || f.mask.busy(now)) return true;
       if (f.reacts.some((r) => now < r.t0 + r.dur)) return true;
     }
     return false;
@@ -419,6 +424,7 @@ export class Director {
         alpha,
         dim,
         lit,
+        mask: f.mask.value(now),
         depth,
         lod: blurOK ? dim * 1.1 * (1 - close) + depth * 0.5 : 0,
         pad: [padU, padV],
@@ -509,8 +515,9 @@ export class Director {
     const id = closeId ?? (mode === "focus" ? this.state.focus : null);
     if (!id) return null;
     const f = figures.find((x) => x.id === id);
-    if (!f) return null;
-    const amount = closeId ? close : f.lit;
+    // An unrevealed character has no name yet; the card arrives with the reveal.
+    if (!f || f.mask >= 0.999) return null;
+    const amount = (closeId ? close : f.lit) * (1 - f.mask);
     return { id, name: f.name, title: f.title, amount: amount * show, close: !!closeId, anchor: f.screen };
   }
 }

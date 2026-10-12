@@ -57,8 +57,8 @@
             {{#each stage.marks}}
               <div class="glstage-dir-fig {{#if selected}}is-selected{{/if}} {{#if focus}}is-focus{{/if}} {{#if closePush}}is-close{{/if}}{{#if closeCut}}is-close{{/if}}"
                 data-fig="{{id}}" data-x="{{x}}" data-depth="{{depth}}" data-height="{{height}}" style="{{figStyle}}">
-                <img class="{{#if flip}}is-flipped{{/if}}" src="{{src}}" alt="" draggable="false">
-                <span class="glstage-dir-fig-name">{{name}}</span>
+                <img class="{{#if flip}}is-flipped{{/if}} {{#if masked}}is-masked{{/if}}" src="{{src}}" alt="" draggable="false">
+                <span class="glstage-dir-fig-name">{{#if masked}}<i class="fa-solid fa-user-secret" aria-hidden="true"></i> {{/if}}{{name}}</span>
               </div>
             {{/each}}
           </div>
@@ -84,6 +84,9 @@
                   data-tooltip="{{localize "GLSTAGE.director.stage.closeCut"}}" aria-label="{{localize "GLSTAGE.director.stage.closeCut"}}"><i class="fa-solid fa-scissors"></i></button>
                 <button type="button" class="glstage-dir-mini {{#if flip}}is-on{{/if}}" data-action="flip" data-id="{{id}}" aria-pressed="{{#if flip}}true{{else}}false{{/if}}"
                   data-tooltip="{{localize "GLSTAGE.director.stage.flip"}}" aria-label="{{localize "GLSTAGE.director.stage.flip"}}"><i class="fa-solid fa-right-left"></i></button>
+                <button type="button" class="glstage-dir-mini {{#if masked}}is-on{{/if}}" data-action="mask" data-id="{{id}}" aria-pressed="{{#if masked}}true{{else}}false{{/if}}"
+                  data-tooltip="{{#if masked}}{{localize "GLSTAGE.director.stage.reveal"}}{{else}}{{localize "GLSTAGE.director.stage.mask"}}{{/if}}"
+                  aria-label="{{#if masked}}{{localize "GLSTAGE.director.stage.reveal"}}{{else}}{{localize "GLSTAGE.director.stage.mask"}}{{/if}}"><i class="fa-solid {{#if masked}}fa-eye{{else}}fa-user-secret{{/if}}"></i></button>
                 <button type="button" class="glstage-dir-mini glstage-dir-mini--danger" data-action="exit" data-id="{{id}}"
                   data-tooltip="{{localize "GLSTAGE.director.stage.exit"}}" aria-label="{{localize "GLSTAGE.director.stage.exit"}}"><i class="fa-solid fa-right-from-bracket"></i></button>
               </span>
@@ -128,6 +131,8 @@
                 {{else}}
                   <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--sm" data-action="enter" data-id="{{id}}" {{#unless canEnter}}disabled{{/unless}}>
                     <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.enter"}}</span></button>
+                  <button type="button" class="glstage-dir-mini" data-action="enterMasked" data-id="{{id}}" {{#unless canEnter}}disabled{{/unless}}
+                    data-tooltip="{{localize "GLSTAGE.director.stage.enterMasked"}}" aria-label="{{localize "GLSTAGE.director.stage.enterMasked"}}"><i class="fa-solid fa-user-secret"></i></button>
                 {{/if}}
               </li>
             {{/each}}

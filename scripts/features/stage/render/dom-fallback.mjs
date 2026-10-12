@@ -89,7 +89,9 @@ export class DomStage {
       img.style.transform = `translate(${x}px, ${y}px) rotate(${f.motion[2]}rad) scale(${f.flip}, ${1 + f.motion[3]})`;
       img.style.opacity = String(f.alpha);
       const dim = f.dim * (1 - f.lit);
-      img.style.filter = dim > 0.01 ? `brightness(${1 - dim * 0.42}) saturate(${1 - dim * 0.35})` : "";
+      // A silhouette is the picture taken down to its shape.
+      const level = (1 - dim * 0.42) * (1 - (f.mask ?? 0) * 0.95);
+      img.style.filter = level < 0.99 ? `brightness(${level}) saturate(${1 - Math.max(dim * 0.35, f.mask ?? 0)})` : "";
     });
     for (const [id, img] of this.imgs) if (!live.has(id)) { img.remove(); this.imgs.delete(id); }
   }

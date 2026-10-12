@@ -188,6 +188,7 @@ export function identityRig() {
     ao: 0,
     haze: [0.18, 0.18, 0.18],
     shadowColor: [0, 0, 0], shadow: 0,
+    silhouette: [0.006, 0.006, 0.006],
     flicker: 0,
     blur: 0, bloom: 0, bgLevel: 1, bgTint: [1, 1, 1], bgHaze: 0,
     glow: 0,
@@ -344,6 +345,8 @@ export function resolveRig(light, probe, { darkness = 0 } = {}) {
     haze: p.haze,
     shadowColor: scale3(chroma(p.shadow, 0.6), 0.02),
     shadow: 0.55 * (1 - d * 0.4) * k,
+    // An unrevealed character: the room's deepest shade, never paper black.
+    silhouette: scale3(mix3(WHITE, tintOf(p.shadow, 0.6), k), 0.006),
     flicker: flicker * k,
     blur: l.blur * k,
     bloom: bloom * k,

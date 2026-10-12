@@ -197,6 +197,11 @@ function DirectorApp() {
         clearStage: function () { return this._write(() => store.clearStage()); },
         wide: function () { return this._write(() => store.closeUp(null)); },
         enter: function (_e, t) { return this._enter(t.dataset.id); },
+        enterMasked: function (_e, t) { return this._enter(t.dataset.id, { masked: true }); },
+        mask: function (_e, t) {
+          const mark = store.readState().on.find((m) => m.id === t.dataset.id);
+          if (mark) return this._write(() => store.setMasked(mark.id, !mark.masked));
+        },
         exit: function (_e, t) { return this._write(() => store.exit(t.dataset.id)); },
         flip: function (_e, t) {
           const mark = store.readState().on.find((m) => m.id === t.dataset.id);
@@ -295,6 +300,7 @@ function DirectorApp() {
           thumb: thumb(m ?? {}),
           src: m?.image || DEFAULT_IMAGE,
           flip: mark.flip,
+          masked: mark.masked,
           focus: state.focus === mark.id,
           closePush: state.shot === "close" && state.close === mark.id && state.cut === "push",
           closeCut: state.shot === "close" && state.close === mark.id && state.cut === "cut",
@@ -861,12 +867,12 @@ function DirectorApp() {
 
     /* ── stage / comms ── */
 
-    async _enter(id) {
+    async _enter(id, { masked = false } = {}) {
       const s = store.readState();
       if (s.on.length >= MAX_ON_STAGE && !s.on.some((m) => m.id === id)) {
         return ui.notifications?.warn(L("GLSTAGE.director.stage.full", { max: MAX_ON_STAGE }));
       }
-      return this._write(() => store.enter(id));
+      return this._write(() => store.enter(id, { masked }));
     }
 
     async _call(id) {

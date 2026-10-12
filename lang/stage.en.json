@@ -59,6 +59,7 @@
         "clearHint": "Send everyone off. The stage stays up on the empty room.",
         "cast": "Cast",
         "enter": "Enter",
+        "enterMasked": "Enter as a silhouette",
         "onStage": "On stage",
         "noCast": "No characters yet.",
         "toCast": "Set up the cast",
@@ -67,6 +68,8 @@
         "closePush": "Close-up (push in)",
         "closeCut": "Close-up (hard cut)",
         "flip": "Turn to face the other way",
+        "mask": "Show as a silhouette",
+        "reveal": "Reveal",
         "exit": "Exit",
         "reactions": "Reactions",
         "reactFailed": "That reaction could not be sent."

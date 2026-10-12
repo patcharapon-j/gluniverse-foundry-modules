@@ -42,7 +42,7 @@ scripts/features/stage/
 | key | scope | what |
 |---|---|---|
 | `stage.cast` | world | the characters: name, epithet, art, facing, height, nudges, face, comms tint |
-| `stage.state` | world | shown or not, who is on which mark, focus, wide/close, push/cut |
+| `stage.state` | world | shown or not, who is on which mark (and whether as a silhouette), focus, wide/close, push/cut |
 | `stage.layout` | world | figure height, floor line, mark span, when name cards show |
 | `stage.comms` | world | open calls, who is speaking |
 | `stage.commsLayout` | world | edge, alignment, style (holo / radio / clean), size |
@@ -110,6 +110,14 @@ camera in on the character's head (the face locator's head box, else the shape's
 own) and shows the name card. Gestures are moments, never stored: the GM's
 client plays one at once and broadcasts it; every other client honours it only
 from a sender `meta.attested` says is a GM.
+
+A character can stand as a **silhouette** (`masked` on their mark: entered that
+way from the Director's roster, or toggled on stage) while the GM describes
+them: the room's deepest shade with only the rim light, the outline and the halo
+on it, and no name card. Revealing sweeps the art up from the feet behind a thin
+lit seam (`TIMING.reveal`); the name card arrives with it. The lite renderer
+darkens the picture instead. The art is still in the world's data, so this is
+staging, not a secret a player cannot dig out.
 
 Shedding is `Budget.ladder("stage", SHED_ORDER)`, cheapest loss first: grain,
 flicker, breath, halo, focus blur, shadows. The WebGL context is

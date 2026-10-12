@@ -25,6 +25,8 @@
  *   t=<ms>                freeze the clock at t ms after the page set its state
  *                         (entrances run from 0; t=4000 is settled)
  *   from=<shot>           start in this shot and cut to `shot` at 0, to seek a push
+ *   mask=a,b              these characters stand as silhouettes
+ *   reveal=a,b            these start as silhouettes and are revealed at 0
  *   split=1               left half unlit, right half lit
  *   ui=0                  hide the control strip (for screenshots)
  *   view=1..5             debug: normals · rim light · occlusion · the light alone · outline+halo
@@ -131,10 +133,13 @@ const light = { mood: q.get("mood") ?? "auto" };
 for (const k of ["strength", "match", "key", "rim", "glow", "blur", "grain"]) if (q.has(k)) light[k] = Number(q.get(k));
 const darkness = Number(q.get("darkness") ?? 0);
 const id = (n) => n?.replace(/[^A-Za-z0-9_-]/g, "") ?? null;
-const stateFor = (shot) => normalizeState({
+const idList = (k) => new Set((q.get(k) ?? "").split(",").map(id).filter(Boolean));
+const masks = idList("mask");
+const reveals = idList("reveal");
+const stateFor = (shot, before = false) => normalizeState({
   visible: true, shot, cut: q.get("cut") ?? "push",
   focus: id(q.get("focus")), close: id(q.get("close") ?? q.get("focus") ?? names[0]),
-  on: members.map((m, i) => ({ id: m.id, x: Number.isFinite(xs[i]) ? xs[i] : undefined, depth: ds[i] })),
+  on: members.map((m, i) => ({ id: m.id, x: Number.isFinite(xs[i]) ? xs[i] : undefined, depth: ds[i], masked: masks.has(m.id) || (before && reveals.has(m.id)) })),
 }, members.map((m) => m.id));
 // Unplaced marks spread evenly.
 const spread = (s) => ({ ...s, on: s.on.map((m, i) => ({ ...m, x: Number.isFinite(xs[i]) ? xs[i] : (s.on.length === 1 ? 0.5 : 0.18 + 0.64 * i / (s.on.length - 1)) })) });
@@ -154,7 +159,7 @@ for (const r of renderers) {
   if (q.get("debug") === "1" && r.strength !== 0) err(JSON.stringify({ probe: maps?.probe, rig }, (k, v) => typeof v === "number" ? Math.round(v * 1000) / 1000 : v));
   d.setRig(rig, 0, { immediate: true });
   const from = q.get("from");
-  if (from) d.setState(spread(stateFor(from)), 0, { immediate: true });
+  if (from || reveals.size) d.setState(spread(stateFor(from ?? q.get("shot") ?? "wide", true)), 0, { immediate: true });
   d.setState(spread(stateFor(q.get("shot") ?? "wide")), T0, {});
 }
 
@@ -187,6 +192,7 @@ for (const m of ["auto", "day", "golden", "dusk", "night", "fire", "neon", "stor
 link("wide", { shot: "wide", from: "close", t: null });
 for (const m of members) link("close:" + m.name, { shot: "close", close: m.name, from: "wide", t: null });
 for (const m of members) link("focus:" + m.name, { focus: m.name });
+for (const m of members) link("reveal:" + m.name, { reveal: m.name, mask: null, t: null });
 link("split", { split: q.get("split") === "1" ? "0" : "1" });
 </script>
 </body></html>

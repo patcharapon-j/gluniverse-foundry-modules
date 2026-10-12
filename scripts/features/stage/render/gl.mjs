@@ -316,6 +316,7 @@ export class StageGL {
       gl.uniform1f(u.uWrap, room ? r.wrap : 0);
       gl.uniform1f(u.uAO, r.ao);
       gl.uniform3fv(u.uHaze, r.haze);
+      gl.uniform3fv(u.uSilhouette, r.silhouette);
       gl.uniform1f(u.uFlicker, frame.flicker);
       gl.uniform1f(u.uDebug, frame.debug ?? 0);
       gl.uniform1f(u.uStrokePx, frame.strokePx);
@@ -341,6 +342,7 @@ export class StageGL {
         gl.uniform1f(u.uDim, f.dim);
         gl.uniform1f(u.uDepth, f.depth);
         gl.uniform1f(u.uLit, f.lit);
+        gl.uniform1f(u.uMask, f.mask);
         this._quadDraw();
       }
     }
