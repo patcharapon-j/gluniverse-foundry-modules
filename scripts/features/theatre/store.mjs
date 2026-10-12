@@ -423,8 +423,11 @@ export class TheatreStore {
     if (draws) measureSource(shot.src, { warn: (...a) => warn("theatre |", ...a) });   // warm it during the dip
 
     // A cut relights the cast in the same write, timed to land behind the transition.
-    if (kind === "shot" && shot?.grade) {
-      const frag = gradeFragment(shot.grade);
+    // The light always carries the shot's picture: Stage draws the shot from
+    // `src`, and a grade saved before it did (or none at all) has none.
+    if (kind === "shot" && (shot?.grade || shot?.src)) {
+      const grade = shot.grade ? { ...shot.grade, src: shot.grade.src || shot.src || null } : { src: shot.src };
+      const frag = gradeFragment(grade);
       if (frag) {
         Object.assign(upd, frag);
         const opts = {

@@ -190,6 +190,13 @@ section = "light";
   ok("lerpRig keeps every field", same(Object.keys(half).sort(), keys) && finiteDeep(half));
   ok("lerpRig at 0 and 1 is its ends", same(R.lerpRig(R.identityRig(), lit, 0), R.identityRig()) && same(R.lerpRig(R.identityRig(), lit, 1), lit));
   ok("darkness never brightens the cast", R.resolveRig(R.normalizeLight({}), probe, { darkness: 1 }).level <= lit.level);
+  // Strength is the whole look: a faint strength is faint outside the figures
+  // too, so the dial is continuous into its identity at 0.
+  for (const mood of R.MOODS ?? ["auto", "night"]) {
+    if (mood === "off") continue;
+    const faint = R.resolveRig(R.normalizeLight({ mood, strength: 0.001 }), probe, { darkness: 1 });
+    ok(`strength 0.001 is a breath of ${mood} outside the figures`, ["blur", "bloom", "glow", "grain", "shadow", "bgHaze", "flicker"].every((k) => faint[k] < 0.01) && Math.abs(faint.bgLevel - 1) < 0.01 && faint.bgTint.every((v) => Math.abs(v - 1) < 0.01));
+  }
 
   // Tints are hue only: unit luminance, so a tint never changes how bright the art is.
   for (const k of [0, 0.5, 1, 2]) ok(`tintOf(·, ${k}) is unit-luma`, Math.abs(P.lum(R.tintOf([0.6, 0.3, 0.1], k)) - 1) < 0.02);
@@ -284,6 +291,20 @@ section = "director";
   f = d.step(t);
   ok("rapid restaging settles on the last state", f.figures.length === 1 && f.figures[0].id === "b");
 
+  // Mirrored art whose figure is off-centre in its file stays on its mark.
+  {
+    const d2 = new D.Director();
+    d2.setView(1920, 1080);
+    d2.setCast(M.normalizeCast([{ id: "m", name: "M", image: "m.webp", faces: "left" }]));
+    d2.setArt("m.webp", { ...info, bounds: { x0: 0.08, y0: 0.05, x1: 0.42, y1: 0.95 } });
+    d2.setState(M.normalizeState({ visible: true, on: [{ id: "m", x: 0.3 }] }), 0, { immediate: true });
+    const g = d2.step(10000).figures[0];
+    const om = 0.25;
+    const w = g.rect[2] * (1 - 2 * g.pad[0]);
+    const body = g.rect[0] + g.rect[2] / 2 + g.flip * (om - 0.5) * w;
+    ok("mirrored off-centre art is drawn on its mark and its shadow", g.flip === -1 && Math.abs(body - g.foot[0]) < 0.5);
+  }
+
   // Close-up.
   d.setState(M.normalizeState({ visible: true, shot: "close", close: "b", focus: "b", on: [{ id: "b", x: 0.5 }] }), t);
   ok("a push-in settles", settle());
@@ -294,6 +315,21 @@ section = "director";
   d.setState(M.normalizeState({ visible: true, on: [{ id: "b", x: 0.5 }] }), t);
   settle();
   ok("back to wide", Math.abs(d.step(t).camera.zoom - 1) < 0.01);
+  // A resize lands the camera where the current shot puts it. The store's
+  // "back to wide" keeps `close` set, so the shot, not `close`, decides.
+  d.setState(M.normalizeState({ visible: true, shot: "close", close: "b", on: [{ id: "b", x: 0.5 }] }), t);
+  settle();
+  d.setView(1280, 720);
+  f = d.step(t);
+  const want = d.closeCamera("b");
+  ok("a resize mid close-up re-aims the push-in", Math.abs(f.camera.x - want.x) < 0.5 && Math.abs(f.camera.y - want.y) < 0.5 && Math.abs(f.camera.zoom - want.zoom) < 1e-3);
+  d.setState(M.normalizeState({ visible: true, shot: "wide", close: "b", on: [{ id: "b", x: 0.5 }] }), t);
+  settle();
+  d.setView(1600, 900);
+  f = d.step(t);
+  ok("a resize after a close-up re-centres the wide shot", Math.abs(f.camera.x - 800) < 0.5 && Math.abs(f.camera.y - 450) < 0.5 && Math.abs(f.camera.zoom - 1) < 1e-3);
+  d.setView(1920, 1080);
+  settle();
 
   // Gestures.
   for (const kind of M.REACTIONS) ok(`reaction ${kind} plays`, d.react("b", kind, t) === true);

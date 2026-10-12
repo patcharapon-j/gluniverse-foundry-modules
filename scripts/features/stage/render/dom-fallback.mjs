@@ -15,6 +15,10 @@ export class DomStage {
     this.layer = document.createElement("div");
     this.layer.className = "glstage-fallback";
     root.prepend(this.layer);
+    // The room, in its own layer so the picture arriving can be stacked over
+    // the one leaving (frame order), whatever order they were created in.
+    this.backLayer = document.createElement("div");
+    this.layer.prepend(this.backLayer);
     this.backs = new Map();
     this.imgs = new Map();
     this.srcOf = new Map();
@@ -35,6 +39,7 @@ export class DomStage {
 
     // The room.
     const liveBacks = new Set();
+    let order = 0;
     for (const b of frame.backdrops ?? []) {
       const src = this.srcOf.get(b.key);
       if (!src) continue;
@@ -44,9 +49,11 @@ export class DomStage {
         el = document.createElement("div");
         el.className = "glstage-fallback-back";
         el.style.backgroundImage = cssUrl(src);
-        this.layer.prepend(el);
         this.backs.set(b.key, el);
       }
+      const at = this.backLayer.children[order] ?? null;
+      if (at !== el) this.backLayer.insertBefore(el, at);
+      order++;
       // map: screen uv → picture uv (scale, offset); invert to place the picture.
       const [sx, sy, ox, oy] = b.map;
       el.style.width = `${W / sx}px`;

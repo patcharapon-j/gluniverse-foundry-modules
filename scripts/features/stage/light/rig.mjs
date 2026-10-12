@@ -306,6 +306,12 @@ export function resolveRig(light, probe, { darkness = 0 } = {}) {
 
   const flicker = l.flicker && p.warmth > 0.35 ? smooth(0.35, 0.8, p.warmth) : 0;
 
+  // Strength is the whole look: the figure pass mixes by it, and everything
+  // drawn outside the figures (the room's blur, bloom, dimming, the shadows,
+  // the grain) is scaled by it here, so 0.01 is a breath of the look, not all
+  // of the room's treatment with none of the cast's.
+  const k = clamp(l.strength, 0, 1);
+
   return {
     strength: l.strength,
     level,
@@ -337,15 +343,15 @@ export function resolveRig(light, probe, { darkness = 0 } = {}) {
     ao: 0.35,
     haze: p.haze,
     shadowColor: scale3(chroma(p.shadow, 0.6), 0.02),
-    shadow: 0.55 * (1 - d * 0.4),
-    flicker,
-    blur: l.blur,
-    bloom,
-    bgLevel: mix(1, 0.5, d),
-    bgTint: mix3(WHITE, MOON, d * 0.5),
-    bgHaze: 0.05 * l.glow,
-    glow,
-    grain: l.grain,
+    shadow: 0.55 * (1 - d * 0.4) * k,
+    flicker: flicker * k,
+    blur: l.blur * k,
+    bloom: bloom * k,
+    bgLevel: mix(1, mix(1, 0.5, d), k),
+    bgTint: mix3(WHITE, MOON, d * 0.5 * k),
+    bgHaze: 0.05 * l.glow * k,
+    glow: glow * k,
+    grain: l.grain * k,
   };
 }
 

@@ -535,7 +535,7 @@ function DirectorApp() {
     /** Merge a patch into a pending debounced write; `now` writes at once. */
     _queuePatch(ns, id, patch, now = false) {
       const key = `${ns}|${id ?? ""}`;
-      const entry = this._pending.get(key) ?? { ns, id, patch: {}, timer: 0, sceneId: globalThis.canvas?.scene?.id ?? null };
+      const entry = this._pending.get(key) ?? { ns, id, patch: {}, timer: 0, sceneId: ns === "light" ? id : null };
       Object.assign(entry.patch, patch);
       clearTimeout(entry.timer);
       this._pending.set(key, entry);
@@ -564,16 +564,17 @@ function DirectorApp() {
       return this._write(run).then(() => this._maybeFlushRender());
     }
 
-    _lightPatch(patch, now = false) {
-      if (!globalThis.canvas?.scene) return null;
-      this._queuePatch("light", null, patch, now);
+    /** A light edit, pinned to the scene it was made on (pending per scene). */
+    _lightPatch(patch, now = false, sceneId = globalThis.canvas?.scene?.id ?? null) {
+      if (!sceneId) return null;
+      this._queuePatch("light", sceneId, patch, now);
       return null;
     }
 
     async _lightReset() {
       const scene = globalThis.canvas?.scene;
       if (!scene) return;
-      const key = "light|";
+      const key = `light|${scene.id}`;
       if (this._pending.has(key)) { clearTimeout(this._pending.get(key).timer); this._pending.delete(key); }
       await this._write(() => store.writeLight(scene, { ...DEFAULT_LIGHT }, LIGHT_TIMING));
     }
@@ -854,7 +855,8 @@ function DirectorApp() {
       const scene = globalThis.canvas?.scene;
       if (!scene) return;
       const path = await pickImage(store.readLight(scene).src ?? "");
-      if (path) this._lightPatch({ src: path }, true);
+      // The scene the picker was opened for, not whichever is viewed now.
+      if (path) this._lightPatch({ src: path }, true, scene.id);
     }
 
     /* ── stage / comms ── */

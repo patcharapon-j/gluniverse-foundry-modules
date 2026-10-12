@@ -59,6 +59,27 @@ function loadVideoFrame(src) {
   });
 }
 
+/**
+ * A picture's size, without reading its pixels: what the lite renderer needs
+ * to place a picture it draws as it is (no CORS required).
+ */
+function loadPlainSize(src) {
+  if (VIDEO_RE.test(src)) {
+    return new Promise((resolve, reject) => {
+      const v = document.createElement("video");
+      v.muted = true;
+      v.preload = "metadata";
+      v.addEventListener("loadedmetadata", () => resolve({ w: v.videoWidth, h: v.videoHeight }), { once: true });
+      v.addEventListener("error", () => reject(new Error("video did not load")), { once: true });
+      v.src = src;
+    });
+  }
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  return img.decode().then(() => ({ w: img.naturalWidth, h: img.naturalHeight }));
+}
+
 /** The scene's darkness, 0..1, across v13/v14. */
 function darknessOf(scene) {
   const d = canvas?.scene === scene ? canvas?.environment?.darknessLevel : undefined;
@@ -84,6 +105,7 @@ export class StageOverlay {
     this._lastLight = null;
     this._warned = new Set();
     this._lastDark = null;
+    this._syncRev = 0;
     this._draw = Budget.measure(FEATURE_ID, (frame) => this.gl?.draw(frame));
   }
 
@@ -164,21 +186,42 @@ export class StageOverlay {
       else warn(`stage | WebGL2 unavailable (${gl.report}); drawing the stage without its lighting`);
     }
     if (!this.gl) {
-      this.dom.canvas.hidden = true;
-      this.lite = new DomStage(this.dom.root);
-      for (const [key, b] of this.backdrops) this.lite.setBackdrop(key, b.src);
+      this._useLite();
       return;
     }
     this.dom.canvas.hidden = false;
+    this._resize();
     this._upload();
     this.surface = Surfaces.register({
       id: "stage",
       element: () => this.dom?.canvas ?? null,
-      pause: () => { cancelAnimationFrame(this._raf); this._raf = 0; },
+      pause: () => { cancelAnimationFrame(this._raf); this._raf = 0; Budget.claimMotion(FEATURE_ID, false); },
       resume: () => this.wake(),
       release: () => { this.gl?.release(); },
       restore: () => this._restoreContext(),
     });
+  }
+
+  /**
+   * Draw with the lite renderer. It needs no pixels, so art and pictures the
+   * lit stage could not read are tried again as plain pictures.
+   */
+  _useLite() {
+    this.gl = null;
+    this.surface?.dispose();
+    this.surface = null;
+    this.dom.canvas.hidden = true;
+    this.lite = new DomStage(this.dom.root);
+    for (const [key, b] of this.backdrops) this.lite.setBackdrop(key, b.src);
+    for (const [src, a] of [...this.arts]) {
+      if (!a.failed) continue;
+      this.arts.delete(src);
+      this._ensureArt(src);
+    }
+    if (this.backdropKey && !this.backdrops.has(this.backdropKey)) {
+      this.backdropKey = null;
+      this._syncScene({ immediate: true });
+    }
   }
 
   /** A released or lost context stays lost on its canvas: rebuild on a new one. */
@@ -194,7 +237,11 @@ export class StageOverlay {
     if (!this.dom) return;
     const fresh = this._freshCanvas();
     const gl = new StageGL(fresh);
-    if (!gl.init()) { warn(`stage | could not rebuild the WebGL context (${gl.report})`); this.gl = null; return; }
+    if (!gl.init()) {
+      warn(`stage | could not rebuild the WebGL context (${gl.report}); drawing the stage without its lighting`);
+      this._useLite();
+      return;
+    }
     this.gl = gl;
     this._resize();
     this._upload();
@@ -294,6 +341,7 @@ export class StageOverlay {
         this.director.setState(readState(), now());
         this.wake();
       } catch (e) {
+        if (!this.gl && await this._plainArt(src)) return;
         this.arts.set(src, { failed: assetReason(src) ?? "error" });
         this._warnArt(src, e);
       } finally {
@@ -301,6 +349,22 @@ export class StageOverlay {
       }
     })();
     this.loading.set(src, job);
+  }
+
+  /** The lite renderer draws art it cannot read as it is: only its size is needed. */
+  async _plainArt(src) {
+    try {
+      const { w, h } = await loadPlainSize(src);
+      if (!(w > 0 && h > 0)) return false;
+      const info = { aspect: w / h, width: w, height: h, padU: 0, padV: 0, shapeTexel: [0, 0], bounds: { x0: 0, y0: 0, x1: 1, y1: 1 }, head: null, face: null };
+      this.arts.set(src, { plain: true, info });
+      this.director.setArt(src, info);
+      this.director.setState(readState(), now());
+      this.wake();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   _onFace(src, entry) {
@@ -338,10 +402,12 @@ export class StageOverlay {
 
   /** Re-read the scene's picture and light; cross-fade and relight together. */
   async _syncScene({ immediate = false, timing = null } = {}) {
+    const t0 = now();
+    const rev = ++this._syncRev;
     const scene = canvas?.scene ?? null;
     const light = readLight(scene);
     const src = this._sceneSrc(scene, light);
-    const opts = immediate ? { immediate: true } : timing ?? {};
+    let opts = immediate ? { immediate: true } : timing ?? {};
     const key = src ?? null;
     if (!key && this.backdropKey) {
       this.backdropKey = null;
@@ -351,12 +417,26 @@ export class StageOverlay {
       this.backdropKey = key;
       const b = await this._ensureBackdrop(key);
       if (this.backdropKey !== key) return; // a later change won
-      if (b?.maps) {
-        this.director.setBackdrop(key, roomOf(b.maps), now(), opts);
+      // A later sync of the same picture already applied its own light and
+      // timing; this one only brings the picture (and its probe) in.
+      const stale = rev !== this._syncRev;
+      if (stale) { opts = {}; timing = null; }
+      // The cue's timing counted from when the update arrived, not from when
+      // the picture was ready: land the relight where the cue put it.
+      if (timing && !immediate) opts = resolveTweenTiming({ ...timing, at: t0 }, now()) ?? opts;
+      if (b) {
+        this.director.setBackdrop(key, b.maps ? roomOf(b.maps) : b.room, now(), opts);
+        this._dropStaleBackdrops();
+      } else {
+        // Unreadable: never leave the last room standing behind this scene's
+        // light. The key is forgotten so a later change tries again.
+        this.backdropKey = null;
+        this.director.setBackdrop(null, null, now(), opts);
         this._dropStaleBackdrops();
       }
     }
-    this._lastLight = light;
+    // Re-read: the light may have moved while the picture was loading.
+    this._lastLight = readLight(canvas?.scene ?? null);
     this._applyRig(opts);
   }
 
@@ -392,6 +472,17 @@ export class StageOverlay {
       return b;
     } catch (e) {
       markTainted(src);
+      if (!this.gl) {
+        try {
+          const { w, h } = await loadPlainSize(src);
+          if (w > 0 && h > 0) {
+            const b = { src, maps: null, image: null, room: { ...roomOf(null), aspect: w / h } };
+            this.backdrops.set(src, b);
+            this.lite?.setBackdrop(src, src);
+            return b;
+          }
+        } catch { /* unreadable as a picture too */ }
+      }
       this._warnArt(src, e);
       return null;
     }

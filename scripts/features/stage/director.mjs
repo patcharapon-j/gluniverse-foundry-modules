@@ -137,10 +137,14 @@ export class Director {
 
   d(ms) { return this.scale(ms); }
 
+  /** A new view size: the camera lands where the current shot now puts it. */
   setView(w, h) {
-    const first = this.view.w === 1920 && this.view.h === 1080 && !this.figs.size;
     this.view = { w: Math.max(1, w), h: Math.max(1, h) };
-    if (first || !this.state.close) { this.cam.x.snap(this.view.w / 2); this.cam.y.snap(this.view.h / 2); }
+    const closeOn = this.state.shot === "close" ? this.state.close : null;
+    const target = closeOn ? this.closeCamera(closeOn) : { x: this.view.w / 2, y: this.view.h / 2, zoom: 1 };
+    this.cam.x.snap(target.x);
+    this.cam.y.snap(target.y);
+    this.cam.zoom.snap(target.zoom);
   }
 
   setLayout(layout) { this.layout = { ...this.layout, ...layout }; }
@@ -309,7 +313,8 @@ export class Director {
     const r = this.place(member, art, mark.x, mark.depth);
     const face = member.face ?? art.face ?? art.head ?? { x: 0.5, y: 0.14, h: 0.16 };
     const f = this.facing(member, mark);
-    const fx = f < 0 ? 1 - face.x : face.x;
+    // Mirrored about the opaque centre, which stays on the mark (see step).
+    const fx = f < 0 ? 2 * r.opaqueMid - face.x : face.x;
     return { x: r.left + fx * r.w, y: r.top + face.y * r.h, h: face.h * r.h, facing: f };
   }
 
@@ -385,7 +390,9 @@ export class Director {
       const padV = art.padV ?? 0.1;
       const qw = (r.w / (1 - 2 * padU)) * width;
       const qh = r.h / (1 - 2 * padV);
-      const cx = r.left + r.w / 2;
+      // The quad mirrors (and narrows through a turn) about its own centre;
+      // shift it so the opaque centre, not the file's, stays on the mark.
+      const cx = r.left + r.w / 2 + (1 - sign * width) * (r.opaqueMid - 0.5) * r.w;
       const rect = [cx - qw / 2, r.top - padV * qh, qw, qh];
 
       const lit = f.lit.value(now);
