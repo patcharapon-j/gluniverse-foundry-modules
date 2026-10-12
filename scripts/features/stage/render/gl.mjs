@@ -25,12 +25,15 @@ export class StageGL {
     this._bgs = new Map();
     this._dpr = 1;
     this._view = { w: 1, h: 1 };
+    this._quads = 0;
     this._onLost = (e) => { e.preventDefault(); this._lost = true; };
     canvas.addEventListener("webglcontextlost", this._onLost);
   }
 
   get ok() { return !!this.gl && !this._lost; }
   get lost() { return !!this._lost; }
+  /** Whether the last frame drawn put anything on the canvas. */
+  get showing() { return this.ok && this._quads > 0; }
 
   init() {
     const gl = this.canvas.getContext("webgl2", {
@@ -203,7 +206,7 @@ export class StageGL {
     gl.uniform1i(loc, unit);
   }
 
-  _quadDraw() { this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4); }
+  _quadDraw() { this._quads++; this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4); }
 
   /**
    * Draw one frame. See `director.mjs` for the frame's shape.
@@ -213,6 +216,7 @@ export class StageGL {
     if (!this.ok) return 0;
     const gl = this.gl;
     const dpr = this._dpr;
+    this._quads = 0;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.bindVertexArray(this._vao);
     gl.clearColor(0, 0, 0, 0);

@@ -18,9 +18,12 @@
  *     that has never been used is exempt: it was built ahead of time by an
  *     idle warm-up (`core/warmup.mjs`), and releasing it before its first real
  *     draw would throw the warm-up away and put the compile back on that draw.
+ *     So is a surface whose `holds()` says its canvas still shows a picture:
+ *     releasing wipes the canvas, and a feature that draws only while
+ *     something moves has no next frame to put the picture back.
  *
  * The feature keeps every decision about WHAT to draw; the registry only ever
- * calls the four callbacks it was handed. With the `perf` feature off, the
+ * calls the callbacks it was handed. With the `perf` feature off, the
  * policy's `glRelease` is 0 (never release) and `pauseHidden` false, and
  * off-screen pausing is the only thing that happens — which is what every one
  * of these surfaces should have been doing anyway.
@@ -40,6 +43,8 @@ import { Budget } from "./budget.mjs";
  * @property {() => void} [release]  free the GPU context; must be rebuildable
  * @property {() => void} [restore]  rebuild after a release (else the feature
  *                                   rebuilds lazily inside its own draw path)
+ * @property {() => boolean} [holds] true while the canvas shows a still picture
+ *                                   that a release would wipe; never released then
  */
 
 const _surfaces = new Set();
@@ -82,7 +87,7 @@ function sweep() {
   if (limit <= 0) return;
   const t = now();
   for (const s of _surfaces) {
-    if (s._used && !s._released && t - s._lastUse > limit * 1000) s._release();
+    if (s._used && !s._released && t - s._lastUse > limit * 1000 && !s._holds()) s._release();
   }
 }
 
@@ -165,6 +170,10 @@ class Surface {
       this._paused = true;
       try { this.spec.pause?.(); } catch (e) { console.error(`GLUniverse Suite | surface "${this.id}" pause failed`, e); }
     }
+  }
+
+  _holds() {
+    try { return this.spec.holds?.() === true; } catch { return false; }
   }
 
   _release() {

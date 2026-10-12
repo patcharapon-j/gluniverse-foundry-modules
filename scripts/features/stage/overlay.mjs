@@ -201,6 +201,8 @@ export class StageOverlay {
       resume: () => this.wake(),
       release: () => { this.gl?.release(); },
       restore: () => this._restoreContext(),
+      // A still stage draws no frame after a release: keep what it shows.
+      holds: () => !!this.gl?.showing,
     });
   }
 
