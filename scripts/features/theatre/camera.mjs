@@ -34,7 +34,9 @@ const SIDEBAR_FOLLOW_MS = 600;
 
 /**
  * The locked view of the scene rect on a screen.
- *   fill — the rect covers the visible screen (cropped where the aspects differ)
+ *   fill — the rect covers the visible screen (cropped where the aspects differ),
+ *          except that a sidebar never crops more of its sides than the whole
+ *          screen would: there it shrinks and the backdrop shows above and below
  *   fit  — the whole rect is shown inside the visible screen less `padding` per
  *          cent of its shorter side on every edge; the backdrop fills what is left
  * `right` is the width covered by the UI on the right (the expanded sidebar):
@@ -50,7 +52,14 @@ export function frameView(sceneRect, screenW, screenH, { mode = "fill", padding 
   if (mode === "fit") {
     const pad = (Math.max(0, Math.min(PADDING_MAX, Number(padding) || 0)) / 100) * Math.min(w, screenH);
     scale = Math.min(Math.max(1, w - 2 * pad) / r.width, Math.max(1, screenH - 2 * pad) / r.height);
-  } else scale = Math.max(w / r.width, screenH / r.height);
+  } else {
+    scale = Math.max(w / r.width, screenH / r.height);
+    // The sidebar never crops more of the frame's sides than the whole screen
+    // would: past that the frame shrinks to fit beside it and the backdrop
+    // fills above and below, rather than its left edge falling off the screen.
+    const overflow = Math.max(0, r.width * Math.max(screenW / r.width, screenH / r.height) - screenW);
+    scale = Math.min(scale, (w + overflow) / r.width);
+  }
   // The pivot sits at the screen's centre; the frame's centre sits half the inset left of it.
   return { x: r.x + r.width / 2 + inset / 2 / scale, y: r.y + r.height / 2, scale };
 }

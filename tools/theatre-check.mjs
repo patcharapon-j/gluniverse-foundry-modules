@@ -417,8 +417,13 @@ section = "framing";
     for (const mode of ["fill", "fit"]) {
       const s = onScreen(frameView(rect, sw, sh, { mode, padding: 5 }, { right }));
       ok(`${mode} ${sw}×${sh} sidebar ${right}: the frame is centred in the visible screen`, Math.abs(s.left + s.width / 2 - vis / 2) < 1e-6 && Math.abs(s.top + s.height / 2 - sh / 2) < 1e-6);
-      if (mode === "fill") ok(`fill ${sw}×${sh} sidebar ${right}: the frame covers the visible screen`, s.left <= 1e-6 && s.left + s.width >= vis - 1e-6 && s.top <= 1e-6 && s.top + s.height >= sh - 1e-6);
-      else ok(`fit ${sw}×${sh} sidebar ${right}: the whole frame is visible, clear of the sidebar`, s.left >= -1e-6 && s.left + s.width <= vis + 1e-6 && s.top >= -1e-6 && s.top + s.height <= sh + 1e-6);
+      if (mode === "fill") {
+        const full = onScreen(frameView(rect, sw, sh, { mode }));
+        const cropFull = Math.max(0, full.width - sw), crop = Math.max(0, s.width - vis);
+        ok(`fill ${sw}×${sh} sidebar ${right}: the sidebar crops no more of the frame's sides than the screen does`, crop <= cropFull + 1e-6);
+        ok(`fill ${sw}×${sh} sidebar ${right}: the frame still spans the visible width`, s.left <= 1e-6 && s.left + s.width >= vis - 1e-6);
+        ok(`fill ${sw}×${sh} sidebar ${right}: the frame shrinks no more than it must`, s.height >= sh - 1e-6 || Math.abs(crop - cropFull) < 1e-6);
+      } else ok(`fit ${sw}×${sh} sidebar ${right}: the whole frame is visible, clear of the sidebar`, s.left >= -1e-6 && s.left + s.width <= vis + 1e-6 && s.top >= -1e-6 && s.top + s.height <= sh + 1e-6);
     }
   }
   ok("no sidebar is the plain framing", JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 }, { right: 0 })) === JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 })));
