@@ -131,6 +131,7 @@ export function buildCatalog() {
             scope: cfg.scope ?? "world",
             control,
             choices: cfg.choices ?? null,
+            numeric: cfg.type === Number,
             range: cfg.range ?? null,
           });
         }
