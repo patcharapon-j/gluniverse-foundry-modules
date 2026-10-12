@@ -281,12 +281,18 @@ export class StageGL {
     // Figures, back to front (the director sorts).
     if (figs.length) {
       const room = this._bgs.get(frame.envKey);
+      // The room being left, while the backdrop cross-fades (both must be here to mix).
+      const from = room && frame.envFrom ? this._bgs.get(frame.envFrom.key) : null;
       const u = this._bind("figure");
       gl.uniform2fv(u.uView, view);
       gl.uniform3fv(u.uCamera, cam);
       gl.uniform4fv(u.uEnvMap, frame.envMap);
+      gl.uniform4fv(u.uEnvMapB, from ? frame.envFrom.map : frame.envMap);
+      gl.uniform1f(u.uEnvMix, from ? frame.envFrom.mix : 0);
       this._tex(2, room?.env, u.uEnv);
       this._tex(3, room?.glow ?? this._black, u.uGlow);
+      this._tex(4, from?.env ?? room?.env, u.uEnvB);
+      this._tex(5, from?.glow ?? room?.glow ?? this._black, u.uGlowB);
       gl.uniform1f(u.uStrength, r.strength);
       gl.uniform1f(u.uLevel, r.level);
       gl.uniform1f(u.uShoulder, r.shoulder);

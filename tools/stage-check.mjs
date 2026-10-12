@@ -395,6 +395,19 @@ section = "director";
   settle();
   d.step(t);
   ok("after the fade only the new one is", same(d.backdropsInUse(), ["room2"]));
+
+  // A timed change (Theatre's cut) relights the cast with the picture, not on receipt.
+  d.setBackdrop("dimA", { lum: 0.1, floorColor: [0.1, 0.1, 0.1], aspect: 16 / 9 }, t, { immediate: true });
+  d.step(t);
+  d.setBackdrop("dimB", { lum: 0.5, floorColor: [0.5, 0.5, 0.5], aspect: 4 / 3 }, t, { delayMs: 700, durationMs: 240 });
+  const before = d.step(t + 300);
+  ok("before the cue's beat the cast is still lit by the room being left", before.envFrom?.key === "dimA" && before.envFrom.mix === 1 && Math.abs(before.roomLum - 0.1) < 1e-9 && Math.abs(before.floor.color[0] - 0.1) < 1e-9);
+  const mid = d.step(t + 820);
+  ok("during the beat the two rooms cross-fade", mid.envFrom && mid.envFrom.mix > 0 && mid.envFrom.mix < 1 && mid.roomLum > 0.1 && mid.roomLum < 0.5 && finiteDeep(mid.envFrom.map));
+  const after = d.step(t + 1000);
+  ok("after the beat only the new room lights the cast", after.envFrom === null && Math.abs(after.roomLum - 0.5) < 1e-9);
+  const gl = stripComments(read(`${FEAT}/render/gl.mjs`));
+  ok("the renderer reads the room being left", /frame\.envFrom/.test(gl));
 }
 
 /* ── Timing: a cue lands together on every client ──────────────────────── */

@@ -470,15 +470,28 @@ export class Director {
       veils.push({ key: this.bg.to, map: toMap, amount: glow * fade });
     }
     const envMap = coverMap(this.view, room.aspect, { zoom: bgZoom, focus });
+    // The room lighting the cast cross-fades with the picture: a cue that
+    // changes the backdrop relights the cast when the picture changes, not
+    // when the update arrives.
+    const leaving = this.bg.from ? this.rooms.get(this.bg.from) : null;
+    const envMix = leaving ? 1 - fade : 0;
+    const envFrom = leaving && envMix > 0
+      ? { key: this.bg.from, map: coverMap(this.view, leaving.aspect ?? 16 / 9, { zoom: bgZoom, focus }), mix: envMix }
+      : null;
+    const roomLum = envFrom ? room.lum + (leaving.lum - room.lum) * envMix : room.lum;
+    const floorColor = envFrom
+      ? room.floorColor.map((c, i) => c + ((leaving.floorColor?.[i] ?? c) - c) * envMix)
+      : room.floorColor;
 
     return {
       time: now,
       view: { w: W, h: H },
       camera,
       rig: { ...rig, halo: this.allows("halo") ? rig.halo : 0 },
-      roomLum: room.lum,
+      roomLum,
       envKey: this.bg.to,
       envMap,
+      envFrom,
       flicker,
       shadowAmount: this.allows("shadows") ? 1 - close : 0,
       backdrops,
@@ -494,7 +507,7 @@ export class Director {
       grain: this.allows("grain") ? rig.grain * show : 0,
       strokePx: Math.max(1.25, (2 * H) / 1080) * (1 + 0.4 * close),
       close: { amount: close * show },
-      floor: { amount: 0.28 * show * (1 - close) * Math.min(1, figures.length), color: room.floorColor, top: 0.6 },
+      floor: { amount: 0.28 * show * (1 - close) * Math.min(1, figures.length), color: floorColor, top: 0.6 },
       vignette: (0.14 + 0.28 * close) * show,
       bars: 0.085 * close * show,
       figures,

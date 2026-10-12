@@ -83,11 +83,15 @@ uniform sampler2D uArt;
 uniform sampler2D uShape;   // r edge blur (edges continued), g body blur, b soft blur, a alpha
 uniform sampler2D uEnv;     // the backdrop, very soft
 uniform sampler2D uGlow;    // the backdrop's bloom, linear light encoded as sRGB
+uniform sampler2D uEnvB;    // the room being left, while the backdrop cross-fades
+uniform sampler2D uGlowB;
 uniform vec2 uPad;          // padding as uv fraction of the quad, each side
 uniform vec2 uShapeTexel;   // 1 / shape size
 uniform float uFlipX;
 uniform vec2 uView;
 uniform vec4 uEnvMap;       // screen px → picture uv: scale.xy, offset.xy
+uniform vec4 uEnvMapB;      // the same for the room being left
+uniform float uEnvMix;      // how much of the room being left still lights the cast (0 = none)
 uniform float uBaseLod;     // the art texture's mip for its size on screen
 uniform float uLod;         // extra blur: the focus pull and depth
 uniform float uDiffLod;     // the mip the diffusion reads
@@ -192,11 +196,14 @@ void main() {
   vec2 dir2 = length(nxy) > 1e-4 ? normalize(nxy) : vec2(0.0);
 
   vec2 picUV = vScreen * uEnvMap.xy + uEnvMap.zw;
+  vec2 picUVB = vScreen * uEnvMapB.xy + uEnvMapB.zw;
   vec3 roomGlow = toLinear(texture(uGlow, picUV).rgb);
+  if (uEnvMix > 0.0) roomGlow = mix(roomGlow, toLinear(texture(uGlowB, picUVB).rgb), uEnvMix);
   float dimK = uDim * (1.0 - uLit);
 
   // ── the room's light on the cast ──
   vec3 env = toLinear(texture(uEnv, picUV + vec2(n.x, -n.y) * 0.16).rgb);
+  if (uEnvMix > 0.0) env = mix(env, toLinear(texture(uEnvB, picUVB + vec2(n.x, -n.y) * 0.16).rgb), uEnvMix);
   float el = max(luma(env), 1e-4);
   vec3 envChroma = mix(vec3(1.0), env / el, 0.5);
   float envRel = clamp(pow(el / max(uRoomLum, 1e-4), 0.3), 0.6, 1.5);
@@ -341,6 +348,7 @@ void main() {
   // The halo is the room's own light round the figure: the colour of the
   // backdrop right there, a little brighter than it, leaning on the rig's.
   vec3 envHere = toLinear(texture(uEnv, picUV).rgb);
+  if (uEnvMix > 0.0) envHere = mix(envHere, toLinear(texture(uEnvB, picUVB).rgb), uEnvMix);
   float eh = luma(envHere);
   vec3 haloLin = mix(envHere / max(eh, 1e-4) * clamp(eh * 2.6 + 0.03, 0.05, 0.6), uHaloColor, 0.3);
   vec3 haloSRGB = toSRGB(haloLin) * haloA * 0.6;
@@ -500,7 +508,7 @@ void main() {
 export const UNIFORMS = Object.freeze({
   figure: [
     "uView", "uCamera", "uRect", "uMotion", "uFlipX",
-    "uArt", "uShape", "uEnv", "uGlow", "uPad", "uShapeTexel", "uEnvMap",
+    "uArt", "uShape", "uEnv", "uGlow", "uEnvB", "uGlowB", "uPad", "uShapeTexel", "uEnvMap", "uEnvMapB", "uEnvMix",
     "uBaseLod", "uLod", "uDiffLod", "uArtPx", "uStrokePx",
     "uAlpha", "uDim", "uDepth", "uLit",
     "uStrength", "uLevel", "uShoulder", "uContrast", "uSaturation", "uTintShadow", "uTint", "uTintHigh", "uLift",
