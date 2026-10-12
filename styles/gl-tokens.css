@@ -423,7 +423,8 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
      • #gluni-initiative  — scales itself via `transform: scale(var(--gl-ui-scale))`
        (its fixed edge-anchoring needs transform, not zoom).
      • #gls-control-center — the panel that hosts the slider; zooming it would
-       make it resize under the cursor while dragging.
+       make it resize under the cursor while dragging. It is drawn in Foundry's
+       own form styling, so it follows Foundry's scale rather than the suite's.
    ════════════════════════════════════════════════════════════════════════ */
 #glct-hud,
 #glct-tracker-hud,
@@ -710,7 +711,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
-  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  #gluniverse-pf2e-statblock-importer,
   .gluni-initiative, .glo-root
 ) button:not(.gl-btn) {
   transition: scale var(--gl-d-tap) var(--gl-ease);
@@ -720,7 +721,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
-  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  #gluniverse-pf2e-statblock-importer,
   .gluni-initiative, .glo-root
 ) button:not(.gl-btn):active:not(:disabled) {
   scale: var(--gl-press-scale);
@@ -744,7 +745,7 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   #glct-calendar, #glct-events, #stream-pacer-hud,
   #gluniverse-stage-panel, #gluniverse-comms-overlay, #gllg-llm-log,
   #glddf-face-config, #gltimer-hud, #gltimer-panel, #gmyth-panel,
-  #gls-control-center, #gluniverse-pf2e-statblock-importer,
+  #gluniverse-pf2e-statblock-importer,
   .gluni-initiative, .glo-root
 ) :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
   outline: var(--gl-focus-outline);
@@ -753,293 +754,52 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 
 /* ── Scrollbar ──
    The suite's scrollable panels all want the same thin accent-tinted bar.
-   Was hand-rolled in the Control Center and re-invented in several features. */
-.gl-scroll,
-.gls-fm-list {
+   Was re-invented in several features. */
+.gl-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--gl-accent-soft) transparent;
 }
-.gl-scroll::-webkit-scrollbar,
-.gls-fm-list::-webkit-scrollbar { width: 10px; height: 10px; }
-.gl-scroll::-webkit-scrollbar-thumb,
-.gls-fm-list::-webkit-scrollbar-thumb {
+.gl-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.gl-scroll::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--gl-accent) 35%, transparent);
   border-radius: var(--gl-r-pill);
   border: 2px solid transparent;
   background-clip: content-box;
 }
-.gl-scroll::-webkit-scrollbar-thumb:hover,
-.gls-fm-list::-webkit-scrollbar-thumb:hover {
+.gl-scroll::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--gl-accent) 55%, transparent);
   background-clip: content-box;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
    Control Center (suite config app)
+   Drawn in Foundry's own form styling (.standard-form, .form-group, .hint) —
+   these rules are layout only: no colour, type or motion of the suite's.
    ════════════════════════════════════════════════════════════════════════ */
-/* The window-content is a flex column capped to the viewport, so the feature
-   list scrolls between a pinned intro and footer instead of letting the whole
-   window grow taller than the screen. */
-.gls-control-center .window-content {
-  padding: 0;
-  background: var(--gl-ink-0);
-  /* Fill the (possibly user-resized) window frame so the inner list scrolls
-     instead of overflowing and getting cropped when the window is made short. */
-  height: 100%;
-  min-height: 0;
-  max-height: calc(100vh - 120px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.gls-fm-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  font-family: var(--gl-display);
-  color: var(--gl-text);
-  padding: var(--gl-sp-8) var(--gl-sp-9) var(--gl-sp-9);
-  background:
-    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--gl-cyan) 8%, transparent), transparent 55%),
-    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
-}
-.gls-fm-intro {
-  flex: 0 0 auto;
-  margin: 0 0 var(--gl-sp-7);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-sm);
-  line-height: 1.5;
-}
-.gls-fm-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gl-sp-5);
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  /* room so the scrollbar doesn't clip the sections' glass edges/glow */
-  padding: 2px 8px 2px 2px;
-  margin: -2px -8px -2px -2px;
-  --gl-accent: var(--gl-cyan);
-}
-
-.gls-fm-section {
-  --gl-accent: var(--gl-cyan);
-  animation: gl-cascade var(--gl-d-reveal) var(--gl-ease) both;
-  /* Cards arrive in sequence rather than all at once. --gl-i is set by the
-     .gl-stagger helper on the list. */
-  animation-delay: calc(var(--gl-stagger) * var(--gl-i, 0));
-  overflow: hidden;
-  /* Keep each card at its natural height; the list scrolls instead of
-     squashing the cards (which would clip their settings) when space is tight. */
-  flex: 0 0 auto;
-  transition:
-    border-color var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-quick) var(--gl-ease);
-}
-/* State reads on the lead edge — a hairline that thickens and takes the
-   feature's accent when enabled, so the list is scannable without reading. */
-.gls-fm-section::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  background: var(--gl-accent);
-  opacity: 0.28;
-  transition: opacity var(--gl-d-quick) var(--gl-ease), width var(--gl-d-quick) var(--gl-ease);
-}
-/* `translate`, not `transform`: the cascade entrance above is `fill-mode: both`,
-   so its final `transform: translate(0,0)` stays applied for the life of the
-   element — and an animated value beats a plain declaration in the cascade. A
-   `transform` hover here would simply never fire. The independent property
-   composes on top of the animation instead of losing to it. */
-.gls-fm-section:hover {
-  border-color: var(--gl-accent-soft);
-  translate: 0 var(--gl-lift);
-  box-shadow: var(--gl-etch), var(--gl-elev-2);
-}
-.gls-fm-section.is-on { --gl-accent: var(--gl-good); }
-.gls-fm-section.is-on::after { opacity: 1; width: 3px; }
-.gls-fm-section.is-locked { opacity: 0.62; --gl-accent: var(--gl-text-dim); }
-.gls-fm-section.is-locked:hover { translate: none; }
-/* The pinned suite-wide card is always "open" but is not a feature toggle, so
-   keep it on the neutral cyan accent rather than the enabled-green. */
-.gls-fm-suite.is-on { --gl-accent: var(--gl-cyan); }
-
-.gls-fm-row {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  align-items: center;
-  gap: var(--gl-sp-6);
-  padding: var(--gl-sp-6) var(--gl-sp-7);
-}
-
-/* Feature body (settings + editors) — revealed when the feature is enabled. */
-.gls-sec-body {
-  display: none;
-  padding: var(--gl-sp-2) var(--gl-sp-7) var(--gl-sp-7) var(--gl-sp-7);
-  margin: var(--gl-sp-1) var(--gl-sp-7) 0 var(--gl-sp-7);
-  border-top: 1px solid var(--gl-hair);
-}
-.gls-fm-section.is-on .gls-sec-body { display: block; }
-
-.gls-fm-icon {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--gl-r-lg);
-  background: color-mix(in srgb, var(--gl-accent) 14%, var(--gl-ink-2));
-  border: 1px solid var(--gl-edge);
-  color: var(--gl-accent);
-  font-size: var(--gl-fs-xl);
-  box-shadow: inset 0 0 14px color-mix(in srgb, var(--gl-accent) 20%, transparent);
-  transition:
-    color var(--gl-d-quick) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease);
-}
-/* A single specular arc across the top-left of the tile — the same light every
-   glass surface in the suite catches, at icon scale. */
-.gls-fm-icon::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(150deg, var(--gl-glass-highlight), transparent 46%);
-}
-.gls-fm-section:hover .gls-fm-icon {
-  border-color: var(--gl-accent-soft);
-  box-shadow:
-    inset 0 0 18px color-mix(in srgb, var(--gl-accent) 30%, transparent),
-    0 0 12px var(--gl-bloom);
-}
-.gls-fm-name {
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-tight);
-  color: var(--gl-text-bright);
-}
-.gls-fm-hint { font-size: var(--gl-fs-xs); color: var(--gl-text-dim); line-height: 1.4; margin-top: 2px; }
-.gls-fm-lock {
-  margin-top: var(--gl-sp-2);
-  font-size: var(--gl-fs-2xs);
-  font-family: var(--gl-tech);
-  text-transform: uppercase;
-  letter-spacing: var(--gl-track-normal);
-  color: var(--gl-signal);
-}
-.gls-fm-corechip {
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-  color: var(--gl-cyan);
-  border: 1px solid color-mix(in srgb, var(--gl-cyan) 50%, transparent);
-  border-radius: var(--gl-r-pill);
-  padding: 3px 9px;
-}
-
-/* Toggle switch */
-.gls-switch { background: none; border: none; padding: var(--gl-sp-2); cursor: pointer; }
-/* The thumb squashes toward the direction of travel while held, then springs
-   to the far end on release — the toggle's whole "satisfying" budget, spent in
-   one place. */
-.gls-switch:active:not(:disabled) .gls-switch-thumb { width: 22px; border-radius: var(--gl-r-pill); }
-.gls-switch:hover:not(:disabled) .gls-switch-track { border-color: var(--gl-text-dim); }
-.gls-switch.is-on:hover:not(:disabled) .gls-switch-track { border-color: var(--gl-good-hot); }
-.gls-switch-track {
-  display: block;
-  width: 46px;
-  height: 24px;
-  border-radius: var(--gl-r-pill);
-  background: var(--gl-ink-2);
-  border: 1px solid var(--gl-edge);
-  position: relative;
-  transition: background var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease);
-}
-.gls-switch-thumb {
-  position: absolute;
-  top: 50%;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light)), var(--gl-text-dim));
-  transform: translateY(-50%);
-  transition:
-    left var(--gl-d-quick) var(--gl-snap),
-    width var(--gl-d-tap) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease);
-  box-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.50);
-}
-.gls-switch.is-on .gls-switch-track {
-  background: color-mix(in srgb, var(--gl-good) 30%, var(--gl-ink-2));
-  border-color: var(--gl-good);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-good) 45%, transparent);
-}
-.gls-switch.is-on .gls-switch-thumb {
-  left: 25px;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light)), var(--gl-good));
-}
-/* Squashing an ON thumb has to grow leftward or it runs off the track. */
-.gls-switch.is-on:active:not(:disabled) .gls-switch-thumb { left: 21px; }
-.gls-switch-sm.is-on:active:not(:disabled) .gls-switch-thumb { left: 19px; }
-.gls-switch-sm:active:not(:disabled) .gls-switch-thumb { width: 18px; }
-.gls-switch:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.gls-fm-foot {
-  flex: 0 0 auto;
+/* Cap the window to the viewport so the feature list scrolls between the intro
+   and the footer instead of the window growing taller than the screen. */
+#gls-control-center .window-content { max-height: calc(100vh - 120px); }
+.gls-cc { flex: 1 1 auto; min-height: 0; gap: 0.5rem; }
+.gls-cc-list { flex: 1 1 auto; min-height: 0; }
+.gls-cc-item { border-bottom: 1px solid var(--color-fieldset-border); }
+.gls-cc-item > summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--gl-sp-7);
-  margin-top: var(--gl-sp-7);
-  padding-top: var(--gl-sp-7);
-  border-top: 1px solid var(--gl-hair);
+  gap: 0.5rem;
+  min-height: 2rem;
+  cursor: pointer;
+  list-style: none;
 }
-.gls-fm-note { font-size: var(--gl-fs-xs); color: var(--gl-text-faint); }
+.gls-cc-item > summary::-webkit-details-marker { display: none; }
+.gls-cc-item > summary > i { flex: none; width: 1.25em; text-align: center; }
+.gls-cc-item > summary > .gls-cc-name { flex: 1; }
+.gls-cc-item > summary > input[type="checkbox"] { flex: none; margin: 0; }
+.gls-cc-item[open] > summary > .gls-cc-caret { rotate: 90deg; }
+.gls-cc-item.is-locked > summary > .gls-cc-name { opacity: 0.6; }
+.gls-cc-body { display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0 0.75rem 1.75rem; }
+.gls-cc-fields { display: flex; flex-direction: column; gap: 0.5rem; }
 
-/* ---- Control Center: settings controls inside a feature section ---- */
-
-/* Compact switch variant for boolean settings */
-.gls-switch-sm { padding: 2px; }
-.gls-switch-sm .gls-switch-track { width: 40px; height: 21px; }
-.gls-switch-sm .gls-switch-thumb { width: 15px; height: 15px; }
-.gls-switch-sm.is-on .gls-switch-thumb { left: 22px; }
-
-.gls-set-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--gl-sp-7);
-  padding: 9px var(--gl-sp-3);
-  margin: 0 calc(var(--gl-sp-3) * -1);
-  border-bottom: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-xs);
-  transition: background var(--gl-d-quick) var(--gl-ease);
-}
-/* Row highlight on hover. Settings lists are dense two-column grids; without
-   it the eye loses which hint belongs to which control halfway across. */
-.gls-set-row:hover { background: rgb(var(--gl-tint-light) / 0.03); }
-.gls-set-row:last-of-type { border-bottom: none; }
-.gls-set-name { font-weight: var(--gl-weight-medium); font-size: 12.5px; color: var(--gl-text-bright); }
-.gls-set-hint {
-  font-size: 10.5px;
-  color: var(--gl-text-dim);
-  line-height: 1.4;
-  margin-top: 2px;
-  max-width: 52ch;
-}
-.gls-set-ctl { display: flex; align-items: center; justify-content: flex-end; }
-
+/* Shared numeric field (the timer panel still uses it). */
 .gls-input {
   background: var(--gl-ink-2);
   border: 1px solid var(--gl-edge);
@@ -1058,25 +818,6 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--gl-accent) 22%, transparent);
 }
 .gls-input:disabled { opacity: 0.45; cursor: not-allowed; }
-.gls-select { cursor: pointer; }
-.gls-range { display: flex; align-items: center; gap: var(--gl-sp-5); }
-.gls-range input[type="range"] { min-width: 140px; padding: 0; accent-color: var(--gl-accent); }
-.gls-range-val {
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-xs);
-  color: var(--gl-accent);
-  min-width: 2.5ch;
-  text-align: right;
-}
-
-.gls-editor-row { display: flex; flex-wrap: wrap; gap: var(--gl-sp-4); margin-top: var(--gl-sp-6); }
-.gls-editor-btn { font-size: 11.5px; padding: var(--gl-sp-3) var(--gl-sp-6); }
-
-/* Reload affordance highlight after an enable toggle that needs a reload. */
-.gls-needs-reload .gls-fm-note { color: var(--gl-signal); }
-.gls-needs-reload .gls-btn-accent {
-  box-shadow: 0 0 16px color-mix(in srgb, var(--gl-accent) 50%, transparent);
-}
 
 /* ============================== ICON-ONLY SHEET HEADER BUTTONS ==============================
    GM choice (core.sheetHeaderIconOnly): collapse the label text of window-header
