@@ -160,6 +160,10 @@ export class SuiteConfigApp extends ApplicationV2 {
     section.className = "gls-cc-item";
     section.dataset.feature = def.id;
     section.classList.toggle("is-locked", !available);
+    // Whether the feature could run when this window was built. A dependent that
+    // only becomes available through a toggle here has not started this session,
+    // so its settings and editors stay hidden until the reload.
+    section.dataset.available = String(available);
 
     const summary = document.createElement("summary");
     const name = document.createElement("span");
@@ -274,6 +278,7 @@ export class SuiteConfigApp extends ApplicationV2 {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.dataset.action = "reload";
+      btn.dataset.reload = "";
       const label = document.createElement("span");
       label.textContent = T("GLS.config.saveReload", "Save & Reload");
       btn.append(icon("fa-solid fa-rotate"), label);
@@ -296,6 +301,9 @@ export class SuiteConfigApp extends ApplicationV2 {
    *  element outlives re-renders, so it is bound once. */
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
+    // A section opening grows an auto-height window downward; re-clamp it to
+    // the viewport so the footer stays on screen. `toggle` does not bubble.
+    this.element?.addEventListener("toggle", () => this.setPosition(), true);
     this.element?.addEventListener("change", (event) => {
       const el = event.target;
       if (el.dataset?.feature) return this.#onFeatureToggle(el);
@@ -339,7 +347,7 @@ export class SuiteConfigApp extends ApplicationV2 {
         box.disabled = !available;
         box.checked = on;
       }
-      this.#syncFields(section, on);
+      this.#syncFields(section, on && section.dataset.available === "true");
 
       const reason = Suite.unavailableReason(def);
       const lockIcon = section.querySelector(".gls-cc-lockicon");
@@ -365,11 +373,18 @@ export class SuiteConfigApp extends ApplicationV2 {
       return;
     }
     const next = box.checked;
-    await Suite.setEnabled(id, next);
+    try {
+      await Suite.setEnabled(id, next);
+    } catch (e) {
+      box.checked = !next;
+      return ui.notifications?.error(game.i18n.format("GLS.config.err.setSetting", { message: e.message }));
+    }
     // Update in place; no re-render, so open sections stay open.
     const section = box.closest(".gls-cc-item");
     if (section) this.#syncFields(section, next);
     this.#syncDependents(id);
+    // A feature that cannot switch live needs the reload: say so on the button.
+    if (!Suite.appliesLive(id)) this.element?.querySelector("[data-reload]")?.classList.add("bright");
   }
 
   async #onSettingChange(el) {
@@ -383,6 +398,10 @@ export class SuiteConfigApp extends ApplicationV2 {
     try {
       await game.settings.set(SUITE_ID, s.key, value);
     } catch (e) {
+      // Put the control back to what is actually stored.
+      const stored = getSetting(s.key);
+      if (s.control === "boolean") el.checked = !!stored;
+      else el.value = stored ?? "";
       ui.notifications?.error(game.i18n.format("GLS.config.err.setSetting", { message: e.message }));
     }
   }

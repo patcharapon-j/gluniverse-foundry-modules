@@ -266,7 +266,7 @@ onTrackersReady })`) rather than imported there; the same trap is documented for
 `pf2e-variant-rules` below.
 
 Restoring `core: true` on the adapter is
-not an error: the Control Center just draws a "Core" chip where the switch was,
+not an error: the Control Center just draws a "Core" tag where the checkbox was,
 and the feature is undisableable again with nothing said. And `registerSettings()`
 runs disabled or not, with side-effecting onChange handlers behind several of
 those keys — the engine's internal `timeHud` node is a `ct.moduleConfig` key

@@ -10,7 +10,7 @@
  * Both halves of that fail SILENTLY.
  *
  *   · `core: true` on the adapter is not an error and shows nothing in a diff —
- *     the Control Center simply draws a "Core" chip where the switch was, and
+ *     the Control Center simply draws a "Core" tag where the checkbox was, and
  *     the feature is undisableable again with no message anywhere.
  *
  *   · `registerSettings()` always runs, disabled or not, and several of those

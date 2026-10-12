@@ -798,7 +798,6 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .gls-cc-item.is-locked > summary > .gls-cc-name { opacity: 0.6; }
 .gls-cc-body { display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0 0.75rem 1.75rem; }
 .gls-cc-fields { display: flex; flex-direction: column; gap: 0.5rem; }
-.gls-cc-fields[hidden] { display: none; }
 
 /* Shared numeric field (the timer panel still uses it). */
 .gls-input {
