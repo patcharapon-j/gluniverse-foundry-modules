@@ -1,6 +1,5 @@
 /** Browser checks against the production classes. Run from the motion preview. */
 export async function runStageInitiativeMotionChecks() {
-  const { StageOverlay } = await import('../scripts/features/stage/StageOverlay.js');
   const { GLUniverseInitiativeOverlay } = await import('../scripts/features/initiative/gluniverse-initiative.mjs');
   const results = [];
   const check = (condition, message) => {
@@ -8,41 +7,8 @@ export async function runStageInitiativeMotionChecks() {
     results.push(message);
   };
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const image = color => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="120"><rect width="80" height="120" fill="${color}"/></svg>`)}`;
-  const actor = name => ({ name, image: image(name === 'A' ? 'purple' : name === 'B' ? 'blue' : 'green') });
-  const stage = new StageOverlay();
-  stage._ensurePostFX = () => null;
-  stage.render();
-  stage._element.style.setProperty('--gl-motion-scale', '0.1');
-  const state = (name, extra = {}) => ({ visible: true, slots: [{ slotId: 'motion-check', actor: name ? actor(name) : null }], ...extra });
-  try {
-    stage.applyState(state('A'));
-    stage.applyState(state('B'));
-    stage.applyState(state('C'));
-    await wait(180);
-    check(stage._element.querySelector('.stage-actor-img').alt === 'C', 'Stage rapid replacement settles on the latest actor');
-    stage.applyState(state(null));
-    stage.applyState(state('A'));
-    await wait(120);
-    check(stage._element.querySelector('.stage-actor-img')?.alt === 'A', 'Stage reassignment cancels pending content removal');
-    const slot = stage._element.querySelector('.stage-slot');
-    stage.applyState({ slots: [] });
-    stage.applyState(state('B'));
-    await wait(180);
-    check(stage._element.querySelector('.stage-slot') === slot && !stage._exitingElements.size, 'Stage revived slot survives an interrupted exit without duplication');
-    stage.applyState({ visible: false });
-    stage.applyState({ visible: true });
-    await wait(120);
-    check(!stage._element.classList.contains('hidden'), 'Stage hide/show reversal remains visible');
-    stage._element.style.setProperty('--gl-motion-scale', '0');
-    stage.applyState(state('C'));
-    await wait(80);
-    check(stage._element.querySelector('.stage-actor-img')?.alt === 'C', 'Stage zero duration settles without an uninitialized callback');
-    stage.applyState(state('B'));
-    stage.close();
-    await wait(120);
-    check(stage._motions.size === 0 && !document.querySelector('#gluniverse-stage-overlay'), 'Stage close cancels every channel without late DOM resurrection');
-  } finally { stage.close(); }
+  // The new Stage has no DOM motion to race: its director is pure and
+  // tools/stage-check.mjs drives it.
 
   const initiative = new GLUniverseInitiativeOverlay();
   initiative.root = document.createElement('div');

@@ -48,7 +48,7 @@
   "GLS.feature.insight.title": "Insight",
   "GLS.feature.insight.hint": "Passive, broadcastable on-screen notifications and cues.",
   "GLS.feature.stage.title": "Stage",
-  "GLS.feature.stage.hint": "Visual-novel presenter: actor portraits, dialogue and comms overlays.",
+  "GLS.feature.stage.hint": "A cinematic stage for your cast: characters lit by the room they stand in, a push-in close-up with a name card, and comms call-ins.",
   "GLS.feature.stream-pacer.title": "Stream Pacer",
   "GLS.feature.stream-pacer.hint": "GM/player pacing HUD: countdowns, spotlight, hand-raise and peril cues.",
   "GLS.feature.statsblock-import.title": "PF2e Stat Block Importer",

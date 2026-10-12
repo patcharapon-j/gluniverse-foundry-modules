@@ -1,703 +1,1034 @@
-/* ═══════════════════════════════════════════
-   GLUniverse Stage - Comms / Call-In Overlay
-   Themed portrait cards stacked on a screen edge.
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   Stage — comms: characters calling in from off stage.
 
-/* Typeface comes from the suite's canonical face layer (styles/gl-fonts.css),
-   which bundles Oxanium locally. When the clocks module is installed we still
-   inherit its exact --clock-font value below. */
+   A stack of portrait cards on one screen edge. Three looks share one DOM
+   (scripts/features/stage/comms/comms-overlay.mjs), chosen by
+   `data-style` on the root:
 
-/* Shared comms font: use the clock module's variable when present, else our
-   own Oxanium stack. */
-.gluniverse-comms-overlay,
-.glstage-comms-tab {
-    --comms-font: var(--gl-display);
+     holo   a translucent projection — scanlines, corner brackets, an emitter
+     radio  a gritty transmission — static, a signal meter, a hard frame
+     clean  the suite's Etched Glass card
+
+   Sits above the stage canvas (--gl-z-base) and Theatre's overlay (+1), below
+   every piece of Foundry UI. Never takes a pointer.
+
+   Sizing: everything on a card is a multiple of `--glstage-comms-u`, one
+   hundredth of the card's width, so a card scales as one picture. The width
+   is the GM's, shrunk when the stack would not fit the screen:
+     w = min(width, (avail − n·gap) / (n·k))
+   where k is the style's height-to-width ratio.
+
+   Backdrop roots: the clean card blurs through `.glstage-comms-glass`, and any
+   ANCESTOR of it with opacity, filter, clip-path or a mask stops that blur
+   seeing the scene. Card and body therefore only ever transform; fades and
+   wipes go on their children in the clean style.
+
+   Colour: each card carries the character's tint as --glstage-comms-tint
+   (written inline by the overlay). Each style derives its working colour
+   --glstage-comms-c from it, and everything else from that, on the card
+   itself — the :root-resolved --gl-glow/--gl-bloom/--gl-accent-soft/-faint
+   do not follow a scoped colour and are never read here.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.glstage-comms {
+  --glstage-comms-margin: 8vh;
+  --glstage-comms-gap: 14px;
+  --glstage-comms-dir: 1;
+  --glstage-comms-k: 1.3;
+  --glstage-comms-avail: calc(100vh - 2 * var(--glstage-comms-margin));
+  --glstage-comms-w: min(
+    calc(var(--glstage-comms-width, 188) * 1px),
+    calc((var(--glstage-comms-avail) - var(--glstage-comms-n, 1) * var(--glstage-comms-gap)) / (var(--glstage-comms-n, 1) * var(--glstage-comms-k)))
+  );
+  --glstage-comms-u: calc(var(--glstage-comms-w) / 100);
+
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gl-z-base) + 2);
+  pointer-events: none;
+  overflow: hidden;
+  font-family: var(--gl-display);
+  color: var(--gl-text-bright);
+}
+.glstage-comms[data-edge="left"] { --glstage-comms-dir: -1; }
+.glstage-comms[data-style="holo"] { --glstage-comms-k: 1.3; }
+.glstage-comms[data-style="radio"] { --glstage-comms-k: 1.42; }
+.glstage-comms[data-style="clean"] { --glstage-comms-k: 1.08; }
+
+/* ── the stack ──────────────────────────────────────────────────────── */
+
+.glstage-comms-stack {
+  position: absolute;
+  width: var(--glstage-comms-w);
+  display: flex;
+  flex-direction: column;
+}
+.glstage-comms[data-edge="right"] .glstage-comms-stack { right: var(--glstage-comms-inset, 20px); }
+.glstage-comms[data-edge="left"] .glstage-comms-stack { left: var(--glstage-comms-inset, 20px); }
+.glstage-comms[data-align="top"] .glstage-comms-stack {
+  top: calc(var(--glstage-comms-margin) + var(--glstage-comms-shift, 0) * 1vh);
+}
+.glstage-comms[data-align="center"] .glstage-comms-stack {
+  top: calc(50% + var(--glstage-comms-shift, 0) * 1vh);
+  translate: 0 -50%;
+}
+.glstage-comms[data-align="bottom"] .glstage-comms-stack {
+  bottom: calc(var(--glstage-comms-margin) - var(--glstage-comms-shift, 0) * 1vh);
 }
 
-/* ── Overlay container (mounted in #interface, below all UI) ── */
+/* A slot is one row of the stack. Its row opens before a card arrives and
+   closes after one leaves, so the rest of the stack glides rather than jumps.
+   The card overflows its row while the row is short; it is invisible then. */
+.glstage-comms-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--gl-d-move) var(--gl-ease);
+  --glstage-comms-delay: calc(var(--glstage-comms-i, 0) * var(--gl-stagger) * 2);
+}
+.glstage-comms-slot.is-collapsed {
+  grid-template-rows: 0fr;
+  transition: none;
+}
+.glstage-comms-slot.is-opening { --glstage-comms-delay: calc(var(--gl-d-brisk) + var(--glstage-comms-i, 0) * var(--gl-stagger) * 2); }
+.glstage-comms-slot.is-leaving {
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--gl-d-move) var(--gl-ease-inout) var(--gl-d-swift);
+}
+.glstage-comms-hold { min-height: 0; }
 
-.gluniverse-comms-overlay {
-    position: fixed;
-    /* Full viewport height so the stack can be vertically centred. */
-    top: 0;
-    bottom: 0;
-    width: var(--comms-width, 170px);
-    /* z-index 1: above the canvas, below all Foundry UI/HUD — same layer as
-       the stage. pointer-events: none keeps the UI underneath clickable. */
-    z-index: 1;
-    pointer-events: none;
-    transition: opacity var(--gl-d-swift) ease;
+/* ── the card ───────────────────────────────────────────────────────── */
+
+.glstage-comms-card {
+  --glstage-comms-tint: var(--gl-accent);
+  --glstage-comms-c: var(--glstage-comms-tint);
+  --glstage-comms-hot: color-mix(in oklab, var(--glstage-comms-c) 42%, rgb(var(--gl-tint-light)));
+  --glstage-comms-deep: color-mix(in oklab, var(--glstage-comms-c) 20%, var(--gl-ink-0));
+  --glstage-comms-veil: color-mix(in srgb, var(--glstage-comms-c) 30%, transparent);
+  --glstage-comms-haze: color-mix(in srgb, var(--glstage-comms-c) 14%, transparent);
+  position: relative;
+  margin-block: calc(var(--glstage-comms-gap) / 2);
+}
+/* Holo light: the character's tint lifted toward pale cyan. Mixing toward the
+   pale end keeps a warm tint warm; toward full cyan, orange mixes to grey. */
+.glstage-comms[data-style="holo"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 64%, var(--gl-cyan-hot)); }
+.glstage-comms[data-style="radio"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 34%, var(--gl-warn)); }
+
+.glstage-comms-body {
+  position: relative;
+  isolation: isolate;
+  transform-origin: calc(50% + 50% * var(--glstage-comms-dir)) 50%;
+  transition: transform var(--gl-d-swift) var(--gl-snap);
+}
+.glstage-comms[data-speaking] .glstage-comms-slot.is-speaking .glstage-comms-body {
+  transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * -5)) scale(1.05);
+}
+.glstage-comms[data-speaking] .glstage-comms-slot:not(.is-speaking) .glstage-comms-body {
+  transform: scale(0.94);
 }
 
-/* edge-right clears Foundry's right sidebar so cards stay visible on the canvas
-   (the overlay sits below the sidebar in z-order). --sidebar-width is provided
-   by Foundry v13+; the 0px fallback keeps the original behaviour everywhere it
-   isn't defined, so this can never regress. The edge offset is configurable. */
-.gluniverse-comms-overlay.edge-right {
-    right: calc(var(--sidebar-width, 0px) + var(--comms-edge-offset, 18px));
+/* Not speaking while someone else is: recede. Applied to the parts, never to
+   an ancestor of the glass (see the header). */
+.glstage-comms-glass,
+.glstage-comms-head,
+.glstage-comms-window,
+.glstage-comms-base,
+.glstage-comms-plate {
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), filter var(--gl-d-brisk) var(--gl-ease);
 }
-.gluniverse-comms-overlay.edge-left  {
-    left: var(--comms-edge-offset, 14px);
+.glstage-comms[data-speaking] .glstage-comms-slot:not(.is-speaking) :is(.glstage-comms-head, .glstage-comms-window, .glstage-comms-plate, .glstage-comms-base) {
+  opacity: 0.66;
+  filter: saturate(0.6) brightness(0.8);
+}
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot:not(.is-speaking) :is(.glstage-comms-head, .glstage-comms-window, .glstage-comms-plate) {
+  opacity: 0.6;
+  filter: saturate(0.35) brightness(0.72);
+}
+.glstage-comms[data-speaking] .glstage-comms-slot:not(.is-speaking) .glstage-comms-glass { opacity: 0.72; }
+
+.glstage-comms-glass {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
 }
 
-.gluniverse-comms-overlay.hidden {
+/* Parts a style does not draw. */
+.glstage-comms-head,
+.glstage-comms-tone,
+.glstage-comms-noise,
+.glstage-comms-lines,
+.glstage-comms-scan,
+.glstage-comms-flash,
+.glstage-comms-vignette,
+.glstage-comms-corner,
+.glstage-comms-live,
+.glstage-comms-base,
+.glstage-comms-signal {
+  display: none;
+}
+
+/* ── the picture window ─────────────────────────────────────────────── */
+
+.glstage-comms-window {
+  position: relative;
+  aspect-ratio: 1;
+  isolation: isolate;
+  overflow: hidden;
+}
+.glstage-comms-art {
+  position: absolute;
+  inset: 0;
+}
+.glstage-comms-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 12%;
+  user-select: none;
+}
+.glstage-comms-slot.is-artless .glstage-comms-img { visibility: hidden; }
+
+.glstage-comms-tone,
+.glstage-comms-noise,
+.glstage-comms-lines,
+.glstage-comms-scan,
+.glstage-comms-flash,
+.glstage-comms-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ── name plate ─────────────────────────────────────────────────────── */
+
+.glstage-comms-plate {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: calc(var(--glstage-comms-u) * 4);
+}
+.glstage-comms-id {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--glstage-comms-u) * 1.6);
+  min-width: 0;
+}
+.glstage-comms-name,
+.glstage-comms-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  line-height: var(--gl-lh-tight);
+}
+.glstage-comms-name {
+  font-family: var(--gl-display);
+  font-weight: var(--gl-weight-bold);
+  font-size: max(11px, calc(var(--glstage-comms-u) * 8.2));
+  letter-spacing: var(--gl-track-wide);
+}
+.glstage-comms-title {
+  font-family: var(--gl-display);
+  font-weight: var(--gl-weight-medium);
+  font-size: max(8px, calc(var(--glstage-comms-u) * 4.6));
+  letter-spacing: var(--gl-track-xwide);
+  color: var(--gl-text-dim);
+}
+.glstage-comms-title[hidden] { display: none; }
+
+/* The waveform: idle, a flat carrier; speaking, a live voice. Each bar has its
+   own rate and phase (--glstage-comms-k / -o) and envelope (-e). */
+.glstage-comms-wave {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--glstage-comms-u) * 1.1);
+  height: calc(var(--glstage-comms-u) * 11);
+}
+.glstage-comms-wave i {
+  display: block;
+  width: max(1.5px, calc(var(--glstage-comms-u) * 1.1));
+  height: 100%;
+  background: var(--glstage-comms-c);
+  border-radius: 1px;
+  transform: scaleY(0.08);
+  transform-origin: 50% 50%;
+  opacity: 0.5;
+  transition: transform var(--gl-d-brisk) var(--gl-ease), opacity var(--gl-d-brisk) var(--gl-ease);
+}
+.glstage-comms[data-speaking] .glstage-comms-slot.is-speaking .glstage-comms-wave i {
+  opacity: 1;
+  animation: glstage-comms-voice calc(var(--gl-d-slow) * var(--glstage-comms-k)) var(--gl-ease-inout) infinite alternate;
+  animation-delay: calc(var(--gl-d-slow) * var(--glstage-comms-o) * -1);
+}
+
+@keyframes glstage-comms-voice {
+  0%   { transform: scaleY(calc(0.14 + 0.1 * var(--glstage-comms-e))); }
+  18%  { transform: scaleY(calc(0.95 * var(--glstage-comms-e))); }
+  34%  { transform: scaleY(calc(0.38 * var(--glstage-comms-e))); }
+  52%  { transform: scaleY(calc(0.78 * var(--glstage-comms-e))); }
+  67%  { transform: scaleY(calc(0.2 + 0.1 * var(--glstage-comms-e))); }
+  84%  { transform: scaleY(var(--glstage-comms-e)); }
+  100% { transform: scaleY(calc(0.46 * var(--glstage-comms-e))); }
+}
+
+/* ══ HOLO ═══════════════════════════════════════════════════════════════
+   A projection: no panel, a tinted volume of light with scanlines, corner
+   brackets and an emitter line it is projected from.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.glstage-comms[data-style="holo"] .glstage-comms-window {
+  background:
+    radial-gradient(110% 70% at 50% 112%, color-mix(in srgb, var(--glstage-comms-c) 48%, transparent), transparent 72%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-deep) 46%, transparent), color-mix(in srgb, var(--glstage-comms-deep) 78%, transparent));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 34%, transparent),
+    inset 0 0 calc(var(--glstage-comms-u) * 14) var(--glstage-comms-haze),
+    0 0 calc(var(--glstage-comms-u) * 9) var(--glstage-comms-haze);
+  animation: glstage-comms-holo-idle var(--gl-loop-sm) var(--gl-linear) infinite;
+  animation-delay: calc(var(--gl-d-cinematic) * var(--glstage-comms-i, 0) * -1.7);
+}
+/* Screened: the art is light, so its darks fall away to the projection. */
+.glstage-comms[data-style="holo"] .glstage-comms-art { mix-blend-mode: screen; }
+.glstage-comms[data-style="holo"] .glstage-comms-img {
+  opacity: 0.96;
+  filter: saturate(0.85) brightness(1.14) contrast(1.06) drop-shadow(0 0 calc(var(--glstage-comms-u) * 1.2) color-mix(in srgb, var(--glstage-comms-c) 85%, transparent));
+  -webkit-mask-image: linear-gradient(to bottom, black 58%, transparent 97%);
+  mask-image: linear-gradient(to bottom, black 58%, transparent 97%);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-tone {
+  display: block;
+  background: var(--glstage-comms-c);
+  mix-blend-mode: color;
+  opacity: 0.5;
+}
+/* The projection's own light, pooling up from the emitter. */
+.glstage-comms[data-style="holo"] .glstage-comms-vignette {
+  display: block;
+  background:
+    radial-gradient(100% 55% at 50% 104%, color-mix(in srgb, var(--glstage-comms-c) 34%, transparent), transparent 72%),
+    linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.25), transparent 22%);
+  mix-blend-mode: screen;
+}
+.glstage-comms[data-style="holo"] .glstage-comms-lines {
+  display: block;
+  background: repeating-linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.34) 0 1px, transparent 1px 3px);
+}
+/* The scan band rides inside the scanline layer, which clips it: the holo
+   window itself leaves its overflow visible for the corner brackets. It moves
+   by transform, so it costs no repaint. */
+.glstage-comms[data-style="holo"] .glstage-comms-lines { overflow: hidden; }
+.glstage-comms[data-style="holo"] .glstage-comms-lines::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 32%;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--glstage-comms-c) 12%, transparent) 70%, color-mix(in srgb, var(--glstage-comms-hot) 30%, transparent) 97%, transparent);
+  animation: glstage-comms-holo-scan var(--gl-drift) var(--gl-linear) infinite;
+}
+.glstage-comms[data-style="holo"] .glstage-comms-flash {
+  display: block;
+  opacity: 0;
+  background: linear-gradient(to bottom, transparent 40%, color-mix(in srgb, var(--glstage-comms-hot) 55%, transparent) 50%, transparent 60%);
+  background-size: 100% 260%;
+  mix-blend-mode: screen;
+}
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-flash {
+  animation: glstage-comms-holo-key var(--gl-d-splash) var(--gl-ease) both;
+}
+.glstage-comms[data-style="holo"] .glstage-comms-lines { z-index: 1; }
+
+/* Corner brackets sit just outside the window, so it does not clip. */
+.glstage-comms[data-style="holo"] .glstage-comms-window { overflow: visible; }
+.glstage-comms[data-style="holo"] .glstage-comms-corner {
+  display: block;
+  position: absolute;
+  z-index: 2;
+  width: var(--glstage-comms-corner, calc(var(--glstage-comms-u) * 11));
+  height: var(--glstage-comms-corner, calc(var(--glstage-comms-u) * 11));
+  border: 0 solid var(--glstage-comms-hot);
+  filter: drop-shadow(0 0 calc(var(--glstage-comms-u) * 1.6) var(--glstage-comms-c));
+  transition: translate var(--gl-d-swift) var(--gl-snap), border-color var(--gl-d-brisk) var(--gl-ease);
+  --glstage-comms-spread: calc(var(--glstage-comms-u) * -1.6);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-corner[data-c="tl"] { top: var(--glstage-comms-spread); left: var(--glstage-comms-spread); border-top-width: 2px; border-left-width: 2px; }
+.glstage-comms[data-style="holo"] .glstage-comms-corner[data-c="tr"] { top: var(--glstage-comms-spread); right: var(--glstage-comms-spread); border-top-width: 2px; border-right-width: 2px; }
+.glstage-comms[data-style="holo"] .glstage-comms-corner[data-c="bl"] { bottom: var(--glstage-comms-spread); left: var(--glstage-comms-spread); border-bottom-width: 2px; border-left-width: 2px; }
+.glstage-comms[data-style="holo"] .glstage-comms-corner[data-c="br"] { bottom: var(--glstage-comms-spread); right: var(--glstage-comms-spread); border-bottom-width: 2px; border-right-width: 2px; }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-corner[data-c="tl"] { translate: calc(var(--glstage-comms-u) * -1.5) calc(var(--glstage-comms-u) * -1.5); }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-corner[data-c="tr"] { translate: calc(var(--glstage-comms-u) * 1.5) calc(var(--glstage-comms-u) * -1.5); }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-corner[data-c="bl"] { translate: calc(var(--glstage-comms-u) * -1.5) calc(var(--glstage-comms-u) * 1.5); }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-corner[data-c="br"] { translate: calc(var(--glstage-comms-u) * 1.5) calc(var(--glstage-comms-u) * 1.5); }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-window {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-hot) 70%, transparent),
+    inset 0 0 calc(var(--glstage-comms-u) * 16) var(--glstage-comms-veil),
+    0 0 calc(var(--glstage-comms-u) * 14) var(--glstage-comms-veil);
+}
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-lines::after { animation-duration: var(--gl-breathe); }
+
+/* "Live" tag, inner top corner, while speaking. */
+.glstage-comms[data-style="holo"] .glstage-comms-live {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--glstage-comms-u) * 1.6);
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--glstage-comms-u) * 4);
+  padding: calc(var(--glstage-comms-u) * 0.8) calc(var(--glstage-comms-u) * 2.2);
+  font-size: max(8px, calc(var(--glstage-comms-u) * 4.2));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--gl-ink-0);
+  background: var(--glstage-comms-hot);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 4) var(--glstage-comms-c);
+  opacity: 0;
+  translate: calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * -3) 0;
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), translate var(--gl-d-swift) var(--gl-ease);
+}
+.glstage-comms[data-edge="right"][data-style="holo"] .glstage-comms-live { left: calc(var(--glstage-comms-u) * -1.6); }
+.glstage-comms[data-edge="left"][data-style="holo"] .glstage-comms-live { right: calc(var(--glstage-comms-u) * -1.6); }
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-live { opacity: 1; translate: 0 0; }
+.glstage-comms-live-dot {
+  display: block;
+  width: calc(var(--glstage-comms-u) * 2);
+  height: calc(var(--glstage-comms-u) * 2);
+  border-radius: 50%;
+  background: currentColor;
+  animation: gl-blink var(--gl-d-slow) var(--gl-ease-inout) infinite;
+}
+
+/* Emitter: the line the picture is projected from, and its light cone. */
+.glstage-comms[data-style="holo"] .glstage-comms-base {
+  display: block;
+  position: relative;
+  z-index: 2;
+  height: 2px;
+  margin: calc(var(--glstage-comms-u) * -0.5) 6% 0;
+  background: linear-gradient(90deg, transparent, var(--glstage-comms-hot) 20%, rgb(var(--gl-tint-light)) 50%, var(--glstage-comms-hot) 80%, transparent);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 0 calc(var(--glstage-comms-u) * 8) var(--glstage-comms-veil);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-base::before {
+  content: "";
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 1px;
+  height: calc(var(--glstage-comms-u) * 34);
+  background: radial-gradient(60% 100% at 50% 100%, color-mix(in srgb, var(--glstage-comms-c) 34%, transparent), transparent 75%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity var(--gl-d-brisk) var(--gl-ease);
+}
+.glstage-comms[data-speaking][data-style="holo"] .glstage-comms-slot.is-speaking .glstage-comms-base::before { opacity: 1; }
+
+.glstage-comms[data-style="holo"] .glstage-comms-plate {
+  padding: calc(var(--glstage-comms-u) * 5) calc(var(--glstage-comms-u) * 2) 0;
+}
+.glstage-comms[data-style="holo"] .glstage-comms-name {
+  color: var(--glstage-comms-hot);
+  text-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 1px 2px var(--gl-shadow);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-title {
+  color: color-mix(in oklab, var(--glstage-comms-c) 62%, var(--gl-text-dim));
+  text-shadow: 0 1px 2px var(--gl-shadow);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-wave i {
+  background: var(--glstage-comms-hot);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 1.5) var(--glstage-comms-c);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-wave i:nth-child(n + 13) { display: none; }
+
+@keyframes glstage-comms-holo-idle {
+  0%, 31%, 33%, 71.5%, 73%, 100% { opacity: 1; }
+  32%   { opacity: 0.82; }
+  72%   { opacity: 0.88; }
+  72.4% { opacity: 0.96; }
+}
+@keyframes glstage-comms-holo-scan {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(320%); }
+}
+@keyframes glstage-comms-holo-key {
+  0%   { opacity: 1; background-position: 0 100%; }
+  100% { opacity: 1; background-position: 0 0; }
+}
+
+/* Arrival: a line of light, opened into a picture, with a chromatic tear. */
+.glstage-comms[data-style="holo"] .glstage-comms-slot.is-entering .glstage-comms-card {
+  animation: glstage-comms-holo-in var(--gl-d-cinematic) var(--gl-ease) both;
+  animation-delay: var(--glstage-comms-delay);
+}
+.glstage-comms[data-style="holo"] .glstage-comms-slot.is-leaving .glstage-comms-card,
+.glstage-comms[data-style="holo"].is-hidden .glstage-comms-slot .glstage-comms-card {
+  animation: glstage-comms-holo-out var(--gl-d-splash) var(--gl-exit) both;
+}
+
+@keyframes glstage-comms-holo-in {
+  0% {
     opacity: 0;
-    pointer-events: none;
-}
-
-/* The stack is absolutely positioned within the full-height overlay. How it
-   anchors vertically is set by the valign-* class on the overlay; --comms-voffset
-   is the offset relative to that anchor (px/vh fed in by updateLayout). */
-.glcomms-cards {
-    position: absolute;
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    align-items: flex-end;
-}
-.gluniverse-comms-overlay.edge-left .glcomms-cards { align-items: flex-start; }
-
-/* Centred (default): the stack's own centre sits at 50% (translateY(-50%)), so a
-   single card is dead-centre and the group grows symmetrically; the offset
-   nudges it up (negative) or down (positive). */
-.gluniverse-comms-overlay.valign-centered .glcomms-cards {
-    top: 50%;
-    transform: translateY(calc(-50% + var(--comms-voffset, 0px)));
-}
-/* From the top: the offset is the gap below the top edge. */
-.gluniverse-comms-overlay.valign-top .glcomms-cards {
-    top: var(--comms-voffset, 0px);
-}
-/* From the bottom: the offset is the gap above the bottom edge; the stack grows
-   upward from there. */
-.gluniverse-comms-overlay.valign-bottom .glcomms-cards {
-    bottom: var(--comms-voffset, 0px);
-}
-
-/* ── Card ── */
-
-.glcomms-card {
-    position: relative;
-    width: var(--comms-width, 170px);
-    transform-origin: center center;
-    transition: filter var(--gl-d-swift) ease, opacity var(--gl-d-swift) ease;
-    /* Accent colour driven by the active theme, overridden per-actor by tint. */
-    --comms-glow: rgba(120, 220, 255, 0.55);
-    /* Rim-light colour follows the actor tint, falling back to cool cyan. */
-    --comms-rim-color: var(--comms-tint, rgba(150, 226, 255, 0.95));
-}
-
-.glcomms-frame {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 3 / 4;
-    overflow: hidden;
-    border-radius: 8px;
-    background: #05080c;
-}
-
-.glcomms-portrait-wrap {
-    position: absolute;
-    inset: 0;
-    /* Subtle outer edge in the rim colour for separation against the frame.
-       drop-shadow respects the artwork's alpha (no-ops on opaque images). */
-    filter:
-        drop-shadow(0 0 3px color-mix(in srgb, var(--comms-rim-color) 45%, transparent))
-        drop-shadow(0 -1px 1px color-mix(in srgb, var(--comms-rim-color) 70%, transparent));
-}
-
-/* --gp-auto-pos / --gp-auto-scale frame the art on its detected head (set from
-   CommsOverlay); the GM's framing transform applies on top of them. */
-.glcomms-portrait {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: var(--gp-auto-pos, top center);
-    transform: var(--gp-transform, translate(0, 0)) scale(var(--gp-auto-scale, 1));
-    transform-origin: var(--gp-auto-pos, center center);
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-/* Inner rim light: a colour fill masked by the actor's own silhouette so the
-   glow lands ON the art (not an outline), brightest along the top edge and
-   fading inward — reads as backlight wrapping onto the figure. The mask and
-   transform match the portrait exactly so they stay aligned through framing. */
-.glcomms-rim {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    transform: var(--gp-transform, translate(0, 0)) scale(var(--gp-auto-scale, 1));
-    transform-origin: var(--gp-auto-pos, center center);
-    -webkit-mask: var(--portrait-src) var(--gp-auto-pos, top center) / cover no-repeat;
-    mask: var(--portrait-src) var(--gp-auto-pos, top center) / cover no-repeat;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--comms-rim-color) 92%, white) 0%,
-        color-mix(in srgb, var(--comms-rim-color) 55%, transparent) 14%,
-        transparent 36%
-    );
-    mix-blend-mode: screen;
-    opacity: 0.9;
-    filter: blur(1.5px);
-}
-
-.glcomms-fx {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-}
-
-/* ── Name plate ── */
-
-.glcomms-name {
-    margin-top: 5px;
-    align-self: center;
-    max-width: 100%;
-    padding: 3px 10px;
-    font-family: var(--comms-font);
-    font-size: 12px;
-    font-weight: var(--gl-weight-bold);
-    letter-spacing: 0.6px;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-radius: 4px;
-}
-
-/* ── Status badge ── */
-
-.glcomms-status {
-    position: absolute;
-    left: 6px;
-    bottom: 6px;
-    z-index: 8; /* stay above CRT beam/vignette */
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 7px;
-    font-family: var(--comms-font);
-    font-size: 9px;
-    font-weight: var(--gl-weight-bold);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border-radius: 3px;
-}
-
-.glcomms-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-}
-
-.glcomms-status-text::after { content: attr(data-live); }
-.glcomms-connecting .glcomms-status-text::after { content: attr(data-connecting); }
-
-.glcomms-card:not(.glcomms-connecting) .glcomms-status-dot {
-    animation: glcomms-pulse var(--gl-breathe) var(--gl-ease-inout) infinite;
-}
-.glcomms-connecting .glcomms-status-dot {
-    animation: glcomms-blink var(--gl-d-glide) steps(1) infinite;
-}
-@keyframes glcomms-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-@keyframes glcomms-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-
-/* ── Speaking / dimmed ── */
-
-.glcomms-card.dimmed { opacity: 0.55; filter: saturate(0.55) brightness(0.82); }
-
-/* ── Active caller: light up the card + a glowing halo behind it ── */
-.glcomms-card.speaking { z-index: 2; }
-.glcomms-card.speaking .glcomms-frame { filter: brightness(1.14) saturate(1.1); }
-.glcomms-card.speaking::before {
-    content: "";
-    position: absolute;
-    inset: -12px;
-    z-index: -1;
-    border-radius: 18px;
-    background: radial-gradient(closest-side, var(--comms-glow), transparent 78%);
-    filter: blur(6px);
-    pointer-events: none;
-    animation: glcomms-halo var(--gl-breathe) var(--gl-ease-inout) infinite;
-}
-@keyframes glcomms-halo {
-    0%, 100% { opacity: 0.6; transform: scale(0.98); }
-    50%      { opacity: 1;   transform: scale(1.02); }
-}
-
-/* ── Shared FX primitives (shown/hidden per theme) ── */
-
-/* Dark CRT scanlines that read clearly over any image (multiply darkens the
-   gaps between scan rows). Tighter, denser lines than a subtle overlay. */
-.glcomms-fx-scanlines {
-    opacity: 0;
-    z-index: 3;
-    mix-blend-mode: multiply;
-    background: repeating-linear-gradient(
-        to bottom,
-        rgb(var(--gl-tint-dark) / 0.0) 0px,
-        rgb(var(--gl-tint-dark) / 0.0) 1px,
-        rgb(var(--gl-tint-dark) / 0.45) 2px,
-        rgb(var(--gl-tint-dark) / 0.45) 3px
-    );
-    background-size: 100% 3px;
-    animation: glcomms-scan var(--gl-loop-sm) linear infinite;
-}
-@keyframes glcomms-scan { from { background-position: 0 0; } to { background-position: 0 120px; } }
-
-.glcomms-fx-grain {
-    opacity: 0;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-    background-size: 140px 140px;
-    animation: glcomms-grain var(--gl-d-glide) steps(3) infinite;
-}
-@keyframes glcomms-grain {
-    0%   { transform: translate(0, 0); }
-    33%  { transform: translate(-3%, 2%); }
-    66%  { transform: translate(2%, -2%); }
-    100% { transform: translate(0, 0); }
-}
-
-.glcomms-fx-tint { opacity: 0; }
-.glcomms-fx-glow { opacity: 0; }
-
-/* ═══════════════════════════════════════════
-   Theme: Sci-fi Radio  (cyan/amber hologram)
-   ═══════════════════════════════════════════ */
-
-.theme-scifi { --comms-glow: rgba(90, 220, 255, 0.6); }
-.theme-scifi .glcomms-frame {
-    border: 1px solid rgba(80, 220, 255, 0.55);
-    box-shadow: 0 0 12px rgba(40, 180, 230, 0.35), inset 0 0 24px rgba(0, 40, 60, 0.6);
-    background: #02080c;
-    animation: glcomms-scifi-idle var(--gl-loop-sm) var(--gl-ease-inout) infinite;
-}
-.theme-scifi .glcomms-portrait { filter: contrast(1.05) brightness(1.02) saturate(0.92) hue-rotate(-6deg); }
-.theme-scifi .glcomms-fx-tint {
+    transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * 14)) scale(0.2, 0.012);
+    filter: brightness(3) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent);
+  }
+  14% {
     opacity: 1;
-    mix-blend-mode: screen;
-    background: linear-gradient(180deg, rgba(40, 200, 255, 0.18), rgba(0, 80, 120, 0.10) 60%, rgba(255, 170, 60, 0.10));
-}
-.theme-scifi .glcomms-fx-scanlines { opacity: 0.85; }
-.theme-scifi .glcomms-fx-grain { opacity: 0.16; }
-
-/* CRT screen: curved-glass vignette + a bright scan beam sweeping down the
-   portrait, so it clearly reads as a live transmission feed. */
-.theme-scifi .glcomms-frame::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    pointer-events: none;
-    background:
-        radial-gradient(125% 125% at 50% 50%, transparent 58%, rgba(0, 8, 14, 0.65) 100%),
-        linear-gradient(rgba(90, 220, 255, 0.05), rgba(90, 220, 255, 0.05));
-}
-.theme-scifi .glcomms-frame::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -25%;
-    height: 22%;
-    z-index: 5;
-    pointer-events: none;
-    background: linear-gradient(
-        rgba(170, 245, 255, 0) 0%,
-        rgba(170, 245, 255, 0.18) 45%,
-        rgba(170, 245, 255, 0.28) 50%,
-        rgba(170, 245, 255, 0.18) 55%,
-        rgba(170, 245, 255, 0) 100%
-    );
-    mix-blend-mode: screen;
-    animation: glcomms-crt-beam var(--gl-dread) linear infinite;
-}
-@keyframes glcomms-crt-beam {
-    0%   { top: -25%; opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { top: 120%; opacity: 0; }
-}
-.theme-scifi .glcomms-fx-glow {
+    transform: translateX(0) scale(1, 0.012);
+    filter: brightness(3) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent);
+  }
+  36% {
+    transform: scale(1, 1.03);
+    filter: brightness(1.7) drop-shadow(calc(var(--glstage-comms-u) * -2.4) 0 0 color-mix(in srgb, var(--gl-hazard) 70%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * 2.4) 0 0 color-mix(in srgb, var(--gl-cyan) 70%, transparent));
+  }
+  44% { opacity: 0.4; transform: scale(1, 0.99) translateX(calc(var(--glstage-comms-u) * 1.4)); }
+  49% {
     opacity: 1;
-    background:
-        radial-gradient(120% 60% at 50% 0%, rgba(80, 220, 255, 0.14), transparent 70%),
-        radial-gradient(100% 50% at 50% 100%, rgb(var(--gl-tint-dark) / 0.45), transparent 60%);
-}
-.theme-scifi .glcomms-name {
-    color: #bfefff;
-    background: rgba(4, 24, 34, 0.85);
-    border: 1px solid rgba(80, 220, 255, 0.35);
-    text-shadow: 0 0 6px rgba(80, 220, 255, 0.5);
-    font-family: var(--comms-font);
-}
-.theme-scifi .glcomms-status {
-    color: #061a22;
-    background: rgba(80, 220, 255, 0.88);
-    box-shadow: 0 0 8px rgba(80, 220, 255, 0.5);
-}
-.theme-scifi .glcomms-status-dot { background: #06303c; }
-
-@keyframes glcomms-scifi-idle {
-    0%, 47%, 53%, 100% { opacity: 1; }
-    49% { opacity: 0.86; }
-    51% { opacity: 0.93; }
-}
-
-/* Speaking */
-.glcomms-card.theme-scifi.speaking .glcomms-frame {
-    border-color: rgba(140, 240, 255, 0.95);
-    animation: glcomms-scifi-speak var(--gl-d-cinematic) var(--gl-ease-inout) infinite;
-}
-@keyframes glcomms-scifi-speak {
-    0%, 100% { box-shadow: 0 0 14px rgba(80, 220, 255, 0.5), inset 0 0 24px rgba(0, 60, 90, 0.6); }
-    50% { box-shadow: 0 0 26px rgba(120, 240, 255, 0.8), inset 0 0 24px rgba(0, 80, 120, 0.6); }
-}
-
-/* Connect — signal acquire flicker */
-.glcomms-card.theme-scifi.glcomms-connecting .glcomms-frame { animation: glcomms-scifi-connect var(--gl-d-cinematic) steps(1) 1; }
-.glcomms-card.theme-scifi.glcomms-connecting .glcomms-status {
-    color: #2a1500;
-    background: rgba(255, 170, 60, 0.9);
-    box-shadow: 0 0 8px rgba(255, 170, 60, 0.6);
-}
-@keyframes glcomms-scifi-connect {
-    0%  { opacity: 0; }
-    10% { opacity: 0.6; }
-    15% { opacity: 0.1; }
-    25% { opacity: 0.9; }
-    30% { opacity: 0.2; }
-    45% { opacity: 1; }
-    50% { opacity: 0.4; }
-    100% { opacity: 1; }
-}
-
-/* Hangup — static burst + CRT collapse */
-.glcomms-card.theme-scifi.glcomms-leaving { animation: glcomms-scifi-hangup var(--gl-d-glide) var(--gl-exit) forwards; }
-@keyframes glcomms-scifi-hangup {
-    0%   { opacity: 1; transform: scaleY(1); filter: brightness(1); }
-    30%  { opacity: 1; transform: scaleY(1.02); filter: brightness(2) contrast(2); }
-    65%  { opacity: 0.9; transform: scaleY(0.04); filter: brightness(3); }
-    100% { opacity: 0; transform: scaleY(0.01); filter: brightness(0); }
-}
-
-/* ═══════════════════════════════════════════
-   Theme: Fantasy Ethereal  (arcane sending)
-   ═══════════════════════════════════════════ */
-
-.theme-ethereal { --comms-glow: rgba(190, 150, 255, 0.62); }
-.theme-ethereal .glcomms-frame {
-    border: 1px solid rgba(200, 170, 255, 0.5);
-    border-radius: 14px;
-    box-shadow: 0 0 18px rgba(160, 120, 255, 0.4), inset 0 0 30px rgba(60, 30, 110, 0.4);
-    background: #0a0716;
-    animation: glcomms-ethereal-float var(--gl-loop-sm) var(--gl-ease-inout) infinite;
-}
-.theme-ethereal .glcomms-portrait { filter: saturate(1.05) brightness(1.05) contrast(0.98); }
-.theme-ethereal .glcomms-fx-tint {
+    transform: scale(1, 1);
+    filter: brightness(1.3) drop-shadow(calc(var(--glstage-comms-u) * 1.6) 0 0 color-mix(in srgb, var(--gl-hazard) 60%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * -1.6) 0 0 color-mix(in srgb, var(--gl-cyan) 60%, transparent));
+  }
+  56% { opacity: 0.6; transform: translateX(calc(var(--glstage-comms-u) * -0.8)); }
+  62% { opacity: 1; transform: none; }
+  100% {
     opacity: 1;
-    mix-blend-mode: screen;
-    background: linear-gradient(180deg, rgba(180, 140, 255, 0.20), rgba(120, 200, 255, 0.10) 55%, rgba(255, 200, 240, 0.12));
+    transform: none;
+    filter: brightness(1) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent);
+  }
 }
-.theme-ethereal .glcomms-fx-glow {
-    opacity: 1;
-    background:
-        radial-gradient(120% 80% at 50% 0%, rgba(190, 150, 255, 0.22), transparent 70%),
-        radial-gradient(80% 60% at 50% 110%, rgba(120, 200, 255, 0.18), transparent 60%);
-    animation: glcomms-ethereal-shimmer var(--gl-loop-sm) var(--gl-ease-inout) infinite;
-}
-.theme-ethereal .glcomms-name {
-    color: #ecdcff;
-    background: rgba(28, 16, 48, 0.82);
-    border: 1px solid rgba(200, 170, 255, 0.4);
-    border-radius: 10px;
-    text-shadow: 0 0 8px rgba(190, 150, 255, 0.6);
-}
-.theme-ethereal .glcomms-status {
-    color: #1a0f2e;
-    background: rgba(200, 170, 255, 0.85);
-    box-shadow: 0 0 10px rgba(190, 150, 255, 0.6);
-    border-radius: 8px;
-}
-.theme-ethereal .glcomms-status-dot { background: #3a1f5e; }
-
-@keyframes glcomms-ethereal-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
-}
-@keyframes glcomms-ethereal-shimmer {
-    0%, 100% { opacity: 0.8; filter: hue-rotate(0deg); }
-    50% { opacity: 1; filter: hue-rotate(22deg); }
+@keyframes glstage-comms-holo-out {
+  0%   { opacity: 1; transform: none; filter: brightness(1); }
+  16%  { opacity: 0.45; filter: brightness(1.6); }
+  24%  { opacity: 1; transform: translateX(calc(var(--glstage-comms-u) * 1.2)); }
+  55%  { opacity: 1; transform: scale(1, 0.012); filter: brightness(3); }
+  82%  { opacity: 1; transform: scale(0.04, 0.012); filter: brightness(3); }
+  100% { opacity: 0; transform: scale(0, 0.012); filter: brightness(3); }
 }
 
-/* Speaking */
-.glcomms-card.theme-ethereal.speaking .glcomms-frame {
-    border-color: rgba(225, 200, 255, 0.95);
-    box-shadow: 0 0 30px rgba(190, 150, 255, 0.7), inset 0 0 30px rgba(80, 40, 140, 0.5);
+/* ══ RADIO ══════════════════════════════════════════════════════════════
+   A transmission: a hard dark frame, a channel header, a warm noisy picture
+   behind interlace and static, a signal meter. Opens and closes as a wipe.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.glstage-comms[data-style="radio"] .glstage-comms-body {
+  padding: calc(var(--glstage-comms-u) * 3.2);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-glass {
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-c) 10%, var(--gl-ink-1)), var(--gl-ink-0) 70%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 55%, transparent),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--gl-ink-0),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 18%, transparent),
+    var(--gl-elev-3);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--gl-cut-sm)) 0,
+    100% var(--gl-cut-sm),
+    100% 100%,
+    var(--gl-cut-sm) 100%,
+    0 calc(100% - var(--gl-cut-sm))
+  );
+}
+/* The chamfers' own edge, which the clip cut away. */
+.glstage-comms[data-style="radio"] .glstage-comms-glass::before,
+.glstage-comms[data-style="radio"] .glstage-comms-glass::after {
+  content: "";
+  position: absolute;
+  width: var(--gl-cut-sm);
+  height: var(--gl-cut-sm);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-glass::before {
+  top: 0;
+  right: 0;
+  background: linear-gradient(45deg, transparent calc(50% - 0.8px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% - 0.8px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+.glstage-comms[data-style="radio"] .glstage-comms-glass::after {
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(45deg, transparent calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% + 0.8px), transparent calc(50% + 0.8px));
 }
 
-/* Connect — coalescing shimmer */
-.glcomms-card.theme-ethereal.glcomms-connecting .glcomms-frame { animation: glcomms-ethereal-connect var(--gl-d-cinematic) var(--gl-ease) 1; }
-@keyframes glcomms-ethereal-connect {
-    0%   { opacity: 0; filter: blur(14px) brightness(1.8); transform: scale(1.08); }
-    60%  { opacity: 1; filter: blur(3px) brightness(1.2); transform: scale(1.0); }
-    100% { opacity: 1; filter: blur(0) brightness(1); transform: scale(1); }
+.glstage-comms[data-style="radio"] .glstage-comms-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--glstage-comms-u) * 2.4);
+  height: calc(var(--glstage-comms-u) * 9);
+  padding: 0 calc(var(--glstage-comms-u) * 1) calc(var(--glstage-comms-u) * 1.5);
+  font-size: max(8px, calc(var(--glstage-comms-u) * 4.6));
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--glstage-comms-c) 60%, var(--gl-text-dim));
+  line-height: 1;
+}
+.glstage-comms-lamp {
+  display: block;
+  flex: none;
+  width: calc(var(--glstage-comms-u) * 3);
+  height: calc(var(--glstage-comms-u) * 3);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--gl-hazard) 22%, var(--gl-ink-2));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glstage-comms-tx { transition: color var(--gl-d-quick) var(--gl-ease); }
+.glstage-comms-rule {
+  flex: 1;
+  height: calc(var(--glstage-comms-u) * 2);
+  background:
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--glstage-comms-c) 40%, transparent) 0 1px, transparent 1px calc(var(--glstage-comms-u) * 2.6)) center / 100% 60% no-repeat,
+    linear-gradient(color-mix(in srgb, var(--glstage-comms-c) 30%, transparent), color-mix(in srgb, var(--glstage-comms-c) 30%, transparent)) center / 100% 1px no-repeat;
+}
+.glstage-comms-chan { font-variant-numeric: tabular-nums; }
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-lamp {
+  background: var(--gl-hazard);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 2.4) var(--gl-hazard), 0 0 calc(var(--glstage-comms-u) * 6) color-mix(in srgb, var(--gl-hazard) 50%, transparent);
+  animation: glstage-comms-lamp var(--gl-d-slow) var(--gl-ease-inout) infinite alternate;
+}
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-tx { color: var(--glstage-comms-hot); }
+
+.glstage-comms[data-style="radio"] .glstage-comms-window {
+  background:
+    radial-gradient(90% 80% at 50% 40%, color-mix(in srgb, var(--glstage-comms-c) 20%, var(--gl-ink-1)), var(--gl-ink-0));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 30%, transparent);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-img {
+  filter: grayscale(0.55) sepia(0.4) contrast(1.2) brightness(0.9);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-tone {
+  display: block;
+  background: var(--glstage-comms-c);
+  mix-blend-mode: color;
+  opacity: 0.3;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-lines {
+  display: block;
+  background: repeating-linear-gradient(to bottom, rgb(var(--gl-tint-dark) / 0.28) 0 1px, transparent 1px 2px);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-noise,
+.glstage-comms[data-style="radio"] .glstage-comms-flash {
+  display: block;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n' x='0' y='0' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3.2 0 0 0 -1.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: calc(var(--glstage-comms-u) * 46) calc(var(--glstage-comms-u) * 46);
+  mix-blend-mode: screen;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-noise {
+  opacity: 0.16;
+  animation: glstage-comms-static var(--gl-d-slow) var(--gl-linear) infinite;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-flash {
+  opacity: 0;
+  background-color: color-mix(in srgb, var(--glstage-comms-c) 30%, transparent);
+}
+/* The squelch burst on key-up; its static runs only as long as the burst. */
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-flash {
+  animation:
+    glstage-comms-static var(--gl-d-swift) var(--gl-linear) 2,
+    glstage-comms-squelch var(--gl-d-glide) var(--gl-ease) both;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-scan {
+  display: block;
+  inset: auto 0 auto 0;
+  top: 0;
+  height: 9%;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--glstage-comms-hot) 22%, transparent) 50%, transparent);
+  mix-blend-mode: screen;
+  animation: glstage-comms-roll var(--gl-loop-sm) var(--gl-linear) infinite;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-vignette {
+  display: block;
+  background: radial-gradient(75% 75% at 50% 45%, transparent 55%, rgb(var(--gl-tint-dark) / 0.6) 100%);
 }
 
-/* Hangup — dissolve into motes */
-.glcomms-card.theme-ethereal.glcomms-leaving { animation: glcomms-ethereal-hangup var(--gl-d-reveal) var(--gl-exit) forwards; }
-@keyframes glcomms-ethereal-hangup {
-    0%   { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
-    100% { opacity: 0; filter: blur(10px) brightness(1.5); transform: translateY(-12px) scale(0.96); }
+.glstage-comms[data-style="radio"] .glstage-comms-plate {
+  grid-template-rows: auto auto;
+  row-gap: calc(var(--glstage-comms-u) * 2.6);
+  padding: calc(var(--glstage-comms-u) * 3.6) calc(var(--glstage-comms-u) * 1) calc(var(--glstage-comms-u) * 0.6);
+}
+.glstage-comms[data-style="radio"] .glstage-comms-name { color: var(--glstage-comms-hot); }
+.glstage-comms[data-style="radio"] .glstage-comms-title { color: color-mix(in oklab, var(--glstage-comms-c) 45%, var(--gl-text-dim)); }
+.glstage-comms[data-style="radio"] .glstage-comms-wave {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-content: space-between;
+  height: calc(var(--glstage-comms-u) * 7);
+  padding: 0 calc(var(--glstage-comms-u) * 0.4);
+  background: linear-gradient(color-mix(in srgb, var(--glstage-comms-c) 22%, transparent), color-mix(in srgb, var(--glstage-comms-c) 22%, transparent)) center / 100% 1px no-repeat;
+}
+.glstage-comms[data-style="radio"] .glstage-comms-wave i {
+  width: max(1.5px, calc(var(--glstage-comms-u) * 1.4));
+  background: var(--glstage-comms-c);
+  border-radius: 0;
+  opacity: 0.35;
 }
 
-/* ═══════════════════════════════════════════
-   Theme: Minimal
-   ═══════════════════════════════════════════ */
-
-.theme-minimal { --comms-glow: rgba(255, 215, 100, 0.5); }
-.theme-minimal .glcomms-frame {
-    border: 1px solid rgb(var(--gl-tint-light) / 0.18);
-    box-shadow: 0 4px 16px rgb(var(--gl-tint-dark) / 0.5);
-    background: #111;
+/* Signal meter: five rising steps; three lit at rest, all of them working
+   while this one transmits. */
+.glstage-comms[data-style="radio"] .glstage-comms-signal {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--glstage-comms-u) * 1.1);
+  height: calc(var(--glstage-comms-u) * 8.5);
+  padding-bottom: calc(var(--glstage-comms-u) * 0.6);
 }
-.theme-minimal .glcomms-fx-glow {
-    opacity: 1;
-    background: radial-gradient(100% 60% at 50% 100%, rgb(var(--gl-tint-dark) / 0.4), transparent 60%);
+.glstage-comms-signal i {
+  display: block;
+  width: calc(var(--glstage-comms-u) * 1.9);
+  height: calc(28% + var(--glstage-comms-s) * 18%);
+  background: color-mix(in srgb, var(--glstage-comms-c) 85%, transparent);
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-.theme-minimal .glcomms-name {
-    color: #eee;
-    background: rgb(var(--gl-tint-dark) / 0.7);
-    border: 1px solid rgb(var(--gl-tint-light) / 0.12);
+.glstage-comms-signal i:nth-child(n + 4) { background: color-mix(in srgb, var(--glstage-comms-c) 18%, transparent); }
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-signal i {
+  background: var(--glstage-comms-hot);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 1.8) var(--glstage-comms-c);
 }
-.theme-minimal .glcomms-status { color: #06210f; background: rgba(120, 220, 140, 0.9); }
-.theme-minimal .glcomms-status-dot { background: #0a3; }
-
-.glcomms-card.theme-minimal.speaking .glcomms-frame {
-    border-color: rgba(255, 215, 100, 0.7);
-    box-shadow: 0 0 16px rgba(255, 215, 100, 0.5);
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-signal i:nth-child(4) {
+  animation: glstage-comms-signal var(--gl-d-slow) var(--gl-linear) infinite;
 }
-.glcomms-card.theme-minimal.glcomms-connecting .glcomms-frame { animation: glcomms-fade-in var(--gl-d-move) ease; }
-.glcomms-card.theme-minimal.glcomms-leaving { animation: glcomms-fade-out var(--gl-d-swift) ease forwards; }
-@keyframes glcomms-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes glcomms-fade-out { from { opacity: 1; } to { opacity: 0; transform: scale(0.97); } }
-
-/* ═══════════════════════════════════════════
-   Per-actor / per-campaign TINT
-   Drives the whole card like a primary theme colour — border, glow, name
-   badge, status, scan beam — and grades the portrait into a rich, cinematic
-   duotone (not a flat wash). Placed last so it overrides theme rules.
-   ═══════════════════════════════════════════ */
-
-.glcomms-card.has-tint { --comms-glow: var(--comms-tint); }
-
-/* Portrait: lift contrast/saturation so the graded tint reads deep and rich. */
-.glcomms-card.has-tint .glcomms-portrait {
-    filter: contrast(1.12) brightness(1.05) saturate(1.14);
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-signal i:nth-child(5) {
+  animation: glstage-comms-signal var(--gl-d-cinematic) var(--gl-linear) infinite reverse;
+}
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-glass {
+  box-shadow:
+    inset 0 0 0 1px var(--glstage-comms-hot),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--gl-ink-0),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 45%, transparent),
+    var(--gl-elev-3);
+}
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-img {
+  filter: grayscale(0.3) sepia(0.3) contrast(1.18) brightness(1.04);
+}
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-window {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--glstage-comms-hot) 70%, transparent), 0 0 calc(var(--glstage-comms-u) * 6) var(--glstage-comms-veil);
 }
 
-/* Graded tint kept light (~25%) so the portrait's own colours read through —
-   it's a colour cast, not a wash. The badges/border/glow stay fully tinted. */
-.glcomms-card.has-tint .glcomms-fx-tint {
-    opacity: 0.25;
-    mix-blend-mode: color;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--comms-tint) 72%, white) 0%,
-        var(--comms-tint) 42%,
-        color-mix(in srgb, var(--comms-tint) 72%, black) 100%
-    );
+/* Static: the noise tile jumps between held positions (a stepped hold drawn
+   with paired stops, so the timing stays a token). */
+@keyframes glstage-comms-static {
+  0%, 12.4%      { background-position: 0 0; }
+  12.5%, 24.9%   { background-position: 37% 61%; }
+  25%, 37.4%     { background-position: 81% 14%; }
+  37.5%, 49.9%   { background-position: 22% 88%; }
+  50%, 62.4%     { background-position: 66% 42%; }
+  62.5%, 74.9%   { background-position: 9% 27%; }
+  75%, 87.4%     { background-position: 93% 76%; }
+  87.5%, 100%    { background-position: 48% 5%; }
 }
-/* A gentle soft-light pass adds filmic depth/sheen on top of the colour grade. */
-.glcomms-card.has-tint .glcomms-fx-glow {
-    opacity: 0.7;
-    mix-blend-mode: soft-light;
-    background:
-        radial-gradient(115% 70% at 50% 8%, color-mix(in srgb, var(--comms-tint) 60%, white), transparent 72%),
-        radial-gradient(120% 80% at 50% 104%, color-mix(in srgb, var(--comms-tint) 75%, black), transparent 64%);
+@keyframes glstage-comms-squelch {
+  0%   { opacity: 0.95; }
+  35%  { opacity: 0.4; }
+  100% { opacity: 0; }
 }
-
-/* Frame: border + glow in the tint */
-.glcomms-card.has-tint .glcomms-frame {
-    border-color: color-mix(in srgb, var(--comms-tint) 85%, white);
-    box-shadow:
-        0 0 14px color-mix(in srgb, var(--comms-tint) 55%, transparent),
-        inset 0 0 26px color-mix(in srgb, var(--comms-tint) 32%, rgb(var(--gl-tint-dark)));
+@keyframes glstage-comms-roll {
+  0%   { transform: translateY(-120%); opacity: 0; }
+  8%   { opacity: 1; }
+  60%  { transform: translateY(1100%); opacity: 1; }
+  61%, 100% { transform: translateY(1100%); opacity: 0; }
 }
-
-/* Name badge */
-.glcomms-card.has-tint .glcomms-name {
-    color: rgb(var(--gl-tint-light));
-    background: color-mix(in srgb, var(--comms-tint) 34%, rgb(var(--gl-tint-dark) / 0.82));
-    border: 1px solid color-mix(in srgb, var(--comms-tint) 65%, transparent);
-    text-shadow: 0 0 7px color-mix(in srgb, var(--comms-tint) 75%, transparent);
+@keyframes glstage-comms-lamp {
+  0%   { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+@keyframes glstage-comms-signal {
+  0%, 21%, 46%, 63%, 100% { opacity: 1; }
+  22%, 45%  { opacity: 0.25; }
+  64%, 80%  { opacity: 0.4; }
 }
 
-/* Live status badge */
-.glcomms-card.has-tint .glcomms-status {
-    color: rgb(var(--gl-tint-light));
-    background: var(--comms-tint);
-    box-shadow: 0 0 9px color-mix(in srgb, var(--comms-tint) 65%, transparent);
+/* Open and close: a transmission wipe through a hot centre line, with the
+   picture coming up out of a burst of static. */
+.glstage-comms[data-style="radio"] .glstage-comms-slot.is-entering .glstage-comms-card {
+  animation: glstage-comms-radio-in var(--gl-d-splash) var(--gl-ease-sharp) both;
+  animation-delay: var(--glstage-comms-delay);
 }
-.glcomms-card.has-tint .glcomms-status-dot {
-    background: color-mix(in srgb, rgb(var(--gl-tint-light)) 72%, var(--comms-tint));
+.glstage-comms[data-style="radio"] .glstage-comms-slot.is-entering .glstage-comms-noise {
+  animation:
+    glstage-comms-static var(--gl-d-slow) var(--gl-linear) infinite,
+    glstage-comms-burst var(--gl-d-cinematic) var(--gl-ease) both;
+  animation-delay: var(--gl-d-instant), var(--glstage-comms-delay);
 }
-
-/* Sci-fi CRT scan beam follows the tint */
-.glcomms-card.has-tint.theme-scifi .glcomms-frame::before {
-    background: linear-gradient(
-        transparent 0%,
-        color-mix(in srgb, var(--comms-tint) 55%, white) 50%,
-        transparent 100%
-    );
+.glstage-comms[data-style="radio"] .glstage-comms-slot.is-leaving .glstage-comms-card,
+.glstage-comms[data-style="radio"].is-hidden .glstage-comms-slot .glstage-comms-card {
+  animation: glstage-comms-radio-out var(--gl-d-glide) var(--gl-ease-sharp) both;
 }
-
-/* Active caller: strong static tint glow (the halo behind it carries the pulse) */
-.glcomms-card.has-tint.speaking .glcomms-frame {
-    animation: none;
-    border-color: color-mix(in srgb, rgb(var(--gl-tint-light)) 28%, var(--comms-tint));
-    box-shadow:
-        0 0 26px color-mix(in srgb, var(--comms-tint) 78%, transparent),
-        inset 0 0 28px color-mix(in srgb, var(--comms-tint) 36%, rgb(var(--gl-tint-dark)));
+.glstage-comms[data-style="radio"] .glstage-comms-slot.is-leaving .glstage-comms-noise,
+.glstage-comms[data-style="radio"].is-hidden .glstage-comms-slot .glstage-comms-noise {
+  animation:
+    glstage-comms-static var(--gl-d-swift) var(--gl-linear) infinite,
+    glstage-comms-burst var(--gl-d-glide) var(--gl-ease) reverse both;
 }
 
-/* ═══════════════════════════════════════════
-   GM Panel — Comms tab
-   ═══════════════════════════════════════════ */
-
-.glcomms-call-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+@keyframes glstage-comms-radio-in {
+  0%   { opacity: 0; clip-path: inset(50% 0 50% 0); transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * 6)); filter: brightness(2.4); }
+  10%  { opacity: 1; clip-path: inset(49.4% 0 49.4% 0); filter: brightness(2.4); }
+  38%  { clip-path: inset(49.4% 0 49.4% 0); transform: none; }
+  70%  { clip-path: inset(0 0 0 0); filter: brightness(1.5); }
+  86%  { filter: brightness(0.8); }
+  /* Ends open past the card: a lifted speaking card must not be cut. */
+  100% { opacity: 1; clip-path: inset(-25% -25% -25% -25%); transform: none; filter: brightness(1); }
+}
+@keyframes glstage-comms-radio-out {
+  0%   { opacity: 1; clip-path: inset(-25% -25% -25% -25%); filter: brightness(1); }
+  10%  { clip-path: inset(0 0 0 0); }
+  18%  { filter: brightness(1.6); }
+  58%  { clip-path: inset(49.4% 0 49.4% 0); filter: brightness(2.4); }
+  84%  { opacity: 1; clip-path: inset(49.4% 49% 49.4% 49%); filter: brightness(2.4); }
+  100% { opacity: 0; clip-path: inset(49.4% 50% 49.4% 50%); filter: brightness(2.4); }
+}
+@keyframes glstage-comms-burst {
+  0%   { opacity: 1; }
+  45%  { opacity: 0.7; }
+  100% { opacity: 0.2; }
 }
 
-.glcomms-call-card {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 6px;
-    background: rgb(var(--gl-tint-light) / 0.04);
-    border: 1px solid rgb(var(--gl-tint-light) / 0.08);
-    border-radius: 8px;
-    transition: border-color var(--gl-d-quick) ease;
+/* ══ CLEAN ══════════════════════════════════════════════════════════════
+   Etched Glass: a blurred glass card with the portrait set into it, the
+   name laid over the portrait's foot, and one accent rule on the outer edge.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.glstage-comms[data-style="clean"] .glstage-comms-body {
+  padding: calc(var(--glstage-comms-u) * 3);
 }
-.glcomms-call-card.speaking {
-    border-color: rgba(255, 215, 100, 0.4);
-    background: rgba(255, 215, 100, 0.06);
+.glstage-comms[data-style="clean"] .glstage-comms-glass {
+  background:
+    linear-gradient(165deg,
+      color-mix(in srgb, color-mix(in srgb, var(--glstage-comms-c) 16%, var(--gl-ink-2)) 72%, transparent),
+      color-mix(in srgb, var(--gl-ink-1) 84%, transparent) 70%);
+  box-shadow: inset 0 0 0 1px var(--gl-edge), var(--gl-etch-soft);
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+}
+.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-glass {
+  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut));
+}
+.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-glass {
+  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+}
+/* The chamfer's own edge, which the clip cut away. */
+.glstage-comms[data-style="clean"] .glstage-comms-glass::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: var(--gl-cut);
+  height: var(--gl-cut);
+}
+.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-glass::before {
+  left: 0;
+  background: linear-gradient(-45deg, transparent calc(50% - 1.1px), var(--gl-edge) calc(50% - 1.1px), var(--gl-edge) calc(50% + 0.3px), transparent calc(50% + 0.3px));
+}
+.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-glass::before {
+  right: 0;
+  background: var(--gl-chamfer-edge);
 }
 
-.glcomms-call-main {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.glstage-comms[data-style="clean"] .glstage-comms-window {
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.06);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-c) 10%, transparent), transparent 60%);
+}
+.glstage-comms[data-style="clean"] .glstage-comms-img {
+  -webkit-mask-image: linear-gradient(to bottom, black 52%, transparent 94%);
+  mask-image: linear-gradient(to bottom, black 52%, transparent 94%);
+}
+/* A tint that rises from the foot of the portrait while speaking. */
+.glstage-comms[data-style="clean"] .glstage-comms-tone {
+  display: block;
+  background: linear-gradient(to top, color-mix(in srgb, var(--glstage-comms-c) 32%, transparent), transparent 50%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-tone { opacity: 1; }
+
+.glstage-comms[data-style="clean"] .glstage-comms-plate {
+  position: absolute;
+  left: calc(var(--glstage-comms-u) * 7);
+  right: calc(var(--glstage-comms-u) * 7);
+  bottom: calc(var(--glstage-comms-u) * 7);
+  align-items: end;
+}
+.glstage-comms[data-style="clean"] .glstage-comms-name {
+  font-size: max(11px, calc(var(--glstage-comms-u) * 8.6));
+  letter-spacing: var(--gl-track-normal);
+  text-shadow: 0 1px 2px var(--gl-shadow), 0 0 calc(var(--glstage-comms-u) * 6) rgb(var(--gl-tint-dark) / 0.7);
+}
+.glstage-comms[data-style="clean"] .glstage-comms-title {
+  color: color-mix(in oklab, var(--glstage-comms-c) 30%, var(--gl-text-dim));
+  text-shadow: 0 1px 2px var(--gl-shadow);
+}
+.glstage-comms[data-style="clean"] .glstage-comms-wave {
+  align-items: flex-end;
+  height: calc(var(--glstage-comms-u) * 7);
+  gap: calc(var(--glstage-comms-u) * 1.2);
+  padding-bottom: calc(var(--glstage-comms-u) * 0.6);
+}
+.glstage-comms[data-style="clean"] .glstage-comms-wave i {
+  width: max(2px, calc(var(--glstage-comms-u) * 1.5));
+  transform-origin: 50% 100%;
+  background: var(--glstage-comms-hot);
+  opacity: 0;
+}
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(n + 6) { display: none; }
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(1) { --glstage-comms-e: 0.55; }
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(2) { --glstage-comms-e: 0.9; }
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(3) { --glstage-comms-e: 1; }
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(4) { --glstage-comms-e: 0.75; }
+.glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(5) { --glstage-comms-e: 0.5; }
+
+/* The accent rule on the outer edge: a hairline at rest, lit while speaking. */
+.glstage-comms[data-style="clean"] .glstage-comms-base {
+  display: block;
+  position: absolute;
+  top: calc(var(--glstage-comms-u) * 3);
+  bottom: calc(var(--glstage-comms-u) * 3);
+  width: 2px;
+  background: linear-gradient(to bottom, transparent, var(--glstage-comms-c) 30%, var(--glstage-comms-c) 70%, transparent);
+  opacity: 0.55;
+  transform: scaleY(0.6);
+  transition: transform var(--gl-d-swift) var(--gl-snap), opacity var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
+}
+.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-base { right: calc(var(--glstage-comms-u) * 1); }
+.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-base { left: calc(var(--glstage-comms-u) * 1); }
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-base {
+  opacity: 1;
+  transform: scaleY(1);
+  background: linear-gradient(to bottom, transparent, var(--glstage-comms-hot) 18%, var(--glstage-comms-hot) 82%, transparent);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 0 calc(var(--glstage-comms-u) * 8) var(--glstage-comms-veil);
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-glass {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 45%, transparent), var(--gl-etch-soft);
 }
 
-/* Framing row: scale / x / y placement of the portrait inside the call card */
-.glcomms-call-framing {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 4px 2px;
-    border-top: 1px solid rgb(var(--gl-tint-light) / 0.06);
+/* Arrival: slides in from the edge while its parts fade up. The card only
+   moves; the fades are on the parts (backdrop roots, see the header). */
+.glstage-comms[data-style="clean"] .glstage-comms-slot.is-entering .glstage-comms-card {
+  animation: glstage-comms-clean-in var(--gl-d-reveal) var(--gl-ease) both;
+  animation-delay: var(--glstage-comms-delay);
 }
-.glcomms-call-framing-icon {
-    opacity: 0.5;
-    font-size: 11px;
-    flex-shrink: 0;
+.glstage-comms[data-style="clean"] .glstage-comms-slot.is-entering .glstage-comms-body > * {
+  animation: glstage-comms-fade-in var(--gl-d-reveal) var(--gl-ease) both;
+  animation-delay: var(--glstage-comms-delay);
 }
-.glcomms-call-framing .glstage-field {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    flex: 1;
-    min-width: 0;
+.glstage-comms[data-style="clean"] .glstage-comms-slot.is-entering .glstage-comms-plate {
+  animation: glstage-comms-plate-in var(--gl-d-reveal) var(--gl-ease) both;
+  animation-delay: calc(var(--glstage-comms-delay) + var(--gl-d-quick));
 }
-.glcomms-call-framing .glstage-field label {
-    font-size: 10px;
-    color: #9aa;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.glstage-comms[data-style="clean"] .glstage-comms-slot.is-leaving .glstage-comms-card,
+.glstage-comms[data-style="clean"].is-hidden .glstage-comms-slot .glstage-comms-card {
+  animation: glstage-comms-clean-out var(--gl-d-glide) var(--gl-exit) both;
 }
-.glcomms-call-framing .glstage-field input {
-    width: 100%;
-    min-width: 0;
+.glstage-comms[data-style="clean"] .glstage-comms-slot.is-leaving .glstage-comms-body > *,
+.glstage-comms[data-style="clean"].is-hidden .glstage-comms-slot .glstage-comms-body > * {
+  animation: glstage-comms-fade-out var(--gl-d-glide) var(--gl-exit) both;
 }
 
-/* Presentation row: per-actor theme override + tint */
-.glcomms-call-presentation {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 4px 4px;
+@keyframes glstage-comms-clean-in {
+  0%   { transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * 30)); }
+  100% { transform: none; }
 }
-.glcomms-call-theme {
-    flex: 1;
-    min-width: 0;
-    font-size: 11px;
+@keyframes glstage-comms-clean-out {
+  0%   { transform: none; }
+  100% { transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * 30)); }
 }
-.glcomms-tint-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    opacity: 0.8;
+@keyframes glstage-comms-fade-in {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
-.glcomms-tint-toggle input { cursor: pointer; }
-.glcomms-tint-color {
-    width: 34px;
-    height: 22px;
-    padding: 0;
-    border: 1px solid rgb(var(--gl-tint-light) / 0.2);
-    border-radius: 4px;
-    background: none;
-    cursor: pointer;
+@keyframes glstage-comms-fade-out {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
 }
-.glcomms-tint-color:disabled { opacity: 0.35; cursor: default; }
-
-.glcomms-call-thumb {
-    width: 36px;
-    height: 48px;
-    object-fit: cover;
-    object-position: top center;
-    border-radius: 4px;
-    flex-shrink: 0;
+@keyframes glstage-comms-plate-in {
+  0%   { opacity: 0; transform: translateY(calc(var(--glstage-comms-u) * 4)); }
+  100% { opacity: 1; transform: none; }
 }
 
-.glcomms-call-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    color: #ddd;
-    font-weight: var(--gl-weight-medium);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* ══ COMPACT ════════════════════════════════════════════════════════════
+   When full cards would shrink past reading (the overlay decides, see
+   FIT_* in comms-overlay.mjs), each call becomes a strip: the portrait on
+   the screen edge, the name beside it, facing into the scene.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* A strip is short, so it may run wider than the card it replaces: the name
+   needs the room the portrait no longer takes. */
+.glstage-comms[data-density="compact"][data-style] {
+  --glstage-comms-k: 0.36;
+  --glstage-comms-w: min(
+    calc(var(--glstage-comms-width, 188) * 1.3px),
+    calc((var(--glstage-comms-avail) - var(--glstage-comms-n, 1) * var(--glstage-comms-gap)) / (var(--glstage-comms-n, 1) * var(--glstage-comms-k)))
+  );
 }
 
-.glcomms-call-actions {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-    flex-shrink: 0;
+.glstage-comms[data-density="compact"] .glstage-comms-body {
+  --glstage-comms-s: calc(var(--glstage-comms-u) * 28);
+  --glstage-comms-corner: calc(var(--glstage-comms-u) * 5);
+  display: grid;
+  grid-template-columns: var(--glstage-comms-s) minmax(0, 1fr);
+  grid-template-rows: auto;
+  grid-template-areas: "win plate";
+  align-items: center;
+  column-gap: calc(var(--glstage-comms-u) * 4.5);
 }
-.glcomms-call-actions .glstage-btn-sm[disabled] {
-    opacity: 0.35;
-    cursor: default;
+.glstage-comms[data-density="compact"][data-edge="right"] .glstage-comms-body {
+  grid-template-columns: minmax(0, 1fr) var(--glstage-comms-s);
+  grid-template-areas: "plate win";
 }
+.glstage-comms[data-density="compact"] .glstage-comms-window { grid-area: win; width: var(--glstage-comms-s); }
+.glstage-comms[data-density="compact"] .glstage-comms-plate { grid-area: plate; }
+.glstage-comms[data-density="compact"][data-edge="right"] .glstage-comms-plate { grid-template-columns: auto minmax(0, 1fr); }
+/* Stretched, not end-aligned: an end-aligned line is as wide as its text and
+   spills over the meter instead of taking its ellipsis. */
+.glstage-comms[data-density="compact"][data-edge="right"] .glstage-comms-id { order: 2; text-align: right; }
+.glstage-comms[data-density="compact"] .glstage-comms-name {
+  font-size: max(11px, calc(var(--glstage-comms-u) * 6));
+  letter-spacing: var(--gl-track-normal);
+}
+.glstage-comms[data-density="compact"] .glstage-comms-title { font-size: max(8px, calc(var(--glstage-comms-u) * 3.8)); }
+.glstage-comms[data-density="compact"] .glstage-comms-wave { height: calc(var(--glstage-comms-u) * 7); gap: calc(var(--glstage-comms-u) * 0.9); }
+.glstage-comms[data-density="compact"] .glstage-comms-wave i { width: max(1.5px, calc(var(--glstage-comms-u) * 0.9)); }
+.glstage-comms[data-density="compact"] .glstage-comms-signal { height: calc(var(--glstage-comms-u) * 6.5); }
+.glstage-comms[data-density="compact"] .glstage-comms-signal i { width: calc(var(--glstage-comms-u) * 1.5); }
+.glstage-comms[data-density="compact"] .glstage-comms-live { display: none; }
 
-/* Quick "Call in" button on actor cards (Actors tab) */
-.glstage-actor-callin {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    z-index: 1;
-    background: rgb(var(--gl-tint-dark) / 0.5) !important;
-    border-radius: 4px;
-    opacity: 0;
-    transition: opacity var(--gl-d-quick) ease;
+/* holo */
+.glstage-comms[data-density="compact"][data-style="holo"] .glstage-comms-base { display: none; }
+.glstage-comms[data-density="compact"][data-style="holo"] .glstage-comms-plate { padding: 0; }
+.glstage-comms[data-density="compact"][data-style="holo"] .glstage-comms-wave i:nth-child(n + 9) { display: none; }
+
+/* radio: the header rides above the name, beside the picture */
+.glstage-comms[data-density="compact"][data-style="radio"] .glstage-comms-body {
+  padding: calc(var(--glstage-comms-u) * 2.4);
+  grid-template-rows: auto auto;
+  grid-template-areas: "win head" "win plate";
+  align-content: center;
 }
-.glstage-actor-card:hover .glstage-actor-callin { opacity: 1; }
+.glstage-comms[data-density="compact"][data-style="radio"][data-edge="right"] .glstage-comms-body {
+  grid-template-areas: "head win" "plate win";
+}
+.glstage-comms[data-density="compact"][data-style="radio"] .glstage-comms-head {
+  grid-area: head;
+  height: calc(var(--glstage-comms-u) * 6);
+  padding: 0;
+  font-size: max(8px, calc(var(--glstage-comms-u) * 3.2));
+}
+.glstage-comms[data-density="compact"][data-style="radio"] .glstage-comms-plate {
+  padding: calc(var(--glstage-comms-u) * 1.5) 0 0;
+  row-gap: calc(var(--glstage-comms-u) * 1.6);
+}
+.glstage-comms[data-density="compact"][data-style="radio"] .glstage-comms-wave { height: calc(var(--glstage-comms-u) * 5); }
+
+/* clean: the name sits beside the portrait, so the portrait needs no fade */
+.glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-body { padding: calc(var(--glstage-comms-u) * 2.5); }
+.glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-plate { position: relative; inset: auto; }
+.glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-img { -webkit-mask-image: none; mask-image: none; }
+.glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-base { top: calc(var(--glstage-comms-u) * 2.5); bottom: calc(var(--glstage-comms-u) * 2.5); }
+
+/* ── hidden quietly ─────────────────────────────────────────────────────
+   A call added while the stack is hidden waits invisible, rather than
+   playing an exit it never had an entrance for. Last, so it wins. */
+.glstage-comms.is-hidden .glstage-comms-slot.is-quiet .glstage-comms-card,
+.glstage-comms.is-hidden .glstage-comms-slot.is-quiet .glstage-comms-body > * {
+  animation: none;
+  opacity: 0;
+}

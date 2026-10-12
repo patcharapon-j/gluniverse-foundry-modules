@@ -1,0 +1,419 @@
+{{!-- Stage — the Director (GM only). Every string localized; names and titles are text, never markup. --}}
+{{#*inline "dial"}}
+<label class="glstage-dir-dial" data-dial>
+  <span class="glstage-dir-label">{{label}}</span>
+  <output class="gl-numeric">{{out}}</output>
+  <input type="range" min="{{min}}" max="{{max}}" step="{{step}}" value="{{value}}" data-bind="{{ns}}:{{key}}" data-fmt="{{kind}}"
+    {{#if member}}data-member="{{member}}"{{/if}} {{#if disabled}}disabled{{/if}}>
+  {{#if hint}}<span class="glstage-dir-hint">{{hint}}</span>{{/if}}
+</label>
+{{/inline}}
+{{#*inline "thumb"}}<img class="glstage-dir-thumb" src="{{src}}" alt="" loading="lazy" draggable="false" {{#if style}}style="{{style}}"{{/if}} {{#if auto}}data-auto-face{{/if}}>{{/inline}}
+
+<div class="glstage-dir gl-type">
+  <nav class="glstage-dir-tabs" role="tablist">
+    {{#each tabs}}
+      <button type="button" class="glstage-dir-tab {{#if active}}is-active{{/if}}" data-action="stageTab" data-tab="{{id}}" role="tab"
+        aria-selected="{{#if active}}true{{else}}false{{/if}}"><i class="{{icon}}" aria-hidden="true"></i><span>{{label}}</span></button>
+    {{/each}}
+    <span class="glstage-dir-tabs-status">
+      <span class="glstage-dir-tally {{#if stage.visible}}is-live{{/if}}">
+        <i class="fa-solid fa-masks-theater" aria-hidden="true"></i>{{#if stage.visible}}{{localize "GLSTAGE.director.status.stageUp"}}{{else}}{{localize "GLSTAGE.director.status.stageDown"}}{{/if}}
+      </span>
+      <span class="glstage-dir-tally {{#if comms.visible}}is-live{{/if}}">
+        <i class="fa-solid fa-tower-broadcast" aria-hidden="true"></i>{{#if comms.visible}}{{localize "GLSTAGE.director.status.commsUp"}}{{else}}{{localize "GLSTAGE.director.status.commsDown"}}{{/if}}
+      </span>
+    </span>
+  </nav>
+
+  {{!-- ═════════════ STAGE ═════════════ --}}
+  <section class="glstage-dir-pane glstage-dir-pane--stage" data-pane="stage" {{#unless is.stage}}hidden{{/unless}}>
+    <header class="glstage-dir-bar">
+      <button type="button" class="gl-btn glstage-dir-btn {{#if stage.visible}}glstage-dir-btn--live{{else}}gl-btn-accent{{/if}}" data-action="toggleStage"
+        aria-pressed="{{#if stage.visible}}true{{else}}false{{/if}}">
+        <i class="fa-solid {{#if stage.visible}}fa-eye-slash{{else}}fa-eye{{/if}}" aria-hidden="true"></i>
+        <span>{{#if stage.visible}}{{localize "GLSTAGE.director.stage.hide"}}{{else}}{{localize "GLSTAGE.director.stage.show"}}{{/if}}</span>
+      </button>
+      <span class="glstage-dir-status">
+        <span class="glstage-dir-status-main">{{stage.shotLabel}}</span>
+        {{#if stage.focusLabel}}<span class="glstage-dir-status-sub">{{stage.focusLabel}}</span>{{/if}}
+      </span>
+      <span class="glstage-dir-bar-end">
+        <button type="button" class="gl-btn glstage-dir-btn" data-action="wide" {{#unless stage.isClose}}disabled{{/unless}}
+          data-tooltip="{{localize "GLSTAGE.director.stage.wideHint"}}"><i class="fa-solid fa-expand" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.wide"}}</span></button>
+        <button type="button" class="gl-btn glstage-dir-btn" data-action="spread" {{#unless stage.any}}disabled{{/unless}}
+          data-tooltip="{{localize "GLSTAGE.director.stage.spreadHint"}}"><i class="fa-solid fa-arrows-left-right-to-line" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.spread"}}</span></button>
+        <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--danger" data-action="clearStage" {{#unless stage.any}}disabled{{/unless}}
+          data-tooltip="{{localize "GLSTAGE.director.stage.clearHint"}}"><i class="fa-solid fa-broom" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.clear"}}</span></button>
+      </span>
+    </header>
+
+    <div class="glstage-dir-stage">
+      <div class="glstage-dir-stage-main">
+        <div class="glstage-dir-strip" aria-label="{{localize "GLSTAGE.director.stage.strip"}}">
+          {{#if stage.backdrop}}<img class="glstage-dir-strip-bg" src="{{stage.backdrop}}" alt="" draggable="false">{{/if}}
+          <span class="glstage-dir-strip-floor" aria-hidden="true"></span>
+          <div class="glstage-dir-track" data-track data-figure="{{stage.figure}}" style="{{stage.trackStyle}}">
+            {{#each stage.marks}}
+              <div class="glstage-dir-fig {{#if selected}}is-selected{{/if}} {{#if focus}}is-focus{{/if}} {{#if closePush}}is-close{{/if}}{{#if closeCut}}is-close{{/if}}"
+                data-fig="{{id}}" data-x="{{x}}" data-depth="{{depth}}" data-height="{{height}}" style="{{figStyle}}">
+                <img class="{{#if flip}}is-flipped{{/if}}" src="{{src}}" alt="" draggable="false">
+                <span class="glstage-dir-fig-name">{{name}}</span>
+              </div>
+            {{/each}}
+          </div>
+          {{#unless stage.any}}<p class="glstage-dir-strip-empty">{{localize "GLSTAGE.director.stage.emptyStrip"}}</p>{{/unless}}
+          <span class="glstage-dir-strip-tag">{{stage.count}}</span>
+          {{#if stage.any}}<span class="glstage-dir-strip-hint">{{localize "GLSTAGE.director.stage.dragHint"}}</span>{{/if}}
+        </div>
+
+        {{#if stage.any}}
+        <ul class="glstage-dir-marks">
+          {{#each stage.marks}}
+            <li class="glstage-dir-mark {{#if selected}}is-selected{{/if}}" data-mark-row="{{id}}">
+              <button type="button" class="glstage-dir-mark-who" data-action="pickMark" data-id="{{id}}">
+                <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
+                <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
+              </button>
+              <span class="glstage-dir-mark-ctl">
+                <button type="button" class="glstage-dir-mini {{#if focus}}is-on{{/if}}" data-action="focus" data-id="{{id}}" aria-pressed="{{#if focus}}true{{else}}false{{/if}}"
+                  data-tooltip="{{localize "GLSTAGE.director.stage.focus"}}" aria-label="{{localize "GLSTAGE.director.stage.focus"}}"><i class="fa-solid fa-crosshairs"></i></button>
+                <button type="button" class="glstage-dir-mini {{#if closePush}}is-on{{/if}}" data-action="closeUp" data-id="{{id}}" data-cut="push" aria-pressed="{{#if closePush}}true{{else}}false{{/if}}"
+                  data-tooltip="{{localize "GLSTAGE.director.stage.closePush"}}" aria-label="{{localize "GLSTAGE.director.stage.closePush"}}"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                <button type="button" class="glstage-dir-mini {{#if closeCut}}is-on{{/if}}" data-action="closeUp" data-id="{{id}}" data-cut="cut" aria-pressed="{{#if closeCut}}true{{else}}false{{/if}}"
+                  data-tooltip="{{localize "GLSTAGE.director.stage.closeCut"}}" aria-label="{{localize "GLSTAGE.director.stage.closeCut"}}"><i class="fa-solid fa-scissors"></i></button>
+                <button type="button" class="glstage-dir-mini {{#if flip}}is-on{{/if}}" data-action="flip" data-id="{{id}}" aria-pressed="{{#if flip}}true{{else}}false{{/if}}"
+                  data-tooltip="{{localize "GLSTAGE.director.stage.flip"}}" aria-label="{{localize "GLSTAGE.director.stage.flip"}}"><i class="fa-solid fa-right-left"></i></button>
+                <button type="button" class="glstage-dir-mini glstage-dir-mini--danger" data-action="exit" data-id="{{id}}"
+                  data-tooltip="{{localize "GLSTAGE.director.stage.exit"}}" aria-label="{{localize "GLSTAGE.director.stage.exit"}}"><i class="fa-solid fa-right-from-bracket"></i></button>
+              </span>
+              <span class="glstage-dir-react" role="group" aria-label="{{localize "GLSTAGE.director.stage.reactions"}}">
+                {{#each ../reactions}}
+                  <button type="button" class="glstage-dir-chipbtn" data-action="react" data-id="{{../id}}" data-kind="{{kind}}"
+                    data-tooltip="{{label}}"><i class="{{icon}}" aria-hidden="true"></i><span>{{label}}</span></button>
+                {{/each}}
+              </span>
+            </li>
+          {{/each}}
+        </ul>
+        {{/if}}
+
+        <fieldset class="glstage-dir-group">
+          <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.layout.title"}}</legend>
+          <div class="glstage-dir-dials">
+            {{#each stage.layout}}{{> dial this}}{{/each}}
+          </div>
+          <div class="glstage-dir-field">
+            <span class="glstage-dir-label">{{localize "GLSTAGE.director.layout.nameplates"}}</span>
+            <span class="glstage-dir-seg" role="group">
+              {{#each stage.nameplates}}
+                <button type="button" class="glstage-dir-seg-btn {{#if active}}is-active{{/if}}" data-action="nameplates" data-value="{{value}}"
+                  aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{label}}</button>
+              {{/each}}
+            </span>
+          </div>
+        </fieldset>
+      </div>
+
+      <aside class="glstage-dir-roster">
+        <h3 class="glstage-dir-legend">{{localize "GLSTAGE.director.stage.cast"}}</h3>
+        {{#if stage.roster.length}}
+          <ul class="glstage-dir-roster-list">
+            {{#each stage.roster}}
+              <li class="glstage-dir-roster-row {{#if on}}is-on{{/if}}">
+                <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
+                <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
+                {{#if on}}
+                  <span class="glstage-dir-tag">{{localize "GLSTAGE.director.stage.onStage"}}</span>
+                {{else}}
+                  <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--sm" data-action="enter" data-id="{{id}}" {{#unless canEnter}}disabled{{/unless}}>
+                    <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.enter"}}</span></button>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class="glstage-dir-empty">{{localize "GLSTAGE.director.stage.noCast"}}</p>
+          <button type="button" class="gl-btn glstage-dir-btn" data-action="stageTab" data-tab="cast"><i class="fa-solid fa-users" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.toCast"}}</span></button>
+        {{/if}}
+      </aside>
+    </div>
+  </section>
+
+  {{!-- ═════════════ CAST ═════════════ --}}
+  <section class="glstage-dir-pane glstage-dir-pane--cast" data-pane="cast" {{#unless is.cast}}hidden{{/unless}}>
+    <div class="glstage-dir-cast">
+      <aside class="glstage-dir-cast-side">
+        <div class="glstage-dir-cast-tools">
+          <button type="button" class="gl-btn gl-btn-accent glstage-dir-btn" data-action="castAdd"><i class="fa-solid fa-user-plus" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.cast.add"}}</span></button>
+          <button type="button" class="gl-btn glstage-dir-btn" data-action="castFromTokens" data-tooltip="{{localize "GLSTAGE.director.cast.fromTokensHint"}}"><i class="fa-solid fa-users-viewfinder" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.cast.fromTokens"}}</span></button>
+        </div>
+        <p class="glstage-dir-drop-hint"><i class="fa-solid fa-hand-pointer" aria-hidden="true"></i>{{localize "GLSTAGE.director.cast.dropHint"}}</p>
+        <ul class="glstage-dir-cast-list gl-scroll">
+          {{#each cast.list}}
+            <li>
+              <button type="button" class="glstage-dir-cast-row {{#if active}}is-active{{/if}}" data-action="castSelect" data-id="{{id}}">
+                <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
+                <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
+                {{#if on}}<i class="fa-solid fa-masks-theater glstage-dir-row-icon" data-tooltip="{{localize "GLSTAGE.director.stage.onStage"}}"></i>{{/if}}
+                {{#if linked}}<i class="fa-solid fa-link glstage-dir-row-icon" data-tooltip="{{localize "GLSTAGE.director.cast.linked"}}"></i>{{/if}}
+              </button>
+            </li>
+          {{else}}
+            <li class="glstage-dir-empty">{{localize "GLSTAGE.director.cast.empty"}}</li>
+          {{/each}}
+        </ul>
+      </aside>
+
+      <div class="glstage-dir-cast-main">
+        <div class="glstage-dir-cast-head">
+          <span class="glstage-dir-seg" role="group">
+            <button type="button" class="glstage-dir-seg-btn {{#unless cast.lineup}}is-active{{/unless}}" data-action="castView" data-view="edit"><i class="fa-solid fa-pen" aria-hidden="true"></i>{{localize "GLSTAGE.director.cast.edit"}}</button>
+            <button type="button" class="glstage-dir-seg-btn {{#if cast.lineup}}is-active{{/if}}" data-action="castView" data-view="lineup"><i class="fa-solid fa-ruler-vertical" aria-hidden="true"></i>{{localize "GLSTAGE.director.cast.lineup"}}</button>
+          </span>
+          {{#if cast.lineup}}<span class="glstage-dir-hint">{{localize "GLSTAGE.director.cast.lineupHint"}}</span>{{/if}}
+        </div>
+
+        {{#if cast.lineup}}
+          {{#if cast.any}}
+          <div class="glstage-dir-lineup" data-lineup data-unit="{{cast.unit}}">
+            <div class="glstage-dir-lineup-stage">
+              {{#each cast.lineupGuides}}<span class="glstage-dir-guide" style="{{style}}"><span>{{label}}</span></span>{{/each}}
+              {{#each cast.lineupItems}}
+                <div class="glstage-dir-lu {{#if active}}is-active{{/if}}">
+                  <div class="glstage-dir-lu-box" data-lineup-box="{{id}}" style="{{boxStyle}}">
+                    <img src="{{src}}" alt="" draggable="false" style="{{imgStyle}}">
+                  </div>
+                </div>
+              {{/each}}
+            </div>
+            <div class="glstage-dir-lineup-labels">
+              {{#each cast.lineupItems}}
+                <div class="glstage-dir-lu-label">
+                  <button type="button" class="glstage-dir-linkbtn" data-action="castSelect" data-id="{{id}}">{{name}}</button>
+                  {{> dial height}}
+                </div>
+              {{/each}}
+            </div>
+          </div>
+          {{else}}
+            <p class="glstage-dir-empty">{{localize "GLSTAGE.director.cast.empty"}}</p>
+          {{/if}}
+        {{else}}
+          {{#with cast.sel}}
+          <form class="glstage-dir-cast-detail gl-scroll" autocomplete="off">
+            <div class="glstage-dir-member">
+              <div class="glstage-dir-facepick">
+                <div class="glstage-dir-face" data-face-pick="{{id}}" data-tooltip="{{localize "GLSTAGE.director.cast.faceHint"}}">
+                  <img src="{{src}}" alt="" draggable="false">
+                  <span class="glstage-dir-face-ring" data-face-ring style="{{faceStyle}}" {{#unless hasFace}}hidden{{/unless}}></span>
+                </div>
+                <p class="glstage-dir-hint">{{#if hasFace}}{{localize "GLSTAGE.director.cast.faceSet"}}{{else}}{{localize "GLSTAGE.director.cast.faceAuto"}}{{/if}}</p>
+                {{> dial faceH}}
+                <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--sm" data-action="faceAuto" data-id="{{id}}" {{#unless hasFace}}disabled{{/unless}}>
+                  <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.cast.faceClear"}}</span></button>
+              </div>
+
+              <div class="glstage-dir-fields">
+                <label class="glstage-dir-field">
+                  <span class="glstage-dir-label">{{localize "GLSTAGE.director.cast.name"}}</span>
+                  <input type="text" class="gl-field" value="{{name}}" data-bind="member:name" data-member="{{id}}" maxlength="120">
+                </label>
+                <label class="glstage-dir-field">
+                  <span class="glstage-dir-label">{{localize "GLSTAGE.director.cast.titleField"}}</span>
+                  <input type="text" class="gl-field" value="{{title}}" data-bind="member:title" data-member="{{id}}" maxlength="120"
+                    placeholder="{{localize "GLSTAGE.director.cast.titlePlaceholder"}}">
+                </label>
+                <div class="glstage-dir-field">
+                  <span class="glstage-dir-label">{{localize "GLSTAGE.director.cast.image"}}</span>
+                  <span class="glstage-dir-inline">
+                    <input type="text" class="gl-field" value="{{image}}" data-bind="member:image" data-member="{{id}}" aria-label="{{localize "GLSTAGE.director.cast.image"}}">
+                    <button type="button" class="glstage-dir-mini glstage-dir-mini--field" data-action="browseImage" data-id="{{id}}"
+                      data-tooltip="{{localize "GLSTAGE.director.browse"}}" aria-label="{{localize "GLSTAGE.director.browse"}}"><i class="fa-solid fa-file-image"></i></button>
+                  </span>
+                </div>
+                <div class="glstage-dir-field-row">
+                  <label class="glstage-dir-field">
+                    <span class="glstage-dir-label">{{localize "GLSTAGE.director.cast.faces.label"}}</span>
+                    <select class="gl-field" data-bind="member:faces" data-member="{{id}}" data-tooltip="{{localize "GLSTAGE.director.cast.faces.hint"}}">
+                      {{#each faces}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                    </select>
+                  </label>
+                  <label class="glstage-dir-field glstage-dir-field--tint">
+                    <span class="glstage-dir-label">{{localize "GLSTAGE.director.cast.tint"}}</span>
+                    <input type="color" value="{{tint}}" data-bind="member:tint" data-member="{{id}}" data-tooltip="{{localize "GLSTAGE.director.cast.tintHint"}}">
+                  </label>
+                </div>
+                <div class="glstage-dir-dials glstage-dir-dials--one">
+                  {{#each dials}}{{> dial this}}{{/each}}
+                </div>
+                {{#if actorUuid}}<p class="glstage-dir-hint"><i class="fa-solid fa-link" aria-hidden="true"></i> {{localize "GLSTAGE.director.cast.linkedTo" uuid=actorUuid}}</p>{{/if}}
+                <div class="glstage-dir-form-end">
+                  {{#unless onStage}}
+                    <button type="button" class="gl-btn glstage-dir-btn" data-action="enter" data-id="{{id}}"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.enter"}}</span></button>
+                  {{/unless}}
+                  <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--danger" data-action="castDelete" data-id="{{id}}"><i class="fa-solid fa-trash" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.cast.delete"}}</span></button>
+                </div>
+              </div>
+            </div>
+          </form>
+          {{else}}
+            <p class="glstage-dir-empty">{{localize "GLSTAGE.director.cast.nothingSelected"}}</p>
+          {{/with}}
+        {{/if}}
+      </div>
+    </div>
+  </section>
+
+  {{!-- ═════════════ LIGHT ═════════════ --}}
+  <section class="glstage-dir-pane glstage-dir-pane--light" data-pane="light" {{#unless is.light}}hidden{{/unless}}>
+    {{#if light}}
+      <header class="glstage-dir-bar">
+        <span class="glstage-dir-status">
+          <span class="glstage-dir-status-sub">{{localize "GLSTAGE.director.light.scene"}}</span>
+          <span class="glstage-dir-status-main">{{light.scene}}</span>
+        </span>
+        <span class="glstage-dir-bar-end">
+          <button type="button" class="gl-btn glstage-dir-btn" data-action="lightReset"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.light.reset"}}</span></button>
+        </span>
+      </header>
+
+      <fieldset class="glstage-dir-group">
+        <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.light.mood"}}</legend>
+        <div class="glstage-dir-moods">
+          {{#each light.moods}}
+            <button type="button" class="glstage-dir-mood {{#if active}}is-active{{/if}}" data-action="mood" data-mood="{{mood}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">
+              <i class="{{icon}}" aria-hidden="true"></i><span>{{label}}</span></button>
+          {{/each}}
+        </div>
+        <p class="glstage-dir-hint">{{#if light.off}}{{localize "GLSTAGE.director.light.offHint"}}{{else}}{{localize "GLSTAGE.director.light.moodHint"}}{{/if}}</p>
+      </fieldset>
+
+      <fieldset class="glstage-dir-group">
+        <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.light.dials"}}</legend>
+        <div class="glstage-dir-dials">
+          {{#each light.dials}}{{> dial this}}{{/each}}
+        </div>
+        <div class="glstage-dir-angle">
+          <label class="glstage-dir-check">
+            <input type="checkbox" data-bind="light:angleAuto" {{#if light.angleAuto}}checked{{/if}}>
+            <span>{{localize "GLSTAGE.director.light.angleAuto"}}</span>
+          </label>
+          {{> dial light.angle}}
+        </div>
+        <div class="glstage-dir-checks">
+          <label class="glstage-dir-check glstage-dir-check--row">
+            <input type="checkbox" data-bind="light:darkness" {{#if light.darkness}}checked{{/if}}>
+            <span><span class="glstage-dir-name">{{localize "GLSTAGE.director.light.darkness"}}</span><span class="glstage-dir-hint">{{localize "GLSTAGE.director.light.darknessHint"}}</span></span>
+          </label>
+          <label class="glstage-dir-check glstage-dir-check--row">
+            <input type="checkbox" data-bind="light:flicker" {{#if light.flicker}}checked{{/if}}>
+            <span><span class="glstage-dir-name">{{localize "GLSTAGE.director.light.flicker"}}</span><span class="glstage-dir-hint">{{localize "GLSTAGE.director.light.flickerHint"}}</span></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="glstage-dir-group">
+        <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.light.src"}}</legend>
+        <div class="glstage-dir-inline">
+          <input type="text" class="gl-field" value="{{light.src}}" data-bind="light:src" placeholder="{{localize "GLSTAGE.director.light.srcPlaceholder"}}" aria-label="{{localize "GLSTAGE.director.light.src"}}">
+          <button type="button" class="glstage-dir-mini glstage-dir-mini--field" data-action="browseSrc"
+            data-tooltip="{{localize "GLSTAGE.director.browse"}}" aria-label="{{localize "GLSTAGE.director.browse"}}"><i class="fa-solid fa-file-image"></i></button>
+          <button type="button" class="glstage-dir-mini glstage-dir-mini--field" data-action="clearSrc" {{#unless light.hasSrc}}disabled{{/unless}}
+            data-tooltip="{{localize "GLSTAGE.director.light.srcClear"}}" aria-label="{{localize "GLSTAGE.director.light.srcClear"}}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p class="glstage-dir-hint">{{localize "GLSTAGE.director.light.srcHint"}}</p>
+      </fieldset>
+    {{else}}
+      <p class="glstage-dir-empty">{{localize "GLSTAGE.director.light.noScene"}}</p>
+    {{/if}}
+  </section>
+
+  {{!-- ═════════════ COMMS ═════════════ --}}
+  <section class="glstage-dir-pane glstage-dir-pane--comms" data-pane="comms" {{#unless is.comms}}hidden{{/unless}}>
+    <header class="glstage-dir-bar">
+      <button type="button" class="gl-btn glstage-dir-btn {{#if comms.visible}}glstage-dir-btn--live{{else}}gl-btn-accent{{/if}}" data-action="toggleComms"
+        {{#unless comms.any}}disabled{{/unless}} aria-pressed="{{#if comms.visible}}true{{else}}false{{/if}}">
+        <i class="fa-solid {{#if comms.visible}}fa-eye-slash{{else}}fa-eye{{/if}}" aria-hidden="true"></i>
+        <span>{{#if comms.visible}}{{localize "GLSTAGE.director.comms.hide"}}{{else}}{{localize "GLSTAGE.director.comms.show"}}{{/if}}</span>
+      </button>
+      <span class="glstage-dir-status"><span class="glstage-dir-status-main">{{comms.count}}</span></span>
+      <span class="glstage-dir-bar-end">
+        <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--danger" data-action="clearComms" {{#unless comms.any}}disabled{{/unless}}>
+          <i class="fa-solid fa-phone-slash" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.comms.clear"}}</span></button>
+      </span>
+    </header>
+
+    <div class="glstage-dir-comms">
+      <div class="glstage-dir-comms-main">
+        <fieldset class="glstage-dir-group">
+          <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.comms.calls"}}</legend>
+          {{#if comms.any}}
+            <ul class="glstage-dir-calls">
+              {{#each comms.calls}}
+                <li class="glstage-dir-call {{#if speaking}}is-speaking{{/if}}">
+                  <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
+                  <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
+                  <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--sm {{#if speaking}}glstage-dir-btn--live{{/if}}" data-action="speak" data-call="{{callId}}"
+                    aria-pressed="{{#if speaking}}true{{else}}false{{/if}}"><i class="fa-solid fa-microphone{{#unless speaking}}-slash{{/unless}}" aria-hidden="true"></i>
+                    <span>{{#if speaking}}{{localize "GLSTAGE.director.comms.speaking"}}{{else}}{{localize "GLSTAGE.director.comms.speak"}}{{/if}}</span></button>
+                  <button type="button" class="glstage-dir-mini glstage-dir-mini--danger" data-action="hangUp" data-call="{{callId}}"
+                    data-tooltip="{{localize "GLSTAGE.director.comms.hangUp"}}" aria-label="{{localize "GLSTAGE.director.comms.hangUp"}}"><i class="fa-solid fa-phone-slash"></i></button>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class="glstage-dir-empty">{{localize "GLSTAGE.director.comms.none"}}</p>
+          {{/if}}
+        </fieldset>
+
+        <fieldset class="glstage-dir-group">
+          <legend class="glstage-dir-legend">{{localize "GLSTAGE.director.comms.layout"}}</legend>
+          <div class="glstage-dir-field">
+            <span class="glstage-dir-label">{{localize "GLSTAGE.director.comms.edge"}}</span>
+            <span class="glstage-dir-seg" role="group">
+              {{#each comms.edges}}<button type="button" class="glstage-dir-seg-btn {{#if active}}is-active{{/if}}" data-action="commsSet" data-key="{{key}}" data-value="{{value}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}"><i class="{{icon}}" aria-hidden="true"></i>{{label}}</button>{{/each}}
+            </span>
+          </div>
+          <div class="glstage-dir-field">
+            <span class="glstage-dir-label">{{localize "GLSTAGE.director.comms.align"}}</span>
+            <span class="glstage-dir-seg" role="group">
+              {{#each comms.aligns}}<button type="button" class="glstage-dir-seg-btn {{#if active}}is-active{{/if}}" data-action="commsSet" data-key="{{key}}" data-value="{{value}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}"><i class="{{icon}}" aria-hidden="true"></i>{{label}}</button>{{/each}}
+            </span>
+          </div>
+          <div class="glstage-dir-field">
+            <span class="glstage-dir-label">{{localize "GLSTAGE.director.comms.style"}}</span>
+            <span class="glstage-dir-seg" role="group">
+              {{#each comms.styles}}<button type="button" class="glstage-dir-seg-btn {{#if active}}is-active{{/if}}" data-action="commsSet" data-key="{{key}}" data-value="{{value}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{label}}</button>{{/each}}
+            </span>
+          </div>
+          <div class="glstage-dir-dials">
+            {{#each comms.dials}}{{> dial this}}{{/each}}
+          </div>
+        </fieldset>
+      </div>
+
+      <aside class="glstage-dir-roster">
+        <h3 class="glstage-dir-legend">{{localize "GLSTAGE.director.comms.callIn"}}</h3>
+        {{#if comms.roster.length}}
+          <ul class="glstage-dir-roster-list">
+            {{#each comms.roster}}
+              <li class="glstage-dir-roster-row {{#if calling}}is-on{{/if}}">
+                <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
+                <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span></span>
+                {{#if calling}}
+                  <span class="glstage-dir-tag">{{localize "GLSTAGE.director.comms.onCall"}}</span>
+                {{else}}
+                  <button type="button" class="gl-btn glstage-dir-btn glstage-dir-btn--sm" data-action="call" data-id="{{id}}" {{#unless canCall}}disabled{{/unless}}>
+                    <i class="fa-solid fa-phone" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.comms.call"}}</span></button>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class="glstage-dir-empty">{{localize "GLSTAGE.director.stage.noCast"}}</p>
+        {{/if}}
+      </aside>
+    </div>
+  </section>
+</div>

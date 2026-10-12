@@ -556,12 +556,14 @@ section = "canvas-mode";
 /* ── Seams: Stage, stream, motion, CSS ───────────────────────────────── */
 section = "seams";
 {
-  const store = read("scripts/features/stage/postfx/grade-store.mjs");
-  for (const name of ["gradeUpdateData", "tweenUpdateOptions", "gradeFromSrc", "readSceneGrade"]) {
-    ok(`stage grade-store exports ${name}`, new RegExp(`export (async )?function ${name}\\b`).test(store));
+  // Stage's scene light is the "grade" Theatre speaks: the store writes it and
+  // the api carries the names the bridge calls.
+  const store = read("scripts/features/stage/store.mjs");
+  for (const name of ["lightUpdateData", "tweenUpdateOptions", "readLight"]) {
+    ok(`stage store exports ${name}`, new RegExp(`export (async )?function ${name}\\b`).test(store));
   }
-  ok("stage exposes TWEEN_OPTION", /export \{ TWEEN_OPTION \}|export const TWEEN_OPTION/.test(store));
-  const stageApi = read("scripts/features/stage/module.js");
+  ok("stage exposes TWEEN_OPTION", /export const TWEEN_OPTION/.test(read("scripts/features/stage/timing.mjs")));
+  const stageApi = read("scripts/features/stage/main.mjs");
   for (const name of ["gradeUpdateData", "tweenUpdateOptions", "gradeFromSrc", "readSceneGrade"]) ok(`the stage api carries ${name}`, stageApi.includes(name));
   const bridge = stripComments(read(`${FEAT}/stage-bridge.mjs`));
   ok("the bridge is gated on stage being enabled",

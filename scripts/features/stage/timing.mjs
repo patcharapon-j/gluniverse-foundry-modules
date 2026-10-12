@@ -1,5 +1,5 @@
 /**
- * When a stored grade change should land on this client.
+ * When a stored light change should land on this client.
  *
  * Pure: no `game`, no clock of its own. A writer that wants the relight to
  * land at a particular moment — Theatre's cut lands it behind the black —
@@ -28,7 +28,7 @@ export const MAX_DELAY_MS = 60000;
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
 
 /**
- * Turn the option a writer stamped into what `StagePostFX.setGrade` takes.
+ * Turn the option a writer stamped into what the stage light tween takes.
  *
  * @param {object|null} opt  `options[TWEEN_OPTION]`, or anything else.
  * @param {number} now       This client's `game.time.serverTime`.

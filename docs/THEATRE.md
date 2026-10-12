@@ -82,10 +82,10 @@ and falls back to black.
 | `focus`     | the point of the image kept in frame when it is cropped to cover |
 | `shake`     | camera shake strength 0–1 (`null` = the GM's default) |
 | `treatment` | the backdrop's own look: exposure, saturation, tint, vignette, blur, letterbox |
-| `grade`     | the Stage character grade this shot relights to (`null` leaves Stage alone) |
+| `grade`     | the Stage light this shot relights to (`null` leaves Stage alone) |
 | `folder`    | the folder it is filed in (`null` = unfiled) |
 
-The treatment is the picture's grade and the Stage grade is the characters'.
+The treatment is the picture's grade and the Stage light is the characters'.
 They are separate on purpose: the backdrop needs a few broad dials that make a
 still read as a film frame, the portraits need Stage's full stack so they sit in
 it, and running Stage's pipeline over a full-screen plate would cost a great deal
@@ -174,13 +174,14 @@ location on screen after the title has gone.
 
 ## Stage
 
-When the stage feature is enabled, a shot added to the scene samples a Stage
-grade from its own image once, and the GM can capture the current grade into a
-shot or re-sample it. On a cut, the GM's single scene update writes `th.state`
+When the stage feature is enabled, a shot added to the scene takes a Stage
+light whose picture is its own image (Stage reads the room from it live), and
+the GM can capture the current light into a shot. On a cut, the GM's single scene update writes `th.state`
 **and** the Stage grade, with update options carrying the tween timing
 (`TWEEN_OPTION`), so every client relights the portraits at the timeline's
 `relight` beat — behind the black, or at a wipe's midpoint. See
-`docs/STAGE_LIGHTING.md` for the API. Theatre runs without Stage; Stage runs
+`docs/STAGE.md` for the API. While the stage is up it owns the frame: it draws
+the shot's picture itself, softened, behind the cast. Theatre runs without Stage; Stage runs
 without Theatre.
 
 The relight is pinned to the cue's clock, not to each client's image-ready
@@ -189,9 +190,9 @@ start. A client that is still loading the image when the cue begins waits for it
 portraits relight on schedule — before its own black. Preloading every shot of
 the scene is what keeps that rare.
 
-Create and Convert write a starting Stage grade (the first shot's, else the
-world default), because Stage seeds an ungraded scene from its background the
-first time it shows a character, and a Theatre scene's background is black.
+Create and Convert write a starting Stage light (the first shot's, else the
+scene's current one), because a Theatre scene's own background is black and a
+light with no picture of its own would read the room from it.
 
 ## Camera
 

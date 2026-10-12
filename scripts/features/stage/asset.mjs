@@ -1,5 +1,5 @@
 /**
- * Stage post-processing — CORS-aware asset loading.
+ * Stage — CORS-aware asset loading.
  *
  * Every part of this feature that touches pixels (the background sampler, the
  * GL texture upload) needs the browser to consider the
@@ -123,10 +123,10 @@ function adviseOnce(url) {
   _advised = true;
   const origin = window.location.origin;
   console.warn(
-    `gluniverse | Stage grading can display ${url.host} art but cannot read its ` +
+    `gluniverse | Stage lighting can display ${url.host} art but cannot read its ` +
       `pixels, because the host does not send an Access-Control-Allow-Origin header. ` +
-      `Those characters fall back to a simpler CSS approximation.\n` +
-      `To enable full grading, add a CORS rule to the bucket allowing GET from ` +
+      `Those characters are drawn unlit, without the scene's light.\n` +
+      `To light them, add a CORS rule to the bucket allowing GET from ` +
       `this origin:\n` +
       JSON.stringify(
         [

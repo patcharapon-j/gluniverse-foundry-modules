@@ -12,7 +12,7 @@
  * leaks a hostile's hit points while looking completely correct.
  *
  * The browser-backed pass needs Playwright and skips cleanly without it, as
- * `tools/stage-lighting-preview.mjs` does.
+ * `tools/stage-preview.mjs` does.
  */
 
 import { readFile } from "node:fs/promises";
