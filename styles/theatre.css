@@ -17,11 +17,15 @@
 
    The title faces are set inline from FACES (constants.mjs) — this sheet never
    names a typeface. `--glth-lb` is the resting letterbox fraction, written by
-   the overlay, so placements clear the bars.
+   the overlay, so placements clear the bars. `--glth-inset-r` is the width an
+   expanded sidebar covers at the right (TitleOverlay#setInset): titles, scrims
+   and the card are laid out in the screen left of it, over the picture the
+   camera centred there. Black and the bars span the whole screen.
    ════════════════════════════════════════════════════════════════════════ */
 
 .glth-overlay {
   --glth-lb: 0;
+  --glth-inset-r: 0px;
   position: fixed;
   inset: 0;
   z-index: calc(var(--gl-z-base) + 1);
@@ -41,7 +45,7 @@
 
 /* ── Scrims: a local shade behind each title placement ── */
 .glth-scrim {
-  inset: 0;
+  inset: 0 var(--glth-inset-r) 0 0;
   opacity: 0;
 }
 .glth-scrim--mid {
@@ -76,7 +80,7 @@
   text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
 }
 .glth-title--centre {
-  left: 50%;
+  left: calc((100% - var(--glth-inset-r)) / 2);
   top: 50%;
   translate: -50% -50%;
   text-align: center;
@@ -87,13 +91,13 @@
   text-align: left;
 }
 .glth-title--credits {
-  left: 50%;
+  left: calc((100% - var(--glth-inset-r)) / 2);
   bottom: 4.2vh;
   translate: -50% 0;
   text-align: center;
 }
 .glth-title--wipe {
-  right: 6vw;
+  right: calc(6vw + var(--glth-inset-r));
   top: calc(10vh + var(--glth-lb) * 100vh);
   text-align: right;
 }
@@ -157,7 +161,7 @@
 
 /* ── Interlude card ── */
 .glth-card {
-  inset: 0;
+  inset: 0 var(--glth-inset-r) 0 0;
   display: grid;
   place-items: center;
 }

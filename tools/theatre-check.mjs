@@ -409,6 +409,25 @@ section = "framing";
     }
   }
   ok("padding is clamped to PADDING_MAX", frameView(rect, 1920, 1080, { mode: "fit", padding: 999 }).scale === frameView(rect, 1920, 1080, { mode: "fit", padding: C.PADDING_MAX }).scale);
+  // An expanded sidebar: the frame is fitted to, and centred in, the screen left of it.
+  for (const [sw, sh, right] of [[1920, 1080, 312], [2560, 1440, 360], [1440, 1080, 300]]) {
+    const vis = sw - right;
+    // Where the frame lands on screen: Foundry puts the pivot at the screen's centre.
+    const onScreen = (v) => ({ left: (rect.x - v.x) * v.scale + sw / 2, width: rect.width * v.scale, top: (rect.y - v.y) * v.scale + sh / 2, height: rect.height * v.scale });
+    for (const mode of ["fill", "fit"]) {
+      const s = onScreen(frameView(rect, sw, sh, { mode, padding: 5 }, { right }));
+      ok(`${mode} ${sw}×${sh} sidebar ${right}: the frame is centred in the visible screen`, Math.abs(s.left + s.width / 2 - vis / 2) < 1e-6 && Math.abs(s.top + s.height / 2 - sh / 2) < 1e-6);
+      if (mode === "fill") ok(`fill ${sw}×${sh} sidebar ${right}: the frame covers the visible screen`, s.left <= 1e-6 && s.left + s.width >= vis - 1e-6 && s.top <= 1e-6 && s.top + s.height >= sh - 1e-6);
+      else ok(`fit ${sw}×${sh} sidebar ${right}: the whole frame is visible, clear of the sidebar`, s.left >= -1e-6 && s.left + s.width <= vis + 1e-6 && s.top >= -1e-6 && s.top + s.height <= sh + 1e-6);
+    }
+  }
+  ok("no sidebar is the plain framing", JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 }, { right: 0 })) === JSON.stringify(frameView(rect, 1920, 1080, { mode: "fit", padding: 5 })));
+  const cam = stripComments(read(`${FEAT}/camera.mjs`));
+  const mainSrc = stripComments(read(`${FEAT}/main.mjs`));
+  ok("the locked view measures the sidebar", /frameView\([^)]*\{\s*right:\s*sidebarInset\(\)\s*\}/.test(cam));
+  ok("a sidebar toggle re-fits the frame and moves the titles with it", /Hooks\.on\("collapseSidebar"[\s\S]{0,200}followSidebar\([\s\S]{0,80}setInset/.test(mainSrc));
+  const css = read("styles/theatre.css");
+  ok("titles, scrims and the card clear the sidebar", ["glth-scrim", "glth-title--centre", "glth-title--credits", "glth-title--wipe", "glth-card"].every((c) => new RegExp(`\\.${c}\\s*\\{[^}]*var\\(--glth-inset-r\\)`).test(css)));
   const v = { x: -500, y: -300, width: 4840, height: 2760 };
   const b = R.backdropRect(1000, 1000, v, { x: 0.5, y: 0.5 });
   ok("the backdrop image covers the whole view", b.x <= v.x && b.y <= v.y && b.x + b.width >= v.x + v.width && b.y + b.height >= v.y + v.height);

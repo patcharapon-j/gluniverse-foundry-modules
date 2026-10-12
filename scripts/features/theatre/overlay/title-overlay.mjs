@@ -144,6 +144,7 @@ export class TitleOverlay {
     this._letterbox = 0;         // resting bar fraction
     this._black = 0;             // resting black
     this._tagText = null;
+    this._insetR = 0;            // px the UI covers at the right (setInset)
     this._last = null;           // last play() arguments, for seek()
     this._frozen = false;
     this._liveTimer = null;
@@ -264,6 +265,17 @@ export class TitleOverlay {
       this._playCard(cue.cardText ?? "", tl.card, clock, k);
       this._showTag(tl.total + TIMING.tagDelay * k, clock, k);
     }
+  }
+
+  /**
+   * The width (CSS px) the UI covers at the right of the screen (an expanded
+   * sidebar). Titles, scrims and the card are laid out in the screen left of
+   * it, centred on the picture the camera fitted there; black and the bars
+   * still span the whole screen.
+   */
+  setInset(right) {
+    this._insetR = Math.max(0, Number(right) || 0);
+    this.node?.style.setProperty("--glth-inset-r", `${this._insetR}px`);
   }
 
   /** Resting letterbox, 0..0.2 of the viewport height per bar. */
@@ -503,11 +515,11 @@ export class TitleOverlay {
     return parts;
   }
 
-  /** Shrink a title that would set wider than BEATS.fitWidth of the viewport (measured at its resting tracking). */
+  /** Shrink a title that would set wider than BEATS.fitWidth of the visible screen (measured at its resting tracking). */
   _fit(name, face) {
     if (!name) return;
     name.style.fontSize = "";
-    const max = (this.node.clientWidth || window.innerWidth) * BEATS.fitWidth;
+    const max = Math.max(1, (this.node.clientWidth || window.innerWidth) - this._insetR) * BEATS.fitWidth;
     name.style.letterSpacing = face.track;
     const w = name.scrollWidth;
     if (w > max && w > 0) {
@@ -568,6 +580,7 @@ export class TitleOverlay {
   /** Static state after a cue, used on mount. */
   _applyRest() {
     this.node.style.setProperty("--glth-lb", String(this._letterbox));
+    this.node.style.setProperty("--glth-inset-r", `${this._insetR}px`);
     this.$.black.style.opacity = String(this._black);
     for (const s of Object.values(this.$.scrims)) s.style.opacity = "0";
     this.$.tag.style.opacity = "0";
