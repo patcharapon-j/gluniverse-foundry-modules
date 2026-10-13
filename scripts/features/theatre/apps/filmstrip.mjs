@@ -255,10 +255,17 @@ function FilmstripApp() {
       input.addEventListener("input", () => { query = input.value; this.#applyFilter(); });
       input.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") {
-          // Cue up the first match; Go stays a deliberate second press.
+          // Cue up the first match; Go stays a deliberate second press, or
+          // Shift+Enter puts it straight on air.
           ev.preventDefault();
           const first = this.element?.querySelector(".glth-frame[data-id]:not([hidden])");
-          if (first && first.dataset.id !== this.selectedId) { this.selectedId = first.dataset.id; this._revealSelected = true; this.render(); }
+          if (!first) return;
+          if (ev.shiftKey) {
+            const store = this.store;
+            this.selectedId = first.dataset.id;
+            this._revealSelected = true;
+            if (store) guarded(() => store.cue({ kind: "shot", shotId: first.dataset.id, style: goStyle || undefined }));
+          } else if (first.dataset.id !== this.selectedId) { this.selectedId = first.dataset.id; this._revealSelected = true; this.render(); }
         } else if (ev.key === "Escape") {
           ev.preventDefault();
           ev.stopPropagation();
@@ -508,6 +515,18 @@ export async function openFilmstrip() {
   const Cls = FilmstripApp();
   const app = new Cls({ sceneId: store.scene.id });
   await app.render({ force: true });
+  return app;
+}
+
+/** Open the filmstrip with one shot cued up (selected, not on air). */
+export async function cueUp(shotId) {
+  const store = (await loadStore()).TheatreStore?.current;
+  if (store && shotId && store.shot(shotId)) selection.set(store.scene.id, shotId);
+  const app = await openFilmstrip();
+  if (app) {
+    app._revealSelected = true;
+    if (collapsed) { collapsed = false; app.render(); }
+  }
   return app;
 }
 

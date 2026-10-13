@@ -14,6 +14,12 @@
  *           optional picture override.
  *   Comms   the call-in stack and its layout.
  *
+ * The Stage, Cast and Comms rosters each carry a search box. It narrows the
+ * roster by name and title and, below it, offers the world's Actors that are
+ * not cast yet, one press from the stage (or the comms). Enter acts on the
+ * first match (Shift+Enter brings them on masked), Esc clears. Filtering is done
+ * on the rendered rows, never by re-rendering, so typing keeps its caret.
+ *
  * GM only. Every read and write goes through `../store.mjs`; reactions through
  * `../channel.mjs`. The ApplicationV2 class is built in a memoised factory, never
  * at module scope: this folder is imported under plain Node by check tools, where
@@ -28,7 +34,7 @@
  */
 
 import { featurePath, warn } from "../../../core/const.mjs";
-import { escapeHTML } from "../../../core/util.mjs";
+import { escapeHTML, matchesQuery } from "../../../core/util.mjs";
 import {
   COMMS_ALIGN, COMMS_EDGES, COMMS_STYLES, DEFAULT_IMAGE, FEATURE_ID, MAX_CALLS, MAX_ON_STAGE, NAMEPLATES, REACTIONS,
 } from "../model.mjs";
@@ -36,6 +42,7 @@ import { DEFAULT_LIGHT, LIGHT_DIALS, MOODS } from "../light/rig.mjs";
 import { onStageSetting } from "../settings.mjs";
 import * as store from "../store.mjs";
 import { sendReaction } from "../channel.mjs";
+import { bringOn, callIn, castActor, castHaystack, memberFromActor, searchWorldActors } from "../search.mjs";
 
 export const DIRECTOR_ID = "glstage-director";
 
@@ -80,7 +87,8 @@ const EDGE_ICONS = Object.freeze({ left: "fa-solid fa-arrow-left", right: "fa-so
 const ALIGN_ICONS = Object.freeze({ top: "fa-solid fa-arrow-up", center: "fa-solid fa-grip-lines", bottom: "fa-solid fa-arrow-down" });
 
 /** Session-local view state, kept across close/reopen. */
-const view = { tab: "stage", sel: null, castSel: null, castView: "edit" };
+const view = { tab: "stage", sel: null, castSel: null, castView: "edit", q: { stage: "", cast: "", comms: "" } };
+const SEARCH_PANES = Object.freeze(["stage", "cast", "comms"]);
 
 /* ── helpers (Foundry reached only when called) ─────────────────────── */
 
@@ -151,27 +159,6 @@ function dragData(event) {
     if (d && typeof d === "object" && Object.keys(d).length) return d;
   } catch { /* not JSON */ }
   try { return JSON.parse(event.dataTransfer?.getData("text/plain") || "null"); } catch { return null; }
-}
-
-const DEFAULT_ARTS = () => new Set([DEFAULT_IMAGE, globalThis.CONST?.DEFAULT_TOKEN, "icons/svg/mystery-man.svg"].filter(Boolean));
-
-/** The art to stand on stage: the actor's portrait, unless it is a placeholder. */
-function pickArt(actorImg, tokenImg) {
-  const defaults = DEFAULT_ARTS();
-  if (actorImg && !defaults.has(actorImg)) return actorImg;
-  if (tokenImg && !defaults.has(tokenImg)) return tokenImg;
-  return actorImg || tokenImg || DEFAULT_IMAGE;
-}
-
-/** The cast entry for an actor (and optionally the token it stood on). */
-function memberFromActor(actor, token = null) {
-  const doc = token?.document ?? token ?? null;
-  const uuid = doc && !doc.actorLink ? (doc.baseActor?.uuid ?? actor?.uuid) : actor?.uuid;
-  return {
-    name: doc?.name || actor?.name || L("GLSTAGE.director.cast.newName"),
-    image: pickArt(actor?.img, doc?.texture?.src),
-    actorUuid: uuid ?? null,
-  };
 }
 
 /* ── the app ─────────────────────────────────────────────────────────── */
@@ -248,6 +235,11 @@ function DirectorApp() {
           return this._write(() => store.speak(store.readComms().speaking === id ? null : id));
         },
         commsSet: function (_e, t) { return this._write(() => store.patchCommsLayout({ [t.dataset.key]: t.dataset.value })); },
+        // search: a world Actor not cast yet
+        worldEnter: function (_e, t) { return this._fromWorld(t.dataset.uuid, "enter"); },
+        worldEnterMasked: function (_e, t) { return this._fromWorld(t.dataset.uuid, "masked"); },
+        worldCall: function (_e, t) { return this._fromWorld(t.dataset.uuid, "call"); },
+        worldCast: function (_e, t) { return this._fromWorld(t.dataset.uuid, "cast"); },
       },
     };
 
@@ -332,7 +324,7 @@ function DirectorApp() {
         figure: layout.figure,
         trackStyle: `left: ${r3(((1 - layout.width) / 2) * 100)}%; right: ${r3(((1 - layout.width) / 2) * 100)}%`,
         backdrop,
-        roster: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, thumb: thumb(m), on: onIds.has(m.id), canEnter: !onIds.has(m.id) && !full })),
+        roster: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, haystack: castHaystack(m), thumb: thumb(m), on: onIds.has(m.id), canEnter: !onIds.has(m.id) && !full })),
         layout: [
           dial("layout", "figure", layout.figure, { min: 0.4, max: 1.4, kind: "pct", label: L("GLSTAGE.director.layout.figure"), hint: L("GLSTAGE.director.layout.figureHint") }),
           dial("layout", "floor", layout.floor, { min: -0.5, max: 0.4, kind: "spct", label: L("GLSTAGE.director.layout.floor"), hint: L("GLSTAGE.director.layout.floorHint") }),
@@ -351,7 +343,7 @@ function DirectorApp() {
         view: view.castView,
         lineup: view.castView === "lineup",
         unit,
-        list: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, thumb: thumb(m), active: m.id === view.castSel, on: onIds.has(m.id), linked: !!m.actorUuid })),
+        list: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, haystack: castHaystack(m), thumb: thumb(m), active: m.id === view.castSel, on: onIds.has(m.id), linked: !!m.actorUuid })),
         sel: sel ? {
           ...sel,
           src: sel.image || DEFAULT_IMAGE,
@@ -404,7 +396,7 @@ function DirectorApp() {
           const m = byId.get(c.castId);
           return { callId: c.callId, castId: c.castId, name: m?.name ?? c.castId, title: m?.title ?? "", thumb: thumb(m ?? {}), speaking: comms.speaking === c.callId };
         }),
-        roster: cast.map((m) => ({ id: m.id, name: m.name, thumb: thumb(m), calling: callCast.has(m.id), canCall: !callCast.has(m.id) && comms.calls.length < MAX_CALLS })),
+        roster: cast.map((m) => ({ id: m.id, name: m.name, haystack: castHaystack(m), thumb: thumb(m), calling: callCast.has(m.id), canCall: !callCast.has(m.id) && comms.calls.length < MAX_CALLS })),
         edges: COMMS_EDGES.map((v) => ({ key: "edge", value: v, label: L(`GLSTAGE.comms.edge.${v}`), icon: EDGE_ICONS[v], active: commsLayout.edge === v })),
         aligns: COMMS_ALIGN.map((v) => ({ key: "align", value: v, label: L(`GLSTAGE.comms.align.${v}`), icon: ALIGN_ICONS[v], active: commsLayout.align === v })),
         styles: COMMS_STYLES.map((v) => ({ key: "style", value: v, label: L(`GLSTAGE.comms.style.${v}`), active: commsLayout.style === v })),
@@ -425,6 +417,12 @@ function DirectorApp() {
         cast: castCtx,
         light: lightCtx,
         comms: commsCtx,
+        search: {
+          ...Object.fromEntries(SEARCH_PANES.map((pane) => [pane, {
+            pane, value: view.q[pane], placeholder: L("GLSTAGE.search.placeholder"), hint: L(`GLSTAGE.search.hint.${pane}`),
+          }])),
+          ...Object.fromEntries(SEARCH_PANES.map((pane) => [`${pane}World`, { pane, label: L("GLSTAGE.search.world") }])),
+        },
       };
     }
 
@@ -447,6 +445,7 @@ function DirectorApp() {
       const el = this.element;
       el.addEventListener("pointerdown", (ev) => this._onPointerDown(ev));
       el.addEventListener("input", (ev) => this._onInput(ev));
+      el.addEventListener("keydown", (ev) => this._onSearchKey(ev));
       el.addEventListener("change", (ev) => this._onChange(ev));
       el.addEventListener("focusout", () => queueMicrotask(() => this._maybeFlushRender()));
       el.addEventListener("dragover", (ev) => this._onDragOver(ev));
@@ -462,9 +461,23 @@ function DirectorApp() {
       window.addEventListener("pointercancel", this._onWindowUp, true);
     }
 
+    async _preRender(context, options) {
+      await super._preRender?.(context, options);
+      const a = document.activeElement;
+      this._refocus = a?.dataset?.dirSearch && this.element?.contains(a)
+        ? { pane: a.dataset.dirSearch, start: a.selectionStart, end: a.selectionEnd } : null;
+    }
+
     async _onRender(context, options) {
       await super._onRender(context, options);
       this._renderPending = false;
+      for (const pane of SEARCH_PANES) this._applySearch(pane);
+      if (this._refocus) {
+        const input = this.element.querySelector(`[data-dir-search="${this._refocus.pane}"]`);
+        input?.focus({ preventScroll: true });
+        try { input?.setSelectionRange(this._refocus.start, this._refocus.end); } catch { /* not a text input */ }
+        this._refocus = null;
+      }
       // Auto-frame thumbnails that have no manual face point. Lazy: the locator is
       // a browser-only module and nothing here should load it until it is drawn.
       const imgs = this.element.querySelectorAll("img[data-auto-face]");
@@ -598,6 +611,12 @@ function DirectorApp() {
 
     _onInput(ev) {
       const input = ev.target;
+      const pane = input?.dataset?.dirSearch;
+      if (pane) {
+        view.q[pane] = input.value;
+        this._applySearch(pane);
+        return;
+      }
       const bind = input?.dataset?.bind;
       if (!bind) return;
       if (input.type === "range") this._preview(input);
@@ -865,22 +884,143 @@ function DirectorApp() {
       if (path) this._lightPatch({ src: path }, true, scene.id);
     }
 
-    /* ── stage / comms ── */
+    /* ── search ── */
 
-    async _enter(id, { masked = false } = {}) {
-      const s = store.readState();
-      if (s.on.length >= MAX_ON_STAGE && !s.on.some((m) => m.id === id)) {
-        return ui.notifications?.warn(L("GLSTAGE.director.stage.full", { max: MAX_ON_STAGE }));
-      }
-      return this._write(() => store.enter(id, { masked }));
+    /** The roster a search box filters. */
+    _searchRoot(pane) {
+      return this.element?.querySelector(`[data-dir-search="${pane}"]`)?.closest(".glstage-dir-roster, .glstage-dir-cast-side") ?? null;
     }
 
-    async _call(id) {
-      const c = store.readComms();
-      if (c.calls.length >= MAX_CALLS && !c.calls.some((x) => x.castId === id)) {
-        return ui.notifications?.warn(L("GLSTAGE.director.comms.full", { max: MAX_CALLS }));
+    /** Show the rows the search allows, and the world's Actors that match. */
+    _applySearch(pane) {
+      const root = this._searchRoot(pane);
+      if (!root) return;
+      const q = view.q[pane] ?? "";
+      const active = !!q.trim();
+      let n = 0;
+      for (const r of root.querySelectorAll("[data-search-row]")) {
+        const ok = matchesQuery(r.dataset.haystack ?? "", q);
+        r.hidden = !ok;
+        if (ok) n++;
       }
-      return this._write(() => store.call(id));
+      root.querySelector(".glstage-dir-search")?.classList.toggle("is-active", active);
+      root.querySelectorAll("[data-search-empty]").forEach((e) => { e.hidden = active; });
+      const world = this._renderWorld(root, pane, q);
+      const none = root.querySelector("[data-no-match]");
+      if (none) none.hidden = !(active && !n && !world);
+    }
+
+    /** Fill the pane's "from the world" list. Returns how many Actors it offers. */
+    _renderWorld(root, pane, q) {
+      const box = root.querySelector(`[data-world="${pane}"]`);
+      const list = box?.querySelector("[data-world-list]");
+      if (!list) return 0;
+      const actors = searchWorldActors(q);
+      list.replaceChildren(...actors.map((a) => this._worldRow(a, pane)));
+      box.hidden = !actors.length;
+      return actors.length;
+    }
+
+    /** One world Actor's row, built from text nodes: an actor's name is never markup. */
+    _worldRow(actor, pane) {
+      const el = (tag, cls, text) => {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text) n.textContent = text;
+        return n;
+      };
+      const m = memberFromActor(actor);
+      const li = el("li", "glstage-dir-roster-row glstage-dir-world-row");
+      li.dataset.worldRow = actor.uuid;
+      const box = el("span", "glstage-dir-thumb-box");
+      const img = el("img", "glstage-dir-thumb");
+      Object.assign(img, { src: m.image, alt: "", loading: "lazy", draggable: false });
+      box.append(img);
+      const who = el("span", "glstage-dir-who-text");
+      who.append(el("span", "glstage-dir-name", m.name));
+      const typeLabel = globalThis.CONFIG?.Actor?.typeLabels?.[actor.type];
+      if (typeLabel || actor.type) who.append(el("span", "glstage-dir-sub", typeLabel ? L(typeLabel) : actor.type));
+      const btn = (action, icon, label, wide = false) => {
+        const b = el("button", wide ? "gl-btn glstage-dir-btn glstage-dir-btn--sm" : "glstage-dir-mini");
+        b.type = "button";
+        Object.assign(b.dataset, { action, uuid: actor.uuid, tooltip: label });
+        b.setAttribute("aria-label", label);
+        const i = el("i", icon);
+        i.setAttribute("aria-hidden", "true");
+        b.append(i);
+        if (wide) b.append(el("span", "", label));
+        return b;
+      };
+      const buttons = {
+        stage: () => [
+          btn("worldEnter", "fa-solid fa-right-to-bracket", L("GLSTAGE.search.worldEnter"), true),
+          btn("worldEnterMasked", "fa-solid fa-user-secret", L("GLSTAGE.director.stage.enterMasked")),
+        ],
+        cast: () => [btn("worldCast", "fa-solid fa-user-plus", L("GLSTAGE.search.worldCast"), true)],
+        comms: () => [btn("worldCall", "fa-solid fa-phone", L("GLSTAGE.search.worldCall"), true)],
+      }[pane]();
+      li.append(box, who, ...buttons);
+      return li;
+    }
+
+    /** Enter acts on the first match (Shift+Enter: masked); Esc clears, then lets go. */
+    _onSearchKey(ev) {
+      const input = ev.target;
+      const pane = input?.dataset?.dirSearch;
+      if (!pane) return;
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (input.value) {
+          input.value = "";
+          view.q[pane] = "";
+          this._applySearch(pane);
+        } else input.blur();
+        return;
+      }
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const root = this._searchRoot(pane);
+      if (!root) return;
+      // The first cast row that can act (not already on stage / on a call), else the first world Actor.
+      const row = root.querySelector("[data-search-row][data-ready]:not([hidden])");
+      const world = root.querySelector("[data-world-row]");
+      const masked = ev.shiftKey;
+      if (pane === "cast") {
+        if (row) this._castSelect(row.dataset.searchRow);
+        else if (world) this._fromWorld(world.dataset.worldRow, "cast");
+        return;
+      }
+      if (row) {
+        const id = row.dataset.searchRow;
+        this._write(() => (pane === "comms" ? callIn(id) : bringOn(id, { masked }))).then(() => this._requestRender(true));
+      } else if (world) {
+        this._fromWorld(world.dataset.worldRow, pane === "comms" ? "call" : masked ? "masked" : "enter");
+      }
+    }
+
+    /** Cast a world Actor (once), then bring them on, call them in, or open them in the Cast tab. */
+    async _fromWorld(uuid, how) {
+      const actor = uuid ? await fromUuid(uuid).catch(() => null) : null;
+      if (!actor) return ui.notifications?.warn(L("GLSTAGE.director.cast.dropFailed"));
+      const id = await this._write(() => castActor(actor));
+      if (id && (how === "enter" || how === "masked")) await this._write(() => bringOn(id, { masked: how === "masked" }));
+      else if (id && how === "call") await this._write(() => callIn(id));
+      else if (id) {
+        view.castSel = id;
+        view.castView = "edit";
+      }
+      return this._requestRender(true);
+    }
+
+    /* ── stage / comms ── */
+
+    _enter(id, { masked = false } = {}) {
+      return this._write(() => bringOn(id, { masked }));
+    }
+
+    _call(id) {
+      return this._write(() => callIn(id));
     }
   };
 

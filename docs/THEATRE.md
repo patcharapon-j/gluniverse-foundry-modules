@@ -112,8 +112,13 @@ In the **filmstrip** a row of chips filters the reel to one folder (or Unfiled);
 in the full reel each folder opens with a slate in its colour. Dropping a frame
 on a chip or a slate refiles it. The **search** box in both narrows by title,
 eyebrow, subtitle, notes, file name and folder (every word must match, accents
-ignored). Enter cues up the first match, Esc clears. Filters and search are a
-view only and are never written to the scene.
+ignored). Enter cues up the first match, Shift+Enter puts it on air, Esc clears.
+Filters and search are a view only and are never written to the scene.
+
+The suite's quick palette (Ctrl+K, GM only) searches the viewed Theatre scene's
+shots the same way (`quick.mjs`). Enter puts a shot on air, Shift+Enter cues it
+up in the filmstrip, Ctrl+Enter opens it in the editor; an empty query lists the
+shot on air and the ones after it.
 
 ## Cues
 

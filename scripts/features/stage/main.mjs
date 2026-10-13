@@ -5,6 +5,8 @@
 
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { warn } from "../../core/const.mjs";
+import { registerQuickProvider } from "../../core/quick-palette.mjs";
+import { QUICK_PROVIDERS } from "./search.mjs";
 import { registerSettings as registerStageSettings } from "./settings.mjs";
 import { wireChannel, sendReaction } from "./channel.mjs";
 import { StageOverlay } from "./overlay.mjs";
@@ -30,6 +32,7 @@ async function openDirector() {
 }
 
 export function onInit() {
+  for (const p of QUICK_PROVIDERS) registerQuickProvider(p);
   Hooks.on("getSceneControlButtons", (controls) => {
     if (!game.user?.isGM) return;
     ensureSuiteGroup(controls).tools[TOOL] = {

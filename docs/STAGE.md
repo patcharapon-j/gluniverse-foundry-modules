@@ -32,6 +32,7 @@ scripts/features/stage/
     assets.mjs          prepares art and backdrops for upload
   comms/comms-overlay.mjs   the call-in stack (pure DOM)
   apps/director-app.mjs     the GM's panel
+  search.mjs                finding a character, casting an Actor, bringing them in
 ```
 
 `render/`, `light/`, `comms/`, `director.mjs`, `model.mjs`, `stage-dom.mjs` and
@@ -134,6 +135,22 @@ A cut writes the light in the same scene update as `th.state`, with the relight
 timing in the update options, so every client relights at the timeline's beat.
 While the stage is up it owns the frame: it draws the shot's picture itself,
 softened, behind the cast.
+
+## Search
+
+Every roster in the Director (Stage, Cast, Comms) has a search box. It filters
+the cast by name and title and, under it, offers the world's Actors that are not
+cast yet (matched on the actor UUID an entry was made from, so nobody is cast
+twice). Enter acts on the first match: Stage brings them on (Shift+Enter:
+masked), Cast opens them, Comms calls them in. A world Actor is cast first, then
+brought on. Esc clears.
+
+The same search feeds the suite's quick palette (`core/quick-palette.mjs`,
+Ctrl+K, GM only) as two groups, the cast and the world's actors. Enter brings a
+character on (or takes them off), Ctrl+Enter pushes in on them, Shift+Enter calls
+them in (or hangs up), Alt+Enter brings them on masked (or toggles the mask).
+`search.mjs` is the one statement of all of it; every write goes through the
+store.
 
 ## Assets
 

@@ -245,6 +245,20 @@
       "live": "Live",
       "transmit": "TX",
       "channel": "CH"
+    },
+    "search": {
+      "placeholder": "Search…",
+      "hint": {
+        "stage": "Filters the cast and finds world actors. Enter brings the first match on (Shift+Enter: masked), Esc clears. Ctrl+K searches from anywhere.",
+        "cast": "Filters the cast and finds world actors. Enter opens the first match, Esc clears.",
+        "comms": "Filters the cast and finds world actors. Enter calls the first match in, Esc clears."
+      },
+      "none": "Nobody matches.",
+      "world": "World actors",
+      "worldEnter": "Bring on",
+      "worldCall": "Call in",
+      "worldCast": "Add to cast",
+      "group": "Stage cast"
     }
   }
 }

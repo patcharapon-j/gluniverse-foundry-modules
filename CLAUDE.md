@@ -34,6 +34,8 @@ scripts/
     gl-surfaces.mjs         Pause/release lifecycle for suite WebGL contexts
     face-frame.mjs          Shared head locator for portrait framing (docs/FACE_FRAME.md)
     face-frame-math.mjs     Its pure crop/placement geometry
+    quick-palette.mjs       Ctrl+K GM search; features add results with
+                            registerQuickProvider() from their onInit
   features/
     index.mjs               Imports every adapter (import order = UI order)
     <featureId>/index.mjs   Adapter: Suite.register({...}) + the ported code

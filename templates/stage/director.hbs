@@ -8,6 +8,19 @@
   {{#if hint}}<span class="glstage-dir-hint">{{hint}}</span>{{/if}}
 </label>
 {{/inline}}
+{{#*inline "search"}}
+<label class="glstage-dir-search {{#if value}}is-active{{/if}}">
+  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+  <input type="search" class="gl-field glstage-dir-search-input" data-dir-search="{{pane}}" value="{{value}}" spellcheck="false" autocomplete="off"
+    placeholder="{{placeholder}}" aria-label="{{placeholder}}" data-tooltip="{{hint}}">
+</label>
+{{/inline}}
+{{#*inline "world"}}
+<div class="glstage-dir-world" data-world="{{pane}}" hidden>
+  <h4 class="glstage-dir-world-head"><i class="fa-solid fa-earth-americas" aria-hidden="true"></i>{{label}}</h4>
+  <ul class="glstage-dir-roster-list" data-world-list></ul>
+</div>
+{{/inline}}
 {{#*inline "thumb"}}<img class="glstage-dir-thumb" src="{{src}}" alt="" loading="lazy" draggable="false" {{#if style}}style="{{style}}"{{/if}} {{#if auto}}data-auto-face{{/if}}>{{/inline}}
 
 <div class="glstage-dir gl-type">
@@ -120,10 +133,11 @@
 
       <aside class="glstage-dir-roster">
         <h3 class="glstage-dir-legend">{{localize "GLSTAGE.director.stage.cast"}}</h3>
+        {{> search search.stage}}
         {{#if stage.roster.length}}
           <ul class="glstage-dir-roster-list">
             {{#each stage.roster}}
-              <li class="glstage-dir-roster-row {{#if on}}is-on{{/if}}">
+              <li class="glstage-dir-roster-row {{#if on}}is-on{{/if}}" data-search-row="{{id}}" data-haystack="{{haystack}}" {{#if canEnter}}data-ready{{/if}}>
                 <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
                 <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
                 {{#if on}}
@@ -138,9 +152,11 @@
             {{/each}}
           </ul>
         {{else}}
-          <p class="glstage-dir-empty">{{localize "GLSTAGE.director.stage.noCast"}}</p>
-          <button type="button" class="gl-btn glstage-dir-btn" data-action="stageTab" data-tab="cast"><i class="fa-solid fa-users" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.toCast"}}</span></button>
+          <p class="glstage-dir-empty" data-search-empty>{{localize "GLSTAGE.director.stage.noCast"}}</p>
+          <button type="button" class="gl-btn glstage-dir-btn" data-action="stageTab" data-tab="cast" data-search-empty><i class="fa-solid fa-users" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.stage.toCast"}}</span></button>
         {{/if}}
+        <p class="glstage-dir-empty" data-no-match hidden>{{localize "GLSTAGE.search.none"}}</p>
+        {{> world search.stageWorld}}
       </aside>
     </div>
   </section>
@@ -154,9 +170,10 @@
           <button type="button" class="gl-btn glstage-dir-btn" data-action="castFromTokens" data-tooltip="{{localize "GLSTAGE.director.cast.fromTokensHint"}}"><i class="fa-solid fa-users-viewfinder" aria-hidden="true"></i><span>{{localize "GLSTAGE.director.cast.fromTokens"}}</span></button>
         </div>
         <p class="glstage-dir-drop-hint"><i class="fa-solid fa-hand-pointer" aria-hidden="true"></i>{{localize "GLSTAGE.director.cast.dropHint"}}</p>
+        {{> search search.cast}}
         <ul class="glstage-dir-cast-list gl-scroll">
           {{#each cast.list}}
-            <li>
+            <li data-search-row="{{id}}" data-haystack="{{haystack}}" data-ready>
               <button type="button" class="glstage-dir-cast-row {{#if active}}is-active{{/if}}" data-action="castSelect" data-id="{{id}}">
                 <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
                 <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span>{{#if title}}<span class="glstage-dir-sub">{{title}}</span>{{/if}}</span>
@@ -167,7 +184,9 @@
           {{else}}
             <li class="glstage-dir-empty">{{localize "GLSTAGE.director.cast.empty"}}</li>
           {{/each}}
+          <li class="glstage-dir-empty" data-no-match hidden>{{localize "GLSTAGE.search.none"}}</li>
         </ul>
+        {{> world search.castWorld}}
       </aside>
 
       <div class="glstage-dir-cast-main">
@@ -400,10 +419,11 @@
 
       <aside class="glstage-dir-roster">
         <h3 class="glstage-dir-legend">{{localize "GLSTAGE.director.comms.callIn"}}</h3>
+        {{> search search.comms}}
         {{#if comms.roster.length}}
           <ul class="glstage-dir-roster-list">
             {{#each comms.roster}}
-              <li class="glstage-dir-roster-row {{#if calling}}is-on{{/if}}">
+              <li class="glstage-dir-roster-row {{#if calling}}is-on{{/if}}" data-search-row="{{id}}" data-haystack="{{haystack}}" {{#if canCall}}data-ready{{/if}}>
                 <span class="glstage-dir-thumb-box">{{> thumb thumb}}</span>
                 <span class="glstage-dir-who-text"><span class="glstage-dir-name">{{name}}</span></span>
                 {{#if calling}}
@@ -416,8 +436,10 @@
             {{/each}}
           </ul>
         {{else}}
-          <p class="glstage-dir-empty">{{localize "GLSTAGE.director.stage.noCast"}}</p>
+          <p class="glstage-dir-empty" data-search-empty>{{localize "GLSTAGE.director.stage.noCast"}}</p>
         {{/if}}
+        <p class="glstage-dir-empty" data-no-match hidden>{{localize "GLSTAGE.search.none"}}</p>
+        {{> world search.commsWorld}}
       </aside>
     </div>
   </section>

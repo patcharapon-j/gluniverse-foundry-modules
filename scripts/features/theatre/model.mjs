@@ -52,6 +52,7 @@
  * { background: string, width, height, padding, gridType, tokenVision, backgroundColor } | null
  */
 
+import { foldText, matchesQuery } from "../../core/util.mjs";
 import { DEFAULT_FACE, DEFAULT_MODE, DEFAULT_STYLE, FACES, MODES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
 
 const num = (v, lo, hi, fallback) => {
@@ -217,10 +218,9 @@ export function groupShots(shots, folders) {
 
 /* ── Search ─────────────────────────────────────────────────────────────── */
 
-/** Lower case, accents stripped, whitespace collapsed: what a query and a shot are compared in. */
-export function foldText(v) {
-  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-}
+/* `foldText` and `matchesQuery` are the suite's (core/util.mjs), re-exported so
+   the apps and the check keep one import. */
+export { foldText, matchesQuery };
 
 /** Everything a GM might search a shot by: its title lines, notes, file name and folder. */
 export function searchText(shot, folderName = "") {
@@ -228,13 +228,6 @@ export function searchText(shot, folderName = "") {
   let decoded = file;
   try { decoded = decodeURIComponent(file); } catch { /* keep the raw name */ }
   return foldText([shot?.eyebrow, shot?.title, shot?.subtitle, shot?.notes, decoded, folderName].filter(Boolean).join(" "));
-}
-
-/** True when every word of `query` appears somewhere in `text` (a `searchText`). An empty query matches all. */
-export function matchesQuery(text, query) {
-  const words = foldText(query).split(" ").filter(Boolean);
-  const hay = foldText(text);
-  return words.every((w) => hay.includes(w));
 }
 
 export function normalizeConfig(raw) {

@@ -39,7 +39,7 @@
 
   "GLTH.search.placeholder": "Search shots",
   "GLTH.search.label": "Search shots",
-  "GLTH.search.hint": "Matches title, eyebrow, subtitle, notes, file name and folder. Enter cues up the first match, Esc clears.",
+  "GLTH.search.hint": "Matches title, eyebrow, subtitle, notes, file name and folder. Enter cues up the first match, Shift+Enter puts it on air, Esc clears.",
   "GLTH.search.none": "No shots match.",
 
   "GLTH.folders.label": "Folders",
@@ -138,5 +138,10 @@
   "GLTH.editor.sceneNote": "What every shot uses unless it sets its own. Changes save as you make them.",
   "GLTH.editor.holdScene": "Title hold (s)",
   "GLTH.editor.tag": "Corner location tag",
-  "GLTH.editor.tagHint": "After the title leaves, keep the shot's title small in a corner so late arrivals know where the story is."
+  "GLTH.editor.tagHint": "After the title leaves, keep the shot's title small in a corner so late arrivals know where the story is.",
+
+  "GLTH.quick.group": "Theatre shots",
+  "GLTH.quick.go": "Go on air",
+  "GLTH.quick.cue": "Cue up in the filmstrip",
+  "GLTH.quick.edit": "Edit shot"
 }

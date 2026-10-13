@@ -20,6 +20,7 @@
     "styles/gl-fonts.css",
     "styles/gl-tokens.css",
     "styles/gl-motion.css",
+    "styles/quick-palette.css",
     "styles/clocks-tracker-hud.css",
     "styles/clocks-tracker-weather.css",
     "styles/clocks-tracker-delving.css",

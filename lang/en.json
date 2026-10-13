@@ -149,5 +149,13 @@
     }
   },
   "GLS.feature.critical.title": "Critical",
-  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations."
+  "GLS.feature.critical.hint": "JRPG-style cinematic critical-hit and critical-success animations.",
+  "GLS.quick.title": "Quick search",
+  "GLS.quick.placeholder": "Search the cast, actors and shots…",
+  "GLS.quick.close": "Close",
+  "GLS.quick.none": "Nothing matches.",
+  "GLS.quick.nothing": "Nothing to search here: Stage is off and this is not a Theatre scene.",
+  "GLS.quick.failed": "That action could not be completed. See the console for details.",
+  "GLS.quick.key.name": "Quick search",
+  "GLS.quick.key.hint": "GM only. Search the Stage cast, the world's actors and the Theatre scene's shots, and bring them in from the keyboard."
 }

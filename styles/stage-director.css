@@ -964,6 +964,52 @@
   border-left-color: var(--glstage-dir-live);
 }
 
+/* ── search: a box over each roster, and the world's actors below it ─── */
+
+.glstage-dir-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.glstage-dir-search > i {
+  position: absolute;
+  left: var(--gl-sp-4);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-2xs);
+  pointer-events: none;
+  transition: color var(--gl-d-quick) var(--gl-ease);
+}
+.glstage-dir .glstage-dir-search-input {
+  width: 100%;
+  height: calc(var(--gl-sp-10) + var(--gl-sp-1));
+  margin: 0;
+  padding: 0 var(--gl-sp-4) 0 calc(var(--gl-sp-4) * 2 + var(--gl-fs-2xs));
+  font-size: var(--gl-fs-xs);
+}
+.glstage-dir-search.is-active > i { color: var(--gl-accent); }
+.glstage-dir-search.is-active .glstage-dir-search-input { border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent); }
+
+.glstage-dir-world { display: flex; flex-direction: column; gap: var(--gl-sp-2); }
+.glstage-dir .glstage-dir-world-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  margin: var(--gl-sp-2) 0 0;
+  padding: var(--gl-sp-3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-weight: normal;
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glstage-dir-world-head > i { color: var(--gl-accent); }
+.glstage-dir-world-row .glstage-dir-thumb-box { border-style: dashed; }
+
 /* ── narrow windows ───────────────────────────────────────────────────── */
 
 @container glstage-dir (max-width: 760px) {

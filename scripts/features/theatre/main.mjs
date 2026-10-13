@@ -26,6 +26,8 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
+import { registerQuickProvider } from "../../core/quick-palette.mjs";
+import { quickProvider } from "./quick.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { BACKDROP } from "./render/shot-renderer.mjs";
 import { DEFAULT_FRAMING, FACES, LOAD_TIMEOUT, SETTINGS, TIMING } from "./constants.mjs";
@@ -391,6 +393,7 @@ function onUpdateScene(scene, changes) {
 
 export function onInit() {
   registerKeybindings();
+  registerQuickProvider(quickProvider);
   registerSceneSetup();
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
   Hooks.on("renderSceneControls", onRenderSceneControls);

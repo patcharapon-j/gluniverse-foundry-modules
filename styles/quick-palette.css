@@ -1,0 +1,202 @@
+/* GLUniverse Suite — the quick palette (scripts/core/quick-palette.mjs).
+   GM only, opened with Ctrl+K. Prefix `glqp-`. */
+
+.glqp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gl-z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: var(--gl-scrim);
+  animation: gl-fade-in var(--gl-d-quick) var(--gl-ease) both;
+}
+
+.glqp {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 92vw);
+  max-height: min(72vh, 620px);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-snug);
+  animation: gl-drop-in var(--gl-d-brisk) var(--gl-ease) both;
+}
+
+/* ── field ── */
+
+.glqp-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--gl-sp-5) var(--gl-sp-6);
+  border-bottom: 1px solid var(--gl-hair);
+}
+.glqp-field > i {
+  position: absolute;
+  left: calc(var(--gl-sp-6) + var(--gl-sp-5));
+  color: var(--gl-accent);
+  font-size: var(--gl-fs-sm);
+  pointer-events: none;
+}
+.glqp .glqp-input {
+  width: 100%;
+  height: calc(var(--gl-sp-10) * 1.5);
+  margin: 0;
+  padding: 0 var(--gl-sp-5) 0 calc(var(--gl-sp-5) * 2 + var(--gl-fs-sm));
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-cut-sm);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-bright);
+  font: inherit;
+  font-size: var(--gl-fs-md);
+  box-shadow: none;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glqp .glqp-input:focus { outline: 0; border-color: var(--gl-accent); box-shadow: var(--gl-ring); }
+.glqp .glqp-input::placeholder { color: var(--gl-text-faint); }
+
+/* ── results ── */
+
+.glqp-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gl-sp-3) var(--gl-sp-4) var(--gl-sp-4);
+}
+
+.glqp .glqp-group {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  margin: var(--gl-sp-4) var(--gl-sp-3) var(--gl-sp-2);
+  padding: 0;
+  border: 0;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-weight: normal;
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+.glqp .glqp-group > i { color: var(--gl-accent); }
+
+.glqp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--gl-r-xs);
+  cursor: pointer;
+  transition: background-color var(--gl-d-tap) var(--gl-ease), border-color var(--gl-d-tap) var(--gl-ease);
+}
+.glqp-row.is-active {
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--gl-accent) 12%, transparent);
+}
+
+.glqp-thumb {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: calc(var(--gl-sp-10) * 1.3);
+  height: calc(var(--gl-sp-10) * 1.3);
+  overflow: hidden;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-faint);
+}
+.glqp-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+  object-position: 50% 15%;
+}
+
+.glqp-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.glqp-title,
+.glqp-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glqp-title { color: var(--gl-text-bright); font-size: var(--gl-fs-sm); }
+.glqp-sub { color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); }
+
+.glqp-badge {
+  flex: 0 0 auto;
+  color: var(--gl-accent);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+.glqp-acts { display: flex; flex: 0 0 auto; gap: var(--gl-sp-1); opacity: 0.35; transition: opacity var(--gl-d-tap) var(--gl-ease); }
+.glqp-row.is-active .glqp-acts,
+.glqp-row:hover .glqp-acts { opacity: 1; }
+.glqp .glqp-act {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--gl-sp-10) * 0.9);
+  height: calc(var(--gl-sp-10) * 0.9);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-2xs);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--gl-d-tap) var(--gl-ease), border-color var(--gl-d-tap) var(--gl-ease);
+}
+.glqp .glqp-act:hover,
+.glqp .glqp-act:focus-visible { border-color: var(--gl-accent); color: var(--gl-text-bright); outline: 0; }
+
+.glqp-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-3);
+  margin: 0;
+  padding: var(--gl-sp-10) var(--gl-sp-6);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-xs);
+}
+
+/* ── footer: what each Enter does on the active row ── */
+
+.glqp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  gap: var(--gl-sp-2) var(--gl-sp-6);
+  padding: var(--gl-sp-4) var(--gl-sp-6);
+  border-top: 1px solid var(--gl-hair);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-2xs);
+}
+.glqp-key { white-space: nowrap; }
+.glqp .glqp-key > kbd {
+  display: inline-block;
+  margin: 0;
+  padding: 0 var(--gl-sp-2);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  box-shadow: none;
+  color: var(--gl-text-bright);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  line-height: var(--gl-lh-normal);
+}
