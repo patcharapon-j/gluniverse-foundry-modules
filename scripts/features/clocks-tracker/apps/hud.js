@@ -23,6 +23,13 @@ import { DelvingStore } from "../delving/delving-store.js";
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 const NS = "http://www.w3.org/2000/svg";
 
+/** Whether this client is the stream feature's capture login. Read off the
+    setting rather than imported, so the time engine never depends on Stream. */
+function isStreamClient() {
+  try { return !!game.user?.id && game.settings.get(MODULE_ID, "stream.streamUserId") === game.user.id; }
+  catch { return false; }
+}
+
 // Compact value-flash choreography (ms). The flash is a deliberate four-beat
 // sequence — open the bar, pause, animate the value change, pause, close —
 // rather than letting the open and the value change overlap.
@@ -189,6 +196,10 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._cloneMissionGlow();
     this._buildDynamic();
     this._applyFeatureGates();
+    // the stream login can be (re)assigned mid-session; re-gate the event pills
+    this._streamUserHook ??= Hooks.on("updateSetting", s => {
+      if (s?.key === `${MODULE_ID}.stream.streamUserId`) this._applyFeatureGates();
+    });
     this._applyPosition();
     this._wireViewportClamp();
     this._activateInteractions();
@@ -243,9 +254,11 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     };
 
     // Calendar access: the date stays visible but stops being a button, and the
-    // event badge / chip is hidden. Events nest under calendar.
+    // event badge / chip is hidden. Events nest under calendar. The stream
+    // capture login never shows the event pills: "Next: X · 3d" on the
+    // broadcast tells the audience what the GM has planned.
     const calendar = Features.on("timeHud.calendar");
-    gate(Features.on("timeHud.events"), ".event-badge");
+    gate(Features.on("timeHud.events") && !isStreamClient(), ".event-badge");
     root.querySelector(".cell.date")?.classList.toggle("feat-noclick", !calendar);
 
     // Mission countdown: drop the dock button and the meter's countdown line.
@@ -271,6 +284,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._dx?.destroy();
     this._dx = null;
     if (this._onViewportResize) window.removeEventListener("resize", this._onViewportResize);
+    if (this._streamUserHook != null) { Hooks.off("updateSetting", this._streamUserHook); this._streamUserHook = null; }
     if (this._resizeRAF) { cancelAnimationFrame(this._resizeRAF); this._resizeRAF = null; }
     return super._onClose(options);
   }
