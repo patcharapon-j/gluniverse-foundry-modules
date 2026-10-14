@@ -35,7 +35,7 @@ import {
 import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
 import { measureSource } from "./canvas-mode.mjs";
 import { writeCanvasLayout, writeFrameLayout } from "./scene-setup.mjs";
-import { currentGrade, dialsOf, gradeFragment, sampleGrade, shotLight, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
+import { currentGrade, dialsOf, gradeFragment, sampleGrade, shotLight, showsPicture, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
 
 /** Fired as Hooks.callAll(HOOK_CHANGED, store|null, detail) on every change the viewed scene's Theatre data goes through. */
 export const HOOK_CHANGED = "gluniverse.theatre.changed";
@@ -514,6 +514,29 @@ export class TheatreStore {
   clear() { return this.cue({ kind: "clear" }); }
 
   /* ── Stage grade on a shot ── */
+
+  /**
+   * Bring Stage's light into line with the shot on screen, when it is not.
+   * Only a cut (or an edit of the shot on screen) writes the light, so a scene
+   * whose shot went up before Stage was switched on — or before a build that
+   * carried the picture — leaves Stage with no picture at all: in Frame mode
+   * the scene's own background is black, so there is nothing to blur, no room
+   * to light the cast from and no lamps to rim them. Run on attach by the
+   * active GM only, so one client writes; the dials are kept.
+   */
+  async syncStageLight() {
+    if (!this.isGM || !stageEnabled()) return false;
+    const active = game.users?.activeGM;
+    if (active && !active.isSelf) return false;
+    const shot = this.shot(this.state.shotId);
+    if (!shot) return false;
+    const want = shotLight(shot, this.scene, { canvasMode: isCanvasMode(this.config) });
+    if (!want || showsPicture(currentGrade(this.scene), want)) return false;
+    const frag = gradeFragment(want);
+    if (!frag) return false;
+    await this._write(() => this.scene.update(frag));
+    return true;
+  }
 
   /** Store the scene's grade as it is right now on the shot (its dials: the picture is the shot's). */
   async captureStageGrade(id) {

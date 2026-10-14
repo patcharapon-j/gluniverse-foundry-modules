@@ -336,6 +336,8 @@ function attachScene() {
     restingLetterbox = resolveLetterbox(store.currentShot, store.config);
     checkReveal(store);
   } else settleState(store);
+  // Stage draws the shot on screen only if its light names it (store.mjs).
+  store.syncStageLight().catch((e) => warn("theatre | could not sync the Stage light", e));
   emit(store, { kind: "attach" });
   refreshControls();
 }

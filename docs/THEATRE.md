@@ -199,6 +199,13 @@ picture as it is. Editing the shot on screen (its image, crop, treatment or
 grade) and switching mode relight Stage in the same write. A stale `src` in an
 old stored grade is ignored.
 
+Those are the only writes, so a shot that went up before Stage was switched on
+leaves Stage with no picture: in Frame mode the scene's own background is black,
+so Stage has nothing to blur, no room to light the cast from and no lamps to rim
+them. When a Theatre scene attaches, the active GM therefore checks the light
+against the shot on screen (`syncStageLight`, `showsPicture`) and rewrites it,
+dials kept, if it names a different picture.
+
 The relight is pinned to the cue's clock, not to each client's image-ready
 start. A client that is still loading the image when the cue begins waits for it
 (up to `LOAD_TIMEOUT`) before playing the picture and the title, but its

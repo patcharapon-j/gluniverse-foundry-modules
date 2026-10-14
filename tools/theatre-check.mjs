@@ -641,6 +641,18 @@ section = "seams";
   ok("editing the shot on screen relights Stage in the same write", /_writeShots\(\s*shots\s*,\s*null\s*,\s*looks\s*\?\s*this\._relightOnScreen/.test(st));
   ok("a mode switch relights the shot on screen", /next\.mode\s*!==\s*before\.mode\)\s*Object\.assign\(\s*upd\s*,\s*this\._relightOnScreen/.test(st));
   ok("capturing a light stores its dials only", /dialsOf\(\s*currentGrade\(/.test(st));
+  // Only a cut writes the light, so a shot that went up before Stage was on
+  // leaves Stage with no picture: no backdrop, no blur, no room, no rims.
+  const stored = SP.normalizePicture(L.picture);
+  ok("a light Stage completed still shows the shot's picture", SB.showsPicture({ src: L.src, picture: stored }, L));
+  ok("a light with no picture does not", !SB.showsPicture({ src: null, picture: SP.NEUTRAL_PICTURE }, L));
+  ok("a light on another grade does not", !SB.showsPicture({ src: L.src, picture: { ...stored, exposure: 0 } }, L));
+  ok("a Canvas-mode light (crop only) matches Stage's complete one",
+    SB.showsPicture({ src: "new.png", picture: SP.normalizePicture({ focus: lit.focus }) }, SB.shotLight(lit, null, { canvasMode: true })));
+  const mainSrc = stripComments(read(`${FEAT}/main.mjs`));
+  const attach = mainSrc.slice(mainSrc.indexOf("function attachScene"), mainSrc.indexOf("function detachScene"));
+  ok("attaching a Theatre scene syncs Stage's light to the shot on screen", /store\.syncStageLight\(\)/.test(attach));
+  ok("the sync is written by the active GM alone", /activeGM[\s\S]{0,80}isSelf/.test(st.slice(st.indexOf("syncStageLight"))));
 
   ok("theatre never imports the stage feature statically", walk(FEAT).every((f) => !/from\s+["'][^"']*features\/stage\//.test(read(f)) && !/from\s+["']\.\.\/stage\//.test(read(f))));
 

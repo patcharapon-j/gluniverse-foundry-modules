@@ -112,6 +112,24 @@ export function shotLight(shot, scene, { canvasMode = false } = {}) {
   return { ...dials, src: shot.src || shot.grade?.src || null, picture: pictureOf(shot, { canvasMode }) };
 }
 
+/**
+ * Whether the light on a scene already shows `want`'s picture (src, crop and
+ * grade; the dials are the GM's and are not compared). Absent picture fields
+ * read as Stage's neutral values, so a Canvas-mode light (crop only) compares
+ * equal to the complete one Stage stores.
+ */
+export function showsPicture(have, want) {
+  if (!have || !want) return false;
+  if ((have.src || null) !== (want.src || null)) return false;
+  const a = have.picture ?? {};
+  const b = want.picture ?? {};
+  const n = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : d);
+  const tint = (v) => String(v ?? "#000000").toLowerCase();
+  return n(a.focus?.x, 0.5) === n(b.focus?.x, 0.5) && n(a.focus?.y, 0.5) === n(b.focus?.y, 0.5)
+    && n(a.exposure, 0) === n(b.exposure, 0) && n(a.saturation, 1) === n(b.saturation, 1)
+    && tint(a.tint) === tint(b.tint) && n(a.tintAmount, 0) === n(b.tintAmount, 0) && n(a.blur, 0) === n(b.blur, 0);
+}
+
 /** A grade proposed from an image, or null (Stage off, a video, a load failure). */
 export async function sampleGrade(src) {
   const api = stageApi();
