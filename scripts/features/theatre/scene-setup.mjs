@@ -193,7 +193,7 @@ export async function convertScene(scene) {
   forceSet(upd, PATHS.state, normalizeState(null));
   // Stage seeds an ungraded scene from its background the first time it shows
   // an actor; a Theatre background is flat black, so give the scene a grade now.
-  const frag = gradeFragment(initialGrade(scene, shots));
+  const frag = gradeFragment(initialGrade(scene, shots, { canvasMode }));
   if (frag) Object.assign(upd, frag);
   // The background is cleared BEFORE the scene turns Theatre on, so a Frame-mode
   // Theatre never touches it while it is on (Leave restores it after switching off).

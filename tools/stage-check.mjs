@@ -215,6 +215,69 @@ section = "light";
   ok("cover centres the picture", Math.abs(c[0] - 0.5) < 1e-6 && Math.abs(c[1] - 0.5) < 1e-6);
 }
 
+/* ── The picture: Theatre's crop and treatment, drawn by Stage ─────────── */
+// While the stage is up Stage draws the shot's picture itself. If its crop or
+// grade differs from Theatre's, bringing the cast on re-frames and re-grades the
+// room, and the cast is lit by a room nobody is looking at. Nothing errors.
+section = "picture";
+{
+  const P = await imp(`${FEAT}/light/picture.mjs`);
+  const n = P.normalizePicture(null);
+  ok("normalizePicture(null) is the neutral picture", same(n, { ...P.NEUTRAL_PICTURE, focus: { ...P.NEUTRAL_PICTURE.focus } }));
+  ok("normalizeLight carries a complete picture", same(R.normalizeLight({}).picture, n));
+  ok("normalizePicture clamps", same(P.normalizePicture({ focus: { x: 9, y: -9 }, exposure: 9, saturation: -1, tintAmount: 4, blur: 3, tint: "red" }),
+    { focus: { x: 1, y: 0 }, exposure: 2, saturation: 0, tint: "#000000", tintAmount: 1, blur: 1 }));
+  ok("the picture never moves the rig (mood off is still the identity)",
+    same(R.resolveRig(R.normalizeLight({ mood: "off", picture: { exposure: -2, blur: 1 } }), null), R.identityRig()));
+  const bytes = Uint8Array.from([10, 128, 250, 255, 200, 40, 90, 255]);
+  ok("a neutral grade touches no pixel", same([...P.gradeBytes(Uint8Array.from(bytes), {})], [...bytes]));
+  // The shader's order on encoded values, restated: gain, saturation, tint wash.
+  const pic = { exposure: -0.5, saturation: 0.6, tint: "#3366ff", tintAmount: 0.4 };
+  const { grade: [g, s, a], tint } = P.pictureUniforms(pic);
+  const want = [];
+  for (let i = 0; i < bytes.length; i += 4) {
+    let c = [bytes[i], bytes[i + 1], bytes[i + 2]].map((v) => (v / 255) * g);
+    let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    c = c.map((v) => Math.max(l + (v - l) * s, 0));
+    l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    c = c.map((v, j) => v + (tint[j] * l - v) * a);
+    want.push(...c.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255)), 255);
+  }
+  ok("gradeBytes is the backdrop shader's grade", same([...P.gradeBytes(Uint8Array.from(bytes), pic)], want));
+  ok("pictureKey is the bare src for a plain picture", P.pictureKey("a.png", {}) === "a.png" && P.pictureKey("a.png", { blur: 1 }) === "a.png");
+  ok("pictureKey splits a crop and a grade", new Set([P.pictureKey("a.png", {}), P.pictureKey("a.png", { focus: { x: 0.2 } }), P.pictureKey("a.png", { exposure: 1 })]).size === 3);
+  ok("pictureKey of no picture is null", P.pictureKey(null, {}) === null);
+
+  const view = { w: 1920, h: 1080 };
+  const centred = B.coverMap(view, 3, { unit: true });
+  ok("a centred crop is no crop", same(B.coverMap(view, 3, { crop: [0.5, 0.5], unit: true }), centred));
+  const left = B.coverMap(view, 3, { crop: [0, 0.5], unit: true });
+  ok("a crop at the left edge shows the left edge", Math.abs(left[2]) < 1e-9);
+  const right = B.coverMap(view, 3, { crop: [0.6, 0.5], unit: true });
+  ok("a crop keeps its point centred where the picture allows", Math.abs(right[2] + right[0] / 2 - 0.6) < 1e-9);
+  let inside = true;
+  for (const zoom of [1, 1.3, 2.5]) for (const cx of [0, 0.3, 1]) for (const fx of [0.1, 0.9]) {
+    const m = B.coverMap(view, 3, { zoom, focus: [fx, 0.5], crop: [cx, cx], unit: true });
+    inside &&= m[2] >= -1e-9 && m[2] + m[0] <= 1 + 1e-9 && m[3] >= -1e-9 && m[3] + m[1] <= 1 + 1e-9;
+  }
+  ok("a cropped, pushed window never leaves the picture", inside);
+
+  const fs = stripComments(SH.BACKDROP_FS);
+  ok("the backdrop shader grades the sharp level", /texture\(uSharp[^;]*;[\s\S]*uPicGrade\.x[\s\S]*uPicGrade\.y[\s\S]*uPicGrade\.z/.test(fs));
+  ok("the backdrop shader never grades the prepared levels twice", !/(m|f)\s*\*=\s*uPicGrade/.test(fs) && !/texture\(uMid[^;]*uPicGrade/.test(fs));
+  const gl = stripComments(read(`${FEAT}/render/gl.mjs`));
+  ok("a mid stand-in for the sharp picture takes no second grade", /image\s*&&\s*look\s*\?\s*look\s*:\s*NEUTRAL_LOOK/.test(gl));
+  const ov = stripComments(read(`${FEAT}/overlay.mjs`));
+  ok("the overlay keys a backdrop by its picture", /pictureKey\(\s*src\s*,\s*light\.picture\s*\)/.test(ov));
+  ok("the overlay prepares the backdrop graded", /prepareBackdrop\(\s*media\s*,\s*picture\s*\)/.test(ov));
+  ok("the overlay hands the director the picture's crop", /setBackdrop\(key,\s*\{[^}]*focus\s*\}/.test(ov));
+  ok("the picture's blur is a floor under the light's", /rig\.blur\s*=\s*Math\.max\(\s*rig\.blur\s*,\s*light\.picture\.blur\s*\)/.test(ov));
+  const dir = stripComments(read(`${FEAT}/director.mjs`));
+  ok("every backdrop and env map the director builds is cropped", (dir.match(/coverMap\(/g) ?? []).length === (dir.match(/crop:/g) ?? []).length);
+  const app = stripComments(read(`${FEAT}/apps/director-app.mjs`));
+  ok("Reset keeps the picture (on a Theatre scene it is the shot on screen)", /DEFAULT_LIGHT,\s*src,\s*picture\s*\}/.test(app));
+}
+
 /* ── Shaders: every uniform declared, listed, and written ──────────────── */
 section = "shaders";
 {

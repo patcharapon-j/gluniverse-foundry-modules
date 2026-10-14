@@ -39,6 +39,7 @@ import {
   COMMS_ALIGN, COMMS_EDGES, COMMS_STYLES, DEFAULT_IMAGE, FEATURE_ID, MAX_CALLS, MAX_ON_STAGE, NAMEPLATES, REACTIONS,
 } from "../model.mjs";
 import { DEFAULT_LIGHT, LIGHT_DIALS, MOODS } from "../light/rig.mjs";
+import { NEUTRAL_PICTURE } from "../light/picture.mjs";
 import { onStageSetting } from "../settings.mjs";
 import * as store from "../store.mjs";
 import { sendReaction } from "../channel.mjs";
@@ -224,7 +225,8 @@ function DirectorApp() {
         mood: function (_e, t) { return this._lightPatch({ mood: t.dataset.mood }, true); },
         lightReset: function () { return this._lightReset(); },
         browseSrc: function () { return this._browseSrc(); },
-        clearSrc: function () { return this._lightPatch({ src: null }, true); },
+        // A picture's framing and grade belong to that picture, so they go with it.
+        clearSrc: function () { return this._lightPatch({ src: null, picture: NEUTRAL_PICTURE }, true); },
         // comms
         toggleComms: function () { return this._write(() => store.showComms(!store.readComms().visible)); },
         clearComms: function () { return this._write(() => store.clearComms()); },
@@ -595,7 +597,10 @@ function DirectorApp() {
       if (!scene) return;
       const key = `light|${scene.id}`;
       if (this._pending.has(key)) { clearTimeout(this._pending.get(key).timer); this._pending.delete(key); }
-      await this._write(() => store.writeLight(scene, { ...DEFAULT_LIGHT }, LIGHT_TIMING));
+      // Reset is the light's dials. The picture stays: on a Theatre scene it is
+      // the shot on screen, and the scene's own background there is black.
+      const { src, picture } = store.readLight(scene);
+      await this._write(() => store.writeLight(scene, { ...DEFAULT_LIGHT, src, picture }, LIGHT_TIMING));
     }
 
     /* ── input routing: data-bind="ns:key" (+ data-member) ── */
@@ -881,7 +886,7 @@ function DirectorApp() {
       if (!scene) return;
       const path = await pickImage(store.readLight(scene).src ?? "");
       // The scene the picker was opened for, not whichever is viewed now.
-      if (path) this._lightPatch({ src: path }, true, scene.id);
+      if (path) this._lightPatch({ src: path, picture: NEUTRAL_PICTURE }, true, scene.id);
     }
 
     /* ── search ── */

@@ -13,6 +13,8 @@
 import { PROGRAMS, UNIFORMS } from "./shaders.mjs";
 
 const ART_MAX = 2048;
+/** An ungraded picture (light/picture.mjs NEUTRAL_UNIFORMS, restated: the renderer imports no light code). */
+const NEUTRAL_LOOK = Object.freeze({ grade: [1, 1, 0, 0], tint: [0, 0, 0] });
 
 export class StageGL {
   /** @param {HTMLCanvasElement} canvas */
@@ -23,6 +25,7 @@ export class StageGL {
     this.report = "";
     this._arts = new Map();
     this._bgs = new Map();
+    this._bgLook = new Map();   // key → the sharp picture's grade (picture.mjs pictureUniforms)
     this._dpr = 1;
     this._view = { w: 1, h: 1 };
     this._quads = 0;
@@ -129,10 +132,13 @@ export class StageGL {
    * @param {string} key
    * @param {object} maps  light/backdrop.mjs `buildBackdrop`
    * @param {TexImageSource} [image]  the sharp picture, ≤ ART_MAX; the mid level stands in without one
+   * @param {{grade: number[], tint: number[]}} [look]  the grade the shader puts on the sharp
+   *        picture; the maps arrive graded, so a mid stand-in takes none
    */
-  setBackdrop(key, maps, image = null) {
+  setBackdrop(key, maps, image = null, look = null) {
     if (!this.ok || !maps) return;
     this.dropBackdrop(key);
+    this._bgLook.set(key, image && look ? look : NEUTRAL_LOOK);
     this._bgs.set(key, {
       sharp: image ? this._texture(image, { mip: true }) : null,
       mid: this._texture(maps.mid),
@@ -149,6 +155,7 @@ export class StageGL {
     if (!b || !this.gl) return;
     for (const t of Object.values(b)) if (t) this.gl.deleteTexture(t);
     this._bgs.delete(key);
+    this._bgLook.delete(key);
   }
 
   /** Keys of every backdrop held. */
@@ -189,6 +196,7 @@ export class StageGL {
     this.gl = null;
     this._arts.clear();
     this._bgs.clear();
+    this._bgLook.clear();
   }
 
   /* ── drawing ─────────────────────────────────────────────────────── */
@@ -238,6 +246,9 @@ export class StageGL {
       this._tex(2, set.soft, u.uSoft);
       this._tex(3, set.glow, u.uGlow);
       gl.uniform4fv(u.uBgMap, b.map);
+      const look = this._bgLook.get(b.key) ?? NEUTRAL_LOOK;
+      gl.uniform4fv(u.uPicGrade, look.grade);
+      gl.uniform3fv(u.uPicTint, look.tint);
       gl.uniform1f(u.uAmount, b.alpha);
       gl.uniform1f(u.uBlur, frame.bg.blur);
       gl.uniform1f(u.uBloom, frame.bg.bloom);

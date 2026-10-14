@@ -35,7 +35,7 @@ import {
 import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
 import { measureSource } from "./canvas-mode.mjs";
 import { writeCanvasLayout, writeFrameLayout } from "./scene-setup.mjs";
-import { currentGrade, gradeFragment, sampleGrade, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
+import { currentGrade, dialsOf, gradeFragment, sampleGrade, shotLight, stageEnabled, tweenOptions } from "./stage-bridge.mjs";
 
 /** Fired as Hooks.callAll(HOOK_CHANGED, store|null, detail) on every change the viewed scene's Theatre data goes through. */
 export const HOOK_CHANGED = "gluniverse.theatre.changed";
@@ -192,14 +192,25 @@ export class TheatreStore {
   /**
    * Write the shot list in play order. With `folders`, the folder list is
    * written in the same update and the shots are ordered (and orphaned shots
-   * unfiled) against it.
+   * unfiled) against it. `extra` is merged into the same update.
    */
-  async _writeShots(shots, folders = null) {
+  async _writeShots(shots, folders = null, extra = null) {
     const upd = {};
     const list = folders ? normalizeFolders(folders) : this.folders;
     forceSet(upd, PATHS.shots, orderShots(normalizeShots(shots), list));
     if (folders) forceSet(upd, PATHS.folders, list);
+    if (extra) Object.assign(upd, extra);
     await this.scene.update(upd);
+  }
+
+  /**
+   * Stage's light for the shot on screen, re-stated after that shot (or the
+   * scene's mode) changed under it, or null. Without it Stage keeps drawing the
+   * old picture, crop and grade behind the cast until the next cut.
+   */
+  _relightOnScreen(shot, config = this.config) {
+    if (!shot || shot.id !== this.state.shotId) return null;
+    return gradeFragment(shotLight(shot, this.scene, { canvasMode: isCanvasMode(config) }));
   }
 
   /** A folder id that exists in this scene, else null (unfiled). */
@@ -241,7 +252,10 @@ export class TheatreStore {
       if ("grade" in (patch ?? {})) merged.grade = grade ?? null;
       merged.id = id;
       shots[i] = normalizeShot(merged, i);
-      await this._writeShots(shots);
+      // Canvas mode only redraws a picture at a cut, so a new image waits for one there.
+      const canvasSrc = isCanvasMode(this.config) && "src" in (patch ?? {});
+      const looks = !canvasSrc && ["src", "focus", "treatment", "grade"].some((k) => k in (patch ?? {}));
+      await this._writeShots(shots, null, looks ? this._relightOnScreen(shots[i]) : null);
       return true;
     });
   }
@@ -352,6 +366,8 @@ export class TheatreStore {
       const next = normalizeConfig({ ...before, ...(patch ?? {}) });
       const upd = {};
       forceSet(upd, PATHS.config, next);
+      // Canvas mode draws the picture ungraded, Frame mode graded: Stage follows.
+      if (next.mode !== before.mode) Object.assign(upd, this._relightOnScreen(this.currentShot, next) ?? {});
       await this.scene.update(upd);
       // A mode switch lays the scene out for the new mode (a canvas redraw, once).
       if (next.mode !== before.mode) {
@@ -423,11 +439,12 @@ export class TheatreStore {
     if (draws) measureSource(shot.src, { warn: (...a) => warn("theatre |", ...a) });   // warm it during the dip
 
     // A cut relights the cast in the same write, timed to land behind the transition.
-    // The light always carries the shot's picture: Stage draws the shot from
-    // `src`, and a grade saved before it did (or none at all) has none.
-    if (kind === "shot" && (shot?.grade || shot?.src)) {
-      const grade = shot.grade ? { ...shot.grade, src: shot.grade.src || shot.src || null } : { src: shot.src };
-      const frag = gradeFragment(grade);
+    // The light always carries the shot's picture as Theatre shows it (its
+    // src, crop and treatment, from the shot and never from the stored grade):
+    // Stage draws that picture itself behind the cast. See stage-bridge.mjs.
+    const light = kind === "shot" ? shotLight(shot, this.scene, { canvasMode: isCanvasMode(config) }) : null;
+    if (light) {
+      const frag = gradeFragment(light);
       if (frag) {
         Object.assign(upd, frag);
         const opts = {
@@ -498,10 +515,10 @@ export class TheatreStore {
 
   /* ── Stage grade on a shot ── */
 
-  /** Store the scene's grade as it is right now on the shot. */
+  /** Store the scene's grade as it is right now on the shot (its dials: the picture is the shot's). */
   async captureStageGrade(id) {
     if (!this.isGM) return false;
-    const grade = currentGrade(this.scene);
+    const grade = dialsOf(currentGrade(this.scene));
     if (!grade) return false;
     return this.updateShot(id, { grade });
   }

@@ -145,17 +145,26 @@ export function buildBackdrop(read) {
 
 /**
  * Screen → picture uv for a picture of `aspect` laid over a `view` as `cover`,
- * pushed in by `zoom` about `focus` (screen uv). Returns [sx, sy, ox, oy] such
- * that uv = screenPx * s + o (pixels) — or, with `unit`, screen uv * s + o.
+ * pushed in by `zoom` about `focus` (screen uv). `crop` is the point of the
+ * PICTURE (picture uv) kept in frame when it is cropped — Theatre's shot focus,
+ * the same rule as its `coverRect`: centred on it where the picture allows,
+ * against the edge where it does not. Returns [sx, sy, ox, oy] such that
+ * uv = screenPx * s + o (pixels) — or, with `unit`, screen uv * s + o.
  */
-export function coverMap(view, aspect, { zoom = 1, focus = [0.5, 0.5], unit = false } = {}) {
+export function coverMap(view, aspect, { zoom = 1, focus = [0.5, 0.5], crop = null, unit = false } = {}) {
   const va = view.w / Math.max(1, view.h);
   // Fraction of the picture visible across each axis at zoom 1.
-  let fx = 1, fy = 1;
-  if (va > aspect) fy = aspect / va; else fx = va / aspect;
-  fx /= zoom; fy /= zoom;
-  const ox = focus[0] - fx * focus[0];
-  const oy = focus[1] - fy * focus[1];
+  let f0x = 1, f0y = 1;
+  if (va > aspect) f0y = aspect / va; else f0x = va / aspect;
+  const fx = f0x / zoom, fy = f0y / zoom;
+  let ox = focus[0] - fx * focus[0];
+  let oy = focus[1] - fy * focus[1];
+  if (crop) {
+    // Slide the window by where the crop puts it at zoom 1, never past an edge.
+    const at = (c, f) => Math.min(1 - f, Math.max(0, c - f / 2)) - (0.5 - f / 2);
+    ox = Math.min(1 - fx, Math.max(0, ox + at(crop[0], f0x)));
+    oy = Math.min(1 - fy, Math.max(0, oy + at(crop[1], f0y)));
+  }
   if (unit) return [fx, fy, ox, oy];
   return [fx / view.w, fy / view.h, ox, oy];
 }

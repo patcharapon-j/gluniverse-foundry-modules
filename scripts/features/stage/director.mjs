@@ -172,7 +172,8 @@ export class Director {
   }
 
   /**
-   * Show the backdrop held under `key` (its numbers in `room`), cross-fading
+   * Show the backdrop held under `key` (its numbers in `room`, and `room.focus`,
+   * the picture point its crop keeps — light/picture.mjs), cross-fading
    * from the one on now over the same window a relight takes, so a cue that
    * changes the picture and the light lands them together.
    */
@@ -452,7 +453,10 @@ export class Director {
     const head = closeId ? this.headOf(closeId) : null;
     const focus = head ? [Math.min(0.9, Math.max(0.1, head.x / W)), Math.min(0.9, Math.max(0.1, head.y / H))] : [0.5, 0.5];
     const bgZoom = 1.02 + (camera.zoom - 1) * 0.25 + 0.06 * close;
-    const mapOf = (key) => coverMap(this.view, this.rooms.get(key)?.aspect ?? 16 / 9, { zoom: bgZoom, focus, unit: true });
+    const mapOf = (key) => {
+      const r = this.rooms.get(key);
+      return coverMap(this.view, r?.aspect ?? 16 / 9, { zoom: bgZoom, focus, crop: r?.focus ?? null, unit: true });
+    };
     let fade = this.bg.from ? this.bg.fade.value(now) : 1;
     if (this.bg.from && fade >= 1 && !this.bg.fade.busy(now)) { this.bg.from = null; fade = 1; }
     const room = this.room;
@@ -469,14 +473,14 @@ export class Director {
       backdrops.push({ key: this.bg.to, map: toMap, alpha: show * (this.bg.from ? fade : 1) });
       veils.push({ key: this.bg.to, map: toMap, amount: glow * fade });
     }
-    const envMap = coverMap(this.view, room.aspect, { zoom: bgZoom, focus });
+    const envMap = coverMap(this.view, room.aspect, { zoom: bgZoom, focus, crop: room.focus ?? null });
     // The room lighting the cast cross-fades with the picture: a cue that
     // changes the backdrop relights the cast when the picture changes, not
     // when the update arrives.
     const leaving = this.bg.from ? this.rooms.get(this.bg.from) : null;
     const envMix = leaving ? 1 - fade : 0;
     const envFrom = leaving && envMix > 0
-      ? { key: this.bg.from, map: coverMap(this.view, leaving.aspect ?? 16 / 9, { zoom: bgZoom, focus }), mix: envMix }
+      ? { key: this.bg.from, map: coverMap(this.view, leaving.aspect ?? 16 / 9, { zoom: bgZoom, focus, crop: leaving.focus ?? null }), mix: envMix }
       : null;
     const roomLum = envFrom ? room.lum + (leaving.lum - room.lum) * envMix : room.lum;
     const floorColor = envFrom

@@ -26,6 +26,7 @@
 
 import { chroma, hueTrust, lum, neutralProbe, normalizeProbe } from "./probe.mjs";
 import { num, oneOf, str } from "../model.mjs";
+import { NEUTRAL_PICTURE, normalizePicture } from "./picture.mjs";
 
 export const LIGHT_FLAG = "stage.light";
 
@@ -44,6 +45,7 @@ export const DEFAULT_LIGHT = Object.freeze({
   darkness: true,
   flicker: true,
   src: null,
+  picture: NEUTRAL_PICTURE,
 });
 
 /** The dials, in the order the Director app lists them, with their ranges. */
@@ -76,6 +78,8 @@ export const LIGHT_DIALS = Object.freeze({
  *   darkness  follow Foundry's scene darkness
  *   flicker   let a firelit room's light breathe
  *   src       read this picture instead of the scene's background (Theatre's shot)
+ *   picture   how that picture is framed and graded (Theatre's focus and
+ *             treatment, picture.mjs): the picture's own, not the light's
  */
 export function normalizeLight(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -86,6 +90,7 @@ export function normalizeLight(raw) {
   out.darkness = typeof r.darkness === "boolean" ? r.darkness : DEFAULT_LIGHT.darkness;
   out.flicker = typeof r.flicker === "boolean" ? r.flicker : DEFAULT_LIGHT.flicker;
   out.src = str(r.src, "", 1024) || null;
+  out.picture = normalizePicture(r.picture);
   return out;
 }
 

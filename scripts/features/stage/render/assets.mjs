@@ -7,6 +7,7 @@
 
 import { SHAPE_PAD, buildShape, shapeGrid } from "../light/shape.mjs";
 import { backdropReadSize, buildBackdrop } from "../light/backdrop.mjs";
+import { gradeBytes } from "../light/picture.mjs";
 
 const ART_MAX = 2048;
 
@@ -79,17 +80,23 @@ function capped(img) {
 /**
  * Prepare a backdrop: its maps (light/backdrop.mjs) and the sharp picture to
  * upload beside them. A video is read as its current frame. Throws when tainted.
+ * The maps are made from the picture graded by `picture` (light/picture.mjs), so
+ * the room the cast is lit by, its bloom and its blur levels are the picture as
+ * Theatre shows it; the sharp level is graded by the shader instead.
  * @param {HTMLImageElement|HTMLVideoElement|ImageBitmap} img
+ * @param {object} [picture]  light.picture
  * @returns {{ maps: object, image: TexImageSource }}
  */
-export function prepareBackdrop(img) {
+export function prepareBackdrop(img, picture = null) {
   const { w, h } = sizeOf(img);
   if (!(w > 0 && h > 0)) throw new Error("empty image");
   const size = backdropReadSize(w / h);
   const { c, ctx } = canvas2d(size.width, size.height);
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, size.width, size.height);
-  const maps = buildBackdrop(ctx.getImageData(0, 0, size.width, size.height));
+  const read = ctx.getImageData(0, 0, size.width, size.height);
+  gradeBytes(read.data, picture);
+  const maps = buildBackdrop(read);
   return { maps, image: capped(img) };
 }
 

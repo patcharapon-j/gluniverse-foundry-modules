@@ -189,6 +189,16 @@ the GM can capture the current light into a shot. On a cut, the GM's single scen
 the shot's picture itself, softened, behind the cast. Theatre runs without Stage; Stage runs
 without Theatre.
 
+A shot stores only the light's **dials**. What Stage draws comes from the shot
+at the moment of the cut (`shotLight` in `stage-bridge.mjs`): its `src`, its
+`focus` and its treatment (exposure, saturation, tint, blur), so the cast walks
+on in front of the picture exactly as it was framed and graded, and is lit by
+that graded room. A shot with no grade keeps the scene's dials and only changes
+the picture. Canvas mode carries the crop and no grade, because Foundry draws the
+picture as it is. Editing the shot on screen (its image, crop, treatment or
+grade) and switching mode relight Stage in the same write. A stale `src` in an
+old stored grade is ignored.
+
 The relight is pinned to the cue's clock, not to each client's image-ready
 start. A client that is still loading the image when the cue begins waits for it
 (up to `LOAD_TIMEOUT`) before playing the picture and the title, but its

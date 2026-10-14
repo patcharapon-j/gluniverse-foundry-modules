@@ -421,6 +421,8 @@ uniform sampler2D uMid;     // shallow depth of field
 uniform sampler2D uSoft;    // deep depth of field
 uniform sampler2D uGlow;    // bloom, linear light encoded as sRGB
 uniform vec4 uBgMap;        // screen uv → picture uv: scale.xy, offset.xy (cover fit + push)
+uniform vec4 uPicGrade;     // the picture's own grade on the SHARP level: gain, saturation, tint amount, -
+uniform vec3 uPicTint;      // tint / luma(tint); the other levels arrive graded (assets.mjs)
 uniform float uAmount;      // presence (premultiplied alpha)
 uniform float uBlur;        // 0 sharp .. 1 the deepest
 uniform float uBloom;
@@ -430,7 +432,12 @@ uniform float uHaze;
 uniform vec3 uHazeColor;
 void main() {
   vec2 uv = vUV * uBgMap.xy + uBgMap.zw;
-  vec3 s = toLinear(texture(uSharp, uv).rgb);
+  // Theatre's treatment, in its order and on encoded values (light/picture.mjs).
+  vec3 e = texture(uSharp, uv).rgb;
+  if (uPicGrade.x != 1.0) e *= uPicGrade.x;
+  if (uPicGrade.y != 1.0) { float l = luma(e); e = max(vec3(l) + (e - vec3(l)) * uPicGrade.y, 0.0); }
+  if (uPicGrade.z > 0.0) e = mix(e, uPicTint * luma(e), uPicGrade.z);
+  vec3 s = toLinear(clamp(e, 0.0, 1.0));
   vec3 m = toLinear(texture(uMid, uv).rgb);
   vec3 f = toLinear(texture(uSoft, uv).rgb);
   vec3 c = uBlur < 0.35 ? mix(s, m, uBlur / 0.35) : mix(m, f, (uBlur - 0.35) / 0.65);
@@ -518,7 +525,7 @@ export const UNIFORMS = Object.freeze({
     "uAO", "uHaze", "uFlicker", "uMask", "uSilhouette", "uDebug",
   ],
   shadow: ["uView", "uCamera", "uFoot", "uThrow", "uShape", "uPad", "uFlipX", "uFootUV", "uShadowColor", "uShadow", "uAlpha"],
-  backdrop: ["uSharp", "uMid", "uSoft", "uGlow", "uBgMap", "uAmount", "uBlur", "uBloom", "uLevel", "uTint", "uHaze", "uHazeColor"],
+  backdrop: ["uSharp", "uMid", "uSoft", "uGlow", "uBgMap", "uPicGrade", "uPicTint", "uAmount", "uBlur", "uBloom", "uLevel", "uTint", "uHaze", "uHazeColor"],
   veil: ["uGlow", "uBgMap", "uGlowAmt"],
   grain: ["uGrain", "uTime", "uGrainPx"],
   screen: ["uView", "uFloor", "uFloorColor", "uFloorTop", "uVignette", "uBars"],

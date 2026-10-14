@@ -136,6 +136,21 @@ timing in the update options, so every client relights at the timeline's beat.
 While the stage is up it owns the frame: it draws the shot's picture itself,
 softened, behind the cast.
 
+It has to draw the **same** picture Theatre was showing, or bringing the cast on
+re-frames and re-grades the room and the cast is lit by a room nobody is looking
+at. So the light carries `picture` (`light/picture.mjs`): the shot's crop focus
+and its treatment's exposure, saturation, tint and blur. The read the backdrop
+maps are made from is graded with it before anything is measured, so the probe
+(the room the cast is lit by), the bloom and the blur levels are the graded
+picture; the shader grades the sharp level the same way, in Theatre's order on
+encoded values. The backdrop is cropped about the focus as Theatre's
+`coverRect` crops it, and the picture's blur is a floor under the light's
+(`max`), so it holds with the light off. A backdrop is held under
+`pictureKey(src, picture)`, so one image shown two ways is two backdrops. The
+vignette and letterbox are not carried: Stage frames its own, and Theatre's bars
+sit in its overlay above. The picture is the shot's, not the light's: Reset in
+the Director keeps it, and Clear or Browse drops it with the image.
+
 ## Search
 
 Every roster in the Director (Stage, Cast, Comms) has a search box. It filters

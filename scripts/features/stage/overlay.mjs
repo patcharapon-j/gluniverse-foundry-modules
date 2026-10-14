@@ -25,6 +25,7 @@ import { DomStage } from "./render/dom-fallback.mjs";
 import { faceFromBox, prepareArt, prepareBackdrop } from "./render/assets.mjs";
 import { roomOf } from "./light/backdrop.mjs";
 import { LIGHT_FLAG, resolveRig } from "./light/rig.mjs";
+import { pictureFilter, pictureKey, pictureUniforms } from "./light/picture.mjs";
 import { assetReason, corsRetryUrl, isSameOrigin, loadPixelImage, markTainted } from "./asset.mjs";
 import { mountStageDom } from "./stage-dom.mjs";
 import { onStageSetting } from "./settings.mjs";
@@ -216,7 +217,7 @@ export class StageOverlay {
     this.surface = null;
     this.dom.canvas.hidden = true;
     this.lite = new DomStage(this.dom.root);
-    for (const [key, b] of this.backdrops) this.lite.setBackdrop(key, b.src);
+    for (const [key, b] of this.backdrops) this.lite.setBackdrop(key, b.src, b.filter);
     for (const [src, a] of [...this.arts]) {
       if (!a.failed) continue;
       this.arts.delete(src);
@@ -255,7 +256,7 @@ export class StageOverlay {
   _upload() {
     if (!this.gl?.ok) return;
     for (const [src, a] of this.arts) if (a.image) this.gl.setArt(src, a.image, a.shape);
-    for (const [key, b] of this.backdrops) if (b.maps) this.gl.setBackdrop(key, b.maps, b.image);
+    for (const [key, b] of this.backdrops) if (b.maps) this.gl.setBackdrop(key, b.maps, b.image, b.look);
   }
 
   _resize() {
@@ -415,14 +416,15 @@ export class StageOverlay {
     const light = readLight(scene);
     const src = this._sceneSrc(scene, light);
     let opts = immediate ? { immediate: true } : timing ?? {};
-    const key = src ?? null;
+    // One picture framed or graded two ways is two backdrops (picture.mjs).
+    const key = pictureKey(src, light.picture);
     if (!key && this.backdropKey) {
       this.backdropKey = null;
       this.director.setBackdrop(null, null, now(), opts);
       this._dropStaleBackdrops();
     } else if (key && key !== this.backdropKey) {
       this.backdropKey = key;
-      const b = await this._ensureBackdrop(key);
+      const b = await this._ensureBackdrop(key, src, light.picture);
       if (this.backdropKey !== key) return; // a later change won
       // A later sync of the same picture already applied its own light and
       // timing; this one only brings the picture (and its probe) in.
@@ -432,7 +434,8 @@ export class StageOverlay {
       // the picture was ready: land the relight where the cue put it.
       if (timing && !immediate) opts = resolveTweenTiming({ ...timing, at: t0 }, now()) ?? opts;
       if (b) {
-        this.director.setBackdrop(key, b.maps ? roomOf(b.maps) : b.room, now(), opts);
+        const focus = [light.picture.focus.x, light.picture.focus.y];
+        this.director.setBackdrop(key, { ...(b.maps ? roomOf(b.maps) : b.room), focus }, now(), opts);
         this._dropStaleBackdrops();
       } else {
         // Unreadable: never leave the last room standing behind this scene's
@@ -462,20 +465,26 @@ export class StageOverlay {
     const darkness = light.darkness ? darknessOf(scene) : 0;
     this._lastDark = darkness;
     const rig = resolveRig(light, probe, { darkness });
+    // The picture's own softness is a floor under the light's depth of field: it
+    // is part of the shot (Theatre's treatment), so it holds with the light off.
+    rig.blur = Math.max(rig.blur, light.picture.blur);
     this.director.setRig(rig, now(), opts);
     this.wake();
   }
 
-  async _ensureBackdrop(src) {
-    const have = this.backdrops.get(src);
+  /** Prepare `src` graded by `picture`, held under `key` (pictureKey). */
+  async _ensureBackdrop(key, src, picture) {
+    const have = this.backdrops.get(key);
     if (have) return have;
+    const look = pictureUniforms(picture);
+    const filter = pictureFilter(picture);
     try {
       const media = VIDEO_RE.test(src) ? await loadVideoFrame(src) : await loadPixelImage(src);
-      const { maps, image } = prepareBackdrop(media);
-      const b = { src, maps, image };
-      this.backdrops.set(src, b);
-      this.gl?.setBackdrop(src, maps, image);
-      this.lite?.setBackdrop(src, src);
+      const { maps, image } = prepareBackdrop(media, picture);
+      const b = { src, maps, image, look, filter };
+      this.backdrops.set(key, b);
+      this.gl?.setBackdrop(key, maps, image, look);
+      this.lite?.setBackdrop(key, src, filter);
       return b;
     } catch (e) {
       markTainted(src);
@@ -483,9 +492,9 @@ export class StageOverlay {
         try {
           const { w, h } = await loadPlainSize(src);
           if (w > 0 && h > 0) {
-            const b = { src, maps: null, image: null, room: { ...roomOf(null), aspect: w / h } };
-            this.backdrops.set(src, b);
-            this.lite?.setBackdrop(src, src);
+            const b = { src, maps: null, image: null, look, filter, room: { ...roomOf(null), aspect: w / h } };
+            this.backdrops.set(key, b);
+            this.lite?.setBackdrop(key, src, filter);
             return b;
           }
         } catch { /* unreadable as a picture too */ }

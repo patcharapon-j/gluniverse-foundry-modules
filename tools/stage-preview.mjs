@@ -31,6 +31,9 @@
  *   split=1               left half unlit, right half lit
  *   ui=0                  hide the control strip (for screenshots)
  *   view=1..5             debug: normals · rim light · occlusion · the light alone · outline+halo
+ *   exposure= saturation= tint=#rrggbb tintAmount= picblur= cropx= cropy=
+ *                         the picture's own look (light/picture.mjs: Theatre's
+ *                         shot treatment and crop), drawn the way the overlay does
  *
  * window.__stageReady is true once every picture is prepared and a frame drawn.
  */
@@ -84,6 +87,7 @@ import { Director } from "/scripts/features/stage/director.mjs";
 import { prepareArt, prepareBackdrop } from "/scripts/features/stage/render/assets.mjs";
 import { resolveRig } from "/scripts/features/stage/light/rig.mjs";
 import { roomOf } from "/scripts/features/stage/light/backdrop.mjs";
+import { normalizePicture, pictureUniforms } from "/scripts/features/stage/light/picture.mjs";
 import { normalizeState, normalizeCast, normalizeLayout } from "/scripts/features/stage/model.mjs";
 import { mountStageDom } from "/scripts/features/stage/stage-dom.mjs";
 
@@ -122,7 +126,11 @@ for (const [canvas, strength] of [[lit, null], [unlit, 0]]) {
 
 let maps = null;
 let bgImage = null;
-try { ({ maps, image: bgImage } = prepareBackdrop(await load(bg.src))); } catch (e) { err("backdrop: " + e); }
+const picture = normalizePicture({
+  focus: { x: q.get("cropx") ?? 0.5, y: q.get("cropy") ?? 0.5 },
+  exposure: q.get("exposure"), saturation: q.get("saturation"), tint: q.get("tint"), tintAmount: q.get("tintAmount"), blur: q.get("picblur"),
+});
+try { ({ maps, image: bgImage } = prepareBackdrop(await load(bg.src), picture)); } catch (e) { err("backdrop: " + e); }
 for (const m of members) {
   try {
     const p = prepareArt(await load(m.image));
@@ -152,11 +160,12 @@ for (const r of renderers) {
   d.setLayout(layout);
   d.setCast(members);
   if (maps) {
-    r.gl.setBackdrop(bg.name, maps, bgImage);
-    d.setBackdrop(bg.name, roomOf(maps), 0, { immediate: true });
+    r.gl.setBackdrop(bg.name, maps, bgImage, pictureUniforms(picture));
+    d.setBackdrop(bg.name, { ...roomOf(maps), focus: [picture.focus.x, picture.focus.y] }, 0, { immediate: true });
   }
   r.gl.setSize(innerWidth, innerHeight, Math.min(devicePixelRatio || 1, 2));
   const rig = resolveRig(r.strength === 0 ? { mood: "off" } : light, maps?.probe, { darkness });
+  rig.blur = Math.max(rig.blur, picture.blur);   // as overlay.mjs _applyRig
   if (q.get("debug") === "1" && r.strength !== 0) err(JSON.stringify({ probe: maps?.probe, rig }, (k, v) => typeof v === "number" ? Math.round(v * 1000) / 1000 : v));
   d.setRig(rig, 0, { immediate: true });
   const from = q.get("from");

@@ -22,12 +22,20 @@ export class DomStage {
     this.backs = new Map();
     this.imgs = new Map();
     this.srcOf = new Map();
+    this.filterOf = new Map();
   }
 
-  /** Remember which picture a backdrop key draws. */
-  setBackdrop(key, src) { this.srcOf.set(key, src); }
+  /**
+   * Remember which picture a backdrop key draws, and the CSS filter that stands
+   * in for its grade (light/picture.mjs `pictureFilter`; there is no tint here).
+   */
+  setBackdrop(key, src, filter = "") {
+    this.srcOf.set(key, src);
+    this.filterOf.set(key, filter);
+  }
   dropBackdrop(key) {
     this.srcOf.delete(key);
+    this.filterOf.delete(key);
     this.backs.get(key)?.remove();
     this.backs.delete(key);
   }
@@ -49,6 +57,7 @@ export class DomStage {
         el = document.createElement("div");
         el.className = "glstage-fallback-back";
         el.style.backgroundImage = cssUrl(src);
+        el.style.filter = this.filterOf.get(b.key) ?? "";
         this.backs.set(b.key, el);
       }
       const at = this.backLayer.children[order] ?? null;

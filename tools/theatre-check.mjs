@@ -610,6 +610,38 @@ section = "seams";
   ok("the bridge is gated on stage being enabled",
     /Suite\.enabled\(\s*["']stage["']\s*\)/.test(bridge)
       || (/Suite\.enabled\(\s*STAGE_ID\s*\)/.test(bridge) && /STAGE_ID\s*=\s*["']stage["']/.test(bridge)));
+  // What Stage draws behind the cast is the shot's picture as Theatre shows it.
+  // Taken from a stored grade instead, it goes stale when the shot's image or
+  // look changes, and a light captured on one shot draws that shot's picture.
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const SB = await imp(`${FEAT}/stage-bridge.mjs`);
+  const SP = await imp("scripts/features/stage/light/picture.mjs");
+  const lit = { id: "a", src: "new.png", focus: { x: 0.2, y: 0.7 }, treatment: { exposure: -1, saturation: 0.5, tint: "#3366ff", tintAmount: 0.3, vignette: 0.5, blur: 0.4 },
+    grade: { mood: "night", rim: 1.5, src: "old.png", picture: { exposure: 2 } } };
+  const L = SB.shotLight(lit, null);
+  ok("a cut's light takes the shot's src, never the stored grade's", L?.src === "new.png");
+  ok("a cut's light keeps the shot's dials", L?.mood === "night" && L?.rim === 1.5);
+  ok("a cut's light carries the shot's crop and treatment",
+    same(SP.normalizePicture(L?.picture), SP.normalizePicture({ focus: lit.focus, ...lit.treatment })));
+  ok("Canvas mode carries the crop and no grade (Foundry draws the picture as it is)",
+    same(SP.normalizePicture(SB.shotLight(lit, null, { canvasMode: true })?.picture), SP.normalizePicture({ focus: lit.focus })));
+  ok("a stored grade keeps the dials only", same(SB.dialsOf(lit.grade), { mood: "night", rim: 1.5 }));
+  ok("a shot with nothing to show writes no light", SB.shotLight({ id: "x", src: "" }, null) === null);
+  const R = await imp(`${FEAT}/render/shot-renderer.mjs`);
+  ok("Stage's tint is Theatre's tint", ["#3366ff", "#ffaa00", "#000000"].every((h) => same(SP.tintVector(h), R.tintVector(h))));
+  ok("Stage's gain is Theatre's exposure", [-2, -0.5, 0, 1.5].every((e) => Math.abs(SP.pictureUniforms({ exposure: e }).grade[0] - R.gainOf(e)) < 1e-12));
+  const extreme = M.normalizeTreatment({ exposure: 99, saturation: 99, tintAmount: 99, blur: 99 });
+  const low = M.normalizeTreatment({ exposure: -99, saturation: -99, tintAmount: -99, blur: -99 });
+  ok("Stage's picture ranges are Theatre's treatment ranges", [extreme, low].every((t) => {
+    const p = SP.normalizePicture(t);
+    return p.exposure === t.exposure && p.saturation === t.saturation && p.tintAmount === t.tintAmount && p.blur === t.blur;
+  }));
+  const st = stripComments(read(`${FEAT}/store.mjs`));
+  ok("a cut writes the shot's light", /shotLight\(\s*shot\s*,\s*this\.scene/.test(st));
+  ok("editing the shot on screen relights Stage in the same write", /_writeShots\(\s*shots\s*,\s*null\s*,\s*looks\s*\?\s*this\._relightOnScreen/.test(st));
+  ok("a mode switch relights the shot on screen", /next\.mode\s*!==\s*before\.mode\)\s*Object\.assign\(\s*upd\s*,\s*this\._relightOnScreen/.test(st));
+  ok("capturing a light stores its dials only", /dialsOf\(\s*currentGrade\(/.test(st));
+
   ok("theatre never imports the stage feature statically", walk(FEAT).every((f) => !/from\s+["'][^"']*features\/stage\//.test(read(f)) && !/from\s+["']\.\.\/stage\//.test(read(f))));
 
   const ctrl = stripComments(read("scripts/features/stream/camera/controller.js"));
