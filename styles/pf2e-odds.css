@@ -77,11 +77,21 @@
 .glod-badge {
   position: relative;
   box-sizing: border-box;
-  width: 232px;
-  padding: var(--gl-sp-5) var(--gl-sp-6) var(--gl-sp-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gl-sp-3);
+  width: 248px;
+  padding: var(--gl-sp-3) var(--gl-sp-5) var(--gl-sp-4);
+  /* The ribbon: the headline is the hero of its own row, flanked by the degree
+     words and the defence; the strip runs the full width under it. */
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "head  head  head"
+    "pct   deg   dc"
+    "strip strip strip"
+    "chips chips chips"
+    "gm    gm    gm";
+  column-gap: var(--gl-sp-4);
+  row-gap: var(--gl-sp-2);
+  align-items: center;
   color: var(--gl-text);
   font-family: var(--gl-display);
   background:
@@ -125,6 +135,7 @@
 }
 
 .glod-head {
+  grid-area: head;
   display: flex;
   align-items: baseline;
   gap: var(--gl-sp-3);
@@ -155,18 +166,18 @@
   color: var(--gl-text);
 }
 
+/* A wrapper for in-place updates only; its children sit on the badge's grid. */
 .glod-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--gl-sp-4);
+  display: contents;
 }
 
 .glod-pct {
+  grid-area: pct;
   font-family: var(--gl-display);
   font-size: var(--gl-fs-3xl);
   font-weight: var(--gl-weight-heavy);
-  line-height: 0.88;
+  line-height: 0.86;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 35%, transparent);
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   color: var(--gl-text-bright);
@@ -186,9 +197,11 @@
 }
 
 .glod-deg {
+  grid-area: deg;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 2px;
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-2xs);
@@ -210,6 +223,25 @@
 }
 
 .glod-dc {
+  grid-area: dc;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-lg);
+  font-weight: var(--gl-weight-heavy);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text);
+  white-space: nowrap;
+}
+
+.glod-dc small {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
   color: var(--gl-text-dim);
 }
 
@@ -220,6 +252,7 @@
 /* ---- the strip --------------------------------------------- */
 
 .glod-strip {
+  grid-area: strip;
   display: grid;
   grid-template-columns: repeat(20, 1fr);
   gap: 2px;
@@ -227,7 +260,7 @@
 
 .glod-pip {
   display: block;
-  height: 13px;
+  height: 10px;
   background: var(--glod-f);
   transform-origin: 50% 100%;
 }
@@ -296,6 +329,7 @@
 /* ---- chips ------------------------------------------------- */
 
 .glod-chips {
+  grid-area: chips;
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
@@ -322,28 +356,10 @@
 .glod-chip[data-tone="warn"] { --glod-tone: var(--gl-warn); }
 .glod-chip[data-tone="info"] { --glod-tone: var(--gl-info); }
 
-.glod-chip[data-action="glod-map"] {
-  cursor: pointer;
-  transition: background var(--gl-d-quick) var(--gl-ease), transform var(--gl-d-tap) var(--gl-ease);
-}
-
-.glod-chip[data-action="glod-map"]:hover {
-  background: color-mix(in srgb, var(--glod-tone) 26%, transparent);
-  transform: translateY(var(--gl-lift));
-}
-
-.glod-chip[data-action="glod-map"]:active {
-  transform: translateY(var(--gl-press));
-}
-
-/* A manual MAP step reads as a correction: dashed instead of solid. */
-.glod-chip[data-manual="1"] {
-  box-shadow: inset 2px 0 0 var(--glod-tone), inset 0 0 0 1px color-mix(in srgb, var(--glod-tone) 45%, transparent);
-}
-
 /* ---- GM-only line ------------------------------------------ */
 
 .glod-gm {
+  grid-area: gm;
   display: flex;
   flex-wrap: wrap;
   gap: var(--gl-sp-3);
@@ -381,6 +397,7 @@
 }
 
 .glod-oor {
+  grid-column: 1 / -1;
   font-family: var(--gl-tech);
   font-size: var(--gl-fs-xs);
   font-weight: var(--gl-weight-bold);
