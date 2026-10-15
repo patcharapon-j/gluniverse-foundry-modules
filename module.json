@@ -52,6 +52,9 @@
     "styles/pf2e-variant-rules.css",
     "styles/pf2e-variant-rules-boss.css",
     "styles/pf2e-creaturedex.css",
+    "styles/pf2e-odds.css",
+    "styles/pf2e-odds-surfaces.css",
+    "styles/pf2e-odds-observations.css",
     "styles/spotlight-roll.css",
     "styles/spotlight-roll-app.css",
     "styles/combat-intro.css",
@@ -176,6 +179,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-creaturedex.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-odds.en.json"
     },
     {
       "lang": "en",

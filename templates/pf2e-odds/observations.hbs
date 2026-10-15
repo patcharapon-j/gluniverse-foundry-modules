@@ -1,0 +1,78 @@
+{{!--
+  PF2e Odds — the GM's Observations view. One block per creature kind, one row
+  per (stat, owner). Everything here is escaped normally: the ledger carries
+  creature names, which are world data.
+--}}
+<div class="glod-obs-root gl-glass gl-type">
+
+  <header class="glod-obs-bar">
+    <span class="glod-obs-bar-title">{{localize "GLOD.observations.title"}}</span>
+    <span class="glod-obs-bar-tag">{{modeLabel}}</span>
+    {{#if isGM}}
+      <button type="button" class="gl-btn glod-obs-forget-all" data-action="forgetAll" {{#if empty}}disabled{{/if}}>
+        <i class="fa-solid fa-eraser" aria-hidden="true"></i>
+        {{localize "GLOD.observations.forgetAll"}}
+      </button>
+    {{/if}}
+  </header>
+
+  <p class="glod-obs-note">{{localize "GLOD.observations.note"}}</p>
+
+  {{#unless empty}}
+    <label class="glod-obs-filter">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" class="gl-field glod-obs-search" value="{{query}}"
+             placeholder="{{localize "GLOD.observations.search"}}"
+             aria-label="{{localize "GLOD.observations.search"}}">
+    </label>
+  {{/unless}}
+
+  <div class="glod-obs-list gl-scroll">
+    {{#if empty}}
+      <p class="glod-obs-empty">{{localize "GLOD.observations.empty"}}</p>
+    {{/if}}
+    <p class="glod-obs-empty glod-obs-nomatch" hidden>{{localize "GLOD.observations.noMatch"}}</p>
+
+    {{#each kinds}}
+      <article class="glod-obs-kind{{#if contradictions}} has-reset{{/if}}" data-kind="{{key}}" data-search="{{search}}">
+        <header class="glod-obs-kind-head">
+          <span class="glod-obs-kind-name">{{name}}</span>
+          <span class="glod-obs-kind-count">{{count}}</span>
+          {{#if ../isGM}}
+            <button type="button" class="gl-btn glod-obs-forget-kind" data-action="forgetKind" data-kind="{{key}}"
+                    title="{{localize "GLOD.observations.forgetKindHint"}}">
+              {{localize "GLOD.observations.forgetKind"}}
+            </button>
+          {{/if}}
+        </header>
+
+        <ul class="glod-obs-stats">
+          {{#each stats}}
+            <li class="glod-obs-stat{{#if contradiction}} is-reset{{/if}}">
+              <span class="glod-obs-stat-label">{{label}}</span>
+              <span class="glod-obs-stat-range">{{range}}</span>
+              <span class="glod-obs-stat-meta">
+                <span class="glod-obs-stat-owner{{#if isParty}} is-party{{/if}}">{{owner}}</span>
+                {{#if src}}<span class="glod-obs-stat-src" title="{{when}}">{{src}}</span>{{/if}}
+                {{#if contradiction}}
+                  <span class="glod-obs-stat-flag" title="{{localize "GLOD.observations.contradictionHint"}}">
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    {{localize "GLOD.observations.contradiction"}}
+                  </span>
+                {{/if}}
+              </span>
+              {{#if ../../isGM}}
+                <button type="button" class="gl-btn glod-obs-forget-stat" data-action="forgetStat"
+                        data-kind="{{kind}}" data-stat="{{stat}}"
+                        title="{{localize "GLOD.observations.forgetStat"}}"
+                        aria-label="{{localize "GLOD.observations.forgetStat"}}">
+                  <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+                </button>
+              {{/if}}
+            </li>
+          {{/each}}
+        </ul>
+      </article>
+    {{/each}}
+  </div>
+</div>

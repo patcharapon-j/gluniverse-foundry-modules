@@ -205,6 +205,7 @@ export class TargetLineController {
     }
     this.#riseFromLaunchingToken(desired);
     this.#updateListening();
+    Hooks.callAll(TARGETS_HOOKS.linesChanged, [...desired.values()].map(({ sourceId, targetId }) => ({ sourceId, targetId })));
   }
 
   /**
@@ -385,6 +386,7 @@ export class TargetLineController {
     for (const line of [...this.lines.values()]) line.destroy();
     this.lines.clear();
     this.#updateListening();
+    Hooks.callAll(TARGETS_HOOKS.linesChanged, []);
     if (this.layer && !this.layer.destroyed) {
       this.layer.parent?.removeChild(this.layer);
       this.layer.destroy({ children: true });
