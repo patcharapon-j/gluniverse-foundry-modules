@@ -5,7 +5,8 @@
  * an attack roll or a save, and every skill action the sheet lists as an item
  * (Demoralize, Grapple…) get an inline % and bar. Hovering or clicking one of
  * those rows ARMS it (tracker.mjs), so the targeting-line badge follows what
- * the player is looking at.
+ * the player is looking at — down to the MAP button: pointing at a Strike's
+ * second button prices the second attack, and that is the whole of MAP here.
  *
  * PF2e's sheets are AppV1, so a render replaces the whole content and the
  * `render<Class>` hook runs for every class in the chain: `renderCharacterSheetPF2e`
@@ -23,7 +24,7 @@
 import { SETTINGS, SKILL_ACTIONS, TIMING, KNOWLEDGE_HOOK } from "./constants.mjs";
 import { inlineHTML } from "./render.mjs";
 import { get } from "./settings.mjs";
-import { arm, mapIndex, onTrackerChange } from "./tracker.mjs";
+import { arm, armedOf } from "./tracker.mjs";
 import { modelFor } from "./view.mjs";
 
 const SLOT = "glod-sheet-slot";
@@ -76,12 +77,20 @@ function skillActionOf(actor, row) {
   return slug && slug in SKILL_ACTIONS ? slug : null;
 }
 
-/** The Armed descriptor for whatever row an event landed in, or null. */
+/**
+ * The Armed descriptor for whatever row an event landed in, or null. On a
+ * Strike, the MAP button under the cursor is the attack being priced;
+ * elsewhere on the same Strike's row the variant already pointed at stands.
+ */
 function armedFor(actor, target) {
   const strikeRow = target?.closest?.("[data-strike][data-action-index]");
   if (strikeRow) {
     const slug = strikeSlug(actor, strikeRow);
-    return slug ? { kind: "strike", slug } : null;
+    if (!slug) return null;
+    const variant = Number(target.closest?.('[data-action="strike-attack"][data-variant-index]')?.dataset.variantIndex);
+    const prev = armedOf(actor);
+    const map = variant >= 0 && variant <= 2 ? variant : prev?.kind === "strike" && prev.slug === slug ? prev.map : undefined;
+    return map ? { kind: "strike", slug, map } : { kind: "strike", slug };
   }
   const spellRow = target?.closest?.("li.spell[data-item-id]");
   if (spellRow) {
@@ -182,7 +191,6 @@ async function decorate(app, root) {
     return;
   }
   const rollerToken = app.token?.object ?? actor.getActiveTokens?.()[0] ?? null;
-  app._glodMap = JSON.stringify(mapIndex(actor));
 
   const jobs = jobsFor(actor, root);
   // Placeholders first, synchronously; a slot no job claims this pass is stale.
@@ -246,20 +254,5 @@ export function wireSheet() {
   Hooks.on(KNOWLEDGE_HOOK, onTargets);
   Hooks.on("targetToken", (user) => {
     if (user === game.user) onTargets();
-  });
-
-  // The tracker fires on arming too; only a MAP step changes what a sheet shows.
-  const dirty = new Set();
-  const flush = debounce(() => {
-    const ids = new Set(dirty);
-    dirty.clear();
-    refresh((app) => {
-      if (!ids.has(null) && !ids.has(app.actor?.id)) return false;
-      return JSON.stringify(mapIndex(app.actor)) !== app._glodMap;
-    });
-  }, TIMING.debounce);
-  onTrackerChange((actorId) => {
-    dirty.add(actorId ?? null);
-    flush();
   });
 }

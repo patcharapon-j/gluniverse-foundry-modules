@@ -1,7 +1,7 @@
 /**
  * Building a badge model for a real roller, action and target — the glue
- * between PF2e (probe.mjs), what the viewer knows (knowledge.mjs), the MAP and
- * armed action (tracker.mjs), and the pure model (view-model.mjs).
+ * between PF2e (probe.mjs), what the viewer knows (knowledge.mjs), the armed
+ * action and its MAP button (tracker.mjs), and the pure model (view-model.mjs).
  *
  * Every surface calls `modelFor`: the line badge, the sheet, the roll dialog,
  * the save prompt. One function, so a number never means two things on two
@@ -17,7 +17,8 @@ import { SKILL_ACTIONS, strikeStat } from "./constants.mjs";
 import { flatDcFor, modelFromProbe } from "./model-from-probe.mjs";
 import { isCreature } from "./knowledge.mjs";
 import { cached, probeSave, probeSkillAction, probeSpellAttack, probeStrike, strikeOf } from "./probe.mjs";
-import { armedOf, mapIndex } from "./tracker.mjs";
+import { armedOf } from "./tracker.mjs";
+import { mapOf } from "./armed.mjs";
 
 const ORDINAL = ["GLOD.attack.first", "GLOD.attack.second", "GLOD.attack.third"];
 
@@ -63,7 +64,7 @@ function outOfRange(strike, rollerToken, targetToken) {
  * @param {{
  *   roller: Actor, rollerToken?: Token, target: Token,
  *   action?: object|null,     // an Armed descriptor; default: the armed action, else the primary Strike
- *   map?: number|null,        // force a MAP index (the sheet's three buttons); default: tracked
+ *   map?: number|null,        // force a MAP index (the sheet's three buttons); default: the armed button
  *   user?: User,
  * }} spec
  * @returns {Promise<object|null>}
@@ -72,8 +73,7 @@ export async function modelFor({ roller, rollerToken = null, target, action = nu
   const targetActor = target?.actor ?? null;
   if (!roller || !targetActor || roller === targetActor) return null;
   const armed = action ?? armedOf(roller) ?? { kind: "strike", slug: null };
-  const tracked = mapIndex(roller);
-  const index = map ?? tracked.index;
+  const index = map ?? mapOf(armed);
   const truth = seesTruth(user);
   const key = `${roller.uuid}|${tokenDoc(target)?.uuid}|${JSON.stringify(armed)}|${index}`;
 
@@ -125,7 +125,6 @@ export async function modelFor({ roller, rollerToken = null, target, action = nu
     label,
     sub,
     flatDc: flat,
-    mapOverride: tracked.manual && map == null,
     modStat: unknownModStat,
   });
 }

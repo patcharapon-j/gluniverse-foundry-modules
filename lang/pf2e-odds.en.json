@@ -3,8 +3,6 @@
   "GLS.feature.pf2e-odds.hint": "The chance a Strike, spell or skill action works, on the targeting line, the sheet and PF2e's roll dialog. Players see only what the party has witnessed: a creature's AC starts as ??? and narrows with every roll.",
   "GLOD.settings.partyKnowledge.name": "Party knowledge",
   "GLOD.settings.partyKnowledge.hint": "What one character witnesses, the whole party knows. Only used while Creaturedex is off; with Creaturedex on, its own Party Knowledge setting decides.",
-  "GLOD.settings.mapResetSeconds.name": "Out-of-combat attack window (seconds)",
-  "GLOD.settings.mapResetSeconds.hint": "Outside an encounter there are no turns, so the multiple attack penalty resets after this long without an attack from that creature. In combat it resets at the start of the creature's turn.",
   "GLOD.settings.lineBadge.name": "Odds on targeting lines",
   "GLOD.settings.lineBadge.hint": "Show the odds badge where a targeting line lands. Off-turn lines shrink to a compact tag; hover either token to expand it.",
   "GLOD.settings.sheet.name": "Odds on the character sheet",

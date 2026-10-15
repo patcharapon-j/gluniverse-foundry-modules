@@ -68,13 +68,13 @@ Delivery is three stacked PRs: (1) engine + Odds + ledger, (2) dice highlight,
 
 ### MAP
 
-- **Auto-count:** chat messages carrying the `attack` trait, Grapple and Trip
-  included, posted by that actor. The agile trait is respected.
-- **Reset in combat:** on `combatTurnChange` for that combatant.
-- **Reset out of combat:** after 12 s with no attack-trait check from that actor
-  (world setting).
-- **Manual override:** a clickable chip cycles 0 / −5 / −10 and holds until the
-  next reset.
+- **No counting.** The badge shows the MAP of the Strike button the player is
+  pointing at on their sheet: hovering the second or third attack button arms
+  that variant (`data-variant-index`, so agile is whatever PF2e printed on the
+  button). Elsewhere on the same Strike row the last pointed-at variant holds;
+  any other action has no MAP. Nothing is tracked across rolls, turns or time.
+- The armed action is broadcast over the suite socket and honoured only from an
+  owner (`meta.attested`), so the target sees the same variant.
 
 ## Knowledge: what a player is allowed to see
 
@@ -176,6 +176,10 @@ against that DC, gated on whether they've learned it.
 - **Roll lands:** the landed face's pip pulses, and the badge shows the degree
   stamp (CRIT / HIT / MISS / FUMBLE, or the save words) for about 1.5 s before
   returning to odds.
+- **Holding through a roll:** when a check is posted, every badge touching its
+  roller or target freezes on the number it showed when the die left the hand.
+  Condition, MAP and target changes that arrive mid-throw are queued and applied
+  once the die lands (after the stamp), or after 13 s if no throw is seen.
 - **Sound:** none by default; an optional setting.
 - All durations are tokens. The feature has a `SHED_ORDER` bound to the shared
   budget.

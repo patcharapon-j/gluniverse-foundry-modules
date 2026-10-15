@@ -37,7 +37,7 @@ const C = await imp("scripts/features/pf2e-odds/constants.mjs");
 const VM = await imp("scripts/features/pf2e-odds/view-model.mjs");
 const LM = await imp("scripts/features/pf2e-odds/ledger-model.mjs");
 const OM = await imp("scripts/features/pf2e-odds/observe-model.mjs");
-const MM = await imp("scripts/features/pf2e-odds/map-model.mjs");
+const AR = await imp("scripts/features/pf2e-odds/armed.mjs");
 const DP = await imp("scripts/features/pf2e-odds/dex-parse.mjs");
 
 /* ── 1. The engine is PF2e ──────────────────────────────────────────────── */
@@ -227,21 +227,31 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   checks++;
 }
 
-/* ── 6. MAP ─────────────────────────────────────────────────────────────── */
+/* ── 6. MAP is the button the player pointed at ─────────────────────────── */
 
 {
-  let s = MM.blank();
-  s = MM.recordAttack(s, { at: 0, turn: "t1" });
-  ok(MM.nextIndex(s, { now: 1, turn: "t1", resetMs: 12000, inCombat: true }).index === 1, "one attack → second attack next");
-  s = MM.recordAttack(s, { at: 1, turn: "t1" });
-  s = MM.recordAttack(s, { at: 2, turn: "t1" });
-  ok(MM.nextIndex(s, { now: 3, turn: "t1", resetMs: 12000, inCombat: true }).index === 2, "MAP caps at the third");
-  ok(MM.nextIndex(s, { now: 3, turn: "t2", resetMs: 12000, inCombat: true }).index === 0, "a new turn resets");
-  ok(MM.nextIndex(s, { now: 20000, turn: null, resetMs: 12000, inCombat: false }).index === 0, "out of combat it resets after the window");
-  const o = MM.cycle(MM.blank(), 0, { now: 0, turn: "t1" });
-  ok(MM.nextIndex(o, { now: 1, turn: "t1", resetMs: 1, inCombat: true }).manual, "a clicked chip is a manual override");
-  ok(MM.nextIndex(MM.recordAttack(o, { at: 2, turn: "t1" }), { now: 3, turn: "t1", resetMs: 1, inCombat: true }).index === 2, "an attack after an override moves it on");
-  ok(MM.isAttack({ type: "skill-check", traits: ["attack"] }) && !MM.isAttack({ type: "skill-check", traits: [] }), "Grapple counts toward MAP, Demoralize does not");
+  // PF2e does not track MAP and neither does this feature: the badge prices
+  // the variant the player hovered or clicked on their sheet.
+  ok(AR.mapOf({ kind: "strike", slug: "s" }) === 0, "a Strike pointed at with no MAP button is the first attack");
+  ok(AR.mapOf({ kind: "strike", slug: "s", map: 2 }) === 2, "the third button prices the third attack");
+  ok(AR.validArmed({ kind: "strike", slug: "s", map: 1 }) && !AR.validArmed({ kind: "strike", slug: "s", map: 3 }) && !AR.validArmed({ kind: "strike", slug: "s", map: "1" }), "a broadcast MAP index is 0, 1 or 2");
+  ok(!AR.validArmed({ kind: "spell", uuid: "u", mode: "heal" }) && AR.validArmed({ kind: "skill", action: "grapple" }), "the armed shapes are unchanged");
+  const src = (f) => read(`scripts/features/pf2e-odds/${f}`);
+  ok(!/recordAttack|mapIndex|stepMap|mapOverride|createChatMessage/.test(src("tracker.mjs")), "nothing counts attacks from chat cards");
+  ok(/mapOf\(armed\)/.test(src("view.mjs")), "the badge's MAP index is the armed button's");
+  ok(/data-variant-index/.test(src("sheet.mjs").slice(src("sheet.mjs").indexOf("function armedFor"))), "hovering a MAP button arms that variant");
+  ok(!/glod-map/.test(src("render.mjs") + src("line-badges.mjs")), "the MAP chip is a readout, not a control");
+}
+
+/* ── 6a. A badge holds its numbers while its roll is in flight ──────────── */
+
+{
+  const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
+  const dh = read("scripts/features/pf2e-odds/dice-highlight.mjs");
+  ok(/if \(view && this\.#held\(pair\)\) \{\s+view\.pending = true;\s+return;/.test(lb), "a held badge stores the recompute instead of drawing it");
+  ok(/const held = !!lines\?\.hold\(message\)/.test(dh) && /finally \{[\s\S]*?lines\?\.release\(message\.id/.test(dh), "every posted check holds its badges and always releases them");
+  ok(/if \(!badge && !ring && !held\) return false;/.test(dh), "a held badge waits for the die even with no landing beat of its own");
+  ok(/setTimeout\(\(\) => this\.release\(message\.id\), TIMING\.holdMax\)/.test(lb), "a hold whose release never comes still ends");
 }
 
 /* ── 6b. Review regressions (PR #125) ───────────────────────────────────── */
@@ -262,9 +272,6 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
     ok(keys({ fixed: 18 }) === "fixed", "a fixed d20 carries its chip");
   }
   // Out-of-combat expiry clears the count before a fresh attack.
-  let s = MM.recordAttack(MM.blank(), { at: 0, turn: null, resetMs: 12000 });
-  s = MM.recordAttack(s, { at: 20000, turn: null, resetMs: 12000 });
-  ok(MM.nextIndex(s, { now: 20001, turn: null, resetMs: 12000, inCombat: false }).index === 1, "an expired count does not carry into a fresh attack");
   // A hidden NPC breakdown teaches no modifier.
   const hidden = OM.observationsFrom({
     context: { type: "attack-roll", identifier: "a.claw.melee", dc: { value: 18, slug: "armor" }, unadjustedOutcome: "success" },
@@ -299,7 +306,7 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   };
   ok(!OM.observationsFrom(card).some((o) => o.stat === "spell-dc"), "a breath weapon's DC is not filed as the spell DC");
   ok(OM.observationsFrom({ ...card, originIsSpell: true }).some((o) => o.stat === "spell-dc"), "a spell's save DC is filed as the spell DC");
-  ok(!MM.isAttack({ type: "damage-roll", traits: ["attack"] }), "a damage roll never counts toward MAP");
+
   ok(DP.parseSaves("Fortitude 1, Reflex +9, Will −2")?.reflex != null, "dex-parse reads signed saves");
   ok(DP.leadingInt("x9") == null || DP.leadingInt("x9") !== 9, "dex-parse's sign class does not swallow letters");
   const anon = VM.buildModel({ probe: { mod: 12, mods: [], dc: { value: 18, slug: "armor" }, options: [] }, who: { rollerIsCreature: true, defenderIsCreature: false, isGM: false }, known: null, label: "Jaws" });
@@ -323,7 +330,7 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   const dh = read("scripts/features/pf2e-odds/dice-highlight.mjs");
   ok(/landing\.degree != null/.test(dh), "the ring is drawn only when this viewer may see the degree");
   ok(/flags\?\.\[SUITE_ID\]\?\.spotlight/.test(dh) && /watch && !spotlight \? await watch\.wait/.test(dh), "Spotlight Roll's own dice are left alone, and its cards land without waiting for a throw that never comes");
-  ok(/if \(!game\.messages\?\.get\(message\.id\)\) return;/.test(dh), "a message deleted while its die is in the air lands nothing");
+  ok(/if \(!game\.messages\?\.get\(message\.id\)\) return false;/.test(dh), "a message deleted while its die is in the air lands nothing");
   ok(/allows\("landBeat"\)/.test(dh), "the ring sheds with the landing beat");
   ok(!/dsnActive = [^\n]*game\.dice3d/.test(dh), "wiring does not wait on game.dice3d (DSN builds it in its own ready hook, maybe after ours)");
   ok(!/waitFor3DAnimationByMessageID|diceSoNiceRollComplete|Hooks\.once/.test(dh + read("scripts/features/pf2e-odds/line-badges.mjs")), "no landing waits on DSN's completion hook (it fires early under immediate chat display, and its waiter is never removed)");
@@ -585,7 +592,7 @@ ok(DP.parseSaves("Fort +15, Ref +9, Will +12")?.fortitude != null || true, "dex-
 
 /* ── 10. Purity and import-time side effects ────────────────────────────── */
 
-for (const f of ["view-model.mjs", "ledger-model.mjs", "observe-model.mjs", "map-model.mjs", "dex-parse.mjs", "render.mjs", "constants.mjs"]) {
+for (const f of ["view-model.mjs", "ledger-model.mjs", "observe-model.mjs", "armed.mjs", "dex-parse.mjs", "render.mjs", "constants.mjs"]) {
   const s = readFileSync(join(FEAT, f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   ok(!/\b(game|canvas|Hooks|ui|foundry)\s*[.?]/.test(s), `${f} is pure: no game/canvas/Hooks/ui/foundry (the preview and this check import it)`);
 }

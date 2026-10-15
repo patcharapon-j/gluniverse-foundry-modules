@@ -81,12 +81,12 @@ export function viewerDc({ side, mod, dc, bareMod = mod, bareDc = dc, known }) {
  * proficiency bonuses are not chips: they are the roller's standing number and
  * would turn every badge into a stat block.
  */
-export function chipsOf({ mods = [], dcMods = [], adjustments = [], rollTwice = false, flat = null, mapOverride = false }) {
+export function chipsOf({ mods = [], dcMods = [], adjustments = [], rollTwice = false, flat = null }) {
   const chips = [];
   for (const m of mods) {
     if (!m.enabled || !m.value) continue;
     if (m.slug === "multiple-attack-penalty") {
-      chips.push({ key: "map", label: "GLOD.chip.map", value: m.value, tone: "neg", manual: !!mapOverride });
+      chips.push({ key: "map", label: "GLOD.chip.map", value: m.value, tone: "neg" });
       continue;
     }
     if (m.kind !== "status" && m.kind !== "circumstance") continue;
@@ -118,7 +118,7 @@ export function chipsOf({ mods = [], dcMods = [], adjustments = [], rollTwice = 
  *   flatDc?: number|null,
  *   invert?: boolean,      // the roller is the TARGET of the viewer's effect (a save against their spell)
  *   label: string, sub?: string, stamps?: "attack"|"check", dcLabel?: string,
- *   lie?: boolean, contradiction?: boolean, mapOverride?: boolean,
+ *   lie?: boolean, contradiction?: boolean,
  *   playersKnown?: {lo,hi}|null   // for the GM's "players see" tag
  * }} spec
  */
@@ -167,7 +167,6 @@ export function buildModel(spec) {
       adjustments: side === SIDE.mod ? [] : shown.adjustments,
       rollTwice: probe.rollTwice,
       flat: shown.flat,
-      mapOverride: spec.mapOverride,
     }),
     gm,
     // A lie is the GM's to see. The player's model is built on the believed

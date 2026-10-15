@@ -23,15 +23,6 @@ export function registerSettings() {
   // setting decides, so a table never has two answers to one question.
   game.settings.register(SUITE_ID, SETTINGS.partyKnowledge, bool(SETTINGS.partyKnowledge, true, "world"));
 
-  game.settings.register(SUITE_ID, SETTINGS.mapReset, {
-    ...label(SETTINGS.mapReset),
-    scope: "world",
-    config: true,
-    type: Number,
-    range: { min: 3, max: 60, step: 1 },
-    default: 12,
-  });
-
   game.settings.register(SUITE_ID, SETTINGS.lineBadge, bool(SETTINGS.lineBadge, true));
   game.settings.register(SUITE_ID, SETTINGS.sheet, bool(SETTINGS.sheet, true));
   game.settings.register(SUITE_ID, SETTINGS.dialog, bool(SETTINGS.dialog, true));

@@ -86,7 +86,7 @@ export function chipsHTML(model, t = ident) {
   return `<div class="glod-chips">${chips
     .map(
       (c) =>
-        `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}"${c.key === "map" ? ` data-action="glod-map" role="button" tabindex="0"` : ""}${c.manual ? ` data-manual="1"` : ""}>${escapeHTML(chipText(c, t))}</span>`
+        `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}">${escapeHTML(chipText(c, t))}</span>`
     )
     .join("")}</div>`;
 }
