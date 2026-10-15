@@ -82,8 +82,21 @@ export const readLedger = () => setting(SETTINGS.ledger, {}) ?? {};
  * What the dex states about one kind for one reader, true and false.
  * @returns {{stats: Record<string, number>, lies: Set<string>}}
  */
+const DEX_CACHE = new Map();
+
+/** Drop memoised dex reads: the dex or its party setting changed. */
+export const clearKnowledgeCache = () => DEX_CACHE.clear();
+
 function dexStats(kind, owners) {
   if (!dexOn() || !kind) return { stats: {}, lies: new Set() };
+  // The dex store deep-clones its whole setting per read; one parse per
+  // (kind, readers) until the next knowledge change is plenty.
+  const key = `${kind}|${partyMode() ? DEX_PARTY : [...owners].sort().join(",")}`;
+  if (!DEX_CACHE.has(key)) DEX_CACHE.set(key, dexStatsUncached(kind, owners));
+  return DEX_CACHE.get(key);
+}
+
+function dexStatsUncached(kind, owners) {
   const all = readDex();
   const entry = all?.[kind];
   if (!entry) return { stats: {}, lies: new Set() };

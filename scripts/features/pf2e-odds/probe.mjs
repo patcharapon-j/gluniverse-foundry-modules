@@ -26,7 +26,7 @@
 
 import { registerWrapper, MIXED } from "../../core/wrapper.mjs";
 import { warn } from "../../core/const.mjs";
-import { PROBE_TAG, SKILL_ACTIONS, TIMING } from "./constants.mjs";
+import { PROBE_TAG, SKILL_ACTIONS, TIMING, isPublicModifier } from "./constants.mjs";
 
 const PENDING = new Map();
 let installed = false;
@@ -49,7 +49,10 @@ export function installProbe() {
     "game.pf2e.Check.roll",
     function (next, check, context = {}, ...rest) {
       const job = jobFor(context);
-      if (!job) return next(check, context, ...rest);
+      if (!job) {
+        stampDcDelta(context);
+        return next(check, context, ...rest);
+      }
       try {
         const options = context.options instanceof Set ? context.options : new Set(context.options ?? []);
         check.calculateTotal(options);
@@ -58,7 +61,7 @@ export function installProbe() {
           mods: modsOf(check),
           dc: Number.isFinite(context.dc?.value) ? { value: context.dc.value, slug: context.dc.slug ?? null } : null,
           dcStatistic: context.dc?.statistic ?? null,
-          rollTwice: bothOrOne(context.rollTwice, context.substitutions),
+          rollTwice: rollModeOf(context.rollTwice, context.substitutions),
           dos: (context.dosAdjustments ?? []).map((d) => ({
             adjustments: d.adjustments,
             test: (o) => (d.predicate?.test ? d.predicate.test(o) : true),
@@ -78,11 +81,22 @@ export function installProbe() {
   return true;
 }
 
-/** Fortune and misfortune together roll a single d20 (PF2e's own rule). */
-function bothOrOne(rollTwice, substitutions) {
-  const fortune = rollTwice === "keep-higher" || substitutions?.some?.((s) => s.selected && s.effectType === "fortune");
-  const misfortune = rollTwice === "keep-lower" || substitutions?.some?.((s) => s.selected && s.effectType === "misfortune");
+/**
+ * How the d20 is rolled, as the engine's `rollTwice`.
+ *
+ * A selected substitution ("treat the roll as 18") is not a second die: it
+ * FIXES the face, so it comes back as `{fixed}` and the engine weights that one
+ * face. Fortune and misfortune together cancel — the substitution with them,
+ * since a substitution carries its own fortune or misfortune type (PF2e's
+ * own rule) — and the check is a single flat d20.
+ */
+export function rollModeOf(rollTwice, substitutions = []) {
+  const chosen = (substitutions ?? []).filter?.((s) => s?.selected) ?? [];
+  const fortune = rollTwice === "keep-higher" || chosen.some((s) => s.effectType === "fortune");
+  const misfortune = rollTwice === "keep-lower" || chosen.some((s) => s.effectType === "misfortune");
   if (fortune && misfortune) return false;
+  const fixed = chosen.find((s) => Number.isFinite(Number(s.value)));
+  if (fixed) return { fixed: Math.max(1, Math.min(20, Number(fixed.value))) };
   return fortune ? "keep-higher" : misfortune ? "keep-lower" : false;
 }
 
@@ -92,9 +106,16 @@ export function modsOf(check) {
     .map((m) => ({ slug: m.slug, label: m.label, value: m.modifier, kind: m.type ?? "untyped", enabled: !!m.enabled && !m.ignored }));
 }
 
-/** The part of a modifier list a table can see happening: status and circumstance. */
+/**
+ * The part of a creature's modifier list the table can see happening: status
+ * and circumstance modifiers from a public source (constants.mjs). A private
+ * one stays inside the bare number — honest, since nobody saw it; when it ends
+ * the next roll may contradict, and the ledger resets.
+ */
 export const situational = (mods) =>
-  (mods ?? []).filter((m) => m.enabled && (m.kind === "status" || m.kind === "circumstance") && m.slug !== "multiple-attack-penalty");
+  (mods ?? []).filter(
+    (m) => m.enabled && (m.kind === "status" || m.kind === "circumstance") && m.slug !== "multiple-attack-penalty" && isPublicModifier(m)
+  );
 
 const sum = (mods) => mods.reduce((a, m) => a + (Number(m.value) || 0), 0);
 
@@ -113,6 +134,21 @@ export function bareDc(dcStatistic, value) {
     enabled: !!m.enabled && !m.ignored,
   }));
   return value - sum(situational(mods));
+}
+
+/**
+ * A real roll: write today's situational DC delta onto the context, measured
+ * on the CONTEXTUAL DC statistic (flanking's off-guard lives on a clone of the
+ * target made for this one roll, and nowhere else). PF2e copies the context
+ * into the message's flags, which is how the GM's observer reads it.
+ */
+function stampDcDelta(context) {
+  try {
+    const dc = context?.dc;
+    if (dc?.statistic && Number.isFinite(dc.value)) context.glodDcDelta = dc.value - bareDc(dc.statistic, dc.value);
+  } catch {
+    /* never in the way of a real roll */
+  }
 }
 
 /* ── the probes ──────────────────────────────────────────────────────────── */
@@ -159,7 +195,9 @@ export function probeStrike(actor, { slug = null, map = 0, target = null } = {})
   const strike = strikeOf(actor, slug);
   const variant = strike?.variants?.[Math.max(0, Math.min(2, map | 0))] ?? strike?.variants?.[0];
   if (!variant?.roll) return Promise.resolve(null);
-  return run((tag) => variant.roll({ target: tokenObject(target), options: [tag], createMessage: false })).then((r) =>
+  // consumeAmmo: false — PF2e checks (and toasts about) ammunition before the
+  // check is ever built, and a probe must never warn a player about anything.
+  return run((tag) => variant.roll({ target: tokenObject(target), options: [tag], createMessage: false, consumeAmmo: false, skipDialog: true })).then((r) =>
     r ? { ...r, strike: { slug: strike.slug ?? strike.item?.slug ?? null, label: strike.label ?? strike.item?.name ?? "", agile: !!strike.item?.traits?.has?.("agile") } } : null
   );
 }
@@ -179,6 +217,23 @@ export function probeSkillAction(actor, action, { target = null, map = 0 } = {})
   if (def.attack && map > 0 && game.pf2e?.Modifier) {
     modifiers.push(
       new game.pf2e.Modifier({ slug: "multiple-attack-penalty", label: "PF2E.MultipleAttackPenalty", modifier: map === 1 ? -5 : -10, type: "untyped" })
+    );
+  }
+  // PF2e's own action first: its checkContext adds what the action brings —
+  // a trip weapon's potency on Trip, ranged-trip's −2, a grapple weapon on
+  // Grapple — none of which a bare skill roll carries. The MAP rides as our
+  // own slugged modifier (the action's `multipleAttackPenalty` slugs it from
+  // its label), so bareMod can still find it.
+  const pf2eAction = game.pf2e?.actions?.get?.(action);
+  if (typeof pf2eAction?.use === "function") {
+    return run((tag) =>
+      pf2eAction.use({
+        actors: [actor],
+        target: tokenObject(target) ?? targetActor ?? undefined,
+        modifiers,
+        rollOptions: [tag],
+        message: { create: false },
+      })
     );
   }
   return run((tag) =>
@@ -230,6 +285,13 @@ export function cached(key, start) {
   return promise;
 }
 
-export function invalidate() {
-  CACHE.clear();
+/**
+ * Drop cached probes. With `uuids`, only answers that mention one of them
+ * (keys carry the roller's actor uuid and the target's token uuid), so an
+ * HP change on one creature does not re-probe every open sheet.
+ */
+export function invalidate(uuids = null) {
+  if (!uuids) return CACHE.clear();
+  const list = [...uuids].filter(Boolean);
+  for (const key of CACHE.keys()) if (list.some((u) => key.includes(u))) CACHE.delete(key);
 }

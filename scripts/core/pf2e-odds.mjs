@@ -74,6 +74,10 @@ export function flatChance(dc) {
  * misfortune both apply, which callers pass as `false`.
  */
 export function faceWeights(rollTwice = false) {
+  // A substitution fixes the face: all the weight on it.
+  if (rollTwice && typeof rollTwice === "object" && Number.isInteger(rollTwice.fixed)) {
+    return Array.from({ length: 20 }, (_, i) => (i + 1 === rollTwice.fixed ? 1 : 0));
+  }
   const w = new Array(20);
   for (let k = 1; k <= 20; k++) {
     w[k - 1] = rollTwice === "keep-higher" ? (2 * k - 1) / 400 : rollTwice === "keep-lower" ? (41 - 2 * k) / 400 : 1 / 20;
@@ -149,16 +153,29 @@ export function faceDegree(face, mod, dc, { dos = null, baseOptions = null } = {
 
 /**
  * Normalise what is known about a DC into `{lo, hi}` or null (nothing known).
- * A number is an exact DC; `{lo, hi}` with either end open is clamped to a
- * window wide enough that every face is already decided past it.
+ * A number is an exact DC; either end of a range may stay open (±Infinity) —
+ * this is the KNOWLEDGE, and it is what the badge prints.
  */
-export function dcRange(dc, mod = 0) {
+export function dcRange(dc) {
   if (dc == null) return null;
   if (Number.isFinite(dc)) return { lo: dc, hi: dc };
-  const lo = Number.isFinite(dc.lo) ? dc.lo : mod + 1 - 10;
-  const hi = Number.isFinite(dc.hi) ? dc.hi : mod + 20 + 11;
-  if (lo > hi) return null;
+  const lo = Number.isFinite(dc.lo) ? dc.lo : -Infinity;
+  const hi = Number.isFinite(dc.hi) ? dc.hi : Infinity;
+  if (!(lo <= hi) || (lo === hi && !Number.isFinite(lo))) return null;
   return { lo, hi };
+}
+
+/**
+ * The DCs worth enumerating for a range: past these every face is already
+ * decided (a 1 still critically succeeds at DC ≤ mod − 9; a 20 still
+ * critically fails at DC ≥ mod + 31), so the range is clamped into the window
+ * — never truncated, so a range lying wholly past one edge still resolves.
+ */
+function calcWindow(range, mod) {
+  const w0 = mod - 10;
+  const w1 = mod + 31;
+  const clamp = (n) => Math.max(w0, Math.min(w1, n));
+  return { lo: clamp(range.lo), hi: clamp(range.hi) };
 }
 
 export const isExact = (range) => !!range && range.lo === range.hi;
@@ -170,7 +187,8 @@ export const isExact = (range) => !!range && range.lo === range.hi;
  * @returns {Array<{face: number, lo: number, hi: number, certain: boolean, adjustments: string[]}>}
  */
 export function faces({ mod, dc, dos = null, baseOptions = null }) {
-  const range = dcRange(dc, mod);
+  const known = dcRange(dc);
+  const range = known && calcWindow(known, mod);
   const out = [];
   for (let face = 1; face <= 20; face++) {
     if (!range) {
@@ -237,7 +255,7 @@ export function oddsOf(spec) {
   const { mod, dc, dos = null, baseOptions = null, rollTwice = false, flatDc = null, goal = SUCCESS, invert = false } = spec;
   const list = faces({ mod, dc, dos, baseOptions });
   const weights = faceWeights(rollTwice);
-  const range = dcRange(dc, mod);
+  const range = dcRange(dc);
   const flat = flatChance(flatDc);
   const atLeast = chanceAtLeast(list, goal, weights);
   const crit = chanceAtLeast(list, CRIT_SUCCESS, weights);

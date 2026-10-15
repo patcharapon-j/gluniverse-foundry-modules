@@ -36,7 +36,6 @@ export function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.sheet, bool(SETTINGS.sheet, true));
   game.settings.register(SUITE_ID, SETTINGS.dialog, bool(SETTINGS.dialog, true));
   game.settings.register(SUITE_ID, SETTINGS.savePrompt, bool(SETTINGS.savePrompt, true));
-  game.settings.register(SUITE_ID, SETTINGS.sound, bool(SETTINGS.sound, false));
 
   game.settings.registerMenu(SUITE_ID, SETTINGS.observationsMenu, {
     ...label(SETTINGS.observationsMenu),

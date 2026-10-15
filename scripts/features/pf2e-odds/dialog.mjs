@@ -19,10 +19,10 @@
 
 import { SETTINGS } from "./constants.mjs";
 import { flatDcFor, modelFromProbe } from "./model-from-probe.mjs";
-import { modsOf } from "./probe.mjs";
+import { modsOf, rollModeOf } from "./probe.mjs";
 import { badgeHTML, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
-import { modelFor, seesTruth } from "./view.mjs";
+import { modelFor, nameFor, seesTruth } from "./view.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { escapeHTML } from "../../core/util.mjs";
 
@@ -40,15 +40,11 @@ const rootOf = (app, html) => {
 const isCheckDialog = (app, root) =>
   !!app?.check && !!app?.context && (app.constructor?.name === "CheckModifiersDialog" || !!root?.classList?.contains("dice-checks"));
 
-/** Fortune and misfortune together roll a single d20 (PF2e's own rule). */
+/** The dialog's own fortune radio, then the probe's rule (substitutions fix the face). */
 function rollTwiceOf(context, root) {
   const radio = root?.querySelector?.("[data-roll-twice] input[type=radio]:checked");
   const chosen = radio ? radio.value || false : context.rollTwice ?? false;
-  const subs = context.substitutions ?? [];
-  const fortune = chosen === "keep-higher" || subs.some((s) => s.selected && s.effectType === "fortune");
-  const misfortune = chosen === "keep-lower" || subs.some((s) => s.selected && s.effectType === "misfortune");
-  if (fortune && misfortune) return false;
-  return fortune ? "keep-higher" : misfortune ? "keep-lower" : false;
+  return rollModeOf(chosen, context.substitutions ?? []);
 }
 
 const isSave = (context) => context.type === "saving-throw";
@@ -68,12 +64,7 @@ function rolesOf(context) {
 
 const docOf = (t) => t?.document ?? t ?? null;
 
-/** A target's name as this viewer may see it. */
-function nameOf(token, actor) {
-  const doc = docOf(token);
-  if (doc && !game.user.isGM && doc.playersCanSeeName === false) return "";
-  return doc?.name ?? actor?.name ?? "";
-}
+const nameOf = (token, actor) => nameFor(token, actor);
 
 /** The dialog's own state in the probe's shape. */
 function probeOf(app, root) {
@@ -114,7 +105,9 @@ function primaryModel(app, root) {
     label: String(app.title ?? context.title ?? "").trim(),
     sub: attack ? ORDINAL[map] : "",
     flatDc: attack ? flatDcFor(defender) : null,
-    dcStat: save ? "spell-dc" : undefined,
+    // Only a spell's save DC is the caster's spell DC (a breath weapon's is not).
+    dcStat: save ? (context.item?.type === "spell" ? "spell-dc" : null) : undefined,
+    dcPublic: !!context.dc?.visible || !!game.pf2e?.settings?.metagame?.dcs,
   });
 }
 

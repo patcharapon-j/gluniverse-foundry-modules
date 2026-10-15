@@ -24,6 +24,7 @@ export const blank = () => ({ count: 0, at: 0, override: null, turn: null });
 /** Whether a PF2e check context is an attack for MAP purposes. */
 export function isAttack(context) {
   if (!context) return false;
+  if (context.type === "damage-roll" || context.type === "damage-taken") return false;
   if (context.type === "attack-roll" || context.type === "spell-attack-roll") return true;
   const traits = (context.traits ?? []).map((t) => (typeof t === "string" ? t : t?.name));
   if (traits.includes("attack")) return true;
@@ -35,8 +36,11 @@ export function isAttack(context) {
  * @param {object} state
  * @param {{at: number, turn: string|null, mapIncreases?: number|null}} hit
  */
-export function recordAttack(state, { at, turn, mapIncreases = null }) {
-  const s = state && state.turn === turn ? { ...state } : { ...blank(), turn };
+export function recordAttack(state, { at, turn, mapIncreases = null, resetMs = Infinity }) {
+  // Out of combat both turn keys are null, so expiry has to be asked for here
+  // too: a stale count carried into a fresh attack makes it the third.
+  const live = state && state.turn === turn && (turn != null || at - state.at <= resetMs);
+  const s = live ? { ...state } : { ...blank(), turn };
   const prior = Number.isInteger(mapIncreases) ? Math.max(s.count, mapIncreases) : s.count;
   s.count = Math.min(2, prior + 1);
   // A manual step is a correction to the count, not a freeze: the attack after

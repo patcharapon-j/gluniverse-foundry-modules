@@ -20,7 +20,7 @@
  *   Action row   li.action.item[data-item-id] › .button-group              actors/partials/action.hbs:1,23
  */
 
-import { SETTINGS, SKILL_ACTIONS, TIMING } from "./constants.mjs";
+import { SETTINGS, SKILL_ACTIONS, TIMING, KNOWLEDGE_HOOK } from "./constants.mjs";
 import { inlineHTML } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { arm, mapIndex, onTrackerChange } from "./tracker.mjs";
@@ -242,6 +242,8 @@ export function wireSheet() {
 
   const debounce = foundry.utils.debounce;
   const onTargets = debounce(() => refresh(), TIMING.debounce);
+  // What the party knows changed: every open sheet's odds may have.
+  Hooks.on(KNOWLEDGE_HOOK, onTargets);
   Hooks.on("targetToken", (user) => {
     if (user === game.user) onTargets();
   });

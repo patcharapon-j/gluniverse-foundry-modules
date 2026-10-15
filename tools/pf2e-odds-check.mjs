@@ -244,6 +244,68 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(MM.isAttack({ type: "skill-check", traits: ["attack"] }) && !MM.isAttack({ type: "skill-check", traits: [] }), "Grapple counts toward MAP, Demoralize does not");
 }
 
+/* ── 6b. Review regressions (PR #125) ───────────────────────────────────── */
+
+{
+  // An open-ended range wholly past the calculation window still resolves.
+  const o = E.oddsOf({ mod: 12, dc: { lo: 50, hi: Infinity } });
+  ok(o.known && o.headline?.lo === 0 && o.headline?.hi === 0, `DC ≥ 50 against +12 is a known 0%, not ??? (${JSON.stringify(o.headline)})`);
+  ok(VM.dcText({ lo: 19, hi: Infinity }) === "≥ 19" && VM.dcText({ lo: -Infinity, hi: 26 }) === "≤ 26", "open ends print as ≥ / ≤");
+  // A substitution fixes the face.
+  const fixed = E.oddsOf({ mod: 10, dc: 25, rollTwice: { fixed: 18 } });
+  ok(fixed.headline.lo === 1 && fixed.headline.hi === 1, `substitute 18 at +10 vs 25 is a certain success (${fixed.headline.lo})`);
+  ok(Math.abs(E.faceWeights({ fixed: 18 }).reduce((a, b) => a + b, 0) - 1) < 1e-9, "fixed weights sum to 1");
+  // Out-of-combat expiry clears the count before a fresh attack.
+  let s = MM.recordAttack(MM.blank(), { at: 0, turn: null, resetMs: 12000 });
+  s = MM.recordAttack(s, { at: 20000, turn: null, resetMs: 12000 });
+  ok(MM.nextIndex(s, { now: 20001, turn: null, resetMs: 12000, inCombat: false }).index === 1, "an expired count does not carry into a fresh attack");
+  // A hidden NPC breakdown teaches no modifier.
+  const hidden = OM.observationsFrom({
+    context: { type: "attack-roll", identifier: "a.claw.melee", dc: { value: 18, slug: "armor" }, unadjustedOutcome: "success" },
+    total: 23, natural: 9, breakdownShown: false, visible: true, resultsShown: true,
+    roller: { creature: true, kind: "ogre" }, defender: { creature: false }, modDelta: 0,
+  });
+  ok(!hidden.some((o) => o.stat.startsWith("strike:")), "a hidden breakdown files no exact modifier");
+  // A private creature bonus is neither a chip nor a witnessed delta.
+  const m = VM.buildModel({
+    probe: { mod: 12, mods: [], dc: { value: 25, slug: "armor" }, options: [] },
+    dcMods: [{ slug: "secret-ward", label: "Secret ward", value: 2, kind: "status", enabled: true }, { slug: "off-guard", label: "Off-guard", value: -2, kind: "circumstance", enabled: true }],
+    who: { rollerIsCreature: false, defenderIsCreature: true, isGM: false }, known: null, label: "x",
+  });
+  ok(!m.chips.some((c) => c.key === "dc:secret-ward") && m.chips.some((c) => c.key === "dc:off-guard"), "a player sees off-guard but not a private ward");
+}
+{
+  const src = read("scripts/features/pf2e-odds/observe.mjs");
+  ok(/if \(!isActiveGM\(\)\) return;\s*const before/.test(src), "a queued ledger write re-checks the active GM");
+  ok(/emitSocket\(FEATURE_ID, \{ type: MSG\.forget/.test(src) && /onForgetIntent/.test(src), "a non-active GM's reset is routed to the active GM");
+  const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
+  ok(/seesTruth\(\)/.test(lb) && /reachedPlayers\(message\)/.test(lb) && !/game\.user\.isGM \|\| !!game\.pf2e/.test(lb), "the landing stamp follows the player-visibility policy");
+  ok(/KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/sheet.mjs")) && /KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/save-prompt.mjs")), "sheets and save prompts redraw when knowledge changes");
+  ok(/headHTML\(next/.test(read("scripts/features/pf2e-odds/render.mjs")), "updateBadge redraws the heading");
+}
+
+{
+  // Only a spell's save teaches a spell DC.
+  const card = {
+    context: { type: "saving-throw", dc: { value: 22, slug: "reflex" }, unadjustedOutcome: "failure" },
+    modifierName: "reflex", total: 15, natural: 8, visible: true, resultsShown: true, dcShown: false,
+    roller: { creature: false }, defender: null, origin: { creature: true, kind: "dragon" },
+  };
+  ok(!OM.observationsFrom(card).some((o) => o.stat === "spell-dc"), "a breath weapon's DC is not filed as the spell DC");
+  ok(OM.observationsFrom({ ...card, originIsSpell: true }).some((o) => o.stat === "spell-dc"), "a spell's save DC is filed as the spell DC");
+  ok(!MM.isAttack({ type: "damage-roll", traits: ["attack"] }), "a damage roll never counts toward MAP");
+  ok(DP.parseSaves("Fortitude 1, Reflex +9, Will −2")?.reflex != null, "dex-parse reads signed saves");
+  ok(DP.leadingInt("x9") == null || DP.leadingInt("x9") !== 9, "dex-parse's sign class does not swallow letters");
+  const anon = VM.buildModel({ probe: { mod: 12, mods: [], dc: { value: 18, slug: "armor" }, options: [] }, who: { rollerIsCreature: true, defenderIsCreature: false, isGM: false }, known: null, label: "Jaws" });
+  ok(anon.label === "GLOD.unseen.attackLabel", "an unseen creature attack is labelled \"Attack\", not by its Strike");
+  const src = (f) => read(`scripts/features/pf2e-odds/${f}`);
+  ok(/glodDcDelta/.test(src("probe.mjs")) && /glodDcDelta/.test(src("observe.mjs")), "the contextual DC delta is stamped by the roller and read by the observer");
+  ok(/changed \? next : ledger/.test(src("observe.mjs")), "a card that narrows nothing writes nothing");
+  ok(/consumeAmmo: false/.test(src("probe.mjs")), "a Strike probe never checks ammunition");
+  ok(/nameFor\(target/.test(src("line-badges.mjs")) && !/document\?\.name \?\? target\.name/.test(src("line-badges.mjs")), "the line badge gates the target's name");
+  ok(!/\bsound\b/.test(src("constants.mjs")), "no dead sound switch");
+}
+
 /* ── 7. Data keys are pinned ────────────────────────────────────────────── */
 
 ok(Object.keys(C.STATS).join() === "ac,fortitude,reflex,will,perception,spell-dc,spell-attack", `STATS keys are ledger data — renaming one forgets the party's knowledge (${Object.keys(C.STATS)})`);

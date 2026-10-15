@@ -15,7 +15,8 @@
 import { isConfiguredStreamUser } from "../stream/settings.js";
 import { SKILL_ACTIONS, strikeStat } from "./constants.mjs";
 import { flatDcFor, modelFromProbe } from "./model-from-probe.mjs";
-import { cached, probeSave, probeSkillAction, probeSpellAttack, probeStrike } from "./probe.mjs";
+import { isCreature } from "./knowledge.mjs";
+import { cached, probeSave, probeSkillAction, probeSpellAttack, probeStrike, strikeOf } from "./probe.mjs";
 import { armedOf, mapIndex } from "./tracker.mjs";
 
 const ORDINAL = ["GLOD.attack.first", "GLOD.attack.second", "GLOD.attack.third"];
@@ -31,6 +32,18 @@ export function seesTruth(user = game.user) {
 }
 
 const tokenDoc = (t) => t?.document ?? t ?? null;
+
+/**
+ * A creature's name as this viewer may see it: PF2e's own answer
+ * (`playersCanSeeName`) for anyone short of the truth — the stream login
+ * included, since the players watch it. Blank rather than a placeholder: the
+ * plate simply drops its "›› target" half.
+ */
+export function nameFor(token, actor = null, user = game.user) {
+  const doc = tokenDoc(token);
+  if (!seesTruth(user) && (doc ? doc.playersCanSeeName === false : !!actor && isCreature(actor))) return "";
+  return doc?.name ?? actor?.name ?? "";
+}
 
 /** A ranged Strike past its maximum range: PF2e would refuse it, so do we. */
 function outOfRange(strike, rollerToken, targetToken) {
@@ -74,10 +87,12 @@ export async function modelFor({ roller, rollerToken = null, target, action = nu
   let flat = null;
 
   if (armed.kind === "strike") {
+    // Range first: past it PF2e refuses the Strike with a toast, so asking it
+    // would warn the player on every redraw and never price anything.
+    const strike = strikeOf(roller, armed.slug);
+    if (outOfRange(strike, rollerToken, target)) return { state: "oor", label: strike?.label ?? strike?.item?.name ?? "" };
     probe = await cached(key, () => probeStrike(roller, { slug: armed.slug, map: index, target }));
     if (!probe) return null;
-    const strike = (roller.system?.actions ?? []).find((s) => (s.slug ?? s.item?.slug) === probe.strike?.slug);
-    if (outOfRange(strike, rollerToken, target)) return { state: "oor", label: probe.strike?.label ?? "" };
     label = probe.strike?.label ?? "";
     sub = ORDINAL[index];
     unknownModStat = probe.strike?.slug ? strikeStat(probe.strike.slug) : null;
@@ -151,6 +166,10 @@ export async function saveButtonModel({ saver, save, dc, origin = null, item = n
   if (!probe?.dc) return null;
   // The roller is the one saving; the unknown is the CASTER's DC, which the
   // ledger keeps as "spell-dc".
+  // Only a spell's DC is the caster's "spell DC"; a breath weapon or an
+  // affliction is a DC the ledger has no name for, so it stays unknown.
+  // A caster we cannot resolve is unknown too, unless PF2e prints DCs.
+  const dcPublic = !!game.pf2e?.settings?.metagame?.dcs;
   return modelFromProbe({
     probe,
     roller: saver,
@@ -159,6 +178,7 @@ export async function saveButtonModel({ saver, save, dc, origin = null, item = n
     user,
     label: `GLOD.save.${save}`,
     stamps: "check",
-    dcStat: "spell-dc",
+    dcStat: item?.type === "spell" ? "spell-dc" : null,
+    dcPublic,
   });
 }

@@ -5,6 +5,13 @@
 export const FEATURE_ID = "pf2e-odds";
 export const PREFIX = "od.";
 
+/**
+ * Raised when what a viewer KNOWS changes (the ledger, a Creaturedex reveal):
+ * every mounted surface — line badges, open sheets, save prompts — redraws.
+ * Namespaced under the suite id so no other feature can raise it by accident.
+ */
+export const KNOWLEDGE_HOOK = "gluniverse-foundry-modules.odds.knowledgeChanged";
+
 export const SETTINGS = Object.freeze({
   ledger: "od.ledger",
   partyKnowledge: "od.partyKnowledge",
@@ -13,12 +20,11 @@ export const SETTINGS = Object.freeze({
   sheet: "od.sheet",
   dialog: "od.dialog",
   savePrompt: "od.savePrompt",
-  sound: "od.sound",
   observationsMenu: "od.observations",
 });
 
 /** The socket payload kinds this feature speaks. */
-export const MSG = Object.freeze({ armed: "armed", mapOverride: "map" });
+export const MSG = Object.freeze({ armed: "armed", mapOverride: "map", forget: "forget" });
 
 /** Roll option that tags a probe, so the Check.roll handler can catch it. */
 export const PROBE_TAG = "gluniverse:odds-probe";
@@ -102,6 +108,28 @@ export const TIMING = Object.freeze({
   /** Coalesce bursts of document updates into one recompute. */
   debounce: 120,
 });
+
+/**
+ * Modifiers the TABLE can see happening on a creature: its conditions (each
+ * one an icon on its token, slugged like the condition) and cover. A status
+ * or circumstance bonus from anything else — a spell the GM cast off-screen,
+ * an aura, a hidden ability — is not public: it is neither printed as a chip
+ * for a player nor treated as a witnessed delta when a stat is normalised, so
+ * a player who has not seen the "secret ward" cannot read it off a badge.
+ */
+const PUBLIC_SLUGS = new Set([
+  "off-guard", "cover", "lesser-cover", "standard-cover", "greater-cover",
+  "clumsy", "drained", "enfeebled", "frightened", "sickened", "stupefied",
+  "prone", "blinded", "dazzled", "fatigued", "grabbed", "restrained", "slowed",
+  "stunned", "unconscious", "paralyzed", "dying", "doomed", "wounded",
+]);
+
+export function isPublicModifier(m) {
+  const slug = String(m?.slug ?? "");
+  if (PUBLIC_SLUGS.has(slug)) return true;
+  const conditions = globalThis.CONFIG?.PF2E?.conditionTypes;
+  return !!conditions && Object.hasOwn(conditions, slug);
+}
 
 /** Shed order for the line badges, cheapest loss first. */
 export const SHED_ORDER = Object.freeze(["narrowBeat", "landBeat", "glass", "expanded"]);

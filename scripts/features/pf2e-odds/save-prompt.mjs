@@ -12,7 +12,7 @@
  * someone the reader does not own.
  */
 
-import { SETTINGS, TIMING } from "./constants.mjs";
+import { SETTINGS, TIMING, KNOWLEDGE_HOOK } from "./constants.mjs";
 import { inlineHTML } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { saveButtonModel } from "./view.mjs";
@@ -115,6 +115,7 @@ function refreshAll() {
 export function wireSavePrompts() {
   Hooks.on("renderChatMessageHTML", onRender);
   const debounced = foundry.utils.debounce(refreshAll, TIMING.debounce);
+  Hooks.on(KNOWLEDGE_HOOK, debounced);
   // The GM's savers are the selection; a player's only change with their character.
   Hooks.on("controlToken", () => {
     if (game.user.isGM) debounced();

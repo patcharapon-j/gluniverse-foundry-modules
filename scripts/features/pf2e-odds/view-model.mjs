@@ -29,6 +29,7 @@
  */
 
 import { CRIT_SUCCESS, SUCCESS, oddsOf, formatRange, pct, shift, isExact } from "../../core/pf2e-odds.mjs";
+import { isPublicModifier } from "./constants.mjs";
 
 export const SIDE = Object.freeze({ dc: "dc", mod: "mod", none: "none", open: "open" });
 
@@ -99,6 +100,7 @@ export function chipsOf({ mods = [], dcMods = [], adjustments = [], rollTwice = 
   for (const label of adjustments) chips.push({ key: `dos:${label}`, label, value: null, tone: "info" });
   if (rollTwice === "keep-higher") chips.push({ key: "fortune", label: "GLOD.chip.fortune", value: null, tone: "pos" });
   if (rollTwice === "keep-lower") chips.push({ key: "misfortune", label: "GLOD.chip.misfortune", value: null, tone: "warn" });
+  if (rollTwice?.fixed) chips.push({ key: "fixed", label: "GLOD.chip.fixed", value: rollTwice.fixed, tone: "info" });
   if (flat) chips.push({ key: "flat", label: flat.dc >= 11 ? "GLOD.chip.hidden" : "GLOD.chip.concealed", value: null, flatDc: flat.dc, chance: flat.chance, tone: "warn" });
   return chips;
 }
@@ -139,8 +141,11 @@ export function buildModel(spec) {
     }
   }
 
+  // A creature's attack nobody has seen is "Attack": its Strike's name is
+  // Offense knowledge the dex sells, not something a targeting line gives away.
+  const anonymous = side === SIDE.mod && !shown.known && (spec.stamps ?? "attack") === "attack";
   return {
-    label: spec.label ?? "",
+    label: anonymous ? "GLOD.unseen.attackLabel" : spec.label ?? "",
     sub: spec.sub ?? "",
     stamps: spec.stamps ?? "attack",
     invert: !!invert,
@@ -151,10 +156,13 @@ export function buildModel(spec) {
     crit: shown.known ? formatRange(shown.crit) : null,
     dcText: side === SIDE.mod ? null : dcText(shown.dc),
     dcLabel: spec.dcLabel ?? "GLOD.word.dc",
+    // The unknown side's modifiers are the creature's: a player sees only the
+    // public ones (its conditions, cover). The viewer's own are all theirs.
     chips: chipsOf({
-      mods: probe.mods ?? [],
-      dcMods: spec.dcMods ?? [],
-      adjustments: shown.adjustments,
+      mods: side === SIDE.mod ? (probe.mods ?? []).filter((m) => m.slug === "multiple-attack-penalty" || isPublicModifier(m)) : probe.mods ?? [],
+      dcMods: side === SIDE.dc ? (spec.dcMods ?? []).filter(isPublicModifier) : spec.dcMods ?? [],
+      // A creature's own degree adjustments (its Evasion) are its business.
+      adjustments: side === SIDE.mod ? [] : shown.adjustments,
       rollTwice: probe.rollTwice,
       flat: shown.flat,
       mapOverride: spec.mapOverride,
@@ -166,13 +174,14 @@ export function buildModel(spec) {
   };
 }
 
-/** "21", "19–22", or null. */
+/** "21", "19–22", "≥ 19", "≤ 26", or null. */
 export function dcText(range) {
   if (!range) return null;
-  return range.lo === range.hi ? `${range.lo}` : `${fin(range.lo)}–${fin(range.hi)}`;
+  if (range.lo === range.hi) return `${range.lo}`;
+  if (!Number.isFinite(range.lo)) return `≤ ${range.hi}`;
+  if (!Number.isFinite(range.hi)) return `≥ ${range.lo}`;
+  return `${range.lo}–${range.hi}`;
 }
-
-const fin = (n) => (Number.isFinite(n) ? n : "?");
 
 /** For the compact tag: the headline alone, or ??? */
 export const compactText = (model) => model?.headline ?? "???";

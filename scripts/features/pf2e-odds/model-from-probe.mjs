@@ -65,9 +65,14 @@ export function modelFromProbe({
   dcStat,
   modStat = null,
   dcLabel = undefined,
+  dcPublic = false,
 }) {
   if (!probe?.dc || !roller) return null;
-  const who = { rollerIsCreature: isCreature(roller), defenderIsCreature: !!targetActor && isCreature(targetActor), isGM: !!truth };
+  // A defender we cannot resolve is treated as a creature — its DC unknown —
+  // unless the DC is public anyway; never "open", which would print the truth.
+  const publicFor = dcPublic && !isCreature(roller);
+  const defenderIsCreature = targetActor ? isCreature(targetActor) && !publicFor : !publicFor;
+  const who = { rollerIsCreature: isCreature(roller), defenderIsCreature, isGM: !!truth };
   const side = unknownSide({ ...who, isGM: false });
   const dcKey = dcStat === undefined ? statForDcSlug(probe.dc.slug) : dcStat;
   const subject =

@@ -73,7 +73,8 @@ export function stripHTML(model, { numbers = true } = {}) {
 
 function chipText(chip, t) {
   const label = t(chip.label);
-  if (chip.key === "flat") return `${label} · DC ${chip.flatDc} · ${Math.round((chip.chance ?? 0) * 100)}%`;
+  if (chip.key === "flat") return `${label} · ${t("GLOD.word.dc")} ${chip.flatDc} · ${Math.round((chip.chance ?? 0) * 100)}%`;
+  if (chip.key === "fixed") return `${label} ${chip.value}`;
   if (chip.value == null) return label;
   const v = chip.value > 0 ? `+${chip.value}` : `−${Math.abs(chip.value)}`;
   return `${label} ${v}`;
@@ -110,6 +111,12 @@ function gmHTML(model, t) {
     .join("")}</div>`;
 }
 
+/** The plate's heading: action · attack ordinal ›› target. */
+function headHTML(model, t, target) {
+  const title = [t(model.label), model.sub ? t(model.sub) : ""].filter(Boolean).join(" · ");
+  return `<div class="glod-head"><span class="glod-title">${escapeHTML(title)}</span>${target ? `<span class="glod-arrow" aria-hidden="true">››</span><span class="glod-target">${escapeHTML(target)}</span>` : ""}</div>`;
+}
+
 /**
  * The full plate.
  * @param {object} model   view-model.mjs `buildModel` output
@@ -120,8 +127,7 @@ export function badgeHTML(model, { t = ident, target = "", numbers = true, gm = 
   if (model.state === "oor") {
     return `<div class="glod-badge gl-type" data-state="oor"><div class="glod-head">${escapeHTML(t(model.label))}</div><div class="glod-oor">${escapeHTML(t("GLOD.outOfRange"))}</div></div>`;
   }
-  const title = [t(model.label), model.sub ? t(model.sub) : ""].filter(Boolean).join(" · ");
-  const head = `<div class="glod-head"><span class="glod-title">${escapeHTML(title)}</span>${target ? `<span class="glod-arrow" aria-hidden="true">››</span><span class="glod-target">${escapeHTML(target)}</span>` : ""}</div>`;
+  const head = headHTML(model, t, target);
   return `<div class="glod-badge gl-type" data-state="${model.state}" data-stamps="${model.stamps}">${head}<div class="glod-row">${headlineHTML(model)}${degreeLine(model, t)}</div>${stripHTML(
     model,
     { numbers }
@@ -165,6 +171,10 @@ export function updateBadge(el, prev, next, opts = {}) {
   }
   const scale = Number.isFinite(opts.motion) ? opts.motion : 1;
   el.dataset.state = next.state;
+  el.dataset.stamps = next.stamps;
+  // The heading follows the action: a new weapon, the next MAP ordinal, a renamed target.
+  const head = el.querySelector(".glod-head");
+  if (head) head.outerHTML = headHTML(next, t, opts.target ?? "");
 
   // Headline: count from the old numbers to the new.
   const row = el.querySelector(".glod-row");

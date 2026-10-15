@@ -37,7 +37,8 @@ import { DEGREE_KEYS } from "../../core/pf2e-odds.mjs";
 import { badgeHTML, compactHTML, playLanding, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { onTrackerChange, stepMap } from "./tracker.mjs";
-import { modelFor } from "./view.mjs";
+import { modelFor, nameFor, seesTruth } from "./view.mjs";
+import { breakdownShown, metagame, reachedPlayers } from "./observe.mjs";
 
 const L = (key) => {
   if (typeof key !== "string" || !key) return "";
@@ -153,7 +154,7 @@ export class LineBadges {
       if (view) this.#drop(key, view);
       return;
     }
-    const opts = { t: L, target: target.document?.name ?? target.name ?? "", motion: this.#motion() };
+    const opts = { t: L, target: nameFor(target, target.actor), motion: this.#motion() };
     if (!view) {
       const el = document.createElement("div");
       el.className = "glod-line";
@@ -171,6 +172,7 @@ export class LineBadges {
     const tag = view.el.querySelector(".glod-tag");
     if (tag) tag.outerHTML = compactHTML(model);
     view.model = model;
+    view.box = null;
   }
 
   #bind(el, pair) {
@@ -205,6 +207,7 @@ export class LineBadges {
         view.full = full;
         view.el.classList.toggle("is-full", full);
         view.el.classList.toggle("is-compact", !full);
+        view.box = null;
       }
       view.el.classList.toggle("is-flat", shedGlass);
     }
@@ -239,6 +242,9 @@ export class LineBadges {
     if (!view || !stage) return;
     const rect = view.getBoundingClientRect?.() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
     const wt = stage.worldTransform;
+    // Measure every badge that needs it first, then write: interleaving a read
+    // with the previous badge's write forces a layout per badge per frame.
+    for (const v of this.views.values()) if (!v.box) v.box = v.el.getBoundingClientRect();
     for (const v of this.views.values()) {
       const target = tokenById(v.targetId);
       if (!target || !target.visible) {
@@ -253,7 +259,7 @@ export class LineBadges {
       const p = wt.apply({ x: c.x + w * 0.5, y: c.y - h * 0.1 });
       const x = Math.round(rect.left + p.x + 10);
       const y = Math.round(rect.top + p.y);
-      const box = v.el.getBoundingClientRect();
+      const box = v.box;
       const cx = Math.min(Math.max(8, x), innerWidth - box.width - 8);
       const cy = Math.min(Math.max(8, y), innerHeight - box.height - 8);
       v.el.style.visibility = "";
@@ -302,6 +308,10 @@ export class LineBadges {
    */
   land(message) {
     if (this.ladder?.allows("landBeat") === false || !message?.isContentVisible || message.blind) return;
+    // The stream login holds GM rights and is watched by the players, so
+    // anything short of the truth asks what the PLAYERS could read on the card.
+    const truth = seesTruth();
+    if (!truth && !reachedPlayers(message)) return;
     const ctx = message.flags?.pf2e?.context;
     const roll = message.rolls?.[0];
     const sourceId = message.speaker?.token;
@@ -310,9 +320,10 @@ export class LineBadges {
     const plate = this.views.get(`${sourceId}>${targetId}`)?.el.querySelector(".glod-badge");
     if (!plate) return;
     const degree = DEGREE_KEYS.indexOf(ctx.outcome ?? "");
-    const resultsShown = game.user.isGM || !!game.pf2e?.settings?.metagame?.results;
-    const face = roll.dice?.find((d) => d.faces === 20)?.total ?? null;
-    if (!Number.isInteger(face)) return;
+    const resultsShown = truth || metagame("results");
+    // An NPC's dice are hidden from players unless PF2e shows breakdowns.
+    const face = truth || breakdownShown(roll) ? roll.dice?.find((d) => d.faces === 20)?.total ?? null : null;
+    if (!Number.isInteger(face) && !(resultsShown && degree >= 0)) return;
     const stamps = ctx.type === "attack-roll" || ctx.type === "spell-attack-roll" ? "attack" : "check";
     playLanding(plate, { face, degree: resultsShown && degree >= 0 ? degree : null, stamps, t: L, motion: this.#motion() });
   }

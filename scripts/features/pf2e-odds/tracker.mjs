@@ -82,7 +82,7 @@ function onAttackCard(message) {
   if (!isAttack(ctx)) return;
   const actor = message.actor;
   if (!actor) return;
-  MAP.set(actor.id, recordAttack(MAP.get(actor.id), { at: Date.now(), turn: turnKey(), mapIncreases: ctx.mapIncreases ?? null }));
+  MAP.set(actor.id, recordAttack(MAP.get(actor.id), { at: Date.now(), turn: turnKey(), mapIncreases: ctx.mapIncreases ?? null, resetMs: resetMs() }));
   changed(actor.id);
 }
 
@@ -112,8 +112,18 @@ export function arm(actor, armed) {
   changed(actor.id);
 }
 
+let forgetHandler = null;
+/** observe.mjs owns the ledger; this socket only carries a GM's reset to it. */
+export const setForgetHandler = (fn) => {
+  forgetHandler = fn;
+};
+
 function fromSocket(payload, _claimed, meta) {
   const user = game.users?.get(meta?.attested ?? "");
+  if (payload?.type === MSG.forget) {
+    if (user) forgetHandler?.(payload, user);
+    return;
+  }
   const actor = game.actors?.get(payload?.actorId);
   if (!user || !actor || !actor.testUserPermission?.(user, "OWNER")) return;
   if (payload.type === MSG.armed && validArmed(payload.armed)) {

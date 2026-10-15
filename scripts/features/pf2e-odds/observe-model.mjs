@@ -68,7 +68,9 @@ export function observationsFrom(card) {
   }
 
   // 2. A creature's modifier, read off a public card.
-  if (card.roller?.creature && card.roller.kind && Number.isInteger(card.natural) && Number.isFinite(card.total)) {
+  // Only when the players could read the natural: PF2e hides an NPC roll's
+  // formula and dice unless "show breakdowns" is on, and a total alone pins nothing.
+  if (card.roller?.creature && card.roller.kind && card.breakdownShown !== false && Number.isInteger(card.natural) && Number.isFinite(card.total)) {
     const bare = card.total - card.natural - (card.modDelta ?? 0);
     let stat = null;
     let value = bare;
@@ -85,7 +87,7 @@ export function observationsFrom(card) {
   }
 
   // 3. A PC saves against a creature's spell.
-  if (type === "saving-throw" && !card.roller?.creature && card.origin?.creature && card.origin.kind && dcValue != null) {
+  if (type === "saving-throw" && card.originIsSpell && !card.roller?.creature && card.origin?.creature && card.origin.kind && dcValue != null) {
     const proof = proofOf();
     if (proof) out.push({ kind: card.origin.kind, stat: "spell-dc", proof, src: "saving-throw" });
   }
