@@ -6,7 +6,8 @@
  * Anything short of the truth asks what the PLAYERS could read on the card —
  * the stream login holds GM rights and is watched by the players:
  *
- *   • the card must have reached a player (not blind, not a GM-only whisper);
+ *   • the card must have reached a player (not blind, not a GM-only whisper),
+ *     and for the stream login every player: no whisper at all;
  *   • the degree only under PF2e's own "show results" metagame setting;
  *   • the natural only when PF2e shows the roll's breakdown (NPC dice are
  *     hidden from players otherwise).
@@ -33,6 +34,10 @@ export function landingOf(message, user = game.user) {
   if (!message?.isContentVisible || message.blind) return null;
   const truth = seesTruth(user);
   if (!truth && !reachedPlayers(message)) return null;
+  // A GM-rights viewer short of the truth is the stream login, whose screen is
+  // the whole audience's: a whisper reaching one player (Alice's private check)
+  // is content it can read and they may not, so it lands public rolls only.
+  if (!truth && user?.isGM && (message.whisper ?? []).length) return null;
   const ctx = message.flags?.pf2e?.context;
   const roll = message.rolls?.[0];
   if (!ctx || !roll) return null;

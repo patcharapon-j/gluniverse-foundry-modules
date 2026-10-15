@@ -761,62 +761,78 @@ class DsnDie {
 
 /* ── the board, read-only (PF2e Odds' dice highlight) ───────────────────────
  *
- * The one other thing the suite asks of DSN's own board: where a thrown die
- * came to rest, on screen. Read-only — nothing here touches a mesh, a material
- * or the renderer. DSN 6 keeps the dice it is showing on its ThrowEngine
- * (`diceList`, then `deadDiceList` once settled); every mesh carries
- * `notation.type` ("d20") and `forcedResult` (the face Foundry rolled). The
- * camera is DiceScene's, looking down −Y with screen-up −Z, so world X is
- * screen X — which is how a die's on-screen radius is measured.
+ * The one other thing the suite asks of DSN's own board: has a given die come
+ * to rest, and where is it on screen. Read-only — nothing here touches a mesh,
+ * a material or the renderer.
+ *
+ * Identity, not guesswork. DSN builds a throw from the message's OWN dice
+ * terms (ThrowPipeline#_buildRollList pushes the original DiceTerms), and each
+ * die entry keeps `fvttResult` — the very result object from that term. So a
+ * mesh belongs to a roll exactly when `mesh.notation.fvttResult` is one of
+ * that roll's result objects; two throws showing the same natural can never be
+ * confused, and a die left on the board from an earlier throw never matches.
+ *
+ * Settled means DSN has moved it from `throwEngine.diceList` to
+ * `deadDiceList` (ThrowEngine#clearDice, at the end of the throw) — the board
+ * itself, so it holds even under "immediately display chat messages", where
+ * DSN's own completion hook and waitFor3DAnimationByMessageID resolve before
+ * any die has landed. The camera is DiceScene's, looking down −Y with
+ * screen-up −Z, so world X is screen X — which is how a die's on-screen
+ * radius is measured.
  */
 
 const boardEngine = () => game.dice3d?.box?.throwEngine ?? null;
 
-/** Every die mesh on DSN's board right now. */
-function boardMeshes() {
-  const engine = boardEngine();
-  if (!engine) return [];
-  return [...(engine.diceList ?? []), ...(engine.deadDiceList ?? [])].filter(Boolean);
-}
+/** DSN's board container (`#dice-box-canvas`) — the element an overlay stacks above. */
+export const boardContainer = () => document.getElementById("dice-box-canvas");
 
-/** DSN's board canvas (for layering an overlay just above it), or null. */
-export const boardCanvas = () => game.dice3d?.box?.diceScene?.renderer?.domElement ?? null;
+const ownedBy = (mesh, results) => results.has(mesh?.notation?.fvttResult);
+const keptResult = (r) => r && r.active !== false && !r.discarded;
 
-/** Ids of the dice already on the board — snapshot this when a throw starts. */
-export function boardDiceIds() {
-  return new Set(boardMeshes().map((m) => m.id));
+function onScreen(mesh, scene) {
+  const camera = scene?.camera;
+  const el = scene?.renderer?.domElement;
+  if (!camera || !el?.getBoundingClientRect) return null;
+  const rect = el.getBoundingClientRect();
+  const Vec = mesh.position.constructor;
+  const centre = mesh.getWorldPosition(new Vec());
+  mesh.geometry?.computeBoundingSphere?.();
+  const scale = mesh.getWorldScale?.(new Vec())?.x ?? 1;
+  const radius = (mesh.geometry?.boundingSphere?.radius ?? 1) * scale;
+  const toScreen = (v) => {
+    const p = v.clone().project(camera);
+    return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+  };
+  const c = toScreen(centre);
+  const edge = toScreen(centre.clone().add(new Vec(radius, 0, 0)));
+  return { x: c.x, y: c.y, r: Math.max(8, Math.abs(edge.x - c.x)) };
 }
 
 /**
- * The d20s on the board not in `before`, each with where it rests on screen:
- * `{ result, x, y, r }` in client pixels (centre and radius). Empty when DSN,
- * its scene or its camera is not there.
+ * Where a roll's dice stand on the board, read once.
+ * @param {Set<object>} results the roll's d20 result objects (from its terms)
+ * @returns {{busy: boolean, present: boolean, settled: {x:number,y:number,r:number}|null}}
+ *   busy — DSN is mid-throw (ours or a queued one ahead of it);
+ *   present — one of these dice is on the board, moving or at rest;
+ *   settled — the KEPT die at rest, with its centre and radius in client px.
  */
-export function landedD20s(before = new Set()) {
-  const scene = game.dice3d?.box?.diceScene;
-  const camera = scene?.camera;
-  const el = scene?.renderer?.domElement;
-  if (!camera || !el?.getBoundingClientRect) return [];
-  const rect = el.getBoundingClientRect();
-  const out = [];
-  for (const mesh of boardMeshes()) {
-    if (before.has(mesh.id) || String(mesh.notation?.type ?? "").toLowerCase() !== "d20") continue;
+export function boardState(results) {
+  const engine = boardEngine();
+  const out = { busy: false, present: false, settled: null };
+  if (!engine || !results?.size) return out;
+  const live = (engine.diceList ?? []).filter(Boolean);
+  out.busy = !!engine.rolling || live.length > 0;
+  if (live.some((m) => ownedBy(m, results))) out.present = true;
+  for (const mesh of (engine.deadDiceList ?? []).filter(Boolean)) {
+    if (!ownedBy(mesh, results)) continue;
+    out.present = true;
+    if (!keptResult(mesh.notation.fvttResult)) continue;
     try {
-      const Vec = mesh.position.constructor;
-      const centre = mesh.getWorldPosition(new Vec());
-      mesh.geometry?.computeBoundingSphere?.();
-      const scale = mesh.getWorldScale?.(new Vec())?.x ?? 1;
-      const radius = (mesh.geometry?.boundingSphere?.radius ?? 1) * scale;
-      const toScreen = (v) => {
-        const p = v.clone().project(camera);
-        return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
-      };
-      const c = toScreen(centre);
-      const edge = toScreen(centre.clone().add(new Vec(radius, 0, 0)));
-      out.push({ result: mesh.forcedResult ?? mesh.result ?? null, x: c.x, y: c.y, r: Math.max(8, Math.abs(edge.x - c.x)) });
+      out.settled = onScreen(mesh, game.dice3d?.box?.diceScene);
     } catch {
       /* a die mid-teardown */
     }
+    if (out.settled) break;
   }
   return out;
 }

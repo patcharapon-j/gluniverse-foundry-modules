@@ -18,11 +18,10 @@ decisions from the grilling session (Q1–Q36); the save half moves to
   `dc.visible`), and the landing stamp keyed on `context.target.token`;
 - spells inside wands, scrolls and staves (`fromUuidSync` may not resolve them:
   they show no odds rather than wrong ones);
-- the dice highlight against DSN 6's real board: `throwEngine.diceList` /
-  `deadDiceList`, `forcedResult`, the projection onto the canvas, and the
-  overlay's z-index above DSN's canvas. The badge's landing now waits for
-  `waitFor3DAnimationByMessageID` (capped at 10 s), so the pip pulses as the die
-  stops.
+- the dice highlight against DSN 6's real board: `fvttResult` identity
+  surviving to the meshes, `throwEngine.diceList` → `deadDiceList` as the
+  settle signal, the projection onto the canvas, and the layer stacking above
+  `#dice-box-canvas` in each of DSN's three layering modes.
 
 ## Shape
 
@@ -185,11 +184,26 @@ against that DC, gated on whether they've learned it.
 
 - **What's drawn:** a degree-coloured ring/burst and a short stamp over the
   landed d20, in the same four colours.
-- **How:** a DOM/canvas overlay positioned over Dice So Nice's canvas. It never
-  edits DSN materials; Spotlight's `dsn-host.mjs` remains the only file that
-  reaches into DSN's internals.
-- **Visibility:** the same gate as above. No highlight when PF2e would hide the
-  result from that viewer.
+- **How:** a DOM overlay stacked directly above DSN's `#dice-box-canvas`,
+  re-stacked on every draw because DSN's "auto" layering raises its board above
+  whichever window is open. It never edits DSN materials; Spotlight's
+  `dsn-host.mjs` remains the only file that reaches into DSN's internals, and
+  only to read.
+- **Which die:** by identity. DSN builds a throw from the message's own dice
+  terms, so a mesh's `notation.fvttResult` *is* the message's result object.
+  The result objects are captured from the roll DSN is handed at
+  `diceSoNiceRollStart`; a die is ours only if it is the kept one of those.
+  Concurrent throws showing the same natural, and dice left on the board, never
+  match.
+- **When:** `dice-watch.mjs` reads the board on a timer until the kept die is
+  in `deadDiceList`. Not DSN's completion hook, which fires before the dice land
+  under "immediately display chat messages" and whose waiter is never removed.
+  Every watch ends: settled; DSN never started the throw (1.5 s); started but
+  never reached an idle board (4 s); deleted; or 10 s. Both landing beats —
+  the badge pulse and the ring — wait on that one watch, in `dice-highlight.mjs`.
+- **Visibility:** the same gate as above (`landing.mjs`). No highlight when PF2e
+  would hide the result from that viewer, and the stream login lands only
+  public rolls: a whisper to one player is content its audience may not see.
 - **Exclusion:** Spotlight Roll messages are skipped, since that feature draws
   its own die.
 

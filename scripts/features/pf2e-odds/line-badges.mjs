@@ -37,7 +37,6 @@ import { badgeHTML, compactHTML, playLanding, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { onTrackerChange, stepMap } from "./tracker.mjs";
 import { modelFor, nameFor } from "./view.mjs";
-import { landingOf } from "./landing.mjs";
 
 const L = (key) => {
   if (typeof key !== "string" || !key) return "";
@@ -78,7 +77,6 @@ export class LineBadges {
     });
     for (const hook of ["combatTurnChange", "combatStart", "deleteCombat", "controlToken"]) Hooks.on(hook, () => this.refresh());
     onTrackerChange(() => this.refresh());
-    Hooks.on("createChatMessage", (message) => this.land(message));
     if (canvas?.ready) this.#mount();
     this.refresh();
   }
@@ -299,26 +297,19 @@ export class LineBadges {
     this.layer = null;
   }
 
-  /**
-   * A check on this line resolved: stamp its degree on the plate and mark the
-   * face that came up — once Dice So Nice has finished showing it, so the beat
-   * lands with the die. What may be shown is landing.mjs's to decide.
-   */
-  async land(message) {
-    if (this.ladder?.allows("landBeat") === false) return;
-    const landing = landingOf(message);
-    if (!landing?.sourceId || !landing.targetId) return;
-    if (!this.views.has(`${landing.sourceId}>${landing.targetId}`)) return;
-    try {
-      const wait = game.dice3d?.waitFor3DAnimationByMessageID;
-      if (typeof wait === "function") await Promise.race([wait.call(game.dice3d, message.id), new Promise((r) => setTimeout(r, TIMING.diceWait))]);
-    } catch {
-      /* land anyway */
-    }
-    this.landNow(landing, this.#motion());
+  /** Whether a landing would show on a badge here (dice-highlight.mjs asks before it waits). */
+  hasLine(landing) {
+    return !!landing?.sourceId && !!landing.targetId && this.views.has(`${landing.sourceId}>${landing.targetId}`);
   }
 
-  landNow(landing, motion = this.#motion()) {
+  /**
+   * A check on this line resolved: stamp its degree on the plate and mark the
+   * face that came up. dice-highlight.mjs calls it once the die has come to
+   * rest (or at once, without Dice So Nice); what may be shown is
+   * landing.mjs's to decide.
+   */
+  land(landing, motion = this.#motion()) {
+    if (this.ladder?.allows("landBeat") === false || !this.hasLine(landing)) return;
     const plate = this.views.get(`${landing.sourceId}>${landing.targetId}`)?.el.querySelector(".glod-badge");
     if (plate) playLanding(plate, { face: landing.face, degree: landing.degree, stamps: landing.stamps, t: L, motion });
   }
