@@ -100,7 +100,9 @@ export function chipsOf({ mods = [], dcMods = [], adjustments = [], rollTwice = 
   for (const label of adjustments) chips.push({ key: `dos:${label}`, label, value: null, tone: "info" });
   if (rollTwice === "keep-higher") chips.push({ key: "fortune", label: "GLOD.chip.fortune", value: null, tone: "pos" });
   if (rollTwice === "keep-lower") chips.push({ key: "misfortune", label: "GLOD.chip.misfortune", value: null, tone: "warn" });
-  if (rollTwice?.fixed) chips.push({ key: "fixed", label: "GLOD.chip.fixed", value: rollTwice.fixed, tone: "info" });
+  // `rollTwice` is also a string ("keep-higher"), and "keep-higher".fixed is
+  // String.prototype.fixed — truthy. Same guard as the engine's faceWeights.
+  if (typeof rollTwice === "object" && Number.isInteger(rollTwice?.fixed)) chips.push({ key: "fixed", label: "GLOD.chip.fixed", value: rollTwice.fixed, tone: "info" });
   if (flat) chips.push({ key: "flat", label: flat.dc >= 11 ? "GLOD.chip.hidden" : "GLOD.chip.concealed", value: null, flatDc: flat.dc, chance: flat.chance, tone: "warn" });
   return chips;
 }

@@ -33,12 +33,10 @@ import { motionScale } from "../../core/theme.mjs";
 import { TARGETS_HOOKS } from "../stream-targets/settings.js";
 import { TARGETS_FEATURE_ID } from "../stream/constants.js";
 import { FEATURE_ID, SETTINGS, SHED_ORDER, TIMING } from "./constants.mjs";
-import { DEGREE_KEYS } from "../../core/pf2e-odds.mjs";
 import { badgeHTML, compactHTML, playLanding, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { onTrackerChange, stepMap } from "./tracker.mjs";
-import { modelFor, nameFor, seesTruth } from "./view.mjs";
-import { breakdownShown, metagame, reachedPlayers } from "./observe.mjs";
+import { modelFor, nameFor } from "./view.mjs";
 
 const L = (key) => {
   if (typeof key !== "string" || !key) return "";
@@ -79,7 +77,6 @@ export class LineBadges {
     });
     for (const hook of ["combatTurnChange", "combatStart", "deleteCombat", "controlToken"]) Hooks.on(hook, () => this.refresh());
     onTrackerChange(() => this.refresh());
-    Hooks.on("createChatMessage", (message) => this.land(message));
     if (canvas?.ready) this.#mount();
     this.refresh();
   }
@@ -300,32 +297,21 @@ export class LineBadges {
     this.layer = null;
   }
 
+  /** Whether a landing would show on a badge here (dice-highlight.mjs asks before it waits). */
+  hasLine(landing) {
+    return !!landing?.sourceId && !!landing.targetId && this.views.has(`${landing.sourceId}>${landing.targetId}`);
+  }
+
   /**
    * A check on this line resolved: stamp its degree on the plate and mark the
-   * face that came up. Only what this client could read on the card itself —
-   * a blind roll stamps nothing, and a degree PF2e hides from players (its
-   * metagame "results" setting) is not stamped for them either.
+   * face that came up. dice-highlight.mjs calls it once the die has come to
+   * rest (or at once, without Dice So Nice); what may be shown is
+   * landing.mjs's to decide.
    */
-  land(message) {
-    if (this.ladder?.allows("landBeat") === false || !message?.isContentVisible || message.blind) return;
-    // The stream login holds GM rights and is watched by the players, so
-    // anything short of the truth asks what the PLAYERS could read on the card.
-    const truth = seesTruth();
-    if (!truth && !reachedPlayers(message)) return;
-    const ctx = message.flags?.pf2e?.context;
-    const roll = message.rolls?.[0];
-    const sourceId = message.speaker?.token;
-    const targetId = String(ctx?.target?.token ?? "").split(".").pop();
-    if (!ctx || !roll || !sourceId || !targetId) return;
-    const plate = this.views.get(`${sourceId}>${targetId}`)?.el.querySelector(".glod-badge");
-    if (!plate) return;
-    const degree = DEGREE_KEYS.indexOf(ctx.outcome ?? "");
-    const resultsShown = truth || metagame("results");
-    // An NPC's dice are hidden from players unless PF2e shows breakdowns.
-    const face = truth || breakdownShown(roll) ? roll.dice?.find((d) => d.faces === 20)?.total ?? null : null;
-    if (!Number.isInteger(face) && !(resultsShown && degree >= 0)) return;
-    const stamps = ctx.type === "attack-roll" || ctx.type === "spell-attack-roll" ? "attack" : "check";
-    playLanding(plate, { face, degree: resultsShown && degree >= 0 ? degree : null, stamps, t: L, motion: this.#motion() });
+  land(landing, motion = this.#motion()) {
+    if (this.ladder?.allows("landBeat") === false || !this.hasLine(landing)) return;
+    const plate = this.views.get(`${landing.sourceId}>${landing.targetId}`)?.el.querySelector(".glod-badge");
+    if (plate) playLanding(plate, { face: landing.face, degree: landing.degree, stamps: landing.stamps, t: L, motion });
   }
 
   /** The landing beat on every badge whose roller is this actor (PR 2 drives it). */

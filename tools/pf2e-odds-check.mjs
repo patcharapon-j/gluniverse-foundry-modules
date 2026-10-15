@@ -255,6 +255,12 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   const fixed = E.oddsOf({ mod: 10, dc: 25, rollTwice: { fixed: 18 } });
   ok(fixed.headline.lo === 1 && fixed.headline.hi === 1, `substitute 18 at +10 vs 25 is a certain success (${fixed.headline.lo})`);
   ok(Math.abs(E.faceWeights({ fixed: 18 }).reduce((a, b) => a + b, 0) - 1) < 1e-9, "fixed weights sum to 1");
+  {
+    const VM = await imp("scripts/features/pf2e-odds/view-model.mjs");
+    const keys = (rollTwice) => VM.chipsOf({ rollTwice }).map((c) => c.key).join();
+    ok(keys("keep-higher") === "fortune" && keys("keep-lower") === "misfortune", `a fortune roll carries no fixed-d20 chip ("keep-higher".fixed is String.prototype.fixed) — got ${keys("keep-higher")}`);
+    ok(keys({ fixed: 18 }) === "fixed", "a fixed d20 carries its chip");
+  }
   // Out-of-combat expiry clears the count before a fresh attack.
   let s = MM.recordAttack(MM.blank(), { at: 0, turn: null, resetMs: 12000 });
   s = MM.recordAttack(s, { at: 20000, turn: null, resetMs: 12000 });
@@ -278,8 +284,8 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   const src = read("scripts/features/pf2e-odds/observe.mjs");
   ok(/if \(!isActiveGM\(\)\) return;\s*const before/.test(src), "a queued ledger write re-checks the active GM");
   ok(/emitSocket\(FEATURE_ID, \{ type: MSG\.forget/.test(src) && /onForgetIntent/.test(src), "a non-active GM's reset is routed to the active GM");
-  const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
-  ok(/seesTruth\(\)/.test(lb) && /reachedPlayers\(message\)/.test(lb) && !/game\.user\.isGM \|\| !!game\.pf2e/.test(lb), "the landing stamp follows the player-visibility policy");
+  // The landing gate itself is driven, not read, in section 6c.
+  ok(/landingOf\(message\)/.test(read("scripts/features/pf2e-odds/dice-highlight.mjs")) && !/landingOf|createChatMessage/.test(read("scripts/features/pf2e-odds/line-badges.mjs")), "both landing beats pass through one landingOf call (dice-highlight.mjs)");
   ok(/KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/sheet.mjs")) && /KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/save-prompt.mjs")), "sheets and save prompts redraw when knowledge changes");
   ok(/headHTML\(next/.test(read("scripts/features/pf2e-odds/render.mjs")), "updateBadge redraws the heading");
 }
@@ -304,6 +310,228 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(/consumeAmmo: false/.test(src("probe.mjs")), "a Strike probe never checks ammunition");
   ok(/nameFor\(target/.test(src("line-badges.mjs")) && !/document\?\.name \?\? target\.name/.test(src("line-badges.mjs")), "the line badge gates the target's name");
   ok(!/\bsound\b/.test(src("constants.mjs")), "no dead sound switch");
+}
+
+/* ── 6c. The dice highlight (PR 2) ──────────────────────────────────────── */
+
+{
+  const R = await imp("scripts/features/pf2e-odds/render.mjs");
+  ok(R.diceHTML({ degree: null, stamps: "attack" }) === "", "no degree, no ring");
+  const crit = R.diceHTML({ degree: 3, stamps: "attack" });
+  ok(/data-d="c"/.test(crit) && crit.includes("GLOD.stamp.crit<"), "a critical rings amber with the attack stamp");
+  ok(R.diceHTML({ degree: 0, stamps: "check" }).includes("GLOD.stamp.critFail"), "a check's critical failure stamps as such");
+  const dh = read("scripts/features/pf2e-odds/dice-highlight.mjs");
+  ok(/landing\.degree != null/.test(dh), "the ring is drawn only when this viewer may see the degree");
+  ok(/flags\?\.\[SUITE_ID\]\?\.spotlight/.test(dh) && /watch && !spotlight \? await watch\.wait/.test(dh), "Spotlight Roll's own dice are left alone, and its cards land without waiting for a throw that never comes");
+  ok(/if \(!game\.messages\?\.get\(message\.id\)\) return;/.test(dh), "a message deleted while its die is in the air lands nothing");
+  ok(/allows\("landBeat"\)/.test(dh), "the ring sheds with the landing beat");
+  ok(!/dsnActive = [^\n]*game\.dice3d/.test(dh), "wiring does not wait on game.dice3d (DSN builds it in its own ready hook, maybe after ours)");
+  ok(!/waitFor3DAnimationByMessageID|diceSoNiceRollComplete|Hooks\.once/.test(dh + read("scripts/features/pf2e-odds/line-badges.mjs")), "no landing waits on DSN's completion hook (it fires early under immediate chat display, and its waiter is never removed)");
+  ok(/boardContainer\(\)/.test(dh) && /board\.after\(layer\)/.test(dh), "the ring layer is stacked on DSN's board container, re-read each draw");
+  ok(/getComputedStyle\(board\)\.zIndex \|\| "auto"/.test(dh) && !/zIndex = [^\n]*: ""/.test(dh), "under DSN's 'under' layering the ring keeps z-index auto rather than falling back to the HUD height");
+
+  // ── the gate, driven: what lands for whom ──
+  const prevGame = globalThis.game;
+  const users = { gm: { id: "gm", isGM: true }, stream: { id: "stream", isGM: true }, alice: { id: "alice", isGM: false } };
+  let results = true;
+  globalThis.game = {
+    user: users.gm,
+    users: { get: (id) => users[id] },
+    settings: { get: (_ns, key) => (String(key).endsWith("streamUserId") ? "stream" : undefined) },
+    pf2e: { settings: { metagame: { get results() { return results; } } } },
+  };
+  const { landingOf } = await imp("scripts/features/pf2e-odds/landing.mjs");
+  const msg = ({ whisper = [], blind = false, visible = true, breakdown = true } = {}) => ({
+    isContentVisible: visible,
+    blind,
+    whisper,
+    speaker: { token: "S" },
+    flags: { pf2e: { context: { type: "attack-roll", outcome: "success", target: { token: "Scene.x.Token.T" } } } },
+    rolls: [{ options: { showBreakdown: breakdown }, dice: [{ faces: 20, results: [{ result: 14, active: true }] }] }],
+  });
+  const as = (u, m) => landingOf(m, users[u]);
+  const pub = as("stream", msg());
+  ok(pub?.degree === 2 && pub.face === 14 && pub.targetId === "T", "the stream login lands a public roll in full");
+  ok(as("stream", msg({ whisper: ["alice"] })) === null, "the stream login lands NOTHING of a whisper to one player — its screen is the whole audience's");
+  ok(as("alice", msg({ whisper: ["alice"] }))?.degree === 2, "the player a whisper reached lands it");
+  ok(as("alice", msg({ whisper: ["alice"], visible: false })) === null, "a player who cannot read the card lands nothing");
+  ok(as("stream", msg({ blind: true })) === null && as("stream", msg({ whisper: ["gm"] })) === null, "blind rolls and GM-only whispers land nothing short of the truth");
+  ok(as("gm", msg({ whisper: ["gm"] }))?.degree === 2, "the GM lands a GM-only whisper");
+  results = false;
+  const hid = as("stream", msg());
+  ok(hid?.degree === null && hid.face === 14, "with PF2e hiding results, the face lands and the degree does not");
+  ok(as("stream", msg({ breakdown: false })) === null, "with results and the NPC's dice both hidden, nothing lands");
+  results = true;
+  ok(as("stream", msg({ breakdown: false }))?.face === null, "a hidden NPC breakdown never lands its natural");
+
+  // ── the board reader, driven against DSN's real shapes ──
+  // A throw is `throwEngine.throws[].dice[]` of die entries, each holding the
+  // term's own result object (`fvttResult`) and a `vectors` object; the spawned
+  // mesh's `notation` IS that vectors object (ThrowEngine#spawnDiceMesh), and
+  // carries no result. A die is at rest once its sim died at or before the
+  // playback iteration; finished dice stay in `diceList` until the next batch.
+  class Vec {
+    constructor(x = 0, y = 0, z = 0) { Object.assign(this, { x, y, z }); }
+    clone() { return new Vec(this.x, this.y, this.z); }
+    add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+    project() { return this; }
+  }
+  const spawn = (entry, x, dead) => ({
+    notation: entry.vectors,
+    forcedResult: entry.result,
+    sim: { dead },
+    position: new Vec(),
+    getWorldPosition: (v) => Object.assign(v, { x, y: 0, z: 0 }),
+    getWorldScale: (v) => Object.assign(v, { x: 1, y: 1, z: 1 }),
+    geometry: { boundingSphere: { radius: 0.05 } },
+  });
+  const entry = (fvttResult) => ({ type: "d20", result: fvttResult.result, fvttResult, vectors: { type: "d20", pos: {}, velocity: {}, angle: {}, axis: {} } });
+  const engine = { rolling: true, running: 1, iteration: 0, iterationsNeeded: 300, throws: null, diceList: [], deadDiceList: [] };
+  globalThis.game.dice3d = { box: { throwEngine: engine, diceScene: { camera: {}, renderer: { domElement: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 1000 }) } } } } };
+  const { boardState } = await imp("scripts/features/spotlight-roll/dsn-host.mjs");
+  const a = { result: 14, active: true };
+  const b = { result: 14, active: true };
+  const ea = entry(a);
+  const eb = entry(b);
+  // Batch 1 plays roll A; roll B (same natural) is queued behind it.
+  engine.throws = [{ dice: [ea] }];
+  engine.diceList = [spawn(ea, 0.5, 180)];
+  engine.iteration = 120;
+  const flying = boardState(new Set([a]));
+  ok(flying.present && flying.busy && !flying.settled, "a die whose sim has not died yet is present and in the air");
+  ok(!boardState(new Set([b])).present, "a queued roll showing the same natural does not claim the die in the air");
+  engine.iteration = 200;
+  const rest = boardState(new Set([a]));
+  ok(rest.settled && Math.round(rest.settled.x) === 750, "the die is found through its vectors object and lands once its sim has died");
+  // The batch ends with no other throw behind it: DSN leaves the dice in diceList.
+  engine.iteration = 300;
+  engine.rolling = false;
+  engine.running = false;
+  const done = boardState(new Set([a]));
+  ok(done.settled && !done.busy, "a finished batch with nothing after it settles — finished dice stay in diceList");
+  // Batch 2 starts: throws is reset and A's die moves to deadDiceList.
+  engine.throws = [{ dice: [eb] }];
+  engine.deadDiceList = engine.diceList;
+  engine.diceList = [spawn(eb, -0.5, 90)];
+  engine.rolling = true;
+  engine.iteration = 10;
+  ok(boardState(new Set([a])).settled && !boardState(new Set([b])).settled, "A is still found after its batch is gone (remembered link) and B is not taken for it");
+  ok(!boardState(new Set([{ result: 14, active: true }])).present, "a result DSN never threw matches nothing on the board");
+  const dropped = { result: 3, active: false, discarded: true };
+  const kept = { result: 17, active: true };
+  const ed = entry(dropped);
+  const ek = entry(kept);
+  engine.throws = [{ dice: [ed, ek] }];
+  engine.diceList = [spawn(ed, -0.5, 50), spawn(ek, 0.2, 60)];
+  engine.iteration = 100;
+  ok(Math.round(boardState(new Set([dropped, kept])).settled?.x) === 600, "a fortune pair rings the kept die, not the dropped one");
+  globalThis.game = prevGame;
+
+  // ── the watch, driven on a fake clock: every road out ends, and empties ──
+  const { createDiceWatch } = await imp("scripts/features/pf2e-odds/dice-watch.mjs");
+  const clock = () => {
+    let t = 0, seq = 0;
+    const timers = new Map();
+    return {
+      now: () => t,
+      setTimer: (fn, ms) => (timers.set(++seq, { at: t + ms, fn }), seq),
+      clearTimer: (id) => timers.delete(id),
+      pending: () => timers.size,
+      advance(ms) {
+        const end = t + ms;
+        for (;;) {
+          const next = [...timers.entries()].filter(([, v]) => v.at <= end).sort((x, y) => x[1].at - y[1].at)[0];
+          if (!next) break;
+          timers.delete(next[0]);
+          t = next[1].at;
+          next[1].fn();
+        }
+        t = end;
+      },
+    };
+  };
+  const roll = (r) => ({ dice: [{ faces: 20, results: [r] }] });
+  const settle = () => new Promise((r) => setImmediate(r));
+  const run = async (name, board, script) => {
+    const c = clock();
+    const w = createDiceWatch({ readBoard: board, setTimer: c.setTimer, clearTimer: c.clearTimer, now: c.now, poll: 100, startGrace: 1500, spawnGrace: 4000, maxWait: 10000 });
+    let out = "pending";
+    await script(w, c, (p) => p.then((v) => (out = v)));
+    await settle();
+    ok(w.size === 0 && c.pending() === 0, `${name}: the watch empties and leaves no timer (${w.size} open, ${c.pending()} timers)`);
+    return out;
+  };
+  const r1 = { result: 14, active: true };
+  let landedAt = 3000;
+  let got = await run("settled", (rs) => ({ busy: true, present: true, settled: rs.has(r1) && landedAt <= 0 ? { x: 1, y: 2, r: 30 } : null }), async (w, c, hold) => {
+    hold(w.wait("m1"));
+    w.start("m1", roll(r1));
+    c.advance(2000);
+    landedAt = 0;
+    c.advance(200);
+  });
+  ok(got?.r === 30, "a watch resolves with the die once the board shows it at rest");
+  {
+    // Nothing settles until the board says so — DSN's completion signal is not consulted at all.
+    const c = clock();
+    let rested = false;
+    const w = createDiceWatch({ readBoard: () => ({ busy: true, present: true, settled: rested ? { x: 0, y: 0, r: 9 } : null }), setTimer: c.setTimer, clearTimer: c.clearTimer, now: c.now });
+    let v = "pending";
+    w.wait("m3").then((x) => (v = x));
+    w.start("m3", roll({ result: 9, active: true }));
+    c.advance(3000);
+    await settle();
+    ok(v === "pending", "under immediate chat display the landing still waits for the die, not the hook");
+    rested = true;
+    c.advance(100);
+    await settle();
+    ok(v?.r === 9 && w.size === 0 && c.pending() === 0, "…and lands the moment it rests");
+  }
+  got = await run("unseen", () => ({ busy: false, present: false, settled: null }), async (w, c, hold) => {
+    hold(w.wait("m4"));
+    c.advance(1500);
+  });
+  ok(got === null, "a throw DSN never started (hidden NPC roll, only-my-rolls) lands without a ring after the start grace");
+  got = await run("unshown", () => ({ busy: false, present: false, settled: null }), async (w, c, hold) => {
+    hold(w.wait("m5"));
+    w.start("m5", roll({ result: 2, active: true }));
+    c.advance(4200);
+  });
+  ok(got === null, "a throw started but never shown (DSN off, off in combat) gives up after the idle grace");
+  got = await run("deleted", () => ({ busy: true, present: true, settled: null }), async (w, c, hold) => {
+    hold(w.wait("m6"));
+    w.start("m6", roll({ result: 2, active: true }));
+    c.advance(300);
+    w.forget("m6");
+  });
+  ok(got === null, "a deleted message ends its watch at once");
+  got = await run("too long", () => ({ busy: true, present: true, settled: null }), async (w, c, hold) => {
+    hold(w.wait("m7"));
+    w.start("m7", roll({ result: 2, active: true }));
+    c.advance(10000);
+  });
+  ok(got === null, "an interactive throw left in the air ends at maxWait");
+  await run("start with no waiter", () => ({ busy: true, present: true, settled: null }), async (w, c) => {
+    for (let i = 0; i < 100; i++) w.start(`direct${i}`, roll({ result: 2, active: true }));
+    c.advance(10000);
+  });
+  await run("no message id", () => ({ busy: false, present: false, settled: null }), async (w) => {
+    w.start(null, roll({ result: 2, active: true }));
+    w.start("m8", { dice: [{ faces: 6, results: [{ result: 2 }] }] });
+  });
+  await run("cleared", () => ({ busy: true, present: true, settled: null }), async (w, c, hold) => {
+    hold(w.wait("m9"));
+    w.start("m9", roll({ result: 2, active: true }));
+    w.clear();
+  });
+  for (const f of readdirSync(FEAT).filter((x) => x.endsWith(".mjs"))) {
+    const src = readFileSync(join(FEAT, f), "utf8");
+    if (/dice3d\.box|throwEngine|diceScene|\.material\b/.test(src)) fail(`${f}: reaches into Dice So Nice — only spotlight-roll/dsn-host.mjs may`);
+  }
+  checks++;
+  const host = read("scripts/features/spotlight-roll/dsn-host.mjs");
+  const reader = host.slice(host.indexOf("the board, read-only"));
+  ok(reader.length > 100 && !/\.material\b|dispose\(|\.visible\s*=|position\.set|\.add\(mesh/.test(reader), "the board reader in dsn-host.mjs only reads");
 }
 
 /* ── 7. Data keys are pinned ────────────────────────────────────────────── */

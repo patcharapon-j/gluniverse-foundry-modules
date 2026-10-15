@@ -758,3 +758,115 @@ class DsnDie {
     this.host.dice.delete(this);
   }
 }
+
+/* ── the board, read-only (PF2e Odds' dice highlight) ───────────────────────
+ *
+ * The one other thing the suite asks of DSN's own board: has a given die come
+ * to rest, and where is it on screen. Read-only — nothing here touches a mesh,
+ * a material or the renderer.
+ *
+ * Identity, not guesswork — through DSN's own two links:
+ *   • DSN builds a throw from the message's OWN dice terms
+ *     (ThrowPipeline#_buildRollList), and every die entry it makes keeps
+ *     `fvttResult`, the very result object of that term (DiceNotation#addDie);
+ *   • that entry's `vectors` object is what becomes `mesh.notation`
+ *     (ThrowEngine#getVectors, then #spawnDiceMesh).
+ * The entries are reachable only while their batch plays (`throwEngine.throws`,
+ * reset by the next batch), so each result → vectors link is remembered in a
+ * WeakMap as it is seen. Two throws showing the same natural can never be
+ * confused, and a die left on the board from an earlier throw never matches.
+ *
+ * At rest is DSN's own test (ThrowEngine#updateThrowPlayback animates a die
+ * only while `!sim.dead || sim.dead > iteration`): its sim died at or before
+ * the playback iteration, playback reached the end, the batch stopped rolling,
+ * or DSN has moved it to `deadDiceList`. Finished dice stay in `diceList`
+ * until the next batch begins, so list membership alone says nothing. This is
+ * the board itself, so it holds even under "immediately display chat
+ * messages", where DSN's completion hook fires before any die has landed.
+ *
+ * The camera is DiceScene's, looking down −Y with screen-up −Z, so world X is
+ * screen X — which is how a die's on-screen radius is measured.
+ */
+
+const boardEngine = () => game.dice3d?.box?.throwEngine ?? null;
+
+/** DSN's board container (`#dice-box-canvas`) — the element an overlay stacks above. */
+export const boardContainer = () => document.getElementById("dice-box-canvas");
+
+/** fvttResult → the vectors object DSN made `mesh.notation` for it. */
+const links = new WeakMap();
+
+function learnLinks(engine) {
+  for (const t of engine.throws ?? []) {
+    for (const d of t?.dice ?? []) {
+      if (d?.fvttResult && typeof d.fvttResult === "object" && d.vectors) links.set(d.fvttResult, d.vectors);
+    }
+  }
+}
+
+const keptResult = (r) => r && r.active !== false && !r.discarded;
+
+function atRest(mesh, engine) {
+  if (!engine.rolling) return true;
+  if (engine.iterationsNeeded > 0 && engine.iteration >= engine.iterationsNeeded) return true;
+  const dead = mesh.sim?.dead;
+  return dead > 0 && dead <= engine.iteration;
+}
+
+function onScreen(mesh, scene) {
+  const camera = scene?.camera;
+  const el = scene?.renderer?.domElement;
+  if (!camera || !el?.getBoundingClientRect) return null;
+  const rect = el.getBoundingClientRect();
+  const Vec = mesh.position.constructor;
+  const centre = mesh.getWorldPosition(new Vec());
+  mesh.geometry?.computeBoundingSphere?.();
+  const scale = mesh.getWorldScale?.(new Vec())?.x ?? 1;
+  const radius = (mesh.geometry?.boundingSphere?.radius ?? 1) * scale;
+  const toScreen = (v) => {
+    const p = v.clone().project(camera);
+    return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+  };
+  const c = toScreen(centre);
+  const edge = toScreen(centre.clone().add(new Vec(radius, 0, 0)));
+  return { x: c.x, y: c.y, r: Math.max(8, Math.abs(edge.x - c.x)) };
+}
+
+/**
+ * Where a roll's dice stand on the board, read once.
+ * @param {Set<object>} results the roll's d20 result objects (from its terms)
+ * @returns {{busy: boolean, present: boolean, settled: {x:number,y:number,r:number}|null}}
+ *   busy — DSN is playing a throw (ours or one ahead of it);
+ *   present — one of these dice is on the board, moving or at rest;
+ *   settled — the KEPT die at rest, with its centre and radius in client px.
+ */
+export function boardState(results) {
+  const engine = boardEngine();
+  const out = { busy: false, present: false, settled: null };
+  if (!engine || !results?.size) return out;
+  out.busy = !!engine.rolling;
+  learnLinks(engine);
+  const mine = new Map();
+  for (const r of results) {
+    const v = links.get(r);
+    if (v) mine.set(v, r);
+  }
+  if (!mine.size) return out;
+  for (const [list, finished] of [
+    [engine.diceList, false],
+    [engine.deadDiceList, true],
+  ]) {
+    for (const mesh of list ?? []) {
+      const r = mesh ? mine.get(mesh.notation) : null;
+      if (!r) continue;
+      out.present = true;
+      if (out.settled || !keptResult(r) || !(finished || atRest(mesh, engine))) continue;
+      try {
+        out.settled = onScreen(mesh, game.dice3d?.box?.diceScene);
+      } catch {
+        /* a die mid-teardown */
+      }
+    }
+  }
+  return out;
+}

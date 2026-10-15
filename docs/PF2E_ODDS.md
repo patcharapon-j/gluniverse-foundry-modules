@@ -1,9 +1,9 @@
 # PF2e Odds and Save Resolution — design
 
-Status: **PR 1 built, not yet run in a live session.** The engine, every Odds
-surface (line badge, sheet, roll dialog, save prompt), the observation ledger,
-the Observations window and the Creaturedex hint exist and pass
-`tools/pf2e-odds-check.mjs`. Not built: the Dice So Nice highlight (PR 2), Save
+Status: **PRs 1 and 2 built, not yet run in a live session.** The engine,
+every Odds surface (line badge, sheet, roll dialog, save prompt), the
+observation ledger, the Observations window, the Creaturedex hint and the Dice
+So Nice highlight exist and pass `tools/pf2e-odds-check.mjs`. Not built: Save
 Resolution (PR 3) and the HUD (its own grilling). This file records the
 decisions from the grilling session (Q1–Q36); the save half moves to
 `docs/SAVE_RESOLUTION.md` when it is built.
@@ -17,7 +17,11 @@ decisions from the grilling session (Q1–Q36); the save half moves to
 - observation off real chat cards (`flags.pf2e.context`, `unadjustedOutcome`,
   `dc.visible`), and the landing stamp keyed on `context.target.token`;
 - spells inside wands, scrolls and staves (`fromUuidSync` may not resolve them:
-  they show no odds rather than wrong ones).
+  they show no odds rather than wrong ones);
+- the dice highlight against DSN 6's real board: the result → vectors →
+  `mesh.notation` join, `sim.dead` against the playback iteration as the
+  settle signal, the projection onto the canvas, and the layer stacking above
+  `#dice-box-canvas` in each of DSN's three layering modes.
 
 ## Shape
 
@@ -180,11 +184,31 @@ against that DC, gated on whether they've learned it.
 
 - **What's drawn:** a degree-coloured ring/burst and a short stamp over the
   landed d20, in the same four colours.
-- **How:** a DOM/canvas overlay positioned over Dice So Nice's canvas. It never
-  edits DSN materials; Spotlight's `dsn-host.mjs` remains the only file that
-  reaches into DSN's internals.
-- **Visibility:** the same gate as above. No highlight when PF2e would hide the
-  result from that viewer.
+- **How:** a DOM overlay stacked directly above DSN's `#dice-box-canvas`,
+  re-stacked on every draw because DSN's "auto" layering raises its board above
+  whichever window is open. It never edits DSN materials; Spotlight's
+  `dsn-host.mjs` remains the only file that reaches into DSN's internals, and
+  only to read.
+- **Which die:** by identity, through DSN's own two links. DSN builds a throw
+  from the message's own dice terms, and each die entry in
+  `throwEngine.throws[].dice[]` keeps `fvttResult` (the term's result object)
+  and a `vectors` object, which is what becomes `mesh.notation`. The reader
+  remembers result → vectors in a WeakMap while the batch plays. The result
+  objects are captured from the roll DSN is handed at `diceSoNiceRollStart`; a
+  die is ours only if it is the kept one of those. Concurrent throws showing
+  the same natural, and dice left on the board, never match.
+- **When:** `dice-watch.mjs` reads the board on a timer until the kept die is
+  at rest by DSN's own test — its sim died at or before the playback
+  iteration, playback ended, or the batch stopped rolling. Finished dice stay
+  in `diceList` until the next batch, so list membership says nothing. Not
+  DSN's completion hook, which fires before the dice land under "immediately
+  display chat messages" and whose waiter is never removed.
+  Every watch ends: settled; DSN never started the throw (1.5 s); started but
+  never reached an idle board (4 s); deleted; or 10 s. Both landing beats —
+  the badge pulse and the ring — wait on that one watch, in `dice-highlight.mjs`.
+- **Visibility:** the same gate as above (`landing.mjs`). No highlight when PF2e
+  would hide the result from that viewer, and the stream login lands only
+  public rolls: a whisper to one player is content its audience may not see.
 - **Exclusion:** Spotlight Roll messages are skipped, since that feature draws
   its own die.
 

@@ -24,6 +24,8 @@ import { wireDialog } from "./dialog.mjs";
 import { wireSavePrompts } from "./save-prompt.mjs";
 import { ObservationsMenu } from "./observations-app.mjs";
 import { wireDexHint } from "./dex-hint.mjs";
+import { wireLanding } from "./dice-highlight.mjs";
+import { motionScale } from "../../core/theme.mjs";
 
 let badges = null;
 
@@ -86,6 +88,16 @@ Suite.register({
     badges = new LineBadges();
     badges.wire();
     Hooks.on(KNOWLEDGE_HOOK, () => badges?.refresh());
+    wireLanding({
+      badges: () => badges,
+      motion: () => {
+        try {
+          return motionScale(document.body);
+        } catch {
+          return 1;
+        }
+      },
+    });
   },
 
   api: {

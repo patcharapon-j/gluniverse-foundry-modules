@@ -37,6 +37,7 @@ const html = `<!doctype html>
 <link rel="stylesheet" href="/styles/gl-tokens.css">
 <link rel="stylesheet" href="/styles/gl-motion.css">
 <link rel="stylesheet" href="/styles/pf2e-odds.css">
+<link rel="stylesheet" href="/styles/pf2e-odds-dice.css">
 <style>
   body { margin: 0; background: var(--gl-ink-0); color: var(--gl-text); font-family: var(--gl-display); }
   .pv { max-width: 1180px; margin: 0 auto; padding: 28px; display: flex; flex-direction: column; gap: 22px; }
@@ -53,6 +54,10 @@ const html = `<!doctype html>
   .cell { display: flex; flex-direction: column; gap: 8px; }
   .cap { font: 500 12px/1.4 var(--gl-display); color: var(--gl-text-dim); max-width: 240px; }
   .sheet { display: flex; gap: 8px; align-items: center; padding: 16px; background: var(--gl-ink-2); border-radius: 10px; box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / .07); font-size: 14px; }
+  .dsn { position: relative; height: 260px; border-radius: 10px; background: radial-gradient(90% 120% at 50% 30%, #2a2f3a, #10141c 75%); box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / .07); overflow: hidden; }
+  .dsn .die { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; font: 800 22px var(--gl-display); color: #f2f4f8;
+    clip-path: polygon(50% 0, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%); background: linear-gradient(160deg, #6a7488, #2a3040); }
+  .dsn .glod-dice-layer { position: absolute; }
   .mapbtn { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 10px; background: var(--gl-ink-3); border: 1px solid rgb(var(--gl-tint-light) / .12); border-radius: 3px; font: 600 13px var(--gl-display); color: var(--gl-text); }
 </style></head>
 <body><div class="pv gl-type">
@@ -63,11 +68,13 @@ const html = `<!doctype html>
     <div class="cell"><div id="gm"></div><div class="cap">The GM's view of the same line: the truth, and what the table currently sees.</div></div></div></section>
   <section><h2>Other shapes</h2><div class="row" id="shapes"></div></section>
   <section><h2>Sheet — the three MAP buttons with one target</h2><div class="sheet" id="sheet"></div></section>
+  <section><h2>Dice So Nice — the degree on the landed die (crit · hit · miss · fumble · crit fail on a check)</h2>
+    <div class="dsn" id="dsn"></div></section>
 </div>
 <script type="module">
 import { oddsOf } from "/scripts/core/pf2e-odds.mjs";
 import { buildModel } from "/scripts/features/pf2e-odds/view-model.mjs";
-import { badgeHTML, compactHTML, inlineHTML, updateBadge, playLanding } from "/scripts/features/pf2e-odds/render.mjs";
+import { badgeHTML, compactHTML, inlineHTML, updateBadge, playLanding, diceHTML } from "/scripts/features/pf2e-odds/render.mjs";
 
 const EN = {
   "GLOD.attack.first": "1st", "GLOD.attack.second": "2nd", "GLOD.attack.third": "3rd",
@@ -148,6 +155,30 @@ sheet.innerHTML = '<b style="min-width:110px">Longsword</b>' + [0, -5, -10].map(
   const m = buildModel({ probe: { mod: 17 + map, mods: [], dc: { value: 21, slug: "armor" }, options: [] }, who: pc, known: k === 2 ? null : { lo: 21, hi: 21 }, label: "Longsword", dcLabel: "GLOD.stat.ac" });
   return \`<span class="mapbtn">\${map ? (17 + map >= 0 ? "+" : "") + (17 + map) : "+17"} \${inlineHTML(m)}</span>\`;
 }).join("") + '<span class="cap" style="max-width:none;margin-left:12px">third button: a creature never seen — ??? with a violet hatch</span>';
+
+// ── Dice So Nice ring ──
+const dsn = document.getElementById("dsn");
+const DICE = [[20, 3, "attack"], [14, 2, "attack"], [6, 1, "attack"], [1, 0, "attack"], [3, 0, "check"]];
+const layer = document.createElement("div");
+layer.className = "glod-dice-layer gl-type";
+const replay = () => {
+  dsn.innerHTML = "";
+  layer.innerHTML = "";
+  DICE.forEach(([face, degree, stamps], i) => {
+    const x = 110 + i * 225, y = 105;
+    dsn.insertAdjacentHTML("beforeend", \`<div class="die" style="left:\${x}px;top:\${y}px">\${face}</div>\`);
+    const el = document.createElement("div");
+    el.className = "glod-dice";
+    el.style.setProperty("--glod-die-x", x + "px");
+    el.style.setProperty("--glod-die-y", y + "px");
+    el.style.setProperty("--glod-die-r", "34px");
+    el.innerHTML = diceHTML({ degree, stamps }, { t });
+    layer.append(el);
+  });
+  dsn.append(layer);
+};
+replay();
+if (!freeze) setInterval(replay, 4000);
 </script></body></html>
 `;
 

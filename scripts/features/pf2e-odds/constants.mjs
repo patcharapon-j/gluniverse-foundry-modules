@@ -20,6 +20,7 @@ export const SETTINGS = Object.freeze({
   sheet: "od.sheet",
   dialog: "od.dialog",
   savePrompt: "od.savePrompt",
+  dice: "od.dice",
   observationsMenu: "od.observations",
 });
 
@@ -107,6 +108,17 @@ export const TIMING = Object.freeze({
   leave: 260,
   /** Coalesce bursts of document updates into one recompute. */
   debounce: 120,
+  /** How long the ring holds on the Dice So Nice die, and never less than this under a slow motion tier. */
+  diceHold: 1800,
+  diceHoldMin: 400,
+  /** How often the board is read while a check's die is in the air. */
+  dicePoll: 100,
+  /** No throw started for the message by then: DSN is not showing it here. */
+  diceStartGrace: 1500,
+  /** Started, but none of its dice reached an idle board by then: not shown. */
+  diceSpawnGrace: 4000,
+  /** The longest any landing waits for Dice So Nice. */
+  diceWait: 10000,
 });
 
 /**
