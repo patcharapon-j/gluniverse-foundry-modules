@@ -20,6 +20,7 @@ export const SETTINGS = Object.freeze({
   sheet: "od.sheet",
   dialog: "od.dialog",
   savePrompt: "od.savePrompt",
+  dice: "od.dice",
   observationsMenu: "od.observations",
 });
 
@@ -107,6 +108,10 @@ export const TIMING = Object.freeze({
   leave: 260,
   /** Coalesce bursts of document updates into one recompute. */
   debounce: 120,
+  /** How long the ring holds on the Dice So Nice die. */
+  diceHold: 1800,
+  /** The longest the badge waits for Dice So Nice before landing anyway. */
+  diceWait: 10000,
 });
 
 /**

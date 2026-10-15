@@ -758,3 +758,65 @@ class DsnDie {
     this.host.dice.delete(this);
   }
 }
+
+/* ── the board, read-only (PF2e Odds' dice highlight) ───────────────────────
+ *
+ * The one other thing the suite asks of DSN's own board: where a thrown die
+ * came to rest, on screen. Read-only — nothing here touches a mesh, a material
+ * or the renderer. DSN 6 keeps the dice it is showing on its ThrowEngine
+ * (`diceList`, then `deadDiceList` once settled); every mesh carries
+ * `notation.type` ("d20") and `forcedResult` (the face Foundry rolled). The
+ * camera is DiceScene's, looking down −Y with screen-up −Z, so world X is
+ * screen X — which is how a die's on-screen radius is measured.
+ */
+
+const boardEngine = () => game.dice3d?.box?.throwEngine ?? null;
+
+/** Every die mesh on DSN's board right now. */
+function boardMeshes() {
+  const engine = boardEngine();
+  if (!engine) return [];
+  return [...(engine.diceList ?? []), ...(engine.deadDiceList ?? [])].filter(Boolean);
+}
+
+/** DSN's board canvas (for layering an overlay just above it), or null. */
+export const boardCanvas = () => game.dice3d?.box?.diceScene?.renderer?.domElement ?? null;
+
+/** Ids of the dice already on the board — snapshot this when a throw starts. */
+export function boardDiceIds() {
+  return new Set(boardMeshes().map((m) => m.id));
+}
+
+/**
+ * The d20s on the board not in `before`, each with where it rests on screen:
+ * `{ result, x, y, r }` in client pixels (centre and radius). Empty when DSN,
+ * its scene or its camera is not there.
+ */
+export function landedD20s(before = new Set()) {
+  const scene = game.dice3d?.box?.diceScene;
+  const camera = scene?.camera;
+  const el = scene?.renderer?.domElement;
+  if (!camera || !el?.getBoundingClientRect) return [];
+  const rect = el.getBoundingClientRect();
+  const out = [];
+  for (const mesh of boardMeshes()) {
+    if (before.has(mesh.id) || String(mesh.notation?.type ?? "").toLowerCase() !== "d20") continue;
+    try {
+      const Vec = mesh.position.constructor;
+      const centre = mesh.getWorldPosition(new Vec());
+      mesh.geometry?.computeBoundingSphere?.();
+      const scale = mesh.getWorldScale?.(new Vec())?.x ?? 1;
+      const radius = (mesh.geometry?.boundingSphere?.radius ?? 1) * scale;
+      const toScreen = (v) => {
+        const p = v.clone().project(camera);
+        return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+      };
+      const c = toScreen(centre);
+      const edge = toScreen(centre.clone().add(new Vec(radius, 0, 0)));
+      out.push({ result: mesh.forcedResult ?? mesh.result ?? null, x: c.x, y: c.y, r: Math.max(8, Math.abs(edge.x - c.x)) });
+    } catch {
+      /* a die mid-teardown */
+    }
+  }
+  return out;
+}

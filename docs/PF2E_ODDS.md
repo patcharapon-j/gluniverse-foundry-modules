@@ -1,9 +1,9 @@
 # PF2e Odds and Save Resolution — design
 
-Status: **PR 1 built, not yet run in a live session.** The engine, every Odds
-surface (line badge, sheet, roll dialog, save prompt), the observation ledger,
-the Observations window and the Creaturedex hint exist and pass
-`tools/pf2e-odds-check.mjs`. Not built: the Dice So Nice highlight (PR 2), Save
+Status: **PRs 1 and 2 built, not yet run in a live session.** The engine,
+every Odds surface (line badge, sheet, roll dialog, save prompt), the
+observation ledger, the Observations window, the Creaturedex hint and the Dice
+So Nice highlight exist and pass `tools/pf2e-odds-check.mjs`. Not built: Save
 Resolution (PR 3) and the HUD (its own grilling). This file records the
 decisions from the grilling session (Q1–Q36); the save half moves to
 `docs/SAVE_RESOLUTION.md` when it is built.
@@ -17,7 +17,12 @@ decisions from the grilling session (Q1–Q36); the save half moves to
 - observation off real chat cards (`flags.pf2e.context`, `unadjustedOutcome`,
   `dc.visible`), and the landing stamp keyed on `context.target.token`;
 - spells inside wands, scrolls and staves (`fromUuidSync` may not resolve them:
-  they show no odds rather than wrong ones).
+  they show no odds rather than wrong ones);
+- the dice highlight against DSN 6's real board: `throwEngine.diceList` /
+  `deadDiceList`, `forcedResult`, the projection onto the canvas, and the
+  overlay's z-index above DSN's canvas. The badge's landing now waits for
+  `waitFor3DAnimationByMessageID` (capped at 10 s), so the pip pulses as the die
+  stops.
 
 ## Shape
 

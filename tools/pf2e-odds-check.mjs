@@ -255,6 +255,12 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   const fixed = E.oddsOf({ mod: 10, dc: 25, rollTwice: { fixed: 18 } });
   ok(fixed.headline.lo === 1 && fixed.headline.hi === 1, `substitute 18 at +10 vs 25 is a certain success (${fixed.headline.lo})`);
   ok(Math.abs(E.faceWeights({ fixed: 18 }).reduce((a, b) => a + b, 0) - 1) < 1e-9, "fixed weights sum to 1");
+  {
+    const VM = await imp("scripts/features/pf2e-odds/view-model.mjs");
+    const keys = (rollTwice) => VM.chipsOf({ rollTwice }).map((c) => c.key).join();
+    ok(keys("keep-higher") === "fortune" && keys("keep-lower") === "misfortune", `a fortune roll carries no fixed-d20 chip ("keep-higher".fixed is String.prototype.fixed) — got ${keys("keep-higher")}`);
+    ok(keys({ fixed: 18 }) === "fixed", "a fixed d20 carries its chip");
+  }
   // Out-of-combat expiry clears the count before a fresh attack.
   let s = MM.recordAttack(MM.blank(), { at: 0, turn: null, resetMs: 12000 });
   s = MM.recordAttack(s, { at: 20000, turn: null, resetMs: 12000 });
@@ -279,7 +285,11 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(/if \(!isActiveGM\(\)\) return;\s*const before/.test(src), "a queued ledger write re-checks the active GM");
   ok(/emitSocket\(FEATURE_ID, \{ type: MSG\.forget/.test(src) && /onForgetIntent/.test(src), "a non-active GM's reset is routed to the active GM");
   const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
-  ok(/seesTruth\(\)/.test(lb) && /reachedPlayers\(message\)/.test(lb) && !/game\.user\.isGM \|\| !!game\.pf2e/.test(lb), "the landing stamp follows the player-visibility policy");
+  const ld = read("scripts/features/pf2e-odds/landing.mjs");
+  ok(
+    /landingOf\(message\)/.test(lb) && /seesTruth\(user\)/.test(ld) && /reachedPlayers\(message\)/.test(ld) && /metagame\("results"\)/.test(ld) && /breakdownShown\(roll\)/.test(ld) && !/isGM/.test(ld),
+    "every landing beat follows the player-visibility policy (landing.mjs)"
+  );
   ok(/KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/sheet.mjs")) && /KNOWLEDGE_HOOK/.test(read("scripts/features/pf2e-odds/save-prompt.mjs")), "sheets and save prompts redraw when knowledge changes");
   ok(/headHTML\(next/.test(read("scripts/features/pf2e-odds/render.mjs")), "updateBadge redraws the heading");
 }
@@ -304,6 +314,29 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(/consumeAmmo: false/.test(src("probe.mjs")), "a Strike probe never checks ammunition");
   ok(/nameFor\(target/.test(src("line-badges.mjs")) && !/document\?\.name \?\? target\.name/.test(src("line-badges.mjs")), "the line badge gates the target's name");
   ok(!/\bsound\b/.test(src("constants.mjs")), "no dead sound switch");
+}
+
+/* ── 6c. The dice highlight (PR 2) ──────────────────────────────────────── */
+
+{
+  const R = await imp("scripts/features/pf2e-odds/render.mjs");
+  ok(R.diceHTML({ degree: null, stamps: "attack" }) === "", "no degree, no ring");
+  const crit = R.diceHTML({ degree: 3, stamps: "attack" });
+  ok(/data-d="c"/.test(crit) && crit.includes("GLOD.stamp.crit<"), "a critical rings amber with the attack stamp");
+  ok(R.diceHTML({ degree: 0, stamps: "check" }).includes("GLOD.stamp.critFail"), "a check's critical failure stamps as such");
+  const dh = read("scripts/features/pf2e-odds/dice-highlight.mjs");
+  ok(/landingOf\(message\)/.test(dh) && /landing\.degree == null/.test(dh), "the ring is drawn only when this viewer may see the degree");
+  ok(/flags\?\.\[SUITE_ID\]\?\.spotlight/.test(dh), "Spotlight Roll's own dice are left alone");
+  ok(/allows\("landBeat"\)/.test(dh), "the ring sheds with the landing beat");
+  ok(!/dsnActive = [^\n]*game\.dice3d/.test(dh), "wiring does not wait on game.dice3d (DSN builds it in its own ready hook, maybe after ours)");
+  for (const f of readdirSync(FEAT).filter((x) => x.endsWith(".mjs"))) {
+    const src = readFileSync(join(FEAT, f), "utf8");
+    if (/dice3d\.box|throwEngine|diceScene|\.material\b/.test(src)) fail(`${f}: reaches into Dice So Nice — only spotlight-roll/dsn-host.mjs may`);
+  }
+  checks++;
+  const host = read("scripts/features/spotlight-roll/dsn-host.mjs");
+  const reader = host.slice(host.indexOf("the board, read-only"));
+  ok(reader.length > 100 && !/\.material\b|dispose\(|\.visible\s*=|position\.set|\.add\(mesh/.test(reader), "the board reader in dsn-host.mjs only reads");
 }
 
 /* ── 7. Data keys are pinned ────────────────────────────────────────────── */

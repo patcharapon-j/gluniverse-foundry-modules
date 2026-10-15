@@ -13,6 +13,8 @@
   "GLOD.settings.dialog.hint": "Show the odds panel at the top of PF2e's roll dialog, updating as modifiers are toggled.",
   "GLOD.settings.savePrompt.name": "Odds on save buttons",
   "GLOD.settings.savePrompt.hint": "Show your chance to save on a spell card's save button, once the party has seen enough of the caster to know.",
+  "GLOD.settings.dice.name": "Degree on the Dice So Nice die",
+  "GLOD.settings.dice.hint": "When a check's dice come to rest, ring the kept d20 in its degree's colour and stamp the result beneath it. Only when PF2e would show you the result.",
   "GLOD.settings.observations.name": "Observations",
   "GLOD.settings.observations.hint": "What the party has learned about each kind of creature from the rolls it has watched, with resets.",
   "GLOD.observations.open": "Open observations",

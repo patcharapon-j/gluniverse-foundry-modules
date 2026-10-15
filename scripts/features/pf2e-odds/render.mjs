@@ -150,6 +150,18 @@ export function inlineHTML(model) {
   return `<span class="glod-inline gl-type" data-state="${model.state}" style="--glod-lo-p:${Math.round(lo * 100)}%;--glod-hi-p:${Math.round(hi * 100)}%"><span class="glod-inline-n">${escapeHTML(text)}</span><span class="glod-inline-bar"></span></span>`;
 }
 
+/**
+ * The ring and stamp drawn over a landed Dice So Nice d20. Positioned by the
+ * caller through --glod-die-x/-y/-r; this is only the mark.
+ * @param {{degree: number, stamps?: "attack"|"check"}} landing
+ */
+export function diceHTML(landing, { t = ident } = {}) {
+  if (!landing || !Number.isInteger(landing.degree)) return "";
+  const word = (DEGREE_STAMP[landing.stamps] ?? DEGREE_STAMP.attack)[landing.degree];
+  const d = DEGREE[landing.degree];
+  return `<div class="glod-dice-mark" data-d="${d}"><span class="glod-dice-ring"></span><span class="glod-dice-burst"></span><span class="glod-dice-tick"></span><span class="glod-dice-stamp">${escapeHTML(t(word))}</span></div>`;
+}
+
 /* ── in-place updates and the two beats ──────────────────────────────────── */
 
 const pipKey = (p) => p.getAttribute("data-d") ?? `u:${p.getAttribute("data-u")}`;
