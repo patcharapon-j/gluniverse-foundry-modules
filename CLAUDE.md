@@ -1203,6 +1203,29 @@ active GM's alone. To see it: `node tools/pf2e-odds-preview.mjs && node
 tools/preview-server.mjs`, then `/.preview/odds.html` (`?freeze=1` stops the
 narrowing loop). See `docs/PF2E_ODDS.md`.
 
+**When touching Save Resolution** (`features/pf2e-saves/`, `styles/pf2e-saves.css`),
+re-run its check. Everything it covers fails silently:
+
+```bash
+node tools/pf2e-saves-check.mjs
+```
+
+Zero problems required. Three things are worth knowing before you change it.
+**The session flag carries no results.** `sv.session` reaches every client, so
+a row holds only the id of the message its save is on; every viewer reads the
+result off that message through pf2e-odds' `landingOf` gate, and a degree, a
+total or a multiplier written into the flag prints a hidden NPC's result on
+every player's console while every screen looks right. The per-row multiplier
+override lives in the panel's memory for that reason. **The active GM is the
+only writer**, through `mutate()`; a caster's owner opens a session over the
+socket on the attested sender, and a player's save is filed only against a
+creature they own. **Rolls are matched, not routed**: any saving throw against
+the session's spell (PF2e's own card button included) files to its row by
+identifier or token, and apply goes through PF2e's own `applyDamage` with IWR,
+never the flat path. To see it: `node tools/pf2e-saves-preview.mjs && node
+tools/preview-server.mjs`, then `/.preview/saves.html`. See
+`docs/SAVE_RESOLUTION.md`.
+
 **When touching Spotlight Roll** (`features/spotlight-roll/`, `styles/spotlight-roll*.css`,
 `templates/spotlight-roll/`, `core/pf2e-degree.mjs`), re-run its check. Everything it
 covers fails silently:

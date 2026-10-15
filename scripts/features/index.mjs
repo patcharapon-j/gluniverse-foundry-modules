@@ -29,6 +29,7 @@ import "./pf2e-arcane-surge/index.mjs";
 import "./pf2e-variant-rules/index.mjs";
 import "./pf2e-creaturedex/index.mjs";
 import "./pf2e-odds/index.mjs";
+import "./pf2e-saves/index.mjs";
 import "./spotlight-roll/index.mjs";
 // Gated on `initiative` via requiresFeature, so it is imported after it.
 import "./combat-intro/index.mjs";

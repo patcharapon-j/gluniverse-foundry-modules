@@ -1,0 +1,429 @@
+/* ============================================================
+   PF2E SAVES — Save Resolution
+   ------------------------------------------------------------
+   One row per creature, in the d20 strip's language: a slab of
+   dark glass, a hairline rule, the degree in its colour. The
+   panel and the chat card draw the same rows from the same
+   renderer; the card is the compact host.
+
+   Degree colours are this feature's own aliases, the same four
+   the Odds strip uses, scoped to the session root — never :root:
+     c  amber · s  cyan · f  steel · cf  hazard
+   A critical failure is hatched as well as red, so it never
+   reads by hue alone. Every accent-derived value is struck
+   inline with color-mix() against these.
+
+   `.gl-btn` declares no font size and takes the host's, so every
+   button here is sized on its own class — a chat log is 14px,
+   this panel is not.
+   ============================================================ */
+
+.glsv-session,
+.glsv-open-btn {
+  --gl-accent: var(--gl-cyan);
+  --glsv-c: var(--gl-signal);
+  --glsv-s: var(--gl-cyan);
+  --glsv-f: color-mix(in srgb, var(--gl-text-dim) 34%, var(--gl-ink-3));
+  --glsv-cf: var(--gl-hazard);
+}
+
+.glsv-panel .window-content {
+  padding: 0;
+  background: var(--gl-surface);
+}
+
+.glsv-session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-4);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-snug);
+}
+
+.glsv-session--card {
+  padding: var(--gl-sp-2) 0 0;
+  gap: var(--gl-sp-2);
+}
+
+/* ---- head ------------------------------------------------- */
+
+.glsv-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding-bottom: var(--gl-sp-2);
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.glsv-spell {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 1px solid var(--gl-edge);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
+}
+
+.glsv-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.glsv-spell-name {
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-md);
+  font-weight: var(--gl-weight-bold);
+  color: var(--gl-text-bright);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glsv-save {
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+}
+
+/* ---- toolbar ---------------------------------------------- */
+
+.glsv-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-2);
+}
+
+.glsv-spacer { flex: 1; }
+
+.glsv-session .gl-btn.glsv-tool,
+.glsv-session .gl-btn.glsv-btn {
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-tight);
+  flex: none;
+  width: auto;
+}
+
+.glsv-session .gl-btn.glsv-tool { padding: 0.45em 0.8em; }
+.glsv-session .gl-btn.glsv-btn { padding: 0.4em 0.55em; min-width: 2.2em; }
+
+.glsv-session .gl-btn.glsv-tool--primary,
+.glsv-session .gl-btn.glsv-btn--apply {
+  border-color: var(--gl-accent);
+  color: var(--gl-text-bright);
+  background: color-mix(in srgb, var(--gl-accent) 16%, transparent);
+}
+
+.glsv-session .gl-btn.glsv-btn--roll {
+  border-color: color-mix(in srgb, var(--gl-accent) 60%, var(--gl-edge));
+}
+
+.glsv-session .gl-btn.glsv-btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--gl-text-dim);
+}
+
+.glsv-session .gl-btn:disabled { opacity: 0.4; cursor: default; }
+
+.glsv-damage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-1);
+  padding: 0.3em 0.6em;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-bright);
+  border-left: 2px solid var(--glsv-cf);
+  background: rgb(var(--gl-tint-dark) / 0.35);
+}
+
+/* ---- rows ------------------------------------------------- */
+
+.glsv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-1);
+}
+
+.glsv-row {
+  --glsv-tone: var(--gl-hair);
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-2) var(--gl-sp-2) var(--gl-sp-2) var(--gl-sp-3);
+  background: rgb(var(--gl-tint-dark) / 0.32);
+  border-left: 2px solid var(--glsv-tone);
+  transition: background var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease);
+}
+
+.glsv-row[data-d="c"] { --glsv-tone: var(--glsv-c); }
+.glsv-row[data-d="s"] { --glsv-tone: var(--glsv-s); }
+.glsv-row[data-d="f"] { --glsv-tone: var(--glsv-f); }
+.glsv-row[data-d="cf"] { --glsv-tone: var(--glsv-cf); }
+
+.glsv-row[data-d="cf"] {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--glsv-cf) 10%, transparent) 0 3px, transparent 3px 8px),
+    rgb(var(--gl-tint-dark) / 0.32);
+}
+
+.glsv-row[data-state="applied"] { opacity: 0.72; }
+.glsv-row[data-hidden] { border-left-style: dashed; }
+
+.glsv-img {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  object-fit: cover;
+  border: 1px solid var(--gl-hair);
+  background: rgb(var(--gl-tint-dark) / 0.5);
+}
+
+.glsv-img--blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-xs);
+}
+
+.glsv-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.glsv-name {
+  font-weight: var(--gl-weight-medium);
+  color: var(--gl-text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glsv-name em { color: var(--gl-text-dim); font-style: normal; }
+.glsv-hid { color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); }
+
+.glsv-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  min-height: 1.4em;
+}
+
+.glsv-degree {
+  display: inline-block;
+  padding: 1px 7px 2px;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-2xs);
+  font-weight: var(--gl-weight-heavy);
+  letter-spacing: var(--gl-track-xwide);
+  text-transform: uppercase;
+  color: var(--glsv-tone, var(--gl-text));
+  background: color-mix(in srgb, var(--glsv-tone, var(--gl-hair)) 14%, rgb(var(--gl-tint-dark) / 0.7));
+  border-top: 1px solid var(--glsv-tone, var(--gl-hair));
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  white-space: nowrap;
+}
+
+.glsv-degree[data-d="c"] { --glsv-tone: var(--glsv-c); }
+.glsv-degree[data-d="s"] { --glsv-tone: var(--glsv-s); }
+.glsv-degree[data-d="f"] { --glsv-tone: var(--glsv-f); color: var(--gl-text); }
+.glsv-degree[data-d="cf"] { --glsv-tone: var(--glsv-cf); }
+
+.glsv-roll {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--gl-sp-1);
+  font-family: var(--gl-tech);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+}
+
+.glsv-face {
+  padding: 0 4px;
+  border: 1px solid var(--gl-hair);
+  color: var(--gl-text);
+}
+
+.glsv-face[data-nat="hi"] { border-color: var(--glsv-c); color: var(--glsv-c); }
+.glsv-face[data-nat="lo"] { border-color: var(--glsv-cf); color: var(--glsv-cf); }
+.glsv-total { color: var(--gl-text-bright); font-weight: var(--gl-weight-bold); }
+
+.glsv-state {
+  font-size: var(--gl-fs-2xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glsv-state[data-s="waiting"] i { animation: gl-breathe var(--gl-loop-md) var(--gl-ease-inout) infinite; }
+.glsv-state[data-s="applied"] { color: var(--glsv-s); }
+
+.glsv-odds { font-size: var(--gl-fs-xs); }
+
+.glsv-preview,
+.glsv-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gl-sp-1) var(--gl-sp-2);
+  font-size: var(--gl-fs-xs);
+}
+
+.glsv-takes {
+  font-family: var(--gl-tech);
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text-bright);
+}
+
+.glsv-iwr { color: var(--gl-text-dim); }
+.glsv-iwr[data-k="immune"] { color: var(--glsv-s); }
+.glsv-iwr[data-k="weak"] { color: var(--glsv-cf); }
+
+.glsv-effect {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: var(--gl-fs-2xs);
+  color: var(--gl-text);
+  border: 1px solid var(--gl-hair);
+  background: rgb(var(--gl-tint-light) / 0.04);
+}
+
+.glsv-acts {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-1);
+  flex: none;
+}
+
+.glsv-mult {
+  width: auto;
+  height: auto;
+  padding: 2px 4px;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text);
+  background: rgb(var(--gl-tint-dark) / 0.5);
+  border: 1px solid var(--gl-hair);
+}
+
+/* ---- blocked + config ------------------------------------- */
+
+.glsv-sub {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gl-sp-2);
+  margin: 0 0 var(--gl-sp-1);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+  border: none;
+  cursor: default;
+}
+
+.glsv-hint {
+  font-family: inherit;
+  font-weight: var(--gl-weight-normal);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--gl-text-faint);
+}
+
+.glsv-blocked-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-1) var(--gl-sp-2) var(--gl-sp-1) var(--gl-sp-3);
+  opacity: 0.6;
+  border-left: 2px dashed var(--gl-hair);
+}
+
+.glsv-blocked-row .glsv-name { flex: 1; }
+
+.glsv-config summary { cursor: pointer; list-style: none; }
+.glsv-config summary::before { content: "▸"; color: var(--gl-text-faint); }
+.glsv-config[open] summary::before { content: "▾"; }
+
+.glsv-config-row {
+  display: grid;
+  grid-template-columns: 9.5em auto 1fr;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  padding: var(--gl-sp-1) 0;
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.glsv-config-effects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-1);
+}
+
+.glsv-effect-value {
+  width: 3em;
+  height: auto;
+  padding: 0 2px;
+  font-size: var(--gl-fs-2xs);
+}
+
+.glsv-x {
+  all: unset;
+  cursor: pointer;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-2xs);
+}
+
+.glsv-x:hover { color: var(--gl-text-bright); }
+
+.glsv-empty { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+
+.glsv-card-foot { display: flex; justify-content: flex-end; }
+
+/* ---- the spell card's "Resolve saves" --------------------- */
+
+.glsv-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-2);
+  width: 100%;
+  margin-top: var(--gl-sp-1);
+  padding: 0.35em 0.6em;
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-xs);
+  font-weight: var(--gl-weight-bold);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  line-height: var(--gl-lh-tight);
+  color: var(--gl-text-bright);
+  background: color-mix(in srgb, var(--gl-accent) 18%, var(--gl-ink-1));
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
+  cursor: pointer;
+}
+
+.glsv-open-btn:hover { background: color-mix(in srgb, var(--gl-accent) 30%, var(--gl-ink-1)); }
+
+.glsv-pick { display: flex; gap: var(--gl-sp-2); }
+.glsv-pick input { width: 5em; }
