@@ -50,8 +50,11 @@ function mountLayer() {
   const board = boardContainer();
   if (board?.isConnected) {
     if (layer.previousElementSibling !== board) board.after(layer);
-    const z = board.style.zIndex || getComputedStyle(board).zIndex;
-    layer.style.zIndex = z && z !== "auto" ? z : "";
+    // DSN's three layerings: "over" 1000, "auto" raised above the open window
+    // per throw, and "under" — no z-index, placed after #board. Copy all three,
+    // `auto` included: falling back to this sheet's HUD height would lift the
+    // ring over interface layers that cover the die it belongs to.
+    layer.style.zIndex = board.style.zIndex || getComputedStyle(board).zIndex || "auto";
   } else if (!layer.isConnected) {
     document.body.append(layer);
   }

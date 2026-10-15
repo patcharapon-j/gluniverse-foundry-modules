@@ -18,8 +18,8 @@ decisions from the grilling session (Q1–Q36); the save half moves to
   `dc.visible`), and the landing stamp keyed on `context.target.token`;
 - spells inside wands, scrolls and staves (`fromUuidSync` may not resolve them:
   they show no odds rather than wrong ones);
-- the dice highlight against DSN 6's real board: `fvttResult` identity
-  surviving to the meshes, `throwEngine.diceList` → `deadDiceList` as the
+- the dice highlight against DSN 6's real board: the result → vectors →
+  `mesh.notation` join, `sim.dead` against the playback iteration as the
   settle signal, the projection onto the canvas, and the layer stacking above
   `#dice-box-canvas` in each of DSN's three layering modes.
 
@@ -189,15 +189,20 @@ against that DC, gated on whether they've learned it.
   whichever window is open. It never edits DSN materials; Spotlight's
   `dsn-host.mjs` remains the only file that reaches into DSN's internals, and
   only to read.
-- **Which die:** by identity. DSN builds a throw from the message's own dice
-  terms, so a mesh's `notation.fvttResult` *is* the message's result object.
-  The result objects are captured from the roll DSN is handed at
-  `diceSoNiceRollStart`; a die is ours only if it is the kept one of those.
-  Concurrent throws showing the same natural, and dice left on the board, never
-  match.
+- **Which die:** by identity, through DSN's own two links. DSN builds a throw
+  from the message's own dice terms, and each die entry in
+  `throwEngine.throws[].dice[]` keeps `fvttResult` (the term's result object)
+  and a `vectors` object, which is what becomes `mesh.notation`. The reader
+  remembers result → vectors in a WeakMap while the batch plays. The result
+  objects are captured from the roll DSN is handed at `diceSoNiceRollStart`; a
+  die is ours only if it is the kept one of those. Concurrent throws showing
+  the same natural, and dice left on the board, never match.
 - **When:** `dice-watch.mjs` reads the board on a timer until the kept die is
-  in `deadDiceList`. Not DSN's completion hook, which fires before the dice land
-  under "immediately display chat messages" and whose waiter is never removed.
+  at rest by DSN's own test — its sim died at or before the playback
+  iteration, playback ended, or the batch stopped rolling. Finished dice stay
+  in `diceList` until the next batch, so list membership says nothing. Not
+  DSN's completion hook, which fires before the dice land under "immediately
+  display chat messages" and whose waiter is never removed.
   Every watch ends: settled; DSN never started the throw (1.5 s); started but
   never reached an idle board (4 s); deleted; or 10 s. Both landing beats —
   the badge pulse and the ring — wait on that one watch, in `dice-highlight.mjs`.

@@ -327,6 +327,7 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(!/dsnActive = [^\n]*game\.dice3d/.test(dh), "wiring does not wait on game.dice3d (DSN builds it in its own ready hook, maybe after ours)");
   ok(!/waitFor3DAnimationByMessageID|diceSoNiceRollComplete|Hooks\.once/.test(dh + read("scripts/features/pf2e-odds/line-badges.mjs")), "no landing waits on DSN's completion hook (it fires early under immediate chat display, and its waiter is never removed)");
   ok(/boardContainer\(\)/.test(dh) && /board\.after\(layer\)/.test(dh), "the ring layer is stacked on DSN's board container, re-read each draw");
+  ok(/getComputedStyle\(board\)\.zIndex \|\| "auto"/.test(dh) && !/zIndex = [^\n]*: ""/.test(dh), "under DSN's 'under' layering the ring keeps z-index auto rather than falling back to the HUD height");
 
   // ── the gate, driven: what lands for whom ──
   const prevGame = globalThis.game;
@@ -362,39 +363,67 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   results = true;
   ok(as("stream", msg({ breakdown: false }))?.face === null, "a hidden NPC breakdown never lands its natural");
 
-  // ── the board reader, driven: identity, not faces ──
+  // ── the board reader, driven against DSN's real shapes ──
+  // A throw is `throwEngine.throws[].dice[]` of die entries, each holding the
+  // term's own result object (`fvttResult`) and a `vectors` object; the spawned
+  // mesh's `notation` IS that vectors object (ThrowEngine#spawnDiceMesh), and
+  // carries no result. A die is at rest once its sim died at or before the
+  // playback iteration; finished dice stay in `diceList` until the next batch.
   class Vec {
     constructor(x = 0, y = 0, z = 0) { Object.assign(this, { x, y, z }); }
     clone() { return new Vec(this.x, this.y, this.z); }
     add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
     project() { return this; }
   }
-  const mesh = (fvttResult, x) => ({
-    notation: { fvttResult },
+  const spawn = (entry, x, dead) => ({
+    notation: entry.vectors,
+    forcedResult: entry.result,
+    sim: { dead },
     position: new Vec(),
     getWorldPosition: (v) => Object.assign(v, { x, y: 0, z: 0 }),
     getWorldScale: (v) => Object.assign(v, { x: 1, y: 1, z: 1 }),
     geometry: { boundingSphere: { radius: 0.05 } },
   });
-  const engine = { rolling: false, diceList: [], deadDiceList: [] };
+  const entry = (fvttResult) => ({ type: "d20", result: fvttResult.result, fvttResult, vectors: { type: "d20", pos: {}, velocity: {}, angle: {}, axis: {} } });
+  const engine = { rolling: true, running: 1, iteration: 0, iterationsNeeded: 300, throws: null, diceList: [], deadDiceList: [] };
   globalThis.game.dice3d = { box: { throwEngine: engine, diceScene: { camera: {}, renderer: { domElement: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 1000 }) } } } } };
   const { boardState } = await imp("scripts/features/spotlight-roll/dsn-host.mjs");
   const a = { result: 14, active: true };
   const b = { result: 14, active: true };
-  const stale = { result: 14, active: true };
-  engine.deadDiceList = [mesh(stale, -0.5), mesh(a, 0.5)];
-  const sa = boardState(new Set([a]));
-  ok(sa.settled && Math.round(sa.settled.x) === 750, "a roll's die is found by its result object");
-  const sb = boardState(new Set([b]));
-  ok(!sb.settled && !sb.present, "another roll showing the same natural, and a stale die left on the board, never match");
+  const ea = entry(a);
+  const eb = entry(b);
+  // Batch 1 plays roll A; roll B (same natural) is queued behind it.
+  engine.throws = [{ dice: [ea] }];
+  engine.diceList = [spawn(ea, 0.5, 180)];
+  engine.iteration = 120;
+  const flying = boardState(new Set([a]));
+  ok(flying.present && flying.busy && !flying.settled, "a die whose sim has not died yet is present and in the air");
+  ok(!boardState(new Set([b])).present, "a queued roll showing the same natural does not claim the die in the air");
+  engine.iteration = 200;
+  const rest = boardState(new Set([a]));
+  ok(rest.settled && Math.round(rest.settled.x) === 750, "the die is found through its vectors object and lands once its sim has died");
+  // The batch ends with no other throw behind it: DSN leaves the dice in diceList.
+  engine.iteration = 300;
+  engine.rolling = false;
+  engine.running = false;
+  const done = boardState(new Set([a]));
+  ok(done.settled && !done.busy, "a finished batch with nothing after it settles — finished dice stay in diceList");
+  // Batch 2 starts: throws is reset and A's die moves to deadDiceList.
+  engine.throws = [{ dice: [eb] }];
+  engine.deadDiceList = engine.diceList;
+  engine.diceList = [spawn(eb, -0.5, 90)];
+  engine.rolling = true;
+  engine.iteration = 10;
+  ok(boardState(new Set([a])).settled && !boardState(new Set([b])).settled, "A is still found after its batch is gone (remembered link) and B is not taken for it");
+  ok(!boardState(new Set([{ result: 14, active: true }])).present, "a result DSN never threw matches nothing on the board");
   const dropped = { result: 3, active: false, discarded: true };
   const kept = { result: 17, active: true };
-  engine.deadDiceList = [mesh(dropped, -0.5), mesh(kept, 0.2)];
+  const ed = entry(dropped);
+  const ek = entry(kept);
+  engine.throws = [{ dice: [ed, ek] }];
+  engine.diceList = [spawn(ed, -0.5, 50), spawn(ek, 0.2, 60)];
+  engine.iteration = 100;
   ok(Math.round(boardState(new Set([dropped, kept])).settled?.x) === 600, "a fortune pair rings the kept die, not the dropped one");
-  engine.deadDiceList = [];
-  engine.diceList = [mesh(a, 0)];
-  const flying = boardState(new Set([a]));
-  ok(flying.present && flying.busy && !flying.settled, "a die still in the air is present, not settled");
   globalThis.game = prevGame;
 
   // ── the watch, driven on a fake clock: every road out ends, and empties ──
