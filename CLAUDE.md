@@ -1178,6 +1178,31 @@ identifies the thing the party is looking at. Knowing a *lie* counts as knowing
 something there: a player told one cannot see that it is false, so refusing to
 open is the module losing the only thing they were given.
 
+**When touching PF2e Odds** (`features/pf2e-odds/`, `core/pf2e-odds.mjs`,
+`styles/pf2e-odds*.css`, `templates/pf2e-odds/`), re-run its check. Everything
+it covers fails silently: a wrong degree band is a plausible percentage; a proof
+one DC too tight puts a player's odds on a number the creature does not have,
+and every later roll then "contradicts" it; a renamed `STATS` key forgets the
+party's whole ledger; a GM field in a player's model prints the truth where ???
+belongs:
+
+```bash
+node tools/pf2e-odds-check.mjs
+```
+
+Zero problems required. Three things are worth knowing before you change it.
+**The engine is PF2e's rule, not an approximation** — it is driven against a
+brute-force restatement for every modifier, DC and face, and `boundsFromRoll`
+must be both sound (the true DC is inside) and tight (no DC inside would have
+produced a different card). **Every surface builds its model through
+`modelFromProbe`**, and "does this viewer see the truth" is `seesTruth()`,
+never `isGM`: the stream login holds GM rights and is watched by the players.
+**Knowledge is the bare stat**: observations are filed with the visible status
+and circumstance modifiers (and MAP) taken off, and a ledger write is the
+active GM's alone. To see it: `node tools/pf2e-odds-preview.mjs && node
+tools/preview-server.mjs`, then `/.preview/odds.html` (`?freeze=1` stops the
+narrowing loop). See `docs/PF2E_ODDS.md`.
+
 **When touching Spotlight Roll** (`features/spotlight-roll/`, `styles/spotlight-roll*.css`,
 `templates/spotlight-roll/`, `core/pf2e-degree.mjs`), re-run its check. Everything it
 covers fails silently:

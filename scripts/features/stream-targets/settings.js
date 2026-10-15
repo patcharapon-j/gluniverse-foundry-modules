@@ -38,7 +38,13 @@ export const SETTINGS = {
  * every frame still draws correctly.
  */
 export const TARGETS_HOOKS = {
-  settingsChanged: `${SUITE_ID}.targets.settingsChanged`
+  settingsChanged: `${SUITE_ID}.targets.settingsChanged`,
+  /**
+   * Raised after every sync with the lines this client now draws, as
+   * `[{ sourceId, targetId }]` token ids. `pf2e-odds` hangs its badge on these,
+   * so a badge appears exactly where a line does and never where one does not.
+   */
+  linesChanged: `${SUITE_ID}.targets.linesChanged`
 };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
