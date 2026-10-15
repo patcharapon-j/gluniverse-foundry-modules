@@ -313,7 +313,20 @@ function dcFromCard(castMsg) {
   } catch { return null; }
 }
 
-async function openSession(castMsg, { targetIds = [] } = {}) {
+let opening = Promise.resolve();
+
+/**
+ * Opens are serialized: the existing-session check and the card's creation are
+ * one step, or two requests for one cast both find none and both open one —
+ * two sessions, each with its own Apply.
+ */
+function openSession(castMsg, opts) {
+  const run = opening.then(() => openSessionNow(castMsg, opts));
+  opening = run.catch(() => {});
+  return run;
+}
+
+async function openSessionNow(castMsg, { targetIds = [] } = {}) {
   if (!isConductor()) return null;
   const existing = sessionForCast(castMsg.id);
   if (existing) return existing._msg;
@@ -373,7 +386,10 @@ async function observe(message) {
   const ctx = message?.flags?.pf2e?.context;
   if (!ctx || (ctx.type !== "saving-throw" && ctx.type !== "damage-roll")) return;
   const originUuid = message.flags?.pf2e?.origin?.uuid ?? null;
-  const sessions = openSessions();
+  // Only sessions whose cast came before this message: catch-up replays old
+  // messages, and an earlier cast's roll must not land in a later cast's session.
+  const castTime = (x) => game.messages.get(x.castId ?? "")?.timestamp ?? x.at;
+  const sessions = openSessions().filter((x) => castTime(x) <= message.timestamp);
   if (ctx.type === "damage-roll") {
     const DamageRoll = CONFIG.Dice?.rolls?.find((R) => R.name === "DamageRoll");
     if (!DamageRoll || !(message.rolls?.[0] instanceof DamageRoll)) return;
@@ -403,8 +419,11 @@ async function observe(message) {
     const author = message.author;
     if (!author?.isGM && !owns(author, row)) return;
     await mutate(s._msg.id, (st) => {
+      // Re-checked against the fresh row: a newer save may have been filed while this waited in the queue.
       const r = st.rows.find((x) => x.id === row.id);
-      if (!r || (r.applied && r.rollId && game.messages.has(r.rollId))) return null;
+      if (!r || !game.messages.has(message.id)) return null;
+      const cur = r.rollId ? game.messages.get(r.rollId) : null;
+      if (cur && (r.applied || cur.timestamp > message.timestamp)) return null;
       r.rollId = message.id;
       return st;
     });
@@ -638,60 +657,87 @@ async function rollDamage(messageId) {
 
 /* ── editing the session (GM) ──────────────────────────────────────── */
 
-const editRows = (messageId, fn) => (gmView() ? mutate(messageId, fn) : null);
-
-function removeRow(messageId, rowId) {
-  return editRows(messageId, (st) => {
-    const r = st.rows.find((x) => x.id === rowId);
-    if (!r || r.applied) return null;
-    st.rows = st.rows.filter((x) => x.id !== rowId);
-    return st;
-  });
+/**
+ * Every session edit runs on the conductor, as data: a second GM's local
+ * read-modify-write would carry a stale copy of the rows over the conductor's
+ * newest write — an undo record lost, the creature still hurt, Apply live again.
+ * @param {{op: "remove"|"unblock", rowId: string} | {op: "addTargets", tokenIds: string[]} | {op: "config", config: object}} edit
+ */
+function requestEdit(messageId, edit) {
+  if (!gmView()) return null;
+  return viaConductor(MSG.edit, { messageId, edit }, () => runEdit(messageId, edit));
 }
 
-function unblock(messageId, rowId) {
-  return editRows(messageId, (st) => {
-    const b = st.blocked.find((x) => x.id === rowId);
-    if (!b || st.rows.length >= MAX_ROWS) return null;
-    st.blocked = st.blocked.filter((x) => x.id !== rowId);
-    st.rows.push({ ...b, rollId: null, applied: null });
-    return st;
-  });
+/** Conductor only. */
+async function runEdit(messageId, edit) {
+  if (!isConductor() || !edit || typeof edit !== "object") return;
+  const rowId = typeof edit.rowId === "string" ? edit.rowId : null;
+  if (edit.op === "remove") {
+    return mutate(messageId, (st) => {
+      const r = st.rows.find((x) => x.id === rowId);
+      if (!r || r.applied) return null;
+      st.rows = st.rows.filter((x) => x.id !== rowId);
+      return st;
+    });
+  }
+  if (edit.op === "unblock") {
+    return mutate(messageId, (st) => {
+      const b = st.blocked.find((x) => x.id === rowId);
+      if (!b || st.rows.length >= MAX_ROWS) return null;
+      st.blocked = st.blocked.filter((x) => x.id !== rowId);
+      st.rows.push({ ...b, rollId: null, applied: null });
+      return st;
+    });
+  }
+  if (edit.op === "addTargets") {
+    const scene = canvas?.scene;
+    const ids = (Array.isArray(edit.tokenIds) ? edit.tokenIds : []).filter((x) => typeof x === "string").slice(0, MAX_ROWS);
+    return mutate(messageId, (st) => {
+      let added = 0;
+      for (const id of ids) {
+        const doc = scene?.tokens?.get(id);
+        if (!doc || st.rows.some((r) => r.id === doc.id) || st.rows.length >= MAX_ROWS) continue;
+        const row = rowOf(doc, st.save);
+        if (!row) continue;
+        st.rows.push(row);
+        st.blocked = st.blocked.filter((b) => b.id !== doc.id);
+        added += 1;
+      }
+      return added ? st : null;
+    });
+  }
+  if (edit.op === "config") {
+    let config = null;
+    await mutate(messageId, (st) => {
+      st.config = normalizeConfig(edit.config, st.basic);
+      config = st.config;
+      return st;
+    });
+    const s = readSession(game.messages.get(messageId));
+    if (!config || !s) return;
+    const spell = await spellOf(s);
+    const base = spell?.original ?? spell;
+    try { await base?.setFlag?.(SUITE_ID, SPELL_FLAG, config); } catch (e) { warn("pf2e-saves: could not remember the effects on the spell", e); }
+  }
 }
+
+const removeRow = (messageId, rowId) => requestEdit(messageId, { op: "remove", rowId });
+const unblock = (messageId, rowId) => requestEdit(messageId, { op: "unblock", rowId });
 
 function addTargets(messageId) {
-  return editRows(messageId, (st) => {
-    let added = 0;
-    for (const t of game.user.targets ?? []) {
-      const doc = t.document ?? t;
-      if (st.rows.some((r) => r.id === doc.id) || st.rows.length >= MAX_ROWS) continue;
-      const row = rowOf(doc, st.save);
-      if (!row) continue;
-      st.rows.push(row);
-      st.blocked = st.blocked.filter((b) => b.id !== doc.id);
-      added += 1;
-    }
-    if (!added) ui.notifications?.info(T("GLSV.warn.noTargets"));
-    return added ? st : null;
-  });
+  const tokenIds = [...(game.user.targets ?? [])].map((t) => t.document?.id ?? t.id).filter(Boolean);
+  if (!tokenIds.length) { ui.notifications?.info(T("GLSV.warn.noTargets")); return null; }
+  return requestEdit(messageId, { op: "addTargets", tokenIds });
 }
 
-/** The GM's effects-by-degree answer: written to the session and remembered on the spell. */
-async function setConfig(messageId, fn) {
-  if (!gmView()) return;
-  let config = null;
-  await mutate(messageId, (st) => {
-    const next = fn(structuredClone(st.config));
-    if (!next) return null;
-    st.config = normalizeConfig(next, st.basic);
-    config = st.config;
-    return st;
-  });
+/** The GM's effects-by-degree answer: written to the session and remembered on the spell (by the conductor). */
+function setConfig(messageId, fn) {
+  if (!gmView()) return null;
   const s = readSession(game.messages.get(messageId));
-  if (!config || !s) return;
-  const spell = await spellOf(s);
-  const base = spell?.original ?? spell;
-  try { await base?.setFlag?.(SUITE_ID, SPELL_FLAG, config); } catch (e) { warn("pf2e-saves: could not remember the effects on the spell", e); }
+  if (!s) return null;
+  const next = fn(structuredClone(s.config));
+  if (!next) return null;
+  return requestEdit(messageId, { op: "config", config: normalizeConfig(next, s.basic) });
 }
 
 /** Ask for a condition and its value; resolves to an effect entry or null. */
@@ -895,6 +941,12 @@ export function onReady() {
       const overrides = new Map((Array.isArray(payload.overrides) ? payload.overrides : [])
         .filter((p) => Array.isArray(p) && typeof p[0] === "string" && MULTS.includes(p[1])));
       return serially(() => applyRows(messageId, ids(payload.rowIds), overrides));
+    }
+    if (payload?.type === MSG.edit) {
+      if (!user.isGM || !seesTruth(user)) return;
+      const messageId = String(payload.messageId ?? "");
+      if (!readSession(game.messages.get(messageId))) return;
+      return runEdit(messageId, payload.edit);
     }
     if (payload?.type !== MSG.open) return;
     const castMsg = game.messages.get(String(payload.castId ?? ""));

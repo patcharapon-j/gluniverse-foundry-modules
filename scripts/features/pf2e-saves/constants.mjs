@@ -35,6 +35,8 @@ export const MSG = Object.freeze({
   apply: "apply",
   /** GM → the conductor: revert { messageId, rowIds }. */
   revert: "revert",
+  /** GM → the conductor: a session edit { messageId, edit: {op, ...} } (see runEdit). */
+  edit: "edit",
 });
 
 /** The identifier our own rolls carry, so a save is matched to its row without guessing. */

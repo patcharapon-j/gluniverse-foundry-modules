@@ -28,6 +28,13 @@ and a Revert for every Apply.
   host for the rows.
 - **One writer.** The active GM's client (the "conductor") writes it, one write
   at a time through `mutate()`, which re-reads the flag before each write.
+  Every edit another GM makes (remove, unblock, add targets, the effects
+  config, Apply, Revert) is sent to the conductor as data over the socket, never
+  read-modified-written locally: a stale local copy would carry old rows over
+  the conductor's newest write and lose an undo record. Opens are serialized
+  too, so one cast never gets two sessions.
+- **Rolls file forward only.** A roll is filed only into a session whose cast
+  came before it, and a save's freshness is re-checked inside the queued write.
 - **It carries no results.** A row holds the **id of the message** with its
   save (`rollId`), never a degree, a total, a natural or a multiplier.
   - Every viewer reads the result off that message through the gate PF2e's
