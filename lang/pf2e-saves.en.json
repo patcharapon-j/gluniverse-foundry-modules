@@ -10,6 +10,7 @@
   "GLSV.card.open": "Open the panel",
   "GLSV.head.basic": "Basic {save}",
   "GLSV.head.dc": "DC {dc}",
+  "GLSV.head.private": "Saving throw",
   "GLSV.empty": "Nobody is resolving this save yet. Target creatures and press Add targeted.",
   "GLSV.gone": "This session's card was deleted.",
   "GLSV.degree.criticalSuccess": "Crit success",

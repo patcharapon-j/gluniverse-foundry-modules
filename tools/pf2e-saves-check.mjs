@@ -270,7 +270,29 @@ const SESSION = (o = {}) => ({
     const i = main.search(new RegExp(`(?:async )?function ${name}\\(`));
     return i < 0 ? "" : main.slice(i, main.indexOf("\n}\n", i));
   };
-  for (const fn of ["applyRows", "revertRows"]) ok(/if \(!mayWrite\(game\.user\) \|\| !gmView\(\)\) return;/.test(body(fn)), `${fn} refuses anyone but a GM who sees the truth`);
+  for (const fn of ["requestApply", "requestRevert"]) ok(/if \(!mayWrite\(game\.user\) \|\| !gmView\(\)\) return null;/.test(body(fn)), `${fn} refuses anyone but a GM who sees the truth`);
+  for (const fn of ["applyRows", "revertRows"]) {
+    ok(/if \(!isConductor\(\)\) return;/.test(body(fn)), `${fn} runs on the conductor only (one queue for every GM)`);
+    ok(main.includes(`serially(() => ${fn}(`), `${fn} runs inside serially(): two clicks never both apply one row`);
+  }
+  ok(/s = readSession\(message\);\s+const row = s\?\.rows/.test(body("applyRows")), "Apply re-reads each row fresh before touching its creature");
+  {
+    const sock0 = main.slice(main.indexOf("onSocket(FEATURE_ID"), main.indexOf("Hooks.on(\"createChatMessage\""));
+    ok(/if \(!user\.isGM \|\| !seesTruth\(user\)\) return;/.test(sock0), "a socketed Apply/Revert is honoured only from a GM who sees the truth");
+    ok(/MULTS\.includes\(p\[1\]\)/.test(sock0), "a socketed multiplier override is one of the four multipliers");
+    ok(/castMsg\.item\?\.actor/.test(sock0) && /castMsg\.actor\.uuid !== owner\.uuid/.test(sock0), "a player's open is authorised against the SPELL's actor, which must be the speaker");
+  }
+  // Review round 1: each of these failed silently.
+  ok(/!m\.blind/.test(body("resultFor")) && !/m\.isAuthor/.test(body("resultFor")), "a blind save is not read back to its own author");
+  ok(/instanceof DamageRoll/.test(body("observe")) && /casterOf\(s\)\?\.testUserPermission\?\.\(author, "OWNER"\)/.test(body("observe")), "a damage roll is filed only when real and rolled by the GM or the caster's owner");
+  ok(/castMsg\.whisper/.test(body("openSession")) && /castMsg\.blind/.test(body("openSession")) && /spellName: priv \? ""/.test(body("openSession")) && /getSpeaker\(\{ user: game\.user \}\)/.test(body("openSession")), "a private cast's session card names no spell and speaks as the GM");
+  ok(!/isConnected/.test(body("renderCard")) && /_glsvGen !== gen/.test(body("renderCard")), "the card renders into the detached host Foundry hands the hook");
+  ok(!/Item\.\$\{cond\.id\}/.test(main) && /ConditionManager\?\.conditions\?\.get\(/.test(body("pickCondition")), "a picked condition's uuid comes from the canonical document, not a clone");
+  ok(/!before\.has\(m\.id\)/.test(body("applyDamageTo")) && !/since - 1000/.test(main), "the damage-taken card is found by identity, never by time");
+  ok(/getContextualClone\?\.\(originOpts, ephemeral\)/.test(body("applyDamageTo")) && /ephemeralEffects/.test(body("targetEffects")), "Apply passes the caster's damage-received target effects, as PF2e does");
+  ok(!/!r\.applied/.test(body("forgetMessage")), "a deleted save unfiles an applied row too (a reroll after Apply is filed on Revert)");
+  ok(/reconcile\(/.test(body("openPanel")) && /reconcile\(s\._msg\)/.test(main.slice(main.indexOf("export function onReady"))), "sessions catch up when opened and when a conductor starts");
+  ok(/maskRow\(row, liveOf\(row\)\)/.test(body("buildView")) && /Hooks\.on\("updateToken"/.test(main), "visibility is re-read live and refreshed on token changes");
   for (const fn of ["rollNpcs", "rollDamage", "setConfig"]) ok(/if \(!gmView\(\)\) return;/.test(body(fn)), `${fn} refuses anyone but the GM`);
   ok(/const editRows = \(messageId, fn\) => \(gmView\(\) \? mutate/.test(main), "row edits go through the GM gate");
   for (const fn of ["openSession", "observe", "forgetMessage"]) ok(/if \(!isConductor\(\)\) return/.test(body(fn)), `${fn} runs on the active GM only`);
@@ -361,6 +383,21 @@ const SESSION = (o = {}) => ({
   ok(/import "\.\/pf2e-saves\/index\.mjs"/.test(read("scripts/features/index.mjs")), "the adapter is not imported");
   ok(/saveOdds:/.test(read("scripts/features/pf2e-odds/index.mjs")), "pf2e-odds exposes saveOdds for the rows");
   ok(readdirSync(join(ROOT, "scripts/features/pf2e-saves")).every((f) => f.endsWith(".mjs")), "only modules in the feature folder");
+}
+
+/* ── 13. Live masking and private sessions ────────────────────────────── */
+
+{
+  const row = { ...ROW({ kind: "npc", name: "Ogre", img: "o.png" }), hidden: false };
+  ok(M.maskRow(row, null) === row, "a gone token leaves the stored row standing");
+  const hid = M.maskRow(row, { hidden: true, named: false, name: "Ogre", img: "o.png" });
+  ok(hid.hidden && hid.name === "" && hid.img === "", "a token hidden since the session opened is hidden and unnamed");
+  ok(M.rowView(hid, { truth: false }) === null, "a hidden row is absent for a player");
+  const masked = M.maskRow(row, { hidden: false, named: false, name: "Ogre", img: "o.png" });
+  ok(masked.name === "" && masked.img === "", "a name concealed since the session opened is masked");
+  const shown = M.maskRow({ ...row, name: "", img: "" }, { hidden: false, named: true, name: "Ogre", img: "o.png" });
+  ok(shown.name === "Ogre" && shown.img === "o.png", "a name revealed since is shown");
+  ok(M.normalizeSession(SESSION({ private: true })).private === true && M.normalizeSession(SESSION()).private === false, "the private mark survives normalising, and defaults off");
 }
 
 /* ── report ─────────────────────────────────────────────────────────────── */

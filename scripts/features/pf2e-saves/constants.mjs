@@ -31,6 +31,10 @@ export const SAVES = Object.freeze(["fortitude", "reflex", "will"]);
 export const MSG = Object.freeze({
   /** client → GM: open a session for a cast { castId, targets: tokenId[] }. */
   open: "open",
+  /** GM → the conductor: apply { messageId, rowIds, overrides: [rowId, mult][] }. */
+  apply: "apply",
+  /** GM → the conductor: revert { messageId, rowIds }. */
+  revert: "revert",
 });
 
 /** The identifier our own rolls carry, so a save is matched to its row without guessing. */

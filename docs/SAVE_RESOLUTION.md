@@ -1,6 +1,7 @@
 # Save Resolution (`pf2e-saves`)
 
-Status: **built, not yet run in a live session.** Passes
+Status: **built, run once in a live v14 / PF2e 8.5.1 session** (open, roll
+all NPCs, roll damage, apply, revert, a private cast). Passes
 `tools/pf2e-saves-check.mjs`. Designed in the PF2e Odds grilling session
 (`docs/PF2E_ODDS.md`, Q1–Q36); this file records what was built and where it
 departs from that design.
@@ -34,7 +35,8 @@ and a Revert for every Apply.
   - That gate includes PF2e's metagame "show results" setting, the
     breakdown/natural setting, whispers, and the stream login's rule (public
     rolls only).
-  - The author of a save also reads their own card in full.
+  - The author of a save also reads their own card in full, unless it was
+    blind: Foundry hides a blind roll from its own author.
 - **The undo record** is message and item ids plus earlier condition values.
   All of that is already visible on the creature.
 - **Normalising.** `normalizeSession` is the only reader, so a result field
@@ -45,6 +47,14 @@ and a Revert for every Apply.
 - **Hidden tokens** are rows marked `hidden`. They are drawn for the truth
   only, which is not a secrecy boundary: token documents reach every client
   anyway.
+- **Visibility is re-read live.** For anyone but the truth, each row is masked
+  again from its token at render time (`maskRow`), and an `updateToken` that
+  touches hiding or naming re-renders every session holding that token. A
+  creature hidden after its session opened disappears from the players' card.
+- **A private cast** (whispered or blind) still needs a card players can roll
+  from, so its session card is a sanitized projection: no spell name, no art,
+  spoken as the GM rather than the (possibly hidden) caster. The truth still
+  reads the spell off the document.
 
 ## Opening a session
 
@@ -52,7 +62,9 @@ and a Revert for every Apply.
   card. It is shown to the GM and to the caster's owner.
 - **Who opens it.** The GM's click opens the session directly. The caster's
   owner sends `{castId, targets}` over the socket to the active GM, who checks
-  the **attested** sender: it must be a GM or own the caster.
+  the **attested** sender: it must be a GM or own the caster. The caster is the
+  **spell's** actor (PF2e resolves a card's item from its origin flag, not its
+  speaker), and the speaker must be that same actor.
 - **Who is in it.**
   - **The area comes first:** the cast's own Regions (`flags.pf2e.messageId`)
     run through `pf2e-aoe`'s `pf2eCoverage()`, imported directly.
@@ -67,7 +79,10 @@ and a Revert for every Apply.
   - **The GM can edit the list:** add their targets, or remove any row that
     has not been applied.
 - **Catch-up.** A save or damage roll already in chat for the cast (from
-  PF2e's own buttons) is filed against the new session.
+  PF2e's own buttons) is filed against the session when it opens, whenever its
+  panel is opened, and when a conductor starts (`reconcile`): saves made while
+  no conductor was connected were never seen. A filed save is never replaced
+  by an older one.
 
 ## Rolling
 
@@ -90,23 +105,34 @@ and a Revert for every Apply.
 - **The GM** has "Roll all NPCs", which skips the dialog and uses the GM's
   current message mode.
 - **A hero-point reroll** deletes the old card and creates a new one. The
-  deletion unfiles the row and the new card refiles it.
+  deletion unfiles the row and the new card refiles it. On an applied row the
+  undo record stands on its own; the replacement is filed into it, so after a
+  Revert the row is ready to apply at its new degree.
 
 ## Damage and Apply
 
 - **Rolled once, from the spell.** "Roll damage" calls
   `spell.rollDamage(click)`. Any damage roll from that spell is filed against
   the session, until something has been applied. After that, a new roll never
-  replaces the one the applied rows used.
+  replaces the one the applied rows used. A damage message is filed only when
+  it is a real `DamageRoll` and its author is the GM or owns the caster: a
+  flag is anybody's to write.
 - **Apply mirrors PF2e's `applyDamageFromMessage`:**
   - `DamageRoll#alter(mult, 0)` for the multiplier, as PF2e's half and double
     buttons use it;
   - origin and target roll options;
-  - the contextual clone;
+  - the caster's `damage-received` target effects (PF2e's module-private
+    `extractEphemeralEffects`, restated) passed to the contextual clone;
   - `applyDamage({skipIWR: false, …})`.
 
   It is deliberately not `pf2e-variant-rules`' `applyFlatDamage`, which skips
-  IWR.
+  IWR. The damage-taken card is the one that call created, found by identity
+  (new since the call), never by time.
+- **One operation at a time, on the conductor.** Apply and Revert run on the
+  active GM's client inside `serially()`: the fresh read, every write to the
+  creature and the undo record together. Another GM's click is sent there over
+  the socket (honoured only from a GM who sees the truth). Two overlapping
+  clicks otherwise both see an unapplied row and both apply it.
 - **Multipliers.**
   - A basic save is ×2 / ×1 / ×½ / ×0.
   - A non-basic save defaults to ×1 / ×1 / ×0 / ×0.
@@ -152,16 +178,17 @@ and a Revert for every Apply.
 
 ## Still to prove in a live session
 
-- `DamageRoll#alter` on a real spell roll, and the damage-taken card being
-  found by actor uuid right after `applyDamage`;
 - that `flags.pf2e.origin.uuid` on a save rolled from PF2e's own spell-card
   button is the cast-rank spell's uuid, and that `modifierName` is the save
   slug;
 - `getOccupiedGridSpaceOffsets` matching `pf2eCoverage` offsets on a real
   scene, including Large creatures and emanations;
-- `spell.rollDamage(new MouseEvent("click"))` from the panel;
-- the session card re-rendering through `ui.chat.updateMessage` when a save
-  lands.
+- a player's view of a live session (only the GM's was driven).
+
+Proven live: `DamageRoll#alter` and the damage-taken card by identity;
+`spell.rollDamage(new MouseEvent("click"))` opens PF2e's own damage dialog
+(as PF2e's own button does) and files the roll; the session card renders
+through the render hook and re-renders when a save lands.
 
 ## Check and preview
 

@@ -235,6 +235,24 @@ export function normalizeSession(raw) {
     combatId: id(raw.combatId),
     at: num(raw.at),
     closed: raw.closed === true,
+    private: raw.private === true,
+  };
+}
+
+/**
+ * A row as it stands NOW for a viewer who is not the truth. The stored row was
+ * masked when the session opened; a token hidden, or its name concealed, since
+ * then must not keep showing what it showed. `live` is null when the token is
+ * gone (the stored row stands), else `{hidden, named, name, img}`.
+ */
+export function maskRow(row, live) {
+  if (!row || !live) return row;
+  const named = live.named === true;
+  return {
+    ...row,
+    hidden: live.hidden === true,
+    name: named ? str(live.name, 80) || row.name : "",
+    img: named ? str(live.img, 400) || row.img : "",
   };
 }
 

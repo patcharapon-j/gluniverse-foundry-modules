@@ -21,9 +21,9 @@ import { escapeHTML } from "../../core/util.mjs";
 import { pf2eCoverage } from "../pf2e-aoe/data.mjs";
 import { landingOf, naturalOf } from "../pf2e-odds/landing.mjs";
 import { seesTruth } from "../pf2e-odds/view.mjs";
-import { DEGREES, FEATURE_ID, FLAG, MAX_ROWS, MSG, SAVES, SCAN_MESSAGES, SETTINGS, SPELL_FLAG } from "./constants.mjs";
+import { DEGREES, FEATURE_ID, FLAG, MAX_ROWS, MSG, MULTS, SAVES, SCAN_MESSAGES, SETTINGS, SPELL_FLAG } from "./constants.mjs";
 import {
-  identFor, mayRoll, mayWrite, membersOf, multiplierFor, newestFirst, normalizeConfig, normalizeSession,
+  identFor, maskRow, mayRoll, mayWrite, membersOf, multiplierFor, newestFirst, normalizeConfig, normalizeSession,
   parseDegreeEffects, planCondition, planRevert, previewDamage, rowForSave, rowView, takesDamage, undoLive,
 } from "./model.mjs";
 import { sessionHTML } from "./render.mjs";
@@ -67,9 +67,19 @@ async function spellOf(s) {
   return cast?.item ?? (s.spellUuid ? await fromUuid(s.spellUuid) : null);
 }
 
+/** The spell's own actor. PF2e resolves a card's item from its origin flag, not its speaker, so the two can disagree. */
 function casterOf(s) {
   const cast = s.castId ? game.messages.get(s.castId) : null;
-  return cast?.actor ?? (s.casterUuid ? fromUuidSync(s.casterUuid) : null);
+  return cast?.item?.actor ?? cast?.actor ?? (s.casterUuid ? fromUuidSync(s.casterUuid) : null);
+}
+
+/** Who a row's creature is right now, for a viewer who is not the truth (null: the token is gone). */
+function liveOf(row) {
+  const tok = tokenOf(row);
+  if (!tok) return null;
+  const actor = tok.actor;
+  const named = !!actor?.hasPlayerOwner || (!tok.hidden && tok.playersCanSeeName !== false);
+  return { hidden: !!tok.hidden, named, name: tok.name, img: tok.texture?.src ?? actor?.img ?? "" };
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -79,13 +89,14 @@ function casterOf(s) {
 /**
  * The result a viewer may read off a save's message, or null (not rolled, or
  * sealed for them). The truth reads it straight; a player who rolled it reads
- * their own card; everyone else goes through PF2e's gate.
+ * their own card unless it was blind (Foundry hides a blind roll from its own
+ * author); everyone else goes through PF2e's gate.
  */
 function resultFor(rollId, user = game.user) {
   const m = rollId ? game.messages.get(rollId) : null;
   const roll = m?.rolls?.[0];
   if (!m || !roll) return null;
-  if (seesTruth(user) || (m.isAuthor && !user.isGM)) {
+  if (seesTruth(user) || (!user.isGM && m.author?.id === user.id && !m.blind)) {
     const d = DEGREES.indexOf(m.flags?.pf2e?.context?.outcome ?? "");
     return { degree: d >= 0 ? d : null, face: naturalOf(roll), total: roll.total };
   }
@@ -159,7 +170,8 @@ export async function buildView(message, { compact = false, overrides = new Map(
       live.preview = damageMsg ? previewFor(actor, damageMsg, live.mult) : null;
       live.effects = s.config.effects[DEGREES[result.degree]] ?? [];
     }
-    const view = rowView(row, {
+    // Visibility is re-read live: a token hidden, or its name concealed, after the session opened.
+    const view = rowView(truth ? row : maskRow(row, liveOf(row)), {
       truth, isGM: gm, live,
       canRoll: (gm || !user.isGM) && mayRoll(user, row, { owns }),
       undo: undoLive(row.applied, { now, combatAlive }),
@@ -176,15 +188,18 @@ export async function buildView(message, { compact = false, overrides = new Map(
     dcShown ? T("GLSV.head.dc", { dc: s.dc }) : null,
   ].filter(Boolean).join(" · ");
   const roll = damageMsg?.rolls?.[0];
+  // A private cast's card is a sanitized public projection: no spell, no caster.
+  const title = truth ? spell?.name || s.spellName : s.private ? T("GLSV.head.private") : s.spellName || spell?.name;
   return {
-    title: s.spellName || spell?.name || "",
-    img: s.spellImg,
+    title: title || "",
+    img: truth ? s.spellImg || spell?.img || "" : s.spellImg,
     saveLine,
     isGM: gm,
     canOpen: gm || (!user.isGM && !!caster?.isOwner),
     compact,
     rows,
-    blocked: s.blocked.filter((b) => truth || !b.hidden).map((b) => ({ id: b.id, name: (truth ? tokenOf(b)?.name : null) || b.name, img: (truth ? tokenOf(b)?.texture?.src : null) || b.img })),
+    blocked: s.blocked.map((b) => (truth ? b : maskRow(b, liveOf(b)))).filter((b) => truth || !b.hidden)
+      .map((b) => ({ id: b.id, name: (truth ? tokenOf(b)?.name : null) || b.name, img: (truth ? tokenOf(b)?.texture?.src : null) || b.img })),
     config: gm ? s.config : null,
     configOpen,
     damage: gm && roll ? { total: String(roll.total), types: [...new Set((roll.instances ?? []).map((i) => i.typeLabel ?? i.type))].join(", "), formula: roll.formula ?? "" } : null,
@@ -211,6 +226,27 @@ function mutate(messageId, fn) {
     if (next) await message.update({ [`flags.${SUITE_ID}.${FLAG}`]: next });
   }).catch((e) => err("pf2e-saves: session write failed", e));
   return queue;
+}
+
+let ops = Promise.resolve();
+
+/**
+ * Apply and Revert, one whole operation at a time on the conductor: the fresh
+ * read, every write to the creature and the undo record. Two overlapping clicks
+ * (or two GMs) otherwise both see an unapplied row and both apply it.
+ */
+function serially(fn) {
+  ops = ops.then(fn).catch((e) => err("pf2e-saves: apply/revert failed", e));
+  return ops;
+}
+
+/** Run on the conductor: here if this client is it, else over the socket to it. */
+function viaConductor(type, payload, run) {
+  if (isConductor()) return run();
+  const gm = game.users.activeGM;
+  if (!gm) { ui.notifications?.warn(T("GLSV.warn.noGM")); return null; }
+  emitSocket(FEATURE_ID, { type, ...payload }, { recipients: [gm.id] });
+  return null;
 }
 
 /** One row, as everybody may read it: a creature players cannot name is stored without its name or art. */
@@ -287,7 +323,7 @@ async function openSession(castMsg, { targetIds = [] } = {}) {
     ui.notifications?.warn(T("GLSV.warn.noSave"));
     return null;
   }
-  const caster = castMsg.actor;
+  const caster = spell.actor ?? castMsg.actor;
   const dc = dcFromCard(castMsg) ?? spell.spellcasting?.statistic?.withRollOptions?.({ item: spell })?.dc?.value ?? null;
   const basic = !!save.basic;
   const { inside, blocked } = membersFor(castMsg, targetIds);
@@ -297,19 +333,38 @@ async function openSession(castMsg, { targetIds = [] } = {}) {
   const base = spell.original ?? spell;
   const remembered = base.getFlag?.(SUITE_ID, SPELL_FLAG);
   const config = normalizeConfig(remembered ?? { effects: parseDegreeEffects(base._source?.system?.description?.value ?? spell.description ?? "", degreeLabels()) }, basic);
+  // A private cast (whispered or blind) still needs a card the players can roll
+  // from, so the card is a sanitized projection: it names no spell, carries no
+  // art, and speaks as the GM rather than as the (possibly hidden) caster.
+  const priv = (castMsg.whisper?.length ?? 0) > 0 || !!castMsg.blind;
   const state = {
     v: 1, id: foundry.utils.randomID(), castId: castMsg.id, spellUuid: spell.uuid, casterUuid: caster?.uuid ?? "",
-    spellName: spell.name, spellImg: spell.img, save: save.statistic, dc, basic,
+    spellName: priv ? "" : spell.name, spellImg: priv ? "" : spell.img, save: save.statistic, dc, basic,
     rank: Number(castMsg.flags?.pf2e?.casting?.castRank ?? spell.rank) || null,
     rows, blocked: cut, damageId: null, config, combatId: game.combat?.id ?? null, at: Date.now(), closed: false,
+    private: priv,
   };
-  const data = { speaker: castMsg.speaker, content: `<div class="glsv-card-host"></div>` };
+  const ChatMessage = getDocumentClass("ChatMessage");
+  const data = { speaker: priv ? ChatMessage.getSpeaker({ user: game.user }) : castMsg.speaker, content: `<div class="glsv-card-host"></div>` };
   foundry.utils.setProperty(data, `flags.${SUITE_ID}.${FLAG}`, state);
-  const message = await getDocumentClass("ChatMessage").create(data);
-  // Anything already rolled against this cast (a save from PF2e's own button,
-  // the damage) is filed now, in the order it landed.
-  for (const m of game.messages.contents) if (m.timestamp >= castMsg.timestamp && m.id !== message.id) await observe(m);
+  const message = await ChatMessage.create(data);
+  await reconcile(message);
   return message;
+}
+
+/**
+ * File anything already in chat for a session's cast (a save from PF2e's own
+ * button, the damage), in the order it landed. Run when a session opens, when
+ * its panel is opened, and when a conductor starts: saves made while no
+ * conductor was connected were never seen.
+ */
+async function reconcile(sessionMsg) {
+  if (!isConductor()) return;
+  const s = readSession(sessionMsg);
+  if (!s) return;
+  const cast = s.castId ? game.messages.get(s.castId) : null;
+  const since = cast?.timestamp ?? s.at;
+  for (const m of game.messages.contents) if (m.timestamp >= since && m.id !== sessionMsg.id) await observe(m);
 }
 
 /** A save or a damage roll landed: file it against the newest open session it belongs to. */
@@ -320,8 +375,14 @@ async function observe(message) {
   const originUuid = message.flags?.pf2e?.origin?.uuid ?? null;
   const sessions = openSessions();
   if (ctx.type === "damage-roll") {
+    const DamageRoll = CONFIG.Dice?.rolls?.find((R) => R.name === "DamageRoll");
+    if (!DamageRoll || !(message.rolls?.[0] instanceof DamageRoll)) return;
     const s = sessions.find((x) => takesDamage(x, { type: ctx.type, originUuid }));
-    if (s && s.damageId !== message.id) await mutate(s._msg.id, (st) => (takesDamage(st, { type: ctx.type, originUuid }) ? { ...st, damageId: message.id } : null));
+    if (!s || s.damageId === message.id) return;
+    // A flag is anybody's to write: only the GM or the caster's own owner rolls the spell's damage.
+    const author = message.author;
+    if (!author?.isGM && !casterOf(s)?.testUserPermission?.(author, "OWNER")) return;
+    await mutate(s._msg.id, (st) => (takesDamage(st, { type: ctx.type, originUuid }) ? { ...st, damageId: message.id } : null));
     return;
   }
   const save = {
@@ -332,13 +393,18 @@ async function observe(message) {
   for (const s of sessions) {
     const row = rowForSave(s, save, actorIdOf);
     if (!row) continue;
-    if (row.applied || row.rollId === message.id) return;
+    if (row.rollId === message.id) return;
+    // A filed save is never replaced by an older one; an applied row keeps its
+    // save until that card is gone (a reroll's replacement is filed then, so a
+    // Revert leaves the row ready to apply again).
+    const current = row.rollId ? game.messages.get(row.rollId) : null;
+    if (current && (row.applied || current.timestamp > message.timestamp)) return;
     // A player may only file a save for a creature they own.
     const author = message.author;
     if (!author?.isGM && !owns(author, row)) return;
     await mutate(s._msg.id, (st) => {
       const r = st.rows.find((x) => x.id === row.id);
-      if (!r || r.applied) return null;
+      if (!r || (r.applied && r.rollId && game.messages.has(r.rollId))) return null;
       r.rollId = message.id;
       return st;
     });
@@ -350,17 +416,42 @@ async function observe(message) {
 async function forgetMessage(message) {
   if (!isConductor()) return;
   for (const s of openSessions()) {
-    const hit = s.damageId === message.id || s.rows.some((r) => r.rollId === message.id && !r.applied);
+    const hit = s.damageId === message.id || s.rows.some((r) => r.rollId === message.id);
     if (!hit) continue;
     await mutate(s._msg.id, (st) => {
       if (st.damageId === message.id) st.damageId = null;
-      for (const r of st.rows) if (r.rollId === message.id && !r.applied) r.rollId = null;
+      // Applied rows too: the undo record stands on its own, and a dangling id would block the row forever.
+      for (const r of st.rows) if (r.rollId === message.id) r.rollId = null;
       return st;
     });
   }
 }
 
 /* ── apply and revert ──────────────────────────────────────────────── */
+
+/**
+ * The caster's ephemeral effects on its target for `damage-received` — PF2e's
+ * `extractEphemeralEffects`, which is module-private, restated. A conditional
+ * weakness or resistance the caster grants against its own damage lives here.
+ */
+async function targetEffects(origin, target, item, options) {
+  if (!origin || !target) return [];
+  const domains = ["damage-received"];
+  const test = [...options, origin.getRollOptions(domains), target.getSelfRollOptions("target")].flat();
+  const resolvables = item ? (item.isOfType?.("spell") ? { spell: item } : { weapon: item }) : {};
+  const fns = domains.flatMap((d) => origin.synthetics?.ephemeralEffects?.[d]?.target ?? []);
+  const made = (await Promise.all(fns.map((fn) => fn({ test, resolvables })))).filter(Boolean);
+  for (const e of made) {
+    if (e.type !== "effect") continue;
+    e.system.context = {
+      origin: { actor: origin.uuid, token: null, item: null, spellcasting: null, rollOptions: [] },
+      target: { actor: target.uuid, token: null },
+      roll: null,
+    };
+    e.system.duration = { value: -1, unit: "unlimited", expiry: null, sustained: false };
+  }
+  return made;
+}
 
 /** PF2e's own damage path (applyDamageFromMessage), for one creature at one multiplier. */
 async function applyDamageTo(actor, tokenDoc, damageMsg, mult) {
@@ -370,13 +461,19 @@ async function applyDamageTo(actor, tokenDoc, damageMsg, mult) {
   const opts = [...(damageMsg.flags?.pf2e?.context?.options ?? [])];
   const originOpts = opts.filter((o) => o.startsWith("self:")).map((o) => o.replace(/^self\b/, "origin"));
   const origin = damageMsg.actor;
+  const item = damageMsg.item;
+  const itemOpts = item?.isOfType?.("affliction", "condition", "effect") ? item.getRollOptions("item") : [];
   if (actor.alliance && origin) opts.push(`origin:${actor.alliance === origin.alliance ? "ally" : "enemy"}`);
   if (!opts.some((o) => o.startsWith("target"))) opts.push(...actor.getSelfRollOptions("target"));
-  const clone = actor.getContextualClone?.(originOpts, []) ?? actor;
-  const rollOptions = new Set([...opts.filter((o) => !/^(?:self|target)(?::|$)/.test(o)), ...originOpts, ...clone.getSelfRollOptions()]);
-  const since = Date.now();
-  await clone.applyDamage({ damage, token: tokenDoc, item: damageMsg.item, skipIWR: false, rollOptions, shieldBlockRequest: false, outcome: damageMsg.flags?.pf2e?.context?.outcome ?? null });
-  const taken = game.messages.contents.findLast((m) => m.isAuthor && m.timestamp >= since - 1000 && m.flags?.pf2e?.appliedDamage?.uuid === actor.uuid);
+  const ephemeral = await targetEffects(origin, actor, item, opts);
+  const clone = actor.getContextualClone?.(originOpts, ephemeral) ?? actor;
+  const rollOptions = new Set([...opts.filter((o) => !/^(?:self|target)(?::|$)/.test(o)), ...itemOpts, ...originOpts, ...clone.getSelfRollOptions()]);
+  // The damage-taken card is the one this call creates — by identity, never by
+  // time: an application that changes nothing posts none, and an earlier card
+  // against the same creature must not be mistaken for it.
+  const before = new Set(game.messages.keys());
+  await clone.applyDamage({ damage, token: tokenDoc, item, skipIWR: false, rollOptions, shieldBlockRequest: false, outcome: damageMsg.flags?.pf2e?.context?.outcome ?? null });
+  const taken = game.messages.contents.findLast((m) => !before.has(m.id) && m.flags?.pf2e?.appliedDamage?.uuid === actor.uuid);
   return taken?.id ?? null;
 }
 
@@ -410,16 +507,31 @@ async function applyEffect(actor, effect, record, ctx) {
   if (made?.id) record.created.push(made.id);
 }
 
+/** A GM's Apply: run on the conductor, whose single queue makes it one operation. */
+function requestApply(messageId, rowIds, overrides = new Map()) {
+  if (!mayWrite(game.user) || !gmView()) return null;
+  const ids = rowIds.filter((x) => typeof x === "string");
+  return viaConductor(MSG.apply, { messageId, rowIds: ids, overrides: [...overrides] }, () => serially(() => applyRows(messageId, ids, overrides)));
+}
+
+function requestRevert(messageId, rowIds) {
+  if (!mayWrite(game.user) || !gmView()) return null;
+  const ids = rowIds.filter((x) => typeof x === "string");
+  return viaConductor(MSG.revert, { messageId, rowIds: ids }, () => serially(() => revertRows(messageId, ids)));
+}
+
+/** Conductor only, inside `serially`: each row is re-read fresh before anything touches its creature. */
 async function applyRows(messageId, rowIds, overrides = new Map()) {
-  if (!mayWrite(game.user) || !gmView()) return;
+  if (!isConductor()) return;
   const message = game.messages.get(messageId);
-  const s = readSession(message);
+  let s = readSession(message);
   if (!s) return;
   const damageMsg = s.damageId ? game.messages.get(s.damageId) : null;
   const spell = await spellOf(s);
   const caster = casterOf(s);
   for (const rid of rowIds) {
-    const row = s.rows.find((r) => r.id === rid);
+    s = readSession(message);
+    const row = s?.rows.find((r) => r.id === rid);
     if (!row || !row.rollId || row.applied) continue;
     const degree = degreeOf(row.rollId);
     const tokenDoc = tokenOf(row);
@@ -445,14 +557,14 @@ async function applyRows(messageId, rowIds, overrides = new Map()) {
 }
 
 async function revertRows(messageId, rowIds) {
-  if (!mayWrite(game.user) || !gmView()) return;
-  const s = readSession(game.messages.get(messageId));
-  if (!s) return;
+  if (!isConductor()) return;
+  const message = game.messages.get(messageId);
+  if (!readSession(message)) return;
   const now = Date.now();
   const combatAlive = (cid) => !!game.combats?.get(cid);
   let expired = 0;
   for (const rid of rowIds) {
-    const row = s.rows.find((r) => r.id === rid);
+    const row = readSession(message)?.rows.find((r) => r.id === rid);
     const rec = row?.applied;
     if (!rec) continue;
     if (!undoLive(rec, { now, combatAlive })) { expired += 1; continue; }
@@ -597,11 +709,12 @@ async function pickCondition() {
     rejectClose: false,
   });
   if (!picked?.slug) return null;
-  const cond = game.pf2e?.ConditionManager?.getCondition(picked.slug);
-  if (!cond) return null;
+  // The canonical document, not getCondition()'s clone: a clone has no _id, so its uuid ends in "null".
+  const cond = game.pf2e?.ConditionManager?.conditions?.get(picked.slug);
+  if (!cond?.uuid?.startsWith("Compendium.")) return null;
   const valued = typeof cond.system?.value?.value === "number";
   const value = valued ? picked.value ?? 1 : null;
-  return { uuid: `Compendium.pf2e.conditionitems.Item.${cond.id}`, label: value ? `${cond.name} ${value}` : cond.name, value };
+  return { uuid: cond.uuid, label: value ? `${cond.name} ${value}` : cond.name, value };
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -620,6 +733,8 @@ function requestOpen(castMsg) {
 }
 
 export function openPanel(messageId) {
+  // Opening a session is also when the conductor catches it up on anything it missed.
+  if (isConductor()) reconcile(game.messages.get(messageId)).catch((e) => err("pf2e-saves: catch-up failed", e));
   const Panel = SavesPanel();
   const id = `glsv-panel-${messageId}`;
   const open = foundry.applications.instances.get(id);
@@ -630,15 +745,15 @@ export function openPanel(messageId) {
 /** Every action either host can fire. The panel adds its own overrides. */
 export const actions = {
   roll: (mid, rid) => rollRow(mid, rid),
-  apply: (mid, rid, o) => applyRows(mid, [rid], o),
-  applyAll: async (mid, _r, o) => {
+  apply: (mid, rid, o) => requestApply(mid, [rid], o),
+  applyAll: (mid, _r, o) => {
     const s = readSession(game.messages.get(mid));
-    await applyRows(mid, (s?.rows ?? []).filter((r) => r.rollId && !r.applied).map((r) => r.id), o);
+    return requestApply(mid, (s?.rows ?? []).filter((r) => r.rollId && !r.applied).map((r) => r.id), o);
   },
-  revert: (mid, rid) => revertRows(mid, [rid]),
-  revertAll: async (mid) => {
+  revert: (mid, rid) => requestRevert(mid, [rid]),
+  revertAll: (mid) => {
     const s = readSession(game.messages.get(mid));
-    await revertRows(mid, (s?.rows ?? []).filter((r) => r.applied).map((r) => r.id));
+    return requestRevert(mid, (s?.rows ?? []).filter((r) => r.applied).map((r) => r.id));
   },
   remove: (mid, rid) => removeRow(mid, rid),
   unblock: (mid, rid) => unblock(mid, rid),
@@ -678,8 +793,12 @@ export const changes = {
 async function renderCard(message, root) {
   const host = root.querySelector(".glsv-card-host");
   if (!host) return;
+  // Foundry fires the render hook on a DETACHED element and inserts it after,
+  // so this renders into the host as it is; only a newer render of the same host wins.
+  const gen = (host._glsvGen ?? 0) + 1;
+  host._glsvGen = gen;
   const view = await buildView(message, { compact: true });
-  if (!view || !host.isConnected) return;
+  if (!view || host._glsvGen !== gen) return;
   host.innerHTML = sessionHTML(view, { t: T });
   host.classList.add("gl-type");
   if (host._glsvWired) return;
@@ -701,7 +820,7 @@ function decorateCast(message, root) {
   const btn = root.querySelector('button[data-action="spell-save"]');
   if (!btn || root.querySelector(".glsv-open-btn")) return;
   const user = game.user;
-  if (!(gmView(user) || (!user.isGM && message.actor?.isOwner))) return;
+  if (!(gmView(user) || (!user.isGM && (message.item?.actor ?? message.actor)?.isOwner))) return;
   const open = document.createElement("button");
   open.type = "button";
   open.className = "glsv-open-btn";
@@ -721,6 +840,15 @@ function onRenderMessage(message, html) {
     if (readSession(message)) renderCard(message, root).catch((e) => warn("pf2e-saves: card render failed", e));
     else if (message.flags?.pf2e?.casting || message.flags?.pf2e?.context?.type === "spell-cast") decorateCast(message, root);
   } catch { /* never break the chat log */ }
+}
+
+/** Re-render the cards and panels of every session that has this token in it. */
+function rerenderForToken(tokenDoc) {
+  for (const s of openSessions()) {
+    if (![...s.rows, ...s.blocked].some((r) => r.tokenUuid === tokenDoc.uuid)) continue;
+    ui.chat?.updateMessage?.(s._msg);
+    foundry.applications.instances.get(`glsv-panel-${s._msg.id}`)?.render();
+  }
 }
 
 /** Re-render the cards and panels that read a message that just changed. */
@@ -754,15 +882,39 @@ export function onInit() {
 
 export function onReady() {
   onSocket(FEATURE_ID, async (payload, _claimed, meta) => {
-    if (!isConductor() || payload?.type !== MSG.open || !meta?.attested) return;
+    if (!isConductor() || !meta?.attested) return;
     const user = game.users.get(meta.attested);
+    if (!user) return;
+    const ids = (list) => (Array.isArray(list) ? list : []).filter((id) => typeof id === "string").slice(0, MAX_ROWS);
+    if (payload?.type === MSG.apply || payload?.type === MSG.revert) {
+      // Apply and Revert are the truth's: a GM who is not the stream login.
+      if (!user.isGM || !seesTruth(user)) return;
+      const messageId = String(payload.messageId ?? "");
+      if (!readSession(game.messages.get(messageId))) return;
+      if (payload.type === MSG.revert) return serially(() => revertRows(messageId, ids(payload.rowIds)));
+      const overrides = new Map((Array.isArray(payload.overrides) ? payload.overrides : [])
+        .filter((p) => Array.isArray(p) && typeof p[0] === "string" && MULTS.includes(p[1])));
+      return serially(() => applyRows(messageId, ids(payload.rowIds), overrides));
+    }
+    if (payload?.type !== MSG.open) return;
     const castMsg = game.messages.get(String(payload.castId ?? ""));
-    if (!user || !castMsg) return;
-    // Only the GM or the caster's owner may open a session for a cast.
-    if (!user.isGM && !castMsg.actor?.testUserPermission?.(user, "OWNER")) return;
-    const targets = (Array.isArray(payload.targets) ? payload.targets : []).filter((id) => typeof id === "string").slice(0, MAX_ROWS);
-    await openSession(castMsg, { targetIds: targets });
+    if (!castMsg) return;
+    // Only the GM or the caster's owner may open a session for a cast. The
+    // caster is the SPELL's actor — PF2e resolves the card's item from its
+    // origin flag, not its speaker — and the two must agree.
+    if (!user.isGM) {
+      const owner = castMsg.item?.actor;
+      if (!owner?.testUserPermission?.(user, "OWNER")) return;
+      if (castMsg.actor && castMsg.actor.uuid !== owner.uuid) return;
+    }
+    await openSession(castMsg, { targetIds: ids(payload.targets) });
   });
+
+  // Saves made while no conductor was connected were never filed.
+  if (isConductor()) {
+    (async () => { for (const s of openSessions()) await reconcile(s._msg); })()
+      .catch((e) => err("pf2e-saves: catch-up failed", e));
+  }
 
   Hooks.on("createChatMessage", (message) => {
     const s = readSession(message);
@@ -776,6 +928,11 @@ export function onReady() {
     rerenderSessions(message);
   });
   Hooks.on("updateChatMessage", (message) => rerenderSessions(message));
+  // A token hidden, or its name concealed, after its session opened.
+  Hooks.on("updateToken", (tokenDoc, changes) => {
+    if (!("hidden" in changes) && !("name" in changes) && !("displayName" in changes) && !changes.texture && !changes.flags) return;
+    rerenderForToken(tokenDoc);
+  });
   Hooks.on("deleteChatMessage", (message) => {
     forgetMessage(message).catch((e) => err("pf2e-saves: could not unfile a roll", e));
     foundry.applications.instances.get(`glsv-panel-${message.id}`)?.close();
