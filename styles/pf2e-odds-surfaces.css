@@ -1,0 +1,89 @@
+/* ============================================================
+   PF2e Odds — layout glue for the three host surfaces.
+
+   Placement only: where the readout sits inside PF2e's sheet
+   rows, the roll dialog and a chat card's save button. The
+   readout itself (.glod-inline, .glod-badge, pips, chips) is
+   styled in pf2e-odds.css and is not restyled here.
+   ============================================================ */
+
+/* ---- the sheet ---------------------------------------------- */
+
+/* One slot per host; it never takes the button's own type. */
+.glod-sheet-slot {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: var(--gl-sp-2);
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+.glod-sheet-slot:empty { display: none; }
+
+/* Strike MAP buttons: the readout rides at the end of the label. */
+[data-strike] button[data-action="strike-attack"] > .glod-sheet-slot {
+  margin-inline-start: var(--gl-sp-2);
+}
+
+/* Spell rows: the defence cell grows a second line rather than widening the grid column. */
+li.spell .defense > .glod-sheet-slot {
+  display: flex;
+  margin: var(--gl-sp-1) 0 0;
+}
+
+/* Skill actions: beside the Use button. */
+li.action .button-group > .glod-sheet-slot {
+  align-self: center;
+}
+
+/* ---- the roll dialog ---------------------------------------- */
+
+.glod-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  margin: 0 0 var(--gl-sp-4);
+  padding-bottom: var(--gl-sp-4);
+  border-bottom: 1px solid var(--gl-hair);
+}
+
+.glod-dialog > .glod-badge { width: 100%; }
+
+.glod-dialog-others {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+}
+
+.glod-dialog-others-head {
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-tight);
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+
+.glod-dialog-row > .glod-badge { width: 100%; }
+
+/* ---- the save prompt ---------------------------------------- */
+
+.glod-save-odds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-2) var(--gl-sp-4);
+  margin: var(--gl-sp-1) 0 var(--gl-sp-2);
+}
+
+.glod-save-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+}
+
+.glod-save-who {
+  font-size: var(--gl-fs-2xs);
+  line-height: 1;
+  color: var(--gl-text-dim);
+}
