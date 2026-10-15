@@ -12,8 +12,8 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { FEATURE_ID, KNOWLEDGE_HOOK, PREFIX } from "./constants.mjs";
-import { registerSettings } from "./settings.mjs";
+import { FEATURE_ID, KNOWLEDGE_HOOK, PREFIX, SETTINGS } from "./constants.mjs";
+import { get, registerSettings } from "./settings.mjs";
 import { installProbe, invalidate } from "./probe.mjs";
 import { onChatMessage, onForgetIntent } from "./observe.mjs";
 import { clearKnowledgeCache } from "./knowledge.mjs";
@@ -26,6 +26,8 @@ import { ObservationsMenu } from "./observations-app.mjs";
 import { wireDexHint } from "./dex-hint.mjs";
 import { wireLanding } from "./dice-highlight.mjs";
 import { motionScale } from "../../core/theme.mjs";
+import { saveButtonModel } from "./view.mjs";
+import { inlineHTML } from "./render.mjs";
 
 let badges = null;
 
@@ -105,5 +107,15 @@ Suite.register({
       return badges;
     },
     openObservations: () => new (ObservationsMenu())().render(true),
+    /**
+     * The inline odds for one creature's save, as the current user may see
+     * them ("" when there is nothing to show). Save Resolution draws it on
+     * each unrolled row; one model, so a row and a spell card's save button
+     * never disagree.
+     */
+    saveOdds: async ({ saver, save, dc, origin = null, item = null }) => {
+      if (!Suite.enabled(FEATURE_ID) || !get(SETTINGS.savePrompt, true)) return "";
+      return inlineHTML(await saveButtonModel({ saver, save, dc, origin, item })) ?? "";
+    },
   },
 });

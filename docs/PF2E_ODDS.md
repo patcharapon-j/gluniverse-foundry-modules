@@ -1,12 +1,12 @@
 # PF2e Odds and Save Resolution — design
 
-Status: **PRs 1 and 2 built, not yet run in a live session.** The engine,
+Status: **PRs 1–3 built, not yet run in a live session.** The engine,
 every Odds surface (line badge, sheet, roll dialog, save prompt), the
 observation ledger, the Observations window, the Creaturedex hint and the Dice
-So Nice highlight exist and pass `tools/pf2e-odds-check.mjs`. Not built: Save
-Resolution (PR 3) and the HUD (its own grilling). This file records the
-decisions from the grilling session (Q1–Q36); the save half moves to
-`docs/SAVE_RESOLUTION.md` when it is built.
+So Nice highlight exist and pass `tools/pf2e-odds-check.mjs`. Save Resolution
+is built and documented in `docs/SAVE_RESOLUTION.md`. Not built: the HUD (its
+own grilling). This file records the decisions from the grilling session
+(Q1–Q36).
 
 ### Still to prove in a live session
 
@@ -214,47 +214,9 @@ against that DC, gated on whether they've learned it.
 
 ## Save Resolution (`pf2e-saves`)
 
-- **Scope:** one flow for every save spell. Targets come from the area's
-  contents or from the caster's current targets. The GM can add or remove rows
-  before anyone rolls.
-- **Who is in the area:** built from `pf2e-aoe`'s `pf2eCoverage()`, by
-  intersecting token cells with the covered cells.
-  - Creatures in cells cut off from the origin (no line of effect) are left out
-    of the list but shown greyed under "Blocked", with one-click add.
-  - `pf2eCoverage` is not on that feature's api today, so it is imported
-    directly.
-- **The panel:**
-  - Opens for the GM and the caster's owner.
-  - Each row: the creature, its odds (gated), its roll state and its degree.
-  - Players roll their own PCs from the panel or from a chat prompt; the GM gets
-    "Roll all NPCs".
-  - Each roll goes through Spotlight's `rollSlot` (headless, PF2e's own degree)
-    without the Spotlight staging, which is capped at 6 rollers.
-  - It follows Combat Intro's split: the GM is the only writer, and results are
-    sealed per user over the socket.
-- **Visibility:** PC rows are visible to everyone. NPC rows show their degree
-  only when PF2e would show results, never a total or a modifier.
-- **Damage:**
-  - Rolled **once** for all targets.
-  - Applied per row through PF2e's `applyDamage` with a DamageRoll, so
-    immunities, weaknesses and resistances apply. A basic save scales it ×0 /
-    ×½ / ×1 / ×2 by degree.
-  - This is deliberately not `pf2e-variant-rules`' `applyFlatDamage`, which
-    exists to skip IWR.
-  - Each row previews its net HP change ("takes 14, resist fire 5") before
-    Apply.
-- **Effects by degree:**
-  - Pre-filled by parsing the condition links in the spell's degree lines.
-  - The GM confirms, and the answer is remembered as a flag on the spell, so the
-    next cast is one click.
-- **Apply and undo:**
-  - Only the GM can Apply.
-  - Every Apply writes an undo record: HP before, effects and conditions added,
-    stacks changed.
-  - Per-row and all-rows Revert, in the panel and on its chat card. It stays live
-    until the encounter ends, or for 10 minutes outside combat.
-- **Spotlight:** not used for v1. A button to promote one PC's save into
-  Spotlight may come later.
+Built; see `docs/SAVE_RESOLUTION.md`, which also records where it departs from
+the design agreed here (saves roll through PF2e's own `check.roll` rather than
+Spotlight's `rollSlot`, and the session carries message ids, never results).
 
 ## Checks and previews (to build with each PR)
 
