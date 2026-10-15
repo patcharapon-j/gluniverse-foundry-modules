@@ -260,7 +260,10 @@ export class LineBadges {
       const cx = Math.min(Math.max(8, x), innerWidth - box.width - 8);
       const cy = Math.min(Math.max(8, y), innerHeight - box.height - 8);
       v.el.style.visibility = "";
-      v.el.style.transform = `translate(${cx}px, ${cy}px)`;
+      // The individual `translate` property, never `transform`: the entry
+      // animation (gl-pop-in, fill `both`) owns `transform`, and a filled
+      // animation outranks an inline style, which pinned every badge to 0,0.
+      v.el.style.translate = `${cx}px ${cy}px`;
     }
   }
 

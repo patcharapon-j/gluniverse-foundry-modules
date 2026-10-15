@@ -56,7 +56,8 @@
   left: 0;
   top: 0;
   pointer-events: auto;
-  will-change: transform;
+  /* Placed by JS through `translate`; `transform` belongs to the pop-in below. */
+  will-change: translate, transform;
   animation: gl-pop-in var(--gl-d-swift) var(--gl-snap) both;
 }
 

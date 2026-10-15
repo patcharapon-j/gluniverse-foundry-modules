@@ -633,6 +633,20 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   ok(/linesChanged/.test(read("scripts/features/stream-targets/targeting/target-lines.js")), "the targeting lines announce their pairs");
 }
 
+{
+  // The badge is placed by JS and popped in by CSS. A filled animation outranks
+  // an inline style, so if both drive `transform` the badge sits at 0,0 forever.
+  const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
+  const css = read("styles/pf2e-odds.css");
+  const motion = read("styles/gl-motion.css");
+  const rule = css.match(/\.glod-line \{[^}]*\}/)?.[0] ?? "";
+  const anim = rule.match(/animation:\s*([\w-]+)/)?.[1];
+  const frames = anim ? motion.match(new RegExp(`@keyframes ${anim} \{[\s\S]*?\n\}`))?.[0] ?? "" : "";
+  const animatesTransform = /transform\s*:/.test(frames);
+  ok(/\.style\.translate = /.test(lb) && !/el\.style\.transform = /.test(lb), "the line badge is placed with the `translate` property, not `transform`");
+  ok(!animatesTransform || !/\.style\.transform\b/.test(lb), "the badge's entry animation never owns the property that places it");
+}
+
 /* ── report ─────────────────────────────────────────────────────────────── */
 
 if (problems.length) {
