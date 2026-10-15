@@ -286,6 +286,7 @@ const SESSION = (o = {}) => ({
   ok(/if \(!gmView\(\)\) return null;/.test(body("setConfig")) && /requestEdit\(messageId, \{ op: "config"/.test(body("setConfig")), "setConfig refuses anyone but the GM and is sent to the conductor");
   ok(/if \(!gmView\(\)\) return null;\s+return viaConductor\(MSG\.edit/.test(body("requestEdit")), "row edits go through the GM gate, to the conductor");
   ok(/if \(!isConductor\(\)/.test(body("runEdit")) && !/editRows/.test(main), "edits run on the conductor only (no local read-modify-write)");
+  ok(main.includes("serially(() => runEdit(messageId, edit))") && main.includes("serially(() => runEdit(messageId, payload.edit))") && main.split("runEdit(messageId").length === 4, "edits share Apply/Revert's queue: a row is never removed mid-Apply");
   {
     const outsideMutate = main.replace(body("mutate"), "");
     const callers = [...outsideMutate.matchAll(/\bmutate\(/g)].map((m) => {

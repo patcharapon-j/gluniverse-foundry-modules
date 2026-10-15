@@ -665,10 +665,13 @@ async function rollDamage(messageId) {
  */
 function requestEdit(messageId, edit) {
   if (!gmView()) return null;
-  return viaConductor(MSG.edit, { messageId, edit }, () => runEdit(messageId, edit));
+  return viaConductor(MSG.edit, { messageId, edit }, () => serially(() => runEdit(messageId, edit)));
 }
 
-/** Conductor only. */
+/**
+ * Conductor only, inside `serially` with Apply and Revert: a row removed while
+ * an Apply is still writing to its creature would take the undo record with it.
+ */
 async function runEdit(messageId, edit) {
   if (!isConductor() || !edit || typeof edit !== "object") return;
   const rowId = typeof edit.rowId === "string" ? edit.rowId : null;
@@ -946,7 +949,7 @@ export function onReady() {
       if (!user.isGM || !seesTruth(user)) return;
       const messageId = String(payload.messageId ?? "");
       if (!readSession(game.messages.get(messageId))) return;
-      return runEdit(messageId, payload.edit);
+      return serially(() => runEdit(messageId, payload.edit));
     }
     if (payload?.type !== MSG.open) return;
     const castMsg = game.messages.get(String(payload.castId ?? ""));
