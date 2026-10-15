@@ -149,7 +149,7 @@ async function fillOthers(app, panel, gen) {
     if (!model) continue;
     const row = document.createElement("div");
     row.className = "glod-dialog-row";
-    row.innerHTML = badgeHTML(model, { t, target: nameOf(target, target.actor), numbers: false });
+    row.innerHTML = badgeHTML(model, { t, target: nameOf(target, target.actor) });
     list.append(row);
     app.setPosition?.({ height: "auto" });
   }

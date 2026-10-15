@@ -15,7 +15,6 @@ export const KNOWLEDGE_HOOK = "gluniverse-foundry-modules.odds.knowledgeChanged"
 export const SETTINGS = Object.freeze({
   ledger: "od.ledger",
   partyKnowledge: "od.partyKnowledge",
-  mapReset: "od.mapResetSeconds",
   lineBadge: "od.lineBadge",
   sheet: "od.sheet",
   dialog: "od.dialog",
@@ -25,7 +24,7 @@ export const SETTINGS = Object.freeze({
 });
 
 /** The socket payload kinds this feature speaks. */
-export const MSG = Object.freeze({ armed: "armed", mapOverride: "map", forget: "forget" });
+export const MSG = Object.freeze({ armed: "armed", forget: "forget" });
 
 /** Roll option that tags a probe, so the Check.roll handler can catch it. */
 export const PROBE_TAG = "gluniverse:odds-probe";
@@ -119,6 +118,12 @@ export const TIMING = Object.freeze({
   diceSpawnGrace: 4000,
   /** The longest any landing waits for Dice So Nice. */
   diceWait: 10000,
+  /**
+   * The longest a badge holds its numbers for a roll in flight: past the
+   * longest landing wait and the stamp, so a hold whose release never comes
+   * (a roll deleted mid-throw, a client that missed the hook) still ends.
+   */
+  holdMax: 13000,
 });
 
 /**

@@ -24,6 +24,15 @@
  * strip only while it matters — on its roller's turn, while either token or
  * the badge is hovered, and out of combat (where there are few lines and no
  * turns) — and the compact `60%` tag otherwise (Q21).
+ *
+ * ## Holding through a roll
+ *
+ * A roll changes what a badge would say — a narrowed AC, a used reaction, an
+ * item consumed — and a number that moves while the die is still in the air
+ * reads as the badge rolling the dice. So from the moment a check is posted
+ * until it has landed (dice-highlight.mjs `release`, after the stamp), every
+ * badge naming its roller or its target holds the numbers it had. Recomputes
+ * still happen; they wait in `view.pending` and are drawn on release.
  */
 
 import { Budget } from "../../core/budget.mjs";
@@ -35,7 +44,7 @@ import { TARGETS_FEATURE_ID } from "../stream/constants.js";
 import { FEATURE_ID, SETTINGS, SHED_ORDER, TIMING } from "./constants.mjs";
 import { badgeHTML, compactHTML, playLanding, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
-import { onTrackerChange, stepMap } from "./tracker.mjs";
+import { onTrackerChange } from "./tracker.mjs";
 import { modelFor, nameFor } from "./view.mjs";
 
 const L = (key) => {
@@ -56,6 +65,8 @@ export class LineBadges {
   #tick = null;
   #timer = null;
   #seq = 0;
+  /** messageId → { actors: Set<actorId>, timer } — rolls in flight. */
+  #holds = new Map();
 
   wire() {
     this.ladder = Budget.ladder(FEATURE_ID, SHED_ORDER);
@@ -147,6 +158,11 @@ export class LineBadges {
 
   #draw(key, pair, model, target) {
     let view = this.views.get(key);
+    // A roll in flight on this line: keep what the badge said when it was thrown.
+    if (view && this.#held(pair)) {
+      view.pending = true;
+      return;
+    }
     if (!model) {
       if (view) this.#drop(key, view);
       return;
@@ -181,13 +197,50 @@ export class LineBadges {
       this.hovered.delete(`badge:${pair.sourceId}>${pair.targetId}`);
       this.#applySizes();
     });
-    el.addEventListener("click", (event) => {
-      const chip = event.target.closest?.('[data-action="glod-map"]');
-      if (!chip) return;
-      event.stopPropagation();
-      const actor = tokenById(pair.sourceId)?.actor;
-      if (actor?.isOwner) stepMap(actor);
-    });
+  }
+
+  /* ── holding through a roll ──────────────────────────────────────────── */
+
+  #held(pair) {
+    if (!this.#holds.size) return false;
+    const ids = [tokenById(pair.sourceId)?.actor?.id, tokenById(pair.targetId)?.actor?.id].filter(Boolean);
+    for (const h of this.#holds.values()) if (ids.some((id) => h.actors.has(id))) return true;
+    return false;
+  }
+
+  /**
+   * A check was posted: hold every badge naming its roller or its target until
+   * `release`. Returns whether anything is held, so the landing knows to wait
+   * for the die even when it has no beat of its own to play.
+   */
+  hold(message) {
+    const ctx = message?.flags?.pf2e?.context;
+    if (!ctx || ctx.type === "damage-roll" || ctx.type === "damage-taken" || !message.rolls?.[0]) return false;
+    const actors = new Set();
+    if (message.actor?.id) actors.add(message.actor.id);
+    const targetToken = String(ctx.target?.token ?? "").split(".").pop();
+    const targetActor = (targetToken && tokenById(targetToken)?.actor) || (ctx.target?.actor ? fromUuidSync(ctx.target.actor) : null);
+    if (targetActor?.id) actors.add(targetActor.id);
+    const touches = [...this.views.values()].some((v) => [tokenById(v.sourceId)?.actor?.id, tokenById(v.targetId)?.actor?.id].some((id) => id && actors.has(id)));
+    if (!touches) return false;
+    clearTimeout(this.#holds.get(message.id)?.timer);
+    const timer = setTimeout(() => this.release(message.id), TIMING.holdMax);
+    this.#holds.set(message.id, { actors, timer });
+    return true;
+  }
+
+  /** The roll has landed (or never will here): draw what waited, after `delay`. */
+  release(messageId, delay = 0) {
+    const h = this.#holds.get(messageId);
+    if (!h) return;
+    clearTimeout(h.timer);
+    h.timer = setTimeout(() => {
+      this.#holds.delete(messageId);
+      if ([...this.views.values()].some((v) => v.pending)) {
+        for (const v of this.views.values()) v.pending = false;
+        this.refresh();
+      }
+    }, Math.max(0, delay));
   }
 
   /** Full or compact, per Q21; and shed to compact under load. */
@@ -260,7 +313,10 @@ export class LineBadges {
       const cx = Math.min(Math.max(8, x), innerWidth - box.width - 8);
       const cy = Math.min(Math.max(8, y), innerHeight - box.height - 8);
       v.el.style.visibility = "";
-      v.el.style.transform = `translate(${cx}px, ${cy}px)`;
+      // The individual `translate` property, never `transform`: the entry
+      // animation (gl-pop-in, fill `both`) owns `transform`, and a filled
+      // animation outranks an inline style, which pinned every badge to 0,0.
+      v.el.style.translate = `${cx}px ${cy}px`;
     }
   }
 

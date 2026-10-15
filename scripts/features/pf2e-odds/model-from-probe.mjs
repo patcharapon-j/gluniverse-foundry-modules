@@ -44,7 +44,7 @@ export function dcModsOf(dcStatistic) {
  *   truth: boolean,                // does this viewer see the truth (view.mjs seesTruth)
  *   user?: User,
  *   stamps?: "attack"|"check", label?: string, sub?: string,
- *   flatDc?: number|null, invert?: boolean, mapOverride?: boolean,
+ *   flatDc?: number|null, invert?: boolean,
  *   dcStat?: string|null,          // ledger key of the defender's DC; default from probe.dc.slug
  *   modStat?: string|null,         // ledger key of the roller's modifier, when the roller is the unknown
  * }} spec
@@ -61,7 +61,6 @@ export function modelFromProbe({
   sub = "",
   flatDc = null,
   invert = false,
-  mapOverride = false,
   dcStat,
   modStat = null,
   dcLabel = undefined,
@@ -102,7 +101,6 @@ export function modelFromProbe({
     label,
     sub,
     stamps,
-    mapOverride,
     dcLabel: dcLabel ?? STATS[dcKey]?.label,
   });
 }

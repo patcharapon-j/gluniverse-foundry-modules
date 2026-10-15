@@ -86,7 +86,7 @@ export function chipsHTML(model, t = ident) {
   return `<div class="glod-chips">${chips
     .map(
       (c) =>
-        `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}"${c.key === "map" ? ` data-action="glod-map" role="button" tabindex="0"` : ""}${c.manual ? ` data-manual="1"` : ""}>${escapeHTML(chipText(c, t))}</span>`
+        `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}">${escapeHTML(chipText(c, t))}</span>`
     )
     .join("")}</div>`;
 }
@@ -96,9 +96,17 @@ function degreeLine(model, t) {
   // Inverted (a save against the viewer's own spell): the headline is the
   // target doing WORSE than a success, and the second figure its critical failure.
   const words = model.invert ? ["GLOD.word.theyFail", "GLOD.word.critFail"] : model.stamps === "check" ? ["GLOD.word.success", "GLOD.word.crit"] : ["GLOD.word.hit", "GLOD.word.crit"];
-  const dc = model.dcText ? `<span class="glod-dc">${escapeHTML(t(model.dcLabel ?? "GLOD.word.dc"))} ${escapeHTML(model.dcText)}</span>` : "";
-  return `<span class="glod-deg"><b>${escapeHTML(t(words[0]))}</b><em>${escapeHTML(t(words[1]))} ${escapeHTML(model.crit ?? "")}</em>${dc}</span>`;
+  return `<span class="glod-deg"><b>${escapeHTML(t(words[0]))}</b><em>${escapeHTML(t(words[1]))} ${escapeHTML(model.crit ?? "")}</em></span>`;
 }
+
+/** The defence being rolled against: its label over its value, at the ribbon's right end. */
+function dcHTML(model, t) {
+  if (!model?.dcText || model.state === "unknown") return "";
+  return `<span class="glod-dc"><small>${escapeHTML(t(model.dcLabel ?? "GLOD.word.dc"))}</small>${escapeHTML(model.dcText)}</span>`;
+}
+
+/** The ribbon's working line: headline, degree words, defence. */
+const rowHTML = (model, t) => headlineHTML(model) + degreeLine(model, t) + dcHTML(model, t);
 
 function gmHTML(model, t) {
   const gm = model?.gm;
@@ -118,20 +126,19 @@ function headHTML(model, t, target) {
 }
 
 /**
- * The full plate.
+ * The full plate: a ribbon. Heading, then the headline beside its degree
+ * words and defence, then the full-width strip; chips and the GM line only
+ * take a row when they exist. The strip carries no face numbers here.
  * @param {object} model   view-model.mjs `buildModel` output
- * @param {{t?: Function, target?: string, numbers?: boolean, gm?: boolean}} [opts]
+ * @param {{t?: Function, target?: string, gm?: boolean}} [opts]
  */
-export function badgeHTML(model, { t = ident, target = "", numbers = true, gm = true } = {}) {
+export function badgeHTML(model, { t = ident, target = "", gm = true } = {}) {
   if (!model) return "";
   if (model.state === "oor") {
     return `<div class="glod-badge gl-type" data-state="oor"><div class="glod-head">${escapeHTML(t(model.label))}</div><div class="glod-oor">${escapeHTML(t("GLOD.outOfRange"))}</div></div>`;
   }
   const head = headHTML(model, t, target);
-  return `<div class="glod-badge gl-type" data-state="${model.state}" data-stamps="${model.stamps}">${head}<div class="glod-row">${headlineHTML(model)}${degreeLine(model, t)}</div>${stripHTML(
-    model,
-    { numbers }
-  )}${chipsHTML(model, t)}${gm ? gmHTML(model, t) : ""}<div class="glod-stamp" aria-live="polite"></div></div>`;
+  return `<div class="glod-badge gl-type" data-state="${model.state}" data-stamps="${model.stamps}">${head}<div class="glod-row">${rowHTML(model, t)}</div>${stripHTML(model, { numbers: false })}${chipsHTML(model, t)}${gm ? gmHTML(model, t) : ""}<div class="glod-stamp" aria-live="polite"></div></div>`;
 }
 
 /** The collapsed tag a line wears off its roller's turn. */
@@ -192,7 +199,7 @@ export function updateBadge(el, prev, next, opts = {}) {
   const row = el.querySelector(".glod-row");
   if (row) {
     const fromNums = [...row.querySelectorAll(".glod-pct-n")].map((n) => Number(n.textContent));
-    row.innerHTML = headlineHTML(next) + degreeLine(next, t);
+    row.innerHTML = rowHTML(next, t);
     const to = [...row.querySelectorAll(".glod-pct-n")];
     if (scale > 0 && fromNums.length && to.length) countUp(to, fromNums, TIMING.count * scale);
   }
@@ -235,7 +242,7 @@ export function updateBadge(el, prev, next, opts = {}) {
   const chips = el.querySelector(".glod-chips");
   const chipsNext = chipsHTML(next, t);
   if (chips) chips.outerHTML = chipsNext || "";
-  else if (chipsNext) el.querySelector(".glod-faces, .glod-strip:last-of-type")?.insertAdjacentHTML("afterend", chipsNext);
+  else if (chipsNext) el.querySelector(".glod-gm, .glod-stamp")?.insertAdjacentHTML("beforebegin", chipsNext);
   const gm = el.querySelector(".glod-gm");
   const gmNext = opts.gm === false ? "" : gmHTML(next, t);
   if (gm) gm.outerHTML = gmNext || "";

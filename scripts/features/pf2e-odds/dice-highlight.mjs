@@ -76,23 +76,42 @@ function draw(landing, die, motion) {
   }, Math.max(TIMING.diceHoldMin, TIMING.diceHold * (motion || 1)));
 }
 
-async function onMessage(message, { badges, motion }) {
+/**
+ * Every check holds the badges it touches (line-badges.mjs `hold`) from the
+ * moment it is posted, and this releases them once the die has landed and the
+ * stamp has been read — so a number never moves while its die is in the air.
+ */
+async function onMessage(message, deps) {
+  const lines = deps.badges();
+  const held = !!lines?.hold(message);
+  let landed = false;
+  try {
+    landed = await play(message, deps, held);
+  } finally {
+    const m = deps.motion();
+    lines?.release(message.id, landed ? Math.max(TIMING.diceHoldMin, TIMING.stampHold * (m || 1)) : 0);
+  }
+}
+
+/** The landing beats; true when the badge's beat played. */
+async function play(message, { badges, motion }, held) {
   const landing = landingOf(message);
-  if (!landing) return;
   const lines = badges();
   const shed = lines?.ladder?.allows("landBeat") === false;
-  const badge = !shed && !!lines?.hasLine(landing);
+  const badge = !!landing && !shed && !!lines?.hasLine(landing);
   // Spotlight Roll posts its card at its own degree beat and tells DSN to skip
   // it: no throw is coming, so nothing waits for one and no ring is drawn.
   const spotlight = !!message.flags?.[SUITE_ID]?.spotlight;
-  const ring = !shed && watch && landing.degree != null && get(SETTINGS.dice, true) && !spotlight;
-  if (!badge && !ring) return;
+  const ring = !!landing && !shed && watch && landing.degree != null && get(SETTINGS.dice, true) && !spotlight;
+  // A held badge waits for the die too, even with no beat of its own to play.
+  if (!badge && !ring && !held) return false;
   const die = watch && !spotlight ? await watch.wait(message.id) : null;
   // Deleted while its die was in the air: the roll is gone, so nothing lands.
-  if (!game.messages?.get(message.id)) return;
+  if (!game.messages?.get(message.id)) return false;
   const m = motion();
   if (badge) badges()?.land(landing, m);
   if (ring && die) draw(landing, die, m);
+  return badge;
 }
 
 /**
