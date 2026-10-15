@@ -380,8 +380,16 @@ async function reconcile(sessionMsg) {
   for (const m of game.messages.contents) if (m.timestamp >= since && m.id !== sessionMsg.id) await observe(m);
 }
 
+/**
+ * Filing shares Apply/Revert's queue. Apply reads the session's damage once and
+ * writes no undo record until the creature is done; a second damage roll filed
+ * in between would leave one session applying two different rolls.
+ */
+const observe = (message) => serially(() => observeNow(message));
+const forgetMessage = (message) => serially(() => forgetNow(message));
+
 /** A save or a damage roll landed: file it against the newest open session it belongs to. */
-async function observe(message) {
+async function observeNow(message) {
   if (!isConductor()) return;
   const ctx = message?.flags?.pf2e?.context;
   if (!ctx || (ctx.type !== "saving-throw" && ctx.type !== "damage-roll")) return;
@@ -432,7 +440,7 @@ async function observe(message) {
 }
 
 /** A filed message went away: its row is unrolled (a hero-point reroll files its new card next). */
-async function forgetMessage(message) {
+async function forgetNow(message) {
   if (!isConductor()) return;
   for (const s of openSessions()) {
     const hit = s.damageId === message.id || s.rows.some((r) => r.rollId === message.id);

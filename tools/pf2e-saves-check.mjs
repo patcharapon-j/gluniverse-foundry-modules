@@ -293,29 +293,30 @@ const SESSION = (o = {}) => ({
       const head = outsideMutate.lastIndexOf("\nasync function ", m.index), head2 = outsideMutate.lastIndexOf("\nfunction ", m.index);
       return outsideMutate.slice(Math.max(head, head2) + 1).match(/function (\w+)/)?.[1];
     });
-    const allowed = new Set(["runEdit", "observe", "forgetMessage", "applyRows", "revertRows"]);
+    const allowed = new Set(["runEdit", "observeNow", "forgetNow", "applyRows", "revertRows"]);
     ok(callers.length >= 5 && callers.every((c) => allowed.has(c)), `mutate() is called only from conductor-side functions (got ${[...new Set(callers)].join(", ")})`);
   }
   {
     const sock1 = main.slice(main.indexOf("onSocket(FEATURE_ID"), main.indexOf("Hooks.on(\"createChatMessage\""));
     ok(/MSG\.edit\) \{\s+if \(!user\.isGM \|\| !seesTruth\(user\)\) return;/.test(sock1), "a socketed edit is honoured only from a GM who sees the truth");
   }
-  ok(/castTime\(x\) <= message\.timestamp/.test(body("observe")), "a roll is filed only into a session whose cast came before it");
-  ok(/const cur = r\.rollId \? game\.messages\.get\(r\.rollId\)/.test(body("observe")), "save freshness is re-checked inside the queued write");
+  ok(main.includes("const observe = (message) => serially(() => observeNow(message));") && main.includes("const forgetMessage = (message) => serially(() => forgetNow(message));"), "filing shares Apply's queue: the damage never changes under a running Apply");
+  ok(/castTime\(x\) <= message\.timestamp/.test(body("observeNow")), "a roll is filed only into a session whose cast came before it");
+  ok(/const cur = r\.rollId \? game\.messages\.get\(r\.rollId\)/.test(body("observeNow")), "save freshness is re-checked inside the queued write");
   ok(/opening\.then\(\(\) => openSessionNow\(/.test(body("openSession")), "opens are serialized: one cast, one session");
   // Review round 1: each of these failed silently.
   ok(/!m\.blind/.test(body("resultFor")) && !/m\.isAuthor/.test(body("resultFor")), "a blind save is not read back to its own author");
-  ok(/instanceof DamageRoll/.test(body("observe")) && /casterOf\(s\)\?\.testUserPermission\?\.\(author, "OWNER"\)/.test(body("observe")), "a damage roll is filed only when real and rolled by the GM or the caster's owner");
+  ok(/instanceof DamageRoll/.test(body("observeNow")) && /casterOf\(s\)\?\.testUserPermission\?\.\(author, "OWNER"\)/.test(body("observeNow")), "a damage roll is filed only when real and rolled by the GM or the caster's owner");
   ok(/castMsg\.whisper/.test(body("openSessionNow")) && /castMsg\.blind/.test(body("openSessionNow")) && /spellName: priv \? ""/.test(body("openSessionNow")) && /getSpeaker\(\{ user: game\.user \}\)/.test(body("openSessionNow")), "a private cast's session card names no spell and speaks as the GM");
   ok(!/isConnected/.test(body("renderCard")) && /_glsvGen !== gen/.test(body("renderCard")), "the card renders into the detached host Foundry hands the hook");
   ok(!/Item\.\$\{cond\.id\}/.test(main) && /ConditionManager\?\.conditions\?\.get\(/.test(body("pickCondition")), "a picked condition's uuid comes from the canonical document, not a clone");
   ok(/!before\.has\(m\.id\)/.test(body("applyDamageTo")) && !/since - 1000/.test(main), "the damage-taken card is found by identity, never by time");
   ok(/getContextualClone\?\.\(originOpts, ephemeral\)/.test(body("applyDamageTo")) && /ephemeralEffects/.test(body("targetEffects")), "Apply passes the caster's damage-received target effects, as PF2e does");
-  ok(!/!r\.applied/.test(body("forgetMessage")), "a deleted save unfiles an applied row too (a reroll after Apply is filed on Revert)");
+  ok(!/!r\.applied/.test(body("forgetNow")), "a deleted save unfiles an applied row too (a reroll after Apply is filed on Revert)");
   ok(/reconcile\(/.test(body("openPanel")) && /reconcile\(s\._msg\)/.test(main.slice(main.indexOf("export function onReady"))), "sessions catch up when opened and when a conductor starts");
   ok(/maskRow\(row, liveOf\(row\)\)/.test(body("buildView")) && /Hooks\.on\("updateToken"/.test(main), "visibility is re-read live and refreshed on token changes");
   for (const fn of ["rollNpcs", "rollDamage"]) ok(/if \(!gmView\(\)\) return;/.test(body(fn)), `${fn} refuses anyone but the GM`);
-  for (const fn of ["openSessionNow", "observe", "forgetMessage"]) ok(/if \(!isConductor\(\)\) return/.test(body(fn)), `${fn} runs on the active GM only`);
+  for (const fn of ["openSessionNow", "observeNow", "forgetNow"]) ok(/if \(!isConductor\(\)\) return/.test(body(fn)), `${fn} runs on the active GM only`);
   const calls = [...main.matchAll(/\bmutate\(/g)].length;
   ok(calls >= 1 && !/game\.messages\.get\([^)]*\)\.update\(\{\s*\[`flags\.\$\{SUITE_ID\}\.\$\{FLAG\}`/.test(main.replace(body("mutate"), "")), "the session flag is written only through mutate()");
   // The socket: one op, from the attested sender, who must be the GM or own the caster.
