@@ -82,10 +82,14 @@ async function onMessage(message, { badges, motion }) {
   const lines = badges();
   const shed = lines?.ladder?.allows("landBeat") === false;
   const badge = !shed && !!lines?.hasLine(landing);
-  const ring =
-    !shed && watch && landing.degree != null && get(SETTINGS.dice, true) && !message.flags?.[SUITE_ID]?.spotlight;
+  // Spotlight Roll posts its card at its own degree beat and tells DSN to skip
+  // it: no throw is coming, so nothing waits for one and no ring is drawn.
+  const spotlight = !!message.flags?.[SUITE_ID]?.spotlight;
+  const ring = !shed && watch && landing.degree != null && get(SETTINGS.dice, true) && !spotlight;
   if (!badge && !ring) return;
-  const die = watch ? await watch.wait(message.id) : null;
+  const die = watch && !spotlight ? await watch.wait(message.id) : null;
+  // Deleted while its die was in the air: the roll is gone, so nothing lands.
+  if (!game.messages?.get(message.id)) return;
   const m = motion();
   if (badge) badges()?.land(landing, m);
   if (ring && die) draw(landing, die, m);

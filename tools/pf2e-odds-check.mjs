@@ -322,7 +322,8 @@ ok(loose === 0, `boundsFromRoll admits ${loose} DCs that would have produced a d
   ok(R.diceHTML({ degree: 0, stamps: "check" }).includes("GLOD.stamp.critFail"), "a check's critical failure stamps as such");
   const dh = read("scripts/features/pf2e-odds/dice-highlight.mjs");
   ok(/landing\.degree != null/.test(dh), "the ring is drawn only when this viewer may see the degree");
-  ok(/flags\?\.\[SUITE_ID\]\?\.spotlight/.test(dh), "Spotlight Roll's own dice are left alone");
+  ok(/flags\?\.\[SUITE_ID\]\?\.spotlight/.test(dh) && /watch && !spotlight \? await watch\.wait/.test(dh), "Spotlight Roll's own dice are left alone, and its cards land without waiting for a throw that never comes");
+  ok(/if \(!game\.messages\?\.get\(message\.id\)\) return;/.test(dh), "a message deleted while its die is in the air lands nothing");
   ok(/allows\("landBeat"\)/.test(dh), "the ring sheds with the landing beat");
   ok(!/dsnActive = [^\n]*game\.dice3d/.test(dh), "wiring does not wait on game.dice3d (DSN builds it in its own ready hook, maybe after ours)");
   ok(!/waitFor3DAnimationByMessageID|diceSoNiceRollComplete|Hooks\.once/.test(dh + read("scripts/features/pf2e-odds/line-badges.mjs")), "no landing waits on DSN's completion hook (it fires early under immediate chat display, and its waiter is never removed)");
