@@ -9,8 +9,7 @@ import { addSpellglassSceneControl, bindSpellglassSceneControl } from "./control
 import { inferredLabel } from "./data.mjs";
 import { migrateLegacyPresentations } from "./migration-runtime.mjs";
 import { compactPresentation } from "./schema.mjs";
-import { canRenderEffectRegion, host, warmShaders } from "./host.mjs";
-import { warmAtIdle } from "../../core/warmup.mjs";
+import { canRenderEffectRegion, host } from "./host.mjs";
 import {
   registerProfile, resolveProfile as resolveSourceProfile, unregisterProfiles,
 } from "./profiles.mjs";
@@ -200,7 +199,6 @@ export async function onReady() {
   untheme = onThemeChange(() => host.refreshAll());
 
   if (canvas?.ready) host.attach();
-  warmAtIdle("pf2e-aoe", warmShaders);
   log("pf2e-aoe | Spellglass Region renderer ready");
 }
 
