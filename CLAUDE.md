@@ -726,35 +726,36 @@ context rather than from baked frames.
 **When touching the PF2e areas** (`features/pf2e-aoe/`), re-run its consistency
 check. It covers the closed semantic vocabulary, classification ties, profile
 precedence, PF2e coverage (the 5/10/5 diagonal, half-grid cone origins, blocked
-cells, emanation footprints), every shader uniform being both declared and
-written by the host, the shed gates, and the atlas layout the shader's
-`uAtlasRect` assumes:
+cells, emanation footprints), that every function draws its own pattern and
+every material its own colour pair (held apart in OKLab — a new entry that
+lands on top of an old one is two meanings a player cannot tell apart), that
+every alert actually beats, the lattice outline, the shed gates, and that the
+renderer stays pure and shader-free:
 
 ```bash
 node tools/pf2e-aoe-check.mjs
 ```
 
-Zero failures required. It cannot compile a line of GLSL, and a shader that
-fails to compile restores that Region to Foundry's native highlight rather than
-erroring, so after touching `shader.mjs` render it:
+Zero failures required. Spellglass draws with **PIXI primitives only** — Graphics
+and TilingSprites of pattern tiles baked once on a 2D canvas, under a Graphics
+mask of the covered squares. There is no shader, filter, atlas or warm-up, and
+the check refuses one creeping back. To see it:
 
 ```bash
-node tools/pf2e-aoe-preview.mjs --out=.preview/aoe.html && node tools/preview-server.mjs
+node tools/pf2e-aoe-preview.mjs && node tools/preview-server.mjs
 ```
 
-The page exposes `__aoeArchSheet`, `__aoeSheet` and `__aoeTimeSheet` for
-headless contact sheets. Three things about that shader are invisible in a diff.
-Every band of the frame is drawn against `latticeSdf` — the PF2e staircase —
-not the smooth shape; drawing any of them against the shape puts two disagreeing
-edges on a rules lattice. Every hairline is sized in device pixels through
-`uTexel`, never in grid units. And the material fill is computed only on the
-ground and shade planes: the boundary and atmosphere planes must not reach for
-`fill`, or three of four passes pay for frost's dendrite search again. The
-material atlas is generated, not drawn — re-bake and confirm after any recipe
-change with `node tools/gen-pf2e-aoe-atlas.mjs && node tools/gen-pf2e-aoe-atlas.mjs --check`;
-its tiles must stay seamless (periodic noise) and the host must keep mipmaps
-off on it, or the `fract()` tiling draws a hairline grid at the repeat. See
-`docs/PF2E_AOE.md` for the frame and the material contract.
+then `/.preview/aoe.html` (`sheet=functions|profiles|materials|shapes`,
+`floor=bright`, `zoom`, `shed`, `seek` for headless stills). Judge every change
+on **both floors**: a pale pattern that reads on a dark map washes out on
+parchment, which is what the ink shadow tile under each pattern is for. Three
+things are invisible in a diff. The outline is PF2e's staircase traced from the
+rules cells (`render/outline.mjs`), never the smooth shape. Every line is sized
+in screen pixels and divided by the stage zoom, so strokes rebuild past a 6%
+zoom change — a width in world units is a slab zoomed in and gone zoomed out.
+And a look that does not move (`view.animated` false, motion "none", or a
+static behaviour) asks for no frames once it has landed; the host's ticker
+stops. See `docs/PF2E_AOE.md` for the look tables and the layers.
 
 **When touching Insight** (`features/insight/`, `styles/insight.css`,
 `templates/insight/`), re-run its consistency check. An Insight arrival is a

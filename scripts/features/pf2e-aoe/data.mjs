@@ -1,7 +1,7 @@
 /** PF2e AoE — Region source identity and authoritative rules coverage. */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { CELL, FLAGS, LAYOUT, SHAPE } from "./constants.mjs";
+import { AREA_PAD, CELL, FLAGS, SHAPE } from "./constants.mjs";
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -66,15 +66,16 @@ function fallbackBounds(shape, origin, grid, radius, base) {
 }
 
 /**
- * Convert one PF2e Region into the shader's origin-relative grid contract.
- * Unsupported polygonal shapes retain exact rules coverage and use an outer
- * burst ghost only; gameplay truth always comes from the cell texture.
+ * Convert one PF2e Region into the renderer's origin-relative grid contract.
+ * Unsupported polygonal shapes retain exact rules coverage and draw as a
+ * burst only on gridless Scenes; on a grid the truth always comes from the
+ * rules cells.
  */
 export function regionGeometry(region) {
   const document = region?.document ?? region;
   /* A token-attached Region exposes transient animated shapes on its placeable
      while the Token is moving. Prefer those so the overlay follows the Token
-     without rebuilding its coverage texture every animation frame. */
+     without rebuilding its coverage outline every animation frame. */
   const shape = firstShape(region?.animationState?.shapes ?? document) ?? firstShape(document);
   if (!shape) return null;
   const grid = finite(canvas?.dimensions?.size, 100) || 100;
@@ -134,7 +135,7 @@ export function regionGeometry(region) {
 
   const bounds = rectFrom(region?.bounds) ?? rectFrom(document?.bounds)
     ?? fallbackBounds(shape, origin, grid, radius, base);
-  const pad = Math.max(LAYOUT.skirtRise, LAYOUT.scorchSpread, LAYOUT.orbitOut + LAYOUT.glowReach * 3, LAYOUT.landReach + 0.5) + 0.65;
+  const pad = AREA_PAD;
   const x0 = (bounds.x - origin.x) / grid - pad;
   const y0 = (bounds.y - origin.y) / grid - pad;
   const x1 = (bounds.x + bounds.width - origin.x) / grid + pad;
@@ -362,7 +363,7 @@ function contains(document, point) {
   catch { return false; }
 }
 
-/** Build an RGBA rules texture: 0 outside, 128 blocked, 255 covered. */
+/** Build the RGBA rules cells: 0 outside, 128 blocked, 255 covered. */
 export function regionCells(region, geometry) {
   const document = region?.document ?? region;
   const grid = geometry.grid;
@@ -399,7 +400,7 @@ export function regionCells(region, geometry) {
     maxX = Math.max(maxX, x + 1); maxY = Math.max(maxY, y + 1);
   }
 
-  /* A malformed or enormous Region must not allocate an unbounded GPU texture. */
+  /* A malformed or enormous Region must not allocate an unbounded rules grid. */
   if (maxX - minX + 1 > 512 || maxY - minY + 1 > 512) return null;
   const width = Math.max(1, maxX - minX + 1);
   const height = Math.max(1, maxY - minY + 1);

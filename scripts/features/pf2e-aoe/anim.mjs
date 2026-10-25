@@ -13,11 +13,10 @@
 
 /** Phase durations, ms. Multiplied by motionScale at every read. */
 export const TIMING = Object.freeze({
-  castIn: 520,      // the template is DRAWN on: nib travels, ink lands behind it
-  castHold: 90,     // the beat after the last stroke lands, before it settles
-  pulse: 520,       // the trigger beat: flash, shockwave, settle
-  dissipate: 640,   // collapse inward and drift up
-  scorchFade: 2600, // the ground decal outliving the effect
+  castIn: 520,      // the rim is DRAWN on (or flashes in): the extent never grows
+  pulse: 520,       // the trigger beat: flash, echo, settle
+  dissipate: 640,   // everything fades out together
+  echo: 900,        // one echo ring travelling out past the boundary
 });
 
 /**
@@ -26,16 +25,17 @@ export const TIMING = Object.freeze({
  * decided here: the host binds this order to the suite's shared frame budget
  * (`core/budget.mjs`), which owns the clock and the hysteresis.
  *
- * Two entries are deliberately ABSENT and must stay absent: the rules lattice
- * and the boundary rim. Readability is not a quality tier — a player must be
- * able to answer "am I in it?" on a machine that cannot afford motes.
+ * Four things are deliberately ABSENT and must stay absent: the fill, the
+ * function pattern, the rules seams and the boundary rim. Readability is not
+ * a quality tier — a player must be able to answer "am I in it, and what is
+ * it?" on a machine that cannot afford a glow.
  */
 export const SHED_ORDER = Object.freeze([
-  "tokenEdgeLight", // alpha-masked token rim light; no image displacement
-  "motes",     // rising particulate
-  "scorch",    // the persistent ground decal
-  "skirt",     // the fake vertical
-  "turbulence" // the archetype fill collapses to a flat lit plate
+  "tokenMarks", // brackets around Tokens standing in the area
+  "echo",       // rings leaving the boundary on each beat
+  "drift",      // the pattern's own motion and the rim's chase
+  "secondary",  // the secondary-function pattern and the detect sweep
+  "glow",       // the additive glow stack and the alert flare
 ]);
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
@@ -57,6 +57,41 @@ const smooth = (t) => t * t * (3 - 2 * t);
  * where nearly all the ink is laid — and eases off only at the very end.
  */
 const stroke = (t) => t * t * (3 - 2 * t);
+
+/**
+ * The idle alert, 0 at rest and 1 at the crest, for `kind` at `t` seconds
+ * with one cycle every `period` seconds. Pure, so the preview and the check
+ * tool read the same beat the canvas does.
+ *
+ *   heartbeat  lub-dub: two sharp beats close together, then rest (harm)
+ *   breathe    a slow even swell (restore, support, control, summon)
+ *   throb      a swell with a hard crest and a long trough (hinder)
+ *   strobe     on/off with quick edges, the alarm (hazard)
+ */
+export function alertLevel(kind, t, period) {
+  if (!(period > 0) || kind === "none" || !kind) return 0;
+  const p = ((t / period) % 1 + 1) % 1;
+  if (kind === "heartbeat") {
+    const beat = (c, w) => Math.exp(-((p - c) ** 2) / (2 * w * w));
+    return Math.min(1, beat(0.08, 0.045) + 0.72 * beat(0.27, 0.05));
+  }
+  if (kind === "breathe") return 0.5 - 0.5 * Math.cos(p * Math.PI * 2);
+  if (kind === "throb") return Math.pow(0.5 - 0.5 * Math.cos(p * Math.PI * 2), 2.4);
+  if (kind === "strobe") {
+    const edge = 0.06;
+    const up = smooth(clamp01(p / edge)), down = smooth(clamp01((p - 0.5) / edge));
+    return up * (1 - down);
+  }
+  return 0;
+}
+
+/** Where each beat's echo ring is, 0 → 1, for an alert of this kind. */
+export function echoPhase(kind, t, period, travel) {
+  if (!(period > 0) || !(travel > 0)) return -1;
+  const start = kind === "heartbeat" ? 0.06 : kind === "strobe" ? 0 : 0.5;
+  const since = (((t / period - start) % 1) + 1) % 1 * period;
+  return since < travel ? since / travel : -1;
+}
 
 export class AoeAnim {
   constructor({ motionScale = 1 } = {}) {
@@ -87,14 +122,13 @@ export class AoeAnim {
   }
 
   /**
-   * True while this effect still needs frames. A sustaining AoE is always hot —
-   * turbulence and motes need frames with no event behind them — but a shed-out
-   * one that has finished entering does not.
+   * True while this effect's own beats still need frames: the entrance, a
+   * trigger beat or the exit. Whether the LOOK needs idle frames (a drifting
+   * pattern, an alert) is the renderer's `animated`, not this.
    */
   get hot() {
-    if (this.dead) return false;
-    if (this.still) return false;
-    return true;
+    if (this.dead || this.still) return false;
+    return this.leaving || this.pulseAt >= 0 || this.enter < 1;
   }
 
   step(dt) {
@@ -124,12 +158,12 @@ export class AoeAnim {
   /**
    * The entrance as a NIB POSITION, 0 -> 1, monotonic, arriving exactly once.
    *
-   * What this drives is the shader's business: uEnterMode picks between a pen
-   * running the perimeter, a radial write outward, and a wireframe that strikes
-   * whole before flooding. All three read this one curve, and none of them
-   * scales the geometry or fades the whole quad — the extent is final from
-   * frame one and only the INK moves. A template that grows is a template
-   * briefly lying about which squares are in it.
+   * What this drives is the renderer's business: a "draw" entrance runs a pen
+   * round the rim with the fill following it in, a "flash" entrance strikes
+   * the whole frame at once and lets a flare settle. Neither scales the
+   * geometry — the extent is final from frame one and only the INK moves. A
+   * template that grows is a template briefly lying about which squares are
+   * in it.
    */
   get eased() {
     return stroke(this.enter);
@@ -145,8 +179,8 @@ export class AoeAnim {
 
   /**
    * The trigger beat, 0 at rest. Rises almost instantly and decays — the
-   * shockwave radius is driven off this, so the attack must be sharp or the
-   * ring reads as a slow bloom rather than an impact.
+   * flare is driven off this, so the attack must be sharp or the beat reads
+   * as a slow bloom rather than an impact.
    */
   get shock() {
     if (this.pulseAt < 0 || this.still) return 0;
@@ -156,7 +190,14 @@ export class AoeAnim {
     return Math.pow(1 - t, 1.9) * smooth(clamp01(t * 14));
   }
 
-  /** Seconds since birth, for the shader's own clocks. */
+  /** 0 → 1 through the trigger beat, -1 at rest: the beat's echo ring. */
+  get pulseProgress() {
+    if (this.pulseAt < 0 || this.still) return -1;
+    const span = TIMING.pulse * this.motionScale;
+    return span <= 0 ? -1 : clamp01(this.pulseAt / span);
+  }
+
+  /** Seconds since birth, for the renderer's idle clocks. */
   get time() {
     return this.elapsed / 1000;
   }
@@ -169,8 +210,8 @@ export class AoeAnim {
    * thing a drawn-on template must not do: it fades the finished squares back
    * out while the nib is still laying the next ones, so the area never reads as
    * ink on a surface, only as a picture being turned up. Where the ink has
-   * reached is the shader's business (see uEnterMode); this is only how much of
-   * the effect is left as it dissipates.
+   * reached is the renderer's business (see `enter` in BEHAVIOR_MOTION); this
+   * is only how much of the effect is left as it dissipates.
    */
   get presence() {
     return smooth(this.leave);

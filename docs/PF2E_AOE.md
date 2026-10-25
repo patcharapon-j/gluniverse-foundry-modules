@@ -7,79 +7,93 @@ and aura membership.
 
 ## Visual contract
 
-Every effect is resolved along independent axes:
+Every effect is resolved along independent axes, and each axis owns a
+different part of the picture so two effects that mean different things never
+draw the same thing:
 
-- **Function** controls monochrome topology and semantic accent: harm, restore,
+- **Function** owns the **pattern, rim, alert and accent**: harm, restore,
   support, protect, hinder, control, conceal, terrain, detect, summon, hazard,
-  or neutral.
-- **Material** controls the primary palette and surface. All 26 canonical
-  materials select a tile in the local channel-packed atlas and retain a full
-  procedural fallback; no remote texture or arbitrary shader input is accepted.
-- **Behavior** controls temporal rhythm: impact, pulse, flow, grow, contain,
-  sweep, linger, sustain, trigger, or static.
+  or neutral (`FUNCTION_LOOK` in `render/look.mjs`).
+- **Material** owns the **colour pair** — a body and a hot colour for each of
+  the 26 canonical materials (`MATERIAL_COLORS`). A GM body-palette override
+  replaces the body and derives the hot colour from it.
+- **Behavior** owns the **motion**: drift, spin, pace and entrance for impact,
+  pulse, flow, grow, contain, sweep, linger, sustain, trigger, or static
+  (`BEHAVIOR_MOTION`). Static never moves and never alerts.
+- **Treatment** (grounded / volumetric / airborne) and **intensity** (subtle /
+  balanced / cinematic) scale fill, glow and pattern strength.
 
-The invariant tactical layer—coverage lattice, blocked cells, and boundary—is
-never removed by quality or motion settings. Spectacle sheds in this order:
-token edge light, motes, scorch, vertical skirt, then turbulence.
+`composeLook()` folds those into one frozen look per area; the renderer reads
+nothing else. There are no shaders, filters, atlases or warm-up: an area is
+`PIXI.Graphics` plus `PIXI.TilingSprite`, which every client can draw.
 
-### The frame
+| Function | Pattern | Rim | Alert |
+| --- | --- | --- | --- |
+| harm | shards | solid, heavy | heartbeat, echo ring |
+| restore | cross | double | slow breathe |
+| support | chevrons | solid | breathe |
+| protect | scales | double, heavy | none |
+| hinder | zigzag | dashed | throb |
+| control | net | chain | breathe |
+| conceal | fog | dotted | none |
+| terrain | cobble | solid | none |
+| detect | scan lines | dashed | sweeping wedge |
+| summon | sigil | double | breathe, echo ring |
+| hazard | caution tape | tape | strobe, echo ring |
+| neutral | dots | solid | none |
 
-Every area is drawn as a **tactical frame** first and a material second. The
-frame is what makes a placed area read as a precise instrument rather than a
-tinted disc, and all of it lives in `shader.mjs` under "the tactical frame":
+The check tool holds the vocabulary apart: every function draws its own
+pattern, function accents and material colour pairs stay at least 0.09 apart
+in OKLab, and no two built-in profiles draw the same pattern in the same
+colour.
 
-- **One rule on the rules edge.** On a square grid that is PF2e's staircase of
-  covered squares; gridless it is the true shape. The old renderer drew both
-  the staircase and the smooth geometry at similar weight, and two edges
-  disagreeing is most of what read as fuzzy. The rule is a device-pixel
-  hairline (`LAYOUT.rimWidthPx`) drawn against `latticeSdf`, a signed
-  distance to the covered set computed from the 3×3 squares around the
-  fragment, so every band below follows the squares exactly.
-- **Corner brackets** on every convex corner of the staircase, where the rule
-  brightens and widens for `LAYOUT.tickOut` squares.
-- **An inset rule**, finer and dimmer, `LAYOUT.ruleInset` squares inside.
-- **A fresnel band** inside the edge falling away over `LAYOUT.fresnelReach`
-  squares, and **a soft glow** outside reaching `LAYOUT.glowReach`. Both are
-  on the ground plane, under tokens, so no token is ever veiled by them; the
-  boundary plane over tokens carries only hairlines.
-- **Blocked squares** — inside the area, out of line of effect — carry no lit
-  face; they take a 45° hatch in the tint instead, and a seam against the
-  covered squares beside them.
-- **The orbit ring**: a dashed ring on the true geometry, `LAYOUT.orbitOut`
-  squares outside it, turning at the behaviour's pace. It is the intent the
-  squares were cut from, drawn as a reticle so it cannot be mistaken for a
-  second edge.
-- **Direction chevrons** on cones and lines, one per square along the axis,
-  drifting outward at the behaviour's pace.
-- **A scan pulse** from origin to edge every `LAYOUT.scanPeriod` seconds at
-  pace 1; static behaviour never pulses.
-- **The landing.** When the cast-in edge pen closes its lap the frame flares
-  once and a single ring leaves the boundary outward. Both are gone by the
-  time the entrance completes.
+### Layers
 
-`behaviourPace()` in the shader is the one clock all idle frame motion reads,
-so the rhythm a profile declares is visible in the frame as well as in the
-material.
+An area is two containers, so nothing that sits over a token can veil it:
 
-### The material
+- **Ground**, under tokens (`canvas.regions` highlights): outer glow (additive),
+  the fill, the pattern tiles masked to the coverage, blocked squares, the
+  seams between squares, and direction chevrons on cones and lines.
+- **Overlay**, over tokens (`canvas.interface`): the rim, the entrance pen,
+  corner brackets, the echo ring, the flare, and the marks on affected tokens.
 
-The archetype fills remain procedural, but the ones that have to read as
-matter (ember, spirit, umbra, the atmosphere column) run on gradient noise
-rather than the shared value noise, whose lattice-aligned blobs are the "cloud
-filter" look. Over the fill, the channel-packed atlas at
-`assets/pf2e-aoe/material-atlas.png` is sampled as a **detail texture** at two
-rotated scales (`LAYOUT.atlasScaleA/B`) so the repeat never lines up with the
-lattice. It is 1024 × 512, one seamless 128px tile per canonical material in
-`MATERIALS` order, baked deterministically by `tools/gen-pf2e-aoe-atlas.mjs`
-(`--check` verifies the shipped bytes). R is body variation, G the family's
-structure mask (cracks, dendrites, filaments, bubbles, waves, fibres, plates,
-wisps, grain), B the emissive crests, A a particulate mask. The host loads it
-with mipmaps **off**: the shader tiles with `fract()`, and a mip seam at the
-repeat draws a dark hairline grid across the area.
+Patterns are 128px seamless tiles baked once per id on a Canvas2D in white
+(`render/patterns.mjs`) and tinted per area, repeating in hardware with
+mipmaps on. Each pattern sits on an ink shadow of itself, offset a fraction of
+a square, so it still reads on a bright map. A secondary function, where an
+effect has one, lays its pattern over the primary at lower strength.
 
-The colour ramp has three stops: a deep stop (the tint squared) for the body,
-the tint, and the hot stop for the rule and brackets. A ramp that starts at the
-tint has nowhere to go but paler.
+### The outline
+
+The rim is drawn on the **rules edge**: on a square grid that is PF2e's
+staircase traced from the covered squares (`render/outline.mjs`, holes
+included); gridless it is the true shape. Blocked squares — inside the area,
+out of line of effect — take a hatch and a darker shade instead of the
+pattern.
+
+Every stroke is sized in **screen pixels** (`SIZES` in `render/look.mjs`)
+divided by the canvas zoom, and strokes are rebuilt when the zoom changes by
+more than 6%, so a rim is the same weight at every zoom and never a slab or a
+hairline that vanishes.
+
+### Motion and alerts
+
+`anim.mjs` holds the clocks: `alertLevel()` (heartbeat, breathe, throb,
+strobe) modulates rim, glow and fill; `echoPhase()` sends a ring off the
+boundary on the beat. The entrance is either a flash or a pen drawing the rim
+on with a bright nib, per behaviour. A trigger beat (`pulse()` in the API)
+flares the area and sends an echo.
+
+The host ticks only while something needs frames — an entrance, a beat, a
+dissipation, or an area whose look actually moves — and claims motion from the
+shared budget only while it does. A settled static area costs nothing per
+frame.
+
+### Shedding
+
+Under load the budget sheds, in `SHED_ORDER`: token marks, the echo ring,
+drift and chase, the secondary pattern and detect sweep, then glow and flare.
+The fill, pattern, seams and rim are tactical and never shed.
 
 ## Classification
 
@@ -162,13 +176,13 @@ built-in profiles.
 
 Square grids use PF2e's covered-cell offsets and line-of-effect collision split.
 Gridless circle, cone, emanation, rectangle, and actual-width line primitives
-use analytic distance fields. Token emanations preserve the source footprint
+are traced from their analytic shape. Token emanations preserve the source footprint
 from Small through Gargantuan and translate their cached mask rigidly during
 movement.
 
 Hex, polygon, ring, rotated rectangle, hole, and multi-shape cases that do not
-have an exact active backend remain visibly native. A render, shader, texture,
-or presenter failure restores that Region's native nodes without affecting
+have an exact active backend remain visibly native. A render or presenter
+failure restores that Region's native nodes without affecting
 other effects.
 
 ## Performance settings
@@ -178,7 +192,8 @@ other effects.
 - `aoe.quality` is automatic, low, medium, or high.
 - `aoe.maxConcurrent` is the hard client safety ceiling; overflow stays native.
 
-Automatic quality uses frame-time hysteresis. Priorities are inspected Regions,
+Automatic quality follows the shared frame budget; low and medium set a
+minimum shed level. Priorities are inspected Regions,
 attached effects, live auras, on-screen effects, then stable creation order.
 No tier removes tactical boundaries, covered cells, or settled function marks.
 
@@ -216,9 +231,17 @@ node tools/pf2e-aoe-preview.mjs --out=.preview/aoe.html
 node tools/preview-server.mjs
 ```
 
-The preview embeds the shipped shader and animation source verbatim. The check
-tool covers controlled vocabulary, every semantic axis, deterministic ties,
-profile precedence, inherited/custom/hidden labels, migration mapping and
+Serve the preview from the repository root (`/.preview/aoe.html`); a
+`file://` page does not run its module. It imports the shipped renderer, look
+tables and data adapter and builds its areas from fixture Regions through the
+real `regionGeometry()` / `regionCells()`. Query parameters for headless
+stills: `sheet=functions|profiles|materials|shapes`, `floor=dark|bright`,
+`zoom`, `shed=0..5`, `motion=0`, `seek=<ms>`; `window.__aoeSeek(ms)`
+advances a paused clock. Judge on both floors — a pattern that reads on a dark
+map can vanish on a bright one.
+
+The check tool covers controlled vocabulary, every semantic axis, deterministic
+ties, profile precedence, inherited/custom/hidden labels, migration mapping and
 backup shape, PF2e coverage, gridless fallback, line width, token emanation
-sizes and movement, aura adaptation, shader uniforms, and renderer restoration
-contracts.
+sizes and movement, aura adaptation, look distinctness, pattern and outline
+geometry, renderer purity, the shed gates, and renderer restoration contracts.

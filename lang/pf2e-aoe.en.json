@@ -1,6 +1,6 @@
 {
   "GLS.feature.pf2e-aoe.title": "PF2e Spellglass Areas",
-  "GLS.feature.pf2e-aoe.hint": "Replaces PF2e Region templates, token emanations, and auras with translucent, damage-aware WebGL areas, integrated labels, and configurable warning zones.",
+  "GLS.feature.pf2e-aoe.hint": "Replaces PF2e Region templates, token emanations, and auras with bold, patterned areas — a distinct pattern, rim and alert for every effect function and a distinct colour for every material — plus integrated labels and warning zones.",
   "GLAOE.Settings.MotionTier.Name": "Area motion",
   "GLAOE.Settings.MotionTier.Hint": "How much area effects animate on your screen. This is a client preference and does not change another player's view.",
   "GLAOE.Settings.MotionTier.Default": "Full",
