@@ -45,8 +45,21 @@ export class DaggerheartCardFeed {
     return readMessage(this.snapshot(message));
   }
 
+  /**
+   * A card or feature posted from a sheet is shown whole: the overlay clones the system's own chat card
+   * for it rather than this feed drawing a roll card. The reader still decides whether it may show at all.
+   */
+  clones(message) {
+    try {
+      return this.read(message)?.dhKind === "feature";
+    } catch {
+      return false;
+    }
+  }
+
   async handleCreate(message) {
-    if (!this.read(message)) return;
+    const first = this.read(message);
+    if (!first || first.dhKind === "feature") return;
     await this.waitForDice(message);
     const live = game.messages?.get?.(message.id);
     if (!this.overlay.streamMode.active || !live) return;
