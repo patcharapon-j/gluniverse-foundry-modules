@@ -28,7 +28,7 @@ import {
   textOf
 } from "./model.mjs";
 import { bubbleLineHTML, bubbleTailHTML, laneLineHTML } from "./render.mjs";
-import { identityOf } from "./identity.mjs";
+import { identityOf, viewsAsAudience } from "./identity.mjs";
 import { overlaysOn, streamBubblesOn } from "./settings.mjs";
 
 /** How long a line takes to leave, matching `--gl-d-glide` in the stylesheet. */
@@ -58,7 +58,8 @@ class Overlay {
       blind: message.blind,
       authorId: message.author?.id ?? null,
       viewerId: game.user?.id ?? null,
-      viewerIsGM: Boolean(game.user?.isGM)
+      viewerIsGM: Boolean(game.user?.isGM),
+      audience: viewsAsAudience()
     });
     const token = this.#tokenFor(message);
     const route = routeLine({

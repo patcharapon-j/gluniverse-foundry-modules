@@ -202,6 +202,13 @@ eq(view({ whisper: ["viewer"] }), true, "a whisper to the viewer");
 eq(view({ whisper: ["gm"], viewerId: "author" }), true, "the author reads their own whisper");
 eq(view({ blind: true, viewerId: "author" }), false, "a blind line hides from its own author");
 eq(view({ blind: true, viewerId: "author", viewerIsGM: true }), true, "unless the author is a GM");
+// The stream login draws for the whole audience, so it reads public lines only, whatever its rights.
+const stream = { audience: true, viewerIsGM: true };
+eq(view({ ...stream }), true, "the stream login reads a public line");
+eq(view({ ...stream, whisper: ["viewer"] }), false, "the stream login never draws a whisper sent to it");
+eq(view({ ...stream, whisper: ["viewer"], viewerId: "author" }), false, "nor its own whisper");
+eq(view({ ...stream, blind: true, viewerId: "author" }), false, "nor a blind line it wrote as a GM");
+eq(M.nameFor({ name: "Ogre", hidden: true, viewerIsGM: false }).unknown, true, "a hidden name reads Unknown to the audience");
 const visible = { onScene: true, visible: true, onScreen: true };
 const route = (o) => M.routeLine({ mode: "say", canRead: true, overlaysOn: true, suppressed: false, token: visible, ...o });
 eq(route({}), "balloon", "Say over a visible token");
@@ -223,6 +230,8 @@ ok(/canView\(/.test(sources["overlay.mjs"]) && /canRead/.test(sources["overlay.m
 ok(/isContentVisible/.test(sources["log.mjs"]), "log.mjs: restyles an entry without asking isContentVisible — a head over hidden content names the speaker of a line the viewer was not sent");
 for (const file of ["overlay.mjs", "log.mjs"]) ok(/identityOf\(/.test(sources[file]), `${file}: names a speaker without identityOf — a hidden name would show on one surface and not another`);
 ok(/speakerNameHidden\(/.test(sources["identity.mjs"]), "identity.mjs: the hidden-name rule is not the stream cards' speakerNameHidden");
+ok(/viewerIsGM:.*&&\s*!viewsAsAudience\(\)/.test(sources["identity.mjs"]), "identity.mjs: the stream login reads hidden names as a GM, and its log is what the stream clones");
+ok(/audience:\s*viewsAsAudience\(\)/.test(sources["overlay.mjs"]), "overlay.mjs: canView is not told the stream login is the audience, so its whispers and blind lines reach the stream");
 {
   const overlay = strip(read("scripts/features/stream/chat-overlay.js"));
   ok(/rpModeOf\(/.test(overlay), "stream/chat-overlay.js: does not read the roleplay flag — a whispered line would reach the stream on non-PF2e worlds");

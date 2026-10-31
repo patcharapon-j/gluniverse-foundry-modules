@@ -8,11 +8,21 @@
  * Display Name. The art is never hidden: a face is what the players are looking at on the map anyway.
  */
 
+import { Features } from "../../core/registry.mjs";
 import { rpModeOf } from "../../core/rp-mode.mjs";
 import { playersSeeDisplayName, speakerNameHidden } from "../stream-cards/text/read-text.js";
+import { isConfiguredStreamUser } from "../stream/settings.js";
 import { nameFor } from "./model.mjs";
 
 const loc = (key) => game.i18n.localize(key);
+
+/**
+ * Whether this client is the stream login. Its screen is the audience's, so it reads names and lines
+ * as a player would even when it holds GM rights; its log is what the stream's cloned cards copy.
+ */
+export function viewsAsAudience() {
+  return Features.on("stream") && isConfiguredStreamUser();
+}
 
 /** The token document a message's speaker names, on whichever scene it is. */
 export function speakerTokenDoc(speaker) {
@@ -47,7 +57,7 @@ export function identityOf(message) {
     nameVisibility: game.system?.id === "pf2e" ? Boolean(game.pf2e?.settings?.tokens?.nameVisibility) : true,
     playersCanSeeName: playersCanSeeName(tokenDoc)
   });
-  const shown = nameFor({ name: base, hidden, viewerIsGM: Boolean(game.user?.isGM) });
+  const shown = nameFor({ name: base, hidden, viewerIsGM: Boolean(game.user?.isGM) && !viewsAsAudience() });
   return {
     mode,
     name: shown.unknown ? loc("GLRP.unknown") : shown.name,

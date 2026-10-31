@@ -307,9 +307,13 @@ export function sanitizePin(value) {
  * Whether a viewer may read a line at all. The message's own visibility, exactly: Foundry's
  * `ChatMessage#isContentVisible`. A bubble, a caption or a restyled entry is the message, drawn
  * somewhere else, so it shows to exactly the people the message shows to and to nobody more.
+ *
+ * `audience` is the stream login: whatever it draws, the whole audience reads. It is often a GM and
+ * may be a whisper's recipient or a blind roll's author, so for it only a public line is readable.
  */
-export function canView({ whisper = [], blind = false, authorId = null, viewerId = null, viewerIsGM = false } = {}) {
+export function canView({ whisper = [], blind = false, authorId = null, viewerId = null, viewerIsGM = false, audience = false } = {}) {
   const recipients = Array.isArray(whisper) ? whisper : [];
+  if (audience) return !blind && !recipients.length;
   if (authorId && authorId === viewerId) return !(blind && !viewerIsGM);
   if (recipients.length && !recipients.includes(viewerId)) return false;
   return true;

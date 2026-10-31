@@ -43,7 +43,7 @@ export function restyleMessage(message, html) {
     img: who.img,
     label: loc(I18N.label(mode)),
     // The mark tells a GM the table reads "Unknown"; a player reading "Unknown" needs no telling.
-    hiddenFromPlayers: who.hiddenFromPlayers && game.user.isGM,
+    hiddenFromPlayers: who.hiddenFromPlayers && !who.unknown,
     hiddenHint: loc("GLRP.log.hiddenName")
   });
   header.prepend(head);
