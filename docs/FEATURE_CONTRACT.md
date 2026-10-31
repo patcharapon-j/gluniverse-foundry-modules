@@ -231,6 +231,7 @@ rather than at the end.
 | stream-targets     | tgt.                         | null              | —               | off     |
 | hexcrawl           | hex.                         | null              | —               | off     |
 | theatre            | th.                          | null              | —               | off     |
+| roleplay-chat      | rp.                          | null              | —               | off     |
 | perf               | perf.                        | null              | —               | ON      |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite

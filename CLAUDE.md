@@ -1335,7 +1335,7 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (151 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (190 tests; Node's
 directory mode is not supported here, so name the glob).
 
 Seven things are worth knowing before you change any of it.
@@ -1670,6 +1670,45 @@ family is declared in `gl-fonts.css`, and every dynamic family (`GLTH.style/
 face/cue.*`) resolves. To see it: `node tools/theatre-preview.mjs && node
 tools/preview-server.mjs`, then `/.preview/theatre.html` (URL params `style`,
 `face`, `seek` for headless frames). See `docs/THEATRE.md`.
+
+**When touching Roleplay Chat** (`features/roleplay-chat/`, `core/rp-mode.mjs`,
+`stream-cards/text/read-text.js`, `styles/roleplay-chat.css`), re-run its check,
+and `stream-check` too if the reader or the chat filter moved. Everything it
+covers fails silently:
+
+```bash
+node tools/roleplay-chat-check.mjs
+```
+
+Zero problems required. Four things are worth knowing before you change it.
+
+**Privacy is the message's, never the feature's.** A bubble, a caption or a
+restyled log head is drawn only for a viewer who can read the message
+(`model.canView`), and a head is never added over a body Foundry has already
+swapped for its placeholder: it would name the speaker of a line that viewer was
+not sent. A hidden name is decided once, by `speakerNameHidden` in
+`read-text.js`, for the log, the bubble and the stream alike.
+
+**The mode is a flag, and the flag wins.** `rp.mode` is read and written only
+through `core/rp-mode.mjs`. Think and Narrator are posted as IC, so anything that
+reads the style alone (the stream's filter, its reader) files a thought as speech;
+the RP rows in `chat-filter.mjs` (`RP_MODE_ROWS`) and `read-text.js` (`RP_TEXT`)
+must agree, and the check holds them to `RP_MODES`. A Do line is stored without
+the name at its front and every renderer puts it back.
+
+**Only the chat box is intercepted.** `chatMessage` also fires for chat macros, so
+the hook acts only while an Enter in the box has armed it. Lines are created with
+`chatBubble: false`, or Foundry draws its own bubble beside this one, for viewers
+this feature refused. `/think` is a real `CHAT_COMMANDS` entry so a macro can use
+it.
+
+**The bar must read over anything.** A collapsed sidebar moves the box into
+`#chat-notifications`, a grid with no background, over the canvas; the bar and
+hint carry their own glass, and the grid rule gives them rows. Model and markup
+are pure (`model.mjs`, `render.mjs`), which is what the preview drives:
+`node tools/roleplay-chat-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/roleplay-chat.html`. Foundry's own log and box need a live session.
+See `docs/ROLEPLAY_CHAT.md`.
 
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
