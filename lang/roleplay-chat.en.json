@@ -1,0 +1,65 @@
+{
+  "GLS.feature.roleplay-chat.title": "Roleplay Chat",
+  "GLS.feature.roleplay-chat.hint": "Speak, act and think as your character from the chat box. A switch above the box picks out of character or in character, and in character, Say, Do or Think. Lines appear over the speaker's token for everyone who can see it, set in their own voice in the chat log, and on the stream as cards of their own kind. The GM speaks as the token they control, or as the Narrator. System agnostic.",
+
+  "GLRP.narrator": "Narrator",
+  "GLRP.unknown": "Unknown",
+
+  "GLRP.label.say": "Says",
+  "GLRP.label.do": "Does",
+  "GLRP.label.think": "Thinks",
+  "GLRP.label.narrator": "Narrator",
+  "GLRP.label.ooc": "OOC",
+
+  "GLRP.switch.label": "Out of character or in character",
+  "GLRP.switch.subLabel": "How the line is delivered",
+  "GLRP.switch.ooc": "OOC",
+  "GLRP.switch.ic": "In character",
+  "GLRP.switch.say": "Say",
+  "GLRP.switch.do": "Do",
+  "GLRP.switch.think": "Think",
+
+  "GLRP.placeholder.say": "Speak as {name}…",
+  "GLRP.placeholder.do": "What does {name} do?",
+  "GLRP.placeholder.think": "{name} thinks…",
+  "GLRP.placeholder.narrator": "Narrate the scene…",
+  "GLRP.placeholder.ooc": "Out of character…",
+
+  "GLRP.chip.auto": "AUTO",
+  "GLRP.chip.pinned": "PINNED",
+  "GLRP.chip.title": "Choose who you are speaking as",
+
+  "GLRP.picker.label": "Speakers",
+  "GLRP.picker.speakAs": "Speak as",
+  "GLRP.picker.assigned": "ASSIGNED",
+  "GLRP.picker.follow": "Follow selection",
+  "GLRP.picker.pin": "Pin a speaker",
+  "GLRP.picker.selected": "SELECTED",
+  "GLRP.picker.nothingSelected": "NOTHING SELECTED",
+  "GLRP.picker.hidden": "HIDDEN",
+  "GLRP.picker.offScene": "OFF SCENE",
+
+  "GLRP.hint.toggle": "OOC / IC",
+  "GLRP.hint.cycle": "Say, Do, Think",
+  "GLRP.hint.noSpeaker": "No character assigned. Ask your GM to assign one to speak in character.",
+  "GLRP.hint.noSpeakerGM": "Select a token or pin a speaker to speak in character.",
+
+  "GLRP.log.hiddenName": "Players see this speaker as Unknown.",
+
+  "GLRP.errors.noSpeaker": "You need a character to speak in character. Ask your GM to assign one.",
+  "GLRP.errors.post": "Roleplay Chat could not post that line. See the console for details.",
+
+  "GLRP.settings.overlays.name": "Bubbles and captions",
+  "GLRP.settings.overlays.hint": "Show in-character lines over the speaker's token and in the caption lane on this screen. The chat log is unaffected.",
+  "GLRP.settings.streamBubbles.name": "Bubbles on the stream",
+  "GLRP.settings.streamBubbles.hint": "Also draw bubbles and captions on the stream login. Off by default, because the stream's chat overlay already shows each line as a card.",
+
+  "GLRP.keys.toggle.name": "Roleplay Chat: out of character / in character",
+  "GLRP.keys.toggle.hint": "Switch the chat box between out of character and in character. Works while typing.",
+  "GLRP.keys.cycle.name": "Roleplay Chat: Say, Do, Think",
+  "GLRP.keys.cycle.hint": "Step the chat box through Say, Do and Think. Works while typing.",
+
+  "GLRP.panel.title": "Roleplay Chat",
+  "GLRP.panel.streamBubbles": "Draw bubbles and captions on the stream",
+  "GLRP.panel.hint": "Each in-character line already reaches the stream as a card. Turn this on to also show it over the speaker's token in the shot. Which lines become cards is on the Chat Filter page."
+}

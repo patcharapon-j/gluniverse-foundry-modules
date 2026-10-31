@@ -1,0 +1,560 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Roleplay Chat
+   The switch above the chat box, the chat log's in-character entries, the
+   bubbles over tokens, the caption lane, and the tones of the stream cards
+   this feature's lines become.
+
+   Two voices of type. Google Sans Flex is what the interface says and what a
+   character says aloud; Cormorant Garamond italic is what the story narrates:
+   a Do line, a thought, the Narrator. Small radii, a 1px inner rule struck
+   from the tint channel, soft drop shadows, no glow halos, no cut corners.
+
+   Every custom property here is feature-local (`--glrp-*`) and declared on
+   this feature's own roots, never on :root.
+   ════════════════════════════════════════════════════════════════════════ */
+
+:is(.glrp-bar, .glrp-hint, #chat-message, .glrp-msg, .glrp-ooc, .glrp-layer, .glrp-lane, .glus-rc) {
+  --glrp-sans: "Google Sans Flex", var(--gl-display);
+  --glrp-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  /* Mode hues: the suite's semantic tokens, softened toward text so nothing reads as neon. */
+  --glrp-say: color-mix(in oklab, var(--gl-info-hot) 72%, var(--gl-text));
+  --glrp-do: var(--gl-signal-pale);
+  --glrp-think: color-mix(in oklab, var(--gl-violet) 78%, var(--gl-text));
+  --glrp-think-ink: color-mix(in oklab, var(--gl-violet-hot) 75%, var(--gl-text));
+  --glrp-ooc: var(--gl-text-dim);
+  --glrp-narr: var(--gl-text);
+  --glrp-glass: color-mix(in srgb, var(--gl-ink-1) 84%, transparent);
+  --glrp-drop: 0 8px 22px rgb(var(--gl-tint-dark) / 0.45);
+  --glrp-hue: var(--glrp-ooc);
+}
+[data-glrp-mode="say"] { --glrp-hue: var(--glrp-say); }
+[data-glrp-mode="do"] { --glrp-hue: var(--glrp-do); }
+[data-glrp-mode="think"] { --glrp-hue: var(--glrp-think); }
+[data-glrp-mode="narrator"] { --glrp-hue: var(--glrp-narr); }
+[data-glrp-mode="ooc"] { --glrp-hue: var(--glrp-ooc); }
+
+/* Foundry's own "In character" message mode is this feature's switch while it runs. */
+body.glrp-on #message-modes [data-mode="ic"] { display: none; }
+
+/* ── avatars ───────────────────────────────────────────────────────────── */
+
+.glrp-avatar {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 0;
+  box-shadow: 0 0 0 1px rgb(var(--gl-tint-light) / 0.14);
+}
+.glrp-mono {
+  display: grid;
+  place-items: center;
+  background: var(--gl-ink-3);
+  font: italic 600 13px/1 var(--glrp-serif);
+  color: var(--gl-text-dim);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE SWITCH
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The bar carries its own glass: a sidebar can be transparent (several systems make it so), and a
+   collapsed sidebar puts the chat box straight over the canvas, where unbacked type disappears. */
+.glrp-bar {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 8px;
+  background: var(--glrp-glass);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.08), 0 4px 14px rgb(var(--gl-tint-dark) / 0.3);
+  pointer-events: all;
+  font-family: var(--glrp-sans);
+}
+.glrp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.glrp-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgb(var(--gl-tint-light) / 0.04);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.07);
+}
+.glrp-bar .glrp-seg-btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 5px 9px;
+  border-radius: 4px;
+  font: 600 11px/1 var(--glrp-sans);
+  letter-spacing: 0.06em;
+  color: var(--gl-text-dim);
+  text-align: center;
+  white-space: nowrap;
+  transition: color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glrp-bar .glrp-seg-btn:hover:not(:disabled) { color: var(--gl-text); }
+.glrp-bar .glrp-seg-btn:focus-visible { outline: 1px solid var(--glrp-hue); outline-offset: 1px; }
+.glrp-bar .glrp-seg-btn[aria-pressed="true"] {
+  color: var(--gl-text-bright);
+  background: color-mix(in srgb, var(--glrp-hue) 20%, var(--gl-ink-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glrp-hue) 45%, transparent), inset 0 -2px 0 var(--glrp-hue);
+}
+.glrp-bar .glrp-seg-btn:disabled { opacity: 0.35; cursor: default; }
+.glrp-sub {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+.glrp-bar .glrp-sub .glrp-seg-btn { padding: 6px 0; font-size: 12px; letter-spacing: 0.02em; }
+
+/* the speaker chip */
+.glrp-bar .glrp-chip {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 62%;
+  padding: 3px 9px 3px 3px;
+  border-radius: 6px;
+  background: rgb(var(--gl-tint-light) / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.09);
+  transition: background-color var(--gl-d-quick) var(--gl-ease);
+}
+.glrp-bar .glrp-chip:hover,
+.glrp-bar .glrp-chip[aria-expanded="true"] { background: rgb(var(--gl-tint-light) / 0.09); }
+.glrp-bar .glrp-chip:focus-visible { outline: 1px solid var(--glrp-hue); outline-offset: 1px; }
+.glrp-chip-text { display: grid; gap: 2px; min-width: 0; }
+.glrp-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 12px/1.1 var(--glrp-sans);
+  color: var(--gl-text-bright);
+}
+.glrp-chip-tag {
+  font: 600 8px/1 var(--glrp-sans);
+  letter-spacing: 0.12em;
+  color: var(--gl-text-dim);
+}
+.glrp-chip-caret { flex: none; font-size: 10px; color: var(--gl-text-dim); }
+
+/* the picker */
+.glrp-picker {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: var(--gl-z-sticky);
+  width: 240px;
+  max-height: 320px;
+  overflow: hidden auto;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gl-ink-3) 96%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.09), 0 12px 32px rgb(var(--gl-tint-dark) / 0.6);
+  animation: gl-rise-in var(--gl-d-brisk) var(--gl-ease) both;
+}
+.glrp-bar .glrp-picker-head {
+  margin: 6px 6px 4px;
+  padding: 0;
+  border: 0;
+  font: 600 9px/1 var(--glrp-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glrp-bar .glrp-picker-row {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 5px;
+  font: 13px/1.1 var(--glrp-sans);
+  color: var(--gl-text);
+}
+.glrp-bar .glrp-picker-row:hover,
+.glrp-bar .glrp-picker-row:focus-visible { background: rgb(var(--gl-tint-light) / 0.05); }
+.glrp-bar .glrp-picker-row[aria-selected="true"] { background: rgb(var(--gl-tint-light) / 0.08); color: var(--gl-text-bright); }
+.glrp-picker-row .glrp-avatar { width: 24px; height: 24px; }
+.glrp-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glrp-picker-tag {
+  margin-left: auto;
+  flex: none;
+  font: 600 9px/1 var(--glrp-sans);
+  letter-spacing: 0.1em;
+  color: var(--gl-text-dim);
+}
+
+/* the line under the box */
+.glrp-hint {
+  justify-self: start;
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--glrp-glass);
+  font: 11px/1.3 var(--glrp-sans);
+  color: var(--gl-text-dim);
+  pointer-events: all;
+}
+.glrp-hint kbd {
+  font: 600 10px/1 var(--glrp-sans);
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: rgb(var(--gl-tint-light) / 0.06);
+  box-shadow: none;
+  color: var(--gl-text);
+}
+
+/* the box itself: a faint tint of the mode, and the voice the line will appear in */
+#chat-message[data-glrp-mode] > .editor-container {
+  background: color-mix(in srgb, var(--glrp-hue) 4%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--glrp-hue) 28%, rgb(var(--gl-tint-light) / 0.08));
+}
+#chat-message[data-glrp-mode] > .editor-container .editor-content {
+  font-family: var(--glrp-sans);
+  color: var(--gl-text-bright);
+}
+#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) > .editor-container .editor-content,
+#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) > .editor-container::after {
+  font-family: var(--glrp-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 1.25;
+}
+#chat-message[data-glrp-mode] > .editor-container::after { font-family: var(--glrp-sans); font-style: normal; }
+textarea#chat-message[data-glrp-mode] {
+  background: color-mix(in srgb, var(--glrp-hue) 4%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--glrp-hue) 28%, rgb(var(--gl-tint-light) / 0.08));
+}
+textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) {
+  font: italic 500 17px/1.25 var(--glrp-serif);
+}
+
+/* The notification area is a two-row grid; the bar and the hint each get a row of their own. */
+#chat-notifications:has(> .glrp-bar) {
+  grid-template-rows: 1fr auto calc(var(--chat-input-height) + var(--chat-menu-height, 0px) + 10px) auto;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE CHAT LOG
+   ════════════════════════════════════════════════════════════════════════ */
+
+.chat-message.glrp-msg {
+  position: relative;
+  padding: 9px 11px 10px 13px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--glrp-hue) 5%, var(--gl-ink-2));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.07);
+  color: var(--gl-text-bright);
+  font-family: var(--glrp-sans);
+}
+.chat-message.glrp-msg::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--glrp-hue);
+}
+.chat-message.glrp-msg .message-header {
+  align-items: flex-start;
+  margin-bottom: 6px;
+  color: var(--gl-text-dim);
+}
+.chat-message.glrp-msg .message-sender { display: none; }
+.chat-message.glrp-msg .message-metadata { flex: none; color: var(--gl-text-faint); font: 11px/1.2 var(--glrp-sans); }
+.chat-message.glrp-msg .message-metadata a { color: inherit; }
+.chat-message.glrp-msg .whisper-to,
+.chat-message.glrp-msg .flavor-text { flex: 0 0 100%; font: 11px/1.3 var(--glrp-sans); color: var(--gl-text-dim); }
+.glrp-head-wrap { flex: 1; min-width: 0; }
+.glrp-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.glrp-head .glrp-portrait { width: 30px; height: 30px; }
+.glrp-head .glrp-portrait.glrp-mono { font-size: 16px; }
+.glrp-who { display: grid; gap: 3px; min-width: 0; }
+.glrp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 14px/1.1 var(--glrp-sans);
+  color: var(--gl-text-bright);
+}
+.glrp-hidden { font-size: 10px; color: var(--gl-text-dim); }
+.glrp-label {
+  font: 600 9px/1 var(--glrp-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--glrp-hue);
+}
+.chat-message.glrp-msg .message-content.glrp-body {
+  font: 14.5px/1.42 var(--glrp-sans);
+  color: var(--gl-text-bright);
+}
+.chat-message.glrp-msg .glrp-body p { margin: 0; }
+.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body::before { content: "“"; color: var(--glrp-hue); }
+.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body::after { content: "”"; color: var(--glrp-hue); }
+.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body > p { display: inline; }
+.chat-message.glrp-msg:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-body {
+  font: italic 500 17px/1.25 var(--glrp-serif);
+}
+.glrp-lead { font-weight: 700; font-style: inherit; color: var(--glrp-do); }
+.chat-message.glrp-msg[data-glrp-mode="think"] { background: color-mix(in srgb, var(--glrp-hue) 7%, var(--gl-ink-1)); }
+.chat-message.glrp-msg[data-glrp-mode="think"]::before {
+  background: repeating-linear-gradient(180deg, var(--glrp-hue) 0 3px, transparent 0 6px);
+}
+.chat-message.glrp-msg[data-glrp-mode="think"] .glrp-body { color: var(--glrp-think-ink); }
+
+/* Narrator: centred between thin rules, like a line of the book. */
+.chat-message.glrp-msg[data-glrp-mode="narrator"] {
+  padding: 12px 16px 14px;
+  text-align: center;
+  background: var(--gl-ink-1);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.05);
+}
+.chat-message.glrp-msg[data-glrp-mode="narrator"]::before { display: none; }
+.chat-message.glrp-msg[data-glrp-mode="narrator"] .message-header { justify-content: center; }
+.glrp-rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 600 9px/1 var(--glrp-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-text-dim);
+}
+.glrp-rule::before,
+.glrp-rule::after {
+  content: "";
+  width: 34px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.3));
+}
+.glrp-rule::after { transform: scaleX(-1); }
+.chat-message.glrp-msg[data-glrp-mode="narrator"] .glrp-body {
+  font: italic 500 19px/1.28 var(--glrp-serif);
+  color: var(--gl-text-bright);
+}
+
+/* Out of character keeps Foundry's look; it only gains a tag, beside the name. Foundry's header
+   shares its width 3:2 between sender and metadata, which would strand the tag in the middle. */
+.chat-message.glrp-ooc .message-sender { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.glrp-ooc-tag {
+  flex: none;
+  align-self: center;
+  margin: 0 auto 0 6px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font: 600 9px/1 var(--glrp-sans);
+  letter-spacing: 0.1em;
+  color: var(--gl-text-dim);
+  background: rgb(var(--gl-tint-light) / 0.06);
+}
+.theme-light .glrp-ooc-tag,
+.glrp-ooc.theme-light .glrp-ooc-tag {
+  color: var(--gl-ink-3);
+  background: rgb(var(--gl-tint-dark) / 0.08);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   OVER THE CANVAS
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glrp-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gl-z-sticky);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* A stack of lines over (or under) one token. Placed by JS through `translate`. */
+.glrp-bub {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  width: max-content;
+  max-width: 280px;
+  font-family: var(--glrp-sans);
+  will-change: translate;
+}
+.glrp-bub--above {
+  transform-origin: 50% 100%;
+  transform: translate(-50%, calc(-100% - 6px)) scale(var(--glrp-scale, 1));
+}
+.glrp-bub--below {
+  transform-origin: 50% 0;
+  transform: translate(-50%, 4px) scale(var(--glrp-scale, 1));
+}
+.glrp-bub-stack { display: grid; gap: 5px; justify-items: center; }
+
+.glrp-balloon {
+  position: relative;
+  max-width: 250px;
+  padding: 8px 13px 9px;
+  border-radius: 12px;
+  background: var(--glrp-glass);
+  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.12), var(--glrp-drop);
+  font: 15px/1.32 var(--glrp-sans);
+  color: var(--gl-text-bright);
+  text-align: left;
+  overflow-wrap: anywhere;
+  transform-origin: 50% 100%;
+  transition: opacity var(--gl-d-swift) var(--gl-ease), scale var(--gl-d-swift) var(--gl-ease);
+}
+.glrp-balloon-who {
+  display: block;
+  margin-bottom: 2px;
+  font: 600 9.5px/1 var(--glrp-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glrp-hue);
+}
+.glrp-balloon-txt { display: block; }
+.glrp-balloon.glrp-old { opacity: 0.55; scale: 0.94; }
+.glrp-tail {
+  width: 14px;
+  height: 9px;
+  margin-top: -1px;
+  background: var(--glrp-glass);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 1px 0 rgb(var(--gl-tint-light) / 0.12));
+}
+
+/* Think: a rounder cloud in the narrated voice, trailing two puffs. */
+.glrp-bub[data-glrp-mode="think"] .glrp-balloon {
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--gl-violet) 10%, var(--glrp-glass));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glrp-think) 28%, transparent), var(--glrp-drop);
+  font: italic 500 17px/1.22 var(--glrp-serif);
+  color: var(--glrp-think-ink);
+}
+.glrp-bub[data-glrp-mode="think"] .glrp-balloon-who { font-style: normal; }
+.glrp-puffs { display: grid; justify-items: center; gap: 3px; padding-top: 4px; }
+.glrp-puffs i {
+  display: block;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--gl-violet) 14%, var(--glrp-glass));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glrp-think) 32%, transparent);
+}
+.glrp-puffs i:nth-child(1) { width: 9px; height: 9px; }
+.glrp-puffs i:nth-child(2) { width: 5px; height: 5px; }
+
+/* Do: narration under the token, no box. */
+.glrp-bub[data-glrp-mode="do"] { max-width: 320px; }
+.glrp-cap-line {
+  padding: 4px 18px 6px;
+  text-align: center;
+  background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.62), rgb(var(--gl-tint-dark) / 0));
+  font: italic 500 18px/1.2 var(--glrp-serif);
+  color: var(--gl-text-bright);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9), 0 0 10px rgb(var(--gl-tint-dark) / 0.6);
+  overflow-wrap: anywhere;
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
+}
+.glrp-cap-line.glrp-old { opacity: 0.55; }
+
+/* ── the caption lane ──────────────────────────────────────────────────── */
+
+.glrp-lane {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  z-index: var(--gl-z-sticky);
+  translate: -50% 0;
+  width: min(800px, 70vw);
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  pointer-events: none;
+  font-family: var(--glrp-sans);
+}
+.glrp-line {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  max-width: 100%;
+  padding: 7px 18px 8px 7px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gl-ink-1) 80%, transparent);
+  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.09), 0 8px 22px rgb(var(--gl-tint-dark) / 0.4);
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
+}
+.glrp-line .glrp-line-art { width: 32px; height: 32px; }
+.glrp-line .glrp-line-art.glrp-mono { font-size: 16px; }
+.glrp-line-body { min-width: 0; }
+.glrp-line-who {
+  margin-bottom: 3px;
+  font: 600 9.5px/1 var(--glrp-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glrp-hue);
+}
+.glrp-line-txt { font: 16px/1.3 var(--glrp-sans); color: var(--gl-text-bright); overflow-wrap: anywhere; }
+.glrp-line[data-glrp-mode="say"] .glrp-line-txt::before { content: "“"; color: var(--glrp-hue); }
+.glrp-line[data-glrp-mode="say"] .glrp-line-txt::after { content: "”"; color: var(--glrp-hue); }
+.glrp-line:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-line-txt { font: italic 500 18px/1.22 var(--glrp-serif); }
+.glrp-line[data-glrp-mode="think"] .glrp-line-txt { color: var(--glrp-think-ink); }
+.glrp-line.glrp-old { opacity: 0.55; }
+
+/* Narrator: a film subtitle. */
+.glrp-line--narr {
+  display: block;
+  padding: 6px 48px 10px;
+  border-radius: 0;
+  background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.7), rgb(var(--gl-tint-dark) / 0));
+  box-shadow: none;
+  backdrop-filter: none;
+  text-align: center;
+}
+.glrp-line--narr .glrp-line-txt {
+  font: italic 500 25px/1.22 var(--glrp-serif);
+  text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 1), 0 0 14px rgb(var(--gl-tint-dark) / 0.7);
+}
+
+/* ── arriving and leaving ──────────────────────────────────────────────── */
+
+.glrp-enter { animation: gl-rise-in var(--gl-d-swift) var(--gl-ease) both; }
+.glrp-leaving { animation: gl-fade-out var(--gl-d-glide) var(--gl-ease-inout) forwards; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   STREAM CARDS
+   The tones this feature's lines carry on the stream's roll cards. The card's
+   own sheet styles the quote; only the tone colour, and Think's dotted rule,
+   are this feature's.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.glus-rc[data-tone="say"] { --glus-rc-tone: var(--glrp-say); }
+.glus-rc[data-tone="do"] { --glus-rc-tone: var(--glrp-do); }
+.glus-rc[data-tone="think"] { --glus-rc-tone: var(--glrp-think); }
+.glus-rc[data-tone="narrator"] { --glus-rc-tone: var(--gl-text-dim); }
+.glus-rc[data-tone="think"] .glus-rc-hair {
+  background: repeating-linear-gradient(90deg, var(--glus-rc-tone) 0 calc(0.18 * var(--u)), transparent 0 calc(0.36 * var(--u)));
+}
