@@ -197,6 +197,8 @@ export class RollCard {
     this.model = model;
     this.pending = false;
     this.version = 0;
+    /** Bumped by every `setChips`, so an update can tell a claim landed while it was fading. */
+    this.chipStamp = 0;
     this.destroyed = false;
     this.crack = null;
     this.damageCrack = null;
@@ -701,9 +703,12 @@ export class RollCard {
     this.clearCrack();
     const result = this.q(".glus-rc-result");
     const previous = Number(this.q(".glus-rc-total")?.textContent);
+    const chipsBefore = this.chipStamp;
     await tween(result, { opacity: [1, 0], translateY: [0, -0.5 * u], duration: 180, ease: EASE_EXIT });
     if (!this.alive(version)) return;
 
+    // A claim that landed during the fade (the GM's Fear) is newer than this model's chips: keep it.
+    if (this.chipStamp !== chipsBefore) model = { ...model, chips: this.model?.chips ?? model.chips };
     this.pending = true;
     this.render(model);
     const total = this.q(".glus-rc-total");
@@ -732,6 +737,7 @@ export class RollCard {
    */
   setChips(model) {
     if (this.destroyed) return;
+    this.chipStamp = (this.chipStamp ?? 0) + 1;
     this.model = { ...this.model, chips: model?.chips ?? [] };
     const player = this.q(".glus-rc-player");
     if (!player) return;

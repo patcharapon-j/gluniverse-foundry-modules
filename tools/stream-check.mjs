@@ -788,6 +788,11 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   if (!/speakerNameHidden\(/.test(reader)) {
     fail("daggerheart/read-message.js: the hidden-name rule is not the shared speakerNameHidden — a name hidden over the token could print on the stream");
   }
+  // The Fear claim lands moments after a roll, often while a reroll's result is fading out. Without the
+  // stamp, the redraw after the fade puts the older chips back and the "+1 Fear" is gone for good.
+  if (!/this\.chipStamp = \(this\.chipStamp \?\? 0\) \+ 1/.test(card) || !/this\.chipStamp !== chipsBefore/.test(card)) {
+    fail("roll-card.js: update() no longer keeps chips set during its fade — a Fear claim landing mid-reroll is overwritten by the older chips");
+  }
   if (!/chatFilter:\s*getChatFilter\(\)/.test(snapshot)) {
     fail("daggerheart/snapshot.js: the snapshot does not carry the chat filter — the reader would fall back to the defaults forever");
   }
