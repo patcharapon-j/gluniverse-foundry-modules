@@ -241,7 +241,7 @@ function kindOf(pf2e, context, derived, raw) {
  * classic `1d20+N`. A `10d20` has no "natural" and a die drawn with one of its ten results on it would
  * be a lie about the roll.
  */
-function readPlainRoll(raw, derived) {
+export function readPlainRoll(raw, derived) {
   const roll = derived.rolls[0] ?? {};
   const natural = singleD20Of(roll);
   const heading = headingText(raw.flavor) || plainText(raw.flavor) || null;

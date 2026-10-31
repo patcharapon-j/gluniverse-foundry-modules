@@ -1,9 +1,11 @@
 /**
- * GLUniverse Stream: PF2e Roll Cards — suite adapter.
+ * GLUniverse Stream: Roll Cards — suite adapter.
  *
- * In PF2e worlds the stream's chat overlay shows compact roll cards instead of
- * cloned chat cards: player, character, check, target, natural d20, DC, total
- * and degree of success, over character art framed on the face.
+ * In PF2e and Daggerheart (`gluniverse-daggerheart`) worlds the stream's chat
+ * overlay shows compact roll cards instead of cloned chat cards: player,
+ * character, check, target, the die, DC, total and outcome, over character art
+ * framed on the face. Each system has a reader of its own (`pf2e/`,
+ * `daggerheart/`) and one card draws them both (`cards/roll-card.js`).
  *
  * A promoted sub-feature of `stream`: the cards render into that feature's
  * overlay and have nowhere to draw without it, so `requiresFeature` gates them
@@ -14,8 +16,8 @@
  * The dependency points one way. `stream` never imports this feature; it
  * exposes a card-feed slot and a panel-section slot, which are filled here (the
  * feed at init — see onInit). With this feature absent or disabled the overlay's feed is null and
- * it clones Foundry-rendered chat cards, which is the non-PF2e path and has
- * always worked.
+ * it clones Foundry-rendered chat cards, which is every other system's path and
+ * has always worked.
  */
 
 import { Suite } from "../../core/registry.mjs";
@@ -27,6 +29,8 @@ import { claimAction, claimChange, renderSection } from "./panel.js";
 import { registerFramingSheetHeader } from "./framing/sheet-header.js";
 import { RollCardFeed } from "./pf2e/roll-card-feed.js";
 import { registerStatusHooks } from "./pf2e/status-watch.js";
+import { DaggerheartCardFeed } from "./daggerheart/card-feed.js";
+import { DAGGERHEART_SYSTEM, PF2E_SYSTEM } from "../stream/chat-filter.mjs";
 import { crackRenderer } from "./fx/crack-renderer.js";
 import { isConfiguredStreamUser } from "../stream/settings.js";
 import { warmAtIdle } from "../../core/warmup.mjs";
@@ -37,7 +41,7 @@ Suite.register({
   hint: "GLS.feature.stream-cards.hint",
   icon: "fa-solid fa-address-card",
   settingPrefix: CARDS_PREFIX,
-  system: "pf2e",
+  system: [PF2E_SYSTEM, DAGGERHEART_SYSTEM],
   requiresFeature: FEATURE_ID,
   requires: [],
   core: false,
@@ -56,15 +60,18 @@ Suite.register({
     // its constructor; phases run in registration order, so this feature's
     // onReady is too late and the overlay would be built with a null feed —
     // falling back to cloned chat cards forever, with nothing reported.
-    registerCardFeed((overlay) => new RollCardFeed(overlay));
+    // One feed per system; the overlay asks for the one this world runs.
+    registerCardFeed(PF2E_SYSTEM, (overlay) => new RollCardFeed(overlay));
+    registerCardFeed(DAGGERHEART_SYSTEM, (overlay) => new DaggerheartCardFeed(overlay));
   },
 
   onReady() {
-    // Status cards. These hooks are the feature's, not an overlay's: the overlay is rebuilt every time
-    // stream mode is toggled, so listeners owned by a feed instance would pile up one set per toggle.
-    // They are pointed at whichever feed is current and are inert until one exists, so registering here
-    // — after `stream`'s onReady has built the overlay and its feed — is the whole wiring.
-    registerStatusHooks();
+    // Status cards (PF2e only: they are read off its condition and effect items). These hooks are the
+    // feature's, not an overlay's: the overlay is rebuilt every time stream mode is toggled, so
+    // listeners owned by a feed instance would pile up one set per toggle. They are pointed at
+    // whichever feed is current and are inert until one exists, so registering here — after `stream`'s
+    // onReady has built the overlay and its feed — is the whole wiring.
+    if (game.system?.id === PF2E_SYSTEM) registerStatusHooks();
 
     // `basicCards` and the per-kind rows of `statusUpdates` became rows of the stream's chat filter.
     // Fire-and-forget: it writes once, on the active GM, only in a world that never stored a filter.

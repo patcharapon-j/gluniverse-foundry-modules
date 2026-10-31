@@ -8,11 +8,11 @@
   </div>
   <p class="gluniverse-stream-form-hint"><small>A GM roll with no art of its own — a plain roll with no token, or a creature still on a default icon — shows this picture instead of the monogram. Leave it empty to keep the monogram. {{#if defaultRollArt.focus}}Framed by hand.{{else}}Framed automatically.{{/if}}</small></p>
   <div class="gluniverse-stream-actions">
-    <button type="button" data-action="portrait-framing" title="Choose how each character's picture is framed on PF2e roll cards"><i class="fas fa-crop-simple"></i> Frame Portraits</button>
+    <button type="button" data-action="portrait-framing" title="Choose how each character's picture is framed on roll cards"><i class="fas fa-crop-simple"></i> Frame Portraits</button>
   </div>
 </section>
 
-
+{{#if statusCards}}
 <section class="gluniverse-stream-panel">
   <h2>Status Updates</h2>
   <p class="gluniverse-stream-form-hint"><small>A small card, the size of the damage row, when a creature gains or loses a condition. An NPC also has to be standing somewhere a player could see it — a token on the scene that is not hidden — whatever is ticked here. Which statuses are shown, and for whose creatures, is on the <a data-action="open-chat-filter">Chat Filter</a> page.</small></p>
@@ -27,4 +27,5 @@
     </label>
   </div>
 </section>
+{{/if}}
 

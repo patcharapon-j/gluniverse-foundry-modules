@@ -19,7 +19,9 @@ import {
   CHAT_FILTER_DETAILS,
   CHAT_FILTER_GROUPS,
   CHAT_FILTER_ROWS,
-  DEFAULT_CHAT_FILTER
+  DEFAULT_CHAT_FILTER,
+  hasRollCards,
+  rowAppliesTo
 } from "./chat-filter.mjs";
 import { FEATURE_ID, MODULE_ID } from "./constants.js";
 import { delegationUnavailable } from "./director-auth.mjs";
@@ -44,19 +46,19 @@ export function renderChatFilterApp() {
 }
 
 /** "Players 14 of 18 · GM 12 of 18" — what the Control Room prints beside the button. */
-export function summarizeChatFilter(filter = getChatFilter(), { pf2e = isPf2e() } = {}) {
-  const rows = visibleRows(pf2e);
+export function summarizeChatFilter(filter = getChatFilter(), { system = systemId() } = {}) {
+  const rows = visibleRows(system);
   const count = (author) => rows.filter((row) => filter.rows[row.id]?.[author]).length;
   return game.i18n.format(L("summary"), { player: count("player"), gm: count("gm"), total: rows.length });
 }
 
-function isPf2e() {
-  return game.system?.id === "pf2e";
+function systemId() {
+  return game.system?.id ?? null;
 }
 
-/** A PF2e-only row would be a switch that does nothing in any other world, so it is not offered there. */
-function visibleRows(pf2e) {
-  return CHAT_FILTER_ROWS.filter((row) => pf2e || !row.pf2e);
+/** A row tagged for another system would be a switch that does nothing in this world, so it is not offered here. */
+function visibleRows(system) {
+  return CHAT_FILTER_ROWS.filter((row) => rowAppliesTo(row, system));
 }
 
 function chatFilterAppClass() {
@@ -82,7 +84,10 @@ function chatFilterAppClass() {
 
     async _prepareContext(options) {
       const filter = getChatFilter();
-      const pf2e = isPf2e();
+      const system = systemId();
+      // The card details are what a drawn roll card may say; a world that clones chat cards has nothing
+      // for them to act on.
+      const rollCards = hasRollCards(system);
       const canEdit = canEditDirectorSettings();
       const loc = (key) => game.i18n.localize(key);
       const authorLabel = Object.fromEntries(CHAT_FILTER_AUTHORS.map((author) => [author, loc(L(`columns.${author}`))]));
@@ -92,7 +97,7 @@ function chatFilterAppClass() {
           label: loc(L(`group.${group.id}.name`)),
           hint: loc(L(`group.${group.id}.hint`)),
           rows: group.rows
-            .filter((row) => pf2e || !row.pf2e)
+            .filter((row) => rowAppliesTo(row, system))
             .map((row) => ({
               id: row.id,
               label: loc(L(`row.${row.id}.name`)),
@@ -106,7 +111,7 @@ function chatFilterAppClass() {
             }))
         }))
         .filter((group) => group.rows.length);
-      const details = pf2e
+      const details = rollCards
         ? CHAT_FILTER_DETAILS.map((detail) => ({
           id: detail.id,
           label: loc(L(`detail.${detail.id}.name`)),
@@ -120,13 +125,13 @@ function chatFilterAppClass() {
         ...(await super._prepareContext(options)),
         groups,
         details,
-        pf2e,
+        rollCards,
         canEdit,
         readOnly: !canEdit,
         readOnlyMessage: game.i18n.localize(delegationUnavailable()
           ? "GLUNIVERSE_STREAM.notifications.readOnly"
           : "GLUNIVERSE_STREAM.notifications.readOnlyNoGm"),
-        summary: summarizeChatFilter(filter, { pf2e }),
+        summary: summarizeChatFilter(filter, { system }),
         authors: CHAT_FILTER_AUTHORS.map((author) => ({ author, label: authorLabel[author] }))
       };
     }
@@ -162,7 +167,7 @@ function chatFilterAppClass() {
       const on = target.dataset.value === "on";
       if (!CHAT_FILTER_AUTHORS.includes(author)) return;
       const next = foundry.utils.deepClone(getChatFilter());
-      for (const row of visibleRows(isPf2e())) next.rows[row.id][author] = on;
+      for (const row of visibleRows(systemId())) next.rows[row.id][author] = on;
       await this.#save(next);
     }
 

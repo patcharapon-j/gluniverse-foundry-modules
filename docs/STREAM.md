@@ -5,7 +5,7 @@ Three suite features, ported from the standalone `gluniverse-stream` module.
 | Feature | Prefix | Requires | System |
 |---|---|---|---|
 | **Stream Client** (`stream`) | `stream.` | — | any |
-| **Stream Roll Cards** (`stream-cards`) | `stream.card` | `stream` | pf2e |
+| **Stream Roll Cards** (`stream-cards`) | `stream.card` | `stream` | pf2e, gluniverse-daggerheart |
 | **Targeting Lines** (`stream-targets`) | `tgt.` | — | any |
 
 All three ship disabled.
@@ -119,11 +119,20 @@ hairline.
 
 ## Roll cards
 
-In PF2e worlds the chat overlay shows compact cards instead of cloned chat
-cards: player, character, check, target, natural d20, DC, total and degree of
-success. Damage merges under its attack, spells update in place, rerolls rewrite
-their card, and criticals crack in gold or red using the suite's Broken-condition
-shader.
+In PF2e and Daggerheart (`gluniverse-daggerheart`) worlds the chat overlay shows
+compact cards instead of cloned chat cards: player, character, check, target,
+the die, DC, total and outcome. Damage merges under its attack, spells update in
+place, rerolls rewrite their card, and criticals crack in gold or red using the
+suite's Broken-condition shader.
+
+Each system has a reader of its own and one card draws them both. The overlay
+holds one feed, asked for by system id: `registerCardFeed(system, factory)` in
+`stream/extensions.mjs` keeps one factory per system, and `stream-cards`
+registers both from its `onInit`. A world running any other system gets no feed
+and clones Foundry's chat cards, exactly as before. The card reads a few optional
+model fields only the Daggerheart reader sets (the duality die, an outcome named
+by key, chips beside the player name, a feature's price); PF2e sets none of them
+and its cards are unchanged.
 
 Character art is framed on the face automatically: the suite's head locator
 (see [FACE_FRAME.md](FACE_FRAME.md)), then MediaPipe's detector, then smartcrop. A GM can set the framing by hand in the control panel's
@@ -141,16 +150,77 @@ quote styles). Both roles (`--glus-sans`, `--glus-serif`) are declared on the
 cards, never on `:root`. There are no cut corners, no monospace labels, no scan
 line, sheen or text decode; things fade and rise into place, and the strip
 unfolds inside its own rounded clip. The crit crack stays, since it is shared
-with core. The wrapper a cloned chat card gets on a non-PF2e world takes the same
+with core. The wrapper a cloned chat card gets on any other world takes the same
 radius and inner rule and nothing else; what is inside it is Foundry's.
 
 Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
 scales the overlay, which the stream client owns.
 
+## Daggerheart
+
+The reader is `stream-cards/daggerheart/read-message.js`, pure like the PF2e one;
+`daggerheart/snapshot.js` is the only half that reads the world, and
+`daggerheart/card-feed.js` keeps the cards in step. The system writes its whole
+record onto the message (`flags["gluniverse-daggerheart"] = { plate, kind,
+actorUuid, next, nextAct }`, from `postPlate()` in its `dice/rolls.ts`), and every
+number on a plate was decided before the card was drawn, so the reader only reads
+a plate and never re-derives one.
+
+| The system posts | The stream shows |
+|---|---|
+| `duality` | The duality card. Hope's face on the left in gold, Fear's on the right in violet, in one die's footprint; the half that won is lit, both on a critical. The total is large and the headline is With Hope, With Fear or Critical. The card takes the outcome's tone: the warm signal for hope, a deep violet body for fear, gold and the gold crack for a critical. |
+| `duality` thrown as a reaction (`plate.rxn`) | The same card with the duality thrown away: a neutral die and tone, and the verdict against the Difficulty as the headline. Its own chat filter row. |
+| `adversary` | "◆ Adversary" (or Environment) in the player slot, the kept d20, the total, and Hit or Miss. A natural 20 is a critical. |
+| `adversary` reaction | Nothing. The system whispers it to the GMs, and a whisper never reaches the stream. |
+| `damage` | Merged under the attack that offered it as the damage row, marked physical or magic. A critical is labelled Critical: this system awards each die's maximum on top of the roll, so it is not "×2". |
+| `card` (a card or feature posted from a sheet) | The action card: the feature's name large, the card it came from beside the verb, and its price ("Spend 1 Hope", "Mark 1 Stress") when the card has one unambiguous price. |
+| `rest` | Nothing, deliberately: a rest summary is bookkeeping, and at roll-card weight it reads as a second roll nobody made. |
+| A plain `/r`, the Focus refresh, a card's "roll a d4" | A plain roll card. |
+| A line somebody typed, Roleplay Chat included | A text card, through the shared text reader. |
+| Anything else | Nothing. Every kind above is named on purpose, because a null here looks exactly like the overlay being switched off. |
+
+**The Difficulty.** The system prints a plate's Difficulty to the whole table, so
+a player's roll shows it, with Success or Failure beside it; a GM's duality roll
+never does. An adversary's attack is measured against its target's Evasion, and
+that number shows only when the snapshot finds that the plate's target is a
+player character (or companion) a player owns whose own Evasion it is: it is
+already on their sheet. Aimed at anything else, both the number and the target's
+name stay off. The plate stores the target by name only, so this is a name
+lookup, and it fails closed.
+
+**Updates arrive on the same message.** Unlike PF2e, this system never replaces a
+message: the GM's Fear is claimed onto a fear roll (`claimed.fear`, set by the
+active GM's client a moment after it posts) and a reroll rewrites the plate in
+place (`dice/reroll.ts`). Both reach the stream as `updateChatMessage`, which the
+overlay hands to the feed's optional `handleUpdate`. The claim adds a "+1 Fear"
+chip beside the player name and touches nothing else on the card; a reroll
+rewrites the result with the Reroll chip, after Dice So Nice has shown the new
+die. The feed also reads the message again after the first dice wait, so a claim
+or a reroll that lands while the dice are still tumbling is on the card from the
+start.
+
+**Damage names no attack.** The damage button reads the weapon off the attack
+card and rolls a new message with no back-reference, so damage joins the most
+recent card from the same actor that offered "Roll damage" (`nextAct`
+`roll-damage` or `roll-foe-damage`, the latter only on a hit), within the same
+60-second window PF2e uses. One damage roll per card: the system claims the
+button when it is pressed, so the next one belongs to something else.
+
+**Names and art.** A creature the GM runs whose token nameplate players cannot
+read is "Unknown", with its art kept, by the shared `speakerNameHidden` rule fed
+by the token's own display mode (this system has no world switch for hiding
+names). A roll made from a sheet with no token on the scene reads the prototype
+token's mode. The art is the portrait first, the system's own rule, for players
+and adversaries alike; the Frame Portraits window frames that same picture in a
+Daggerheart world.
+
+There are no status cards in a Daggerheart world, and the Status Updates section
+of the control panel is not drawn there.
+
 ## Plain rolls and chat text
 
-In a PF2e world the overlay clones no chat card at all — every new message goes
+In a PF2e or Daggerheart world the overlay clones no chat card at all — every new message goes
 through the roll-card feed. So before these two kinds existed, a `/r 2d6+3` and a
 line somebody typed reached the stream as *nothing*: the reader returned null, no
 card was built, and the result is indistinguishable from the overlay being
@@ -312,14 +382,17 @@ left alone.
 
 ```bash
 node tools/stream-check.mjs          # source-shape invariants
-node --test tests/*.test.mjs         # 122 unit tests (directory mode is unsupported)
+node --test tests/*.test.mjs         # unit tests (directory mode is unsupported)
 ```
 
 To see the cards, `node tools/stream-cards-preview.mjs && node
 tools/preview-server.mjs 8962`, then `/.preview/stream-cards.html`. It imports
 the shipped `RollCard` and `StatusCard` against the shipped stylesheets, for
-every card kind. `?still` shows the settled state, `?scale=0.5` the shipped
-default size, `?bg=bright` a pale floor.
+every card kind. Its Daggerheart section is not hand-built: each card is a
+real-shaped message from `tests/fixtures/daggerheart/messages.mjs` (the ones the
+tests read) put through the shipped reader. `?still` shows the settled state,
+`?scale=0.5` the shipped default size, `?bg=bright` a pale floor, `?only=dh` the
+Daggerheart columns alone.
 
 `stream-check` covers what a diff cannot show: import bindings across the
 feature boundary, `stream` never importing a child, hook names that would
@@ -334,8 +407,17 @@ three restated labels staying gone, the degree of success never being re-gated o
 a DC in the message context, every status row having a reader *and* a control
 *and* a label, observability never becoming a setting, `preUpdateItem` staying
 out, the status hooks staying out of the per-overlay feed, the square framing on
-the thumbnail, the managed-card property agreeing across the overlay and both
-feeds, and the status strip staying smaller than the roll card's.
+the thumbnail, the managed-card property agreeing across the overlay and every
+feed, and the status strip staying smaller than the roll card's.
+
+For Daggerheart it pins a feed registered from `onInit` for each roll-card
+system, the reader staying pure and gating through the chat filter and
+`visibilityOf`, typed chat going through the shared text reader, every label key
+the reader hands the card existing in both the lang file and the card's English
+fallbacks, every Daggerheart kind filing under a row offered in that world, the
+cloned-card path filing by the same kind, the rest summary staying a non-card,
+and the Daggerheart stylesheet loading after the base card and staying inside
+the card's look.
 
 Neither tool can show you how any of this **looks**. The camera flights, the
 targeting arcs and the roll cards need a real session.

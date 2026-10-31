@@ -18,7 +18,15 @@
  *   • a player's own blind roll, a creature with no art (the monogram);
  *   • a status card with one chip and with three;
  *   • the wrapper a cloned chat card gets on a non-PF2e world, around a stand-in
- *     for Foundry's own chat message.
+ *     for Foundry's own chat message;
+ *   • Daggerheart: a roll With Hope, one With Fear (the "+1 Fear" chip arrives
+ *     after it lands, as the GM's claim does), a critical, a reaction, an attack
+ *     with its damage merged under it, an adversary's hit and miss, a posted
+ *     feature with its price, and typed Say, Do and Think lines. These are NOT
+ *     hand-built: each is a real-shaped message from
+ *     `tests/fixtures/daggerheart/messages.mjs` (the same ones the tests read)
+ *     put through the shipped Daggerheart reader, so the page shows what the
+ *     reader decides.
  *
  * URL parameters:
  *   still        the settled final state: no entrance, crits already cracked,
@@ -26,6 +34,7 @@
  *   scale=<n>    the overlay's card scale (`--glus-rc-scale`); 0.5 is the shipped
  *                default at 1080p, 1 is the design size. Default 1.
  *   bg=bright    a pale floor instead of the dark map, to judge the glass
+ *   only=dh      the Daggerheart columns alone
  *
  * The crit crack is the real shader through the real renderer, which needs PIXI
  * v7 the way Foundry provides it. The page loads it from cdnjs (as the Theatre
@@ -55,6 +64,7 @@ const html = String.raw`<!doctype html>
 <link rel="stylesheet" href="/styles/gl-motion.css">
 <link rel="stylesheet" href="/styles/stream.css">
 <link rel="stylesheet" href="/styles/stream-cards.css">
+<link rel="stylesheet" href="/styles/stream-cards-daggerheart.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
 <style>
   /* Page chrome only: none of this ships. */
@@ -82,23 +92,35 @@ const html = String.raw`<!doctype html>
   .pv-msg header b { color: #fff; }
   .pv-msg header time { margin-left: auto; font-size: 11px; color: #7d8292; }
   .pv-msg .dice { margin-top: 6px; padding: 6px; text-align: center; font-size: 20px; font-weight: 700; background: #23242e; border: 1px solid #34374a; border-radius: 3px; }
+  .pv-section { margin: 30px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--gl-text-dim); }
+  body[data-only="dh"] .pv-pf2e { display: none; }
+  body[data-only="dh"] .pv-section { margin-top: 0; }
 </style></head>
 <body>
 <div class="pv-head"><h1>Stream cards</h1><span class="pv-note" id="note"></span></div>
-<div class="pv-grid">
+<div class="pv-grid pv-pf2e">
   <div class="pv-col"><h2>Checks and saves</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-checks"></div></div>
   <div class="pv-col"><h2>Casts, actions, rolls, blind, no art</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-other"></div></div>
   <div class="pv-col"><h2>Chat text</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-text"></div></div>
   <div class="pv-col"><h2>Status cards · cloned chat card (non-PF2e)</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-status"></div></div>
 </div>
+<h2 class="pv-section">Daggerheart · real messages through the shipped reader</h2>
+<div class="pv-grid">
+  <div class="pv-col"><h2>Duality rolls</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-dh-duality"></div></div>
+  <div class="pv-col"><h2>Attack and damage · adversary</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-dh-attack"></div></div>
+  <div class="pv-col"><h2>Feature · typed lines</h2><div class="gluniverse-stream-chat-root position-top-left" id="col-dh-other"></div></div>
+</div>
 <script type="module">
 import { RollCard } from "/scripts/features/stream-cards/cards/roll-card.js";
 import { StatusCard } from "/scripts/features/stream-cards/cards/status-card.js";
+import { readMessage as readDaggerheart } from "/scripts/features/stream-cards/daggerheart/read-message.js";
+import * as DH from "/tests/fixtures/daggerheart/messages.mjs";
 
 const qs = new URLSearchParams(location.search);
 const still = qs.has("still");
 const scale = Number(qs.get("scale")) || 1;
 if (qs.get("bg") === "bright") document.body.dataset.bg = "bright";
+if (qs.get("only") === "dh") document.body.dataset.only = "dh";
 document.documentElement.style.setProperty("--glus-rc-scale", String(scale));
 document.getElementById("note").textContent =
   "scale " + scale + (still ? " · still" : " · live entrance") +
@@ -181,6 +203,47 @@ const STATUS = [
     changes: [{ id: "e", slug: "bless", name: "Bless", kind: "effect", img: null, value: null, direction: "gained", eased: false }] }
 ];
 
+/*
+ * Daggerheart. Every model is the shipped reader's answer to a fixture message; only the art is swapped
+ * for a drawn portrait. A spec's damage is the reader's own damage model for the message that follows
+ * the attack, and "later" is the same message after the GM's Fear was claimed onto it.
+ */
+const dhActor = (fixture, img) => ({ ...fixture, img });
+const ARIA = dhActor(DH.ARIA, ART.seri);
+const KESS = dhActor(DH.KESS, ART.jo);
+const BRUTE = dhActor(DH.BRUTE, ART.ogre);
+const read = (snapshot) => {
+  const result = readDaggerheart(snapshot);
+  if (!result) throw new Error("the Daggerheart reader returned nothing for " + snapshot.raw._id);
+  return result;
+};
+const fearRoll = DH.duality({ h: 3, f: 10, mod: 2, label: "Instinct", actor: KESS, dc: 14 });
+const DAGGERHEART = {
+  duality: [
+    { model: read(DH.duality({ h: 9, f: 4, mod: 2, label: "Agility", actor: ARIA, dc: 12 })) },
+    { model: read(fearRoll), later: read(DH.withFlags(fearRoll, { claimed: { fear: true } })) },
+    { model: read(DH.duality({ h: 7, f: 7, mod: 3, label: "Presence", actor: ARIA })) },
+    { model: read(DH.duality({ h: 8, f: 2, mod: 1, label: "Finesse", actor: KESS, rxn: true, dc: 13 })) }
+  ],
+  attack: [
+    { model: read(DH.duality({ h: 10, f: 6, mod: 2, label: "Longsword", actor: ARIA, attack: true, dc: 13 })),
+      damage: read(DH.damage({ rolls: [7, 3], die: "d10", bonus: 3, actor: ARIA })).damage },
+    { model: read(DH.duality({ h: 11, f: 11, mod: 2, label: "Arcane Bolt", actor: KESS, attack: true })),
+      damage: read(DH.damage({ rolls: [5], die: "d8", bonus: 2, dtype: "magic", crit: true, actor: KESS })).damage },
+    { model: read(DH.adversary({ d20: [16], mod: 3, label: "Thorned Fist", actor: BRUTE, target: KESS.name, dc: 11, foeTarget: { isPc: true },
+        token: { name: BRUTE.name, textureSrc: BRUTE.img, displayName: 50 } })),
+      damage: read(DH.damage({ rolls: [6, 2], die: "d8", bonus: 2, actor: BRUTE, isGM: true })).damage },
+    { model: read(DH.adversary({ d20: [4], mod: 3, label: "Thorned Fist", actor: BRUTE, target: ARIA.name, dc: 12, foeTarget: { isPc: true } })) }
+  ],
+  other: [
+    { model: read(DH.feature({ actor: ARIA })) },
+    { model: read(DH.feature({ actor: KESS, name: "Cloaked", feature: "", type: "classFeature", actions: [{ kind: "pay-cost", stress: 1 }] })) },
+    { model: read(DH.typed({ body: "Stay behind me. Whatever comes out of that door, it answers to me first.", actor: ARIA })) },
+    { model: read(DH.typed({ body: "draws her blade and steps into the doorway.", style: 3, rpMode: "do", actor: ARIA })) },
+    { model: read(DH.typed({ body: "If this goes wrong, it goes wrong on me.", rpMode: "think", actor: KESS })) }
+  ]
+};
+
 /* The labels the Roleplay Chat feature will hand over; the card falls back to the key otherwise. */
 const LABELS = { Thinks: "Thinks", Narrates: "Narration" };
 const label = (key) => LABELS[key];
@@ -190,6 +253,9 @@ async function settle(card, spec) {
   card.setPending(false);
   const total = card.element.querySelector(".glus-rc-total");
   if (total) total.textContent = card.headlineValue();
+  if (spec.later) card.setChips(spec.later);
+  // A duality die's two faces are set by its spin, which a still never runs.
+  for (const value of card.element.querySelectorAll(".glus-rc-dd-value")) value.textContent = spec.model.duality[value.dataset.side];
   if (spec.model.fx === "gold" || spec.model.fx === "red") card.climax();
   if (!spec.damage) return;
   await card.addDamage(spec.damage);
@@ -211,6 +277,8 @@ async function mountRolls(root, list, offset) {
       root.append(card.element);
       await card.enter();
       if (spec.damage) await card.addDamage(spec.damage);
+      // The GM's claim lands a moment after the card, as an update to the message it shows.
+      if (spec.later) await new Promise((r) => setTimeout(r, 700)).then(() => card.setChips(spec.later));
       done();
     }, offset + i * 220);
   }));
@@ -245,7 +313,10 @@ const ready = Promise.all([
   mountRolls(document.getElementById("col-checks"), CARDS.checks, 200),
   mountRolls(document.getElementById("col-other"), CARDS.other, 320),
   mountRolls(document.getElementById("col-text"), CARDS.text, 440),
-  mountStatus(document.getElementById("col-status"), STATUS, 560)
+  mountStatus(document.getElementById("col-status"), STATUS, 560),
+  mountRolls(document.getElementById("col-dh-duality"), DAGGERHEART.duality, 200),
+  mountRolls(document.getElementById("col-dh-attack"), DAGGERHEART.attack, 320),
+  mountRolls(document.getElementById("col-dh-other"), DAGGERHEART.other, 440)
 ]).then(() => { document.body.dataset.done = ""; });
 mountCloned(document.getElementById("col-status"));
 globalThis.__streamCardsReady = ready;

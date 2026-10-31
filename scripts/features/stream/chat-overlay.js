@@ -3,7 +3,7 @@ import { animate, prefersCalmMotion, remove } from "./motion/engine.js";
 import { waitForDiceAnimation } from "./dice-wait.js";
 import { createCardFeed, hasCardFeed } from "./extensions.mjs";
 import { getChatFilter, getChatSettings } from "./settings.js";
-import { allows, authorColumn, classifyMessage } from "./chat-filter.mjs";
+import { DAGGERHEART_SYSTEM, allows, authorColumn, classifyMessage } from "./chat-filter.mjs";
 import { frameImage } from "../../core/face-frame.mjs";
 import { rpModeOf } from "../../core/rp-mode.mjs";
 
@@ -29,19 +29,20 @@ export class ChatOverlay {
     this.shownMessageIds = new Set();
     /** When stream mode last started; anything posted before it is history, not news. */
     this.activatedAt = 0;
-    // Null unless a feature has claimed the card-feed slot; every use below
-    // is optional-chained so the overlay degrades to cloned chat cards.
-    this.feed = createCardFeed(this);
+    // Null unless a feature has claimed the card-feed slot for this world's system; every use below is
+    // optional-chained so the overlay degrades to cloned chat cards.
+    this.feed = createCardFeed(this, game.system?.id);
   }
 
   registerHooks() {
-    // PF2e gets its own roll cards, built from new messages only, never from re-rendered history.
+    // A system with a reader (PF2e, Daggerheart) gets its own roll cards, built from new messages only,
+    // never from re-rendered history.
     Hooks.on("createChatMessage", message => {
       if (!this.streamMode.active || !usesRollCards()) return;
       this.feed?.handleCreate(message)?.catch(error => console.error(`${MODULE_ID} | Roll card failed`, error));
     });
     Hooks.on("renderChatMessageHTML", (message, html) => this.handleRenderedMessage(message, html));
-    Hooks.on("updateChatMessage", message => this.handleMessageUpdate(message));
+    Hooks.on("updateChatMessage", (message, changes) => this.handleMessageUpdate(message, changes));
     Hooks.on("deleteChatMessage", message => this.handleMessageDelete(message));
     Hooks.on(HOOKS.settingsChanged, key => {
       if (key === "chatSettings") this.applySettings();
@@ -95,8 +96,18 @@ export class ChatOverlay {
     this.createCardAfterDice(message, source, messageId, placeholder);
   }
 
-  handleMessageUpdate(message) {
-    if (!this.streamMode.active || usesRollCards()) return;
+  handleMessageUpdate(message, changes) {
+    if (!this.streamMode.active) return;
+    // A roll card is rebuilt from the message by its own feed, when the feed reads updates at all: PF2e
+    // rerolls by posting a new message, Daggerheart rewrites the one it posted (a reroll, the Fear claim).
+    if (usesRollCards()) {
+      try {
+        this.feed?.handleUpdate?.(message, changes)?.catch?.(error => console.error(`${MODULE_ID} | Roll card update failed`, error));
+      } catch (error) {
+        console.error(`${MODULE_ID} | Roll card update failed`, error);
+      }
+      return;
+    }
     const id = message?.id;
     if (!id) return;
     const record = this.cardsByMessageId.get(id);
@@ -443,6 +454,8 @@ function isAudienceVisible(message) {
  */
 function passesChatFilter(message) {
   const pf2e = message?.flags?.pf2e ?? {};
+  // A Daggerheart world with roll cards switched off still files its rolls under their own rows.
+  const daggerheart = message?.flags?.[DAGGERHEART_SYSTEM] ?? {};
   const row = classifyMessage({
     style: message?.style ?? 0,
     rollCount: message?.rolls?.length ?? 0,
@@ -450,7 +463,9 @@ function passesChatFilter(message) {
     casting: Boolean(pf2e.casting),
     originType: pf2e.origin?.type ?? null,
     // A Roleplay Chat line files by its mode, so Think is not speech and an RP OOC line is `ooc`.
-    rpMode: rpModeOf(message?.flags)
+    rpMode: rpModeOf(message?.flags),
+    dhKind: typeof daggerheart.kind === "string" ? daggerheart.kind : null,
+    dhReaction: Boolean(daggerheart.plate?.rxn)
   });
   return allows(getChatFilter(), row, authorColumn(Boolean(message?.author?.isGM)));
 }
@@ -556,14 +571,14 @@ function getSpeakerTokenDocument(speaker) {
     ?? null;
 }
 
-/** PF2e worlds get the purpose-built roll card; every other system keeps the cloned chat card. */
 /**
- * Roll cards need both a PF2e world and a feature providing the feed. With
- * `stream-cards` absent or disabled this is false and the overlay clones
- * Foundry-rendered chat cards, which is the non-PF2e path and always worked.
+ * Roll cards need a feature providing a feed for this world's system — PF2e and Daggerheart today, each
+ * with a reader of its own. With `stream-cards` absent or disabled, or in any other system, this is false
+ * and the overlay clones Foundry-rendered chat cards, which is the path every other world takes and has
+ * always worked.
  */
 function usesRollCards() {
-  return game.system?.id === "pf2e" && hasCardFeed();
+  return hasCardFeed(game.system?.id);
 }
 
 function getLatestRenderedMessage(source, message, messageId) {

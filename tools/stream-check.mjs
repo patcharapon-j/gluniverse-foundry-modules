@@ -115,6 +115,17 @@ for (const f of sources) {
   if (onReady && /registerCardFeed\(/.test(onReady[1])) {
     fail("stream-cards/index.mjs: registerCardFeed is called from onReady, which runs after the overlay is built");
   }
+  // One feed per system, each from onInit. A system the feature is available in with no feed of its own
+  // falls back to cloned chat cards while the Control Center says Roll Cards is on.
+  const feeds = { PF2E_SYSTEM: "pf2e", DAGGERHEART_SYSTEM: "gluniverse-daggerheart" };
+  for (const [constant, id] of Object.entries(feeds)) {
+    if (!onInit || !new RegExp(`registerCardFeed\\(\\s*(${constant}|["']${id}["'])\\s*,`).test(onInit[1])) {
+      fail(`stream-cards/index.mjs: no card feed is registered for ${id} in onInit — that world would clone chat cards with Roll Cards switched on`);
+    }
+    if (!new RegExp(`system:\\s*\\[[^\\]]*(${constant}|["']${id}["'])`).test(s)) {
+      fail(`stream-cards/index.mjs: the adapter's system list does not name ${id} — the feature would be unavailable there`);
+    }
+  }
 }
 
 // No feature may act at import time.
@@ -367,7 +378,7 @@ for (const f of sources) {
 }
 
 /* ------------------------------------------------------------------- CSS ---- */
-for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-targets.css"]) {
+for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-cards-daggerheart.css", "styles/stream-targets.css"]) {
   const s = read(f);
   if (/@font-face/.test(s)) fail(`${f}: @font-face — gl-fonts.css is the only place faces are declared`);
   if (/@import\s+url\(['"]?http/.test(s)) fail(`${f}: network @import`);
@@ -552,6 +563,10 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   const feed = strip(read("scripts/features/stream-cards/pf2e/roll-card-feed.js"));
   if (!/\bcard,/.test(feed) || /rollCard:/.test(feed)) {
     fail("stream-cards/pf2e/roll-card-feed.js: the record's card must be pushed as `card`, the name the overlay reads");
+  }
+  const dhFeed = strip(read("scripts/features/stream-cards/daggerheart/card-feed.js"));
+  if (!/\bcard,/.test(dhFeed) || /rollCard:/.test(dhFeed)) {
+    fail("stream-cards/daggerheart/card-feed.js: the record's card must be pushed as `card`, the name the overlay reads");
   }
   if (!/statusKey !== undefined/.test(feed)) {
     fail("stream-cards/pf2e/roll-card-feed.js: forget() no longer routes status records to the status feed — it would walk a roll card's message ids on a record that has none");
@@ -743,6 +758,91 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   if (!formula) fail("roll-card.js: could not find buildFormula");
   else if (/glus-rc-degree-label/.test(formula[0])) {
     fail("roll-card.js: the plain roll's box carries a label as well as its formula — \"Roll\" is already the headline on the left");
+  }
+}
+
+/* -------------------------------------------------------------- Daggerheart -- */
+// In a `gluniverse-daggerheart` world the overlay hands every new message to the
+// Daggerheart feed and clones nothing, so everything below fails the same way:
+// a message the reader returns null for reaches the stream as nothing at all.
+{
+  const reader = strip(read("scripts/features/stream-cards/daggerheart/read-message.js"));
+  const snapshot = strip(read("scripts/features/stream-cards/daggerheart/snapshot.js"));
+  const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+  const lang = JSON.parse(read("lang/stream-cards.en.json"));
+
+  // Pure: the preview and the tests drive it under Node. The world is the snapshot's.
+  if (/\b(game|canvas|ui|foundry|Hooks|document|fromUuidSync|ChatMessage)\s*[.?(]/.test(reader)) {
+    fail("daggerheart/read-message.js: reads the world or the DOM — the reader is pure; documents are looked up in snapshot.js");
+  }
+  if (!/from "\.\.\/text\/read-text\.js"/.test(reader) || /TEXT_STYLES = Object\.freeze/.test(reader) || /function readText\(/.test(reader)) {
+    fail("daggerheart/read-message.js: typed chat must go through the shared text reader (../text/read-text.js), not a copy");
+  }
+  if (!/allows\(filter, rowOf\(/.test(reader)) {
+    fail("daggerheart/read-message.js: readMessage no longer gates the kind through the chat filter (allows(filter, rowOf(...)))");
+  }
+  // Whispers (every adversary reaction) and other players' blind rolls never reach the stream.
+  if (!/visibilityOf\(raw, derived\)/.test(reader)) {
+    fail("daggerheart/read-message.js: readMessage no longer asks visibilityOf — a whispered adversary reaction would reach the stream");
+  }
+  if (!/speakerNameHidden\(/.test(reader)) {
+    fail("daggerheart/read-message.js: the hidden-name rule is not the shared speakerNameHidden — a name hidden over the token could print on the stream");
+  }
+  // The Fear claim lands moments after a roll, often while a reroll's result is fading out. Without the
+  // stamp, the redraw after the fade puts the older chips back and the "+1 Fear" is gone for good.
+  if (!/this\.chipStamp = \(this\.chipStamp \?\? 0\) \+ 1/.test(card) || !/this\.chipStamp !== chipsBefore/.test(card)) {
+    fail("roll-card.js: update() no longer keeps chips set during its fade — a Fear claim landing mid-reroll is overwritten by the older chips");
+  }
+  if (!/chatFilter:\s*getChatFilter\(\)/.test(snapshot)) {
+    fail("daggerheart/snapshot.js: the snapshot does not carry the chat filter — the reader would fall back to the defaults forever");
+  }
+  // Every capitalised string the reader hands the card is a label key, looked up at runtime; nothing
+  // else catches a missing one, and the card would headline with the key itself.
+  for (const key of new Set([...reader.matchAll(/"([A-Z][A-Za-z]+)"/g)].map((m) => m[1]))) {
+    if (!(`GLUNIVERSE_STREAM.rollCard.${key}` in lang)) {
+      fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${key} is not defined — the Daggerheart reader hands it to the card`);
+    }
+    if (!new RegExp(`\\b${key}:`).test(card)) {
+      fail(`roll-card.js: DEFAULT_LABELS has no ${key} — the English fallback is what a world with no translation loaded shows`);
+    }
+  }
+  // The cloned-card path files Daggerheart messages by their kind too, so a row means the same with
+  // Roll Cards switched off.
+  const overlay = strip(read("scripts/features/stream/chat-overlay.js"));
+  if (!/dhKind:/.test(overlay)) {
+    fail("stream/chat-overlay.js: passesChatFilter does not hand classifyMessage the Daggerheart kind — every Daggerheart roll would file as a plain roll there");
+  }
+  const model = await import(new URL("../scripts/features/stream/chat-filter.mjs", import.meta.url));
+  const ids = new Set(model.CHAT_FILTER_ROWS.map((r) => r.id));
+  for (const row of [...Object.values(model.DAGGERHEART_KIND_ROWS), "reaction"]) {
+    const entry = model.CHAT_FILTER_ROWS.find((r) => r.id === row);
+    if (!entry) fail(`chat-filter.mjs: DAGGERHEART_KIND_ROWS names "${row}", which is no row`);
+    else if (!model.rowAppliesTo(entry, model.DAGGERHEART_SYSTEM)) fail(`chat-filter.mjs: row "${row}" is not offered in a Daggerheart world — a switch the page never shows`);
+  }
+  for (const row of model.CHAT_FILTER_ROWS) {
+    for (const system of row.systems ?? []) {
+      if (!model.ROLL_CARD_SYSTEMS.includes(system)) fail(`chat-filter.mjs: row "${row.id}" is tagged for "${system}", which has no roll cards to read it`);
+    }
+  }
+  if (!ids.has("damage")) fail("chat-filter.mjs: no damage row");
+  // The two kinds the system posts that are deliberately not cards must stay deliberate.
+  if (!/kind === "card"/.test(reader) || "rest" in model.DAGGERHEART_KIND_ROWS) {
+    fail("daggerheart/read-message.js / chat-filter.mjs: the rest summary became a card kind, or posted cards stopped being read by name");
+  }
+
+  // The Daggerheart sheet stays inside the card's look.
+  const css = strip(read("styles/stream-cards-daggerheart.css"));
+  if (/polygon\(/.test(css)) fail("styles/stream-cards-daggerheart.css: a clip-path polygon — the cards are rounded");
+  if (/var\(--gl-tech\)|var\(--glus-serif\)/.test(css)) fail("styles/stream-cards-daggerheart.css: a face other than --glus-sans — every word and number on a roll card is the sans");
+  if (/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(css)) fail("styles/stream-cards-daggerheart.css: a raw white veil — use a tint channel");
+  if (/#[0-9a-fA-F]{3,8}\b/.test(css)) fail("styles/stream-cards-daggerheart.css: a raw hex colour — route it through a token");
+  if (/:root\b/.test(css)) fail("styles/stream-cards-daggerheart.css: declares on :root");
+  if (/[0-9.]+m?s\s+(ease|linear|cubic-bezier)/.test(css)) fail("styles/stream-cards-daggerheart.css: a raw duration or easing — use --gl-d-* and --gl-ease");
+  const order = JSON.parse(read("module.json")).styles;
+  const at = (p) => order.indexOf(p);
+  if (at("styles/stream-cards-daggerheart.css") < 0) fail("module.json: styles/stream-cards-daggerheart.css is not loaded");
+  else if (at("styles/stream-cards-daggerheart.css") < at("styles/stream-cards.css")) {
+    fail("module.json: stream-cards-daggerheart.css loads before stream-cards.css — its tones would lose to the base card's");
   }
 }
 
