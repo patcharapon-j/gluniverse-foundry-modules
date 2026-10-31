@@ -1,7 +1,7 @@
 # Roleplay Chat
 
 Feature id `roleplay-chat`, settings prefix `rp.`, i18n `GLRP.*`, CSS prefix `glrp-`.
-Any system, off by default.
+Any system, Foundry v14 only (it speaks v14's chat API), off by default.
 
 At a real table you hear who is speaking, see who they are looking at, and know
 when somebody steps out of the scene to ask for the crisps. Online, all of that
